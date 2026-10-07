@@ -134,16 +134,3 @@ async fn a_failed_file_is_a_failed_outcome_and_a_cancelled_one_cancelled() {
         assert!(f.manager.meters().is_empty());
     }
 }
-
-/// Clearing the finished list is published, so a client's list empties
-/// without its asking again.
-#[tokio::test]
-async fn clearing_the_finished_list_publishes_it_empty() {
-    let f = queued(Arc::new(NoRegistrar)).await;
-    run_next(&f.manager, End::Failed).await;
-    assert_eq!(f.recorded.snapshots().pop().unwrap().finished.len(), 1);
-
-    f.manager.clear_finished().await.unwrap();
-
-    assert!(f.recorded.snapshots().pop().unwrap().finished.is_empty());
-}

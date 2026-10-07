@@ -1077,13 +1077,6 @@ impl DownloadManagerPort for DownloadManagerImpl {
         Ok(actual_position)
     }
 
-    async fn clear_finished(&self) -> Result<(), DownloadError> {
-        self.queue.write().await.clear_finished();
-        tracing::info!("Cleared the finished downloads");
-        self.publish().await;
-        Ok(())
-    }
-
     async fn set_max_queue_size(&self, size: u32) -> Result<(), DownloadError> {
         self.queue.write().await.set_max_size(size);
         tracing::info!(size = size, "Set max queue size");

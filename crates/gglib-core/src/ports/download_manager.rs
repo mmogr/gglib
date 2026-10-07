@@ -167,10 +167,6 @@ pub trait DownloadManagerPort: Send + Sync {
     async fn reorder_queue(&self, id: &DownloadId, new_position: u32)
     -> Result<u32, DownloadError>;
 
-    /// Clear the record of how earlier downloads ended: every entry of the
-    /// snapshot's `finished`, whatever its outcome.
-    async fn clear_finished(&self) -> Result<(), DownloadError>;
-
     /// Update the maximum queue size.
     ///
     /// Downloads already in queue are not affected, but new downloads

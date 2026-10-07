@@ -2,13 +2,23 @@
 //! runs on, without a machine.
 //!
 //! Everything that needs a daemon is below the seam and is exercised where
-//! it always was; what is checked here is the table, the refusal and the two
-//! pure decisions. What a turn's model resolves to, and what remembering it
-//! writes, is `target_turn_tests`'.
+//! it always was; what is checked here is the table, the refusal, the two
+//! pure decisions, and what this machine's catalogue answers when it holds
+//! no such model and when it cannot be read. What a turn's model resolves to
+//! on the paired machine, and what remembering it writes, is
+//! `target_turn_tests`'.
 
+use std::path::Path;
+use std::sync::Arc;
+
+use async_trait::async_trait;
 use clap::Parser as _;
+use gglib_core::domain::NewModel;
+use gglib_core::ports::{ModelRepository, RepositoryError};
+use gglib_core::services::AppCore;
 
 use super::*;
+use crate::bootstrap::test_context;
 use crate::parser::Cli;
 
 fn parsed(argv: &[&str]) -> Commands {
@@ -181,4 +191,90 @@ fn the_flag_is_the_only_way_to_the_paired_machine() {
     assert_eq!(Target::from_flag(false), Target::Local);
     assert_eq!(Target::from_flag(true), Target::Remote);
     assert_eq!(Target::default(), Target::Local);
+}
+
+// ── This machine's catalogue ─────────────────────────────────────────────
+
+/// What a catalogue that cannot be read says.
+pub(crate) const UNREADABLE: &str = "Storage error: database is locked";
+
+/// A catalogue no call to which succeeds, as a locked database's does not.
+struct Unreadable;
+
+fn locked<T>() -> Result<T, RepositoryError> {
+    Err(RepositoryError::Storage("database is locked".to_owned()))
+}
+
+#[async_trait]
+impl ModelRepository for Unreadable {
+    async fn list(&self) -> Result<Vec<Model>, RepositoryError> {
+        locked()
+    }
+    async fn get_by_id(&self, _id: i64) -> Result<Model, RepositoryError> {
+        locked()
+    }
+    async fn get_by_name(&self, _name: &str) -> Result<Model, RepositoryError> {
+        locked()
+    }
+    async fn insert(&self, _model: &NewModel) -> Result<Model, RepositoryError> {
+        locked()
+    }
+    async fn find_by_path(&self, _path: &Path) -> Result<Option<Model>, RepositoryError> {
+        locked()
+    }
+    async fn update(&self, _model: &Model) -> Result<(), RepositoryError> {
+        locked()
+    }
+    async fn delete(&self, _id: i64) -> Result<(), RepositoryError> {
+        locked()
+    }
+}
+
+/// The CLI's context in `dir`, over a catalogue that cannot be read. Its
+/// other stores are an empty database's.
+pub(crate) async fn with_unreadable_catalogue(dir: &tempfile::TempDir) -> CliContext {
+    let mut ctx = test_context(dir.path()).await;
+    let pool = gglib_db::setup_test_database().await.expect("a database");
+    let mut repos = gglib_db::CoreFactory::build_repos(pool);
+    repos.models = Arc::new(Unreadable);
+    let (hf, downloads) = (Arc::clone(&ctx.hf_client), Arc::clone(&ctx.downloads));
+    ctx.app = Arc::new(AppCore::new(repos, hf, downloads));
+    ctx
+}
+
+/// A catalogue that cannot be read is an error wherever a turn looks its
+/// model up, by id or by name, and the error is the store's own: it is not
+/// taken for a model this machine does not have.
+#[tokio::test]
+async fn a_catalogue_that_cannot_be_read_is_an_error_and_not_a_missing_model() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = with_unreadable_catalogue(&dir).await;
+
+    for identifier in ["qwen3", "7"] {
+        let looked_up = Target::Local.local_model(&ctx, identifier).await;
+        let error = looked_up.expect_err("the read failed").to_string();
+        assert_eq!(error, UNREADABLE, "{identifier}");
+
+        let turn = Target::Local.resolve_turn(&ctx, identifier.to_owned());
+        let error = turn.await.expect_err("the read failed").to_string();
+        assert_eq!(error, UNREADABLE, "{identifier}");
+    }
+    // The paired machine's models are not in this catalogue: it is not read.
+    let far = Target::Remote.local_model(&ctx, "qwen3").await;
+    assert!(far.expect("nothing was read").is_none());
+}
+
+/// A model this catalogue does not hold is no error: a session on `--port`
+/// may name one, and its turn goes on under the name as typed.
+#[tokio::test]
+async fn a_model_this_catalogue_does_not_hold_is_none() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = test_context(dir.path()).await;
+
+    let looked_up = Target::Local.local_model(&ctx, "qwen3").await;
+    assert!(looked_up.expect("the catalogue was read").is_none());
+
+    let turn = Target::Local.resolve_turn(&ctx, "qwen3".to_owned()).await;
+    let turn = turn.expect("a turn on a model the catalogue lacks");
+    assert_eq!((turn.name.as_str(), turn.model_ref), ("qwen3", None));
 }

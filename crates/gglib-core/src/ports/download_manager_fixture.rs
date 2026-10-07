@@ -72,9 +72,6 @@ impl DownloadManagerPort for AskedDownloads {
     async fn reorder_queue(&self, _id: &DownloadId, _position: u32) -> Result<u32, DownloadError> {
         unimplemented!("a queue request is all this manager answers")
     }
-    async fn clear_finished(&self) -> Result<(), DownloadError> {
-        unimplemented!("a queue request is all this manager answers")
-    }
     async fn set_max_queue_size(&self, _size: u32) -> Result<(), DownloadError> {
         unimplemented!("a queue request is all this manager answers")
     }

@@ -15,8 +15,10 @@ stdin.
 | [`input::prompt_float`] | A positive number, asked again until it is one |
 | [`input::prompt_float_with_default`] | A positive number, or Enter for the default shown in brackets |
 
-The two confirmations read an answer by one rule: `y` or `yes` is yes and `n`
-or `no` is no, in any case; anything else is asked again; and the end of
-input is no, whichever way Enter goes.
+The two confirmations read an answer by one rule, [`input::confirm_from`]:
+`y` or `yes` is yes and `n` or `no` is no, in any case; anything else is asked
+again; and the end of input is no, whichever way Enter goes. `gglib q` asks
+whether to continue chatting by the same rule, on stderr, since its stdout is
+the answer it printed.
 
 <!-- module-docs:end -->

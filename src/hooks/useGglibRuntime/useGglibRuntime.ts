@@ -188,8 +188,8 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         replaceFrom,
         selectedServerPort,
         // The limits from the Tools popover, read fresh per send. No
-        // iteration limit: the daemon takes the stored setting for a run
-        // that names none.
+        // iteration limit: for a run that names none the daemon takes the
+        // conversation's saved one, then the stored setting.
         config: agentOverridesToWire(),
         reasoning: reasoningOverridesToWire(),
         thinking: thinking?.said,

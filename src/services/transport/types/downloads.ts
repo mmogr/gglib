@@ -27,7 +27,6 @@ export interface QueueDownloadParams {
   modelId: HfModelId;
   /** Optional quantization. If omitted, smart selection picks the best available. */
   quantization?: string;
-  targetPath?: string;
 }
 
 /**

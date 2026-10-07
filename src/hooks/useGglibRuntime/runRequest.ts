@@ -24,8 +24,9 @@ import { convertToWireMessages } from './wireMessages';
  *
  * All fields are optional; omitted fields use the backend's
  * `AgentConfig::default()` values. `max_iterations` is not among them: the
- * page names no iteration limit, and the daemon takes the stored
- * `maxToolIterations` setting for a run that names none.
+ * page names no iteration limit, and for a run that names none the daemon
+ * takes the limit its conversation saved, then the stored
+ * `maxToolIterations` setting.
  */
 export interface PartialAgentConfig {
   /** Maps to `AgentConfig::max_parallel_tools` (default 25). */

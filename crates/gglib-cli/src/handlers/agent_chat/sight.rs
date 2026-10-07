@@ -69,22 +69,27 @@ impl Sight {
     ///
     /// `--port` names the server that answers, whatever the catalogue holds
     /// under the same name, so there the server is the one asked.
-    pub(crate) async fn of_session(ctx: &CliContext, params: &AgentSessionParams) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// A catalogue that cannot be read: a model it could not look up is not
+    /// one it has no row for, and is not left unjudged.
+    pub(crate) async fn of_session(ctx: &CliContext, params: &AgentSessionParams) -> Result<Self> {
         let name = params
             .turn
             .as_ref()
             .map_or(params.model_identifier.as_str(), |turn| turn.name.as_str());
-        match (params.target, params.port) {
+        Ok(match (params.target, params.port) {
             (Target::Remote, _) => Self::unjudged(),
             (Target::Local, Some(port)) => Self::server(name, ctx.http_client.clone(), port),
             (Target::Local, None) => params
                 .target
                 .local_model(ctx, &params.model_identifier)
-                .await
+                .await?
                 .map_or_else(Self::unjudged, |model| {
                     Self::catalogue(&model.name, model.image_input())
                 }),
-        }
+        })
     }
 
     /// Refuse a run that carries an image when the model cannot read one.

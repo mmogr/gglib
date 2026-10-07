@@ -20,6 +20,7 @@ import {
   updateConversationSystemPrompt,
   updateConversationTitle,
 } from '../../../../src/services/transport/api/chat';
+import { queueDownload, reorderQueue, reorderQueueItem } from '../../../../src/services/transport/api/downloads';
 import { addMcpServer, updateMcpServer } from '../../../../src/services/transport/api/mcp';
 import {
   addModel,
@@ -127,6 +128,36 @@ describe('what a typed request body sends', () => {
       method: 'PUT',
       path: '/api/config/system/models-directory',
       body: { path: '/models' },
+    });
+  });
+
+  it('queueing a download names the repository as `model_id` and the quantization as `quantization`', async () => {
+    expect(await sent(() => queueDownload({ modelId: 'owner/mine-GGUF', quantization: 'Q8_0' }))).toStrictEqual({
+      method: 'POST',
+      path: '/api/models/downloads/queue',
+      body: { model_id: 'owner/mine-GGUF', quantization: 'Q8_0' },
+    });
+  });
+
+  it('queueing a download with no quantization named sends no `quantization` key', async () => {
+    expect((await sent(() => queueDownload({ modelId: 'owner/mine-GGUF' }))).body).toStrictEqual({
+      model_id: 'owner/mine-GGUF',
+    });
+  });
+
+  it('moving one download sends its id as `model_id` and the position', async () => {
+    expect(await sent(() => reorderQueueItem('owner/mine-GGUF:Q8_0', 2))).toStrictEqual({
+      method: 'POST',
+      path: '/api/models/downloads/reorder',
+      body: { model_id: 'owner/mine-GGUF:Q8_0', position: 2 },
+    });
+  });
+
+  it('reordering the queue sends the ids in the order wanted', async () => {
+    expect(await sent(() => reorderQueue(['owner/b:Q4_K_M', 'owner/a:Q8_0']))).toStrictEqual({
+      method: 'POST',
+      path: '/api/models/downloads/reorder-full',
+      body: { ids: ['owner/b:Q4_K_M', 'owner/a:Q8_0'] },
     });
   });
 

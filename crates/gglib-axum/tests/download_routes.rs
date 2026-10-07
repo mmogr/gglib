@@ -1,6 +1,5 @@
 //! The download queue's routes, each to the manager call it makes: queueing
-//! answers the id the manager gave, cancel cancels, DELETE removes, and
-//! clear clears.
+//! answers the id the manager gave, cancel cancels and DELETE removes.
 
 mod common;
 
@@ -81,11 +80,6 @@ impl DownloadManagerPort for Recording {
         Ok(position)
     }
 
-    async fn clear_finished(&self) -> Result<(), DownloadError> {
-        self.record("clear_finished".to_string());
-        Ok(())
-    }
-
     async fn set_max_queue_size(&self, size: u32) -> Result<(), DownloadError> {
         self.record(format!("set_max_queue_size {size}"));
         Ok(())
@@ -163,17 +157,4 @@ async fn a_delete_removes_and_is_not_found_for_a_download_that_is_gone() {
 
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
     assert_eq!(manager.calls(), [format!("remove_from_queue {QUEUED}")]);
-}
-
-/// Clearing the finished downloads reaches the manager.
-#[tokio::test]
-async fn clearing_the_finished_downloads_reaches_the_manager() {
-    let manager = Arc::new(Recording::default());
-    let app = app_over(Arc::clone(&manager)).await;
-
-    let path = "/api/models/downloads/finished/clear";
-    let (status, body) = send(app, Method::POST, path, "").await;
-
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(manager.calls(), ["clear_finished"]);
 }

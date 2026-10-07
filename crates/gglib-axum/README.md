@@ -92,7 +92,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `GET` | `/api/models/downloads/queue` | Download queue snapshot |
 | `POST` | `/api/models/downloads/:id/cancel` | Cancel a waiting or running download, every file of it |
 | `DELETE` | `/api/models/downloads/:id` | The same; for a download that has ended, drop its finished entry |
-| `POST` | `/api/models/downloads/finished/clear` | Clear the record of how earlier downloads ended |
 | `GET` | `/api/config/settings` | Get application settings |
 | `PUT` | `/api/config/settings` | Update application settings |
 | `GET` | `/api/mcp/servers` | List MCP servers |

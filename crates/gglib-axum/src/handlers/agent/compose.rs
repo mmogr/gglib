@@ -125,10 +125,13 @@ pub(crate) async fn prepare(
 }
 
 /// The loop config a request runs with: what it names, and for the limits
-/// it leaves out this machine's stored ones (`TurnLimits::resolve`). So a
-/// client that names no iteration limit (a paired device's turn, the chat
-/// page) runs with `max_tool_iterations`, and none has to send it. A
-/// settings read that fails leaves the built-in defaults.
+/// it leaves out this machine's stored ones (`TurnLimits::resolve`). A
+/// turn on a saved chat reaches here with that chat's saved iteration limit
+/// already standing in for one it did not name (`hub_turn::plan` for a
+/// paired device's turn, `run::plan` for the page's run). So a client that
+/// names no iteration limit runs with its chat's, and failing that with
+/// `max_tool_iterations`, and none has to send either. A settings read that
+/// fails leaves the built-in defaults.
 ///
 /// Its own function because `prepare` cannot be driven in a test: it needs
 /// a running llama-server.

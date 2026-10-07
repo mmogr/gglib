@@ -96,17 +96,6 @@ async fn reorder_queue_returns_new_position() {
     assert_eq!(result.unwrap(), 3);
 }
 
-/// Clearing reaches the manager. It answers nothing, so the call is all
-/// there is to see.
-#[tokio::test]
-async fn clear_finished_clears_the_managers_record() {
-    let (ops, calls) = recording_ops();
-
-    ops.clear_finished().await;
-
-    assert_eq!(*calls.lock().unwrap(), ["clear_finished"]);
-}
-
 #[tokio::test]
 async fn cancel_all_completes_without_error() {
     let ops = make_ops(MockDownloadManager::new());

@@ -8,11 +8,13 @@ POST /api/agent/chat — server-side agentic loop with SSE streaming.
 configured limits and calls [`compose_agent_loop`](gglib_runtime::compose_agent_loop),
 so every caller of the loop does those alike. The limits are resolved by
 core's `TurnLimits::resolve`, which the CLI's `chat` and `q` call too: the
-iteration limit the request names (for a device's turn, the one its chat's
-settings name), then this machine's stored `max_tool_iterations`, then the
-default; and the stored `max_stagnation_steps`, which no request names. So a
-client that sends no iteration limit, as the chat page and a paired device
-do, runs with the stored one. The handler spawns the loop as
+iteration limit the request names, then the one its chat's settings saved
+(put in the request's place by `hub_turn::plan` for a device's turn and by
+`run::plan` for the page's run, as the CLI's resume puts it in its flag's),
+then this machine's stored `max_tool_iterations`, then the default; and the
+stored `max_stagnation_steps`, which no request names. So a client that
+sends no iteration limit, as the chat page and a paired device do, runs with
+its chat's saved one, or the stored one. The handler spawns the loop as
 a background task and bridges the resulting `mpsc::Receiver<AgentEvent>` to an
 Axum [`Sse`] response, each event framed by `compose::frame`.
 

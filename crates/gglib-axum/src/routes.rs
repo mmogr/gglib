@@ -215,10 +215,6 @@ fn model_fetch_routes() -> Router<AppState> {
             "/downloads/reorder-full",
             post(handlers::model::downloads::reorder_full),
         )
-        .route(
-            "/downloads/finished/clear",
-            post(handlers::model::downloads::clear_finished),
-        )
         // HuggingFace discovery
         .route("/hf/search", post(handlers::model::hf::search))
         .route(

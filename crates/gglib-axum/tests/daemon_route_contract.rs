@@ -193,6 +193,7 @@ const WITHOUT_A_CLIENT: &[(&str, &str)] = &[
     ("GET", "/api/models/1/benchmark"),
     ("GET", "/api/models/1/tune-history"),
     ("POST", "/api/mcp/tools/call"),
+    ("POST", "/api/models/downloads/finished/clear"),
 ];
 
 /// What the page does send on the paths beside those.
@@ -201,6 +202,8 @@ const BESIDE_THEM: &[(&[&str], &str)] = &[
     (&["GET"], "/api/benchmark/runs"),
     (&["GET"], "/api/models/1/agentic-history"),
     (&["GET", "POST"], "/api/mcp/servers"),
+    (&["DELETE"], "/api/models/downloads/1"),
+    (&["POST"], "/api/models/downloads/1/cancel"),
 ];
 
 #[tokio::test]

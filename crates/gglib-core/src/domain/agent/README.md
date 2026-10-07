@@ -13,7 +13,7 @@ no infrastructure concerns.
 | Module | Contents |
 |--------|----------|
 | [`config`] | [`AgentConfig`] — loop control parameters |
-| `limits` | [`TurnLimits`] — a turn's iteration and stagnation limits: what it names, then the stored settings, then the default; the one resolver the daemon and the CLI share |
+| `limits` | [`TurnLimits`] — a turn's iteration and stagnation limits: what it names (its own limit, or failing that its chat's saved one, which each caller puts there), then the stored settings, then the default; the one resolver the daemon and the CLI share |
 | [`tool_types`] | [`ToolDefinition`], [`ToolCall`], [`ToolResult`] |
 | [`messages`] | [`AgentMessage`] — closed conversation-turn enum; a user turn names its images by id, and each is charged [`IMAGE_CHARGE_CHARS`] against the context budget |
 | `messages_serde` | Custom `Serialize`/`Deserialize` impls for [`AssistantContent`] |
