@@ -168,6 +168,16 @@ pub struct StartServerRequest {
     pub mlock: bool,
 }
 
+/// Response for queueing a download: the one shape the daemon answers with
+/// and the CLI reads.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct QueueDownloadResponse {
+    /// The download's canonical ID: its row's `id` in the queue snapshot,
+    /// and its entry's in `finished` once it has ended.
+    pub id: String,
+}
+
 /// Response for starting a server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]

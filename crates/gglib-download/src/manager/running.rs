@@ -21,7 +21,7 @@ impl DownloadManagerImpl {
             return Some(Running {
                 id: id.clone(),
                 phase: job.phase,
-                file: job.shard_info.clone(),
+                file: job.item.shard_info.clone(),
             });
         }
         let (id, group) = queue.head_group()?;

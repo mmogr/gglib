@@ -185,31 +185,28 @@ fn an_idle_queue_prints_nothing() {
     assert!(board.printed.is_none());
 }
 
+/// The line is the entry's own words behind a mark: the board words
+/// nothing of an ending itself, so a text it has never seen prints as it is.
 #[test]
-fn an_outcome_is_one_line() {
-    let ended = |outcome| FinishedDownload {
+fn an_outcome_line_is_the_entrys_text_behind_a_mark() {
+    let ended = |outcome, text: &str| FinishedDownload {
         id: "o/a:Q8_0".to_string(),
         title: "o/a:Q8_0".to_string(),
         outcome,
+        text: text.to_string(),
     };
-    let completed = DownloadOutcome::Completed {
-        message: Some("Downloaded to /models/a.gguf".to_string()),
-    };
+    let completed = DownloadOutcome::Completed { message: None };
     let failed = DownloadOutcome::Failed {
         error: "no route".to_string(),
     };
 
     assert_eq!(
-        outcome_line(&ended(completed)),
-        "✓ o/a:Q8_0 — Downloaded to /models/a.gguf"
+        outcome_line(&ended(completed, "the daemon's words")),
+        "✓ the daemon's words"
     );
+    assert_eq!(outcome_line(&ended(failed, "it broke")), "✗ it broke");
     assert_eq!(
-        outcome_line(&ended(DownloadOutcome::Completed { message: None })),
-        "✓ o/a:Q8_0"
-    );
-    assert_eq!(outcome_line(&ended(failed)), "✗ o/a:Q8_0: no route");
-    assert_eq!(
-        outcome_line(&ended(DownloadOutcome::Cancelled)),
-        "✗ o/a:Q8_0: cancelled"
+        outcome_line(&ended(DownloadOutcome::Cancelled, "stopped")),
+        "✗ stopped"
     );
 }

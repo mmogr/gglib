@@ -43,8 +43,8 @@ export type { QueueDownloadResponse };
 export interface DownloadCompletionInfo {
   /** Canonical download ID (model_id:quantization or model_id) */
   id: string;
-  /** The download's name, as its row had it */
-  title: string;
+  /** How it ended, in the daemon's words: its finished entry's text */
+  text: string;
 }
 
 /**
@@ -53,8 +53,6 @@ export interface DownloadCompletionInfo {
 export interface DownloadFailureInfo {
   /** Canonical download ID (model_id:quantization or model_id) */
   id: string;
-  /** The download's name, as its row had it */
-  title: string;
-  /** Why, in the daemon's words */
-  error: string;
+  /** How it ended, in the daemon's words: its finished entry's text */
+  text: string;
 }

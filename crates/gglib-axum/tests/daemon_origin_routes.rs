@@ -72,7 +72,7 @@ async fn every_change_the_cli_can_make_is_refused_to_another_site() {
 /// on the machine running the test.
 #[tokio::test]
 async fn the_routes_that_act_on_this_machine_are_refused_to_another_site() {
-    const ISSUE_1118: [&str; 16] = [
+    const ISSUE_1118: [&str; 15] = [
         "/api/config/system/install-llama",
         "/api/config/system/update-llama",
         "/api/config/system/uninstall-llama",
@@ -87,8 +87,7 @@ async fn the_routes_that_act_on_this_machine_are_refused_to_another_site() {
         "/api/models/1/upgrade",
         "/api/models/1/verify",
         "/api/models/downloads/1/cancel",
-        "/api/models/downloads/shard-group/1/cancel",
-        "/api/models/downloads/failed/clear",
+        "/api/models/downloads/finished/clear",
     ];
     let cors = shipped_cors();
     let app = gglib_axum::create_router(test_state(cors.clone()).await, &cors, test_access());
@@ -110,7 +109,7 @@ async fn the_routes_that_act_on_this_machine_are_refused_to_another_site() {
 /// Under every config, a page that names any origin but the daemon's own may
 /// change something exactly when the CORS layer lets it read the answer.
 /// Read with `GET /api/version`, changed with the in-memory
-/// `POST /api/models/downloads/failed/clear`.
+/// `POST /api/models/downloads/finished/clear`.
 #[tokio::test]
 async fn every_origin_the_daemon_lets_read_may_change_things_and_no_other() {
     let origins = [
@@ -121,7 +120,7 @@ async fn every_origin_the_daemon_lets_read_may_change_things_and_no_other() {
         "http://tauri.localhost",
         "http://192.168.1.5:9887",
     ];
-    let clear = "/api/models/downloads/failed/clear";
+    let clear = "/api/models/downloads/finished/clear";
     for cors in [CorsConfig::AllowAll, shipped_cors(), CorsConfig::LocalOnly] {
         let app = shipped(&cors, DaemonAccess::loopback()).await;
         let mut readers = 0;

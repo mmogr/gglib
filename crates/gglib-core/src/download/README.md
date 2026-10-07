@@ -27,14 +27,15 @@ system. No I/O, networking, or runtime dependencies allowed.
 - `events` - `DownloadEvent`, five variants. `QueueSnapshot` carries the whole
   queue, the same value the REST route serves. `DownloadCompleted`,
   `DownloadFailed` and `DownloadCancelled` say a download ended, for a notice
-  to the user and a refresh of the library, and `QueueRunComplete` sums up a
-  run. Progress, phases and notes are not events: they are on the snapshot's
+  to the user and a refresh of the library, each with its finished entry's
+  `text`, and `QueueRunComplete` sums up a run. Progress, phases and notes are not events: they are on the snapshot's
   rows.
 - `errors` - Error types for download operations
 - `queue` - The queue as it is served (`QueueSnapshot`): the running download,
   the waiting ones, and how the latest ended (`FinishedDownload`,
   `DownloadOutcome`), with a `revision` that orders every snapshot a process
-  builds.
+  builds. `FinishedDownload::new` is the one place an ending is put in
+  words (its `text`), as `DownloadRowText::of` is for a row.
 - `completion` - Queue run completion tracking types
 - `rate` - `RateEstimator`, the single owner of download speed and ETA math.
   Decays bytes and elapsed time separately so `hf-xet`'s bursty on-disk writes

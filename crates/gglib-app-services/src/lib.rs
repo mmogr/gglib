@@ -66,7 +66,7 @@ pub use error::GuiError;
 
 // Domain ops + their Deps
 pub use benchmark::BenchmarkOps;
-pub use downloads::DownloadOps;
+pub use downloads::{DownloadDeps, DownloadOps};
 pub use hub_chats::HubChats;
 pub use mcp::McpOps;
 pub use models::{ModelDeps, ModelOps};

@@ -17,14 +17,14 @@ async fn queued_again(manager: &DownloadManagerImpl) -> gglib_core::download::Do
     snapshot.active.expect("a running row")
 }
 
-/// The weights fail and the projector, still on the queue, lands after
-/// them. Its bytes belong to the run that failed: the retry counts from 0.
+/// The weights land and the projector fails. The weights' bytes belong to
+/// the run that failed: the retry counts from 0.
 #[tokio::test]
 async fn a_retry_does_not_start_with_the_failed_runs_bytes() {
     let f = queued(Arc::new(NoRegistrar)).await;
-    assert_eq!(run_next(&f.manager, End::Failed).await, "zeta.Q8_0.gguf");
-    assert_eq!(run_next(&f.manager, End::OnDisk).await, "mmproj-F16.gguf");
-    assert_eq!(f.manager.meters().len(), 1, "the projector's meter");
+    assert_eq!(run_next(&f.manager, End::OnDisk).await, "zeta.Q8_0.gguf");
+    assert_eq!(f.manager.meters().len(), 1, "the meter the weights fed");
+    assert_eq!(run_next(&f.manager, End::Failed).await, "mmproj-F16.gguf");
 
     let row = queued_again(&f.manager).await;
 

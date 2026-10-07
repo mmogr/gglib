@@ -44,17 +44,17 @@ impl ModelRegistrarPort for RecordingRegistrar {
     }
 }
 
-/// Keeps the message of every completed download announced.
+/// Keeps the text of every completed download announced.
 #[derive(Default)]
 struct Announced(StdMutex<Vec<String>>);
 
 impl AppEventEmitter for Announced {
     fn emit(&self, event: AppEvent) {
         if let AppEvent::Download {
-            event: DownloadEvent::DownloadCompleted { message, .. },
+            event: DownloadEvent::DownloadCompleted { text, .. },
         } = event
         {
-            self.0.lock().unwrap().extend(message);
+            self.0.lock().unwrap().push(text);
         }
     }
 }

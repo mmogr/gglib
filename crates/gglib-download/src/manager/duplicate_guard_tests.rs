@@ -97,7 +97,7 @@ async fn start_head(manager: &DownloadManagerImpl) -> DownloadId {
         ActiveJob {
             lease: LeaseId(1),
             cancel: CancellationToken::new(),
-            shard_info: None,
+            item,
             phase: DownloadPhase::Downloading,
         },
     );
@@ -123,7 +123,7 @@ async fn repeat_request_while_active_attaches_instead_of_duplicating() {
         .await
         .expect("a repeat request attaches rather than failing");
 
-    assert_eq!(again.root_id, active_id, "must attach to the live download");
+    assert_eq!(again, active_id, "must attach to the live download");
     assert_eq!(
         manager.queue.read().await.pending_len(),
         0,
@@ -184,7 +184,7 @@ async fn a_repeat_request_attaches_on_both_paths() {
         .queue_download_smart(REPO, Some("Q8_0".to_string()))
         .await
         .expect("attaches while active");
-    assert_eq!(smart.root_id, active_id);
+    assert_eq!(smart, active_id);
 
     assert_eq!(
         manager.queue.read().await.pending_len(),

@@ -28,7 +28,7 @@ vi.mock('../../../src/contexts/ToastContext', async () => {
 function createCompletionInfo(overrides: Partial<DownloadCompletionInfo> = {}): DownloadCompletionInfo {
   return {
     id: 'test/model:Q4_K_M',
-    title: 'test/model:Q4_K_M',
+    text: 'test/model:Q4_K_M: downloaded',
     ...overrides,
   };
 }
@@ -63,36 +63,36 @@ describe('useDownloadCompletionEffects', () => {
       expect(refreshModels).toHaveBeenCalledTimes(1);
     });
 
-    it('shows a toast naming the download for a single completion', () => {
+    it("shows a single completion in the daemon's words", () => {
       const refreshModels = vi.fn();
       const { result } = renderHook(() =>
         useDownloadCompletionEffects({ refreshModels, windowMs: 100 })
       );
 
       act(() => {
-        result.current.onCompleted(createCompletionInfo({ title: 'My Model' }));
+        result.current.onCompleted(createCompletionInfo({ text: 'My Model: in the library' }));
       });
 
       act(() => {
         vi.advanceTimersByTime(100);
       });
 
-      expect(mockShowToast).toHaveBeenCalledWith('Downloaded My Model', 'success');
+      expect(mockShowToast).toHaveBeenCalledWith('My Model: in the library', 'success');
     });
   });
 
   describe('a failure', () => {
-    it('raises an error toast at once, naming the download and the error, and refreshes nothing', () => {
+    it("raises an error toast at once, in the daemon's words, and refreshes nothing", () => {
       const refreshModels = vi.fn();
       const { result } = renderHook(() =>
         useDownloadCompletionEffects({ refreshModels, windowMs: 100 })
       );
 
       act(() => {
-        result.current.onFailed({ id: 'owner/b:Q4_K_M', title: 'owner/b:Q4_K_M', error: 'disk full' });
+        result.current.onFailed({ id: 'owner/b:Q4_K_M', text: 'B, four bit: it broke' });
       });
 
-      expect(mockShowToast).toHaveBeenCalledWith('Download failed: owner/b:Q4_K_M: disk full', 'error');
+      expect(mockShowToast).toHaveBeenCalledWith('B, four bit: it broke', 'error');
       act(() => {
         vi.advanceTimersByTime(100);
       });
@@ -206,24 +206,24 @@ describe('useDownloadCompletionEffects', () => {
       );
 
       act(() => {
-        result.current.onCompleted(createCompletionInfo({ title: 'Model A' }));
+        result.current.onCompleted(createCompletionInfo({ text: 'Model A: downloaded' }));
       });
 
       act(() => {
         vi.advanceTimersByTime(100);
       });
 
-      expect(mockShowToast).toHaveBeenCalledWith('Downloaded Model A', 'success');
+      expect(mockShowToast).toHaveBeenCalledWith('Model A: downloaded', 'success');
 
       act(() => {
-        result.current.onCompleted(createCompletionInfo({ title: 'Model B' }));
+        result.current.onCompleted(createCompletionInfo({ text: 'Model B: downloaded' }));
       });
 
       act(() => {
         vi.advanceTimersByTime(100);
       });
 
-      expect(mockShowToast).toHaveBeenCalledWith('Downloaded Model B', 'success');
+      expect(mockShowToast).toHaveBeenCalledWith('Model B: downloaded', 'success');
       expect(mockShowToast).toHaveBeenCalledTimes(2);
     });
   });

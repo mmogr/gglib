@@ -57,7 +57,7 @@ async fn a_completed_download_is_recorded_with_its_message() {
     );
     let endings = f.recorded.endings();
     assert!(
-        matches!(&endings[..], [DownloadEvent::DownloadCompleted { id, message: Some(m) }] if id == ID && m == message),
+        matches!(&endings[..], [DownloadEvent::DownloadCompleted { id, text }] if id == ID && text.ends_with(message.as_str()) && *text == ended.text),
         "{endings:?}"
     );
     assert!(
@@ -102,7 +102,7 @@ async fn a_registration_error_is_a_failed_outcome() {
     );
     let endings = f.recorded.endings();
     assert!(
-        matches!(&endings[..], [DownloadEvent::DownloadFailed { id, error }] if id == ID && error.starts_with("Registration failed")),
+        matches!(&endings[..], [DownloadEvent::DownloadFailed { id, text }] if id == ID && text.contains("Registration failed") && *text == ended.text),
         "{endings:?}"
     );
 }
@@ -135,15 +135,15 @@ async fn a_failed_file_is_a_failed_outcome_and_a_cancelled_one_cancelled() {
     }
 }
 
-/// Clearing the failures is published, so a client's list empties without
-/// its asking again.
+/// Clearing the finished list is published, so a client's list empties
+/// without its asking again.
 #[tokio::test]
-async fn clearing_the_failures_publishes_the_shorter_list() {
+async fn clearing_the_finished_list_publishes_it_empty() {
     let f = queued(Arc::new(NoRegistrar)).await;
     run_next(&f.manager, End::Failed).await;
     assert_eq!(f.recorded.snapshots().pop().unwrap().finished.len(), 1);
 
-    f.manager.clear_failed().await.unwrap();
+    f.manager.clear_finished().await.unwrap();
 
     assert!(f.recorded.snapshots().pop().unwrap().finished.is_empty());
 }

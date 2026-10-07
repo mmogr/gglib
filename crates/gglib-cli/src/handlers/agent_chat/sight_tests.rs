@@ -45,7 +45,7 @@ impl FakeServer {
 }
 
 /// Read one request from `stream`: its first line and its body.
-fn read_request(stream: &mut std::net::TcpStream) -> (String, String) {
+pub(crate) fn read_request(stream: &mut std::net::TcpStream) -> (String, String) {
     let mut head = Vec::new();
     let mut byte = [0_u8; 1];
     while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).is_ok_and(|n| n == 1) {

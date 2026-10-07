@@ -15,6 +15,9 @@ pub(crate) struct ShardGroupId(String);
 
 impl ShardGroupId {
     /// Create a new shard group ID from a string.
+    ///
+    /// Test-only: production makes one with [`Self::generate`].
+    #[cfg(test)]
     pub(crate) fn new(id: impl Into<String>) -> Self {
         Self(id.into())
     }

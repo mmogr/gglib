@@ -16,4 +16,9 @@ title: string,
 /**
  * What became of it.
  */
-outcome: DownloadOutcome, };
+outcome: DownloadOutcome, 
+/**
+ * How it ended, in words, ready to print. Made here and nowhere else,
+ * so a toast, a terminal line and a command's error all read the same.
+ */
+text: string, };

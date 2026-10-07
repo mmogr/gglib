@@ -24,11 +24,10 @@ fn manager() -> DownloadManagerImpl {
 }
 
 async fn queue(manager: &DownloadManagerImpl, repo: &str) -> DownloadId {
-    let queued = manager
+    manager
         .queue_download_smart(repo, Some("Q8_0".to_string()))
         .await
-        .unwrap();
-    queued.root_id
+        .unwrap()
 }
 
 /// Run the next file off the queue to its end: on disk, or failed.
@@ -121,21 +120,24 @@ async fn the_monitor_does_not_exit_between_files() {
     assert!(!snapshot.is_idle(), "idle is what the monitors exit on");
 }
 
-/// The weights failed and the projector then arrived, which leaves the
-/// tracker holding a group that will never complete. With no file of it left
-/// to run, it is not a download.
+/// A group the tracker holds open is not a download on that alone: with no
+/// file of it active or pending, there is nothing of it to run.
 #[tokio::test]
 async fn a_download_with_nothing_left_waiting_is_not_active() {
     let manager = manager();
-    queue(&manager, "owner/a").await;
-    finish_next(&manager, false).await;
-    assert_eq!(
-        rows(&manager).await,
-        [row("owner/a", DownloadPhase::Queued, 1)],
-        "after a failure the file left over is waiting, not running"
-    );
-    finish_next(&manager, true).await;
-    assert!(manager.shard_tracker.lock().await.has_open_groups());
+    let metadata = GroupMetadata {
+        repo_id: "owner/a".to_string(),
+        commit_sha: "abc123".to_string(),
+        quantization: gglib_core::download::Quantization::Q8_0,
+        primary_filename: "zeta.Q8_0.gguf".to_string(),
+        hf_tags: vec![],
+        file_entries: vec![],
+    };
+    let stray = ShardGroupId::new("owner/a:Q8_0:stray");
+    let mut tracker = manager.shard_tracker.lock().await;
+    tracker.on_shard_done(&stray, 0, "zeta.Q8_0.gguf".into(), 2, &metadata);
+    assert!(tracker.has_open_groups());
+    drop(tracker);
 
     let snapshot = manager.get_queue_snapshot().await.unwrap();
 

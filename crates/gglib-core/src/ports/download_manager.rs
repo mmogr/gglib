@@ -180,12 +180,14 @@ pub trait DownloadManagerPort: Send + Sync {
     ///
     /// # Returns
     ///
-    /// Returns (position, `shard_count`) on success.
+    /// The download's ID: the row to watch in the queue snapshot, and the
+    /// entry to read once it has ended. A request for a download already
+    /// waiting or running answers that download's ID and queues nothing.
     async fn queue_smart(
         self: Arc<Self>,
         repo_id: String,
         quantization: Option<String>,
-    ) -> Result<(usize, usize), DownloadError>;
+    ) -> Result<DownloadId, DownloadError>;
 
     /// Get a snapshot of the current queue state.
     ///
@@ -193,14 +195,24 @@ pub trait DownloadManagerPort: Send + Sync {
     /// This is used by UIs to display download status.
     async fn get_queue_snapshot(&self) -> Result<QueueSnapshot, DownloadError>;
 
-    /// Cancel a download.
+    /// Cancel a download: every file of it.
     ///
-    /// If the download is queued, it's removed from the queue.
-    /// If the download is active, the underlying process is terminated.
-    /// Returns an error if the download ID is not found.
+    /// A download waiting, or between two of its files, ends at once with a
+    /// cancelled outcome. One with a file being fetched has that transfer
+    /// told to stop, and ends cancelled when it has.
+    ///
+    /// A cancel can come too late and still be answered `Ok`: once the
+    /// download's last file is on disk and its model is being registered,
+    /// or once a file of it has failed, the download ends completed or
+    /// failed as it was going to.
+    ///
+    /// Returns an error when the download is neither waiting nor running;
+    /// the outcome of one that has already ended is left as it is.
     async fn cancel_download(&self, id: &DownloadId) -> Result<(), DownloadError>;
 
-    /// Cancel all active and queued downloads.
+    /// Cancel all active and queued downloads, each as
+    /// [`Self::cancel_download`] does, so each leaves its own cancelled
+    /// outcome.
     ///
     /// This is used during application shutdown or when the user
     /// wants to clear the queue.
@@ -213,10 +225,12 @@ pub trait DownloadManagerPort: Send + Sync {
     // Queue management operations
     // ─────────────────────────────────────────────────────────────────────────
 
-    /// Remove a pending download from the queue.
+    /// Take a download off the queue.
     ///
-    /// This is for items that haven't started yet. For active downloads,
-    /// use `cancel_download` instead.
+    /// A download waiting or running is cancelled, as
+    /// [`Self::cancel_download`] does. One that has already ended has its
+    /// outcome dropped from the snapshot's `finished`. Returns an error when
+    /// it is neither.
     async fn remove_from_queue(&self, id: &DownloadId) -> Result<(), DownloadError>;
 
     /// Reorder a waiting download to a new position in the queue.
@@ -230,14 +244,9 @@ pub trait DownloadManagerPort: Send + Sync {
     async fn reorder_queue(&self, id: &DownloadId, new_position: u32)
     -> Result<u32, DownloadError>;
 
-    /// Cancel all downloads in a shard group.
-    ///
-    /// Used for canceling multi-file model downloads where shards are
-    /// queued together.
-    async fn cancel_group(&self, group_id: &str) -> Result<(), DownloadError>;
-
-    /// Clear all failed downloads from the failures list.
-    async fn clear_failed(&self) -> Result<(), DownloadError>;
+    /// Clear the record of how earlier downloads ended: every entry of the
+    /// snapshot's `finished`, whatever its outcome.
+    async fn clear_finished(&self) -> Result<(), DownloadError>;
 
     /// Update the maximum queue size.
     ///

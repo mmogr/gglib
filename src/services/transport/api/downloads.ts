@@ -19,7 +19,8 @@ export async function getDownloadQueue(): Promise<QueueSnapshot> {
 }
 
 /**
- * Queue a new download from HuggingFace.
+ * Queue a new download from HuggingFace. The answer is the download's id:
+ * its row's in the queue snapshot.
  */
 export async function queueDownload(params: QueueDownloadParams): Promise<QueueDownloadResponse> {
   return post<QueueDownloadResponse>('/api/models/downloads/queue', {
@@ -30,24 +31,21 @@ export async function queueDownload(params: QueueDownloadParams): Promise<QueueD
 }
 
 /**
- * Cancel an active or queued download.
+ * Cancel a download that is waiting or running, every file of it. It ends
+ * with a cancelled outcome, unless the cancel came too late: its last file was
+ * already on disk and its model being registered, or a file of it had already
+ * failed. Then it ends completed or failed, as it was going to.
  */
 export async function cancelDownload(id: DownloadId): Promise<void> {
   await post<void>(`/api/models/downloads/${encodeURIComponent(id)}/cancel`);
 }
 
 /**
- * Remove a download from the queue (for failed/completed items).
+ * Take a download off the queue. One that is waiting or running is
+ * cancelled; one that has ended has its entry dropped from `finished`.
  */
 export async function removeFromQueue(id: DownloadId): Promise<void> {
   await del<void>(`/api/models/downloads/${encodeURIComponent(id)}`);
-}
-
-/**
- * Clear all failed downloads from the queue.
- */
-export async function clearFailedDownloads(): Promise<void> {
-  await post<void>('/api/models/downloads/failed/clear');
 }
 
 /**

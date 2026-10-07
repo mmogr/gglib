@@ -30,8 +30,8 @@ pub(crate) struct DownloadArgs<'a> {
 
 /// Execute the download command.
 ///
-/// Queues `model_id` on the daemon and watches the queue until that download
-/// has ended.
+/// Queues `model_id` on the daemon and watches the queue until the download
+/// the daemon answered with has ended.
 /// Ctrl-C detaches; the daemon keeps downloading and registers the model
 /// itself.
 pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
@@ -43,11 +43,10 @@ pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<
 
     let handle =
         daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
-    handle
-        .queue_download(&daemon_client::QueueDownloadBody {
-            model_id: args.model_id.to_string(),
-            quant: args.quantization.map(String::from),
-        })
-        .await?;
-    remote::monitor(&handle, Arc::clone(&ctx.console), args.model_id).await
+    let body = daemon_client::QueueDownloadBody {
+        model_id: args.model_id.to_string(),
+        quant: args.quantization.map(String::from),
+    };
+    let queue = handle.queue_download(&body);
+    remote::monitor(&handle, Arc::clone(&ctx.console), queue).await
 }

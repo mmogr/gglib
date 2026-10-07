@@ -35,5 +35,8 @@ No I/O is performed here; the orchestrator (`DownloadManager`) handles I/O.
   download: completed, failed, or cancelled
 - Queued again, a download loses its old entry, so its new run is not read
   as its last
+- A download that is stopped or fails leaves the queue with every pending
+  file of it (`take_pending`), and its outcome is recorded by the same caller
+  under the same lock
 
 <!-- module-docs:end -->

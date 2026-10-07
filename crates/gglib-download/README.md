@@ -116,7 +116,13 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
   its absence or failure falls back to the native path. Either way each file
   has one count (`executor/progress.rs`): bytes on disk for the bar, and bytes
   off the network apart from them.
-- **Bounded Drain on Cancel** — `cancel_all()` signals cancel tokens and
+- **Whole-Download Endings** — A download ends as a whole
+  (`manager/ending.rs`). A file that fails, a cancel or a removal takes every
+  file of the download off the queue, and the download leaves one outcome:
+  completed, failed or cancelled. A cancel wins over a file that lands all
+  the same: the model is not registered.
+- **Bounded Drain on Cancel** — `cancel_all()` ends each waiting download as
+  cancelled, tells the transfer in flight to stop, and
   then waits up to 5 s for in-flight jobs to finalize before returning,
   so callers (CLI, Tauri, Axum) don't exit while in-flight transfers (or an
   accelerator subprocess) are still cleaning up.
@@ -145,7 +151,8 @@ let id = manager.queue_download(request).await?;
 // Note: Unsloth Dynamic ("UD-") quants (e.g. "UD-Q6_K") are always distinct,
 // separately selectable entries from their plain counterparts ("Q6_K") -- they
 // are never picked by the default preference list, so request them explicitly.
-let (position, shard_count) = Arc::clone(&manager)
+// It answers the download's ID, as queue_download does.
+let id = Arc::clone(&manager)
     .queue_smart("user/model".to_string(), Some("Q8_0".to_string()))
     .await?;
 

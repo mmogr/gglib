@@ -7,7 +7,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::row::DownloadRow;
+use super::row::{DownloadRow, download_title};
+use super::types::DownloadId;
 
 /// How many finished downloads a snapshot keeps.
 pub const FINISHED_LIMIT: usize = 16;
@@ -61,6 +62,31 @@ pub struct FinishedDownload {
     pub title: String,
     /// What became of it.
     pub outcome: DownloadOutcome,
+    /// How it ended, in words, ready to print. Made here and nowhere else,
+    /// so a toast, a terminal line and a command's error all read the same.
+    pub text: String,
+}
+
+impl FinishedDownload {
+    /// The entry for the download `id`, which ended with `outcome`.
+    #[must_use]
+    pub fn new(id: &DownloadId, outcome: DownloadOutcome) -> Self {
+        let title = download_title(id);
+        let text = match &outcome {
+            DownloadOutcome::Completed { message: None } => format!("{title}: downloaded"),
+            DownloadOutcome::Completed {
+                message: Some(message),
+            } => format!("{title}: {message}"),
+            DownloadOutcome::Failed { error } => format!("{title}: download failed: {error}"),
+            DownloadOutcome::Cancelled => format!("{title}: download cancelled"),
+        };
+        Self {
+            id: id.to_string(),
+            title,
+            outcome,
+            text,
+        }
+    }
 }
 
 /// What became of a download.
