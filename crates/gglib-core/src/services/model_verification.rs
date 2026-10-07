@@ -11,7 +11,6 @@ use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -19,7 +18,9 @@ use tokio::sync::{RwLock, mpsc};
 use tokio::task::JoinHandle;
 
 use crate::domain::ModelFile;
-use crate::ports::{HfClientPort, ModelFilesRepositoryPort, ModelRepository, RepositoryError};
+use crate::ports::{
+    DownloadManagerPort, HfClientPort, ModelFilesRepositoryPort, ModelRepository, RepositoryError,
+};
 
 // ============================================================================
 // Domain Types
@@ -241,19 +242,6 @@ impl Default for ModelOperationLock {
 // Service
 // ============================================================================
 
-/// Port trait for triggering downloads.
-///
-/// This abstracts the download manager to avoid tight coupling.
-#[async_trait]
-pub trait DownloadTriggerPort: Send + Sync {
-    /// Queue a download for a specific model by repo ID and quantization.
-    async fn queue_download(
-        &self,
-        repo_id: String,
-        quantization: Option<String>,
-    ) -> anyhow::Result<String>;
-}
-
 /// Model verification service.
 pub struct ModelVerificationService {
     /// Repository for model metadata.
@@ -262,8 +250,8 @@ pub struct ModelVerificationService {
     pub(super) model_files_repo: Arc<dyn ModelFilesRepositoryPort>,
     /// `HuggingFace` client for update checks.
     pub(super) hf_client: Arc<dyn HfClientPort>,
-    /// Download trigger for repairs.
-    pub(super) download_trigger: Arc<dyn DownloadTriggerPort>,
+    /// The download queue a repair fetches its files through.
+    pub(super) downloads: Arc<dyn DownloadManagerPort>,
     /// Concurrency control.
     pub(super) operation_lock: ModelOperationLock,
 }
@@ -274,13 +262,13 @@ impl ModelVerificationService {
         model_repo: Arc<dyn ModelRepository>,
         model_files_repo: Arc<dyn ModelFilesRepositoryPort>,
         hf_client: Arc<dyn HfClientPort>,
-        download_trigger: Arc<dyn DownloadTriggerPort>,
+        downloads: Arc<dyn DownloadManagerPort>,
     ) -> Self {
         Self {
             model_repo,
             model_files_repo,
             hf_client,
-            download_trigger,
+            downloads,
             operation_lock: ModelOperationLock::new(),
         }
     }

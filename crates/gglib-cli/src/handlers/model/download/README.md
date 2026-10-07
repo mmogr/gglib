@@ -16,6 +16,7 @@ This module handles all download-related commands that interact with `HuggingFac
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  model download → exec.rs ──► daemon queue ──► remote.rs         │
+│  model repair ──► daemon repairs and queues ──► remote.rs        │
 │  gglib up ──► DownloadManagerPort ──► interactive.rs             │
 │                                          ↕  [a]/[q] hotkeys      │
 │        both read a QueueSnapshot every 250 ms, and hand it to    │
@@ -36,8 +37,13 @@ This module handles all download-related commands that interact with `HuggingFac
 **Key Flow:**
 1. `gglib model download <repo>`: `exec.rs` queues the download on the gglib
    daemon, which answers with the download's ID, and `remote.rs` polls the
-   daemon's queue for that ID. `gglib up` queues on this
-   process's own download manager and runs `interactive.rs`. Neither subscribes
+   daemon's queue for that ID. `gglib model repair <model>` has the daemon
+   delete the model's unhealthy files and queue their download, and
+   `remote.rs` follows the ID the daemon answers in the same way; when that
+   download does not complete, the command's error goes on to name the files
+   still missing from the model's folder and the command that fetches them.
+   `gglib up` queues on this
+   process's own download manager and runs `interactive.rs`. None subscribes
    to events: each reads the queue snapshot four times a second.
 2. `board.rs` draws the snapshot, one line per download, from the row's own
    text (`DownloadRowText`), which is the text the GUI shows. The line leaves
@@ -193,20 +199,22 @@ HF_TOKEN=hf_... gglib model download my-org/private-model -q Q4_K_M
 ```
 
 ### `check-updates`
-Check if downloaded models have updates on `HuggingFace` Hub. Sends `HF_TOKEN` to
-the Hub when it is set: the token the CLI's core was built with, as `search`,
-`browse` and `upgrade` do.
+Check if downloaded models have updates on `HuggingFace` Hub: whether the
+repository has a commit newer than the one recorded for the model
+(`ModelOps::check_update`, the comparison `upgrade` makes before it
+downloads). Sends `HF_TOKEN` to the Hub when it is set: the token the CLI's
+core was built with, as `search`, `browse` and `upgrade` do.
 
 **Module:** `check_updates.rs`
 
 **Options:**
-- `--model-id <ID>` - Check specific model
+- `--identifier <ID|NAME>` - Check specific model
 - `--all` - Check all models
 
 **Example:**
 ```bash
 gglib model check-updates --all
-gglib model check-updates --model-id 1
+gglib model check-updates --identifier 1
 ```
 
 ### `update-model`

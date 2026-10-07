@@ -3,11 +3,13 @@
 //! Handlers for verifying model integrity, checking for updates via OID comparison,
 //! and repairing corrupt models.
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
+use std::sync::Arc;
 use std::time::Instant;
 
-use super::resolver;
+use super::{download, resolver};
 use crate::bootstrap::CliContext;
+use crate::daemon_client;
 use crate::presentation::short_sha;
 use crate::utils::input;
 
@@ -159,14 +161,16 @@ pub(crate) async fn execute_verify(
 /// Execute the repair command.
 ///
 /// Repairs a corrupt model by deleting failed shards and re-downloading them.
+/// The daemon does both, on the queue `gglib model download` uses, and this
+/// command watches the download to its end: it succeeds when the files are
+/// back, and otherwise fails with what is missing and what fetches it.
+/// Ctrl-C detaches, and the daemon keeps downloading.
 pub(crate) async fn execute_repair(
     ctx: &CliContext,
     identifier: &str,
     shards: Option<String>,
     force: bool,
 ) -> Result<()> {
-    let verification = ctx.app.verification();
-
     // Resolve name-or-id to a model record.
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
@@ -199,19 +203,11 @@ pub(crate) async fn execute_repair(
     println!();
     println!("Starting repair...");
 
-    // Execute repair
-    verification
-        .repair_model(model.id, shard_indices)
-        .await
-        .map_err(|e| anyhow::anyhow!("Repair failed: {e}"))?;
-
-    println!("✓ Repair completed successfully");
-    println!();
-    println!("Note: The model files have been queued for re-download.");
-    println!(
-        "      Use 'gglib model verify {}' to check status after download completes.",
-        model.name
-    );
-
-    Ok(())
+    let folder = model
+        .file_path
+        .parent()
+        .context("the model's file has no folder")?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let repair = handle.repair_model(model.id, shard_indices);
+    download::monitor_repair(&handle, Arc::clone(&ctx.console), folder, repair).await
 }

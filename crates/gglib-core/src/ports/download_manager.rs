@@ -12,61 +12,9 @@
 
 use async_trait::async_trait;
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use crate::download::{DownloadError, DownloadId, Quantization, QueueSnapshot};
-
-/// Request to queue a new download.
-///
-/// This is a pure data structure containing all information needed
-/// to initiate a download. Infrastructure concerns (tokens, paths)
-/// are handled internally by the implementation.
-#[derive(Debug, Clone)]
-pub struct DownloadRequest {
-    /// Repository ID on `HuggingFace` (e.g., `unsloth/Llama-3-GGUF`).
-    pub repo_id: String,
-    /// The quantization to download.
-    pub quantization: Quantization,
-    /// Git revision/commit SHA (defaults to "main" if not specified).
-    pub revision: Option<String>,
-    /// Force re-download even if file exists locally.
-    pub force: bool,
-    /// Add to local model database after download.
-    pub add_to_db: bool,
-}
-
-impl DownloadRequest {
-    /// Create a new download request with required fields.
-    pub fn new(repo_id: impl Into<String>, quantization: Quantization) -> Self {
-        Self {
-            repo_id: repo_id.into(),
-            quantization,
-            revision: None,
-            force: false,
-            add_to_db: true,
-        }
-    }
-
-    /// Set the revision/commit SHA.
-    #[must_use]
-    pub fn with_revision(mut self, revision: impl Into<String>) -> Self {
-        self.revision = Some(revision.into());
-        self
-    }
-
-    /// Set whether to force re-download.
-    #[must_use]
-    pub const fn with_force(mut self, force: bool) -> Self {
-        self.force = force;
-        self
-    }
-
-    /// Set whether to add to database after download.
-    #[must_use]
-    pub const fn with_add_to_db(mut self, add_to_db: bool) -> Self {
-        self.add_to_db = add_to_db;
-        self
-    }
-}
+use crate::download::{DownloadError, DownloadId, QueueSnapshot};
 
 /// Configuration for creating a download manager.
 ///
@@ -76,8 +24,6 @@ impl DownloadRequest {
 pub struct DownloadManagerConfig {
     /// Directory where models are stored.
     pub models_directory: PathBuf,
-    /// Maximum concurrent downloads.
-    pub max_concurrent: u32,
     /// Maximum queue size.
     pub max_queue_size: u32,
     /// `HuggingFace` authentication token (for private repos).
@@ -88,7 +34,6 @@ impl Default for DownloadManagerConfig {
     fn default() -> Self {
         Self {
             models_directory: PathBuf::from("."),
-            max_concurrent: 1,
             max_queue_size: 10,
             hf_token: None,
         }
@@ -103,20 +48,6 @@ impl DownloadManagerConfig {
             models_directory,
             ..Default::default()
         }
-    }
-
-    /// Set the maximum concurrent downloads.
-    #[must_use]
-    pub const fn with_max_concurrent(mut self, max: u32) -> Self {
-        self.max_concurrent = max;
-        self
-    }
-
-    /// Set the maximum queue size.
-    #[must_use]
-    pub const fn with_max_queue_size(mut self, max: u32) -> Self {
-        self.max_queue_size = max;
-        self
     }
 
     /// Set the `HuggingFace` token.
@@ -139,8 +70,9 @@ impl DownloadManagerConfig {
 /// let manager: Arc<dyn DownloadManagerPort> = /* ... */;
 ///
 /// // Queue a download
-/// let request = DownloadRequest::new("unsloth/Llama-3-GGUF", Quantization::Q4KM);
-/// let id = manager.queue_download(request).await?;
+/// let id = Arc::clone(&manager)
+///     .queue_smart("unsloth/Llama-3-GGUF".to_string(), Some("Q4_K_M".to_string()))
+///     .await?;
 ///
 /// // Check status
 /// let snapshot = manager.get_queue_snapshot().await?;
@@ -148,20 +80,11 @@ impl DownloadManagerConfig {
 /// // Cancel if needed
 /// manager.cancel_download(&id).await?;
 /// ```
-use std::sync::Arc;
-
 #[async_trait]
 pub trait DownloadManagerPort: Send + Sync {
-    /// Queue a new download.
+    /// Queue a download, choosing its quantization when none is named.
     ///
-    /// Returns the download's ID, for tracking or cancelling it.
-    /// The download will be processed according to the manager's concurrency settings.
-    async fn queue_download(&self, request: DownloadRequest) -> Result<DownloadId, DownloadError>;
-
-    /// Queue a download with smart quantization selection.
-    ///
-    /// This is the recommended method for GUI adapters when the quantization
-    /// may be optional. It:
+    /// The one way a download is queued: by a user, and by a repair. It:
     /// 1. Selects the best quantization if none specified
     /// 2. Validates the requested quantization exists
     /// 3. Queues the download and starts processing

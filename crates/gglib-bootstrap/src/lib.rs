@@ -7,8 +7,8 @@
 //! 2. GGUF parser + model registrar
 //! 3. `HuggingFace` HTTP client
 //! 4. Download manager (accepting an injected event emitter)
-//! 5. `DownloadTriggerAdapter` (bridges `DownloadManagerPort` → `DownloadTriggerPort`)
-//! 6. `AppCore`, with the `ModelVerificationService` it builds from the above
+//! 5. `AppCore`, with the `ModelVerificationService` it builds from the above,
+//!    whose repair queues on that download manager
 //!
 //! Each adapter then adds its own concerns on top of the returned [`BuiltCore`]
 //! (MCP service, proxy supervisor, SSE broadcaster, 7 domain `*Ops`, etc.).
@@ -40,9 +40,9 @@
 //!
 //! The test suite uses these layers:
 //!
-//! - **Unit** (`src/download_trigger.rs`): inline `#[cfg(test)]` block with a
-//!   `MockDownloadManager` to verify quantization mapping and error propagation
-//!   without touching the database.
+//! - **Repair** (`src/builder_repair_tests.rs`): a repair through the wired
+//!   core queues its download on the manager the adapters hold, and that
+//!   manager runs it. The Hub is a stand-in.
 //! - **Happy path / config** (`tests/build_happy_path.rs`): full
 //!   `CoreBootstrap::build()` calls that confirm wiring succeeds and the
 //!   returned [`BuiltCore`] is live.
@@ -64,7 +64,6 @@
 mod builder;
 mod built;
 mod config;
-mod download_trigger;
 
 pub use builder::CoreBootstrap;
 pub use built::BuiltCore;

@@ -2,8 +2,8 @@
 mod client;
 mod download_group;
 mod error;
-#[cfg(test)]
-pub(crate) mod fake_hub;
+#[cfg(any(test, feature = "test-utils"))]
+pub mod fake_hub;
 mod types;
 
 pub use client::HfClientPort;

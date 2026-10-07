@@ -3,7 +3,7 @@
 
 use std::time::Instant;
 
-use gglib_core::download::{GgufFileRole, Quantization};
+use gglib_core::download::GgufFileRole;
 use gglib_core::ports::NoopEmitter;
 
 use super::duplicate_guard_tests::NoRegistrar;
@@ -66,34 +66,28 @@ async fn the_projector_is_queued_in_the_models_group_and_is_not_a_shard() {
     assert_eq!(last.filename, "mmproj-F16.gguf");
 }
 
-/// The files are kept for registration by both ways in: the request a user
-/// makes, and the one a repair makes through the port.
+/// The group's files are kept for registration, the projector last.
 #[tokio::test]
-async fn both_ways_of_queueing_keep_the_groups_files_for_registration() {
-    let by_user = manager();
-    by_user
+async fn queueing_keeps_the_groups_files_for_registration() {
+    let manager = manager();
+    let id = manager
         .queue_download_smart(REPO, Some("Q8_0".to_string()))
         .await
         .unwrap();
-    let by_repair = manager();
-    let request = DownloadRequest::new(REPO.to_string(), Quantization::Q8_0);
-    let id = by_repair.queue_download(request).await.unwrap();
 
-    for manager in [&by_user, &by_repair] {
-        let kept = manager
-            .file_entries_map
-            .lock()
-            .await
-            .get(&id.to_string())
-            .cloned();
-        let files = kept.expect("the group's files are kept");
-        let roles: Vec<_> = files.iter().map(|f| f.role).collect();
-        assert_eq!(files.len(), 4);
-        assert_eq!(files[3].path, "mmproj-F16.gguf");
-        assert_eq!(roles[..3], [GgufFileRole::Weights; 3]);
-        assert_eq!(roles[3], GgufFileRole::Projector);
-        assert_eq!(manager.queue.read().await.pending_len(), 4);
-    }
+    let kept = manager
+        .file_entries_map
+        .lock()
+        .await
+        .get(&id.to_string())
+        .cloned();
+    let files = kept.expect("the group's files are kept");
+    let roles: Vec<_> = files.iter().map(|f| f.role).collect();
+    assert_eq!(files.len(), 4);
+    assert_eq!(files[3].path, "mmproj-F16.gguf");
+    assert_eq!(roles[..3], [GgufFileRole::Weights; 3]);
+    assert_eq!(roles[3], GgufFileRole::Projector);
+    assert_eq!(manager.queue.read().await.pending_len(), 4);
 }
 
 // ── How its files are reported ───────────────────────────────────────────

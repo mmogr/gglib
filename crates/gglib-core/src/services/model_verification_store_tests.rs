@@ -101,7 +101,7 @@ async fn an_unreadable_store_stops_a_repair_before_anything_is_deleted() {
         format!("Failed to get model files: Storage error: {WHY}")
     );
     assert!(dir.path().join(WEIGHTS).exists(), "nothing is deleted");
-    assert!(f.queued.0.lock().unwrap().is_empty(), "nothing is queued");
+    assert!(f.queued.asked().is_empty(), "nothing is queued");
 }
 
 #[tokio::test]

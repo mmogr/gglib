@@ -26,7 +26,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gglib_core::ports::{HubChatsPort, RemoteGatewayPort, RunsPort};
-use gglib_core::{CorsConfig, ProxyAccessConfig};
+use gglib_core::{CorsConfig, DevicePorts, ProxyAccessConfig};
 use modelpipe::{ConnectOptions, ServeOptions, TokenPolicy};
 use reqwest::{Client, StatusCode};
 use tokio_util::sync::CancellationToken;
@@ -77,8 +77,11 @@ pub(crate) async fn spawn_proxy_holding(
         vec![],
     )
     .with_remote(Some(Arc::clone(&gateway) as Arc<dyn RemoteGatewayPort>))
-    .with_runs(runs)
-    .with_chats(chats);
+    .with_devices(DevicePorts {
+        runs,
+        chats,
+        ..DevicePorts::default()
+    });
     let (base, _, cancel) = super::access::spawn_proxy(access).await;
     (base, cancel, gateway)
 }

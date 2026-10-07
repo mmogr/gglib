@@ -200,8 +200,7 @@ impl DaemonHandle {
 
 /// The download a queue request was answered with.
 fn queued_id(queued: &QueueDownloadResponse) -> DownloadId {
-    let Ok(id) = queued.id.parse();
-    id
+    DownloadId::from(queued.id.as_str())
 }
 
 #[cfg(test)]

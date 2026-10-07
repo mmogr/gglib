@@ -46,13 +46,12 @@ pub use events::{AppEvent, ModelSummary};
 pub use ports::{
     AgentError, AgentLoopPort, AgentRunOutput, AppEventEmitter, ChatHistoryError,
     ChatHistoryRepository, CompletedDownload, CoreError, DownloadManagerConfig,
-    DownloadManagerPort, DownloadRequest, EmptyToolExecutor, FilteredToolExecutor,
-    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HfClientPort, HfFileInfo,
-    HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult, JinjaMode,
-    LlmCompletionPort, McpRepositoryError, McpServerRepository, McpServiceError,
-    ModelRegistrarPort, ModelRepository, NoopEmitter, NoopGgufParser, ProcessHandle,
-    QuantizationResolver, Repos, RepositoryError, Resolution, ResolvedFile, ServerConfig,
-    SettingsRepository, ToolExecutorPort, UsageSink,
+    DownloadManagerPort, EmptyToolExecutor, FilteredToolExecutor, GgufCapabilities, GgufMetadata,
+    GgufParseError, GgufParserPort, HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo,
+    HfSearchOptions, HfSearchResult, JinjaMode, LlmCompletionPort, McpRepositoryError,
+    McpServerRepository, McpServiceError, ModelRegistrarPort, ModelRepository, NoopEmitter,
+    NoopGgufParser, ProcessHandle, QuantizationResolver, Repos, RepositoryError, Resolution,
+    ResolvedFile, ServerConfig, SettingsRepository, ToolExecutorPort, UsageSink,
 };
 pub use services::{ChatHistoryService, ModelRegistrar};
 pub use settings::{

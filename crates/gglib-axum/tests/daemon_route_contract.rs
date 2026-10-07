@@ -146,6 +146,10 @@ async fn every_daemon_path_the_cli_calls_is_routed() {
     if let Some(complaint) = check(&app, daemon::REMOTE_FORGET_METHODS, &forget).await {
         broken.push(format!("  {complaint}"));
     }
+    let repair = daemon::model_repair_path(1);
+    if let Some(complaint) = check(&app, daemon::MODEL_REPAIR_METHODS, &repair).await {
+        broken.push(format!("  {complaint}"));
+    }
     for (methods, path) in [
         (daemon::RUN_METHODS, daemon::run_path("run-1")),
         (

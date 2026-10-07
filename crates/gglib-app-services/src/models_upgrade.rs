@@ -15,43 +15,77 @@ use crate::error::GuiError;
 use crate::models::ModelOps;
 use crate::types::{UpgradeCheck, UpgradeOutcome};
 
+/// Ask the Hub for `repo`'s latest commit, and compare it with `recorded`.
+async fn hub_check(
+    repo: String,
+    recorded: Option<String>,
+    token: Option<String>,
+) -> anyhow::Result<UpdateCheckResult> {
+    gglib_download::cli_exec::check_update(&repo, recorded.as_deref(), token).await
+}
+
 impl ModelOps {
-    /// Preconditions shared by the upgrade check and the upgrade itself.
-    fn upgrade_source(model: &gglib_core::Model) -> Result<(String, String), GuiError> {
-        let repo = model.hf_repo_id.clone().ok_or_else(|| {
+    /// The repository an update check asks about. A model that did not come
+    /// from `HuggingFace` has none.
+    fn hf_repo(model: &gglib_core::Model) -> Result<String, GuiError> {
+        model.hf_repo_id.clone().ok_or_else(|| {
             GuiError::ValidationFailed("Model is not from HuggingFace, cannot update".into())
-        })?;
+        })
+    }
+
+    /// Preconditions of the upgrade itself: the repository, and the
+    /// quantization it downloads again.
+    fn upgrade_source(model: &gglib_core::Model) -> Result<(String, String), GuiError> {
+        let repo = Self::hf_repo(model)?;
         let quant = model.quantization.clone().ok_or_else(|| {
             GuiError::ValidationFailed("Model has no quantization info stored".into())
         })?;
         Ok((repo, quant))
     }
 
-    /// Whether a newer `HuggingFace` revision exists — the commit-SHA check
-    /// `gglib model upgrade` runs before downloading, distinct from the
-    /// shard-level diff on `/{id}/updates`.
+    /// Whether the model's repository has a commit newer than the one
+    /// recorded for it: the comparison behind `gglib model check-updates`,
+    /// `gglib model upgrade` and the daemon's upgrade check, distinct from
+    /// the shard-level diff on `/{id}/updates`.
     ///
-    /// Not the same question as `gglib model check-updates`: with no recorded
-    /// revision this reports `has_update: true` (nothing to compare against)
-    /// where that command declines to answer. Callers should present a
-    /// `current_sha` of `None` as "no baseline recorded", not as a new release.
-    pub async fn check_upgrade(&self, id: i64) -> Result<UpgradeCheck, GuiError> {
-        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
-        let (repo, _quant) = Self::upgrade_source(&model)?;
+    /// It asks about the repository alone, so a model with no stored
+    /// quantization is checked like any other. With no recorded revision
+    /// there is nothing to compare: `current_sha` is `None` and `has_update`
+    /// is true, which a caller presents as "no baseline recorded", not as a
+    /// new release.
+    pub async fn check_update(&self, id: i64) -> Result<UpgradeCheck, GuiError> {
+        self.check_update_with(id, hub_check).await
+    }
 
-        let check = gglib_download::cli_exec::check_update(
-            &repo,
-            model.hf_commit_sha.as_deref(),
-            self.deps.core.hf_token(),
-        )
-        .await
-        .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
+    /// [`check_update`](Self::check_update) with what it asks of the Hub
+    /// passed in: `check`, given the repository, the recorded revision and
+    /// the token.
+    async fn check_update_with<C, CF>(&self, id: i64, check: C) -> Result<UpgradeCheck, GuiError>
+    where
+        C: FnOnce(String, Option<String>, Option<String>) -> CF,
+        CF: Future<Output = anyhow::Result<UpdateCheckResult>>,
+    {
+        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
+        let repo = Self::hf_repo(&model)?;
+
+        let check = check(repo, model.hf_commit_sha, self.deps.core.hf_token())
+            .await
+            .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
 
         Ok(UpgradeCheck {
             has_update: check.has_update,
             current_sha: check.current_sha,
             latest_sha: check.latest_sha,
         })
+    }
+
+    /// [`check_update`](Self::check_update) for a model an upgrade can be
+    /// applied to: one with no stored quantization is refused here, as
+    /// [`apply_upgrade`](Self::apply_upgrade) would refuse it.
+    pub async fn check_upgrade(&self, id: i64) -> Result<UpgradeCheck, GuiError> {
+        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
+        Self::upgrade_source(&model)?;
+        self.check_update(id).await
     }
 
     /// Re-download the model at the latest `HuggingFace` revision and rewrite
@@ -72,10 +106,7 @@ impl ModelOps {
         id: i64,
         rows: Option<RowCallback>,
     ) -> Result<UpgradeOutcome, GuiError> {
-        let check = |repo: String, recorded: Option<String>, token| async move {
-            gglib_download::cli_exec::check_update(&repo, recorded.as_deref(), token).await
-        };
-        self.apply_upgrade_with(id, rows, check, gglib_download::cli_exec::update_model)
+        self.apply_upgrade_with(id, rows, hub_check, gglib_download::cli_exec::update_model)
             .await
     }
 

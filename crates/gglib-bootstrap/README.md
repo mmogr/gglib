@@ -51,8 +51,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 2. `GgufParser` + `ModelRegistrar`
 3. `HfClient` (`HuggingFace` HTTP client)
 4. Download manager (using the injected `AppEventEmitter`)
-5. `DownloadTriggerAdapter` (bridges `DownloadManagerPort` → `DownloadTriggerPort`)
-6. `AppCore`, with the `ModelVerificationService` it builds from the above
+5. `AppCore`, with the `ModelVerificationService` it builds from the above,
+   whose repair queues on that download manager
 
 ## Internal Structure
 
@@ -61,11 +61,11 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │                                 gglib-bootstrap                                     │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                     │
-│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌────────────────────┐        │
-│   │ config.rs   │  │ built.rs    │  │ builder.rs  │  │ download_trigger.rs│        │
-│   │BootstrapCfg │  │ BuiltCore   │  │CoreBootstrap│  │  (private adapter) │        │
-│   └─────────────┘  └─────────────┘  └─────────────┘  └────────────────────┘        │
-│         └───────────────┴────────┬───────┴────────────────┘                         │
+│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                                 │
+│   │ config.rs   │  │ built.rs    │  │ builder.rs  │                                 │
+│   │BootstrapCfg │  │ BuiltCore   │  │CoreBootstrap│                                 │
+│   └─────────────┘  └─────────────┘  └─────────────┘                                 │
+│         └───────────────┴────────┬───────┘                                          │
 │                                  ▼                                                  │
 │                 lib.rs (declares modules + re-exports)                              │
 │                                                                                     │
@@ -87,7 +87,7 @@ The test suite is split into these layers:
 
 | Layer | Location | Purpose |
 |-------|----------|---------|
-| Unit | `src/download_trigger.rs` `#[cfg(test)]` | Inline tests for `DownloadTriggerAdapter` using a `MockDownloadManager`. Validates quantization mapping and error propagation without touching the database. |
+| Repair | `src/builder_repair_tests.rs` | A repair through the wired core queues its download on the manager the adapters hold, and that manager runs it. The Hub is a stand-in. |
 | Happy path / config | `tests/build_happy_path.rs` | Full `CoreBootstrap::build()` calls that confirm the wiring succeeds and the returned `BuiltCore` is live. |
 | Hub token | `src/builder.rs` `#[cfg(test)]`, `tests/hub_token.rs` | Inline: one token is handed to the Hub client's config, the download manager's config and `AppCore`, or to none of them. `tests/hub_token.rs`: `build()` reads `HF_TOKEN` itself, and the `AppCore` it returns holds it. That test runs itself again in a process started with the variable, since a running process cannot safely set it. |
 | Error cases | `tests/build_error_cases.rs` | Exercises the failure paths of `build()` — missing DB directory and DB path pointing at a directory. |

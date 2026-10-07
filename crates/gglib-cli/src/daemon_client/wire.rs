@@ -7,13 +7,16 @@
 //! pairing is visible from the tree; `StartServerBody` pairs with its namesake
 //! in `gglib_axum::handlers::servers`, and carries the daemon's own
 //! `StartServerRequest`; `StartServerDto` narrows
-//! `gglib_app_services::types::StartServerResponse`, and `QueueDownloadBody`
-//! pairs with `gglib_axum::handlers::model::downloads`. The tests in
-//! `wire_tests.rs` pin `StartProxyBody`, `StartServerBody` and
-//! `StartServerDto`, and the test of the queue request in `calls.rs` reads
-//! `QueueDownloadBody` as it was sent. `ProxyStatusDto` is not pinned. The
-//! answer to a queue request has no twin here: the CLI reads the daemon's own
-//! `gglib_app_services::types::QueueDownloadResponse`.
+//! `gglib_app_services::types::StartServerResponse`, `QueueDownloadBody`
+//! pairs with `gglib_axum::handlers::model::downloads`, and `RepairBody` with
+//! `RepairRequest` in `gglib_axum::handlers::model::verification`. The tests
+//! in `wire_tests.rs` pin `StartProxyBody`, `StartServerBody` and
+//! `StartServerDto`, the test of the queue request in `calls.rs` reads
+//! `QueueDownloadBody` as it was sent, and `repair_tests.rs` reads
+//! `RepairBody` so. `ProxyStatusDto` is not pinned. The answers to a queue
+//! request and to a repair have no twin here: the CLI reads the daemon's own
+//! `gglib_app_services::types::QueueDownloadResponse` and
+//! `gglib_core::services::RepairStarted`.
 //!
 //! The remote tunnel's shapes are not here: the CLI reads and sends
 //! `gglib_app_services`' own `RemoteStatus`, `RemoteDevice` and the rest, the
@@ -89,6 +92,13 @@ pub(crate) struct QueueDownloadBody {
     pub model_id: String,
     /// `None` leaves the quantization choice to the daemon.
     pub quant: Option<String>,
+}
+
+/// `POST /api/models/{id}/repair` request body.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct RepairBody {
+    /// The file indices to repair. `None` is every unhealthy file.
+    pub shards: Option<Vec<usize>>,
 }
 
 #[cfg(test)]

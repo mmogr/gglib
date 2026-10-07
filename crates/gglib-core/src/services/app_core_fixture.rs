@@ -5,10 +5,12 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use super::{AppCore, DownloadTriggerPort};
+use super::AppCore;
+use crate::download::DownloadError;
 use crate::ports::huggingface::HfPortResult;
 use crate::ports::{
-    HfClientPort, HfFileInfo, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult, Repos,
+    AskedDownloads, HfClientPort, HfFileInfo, HfQuantInfo, HfRepoInfo, HfSearchOptions,
+    HfSearchResult, Repos,
 };
 
 impl AppCore {
@@ -18,7 +20,9 @@ impl AppCore {
     /// either builds its core with [`AppCore::new`] and doubles of its own.
     #[must_use]
     pub fn bare(repos: Repos) -> Self {
-        Self::new(repos, Arc::new(NoHub), Arc::new(NoQueue))
+        let no_queue = DownloadError::other("a bare core has no download queue");
+        let downloads = Arc::new(AskedDownloads::refusing(no_queue));
+        Self::new(repos, Arc::new(NoHub), downloads)
     }
 }
 
@@ -51,19 +55,5 @@ impl HfClientPort for NoHub {
     }
     async fn get_model_info(&self, _model_id: &str) -> HfPortResult<HfRepoInfo> {
         unimplemented!("a bare core has no Hub")
-    }
-}
-
-/// The download queue of a core that has none.
-struct NoQueue;
-
-#[async_trait]
-impl DownloadTriggerPort for NoQueue {
-    async fn queue_download(
-        &self,
-        _repo_id: String,
-        _quantization: Option<String>,
-    ) -> anyhow::Result<String> {
-        unimplemented!("a bare core has no download queue")
     }
 }

@@ -1,17 +1,15 @@
 //! What the three verification routes answer: for an id no model has, for a
 //! model that did not come from Hugging Face, and for one that did.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use async_trait::async_trait;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use gglib_core::domain::{NewModel, NewModelFile};
-use gglib_core::ports::{
-    HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
-    HfSearchResult, ModelFilesRepositoryPort,
-};
-use gglib_core::services::{AppCore, DownloadTriggerPort};
+use gglib_core::download::DownloadError;
+use gglib_core::ports::huggingface::fake_hub::{FakeHub, hub_file};
+use gglib_core::ports::{AskedDownloads, ModelFilesRepositoryPort};
+use gglib_core::services::AppCore;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 
@@ -26,80 +24,40 @@ const WEIGHTS: &str = "zeta.Q8_0.gguf";
 const HEALTHY_OID: &str = "9a129038d9a00aed0cf6a7ea059ca50a813449061ab87848cf1a13eafdf33b2c";
 /// What [`WEIGHTS`] is on the Hub now.
 const HUB_OID: &str = "newer";
-/// The id the queue gives a download.
+/// The id the queue gives a `Q8_0` download of [`REPO`].
 const QUEUED: &str = "owner/zeta-GGUF:Q8_0";
 
 /// A Hub whose every quantization is [`WEIGHTS`] under [`HUB_OID`].
-struct Hub;
-
-#[async_trait]
-impl HfClientPort for Hub {
-    async fn get_quantization_files(
-        &self,
-        _model_id: &str,
-        _quantization: &str,
-    ) -> Result<Vec<HfFileInfo>, HfPortError> {
-        Ok(vec![HfFileInfo {
-            path: WEIGHTS.to_owned(),
-            size: 7,
-            is_gguf: true,
-            oid: Some(HUB_OID.to_owned()),
-        }])
-    }
-    async fn search(&self, _options: &HfSearchOptions) -> Result<HfSearchResult, HfPortError> {
-        unimplemented!("a quantization's files are all this hub answers")
-    }
-    async fn list_quantizations(&self, _model_id: &str) -> Result<Vec<HfQuantInfo>, HfPortError> {
-        unimplemented!("a quantization's files are all this hub answers")
-    }
-    async fn list_projectors(&self, _model_id: &str) -> Result<Vec<HfFileInfo>, HfPortError> {
-        unimplemented!("a quantization's files are all this hub answers")
-    }
-    async fn list_gguf_files(&self, _model_id: &str) -> Result<Vec<HfFileInfo>, HfPortError> {
-        unimplemented!("a quantization's files are all this hub answers")
-    }
-    async fn get_commit_sha(&self, _model_id: &str) -> Result<String, HfPortError> {
-        unimplemented!("a quantization's files are all this hub answers")
-    }
-    async fn get_model_info(&self, _model_id: &str) -> Result<HfRepoInfo, HfPortError> {
-        unimplemented!("a quantization's files are all this hub answers")
+fn hub() -> FakeHub {
+    FakeHub {
+        weights: vec![hub_file(WEIGHTS, 7, HUB_OID)],
+        ..FakeHub::default()
     }
 }
 
-/// Keeps each download a repair asks for, as `(repo, quantization)`.
-#[derive(Default)]
-struct Queue(Mutex<Vec<(String, Option<String>)>>);
-
-#[async_trait]
-impl DownloadTriggerPort for Queue {
-    async fn queue_download(
-        &self,
-        repo_id: String,
-        quantization: Option<String>,
-    ) -> anyhow::Result<String> {
-        self.0.lock().unwrap().push((repo_id, quantization));
-        Ok(QUEUED.to_owned())
-    }
-}
-
-/// A daemon whose library is in `dir`, with [`Hub`] and `queue` behind its
+/// A daemon whose library is in `dir`, with [`hub`] and `queue` behind its
 /// verification service.
 struct Library {
     state: AppState,
     files: Arc<dyn ModelFilesRepositoryPort>,
-    queue: Arc<Queue>,
+    queue: Arc<AskedDownloads>,
     dir: tempfile::TempDir,
 }
 
 async fn library() -> Library {
+    library_queueing_on(AskedDownloads::default()).await
+}
+
+/// [`library`], whose repairs queue on `queue`.
+async fn library_queueing_on(queue: AskedDownloads) -> Library {
     let (dir, state) = state().await;
     let url = format!("sqlite:{}", dir.path().join("gglib.db").display());
     let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
     let repos = gglib_db::CoreFactory::build_repos(pool);
     let files = Arc::clone(&repos.model_files);
-    let queue = Arc::new(Queue::default());
+    let queue = Arc::new(queue);
     let mut state = Arc::into_inner(state).expect("the only holder");
-    state.core = Arc::new(AppCore::new(repos, Arc::new(Hub), queue.clone()));
+    state.core = Arc::new(AppCore::new(repos, Arc::new(hub()), queue.clone()));
     Library {
         state: Arc::new(state),
         files,
@@ -164,7 +122,7 @@ async fn an_unknown_model_is_not_found_by_verify_check_updates_and_repair() {
     assert_eq!(library.verify(UNKNOWN).await, not_found);
     assert_eq!(library.check_updates(UNKNOWN).await, not_found);
     assert_eq!(library.repair(UNKNOWN).await, not_found);
-    assert!(library.queue.0.lock().unwrap().is_empty());
+    assert!(library.queue.asked().is_empty());
 }
 
 #[tokio::test]
@@ -189,7 +147,7 @@ async fn a_model_with_no_hugging_face_source_has_nothing_to_verify_or_repair_and
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
     let error = "Failed to repair model: Model does not have HuggingFace repository information";
     assert_eq!(body, json!({ "error": error, "status": 500 }));
-    assert!(library.queue.0.lock().unwrap().is_empty());
+    assert!(library.queue.asked().is_empty());
 }
 
 #[tokio::test]
@@ -240,10 +198,29 @@ async fn repair_deletes_a_corrupt_file_and_answers_the_download_it_queued() {
     let (status, body) = library.repair(id).await;
 
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body, json!({ "message": QUEUED }));
+    assert_eq!(body, json!({ "id": QUEUED, "files": [WEIGHTS] }));
     assert!(!library.dir.path().join(WEIGHTS).exists(), "the file goes");
     assert_eq!(
-        *library.queue.0.lock().unwrap(),
+        library.queue.asked(),
         [(REPO.to_owned(), Some("Q8_0".to_owned()))]
     );
+}
+
+/// The queue refuses once the file is gone. The route fails, and its error
+/// says which file is missing and the command that fetches it.
+#[tokio::test]
+async fn a_repair_whose_download_cannot_be_queued_fails_and_names_the_missing_file() {
+    let full = AskedDownloads::refusing(DownloadError::queue_full(10));
+    let library = library_queueing_on(full).await;
+    let id = library.downloaded_model("damaged").await;
+
+    let (status, body) = library.repair(id).await;
+
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    let error = "Failed to repair model: The download that fetches them again could not be \
+                 queued: Queue full: maximum 10 downloads allowed. Missing from the model's \
+                 folder: zeta.Q8_0.gguf. Run `gglib model download owner/zeta-GGUF \
+                 --quantization Q8_0` to fetch what is missing.";
+    assert_eq!(body, json!({ "error": error, "status": 500 }));
+    assert!(!library.dir.path().join(WEIGHTS).exists(), "as it says");
 }

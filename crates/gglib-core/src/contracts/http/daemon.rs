@@ -152,6 +152,16 @@ pub const DOWNLOADS_QUEUE_PATH: &str = "/api/models/downloads/queue";
 /// Model list: the library, sorted and filtered as its query parameters ask.
 pub const MODELS_LIST_PATH: &str = "/api/models";
 
+/// Repair one model, interpolating `id` into [`MODELS_LIST_PATH`]: delete its
+/// unhealthy files and queue the download that fetches them again.
+#[must_use]
+pub fn model_repair_path(id: i64) -> String {
+    format!("{MODELS_LIST_PATH}/{id}/repair")
+}
+
+/// The verbs [`model_repair_path`] is called with.
+pub const MODEL_REPAIR_METHODS: &[&str] = &["POST"];
+
 /// Benchmark comparison run (SSE).
 pub const BENCHMARK_COMPARE_PATH: &str = "/api/benchmark/compare";
 

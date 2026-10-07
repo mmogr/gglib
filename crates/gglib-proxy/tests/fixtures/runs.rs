@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use futures_util::stream::{self, StreamExt as _};
 use gglib_core::domain::runs::{RunInfo, RunKind, RunList, RunStatus};
 use gglib_core::ports::{Created, RunEvent, RunEvents, RunScope, RunsError, RunsPort};
-use gglib_core::{CorsConfig, ProxyAccessConfig};
+use gglib_core::{CorsConfig, DevicePorts, ProxyAccessConfig};
 use serde_json::Value;
 
 /// The stub.
@@ -123,7 +123,10 @@ pub(crate) async fn serve_demanding(
         "127.0.0.1",
         vec![],
     )
-    .with_runs(runs.map(|r| r as Arc<dyn RunsPort>));
+    .with_devices(DevicePorts {
+        runs: runs.map(|r| r as Arc<dyn RunsPort>),
+        ..DevicePorts::default()
+    });
     let (base, _, cancel) = super::access::spawn_proxy(access).await;
     (base, cancel)
 }

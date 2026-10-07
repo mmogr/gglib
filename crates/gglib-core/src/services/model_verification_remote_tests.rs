@@ -10,12 +10,11 @@ use sha2::{Digest, Sha256};
 
 use super::*;
 use crate::domain::{Model, NewModel, NewModelFile};
-use crate::ports::ModelFilesRepositoryPort;
 use crate::ports::huggingface::fake_hub::{FakeHub, hub_file};
-use crate::services::DownloadTriggerPort;
+use crate::ports::{AskedDownloads, ModelFilesRepositoryPort};
 use crate::services::model_projector::tests::OneModelRepo;
 
-const REPO: &str = "owner/zeta-GGUF";
+pub(super) const REPO: &str = "owner/zeta-GGUF";
 pub(super) const WEIGHTS: &str = "zeta.Q8_0.gguf";
 pub(super) const PROJECTOR: &str = "mmproj-F16.gguf";
 
@@ -39,22 +38,6 @@ impl ModelFilesRepositoryPort for Rows {
     }
 }
 
-/// Records each download asked for, as `(repo, quantization)`.
-#[derive(Default)]
-pub(super) struct Queued(pub Mutex<Vec<(String, Option<String>)>>);
-
-#[async_trait]
-impl DownloadTriggerPort for Queued {
-    async fn queue_download(
-        &self,
-        repo_id: String,
-        quantization: Option<String>,
-    ) -> anyhow::Result<String> {
-        self.0.lock().unwrap().push((repo_id, quantization));
-        Ok("queued".to_owned())
-    }
-}
-
 pub(super) fn sha256(content: &str) -> String {
     format!("{:x}", Sha256::digest(content.as_bytes()))
 }
@@ -71,18 +54,19 @@ pub(super) fn row(index: i32, name: &str, oid: &str) -> ModelFile {
     }
 }
 
-/// Model 1, a `Q8_0` download of [`REPO`] whose weights are in `dir`.
-fn model_in(dir: &Path) -> Model {
+/// Model 1, a download of [`REPO`] stored as `quantization`, whose weights
+/// are in `dir`.
+fn model_in(dir: &Path, quantization: &str) -> Model {
     let mut new = NewModel::new("zeta".to_owned(), dir.join(WEIGHTS), 7.0, Utc::now());
     new.hf_repo_id = Some(REPO.to_owned());
-    new.quantization = Some("Q8_0".to_owned());
+    new.quantization = Some(quantization.to_owned());
     Model::stored(1, &new)
 }
 
 pub(super) struct Fixture {
     pub service: ModelVerificationService,
     pub hub: Arc<FakeHub>,
-    pub queued: Arc<Queued>,
+    pub queued: Arc<AskedDownloads>,
 }
 
 pub(super) fn fixture(dir: &Path, rows: Vec<ModelFile>, hub: FakeHub) -> Fixture {
@@ -95,10 +79,22 @@ pub(super) fn fixture_over(
     store: Arc<dyn ModelFilesRepositoryPort>,
     hub: FakeHub,
 ) -> Fixture {
+    fixture_queueing_on(dir, "Q8_0", store, hub, AskedDownloads::default())
+}
+
+/// [`fixture_over`], for a model stored as `quantization` whose repair
+/// queues on `queued`.
+pub(super) fn fixture_queueing_on(
+    dir: &Path,
+    quantization: &str,
+    store: Arc<dyn ModelFilesRepositoryPort>,
+    hub: FakeHub,
+    queued: AskedDownloads,
+) -> Fixture {
     let hub = Arc::new(hub);
-    let queued = Arc::new(Queued::default());
+    let queued = Arc::new(queued);
     let service = ModelVerificationService::new(
-        Arc::new(OneModelRepo(Mutex::new(model_in(dir)))),
+        Arc::new(OneModelRepo(Mutex::new(model_in(dir, quantization)))),
         store,
         hub.clone(),
         queued.clone(),
@@ -198,16 +194,17 @@ async fn a_corrupt_projector_is_deleted_and_its_group_is_queued_again() {
     };
     let f = fixture(dir.path(), rows, hub);
 
-    let queued_as = f.service.repair_model(1, None).await.unwrap();
+    let started = f.service.repair_model(1, None).await.unwrap();
 
-    assert_eq!(queued_as, "queued");
+    assert_eq!(started.id, "owner/zeta-GGUF:Q8_0");
+    assert_eq!(started.files, [PROJECTOR]);
     assert!(
         !dir.path().join(PROJECTOR).exists(),
         "the corrupt file goes"
     );
     assert!(dir.path().join(WEIGHTS).exists(), "healthy weights stay");
     assert_eq!(
-        *f.queued.0.lock().unwrap(),
+        f.queued.asked(),
         [(REPO.to_owned(), Some("Q8_0".to_owned()))]
     );
     // What was queued is a group that holds the projector.
@@ -235,7 +232,7 @@ async fn a_corrupt_projector_no_download_fetches_is_left_in_place() {
     assert!(refused.contains(PROJECTOR), "{refused}");
     assert!(refused.contains("--projector"), "{refused}");
     assert!(dir.path().join(PROJECTOR).exists(), "nothing is deleted");
-    assert!(f.queued.0.lock().unwrap().is_empty(), "nothing is queued");
+    assert!(f.queued.asked().is_empty(), "nothing is queued");
 }
 
 /// The same projector beside corrupt weights: the weights are repaired, and
@@ -255,7 +252,7 @@ async fn corrupt_weights_are_repaired_around_a_projector_that_is_kept() {
 
     assert!(!dir.path().join(WEIGHTS).exists());
     assert!(dir.path().join(PROJECTOR).exists());
-    assert_eq!(f.queued.0.lock().unwrap().len(), 1);
+    assert_eq!(f.queued.asked().len(), 1);
 }
 
 /// Repair by index, as the update flow asks it: the projector's row index.
@@ -274,5 +271,5 @@ async fn a_projector_named_by_its_index_is_repaired() {
 
     assert!(!dir.path().join(PROJECTOR).exists());
     assert!(dir.path().join(WEIGHTS).exists());
-    assert_eq!(f.queued.0.lock().unwrap().len(), 1);
+    assert_eq!(f.queued.asked().len(), 1);
 }

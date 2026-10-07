@@ -175,7 +175,7 @@ fn a_notice_is_the_status_and_an_unknown_rate_is_a_dash() {
 
 #[test]
 fn a_download_without_a_quantization_is_titled_by_its_repository() {
-    let id = DownloadId::from_model("owner/zeta-GGUF");
+    let id = DownloadId::from("owner/zeta-GGUF");
 
     assert_eq!(download_title(&id), "owner/zeta-GGUF");
     assert_eq!(
