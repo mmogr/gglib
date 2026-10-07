@@ -140,9 +140,11 @@ resolves through the hierarchy as it always has. `gglib chat --continue` reads
 a chat by the same rule: a command line says neither `off` nor `default`, so a
 chat switched off runs there with a budget of `0`, whatever
 `--reasoning-budget-tokens` says, until the switch is set back on the chat
-page or a paired device. A chat the CLI starts remembers nothing, and neither
-does `gglib q`: pass `--reasoning-budget-tokens 0` to stop a turn's thinking
-there.
+page or a paired device. A resume whose typed budget is not the `0` the chat
+runs with says so once, in a line on stderr: the chat has Thinking switched
+off, the budget was not applied, and where the switch is set back. A chat the
+CLI starts remembers nothing, and neither does `gglib q`: pass
+`--reasoning-budget-tokens 0` to stop a turn's thinking there.
 
 On the chat page the choice is the **Thinking** switch in the composer's
 margin, drawn only for a model that thinks: one tagged `reasoning` here, or

@@ -220,6 +220,9 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
 /// ```
 /// uses `other-model` and temperature `0.9` from the CLI, but restores
 /// everything else (system prompt, `top_p`, tools, etc.) from conversation 42.
+/// The one flag a chat overrides is `--reasoning-budget-tokens`, on a chat
+/// with Thinking switched off, and
+/// [`resume_settings::apply_saved_settings`] says so on stderr.
 /// Which machine it resumes on, and by which id, `prepare` has already taken
 /// from the model the conversation stored. The saved settings come back too:
 /// whether their profile applies is [`resume_settings::restore_profile`]'s
