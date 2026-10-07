@@ -47,7 +47,6 @@ use anyhow::Result;
 use futures_core::Stream;
 
 use super::parser::{ParserOutput, ToolCallParser};
-use super::think_tags::strip_think_tags;
 use crate::domain::agent::{LlmStreamEvent, ToolCall};
 
 type InnerStream = Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>;
@@ -259,6 +258,21 @@ impl Stream for NormalizingStream {
             }
         }
     }
+}
+
+/// `text` without its `<think>` and `</think>` tags; what is between them
+/// stays.
+///
+/// A reasoning model (Qwen3, for one) sends its chain of thought in
+/// `reasoning_content` but leaks the closing `</think>` into `content` as
+/// it turns to its answer. The tag means nothing to a client and shows up
+/// verbatim in its chat pane.
+///
+/// The one function both paths call: [`NormalizingStream`] on each text
+/// delta, and [`super::oneshot::normalize_chat_completion_body`] on a whole
+/// reply.
+pub(crate) fn strip_think_tags(text: &str) -> String {
+    text.replace("</think>", "").replace("<think>", "")
 }
 
 #[cfg(test)]
@@ -642,3 +656,7 @@ mod tests {
         assert!(texts.iter().any(|t| t.contains("real text")));
     }
 }
+
+#[cfg(test)]
+#[path = "think_tags_tests.rs"]
+mod think_tags_tests;

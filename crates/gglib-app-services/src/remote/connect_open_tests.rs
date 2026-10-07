@@ -7,7 +7,7 @@
 //! written — fourteen of the sixteen other tested files here declare a
 //! sibling, and `connect_dial.rs` and `teardown.rs` do not.
 //! `connect_open.rs` sat at the 300-line budget
-//! `scripts/check_rust_complexity.sh` enforces, with its tests taking a
+//! `scripts/check_file_size.sh` enforces, with its tests taking a
 //! quarter of it.
 
 use super::*;

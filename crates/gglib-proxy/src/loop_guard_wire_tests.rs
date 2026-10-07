@@ -1,7 +1,7 @@
 //! Unit tests for [`super`]: the permissive wire view.
 //!
 //! Split out of `loop_guard_wire.rs` to keep that file under the repo's
-//! file-size ratchet; see `scripts/check_rust_complexity.sh`.
+//! file-size ratchet; see `scripts/check_file_size.sh`.
 //!
 //! The end-to-end cases run through [`crate::loop_guard::scan_history`] rather
 //! than this module's own functions, because the property under test is not

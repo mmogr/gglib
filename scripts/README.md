@@ -3,7 +3,7 @@
 Helper scripts for development, CI enforcement, documentation and releases.
 
 A check's header comment is its specification. This file says which script is
-which and what runs it. Of the checks, only the file-size ratchet has a section
+which and what runs it. Of the checks, only the file-size check has a section
 here.
 
 ## Architecture checks
@@ -20,20 +20,29 @@ lists every check it runs, and this file keeps no second list.
 
 ### `check_file_size.sh`
 
-The file-size ratchet, run once per language. A file already over the 300-LOC
-budget is recorded in that language's baseline at its size and may shrink
-freely; growing it fails. A file not in the baseline may not cross the line at
-all.
+The file-size check, run once per language. Its 300-line budget is a guide,
+not a limit: it is there so that a file which has taken on a second job is
+noticed, and CONTRIBUTING's [File size](../CONTRIBUTING.md#file-size) says
+what follows.
 
-A ratchet rather than a threshold because a threshold could not be switched on:
-well over a hundred Rust files and more than a dozen TypeScript ones are
-already over. A gate that fails on every commit gets switched off within a day,
-which is how a constraint becomes decorative.
+A file already over the budget is recorded in that language's baseline at its
+size and may shrink freely. The check stops when a file is longer than its
+row, and when a file with no row crosses the budget. It is a ratchet rather
+than a threshold because well over a hundred Rust files and more than a dozen
+TypeScript ones are over the budget, many of them one thing: a gate on size
+would fail on every commit and be switched off within a day, which is how a
+check becomes decorative.
 
-`--update` rewrites the baseline to the tree's sizes. Use it when a file
-legitimately grew and the growth is the point: the diff then shows the number
-going up. On a tree that passes, it can only lower a row or drop one, and the
-check says when a row is above its file.
+When it stops, the question is whether the file is still one thing. One that
+has taken on a second job is split at that seam. One that is a single concept
+stays whole, and its row is raised, or added, by hand, so the diff shows the
+number going up. A sibling file added to get under the number is the one
+answer that is wrong.
+
+`--update` rewrites every row to the tree's sizes. On a tree that passes, it
+can only lower a row or drop one, and the check says when a row is above its
+file. On a tree that fails it records every growth at once, which is why a
+deliberate growth is one row edited by hand.
 
 ```bash
 # crates/ and src-tauri/
@@ -41,9 +50,6 @@ check says when a row is above its file.
 # src/**/*.{ts,tsx,css}, except src/types/generated/
 ./scripts/check_file_size.sh ts scripts/ts-complexity-baseline.txt [--update]
 ```
-
-`check_rust_complexity.sh` and `check_file_complexity.sh` run those two
-commands, under the names that module docs cite.
 
 ## Other scripts
 

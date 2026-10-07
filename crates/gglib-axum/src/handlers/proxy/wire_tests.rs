@@ -4,9 +4,7 @@
 //! the 300-line budget with a new contract test due.
 
 use super::*;
-use gglib_core::contracts::http::daemon_bodies::{
-    PROXY_START_CLI_FIELDS, PROXY_START_DAEMON_ONLY_FIELDS,
-};
+use gglib_core::contracts::http::daemon::{PROXY_START_CLI_FIELDS, PROXY_START_DAEMON_ONLY_FIELDS};
 use gglib_core::settings::DEFAULT_PROXY_PORT;
 
 /// An omitted port must come from settings, not from the compile-time

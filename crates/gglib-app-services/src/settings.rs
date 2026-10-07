@@ -156,7 +156,3 @@ mod tests;
 #[cfg(test)]
 #[path = "settings_models_dir_tests.rs"]
 mod models_dir_tests;
-
-#[cfg(test)]
-#[path = "settings_profile_templates_tests.rs"]
-mod profile_templates_tests;

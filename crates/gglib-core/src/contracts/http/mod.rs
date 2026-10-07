@@ -1,7 +1,6 @@
 #![doc = include_str!("README.md")]
 pub mod attachments;
 pub mod daemon;
-pub mod daemon_bodies;
 pub mod hf;
 
 // Re-export for convenience
