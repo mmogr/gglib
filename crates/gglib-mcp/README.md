@@ -129,8 +129,9 @@ Manages running MCP server processes:
 ### `McpService`
 
 High-level facade combining persistence and lifecycle:
-- CRUD operations for server configurations
+- CRUD operations for server configurations; an add or a rename to a name another server has is refused
 - Server start/stop with event emission
+- A test of a stored server (`test_server`): resolve its executable, start a throwaway instance, list its tools, stop it
 - Tool listing and invocation across all running servers
 - Executable path resolution with caching and diagnostics
 
@@ -192,4 +193,4 @@ async fn example(repo: impl McpServerRepository + 'static) {
 
 ## Testing
 
-The crate uses trait-based testing. See `gglib-db` for `SqliteMcpRepository` unit tests (8 tests covering all CRUD operations).
+The crate uses trait-based testing: `McpService` is tested over a repository held in memory (`service_tests.rs`). See `gglib-db` for `SqliteMcpRepository`'s own tests, which run on the schema production creates.

@@ -222,7 +222,8 @@ winning settings straight back to the model's inference defaults.
 
 Servers are `stdio` (a process) or `sse` (HTTP). The `lifecycle` policy decides
 when gglib spawns one: `eager` at host init, `lazy` on first tool use (default),
-`manual` never.
+`manual` never. A server's name is its own: `add` refuses a name another server
+already has.
 
 ## Configuration
 

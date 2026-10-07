@@ -60,6 +60,29 @@ pub enum McpServerType {
     Sse,
 }
 
+impl std::fmt::Display for McpServerType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Stdio => write!(f, "stdio"),
+            Self::Sse => write!(f, "sse"),
+        }
+    }
+}
+
+impl std::str::FromStr for McpServerType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "stdio" => Ok(Self::Stdio),
+            "sse" => Ok(Self::Sse),
+            other => Err(format!(
+                "unknown server type '{other}'; expected stdio or sse"
+            )),
+        }
+    }
+}
+
 /// Runtime status of an MCP server.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -489,6 +512,29 @@ mod tests {
             Some("http://localhost:3001/sse".to_string())
         );
         assert!(server.config.command.is_none());
+    }
+
+    #[test]
+    fn a_server_type_is_spelled_one_way_printed_parsed_and_on_the_wire() {
+        for (server_type, spelled) in [(McpServerType::Stdio, "stdio"), (McpServerType::Sse, "sse")]
+        {
+            assert_eq!(server_type.to_string(), spelled);
+            assert_eq!(spelled.parse::<McpServerType>(), Ok(server_type));
+            assert_eq!(
+                serde_json::to_string(&server_type).unwrap(),
+                format!("\"{spelled}\"")
+            );
+        }
+    }
+
+    #[test]
+    fn an_unknown_server_type_is_refused_by_name() {
+        assert_eq!(
+            "grpc".parse::<McpServerType>(),
+            Err("unknown server type 'grpc'; expected stdio or sse".to_string())
+        );
+        // The stored and sent spelling is lowercase, and nothing else parses.
+        assert!("Stdio".parse::<McpServerType>().is_err());
     }
 
     #[test]

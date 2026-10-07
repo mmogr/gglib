@@ -25,33 +25,42 @@ const SEEDED_NAME: &str = "List Contract Server";
 /// describe until something is registered, and an empty list is exactly the
 /// state a clean machine starts in.
 async fn add_server(app: &Router, name: &str) -> Value {
-    let body = json!({
+    let (status, json) = send(app, "POST", "/api/mcp/servers", &new_server(name)).await;
+    assert_eq!(status, StatusCode::OK, "POST /api/mcp/servers");
+    json
+}
+
+/// The body that registers a stdio server named `name`.
+fn new_server(name: &str) -> Value {
+    json!({
         "name": name,
         "server_type": "stdio",
         "command": "node",
         "args": ["server.js"],
         "env": [],
         "lifecycle": "lazy"
-    });
+    })
+}
 
+/// Send `body` as JSON and return the status and the decoded answer.
+async fn send(app: &Router, method: &str, uri: &str, body: &Value) -> (StatusCode, Value) {
     let response = app
         .clone()
         .oneshot(
             authed()
-                .uri("/api/mcp/servers")
+                .uri(uri)
                 .header("Host", "127.0.0.1:9887")
-                .method("POST")
+                .method(method)
                 .header("content-type", "application/json")
-                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .body(Body::from(serde_json::to_string(body).unwrap()))
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK, "POST /api/mcp/servers");
-
+    let status = response.status();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    serde_json::from_slice(&bytes).unwrap()
+    (status, serde_json::from_slice(&bytes).unwrap())
 }
 
 /// Assert the `{ server, status, tools }` envelope the frontend destructures.
@@ -141,4 +150,27 @@ async fn test_add_mcp_server_returns_nested_structure() {
         json.get("id").is_none(),
         "top-level 'id' should NOT exist (should be server.id), got {json}"
     );
+}
+
+/// A name another server has is the caller's to change: 409 with the reason,
+/// on the add and on the rename, and not the 500 of a storage failure.
+#[tokio::test]
+async fn a_taken_name_is_a_conflict_on_add_and_on_rename() {
+    let app = test_app(CorsConfig::AllowAll).await;
+    add_server(&app, "Taken").await;
+    let other = add_server(&app, "Other").await;
+    let taken = json!({
+        "error": "An MCP server named 'Taken' already exists; choose another name",
+        "status": 409
+    });
+
+    let (status, body) = send(&app, "POST", "/api/mcp/servers", &new_server("Taken")).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body, taken);
+
+    let id = other.pointer("/server/id").expect("the server's id");
+    let rename = json!({ "name": "Taken" });
+    let (status, body) = send(&app, "PUT", &format!("/api/mcp/servers/{id}"), &rename).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body, taken);
 }

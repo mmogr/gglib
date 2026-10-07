@@ -172,6 +172,8 @@ impl From<gglib_core::McpServiceError> for GuiError {
             McpServiceError::NotRunning(name) => {
                 Self::Conflict(format!("MCP server not running: {name}"))
             }
+            // The caller's to fix, by choosing another name.
+            McpServiceError::NameTaken(_) => Self::Conflict(err.to_string()),
             _ => Self::Internal(err.to_string()),
         }
     }

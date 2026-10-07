@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use gglib_core::McpServiceError;
 use gglib_mcp::{
     McpEnvEntry, McpServerConfig, McpServerStatus, McpServerType, McpService, McpTool, NewMcpServer,
 };
@@ -42,7 +43,7 @@ impl McpOps {
         McpServerDto {
             id: server.id,
             name: server.name.clone(),
-            server_type: format!("{:?}", server.server_type).to_lowercase(),
+            server_type: server.server_type.to_string(),
             config: McpServerConfigDto {
                 command: server.config.command.clone(),
                 resolved_path_cache: server.config.resolved_path_cache.clone(),
@@ -98,16 +99,10 @@ impl McpOps {
 
     /// Add a new MCP server configuration.
     pub async fn add(&self, req: CreateMcpServerRequest) -> Result<McpServerInfo, GuiError> {
-        let server_type = match req.server_type.as_str() {
-            "stdio" => McpServerType::Stdio,
-            "sse" => McpServerType::Sse,
-            _ => {
-                return Err(GuiError::ValidationFailed(format!(
-                    "Invalid server type: {}",
-                    req.server_type
-                )));
-            }
-        };
+        let server_type = req
+            .server_type
+            .parse::<McpServerType>()
+            .map_err(GuiError::ValidationFailed)?;
 
         let config = McpServerConfig {
             command: req.command,
@@ -247,39 +242,19 @@ impl McpOps {
     /// "is this config right?", and without it the only way to find out is a
     /// chat that silently has no tools.
     pub async fn test_connection(&self, id: i64) -> Result<McpTestResult, GuiError> {
-        // Resolve the executable first, exactly as the start path does. Without
-        // this a freshly-added stdio server — whose resolved_path_cache is
-        // still empty — fails the test with "executable path must be absolute"
-        // while Start on the same row succeeds, which reads as the test being
-        // broken rather than the config being fine.
-        let _ = self.mcp.ensure_resolved(id).await;
-
-        let server = self
-            .mcp
-            .get_server(id)
-            .await
-            .map_err(|_| GuiError::NotFound {
-                entity: "MCP server",
-                id: id.to_string(),
-            })?;
-
-        let candidate = NewMcpServer {
-            name: server.name.clone(),
-            server_type: server.server_type,
-            config: server.config.clone(),
-            enabled: server.enabled,
-            lifecycle: server.lifecycle,
-            env: server.env.clone(),
-        };
-
         // A failed connection is the expected outcome of a misconfiguration,
         // not a fault — report it as a result the UI can render beside the
-        // config rather than an error that replaces the panel.
-        match self.mcp.test_connection(candidate).await {
+        // config rather than an error that replaces the panel. Only a server
+        // that could not be read at all is an error.
+        match self.mcp.test_server(id).await {
             Ok(tools) => Ok(McpTestResult {
                 ok: true,
                 error: None,
                 tools: tools.iter().map(Self::tool_to_info).collect(),
+            }),
+            Err(McpServiceError::Repository(_)) => Err(GuiError::NotFound {
+                entity: "MCP server",
+                id: id.to_string(),
             }),
             Err(e) => Ok(McpTestResult {
                 ok: false,
@@ -302,75 +277,5 @@ impl McpOps {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use gglib_core::McpLifecycle;
-    use gglib_db::SqliteMcpRepository;
-
-    use super::*;
-    use gglib_db::setup_test_database;
-
-    async fn make_ops() -> McpOps {
-        let pool = setup_test_database().await.expect("in-memory DB");
-        let repo = Arc::new(SqliteMcpRepository::new(pool));
-        let mcp = Arc::new(McpService::new(repo));
-        McpOps::new(McpDeps { mcp })
-    }
-
-    fn stdio_req(name: &str) -> CreateMcpServerRequest {
-        CreateMcpServerRequest {
-            name: name.to_string(),
-            server_type: "stdio".to_string(),
-            command: Some("echo".to_string()),
-            args: vec![],
-            working_dir: None,
-            path_extra: None,
-            url: None,
-            env: vec![],
-            lifecycle: McpLifecycle::Lazy,
-        }
-    }
-
-    #[tokio::test]
-    async fn list_returns_empty_on_fresh_db() {
-        let ops = make_ops().await;
-        let servers = ops.list().await.expect("list should succeed");
-        assert!(servers.is_empty());
-    }
-
-    #[tokio::test]
-    async fn add_server_appears_in_list() {
-        let ops = make_ops().await;
-        ops.add(stdio_req("test-server"))
-            .await
-            .expect("add should succeed");
-
-        let servers = ops.list().await.unwrap();
-        assert_eq!(servers.len(), 1);
-        assert_eq!(servers[0].server.name, "test-server");
-    }
-
-    #[tokio::test]
-    async fn invalid_server_type_returns_validation_error() {
-        let ops = make_ops().await;
-        let mut req = stdio_req("bad");
-        req.server_type = "grpc".to_string(); // unsupported
-        let result = ops.add(req).await;
-        assert!(
-            matches!(result, Err(GuiError::ValidationFailed(_))),
-            "expected ValidationFailed, got {result:?}"
-        );
-    }
-
-    #[tokio::test]
-    async fn remove_server_deletes_it() {
-        let ops = make_ops().await;
-        let info = ops.add(stdio_req("to-delete")).await.unwrap();
-        ops.remove(info.server.id)
-            .await
-            .expect("remove should succeed");
-        let servers = ops.list().await.unwrap();
-        assert!(servers.is_empty());
-    }
-}
+#[path = "mcp_tests.rs"]
+mod tests;
