@@ -311,26 +311,6 @@ fn test_trust_client_sampling_defaults_to_none_and_merges_like_any_bool_setting(
     assert_eq!(settings.trust_client_sampling, None);
 }
 
-#[test]
-fn test_proxy_loop_detection_defaults_to_none_and_merges_like_any_bool_setting() {
-    // None means enabled — the guard is on unless explicitly disabled.
-    let defaults = Settings::with_defaults();
-    assert_eq!(defaults.proxy_loop_detection, None);
-
-    let mut settings = Settings::with_defaults();
-    settings.merge(&SettingsUpdate {
-        proxy_loop_detection: Some(Some(false)),
-        ..Default::default()
-    });
-    assert_eq!(settings.proxy_loop_detection, Some(false));
-
-    settings.merge(&SettingsUpdate {
-        proxy_loop_detection: Some(None),
-        ..Default::default()
-    });
-    assert_eq!(settings.proxy_loop_detection, None);
-}
-
 /// The stored port, and the default only when none is stored.
 #[test]
 fn the_effective_proxy_port_is_the_stored_one_then_the_default() {

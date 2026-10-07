@@ -38,7 +38,6 @@ fn update_from(args: SettingsSetArgs) -> SettingsUpdate {
         proxy_api_key: args.proxy_api_key.map(Some),
         trust_client_sampling: args.trust_client_sampling.map(Some),
         loop_guard_mode: args.loop_guard_mode.map(|m| Some(m.into())),
-        proxy_loop_detection: args.proxy_loop_detection.map(Some),
         tool_call_repair: args.tool_call_repair.map(Some),
         agentic_sampling: args.agentic_sampling.map(Some),
         proxy_autostart: args.proxy_autostart.map(Some),

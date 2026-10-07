@@ -32,7 +32,6 @@ const UNSET: AppSettings = {
   proxyApiKey: null,
   trustClientSampling: null,
   loopGuardMode: null,
-  proxyLoopDetection: null,
   toolCallRepair: null,
   agenticSampling: null,
   proxyAutostart: null,

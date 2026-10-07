@@ -67,6 +67,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`setup_attachments.rs`** — The `attachments` table (an image's bytes under the SHA-256 of them) and `message_attachments` (the images each message carries, in order), and the sweep of images no message carries
 - **`setup_models.rs`** — The `models` table: its definition, the columns added to it since, its indexes, and the one-time rebuild that stops it reusing ids
 - **`setup_model_files.rs`** — The `model_files` table, and `models.projector_path` with the one-time link of each model to the projector among its own files
+- **`setup_settings.rs`** — Settings rows whose setting is gone: the `auto_tune` row reclaimed, and the one-time fold of the loop guard's `proxy_loop_detection` row into `loop_guard_mode`
 - **`repositories/`** — `SQLite` implementations of all repository ports
 
 ## Features
@@ -135,8 +136,8 @@ that table is the tombstone of a removed feature and provably never held a row
 write to is refused instead: if `chat_messages` predates the `'tool'` role, setup
 fails and names the database file, leaving every conversation where it is. That
 branch used to DROP both chat tables — silently, at boot, on a substring match
-against a stored CREATE statement. Beyond reclaiming the removed `auto_tune`
-setting's row at setup, this crate deletes rows on its own in two places. The
+against a stored CREATE statement. Beyond the two settings rows setup reclaims
+(below), this crate deletes rows on its own in two places. The
 loop guard's log is pruned by its writer, by age (90 days, today included) and
 by a row cap, whole days at a time. A stored image no message carries, last
 stored more than a day ago, is deleted when the daemon starts, and only then.
@@ -171,6 +172,30 @@ either.
   themselves, the `model_id` of every table that references them (a row that
   already referenced no model included, which a new model would otherwise take
   over), every benchmark run's `model_ids` and the `default_model_id` setting.
+
+**A setting that is gone leaves no row, and takes no answer with it.**
+`Settings` reads the rows it has fields for and passes over the rest, and a
+write touches one row per field, so nothing else would ever remove a row whose
+setting is gone. Setup removes two. The `auto_tune` row carried nothing and is
+deleted as a database opens. The `proxy_loop_detection` row was the loop
+guard's switch, consulted when no `loop_guard_mode` was stored (`false` meant
+`off`, `true` meant `note`), so deleting it alone would turn a guard that was
+switched off back on. It is folded instead, once per database, gated on
+`user_version` 2:
+
+- What the two rows answered together is stored as `loop_guard_mode` where the
+  mode's row alone would answer otherwise, which is the one case of a `false`
+  switch and no mode, stored as `"off"`. Then the switch's row is deleted. No
+  other row is written, and a stored mode keeps its row as it is.
+- A record the build before could not read answered nothing, so nothing is
+  carried over and every row is left as found: one this build's own load
+  refuses, or one whose switch is not `true`, `false` or `null`. The boot goes
+  on, and the database is stamped all the same.
+- The rows and the stamp are one `BEGIN IMMEDIATE` transaction, and the
+  version is asked again once the lock is held: of two processes opening one
+  database the second finds the work done, and a later stamp is not lowered.
+- Once stamped, a `proxy_loop_detection` row is a row no field answers to. One
+  written afterwards, by a build older than this, is not folded.
 
 There is deliberately no `PRAGMA user_version` ladder over the column set.
 `CANONICAL_PATH_SCHEMA_VERSION` is already load-bearing for the canonical-path

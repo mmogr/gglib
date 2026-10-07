@@ -110,14 +110,6 @@ pub struct SettingsSetArgs {
     /// changed is an agent polling for output, and is not counted.
     #[arg(long, value_enum)]
     pub loop_guard_mode: Option<LoopGuardModeArg>,
-    /// Deprecated: use `--loop-guard-mode off|note|refuse`.
-    ///
-    /// `false` still means `off`; `true` now means `note`, not a refusal.
-    /// Writing either spelling to a value clears the other, so whichever was
-    /// set last is the one that answers. (`gglib config settings unset` clears
-    /// one without touching the other.)
-    #[arg(long)]
-    pub proxy_loop_detection: Option<bool>,
     /// Cap the temperature on agentic turns. Enabled by default: a
     /// request carrying tools may emit structured output, so its
     /// temperature is capped — but only over a value nobody chose (an

@@ -1,18 +1,13 @@
-//! Tests for [`LoopGuardMode`] and the precedence that reconciles it with the
-//! boolean it replaces.
+//! Tests for [`LoopGuardMode`]: its default, its wire spelling, and how a
+//! stored one is read, written and cleared.
 //!
-//! Their own file because `settings_tests.rs` is at its size baseline. All
-//! twelve combinations of the two fields are here, because the pair is the
-//! whole compatibility story for one release and "nine" was a miscount of it:
-//! the mode has four states (absent, off, note, refuse) and the boolean three
-//! (absent, false, true).
+//! Their own file because `settings_tests.rs` is at its size baseline.
 
 use super::{LoopGuardMode, Settings, SettingsUpdate};
 
-fn settings(mode: Option<LoopGuardMode>, bool_setting: Option<bool>) -> Settings {
+fn settings(mode: Option<LoopGuardMode>) -> Settings {
     Settings {
         loop_guard_mode: mode,
-        proxy_loop_detection: bool_setting,
         ..Settings::with_defaults()
     }
 }
@@ -35,97 +30,54 @@ fn only_off_stops_the_scan() {
 }
 
 #[test]
-fn all_twelve_combinations_of_the_two_spellings_resolve() {
+fn the_effective_mode_is_the_stored_one_then_the_default() {
     use LoopGuardMode::{Note, Off, Refuse};
-    // (mode, deprecated bool) -> effective mode.
-    let cases = [
-        // The new setting wins outright whenever it is present, whatever the
-        // boolean says — including when they disagree.
-        (Some(Off), None, Off),
-        (Some(Off), Some(false), Off),
-        (Some(Off), Some(true), Off),
-        (Some(Note), None, Note),
-        (Some(Note), Some(false), Note),
-        (Some(Note), Some(true), Note),
-        (Some(Refuse), None, Refuse),
-        (Some(Refuse), Some(false), Refuse),
-        (Some(Refuse), Some(true), Refuse),
-        // Absent: the boolean answers, for a settings file an older build
-        // wrote. `false` is still off; `true` and absent are now a note, not
-        // a refusal — the behaviour change #1052 exists to make.
-        (None, Some(false), Off),
-        (None, Some(true), Note),
-        (None, None, Note),
-    ];
-    assert_eq!(cases.len(), 12);
-    for (mode, bool_setting, expected) in cases {
+    for (stored, expected) in [
+        (Some(Off), Off),
+        (Some(Note), Note),
+        (Some(Refuse), Refuse),
+        (None, Note),
+    ] {
         assert_eq!(
-            settings(mode, bool_setting).effective_loop_guard_mode(),
+            settings(stored).effective_loop_guard_mode(),
             expected,
-            "mode {mode:?} with proxy_loop_detection {bool_setting:?}"
+            "stored {stored:?}"
         );
     }
 }
 
 #[test]
-fn writing_the_mode_clears_the_deprecated_bool() {
-    let mut s = settings(None, Some(false));
+fn writing_the_mode_stores_it() {
+    let mut s = settings(None);
     s.merge(&SettingsUpdate {
         loop_guard_mode: Some(Some(LoopGuardMode::Refuse)),
         ..SettingsUpdate::default()
     });
 
     assert_eq!(s.loop_guard_mode, Some(LoopGuardMode::Refuse));
-    assert_eq!(
-        s.proxy_loop_detection, None,
-        "the two must never disagree on disk"
-    );
     assert_eq!(s.effective_loop_guard_mode(), LoopGuardMode::Refuse);
 }
 
 #[test]
-fn writing_the_deprecated_bool_clears_the_mode() {
-    // The half that makes `--proxy-loop-detection false` keep working: without
-    // it, anything that had ever written the mode would leave the boolean
-    // last in precedence for ever, and the flag would silently do nothing.
-    let mut s = settings(Some(LoopGuardMode::Refuse), None);
+fn an_update_that_does_not_name_the_mode_leaves_it_alone() {
+    let mut s = settings(Some(LoopGuardMode::Off));
     s.merge(&SettingsUpdate {
-        proxy_loop_detection: Some(Some(false)),
+        proxy_port: Some(Some(9191)),
         ..SettingsUpdate::default()
     });
 
-    assert_eq!(s.proxy_loop_detection, Some(false));
-    assert_eq!(s.loop_guard_mode, None);
-    assert_eq!(
-        s.effective_loop_guard_mode(),
-        LoopGuardMode::Off,
-        "the deprecated off-switch still switches the guard off"
-    );
-}
-
-#[test]
-fn an_update_carrying_both_spellings_answers_with_the_new_one() {
-    let mut s = Settings::with_defaults();
-    s.merge(&SettingsUpdate {
-        proxy_loop_detection: Some(Some(false)),
-        loop_guard_mode: Some(Some(LoopGuardMode::Refuse)),
-        ..SettingsUpdate::default()
-    });
-
-    assert_eq!(s.loop_guard_mode, Some(LoopGuardMode::Refuse));
-    assert_eq!(s.proxy_loop_detection, None);
+    assert_eq!(s.loop_guard_mode, Some(LoopGuardMode::Off));
 }
 
 #[test]
 fn clearing_the_mode_returns_to_the_default() {
-    let mut s = settings(Some(LoopGuardMode::Off), None);
+    let mut s = settings(Some(LoopGuardMode::Off));
     s.merge(&SettingsUpdate {
         loop_guard_mode: Some(None),
         ..SettingsUpdate::default()
     });
 
     assert_eq!(s.loop_guard_mode, None);
-    assert_eq!(s.proxy_loop_detection, None);
     assert_eq!(s.effective_loop_guard_mode(), LoopGuardMode::Note);
 }
 
@@ -144,39 +96,4 @@ fn the_wire_spelling_is_lowercase() {
             mode
         );
     }
-}
-
-#[test]
-fn clearing_one_spelling_leaves_the_other_alone() {
-    // `Some(None)` is the "clear this field" update every
-    // `UpdateSettingsRequest` field must support, and it reaches `merge` from
-    // the API. Clearing one spelling must not discard what the other says —
-    // otherwise `{"proxyLoopDetection": null}` silently wipes a stored mode.
-    let mut s = settings(Some(LoopGuardMode::Refuse), Some(true));
-    s.merge(&SettingsUpdate {
-        proxy_loop_detection: Some(None),
-        ..SettingsUpdate::default()
-    });
-    assert_eq!(s.proxy_loop_detection, None, "the bool was cleared");
-    assert_eq!(
-        s.loop_guard_mode,
-        Some(LoopGuardMode::Refuse),
-        "clearing the bool must not discard the mode"
-    );
-    assert_eq!(s.effective_loop_guard_mode(), LoopGuardMode::Refuse);
-
-    // And the other way round: clearing the mode leaves the deprecated
-    // off-switch standing, so it still answers.
-    let mut s = settings(Some(LoopGuardMode::Refuse), Some(false));
-    s.merge(&SettingsUpdate {
-        loop_guard_mode: Some(None),
-        ..SettingsUpdate::default()
-    });
-    assert_eq!(s.loop_guard_mode, None);
-    assert_eq!(s.proxy_loop_detection, Some(false));
-    assert_eq!(
-        s.effective_loop_guard_mode(),
-        LoopGuardMode::Off,
-        "the deprecated off-switch still answers once the mode is cleared"
-    );
 }

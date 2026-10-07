@@ -44,8 +44,6 @@ pub struct AppSettings {
     // Proxy loop guard; `None` means the default, `note` (see
     // `gglib_core::Settings::loop_guard_mode`)
     pub loop_guard_mode: Option<LoopGuardMode>,
-    // Deprecated (#1052); superseded by `loop_guard_mode`
-    pub proxy_loop_detection: Option<bool>,
     /// Whether a tool call failing schema validation is re-issued, with
     /// `tool_choice: "required"` or under gglib's grammar. Absent means on.
     pub tool_call_repair: Option<bool>,
@@ -81,7 +79,6 @@ impl From<gglib_core::Settings> for AppSettings {
             proxy_api_key: settings.proxy_api_key,
             trust_client_sampling: settings.trust_client_sampling,
             loop_guard_mode: settings.loop_guard_mode,
-            proxy_loop_detection: settings.proxy_loop_detection,
             tool_call_repair: settings.tool_call_repair,
             agentic_sampling: settings.agentic_sampling,
             proxy_autostart: settings.proxy_autostart,
@@ -183,10 +180,6 @@ pub struct UpdateSettingsRequest {
     )]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub loop_guard_mode: Option<Option<LoopGuardMode>>,
-    // Deprecated, for one release; writing it clears `loop_guard_mode`
-    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
-    #[serde(default, with = "serde_with::rust::double_option")]
-    pub proxy_loop_detection: Option<Option<bool>>,
     // Proxy tool-call repair; explicit `null` re-enables (see `gglib_core::Settings`)
     #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
@@ -232,7 +225,6 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             proxy_api_key: request.proxy_api_key,
             trust_client_sampling: request.trust_client_sampling,
             loop_guard_mode: request.loop_guard_mode,
-            proxy_loop_detection: request.proxy_loop_detection,
             tool_call_repair: request.tool_call_repair,
             agentic_sampling: request.agentic_sampling,
             proxy_autostart: request.proxy_autostart,

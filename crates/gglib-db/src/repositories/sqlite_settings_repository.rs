@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use serde_json::Value;
+use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, SqliteConnection, SqlitePool};
 
 use gglib_core::ports::SettingsChange;
@@ -119,19 +120,29 @@ fn rows_of(settings: &Settings) -> Result<BTreeMap<String, Option<Value>>, Repos
 
 /// The stored settings, read over `conn`.
 async fn read(conn: &mut SqliteConnection) -> Result<Settings, RepositoryError> {
-    let rows = sqlx::query("SELECT key, value FROM settings_kv")
-        .fetch_all(&mut *conn)
+    let rows = stored_rows(conn).await.map_err(storage)?;
+    let record = values(&rows).map_err(storage)?;
+    serde_json::from_value(Value::Object(record)).map_err(storage)
+}
+
+/// Every stored row's `key` and `value`, read over `conn`.
+pub(crate) async fn stored_rows(conn: &mut SqliteConnection) -> sqlx::Result<Vec<SqliteRow>> {
+    sqlx::query("SELECT key, value FROM settings_kv")
+        .fetch_all(conn)
         .await
-        .map_err(storage)?;
+}
 
-    let mut map = serde_json::Map::new();
+/// Each row's value by its key, as the JSON it holds, or why this build
+/// cannot read the rows: a key or a value that is not text, or a value that
+/// is not JSON.
+pub(crate) fn values(rows: &[SqliteRow]) -> anyhow::Result<serde_json::Map<String, Value>> {
+    let mut record = serde_json::Map::new();
     for row in rows {
-        let key: String = row.get("key");
-        let raw: String = row.get("value");
-        map.insert(key, serde_json::from_str::<Value>(&raw).map_err(storage)?);
+        let key: String = row.try_get("key")?;
+        let raw: String = row.try_get("value")?;
+        record.insert(key, serde_json::from_str::<Value>(&raw)?);
     }
-
-    serde_json::from_value(Value::Object(map)).map_err(storage)
+    Ok(record)
 }
 
 /// Store `value` as `key`'s row, or remove the row when there is no value.
@@ -139,7 +150,7 @@ async fn read(conn: &mut SqliteConnection) -> Result<Settings, RepositoryError> 
     clippy::option_if_let_else,
     reason = "grandfathered at lint inheritance, #1157"
 )]
-async fn write_row(
+pub(crate) async fn write_row(
     conn: &mut SqliteConnection,
     key: &str,
     value: Option<&Value>,
@@ -157,7 +168,8 @@ async fn write_row(
     query.execute(conn).await.map(drop).map_err(storage)
 }
 
-fn now() -> String {
+/// The time a row is written at, as its `updated_at` holds it.
+pub(crate) fn now() -> String {
     chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()
 }
 

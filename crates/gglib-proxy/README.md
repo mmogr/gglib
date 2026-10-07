@@ -818,8 +818,7 @@ no recovery path from a 400 gets something it can act on. `refuse` is the old
 behaviour — HTTP 400 before any of that cost, `type` and `code` being
 `loop_detected` or `stagnation_detected` (mirroring `context_length_exceeded`'s
 shape), and the message naming `--loop-guard-mode note`. `off` does not scan at
-all, which is what `--proxy-loop-detection false` meant and, for one release,
-still means. Either spelling clears the other when written.
+all.
 
 The note is delivered inside the last message rather than as a trailing
 `system` message because a `system` message at the tail raises on Qwen3.5,

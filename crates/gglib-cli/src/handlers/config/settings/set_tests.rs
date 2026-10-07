@@ -1,6 +1,6 @@
 //! Unit tests for [`super`], over a database of the test's own.
 
-use clap::{Args, Command, FromArgMatches};
+use clap::{Args, Command, FromArgMatches, Parser};
 use gglib_core::LoopGuardMode;
 use gglib_core::settings::SettingsError;
 
@@ -29,7 +29,7 @@ fn every_flag_clap_accepts_is_a_write_reported_under_the_flags_own_name() {
         .get_arguments()
         .filter_map(|arg| arg.get_long().map(str::to_owned))
         .collect();
-    assert!(flags.len() >= 19, "expected every settable flag: {flags:?}");
+    assert!(flags.len() >= 18, "expected every settable flag: {flags:?}");
 
     for flag in flags {
         let long = format!("--{flag}");
@@ -69,19 +69,22 @@ async fn a_refused_value_is_reported_in_the_validators_words_and_stores_nothing(
     assert_eq!(after, before);
 }
 
-/// What is stored is the service's own merge of the flags, down to the part
-/// a merge written out by hand left out: writing one spelling of the loop
-/// guard clears the other.
+/// What is stored is the service's own merge of the flags onto the record as
+/// it stood: the fields named are written, and one set earlier and not named
+/// now is left as it was.
 #[tokio::test]
 async fn a_valid_value_stores_what_the_services_merge_produces() {
     let dir = tempfile::tempdir().expect("tempdir");
     let ctx = test_context(dir.path()).await;
-    handle_set(&ctx, args(&["--proxy-loop-detection", "false"]))
-        .await
-        .expect("seeded");
+    handle_set(
+        &ctx,
+        args(&["--loop-guard-mode", "off", "--max-stagnation-steps", "7"]),
+    )
+    .await
+    .expect("seeded");
     let flags = ["--loop-guard-mode", "refuse", "--proxy-port", "9191"];
     let mut expected = ctx.app.settings().get().await.expect("settings");
-    assert_eq!(expected.proxy_loop_detection, Some(false));
+    assert_eq!(expected.loop_guard_mode, Some(LoopGuardMode::Off));
     expected.merge(&update_from(args(&flags)));
 
     handle_set(&ctx, args(&flags)).await.expect("stored");
@@ -89,6 +92,26 @@ async fn a_valid_value_stores_what_the_services_merge_produces() {
     let stored = ctx.app.settings().get().await.expect("settings");
     assert_eq!(stored, expected);
     assert_eq!(stored.loop_guard_mode, Some(LoopGuardMode::Refuse));
-    assert_eq!(stored.proxy_loop_detection, None);
     assert_eq!(stored.proxy_port, Some(9191));
+    assert_eq!(stored.max_stagnation_steps, Some(7));
+}
+
+/// `--proxy-loop-detection` was the loop guard's switch before
+/// `--loop-guard-mode`, and is a flag no longer. A script that still passes
+/// it is refused by clap as an unknown argument before anything is read or
+/// stored, so the guard is never left on in silence. The second parse shows
+/// the refusal is of that flag and not of the command around it.
+#[test]
+fn the_retired_loop_detection_flag_is_refused_as_an_unknown_argument() {
+    let set = ["gglib", "config", "settings", "set"];
+
+    let Err(refused) =
+        crate::Cli::try_parse_from(set.into_iter().chain(["--proxy-loop-detection", "false"]))
+    else {
+        panic!("the retired flag still parses");
+    };
+
+    assert_eq!(refused.kind(), clap::error::ErrorKind::UnknownArgument);
+    crate::Cli::try_parse_from(set.into_iter().chain(["--loop-guard-mode", "off"]))
+        .expect("the flag that replaced it parses on the same command");
 }
