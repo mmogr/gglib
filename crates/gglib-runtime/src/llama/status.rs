@@ -99,8 +99,8 @@ pub struct LlamaStatus {
 /// in the returned struct. Only a failure to resolve the data directory
 /// itself is an `Err`.
 pub fn llama_status() -> anyhow::Result<LlamaStatus> {
-    let binary_path = llama_server_path().map_err(|e| anyhow::anyhow!("{e}"))?;
-    let config_path = llama_config_path().map_err(|e| anyhow::anyhow!("{e}"))?;
+    let binary_path = llama_server_path()?;
+    let config_path = llama_config_path()?;
 
     let mut status = LlamaStatus {
         installed: binary_path.exists(),

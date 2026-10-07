@@ -10,11 +10,6 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 
-// Helper to convert PathError to anyhow::Error
-fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
-    r.map_err(|e| anyhow::anyhow!("{e}"))
-}
-
 /// How far behind upstream the local llama.cpp checkout is.
 ///
 /// Why the source checkout can be missing while a binary exists: the prebuilt
@@ -63,8 +58,8 @@ impl LlamaUpdateCheck {
 /// user action rather than a page load. Callers that only need what is
 /// installed want [`super::llama_status`] instead, which is local and cheap.
 pub async fn llama_update_check() -> Result<LlamaUpdateCheck> {
-    let llama_dir = path_err(llama_cpp_dir())?;
-    let binary_path = path_err(llama_server_path())?;
+    let llama_dir = llama_cpp_dir()?;
+    let binary_path = llama_server_path()?;
 
     if !binary_path.exists() {
         return Ok(LlamaUpdateCheck::not_comparable(false, false));
@@ -73,7 +68,7 @@ pub async fn llama_update_check() -> Result<LlamaUpdateCheck> {
         return Ok(LlamaUpdateCheck::not_comparable(true, false));
     }
 
-    let config_path = path_err(llama_config_path())?;
+    let config_path = llama_config_path()?;
     if !config_path.exists() {
         return Ok(LlamaUpdateCheck::not_comparable(true, true));
     }
@@ -206,12 +201,10 @@ pub async fn handle_check_updates() -> Result<()> {
         return Ok(());
     }
 
-    let Some(version) = check.current_version.as_deref() else {
+    if check.current_version.is_none() {
         println!("Warning: Build configuration not found.");
         return Ok(());
-    };
-
-    let _ = version;
+    }
 
     if check.commits_behind == 0 {
         println!("✓ llama.cpp is up to date");
@@ -240,7 +233,7 @@ pub async fn handle_check_updates() -> Result<()> {
 /// name is not one we build for. Detection is deliberately fallible — it
 /// refuses to fall back to CPU — so this can fail with the install hints.
 pub fn update_acceleration() -> Result<Acceleration> {
-    let config_path = path_err(llama_config_path())?;
+    let config_path = llama_config_path()?;
     let recorded = config_path
         .exists()
         .then(|| BuildConfig::load(&config_path))
@@ -308,8 +301,8 @@ pub async fn run_llama_update(
 /// Preconditions, the plan and the prompt live here; the work itself is
 /// [`run_llama_update`], shared with the GUI route.
 pub async fn handle_update() -> Result<()> {
-    let llama_dir = path_err(llama_cpp_dir())?;
-    let binary_path = path_err(llama_server_path())?;
+    let llama_dir = llama_cpp_dir()?;
+    let binary_path = llama_server_path()?;
 
     if !binary_path.exists() {
         println!("llama.cpp is not installed.");
@@ -323,7 +316,7 @@ pub async fn handle_update() -> Result<()> {
         return Ok(());
     }
 
-    let config_path = path_err(llama_config_path())?;
+    let config_path = llama_config_path()?;
     let old_config = if config_path.exists() {
         Some(BuildConfig::load(&config_path)?)
     } else {

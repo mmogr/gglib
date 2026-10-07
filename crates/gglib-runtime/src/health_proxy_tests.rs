@@ -12,7 +12,8 @@
 //! resolve, which can only succeed by going through the recorder: it proves the
 //! variables were live in the child, so that an inert environment — a renamed
 //! variable, an emptied value — cannot pass the guard by proving nothing. The
-//! two health checks must add nothing to that count.
+//! health check, called on its own and through the monitor, must add nothing
+//! to that count.
 //!
 //! The child is chosen by name and by an environment variable this parent sets,
 //! and it is deliberately not `#[ignore]`d. An ignored child would have to be
@@ -29,7 +30,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant};
 
-/// Printed by the child once both checks reached the port named in the URL.
+/// Printed by the child once both calls reached the port named in the URL.
 const MARKER: &str = "LOOPBACK-HEALTH-REACHED-THE-PORT-IN-THE-URL";
 
 /// The child's path in this test binary. A rename leaves the child unrun, and
@@ -64,7 +65,7 @@ const PIPE_GRACE: Duration = Duration::from_secs(5);
 /// form's sake: a socket closed with unread bytes still in its receive buffer
 /// is reset rather than closed, and the answer already on the wire can be lost
 /// to the peer along with it.
-fn read_request_head(stream: &TcpStream) {
+pub(crate) fn read_request_head(stream: &TcpStream) {
     let Ok(peek) = stream.try_clone() else { return };
     let mut reader = BufReader::new(peek);
     let mut line = String::new();
@@ -216,8 +217,8 @@ async fn the_child_checks_health_with_a_proxy_set() {
 
     let server = TcpListener::bind("127.0.0.1:0").expect("bind a health endpoint");
     let port = server.local_addr().expect("the endpoint's address").port();
-    // Two connections, because the two checks below use a client each and
-    // neither reuses the other's. The server closes each one after answering.
+    // Two connections, one for each call below: the server closes each one
+    // after answering.
     std::thread::spawn(move || {
         for stream in server.incoming().take(2) {
             let Ok(stream) = stream else { break };
@@ -225,12 +226,13 @@ async fn the_child_checks_health_with_a_proxy_set() {
         }
     });
 
-    let monitor_side = super::check_http_health(port).await;
+    let monitor_side = crate::health_monitor::ServerHealthChecker::check_http(port).await;
     let fast_path = crate::process::check_http_health(port).await;
 
-    assert!(
-        matches!(monitor_side, Ok(true)),
-        "the monitor's check did not reach 127.0.0.1:{port} with {proxy} set: {monitor_side:?}"
+    assert_eq!(
+        monitor_side,
+        gglib_core::ports::ServerHealthStatus::Healthy,
+        "the monitor's check did not reach 127.0.0.1:{port} with {proxy} set"
     );
     assert!(
         fast_path,

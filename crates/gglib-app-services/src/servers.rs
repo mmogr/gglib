@@ -461,11 +461,7 @@ fn map_runtime_error(err: &ModelRuntimeError) -> GuiError {
         },
         ModelRuntimeError::SpawnFailed(msg) => llama_server_unavailable_reason(msg).map_or_else(
             || GuiError::Internal(format!("Failed to start server: {err}")),
-            |reason| GuiError::LlamaServerNotInstalled {
-                expected_path: "~/.local/share/gglib/.llama/bin/llama-server".to_string(),
-                suggested_command: "gglib config llama install".to_string(),
-                reason: reason.to_string(),
-            },
+            GuiError::llama_server_not_installed,
         ),
         _ => GuiError::Internal(format!("Failed to start server: {err}")),
     }

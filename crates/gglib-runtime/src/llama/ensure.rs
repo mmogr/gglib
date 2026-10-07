@@ -26,11 +26,6 @@ fn declined() -> anyhow::Error {
     )
 }
 
-// Helper to convert PathError to anyhow::Error
-fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
-    r.map_err(|e| anyhow::anyhow!("{e}"))
-}
-
 /// Ensure that llama.cpp binaries are installed.
 ///
 /// Checks for the existence of `llama-server`.
@@ -51,7 +46,7 @@ fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
 /// [`AutoConfirmPrompt`]: super::prompt::AutoConfirmPrompt
 /// [`NonInteractivePrompt`]: super::prompt::NonInteractivePrompt
 pub async fn ensure_llama_initialized(prompt: &dyn InstallPrompt) -> Result<()> {
-    let server_path = path_err(llama_server_path())?;
+    let server_path = llama_server_path()?;
 
     if server_path.exists() {
         return Ok(());
@@ -174,8 +169,8 @@ async fn install_prebuilt() -> Result<()> {
 /// is intentionally omitted here so this remains surface-agnostic.
 async fn install_from_source() -> Result<()> {
     let acceleration = detect_optimal_acceleration()?;
-    let llama_dir = path_err(llama_cpp_dir())?;
-    let server_path = path_err(llama_server_path())?;
+    let llama_dir = llama_cpp_dir()?;
+    let server_path = llama_server_path()?;
 
     let (tx, mut rx) = mpsc::channel::<BuildEvent>(64);
     let build = tokio::spawn(run_llama_source_build(

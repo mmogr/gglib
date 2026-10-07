@@ -6,9 +6,9 @@ again, fifteen times over, one `cargo test -p <crate>` per crate, purely so
 `badges.yml` would have a `rust-test-<crate>.txt` to count. That loop cost
 23m15s of a 57m job, and it did not merely repeat work: naming a crate with
 `-p` changes feature unification, so `cargo test -p gglib-runtime` ran 329
-tests where the workspace build runs 352 — the 23 in `llama::{build,config,
-deps,download,update}` are behind features `gglib-cli` turns on. The loop
-tested a configuration no real build uses, and the badge was 23 short.
+tests where the workspace build ran 352 — the 23 in `llama::{build,config,
+deps,download,update}` were behind features `gglib-cli` turned on. The loop
+tested a configuration no real build used, and the badge was 23 short.
 
 The whole-workspace run already contains everything the loop produced; it is
 just not divided by crate. This divides it.

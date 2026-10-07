@@ -31,9 +31,6 @@ pub(crate) mod server_config;
 pub mod system;
 pub mod unified_server_config;
 
-// Re-export health utilities for direct use if needed
-pub use health::check_http_health;
-
 // Re-export health monitoring primitives
 pub use health_monitor::{ServerHealthChecker, ServerHealthMonitor};
 

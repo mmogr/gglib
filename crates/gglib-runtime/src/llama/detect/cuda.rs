@@ -22,7 +22,6 @@
 
 #[cfg(target_os = "linux")]
 use anyhow::Context;
-#[cfg(any(target_os = "linux", feature = "cli"))]
 use anyhow::Result;
 #[cfg(target_os = "linux")]
 use tracing::warn;
@@ -84,7 +83,6 @@ fn get_gcc_version_tuple() -> Option<(u32, u32)> {
 /// 3. `/usr/local/cuda-*` (versioned installs, newest first)
 /// 4. `/usr/local/cuda` (generic symlink)
 /// 5. Windows standard locations
-#[cfg(feature = "cli")]
 pub(crate) fn get_cuda_path() -> Option<String> {
     if let Ok(cuda_path) = std::env::var("CUDA_PATH")
         && std::path::Path::new(&cuda_path).exists()
@@ -209,7 +207,6 @@ fn get_specific_gcc_version(gcc_cmd: &str) -> Result<String> {
 /// Returns `Ok(())` if the combination is supported, or an `Err` with
 /// a detailed message including remediation steps. Validation is only
 /// performed on Linux; other platforms return `Ok(())` unconditionally.
-#[cfg(feature = "cli")]
 pub(crate) fn validate_cuda_gcc_compatibility() -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {

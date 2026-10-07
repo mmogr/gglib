@@ -13,11 +13,6 @@ use std::process::Stdio;
 use std::thread;
 use tokio::sync::mpsc;
 
-// Helper to convert PathError to anyhow::Error
-fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
-    r.map_err(|e| anyhow::anyhow!("{e}"))
-}
-
 /// Core streaming build pipeline for llama.cpp from source.
 ///
 /// Clones or reuses the repository, configures, compiles, installs binaries, and saves
@@ -69,7 +64,7 @@ pub async fn run_llama_source_build(
                 phase: BuildPhase::InstallBinaries,
             });
             install_binary(&dir, "llama-server", &sp)?;
-            let bench_dest = path_err(llama_bench_path())?;
+            let bench_dest = llama_bench_path()?;
             install_binary(&dir, "llama-bench", &bench_dest)?;
             let _ = tx_clone.blocking_send(BuildEvent::PhaseCompleted {
                 phase: BuildPhase::InstallBinaries,
@@ -81,7 +76,7 @@ pub async fn run_llama_source_build(
 
     // Step 4: Persist build configuration.
     let config = BuildConfig::new(version.clone(), commit_sha, acceleration);
-    let config_path = path_err(llama_config_path())?;
+    let config_path = llama_config_path()?;
     config.save(&config_path)?;
 
     // Step 5: Signal successful completion.
@@ -116,7 +111,7 @@ fn clone_llama_cpp(llama_dir: &Path, tx: &mpsc::Sender<BuildEvent>) -> Result<(S
             "https://github.com/ggerganov/llama.cpp",
             llama_dir.to_str().unwrap(),
         ])
-        .stdout(Stdio::piped())
+        .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
         .context("Failed to run git clone")?;

@@ -71,7 +71,7 @@ Concrete examples of established patterns:
 |---|---|---|---|---|
 | Agent loop | `AgentEvent` | spinner + streaming print | SSE at `POST /api/agent/chat` | same SSE stream — no Tauri event |
 | llama install | `LlamaProgressEvent` | spinner + progress bar via `consume_install_events_cli` | SSE at `POST /api/config/system/install-llama` | same SSE stream — no Tauri event |
-| llama build | `BuildEvent` | spinner + progress bar | none — #834 removed the route as dead | none — removed with it |
+| llama build | `BuildEvent` | spinner + progress bar via `consume_build_events_cli` for an install; plain lines for an update | SSE at `POST /api/config/system/update-llama` | same SSE stream — no Tauri event |
 
 Every row is a claim about code that exists. The `llama install` row was not
 one for a long time: the event type was declared private inside `gglib-axum`,
@@ -306,18 +306,6 @@ CI's `boundaries` job runs `scripts/check_boundaries.sh` on every pull request i
 **`src-tauri`** (package `gglib-app`) — The desktop app binary, and the one crate that depends on two surfaces: `gglib-tauri` for its Tauri event emission, and `gglib-axum` to host the daemon in-process when it cannot launch an external one. It also depends on `gglib-app-services`, `gglib-runtime`, `gglib-proxy`, `gglib-core` and `gglib-build-info`. No crate depends on it, and `check_boundaries.sh` does not check it.
 
 If your change requires adding a dependency from a lower layer to a higher layer, reconsider the design. The dependency should flow in the opposite direction via the channel/event pattern described above.
-
-### Feature flags in `gglib-runtime`
-
-`gglib-runtime` uses feature flags to gate compilation of heavy subsystems:
-
-| Feature | Includes | Use in |
-|---|---|---|
-| *(default)* | Inference and server management | No dependent crate: each turns on `prebuilt` or `cli` |
-| `prebuilt` | Pre-built binary download support | `gglib-app-services` |
-| `cli` | Source build pipeline (`build/`, `install/`) — implies `prebuilt` | `gglib-cli`, `gglib-axum`, `src-tauri` |
-
-When adding a new flag-gated import in a surface crate, ensure its `Cargo.toml` declares the correct `features = [...]` value. A missing feature flag will produce a confusing "function not found" compile error rather than a clear feature gate message.
 
 ---
 
@@ -608,8 +596,8 @@ npm run build        # Production build (required before integration tests)
 Some crates have conditional compilation gated on feature flags. A plain `cargo test` will use default features. To test a specific feature combination:
 
 ```bash
-cargo test -p gglib-runtime --features cli
-cargo doc  -p gglib-runtime --features cli
+cargo test -p gglib-db --features test-utils
+cargo doc  -p gglib-db --features test-utils
 ```
 
 ### Lockfile discipline

@@ -1,6 +1,5 @@
 //! Build configuration storage and management.
 
-#[cfg(feature = "cli")]
 use super::detect::Acceleration;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -25,7 +24,6 @@ pub struct BuildConfig {
 
 impl BuildConfig {
     /// Create a new build configuration
-    #[cfg(feature = "cli")]
     pub fn new(version: String, commit_sha: String, acceleration: Acceleration) -> Self {
         Self {
             version,
@@ -41,7 +39,6 @@ impl BuildConfig {
     }
 
     /// Save configuration to file
-    #[cfg(feature = "cli")]
     pub fn save(&self, path: &Path) -> Result<()> {
         let json = serde_json::to_string_pretty(self).context("Failed to serialize config")?;
         fs::write(path, json).context("Failed to write config file")?;
@@ -58,13 +55,10 @@ impl BuildConfig {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "cli")]
     use super::*;
-    #[cfg(feature = "cli")]
     use tempfile::tempdir;
 
     #[test]
-    #[cfg(feature = "cli")]
     fn test_build_config_roundtrip() {
         let dir = tempdir().unwrap();
         let config_path = dir.path().join("test-config.json");

@@ -62,3 +62,30 @@ pub enum LlamaCommand {
         json: bool,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::LlamaCommand;
+    use crate::commands::Commands;
+    use crate::config_commands::ConfigCommand;
+    use clap::Parser;
+    use gglib_core::paths::LLAMA_INSTALL_COMMAND;
+
+    /// The GUI's install prompt and the benchmark's missing-binary message
+    /// tell the user to run this constant, so it has to be a command this
+    /// parser accepts.
+    #[test]
+    fn the_install_hint_is_the_command_that_installs_llama() {
+        let cli = crate::Cli::try_parse_from(LLAMA_INSTALL_COMMAND.split(' '))
+            .unwrap_or_else(|e| panic!("{LLAMA_INSTALL_COMMAND:?} should parse: {e}"));
+
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Config {
+                command: ConfigCommand::Llama {
+                    command: LlamaCommand::Install { .. }
+                }
+            })
+        ));
+    }
+}

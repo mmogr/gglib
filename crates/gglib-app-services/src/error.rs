@@ -5,6 +5,8 @@
 
 use std::fmt;
 
+use gglib_core::paths::{LLAMA_INSTALL_COMMAND, llama_server_path};
+
 /// Semantic errors for GUI backend operations.
 ///
 /// Each variant represents a logical error condition that adapters
@@ -132,6 +134,20 @@ impl From<gglib_core::ports::RepositoryError> for GuiError {
 }
 
 impl GuiError {
+    /// The install prompt for a llama-server that cannot be used, and why.
+    ///
+    /// Names the path gglib looks for llama-server at and the command that
+    /// installs it. The path is empty when it cannot be resolved.
+    pub(crate) fn llama_server_not_installed(reason: &str) -> Self {
+        Self::LlamaServerNotInstalled {
+            expected_path: llama_server_path()
+                .map(|path| path.display().to_string())
+                .unwrap_or_default(),
+            suggested_command: LLAMA_INSTALL_COMMAND.to_string(),
+            reason: reason.to_string(),
+        }
+    }
+
     /// This error, its message led by what was being done when it happened.
     /// The kind is kept, so a refusal stays a refusal; a not-found already
     /// names what was missing and is left as it is.

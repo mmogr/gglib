@@ -7,9 +7,10 @@ use super::detect::select_cuda_compiler_for_build;
 use anyhow::{Context, Result, bail};
 
 use super::build_events::{BuildEvent, BuildPhase};
-use std::io::{BufRead, BufReader};
+use gglib_core::utils::process::cmd;
+use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::mpsc as std_mpsc;
 use std::thread;
 use tokio::sync::mpsc;
@@ -71,11 +72,11 @@ fn configure_cmake(
     let accel_flags = acceleration.cmake_flags();
     args.extend(accel_flags);
 
-    let mut cmd = Command::new("cmake");
+    let mut command = cmd("cmake");
 
     // Set env vars for compilation (GCC ICE workaround).
-    cmd.env("CXXFLAGS", &cxxflags);
-    cmd.env("CFLAGS", &cflags);
+    command.env("CXXFLAGS", &cxxflags);
+    command.env("CFLAGS", &cflags);
 
     // Compiler selection priority (platform-specific):
     // Linux CUDA builds: Clang (best) > GCC 12/11 (compatible) > system GCC
@@ -100,21 +101,21 @@ fn configure_cmake(
                 let (compiler, _version) = select_cuda_compiler_for_build()?;
 
                 if compiler.contains("clang") {
-                    cmd.env("CC", "clang");
-                    cmd.env("CXX", "clang++");
+                    command.env("CC", "clang");
+                    command.env("CXX", "clang++");
                     let _ = tx.blocking_send(BuildEvent::Log {
                         message: "Using clang/clang++ for CUDA build (best compatibility)"
                             .to_string(),
                     });
                 } else if compiler == "gcc-12" {
-                    cmd.env("CC", "gcc-12");
-                    cmd.env("CXX", "g++-12");
+                    command.env("CC", "gcc-12");
+                    command.env("CXX", "g++-12");
                     let _ = tx.blocking_send(BuildEvent::Log {
                         message: "Using gcc-12/g++-12 for CUDA compatibility".to_string(),
                     });
                 } else if compiler == "gcc-11" {
-                    cmd.env("CC", "gcc-11");
-                    cmd.env("CXX", "g++-11");
+                    command.env("CC", "gcc-11");
+                    command.env("CXX", "g++-11");
                     let _ = tx.blocking_send(BuildEvent::Log {
                         message: "Using gcc-11/g++-11 for CUDA compatibility".to_string(),
                     });
@@ -122,12 +123,12 @@ fn configure_cmake(
                 // If "gcc" (system default), don't set explicitly
             } else {
                 // Non-CUDA builds on Linux: prefer Clang over GCC (GCC 14/15 have compiler bugs)
-                if Command::new("clang").arg("--version").output().is_ok() {
-                    cmd.env("CC", "clang");
-                    cmd.env("CXX", "clang++");
-                } else if Command::new("gcc-14").arg("--version").output().is_ok() {
-                    cmd.env("CC", "gcc-14");
-                    cmd.env("CXX", "g++-14");
+                if cmd("clang").arg("--version").output().is_ok() {
+                    command.env("CC", "clang");
+                    command.env("CXX", "clang++");
+                } else if cmd("gcc-14").arg("--version").output().is_ok() {
+                    command.env("CC", "gcc-14");
+                    command.env("CXX", "g++-14");
                 }
             }
         }
@@ -152,9 +153,9 @@ fn configure_cmake(
             });
 
             // Set environment variables for FindCUDAToolkit
-            cmd.env("CUDAToolkit_ROOT", &cuda_path);
-            cmd.env("CUDA_PATH", &cuda_path);
-            cmd.env("CUDA_TOOLKIT_ROOT_DIR", &cuda_path);
+            command.env("CUDAToolkit_ROOT", &cuda_path);
+            command.env("CUDA_PATH", &cuda_path);
+            command.env("CUDA_TOOLKIT_ROOT_DIR", &cuda_path);
 
             // Also pass as CMake arguments (more reliable)
             let nvcc_path = format!("{cuda_path}/bin/nvcc");
@@ -171,37 +172,17 @@ fn configure_cmake(
 
     // Combine all arguments
     args.extend(cuda_args.iter().map(std::string::String::as_str));
-    cmd.args(&args);
+    command.args(&args);
 
-    let mut child = cmd
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("Failed to run CMake")?;
+    run_configure(command, tx)
+}
 
-    let stdout = child.stdout.take().unwrap();
-    let stderr = child.stderr.take().unwrap();
+/// Run the configure `command`: a [`BuildEvent::Log`] for each line it prints
+/// that is not blank, then [`BuildEvent::PhaseCompleted`] once it has exited.
+fn run_configure(command: Command, tx: &mpsc::Sender<BuildEvent>) -> Result<()> {
+    let (mut child, lines) = spawn_lines(command).context("Failed to run CMake")?;
 
-    let (line_tx, line_rx) = std_mpsc::channel();
-    let line_tx2 = line_tx.clone();
-
-    // Read stdout
-    thread::spawn(move || {
-        let reader = BufReader::new(stdout);
-        for line in reader.lines().map_while(Result::ok) {
-            let _ = line_tx.send(line);
-        }
-    });
-
-    // Read stderr
-    thread::spawn(move || {
-        let reader = BufReader::new(stderr);
-        for line in reader.lines().map_while(Result::ok) {
-            let _ = line_tx2.send(line);
-        }
-    });
-
-    while let Ok(line) = line_rx.recv() {
+    for line in lines {
         if !line.trim().is_empty() {
             let _ = tx.blocking_send(BuildEvent::Log { message: line });
         }
@@ -238,7 +219,8 @@ fn build_project(
     let cxxflags = merge_flags("CXXFLAGS", "-O1");
     let cflags = merge_flags("CFLAGS", "-O1");
 
-    let mut child = Command::new("cmake")
+    let mut command = cmd("cmake");
+    command
         .env("CXXFLAGS", cxxflags)
         .env("CFLAGS", cflags)
         .args([
@@ -248,39 +230,22 @@ fn build_project(
             "Release",
             "-j",
             &num_cores.to_string(),
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("Failed to run build")?;
+        ]);
 
-    let stdout = child.stdout.take().unwrap();
-    let stderr = child.stderr.take().unwrap();
+    run_compile(command, tx)
+}
 
-    let (line_tx, line_rx) = std_mpsc::channel();
-    let line_tx2 = line_tx.clone();
-
-    // Read stdout
-    thread::spawn(move || {
-        let reader = BufReader::new(stdout);
-        for line in reader.lines().map_while(Result::ok) {
-            let _ = line_tx.send(line);
-        }
-    });
-
-    // Read stderr
-    thread::spawn(move || {
-        let reader = BufReader::new(stderr);
-        for line in reader.lines().map_while(Result::ok) {
-            let _ = line_tx2.send(line);
-        }
-    });
+/// Run the compile `command`: [`BuildEvent::Progress`] as its output reports
+/// it, a [`BuildEvent::Log`] for each line worth showing, then
+/// [`BuildEvent::PhaseCompleted`] once it has exited.
+fn run_compile(command: Command, tx: &mpsc::Sender<BuildEvent>) -> Result<()> {
+    let (mut child, lines) = spawn_lines(command).context("Failed to run build")?;
 
     let mut last_progress = 0;
     let mut total_files = 100; // Default estimate
 
     // Process output and update progress
-    while let Ok(line) = line_rx.recv() {
+    for line in lines {
         // Parse build progress from output
         // Look for patterns like "[ 50%]" or "[150/200]"
         if let Some(progress) = parse_build_progress(&line, &mut total_files)
@@ -318,6 +283,34 @@ fn build_project(
     }
 
     Ok(())
+}
+
+/// Spawn `command` and hand back its output a line at a time, stdout and
+/// stderr merged in the order the lines arrive.
+///
+/// Each stream is read on an OS thread of its own, so neither pipe fills
+/// while the other is drained. The receiver ends when both threads have.
+fn spawn_lines(mut command: Command) -> std::io::Result<(Child, std_mpsc::Receiver<String>)> {
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let (line_tx, line_rx) = std_mpsc::channel();
+    forward_lines(child.stdout.take(), line_tx.clone());
+    forward_lines(child.stderr.take(), line_tx);
+
+    Ok((child, line_rx))
+}
+
+/// Send each line of `stream` to `line_tx` from a thread of its own.
+fn forward_lines(stream: Option<impl Read + Send + 'static>, line_tx: std_mpsc::Sender<String>) {
+    let Some(stream) = stream else { return };
+    thread::spawn(move || {
+        for line in BufReader::new(stream).lines().map_while(Result::ok) {
+            let _ = line_tx.send(line);
+        }
+    });
 }
 
 /// Determine build parallelism, capping CUDA builds to avoid OOM.
@@ -384,6 +377,10 @@ fn parse_build_progress(line: &str, total_files: &mut usize) -> Option<usize> {
 
     None
 }
+
+#[cfg(all(test, unix))]
+#[path = "step_tests.rs"]
+mod step_tests;
 
 #[cfg(test)]
 mod tests {

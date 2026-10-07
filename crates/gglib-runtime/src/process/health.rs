@@ -142,18 +142,21 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
 ///
 /// Unlike [`wait_for_http_health`] this does **not** retry: it makes one
 /// request with a short timeout and reports whether the server responded
-/// `200 OK`. Used on the "already running" fast path to detect a cached
+/// with a 2xx. The "already running" fast path uses it to detect a cached
 /// server that has silently degraded or wedged, so the caller can recycle it
-/// instead of routing a request into a dead instance.
+/// instead of routing a request into a dead instance, and
+/// [`ServerHealthChecker`](crate::health_monitor::ServerHealthChecker) polls
+/// with it.
 ///
 /// Never returns an error — any failure (connection refused, timeout,
 /// non-2xx) is reported as `false` so callers can treat "not healthy" and
 /// "unreachable" identically.
 pub async fn check_http_health(port: u16) -> bool {
-    /// Shared client, built once. See `crate::health::HEALTH_CLIENT` for why
-    /// this isn't constructed per call — this path is hotter still, running on
-    /// the already-running fast path of every proxied request — and
-    /// `crate::health::loopback_client` for why it never consults a proxy.
+    /// Shared client, built once: this runs on the already-running fast path
+    /// of every proxied request and whenever the health monitor polls a live
+    /// process, and a client per call would initialize a TLS backend and
+    /// throw the connection pool away each time.
+    /// `crate::health::loopback_client` says why it never consults a proxy.
     static CLIENT: std::sync::OnceLock<Option<reqwest::Client>> = std::sync::OnceLock::new();
 
     let health_url = format!("http://127.0.0.1:{port}/health");

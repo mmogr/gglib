@@ -2,7 +2,6 @@
 // === Submodules ===
 
 pub mod args;
-#[cfg(feature = "cli")]
 #[allow(
     clippy::option_if_let_else,
     clippy::too_many_lines,
@@ -22,19 +21,15 @@ mod detect;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 mod download;
-#[cfg(feature = "cli")]
 mod ensure;
 pub mod error;
-#[cfg(feature = "cli")]
 mod install;
 pub mod install_events;
 pub mod prompt;
 pub mod runtime_probe;
 mod server_availability;
 mod status;
-#[cfg(feature = "cli")]
 mod uninstall;
-#[cfg(feature = "cli")]
 mod update;
 mod validate;
 
@@ -52,8 +47,8 @@ pub use server_availability::{LlamaServerError, LlamaServerResult, resolve_llama
 // held for the run — see `runtime_probe` for why arbitration is static.
 pub use runtime_probe::probe as probe_runtime_capabilities;
 
-// Prompt traits
-pub use prompt::{AutoConfirmPrompt, InstallPrompt, NonInteractivePrompt};
+// Prompt trait and its three policies
+pub use prompt::{AutoConfirmPrompt, CliPrompt, InstallPrompt, NonInteractivePrompt};
 
 // Build pipeline event types
 pub use build_events::{BuildEvent, BuildPhase};
@@ -61,28 +56,20 @@ pub use build_events::{BuildEvent, BuildPhase};
 // Prebuilt install pipeline event types
 pub use install_events::{InstallPhase, LlamaProgressEvent};
 
-#[cfg(feature = "cli")]
-pub use deps::{check_dependencies, check_disk_space};
-
-#[cfg(feature = "cli")]
-pub use prompt::CliPrompt;
+pub use deps::check_dependencies;
 
 // Core functionality
 pub use detect::{
     Acceleration, MissingPackage, VulkanStatus, detect_optimal_acceleration, vulkan_status,
 };
 pub use download::check_llama_installed;
-#[cfg(feature = "cli")]
 pub use ensure::ensure_llama_initialized;
 pub use status::{LlamaBuildInfo, LlamaStatus, llama_status};
 pub use validate::{handle_status, validate_llama_binary};
 
-// Installation (CLI only)
-#[cfg(feature = "cli")]
+// Installation
 pub use install::run_llama_source_build;
-#[cfg(feature = "cli")]
 pub use uninstall::{UninstallOutcome, handle_uninstall, uninstall_llama};
-#[cfg(feature = "cli")]
 pub use update::{
     LlamaUpdateCheck, handle_check_updates, handle_update, llama_update_check, run_llama_update,
     update_acceleration,
@@ -96,5 +83,4 @@ pub use args::{
 };
 
 // Prebuilt download (for adapters that need fine-grained control: the daemon and the CLI)
-#[cfg(feature = "prebuilt")]
 pub use download::{PrebuiltAvailability, check_prebuilt_availability, download_prebuilt_binaries};

@@ -8,6 +8,10 @@ use std::path::PathBuf;
 use super::error::PathError;
 use super::platform::resource_root;
 
+/// The command that installs llama.cpp, for a message that tells the user to
+/// run it.
+pub const LLAMA_INSTALL_COMMAND: &str = "gglib config llama install";
+
 /// Get the gglib data directory containing llama binaries.
 ///
 /// Returns the `.llama/` directory containing helper binaries.
