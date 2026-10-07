@@ -35,4 +35,8 @@ pub enum McpServiceError {
     /// Configuration validation error.
     #[error("Invalid MCP configuration: {0}")]
     InvalidConfig(String),
+
+    /// Another server already has the name a server was to be given.
+    #[error("An MCP server named '{0}' already exists; choose another name")]
+    NameTaken(String),
 }

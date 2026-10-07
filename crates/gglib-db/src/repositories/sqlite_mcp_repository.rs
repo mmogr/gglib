@@ -7,13 +7,30 @@
 
 use async_trait::async_trait;
 use base64::Engine;
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::Utc;
 use sqlx::SqlitePool;
 
 use gglib_core::domain::mcp::{
     McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerType, NewMcpServer,
 };
 use gglib_core::ports::{McpRepositoryError, McpServerRepository};
+
+use super::row_mappers::parse_datetime;
+
+/// Every `mcp_servers` column, as [`McpServerRow`] reads them.
+const MCP_SERVER_COLUMNS: &str = "id, name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, created_at, last_connected_at, is_valid, last_error";
+
+/// Adds a server's row. It sets every column but the id and the two
+/// timestamps, in the order [`SqliteMcpRepository::write`] binds them.
+const INSERT_SERVER: &str = "INSERT INTO mcp_servers \
+     (name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, is_valid, last_error) \
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+/// Replaces a server's row: the columns [`INSERT_SERVER`] sets, in its
+/// order, then the id of the row.
+const UPDATE_SERVER: &str = "UPDATE mcp_servers \
+     SET name = ?, type = ?, enabled = ?, lifecycle = ?, command = ?, resolved_path_cache = ?, args = ?, cwd = ?, path_extra = ?, url = ?, is_valid = ?, last_error = ? \
+     WHERE id = ?";
 
 /// `SQLite` implementation of the MCP server repository.
 pub struct SqliteMcpRepository {
@@ -57,30 +74,31 @@ struct EnvRow {
     value: String,
 }
 
+/// What a write sets, borrowed from the server being added or replaced.
+struct Written<'a> {
+    name: &'a str,
+    server_type: McpServerType,
+    config: &'a McpServerConfig,
+    enabled: bool,
+    lifecycle: McpLifecycle,
+    env: &'a [McpEnvEntry],
+    is_valid: bool,
+    last_error: Option<&'a str>,
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper functions
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Parse a datetime string from `SQLite` to a `DateTime<Utc>`.
-fn parse_datetime(s: &str) -> DateTime<Utc> {
-    // `SQLite` stores datetime as "YYYY-MM-DD HH:MM:SS" format
-    chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
-        .map_or_else(|_| Utc::now(), |dt| Utc.from_utc_datetime(&dt))
-}
-
 /// Convert a `McpServerRow` (with env) to domain `McpServer`.
+///
+/// The schema's CHECK constraints admit only the strings the type and the
+/// lifecycle parse, so the defaults here are never taken.
 fn row_to_server(row: McpServerRow, env: Vec<McpEnvEntry>) -> McpServer {
-    let server_type = match row.server_type.as_str() {
-        "sse" => McpServerType::Sse,
-        _ => McpServerType::Stdio,
-    };
-
-    let args: Option<Vec<String>> = row.args.and_then(|a| serde_json::from_str(&a).ok());
-
     let config = McpServerConfig {
         command: row.command,
         resolved_path_cache: row.resolved_path_cache,
-        args,
+        args: row.args.and_then(|a| serde_json::from_str(&a).ok()),
         working_dir: row.cwd,
         path_extra: row.path_extra,
         url: row.url,
@@ -89,13 +107,13 @@ fn row_to_server(row: McpServerRow, env: Vec<McpEnvEntry>) -> McpServer {
     McpServer {
         id: row.id,
         name: row.name,
-        server_type,
+        server_type: row.server_type.parse::<McpServerType>().unwrap_or_default(),
         config,
         enabled: row.enabled,
         lifecycle: row.lifecycle.parse::<McpLifecycle>().unwrap_or_default(),
         env,
-        created_at: parse_datetime(&row.created_at),
-        last_connected_at: row.last_connected_at.as_ref().map(|s| parse_datetime(s)),
+        created_at: parse_datetime(Some(row.created_at)).unwrap_or_else(Utc::now),
+        last_connected_at: parse_datetime(row.last_connected_at),
         is_valid: row.is_valid,
         last_error: row.last_error,
     }
@@ -116,13 +134,8 @@ fn encode_env_value(value: &str) -> String {
     base64::engine::general_purpose::STANDARD.encode(value.as_bytes())
 }
 
-/// Map `SQLx` errors to `McpRepositoryError`.
-fn map_sqlx_error(e: sqlx::Error) -> McpRepositoryError {
-    // Check for unique constraint violations (name conflict)
-    let msg = e.to_string();
-    if msg.contains("UNIQUE constraint failed") && msg.contains("name") {
-        return McpRepositoryError::Conflict("MCP server name already exists".to_string());
-    }
+/// A failure of the store itself, as the port reports it.
+fn internal(e: impl std::fmt::Display) -> McpRepositoryError {
     McpRepositoryError::Internal(e.to_string())
 }
 
@@ -133,110 +146,63 @@ fn map_sqlx_error(e: sqlx::Error) -> McpRepositoryError {
 #[async_trait]
 impl McpServerRepository for SqliteMcpRepository {
     async fn insert(&self, server: NewMcpServer) -> Result<McpServer, McpRepositoryError> {
-        let server_type = match server.server_type {
-            McpServerType::Stdio => "stdio",
-            McpServerType::Sse => "sse",
-        };
+        let id = self
+            .write(
+                None,
+                Written {
+                    name: &server.name,
+                    server_type: server.server_type,
+                    config: &server.config,
+                    enabled: server.enabled,
+                    lifecycle: server.lifecycle,
+                    env: &server.env,
+                    // Not valid until the service has validated it.
+                    is_valid: false,
+                    last_error: None,
+                },
+            )
+            .await?;
 
-        let args_json = server
-            .config
-            .args
-            .as_ref()
-            .map(|a| serde_json::to_string(a).unwrap_or_else(|_| "[]".to_string()));
-
-        // Insert the server
-        let result = sqlx::query(
-            r"
-            INSERT INTO mcp_servers (name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, is_valid, last_error)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ",
-        )
-        .bind(&server.name)
-        .bind(server_type)
-        .bind(server.enabled)
-        .bind(server.lifecycle.to_string())
-        .bind(&server.config.command)
-        .bind(&server.config.resolved_path_cache)
-        .bind(&args_json)
-        .bind(&server.config.working_dir)
-        .bind(&server.config.path_extra)
-        .bind(&server.config.url)
-        .bind(0) // is_valid starts as 0, will be validated on startup
-        .bind(Option::<String>::None) // last_error starts as None
-        .execute(&self.pool)
-        .await
-        .map_err(map_sqlx_error)?;
-
-        let server_id = result.last_insert_rowid();
-
-        // Insert environment variables
-        for entry in &server.env {
-            let encoded_value = encode_env_value(&entry.value);
-
-            sqlx::query("INSERT INTO mcp_server_env (server_id, key, value) VALUES (?, ?, ?)")
-                .bind(server_id)
-                .bind(&entry.key)
-                .bind(&encoded_value)
-                .execute(&self.pool)
-                .await
-                .map_err(map_sqlx_error)?;
-        }
-
-        // Fetch and return the complete server
-        self.get_by_id(server_id).await
+        self.get_by_id(id).await
     }
 
     async fn get_by_id(&self, id: i64) -> Result<McpServer, McpRepositoryError> {
-        let row = sqlx::query_as::<_, McpServerRow>(
-            r"
-            SELECT id, name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, 
-                   created_at, last_connected_at, is_valid, last_error
-            FROM mcp_servers WHERE id = ?
-            ",
-        )
+        let row = sqlx::query_as::<_, McpServerRow>(&format!(
+            "SELECT {MCP_SERVER_COLUMNS} FROM mcp_servers WHERE id = ?"
+        ))
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(map_sqlx_error)?
+        .map_err(internal)?
         .ok_or_else(|| McpRepositoryError::NotFound(id.to_string()))?;
 
-        // Fetch environment variables
         let env = self.fetch_env(id).await?;
 
         Ok(row_to_server(row, env))
     }
 
     async fn get_by_name(&self, name: &str) -> Result<McpServer, McpRepositoryError> {
-        let row = sqlx::query_as::<_, McpServerRow>(
-            r"
-            SELECT id, name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, 
-                   created_at, last_connected_at, is_valid, last_error
-            FROM mcp_servers WHERE name = ?
-            ",
-        )
+        let row = sqlx::query_as::<_, McpServerRow>(&format!(
+            "SELECT {MCP_SERVER_COLUMNS} FROM mcp_servers WHERE name = ?"
+        ))
         .bind(name)
         .fetch_optional(&self.pool)
         .await
-        .map_err(map_sqlx_error)?
+        .map_err(internal)?
         .ok_or_else(|| McpRepositoryError::NotFound(name.to_string()))?;
 
-        // Fetch environment variables
         let env = self.fetch_env(row.id).await?;
 
         Ok(row_to_server(row, env))
     }
 
     async fn list(&self) -> Result<Vec<McpServer>, McpRepositoryError> {
-        let rows = sqlx::query_as::<_, McpServerRow>(
-            r"
-            SELECT id, name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, 
-                   created_at, last_connected_at, is_valid, last_error
-            FROM mcp_servers ORDER BY name
-            ",
-        )
+        let rows = sqlx::query_as::<_, McpServerRow>(&format!(
+            "SELECT {MCP_SERVER_COLUMNS} FROM mcp_servers ORDER BY name"
+        ))
         .fetch_all(&self.pool)
         .await
-        .map_err(map_sqlx_error)?;
+        .map_err(internal)?;
 
         let mut servers = Vec::with_capacity(rows.len());
         for row in rows {
@@ -248,63 +214,20 @@ impl McpServerRepository for SqliteMcpRepository {
     }
 
     async fn update(&self, server: &McpServer) -> Result<(), McpRepositoryError> {
-        // Verify server exists
-        let _ = self.get_by_id(server.id).await?;
-
-        let server_type = match server.server_type {
-            McpServerType::Stdio => "stdio",
-            McpServerType::Sse => "sse",
-        };
-
-        let args_json = server
-            .config
-            .args
-            .as_ref()
-            .map(|a| serde_json::to_string(a).unwrap_or_else(|_| "[]".to_string()));
-
-        // Update the server
-        sqlx::query(
-            r"
-            UPDATE mcp_servers 
-            SET name = ?, type = ?, enabled = ?, lifecycle = ?, command = ?, resolved_path_cache = ?, args = ?, cwd = ?, path_extra = ?, url = ?, is_valid = ?, last_error = ?
-            WHERE id = ?
-            ",
+        self.write(
+            Some(server.id),
+            Written {
+                name: &server.name,
+                server_type: server.server_type,
+                config: &server.config,
+                enabled: server.enabled,
+                lifecycle: server.lifecycle,
+                env: &server.env,
+                is_valid: server.is_valid,
+                last_error: server.last_error.as_deref(),
+            },
         )
-        .bind(&server.name)
-        .bind(server_type)
-        .bind(server.enabled)
-        .bind(server.lifecycle.to_string())
-        .bind(&server.config.command)
-        .bind(&server.config.resolved_path_cache)
-        .bind(&args_json)
-        .bind(&server.config.working_dir)
-        .bind(&server.config.path_extra)
-        .bind(&server.config.url)
-        .bind(server.is_valid)
-        .bind(&server.last_error)
-        .bind(server.id)
-        .execute(&self.pool)
-        .await
-        .map_err(map_sqlx_error)?;
-
-        // Atomic env replacement: delete all and re-insert
-        sqlx::query("DELETE FROM mcp_server_env WHERE server_id = ?")
-            .bind(server.id)
-            .execute(&self.pool)
-            .await
-            .map_err(map_sqlx_error)?;
-
-        for entry in &server.env {
-            let encoded_value = encode_env_value(&entry.value);
-
-            sqlx::query("INSERT INTO mcp_server_env (server_id, key, value) VALUES (?, ?, ?)")
-                .bind(server.id)
-                .bind(&entry.key)
-                .bind(&encoded_value)
-                .execute(&self.pool)
-                .await
-                .map_err(map_sqlx_error)?;
-        }
+        .await?;
 
         Ok(())
     }
@@ -318,7 +241,7 @@ impl McpServerRepository for SqliteMcpRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(map_sqlx_error)?;
+            .map_err(internal)?;
 
         Ok(())
     }
@@ -329,7 +252,7 @@ impl McpServerRepository for SqliteMcpRepository {
                 .bind(id)
                 .execute(&self.pool)
                 .await
-                .map_err(map_sqlx_error)?;
+                .map_err(internal)?;
 
         if result.rows_affected() == 0 {
             return Err(McpRepositoryError::NotFound(id.to_string()));
@@ -340,6 +263,72 @@ impl McpServerRepository for SqliteMcpRepository {
 }
 
 impl SqliteMcpRepository {
+    /// Write a server whole, in one transaction: its row, then its env rows
+    /// in place of any the row had. `id` names the row to replace; without
+    /// one a row is added. Returns the row's id.
+    ///
+    /// A failure at any step rolls the transaction back, so the database
+    /// never holds a server without its env, nor half of an update.
+    async fn write(&self, id: Option<i64>, server: Written<'_>) -> Result<i64, McpRepositoryError> {
+        // `args` is NOT NULL: a server with none, as every SSE server is,
+        // stores an empty list.
+        let args = serde_json::to_string(server.config.args.as_deref().unwrap_or_default())
+            .map_err(internal)?;
+
+        let mut tx = self.pool.begin().await.map_err(internal)?;
+
+        let mut query = sqlx::query(if id.is_some() {
+            UPDATE_SERVER
+        } else {
+            INSERT_SERVER
+        })
+        .bind(server.name)
+        .bind(server.server_type.to_string())
+        .bind(server.enabled)
+        .bind(server.lifecycle.to_string())
+        .bind(&server.config.command)
+        .bind(&server.config.resolved_path_cache)
+        .bind(args)
+        .bind(&server.config.working_dir)
+        .bind(&server.config.path_extra)
+        .bind(&server.config.url)
+        .bind(server.is_valid)
+        .bind(server.last_error);
+        if let Some(id) = id {
+            query = query.bind(id);
+        }
+        let written = query.execute(&mut *tx).await.map_err(internal)?;
+
+        let id = match id {
+            Some(id) if written.rows_affected() == 0 => {
+                return Err(McpRepositoryError::NotFound(id.to_string()));
+            }
+            Some(id) => {
+                sqlx::query("DELETE FROM mcp_server_env WHERE server_id = ?")
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(internal)?;
+                id
+            }
+            None => written.last_insert_rowid(),
+        };
+
+        for entry in server.env {
+            sqlx::query("INSERT INTO mcp_server_env (server_id, key, value) VALUES (?, ?, ?)")
+                .bind(id)
+                .bind(&entry.key)
+                .bind(encode_env_value(&entry.value))
+                .execute(&mut *tx)
+                .await
+                .map_err(internal)?;
+        }
+
+        tx.commit().await.map_err(internal)?;
+
+        Ok(id)
+    }
+
     /// Fetch and decode environment variables for a server.
     async fn fetch_env(&self, server_id: i64) -> Result<Vec<McpEnvEntry>, McpRepositoryError> {
         let rows = sqlx::query_as::<_, EnvRow>(
@@ -348,7 +337,7 @@ impl SqliteMcpRepository {
         .bind(server_id)
         .fetch_all(&self.pool)
         .await
-        .map_err(map_sqlx_error)?;
+        .map_err(internal)?;
 
         let mut env = Vec::with_capacity(rows.len());
         for row in rows {
@@ -360,204 +349,6 @@ impl SqliteMcpRepository {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tests
-// ─────────────────────────────────────────────────────────────────────────────
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    async fn setup_test_db() -> SqlitePool {
-        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-
-        // Create the mcp_servers table
-        sqlx::query(
-            r"
-            CREATE TABLE IF NOT EXISTS mcp_servers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                type TEXT NOT NULL CHECK (type IN ('stdio', 'sse')),
-                enabled INTEGER NOT NULL DEFAULT 1,
-                lifecycle TEXT NOT NULL DEFAULT 'lazy' CHECK (lifecycle IN ('eager', 'lazy', 'manual')),
-                command TEXT,
-                resolved_path_cache TEXT,
-                args TEXT,
-                cwd TEXT,
-                path_extra TEXT,
-                url TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                last_connected_at TEXT,
-                is_valid INTEGER NOT NULL DEFAULT 0,
-                last_error TEXT
-            )
-            ",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-
-        // Create the mcp_server_env table
-        sqlx::query(
-            r"
-            CREATE TABLE IF NOT EXISTS mcp_server_env (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                server_id INTEGER NOT NULL,
-                key TEXT NOT NULL,
-                value TEXT NOT NULL,
-                FOREIGN KEY (server_id) REFERENCES mcp_servers(id) ON DELETE CASCADE,
-                UNIQUE(server_id, key)
-            )
-            ",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-
-        pool
-    }
-
-    #[tokio::test]
-    async fn test_insert_and_get_by_id() {
-        let pool = setup_test_db().await;
-        let repo = SqliteMcpRepository::new(pool);
-
-        let new_server = NewMcpServer::new_stdio(
-            "test-server",
-            "npx",
-            vec!["-y".to_string(), "mcp".to_string()],
-            None,
-        )
-        .with_env("API_KEY", "secret123");
-
-        let server = repo.insert(new_server).await.unwrap();
-
-        assert_eq!(server.name, "test-server");
-        assert_eq!(server.server_type, McpServerType::Stdio);
-        assert_eq!(server.config.command, Some("npx".to_string()));
-        assert_eq!(server.env.len(), 1);
-        assert_eq!(server.env[0].key, "API_KEY");
-        assert_eq!(server.env[0].value, "secret123");
-
-        // Fetch by ID
-        let fetched = repo.get_by_id(server.id).await.unwrap();
-        assert_eq!(fetched.name, "test-server");
-        assert_eq!(fetched.env[0].value, "secret123");
-    }
-
-    #[tokio::test]
-    async fn test_get_by_name() {
-        let pool = setup_test_db().await;
-        let repo = SqliteMcpRepository::new(pool);
-
-        let new_server =
-            NewMcpServer::new_stdio("my-mcp", "node", vec!["server.js".to_string()], None);
-        let _ = repo.insert(new_server).await.unwrap();
-
-        let fetched = repo.get_by_name("my-mcp").await.unwrap();
-        assert_eq!(fetched.name, "my-mcp");
-    }
-
-    #[tokio::test]
-    async fn test_list_servers() {
-        let pool = setup_test_db().await;
-        let repo = SqliteMcpRepository::new(pool);
-
-        repo.insert(NewMcpServer::new_stdio("server-a", "cmd", vec![], None))
-            .await
-            .unwrap();
-        repo.insert(NewMcpServer::new_stdio("server-b", "cmd", vec![], None))
-            .await
-            .unwrap();
-
-        let servers = repo.list().await.unwrap();
-        assert_eq!(servers.len(), 2);
-        // Should be ordered by name
-        assert_eq!(servers[0].name, "server-a");
-        assert_eq!(servers[1].name, "server-b");
-    }
-
-    #[tokio::test]
-    async fn test_update_server() {
-        let pool = setup_test_db().await;
-        let repo = SqliteMcpRepository::new(pool);
-
-        let new_server = NewMcpServer::new_stdio("updatable", "old-cmd", vec![], None)
-            .with_env("KEY", "old-value");
-        let mut server = repo.insert(new_server).await.unwrap();
-
-        // Modify the server
-        server.config.command = Some("new-cmd".to_string());
-        server.env = vec![McpEnvEntry::new("KEY", "new-value")];
-        server.enabled = false;
-
-        repo.update(&server).await.unwrap();
-
-        let fetched = repo.get_by_id(server.id).await.unwrap();
-        assert_eq!(fetched.config.command, Some("new-cmd".to_string()));
-        assert_eq!(fetched.env[0].value, "new-value");
-        assert!(!fetched.enabled);
-    }
-
-    #[tokio::test]
-    async fn test_delete_server() {
-        let pool = setup_test_db().await;
-        let repo = SqliteMcpRepository::new(pool);
-
-        let new_server = NewMcpServer::new_stdio("deletable", "cmd", vec![], None);
-        let server = repo.insert(new_server).await.unwrap();
-        let id = server.id;
-
-        repo.delete(id).await.unwrap();
-
-        let result = repo.get_by_id(id).await;
-        assert!(matches!(result, Err(McpRepositoryError::NotFound(_))));
-    }
-
-    #[tokio::test]
-    async fn test_conflict_on_duplicate_name() {
-        let pool = setup_test_db().await;
-        let repo = SqliteMcpRepository::new(pool);
-
-        repo.insert(NewMcpServer::new_stdio("unique-name", "cmd", vec![], None))
-            .await
-            .unwrap();
-
-        let result = repo
-            .insert(NewMcpServer::new_stdio("unique-name", "cmd", vec![], None))
-            .await;
-
-        assert!(matches!(result, Err(McpRepositoryError::Conflict(_))));
-    }
-
-    #[tokio::test]
-    async fn test_sse_server() {
-        let pool = setup_test_db().await;
-        let repo = SqliteMcpRepository::new(pool);
-
-        let new_server = NewMcpServer::new_sse("sse-server", "http://localhost:3001/sse");
-        let server = repo.insert(new_server).await.unwrap();
-
-        assert_eq!(server.server_type, McpServerType::Sse);
-        assert_eq!(
-            server.config.url,
-            Some("http://localhost:3001/sse".to_string())
-        );
-    }
-
-    #[tokio::test]
-    async fn test_update_last_connected() {
-        let pool = setup_test_db().await;
-        let repo = SqliteMcpRepository::new(pool);
-
-        let new_server = NewMcpServer::new_stdio("connectable", "cmd", vec![], None);
-        let server = repo.insert(new_server).await.unwrap();
-
-        assert!(server.last_connected_at.is_none());
-
-        repo.update_last_connected(server.id).await.unwrap();
-
-        let fetched = repo.get_by_id(server.id).await.unwrap();
-        assert!(fetched.last_connected_at.is_some());
-    }
-}
+#[path = "sqlite_mcp_repository_tests.rs"]
+mod tests;

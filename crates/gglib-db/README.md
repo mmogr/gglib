@@ -242,7 +242,7 @@ mod tests {
 |---|---|
 | `SqliteModelRepository` | insert/list, get_by_id, get_by_name, update, delete, not-found errors, upsert dedup, an upsert takes no id |
 | `SqliteChatHistoryRepository` | create/list conversations, get by id, count, update title, delete, messages round-trip, update/delete messages |
-| `SqliteMcpRepository` | insert/get/list/update/delete servers, SSE server, duplicate name conflict |
+| `SqliteMcpRepository` | insert/get/list/update/delete servers, an SSE server, a failed insert or update leaving nothing partial, the type strings the schema admits, a database holding two servers of one name |
 | `SqliteSettingsRepository` | load empty, save and load, clear individual fields |
 | `SqliteLoopGuardTripLog` | summary over both tables — a scanned day with no trips, and a trip whose scan was lost — detectors, modes and models apart, the window, a second flush adding to a day, pruning by age and by cap, no text in any column |
 
