@@ -22,6 +22,7 @@ use gglib_app_services::RunLog;
 use gglib_app_services::transcript::FrameTimes;
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::runs::RunError;
+use gglib_core::domain::thinking;
 use gglib_core::ports::{AgentError, Created, RunScope};
 
 use super::AgentChatRequest;
@@ -29,7 +30,6 @@ use super::compose::{Prepared, frame, prepare, take_permit};
 use super::dto::AgentRunRequest;
 use super::launch::{Transcript, launch};
 use super::remote_upstream;
-use super::thinking;
 use crate::error::HttpError;
 use crate::state::AppState;
 

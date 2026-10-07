@@ -53,7 +53,7 @@ crates/gglib-core/src/download/completion.rs 557
 crates/gglib-core/src/download/rate.rs 378
 crates/gglib-core/src/download/types.rs 752
 crates/gglib-core/src/normalize/parsers/delimited.rs 984
-crates/gglib-core/src/normalize/stream.rs 651
+crates/gglib-core/src/normalize/stream.rs 644
 crates/gglib-core/src/ports/model_runtime.rs 600
 crates/gglib-core/src/request_pipeline/constrain.rs 325
 crates/gglib-core/src/request_pipeline/sampling.rs 678

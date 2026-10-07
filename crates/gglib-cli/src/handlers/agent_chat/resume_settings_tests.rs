@@ -37,7 +37,6 @@ pub(crate) fn chat_args() -> ChatArgs {
         continue_id: None,
         observation_tools: Vec::new(),
         max_observation_steps: None,
-        max_stagnation_steps: None,
     }
 }
 

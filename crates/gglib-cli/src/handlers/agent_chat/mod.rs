@@ -21,7 +21,7 @@ pub(crate) mod upstream;
 
 use anyhow::{Result, bail};
 
-use gglib_core::domain::agent::{AgentMessage, saved_history};
+use gglib_core::domain::agent::{AgentMessage, TurnLimits, saved_history};
 use gglib_core::domain::chat::ConversationSettings;
 
 use crate::bootstrap::CliContext;
@@ -49,6 +49,7 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     let Session {
         args,
         params,
+        limits,
         persistence,
         prior_messages,
     } = prepare(ctx, args).await?;
@@ -79,14 +80,16 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
 
     // The llama-server belongs to the daemon and stays warm for the next
     // session; nothing to stop here.
-    repl::run_repl_with_prior(agent, &args, persistence, prior_messages, images).await
+    repl::run_repl_with_prior(agent, &args, limits, persistence, prior_messages, images).await
 }
 
 /// A session ready to compose: the merged args, the parameters its agent is
-/// composed with, the conversation it saves to, and the messages it resumes.
+/// composed with, the limits its turns run with, the conversation it saves
+/// to, and the messages it resumes.
 struct Session<'a> {
     args: ChatArgs,
     params: config::AgentSessionParams,
+    limits: TurnLimits,
     persistence: Option<Conversation<'a>>,
     prior_messages: Vec<AgentMessage>,
 }
@@ -102,33 +105,19 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
     //    into args so the agent is composed with the correct parameters.
     let mut args = args.clone();
 
-    // Resolve max_iterations and max_stagnation_steps from persisted settings
-    // when not already provided (there is no per-run stagnation flag).
-    if let Ok(settings) = ctx.app.settings().get().await {
-        if args.max_iterations.is_none() {
-            args.max_iterations = settings.max_tool_iterations.map(|v| v as usize);
-        }
-        if args.max_stagnation_steps.is_none() {
-            args.max_stagnation_steps = settings.max_stagnation_steps.map(|v| v as usize);
-        }
-    }
-
     // Strip any `{model}:{profile}` suffix before a conversation is created:
     // what it names is persisted, and a stored suffix would come back on
     // every resume as a profile the user did not type this time — colliding
     // with their `--profile` and making the session unresumable. What that
     // means on the paired machine, whose profiles these are not, is
     // `profile_selection`'s to say.
-    let profile_settings = ctx.app.settings().get().await?;
-    let configured_profiles = profile_settings
-        .inference_profiles
-        .as_deref()
-        .unwrap_or_default();
+    let settings = ctx.app.settings().get().await?;
+    let configured_profiles = settings.inference_profiles.as_deref().unwrap_or_default();
     let typed_this_invocation = !args.identifier.is_empty();
     // A conversation that stored its model resumes on that model's machine.
     let stored = persistence::continued(ctx.app.chat_history(), args.continue_id).await?;
     if let Some(conv) = &stored {
-        let pairing = profile_settings.remote_pairing.as_ref();
+        let pairing = settings.remote_pairing.as_ref();
         resume_settings::follow_stored_machine(&mut args, conv, pairing)?;
     }
     let mut selected_profile = None;
@@ -208,9 +197,15 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
         turn: Some(turn),
         ..config::AgentSessionParams::from(&args)
     };
+    // By the rule the daemon resolves a turn's limits with, and only now:
+    // `args` holds the flag, or on a resume the limit the chat saved, so the
+    // chat's own comes before this machine's stored one, and a new chat has
+    // saved only what the command line named.
+    let limits = TurnLimits::resolve(args.max_iterations, Some(&settings));
     Ok(Session {
         args,
         params,
+        limits,
         persistence,
         prior_messages,
     })

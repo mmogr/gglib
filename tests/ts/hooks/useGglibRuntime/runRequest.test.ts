@@ -67,9 +67,9 @@ describe('buildRunRequest', () => {
 
   it('sends a config only when a field of it was set', () => {
     expect(buildRunRequest(options({ config: {} })).config).toBeNull();
-    expect(buildRunRequest(options({ config: { max_iterations: 3 } })).config).toMatchObject({
-      max_iterations: 3,
-      max_parallel_tools: null,
+    expect(buildRunRequest(options({ config: { max_parallel_tools: 3 } })).config).toMatchObject({
+      max_parallel_tools: 3,
+      tool_timeout_ms: null,
     });
   });
 

@@ -254,8 +254,7 @@ async fn a_resume_on_another_model_stores_that_model() {
 
 /// A chat the page or a phone switched thinking off on stays switched off
 /// through a resume that moves it to another model: the resume rewrites the
-/// settings whole, and keeps what it does not set. (The CLI's own turns do
-/// not apply the choice.)
+/// settings whole, and keeps what it does not set.
 #[tokio::test]
 async fn a_remembered_thinking_choice_survives_a_resume_on_another_model() {
     use gglib_core::domain::Thinking;

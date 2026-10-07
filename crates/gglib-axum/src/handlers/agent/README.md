@@ -6,7 +6,13 @@ POST /api/agent/chat — server-side agentic loop with SSE streaming.
 
 `compose::prepare` resolves the upstream, validates the request, applies the
 configured limits and calls [`compose_agent_loop`](gglib_runtime::compose_agent_loop),
-so every caller of the loop does those alike. The handler spawns the loop as
+so every caller of the loop does those alike. The limits are resolved by
+core's `TurnLimits::resolve`, which the CLI's `chat` and `q` call too: the
+iteration limit the request names (for a device's turn, the one its chat's
+settings name), then this machine's stored `max_tool_iterations`, then the
+default; and the stored `max_stagnation_steps`, which no request names. So a
+client that sends no iteration limit, as the chat page and a paired device
+do, runs with the stored one. The handler spawns the loop as
 a background task and bridges the resulting `mpsc::Receiver<AgentEvent>` to an
 Axum [`Sse`] response, each event framed by `compose::frame`.
 
@@ -86,10 +92,11 @@ loop.
 
 # The Thinking choice
 
-`thinking::settle` is the one rule for it, read at every door a turn comes
-through: a device's turn (`hub_turn::plan`), which is also how the page's
-turn on a paired machine arrives there, and this machine's own run
-(`run::plan`). A turn says `off`, `default` or nothing. `off` runs it with a
+Core's `gglib_core::domain::thinking::settle` is the one rule for it, read at
+every door a turn comes through: a device's turn (`hub_turn::plan`), which is
+also how the page's turn on a paired machine arrives there, and this
+machine's own run (`run::plan`). The CLI reads a chat it resumes by the same
+rule. A turn says `off`, `default` or nothing. `off` runs it with a
 thinking budget of `0` and the conversation remembers; `default` runs it with
 the request's own `reasoning_budget_tokens` and the conversation forgets;
 nothing runs it as the conversation remembers, and a remembered `off` beats
@@ -114,7 +121,8 @@ with no projector `400 model_cannot_read_images`, all before the model is
 loaded. The history is rebuilt from the hub's
 record as a resumed CLI chat reads it (core's `saved_history`: the system
 prompt, then every row but a system one; then the message), the limits from the
-conversation's settings, no tools unless `enable --allow-mcp` opened the
+conversation's settings (an iteration limit they do not name is this
+machine's stored one), no tools unless `enable --allow-mcp` opened the
 tunnel to them (then only those the settings name), and the reply runs on the chat's model
 (`hub_model`: its own, its settings', its last reply's, the one running on
 the hub (the one started last, of several), or the hub's default), loaded first when it is not running, as an agent run in the

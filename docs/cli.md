@@ -182,7 +182,9 @@ and how it was made. A turn stopped by Ctrl+C or an error keeps what had
 arrived of its reply, marked as stopped.
 
 Local models need guardrails to finish a tool-calling task, so the loop carries
-iteration limits (`--max-iterations`), a tool allowlist (`--tools`, evaluated
+iteration limits (`--max-iterations`; without it the limit a resumed chat
+saved, then the `max-tool-iterations` setting, which the chat page and a
+paired device's turn run with too), a tool allowlist (`--tools`, evaluated
 once at session start), parallelism and timeout caps, and a dual-threshold loop
 guard — `--observation-tool` / `--max-observation-steps` let read-only tools
 repeat more often than mutating ones before loop detection fires.

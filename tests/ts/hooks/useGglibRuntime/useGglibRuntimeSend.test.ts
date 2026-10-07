@@ -7,6 +7,9 @@
  * that model by its machine and its id there; a conversation it makes is
  * made for that model, so its machine is fixed from the start.
  *
+ * A send names no iteration limit: the daemon resolves it from the stored
+ * setting, so the page and a paired device run with the same one.
+ *
  * A send says the chat's Thinking choice when the caller's `thinking` gives
  * one, asked as the send starts, and the device-wide reasoning controls go
  * with it as they always have. The caller is told once the daemon has
@@ -78,6 +81,30 @@ describe('useGglibRuntime send', () => {
     ]);
     expect(daemon.count('POST', '/api/messages')).toBe(0);
     expect(daemon.count('PUT', '/api/messages')).toBe(0);
+  });
+
+  it('names no iteration limit, alone or beside the limits of the Tools popover: the daemon takes the stored one', async () => {
+    const hook = await mount(local);
+    send(hook, 'hello');
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    expect(daemon.only().request!.config).toBeNull();
+    daemon.finish(daemon.only().info.id, 'completed', [{ role: 'assistant', content: 'ok' }]);
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
+
+    localStorage.setItem('gglib.chat.agentOverrides', JSON.stringify({ maxParallelTools: 4 }));
+    try {
+      send(hook, 'again');
+      await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(2));
+      expect([...daemon.runs.values()].at(-1)!.request!.config).toEqual({
+        max_iterations: null,
+        max_parallel_tools: 4,
+        tool_timeout_ms: null,
+        observation_tools: null,
+        max_observation_steps: null,
+      });
+    } finally {
+      localStorage.removeItem('gglib.chat.agentOverrides');
+    }
   });
 
   it('creates the conversation first when none is open, so the run has one', async () => {

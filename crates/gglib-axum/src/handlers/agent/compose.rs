@@ -15,6 +15,7 @@ use gglib_core::ports::{AdmissionLease, AgentGuardReporter, AgentLoopPort, Retry
 use gglib_runtime::compose_agent_loop;
 
 use super::AgentChatRequest;
+use super::dto::AgentRequestConfig;
 use super::remote_upstream;
 use super::retry_notice::RetryNotice;
 use crate::error::HttpError;
@@ -107,19 +108,7 @@ pub(crate) async fn prepare(
         state.core.attachments().store(),
     );
 
-    // Stagnation threshold is a persisted server-side setting, not a request
-    // field; a settings-read failure falls back to the built-in default.
-    let max_stagnation_steps = state
-        .settings
-        .get()
-        .await
-        .ok()
-        .and_then(|s| s.max_stagnation_steps)
-        .map(|v| v as usize);
-    let config: AgentConfig = req
-        .config
-        .unwrap_or_default()
-        .into_agent_config(max_stagnation_steps);
+    let config = config_for(state, req.config).await;
 
     Ok(Prepared {
         agent_loop,
@@ -133,6 +122,21 @@ pub(crate) async fn prepare(
         far_model,
         hold: None,
     })
+}
+
+/// The loop config a request runs with: what it names, and for the limits
+/// it leaves out this machine's stored ones (`TurnLimits::resolve`). So a
+/// client that names no iteration limit (a paired device's turn, the chat
+/// page) runs with `max_tool_iterations`, and none has to send it. A
+/// settings read that fails leaves the built-in defaults.
+///
+/// Its own function because `prepare` cannot be driven in a test: it needs
+/// a running llama-server.
+pub(crate) async fn config_for(state: &AppState, named: Option<AgentRequestConfig>) -> AgentConfig {
+    let settings = state.core.settings().get().await.ok();
+    named
+        .unwrap_or_default()
+        .into_agent_config(settings.as_ref())
 }
 
 /// One event as the `data:` text of its SSE frame.

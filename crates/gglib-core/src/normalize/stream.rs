@@ -47,6 +47,7 @@ use anyhow::Result;
 use futures_core::Stream;
 
 use super::parser::{ParserOutput, ToolCallParser};
+use super::think_tags::strip_think_tags;
 use crate::domain::agent::{LlmStreamEvent, ToolCall};
 
 type InnerStream = Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>;
@@ -100,15 +101,7 @@ impl NormalizingStream {
     /// Translate one parser output batch into the queued event sequence.
     fn enqueue_parser_output(&mut self, mut out: ParserOutput) {
         if !out.forward_text.is_empty() {
-            // Strip stray `<think>` / `</think>` boundary tags from text
-            // content.  Reasoning models (e.g. Qwen3) send their chain-of-
-            // thought in `reasoning_content` SSE fields but leak the closing
-            // `</think>` marker into the regular `content` field when
-            // transitioning back to output mode.  These tags carry no
-            // semantic meaning for the client and produce visible artefacts
-            // (e.g. `</think>` appearing verbatim in Zed's chat pane).
-            let text = std::mem::take(&mut out.forward_text);
-            let text = text.replace("</think>", "").replace("<think>", "");
+            let text = strip_think_tags(&out.forward_text);
             if !text.is_empty() {
                 self.queued
                     .push_back(LlmStreamEvent::TextDelta { content: text });

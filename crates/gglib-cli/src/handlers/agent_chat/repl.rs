@@ -34,7 +34,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
+use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, TurnLimits};
 use gglib_core::ports::AgentLoopPort;
 
 use crate::handlers::inference::chat::ChatArgs;
@@ -69,25 +69,24 @@ const REPL_HELP: &str = "\
 ///
 /// When `prior_messages` is non-empty, the REPL begins with those messages
 /// already in the history (no system prompt is prepended — it is already
-/// in the prior messages). Pass an empty vector to start fresh.
+/// in the prior messages). Pass an empty vector to start fresh. `limits`
+/// are the session's, resolved by its caller.
 pub(crate) async fn run_repl_with_prior(
     agent_loop: Arc<dyn AgentLoopPort>,
     args: &ChatArgs,
+    limits: TurnLimits,
     persistence: Option<Conversation<'_>>,
     prior_messages: Vec<AgentMessage>,
     images: TurnImages<'_>,
 ) -> Result<()> {
     let config = AgentConfig::from_user_params(
-        Some(
-            args.max_iterations
-                .unwrap_or(gglib_core::DEFAULT_MAX_ITERATIONS),
-        ),
+        Some(limits.max_iterations),
         args.max_parallel,
         args.tool_timeout_ms,
         // Some(vec) replaces defaults; empty vec passes None to preserve defaults.
         Some(args.observation_tools.clone()).filter(|v| !v.is_empty()),
         args.max_observation_steps,
-        args.max_stagnation_steps,
+        limits.max_stagnation_steps,
     )
     .map_err(|e| anyhow::anyhow!("invalid agent config: {e}"))?;
 

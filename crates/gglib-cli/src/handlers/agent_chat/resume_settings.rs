@@ -10,6 +10,7 @@
 
 use gglib_core::domain::InferenceProfile;
 use gglib_core::domain::chat::ConversationSettings;
+use gglib_core::domain::thinking;
 
 use super::persistence::Conversation;
 use crate::bootstrap::CliContext;
@@ -75,7 +76,9 @@ pub(crate) fn restore_profile(
 
 /// Merge saved [`ConversationSettings`] into [`ChatArgs`].
 ///
-/// CLI-provided values always win; saved settings fill in blanks.
+/// CLI-provided values always win; saved settings fill in blanks. The one
+/// exception is the chat's Thinking choice, which is read by the rule the
+/// daemon reads a turn by: a chat switched off stays off.
 #[allow(
     clippy::assigning_clones,
     clippy::ref_option,
@@ -150,6 +153,13 @@ pub(crate) fn apply_saved_settings(
         merged.max_parallel = saved.max_parallel;
     }
 
+    // A command line says neither `off` nor `default`, so the chat runs as
+    // it remembers: switched off, its budget is 0 whatever
+    // `--reasoning-budget-tokens` says.
+    let own_budget = merged.sampling.reasoning_budget_tokens;
+    merged.sampling.reasoning_budget_tokens =
+        thinking::settle(None, saved.thinking, own_budget).budget;
+
     merged
 }
 
@@ -179,8 +189,14 @@ pub(super) async fn new_conversation<'a>(
 }
 
 #[cfg(test)]
+#[path = "resume_limits_tests.rs"]
+mod resume_limits_tests;
+#[cfg(test)]
 #[path = "resume_rows_tests.rs"]
 mod resume_rows_tests;
+#[cfg(test)]
+#[path = "resume_thinking_tests.rs"]
+mod resume_thinking_tests;
 #[cfg(test)]
 #[path = "resume_settings_tests.rs"]
 pub(super) mod tests;

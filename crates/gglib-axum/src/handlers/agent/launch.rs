@@ -13,11 +13,11 @@ use gglib_app_services::transcript::FrameTimes;
 use gglib_app_services::{Reservation, RunSpec};
 use gglib_core::domain::Machine;
 use gglib_core::domain::runs::{RunError, RunKind};
+use gglib_core::domain::thinking::Remember;
 use gglib_core::ports::{Created, RunScope};
 
 use super::compose::Prepared;
 use super::run::work;
-use super::thinking::Remember;
 use super::transcript::{keep_machine, record_model, remember_thinking, save_reply, save_user};
 use crate::error::HttpError;
 use crate::state::AppState;

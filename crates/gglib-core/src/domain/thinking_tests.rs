@@ -1,8 +1,7 @@
 //! The Thinking rule over every combination of what a turn says and what
 //! its chat remembers, with and without a budget of the request's own.
 
-use gglib_core::domain::Thinking::{self, Default as Unset, Off};
-
+use super::Thinking::{self, Default as Unset, Off};
 use super::{Remember, Settled, settle};
 
 /// The budgets a request may carry of its own: none, a ceiling, the launch

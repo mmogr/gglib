@@ -280,9 +280,10 @@ pub struct ConversationSettings {
     pub no_tools: Option<bool>,
     /// The chat's Thinking choice, which a turn through gglib's turn routes
     /// runs with: a paired device's turn, a far turn, and this machine's own
-    /// agent run. The CLI's own chat keeps it on resume and does not apply
-    /// it. Only `off` is stored: a turn that says `default` removes the key,
-    /// and an absent key is a chat that remembers nothing.
+    /// agent run. `gglib chat --continue` reads it by the same rule: a chat
+    /// switched off runs there with a budget of 0. Only `off` is stored: a
+    /// turn that says `default` removes the key, and an absent key is a chat
+    /// that remembers nothing.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thinking: Option<Thinking>,

@@ -33,7 +33,8 @@ infrastructure concerns (database, filesystem, etc.).
 - `gguf` - GGUF metadata and capability types
 - `capabilities` - Model capability detection and inference
 - `thinking` - A chat's Thinking choice (`Thinking`: `off` or `default`), which a
-  turn says and `ConversationSettings.thinking` remembers
+  turn says and `ConversationSettings.thinking` remembers, and the one rule
+  (`thinking::settle`) that reads a turn by it at the daemon's doors and in the CLI
 - `kv_memory` - Shape of a model's KV memory from GGUF metadata: whether it
   keeps only part of the token history (`kv_memory_is_partial`), and how many
   layers hold a per-token cache at all (`kv_cache_layer_count`)

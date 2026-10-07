@@ -6,7 +6,8 @@
 //! process, as it is on disk: the message then names it by id. A file that
 //! is missing, is not a PNG or a JPEG, or is over the cap is an error that
 //! names its path, before anything is asked of a model. What an image
-//! costs is said once, on stderr, when it is attached.
+//! costs is said once, on stderr, when it is attached. A session is then
+//! refused as the daemon refuses a run ([`TurnImages::judge`]).
 
 use std::fmt::Write as _;
 use std::io;
@@ -60,14 +61,29 @@ impl<'a> TurnImages<'a> {
     }
 
     /// Take `sight` as what the session's model can read, and refuse the
-    /// session when it carries an image, here or in `history`, that the
-    /// model cannot: the whole history is sent again each turn.
+    /// session as the daemon refuses a run, before its model is asked for
+    /// anything: when an image it carries, in `history` or waiting for the
+    /// first message, is not stored, or they are over the cap together
+    /// ([`AttachmentService::check_request`]), and when the model cannot
+    /// read one. The whole history is sent again each turn.
     ///
     /// # Errors
     ///
-    /// Core's refusal, by name.
+    /// Core's refusals, in its words.
     pub(crate) async fn judge(&mut self, sight: Sight, history: &[AgentMessage]) -> Result<()> {
-        let has_images = !self.pending.is_empty() || history.iter().any(AgentMessage::has_images);
+        // The first message, as far as the checks read it: its images.
+        let waiting = AgentMessage::User {
+            content: String::new(),
+            images: self.pending.clone(),
+        };
+        let carried: Vec<AgentMessage> = history
+            .iter()
+            .filter(|message| message.has_images())
+            .cloned()
+            .chain([waiting])
+            .collect();
+        self.service.check_request(&carried).await?;
+        let has_images = carried.iter().any(AgentMessage::has_images);
         sight.admit(has_images).await?;
         self.sight = sight;
         Ok(())
@@ -169,6 +185,10 @@ pub(crate) fn markers(images: &[AttachmentInfo]) -> String {
         markers
     })
 }
+
+#[cfg(test)]
+#[path = "images_check_tests.rs"]
+mod images_check_tests;
 
 #[cfg(test)]
 #[path = "images_tests.rs"]

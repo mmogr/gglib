@@ -136,9 +136,13 @@ chat, in its Tools popover, and once one is set sends it with every message,
 and a chat that was switched off does not start thinking again because of it.
 Nothing else is remembered. A request's own budget and `reasoning_effort` are
 that request's, and with `default`, or with nothing remembered, the budget
-resolves through the hierarchy as it always has. The CLI's own chat
-(`gglib chat`, `gglib q`) does not apply a remembered `off`: pass
-`--reasoning-budget-tokens 0` there.
+resolves through the hierarchy as it always has. `gglib chat --continue` reads
+a chat by the same rule: a command line says neither `off` nor `default`, so a
+chat switched off runs there with a budget of `0`, whatever
+`--reasoning-budget-tokens` says, until the switch is set back on the chat
+page or a paired device. A chat the CLI starts remembers nothing, and neither
+does `gglib q`: pass `--reasoning-budget-tokens 0` to stop a turn's thinking
+there.
 
 On the chat page the choice is the **Thinking** switch in the composer's
 margin, drawn only for a model that thinks: one tagged `reasoning` here, or
