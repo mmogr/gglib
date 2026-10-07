@@ -1,10 +1,16 @@
 //! Search handler for `HuggingFace` Hub.
 //!
-//! This command doesn't require `AppCore` - it's pure HF API calls.
+//! The search is [`search_hf_models`], the one the GUI's browser runs, over
+//! the Hub client this process was bootstrapped with, which holds its Hub
+//! token. This module prints the hits; `browse` prints them under its own
+//! headings.
+
+use std::fmt::Write as _;
 
 use anyhow::{Result, anyhow};
-use gglib_core::ports::huggingface::HfClientPort;
-use gglib_hf::{DefaultHfClient, HfClientConfig};
+use gglib_app_services::types::{HfModelSummary, HfSearchRequest};
+use gglib_app_services::{GuiError, search_hf_models};
+use gglib_core::ports::{HfClientPort, HfSortField};
 
 use crate::presentation::{format_number, truncate_with};
 
@@ -13,112 +19,124 @@ use crate::presentation::{format_number, truncate_with};
 /// Searches `HuggingFace` Hub for models matching the query.
 /// No database access required.
 pub(crate) async fn execute(
+    hf: &dyn HfClientPort,
     query: String,
     limit: u32,
-    sort: String,
-    gguf_only: bool,
+    sort: HfSortField,
 ) -> Result<()> {
     println!("🔍 Searching HuggingFace Hub for: '{query}'...");
+    print!("{}", found_text(hf, &query, limit, sort).await?);
+    Ok(())
+}
 
-    let client = DefaultHfClient::new(&HfClientConfig::default());
+/// What a search prints once the Hub has answered.
+async fn found_text(
+    hf: &dyn HfClientPort,
+    query: &str,
+    limit: u32,
+    sort: HfSortField,
+) -> Result<String> {
+    let hits = find(hf, query.to_string(), limit, sort).await?;
+    if hits.is_empty() {
+        return Ok(format!("No models found for query: '{query}'\n"));
+    }
+    let heading = format!("📋 Found {} models:", hits.len());
+    Ok(listing(&heading, &hits, &LAYOUT))
+}
 
-    // Default to GGUF filtering unless explicitly disabled
-    let filter_gguf = gguf_only;
+const LAYOUT: Layout = Layout {
+    number: |n| format!(" {n}. "),
+    description_width: 80,
+    quantizations_tip: "To list quantizations",
+};
 
-    // Build search options
-    let options = gglib_core::ports::huggingface::HfSearchOptions {
-        query: Some(query.clone()),
-        limit: if filter_gguf { limit * 3 } else { limit },
-        page: 0,
-        sort_by: sort.clone(),
-        sort_ascending: false,
-        min_params_b: None,
-        max_params_b: None,
+/// A hit, and the names of its quantizations to show beside it.
+pub(super) struct Hit {
+    model: HfModelSummary,
+    quantizations: Vec<String>,
+}
+
+/// What `search` and `browse` lay out differently in a listing.
+pub(super) struct Layout {
+    /// A hit's number, as it starts the hit's line.
+    pub number: fn(usize) -> String,
+    /// The length a description is cut to.
+    pub description_width: usize,
+    /// How the closing tip names the listing of quantizations.
+    pub quantizations_tip: &'static str,
+}
+
+/// The first `limit` GGUF repositories the Hub finds for `query`, most of
+/// `sort_by` first, each with its quantizations.
+pub(super) async fn find(
+    hf: &dyn HfClientPort,
+    query: String,
+    limit: u32,
+    sort_by: HfSortField,
+) -> Result<Vec<Hit>> {
+    let request = HfSearchRequest {
+        query: Some(query),
+        limit,
+        sort_by,
+        ..HfSearchRequest::default()
     };
-
-    // Use the service to fetch models
-    let response = client
-        .search(&options)
+    let found = search_hf_models(hf, request)
         .await
-        .map_err(|e| anyhow!("Search failed: {e}"))?;
+        .map_err(|refused| match refused {
+            GuiError::Internal(reason) => anyhow!(reason),
+            other => other.into(),
+        })?;
 
-    let mut filtered_models = Vec::new();
-
-    // Filter models based on gguf_only flag
-    for model in &response.items {
-        let model_id = &model.model_id;
-        if filter_gguf {
-            // Check if model actually has GGUF files
-            if let Ok(quantizations) = client.list_quantizations(model_id).await {
-                let names: Vec<String> = quantizations.iter().map(|q| q.name.clone()).collect();
-                if !names.is_empty() {
-                    filtered_models.push((model, names));
-                }
-            }
-        } else {
-            // Just check for any potential GGUF indicators in the name
-            if model_id.to_lowercase().contains("gguf")
-                || model_id.to_lowercase().contains("llama")
-                || model_id.to_lowercase().contains("mistral")
-                || model_id.to_lowercase().contains("qwen")
-            {
-                // Quick check for GGUF files
-                if let Ok(quantizations) = client.list_quantizations(model_id).await {
-                    let names: Vec<String> = quantizations.iter().map(|q| q.name.clone()).collect();
-                    filtered_models.push((model, names));
-                } else {
-                    filtered_models.push((model, Vec::new()));
-                }
-            }
-        }
-
-        // Limit results
-        if filtered_models.len() >= limit as usize {
-            break;
-        }
+    let mut hits = Vec::with_capacity(found.models.len());
+    for model in found.models {
+        // Shown beside the hit and no more than that: a repository whose
+        // files cannot be listed is a hit all the same.
+        let quantizations = hf.list_quantizations(&model.id).await.unwrap_or_default();
+        hits.push(Hit {
+            model,
+            quantizations: quantizations.into_iter().map(|q| q.name).collect(),
+        });
     }
+    Ok(hits)
+}
 
-    if filtered_models.is_empty() {
-        if filter_gguf {
-            println!("No GGUF models found for query: '{query}'");
-            println!(
-                "💡 Try using a more general search term like 'gguf', 'llama-gguf', or specific model names"
-            );
-        } else {
-            println!("No models found for query: '{query}'");
-        }
-        return Ok(());
-    }
-
-    let model_type = if filter_gguf { "GGUF " } else { "" };
-    println!("\n📋 Found {} {}models:", filtered_models.len(), model_type);
-    println!("{}", "─".repeat(80));
-
-    for (i, (model, quantizations)) in filtered_models.iter().enumerate() {
-        println!(
-            " {}. {} (↓{} ❤{})",
-            i + 1,
-            model.model_id,
+/// `hits` under `heading`, one numbered entry each, and the closing tips.
+pub(super) fn listing(heading: &str, hits: &[Hit], layout: &Layout) -> String {
+    let mut text = format!("\n{heading}\n{}\n", "─".repeat(80));
+    for (
+        i,
+        Hit {
+            model,
+            quantizations,
+        },
+    ) in hits.iter().enumerate()
+    {
+        let _ = writeln!(
+            text,
+            "{}{} (↓{} ❤{})",
+            (layout.number)(i + 1),
+            model.id,
             format_number(model.downloads),
             model.likes
         );
-
-        // Show available quantizations for GGUF models
         if !quantizations.is_empty() {
-            println!("    Quantizations: {}", quantizations.join(", "));
+            let _ = writeln!(text, "    Quantizations: {}", quantizations.join(", "));
         }
-
-        if let Some(ref desc) = model.description
-            && !desc.is_empty()
-        {
-            println!("    {}", truncate_with(desc, 80, "..."));
+        if let Some(description) = model.description.as_deref().filter(|d| !d.is_empty()) {
+            let cut = truncate_with(description, layout.description_width, "...");
+            let _ = writeln!(text, "    {cut}");
         }
-
-        println!();
+        text.push('\n');
     }
-
-    println!("💡 To download a model: gglib model download <model_id>");
-    println!("💡 To list quantizations: gglib model download <model_id> --list-quants");
-
-    Ok(())
+    let _ = writeln!(
+        text,
+        "💡 To download a model: gglib model download <model_id>\n\
+         💡 {}: gglib model download <model_id> --list-quants",
+        layout.quantizations_tip
+    );
+    text
 }
+
+#[cfg(test)]
+#[path = "search_tests.rs"]
+mod tests;

@@ -75,6 +75,12 @@ impl HfClientConfig {
         self
     }
 
+    /// Whether requests made with this configuration carry a token.
+    #[must_use]
+    pub const fn has_token(&self) -> bool {
+        self.token.is_some()
+    }
+
     /// Set the maximum number of retry attempts for transient errors.
     ///
     /// Defaults to 3 retries.
@@ -117,5 +123,11 @@ mod tests {
 
         let without_token = HfClientConfig::new().with_optional_token(None);
         assert!(without_token.token.is_none());
+    }
+
+    #[test]
+    fn a_config_says_whether_it_holds_a_token() {
+        assert!(HfClientConfig::new().with_token("token").has_token());
+        assert!(!HfClientConfig::new().has_token());
     }
 }

@@ -66,6 +66,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`normalize/`** — Universal normalization layer. The `ToolCallParser` trait plus dialect parsers (`StandardJsonParser` identity and the spec-driven `DelimitedToolCallParser` for marker-delimited tool calls) rewrite model-specific output into strict `OpenAI` events. Selected per-request from the model's persisted `DialectSpec` (with a `format:*` tag fallback) via `normalize::registry::get_parser`.
 - **`utils/`** — Shared utility functions and helpers
 - **`settings.rs`** — Application settings and configuration types
+- **`hf_token.rs`** — The `HuggingFace` token: `from_env`, the one read of `HF_TOKEN`, and the accessor `AppCore` hands it out through
 
 ## Design Principles
 

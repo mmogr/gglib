@@ -6,6 +6,7 @@
 use clap::Subcommand;
 
 use crate::model_list_args::ListArgs;
+use crate::model_sort::{CliBrowseCategory, CliHubSort};
 use crate::presentation::capability_flags::capability_names;
 use crate::projector_args::ProjectorArgs;
 
@@ -244,9 +245,9 @@ pub enum ModelCommand {
         skip_db: bool,
         /// `HuggingFace` token for private models (for `--list-quants` only).
         ///
-        /// For downloads, set the `HF_TOKEN` environment variable instead.
-        /// It is read at startup and wired into the download manager config,
-        /// mirroring how the GUI handles authentication.
+        /// For downloads, set the `HF_TOKEN` environment variable instead, where
+        /// the gglib daemon starts: the daemon runs the download, and reads the
+        /// variable once, as it starts.
         #[arg(long)]
         token: Option<String>,
     },
@@ -277,19 +278,16 @@ pub enum ModelCommand {
         /// Limit number of results
         #[arg(short, long, default_value = "10")]
         limit: u32,
-        /// Sort by: "downloads", "created", "likes", "updated"
-        #[arg(short, long, default_value = "downloads")]
-        sort: String,
-        /// Only show models with GGUF files
-        #[arg(long)]
-        gguf_only: bool,
+        /// What to sort the results by
+        #[arg(short, long, value_enum, default_value_t)]
+        sort: CliHubSort,
     },
 
     /// Browse popular GGUF models on `HuggingFace` Hub
     Browse {
-        /// Category to browse: "popular", "recent", "trending"
-        #[arg(default_value = "popular")]
-        category: String,
+        /// Category to browse
+        #[arg(value_enum, default_value_t)]
+        category: CliBrowseCategory,
         /// Limit number of results
         #[arg(short, long, default_value = "20")]
         limit: u32,

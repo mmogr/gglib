@@ -1,94 +1,52 @@
 //! Browse handler for `HuggingFace` Hub.
 //!
-//! This command doesn't require `AppCore` - it's pure HF API calls.
+//! A browse is a search with a fixed query and the category's order: it runs
+//! [`search`](mod@super::search)'s search and prints its listing.
 
-use anyhow::{Result, anyhow};
-use gglib_core::ports::huggingface::HfClientPort;
-use gglib_hf::{DefaultHfClient, HfClientConfig};
+use anyhow::Result;
+use gglib_core::ports::HfClientPort;
 
-use crate::presentation::{format_number, truncate_with};
+use crate::model_sort::CliBrowseCategory;
+
+use super::search::{Layout, find, listing};
 
 /// Execute the browse command.
 ///
-/// Browses popular/recent/trending GGUF models on `HuggingFace` Hub.
+/// Browses the popular or the recent GGUF models on `HuggingFace` Hub.
 /// No database access required.
-#[allow(
-    clippy::match_same_arms,
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-pub(crate) async fn execute(category: String, limit: u32, size: Option<String>) -> Result<()> {
-    let sort_param = match category.as_str() {
-        "popular" => "downloads",
-        "recent" => "created",
-        "trending" => "trending",
-        _ => "downloads",
-    };
-
-    println!("🌐 Browsing {category} GGUF models...");
-
-    let client = DefaultHfClient::new(&HfClientConfig::default());
-
-    // Search for models with GGUF-related tags
-    let search_query = if let Some(ref model_size) = size {
-        format!("gguf {model_size}")
-    } else {
-        "gguf".to_string()
-    };
-
-    // Build search options
-    let options = gglib_core::ports::huggingface::HfSearchOptions {
-        query: Some(search_query),
-        limit,
-        page: 0,
-        sort_by: sort_param.to_string(),
-        sort_ascending: false,
-        min_params_b: None,
-        max_params_b: None,
-    };
-
-    // Use the service to fetch models
-    let response = client
-        .search(&options)
-        .await
-        .map_err(|e| anyhow!("Search failed: {e}"))?;
-
-    if response.items.is_empty() {
-        println!("No {category} models found.");
-        return Ok(());
-    }
-
-    println!("\n🏆 {} GGUF Models:", category.to_uppercase());
-    println!("{}", "─".repeat(80));
-
-    for (i, model) in response.items.iter().enumerate() {
-        println!(
-            "{:2}. {} (↓{} ❤{})",
-            i + 1,
-            model.model_id,
-            format_number(model.downloads),
-            model.likes
-        );
-
-        // Show available quantizations
-        if let Ok(quantizations) = client.list_quantizations(&model.model_id).await {
-            let names: Vec<&str> = quantizations.iter().map(|q| q.name.as_str()).collect();
-            if !names.is_empty() {
-                println!("    Quantizations: {}", names.join(", "));
-            }
-        }
-
-        if let Some(ref desc) = model.description
-            && !desc.is_empty()
-        {
-            println!("    {}", truncate_with(desc, 100, "..."));
-        }
-
-        println!();
-    }
-
-    println!("💡 To download a model: gglib model download <model_id>");
-    println!("💡 To see all quantizations: gglib model download <model_id> --list-quants");
-
+pub(crate) async fn execute(
+    hf: &dyn HfClientPort,
+    category: CliBrowseCategory,
+    limit: u32,
+    size: Option<String>,
+) -> Result<()> {
+    println!("🌐 Browsing {} GGUF models...", category.name());
+    print!("{}", found_text(hf, category, limit, size).await?);
     Ok(())
 }
+
+/// What a browse prints once the Hub has answered.
+async fn found_text(
+    hf: &dyn HfClientPort,
+    category: CliBrowseCategory,
+    limit: u32,
+    size: Option<String>,
+) -> Result<String> {
+    let query = size.map_or_else(|| "gguf".to_string(), |size| format!("gguf {size}"));
+    let hits = find(hf, query, limit, category.into()).await?;
+    if hits.is_empty() {
+        return Ok(format!("No {} models found.\n", category.name()));
+    }
+    let heading = format!("🏆 {} GGUF Models:", category.name().to_uppercase());
+    Ok(listing(&heading, &hits, &LAYOUT))
+}
+
+const LAYOUT: Layout = Layout {
+    number: |n| format!("{n:2}. "),
+    description_width: 100,
+    quantizations_tip: "To see all quantizations",
+};
+
+#[cfg(test)]
+#[path = "browse_tests.rs"]
+mod tests;

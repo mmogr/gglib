@@ -10,7 +10,7 @@ use gglib_core::ports::{
 use crate::error::GuiError;
 use crate::hf_quantizations::quantizations_response;
 use crate::types::{
-    HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, HfSortField,
+    HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
     QueueDownloadResponse, ToolSupportResponse,
 };
 
@@ -147,53 +147,13 @@ impl DownloadOps {
     // HuggingFace Browser Operations
     // =========================================================================
 
-    /// Search `HuggingFace` for GGUF text-generation models.
+    /// Search `HuggingFace` for GGUF text-generation models: the browser's
+    /// search, which is [`search_hf_models`] over this handler's Hub client.
     pub async fn search_hf_models(
         &self,
         request: HfSearchRequest,
     ) -> Result<HfSearchResponse, GuiError> {
-        let options = HfSearchOptions {
-            query: request.query,
-            min_params_b: request.min_params_b,
-            max_params_b: request.max_params_b,
-            page: request.page,
-            limit: request.limit,
-            sort_by: match request.sort_by {
-                HfSortField::Downloads => "downloads".to_string(),
-                HfSortField::Likes => "likes".to_string(),
-                HfSortField::Created => "created".to_string(),
-                HfSortField::Modified => "modified".to_string(),
-                HfSortField::Alphabetical => "id".to_string(),
-            },
-            sort_ascending: request.sort_ascending,
-        };
-
-        let response = self
-            .hf_client
-            .search(&options)
-            .await
-            .map_err(|e| GuiError::Internal(format!("HF search failed: {e}")))?;
-
-        Ok(HfSearchResponse {
-            models: response
-                .items
-                .into_iter()
-                .map(|m| HfModelSummary {
-                    id: m.model_id,
-                    name: m.name,
-                    author: m.author,
-                    downloads: m.downloads,
-                    likes: m.likes,
-                    last_modified: m.last_modified,
-                    parameters_b: m.parameters_b,
-                    description: m.description,
-                    tags: m.tags,
-                })
-                .collect(),
-            has_more: response.has_more,
-            page: response.page,
-            total_count: None,
-        })
+        search_hf_models(self.hf_client.as_ref(), request).await
     }
 
     /// Get available quantizations for a `HuggingFace` model, each with the
@@ -272,21 +232,46 @@ impl DownloadOps {
             )));
         }
 
-        // Map HfRepoInfo to HfModelSummary
-        Ok(HfModelSummary {
-            id: info.model_id,
-            name: info.name,
-            author: info.author,
-            downloads: info.downloads,
-            likes: info.likes,
-            last_modified: info.last_modified,
-            parameters_b: info.parameters_b,
-            description: info.description,
-            tags: info.tags,
-        })
+        Ok(info.into())
     }
+}
+
+/// Search `hf` for GGUF text-generation models.
+///
+/// The one search every surface runs: the browser's, through
+/// [`DownloadOps::search_hf_models`], and `gglib model search` and `browse`,
+/// which hold the Hub client and no `DownloadOps`.
+pub async fn search_hf_models(
+    hf: &dyn HfClientPort,
+    request: HfSearchRequest,
+) -> Result<HfSearchResponse, GuiError> {
+    let options = HfSearchOptions {
+        query: request.query,
+        min_params_b: request.min_params_b,
+        max_params_b: request.max_params_b,
+        page: request.page,
+        limit: request.limit,
+        sort_by: request.sort_by,
+        sort_ascending: request.sort_ascending,
+    };
+
+    let response = hf
+        .search(&options)
+        .await
+        .map_err(|e| GuiError::Internal(format!("HF search failed: {e}")))?;
+
+    Ok(HfSearchResponse {
+        models: response.items.into_iter().map(Into::into).collect(),
+        has_more: response.has_more,
+        page: response.page,
+        total_count: None,
+    })
 }
 
 #[cfg(test)]
 #[path = "downloads_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "downloads_search_tests.rs"]
+mod search_tests;

@@ -58,7 +58,6 @@ async fn open(root: &Path) -> BuiltCore {
     let config = BootstrapConfig {
         db_path: database(root),
         models_dir,
-        hf_token: None,
     };
     CoreBootstrap::build(config, Arc::new(NoopEmitter::new()))
         .await

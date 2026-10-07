@@ -3,7 +3,8 @@
 //! This module provides pure functions for building `HuggingFace` API URLs,
 //! ensuring consistent URL construction across all API calls.
 
-use crate::models::{HfConfig, HfRepoRef, HfSearchQuery};
+use crate::models::{HfConfig, HfRepoRef};
+use gglib_core::ports::huggingface::{HfSearchOptions, HfSortField};
 use url::Url;
 
 /// Fields to explicitly expand in API requests.
@@ -18,8 +19,19 @@ fn build_expand_params() -> String {
         .join("&")
 }
 
+/// The Hub's own name for a sort order, as its `sort` parameter takes it.
+const fn sort_param(field: HfSortField) -> &'static str {
+    match field {
+        HfSortField::Downloads => "downloads",
+        HfSortField::Likes => "likes",
+        HfSortField::Modified => "lastModified",
+        HfSortField::Created => "createdAt",
+        HfSortField::Alphabetical => "id",
+    }
+}
+
 /// Build a search URL with all required parameters.
-pub(crate) fn build_search_url(config: &HfConfig, query: &HfSearchQuery) -> Url {
+pub(crate) fn build_search_url(config: &HfConfig, query: &HfSearchOptions) -> Url {
     let direction = if query.sort_ascending { "1" } else { "-1" };
 
     let mut url = config.base_url.clone();
@@ -27,7 +39,7 @@ pub(crate) fn build_search_url(config: &HfConfig, query: &HfSearchQuery) -> Url 
     let query_string = format!(
         "library=gguf&pipeline_tag=text-generation&{}&sort={}&direction={}&limit={}&p={}",
         build_expand_params(),
-        query.sort_by.as_api_param(),
+        sort_param(query.sort_by),
         direction,
         query.limit.clamp(1, 100),
         query.page
@@ -98,7 +110,6 @@ pub fn build_file_url(repo_id: &str, file_path: &str, revision: Option<&str>) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::HfSortField;
 
     fn default_config() -> HfConfig {
         HfConfig::default()
@@ -118,7 +129,7 @@ mod tests {
     #[test]
     fn test_build_search_url_default() {
         let config = default_config();
-        let query = HfSearchQuery::new();
+        let query = HfSearchOptions::new();
 
         let url = build_search_url(&config, &query);
         let url_str = url.as_str();
@@ -137,7 +148,7 @@ mod tests {
     #[test]
     fn test_build_search_url_with_query() {
         let config = default_config();
-        let query = HfSearchQuery::new().with_query("llama");
+        let query = HfSearchOptions::new().with_query("llama");
 
         let url = build_search_url(&config, &query);
         let url_str = url.as_str();
@@ -148,7 +159,7 @@ mod tests {
     #[test]
     fn test_build_search_url_with_gguf_in_query() {
         let config = default_config();
-        let query = HfSearchQuery::new().with_query("llama GGUF models");
+        let query = HfSearchOptions::new().with_query("llama GGUF models");
 
         let url = build_search_url(&config, &query);
         let url_str = url.as_str();
@@ -160,7 +171,7 @@ mod tests {
     #[test]
     fn test_build_search_url_with_sort() {
         let config = default_config();
-        let query = HfSearchQuery::new().with_sort(HfSortField::Likes, true);
+        let query = HfSearchOptions::new().with_sort(HfSortField::Likes, true);
 
         let url = build_search_url(&config, &query);
         let url_str = url.as_str();
@@ -169,12 +180,34 @@ mod tests {
         assert!(url_str.contains("direction=1")); // ascending
     }
 
+    /// Each order reaches the Hub under its own name: none is sent as
+    /// another's, and so none is sorted by downloads but downloads.
+    #[test]
+    fn every_sort_field_is_sent_as_its_own_hub_parameter() {
+        let sent = [
+            (HfSortField::Downloads, "downloads"),
+            (HfSortField::Likes, "likes"),
+            (HfSortField::Modified, "lastModified"),
+            (HfSortField::Created, "createdAt"),
+            (HfSortField::Alphabetical, "id"),
+        ];
+
+        for (field, param) in sent {
+            let query = HfSearchOptions::new().with_sort(field, false);
+            let url = build_search_url(&default_config(), &query);
+            let sort = url
+                .query_pairs()
+                .find_map(|(key, value)| (key == "sort").then(|| value.into_owned()));
+            assert_eq!(sort.as_deref(), Some(param), "{field:?}");
+        }
+    }
+
     #[test]
     fn test_build_search_url_clamps_limit() {
         let config = default_config();
 
         // Test upper bound
-        let query = HfSearchQuery {
+        let query = HfSearchOptions {
             limit: 999,
             ..Default::default()
         };
@@ -182,7 +215,7 @@ mod tests {
         assert!(url.as_str().contains("limit=100"));
 
         // Test lower bound
-        let query = HfSearchQuery {
+        let query = HfSearchOptions {
             limit: 0,
             ..Default::default()
         };

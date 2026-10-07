@@ -144,7 +144,13 @@ becomes a live monitor: **[a]** adds another model while one is in flight;
 **[q]** / `Esc` / `Ctrl-C` drains once, then force-quits on a second press. The
 bar shows the lifecycle phase — `Downloading` → `Finalizing` → `Registering` →
 `Completed` / `Failed` / `Cancelled`. Non-TTY environments fall back to a plain
-monitor automatically. Set `HF_TOKEN` in the environment for private repos.
+monitor automatically.
+
+Set `HF_TOKEN` in the environment for private and gated repos. A command and
+the daemon each read it once, as they start. `search`, `browse`,
+`check-updates` and `upgrade` ask the Hub with the command's own; a queued
+download runs on the daemon and uses the daemon's, so the daemon must have
+been started with it. `download --list-quants` takes `--token` instead.
 
 Transfers run natively over HTTP, resumable and checksum-verified; no Python is
 required. See the [Download Module](../crates/gglib-cli/src/handlers/model/download/README.md).

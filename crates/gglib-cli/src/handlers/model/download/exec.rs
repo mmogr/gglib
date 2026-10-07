@@ -22,9 +22,8 @@ pub(crate) struct DownloadArgs<'a> {
     pub list_quants: bool,
     /// `HuggingFace` token for private models.
     ///
-    /// Used only for `--list-quants`. For downloads, prefer the `HF_TOKEN`
-    /// environment variable which is read at startup and wired into the
-    /// download manager config, mirroring how the GUI handles authentication.
+    /// Used only for `--list-quants`. A download runs on the daemon, with the
+    /// `HF_TOKEN` of the environment the daemon started in.
     pub token: Option<&'a str>,
 }
 

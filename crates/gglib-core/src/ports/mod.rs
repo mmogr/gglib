@@ -59,7 +59,8 @@ pub use gguf_parser::{
 };
 pub use hub_chats::{AgentRunStarter, HubChatsError, HubChatsPort, TurnRefused};
 pub use huggingface::{
-    HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult,
+    HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
+    HfSearchResult, HfSortField,
 };
 pub use jinja_mode::JinjaMode;
 pub use mcp_dto::{ResolutionAttempt, ResolutionStatus};

@@ -24,10 +24,11 @@ gglib-core (port definition)        gglib-hf (adapter implementation)
 ┌─────────────────────────────┐     ┌────────────────────────────────┐
 │  HfClientPort trait         │◄────│  impl HfClientPort for HfClient│
 │  HfSearchOptions            │     │  DefaultHfClient type alias    │
-│  HfSearchResponse           │     │  HfClientConfig                │
-│  HfModelInfo                │     │  Internal: HttpBackend,        │
-│  HfQuantizationInfo         │     │            parsing, url, models│
-│  HfClientError              │     └────────────────────────────────┘
+│  HfSortField                │     │  HfClientConfig                │
+│  HfSearchResult             │     │  Internal: HttpBackend,        │
+│  HfRepoInfo                 │     │            parsing, url, models│
+│  HfQuantInfo, HfFileInfo    │     └────────────────────────────────┘
+│  HfPortError                │
 └─────────────────────────────┘
 ```
 
@@ -36,10 +37,10 @@ gglib-core (port definition)        gglib-hf (adapter implementation)
 - **`error.rs`** — Error types for API failures
 - **`file_roles.rs`** — Telling a repository's weights files from its projectors
 - **`http.rs`** — HTTP backend abstraction for testability
-- **`models.rs`** — Response models and deserialization
-- **`parsing.rs`** — HTML/JSON parsing for model pages
+- **`models.rs`** — What the crate holds of a repository: its reference, its file entries and its quantizations
+- **`parsing.rs`** — JSON parsing: a model's summary (`repo_info_from_json`, the one reader of a search hit and of a model info), a file tree, and the grouping of files into quantizations
 - **`port.rs`** — `HfClientPort` trait implementation
-- **`url.rs`** — URL construction helpers
+- **`url.rs`** — URL construction helpers, and the Hub's own name for each `HfSortField`
 - **`client/`** — HTTP client implementation and `HuggingFace` API integration
 
 ## Usage

@@ -42,7 +42,7 @@ impl ModelOps {
         let check = gglib_download::cli_exec::check_update(
             &repo,
             model.hf_commit_sha.as_deref(),
-            std::env::var("HF_TOKEN").ok(),
+            self.deps.core.hf_token(),
         )
         .await
         .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
@@ -58,8 +58,8 @@ impl ModelOps {
     /// the row — `gglib model upgrade`, shared by the CLI and the GUI route.
     ///
     /// Checks first and returns `updated: false` without downloading when the
-    /// model is already current. The HF token comes from the process
-    /// environment, matching the CLI. The call does not return until the
+    /// model is already current. The HF token is the one the core was built
+    /// with, on every surface. The call does not return until the
     /// download finishes; queue integration is future work, as is any
     /// serialisation between two upgrades of the same model (concurrent
     /// callers both download and the last one wins the row).
@@ -104,7 +104,7 @@ impl ModelOps {
         let check = check(
             repo.clone(),
             model.hf_commit_sha.clone(),
-            std::env::var("HF_TOKEN").ok(),
+            self.deps.core.hf_token(),
         )
         .await
         .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
@@ -129,7 +129,7 @@ impl ModelOps {
             repo_id: repo,
             quantization: quant,
             models_dir,
-            token: std::env::var("HF_TOKEN").ok(),
+            token: self.deps.core.hf_token(),
         };
 
         let download = download(request, rows);

@@ -23,7 +23,7 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: Option<&str>, all: boo
 
         for model in models {
             if let Some(hf_repo) = &model.hf_repo_id {
-                check_model_update(&model, hf_repo).await?;
+                check_model_update(ctx, &model, hf_repo).await?;
             } else {
                 println!(
                     "Model '{}' is not from HuggingFace, skipping update check.",
@@ -34,7 +34,7 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: Option<&str>, all: boo
     } else if let Some(ident) = identifier {
         let model = resolver::resolve_model_identifier(ctx, ident).await?;
         if let Some(hf_repo) = &model.hf_repo_id {
-            check_model_update(&model, hf_repo).await?;
+            check_model_update(ctx, &model, hf_repo).await?;
         } else {
             println!(
                 "Model '{}' is not from HuggingFace, cannot check for updates.",
@@ -48,15 +48,19 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: Option<&str>, all: boo
     Ok(())
 }
 
-/// Check if a single model needs updates, asking the Hub with the `HF_TOKEN`
-/// in the environment when it is set.
-async fn check_model_update(model: &gglib_core::domain::Model, hf_repo: &str) -> Result<()> {
+/// Check if a single model needs updates, asking the Hub with the token the
+/// core was built with.
+async fn check_model_update(
+    ctx: &CliContext,
+    model: &gglib_core::domain::Model,
+    hf_repo: &str,
+) -> Result<()> {
     println!("Checking updates for: {}", model.name);
 
     let check = gglib_download::cli_exec::check_update(
         hf_repo,
         model.hf_commit_sha.as_deref(),
-        std::env::var("HF_TOKEN").ok(),
+        ctx.app.hf_token(),
     )
     .await;
 

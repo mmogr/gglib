@@ -8,13 +8,13 @@ use gglib_core::ports::huggingface::{
     HfClientPort, HfFileInfo, HfPortError, HfPortResult, HfQuantInfo, HfRepoInfo, HfSearchOptions,
     HfSearchResult,
 };
-use gglib_core::repo_short_name;
 
 use crate::client::HfClient;
 use crate::error::HfError;
 use crate::file_roles::to_file_info;
 use crate::http::HttpBackend;
-use crate::models::{HfModelSummary, HfQuantization, HfRepoRef, HfSearchQuery, HfSortField};
+use crate::models::{HfQuantization, HfRepoRef};
+use crate::parsing::repo_info_from_json;
 
 // ============================================================================
 // Error Mapping
@@ -78,20 +78,12 @@ fn extract_model_id_from_url(url: &str) -> String {
 // Type Conversions
 // ============================================================================
 
-/// Convert internal `HfModelSummary` to core `HfRepoInfo`.
-fn to_repo_info(model: &HfModelSummary) -> HfRepoInfo {
-    HfRepoInfo {
-        model_id: model.id.clone(),
-        name: model.name.clone(),
-        author: model.author.clone(),
-        downloads: model.downloads,
-        likes: model.likes,
-        parameters_b: model.parameters_b,
-        description: model.description.clone(),
-        last_modified: model.last_modified.clone(),
-        chat_template: None, // Not available in search summary
-        tags: model.tags.clone(),
-    }
+/// `model_id` as a repository reference, or the error every method here
+/// answers a malformed ID with.
+fn parse_repo(model_id: &str) -> HfPortResult<HfRepoRef> {
+    HfRepoRef::parse(model_id).ok_or_else(|| HfPortError::InvalidResponse {
+        message: format!("Invalid model ID format: {model_id}"),
+    })
 }
 
 /// Convert internal `HfQuantization` to core `HfQuantInfo`.
@@ -104,27 +96,6 @@ fn to_quant_info(quant: &HfQuantization) -> HfQuantInfo {
     }
 }
 
-/// Convert core `HfSearchOptions` to internal `HfSearchQuery`.
-fn to_search_query(options: &HfSearchOptions) -> HfSearchQuery {
-    let sort_field = match options.sort_by.as_str() {
-        "likes" => HfSortField::Likes,
-        "modified" | "lastModified" => HfSortField::Modified,
-        "created" | "createdAt" => HfSortField::Created,
-        "id" | "alphabetical" => HfSortField::Alphabetical,
-        _ => HfSortField::Downloads,
-    };
-
-    HfSearchQuery {
-        query: options.query.clone(),
-        min_params_b: options.min_params_b,
-        max_params_b: options.max_params_b,
-        limit: options.limit,
-        page: options.page,
-        sort_by: sort_field,
-        sort_ascending: options.sort_ascending,
-    }
-}
-
 // ============================================================================
 // Port Implementation
 // ============================================================================
@@ -132,20 +103,11 @@ fn to_search_query(options: &HfSearchOptions) -> HfSearchQuery {
 #[async_trait]
 impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
     async fn search(&self, options: &HfSearchOptions) -> HfPortResult<HfSearchResult> {
-        let query = to_search_query(options);
-        let response = self.search_models_page(&query).await.map_err(map_error)?;
-
-        Ok(HfSearchResult {
-            items: response.items.iter().map(to_repo_info).collect(),
-            has_more: response.has_more,
-            page: response.page,
-        })
+        self.search_models_page(options).await.map_err(map_error)
     }
 
     async fn list_quantizations(&self, model_id: &str) -> HfPortResult<Vec<HfQuantInfo>> {
-        let repo = HfRepoRef::parse(model_id).ok_or_else(|| HfPortError::InvalidResponse {
-            message: format!("Invalid model ID format: {model_id}"),
-        })?;
+        let repo = parse_repo(model_id)?;
 
         let quants = self.list_quantizations(&repo).await.map_err(map_error)?;
 
@@ -153,9 +115,7 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
     }
 
     async fn list_gguf_files(&self, model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        let repo = HfRepoRef::parse(model_id).ok_or_else(|| HfPortError::InvalidResponse {
-            message: format!("Invalid model ID format: {model_id}"),
-        })?;
+        let repo = parse_repo(model_id)?;
 
         let files = self.list_all_gguf_files(&repo).await.map_err(map_error)?;
 
@@ -175,9 +135,7 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
         model_id: &str,
         quantization: &str,
     ) -> HfPortResult<Vec<HfFileInfo>> {
-        let repo = HfRepoRef::parse(model_id).ok_or_else(|| HfPortError::InvalidResponse {
-            message: format!("Invalid model ID format: {model_id}"),
-        })?;
+        let repo = parse_repo(model_id)?;
 
         let files = self
             .find_quantization_files_with_sizes(&repo, quantization)
@@ -187,18 +145,14 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
     }
 
     async fn list_projectors(&self, model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        let repo = HfRepoRef::parse(model_id).ok_or_else(|| HfPortError::InvalidResponse {
-            message: format!("Invalid model ID format: {model_id}"),
-        })?;
+        let repo = parse_repo(model_id)?;
 
         let files = self.list_projectors(&repo).await.map_err(map_error)?;
         Ok(files.into_iter().map(to_file_info).collect())
     }
 
     async fn get_commit_sha(&self, model_id: &str) -> HfPortResult<String> {
-        let repo = HfRepoRef::parse(model_id).ok_or_else(|| HfPortError::InvalidResponse {
-            message: format!("Invalid model ID format: {model_id}"),
-        })?;
+        let repo = parse_repo(model_id)?;
 
         self.get_commit_sha(&repo).await.map_err(map_error)
     }
@@ -211,11 +165,7 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
     /// `Err` so the caller can tell "no config published" from "could not
     /// look", even though today it treats both as a reason to fall back.
     async fn fetch_generation_config(&self, model_id: &str) -> HfPortResult<Option<String>> {
-        if HfRepoRef::parse(model_id).is_none() {
-            return Err(HfPortError::InvalidResponse {
-                message: format!("Invalid model ID format: {model_id}"),
-            });
-        }
+        parse_repo(model_id)?;
 
         let raw = crate::url::build_file_url(model_id, "generation_config.json", None);
         let url = url::Url::parse(&raw).map_err(|e| HfPortError::Configuration {
@@ -234,95 +184,19 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
     }
 
     async fn get_model_info(&self, model_id: &str) -> HfPortResult<HfRepoInfo> {
-        let repo = HfRepoRef::parse(model_id).ok_or_else(|| HfPortError::InvalidResponse {
-            message: format!("Invalid model ID format: {model_id}"),
-        })?;
+        let repo = parse_repo(model_id)?;
 
-        // Fetch model info JSON
         let info = self.get_model_info(&repo).await.map_err(map_error)?;
 
-        // Parse the JSON into a HfRepoInfo
-        let model_id_str = info
-            .get("id")
-            .and_then(|v| v.as_str())
-            .map_or_else(|| model_id.to_string(), String::from);
-
-        let name = repo_short_name(&model_id_str).to_string();
-
-        let author = model_id_str.split('/').next().map(String::from);
-
-        let downloads = info
-            .get("downloads")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(0);
-
-        let likes = info
-            .get("likes")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(0);
-
-        let parameters_b = info
-            .get("safetensors")
-            .and_then(|s| s.get("total"))
-            .and_then(serde_json::Value::as_f64)
-            .map(|p| p / 1_000_000_000.0)
-            .or_else(|| {
-                info.get("config")
-                    .and_then(|c| c.get("num_parameters"))
-                    .and_then(serde_json::Value::as_f64)
-                    .map(|p| p / 1_000_000_000.0)
-            });
-
-        let description = info
-            .get("cardData")
-            .and_then(|c| c.get("model_summary"))
-            .and_then(|v| v.as_str())
-            .map(String::from);
-
-        let last_modified = info
-            .get("lastModified")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-
-        // Extract chat template - check gguf location first (for GGUF repos),
-        // then fall back to config location (for safetensors repos)
-        let chat_template = info
-            .get("gguf")
-            .and_then(|g| g.get("chat_template"))
-            .and_then(|v| v.as_str())
-            .map(String::from)
-            .or_else(|| {
-                info.get("config")
-                    .and_then(|c| c.get("chat_template"))
-                    .and_then(|v| v.as_str())
-                    .map(String::from)
-            });
-
-        // Extract tags from model metadata
-        let tags = info
-            .get("tags")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        Ok(HfRepoInfo {
-            model_id: model_id_str,
-            name,
-            author,
-            downloads,
-            likes,
-            parameters_b,
-            description,
-            last_modified,
-            chat_template,
-            tags,
+        repo_info_from_json(&info).ok_or_else(|| HfPortError::InvalidResponse {
+            message: format!("the model info for {model_id} names no id"),
         })
     }
 }
+
+#[cfg(test)]
+#[path = "recorded_tests.rs"]
+mod recorded_tests;
 
 #[cfg(test)]
 mod tests {
@@ -375,27 +249,5 @@ mod tests {
             HfPortError::RateLimited => {}
             _ => panic!("Expected RateLimited"),
         }
-    }
-
-    #[test]
-    fn test_to_search_query() {
-        let options = HfSearchOptions {
-            query: Some("llama".to_string()),
-            limit: 50,
-            page: 2,
-            sort_by: "likes".to_string(),
-            sort_ascending: true,
-            min_params_b: Some(7.0),
-            max_params_b: Some(13.0),
-        };
-
-        let query = to_search_query(&options);
-        assert_eq!(query.query, Some("llama".to_string()));
-        assert_eq!(query.limit, 50);
-        assert_eq!(query.page, 2);
-        assert_eq!(query.sort_by, HfSortField::Likes);
-        assert!(query.sort_ascending);
-        assert_eq!(query.min_params_b, Some(7.0));
-        assert_eq!(query.max_params_b, Some(13.0));
     }
 }

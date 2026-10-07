@@ -1,0 +1,29 @@
+[
+{
+  "_id": "67c2e4c36b1e40e9b1417ec1",
+  "id": "MaziyarPanahi/Phi-4-mini-instruct-GGUF",
+  "likes": 16,
+  "downloads": 139847,
+  "gguf": {"total": 3836021856, "architecture": "phi3", "context_length": 131072, "chat_template": "{% for message in messages %}{% if message['role'] == 'system' and 'tools' in message and message['tools'] is not none %}{{ '<|' + message['role'] + '|>' + message['content'] + '<|tool|>' + message['tools'] + '<|/tool|>' + '<|end|>' }}{% else %}{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ '<|assistant|>' }}{% else %}{{ eos_token }}{% endif %}", "bos_token": "<|endoftext|>", "eos_token": "<|endoftext|>", "totalFileSize": 7680694592},
+  "tags": ["gguf", "mistral", "quantized", "2-bit", "3-bit", "4-bit", "5-bit", "6-bit", "8-bit", "GGUF", "text-generation", "base_model:microsoft/Phi-4-mini-instruct", "base_model:quantized:microsoft/Phi-4-mini-instruct", "region:us", "conversational"],
+  "siblings": [{"rfilename": ".gitattributes"}, {"rfilename": "Phi-4-mini-instruct.Q2_K.gguf"}, {"rfilename": "Phi-4-mini-instruct.Q3_K_L.gguf"}, {"rfilename": "Phi-4-mini-instruct.Q3_K_M.gguf"}, {"rfilename": "Phi-4-mini-instruct.Q3_K_S.gguf"}, {"rfilename": "Phi-4-mini-instruct.Q4_K_M.gguf"}, {"rfilename": "Phi-4-mini-instruct.Q4_K_S.gguf"}, {"rfilename": "Phi-4-mini-instruct.Q5_K_M.gguf"}, {"rfilename": "Phi-4-mini-instruct.Q5_K_S.gguf"}, {"rfilename": "Phi-4-mini-instruct.Q6_K.gguf"}, {"rfilename": "Phi-4-mini-instruct.Q8_0.gguf"}, {"rfilename": "Phi-4-mini-instruct.fp16.gguf"}, {"rfilename": "README.md"}, {"rfilename": "config.json"}]
+},
+{
+  "_id": "67c2370e99830dd31a201057",
+  "id": "unsloth/Phi-4-mini-instruct-GGUF",
+  "likes": 153,
+  "downloads": 117114,
+  "gguf": {"total": 3836021856, "architecture": "phi3", "context_length": 131072, "chat_template": "{% for message in messages %}{% if message['role'] == 'system' and 'tools' in message and message['tools'] is not none %}{{ '<|' + message['role'] + '|>' + message['content'] + '<|tool|>' + message['tools'] + '<|/tool|>' + '<|end|>' }}{% else %}{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ '<|assistant|>' }}{% endif %}", "bos_token": "<|endoftext|>", "eos_token": "<|end|>", "totalFileSize": 1682635744},
+  "tags": ["transformers", "gguf", "phi3", "text-generation", "phi", "phi4", "unsloth", "nlp", "code", "microsoft", "math", "chat", "conversational", "custom_code", "multilingual", "base_model:microsoft/Phi-4-mini-instruct", "base_model:quantized:microsoft/Phi-4-mini-instruct", "license:mit", "endpoints_compatible", "region:us"],
+  "siblings": [{"rfilename": ".gitattributes"}, {"rfilename": "Phi-4-mini-instruct-Q2_K.gguf"}, {"rfilename": "Phi-4-mini-instruct-Q2_K_L.gguf"}, {"rfilename": "Phi-4-mini-instruct-Q3_K_M.gguf"}, {"rfilename": "Phi-4-mini-instruct-Q4_K_M.gguf"}, {"rfilename": "Phi-4-mini-instruct-Q5_K_M.gguf"}, {"rfilename": "Phi-4-mini-instruct-Q6_K.gguf"}, {"rfilename": "Phi-4-mini-instruct.BF16.gguf"}, {"rfilename": "Phi-4-mini-instruct.Q8_0.gguf"}, {"rfilename": "README.md"}, {"rfilename": "config.json"}]
+},
+{
+  "_id": "67bfa980302c06f2205a9c4a",
+  "id": "bartowski/microsoft_Phi-4-mini-instruct-GGUF",
+  "likes": 47,
+  "downloads": 75435,
+  "gguf": {"total": 3836021856, "architecture": "phi3", "context_length": 131072, "quantize_imatrix_file": "/models_out/Phi-4-mini-instruct-GGUF/microsoft_Phi-4-mini-instruct.imatrix", "chat_template": "{% for message in messages %}{% if message['role'] == 'system' and 'tools' in message and message['tools'] is not none %}{{ '<|' + message['role'] + '|>' + message['content'] + '<|tool|>' + message['tools'] + '<|/tool|>' + '<|end|>' }}{% else %}{{ '<|' + message['role'] + '|>' + message['content'] + '<|end|>' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ '<|assistant|>' }}{% else %}{{ eos_token }}{% endif %}", "bos_token": "<|endoftext|>", "eos_token": "<|endoftext|>", "totalFileSize": 1507424640},
+  "tags": ["gguf", "text-generation", "base_model:microsoft/Phi-4-mini-instruct", "base_model:quantized:microsoft/Phi-4-mini-instruct", "endpoints_compatible", "region:us", "imatrix", "conversational"],
+  "siblings": [{"rfilename": ".gitattributes"}, {"rfilename": "README.md"}, {"rfilename": "microsoft_Phi-4-mini-instruct-IQ2_M.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-IQ3_M.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-IQ3_XS.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-IQ3_XXS.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-IQ4_NL.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-IQ4_XS.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q2_K.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q2_K_L.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q3_K_L.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q3_K_M.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q3_K_S.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q3_K_XL.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q4_0.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q4_1.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q4_K_L.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q4_K_M.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q4_K_S.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q5_K_L.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q5_K_M.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q5_K_S.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q6_K.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q6_K_L.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct-Q8_0.gguf"}, {"rfilename": "microsoft_Phi-4-mini-instruct.imatrix"}]
+}
+]

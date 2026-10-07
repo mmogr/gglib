@@ -47,7 +47,6 @@ async fn store(dir: &tempfile::TempDir) -> Arc<dyn SettingsRepository> {
     let config = BootstrapConfig {
         db_path: dir.path().join("gglib.db"),
         models_dir,
-        hf_token: None,
     };
     CoreBootstrap::build(config, Arc::new(NoopEmitter::new()))
         .await

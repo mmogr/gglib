@@ -111,14 +111,19 @@ This module handles all download-related commands that interact with `HuggingFac
 ## Commands
 
 ### `search`
-Search `HuggingFace` Hub for GGUF models.
+Search `HuggingFace` Hub for GGUF models. The search is
+`gglib_app_services::search_hf_models`, the one the GUI's browser runs, over
+the Hub client the CLI was bootstrapped with, which holds the `HF_TOKEN` this
+command started with when there is one. Every hit holds a GGUF file, and each
+is listed with its quantizations.
 
-**Module:** `search.rs`
+**Module:** `search.rs` (the search, and the listing `browse` prints too)
 
 **Options:**
 - `--limit <N>` - Maximum results (default: 10)
-- `--sort <FIELD>` - Sort by "downloads", "created", "likes", or "updated"
-- `--gguf-only` - Only show models with GGUF files
+- `--sort <FIELD>` - `downloads` (default), `likes`, `created` or `updated`
+  (also spelled `modified`), the most of it first. Any other value is refused
+  with the list of these.
 
 **Example:**
 ```bash
@@ -126,14 +131,16 @@ gglib model search "llama 7b" --limit 5 --sort downloads
 ```
 
 ### `browse`
-Browse popular GGUF models by category.
+Browse popular GGUF models by category: `search`'s search for `gguf`, in the
+category's order.
 
 **Module:** `browse.rs`
 
 **Categories:**
-- `popular` - Most popular models
-- `recent` - Recently updated models  
-- `trending` - Trending models
+- `popular` - Most downloaded models (default)
+- `recent` - Newest models
+
+Any other category is refused with the list of these.
 
 **Options:**
 - `--limit <N>` - Maximum results (default: 20)
@@ -154,7 +161,7 @@ Download a model from `HuggingFace` Hub, on the gglib daemon.
 **Options:**
 - `--quantization <QUANT>` / `-q` - Specific quantization (e.g., "`Q4_K_M`")
 - `--list-quants` - List available quantizations, then the repository's projectors with their sizes, each marked with the quantizations whose download fetches it (uses `--token` if provided)
-- `--token <TOKEN>` - `HuggingFace` token (for `--list-quants` only; use `HF_TOKEN` env var for downloads)
+- `--token <TOKEN>` - `HuggingFace` token (for `--list-quants` only; a download uses the `HF_TOKEN` of the environment the daemon started in)
 - `--skip-db` - Accepted and reported as not honoured: registration happens daemon-side
 
 **Interactive mode (TTY, the in-process monitor):**
@@ -179,13 +186,16 @@ gglib model download microsoft/DialoGPT-medium --list-quants
 # Download specific quantization — enters live queue monitor
 gglib model download microsoft/DialoGPT-medium -q Q4_K_M
 
-# Download with HF token for private repos (set env var for downloads)
+# Download from a private repo: the daemon downloads, with the HF_TOKEN it
+# was started with. This sets it for a daemon this command starts; one that
+# is already running keeps the environment it has.
 HF_TOKEN=hf_... gglib model download my-org/private-model -q Q4_K_M
 ```
 
 ### `check-updates`
 Check if downloaded models have updates on `HuggingFace` Hub. Sends `HF_TOKEN` to
-the Hub when it is set.
+the Hub when it is set: the token the CLI's core was built with, as `search`,
+`browse` and `upgrade` do.
 
 **Module:** `check_updates.rs`
 
@@ -245,7 +255,7 @@ Handlers convert download errors to user-friendly messages:
 ## Dependencies
 
 - **gglib-download** - Core download functionality via `cli_exec`
-- **gglib-hf** - `HuggingFace` Hub client
+- **gglib-app-services** - The Hub search (`search_hf_models`) and the upgrade (`ModelOps`), over the one Hub client `gglib-bootstrap` builds
 - **gglib-db** - Model database operations
 - **gglib-gguf** - GGUF metadata parsing
 - **gglib-core** - Domain types and ports
