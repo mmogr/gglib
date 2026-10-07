@@ -7,8 +7,6 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::presentation::sampling_values::stated_parameters;
-use gglib_core::Settings;
-use gglib_core::domain::agent::DEFAULT_MAX_ITERATIONS;
 use gglib_core::domain::{FieldSources, InferenceConfig};
 
 /// Resolve inference parameters via the full merge hierarchy.
@@ -39,16 +37,6 @@ pub(crate) async fn resolve_inference_config(
         settings.inference_defaults.as_ref(),
         model_ctx,
     ))
-}
-
-/// Resolve the maximum agent iterations via a 3-level fallback chain.
-///
-/// Merge order: CLI flag → persisted `Settings.max_tool_iterations` → `DEFAULT_MAX_ITERATIONS`.
-/// This mirrors the pattern in [`resolve_inference_config`] and keeps handler code clean.
-pub(crate) fn resolve_max_iterations(cli_override: Option<usize>, settings: &Settings) -> usize {
-    cli_override
-        .or_else(|| settings.max_tool_iterations.map(|v| v as usize))
-        .unwrap_or(DEFAULT_MAX_ITERATIONS)
 }
 
 /// Log mlock status to stderr.

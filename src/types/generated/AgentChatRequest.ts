@@ -47,8 +47,9 @@ messages: Array<AgentMessage>,
 /**
  * Optional loop tuning, restricted to safe user-facing fields.
  *
- * When `None` (or omitted), all fields default to the values in
- * [`AgentConfig::default`], which match the TypeScript frontend constants.
+ * When `None` (or omitted), the iteration limit is the stored
+ * `max_tool_iterations` setting and every other field defaults to the
+ * value in [`AgentConfig::default`].
  */
 config: AgentRequestConfig | null, 
 /**

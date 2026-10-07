@@ -9,7 +9,6 @@ mod launch;
 mod remote_upstream;
 mod retry_notice;
 mod run;
-mod thinking;
 mod transcript;
 
 pub(crate) use dto::AgentChatRequest;

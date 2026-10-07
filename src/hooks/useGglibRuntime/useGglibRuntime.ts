@@ -56,7 +56,6 @@ export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpen
   selectedServerPort?: number;
   /** The paired machine's model the chat is with, in place of a server here. */
   pairedModel?: ModelRef;
-  maxToolIterations?: number;
   onError?: (error: Error) => void;
   /**
    * Called for each non-fatal `system_warning` the loop emits — an upstream
@@ -94,7 +93,7 @@ export interface UseGglibRuntimeReturn {
 }
 
 export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibRuntimeReturn {
-  const { conversationId, selectedServerPort, pairedModel, maxToolIterations, onError, supportsToolCalls } = options;
+  const { conversationId, selectedServerPort, pairedModel, onError, supportsToolCalls } = options;
   const source = options.source ?? 'this';
   const far = source === 'far';
   const reader = useRunReader(conversationId, options);
@@ -188,11 +187,10 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         conversationId: cid,
         replaceFrom,
         selectedServerPort,
-        config: {
-          ...(maxToolIterations !== undefined && { max_iterations: maxToolIterations }),
-          // Per-chat limits from the Tools popover, read fresh per send.
-          ...agentOverridesToWire(),
-        },
+        // The limits from the Tools popover, read fresh per send. No
+        // iteration limit: the daemon takes the stored setting for a run
+        // that names none.
+        config: agentOverridesToWire(),
         reasoning: reasoningOverridesToWire(),
         thinking: thinking?.said,
         supportsToolCalls,

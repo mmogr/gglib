@@ -29,13 +29,17 @@
 //! the `OpenAI` non-streaming shape, reasoning routed to `reasoning_content`.
 //! Chunk-safety is trivially satisfied (the whole body is one chunk), so
 //! streaming and non-streaming responses cannot drift: there is one parser
-//! per dialect, chosen by the same [`super::registry::get_parser`].
+//! per dialect, chosen by the same [`super::registry::get_parser`], and the
+//! one step the stream takes outside the parser, removing a stray think tag
+//! from the text, is taken here by the same function
+//! ([`super::think_tags`]).
 
 use serde_json::{Value, json};
 
 use super::error::NormalizationError;
 use super::parser::ParserOutput;
 use super::registry::get_parser;
+use super::think_tags::strip_think_tags;
 use crate::domain::dialect::DialectSpec;
 
 /// Normalize a complete (non-streaming) `chat.completion` response body in
@@ -43,8 +47,10 @@ use crate::domain::dialect::DialectSpec;
 ///
 /// Only `message.content` strings are processed; a null, absent, or
 /// non-string content is left untouched, as is everything else in the body.
-/// For models with no dialect the parser is the identity passthrough and
-/// the body comes back byte-identical.
+/// For models with no dialect the parser is the identity passthrough, and
+/// the body comes back as it was unless its content holds a stray
+/// `<think>` or `</think>` tag: that is removed for every model, as the
+/// stream removes it.
 ///
 /// When markup is extracted:
 /// - `message.content` becomes the remaining text, or `null` when a tool
@@ -86,6 +92,7 @@ pub fn normalize_chat_completion_body(
         let mut out = parser.push_text(content);
         let fin = parser.finish();
         merge(&mut out, fin);
+        out.forward_text = strip_think_tags(&out.forward_text);
 
         // Identity fast-path: nothing extracted, nothing failed, text
         // unchanged — leave the message untouched rather than rebuilding it.

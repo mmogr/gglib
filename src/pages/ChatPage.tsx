@@ -131,10 +131,9 @@ export default function ChatPage(props: ChatPageProps) {
   const { showToast } = useToastContext();
   const { confirm } = useConfirmContext();
 
-  // Settings for title generation prompt and agent loop
+  // Settings for title generation prompt
   const { settings } = useSettings();
   const titleGenerationPrompt = settings?.titleGenerationPrompt || DEFAULT_TITLE_GENERATION_PROMPT;
-  const maxToolIterations = settings?.maxToolIterations ?? undefined;
 
   // Tool support and quantisation for the active model. The model is fixed
   // for the lifetime of ChatPage: a switch from the composer's picker
@@ -165,7 +164,6 @@ export default function ChatPage(props: ChatPageProps) {
     // rather than `chatError`, which renders as a failed turn.
     onSystemWarning: (message, suggestedAction) =>
       showToast(suggestedAction ? `${message} — ${suggestedAction}` : message, 'warning'),
-    maxToolIterations,
     supportsToolCalls,
     // assistant-ui only logs a paste or a drop that fails; this is the person told.
     onImageRefused: (sentence) => showToast(sentence, 'error'),

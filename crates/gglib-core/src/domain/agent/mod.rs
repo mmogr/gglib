@@ -2,6 +2,7 @@
 pub mod config;
 pub(crate) mod events;
 pub(crate) mod fnv1a;
+mod limits;
 pub(crate) mod loop_detection;
 pub(crate) mod messages;
 mod messages_serde;
@@ -20,6 +21,7 @@ pub use config::{
     MIN_TOOL_TIMEOUT_MS,
 };
 pub use events::{AGENT_EVENT_CHANNEL_CAPACITY, AgentEvent, LlmStreamEvent};
+pub use limits::TurnLimits;
 pub use loop_detection::results::{batch_results_hash, hash_result_content, hash_result_text};
 pub use loop_detection::{
     BatchRecord, LoopDetector, RepeatOutcome, batch_signature, is_observation_batch,

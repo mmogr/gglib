@@ -134,7 +134,8 @@ pub enum Commands {
         #[command(flatten)]
         upstream: UpstreamArgs,
         /// Maximum agent iterations before giving up
-        /// [default: persisted setting, or 25 if unset]
+        /// [default: the limit the chat saved, with --continue; else the
+        /// persisted setting, or 25 if unset]
         #[arg(long = "max-iterations")]
         max_iterations: Option<usize>,
         /// Tool allowlist; may be repeated or comma-separated.

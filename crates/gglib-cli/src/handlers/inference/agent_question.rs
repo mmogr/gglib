@@ -13,7 +13,7 @@ use anyhow::{Result, anyhow};
 use tokio::sync::mpsc;
 
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
+use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, TurnLimits};
 
 use crate::bootstrap::CliContext;
 use crate::conversation_settings::ConversationSettingsBuilder;
@@ -23,7 +23,6 @@ use crate::handlers::agent_chat::images::TurnImages;
 use crate::handlers::agent_chat::persistence::{Conversation, Reply};
 use crate::handlers::agent_chat::repl::run_repl_with_history;
 use crate::handlers::agent_chat::sight::Sight;
-use crate::handlers::inference::shared::resolve_max_iterations;
 use crate::shared_args::{ContextArgs, SamplingArgs};
 use crate::target::Target;
 
@@ -189,16 +188,18 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     )
     .await?;
 
-    let resolved_max_iterations = resolve_max_iterations(max_iterations, &settings);
+    // The flag, then this machine's stored limits, as the daemon resolves a
+    // turn's.
+    let limits = TurnLimits::resolve(max_iterations, Some(&settings));
 
     let config = AgentConfig::from_user_params(
-        Some(resolved_max_iterations),
+        Some(limits.max_iterations),
         max_parallel,
         tool_timeout_ms,
         // Some(vec) replaces defaults; empty vec passes None to preserve defaults.
         Some(observation_tools).filter(|v| !v.is_empty()),
         max_observation_steps,
-        settings.max_stagnation_steps.map(|v| v as usize),
+        limits.max_stagnation_steps,
     )
     .map_err(|e| anyhow!("invalid agent config: {e}"))?;
 

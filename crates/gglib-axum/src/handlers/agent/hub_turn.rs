@@ -6,7 +6,9 @@
 //! upload answered. The hub rebuilds the history from its
 //! own record, as the chat page would send it: the conversation's system
 //! prompt, then every saved row but a system one, then the new message,
-//! with the limits the conversation's settings name, and with thinking off
+//! with the limits the conversation's settings name (`prepare` takes an
+//! iteration limit they do not name from this machine's settings, as it
+//! does for the page), and with thinking off
 //! when the turn says so or the chat remembers it (`thinking`). It calls no
 //! tool unless
 //! this machine lets the tunnel reach its MCP tools, and then only those the
@@ -25,6 +27,7 @@ use axum::response::IntoResponse as _;
 use gglib_core::domain::agent::{AgentMessage, saved_history};
 use gglib_core::domain::chat::ConversationSettings;
 use gglib_core::domain::hub_chats::HubTurn;
+use gglib_core::domain::thinking;
 use gglib_core::ports::{
     AgentRunStarter, Created, RemoteGatewayPort as _, RunScope, RunsError, TurnRefused,
 };
@@ -37,7 +40,6 @@ use super::hub_model::{model_for, on_model};
 use super::launch::{Transcript, launch};
 use super::remote_upstream;
 use super::run::{coded, with_code};
-use super::thinking;
 use crate::bootstrap::AxumContext;
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -264,6 +266,9 @@ mod hub_turn_forget_tests;
 #[cfg(test)]
 #[path = "hub_turn_images_tests.rs"]
 mod hub_turn_images_tests;
+#[cfg(test)]
+#[path = "hub_turn_limits_tests.rs"]
+mod hub_turn_limits_tests;
 #[cfg(test)]
 #[path = "hub_turn_plan_tests.rs"]
 mod hub_turn_plan_tests;

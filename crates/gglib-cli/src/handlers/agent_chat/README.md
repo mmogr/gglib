@@ -20,11 +20,21 @@ independently readable:
 - [`repl_line`] — what one line typed at the prompt asks for: a command, or
   the next message with the images attached to it
 - [`images`]   — the images a turn carries: `--image` and the REPL's `/image`,
-  each file through core's one ingest, with a receipt line on stderr
+  each file through core's one ingest, with a receipt line on stderr; and,
+  when a session starts, the daemon's check before a run
+  (`AttachmentService::check_request`) over its history and first message
 - [`sight`]    — whether the session's model can read an image, asked before
   the loop is composed: the catalogue row, or `/props` of a `--port` server
 - [`tool_format`] — tool-result summary formatters
 - [`markdown`] — Markdown normalisation + termimad rendering
 - [`thinking_dispatch`] — `RenderContext`, thinking-event dispatch, spinner coordination
+
+Two of a turn's rules are core's, shared with the daemon, and only called
+here. A session's iteration and stagnation limits are
+`gglib_core::domain::agent::TurnLimits::resolve`: `--max-iterations`, then
+the limit a resumed chat saved, then the stored settings, then the default. A
+new chat saves only the limit its command line named. A resumed chat's
+Thinking choice is `gglib_core::domain::thinking::settle`
+(`resume_settings`): a chat switched off runs with a thinking budget of `0`.
 
 <!-- module-docs:end -->
