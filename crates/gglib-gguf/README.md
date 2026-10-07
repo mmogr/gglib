@@ -64,7 +64,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`fixture.rs`** — `write_string_gguf`, a GGUF file written without a model for a test to parse; behind the `test-utils` feature
 - **`format.rs`** — GGUF format types, tensor types, and quantization enums
 - **`parser.rs`** — High-level metadata extraction and port implementation
-- **`reader.rs`** — Low-level file I/O and GGUF header parsing
+- **`reader.rs`** — Low-level file I/O and GGUF header parsing; a string length, array count or metadata count the file declares is held to the bytes it has left before anything is reserved or looped over
 - **`role.rs`** — Whether the header says the file is a model's weights or a projector
 - **`capabilities/`** — Model capability detection (context size, chat templates)
 

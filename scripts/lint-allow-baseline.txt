@@ -3,7 +3,7 @@
 crates/gglib-core 77 75
 crates/gglib-db 8 0
 crates/gglib-download 10 10
-crates/gglib-gguf 8 8
+crates/gglib-gguf 6 6
 crates/gglib-bootstrap 1 1
 crates/gglib-app-services 49 16
 crates/gglib-hf 2 2
