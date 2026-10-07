@@ -136,15 +136,28 @@ chat, in its Tools popover, and once one is set sends it with every message,
 and a chat that was switched off does not start thinking again because of it.
 Nothing else is remembered. A request's own budget and `reasoning_effort` are
 that request's, and with `default`, or with nothing remembered, the budget
-resolves through the hierarchy as it always has. `gglib chat --continue` reads
-a chat by the same rule: a command line says neither `off` nor `default`, so a
-chat switched off runs there with a budget of `0`, whatever
-`--reasoning-budget-tokens` says, until the switch is set back on the chat
-page or a paired device. A resume whose typed budget is not the `0` the chat
-runs with says so once, in a line on stderr: the chat has Thinking switched
-off, the budget was not applied, and where the switch is set back. A chat the
-CLI starts remembers nothing, and neither does `gglib q`: pass
-`--reasoning-budget-tokens 0` to stop a turn's thinking there.
+resolves through the hierarchy as it always has.
+
+`gglib chat` reads a chat by the same rule, and `--thinking on|off` is what
+its turn says: `off` is the turn's `off`, and `on` its `default`. A choice
+named there runs the session, on a new chat or one resumed with `--continue`,
+and the chat remembers it from the session's start, before its first message.
+It is written by the function the daemon's runs write it with, so the page's
+switch and a paired device read it as their own. `--thinking off` runs with a
+budget of `0`, whatever `--reasoning-budget-tokens` says, and `--thinking on`
+runs with the budget typed. With no `--thinking` the command line says
+nothing: a chat switched off runs with a budget of `0`, whatever
+`--reasoning-budget-tokens` says, and stays switched off. A resume whose
+typed budget is set aside that way says so once, in a line on stderr: the
+chat has Thinking switched off, the budget was not applied, and
+`--thinking on` switches it back. A chat the CLI starts remembers `off` only
+when `--thinking off` says it.
+
+`gglib q` has no `--thinking`. It asks one question of a chat it saves only
+once the answer is in, and it saves none of its command line's sampling with
+that chat. Pass `--reasoning-budget-tokens 0` to stop the question's
+thinking, and switch the chat it saved with
+`gglib chat --continue <id> --thinking off`.
 
 On the chat page the choice is the **Thinking** switch in the composer's
 margin, drawn only for a model that thinks: one tagged `reasoning` here, or

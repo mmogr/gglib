@@ -149,6 +149,11 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
             .await?;
         (None, Vec::new(), None)
     };
+    // By the rule the daemon reads a turn's Thinking choice with: `--thinking`
+    // wins and is remembered below, once there is a conversation to remember
+    // it; without it the chat runs as it remembers.
+    let remembered = saved.as_ref().and_then(|s| s.thinking);
+    let remember = resume_settings::settle_thinking(&mut args, remembered);
 
     // On a resume the identifier came from storage, not from this command
     // line. An explicit `--profile` is therefore the only thing the user
@@ -190,6 +195,11 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
         }
         None => resume_settings::new_conversation(ctx, &args, profile, &turn).await,
     };
+    // After the settings a resume replaces whole, which hold what the chat
+    // remembered before this session.
+    if let (Some(conv), Some(choice)) = (&persistence, remember) {
+        conv.remember_thinking(choice).await;
+    }
 
     let params = config::AgentSessionParams {
         model_identifier: args.identifier.clone(),
@@ -221,8 +231,8 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
 /// uses `other-model` and temperature `0.9` from the CLI, but restores
 /// everything else (system prompt, `top_p`, tools, etc.) from conversation 42.
 /// The one flag a chat overrides is `--reasoning-budget-tokens`, on a chat
-/// with Thinking switched off, and
-/// [`resume_settings::apply_saved_settings`] says so on stderr.
+/// with Thinking switched off and no `--thinking` named: `prepare` settles
+/// that next ([`resume_settings::settle_thinking`]), and says so on stderr.
 /// Which machine it resumes on, and by which id, `prepare` has already taken
 /// from the model the conversation stored. The saved settings come back too:
 /// whether their profile applies is [`resume_settings::restore_profile`]'s

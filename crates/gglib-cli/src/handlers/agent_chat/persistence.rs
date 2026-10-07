@@ -13,6 +13,7 @@ use anyhow::{Result, anyhow};
 use chrono::Local;
 
 use gglib_app_services::transcript::{self, FrameTimes, MadeBy};
+use gglib_core::domain::Thinking;
 use gglib_core::domain::agent::{AgentEvent, AgentMessage};
 use gglib_core::domain::chat::{self, ConversationSettings, NewConversation};
 use gglib_core::services::ChatHistoryService;
@@ -117,6 +118,13 @@ impl<'a> Conversation<'a> {
             tracing::warn!("failed to record the session's model on its conversation: {e}");
         }
         self
+    }
+
+    /// Have the conversation remember `choice` of thinking, as a daemon's
+    /// run does when its turn says one: `off`, or nothing for `on`. Every
+    /// other setting stays, and a write that fails is logged there.
+    pub(crate) async fn remember_thinking(&self, choice: Option<Thinking>) {
+        transcript::remember_thinking(self.service, self.id, choice).await;
     }
 
     /// An empty [`Reply`] for a turn of this session's that starts now.

@@ -3,7 +3,7 @@
 //!
 //! The rule is [`settle`], read at a paired device's turn, the page's turn
 //! on a far machine (which arrives there as a device's), this machine's own
-//! run, and a chat the CLI resumes.
+//! run, and the CLI's chat, where `--thinking` is what the turn says.
 //! A turn says `off`, `default` or nothing. `off` runs it with a thinking
 //! budget of `0` and the chat remembers; `default` runs it with the
 //! request's own budget and the chat forgets; nothing runs it as the chat

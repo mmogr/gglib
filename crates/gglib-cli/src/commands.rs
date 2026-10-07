@@ -19,6 +19,7 @@ use crate::shared_args::{
     AccessArgs, CacheArgs, ContextArgs, MtpArgs, RetryArgs, SamplingArgs, ServeOptions,
 };
 pub(crate) use crate::subcommands::{ChatCommand, DaemonCommand, ProxyCommand, RemoteCommand};
+use crate::thinking_arg::ThinkingArg;
 use crate::tool_limit_args::ToolLimitArgs;
 use crate::upstream_args::UpstreamArgs;
 
@@ -157,6 +158,14 @@ pub enum Commands {
         /// Resume a previous conversation by ID (use `gglib chat history` to find IDs)
         #[arg(long = "continue")]
         continue_id: Option<i64>,
+        /// Switch the chat's Thinking on or off, as the chat page's switch does
+        ///
+        /// The choice applies to this session and the chat remembers it. `off`
+        /// runs with a thinking budget of 0, whatever --reasoning-budget-tokens
+        /// says; `on` runs with the budget typed, if any. Omitted, a resumed
+        /// chat runs as it remembers.
+        #[arg(long, value_enum)]
+        thinking: Option<ThinkingArg>,
         /// Observation-only tool name patterns for the dual-threshold loop guard.
         /// A tool whose name ends with or contains any pattern is classified as
         /// observation-only and subject to the higher --max-observation-steps limit.

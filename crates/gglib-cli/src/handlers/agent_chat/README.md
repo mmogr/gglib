@@ -33,10 +33,13 @@ Two of a turn's rules are core's, shared with the daemon, and only called
 here. A session's iteration and stagnation limits are
 `gglib_core::domain::agent::TurnLimits::resolve`: `--max-iterations`, then
 the limit a resumed chat saved, then the stored settings, then the default. A
-new chat saves only the limit its command line named. A resumed chat's
-Thinking choice is `gglib_core::domain::thinking::settle`
-(`resume_settings`): a chat switched off runs with a thinking budget of `0`,
-and the resume says so on stderr when that sets aside a budget its command
-line typed.
+new chat saves only the limit its command line named. A chat's Thinking
+choice is `gglib_core::domain::thinking::settle` (`resume_settings`), with
+`--thinking on|off` as what the turn says: a choice named runs the session
+and is remembered on the chat, new or resumed, through
+`gglib_app_services::transcript::remember_thinking`, which the daemon's runs
+write it with. With none named a chat switched off runs with a thinking
+budget of `0`, and the resume says so on stderr when that sets aside a
+budget its command line typed.
 
 <!-- module-docs:end -->

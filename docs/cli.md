@@ -192,6 +192,14 @@ message when you send it, and the reply when the turn ends, with its reasoning
 and how it was made. A turn stopped by Ctrl+C or an error keeps what had
 arrived of its reply, marked as stopped.
 
+`--thinking on|off` is the chat page's Thinking switch, from the terminal:
+the choice runs this session and the chat remembers it, on a new chat or
+with `--continue`. `off` runs with a thinking budget of `0`, whatever
+`--reasoning-budget-tokens` says; `on` runs with the budget typed. Without
+it a resumed chat runs as it remembers, and a chat switched off says so on
+stderr when that sets a typed budget aside. See
+[the two reasoning controls](sampling.md#the-two-reasoning-controls).
+
 Local models need guardrails to finish a tool-calling task, so the loop carries
 iteration limits (`--max-iterations`; without it the limit a resumed chat
 saved, then the `max-tool-iterations` setting, which the chat page and a
