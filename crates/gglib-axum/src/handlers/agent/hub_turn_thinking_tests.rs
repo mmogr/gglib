@@ -175,7 +175,7 @@ async fn remembering_keeps_every_other_setting() {
     };
     let history = state.core.chat_history();
     let id = history
-        .create_conversation_with_settings(NewConversation {
+        .create_conversation(NewConversation {
             title: "t".to_owned(),
             model_id: Some(model),
             system_prompt: Some("Be brief.".to_owned()),

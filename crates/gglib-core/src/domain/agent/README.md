@@ -19,7 +19,7 @@ no infrastructure concerns.
 | [`events`] | [`AgentEvent`] (SSE units), [`LlmStreamEvent`] (stream protocol) |
 | [`loop_detection`] | [`LoopDetector`] — repeated tool-call-batch guard (FNV-1a batch signatures) |
 | [`stagnation`] | [`StagnationDetector`] — repeated assistant-text guard |
-| `transcript` | [`to_new_message`] — an agent message as a saved chat row |
+| `transcript` | [`to_new_message`] — an agent message as a saved chat row; [`saved_history`] — a saved chat's prompt and rows as the messages its next turn starts from |
 | `replay` | [`rows_from_frames`] — a reply's saved rows, rebuilt from its logged events, each turn's [`TurnUsage`] saved under [`MADE_KEYS`], its context's size, the messages trimmed and why it stopped among them |
 | `turn_usage` | [`TurnUsage`] — how one model turn was made: model, token counts, times, why it stopped; never text. [`ContextReading`] — how large the answering server's context was and how many earlier messages did not fit, under one spelling for the proxy's usage frame and the `turn_usage` event |
 | [`fnv1a`] | [`fnv1a::fnv1a_64`] — the hash backing both detectors |

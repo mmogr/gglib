@@ -9,7 +9,7 @@ use axum::body::Body;
 use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon::run_path;
-use gglib_core::domain::chat::{MessageRole, NewMessage};
+use gglib_core::domain::chat::{MessageRole, NewConversation, NewMessage};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -36,7 +36,10 @@ async fn put(app: &Router, id: &str, body: Value) -> (StatusCode, Value) {
 async fn conversation(state: &gglib_axum::AppState) -> (i64, i64) {
     let history = state.core.chat_history();
     let id = history
-        .create_conversation("t".into(), None, None)
+        .create_conversation(NewConversation {
+            title: "t".into(),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
     let row = |role, content: &str| NewMessage {

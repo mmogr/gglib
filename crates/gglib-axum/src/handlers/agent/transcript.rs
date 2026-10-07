@@ -64,11 +64,13 @@ fn coded(status: StatusCode, code: &'static str, message: impl Into<String>) -> 
 }
 
 /// Refuse a run on `ran_on` in `conversation_id` when the conversation ran
-/// on another machine: the one its stored model names, or this one when it
-/// stores only a `model_id`. One that names no model takes the run's. Paired
-/// machines are told apart by fingerprint, so a chat of a machine this one
-/// has since replaced is refused as well, rather than sent to whatever has
-/// its id on the new one.
+/// on another machine, as [`Conversation::machine`] reads it: the one its
+/// stored model names, or this one when it stores only a `model_id`. One
+/// that names no model takes the run's. Paired machines are told apart by
+/// fingerprint, so a chat of a machine this one has since replaced is
+/// refused as well, rather than sent to whatever has its id on the new one.
+///
+/// [`Conversation::machine`]: gglib_core::domain::chat::Conversation::machine
 ///
 /// # Errors
 ///
@@ -93,12 +95,7 @@ pub(super) async fn keep_machine(
     let Some(conversation) = conversation else {
         return Ok(());
     };
-    let stored = conversation
-        .settings
-        .and_then(|settings| settings.model)
-        .map(|model| model.machine)
-        .or_else(|| conversation.model_id.map(|_| Machine::Local));
-    let refusal = match (stored, ran_on) {
+    let refusal = match (conversation.machine(), ran_on) {
         (None, _) => return Ok(()),
         (Some(stored), ran_on) if stored == *ran_on => return Ok(()),
         (Some(Machine::Local), _) => {

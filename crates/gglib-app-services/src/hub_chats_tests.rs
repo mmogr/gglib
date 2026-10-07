@@ -3,8 +3,9 @@
 
 use std::sync::Arc;
 
-use gglib_core::domain::chat::{MessageRole, NewMessage};
+use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewConversation, NewMessage};
 use gglib_core::domain::runs::{RunError, RunKind};
+use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::{HubChatsError, HubChatsPort, RunScope};
 use serde_json::json;
 
@@ -20,13 +21,19 @@ async fn the_list_is_newest_first_with_each_chats_live_run() {
     let runs = Arc::new(runs);
     let history = core.chat_history();
     let older = history
-        .create_conversation("older".to_owned(), None, None)
+        .create_conversation(NewConversation {
+            title: "older".to_owned(),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
     // A second apart: `updated_at` has one-second resolution.
     tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
     let newer = history
-        .create_conversation("newer".to_owned(), None, None)
+        .create_conversation(NewConversation {
+            title: "newer".to_owned(),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
     let spec = RunSpec {
@@ -70,7 +77,11 @@ async fn a_chat_names_its_model_when_the_catalogue_has_it() {
     );
     let model_id = core.models().add(model).await.unwrap().id;
     core.chat_history()
-        .create_conversation("t".to_owned(), Some(model_id), None)
+        .create_conversation(NewConversation {
+            title: "t".to_owned(),
+            model_id: Some(model_id),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
     let chats = HubChats::new(Arc::clone(&core), &Arc::new(runs))
@@ -81,13 +92,62 @@ async fn a_chat_names_its_model_when_the_catalogue_has_it() {
     assert_eq!(chats.chats[0].model.as_deref(), Some("qwen3-8b"));
 }
 
+/// A chat saved with its model in its settings and no `model_id`, as the
+/// CLI saves one, is listed with that model when it is this machine's. One
+/// on the paired machine's model names none here, though a model here has
+/// its number.
+#[tokio::test]
+async fn a_chat_saved_with_its_model_in_its_settings_is_listed_with_it() {
+    let core = test_core().await;
+    let (runs, _, _) = registry();
+    let model = gglib_core::domain::NewModel::new(
+        "qwen3-8b".to_owned(),
+        std::path::PathBuf::from("/models/qwen.gguf"),
+        8.0,
+        chrono::Utc::now(),
+    );
+    let id = core.models().add(model).await.unwrap().id;
+    let fingerprint = "0123456789ab".to_owned();
+    for machine in [Machine::Paired { fingerprint }, Machine::Local] {
+        let settings = ConversationSettings {
+            model: Some(ModelRef { machine, id }),
+            ..ConversationSettings::default()
+        };
+        core.chat_history()
+            .create_conversation(NewConversation {
+                title: "t".to_owned(),
+                settings: Some(settings),
+                ..NewConversation::default()
+            })
+            .await
+            .unwrap();
+    }
+    let chats = HubChats::new(Arc::clone(&core), &Arc::new(runs))
+        .list()
+        .await
+        .unwrap();
+    let mut listed: Vec<(i64, Option<i64>, Option<&str>)> = chats
+        .chats
+        .iter()
+        .map(|c| (c.id, c.model_id, c.model.as_deref()))
+        .collect();
+    listed.sort_unstable();
+    let (far, here) = (listed[0], listed[1]);
+    assert_eq!((far.1, far.2), (None, None), "the paired machine's");
+    assert_eq!((here.1, here.2), (Some(id), Some("qwen3-8b")));
+}
+
 #[tokio::test]
 async fn a_chat_opens_with_its_rows_and_their_metadata() {
     let core = test_core().await;
     let (runs, _, _) = registry();
     let history = core.chat_history();
     let id = history
-        .create_conversation("t".to_owned(), None, Some("be brief".to_owned()))
+        .create_conversation(NewConversation {
+            title: "t".to_owned(),
+            system_prompt: Some("be brief".to_owned()),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
     for (role, content, metadata) in [

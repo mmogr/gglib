@@ -36,7 +36,7 @@ async fn switched_off(state: &AppState) -> i64 {
     state
         .core
         .chat_history()
-        .create_conversation_with_settings(NewConversation {
+        .create_conversation(NewConversation {
             title: "t".to_owned(),
             model_id: None,
             system_prompt: None,

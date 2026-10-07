@@ -194,7 +194,7 @@ async fn chat_refuses_to_resume_a_chat_that_holds_an_image_on_a_server_that_cann
     let stored = ctx.app.attachments().ingest(&png(64, 32)).await.unwrap();
     let history = ctx.app.chat_history();
     let conversation_id = history
-        .create_conversation_with_settings(NewConversation {
+        .create_conversation(NewConversation {
             title: "Screenshots".to_owned(),
             model_id: None,
             system_prompt: None,

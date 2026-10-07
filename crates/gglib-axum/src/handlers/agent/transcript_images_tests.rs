@@ -4,6 +4,7 @@
 use axum::http::StatusCode;
 use gglib_core::domain::AttachmentId;
 use gglib_core::domain::agent::AgentMessage;
+use gglib_core::domain::chat::NewConversation;
 
 use super::run_fixture::state;
 use super::transcript::save_user;
@@ -32,7 +33,10 @@ async fn a_user_message_is_saved_with_the_images_it_names() {
     let (_dir, state) = state().await;
     let chats = state.core.chat_history();
     let conversation = chats
-        .create_conversation("c".to_owned(), None, None)
+        .create_conversation(NewConversation {
+            title: "c".to_owned(),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
     let image = state.core.attachments().ingest(&png()).await.unwrap().info;
@@ -52,7 +56,10 @@ async fn a_user_message_naming_an_unknown_image_is_refused_by_code_and_not_saved
     let (_dir, state) = state().await;
     let chats = state.core.chat_history();
     let conversation = chats
-        .create_conversation("c".to_owned(), None, None)
+        .create_conversation(NewConversation {
+            title: "c".to_owned(),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
     let missing = AttachmentId::of(b"never uploaded");

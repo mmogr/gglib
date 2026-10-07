@@ -209,7 +209,7 @@ async fn an_old_row_without_the_field_continues_unprofiled() {
     let id = ctx
         .app
         .chat_history()
-        .create_conversation_with_settings(NewConversation {
+        .create_conversation(NewConversation {
             title: "older".to_owned(),
             model_id: None,
             system_prompt: None,

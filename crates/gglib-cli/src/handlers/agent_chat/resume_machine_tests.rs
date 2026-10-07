@@ -11,15 +11,28 @@ use crate::bootstrap::{CliContext, test_context};
 
 const DESK: &str = "0123456789ab";
 
+/// A stored conversation with these `settings`, and no `model_id`.
+fn row(settings: Option<ConversationSettings>) -> Conversation {
+    Conversation {
+        id: 1,
+        title: "t".to_owned(),
+        model_id: None,
+        system_prompt: None,
+        settings,
+        created_at: String::new(),
+        updated_at: String::new(),
+    }
+}
+
 /// A conversation that stored `machine`'s model 3, shown as `qwen3`, with
 /// `profile`.
-fn saved(machine: Machine, profile: Option<&str>) -> ConversationSettings {
-    ConversationSettings {
+fn saved(machine: Machine, profile: Option<&str>) -> Conversation {
+    row(Some(ConversationSettings {
         model_name: Some("qwen3".to_owned()),
         model: Some(ModelRef { machine, id: 3 }),
         profile: profile.map(str::to_owned),
         ..ConversationSettings::default()
-    }
+    }))
 }
 
 fn desk() -> Machine {
@@ -38,14 +51,14 @@ fn paired_with_desk(fingerprint: &str) -> bool {
 #[test]
 fn a_far_chat_resumes_on_its_machine_without_the_flag() {
     let plain = stored_machine(
-        Some(&saved(desk(), None)),
+        &saved(desk(), None),
         Target::Local,
         false,
         false,
         paired_with_desk,
     );
     let profiled = stored_machine(
-        Some(&saved(desk(), Some("coding"))),
+        &saved(desk(), Some("coding")),
         Target::Remote,
         false,
         false,
@@ -63,13 +76,9 @@ fn a_far_chat_resumes_on_its_machine_without_the_flag() {
 /// refused rather than sent to a model 3 that is some other machine's.
 #[test]
 fn a_far_chat_is_refused_once_paired_with_another_machine() {
-    let refused = stored_machine(
-        Some(&saved(desk(), None)),
-        Target::Remote,
-        false,
-        false,
-        |_| false,
-    )
+    let refused = stored_machine(&saved(desk(), None), Target::Remote, false, false, |_| {
+        false
+    })
     .expect_err("refused");
 
     let text = refused.to_string();
@@ -82,7 +91,7 @@ fn a_far_chat_is_refused_once_paired_with_another_machine() {
 #[test]
 fn a_far_chat_refuses_port() {
     let refused = stored_machine(
-        Some(&saved(desk(), None)),
+        &saved(desk(), None),
         Target::Local,
         true,
         false,
@@ -99,7 +108,7 @@ fn a_far_chat_refuses_port() {
 #[test]
 fn a_local_chat_refuses_remote() {
     let refused = stored_machine(
-        Some(&saved(Machine::Local, None)),
+        &saved(Machine::Local, None),
         Target::Remote,
         false,
         false,
@@ -115,7 +124,7 @@ fn a_local_chat_refuses_remote() {
 #[test]
 fn a_local_chat_resumes_here_by_its_id() {
     let resumed = stored_machine(
-        Some(&saved(Machine::Local, Some("coding"))),
+        &saved(Machine::Local, Some("coding")),
         Target::Local,
         false,
         false,
@@ -129,21 +138,21 @@ fn a_local_chat_resumes_here_by_its_id() {
 /// leave the machine to the flag.
 #[test]
 fn without_a_stored_model_the_flag_decides() {
-    let older = ConversationSettings {
+    let older = row(Some(ConversationSettings {
         model_name: Some("qwen3".to_owned()),
         ..ConversationSettings::default()
-    };
+    }));
     for flag in [Target::Local, Target::Remote] {
         assert_eq!(
-            stored_machine(Some(&older), flag, false, false, paired_with_desk).unwrap(),
+            stored_machine(&older, flag, false, false, paired_with_desk).unwrap(),
             None
         );
         assert_eq!(
-            stored_machine(None, flag, false, false, paired_with_desk).unwrap(),
+            stored_machine(&row(None), flag, false, false, paired_with_desk).unwrap(),
             None
         );
         assert_eq!(
-            stored_machine(Some(&saved(desk(), None)), flag, false, true, |_| false).unwrap(),
+            stored_machine(&saved(desk(), None), flag, false, true, |_| false).unwrap(),
             None,
             "a named model follows the flag, and is not refused"
         );
@@ -160,7 +169,7 @@ fn following_the_stored_machine_sets_the_target_and_the_identifier() {
         ..super::super::tests::chat_args()
     };
 
-    follow_stored_machine(&mut args, Some(&saved(Machine::Local, None)), None)
+    follow_stored_machine(&mut args, &saved(Machine::Local, None), None)
         .expect("a local chat resumes here");
 
     assert_eq!(

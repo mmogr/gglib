@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolResult};
-use gglib_core::domain::chat::Message;
+use gglib_core::domain::chat::{Message, NewConversation};
 use gglib_core::domain::runs::RunInfo;
 use gglib_core::ports::{AgentError, AgentLoopPort, AgentRunOutput, RunScope, RunsPort as _};
 use serde_json::{Value, json};
@@ -190,7 +190,10 @@ pub(super) async fn conversation(state: &AppState) -> i64 {
     state
         .core
         .chat_history()
-        .create_conversation("t".to_owned(), None, None)
+        .create_conversation(NewConversation {
+            title: "t".to_owned(),
+            ..NewConversation::default()
+        })
         .await
         .unwrap()
 }

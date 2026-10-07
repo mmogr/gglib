@@ -36,7 +36,7 @@ pub(super) fn turn(conversation_id: i64, content: &str) -> HubTurn {
 pub(super) async fn chat(state: &AppState, settings: Option<ConversationSettings>) -> i64 {
     let history = state.core.chat_history();
     let id = history
-        .create_conversation_with_settings(NewConversation {
+        .create_conversation(NewConversation {
             title: "t".to_owned(),
             model_id: None,
             system_prompt: Some("  Be brief.  ".to_owned()),
@@ -100,7 +100,10 @@ async fn a_chat_that_names_no_model_is_refused_before_anything_runs() {
     let id = state
         .core
         .chat_history()
-        .create_conversation("t".to_owned(), None, None)
+        .create_conversation(NewConversation {
+            title: "t".to_owned(),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
     let refusal = refused(start(&state, "phone", "d1", turn(id, "hi")).await);

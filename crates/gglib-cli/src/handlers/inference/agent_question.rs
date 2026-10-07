@@ -259,13 +259,8 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
                 .tools(tools.clone(), false)
                 .agent_params(max_iterations, tool_timeout_ms, max_parallel)
                 .build();
-        match Conversation::create(
-            ctx.app.chat_history(),
-            Some(system_prompt),
-            None,
-            Some(settings),
-        )
-        .await
+        match Conversation::create(ctx.app.chat_history(), Some(system_prompt), Some(settings))
+            .await
         {
             Ok(mut conv) => {
                 conv.save_new(history).await;
