@@ -103,8 +103,7 @@ model: string | null,
  * Conditional by construction: a template that does not read
  * `reasoning_effort` ignores it in perfect silence, and stage 5b of the
  * request pipeline deletes the key outright on a model whose observed caps
- * say so (ADR 0007 decision 3). Unlike `/api/chat`, this path *does* run
- * the pipeline, so that gate is in force here.
+ * say so (ADR 0007 decision 3).
  *
  * No `none` level exists: omitting the field is what leaves the template's
  * own default in place.

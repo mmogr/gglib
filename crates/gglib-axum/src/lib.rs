@@ -6,9 +6,6 @@ pub(crate) mod access;
 pub(crate) mod bootstrap;
 #[allow(
     clippy::option_option,
-    clippy::ref_option,
-    clippy::struct_field_names,
-    clippy::too_many_lines,
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod chat_api;

@@ -26,7 +26,7 @@
 //! This module provides the core `InferenceConfig` type that is reused across:
 //! - Per-model defaults (`Model.inference_defaults`)
 //! - Global settings (`Settings.inference_defaults`)
-//! - Request-level overrides (flattened in `ChatProxyRequest`)
+//! - Request-level overrides (a run's reasoning controls, a chat title's cap)
 //! - `gglib proxy` — per-request injection into OpenAI-format request bodies
 //! - `gglib chat` / `gglib q` — hierarchy resolution for the agentic loop
 //!

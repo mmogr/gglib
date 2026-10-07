@@ -3,7 +3,8 @@
  * Handles conversations and messages for the chat feature.
  */
 
-import { get, post, put, del, getAuthenticatedFetchConfig } from './client';
+import { get, post, put, del } from './client';
+import { TransportError } from '../errors';
 import { sanitizeMessagesForLlamaServer } from '../sanitizeMessages';
 import { parseGeneratedTitle } from '../parseTitleResponse';
 import type { ConversationId, MessageId } from '../types/ids';
@@ -14,6 +15,7 @@ import type {
   GenerateTitleParams,
 } from '../types/chat';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../types/chat';
+import type { ChatTitleRequest } from '../../../types/generated/ChatTitleRequest';
 import type { CreateConversationRequest } from '../../../types/generated/CreateConversationRequest';
 import type { UpdateConversationRequest } from '../../../types/generated/UpdateConversationRequest';
 
@@ -92,9 +94,24 @@ export async function deleteMessage(id: MessageId): Promise<number> {
 const IMAGE_CHAT_TITLE = 'Image chat';
 
 /**
+ * What a failed title request is shown as. A refusal is said in the title's
+ * own sentence, which names the status and not the daemon's reason; anything
+ * else is passed on as it came.
+ */
+function titleFailure(error: unknown): unknown {
+  const statusText = TransportError.isTransportError(error)
+    ? (error.details as { statusText?: unknown } | undefined)?.statusText
+    : undefined;
+  return typeof statusText === 'string' ? new Error(`Title generation failed: ${statusText}`) : error;
+}
+
+/**
  * Generate a chat title using the served LLM. A chat whose user messages
  * are images with no text gives the model nothing to name it by (it is sent
  * the text alone), so it is titled `IMAGE_CHAT_TITLE` without asking.
+ *
+ * The daemon answers with the model's text as it gave it, empty when it gave
+ * none.
  */
 export async function generateChatTitle(params: GenerateTitleParams): Promise<string> {
   const { serverPort, messages, prompt = DEFAULT_TITLE_GENERATION_PROMPT } = params;
@@ -102,34 +119,15 @@ export async function generateChatTitle(params: GenerateTitleParams): Promise<st
   if (asked.length > 0 && asked.every((m) => !m.content.trim() && (m.images?.length ?? 0) > 0)) {
     return IMAGE_CHAT_TITLE;
   }
-  
-  const sanitizedMessages = sanitizeMessagesForLlamaServer(messages);
-  const llamaMessages = [
-    ...sanitizedMessages,
-    {
-      role: 'user' as const,
-      content: prompt,
-    },
-  ];
 
-  const { baseUrl, headers: authHeaders } = await getAuthenticatedFetchConfig();
-  const response = await fetch(`${baseUrl}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders },
-    body: JSON.stringify({
-      port: serverPort,
-      messages: llamaMessages,
-      temperature: 0.7,
-      max_tokens: 20,
-      stream: false,
-    }),
+  const body: ChatTitleRequest = {
+    port: serverPort,
+    messages: [...sanitizeMessagesForLlamaServer(messages), { role: 'user', content: prompt }],
+    temperature: 0.7,
+    max_tokens: 20,
+  };
+  const rawTitle = await post<string>('/api/chat', body).catch((error: unknown) => {
+    throw titleFailure(error);
   });
-
-  if (!response.ok) {
-    throw new Error(`Title generation failed: ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  const rawTitle = data.choices?.[0]?.message?.content || 'New Chat';
-  return parseGeneratedTitle(rawTitle);
+  return parseGeneratedTitle(rawTitle || 'New Chat');
 }

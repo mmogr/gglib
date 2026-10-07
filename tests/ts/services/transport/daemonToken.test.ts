@@ -153,7 +153,8 @@ describe('the daemon token from the link', () => {
       expect(authOf(fetchMock, 0)).toBe('Bearer old-token');
       expect(authOf(fetchMock, 1)).toBe('Bearer new-token');
       expect(String(fetchMock.mock.calls[1][0])).toBe('http://127.0.0.1:9887/api/models');
-      expect((await api.getAuthenticatedFetchConfig()).headers).toEqual({ Authorization: 'Bearer new-token' });
+      await api.apiFetch('/api/events');
+      expect(authOf(fetchMock, 2)).toBe('Bearer new-token');
       expect(prompt).not.toHaveBeenCalled();
     });
 
@@ -219,7 +220,8 @@ describe('the daemon token from the link', () => {
 
       await renewAfterRefusal(new TransportError('UNAUTHORIZED', SENTENCE, { status: 401, type: 'DAEMON_TOKEN_REQUIRED' }));
       expect(invoke).toHaveBeenCalledTimes(2);
-      expect((await api.getAuthenticatedFetchConfig()).headers).toEqual({ Authorization: 'Bearer new-token' });
+      await api.apiFetch('/api/events');
+      expect(authOf(fetchMock, fetchMock.mock.calls.length - 1)).toBe('Bearer new-token');
     });
 
     it('renews the server log stream before it reopens after a 401', async () => {

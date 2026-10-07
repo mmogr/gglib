@@ -102,7 +102,7 @@ const { streamSse } = await import('../transport/api/sse');
 const { get } = await import(`../transport/api/models/local`);
 EOF
 cat > "$SELFTEST_DIR/known_good.ts" <<'EOF'
-import { get, getAuthenticatedFetchConfig } from '../transport/api/client';
+import { get, apiFetch } from '../transport/api/client';
 import type { DashboardSnapshot } from '../transport/types/dashboard';
 import type { ProxyStatus } from '../transport/types';
 import { appLogger } from '../platform';

@@ -15,7 +15,6 @@ crates/gglib-app-services/src/sampling_explain_tests.rs 757
 crates/gglib-app-services/src/servers.rs 761
 crates/gglib-app-services/src/setup.rs 351
 crates/gglib-app-services/src/types.rs 642
-crates/gglib-axum/src/chat_api.rs 733
 crates/gglib-axum/src/routes.rs 470
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 344

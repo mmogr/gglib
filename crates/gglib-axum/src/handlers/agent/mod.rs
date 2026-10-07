@@ -129,7 +129,7 @@ mod run_busy_tests;
 #[path = "run_end_tests.rs"]
 mod run_end_tests;
 #[cfg(test)]
-mod run_fixture;
+pub(in crate::handlers) mod run_fixture;
 #[cfg(test)]
 #[path = "run_hold_tests.rs"]
 mod run_hold_tests;

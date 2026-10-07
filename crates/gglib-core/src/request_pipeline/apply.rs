@@ -66,15 +66,15 @@
 //! preserves them by construction. The adapter builds its body with `json!` and
 //! already holds a `Value`, so this is also the cheaper side for it.
 //!
-//! # One pipeline, two callers
+//! # One pipeline, three callers
 //!
-//! Outside tests, two paths call [`apply`]: the proxy's forwarding path
-//! (`gglib-proxy`'s `forward.rs`) and the runtime's completion adapter
-//! (`gglib-runtime`'s `llm_completion`). Neither runs these stages in an order
-//! of its own. `/api/chat` in `gglib-axum` does not call it; see the note in
-//! its handler, `proxy_chat` in `chat_api.rs`. Truncation measures the
-//! serialized `Value` and returns a domain error rather than an `axum`
-//! response, so the proxy needs no truncation pass of its own.
+//! Outside tests, three paths call [`apply`]: the proxy's forwarding path
+//! (`gglib-proxy`'s `forward.rs`), the runtime's completion adapter
+//! (`gglib-runtime`'s `llm_completion`) and the daemon's request for a chat's
+//! title (`gglib-axum`'s `handlers/chat_title.rs`). None runs these stages in
+//! an order of its own. Truncation measures the serialized `Value` and
+//! returns a domain error rather than an `axum` response, so the proxy needs
+//! no truncation pass of its own.
 
 use serde_json::Value;
 

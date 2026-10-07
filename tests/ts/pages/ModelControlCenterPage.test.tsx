@@ -86,7 +86,6 @@ vi.mock('../../../src/services/transport/api/client', () => ({
           ? null
           : [],
   ),
-  getAuthenticatedFetchConfig: vi.fn(async () => ({ baseUrl: '', headers: {} })),
 }));
 vi.mock('../../../src/services/remoteEvents', () => ({
   refreshRemoteStatus: vi.fn(),

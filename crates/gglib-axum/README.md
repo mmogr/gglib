@@ -65,7 +65,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`daemon/`** — `run_daemon`, which `gglib daemon run` calls: the one process per machine that owns llama-server, and its singleton lock
 - **`bootstrap.rs`** — Dependency injection and service wiring
 - **`config.rs`** — `ServerConfig`: what the server is given
-- **`chat_api.rs`** — Chat completion API endpoints and streaming
+- **`chat_api.rs`** — Conversations and their messages
 - **`error.rs`** — HTTP error types and JSON error responses
 - **`routes.rs`** — Route definitions and handler mounting
 - **`sse.rs`** — Server-Sent Events utilities for streaming
@@ -73,6 +73,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`dto/`** — Request/response DTOs for API endpoints
 - **`handlers/model/`** — Model CRUD, verification, downloads, `HuggingFace` discovery handlers
 - **`handlers/config/`** — Settings and system setup handlers
+- **`handlers/chat_title.rs`** — A chat's title, asked of the model the chat runs on
 
 ## Endpoints
 
@@ -98,6 +99,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `POST` | `/api/models/:id/verify` | Verify model integrity (streams progress via SSE) |
 | `GET` | `/api/models/:id/updates` | Check for `HuggingFace` updates |
 | `POST` | `/api/models/:id/repair` | Re-download corrupt shards |
+| `POST` | `/api/chat` | A chat's title: the text the model on a port answers a title request with (messages, a temperature and a token cap, and no other key) |
 | `POST` | `/api/attachments` | Store an image, the raw body (a PNG or a JPEG of at most 8 MiB), and answer its id, type, size and estimated prompt tokens |
 | `GET` | `/api/attachments/:id` | A stored image's bytes, as they were sent |
 | `GET` | `/api/remote/models` | The paired machine's models, read through the tunnel, with what may be done to them there |

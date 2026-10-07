@@ -308,43 +308,26 @@ export async function del<T>(path: string, body?: unknown): Promise<T> {
 }
 
 /**
- * This session's base URL and auth headers, once the client has resolved
- * them: the desktop app asks Tauri where the daemon is once, not per call,
- * and a call made before any other still gets the token.
- *
- * `apiFetch` is built on this and is what a caller wants. It is exported for
- * `generateChatTitle` alone, whose own sentence for a refusal `apiFetch`
- * would replace with the daemon's.
- */
-export async function getAuthenticatedFetchConfig(): Promise<{
-  baseUrl: string;
-  headers: Record<string, string>;
-}> {
-  await getClient();
-  return {
-    baseUrl: apiBaseUrl,
-    headers: apiAuthToken ? { Authorization: `Bearer ${apiAuthToken}` } : {},
-  };
-}
-
-/**
  * `fetch` against this session's daemon, for what `request` cannot carry: a
  * stream, a body that is not JSON, a reply that is not JSON.
  *
  * `path` is joined to the daemon's base URL and the session's credential is
- * added, over any `Authorization` the caller gave. A refusal throws the
- * `TransportError` `readData` builds from it, so the response returned is one
- * the daemon accepted. Nothing is retried: a caller that reconnects renews
- * the credential itself (`renew.ts`).
+ * added, over any `Authorization` the caller gave. Both are the client's,
+ * once it has resolved them: the desktop app asks Tauri where the daemon is
+ * once, not per call, and a call made before any other still gets the token.
+ * A refusal throws the `TransportError` `readData` builds from it, so the
+ * response returned is one the daemon accepted. Nothing is retried: a caller
+ * that reconnects renews the credential itself (`renew.ts`).
  */
 export async function apiFetch(
   path: string,
   init: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {},
 ): Promise<Response> {
-  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
-  const response = await fetch(`${baseUrl}${path}`, {
+  await getClient();
+  const credential: Record<string, string> = apiAuthToken ? { Authorization: `Bearer ${apiAuthToken}` } : {};
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
-    headers: { ...init.headers, ...headers },
+    headers: { ...init.headers, ...credential },
   });
   if (!response.ok) await readData(response);
   return response;

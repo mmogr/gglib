@@ -1,5 +1,5 @@
-//! A scripted agent loop and a daemon context of its own, for the agent
-//! run's tests.
+//! A scripted agent loop for the agent run's tests, and a daemon context of
+//! its own for any handler's.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -77,7 +77,7 @@ impl AgentLoopPort for Scripted {
     }
 }
 
-pub(super) async fn state() -> (tempfile::TempDir, AppState) {
+pub(in crate::handlers) async fn state() -> (tempfile::TempDir, AppState) {
     let dir = tempfile::tempdir().unwrap();
     let state = crate::bootstrap::bootstrap(crate::ServerConfig {
         base_port: Some(19_200),

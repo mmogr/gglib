@@ -102,7 +102,7 @@ describe('generateChatTitle', () => {
   });
 
   it('asks the model when a question has text, images or not', async () => {
-    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: 'Cat breeds' } }] })));
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify('Cat breeds')));
 
     const title = await generateChatTitle({ serverPort: 9000, messages: [row('user', 'what breed?', 1), row('assistant', 'A tabby.')] });
 
