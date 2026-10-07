@@ -150,7 +150,7 @@ async fn events_endpoint_not_intercepted_by_spa_fallback() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let state = test_state(CorsConfig::AllowAll).await;
+    let state = test_state().await;
 
     // Create a temp directory with an index.html (SPA fallback target)
     let temp_dir = TempDir::new().unwrap();
@@ -221,7 +221,7 @@ async fn spa_fallback_returns_index_html() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let state = test_state(CorsConfig::AllowAll).await;
+    let state = test_state().await;
 
     // Create a temp directory with an index.html
     let temp_dir = TempDir::new().unwrap();
@@ -595,7 +595,7 @@ async fn model_get_by_id_returns_json_not_html() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let state = test_state(CorsConfig::AllowAll).await;
+    let state = test_state().await;
 
     // Create a temp directory with an index.html (SPA fallback target)
     let temp_dir = TempDir::new().unwrap();
@@ -640,7 +640,7 @@ async fn model_tags_by_id_returns_json_not_html() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let state = test_state(CorsConfig::AllowAll).await;
+    let state = test_state().await;
 
     let temp_dir = TempDir::new().unwrap();
     let index_path = temp_dir.path().join("index.html");
@@ -683,7 +683,7 @@ async fn a_path_param_route_returns_json_not_html() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let state = test_state(CorsConfig::AllowAll).await;
+    let state = test_state().await;
 
     let temp_dir = TempDir::new().unwrap();
     let index_path = temp_dir.path().join("index.html");

@@ -4,8 +4,8 @@
 //!
 //! Before this, proxy-level settings ([`ProxyConfig`]) and per-model launch
 //! parameters ([`ServerConfigOptions`]) were two unrelated bags of options with
-//! no enforced precedence between them. Fields such as `mlock`, `gpu_layers`
-//! and `cache_ram_mb` were direct pass-throughs: whichever surface happened to
+//! no enforced precedence between them. Fields such as `mlock` and
+//! `cache_ram_mb` were direct pass-throughs: whichever surface happened to
 //! populate them won, and a surface that forgot silently got llama-server's
 //! default instead of gglib's.
 //!
@@ -72,7 +72,8 @@ pub struct GlobalDefaults {
     /// Byte budget for the on-disk slot eviction sweep.
     pub disk_budget: DiskBudget,
     /// Operator-supplied sampling overrides for this process
-    /// (`gglib proxy --temperature …`). Sits below the explicit tier.
+    /// (`gglib serve --temperature …`). No launch option: it reaches the
+    /// proxy through [`UnifiedServerConfig::to_proxy_config`].
     pub inference_override: Option<InferenceConfig>,
     /// Bearer token demanded of clients (`--api-key` / `GGLIB_API_KEY`).
     /// `None` defers to the stored setting, then to generating one for a
@@ -167,7 +168,6 @@ impl UnifiedServerConfig {
         let tier3 = ServerConfigOptions {
             global_default_ctx: self.globals.default_ctx,
             slot_save_path: self.resolved_slot_dir(),
-            inference_params: self.globals.inference_override.clone(),
             ..Default::default()
         };
 
@@ -272,49 +272,6 @@ mod tests {
     // ---------------------------------------------------------------
     // Tier 1 over tier 3, per field
     // ---------------------------------------------------------------
-
-    #[test]
-    fn explicit_inference_params_beat_global_override() {
-        let global = InferenceConfig {
-            temperature: Some(0.2),
-            ..Default::default()
-        };
-        let explicit = InferenceConfig {
-            temperature: Some(0.9),
-            ..Default::default()
-        };
-
-        let mut cfg = bare(GlobalDefaults {
-            inference_override: Some(global),
-            ..Default::default()
-        });
-        cfg.explicit.inference_params = Some(explicit);
-
-        assert_eq!(
-            cfg.resolved_options()
-                .inference_params
-                .and_then(|c| c.temperature),
-            Some(0.9)
-        );
-    }
-
-    #[test]
-    fn global_inference_override_applies_when_no_explicit() {
-        let cfg = bare(GlobalDefaults {
-            inference_override: Some(InferenceConfig {
-                temperature: Some(0.2),
-                ..Default::default()
-            }),
-            ..Default::default()
-        });
-
-        assert_eq!(
-            cfg.resolved_options()
-                .inference_params
-                .and_then(|c| c.temperature),
-            Some(0.2)
-        );
-    }
 
     /// jinja, reasoning format and MTP have no tier-3 source — they are tier 1
     /// over tag-driven tier 2, and the tag half is resolved downstream. All

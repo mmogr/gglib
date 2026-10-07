@@ -1,7 +1,8 @@
 //! Event emitter trait for cross-crate event broadcasting.
 //!
 //! This module defines the abstraction for emitting application events.
-//! Implementations handle transport details (channels, Tauri events, SSE, etc.).
+//! Implementations handle the transport: the daemon's sends each event to its
+//! SSE subscribers.
 
 use crate::events::AppEvent;
 
@@ -12,8 +13,9 @@ use crate::events::AppEvent;
 ///
 /// # Implementations
 ///
-/// - `NoopEmitter` - For tests and CLI contexts that don't need events
-/// - Adapter-specific implementations (Tauri, Axum SSE, etc.)
+/// - `NoopEmitter` - For tests and for the CLI, which has no listener
+/// - `SseBroadcaster` in `gglib-axum` - The daemon's, which sends each event
+///   to its SSE subscribers
 ///
 /// # Example
 ///

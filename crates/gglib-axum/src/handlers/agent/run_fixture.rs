@@ -80,13 +80,9 @@ impl AgentLoopPort for Scripted {
 pub(super) async fn state() -> (tempfile::TempDir, AppState) {
     let dir = tempfile::tempdir().unwrap();
     let state = crate::bootstrap::bootstrap(crate::ServerConfig {
-        host: "127.0.0.1".into(),
-        port: 0,
         base_port: Some(19_200),
         llama_server_path: "/nonexistent/llama-server".into(),
         max_concurrent_agent_loops: 1,
-        static_dir: None,
-        cors: gglib_core::CorsConfig::AllowAll,
         db_path: Some(dir.path().join("gglib.db")),
         device_keys_path: Some(dir.path().join("remote_devices")),
     })

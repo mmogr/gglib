@@ -32,7 +32,6 @@ impl Write for Captured {
 async fn resolved_base_port(saved: Option<u16>, base_port: Option<u16>) -> String {
     let dir = tempfile::tempdir().unwrap();
     let config = ServerConfig {
-        port: 0,
         base_port,
         llama_server_path: "/nonexistent/llama-server".into(),
         db_path: Some(dir.path().join("gglib.db")),

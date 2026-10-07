@@ -132,7 +132,6 @@ pub fn plan_pinned_launch(
             mlock: request.mlock.then_some(true),
             jinja: request.jinja,
             reasoning_format: request.reasoning_format.clone(),
-            inference_params: Some(inference.clone()),
             // As sent, never the resolution above: `Some(0)` is the only way
             // to say "off", and a `None` in its place lets the tag turn MTP
             // back on at spawn.

@@ -202,11 +202,6 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
         cmd.arg("-c").arg(ctx.to_string());
     }
 
-    // Add GPU layers if specified
-    if let Some(layers) = config.gpu_layers {
-        cmd.arg("-ngl").arg(layers.to_string());
-    }
-
     // Jinja. Both flags are emitted, and the third state emits neither.
     //
     // `--no-jinja` is not redundant with saying nothing: llama-server starts
@@ -317,11 +312,6 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
         cmd.arg(arg);
     }
 
-    // Add extra arguments
-    for arg in &config.extra_args {
-        cmd.arg(arg);
-    }
-
     cmd
 }
 
@@ -370,13 +360,10 @@ mod tests {
             base_port: 9000,
             port: None,
             context_size: None,
-            gpu_layers: None,
             jinja: JinjaMode::Defer,
             reasoning_format: None,
             spec_draft_n_max: None,
             spec_draft_p_min: None,
-            inference_config: None,
-            extra_args: vec![],
             slot_save_path: None,
             cache_ram_mb: None,
             cache_reuse: None,
@@ -710,3 +697,7 @@ mod tests {
 #[cfg(test)]
 #[path = "command_projector_tests.rs"]
 mod projector_tests;
+
+#[cfg(test)]
+#[path = "command_argv_tests.rs"]
+mod argv_tests;

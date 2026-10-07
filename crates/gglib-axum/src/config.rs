@@ -8,16 +8,13 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use gglib_core::CorsConfig;
 use gglib_core::paths::llama_server_path;
 
-/// Server configuration for the Axum adapter.
+/// What [`bootstrap`](crate::bootstrap::bootstrap) builds the adapter's
+/// context from. Where the daemon binds and the CORS policy of its router are
+/// set by [`DaemonOptions`](crate::DaemonOptions).
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
-    /// Host to bind the HTTP server.
-    pub host: String,
-    /// Port for the HTTP server.
-    pub port: u16,
     /// Base port for llama-server instances, when the caller names one.
     ///
     /// `None` leaves it to the saved `llama_base_port` setting, then the
@@ -34,10 +31,6 @@ pub struct ServerConfig {
     /// of its SSE stream.  When all permits are taken, new requests receive
     /// `429 Too Many Requests` immediately rather than queuing.
     pub max_concurrent_agent_loops: usize,
-    /// Optional path to static assets for SPA serving.
-    pub static_dir: Option<PathBuf>,
-    /// CORS configuration.
-    pub cors: CorsConfig,
     /// Database file to open. `None` resolves through [`database_path`](gglib_core::paths::database_path).
     ///
     /// Naming a path lets a caller run against a database of its own, which
@@ -58,13 +51,9 @@ impl ServerConfig {
     /// Create config with default paths.
     pub fn with_defaults() -> Result<Self> {
         Ok(Self {
-            host: "127.0.0.1".into(),
-            port: 9887,
             base_port: None,
             llama_server_path: llama_server_path()?,
             max_concurrent_agent_loops: 4,
-            static_dir: None,
-            cors: CorsConfig::default(),
             db_path: None,
             device_keys_path: None,
         })

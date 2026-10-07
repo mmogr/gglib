@@ -108,17 +108,13 @@ fn isolated_paths() -> (PathBuf, PathBuf) {
 
 /// Config for a context that binds nothing and launches nothing, resolving
 /// in this binary's own data root.
-fn test_config(cors: CorsConfig) -> ServerConfig {
+fn test_config() -> ServerConfig {
     gglib_core::paths::isolate_data_root();
     let (db_path, device_keys_path) = isolated_paths();
     ServerConfig {
-        host: "127.0.0.1".into(),
-        port: 0,
         base_port: Some(TEST_BASE_PORT),
         llama_server_path: "/nonexistent/llama-server".into(),
         max_concurrent_agent_loops: 1,
-        static_dir: None,
-        cors,
         db_path: Some(db_path),
         device_keys_path: Some(device_keys_path),
     }
@@ -131,8 +127,8 @@ fn test_config(cors: CorsConfig) -> ServerConfig {
 /// If bootstrap fails. That is the point, and it is #842's convention: a
 /// route-contract test that passes silently is the failure mode it exists to
 /// prevent, since #834 shipped a deleted route through a fully green suite.
-pub(crate) async fn test_state(cors: CorsConfig) -> Arc<AxumContext> {
-    let ctx = bootstrap(test_config(cors))
+pub(crate) async fn test_state() -> Arc<AxumContext> {
+    let ctx = bootstrap(test_config())
         .await
         .expect("bootstrap an isolated test context");
 
@@ -160,7 +156,7 @@ pub(crate) fn test_access() -> Arc<DaemonAccess> {
 
 /// [`test_state`] plus the router over it, for tests that assert on both.
 pub(crate) async fn test_state_and_app(cors: CorsConfig) -> (Arc<AxumContext>, Router) {
-    let state = test_state(cors.clone()).await;
+    let state = test_state().await;
     let router = create_router(Arc::clone(&state), &cors, test_access());
     (state, router)
 }
@@ -185,7 +181,7 @@ pub(crate) async fn test_state_and_app_with_access(
     cors: CorsConfig,
     access: DaemonAccess,
 ) -> (Arc<AxumContext>, Router) {
-    let state = test_state(cors.clone()).await;
+    let state = test_state().await;
     let router = create_router(Arc::clone(&state), &cors, Arc::new(access));
     (state, router)
 }

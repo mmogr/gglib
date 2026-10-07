@@ -133,9 +133,6 @@ impl DaemonAccess {
     /// undo it.
     ///
     /// So a keyless daemon gets a policy that names no key, permanently.
-    /// [`crate::bootstrap::start_server`] builds its access the same way and is
-    /// loopback-only by design; anything reaching this machine from another one
-    /// goes through the tunnel, which is guarded at the proxy.
     #[must_use]
     #[allow(
         clippy::option_if_let_else,

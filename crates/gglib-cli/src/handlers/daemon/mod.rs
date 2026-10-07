@@ -25,7 +25,6 @@ pub(crate) async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<(
             host: "0.0.0.0".into(),
             cors: CorsConfig::AllowAll,
             allowed_hosts,
-            ..DaemonOptions::default()
         }
     } else {
         DaemonOptions {

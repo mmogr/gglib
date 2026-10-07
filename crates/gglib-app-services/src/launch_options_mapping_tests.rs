@@ -79,9 +79,10 @@ fn launched_draft_count(model: &Model, options: &ServerConfigOptions) -> Option<
     .spec_draft_n_max
 }
 
-/// Each field of a request reaches its option as it was sent, a pin's options
-/// and a bare start's are the same options, and no option a request cannot
-/// name is set beside them.
+/// Each field of a request that is a launch option reaches it as it was sent,
+/// a pin's options and a bare start's are the same options, and no option a
+/// request cannot name is set beside them. A request's sampling is no launch
+/// option and sets none.
 ///
 /// The destructuring is exhaustive on purpose: an option added to
 /// `ServerConfigOptions` fails to compile here until it is given a row.
@@ -127,7 +128,6 @@ fn a_request_reaches_its_options_as_sent_on_a_pin_and_on_a_bare_start() {
             cache_reuse,
             cache_type_k,
             cache_type_v,
-            inference_params,
             mlock,
         } = pin.pinned.launch_overrides.clone();
 
@@ -138,7 +138,6 @@ fn a_request_reaches_its_options_as_sent_on_a_pin_and_on_a_bare_start() {
         assert_eq!(mtp_draft_n_max, request.mtp_draft_n_max, "{request:?}");
         assert_eq!(mtp_draft_p_min, request.mtp_draft_p_min, "{request:?}");
         assert_eq!(mlock, request.mlock.then_some(true), "{request:?}");
-        assert_eq!(inference_params.as_ref(), Some(&pin.inference));
 
         let own_context = model
             .server_defaults

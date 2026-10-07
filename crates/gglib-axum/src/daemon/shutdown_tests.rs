@@ -51,13 +51,9 @@ async fn teardown_writes_what_the_loop_guard_recorded() {
     let db = dir.path().join("gglib.db");
     let state: AppState = std::sync::Arc::new(
         crate::bootstrap::bootstrap(crate::ServerConfig {
-            host: "127.0.0.1".into(),
-            port: 0,
             base_port: Some(19_000),
             llama_server_path: "/nonexistent/llama-server".into(),
             max_concurrent_agent_loops: 1,
-            static_dir: None,
-            cors: gglib_core::CorsConfig::AllowAll,
             db_path: Some(db.clone()),
             device_keys_path: Some(dir.path().join("remote_devices")),
         })
@@ -144,13 +140,9 @@ async fn teardown_drops_every_run() {
     let dir = tempfile::tempdir().unwrap();
     let state: AppState = std::sync::Arc::new(
         crate::bootstrap::bootstrap(crate::ServerConfig {
-            host: "127.0.0.1".into(),
-            port: 0,
             base_port: Some(19_100),
             llama_server_path: "/nonexistent/llama-server".into(),
             max_concurrent_agent_loops: 1,
-            static_dir: None,
-            cors: gglib_core::CorsConfig::AllowAll,
             db_path: Some(dir.path().join("gglib.db")),
             device_keys_path: Some(dir.path().join("remote_devices")),
         })
@@ -198,13 +190,9 @@ async fn teardown_waits_for_the_runs_ends_but_never_past_its_bound() {
     let dir = tempfile::tempdir().unwrap();
     let state: AppState = std::sync::Arc::new(
         crate::bootstrap::bootstrap(crate::ServerConfig {
-            host: "127.0.0.1".into(),
-            port: 0,
             base_port: Some(19_300),
             llama_server_path: "/nonexistent/llama-server".into(),
             max_concurrent_agent_loops: 1,
-            static_dir: None,
-            cors: gglib_core::CorsConfig::AllowAll,
             db_path: Some(dir.path().join("gglib.db")),
             device_keys_path: Some(dir.path().join("remote_devices")),
         })

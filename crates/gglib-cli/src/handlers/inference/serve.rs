@@ -201,10 +201,9 @@ async fn serve_here(
             slot_dir: proxy_config.slot_dir,
             pinned: Some(plan.pinned),
             cache_disk_gb: cache.cache_disk_gb,
-            // Sampling rides the proxy-wide override, not the pinned model's
-            // launch options: those write to `ServerConfig::inference_config`,
-            // which is documented as read by nobody, so a sampling flag sent
-            // that way would be resolved, printed, and discarded.
+            // Sampling rides the proxy-wide override. The pinned model's
+            // launch options carry none: gglib passes llama-server no sampler
+            // flag (ADR 0003/0004).
             inference_override: proxy_config.inference_override.clone(),
             // The profile is carried by name: the proxy re-reads its list per
             // request, so an edit takes effect without restarting this endpoint.

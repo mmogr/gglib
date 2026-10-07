@@ -1,7 +1,8 @@
 //! Integration tests for `CorsConfig::LocalOnly` behavior.
 //!
 //! Verifies that the `LocalOnly` CORS policy correctly accepts localhost origins
-//! and rejects remote origins, and that `ServerConfig` defaults are correct.
+//! and rejects remote origins, and that the daemon's defaults bind loopback and
+//! leave the database path to resolve.
 
 mod common;
 
@@ -10,7 +11,7 @@ use tower::ServiceExt;
 
 use common::harness::test_app;
 use common::origin::authed;
-use gglib_axum::ServerConfig;
+use gglib_axum::{DaemonOptions, ServerConfig};
 use gglib_core::CorsConfig;
 
 #[tokio::test]
@@ -110,15 +111,14 @@ async fn local_only_allows_ipv6_localhost() {
 }
 
 #[tokio::test]
-async fn server_config_defaults_are_local_only() {
-    let config = ServerConfig::with_defaults().expect("defaults should build");
+async fn the_daemons_defaults_bind_loopback_and_leave_the_database_path_to_resolve() {
+    assert_eq!(DaemonOptions::default().host, "127.0.0.1");
 
-    assert_eq!(config.host, "127.0.0.1", "Default host should be 127.0.0.1");
-    assert!(matches!(config.cors, CorsConfig::LocalOnly));
+    let config = ServerConfig::with_defaults().expect("defaults should build");
 
     // The production arm of `db_path`. Every other test in this crate passes
     // `Some`, so without this nothing asserts that the daemon — which builds
-    // its config by spreading `with_defaults()` — still resolves through
+    // its config from `with_defaults()` — still resolves through
     // `database_path()` rather than somewhere a test chose.
     assert!(
         config.db_path.is_none(),

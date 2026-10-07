@@ -186,10 +186,9 @@ GGLIB_DISABLE_MTP=1 gglib proxy
 ## System-tag protection
 
 Auto-detected tags are protected as system tags: the tag-removal service path
-rejects any attempt to remove a `format:*` tag, and admin operations go through
-its `_force` variant. There is no CLI subcommand for removing a tag — tags are
-edited through the model inspector in the GUI and the HTTP API
-(`DELETE /api/models/{id}/tags/{tag}`). User-curated tags outside the
+rejects any attempt to remove a `format:*` tag. There is no CLI subcommand for
+removing a tag — tags are edited through the model inspector in the GUI and the
+HTTP API (`DELETE /api/models/{id}/tags/{tag}`). User-curated tags outside the
 auto-generated namespace are never touched by detection or retagging.
 
 ## Retagging an existing catalog

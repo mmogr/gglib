@@ -27,7 +27,7 @@ use gglib_core::CorsConfig;
 /// guards the same class of bug on the directory-backed router.
 #[tokio::test]
 async fn embedded_router_does_not_swallow_api_paths() {
-    let state = test_state(CorsConfig::AllowAll).await;
+    let state = test_state().await;
     let app = gglib_axum::create_embedded_spa_router(
         Arc::clone(&state),
         &CorsConfig::AllowAll,
@@ -70,7 +70,7 @@ async fn embedded_router_does_not_swallow_api_paths() {
 /// dashboard at all. That ordering was asserted only in a comment.
 #[tokio::test]
 async fn the_host_guard_covers_embedded_assets() {
-    let state = test_state(CorsConfig::AllowAll).await;
+    let state = test_state().await;
     let app = gglib_axum::create_embedded_spa_router(
         Arc::clone(&state),
         &CorsConfig::AllowAll,

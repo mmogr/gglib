@@ -378,8 +378,7 @@ impl ModelService {
     ///
     /// If the tag doesn't exist on the model, this is a no-op. System tags
     /// (see [`crate::domain::is_system_tag`]) are protected and cannot be
-    /// removed through this API — use [`Self::remove_tag_force`] for
-    /// admin/debug paths that intentionally need to drop them.
+    /// removed through this API.
     pub async fn remove_tag(&self, model_id: i64, tag: &str) -> Result<(), CoreError> {
         if crate::domain::is_system_tag(tag) {
             return Err(CoreError::Validation(format!(
@@ -389,13 +388,9 @@ impl ModelService {
         self.remove_tag_force(model_id, tag).await
     }
 
-    /// Force-remove a tag from a model, including system tags.
-    ///
-    /// Bypasses the system-tag protection enforced by [`Self::remove_tag`].
-    /// Intended for admin/debug paths (e.g. the `gglib model retag --full`
-    /// rebuild) where the caller intentionally needs to drop a `format:*`
-    /// tag before re-detecting capabilities.
-    pub async fn remove_tag_force(&self, model_id: i64, tag: &str) -> Result<(), CoreError> {
+    /// Remove a tag from a model, a system tag included: what
+    /// [`Self::remove_tag`] does once its system-tag check has passed.
+    async fn remove_tag_force(&self, model_id: i64, tag: &str) -> Result<(), CoreError> {
         let mut model = self
             .repo
             .get_by_id(model_id)
