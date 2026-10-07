@@ -156,3 +156,26 @@ async fn removing_a_system_tag_is_a_validation_failure() {
         "{refused:?}"
     );
 }
+
+/// The GUI shows this path and command as the way out, so they are the path
+/// gglib looks for llama-server at and the constant the CLI's own test parses
+/// as its install command.
+#[test]
+fn the_install_prompt_names_the_managed_path_and_the_install_command() {
+    let root = gglib_core::paths::isolate_data_root();
+
+    let GuiError::LlamaServerNotInstalled {
+        expected_path,
+        suggested_command,
+        reason,
+    } = GuiError::llama_server_not_installed("not found")
+    else {
+        panic!("the constructor builds the install prompt");
+    };
+
+    let managed = gglib_core::paths::llama_server_path().expect("the isolated root resolves");
+    assert!(managed.starts_with(root), "{managed:?} is under {root:?}");
+    assert_eq!(expected_path, managed.display().to_string());
+    assert_eq!(suggested_command, gglib_core::paths::LLAMA_INSTALL_COMMAND);
+    assert_eq!(reason, "not found");
+}

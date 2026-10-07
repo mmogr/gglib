@@ -18,7 +18,7 @@ path = "src/lib.rs"
 gglib-core = { workspace = true }
 gglib-download = { workspace = true }
 gglib-mcp = { workspace = true }
-gglib-runtime = { workspace = true, features = ["prebuilt"] }
+gglib-runtime = { workspace = true }
 # For `loopback`, the one builder of an HTTP client for a server on this machine
 # (the far proxy over the pipe's local port, the benchmark's llama-server; see
 # #1085), for `serve`, which the agentic eval's proxy arm starts in-process in

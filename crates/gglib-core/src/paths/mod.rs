@@ -34,7 +34,8 @@ pub use database::database_path;
 
 // Llama binaries
 pub use llama::{
-    gglib_data_dir, llama_bench_path, llama_config_path, llama_cpp_dir, llama_server_path,
+    LLAMA_INSTALL_COMMAND, gglib_data_dir, llama_bench_path, llama_config_path, llama_cpp_dir,
+    llama_server_path,
 };
 
 // Models directory

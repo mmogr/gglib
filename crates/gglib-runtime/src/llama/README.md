@@ -18,12 +18,8 @@ The public API is intentionally minimal. Import from `gglib_runtime::llama`:
 use gglib_runtime::llama::{
     ensure_llama_initialized,
     check_llama_installed,
-    resolve_context_size,
+    llama_status,
 };
 ```
-
-# Feature Flags
-
-- `cli`: Enables `CliPrompt` for interactive CLI usage.
 
 <!-- module-docs:end -->

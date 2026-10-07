@@ -20,11 +20,6 @@
 //! path uses. Surfaces render [`LlamaProgressEvent::Progress`] and must not
 //! derive a rate of their own from successive `downloaded` values — three
 //! surfaces each deriving their own is what this event type replaced.
-//!
-//! The event type is **not** feature-gated: [`LlamaProgressEvent`] and
-//! [`InstallPhase`] are imported unconditionally. Only the pipeline that
-//! *produces* the events (in `download/`) is gated behind
-//! `feature = "prebuilt"`.
 
 use serde::Serialize;
 

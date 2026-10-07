@@ -6,12 +6,6 @@ description = "Process runtime and OS-level concerns for gglib"
 license.workspace = true
 publish = false
 
-[features]
-default = []
-# Feature flags still gate code, but dependencies are always available to avoid missing crates on CI
-prebuilt = []
-cli = ["prebuilt"]
-
 [dependencies]
 gglib-agent = { workspace = true }
 gglib-core = { workspace = true }

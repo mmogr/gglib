@@ -20,7 +20,7 @@ gglib-db = { workspace = true }
 gglib-download = { workspace = true }
 gglib-mcp = { workspace = true }
 gglib-proxy = { workspace = true }
-gglib-runtime = { workspace = true, features = ["cli"] }
+gglib-runtime = { workspace = true }
 reqwest = { workspace = true, features = ["json", "stream", "rustls", "system-proxy"] }
 
 # CLI-specific dependencies

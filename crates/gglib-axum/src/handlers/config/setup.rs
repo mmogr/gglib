@@ -156,13 +156,6 @@ pub(crate) async fn uninstall_llama_handler() -> Result<Json<UninstallOutcome>, 
         .map_err(|e| HttpError::Internal(e.to_string()))
 }
 
-/// Pull upstream and rebuild llama.cpp, streaming [`BuildEvent`]s over SSE —
-/// the GUI face of `gglib config llama update`.
-///
-/// Rebuilds with the acceleration the current build recorded, so an update
-/// cannot silently change backend. Preflight failures are reported as a
-/// `failed` event rather than an HTTP status: by the time they are known the
-/// response has already committed to being a stream.
 /// One llama.cpp build at a time, process-wide.
 ///
 /// Two concurrent builds share a source checkout and a binary destination, so
@@ -170,6 +163,13 @@ pub(crate) async fn uninstall_llama_handler() -> Result<Json<UninstallOutcome>, 
 /// nothing about a second browser tab or a second client.
 static UPDATE_IN_FLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// Pull upstream and rebuild llama.cpp, streaming [`BuildEvent`]s over SSE —
+/// the GUI face of `gglib config llama update`.
+///
+/// Rebuilds with the acceleration the current build recorded, so an update
+/// cannot silently change backend. Preflight failures are reported as a
+/// `failed` event rather than an HTTP status: by the time they are known the
+/// response has already committed to being a stream.
 pub(crate) async fn update_llama()
 -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
     let (tx, rx) = tokio::sync::mpsc::channel::<BuildEvent>(64);

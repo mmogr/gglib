@@ -6,6 +6,7 @@
 
 use anyhow::{Result, bail};
 use indicatif::{ProgressBar, ProgressStyle};
+use std::path::Path;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -13,13 +14,9 @@ use crate::utils::input;
 use gglib_core::paths::{gglib_data_dir, is_prebuilt_binary, llama_cpp_dir, llama_server_path};
 use gglib_runtime::llama::{
     Acceleration, BuildEvent, BuildPhase, PrebuiltAvailability, check_dependencies,
-    check_disk_space, check_prebuilt_availability, detect_optimal_acceleration,
-    run_llama_source_build, vulkan_status,
+    check_prebuilt_availability, detect_optimal_acceleration, run_llama_source_build,
+    vulkan_status,
 };
-
-fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
-    r.map_err(|e| anyhow::anyhow!("{e}"))
-}
 
 /// Handle the install command.
 ///
@@ -36,7 +33,7 @@ pub(crate) async fn handle_install(
     build_from_source: bool,
 ) -> Result<()> {
     // Check if already installed
-    let server_path = path_err(llama_server_path())?;
+    let server_path = llama_server_path()?;
     if server_path.exists() && !force {
         let install_dir = server_path.parent().map_or_else(
             || server_path.display().to_string(),
@@ -161,7 +158,10 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
 
     // Step 3: Interactive pre-flight prompt.
     if !force {
-        print_preflight_info(&acceleration)?;
+        let install_dir = gglib_data_dir()?.join("bin");
+        for line in preflight_lines(acceleration, &install_dir) {
+            println!("{line}");
+        }
         if !input::prompt_confirmation_default_yes("Continue?")? {
             println!("Installation cancelled.");
             return Ok(());
@@ -169,8 +169,8 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
     }
 
     // Steps 4-7: delegate to the pure streaming core.
-    let llama_dir = path_err(llama_cpp_dir())?;
-    let server_path = path_err(llama_server_path())?;
+    let llama_dir = llama_cpp_dir()?;
+    let server_path = llama_server_path()?;
     let (tx, rx) = mpsc::channel::<BuildEvent>(64);
     let build = tokio::spawn(run_llama_source_build(
         acceleration,
@@ -214,30 +214,21 @@ fn determine_acceleration(cuda: bool, metal: bool, vulkan: bool) -> Result<Accel
     }
 }
 
-fn print_preflight_info(acceleration: &Acceleration) -> Result<()> {
-    println!("Pre-flight check:");
-    println!("✓ Build dependencies installed");
-
-    // Check disk space
-    if check_disk_space(800)? {
-        println!("✓ Disk space available");
-    }
-
-    println!("✓ Detected: {}", acceleration.display_name());
-    println!();
-    println!("This will:");
-    println!("  1. Clone llama.cpp repository (~150 MB)");
-    println!(
-        "  2. Configure with CMake ({} enabled)",
-        acceleration.display_name()
-    );
-    println!("  3. Compile llama-server (~3-5 minutes)");
-
-    let gglib_dir = path_err(gglib_data_dir())?;
-    println!("  4. Install to {}", gglib_dir.join("bin").display());
-    println!();
-
-    Ok(())
+/// What the pre-flight says before it asks whether to continue.
+fn preflight_lines(acceleration: Acceleration, install_dir: &Path) -> Vec<String> {
+    let name = acceleration.display_name();
+    vec![
+        "Pre-flight check:".to_owned(),
+        "✓ Build dependencies installed".to_owned(),
+        format!("✓ Detected: {name}"),
+        String::new(),
+        "This will:".to_owned(),
+        "  1. Clone llama.cpp repository (~150 MB)".to_owned(),
+        format!("  2. Configure with CMake ({name} enabled)"),
+        "  3. Compile llama-server (~3-5 minutes)".to_owned(),
+        format!("  4. Install to {}", install_dir.display()),
+        String::new(),
+    ]
 }
 
 /// Consumes [`BuildEvent`] values from the build pipeline channel and renders
@@ -335,3 +326,7 @@ async fn consume_build_events_cli(mut rx: mpsc::Receiver<BuildEvent>) {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "llama_install_tests.rs"]
+mod tests;

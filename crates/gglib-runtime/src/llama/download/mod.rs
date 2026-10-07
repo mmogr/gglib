@@ -1,35 +1,17 @@
 #![doc = include_str!("README.md")]
-#[cfg(feature = "prebuilt")]
 use anyhow::{Context, Result, bail};
-#[cfg(feature = "prebuilt")]
 use reqwest::Client;
-#[cfg(feature = "prebuilt")]
 use serde::Deserialize;
-#[cfg(feature = "prebuilt")]
 use std::fs::{self, File};
-#[cfg(feature = "prebuilt")]
 use std::io::{self, Write};
-#[cfg(feature = "prebuilt")]
 use std::path::Path;
-#[cfg(feature = "prebuilt")]
 use std::time::Instant;
-#[cfg(feature = "prebuilt")]
 use tokio::sync::mpsc;
 
-#[cfg(feature = "prebuilt")]
 use gglib_core::download::{ProgressThrottle, RateEstimator};
-#[cfg(feature = "prebuilt")]
-use gglib_core::paths::data_root;
-use gglib_core::paths::llama_server_path;
+use gglib_core::paths::{data_root, llama_server_path};
 
-#[cfg(feature = "prebuilt")]
 use super::install_events::{InstallPhase, LlamaProgressEvent};
-
-// Helper to convert PathError to anyhow::Error
-#[cfg(feature = "prebuilt")]
-fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
-    r.map_err(|e| anyhow::anyhow!("{e}"))
-}
 
 /// Check if llama.cpp binaries are installed.
 /// Returns true if llama-server exists.
@@ -56,7 +38,6 @@ pub fn check_llama_installed() -> bool {
 /// Pinning does not stop gglib tracking upstream. It makes tracking a
 /// deliberate, reviewable event: bump this constant, run the suite, ship the
 /// bump as its own commit with the observed differences in the message.
-#[cfg(feature = "prebuilt")]
 pub(super) const PINNED_LLAMA_RELEASE: &str = "b10327";
 
 /// Environment override for [`PINNED_LLAMA_RELEASE`].
@@ -68,11 +49,9 @@ pub(super) const PINNED_LLAMA_RELEASE: &str = "b10327";
 /// Provided because a user debugging against an upstream fix should not have
 /// to rebuild gglib to get it, and because it is how the pin bump itself is
 /// tested before the constant moves.
-#[cfg(feature = "prebuilt")]
 pub(super) const LLAMA_RELEASE_ENV: &str = "GGLIB_LLAMA_RELEASE";
 
 /// Which llama.cpp release an install should fetch.
-#[cfg(feature = "prebuilt")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ReleaseSelector {
     /// A specific tag — the pin, or an override naming one.
@@ -81,7 +60,6 @@ enum ReleaseSelector {
     Latest,
 }
 
-#[cfg(feature = "prebuilt")]
 impl ReleaseSelector {
     /// The GitHub API URL this selector resolves through.
     fn api_url(&self) -> String {
@@ -105,7 +83,6 @@ impl ReleaseSelector {
 ///
 /// Split from [`resolve_release_selector`] so the policy is testable without
 /// mutating process environment, which no test can do safely in parallel.
-#[cfg(feature = "prebuilt")]
 fn selector_from_override(raw: &str) -> ReleaseSelector {
     let trimmed = raw.trim();
 
@@ -120,13 +97,11 @@ fn selector_from_override(raw: &str) -> ReleaseSelector {
 
 /// Resolve which release to install from [`LLAMA_RELEASE_ENV`], falling back
 /// to [`PINNED_LLAMA_RELEASE`].
-#[cfg(feature = "prebuilt")]
 fn resolve_release_selector() -> ReleaseSelector {
     selector_from_override(&std::env::var(LLAMA_RELEASE_ENV).unwrap_or_default())
 }
 
 /// GitHub API response for a release
-#[cfg(feature = "prebuilt")]
 #[derive(Debug, Deserialize)]
 struct GitHubRelease {
     tag_name: String,
@@ -134,7 +109,6 @@ struct GitHubRelease {
 }
 
 /// GitHub API response for a release asset
-#[cfg(feature = "prebuilt")]
 #[derive(Debug, Deserialize)]
 struct GitHubAsset {
     name: String,
@@ -142,7 +116,6 @@ struct GitHubAsset {
 }
 
 /// Result of checking pre-built binary availability
-#[cfg(feature = "prebuilt")]
 #[derive(Debug)]
 pub enum PrebuiltAvailability {
     /// Pre-built binaries are available for this platform
@@ -165,7 +138,6 @@ pub enum PrebuiltAvailability {
 /// Extracted as a standalone function so it can be unit-tested with
 /// arbitrary [`GpuInfo`](gglib_core::utils::system::GpuInfo) values without
 /// triggering real hardware probes.
-#[cfg(feature = "prebuilt")]
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn windows_availability_for_gpu(gpu: &gglib_core::utils::system::GpuInfo) -> PrebuiltAvailability {
     if gpu.has_nvidia_gpu && gpu.cuda_version.is_some() {
@@ -194,7 +166,6 @@ fn windows_availability_for_gpu(gpu: &gglib_core::utils::system::GpuInfo) -> Pre
 ///
 /// Returns `Available` with asset pattern for macOS (Metal), Windows (CUDA/Vulkan),
 /// and Linux (CPU).
-#[cfg(feature = "prebuilt")]
 pub fn check_prebuilt_availability() -> PrebuiltAvailability {
     #[cfg(target_os = "macos")]
     {
@@ -267,7 +238,6 @@ pub fn check_prebuilt_availability() -> PrebuiltAvailability {
 /// upstream no longer publishes — is not obvious from the status code, and
 /// the way out is an environment variable the user has no reason to know
 /// about.
-#[cfg(feature = "prebuilt")]
 async fn fetch_release(client: &Client, selector: &ReleaseSelector) -> Result<GitHubRelease> {
     let response = client
         .get(selector.api_url())
@@ -304,7 +274,6 @@ async fn fetch_release(client: &Client, selector: &ReleaseSelector) -> Result<Gi
 }
 
 /// Find the matching asset for our platform in a release.
-#[cfg(feature = "prebuilt")]
 fn find_platform_asset<'a>(
     release: &'a GitHubRelease,
     asset_pattern: &str,
@@ -320,29 +289,22 @@ fn find_platform_asset<'a>(
 /// A dropped receiver means the surface stopped watching — a cancelled CLI, a
 /// closed SSE connection. That is not a reason to abandon an install that is
 /// already writing to disk.
-#[cfg(feature = "prebuilt")]
 async fn started(tx: &mpsc::Sender<LlamaProgressEvent>, phase: InstallPhase) {
     let _ = tx.send(LlamaProgressEvent::PhaseStarted { phase }).await;
 }
 
 /// Emit `PhaseCompleted` for `phase`. See [`started`].
-#[cfg(feature = "prebuilt")]
 async fn completed(tx: &mpsc::Sender<LlamaProgressEvent>, phase: InstallPhase) {
     let _ = tx.send(LlamaProgressEvent::PhaseCompleted { phase }).await;
 }
 
 /// Stream `url` to `dest`, reporting bytes, rate and ETA on `tx`.
 ///
-/// Throughput is measured here and only here, by the same
-/// `gglib_core::download::RateEstimator` the model-download path uses. The
-/// estimator sees every chunk — ticks where nothing moved are how a stall
-/// pulls the reported rate down — while its sibling `ProgressThrottle`
-/// rate-limits the *emission*, so a fast link cannot flood a 64-slot channel.
-///
-/// Neither name is linked: both are behind `feature = "prebuilt"` here, so a
-/// bare link breaks without the feature and an explicit target is redundant
-/// with it.
-#[cfg(feature = "prebuilt")]
+/// Throughput is measured here and only here, by the same [`RateEstimator`]
+/// the model-download path uses. The estimator sees every chunk — ticks where
+/// nothing moved are how a stall pulls the reported rate down — while its
+/// sibling [`ProgressThrottle`] rate-limits the *emission*, so a fast link
+/// cannot flood a 64-slot channel.
 async fn download_archive(
     client: &Client,
     url: &str,
@@ -414,7 +376,6 @@ async fn download_archive(
 ///
 /// This includes the main binary (llama-server) and all required
 /// shared libraries (.dylib on macOS, .dll on Windows, .so on Linux).
-#[cfg(feature = "prebuilt")]
 fn extract_binaries(archive_path: &Path, bin_dir: &Path) -> Result<()> {
     let name = archive_path
         .file_name()
@@ -427,8 +388,49 @@ fn extract_binaries(archive_path: &Path, bin_dir: &Path) -> Result<()> {
     }
 }
 
+/// Whether an archive member named `file_name` is extracted.
+///
+/// Licences, C headers and Metal shader sources are left in the archive.
+fn wanted(file_name: &str) -> bool {
+    !(file_name.starts_with("LICENSE")
+        || file_name.ends_with(".h")
+        || file_name.ends_with(".metal"))
+}
+
+/// Make the extracted `dest_path` executable.
+///
+/// Reads `symlink_metadata` (lstat) so a symlink is not followed to a target
+/// that may not be extracted yet, which would fail with ENOENT. A symlink is
+/// left as it is, because `set_permissions` would follow it too.
+#[cfg(unix)]
+fn make_executable(dest_path: &Path, file_name: &str) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let meta = fs::symlink_metadata(dest_path)
+        .with_context(|| format!("Failed to read metadata: {file_name}"))?;
+    if !meta.file_type().is_symlink() {
+        let mut perms = meta.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(dest_path, perms)
+            .with_context(|| format!("Failed to set permissions: {file_name}"))?;
+    }
+    Ok(())
+}
+
+/// Fail unless `found`, the count of extracted members named in `required`,
+/// is the count of names in it.
+fn ensure_required(found: usize, required: &[&str]) -> Result<()> {
+    if found != required.len() {
+        bail!(
+            "Failed to extract all required binaries. Found {} of {}",
+            found,
+            required.len()
+        );
+    }
+    Ok(())
+}
+
 /// Extract binaries from a tar.gz archive (macOS and Linux).
-#[cfg(feature = "prebuilt")]
 fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
     use flate2::read::GzDecoder;
     use tar::Archive;
@@ -462,10 +464,7 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
             _ => continue,
         };
 
-        if file_name.starts_with("LICENSE")
-            || file_name.ends_with(".h")
-            || file_name.ends_with(".metal")
-        {
+        if !wanted(&file_name) {
             continue;
         }
 
@@ -475,39 +474,17 @@ fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
             .with_context(|| format!("Failed to extract: {file_name}"))?;
 
         #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            // Use symlink_metadata (lstat) so we don't follow symlink entries to
-            // targets that may not yet be extracted, which would return ENOENT.
-            // Symlinks cannot be chmod'd on macOS/Linux so we skip them.
-            let meta = fs::symlink_metadata(&dest_path)
-                .with_context(|| format!("Failed to read metadata: {file_name}"))?;
-            if !meta.file_type().is_symlink() {
-                let mut perms = meta.permissions();
-                perms.set_mode(0o755);
-                fs::set_permissions(&dest_path, perms)
-                    .with_context(|| format!("Failed to set permissions: {file_name}"))?;
-            }
-        }
+        make_executable(&dest_path, &file_name)?;
 
         if required_binaries.contains(&file_name.as_str()) {
             extracted_binaries += 1;
         }
     }
 
-    if extracted_binaries != required_binaries.len() {
-        bail!(
-            "Failed to extract all required binaries. Found {} of {}",
-            extracted_binaries,
-            required_binaries.len()
-        );
-    }
-
-    Ok(())
+    ensure_required(extracted_binaries, &required_binaries)
 }
 
 /// Extract binaries from a zip archive (Windows).
-#[cfg(feature = "prebuilt")]
 fn extract_binaries_zip(zip_path: &Path, bin_dir: &Path) -> Result<()> {
     let file = File::open(zip_path).context("Failed to open downloaded archive")?;
     let mut archive = zip::ZipArchive::new(file).context("Failed to read zip archive")?;
@@ -538,10 +515,7 @@ fn extract_binaries_zip(zip_path: &Path, bin_dir: &Path) -> Result<()> {
             _ => continue,
         };
 
-        if file_name.starts_with("LICENSE")
-            || file_name.ends_with(".h")
-            || file_name.ends_with(".metal")
-        {
+        if !wanted(file_name) {
             continue;
         }
 
@@ -553,37 +527,19 @@ fn extract_binaries_zip(zip_path: &Path, bin_dir: &Path) -> Result<()> {
             .with_context(|| format!("Failed to extract: {file_name}"))?;
 
         #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let meta = fs::symlink_metadata(&dest_path)
-                .with_context(|| format!("Failed to read metadata: {file_name}"))?;
-            if !meta.file_type().is_symlink() {
-                let mut perms = meta.permissions();
-                perms.set_mode(0o755);
-                fs::set_permissions(&dest_path, perms)
-                    .with_context(|| format!("Failed to set permissions: {file_name}"))?;
-            }
-        }
+        make_executable(&dest_path, file_name)?;
 
         if required_binaries.contains(&file_name) {
             extracted_binaries += 1;
         }
     }
 
-    if extracted_binaries != required_binaries.len() {
-        bail!(
-            "Failed to extract all required binaries. Found {} of {}",
-            extracted_binaries,
-            required_binaries.len()
-        );
-    }
-
-    Ok(())
+    ensure_required(extracted_binaries, &required_binaries)
 }
 
 /// Windows-only: Download and extract CUDA runtime DLLs.
 /// These are required for llama.cpp CUDA builds to work on systems without CUDA installed.
-#[cfg(all(target_os = "windows", feature = "prebuilt"))]
+#[cfg(target_os = "windows")]
 async fn download_cuda_runtime(
     client: &Client,
     release: &GitHubRelease,
@@ -664,7 +620,6 @@ async fn download_cuda_runtime(
 ///
 /// This function knows nothing about terminals, HTTP responses or `WebViews`.
 /// The three copies it replaced each knew about one.
-#[cfg(feature = "prebuilt")]
 pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) -> Result<()> {
     started(&tx, InstallPhase::CheckAvailability).await;
     let (asset_pattern, description) = match check_prebuilt_availability() {
@@ -691,7 +646,7 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
     })?;
     completed(&tx, InstallPhase::FetchRelease).await;
 
-    let gglib_dir = path_err(data_root())?;
+    let gglib_dir = data_root()?;
     let download_dir = gglib_dir.join("downloads");
     let archive_path = download_dir.join(&asset.name);
     let bin_dir = gglib_dir.join(".llama").join("bin");
@@ -730,7 +685,7 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
     save_prebuilt_config(&gglib_dir, &release.tag_name, &description)?;
 
     started(&tx, InstallPhase::Verify).await;
-    let server_path = path_err(llama_server_path())?;
+    let server_path = llama_server_path()?;
     if !server_path.exists() {
         bail!("Installation verification failed: binaries not found after extraction");
     }
@@ -746,7 +701,6 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
 }
 
 /// Save configuration for pre-built installation.
-#[cfg(feature = "prebuilt")]
 fn save_prebuilt_config(gglib_dir: &Path, version: &str, platform: &str) -> Result<()> {
     use serde::Serialize;
 
@@ -773,15 +727,17 @@ fn save_prebuilt_config(gglib_dir: &Path, version: &str, platform: &str) -> Resu
     Ok(())
 }
 
+#[cfg(all(test, unix))]
+#[path = "extract_tests.rs"]
+mod extract_tests;
+
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "prebuilt")]
     use super::*;
 
     /// The case the pin exists for: no override installs the pin, not
     /// whatever upstream cut this morning.
     #[test]
-    #[cfg(feature = "prebuilt")]
     fn unset_override_resolves_to_the_pin() {
         assert_eq!(
             selector_from_override(""),
@@ -792,7 +748,6 @@ mod tests {
     /// A blank value is unset, not an empty tag — an empty tag would build a
     /// URL ending in `/tags/` that can never resolve.
     #[test]
-    #[cfg(feature = "prebuilt")]
     fn blank_override_resolves_to_the_pin() {
         assert_eq!(
             selector_from_override("   \t "),
@@ -801,14 +756,12 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "prebuilt")]
     fn latest_override_floats_with_upstream() {
         assert_eq!(selector_from_override("latest"), ReleaseSelector::Latest);
         assert_eq!(selector_from_override("  LATEST "), ReleaseSelector::Latest);
     }
 
     #[test]
-    #[cfg(feature = "prebuilt")]
     fn a_tag_override_is_taken_verbatim() {
         assert_eq!(
             selector_from_override(" b10500 "),
@@ -819,7 +772,6 @@ mod tests {
     /// The two selectors must hit different GitHub endpoints — a tag resolved
     /// through the `latest` URL would silently install the wrong release.
     #[test]
-    #[cfg(feature = "prebuilt")]
     fn selectors_resolve_to_distinct_endpoints() {
         let tag = ReleaseSelector::Tag("b10327".to_owned());
         assert!(tag.api_url().ends_with("/releases/tags/b10327"));
@@ -833,7 +785,6 @@ mod tests {
     /// The pin has to be a real tag shape; a stray `v` prefix or a bare
     /// number would 404 at install time on a user's machine, not here.
     #[test]
-    #[cfg(feature = "prebuilt")]
     fn the_pin_is_a_well_formed_build_tag() {
         let rest = PINNED_LLAMA_RELEASE
             .strip_prefix('b')
@@ -845,7 +796,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "prebuilt")]
     fn test_check_prebuilt_availability() {
         let availability = check_prebuilt_availability();
         // Just verify it doesn't panic and returns a valid variant
@@ -860,7 +810,6 @@ mod tests {
     // function that takes a GpuInfo value — no Windows-only cfg guard needed.
 
     #[test]
-    #[cfg(feature = "prebuilt")]
     fn test_windows_gpu_cuda_selects_cuda_binary() {
         use gglib_core::utils::system::GpuInfo;
         let gpu = GpuInfo {
@@ -894,7 +843,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "prebuilt")]
     fn test_windows_gpu_vulkan_only_selects_vulkan_binary() {
         use gglib_core::utils::system::GpuInfo;
         let gpu = GpuInfo {
@@ -928,7 +876,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "prebuilt")]
     fn test_windows_gpu_nvidia_without_cuda_falls_back_to_vulkan() {
         use gglib_core::utils::system::GpuInfo;
         // NVIDIA hardware present but CUDA toolkit not installed; Vulkan is available.
@@ -956,7 +903,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "prebuilt")]
     fn test_windows_gpu_no_gpu_returns_not_available() {
         use gglib_core::utils::system::GpuInfo;
         let gpu = GpuInfo {
@@ -981,7 +927,6 @@ mod tests {
     /// dangling dylib symlinks (versioned aliases present in real macOS archives)
     /// do not cause a spurious "No such file or directory" error.
     #[test]
-    #[cfg(feature = "prebuilt")]
     fn test_extract_binaries_tar_gz_modern_layout() {
         use flate2::Compression;
         use flate2::write::GzEncoder;

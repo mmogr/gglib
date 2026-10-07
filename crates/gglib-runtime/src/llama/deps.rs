@@ -1,13 +1,13 @@
 //! Dependency checking and validation for building llama.cpp.
 
-#[cfg(feature = "cli")]
 use super::detect::{has_cmake, has_cpp_compiler, has_git};
-#[cfg(feature = "cli")]
 use anyhow::{Result, bail};
 
-/// Check if all required build dependencies are installed
-#[cfg(feature = "cli")]
-pub fn check_dependencies() -> Result<DependencyStatus> {
+/// Check that the build dependencies are installed, printing what was found.
+///
+/// Fails, after printing how to install what is missing, unless git, cmake and
+/// a C++ compiler are all present.
+pub fn check_dependencies() -> Result<()> {
     println!("Checking build dependencies...");
 
     let git = has_git()?;
@@ -45,29 +45,10 @@ pub fn check_dependencies() -> Result<DependencyStatus> {
         bail!("Missing required build dependencies");
     }
 
-    Ok(DependencyStatus {
-        _git: git.unwrap(),
-        _cmake: cmake.unwrap(),
-        _compiler: compiler.unwrap(),
-    })
-}
-
-/// Information about installed dependencies.
-/// Fields prefixed with _ as struct is returned but fields not currently read.
-#[cfg(feature = "cli")]
-#[derive(Debug)]
-#[allow(
-    clippy::pub_underscore_fields,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-pub struct DependencyStatus {
-    pub _git: String,
-    pub _cmake: String,
-    pub _compiler: String,
+    Ok(())
 }
 
 /// Print platform-specific installation instructions for missing dependencies
-#[cfg(feature = "cli")]
 fn print_installation_instructions() {
     println!("Missing dependencies detected. Please install:");
     println!();
@@ -113,57 +94,4 @@ fn print_installation_instructions() {
 
     println!();
     println!("After installing, run 'gglib config llama install' again.");
-}
-
-/// Check available disk space
-#[cfg(feature = "cli")]
-pub fn check_disk_space(_required_mb: u64) -> Result<bool> {
-    use gglib_core::paths::data_root;
-    use std::fs;
-
-    let gglib_dir = data_root().map_err(|e| anyhow::anyhow!("{e}"))?;
-
-    // Create directory if it doesn't exist
-    if !gglib_dir.exists() {
-        fs::create_dir_all(&gglib_dir)?;
-    }
-
-    // Try to get available space (platform-specific)
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        if let Ok(metadata) = fs::metadata(&gglib_dir) {
-            // This is a simplified check - doesn't actually get free space
-            // In a real implementation, you'd use statvfs or similar
-            let _ = metadata.blocks(); // Placeholder
-        }
-        Ok(true) // Assume enough space for now
-    }
-
-    #[cfg(windows)]
-    {
-        // On Windows, you'd use GetDiskFreeSpaceEx
-        // For now, assume enough space
-        Ok(true)
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    {
-        // For other platforms, assume enough space
-        Ok(true)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[cfg(feature = "cli")]
-    use super::*;
-
-    #[test]
-    #[cfg(feature = "cli")]
-    fn test_check_disk_space() {
-        // Should not panic
-        let result = check_disk_space(800);
-        assert!(result.is_ok());
-    }
 }

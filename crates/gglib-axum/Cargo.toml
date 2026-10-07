@@ -22,7 +22,7 @@ gglib-mcp = { workspace = true }
 # for `runs::sse`, which frames a run's events for this crate's door and the proxy's alike,
 # and for `access`, the Host guard, origin guard and CORS layer both routers install.
 gglib-proxy = { workspace = true }
-gglib-runtime = { workspace = true, features = ["cli"] }
+gglib-runtime = { workspace = true }
 gglib-sse = { workspace = true }
 
 # Shared deps

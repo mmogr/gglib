@@ -3,11 +3,6 @@
 //! This module provides a trait-based prompt system that allows CLI and GUI
 //! adapters to handle user confirmations without coupling to specific I/O.
 //!
-//! # Feature Flags
-//!
-//! - `cli`: Enables `CliPrompt` which uses stdin/stdout for interactive prompts.
-//!   Without this feature, only `NonInteractivePrompt` is available.
-//!
 //! # Design
 //!
 //! The default `NonInteractivePrompt` returns `Err(LlamaError::PromptRequired)`
@@ -17,6 +12,7 @@
 //! - Prevents accidental installations in automated contexts
 
 use super::error::{LlamaError, LlamaResult};
+use std::io::{self, BufRead, Write};
 
 /// Trait for handling user prompts during installation operations.
 ///
@@ -87,64 +83,48 @@ impl InstallPrompt for AutoConfirmPrompt {
     }
 }
 
-/// CLI prompt using stdin/stdout for interactive confirmation.
-///
-/// This is only available with the `cli` feature flag.
-#[cfg(feature = "cli")]
-pub mod cli_prompt {
-    #[allow(
-        clippy::wildcard_imports,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
-    use super::*;
-    use std::io::{self, BufRead, Write};
+/// CLI prompt that asks on stdout and reads the answer from stdin.
+#[derive(Debug, Default)]
+pub struct CliPrompt;
 
-    /// CLI prompt that reads from stdin.
-    #[derive(Debug, Default)]
-    pub struct CliPrompt;
-
-    impl CliPrompt {
-        /// Create a new CLI prompt.
-        pub fn new() -> Self {
-            Self
-        }
-    }
-
-    impl InstallPrompt for CliPrompt {
-        fn confirm(&self, message: &str, default: bool) -> LlamaResult<bool> {
-            let prompt_suffix = if default { "[Y/n]" } else { "[y/N]" };
-            print!("{message} {prompt_suffix}: ");
-            io::stdout().flush()?;
-
-            let stdin = io::stdin();
-            let mut input = String::new();
-            stdin.lock().read_line(&mut input)?;
-
-            let trimmed = input.trim().to_lowercase();
-            if trimmed.is_empty() {
-                Ok(default)
-            } else if trimmed == "y" || trimmed == "yes" {
-                Ok(true)
-            } else if trimmed == "n" || trimmed == "no" {
-                Ok(false)
-            } else {
-                // Treat unknown input as default
-                Ok(default)
-            }
-        }
-
-        fn info(&self, message: &str) {
-            println!("{message}");
-        }
-
-        fn warn(&self, message: &str) {
-            eprintln!("⚠️  {message}");
-        }
+impl CliPrompt {
+    /// Create a new CLI prompt.
+    pub fn new() -> Self {
+        Self
     }
 }
 
-#[cfg(feature = "cli")]
-pub use cli_prompt::CliPrompt;
+impl InstallPrompt for CliPrompt {
+    fn confirm(&self, message: &str, default: bool) -> LlamaResult<bool> {
+        let prompt_suffix = if default { "[Y/n]" } else { "[y/N]" };
+        print!("{message} {prompt_suffix}: ");
+        io::stdout().flush()?;
+
+        let stdin = io::stdin();
+        let mut input = String::new();
+        stdin.lock().read_line(&mut input)?;
+
+        let trimmed = input.trim().to_lowercase();
+        if trimmed.is_empty() {
+            Ok(default)
+        } else if trimmed == "y" || trimmed == "yes" {
+            Ok(true)
+        } else if trimmed == "n" || trimmed == "no" {
+            Ok(false)
+        } else {
+            // Treat unknown input as default
+            Ok(default)
+        }
+    }
+
+    fn info(&self, message: &str) {
+        println!("{message}");
+    }
+
+    fn warn(&self, message: &str) {
+        eprintln!("⚠️  {message}");
+    }
+}
 
 #[cfg(test)]
 mod tests {

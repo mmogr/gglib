@@ -18,8 +18,8 @@ pub enum LlamaError {
 
     /// Reading the answer from the terminal failed.
     ///
-    /// Constructed only by `?` inside `CliPrompt::confirm`, which exists under
-    /// the `cli` feature — hence no explicit `LlamaError::IoError` anywhere.
+    /// Constructed only by `?` inside `CliPrompt::confirm`, hence no explicit
+    /// `LlamaError::IoError` anywhere.
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
 }

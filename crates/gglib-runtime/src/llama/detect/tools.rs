@@ -13,7 +13,6 @@
 //! DRY. The helpers here provide a small, typed API on top of
 //! [`gglib_core::utils::process::cmd`].
 
-#[cfg(any(feature = "cli", test))]
 use anyhow::Result;
 use gglib_core::utils::process::cmd;
 
@@ -36,7 +35,6 @@ pub(crate) fn command_succeeds(program: &str, args: &[&str]) -> bool {
 ///
 /// Returns `None` if the command cannot be found, exits with a non-zero
 /// status, or produces non-UTF-8 output.
-#[cfg(any(target_os = "linux", target_os = "windows", feature = "cli", test))]
 pub(crate) fn command_stdout(program: &str, args: &[&str]) -> Option<String> {
     let output = cmd(program).args(args).output().ok()?;
     if !output.status.success() {
@@ -83,7 +81,6 @@ pub(crate) fn parse_version_tuple(version_str: &str) -> Option<(u32, u32)> {
 // ============================================================================
 
 /// Check if git is installed, returning its version string on success.
-#[cfg(any(feature = "cli", test))]
 #[allow(
     clippy::option_if_let_else,
     clippy::unnecessary_wraps,
@@ -100,7 +97,6 @@ pub(crate) fn has_git() -> Result<Option<String>> {
 }
 
 /// Check if cmake is installed, returning its version string on success.
-#[cfg(any(feature = "cli", test))]
 #[allow(
     clippy::option_if_let_else,
     clippy::unnecessary_wraps,
@@ -127,7 +123,6 @@ pub(crate) fn has_cmake() -> Result<Option<String>> {
 /// - **Windows**: `cl`, `g++`, `clang++`
 /// - **macOS**: `clang++`, `g++`
 /// - **Linux**: `g++`, `clang++`
-#[cfg(any(feature = "cli", test))]
 #[allow(
     clippy::unnecessary_wraps,
     reason = "grandfathered at lint inheritance, #1157"
@@ -152,7 +147,6 @@ pub(crate) fn has_cpp_compiler() -> Result<Option<String>> {
 }
 
 /// Get the number of CPU cores available for parallel compilation.
-#[cfg(any(feature = "cli", test))]
 pub(crate) fn get_num_cores() -> usize {
     num_cpus::get()
 }
