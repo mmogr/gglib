@@ -8,16 +8,14 @@
 //! `core` and `gui` services through it.
 
 use axum::extract::{Path, State};
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 
 use crate::error::HttpError;
 use crate::handlers::chat_title;
 use crate::state::AppState;
-use gglib_core::domain::chat::{
-    Conversation, ConversationSettings, Message, MessageRole, NewConversation, NewMessage,
-};
+use gglib_core::domain::chat::{Conversation, ConversationSettings, Message, NewConversation};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Request/Response DTOs
@@ -51,29 +49,6 @@ pub(crate) struct UpdateConversationRequest {
     pub system_prompt: Option<Option<String>>,
 }
 
-/// Request body for saving a new message.
-#[derive(Debug, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct SaveMessageRequest {
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub conversation_id: i64,
-    pub role: String,
-    pub content: String,
-    /// Opaque to gglib — stored and handed back verbatim. `unknown` rather
-    /// than a modelled shape because that is exactly what the server promises.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown | null"))]
-    pub metadata: Option<serde_json::Value>,
-}
-
-/// Request body for updating a message.
-#[derive(Debug, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct UpdateMessageRequest {
-    pub content: String,
-    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown | null"))]
-    pub metadata: Option<serde_json::Value>,
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Router Factory
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,8 +59,7 @@ pub(crate) struct UpdateMessageRequest {
 /// - `/api/conversations` - List/create conversations
 /// - `/api/conversations/{id}` - Get/update/delete conversation
 /// - `/api/conversations/{id}/messages` - Get messages for conversation
-/// - `/api/messages` - Save new message
-/// - `/api/messages/{id}` - Update/delete message
+/// - `/api/messages/{id}` - Delete a message and those after it
 /// - `/api/chat` - Ask the model a chat runs on for the chat's title
 ///
 /// # Returns
@@ -117,8 +91,7 @@ pub(crate) fn chat_routes_no_prefix() -> Router<AppState> {
         )
         // Message endpoints
         .route("/conversations/{id}/messages", get(get_messages))
-        .route("/messages", post(save_message))
-        .route("/messages/{id}", put(update_message).delete(delete_message))
+        .route("/messages/{id}", delete(delete_message))
         // A chat's title, asked of the model it runs on
         .route("/chat", post(chat_title::generate))
 }
@@ -214,43 +187,6 @@ pub(crate) async fn get_messages(
         .get_messages(conversation_id)
         .await?;
     Ok(Json(messages))
-}
-
-/// Save a new message.
-/// POST /api/messages
-pub(crate) async fn save_message(
-    State(state): State<AppState>,
-    Json(req): Json<SaveMessageRequest>,
-) -> Result<Json<i64>, HttpError> {
-    let role = MessageRole::parse(&req.role)
-        .ok_or_else(|| HttpError::BadRequest(format!("Invalid message role: {}", req.role)))?;
-    let id = state
-        .core
-        .chat_history()
-        .save_message(NewMessage {
-            conversation_id: req.conversation_id,
-            role,
-            content: req.content,
-            metadata: req.metadata,
-            images: Vec::new(),
-        })
-        .await?;
-    Ok(Json(id))
-}
-
-/// Update a message's content.
-/// PUT /api/messages/:id
-pub(crate) async fn update_message(
-    State(state): State<AppState>,
-    Path(id): Path<i64>,
-    Json(req): Json<UpdateMessageRequest>,
-) -> Result<(), HttpError> {
-    state
-        .core
-        .chat_history()
-        .update_message(id, req.content, req.metadata)
-        .await?;
-    Ok(())
 }
 
 /// Delete a message and all subsequent messages in the conversation.

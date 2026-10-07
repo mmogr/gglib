@@ -6,7 +6,7 @@ crates/gglib-app-services/src/benchmark/agentic.rs 745
 crates/gglib-app-services/src/benchmark/compare.rs 364
 crates/gglib-app-services/src/benchmark/mapper.rs 529
 crates/gglib-app-services/src/benchmark/tune/mod.rs 1355
-crates/gglib-app-services/src/mcp.rs 397
+crates/gglib-app-services/src/mcp.rs 376
 crates/gglib-app-services/src/models.rs 360
 crates/gglib-app-services/src/models_tests.rs 857
 crates/gglib-app-services/src/proxy.rs 409
@@ -14,8 +14,8 @@ crates/gglib-app-services/src/sampling_explain.rs 444
 crates/gglib-app-services/src/sampling_explain_tests.rs 731
 crates/gglib-app-services/src/servers.rs 755
 crates/gglib-app-services/src/setup.rs 301
-crates/gglib-app-services/src/types.rs 520
-crates/gglib-axum/src/routes.rs 379
+crates/gglib-app-services/src/types.rs 499
+crates/gglib-axum/src/routes.rs 370
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 344
 crates/gglib-cli/src/handlers/benchmark.rs 1613
@@ -141,4 +141,3 @@ crates/gglib-runtime/src/proxy/supervisor.rs 569
 crates/gglib-runtime/src/system/mod.rs 641
 crates/gglib-runtime/src/unified_server_config.rs 465
 crates/gglib-sse/src/lib.rs 320
-src-tauri/src/main.rs 303

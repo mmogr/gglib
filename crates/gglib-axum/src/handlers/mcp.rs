@@ -2,13 +2,11 @@
 
 use axum::Json;
 use axum::extract::{Path, State};
-use serde::Deserialize;
 
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::types::{
-    CreateMcpServerRequest, McpServerInfo, McpTestResult, McpToolCallRequest, McpToolCallResponse,
-    UpdateMcpServerRequest,
+    CreateMcpServerRequest, McpServerInfo, McpTestResult, UpdateMcpServerRequest,
 };
 
 /// List all MCP servers.
@@ -71,26 +69,6 @@ pub(crate) async fn test_connection(
     Path(id): Path<i64>,
 ) -> Result<Json<McpTestResult>, HttpError> {
     Ok(Json(state.mcp_ops.test_connection(id).await?))
-}
-
-/// Request body for calling an MCP tool (includes server ID).
-#[derive(Debug, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct CallToolRequest {
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    pub server_id: i64,
-    #[serde(flatten)]
-    pub call: McpToolCallRequest,
-}
-
-/// Call a tool on an MCP server.
-pub(crate) async fn call_tool(
-    State(state): State<AppState>,
-    Json(req): Json<CallToolRequest>,
-) -> Result<Json<McpToolCallResponse>, HttpError> {
-    Ok(Json(
-        state.mcp_ops.call_tool(req.server_id, req.call).await?,
-    ))
 }
 
 /// Resolve MCP server executable path (for diagnostics/auto-fix).

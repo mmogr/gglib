@@ -12,7 +12,7 @@ src/components/SetupWizard/SetupWizard.tsx 721
 src/components/VerificationModal.tsx 454
 src/hooks/useGglibRuntime/streamAgentChat.ts 263
 src/pages/ChatPage.tsx 388
-src/pages/ModelControlCenterPage.tsx 321
+src/pages/ModelControlCenterPage.tsx 315
 src/services/tools/registry.ts 358
 src/services/transport/api/client.ts 351
 src/services/transport/events/sse.ts 312

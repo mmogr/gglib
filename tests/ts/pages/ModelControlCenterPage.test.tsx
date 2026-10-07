@@ -13,6 +13,10 @@
  * Chat. The one selection across both machines is pinned here too, and that
  * a far read that never answers leaves this machine's rows working.
  *
+ * Downloads are the daemon's, so the page waits on nothing from the desktop
+ * shell before it offers them: one case queues a download in a desktop
+ * window whose shell says nothing.
+ *
  * `ChatPage` itself is stubbed. It is lazily imported and drags in the whole
  * assistant-ui runtime; what is under test here is which screen the page
  * chooses and what it hands it, and the stub shows both.
@@ -35,6 +39,9 @@ const here = vi.hoisted(() => ({ detail: null as unknown, projectors: null as un
 // The download queue the daemon answers with.
 const downloads = vi.hoisted(() => ({ queue: null as unknown }));
 const updateModel = vi.hoisted(() => vi.fn(async (_params: { id: number; projectorPath?: string | null }) => ({})));
+const queueDownload = vi.hoisted(() => vi.fn(async (_params: { modelId: string; quantization?: string }) => ({ id: 'q-1' })));
+// The desktop shell's event channel: it records who listens and sends nothing.
+const shell = vi.hoisted(() => ({ listen: vi.fn(async (_event: string) => () => {}) }));
 const serveModel = vi.hoisted(() => vi.fn(async (_config: { id: number }) => ({ port: 9456 })));
 // What the stub chat page's switch button picks, and the conversation it
 // reports as open when the switch lands.
@@ -68,6 +75,8 @@ vi.mock('../../../src/services/transport', async () => {
         parameterSizes: [],
       })),
       getDownloadQueue: vi.fn(async () => downloads.queue),
+      queueDownload,
+      browseHfModels: vi.fn(async () => ({ models: [], has_more: false, page: 0 })),
       getSettings: vi.fn(async () => ({})),
       subscribe: vi.fn(() => () => {}),
       onEventStreamOpen: vi.fn(() => () => {}),
@@ -75,15 +84,17 @@ vi.mock('../../../src/services/transport', async () => {
   };
 });
 vi.mock('../../../src/services/transport/api/client', () => ({
-  // A model's sampling explanation is "none", which the inspector can draw.
+  // A model's sampling explanation is "none", which the inspector can draw,
+  // and so is the model suggested for this machine.
   get: vi.fn(async (path: string) =>
     path.endsWith('/projectors')
       ? here.projectors
-      : path.startsWith('/api/models/')
+      : path.startsWith('/api/models/') || path.endsWith('/recommend-model')
         ? null
         : [],
   ),
 }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: shell.listen }));
 vi.mock('../../../src/services/remoteEvents', () => ({
   refreshRemoteStatus: vi.fn(),
 }));
@@ -213,6 +224,8 @@ describe('ModelControlCenterPage', () => {
     here.detail = null;
     here.projectors = null;
     updateModel.mockClear();
+    queueDownload.mockClear();
+    shell.listen.mockClear();
     serveModel.mockClear();
     stub.choice = { modelId: 9, modelName: 'gemma-3-12b' };
     stub.conversationId = 2;
@@ -532,5 +545,27 @@ describe('ModelControlCenterPage', () => {
     await user.click(screen.getByRole('button', { name: 'Switch model' }));
     await waitFor(() => expect(screen.getByTestId('chat-page')).toHaveAttribute('data-starting', ''));
     expect(screen.getByTestId('chat-page')).toHaveTextContent('Chatting with gemma-3-12b');
+  });
+
+  it('queues a download in the desktop window with no word from its shell', async () => {
+    // What makes a window the desktop app's: the shell's bridge.
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke: vi.fn(async () => null) } });
+    try {
+      renderPage();
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole('tab', { name: 'Add Models' }));
+      await user.type(await screen.findByPlaceholderText(/user\/repo:quant/), 'owner/zeta-GGUF:Q8_0');
+      await user.click(screen.getByRole('button', { name: 'Download' }));
+
+      await waitFor(() =>
+        expect(queueDownload).toHaveBeenCalledWith({ modelId: 'owner/zeta-GGUF', quantization: 'Q8_0' }),
+      );
+      // The page asks the shell for no event about downloads.
+      const heard = shell.listen.mock.calls.map(([event]) => event);
+      expect(heard.filter((event) => event.startsWith('download'))).toEqual([]);
+    } finally {
+      delete (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+    }
   });
 });

@@ -1,15 +1,11 @@
 //! `GET /api/benchmark/runs` — list benchmark runs (paginated).
-//! `GET /api/benchmark/runs/{id}` — get a single run by ID.
-//! `GET /api/models/{id}/benchmark` — get all benchmark history for one model.
+//! `GET /api/models/{id}/agentic-history` — past A/B reports for one model.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
 
+use gglib_core::domain::benchmark::BenchmarkRun;
 use gglib_core::domain::benchmark::agentic::AgenticEvalReport;
-use gglib_core::domain::benchmark::tune::result::TuneCandidateResult;
-use gglib_core::domain::benchmark::{
-    BenchmarkRun, ModelBenchmarkSummary, ModelCompareResult, ModelPerfResult,
-};
 use gglib_core::ports::BenchmarkRepositoryPort as _;
 
 use crate::error::HttpError;
@@ -42,49 +38,6 @@ pub(crate) struct ListRunsResponse {
     pub runs: Vec<BenchmarkRun>,
 }
 
-/// Response body for `GET /api/benchmark/runs/{id}`.
-#[derive(Debug, serde::Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct GetRunResponse {
-    pub run: BenchmarkRun,
-}
-
-/// Query parameters for `GET /api/models/{id}/benchmark`.
-#[derive(Debug, serde::Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct ModelBenchmarkQuery {
-    /// Maximum number of compare results to return (default: 20).
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    #[serde(default = "default_limit")]
-    pub limit: i64,
-}
-
-/// Response body for `GET /api/models/{id}/benchmark`.
-#[derive(Debug, serde::Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct ModelBenchmarkResponse {
-    pub summary: Option<ModelBenchmarkSummary>,
-    pub compare_history: Vec<ModelCompareResult>,
-    pub perf_history: Vec<ModelPerfResult>,
-}
-
-/// Query parameters for `GET /api/models/{id}/tune-history`.
-#[derive(Debug, serde::Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct ModelTuneHistoryQuery {
-    /// Maximum number of tune candidate results to return (default: 20).
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-    #[serde(default = "default_limit")]
-    pub limit: i64,
-}
-
-/// Response body for `GET /api/models/{id}/tune-history`.
-#[derive(Debug, serde::Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct ModelTuneHistoryResponse {
-    pub results: Vec<TuneCandidateResult>,
-}
-
 /// Query parameters for `GET /api/models/{id}/agentic-history`.
 #[derive(Debug, serde::Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -112,51 +65,6 @@ pub(crate) async fn list_runs(
     let limit = params.limit.clamp(1, 100);
     let runs = state.bench_repo.list_runs(limit, params.offset).await?;
     Ok(Json(ListRunsResponse { runs }))
-}
-
-/// `GET /api/benchmark/runs/{id}` — get a single benchmark run by ID.
-pub(crate) async fn get_run(
-    State(state): State<AppState>,
-    Path(id): Path<i64>,
-) -> Result<Json<GetRunResponse>, HttpError> {
-    let run = state
-        .bench_repo
-        .get_run(id)
-        .await?
-        .ok_or_else(|| HttpError::NotFound(format!("benchmark run #{id} not found")))?;
-    Ok(Json(GetRunResponse { run }))
-}
-
-/// `GET /api/models/{id}/benchmark` — get the full benchmark history for one model.
-pub(crate) async fn model_benchmark(
-    State(state): State<AppState>,
-    Path(id): Path<i64>,
-    Query(params): Query<ModelBenchmarkQuery>,
-) -> Result<Json<ModelBenchmarkResponse>, HttpError> {
-    let limit = params.limit.clamp(1, 100);
-
-    let (summary, compare_history, perf_history) = tokio::try_join!(
-        state.bench_repo.get_model_summary(id),
-        state.bench_repo.get_model_compare_history(id, limit),
-        state.bench_repo.get_model_perf_history(id, limit),
-    )?;
-
-    Ok(Json(ModelBenchmarkResponse {
-        summary,
-        compare_history,
-        perf_history,
-    }))
-}
-
-/// `GET /api/models/{id}/tune-history` — get past tune candidate results for one model.
-pub(crate) async fn model_tune_history(
-    State(state): State<AppState>,
-    Path(id): Path<i64>,
-    Query(params): Query<ModelTuneHistoryQuery>,
-) -> Result<Json<ModelTuneHistoryResponse>, HttpError> {
-    let limit = params.limit.clamp(1, 100);
-    let results = state.bench_repo.get_model_tune_history(id, limit).await?;
-    Ok(Json(ModelTuneHistoryResponse { results }))
 }
 
 /// `GET /api/models/{id}/agentic-history` — past raw-vs-gglib A/B reports for
