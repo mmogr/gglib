@@ -127,7 +127,7 @@ The design system already exists — use it rather than reinventing it inline:
 - **Colour is semantic, never decorative.** `primary` = action, `success` = running/healthy, `warning` = degraded, `danger` = destructive/failure. A fact about a model (its quantization, its parameter count, its throughput) is not a state and should not borrow a state colour. An idle/stopped state is not a failure — it gets `--color-offline` (GUI) or `style::MUTED` (CLI), not danger red.
 - **Spacing and radius come from the token scale** (`--spacing-*`, `--radius-*` in `src/styles/base/variables.css`, bridged into Tailwind's `p-xs/sm/md/base/lg/xl`, `rounded-sm/base/md/lg/xl`), not raw Tailwind numerics (`p-2`, `rounded-[6px]`) or arbitrary bracket values, except where a value is genuinely one-off (e.g. matching an icon's exact pixel size).
 - **Reach for the existing primitives** (`src/components/primitives/`: `Card`, `Row`, `Stack`, `Label`, `EmptyState`, `Skeleton`) before writing a bespoke `flex` wrapper or empty-state block by hand.
-- **Files stay small and single-responsibility.** `scripts/check_file_complexity.sh` and `scripts/check_rust_complexity.sh` hold a 300-LOC budget as a *ratchet*, both in CI: a file already over it may shrink but not grow, and a file under it may not cross. `--update` records a deliberate growth as a visible line in the diff. When a component grows past that, extract by responsibility (see `ModelInspectorPanel/` or `SettingsModal/fields/` for the pattern: a thin composition root plus small, named child components and a barrel `index.ts`), not by splitting arbitrarily in half.
+- **Files stay small and single-responsibility.** `scripts/check_file_size.sh` holds a 300-LOC budget as a *ratchet*, run once for Rust and once for TypeScript/CSS, both in CI: a file already over it may shrink but not grow, and a file under it may not cross. `--update` records a deliberate growth as a visible line in the diff, and lowers the recorded size of a file that shrank. When a component grows past that, extract by responsibility (see `ModelInspectorPanel/` or `SettingsModal/fields/` for the pattern: a thin composition root plus small, named child components and a barrel `index.ts`), not by splitting arbitrarily in half.
 
 ---
 
@@ -475,7 +475,7 @@ Private helper functions, unit-test modules (`#[cfg(test)]`), and generated code
 
 ### Cargo docs deployment
 
-`cargo doc` is deployed to GitHub Pages automatically when a release is published, via `.github/workflows/docs.yml`. It runs:
+`cargo doc` is deployed to GitHub Pages by the `deploy-docs` job of `.github/workflows/release.yml`, which runs for each release that is not a prerelease. It runs:
 
 ```bash
 cargo doc --workspace --no-deps --document-private-items --exclude gglib-app
@@ -612,7 +612,7 @@ make lint
 # Build and open Rustdoc locally
 make doc
 
-# Run all pre-commit checks in sequence: fmt, lint, check, test, lint-web,
+# Run all pre-commit checks in sequence: fmt, lint, test, lint-web,
 # typecheck-web, deadcode-web, test-web, boundaries, unused-deps, enforce,
 # bindings-check, doc-check
 make pre-commit
@@ -642,7 +642,7 @@ cargo doc  -p gglib-runtime --features cli
 
 ### Unused dependencies
 
-CI's `boundaries` job runs `cargo shear --deny-warnings`, and `make unused-deps` runs the same command. It fails on:
+CI's `boundaries` job runs `make unused-deps`, which is `cargo shear --deny-warnings`. It fails on:
 
 - a dependency a crate declares and none of its targets names;
 - a dependency under `[dependencies]` that only the crate's `tests/` name, which belongs under `[dev-dependencies]`;
@@ -706,9 +706,9 @@ A change that splits into several concerns goes up as a stack: one PR per concer
 | Job | Runs | What it enforces |
 |---|---|---|
 | `fmt` | `cargo fmt --all -- --check` | Consistent code style |
-| `quality` | `./scripts/check_workflow_yaml.sh`, `npm run lint -- --max-warnings 0`, `npm run typecheck` | No duplicate key in any YAML file under `.github/`, plus that script's `bump-version.yml` check; the ESLint rules, warnings included; TypeScript types |
-| `boundaries` | `./scripts/check_boundaries.sh`, which also runs `check_readmes.sh --strict`; `cargo shear --deny-warnings` | What [Crate Boundaries](#crate-boundaries) says `check_boundaries.sh` rejects or allow-lists; the `gglib-bootstrap` source guard; README coverage; no dependency a crate declares and none of its targets uses (see [Unused dependencies](#unused-dependencies)) |
-| `enforcement` | `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_context_floor.sh`, `check_settings_surfaces.sh`, `check_swallowed_db_errors.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh`, `check_lint_inheritance.sh`, `check_ts_bindings.sh`, `check_readme_tables.py`, all in `scripts/` | Tauri commands only in the approved files; frontend `invoke()` only with allowlisted commands; no transport branching in frontend client modules; no catch-all over `ParamSource`; nothing outside the resolver fabricates the context floor; every setting reachable from a surface; no discarded `sqlx` result; the Rust and TypeScript/CSS file-size ratchets; every crate inherits the workspace lints, and allows no more lints than its baseline; the ts-rs binding annotations; TypeScript README tables that match their directories |
+| `quality` | `npm run lint -- --max-warnings 0`, `npm run typecheck` | The ESLint rules, warnings included; TypeScript types |
+| `boundaries` | `make boundaries`, which is `check_boundaries.sh` and the `check_readmes.sh --strict` it runs; `make unused-deps`, which is `cargo shear --deny-warnings` | What [Crate Boundaries](#crate-boundaries) says `check_boundaries.sh` rejects or allow-lists; the `gglib-bootstrap` source guard; README coverage; no dependency a crate declares and none of its targets uses (see [Unused dependencies](#unused-dependencies)) |
+| `enforcement` | `make enforce` | The repository rules that neither the compiler nor a linter checks. The `enforce` recipe in the `Makefile` is the only list of them, and each script's header says what it rejects |
 | `test` | `cargo metadata --locked` (the workspace and `src-tauri`), `npm run build`, `cargo test --no-fail-fast`, `scripts/split_test_output.py` | `Cargo.lock` is current; the Rust tests and doctests pass; the per-crate test output the badges read, from a run that ran doctests |
 | `bindings` | `make bindings-check` | The committed TypeScript bindings are what the Rust types generate |
 | `rustdoc` | `cargo doc --workspace --no-deps --document-private-items --exclude gglib-app`, with `RUSTDOCFLAGS=-D warnings` | No rustdoc warning |
@@ -721,7 +721,7 @@ When a CI or Coverage run on `main` completes, `badges.yml` downloads its artifa
 
 Coverage is measured on every push to `main` with `cargo-llvm-cov` and feeds into the same badge pipeline.
 
-Docs are deployed to GitHub Pages automatically when a release is published, via `docs.yml`.
+Docs are deployed to GitHub Pages by `release.yml`'s `deploy-docs` job, for each release that is not a prerelease.
 
 ---
 
