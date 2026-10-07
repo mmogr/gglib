@@ -4,7 +4,7 @@
  */
 
 import { get, put } from './client';
-import type { AppSettings, UpdateSettingsRequest } from '../types/settings';
+import type { AppSettings, UpdateSettingsRequest } from '../../../types';
 
 /**
  * Get current application settings.

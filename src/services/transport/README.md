@@ -31,7 +31,7 @@ Both halves reach the same gglib daemon, on desktop and on the web.
 
 | Directory | Role |
 |-----------|------|
-| `types/` | Per-domain wire shapes and branded ID types |
+| `types/` | Per-domain wire shapes, what each call takes, and ID aliases |
 | `api/` | HTTP API implementations (one module per domain) |
 | `events/` | Real-time event subscriptions over SSE |
 

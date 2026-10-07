@@ -17,7 +17,7 @@ import type {
   BenchmarkEvent,
   BenchmarkRun,
   CompareConfig,
-  ListBenchmarkRunsResponse,
+  ListRunsResponse,
   ModelAgenticHistoryResponse,
   PerfConfig,
   TuneConfig,
@@ -33,7 +33,7 @@ export async function listBenchmarkRuns(
   limit = 20,
   offset = 0,
 ): Promise<BenchmarkRun[]> {
-  const response = await get<ListBenchmarkRunsResponse>(
+  const response = await get<ListRunsResponse>(
     `/api/benchmark/runs?limit=${limit}&offset=${offset}`,
   );
   return response.runs;

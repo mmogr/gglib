@@ -35,7 +35,6 @@ function summaryOf(chat: HubChat): ConversationSummary {
     title: chat.title,
     model_id: null,
     system_prompt: null,
-    settings: null,
     created_at: chat.updated_at,
     updated_at: chat.updated_at,
   };

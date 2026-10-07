@@ -5,8 +5,7 @@
  * serving as the single source of truth for request shape construction.
  */
 
-import type { ServeConfig } from '../transport/types/models';
-import type { SparseInferenceConfig } from '../../types';
+import type { ServeConfig, SparseInferenceConfig } from '../../types';
 import { INFERENCE_CONFIG_KEYS } from '../../constants/inferenceDefaults';
 
 /**

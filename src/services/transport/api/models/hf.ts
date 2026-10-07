@@ -4,21 +4,20 @@
  */
 
 import { get, post } from '../client';
-import { HF_SEARCH_PATH, HF_MODEL_PATH, HF_QUANTIZATIONS_PATH, HF_TOOL_SUPPORT_PATH } from '../../../api/routes';
 import type { HfModelId } from '../../types/ids';
 import type {
+  HfModelSummary,
+  HfQuantizationsResponse,
   HfSearchRequest,
   HfSearchResponse,
-  HfQuantizationsResponse,
   ToolSupportResponse,
-} from '../../types/models';
-import type { HfModelSummary } from '../../../../types';
+} from '../../../../types';
 
 /**
  * Browse HuggingFace models with search and filtering.
  */
 export async function browseHfModels(params: HfSearchRequest): Promise<HfSearchResponse> {
-  return post<HfSearchResponse>(HF_SEARCH_PATH, params);
+  return post<HfSearchResponse>('/api/models/hf/search', params);
 }
 
 /**
@@ -33,7 +32,7 @@ export async function browseHfModels(params: HfSearchRequest): Promise<HfSearchR
  */
 export async function getHfModelSummary(modelId: HfModelId): Promise<HfModelSummary> {
   // Don't encode the modelId - the wildcard route expects the raw path
-  return get<HfModelSummary>(`${HF_MODEL_PATH}/${modelId}`);
+  return get<HfModelSummary>(`/api/models/hf/model/${modelId}`);
 }
 
 /**
@@ -41,7 +40,7 @@ export async function getHfModelSummary(modelId: HfModelId): Promise<HfModelSumm
  */
 export async function getHfQuantizations(modelId: HfModelId): Promise<HfQuantizationsResponse> {
   return get<HfQuantizationsResponse>(
-    `${HF_QUANTIZATIONS_PATH}/${encodeURIComponent(modelId)}`
+    `/api/models/hf/quantizations/${encodeURIComponent(modelId)}`
   );
 }
 
@@ -50,6 +49,6 @@ export async function getHfQuantizations(modelId: HfModelId): Promise<HfQuantiza
  */
 export async function getHfToolSupport(modelId: HfModelId): Promise<ToolSupportResponse> {
   return get<ToolSupportResponse>(
-    `${HF_TOOL_SUPPORT_PATH}/${encodeURIComponent(modelId)}`
+    `/api/models/hf/tool-support/${encodeURIComponent(modelId)}`
   );
 }

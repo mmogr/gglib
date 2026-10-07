@@ -456,22 +456,6 @@ export function getHealthDisplay(health?: ServerHealthStatus): { tone: HealthTon
 }
 
 // ============================================================================
-// Download Types (re-exported from transport types for convenience)
-// ============================================================================
-
-export type {
-  QueueSnapshot,
-  DownloadRow,
-  FinishedDownload,
-  DownloadCompletionInfo,
-  DownloadFailureInfo,
-} from '../services/transport/types/downloads';
-
-export type {
-  DownloadEvent,
-} from '../services/transport/types/events';
-
-// ============================================================================
 // HuggingFace Browser Types
 // ============================================================================
 
@@ -524,11 +508,6 @@ export type { ToolSupportResponse } from './generated/ToolSupportResponse';
 // ============================================================================
 // Model Filter Options Types
 // ============================================================================
-
-/**
- * A range of numeric values with min and max.
- */
-export type { RangeValues } from './generated/RangeValues';
 
 /**
  * Filter options for the model library UI.

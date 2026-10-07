@@ -3,7 +3,6 @@
  * Reports which build of gglib the daemon answering us is running.
  */
 
-import { VERSION_PATH } from '../../api/routes';
 import { get } from './client';
 import type { VersionDto } from '../../../types/generated/VersionDto';
 
@@ -16,5 +15,5 @@ import type { VersionDto } from '../../../types/generated/VersionDto';
  * bundled with.
  */
 export async function getVersion(): Promise<VersionDto> {
-  return get<VersionDto>(VERSION_PATH);
+  return get<VersionDto>('/api/version');
 }

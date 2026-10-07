@@ -56,7 +56,7 @@ function join() {
 
 /** This machine's list as one reading of it: each chat with what it remembers. */
 function listed(...chats: Array<[number, ConversationSettings?]>) {
-  return chats.map(([id, settings]) => ({ id, settings: settings ?? null }));
+  return chats.map(([id, settings]) => ({ id, ...(settings && { settings }) }));
 }
 
 /** A far chat as its machine answers it. */

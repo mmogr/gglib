@@ -8,13 +8,12 @@
  */
 
 import type { AttachmentUpload } from '../../../types/generated/AttachmentUpload';
-import { ATTACHMENTS_PATH, REMOTE_ATTACHMENTS_PATH } from '../../api/routes';
 import { readData } from '../errors';
 import type { ChatSource } from '../types/chat';
 import { apiFetch } from './client';
 
 function storeOf(source: ChatSource): string {
-  return source === 'far' ? REMOTE_ATTACHMENTS_PATH : ATTACHMENTS_PATH;
+  return source === 'far' ? '/api/remote/attachments' : '/api/attachments';
 }
 
 /**

@@ -30,7 +30,7 @@ function chat(id: number, model: ModelRef | null, modelId: number | null = null)
     title: `chat ${id}`,
     model_id: modelId,
     system_prompt: null,
-    settings: model ? { model } : null,
+    ...(model && { settings: { model } }),
     created_at: '2026-10-01T00:00:00Z',
     updated_at: '2026-10-01T00:00:00Z',
   };
