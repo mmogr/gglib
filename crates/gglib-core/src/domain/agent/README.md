@@ -1,8 +1,5 @@
 # agent
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-agent-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-agent-complexity.json)
-
 <!-- module-docs:start -->
 
 Agent loop domain types.

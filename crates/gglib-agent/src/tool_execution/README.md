@@ -1,8 +1,5 @@
 # Tool Execution
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-tool_execution-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-tool_execution-complexity.json)
-
 <!-- module-docs:start -->
 
 Parallel tool execution with bounded concurrency and per-tool timeout.

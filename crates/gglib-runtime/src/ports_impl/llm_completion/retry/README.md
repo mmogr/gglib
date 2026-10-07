@@ -1,8 +1,5 @@
 # Retry
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-llm_completion-retry-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-llm_completion-retry-complexity.json)
-
 <!-- module-docs:start -->
 
 Client-side retry for transient upstream failures on the completions request.

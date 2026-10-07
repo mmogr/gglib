@@ -1,8 +1,5 @@
 # remote
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-remote-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-remote-complexity.json)
-
 <!-- module-docs:start -->
 
 The `RemoteControl` popover's sections ([ADR 0012](../../../docs/adr/0012-the-remote-tunnel.md)): the two sides of the tunnel, and the roster of devices this machine serves. All of them read `remoteRegistry` and act through `getTransport()`; none knows it is inside a popover.

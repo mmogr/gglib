@@ -1,8 +1,5 @@
 # `config_commands`
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-config_commands-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-config_commands-complexity.json)
-
 <!-- module-docs:start -->
 
 Clap definitions for `gglib config` — settings, inference defaults, profiles,

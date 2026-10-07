@@ -1,8 +1,5 @@
 # Retry
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-retry-complexity.json)
-
 <!-- module-docs:start -->
 
 Shared backoff policy for retryable upstream failures.

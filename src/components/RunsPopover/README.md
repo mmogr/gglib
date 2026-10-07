@@ -1,8 +1,5 @@
 # RunsPopover
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-RunsPopover-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-RunsPopover-complexity.json)
-
 <!-- module-docs:start -->
 
 Floating popover listing currently running llama-server instances with per-server stop buttons and quick navigation to each server's chat or console view. Auto-closes when the last server stops.

@@ -1,8 +1,5 @@
 # logging
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-platform-logging-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-platform-logging-complexity.json)
-
 <!-- module-docs:start -->
 
 Unified, strictly-typed application logger with per-category filtering, frontend-side log-level gating, payload truncation, and dual-transport output (browser console + Tauri tracing IPC). All log categories are a TypeScript union type — misspellings fail at compile time.

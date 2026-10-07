@@ -1,8 +1,5 @@
 # Request Pipeline
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-complexity.json)
-
 <!-- module-docs:start -->
 
 Request shaping for every inference pipeline: what we know about the model, and

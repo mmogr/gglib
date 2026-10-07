@@ -1,8 +1,5 @@
 # components
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ChatMessagesPanel-components-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ChatMessagesPanel-components-complexity.json)
-
 <!-- module-docs:start -->
 
 Every child of the `ChatMessagesPanel` composition root: the panel chrome around the thread (header, system prompt card, banners, composer, delete modal) and the per-message rendering (the notebook's rows of margin and body, Markdown with syntax highlighting, collapsible reasoning, and the context wiring message-level actions to their handlers).

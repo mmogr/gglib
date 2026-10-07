@@ -1,8 +1,5 @@
 # Agentic
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-Benchmark-Agentic-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-Benchmark-Agentic-complexity.json)
-
 <!-- module-docs:start -->
 
 Agentic-mode UI: the raw-vs-gglib A/B eval, run against a tool-calling task

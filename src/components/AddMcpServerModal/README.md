@@ -1,8 +1,5 @@
 # AddMcpServerModal
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-AddMcpServerModal-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-AddMcpServerModal-complexity.json)
-
 <!-- module-docs:start -->
 
 Modal dialog for adding and configuring Model Context Protocol (MCP) servers. Handles server type selection (stdio process spawn vs SSE HTTP endpoint), template-based quick-start, environment variable management, working directory, and PATH overrides.

@@ -1,8 +1,6 @@
 # Frontend Components
 
 <!-- module-docs:start -->
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-complexity.json)
 
 This directory contains the React components used in the Desktop GUI (Tauri) and Web UI.
 

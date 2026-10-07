@@ -1,8 +1,5 @@
 # benchmark
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-benchmark-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-benchmark-complexity.json)
-
 <!-- module-docs:start -->
 
 Benchmark service — shared between CLI and web adapters.

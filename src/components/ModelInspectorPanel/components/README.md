@@ -1,8 +1,5 @@
 # components
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ModelInspectorPanel-components-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ModelInspectorPanel-components-complexity.json)
-
 <!-- module-docs:start -->
 
 Presentational sub-components for the model inspector panel, each scoped to a single responsibility.

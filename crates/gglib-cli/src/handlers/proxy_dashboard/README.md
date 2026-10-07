@@ -1,8 +1,5 @@
 # `proxy_dashboard`
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-proxy_dashboard-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-proxy_dashboard-complexity.json)
-
 <!-- module-docs:start -->
 
 `gglib proxy dashboard` — a live terminal view of an already-running proxy.

@@ -1,8 +1,5 @@
 # modelControlCenter
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-pages-modelControlCenter-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-pages-modelControlCenter-complexity.json)
-
 <!-- module-docs:start -->
 
 Custom hooks for the Model Control Center page's filter state, panel layout, chat session, and native menu action wiring. Keeps the page component thin by delegating all stateful logic here.

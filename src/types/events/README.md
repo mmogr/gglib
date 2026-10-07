@@ -1,8 +1,5 @@
 # events
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-types-events-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-types-events-complexity.json)
-
 <!-- module-docs:start -->
 
 Strict discriminated-union TypeScript types for the agent events emitted by the Rust backend over SSE. Mirrors `gglib_core::domain::agent::AgentEvent`, enabling exhaustive `switch` statements and preventing silent contract drift.

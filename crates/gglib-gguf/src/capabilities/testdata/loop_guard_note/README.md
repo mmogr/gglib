@@ -1,8 +1,5 @@
 # loop_guard_note
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-testdata-loop_guard_note-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-capabilities-testdata-loop_guard_note-complexity.json)
-
 <!-- module-docs:start -->
 
 Real chat templates, vendored **byte for byte** from llama.cpp `e5a8d439`

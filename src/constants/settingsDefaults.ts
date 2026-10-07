@@ -6,7 +6,9 @@
  * mirror them so the GUI can show the user what the backend will fall back to
  * and reject out-of-range input before a round trip.
  *
- * Mirroring is not enforcement: nothing here fails if the Rust side changes.
+ * `tests/ts/contracts/settingsBounds.test.ts` reads the Rust source and fails
+ * when a range here admits a value the backend rejects, or a default here is
+ * not the Rust one, for the fields it lists.
  * What this module buys is that a Rust-side change is a one-file fix instead of
  * a hunt through five JSX literals, and that each value is written exactly once
  * (the ranges used to be spelled out twice per field — as `min`/`max` props and

@@ -1,8 +1,5 @@
 # proxy
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-proxy-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-proxy-complexity.json)
-
 <!-- module-docs:start -->
 
 Display components shared by every surface that shows proxy state: the `ProxyControl` dropdown in the header, the `ProxyDashboardModal`, and the system tray popover (`pages/TrayPanel`).

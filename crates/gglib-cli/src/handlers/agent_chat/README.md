@@ -1,8 +1,5 @@
 # Agent Chat
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-agent_chat-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-agent_chat-complexity.json)
-
 <!-- module-docs:start -->
 
 Interactive agentic chat handler for `gglib chat`.

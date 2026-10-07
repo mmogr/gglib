@@ -1,8 +1,5 @@
 # clients
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-clients-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-clients-complexity.json)
-
 <!-- module-docs:start -->
 
 Clients that own real request logic of their own. Each one exists because it does something `getTransport()` cannot: follow a streaming response, or talk to a server that is not the app's own backend. Everything else — plain request/response against the backend — belongs in a `transport/api/` module and is called directly as `getTransport().method()`. There is no facade layer in between.

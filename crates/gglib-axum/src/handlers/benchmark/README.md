@@ -1,8 +1,5 @@
 # benchmark
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-handlers-benchmark-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-handlers-benchmark-complexity.json)
-
 <!-- module-docs:start -->
 
 Benchmark HTTP handlers.

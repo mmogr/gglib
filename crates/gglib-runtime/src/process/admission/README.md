@@ -1,8 +1,5 @@
 # Admission
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-process-admission-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-process-admission-complexity.json)
-
 <!-- module-docs:start -->
 
 Who gets the GPU next, and for how long.

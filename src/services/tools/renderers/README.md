@@ -1,8 +1,5 @@
 # renderers
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-tools-renderers-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-tools-renderers-complexity.json)
-
 <!-- module-docs:start -->
 
 React components and rendering logic for displaying tool execution results in the chat UI. Each renderer is a plain object implementing `renderResult()` for full display and optionally `renderSummary()` for compact inline headers. Renderers are stored on `RegisteredTool` objects in the tool registry and looked up at render time.

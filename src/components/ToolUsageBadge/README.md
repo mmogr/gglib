@@ -1,8 +1,5 @@
 # ToolUsageBadge
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ToolUsageBadge-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ToolUsageBadge-complexity.json)
-
 <!-- module-docs:start -->
 
 Inline badge in message bubbles summarising tool usage for an assistant turn. Shows an aggregate status icon (running/success/error/mixed) and opens a details modal listing each tool call with arguments, result, and a copy button.

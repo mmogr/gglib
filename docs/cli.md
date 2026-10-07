@@ -1,9 +1,4 @@
-<!-- module-docs:start -->
-
 # GGLib Command Reference
-
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-commands-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-commands-complexity.json)
 
 What each command is for, and how they fit together. For the exhaustive flag
 list on any command, run `gglib <command> --help` — clap generates that from the
@@ -122,8 +117,8 @@ Several commands flatten the same argument groups. Learning them once covers
 | Group | Flags cover | Notes |
 |---|---|---|
 | **Context** | `--ctx-size` / `-c` | A number, or `max` to take the model's own metadata. Falls back to the global default. |
-| **Sampling** | temperature, top-p, penalties, … | One layer of a five-level hierarchy — see [Sampling resolution](../../docs/sampling.md). Use [`model explain`](#models) to see which layer won. |
-| **Cache** | `--cache`, `--slot-dir`, `--cache-disk-gb` | The on-disk slot cache. KV quantization and the host-RAM prompt cache are auto-sized by the daemon, not per run — see [KV cache tiering](../../docs/cache.md). |
+| **Sampling** | temperature, top-p, penalties, … | One layer of a five-level hierarchy — see [Sampling resolution](sampling.md). Use [`model explain`](#models) to see which layer won. |
+| **Cache** | `--cache`, `--slot-dir`, `--cache-disk-gb` | The on-disk slot cache. KV quantization and the host-RAM prompt cache are auto-sized by the daemon, not per run — see [KV cache tiering](cache.md). |
 | **Access** | `--host`, `--api-key`, `--allowed-host` | Loopback needs no key. Binding elsewhere mints one and prints it, and every host a client will reach the endpoint by must be named with `--allowed-host` (DNS-rebinding guard). |
 | **MTP** | `--mtp-draft-n-max`, `--mtp-draft-p-min` | Auto-enabled for `mtp`-tagged models; set `n-max` to `0` to force it off. |
 | **Retry** | retry budget, `--no-retry` | Transient upstream failures on the completion path. |
@@ -148,7 +143,7 @@ bar shows the lifecycle phase — `Downloading` → `Finalizing` → `Registerin
 monitor automatically. Set `HF_TOKEN` in the environment for private repos.
 
 Transfers run natively over HTTP, resumable and checksum-verified; no Python is
-required. See the [Download Module](download/README.md).
+required. See the [Download Module](../crates/gglib-cli/src/handlers/model/download/README.md).
 
 **Integrity** — `verify` (SHA-256), `repair` (re-download failed shards).
 
@@ -158,7 +153,7 @@ required. See the [Download Module](download/README.md).
 upgrading gglib to backfill newly-introduced tags such as the `format:*` dialect
 family. It is additive by default and never touches user-curated tags; `--full`
 rebuilds the auto namespace only. See [Tags & capability
-detection](../../docs/tags.md).
+detection](tags.md).
 
 `explain` prints every resolved sampling parameter alongside the layer that
 supplied it, using the same resolver the live path uses — so it cannot describe
@@ -221,7 +216,7 @@ when gglib spawns one: `eager` at host init, `lazy` on first tool use (default),
 - **`models-dir`** — `show` (with its source), `prompt` (interactive), or
   `set <PATH>`.
 - **`llama`** — install, status, check-updates, update, rebuild, uninstall.
-  gglib manages llama.cpp itself; see [Llama Management](llama/README.md).
+  gglib manages llama.cpp itself; see [Llama Management](../crates/gglib-runtime/src/llama/README.md).
 - **`check-deps`** — report what is missing and print your platform's exact
   install commands. Reporting only; it installs nothing.
 - **`fast-downloads`** — `status`, `enable`, `disable`, `prompt` for the
@@ -243,9 +238,7 @@ UI and API from one loopback port. To expose it on the network, run
 
 ## See Also
 
-- [Main README](../../README.md) — what GGLib is and how to point a client at it
-- [Sampling resolution](../../docs/sampling.md) · [Tags](../../docs/tags.md) · [KV cache](../../docs/cache.md)
-- [gglib-cli crate](../../crates/gglib-cli/README.md) — the Rust source behind these commands
-- [Desktop GUI](../../src-tauri/README.md)
-
-<!-- module-docs:end -->
+- [Main README](../README.md) — what GGLib is and how to point a client at it
+- [Sampling resolution](sampling.md) · [Tags](tags.md) · [KV cache](cache.md)
+- [gglib-cli crate](../crates/gglib-cli/README.md) — the Rust source behind these commands
+- [Desktop GUI](../src-tauri/README.md)

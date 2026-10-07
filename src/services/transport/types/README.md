@@ -1,8 +1,5 @@
 # types
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-transport-types-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-transport-types-complexity.json)
-
 <!-- module-docs:start -->
 
 The transport's own TypeScript types: ID aliases, two event-handler types, what each call takes, and the shapes of the domains this layer owns (downloads, events, chat, MCP, the proxy, the remote tunnel, verification). Most are re-exports of the ts-rs bindings under `src/types/generated/`.

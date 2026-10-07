@@ -1,8 +1,5 @@
 # tools
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-tools-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-tools-complexity.json)
-
 <!-- module-docs:start -->
 
 Central tool registry for LLM function calling. Manages registration and enablement of both built-in backend tools and dynamically-loaded MCP server tools, handles name sanitization and collision detection, and stores optional React renderers for displaying tool results in the chat UI. It runs nothing: a run sends the enabled tools' backend names as its `tool_filter`, and the daemon executes them.

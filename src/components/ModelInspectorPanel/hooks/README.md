@@ -1,8 +1,5 @@
 # hooks
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ModelInspectorPanel-hooks-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ModelInspectorPanel-hooks-complexity.json)
-
 <!-- module-docs:start -->
 
 Custom hooks encapsulating stateful logic for the model inspector panel.
