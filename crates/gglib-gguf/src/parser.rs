@@ -14,6 +14,10 @@ use crate::error::GgufResult;
 use crate::format::{CONTEXT_LENGTH_KEYS, quantization};
 use crate::reader::GgufReader;
 
+/// The fewest bytes a metadata pair takes in a file: the length of an empty
+/// key, the value type, and a one-byte value.
+const MIN_PAIR_BYTES: u64 = 8 + 4 + 1;
+
 /// GGUF file parser.
 ///
 /// Implements `GgufParserPort` from `gglib-core`, providing full GGUF
@@ -37,7 +41,8 @@ impl GgufParser {
         reader.read_magic()?;
         let version = reader.read_version()?;
 
-        // Read tensor count (not used but must be read)
+        // Read tensor count (not used but must be read). Nothing is reserved
+        // or looped over by it, so it is not held to the size of the file.
         let _tensor_count = if version >= 2 {
             reader.read_u64()?
         } else {
@@ -50,6 +55,8 @@ impl GgufParser {
         } else {
             u64::from(reader.read_u32()?)
         };
+        let metadata_count =
+            reader.declared_size("metadata count", metadata_count, MIN_PAIR_BYTES)?;
 
         // Parse metadata key-value pairs
         let mut raw_metadata = HashMap::new();

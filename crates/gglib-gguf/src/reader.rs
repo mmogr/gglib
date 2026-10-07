@@ -2,9 +2,15 @@
 //!
 //! This module provides a unified API for reading GGUF files over any
 //! [`Read`], which for a file on disk is buffered standard I/O.
+//!
+//! A model file comes from the internet, so no size it declares is taken on
+//! its word. Each is held to the bytes the file has left before anything is
+//! reserved or looped over, what is reserved is reserved fallibly, and
+//! arrays are followed only so deep. A file that declares more than it holds
+//! is an error, where taking its word would end the process.
 
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{self, BufReader, Read};
 use std::path::Path;
 
 use gglib_core::domain::gguf::GgufValue;
@@ -12,11 +18,21 @@ use gglib_core::domain::gguf::GgufValue;
 use crate::error::{GgufInternalError, GgufResult};
 use crate::format::GGUF_MAGIC;
 
+/// How deep a file may nest arrays.
+///
+/// Reading a value recurses once per level, and so does printing or dropping
+/// it, so a file free to nest without end overflows the stack. llama.cpp
+/// refuses an array of arrays, so no file it loads nests at all.
+const MAX_ARRAY_DEPTH: usize = 32;
+
 /// A reader for GGUF files.
 ///
 /// Abstracts the byte source the GGUF primitives are read from.
 pub(crate) struct GgufReader<R: Read> {
     reader: R,
+    /// The bytes of the file not yet read, which every size the file
+    /// declares is held to.
+    remaining: u64,
 }
 
 impl GgufReader<BufReader<File>> {
@@ -29,22 +45,55 @@ impl GgufReader<BufReader<File>> {
                 GgufInternalError::Io(e)
             }
         })?;
+        let remaining = file.metadata()?.len();
         let reader = BufReader::new(file);
-        Ok(Self { reader })
+        Ok(Self { reader, remaining })
     }
 }
 
 impl<R: Read> GgufReader<R> {
-    /// Create a reader from any Read implementation (useful for testing).
-    #[cfg(test)]
-    const fn from_reader(reader: R) -> Self {
-        Self { reader }
+    /// Fill `buf` from the source, and count its bytes off what the file
+    /// has left.
+    fn fill(&mut self, buf: &mut [u8]) -> GgufResult<()> {
+        self.reader.read_exact(buf)?;
+        self.count_off(buf.len() as u64);
+        Ok(())
+    }
+
+    /// Count `bytes` that were read off what the file has left.
+    ///
+    /// A file that grew after it was opened reads past the length it had,
+    /// and by this count has nothing left.
+    const fn count_off(&mut self, bytes: u64) {
+        self.remaining = self.remaining.saturating_sub(bytes);
+    }
+
+    /// Hold a size the file declares to the bytes it has left.
+    ///
+    /// `declared` items of at least `width` bytes each do not fit in fewer
+    /// bytes than that, so a size the rest of the file cannot hold is
+    /// refused here, under the name `what`, before anything is reserved or
+    /// looped over on its word.
+    pub(crate) fn declared_size(
+        &self,
+        what: &'static str,
+        declared: u64,
+        width: u64,
+    ) -> GgufResult<usize> {
+        match usize::try_from(declared) {
+            Ok(size) if declared <= self.remaining / width => Ok(size),
+            _ => Err(GgufInternalError::DeclaredTooLarge {
+                what,
+                declared,
+                remaining: self.remaining,
+            }),
+        }
     }
 
     /// Read and validate the GGUF magic number.
     pub(crate) fn read_magic(&mut self) -> GgufResult<()> {
         let mut magic = [0u8; 4];
-        self.reader.read_exact(&mut magic)?;
+        self.fill(&mut magic)?;
         if magic != GGUF_MAGIC {
             return Err(GgufInternalError::InvalidMagic);
         }
@@ -63,7 +112,7 @@ impl<R: Read> GgufReader<R> {
     /// Read a u8 value.
     pub(crate) fn read_u8(&mut self) -> GgufResult<u8> {
         let mut buf = [0u8; 1];
-        self.reader.read_exact(&mut buf)?;
+        self.fill(&mut buf)?;
         Ok(buf[0])
     }
 
@@ -76,7 +125,7 @@ impl<R: Read> GgufReader<R> {
     /// Read a u16 value (little-endian).
     pub(crate) fn read_u16(&mut self) -> GgufResult<u16> {
         let mut buf = [0u8; 2];
-        self.reader.read_exact(&mut buf)?;
+        self.fill(&mut buf)?;
         Ok(u16::from_le_bytes(buf))
     }
 
@@ -89,7 +138,7 @@ impl<R: Read> GgufReader<R> {
     /// Read a u32 value (little-endian).
     pub(crate) fn read_u32(&mut self) -> GgufResult<u32> {
         let mut buf = [0u8; 4];
-        self.reader.read_exact(&mut buf)?;
+        self.fill(&mut buf)?;
         Ok(u32::from_le_bytes(buf))
     }
 
@@ -102,7 +151,7 @@ impl<R: Read> GgufReader<R> {
     /// Read a u64 value (little-endian).
     pub(crate) fn read_u64(&mut self) -> GgufResult<u64> {
         let mut buf = [0u8; 8];
-        self.reader.read_exact(&mut buf)?;
+        self.fill(&mut buf)?;
         Ok(u64::from_le_bytes(buf))
     }
 
@@ -115,14 +164,14 @@ impl<R: Read> GgufReader<R> {
     /// Read an f32 value (little-endian).
     pub(crate) fn read_f32(&mut self) -> GgufResult<f32> {
         let mut buf = [0u8; 4];
-        self.reader.read_exact(&mut buf)?;
+        self.fill(&mut buf)?;
         Ok(f32::from_le_bytes(buf))
     }
 
     /// Read an f64 value (little-endian).
     pub(crate) fn read_f64(&mut self) -> GgufResult<f64> {
         let mut buf = [0u8; 8];
-        self.reader.read_exact(&mut buf)?;
+        self.fill(&mut buf)?;
         Ok(f64::from_le_bytes(buf))
     }
 
@@ -132,17 +181,27 @@ impl<R: Read> GgufReader<R> {
     }
 
     /// Read a string (u64 length prefix followed by UTF-8 bytes).
-    #[allow(clippy::cast_possible_truncation)]
     pub(crate) fn read_string(&mut self) -> GgufResult<String> {
-        let len = self.read_u64()? as usize;
-        let mut buf = vec![0u8; len];
-        self.reader.read_exact(&mut buf)?;
+        let declared = self.read_u64()?;
+        let len = self.declared_size("string length", declared, 1)?;
+        let mut buf = reserve("string length", len)?;
+        // Memory is written to only as bytes arrive, so a length the source
+        // does not make good costs none.
+        let read = self.reader.by_ref().take(declared).read_to_end(&mut buf)?;
+        self.count_off(declared);
+        if read < len {
+            return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
+        }
         String::from_utf8(buf).map_err(|_| GgufInternalError::Utf8Error)
     }
 
     /// Read a GGUF value based on its type code.
-    #[allow(clippy::cast_possible_truncation)]
     pub(crate) fn read_value(&mut self, value_type: u32) -> GgufResult<GgufValue> {
+        self.read_value_at(value_type, 0)
+    }
+
+    /// Read a value that `depth` arrays enclose.
+    fn read_value_at(&mut self, value_type: u32, depth: usize) -> GgufResult<GgufValue> {
         match value_type {
             0 => Ok(GgufValue::U8(self.read_u8()?)),
             1 => Ok(GgufValue::I8(self.read_i8()?)),
@@ -155,12 +214,16 @@ impl<R: Read> GgufReader<R> {
             8 => Ok(GgufValue::String(self.read_string()?)),
             9 => {
                 // Array type
+                if depth == MAX_ARRAY_DEPTH {
+                    return Err(GgufInternalError::ArraysTooDeep(MAX_ARRAY_DEPTH));
+                }
                 let element_type = self.read_u32()?;
-                let count = self.read_u64()? as usize;
-                let mut elements = Vec::with_capacity(count);
+                let declared = self.read_u64()?;
+                let count = self.declared_size("array count", declared, min_width(element_type))?;
+                let mut elements = reserve("array count", count)?;
 
                 for _ in 0..count {
-                    elements.push(self.read_value(element_type)?);
+                    elements.push(self.read_value_at(element_type, depth + 1)?);
                 }
 
                 Ok(GgufValue::Array(elements))
@@ -173,73 +236,37 @@ impl<R: Read> GgufReader<R> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Cursor;
-
-    #[test]
-    fn test_read_u32() {
-        let data = [0x01, 0x02, 0x03, 0x04];
-        let mut reader = GgufReader::from_reader(Cursor::new(data));
-        assert_eq!(reader.read_u32().unwrap(), 0x0403_0201);
-    }
-
-    #[test]
-    fn test_read_string() {
-        // Length (u64 LE) = 5, then "hello"
-        let data = [
-            0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, b'h', b'e', b'l', b'l', b'o',
-        ];
-        let mut reader = GgufReader::from_reader(Cursor::new(data));
-        assert_eq!(reader.read_string().unwrap(), "hello");
-    }
-
-    #[test]
-    fn test_read_magic_valid() {
-        let mut reader = GgufReader::from_reader(Cursor::new(GGUF_MAGIC));
-        assert!(reader.read_magic().is_ok());
-    }
-
-    #[test]
-    fn test_read_magic_invalid() {
-        let mut reader = GgufReader::from_reader(Cursor::new([0x00, 0x00, 0x00, 0x00]));
-        assert!(matches!(
-            reader.read_magic(),
-            Err(GgufInternalError::InvalidMagic)
-        ));
-    }
-
-    #[test]
-    fn test_read_version_valid() {
-        let data = [0x02, 0x00, 0x00, 0x00]; // version 2
-        let mut reader = GgufReader::from_reader(Cursor::new(data));
-        assert_eq!(reader.read_version().unwrap(), 2);
-    }
-
-    #[test]
-    fn test_read_version_invalid() {
-        let data = [0x05, 0x00, 0x00, 0x00]; // version 5 - unsupported
-        let mut reader = GgufReader::from_reader(Cursor::new(data));
-        assert!(matches!(
-            reader.read_version(),
-            Err(GgufInternalError::UnsupportedVersion(5))
-        ));
-    }
-
-    #[test]
-    fn test_read_value_u32() {
-        let data = [0x2A, 0x00, 0x00, 0x00]; // 42
-        let mut reader = GgufReader::from_reader(Cursor::new(data));
-        let value = reader.read_value(4).unwrap();
-        assert!(matches!(value, GgufValue::U32(42)));
-    }
-
-    #[test]
-    fn test_read_value_bool() {
-        let data = [0x01];
-        let mut reader = GgufReader::from_reader(Cursor::new(data));
-        let value = reader.read_value(7).unwrap();
-        assert!(matches!(value, GgufValue::Bool(true)));
+/// The fewest bytes one value of `value_type` takes in a file.
+///
+/// A string is at least its length, and an array at least its element type
+/// and its count. One byte is a `u8`, an `i8` or a bool, and the floor for a
+/// type the format does not have, which is refused when a value of it is
+/// read.
+const fn min_width(value_type: u32) -> u64 {
+    match value_type {
+        2 | 3 => 2,
+        4..=6 => 4,
+        8 | 10..=12 => 8,
+        9 => 12,
+        _ => 1,
     }
 }
+
+/// Room for `count` items a file declared, where the machine has it.
+///
+/// A size the file can hold may still be more than there is memory for, and
+/// reserving that on the file's word would abort the process.
+fn reserve<T>(what: &'static str, count: usize) -> GgufResult<Vec<T>> {
+    let mut items = Vec::new();
+    items.try_reserve_exact(count).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::OutOfMemory,
+            format!("no memory for {what} {count}"),
+        )
+    })?;
+    Ok(items)
+}
+
+#[cfg(test)]
+#[path = "reader_tests.rs"]
+mod tests;

@@ -85,6 +85,7 @@ crates/gglib-download/src/quant_selector.rs 340
 crates/gglib-download/src/queue/mod.rs 1088
 crates/gglib-gguf/src/capabilities/template_probe.rs 501
 crates/gglib-gguf/src/parser.rs 423
+crates/gglib-gguf/src/reader_tests.rs 416
 crates/gglib-hf/src/http.rs 381
 crates/gglib-hf/src/parsing.rs 429
 crates/gglib-mcp/src/builtin/mod.rs 337
