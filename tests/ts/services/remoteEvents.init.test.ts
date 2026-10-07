@@ -16,10 +16,8 @@ const applyRemoteStatus = vi.fn();
 const ingestRemoteEvent = vi.fn();
 const resetRemoteState = vi.fn();
 
-vi.mock('../../../src/services/transport/events/sse', () => ({ subscribeSseEvent }));
-
 vi.mock('../../../src/services/transport', () => ({
-  getTransport: () => ({ getRemoteStatus }),
+  getTransport: () => ({ subscribe: subscribeSseEvent, getRemoteStatus }),
 }));
 
 vi.mock('../../../src/services/remoteRegistry', () => ({
@@ -153,5 +151,47 @@ describe('initRemoteEvents', () => {
 
     getRemoteStatus.mockRejectedValueOnce(new Error('daemon gone'));
     await expect(refreshRemoteStatus()).resolves.toBe(false);
+  });
+
+  /**
+   * Cleanup is newer than a read still out. Its status was asked for by a
+   * bridge that is gone, and landing it would fill a registry that cleanup
+   * had just emptied.
+   */
+  it('writes nothing from a status that answers after cleanup', async () => {
+    let resolveStatus: (s: typeof STATUS) => void = () => {};
+    getRemoteStatus.mockImplementationOnce(
+      () => new Promise<typeof STATUS>((resolve) => (resolveStatus = resolve)),
+    );
+
+    const { initRemoteEvents, cleanupRemoteEvents } = await loadFresh();
+    initRemoteEvents();
+    expect(getRemoteStatus).toHaveBeenCalledTimes(1);
+    cleanupRemoteEvents();
+
+    resolveStatus(STATUS);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(applyRemoteStatus).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The re-read is the point of this bridge: the event is thin, and the
+   * status that follows it is what fills the panel in. So that read has to
+   * count as newer than the event that started it, and land.
+   */
+  it('applies the re-read an event started', async () => {
+    const { initRemoteEvents, cleanupRemoteEvents } = await loadFresh();
+    initRemoteEvents();
+    await vi.waitFor(() => expect(applyRemoteStatus).toHaveBeenCalledWith(STATUS));
+
+    const after: RemoteStatus = { ...STATUS, pairing_active: false, paired: true };
+    getRemoteStatus.mockResolvedValueOnce(after);
+    const handler = subscribeSseEvent.mock.calls[0][1] as (evt: unknown) => void;
+    handler({ type: 'remote_paired', peer: 'aabbccddeeff' });
+
+    await vi.waitFor(() => expect(applyRemoteStatus).toHaveBeenCalledWith(after));
+
+    cleanupRemoteEvents();
   });
 });

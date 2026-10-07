@@ -15,6 +15,6 @@ src/pages/ChatPage.tsx 390
 src/pages/ModelControlCenterPage.tsx 325
 src/services/tools/registry.ts 432
 src/services/transport/api/client.ts 351
-src/services/transport/events/sse.ts 321
+src/services/transport/events/sse.ts 312
 src/styles/tailwind.css 402
 src/types/index.ts 533

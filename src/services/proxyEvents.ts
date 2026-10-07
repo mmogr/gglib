@@ -4,61 +4,39 @@
  * Bridges SSE proxy events into the proxyRegistry store.
  * Proxy always uses HTTP/axum (no Tauri commands), so events are
  * SSE-only on both web and desktop — no platform branching needed.
- *
- * Uses subscribeSseEvent directly. That began as a way
- * around a platform-selected transport that routed to Tauri IPC on desktop
- * and never received proxy events; that branch is gone — `createEventBus()`
- * returns the SSE bus unconditionally — so the two now reach the same stream.
  * The Rust backend emits proxy events exclusively via SseBroadcaster.
  *
- * Hydration race fix: subscribe FIRST, then fetch initial status.
- * An eventVersion guard drops stale hydration data if a real event
- * arrived before the fetch response.
+ * The ordering is `bridgeEvents`'s: subscribe FIRST, then fetch the status,
+ * and drop a status that a real event or a cleanup overtook.
  */
 
-import { subscribeSseEvent } from './transport/events/sse';
+import { bridgeEvents } from './bridgeEvents';
 import { getTransport } from './transport';
 import { ingestProxyEvent, resetProxyState } from './proxyRegistry';
-import type { Unsubscribe } from './transport/types/common';
-import type { ProxyEvent } from './transport/types/events';
 
-let unsubscribe: Unsubscribe | null = null;
-let eventVersion = 0;
+const bridge = bridgeEvents({
+  category: 'proxy',
+  onEvent: ingestProxyEvent,
+  // Hydration — seed initial state from current backend status
+  read: () => getTransport().getProxyStatus(),
+  apply: (status) => {
+    // A running proxy always reports a port — `to_api_status` sets the two
+    // together — but they are separate fields, so narrow on the one being
+    // read rather than trusting the pair. The impossible case skips
+    // hydration, which live events would correct anyway.
+    if (status.running && status.port !== null) {
+      ingestProxyEvent({ type: 'proxy_started', port: status.port });
+    }
+  },
+  reset: resetProxyState,
+});
 
 /**
  * Initialize proxy event handling.
  * Safe to call multiple times — only initializes once.
  */
 export function initProxyEvents(): void {
-  if (unsubscribe) return;
-
-  eventVersion = 0;
-
-  // 1. Subscribe FIRST so no events are missed during hydration fetch
-  unsubscribe = subscribeSseEvent('proxy', (evt: ProxyEvent) => {
-    eventVersion++;
-    ingestProxyEvent(evt);
-  });
-
-  // 2. Hydration fetch — seed initial state from current backend status
-  const versionBeforeFetch = eventVersion;
-  getTransport()
-    .getProxyStatus()
-    .then((status) => {
-      // Drop stale hydration if a real event already arrived
-      if (eventVersion !== versionBeforeFetch) return;
-
-      // A running proxy always reports a port — `to_api_status` sets the two
-      // together — but they are separate fields, so narrow on the one being
-      // read rather than trusting the pair. The impossible case skips
-      // hydration, which live events would correct anyway.
-      if (status.running && status.port !== null) {
-        ingestProxyEvent({ type: 'proxy_started', port: status.port });
-      }
-    })
-    .catch(() => {
-      // Hydration failure is non-fatal — events will correct state
-    });
+  bridge.init();
 }
 
 /**
@@ -66,10 +44,5 @@ export function initProxyEvents(): void {
  * Should be called on app unmount or hot-reload.
  */
 export function cleanupProxyEvents(): void {
-  if (unsubscribe) {
-    unsubscribe();
-    unsubscribe = null;
-  }
-  eventVersion = 0;
-  resetProxyState();
+  bridge.cleanup();
 }

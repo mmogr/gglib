@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { getTransport } from '../../../../src/services/transport';
 import { SSEConnectionManager } from '../../../../src/services/transport/events/sse';
 
 /** An accepted stream that sends `frames` and then ends. */
@@ -87,5 +88,39 @@ describe('the event stream\'s open signal', () => {
     stop();
 
     expect(opened).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The transport's `subscribe` and `onEventStreamOpen` are the stream's own
+   * two functions, so they are about one connection: the open a listener
+   * hears is the one a subscriber caused, and that subscriber gets its events.
+   */
+  it('reaches the transport\'s listeners for the stream the transport\'s subscribers opened', async () => {
+    const encoder = new TextEncoder();
+    fetchMock.mockImplementation(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(encoder.encode('data: {"type":"proxy_stopped"}\n\n'));
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    const seen: string[] = [];
+    const stopListening = getTransport().onEventStreamOpen(() => seen.push('open'));
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const stopRemote = getTransport().subscribe('remote', (event) => seen.push(event.type));
+    const stopProxy = getTransport().subscribe('proxy', (event) => seen.push(event.type));
+    await vi.waitFor(() => expect(seen).toEqual(['open', 'proxy_stopped']));
+    stopRemote();
+    stopProxy();
+    stopListening();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

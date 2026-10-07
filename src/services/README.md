@@ -72,7 +72,8 @@ not because it belongs here.
 | `remoteRegistry.ts` | External store for the remote tunnel (ADR 0012): the daemon's status, both sides; and `stillPaired`, whether a far row, pick or chat held for the paired machine still holds once that status names another |
 | `remoteRegistryState.ts` | What that store holds and what an empty tunnel looks like: the `RemoteState` shape and `IDLE_STATUS`, split out so the registry file stays under budget; and `pairedName`, the name the paired machine is shown by, never its fingerprint |
 | `remoteEvents.ts` | Subscribes to `remote_*` events, ingests them into `remoteRegistry`, and re-reads the status after each |
-| `createEventStore.ts` | Shared factory behind both registries — subscribe-before-fetch with an `eventVersion` guard |
+| `createEventStore.ts` | Shared store factory behind the three registries: one value, replaced whole on each write, with a `useSyncExternalStore` hook over it |
+| `bridgeEvents.ts` | Shared bridge behind the three `*Events.ts` files: subscribe before the hydrating fetch, and drop a fetch that an event or a cleanup overtook |
 | `agentOverrides.ts` | Per-session chat overrides, in two halves: `agentOverridesToWire()` builds the `config` object, `reasoningOverridesToWire()` builds the top-level reasoning fields the request declares separately |
 
 ## Clients

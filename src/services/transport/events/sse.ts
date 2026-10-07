@@ -305,17 +305,8 @@ export function subscribeSseEvent<K extends AppEventType>(
 }
 
 /**
- * Create SSE-based event system.
- * Returns an object with `subscribe` and `onEventStreamOpen`.
+ * Be told each time the shared stream opens, reconnections included.
  */
-export function createSseEvents() {
-  function subscribe<K extends AppEventType>(
-    eventType: K,
-    handler: EventHandler<AppEventMap[K]>
-  ): Unsubscribe {
-    return subscribeSseEvent(eventType, handler);
-  }
-
-  const onEventStreamOpen = (handler: () => void) => getSharedManager().opened.listen(handler);
-  return { subscribe, onEventStreamOpen };
+export function onEventStreamOpen(handler: () => void): Unsubscribe {
+  return getSharedManager().opened.listen(handler);
 }
