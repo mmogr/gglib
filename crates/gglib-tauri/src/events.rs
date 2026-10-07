@@ -12,9 +12,6 @@ use tracing::error;
 /// These match the existing frontend event listeners.
 /// Keep strings stable to avoid frontend breakage.
 pub mod names {
-    // Llama installation events
-    pub const LLAMA_INSTALL_PROGRESS: &str = "llama-install-progress";
-
     // Menu action events (menu -> frontend)
     pub const MENU_ADD_MODEL_FILE: &str = "menu:add-model-file";
     pub const MENU_SHOW_DOWNLOADS: &str = "menu:show-downloads";

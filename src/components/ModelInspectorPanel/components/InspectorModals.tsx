@@ -21,7 +21,6 @@ export const InspectorModals: FC<InspectorModalsProps> = ({ model, modals }) => 
   <>
     {modals.showInstallModal && modals.installMetadata && (
       <LlamaInstallModal
-        isOpen={modals.showInstallModal}
         onClose={modals.closeInstallModal}
         metadata={modals.installMetadata as LlamaServerNotInstalledMetadata}
       />

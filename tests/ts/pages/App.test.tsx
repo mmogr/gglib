@@ -24,9 +24,6 @@ vi.mock('../../../src/hooks/useLlamaStatus', () => {
     status: { installed: true, canDownload: false },
     loading: false,
     error: null,
-    installing: false,
-    installProgress: null,
-    installLlama: vi.fn(),
     checkStatus: vi.fn(),
   };
   return { useLlamaStatus: () => llama };

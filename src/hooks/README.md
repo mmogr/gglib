@@ -59,7 +59,7 @@ Custom React hooks for gglib GUI functionality.
 
 | Hook | Description |
 |------|-------------|
-| [`useLlamaStatus.ts`](useLlamaStatus.ts) | llama.cpp installation status |
+| [`useLlamaStatus.ts`](useLlamaStatus.ts) | Whether llama.cpp is installed and can be downloaded, from the daemon's setup-status route |
 | [`useSystemMemory.ts`](useSystemMemory.ts) | System memory probes |
 | [`useModelsDirectory.ts`](useModelsDirectory.ts) | Models directory configuration |
 | [`useServerLogs.ts`](useServerLogs.ts) | Server log streaming |

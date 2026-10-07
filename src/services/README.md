@@ -120,7 +120,6 @@ The `platform/` directory provides OS-specific functionality:
 |---------|-------------|
 | `detect.ts` | Platform detection (Tauri vs Web) |
 | `fileDialogs.ts` | Native file picker integration |
-| `llamaInstall.ts` | llama.cpp installation helpers |
 | `menuEvents.ts` | Native menu bar event handling |
 | `menuSync.ts` | Menu state synchronization |
 | `openUrl.ts` | External URL opening |
@@ -134,6 +133,6 @@ The `transport/` directory provides a unified interface for backend communicatio
 
 - **Every mode**: HTTP fetch against the Axum API, plus SSE for events
 
-Desktop and web share one transport. The desktop WebView resolves its base URL through the `get_embedded_api_info` IPC command and then consumes the same HTTP+SSE surface a browser tab does, so there is no second transport to keep in step — though `transport/api/client.ts` does still branch on platform to resolve that base URL and to choose its retry path. Beyond that, `invoke()` is confined to OS integration: seven commands, allowlisted by name in `scripts/check-frontend-ipc.sh`.
+Desktop and web share one transport. The desktop WebView resolves its base URL through the `get_embedded_api_info` IPC command and then consumes the same HTTP+SSE surface a browser tab does, so there is no second transport to keep in step — though `transport/api/client.ts` does still branch on platform to resolve that base URL and to choose its retry path. Beyond that, `invoke()` is confined to OS integration: five commands, allowlisted by name in `scripts/check-frontend-ipc.sh`.
 
 <!-- module-docs:end -->

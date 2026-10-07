@@ -88,8 +88,6 @@ HTTP cannot do, and those commands live in
 | `open_url` | util | Open URL in system browser |
 | `set_selected_model` | util | Sync native menu selection |
 | `sync_menu_state` | util | Update native menu item states |
-| `check_llama_status` | llama | Check llama.cpp installation |
-| `install_llama` | llama | Install/build llama.cpp |
 | `log_from_frontend` | `app_logs` | Forward frontend logs to Rust logger |
 
 `scripts/check-frontend-ipc.sh` holds the allowlist this table describes; the
@@ -121,8 +119,8 @@ npm run tauri build
 
 1. **One event bus, not two** — the daemon's SSE stream carries every domain
    event to every client. Tauri emit is reserved for things that originate in
-   the app itself — menu clicks, llama install progress — which have no HTTP
-   source to arrive from
+   the app itself, such as a menu click, which have no HTTP source to arrive
+   from
 2. **Names, not payloads** — this crate owns the event *names* so a Rust
    emitter and a TypeScript listener cannot drift; the payloads are the domain
    types the daemon already serialises

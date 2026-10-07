@@ -3,9 +3,9 @@
 # CI gate: Enforce "HTTP-first, OS-glue-only" Tauri command policy
 #
 # This script fails if it finds:
-# 1. #[tauri::command] outside of {util,llama,app_logs}.rs
-# 2. Extra .rs files in src-tauri/src/commands/ (only {mod,util,llama,app_logs}.rs allowed)
-# 3. invoke_handler! referencing commands outside of {util,llama,app_logs}
+# 1. #[tauri::command] outside of {util,app_logs}.rs
+# 2. Extra .rs files in src-tauri/src/commands/ (only {mod,util,app_logs}.rs allowed)
+# 3. invoke_handler! referencing commands outside of {util,app_logs}
 # 4. Deprecated get_gui_api_port anywhere in the codebase
 #
 # Run this in CI to prevent architectural regression.
@@ -13,7 +13,6 @@
 #
 # Approved command files (OS-integration only, not product features):
 #   util.rs          — discovery, shell, menu (OS hooks)
-#   llama.rs         — llama-server binary management (OS process)
 #   app_logs.rs      — frontend log ingestion (OS file I/O)
 
 set -euo pipefail
@@ -34,7 +33,7 @@ echo ""
 ERRORS=0
 
 # =============================================================================
-# Check 1: #[tauri::command] should only exist in util.rs and llama.rs
+# Check 1: #[tauri::command] should only exist in util.rs and app_logs.rs
 # =============================================================================
 
 echo "Checking for #[tauri::command] in unauthorized files..."
@@ -47,20 +46,17 @@ while IFS= read -r line; do
     
     file=$(echo "$line" | cut -d: -f1)
     
-    # Approved files: only util.rs and llama.rs
+    # Approved files: only util.rs and app_logs.rs
     case "$file" in
         src-tauri/src/commands/util.rs)
             echo -e "  ${GREEN}✓${NC} $file (OS integration: discovery, shell, menu)"
-            ;;
-        src-tauri/src/commands/llama.rs)
-            echo -e "  ${GREEN}✓${NC} $file (OS integration: binary management)"
             ;;
         src-tauri/src/commands/app_logs.rs)
             echo -e "  ${GREEN}✓${NC} $file (OS integration: frontend log ingestion)"
             ;;
         *)
             echo -e "  ${RED}✗${NC} UNAUTHORIZED COMMAND: $line"
-            echo -e "      Commands must be in util.rs, llama.rs, or app_logs.rs only"
+            echo -e "      Commands must be in util.rs or app_logs.rs only"
             ERRORS=$((ERRORS + 1))
             ;;
     esac
@@ -69,7 +65,7 @@ done <<< "$COMMAND_ATTRS"
 echo ""
 
 # =============================================================================
-# Check 2: commands/ directory should only contain {mod,util,llama}.rs
+# Check 2: commands/ directory should only contain {mod,util,app_logs}.rs
 # =============================================================================
 
 echo "Checking for extra files in commands/ directory..."
@@ -85,12 +81,12 @@ if [ -d "$COMMANDS_DIR" ]; then
         basename=$(basename "$file")
         
         case "$basename" in
-            mod.rs|util.rs|llama.rs|app_logs.rs)
+            mod.rs|util.rs|app_logs.rs)
                 echo -e "  ${GREEN}✓${NC} $basename (allowed)"
                 ;;
             *)
                 echo -e "  ${RED}✗${NC} EXTRA FILE: $file"
-                echo -e "      Only mod.rs, util.rs, llama.rs are allowed in commands/"
+                echo -e "      Only mod.rs, util.rs, app_logs.rs are allowed in commands/"
                 ERRORS=$((ERRORS + 1))
                 ;;
         esac
@@ -102,7 +98,7 @@ fi
 echo ""
 
 # =============================================================================
-# Check 3: invoke_handler! should only reference commands::{util,llama}::*
+# Check 3: invoke_handler! should only reference commands::{util,app_logs}::*
 # =============================================================================
 
 echo "Checking invoke_handler! registrations..."
@@ -123,11 +119,11 @@ if [ -f "$MAIN_RS" ]; then
             # Check if line contains a command reference
             if echo "$line" | grep -q "commands::"; then
                 # Validate it's one of the allowed patterns
-                if echo "$line" | grep -qE "commands::(util|llama|app_logs)::"; then
+                if echo "$line" | grep -qE "commands::(util|app_logs)::"; then
                     echo -e "  ${GREEN}✓${NC} $(echo "$line" | sed 's/^[[:space:]]*//')"
                 else
                     echo -e "  ${RED}✗${NC} INVALID COMMAND REGISTRATION: $(echo "$line" | sed 's/^[[:space:]]*//')"
-                    echo -e "      Only commands::util::* and commands::llama::* are allowed"
+                    echo -e "      Only commands::util::* and commands::app_logs::* are allowed"
                     ERRORS=$((ERRORS + 1))
                 fi
             fi
@@ -178,9 +174,9 @@ if [ $ERRORS -gt 0 ]; then
     echo ""
     echo "To fix:"
     echo "  1. Move business logic to HTTP API (gglib-axum crate)"
-    echo "  2. Keep only OS integration commands in util.rs and llama.rs"
-    echo "  3. Remove any command files besides mod.rs, util.rs, llama.rs"
-    echo "  4. Update invoke_handler! to only register util and llama commands"
+    echo "  2. Keep only OS integration commands in util.rs and app_logs.rs"
+    echo "  3. Remove any command files besides mod.rs, util.rs, app_logs.rs"
+    echo "  4. Update invoke_handler! to only register util and app_logs commands"
     echo "  5. Replace get_gui_api_port with get_embedded_api_info"
     echo ""
     echo "See Phase 3 (issue #10) for architecture rationale"

@@ -28,13 +28,10 @@ function AppContent() {
   const [showLlamaModal, setShowLlamaModal] = useState(false);
   const { servers, stopServer } = useServers();
   const { toasts, showToast, dismissToast } = useToastContext();
-  const { 
-    status: llamaStatus, 
+  const {
+    status: llamaStatus,
     loading: llamaLoading,
     error: llamaError,
-    installing: llamaInstalling,
-    installProgress,
-    installLlama,
     checkStatus: checkLlamaStatus,
   } = useLlamaStatus();
 
@@ -50,7 +47,7 @@ function AppContent() {
     selectModel: (modelId: number, view?: 'chat' | 'console') => void;
   } | null>(null);
 
-  // Show llama install modal when needed (only for Tauri desktop app)
+  // Show the llama install modal when the daemon's machine has no llama.cpp
   useEffect(() => {
     if (!llamaLoading && llamaStatus && !llamaStatus.installed) {
       setShowLlamaModal(true);
@@ -77,16 +74,16 @@ function AppContent() {
   // A file dropped where nothing takes it must not open in place of the app
   useFileDropGuard();
 
-  // Close modal when installation completes
-  useEffect(() => {
-    if (installProgress?.type === 'completed') {
-      setTimeout(() => {
-        setShowLlamaModal(false);
-        // Sync menu state after llama installation
-        syncMenuStateSilent();
-      }, 2000);
-    }
-  }, [installProgress?.type]);
+  // An install completed: re-read the status, and close the modal once its
+  // last line has had time to be read
+  const handleLlamaInstalled = useCallback(() => {
+    checkLlamaStatus();
+    setTimeout(() => {
+      setShowLlamaModal(false);
+      // Sync menu state after llama installation
+      syncMenuStateSilent();
+    }, 2000);
+  }, [checkLlamaStatus]);
 
   // Menu event listeners (desktop only - via platform helper)
   useEffect(() => {
@@ -175,15 +172,14 @@ function AppContent() {
         {isSettingsOpen && (
           <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
         )}
-        <LlamaInstallModal
-          isOpen={showLlamaModal}
-          canDownload={llamaStatus?.canDownload ?? false}
-          installing={llamaInstalling}
-          progress={installProgress}
-          error={llamaError}
-          onInstall={installLlama}
-          onSkip={() => setShowLlamaModal(false)}
-        />
+        {showLlamaModal && (
+          <LlamaInstallModal
+            canDownload={llamaStatus?.canDownload ?? false}
+            error={llamaError}
+            onSkip={() => setShowLlamaModal(false)}
+            onInstalled={handleLlamaInstalled}
+          />
+        )}
         <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       </div>
     </SettingsProvider>

@@ -76,7 +76,7 @@ When a model is served, users can switch between Chat and Console views:
 - **`ServerList/`**: List of running server instances
 - **`ProxyControl.tsx`**: OpenAI-compatible proxy controls
 - **`RemoteControl.tsx`**: The remote tunnel popover (ADR 0012) — this machine's proxy on another machine, or another's here; its two halves live in `remote/`
-- **`LlamaInstallModal.tsx`**: llama.cpp installation wizard
+- **`LlamaInstallModal.tsx`**: Offers to install llama.cpp and runs the daemon's install stream, the one the setup wizard uses
 
 ### Support Components
 - **`GlobalDownloadStatus/`**: The running download's card, drawn from the daemon's queue snapshot, and the popover of waiting downloads

@@ -1,25 +1,20 @@
-import { FC, useState } from 'react';
+import { FC, useEffect, useRef, useState } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Download, Loader2, XCircle } from 'lucide-react';
 import { appLogger } from '../services/platform';
-import { LlamaProgressEvent } from '../hooks/useLlamaStatus';
-import { INSTALL_PHASE_LABELS } from '../types/setup';
-import { formatBytes, formatDuration, formatRate } from '../utils/format';
-import { installLlama } from '../services/platform/llamaInstall';
+import { streamLlamaInstall } from '../services/transport/api/setup';
+import type { LlamaProgressEvent } from '../types/setup';
+import { InstallProgress } from './SetupWizard/InstallProgress';
 import { Button } from './ui/Button';
 import { Banner } from './ui/Banner';
 import { Icon } from './ui/Icon';
 import { Modal } from './ui/Modal';
-import { cn } from '../utils/cn';
 
 interface LlamaInstallModalProps {
-  isOpen?: boolean;
   canDownload?: boolean;
-  installing?: boolean;
-  progress?: LlamaProgressEvent | null;
+  /** Why the install state could not be read. An install's own failure replaces it. */
   error?: string | null;
-  onInstall?: () => void;
   onSkip?: () => void;
-  // New props for error-triggered mode
+  /** What a refused server start said about the missing binary. */
   metadata?: {
     expectedPath: string;
     suggestedCommand: string;
@@ -29,113 +24,75 @@ interface LlamaInstallModalProps {
   onInstalled?: () => void;
 }
 
+/**
+ * Offers to install llama.cpp, and runs the install.
+ *
+ * The install is the daemon's: the stream the setup wizard reads, drawn by the
+ * wizard's `InstallProgress`. So the desktop app and a browser tab install the
+ * same way, and the modal is mounted only while it is shown, which is what
+ * gives each opening a fresh install state.
+ */
 export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
-  isOpen = true,
   canDownload = true,
-  installing: propInstalling = false,
-  progress: propProgress = null,
-  error: propError = null,
-  onInstall,
+  error: statusError = null,
   onSkip,
   metadata,
   onClose,
   onInstalled,
 }) => {
-  // Local state for error-triggered mode
-  const [localInstalling, setLocalInstalling] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [progress, setProgress] = useState<LlamaProgressEvent | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
+  const stopReading = useRef<(() => void) | null>(null);
 
-  const installing = metadata ? localInstalling : propInstalling;
-  const progress = propProgress;
-  const error = metadata ? localError : propError;
+  // Unmounting stops the reading, not the install: the daemon finishes it.
+  useEffect(() => () => stopReading.current?.(), []);
 
   const isCompleted = progress?.type === 'completed';
-  const isError = progress?.type === 'failed';
+  const error = installError ?? statusError;
 
-  // Error-triggered mode: handle installation
-  const handleErrorModeInstall = async () => {
-    setLocalInstalling(true);
-    setLocalError(null);
-    
-    try {
-      await installLlama();
-      // Installation successful
-      if (onInstalled) {
-        onInstalled();
-      }
-      if (onClose) {
-        onClose();
-      }
-    } catch (err) {
-      appLogger.error('component.settings', 'Installation failed', { error: err });
-      setLocalError(String(err));
-    } finally {
-      setLocalInstalling(false);
-    }
+  const handleInstall = () => {
+    // A stream ends once: with `completed`, with `failed`, with a transport
+    // error, or by closing having said none of them. Whichever comes first is
+    // the result, and `installing` must not outlive it, because the modal
+    // cannot be closed while it is set.
+    let settled = false;
+    const fail = (message: string) => {
+      if (settled) return;
+      settled = true;
+      appLogger.error('component.settings', 'llama.cpp install failed', { message });
+      setInstalling(false);
+      setInstallError(message);
+    };
+
+    setInstalling(true);
+    setInstallError(null);
+    setProgress(null);
+
+    stopReading.current = streamLlamaInstall(
+      (event) => {
+        if (settled) return;
+        setProgress(event);
+        if (event.type === 'completed') {
+          settled = true;
+          setInstalling(false);
+          onInstalled?.();
+          // Opened by a refused server start, there is nothing left to show.
+          if (metadata) onClose?.();
+        } else if (event.type === 'failed') {
+          fail(event.message);
+        }
+      },
+      fail,
+      () => fail('The connection to the install ended before it reported a result.'),
+    );
   };
 
-  if (!isOpen) return null;
-
-  const renderProgress = () => {
-    if (!installing || !progress) return null;
-
-    if (progress.type === 'progress') {
-      // Percentage is a rendering detail; speed and time remaining are not —
-      // they arrive measured, and deriving them here would disagree with
-      // every other surface.
-      const percentage = progress.total > 0 ? (progress.downloaded / progress.total) * 100 : 0;
-      return (
-        <div className="flex flex-col gap-[0.35rem]">
-          <div className="h-2 bg-background-tertiary rounded overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-primary to-primary-light rounded transition-[width] duration-300"
-              style={{ width: `${percentage}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-text-secondary text-base">
-            <span>{percentage.toFixed(1)}%</span>
-            {progress.total > 0 && (
-              <span>{formatBytes(progress.downloaded)} / {formatBytes(progress.total)}</span>
-            )}
-          </div>
-          <div className="text-text text-base">
-            {formatRate(progress.rate_bps)} · {formatDuration(progress.eta_seconds)} remaining
-          </div>
-        </div>
-      );
-    }
-
-    if (progress.type === 'phase_started') {
-      return (
-        <div className="flex flex-col gap-[0.35rem]">
-          <div className="h-2 bg-background-tertiary rounded overflow-hidden">
-            <div className={cn('h-full bg-gradient-to-r from-primary to-primary-light rounded', 'w-[30%] animate-indeterminate')} />
-          </div>
-          <div className="text-text text-base">{INSTALL_PHASE_LABELS[progress.phase]}</div>
-        </div>
-      );
-    }
-
-    if (progress.type === 'completed') {
-      return (
-        <div className="flex flex-col gap-[0.35rem]">
-          <div className="h-2 bg-background-tertiary rounded overflow-hidden">
-            <div className="h-full w-full bg-gradient-to-r from-primary to-primary-light rounded" />
-          </div>
-          <div className="text-text text-base">llama.cpp {progress.version} installed</div>
-        </div>
-      );
-    }
-
-    // `phase_completed` has nothing of its own to draw, and `failed` is
-    // already carried by the error banner above.
-    return null;
-  };
   const renderFooterContent = () => {
     if (metadata) {
       return (
         <>
-          <Button onClick={handleErrorModeInstall} disabled={installing} leftIcon={<Icon icon={Download} size={16} />}>
+          <Button onClick={handleInstall} disabled={installing} leftIcon={<Icon icon={Download} size={16} />}>
             Install now
           </Button>
           <Button variant="ghost" onClick={onClose} disabled={installing}>
@@ -147,7 +104,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
     if (!installing && !isCompleted && canDownload) {
       return (
         <>
-          <Button onClick={onInstall} disabled={installing} leftIcon={<Icon icon={Download} size={16} />}>
+          <Button onClick={handleInstall} disabled={installing} leftIcon={<Icon icon={Download} size={16} />}>
             Install llama.cpp
           </Button>
           {onSkip ? (
@@ -186,7 +143,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
 
       {error ? <Banner variant="danger">{error}</Banner> : null}
 
-      {installing ? renderProgress() : null}
+      {installing ? <InstallProgress progress={progress} /> : null}
     </>
   );
 
@@ -195,7 +152,7 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
       <div className="flex gap-3 items-center">
         <div className="w-10 h-10 rounded-full inline-flex items-center justify-center bg-background-secondary border border-border text-primary">
           <Icon
-            icon={isCompleted ? CheckCircle2 : isError ? XCircle : AlertCircle}
+            icon={isCompleted ? CheckCircle2 : installError ? XCircle : AlertCircle}
             size={28}
             className={installing ? 'animate-pulse' : ''}
           />
@@ -214,19 +171,17 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
 
       {error && !installing ? <Banner variant="danger">{error}</Banner> : null}
 
-      {renderProgress()}
+      {installing ? <InstallProgress progress={progress} /> : null}
 
-      {isCompleted ? (
-        <p className="text-success font-semibold">llama.cpp is ready! You can now serve models.</p>
+      {progress?.type === 'completed' ? (
+        <p className="text-success font-semibold">llama.cpp {progress.version} is ready! You can now serve models.</p>
       ) : null}
-
-
     </>
   );
 
   return (
     <Modal
-      open={isOpen}
+      open
       onClose={onClose ?? (() => {})}
       title="Llama installation"
       size="md"
