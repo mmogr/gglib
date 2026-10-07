@@ -4,56 +4,13 @@
 //! Both commands change the library through `ModelOps`. What they say when
 //! they have is the handlers' own, and scripts read it.
 
-use std::io::Write as _;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+#[path = "support/library.rs"]
+mod library;
+
+use library::{gglib, library};
 
 /// The rule under the preview's heading.
 const RULE: &str = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
-
-/// A GGUF v3 file in `dir` whose only metadata is its architecture, under
-/// its canonical path.
-fn write_gguf(dir: &Path, name: &str) -> PathBuf {
-    let path = dir.join(name);
-    gglib_gguf::write_string_gguf(&path, &[("general.architecture", "qwen3")]);
-    path.canonicalize().expect("its canonical path")
-}
-
-/// `gglib <args>` over the library in `root`, answered `typed` at its
-/// prompts: what it printed, once it has succeeded.
-fn gglib(root: &Path, args: &[&str], typed: &str) -> String {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_gglib"))
-        .args(args)
-        .env("GGLIB_DATA_DIR", root.join("data"))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap_or_else(|e| panic!("running `gglib {}`: {e}", args.join(" ")));
-    child
-        .stdin
-        .take()
-        .expect("its stdin")
-        .write_all(typed.as_bytes())
-        .expect("the answers are typed");
-    let out = child.wait_with_output().expect("the command ends");
-    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
-    assert!(
-        out.status.success(),
-        "`gglib {}` must succeed\nstdout: {stdout}\nstderr: {}",
-        args.join(" "),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    stdout
-}
-
-/// A library in `root` holding one model, id 1, named for its file. The
-/// file carries no parameter count, so `model add` asks for one.
-fn library(root: &Path) -> PathBuf {
-    let weights = write_gguf(root, "qwen.Q8_0.gguf");
-    gglib(root, &["model", "add", weights.to_str().unwrap()], "7\n");
-    weights
-}
 
 #[test]
 fn a_forced_update_prints_its_preview_and_that_it_updated() {

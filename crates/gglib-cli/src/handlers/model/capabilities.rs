@@ -32,10 +32,9 @@ pub(crate) async fn execute(
     let core_model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
     // Build-once — ModelOps is cheap and constructed the same way as in Axum/Tauri.
-    //
-    // `NoopModelRuntime` rather than `ctx.runner`: a one-shot CLI command has
-    // no shared `ProcessManager` to check, and this handler never touches
-    // serving status anyway (`get`/`set_capabilities` only).
+    // What it is built with, and why, is `one_shot_model_ops`'s to say. This
+    // handler shows and sets capabilities, and uses nothing of the serving
+    // status `get` carries.
     let ops = super::one_shot_model_ops(ctx);
 
     // Read-only: no flags provided.

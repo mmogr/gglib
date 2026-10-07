@@ -84,9 +84,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 |---------|-------------|
 | `add <path>` | Add a GGUF model to the library |
 | `list` | List all models with metadata; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
-| `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata); `--remote` reads the paired machine's |
+| `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata), and the port it is being served on when it is; `--remote` reads the paired machine's |
 | `explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
-| `remove <id\|name>` | Remove a model from the library |
+| `remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--force` skips the confirmation only) |
 | `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`) |
 | `chat <id\|name>` | Start interactive llama-cli chat |
 | `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on |

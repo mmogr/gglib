@@ -563,12 +563,12 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
 
 /// A [`ModelRuntimePort`] that never has anything running.
 ///
-/// For callers with no shared `ProcessManager` to point at — the CLI's
-/// single-shot commands, whose `is_serving` checks
-/// against a runtime scoped to that one process invocation would report
-/// "nothing running" regardless, since nothing was started in it. Making that
-/// explicit here is more honest than wiring in a real runner that can only
-/// ever agree.
+/// For code that has to hold a runtime and asks it nothing that matters: a
+/// test of something that starts no model. Not for a process that runs
+/// beside the one serving models. There "nothing is running" would be a
+/// claim about that other process, so the CLI's one-shot commands read the
+/// pid files under their data root instead (`RecordedServers` in
+/// `gglib-cli`).
 #[derive(Debug, Default)]
 pub struct NoopModelRuntime;
 

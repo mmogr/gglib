@@ -137,6 +137,11 @@ on the paired machine — connected, away or not — without asking that machine
 anything; `list --remote` lists that machine's models by their ids there, and
 `inspect --remote` reads one of them.
 
+`remove` drops a model's row and leaves its file. It refuses a model that is
+being served under the same data root, and says how to stop it; `--force`
+skips the confirmation and stops nothing. `inspect` says when a model is being
+served, and on which port.
+
 **HuggingFace** — `download`, `search`, `browse`, `check-updates`, `upgrade`.
 
 Downloads route through the shared queue the GUI uses. In a TTY the terminal

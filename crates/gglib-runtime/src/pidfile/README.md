@@ -6,6 +6,14 @@ PID file management for tracking llama-server processes.
 
 Provides atomic I/O, process verification, and startup orphan cleanup.
 
+# Readers
+The sweep is one reader. The other is a `gglib` command in a terminal, a
+process apart from the one that owns the servers: `list_pidfiles` is how it
+learns what is being served under its data root (`RecordedServers` in
+`gglib-cli`). To either reader a pid file is a claim to check: one can
+outlive its server, so it counts only while `is_our_llama_server` says its
+pid is still one.
+
 # Safety guarantees
 - Atomic writes via temp file + rename
 - Process verification before killing (prevents PID reuse issues)
