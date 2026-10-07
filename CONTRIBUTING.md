@@ -63,7 +63,7 @@ State the tier in the PR description (recent PRs also carry it in the commit mes
 The event-channel pattern below is what makes Tier 1 parity cheap — use it for any long-running operation regardless of tier. Downloads, builds, agent loops, and model management all follow the same pattern:
 
 1. **Core logic in a runtime or domain crate** — emits typed events over a `tokio::sync::mpsc::Sender<T>` channel. It has no knowledge of the terminal, HTTP, or Tauri.
-2. **Surface adapters consume the channel** — the CLI renders events as an `indicatif` progress bar; the Axum layer streams them as SSE; the Tauri layer emits them as Tauri events to the WebView.
+2. **Surface adapters consume the channel** — the CLI renders events as an `indicatif` progress bar; the Axum layer streams them as SSE, which the desktop app's WebView reads as the browser does. The llama install is the one operation a Tauri command also runs, and that command forwards its events to the WebView as Tauri events.
 
 Concrete examples of established patterns:
 
@@ -84,7 +84,7 @@ When adding a new long-running operation:
 
 - Define the event enum in the relevant runtime or domain crate.
 - The function signature takes `tx: tokio::sync::mpsc::Sender<YourEvent>` as a parameter.
-- Wire the CLI adapter in its own function. Wire the Axum handler. Wire the Tauri command.
+- Wire the CLI adapter in its own function. Wire the Axum handler, which the desktop app's WebView calls as the browser does: a new operation gets no Tauri command, as the paragraph below says.
 - Tier 1: all three ship in the same PR. Tier 2: the CLI ships now and the remaining surfaces are tracked in a linked issue.
 
 **Tauri commands are OS integration only.** Product features are served over HTTP (Axum). The CI enforces that `#[tauri::command]` functions live only in a small set of approved files (`util.rs`, `llama.rs`, `app_logs.rs`). A new product feature does not get a Tauri command — it gets an Axum route that the WebView calls over HTTP, just like the browser-based UI does.

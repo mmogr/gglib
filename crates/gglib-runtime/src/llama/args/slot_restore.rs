@@ -33,7 +33,7 @@
 //! return `Supported` unconditionally. `GGLIB_FORCE_HYBRID_DISK_CACHE=1`
 //! re-enables the layer for testing that upstream fix without a rebuild.
 
-use crate::system::is_truthy_flag;
+use gglib_core::debug_switches;
 
 /// Indicates how the disk slot-restore decision was reached.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,9 +87,7 @@ impl SlotRestoreResolution {
 /// `GGLIB_DISABLE_KV_QUANT` and `GGLIB_DISABLE_CACHE_AUTOSIZE`; phrased as
 /// `FORCE` because it re-enables a feature gglib turns off on its own.
 fn hybrid_disk_cache_forced_via_env() -> bool {
-    std::env::var("GGLIB_FORCE_HYBRID_DISK_CACHE")
-        .ok()
-        .is_some_and(|v| is_truthy_flag(&v))
+    debug_switches::enabled("GGLIB_FORCE_HYBRID_DISK_CACHE")
 }
 
 /// Resolve whether the disk slot layer should be used for a launch.
@@ -186,13 +184,5 @@ mod tests {
             resolve_slot_restore(false),
             resolve_slot_restore_with(false, false)
         );
-    }
-
-    #[test]
-    fn truthy_flag_parsing_drives_the_override() {
-        // Guards the `is_truthy_flag` contract this module depends on.
-        assert!(is_truthy_flag("1"));
-        assert!(!is_truthy_flag("0"));
-        assert!(!is_truthy_flag(""));
     }
 }

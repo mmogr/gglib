@@ -13,12 +13,13 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::{TemplateCapsState, classify_cache_ram};
 use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
     AdmissionLease, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, RunningTarget,
 };
-use gglib_core::server_config::{CacheRamSetting, ContextSizeSource, ServerConfigOptions};
+use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 

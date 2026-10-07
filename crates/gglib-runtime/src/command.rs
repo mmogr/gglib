@@ -5,7 +5,7 @@
 
 use crate::llama::{LlamaServerError, resolve_llama_server};
 use crate::process::spawn_stream_reader;
-use crate::system::is_truthy_flag;
+use gglib_core::debug_switches;
 use gglib_core::ports::{JinjaMode, ServerConfig};
 use gglib_core::utils::process::cmd;
 use std::path::{Path, PathBuf};
@@ -29,9 +29,7 @@ pub(crate) const SERVER_PARALLEL: u32 = 1;
 /// Truthy values (case-insensitive): `1`, `true`, `yes`, `on`. Anything else
 /// (including unset) leaves MTP enabled.
 fn mtp_disabled_via_env() -> bool {
-    std::env::var("GGLIB_DISABLE_MTP")
-        .ok()
-        .is_some_and(|v| is_truthy_flag(&v))
+    debug_switches::enabled("GGLIB_DISABLE_MTP")
 }
 
 /// Whether the `GGLIB_DISABLE_CACHE_REUSE` environment variable requests that
@@ -43,9 +41,7 @@ fn mtp_disabled_via_env() -> bool {
 /// suspect without editing whatever launch profile/script set it, e.g.
 /// `GGLIB_DISABLE_CACHE_REUSE=1 gglib proxy --cache-reuse 256`.
 fn cache_reuse_disabled_via_env() -> bool {
-    std::env::var("GGLIB_DISABLE_CACHE_REUSE")
-        .ok()
-        .is_some_and(|v| is_truthy_flag(&v))
+    debug_switches::enabled("GGLIB_DISABLE_CACHE_REUSE")
 }
 
 /// Select the llama-server path to use.
@@ -337,16 +333,6 @@ mod tests {
     // Only the `#[cfg(unix)]` tests below write an executable stub to disk.
     #[cfg(unix)]
     use {std::fs, std::os::unix::fs::PermissionsExt, tempfile::TempDir};
-
-    #[test]
-    fn is_truthy_flag_recognises_on_values() {
-        for v in ["1", "true", "TRUE", " yes ", "On", "  on"] {
-            assert!(crate::system::is_truthy_flag(v), "{v:?} should be truthy");
-        }
-        for v in ["0", "false", "no", "off", "", "2", "disable"] {
-            assert!(!crate::system::is_truthy_flag(v), "{v:?} should be falsy");
-        }
-    }
 
     /// Minimal `ServerConfig` for `build_command` arg-emission tests — every
     /// cache-related field defaults off so each test only sets what it cares

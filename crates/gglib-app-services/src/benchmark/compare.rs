@@ -14,8 +14,8 @@
 //! 2. Calls `runtime.stop_current()` to free GPU memory.
 //! 3. Returns immediately — no further models are processed.
 //!
-//! The token is fired by [`super::guard::BenchmarkTaskGuard`] on SSE stream
-//! drop (HTTP client disconnect) or by a CLI `Ctrl+C` handler.
+//! The token is fired by [`super::guard::BenchmarkTaskGuard`] when the SSE
+//! stream is dropped: the run's stream ended, or the client went away.
 //!
 //! # Defensive SSE Parsing
 //!

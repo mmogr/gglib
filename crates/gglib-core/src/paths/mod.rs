@@ -15,7 +15,7 @@ mod slots;
 mod test_root;
 
 #[cfg(test)]
-mod test_utils;
+pub(crate) mod test_utils;
 
 // Re-export public API
 
@@ -52,6 +52,7 @@ pub use pids::pids_dir;
 pub use remote::{remote_identity_location, remote_identity_path, remote_join_dir};
 
 // Directories and files this user alone can read
+pub(crate) use private::create_new_private_file;
 pub use private::{create_private_dir, create_private_file, make_private};
 
 // Directory operations

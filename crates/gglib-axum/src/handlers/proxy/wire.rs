@@ -10,8 +10,8 @@ use gglib_core::server_config::{ServerConfigOptions, chosen_context_size};
 use gglib_runtime::proxy::ProxyConfig as RuntimeProxyConfig;
 use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
 
-/// Proxy status response.
-/// Matches Tauri's `ProxyStatus` for frontend compatibility.
+/// Proxy status response: what the proxy's status, start, start-pinned and stop
+/// routes answer.
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ProxyStatus {

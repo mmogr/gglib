@@ -32,8 +32,7 @@ pub(crate) fn detect_all(metadata: &HashMap<String, String>) -> GgufCapabilities
     let mut flags = CapabilityFlags::empty();
 
     // Detect reasoning support
-    let reasoning = detect_reasoning_support(metadata);
-    if reasoning.supports_reasoning {
+    if detect_reasoning_support(metadata) {
         flags |= CapabilityFlags::REASONING;
     }
 
@@ -44,8 +43,7 @@ pub(crate) fn detect_all(metadata: &HashMap<String, String>) -> GgufCapabilities
     }
 
     // Detect MTP (Multi-Token Prediction) draft heads
-    let mtp = detect_mtp_support(metadata);
-    if mtp.supported {
+    if detect_mtp_support(metadata) {
         flags |= CapabilityFlags::MTP;
     }
 
@@ -231,6 +229,18 @@ mod tests {
         let caps = detect_all(&metadata);
         assert!(caps.has_embedding());
         assert!(caps.to_tags().contains(&"embedding".to_string()));
+    }
+
+    #[test]
+    fn a_model_with_mtp_layers_is_flagged_mtp_and_one_without_is_not() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "qwen3_5_mtp.nextn_predict_layers".to_string(),
+            "1".to_string(),
+        );
+
+        assert!(detect_all(&metadata).has_mtp());
+        assert!(!detect_all(&HashMap::new()).has_mtp());
     }
 
     #[test]

@@ -338,24 +338,6 @@ pub const fn chosen_context_size(opts: &ServerConfigOptions) -> Option<u64> {
     }
 }
 
-// =============================================================================
-// Host-RAM prompt cache budget (`--cache-ram`)
-// =============================================================================
-
-// `CacheRamSetting` now lives in `crate::cache_config`, alongside
-// `KvCacheType` — cache-related config resolution has one home. Re-exported
-// here so existing `gglib_core::server_config::CacheRamSetting` call sites
-// keep working.
-pub use crate::cache_config::CacheRamSetting;
-
-// Cache-RAM budget constants and [`compute_auto_cache_ram_mb`] now live in
-// `crate::domain::cache_budget` (re-exported from `crate::domain`), alongside
-// the rest of the domain's pure calculations.
-pub use crate::domain::cache_budget::{
-    CACHE_RAM_FLOOR_BYTES, CACHE_RAM_HEADROOM_BYTES, CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES,
-    compute_auto_cache_ram_mb,
-};
-
 #[cfg(test)]
 mod tests {
     use crate::server_config::{ServerConfigOptions, resolve_context_size};
@@ -422,17 +404,6 @@ mod tests {
             resolve_context_size(&opts),
             resolve_context_size_with_source(&opts).0
         );
-    }
-
-    // Cache-RAM budget math tests now live in
-    // `crate::domain::cache_budget::tests`, alongside the function itself.
-    use crate::server_config::CacheRamSetting;
-
-    /// Every launch surface should auto-size unless it opts out, so `Auto`
-    /// has to be the `Default` variant.
-    #[test]
-    fn cache_ram_setting_defaults_to_auto() {
-        assert_eq!(CacheRamSetting::default(), CacheRamSetting::Auto);
     }
 
     #[test]
