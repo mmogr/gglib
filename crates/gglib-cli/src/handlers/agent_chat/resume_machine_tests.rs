@@ -265,7 +265,7 @@ async fn a_remembered_thinking_choice_survives_a_resume_on_another_model() {
     let id = started.persistence.expect("saved").id;
     let history = ctx.app.chat_history();
     let off = Some(Thinking::Off);
-    history.record_thinking(id, off).await.expect("remembered");
+    gglib_app_services::transcript::remember_thinking(history, id, off).await;
 
     chat(&ctx, "llama", Some(id))
         .await

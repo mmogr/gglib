@@ -224,6 +224,7 @@ mod tests {
             model: None,
             profile: None,
             continue_id: None,
+            thinking: None,
             observation_tools: Vec::new(),
             max_observation_steps: None,
         }

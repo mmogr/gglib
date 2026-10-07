@@ -90,6 +90,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`) |
 | `chat <id\|name>` | Start interactive llama-cli chat |
 | `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on |
+| `chat … --thinking on\|off` | Switch the chat's Thinking on or off, as the chat page's switch does: the choice runs the session and the chat remembers it, on a new chat or with `--continue` |
 | `question <text>` | Ask a question (with optional piped context) |
 | `question <text>` | Ask a question; filesystem tools are on unless `--no-tools` |
 | `question --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |

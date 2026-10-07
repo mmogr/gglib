@@ -1,12 +1,13 @@
 //! The transcript writer over a database of its own: which message
-//! `save_user` saves and where, and what `save_reply` makes of a turn's
-//! frames. A whole turn's rows are pinned at each surface that saves one,
-//! against `transcript_turn.json`.
+//! `save_user` saves and where, what `save_reply` makes of a turn's
+//! frames, and what `remember_thinking` leaves on the conversation. A whole
+//! turn's rows are pinned at each surface that saves one, against
+//! `transcript_turn.json`.
 
 use gglib_core::domain::agent::{
     AssistantContent, INCOMPLETE_KEY, THINKING_DURATION_KEY, TurnUsage,
 };
-use gglib_core::domain::chat::{Message, MessageRole, NewConversation};
+use gglib_core::domain::chat::{ConversationSettings, Message, MessageRole, NewConversation};
 use serde_json::json;
 
 use super::*;
@@ -155,4 +156,34 @@ async fn a_reply_is_its_frames_timed_by_place_stamped_and_marked_when_unfinished
             (!finished).then_some(&json!(true))
         );
     }
+}
+
+/// A Thinking choice is one field of the conversation's settings: `off` is
+/// remembered, and nothing forgets it, beside what the settings already
+/// held. A conversation that is not there is not a failure.
+#[tokio::test]
+async fn a_thinking_choice_is_remembered_and_forgotten_beside_the_other_settings() {
+    let core = test_core().await;
+    let history = core.chat_history();
+    let made = history.create_conversation(NewConversation {
+        title: "t".to_owned(),
+        settings: Some(ConversationSettings {
+            model_name: Some("qwen".to_owned()),
+            ..ConversationSettings::default()
+        }),
+        ..NewConversation::default()
+    });
+    let id = made.await.expect("a conversation");
+
+    for choice in [Some(Thinking::Off), None] {
+        remember_thinking(history, id, choice).await;
+
+        let read = history.get_conversation(id).await.expect("read");
+        let settings = read.expect("there").settings.expect("settings");
+        assert_eq!(
+            (settings.thinking, settings.model_name.as_deref()),
+            (choice, Some("qwen"))
+        );
+    }
+    remember_thinking(history, id + 1, Some(Thinking::Off)).await;
 }

@@ -39,6 +39,9 @@ pub(crate) struct ChatArgs {
     pub profile: Option<String>,
     /// Resume a previous conversation by ID.
     pub continue_id: Option<i64>,
+    /// `--thinking`: the Thinking choice this command line names for the
+    /// chat, as a turn says one (`on` is the turn's `default`).
+    pub thinking: Option<gglib_core::domain::Thinking>,
     /// Observation-tool name patterns for the dual-threshold loop guard.
     /// An empty vec means "use defaults" (see `AgentConfig::observation_tools`).
     pub observation_tools: Vec<String>,

@@ -95,8 +95,9 @@ loop.
 Core's `gglib_core::domain::thinking::settle` is the one rule for it, read at
 every door a turn comes through: a device's turn (`hub_turn::plan`), which is
 also how the page's turn on a paired machine arrives there, and this
-machine's own run (`run::plan`). The CLI reads a chat it resumes by the same
-rule. A turn says `off`, `default` or nothing. `off` runs it with a
+machine's own run (`run::plan`). The CLI reads its chat by the same rule,
+with `gglib chat --thinking` as what the turn says. A turn says `off`,
+`default` or nothing. `off` runs it with a
 thinking budget of `0` and the conversation remembers; `default` runs it with
 the request's own `reasoning_budget_tokens` and the conversation forgets;
 nothing runs it as the conversation remembers, and a remembered `off` beats
@@ -106,7 +107,9 @@ effort level are never remembered. What is remembered is
 `ConversationSettings.thinking`,
 written by `launch` beside the run's model, so a refused run, or a repeated
 id that starts nothing, writes nothing, and a run with no conversation
-applies what it said and remembers nothing.
+applies what it said and remembers nothing. The write is
+`gglib_app_services::transcript::remember_thinking`, which the CLI's chat
+remembers a named choice through too.
 
 # A paired device's turn
 

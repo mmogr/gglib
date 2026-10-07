@@ -5,12 +5,14 @@
 //! stored settings is a different job, and the file had reached its size
 //! budget. What a new session saves for a later resume is built here too,
 //! with the conversation it saves it on, so the two sides are read together.
+//! The chat's Thinking choice is settled here as well ([`settle_thinking`]),
+//! against the command line, for a new session and a resumed one.
 //! Which machine a resume goes back to, and what it saves, is
 //! `resume_machine`'s; what a resume reprints is `memory_jogger`'s.
 
-use gglib_core::domain::InferenceProfile;
 use gglib_core::domain::chat::ConversationSettings;
-use gglib_core::domain::thinking;
+use gglib_core::domain::thinking::{self, Remember};
+use gglib_core::domain::{InferenceProfile, Thinking};
 
 use super::persistence::Conversation;
 use crate::bootstrap::CliContext;
@@ -76,10 +78,8 @@ pub(crate) fn restore_profile(
 
 /// Merge saved [`ConversationSettings`] into [`ChatArgs`].
 ///
-/// CLI-provided values always win; saved settings fill in blanks. The one
-/// exception is the chat's Thinking choice, which is read by the rule the
-/// daemon reads a turn by: a chat switched off stays off, and says so when
-/// that sets aside a budget the command line typed.
+/// CLI-provided values always win; saved settings fill in blanks. The chat's
+/// Thinking choice is not merged here: [`settle_thinking`] reads it.
 #[allow(
     clippy::assigning_clones,
     clippy::ref_option,
@@ -154,30 +154,43 @@ pub(crate) fn apply_saved_settings(
         merged.max_parallel = saved.max_parallel;
     }
 
-    // A command line says neither `off` nor `default`, so the chat runs as
-    // it remembers: switched off, its budget is 0 whatever
-    // `--reasoning-budget-tokens` says. With nothing said the rule changes a
-    // budget only for a chat switched off, so a typed budget that is not the
-    // one settled was set aside by that choice.
-    let typed = merged.sampling.reasoning_budget_tokens;
-    let budget = thinking::settle(None, saved.thinking, typed).budget;
-    if let Some(typed) = typed.filter(|_| budget != typed) {
-        note_budget_set_aside(typed);
-    }
-    merged.sampling.reasoning_budget_tokens = budget;
-
     merged
 }
 
+/// Settle a session's Thinking choice by the rule the daemon reads a turn by
+/// ([`thinking::settle`]): what `--thinking` named, against what the chat
+/// `remembered` (nothing, for a new chat) and the budget
+/// `--reasoning-budget-tokens` typed. The budget the session runs with goes
+/// into `args`, and what the chat is to remember comes back.
+///
+/// A named choice wins: `off` runs with a budget of `0`, `on` with the budget
+/// typed. With none named the chat runs as it remembers: switched off, its
+/// budget is `0` whatever was typed, and the session says so when that sets
+/// a typed budget aside.
+pub(crate) fn settle_thinking(args: &mut ChatArgs, remembered: Option<Thinking>) -> Remember {
+    let typed = args.sampling.reasoning_budget_tokens;
+    let settled = thinking::settle(args.thinking, remembered, typed);
+    // With nothing named the rule changes a budget only for a chat switched
+    // off, so a typed budget that is not the one settled was set aside by a
+    // choice this command line did not make.
+    if args.thinking.is_none()
+        && let Some(typed) = typed.filter(|_| settled.budget != typed)
+    {
+        note_budget_set_aside(typed);
+    }
+    args.sampling.reasoning_budget_tokens = settled.budget;
+    settled.remember
+}
+
 /// Say that a resumed chat has Thinking switched off, that the budget its
-/// command line typed was not applied, and where the choice is changed.
+/// command line typed was not applied, and the flag that switches it back.
 ///
 /// On stderr, with a session's other notices, and from the one place a
-/// resume reads the choice: once a session, before its first turn.
+/// session reads the choice: once a session, before its first turn.
 fn note_budget_set_aside(typed: i32) {
     eprintln!(
         "  This chat has Thinking switched off, so --reasoning-budget-tokens {typed} was not \
-         applied. Switch Thinking back on from the chat page or a paired device."
+         applied. Add --thinking on to switch it back on."
     );
 }
 

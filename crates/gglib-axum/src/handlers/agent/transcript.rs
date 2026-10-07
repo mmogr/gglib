@@ -13,16 +13,17 @@
 //! is saved when the run ends, all rows or none, with how long each turn
 //! thought: from its first reasoning event to its last, as they were logged.
 //!
-//! The message and the reply are written by `gglib_app_services::transcript`,
-//! which the CLI's chat saves through too. What is here is this door's own:
-//! its refusals, by code, and what it records on the conversation.
+//! The message, the reply and the Thinking choice are written by
+//! `gglib_app_services::transcript`, which the CLI's chat saves through too.
+//! What is here is this door's own: its refusals, by code, and the model it
+//! names on the conversation.
 
 use std::sync::Arc;
 
 use axum::http::StatusCode;
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::runs::{RunError, RunStatus};
-use gglib_core::domain::{Machine, ModelRef, Thinking};
+use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::ChatHistoryError;
 use gglib_core::services::AppCore;
 
@@ -154,27 +155,6 @@ pub(super) async fn record_model(
         tracing::warn!(
             conversation = conversation_id,
             "an agent run's model was not recorded on its conversation"
-        );
-    }
-}
-
-/// Set what `conversation_id` remembers of thinking to `choice`, as the
-/// run's turn said: `off`, or nothing once it said `default`. One field of
-/// the conversation's settings; every other stays. Not saved is logged, not
-/// refused, as the model is.
-pub(super) async fn remember_thinking(
-    core: &AppCore,
-    conversation_id: i64,
-    choice: Option<Thinking>,
-) {
-    let recorded = core
-        .chat_history()
-        .record_thinking(conversation_id, choice)
-        .await;
-    if recorded.is_err() {
-        tracing::warn!(
-            conversation = conversation_id,
-            "an agent run's thinking choice was not recorded on its conversation"
         );
     }
 }

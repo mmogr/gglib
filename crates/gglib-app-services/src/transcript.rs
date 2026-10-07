@@ -6,6 +6,8 @@
 //! are deleted in the same transaction. The reply is saved when the turn
 //! ends, whatever the end, every row or none, with how long each model turn
 //! thought: from its first reasoning event to its last, as they were logged.
+//! A Thinking choice the turn said is remembered on the conversation by
+//! [`remember_thinking`], whichever surface said it.
 //!
 //! The reply's rows are rebuilt from the events the turn logged, each named
 //! for the model that made it ([`MadeBy`]), and never from the loop's own
@@ -15,6 +17,7 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Instant;
 
+use gglib_core::domain::Thinking;
 use gglib_core::domain::agent::{
     AgentEvent, AgentMessage, MADE_KEYS, rows_from_timed_frames, to_new_message,
 };
@@ -141,6 +144,25 @@ pub async fn save_reply<'a>(
     let rows = rows_from_timed_frames(with_times, finished, conversation_id);
     let total = rows.len();
     history.save_messages(rows).await.map(|()| total)
+}
+
+/// Set what `conversation_id` remembers of thinking to `choice`, as a turn
+/// said: `off`, or nothing once it said `default`.
+///
+/// One field of the conversation's settings; every other stays. Not saved
+/// is logged, not refused: the turn runs by the choice either way.
+pub async fn remember_thinking(
+    history: &ChatHistoryService,
+    conversation_id: i64,
+    choice: Option<Thinking>,
+) {
+    let recorded = history.record_thinking(conversation_id, choice).await;
+    if recorded.is_err() {
+        tracing::warn!(
+            conversation = conversation_id,
+            "a turn's thinking choice was not recorded on its conversation"
+        );
+    }
 }
 
 #[cfg(test)]
