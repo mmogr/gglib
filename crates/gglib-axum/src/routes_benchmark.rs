@@ -42,5 +42,4 @@ pub(crate) fn benchmark_routes() -> Router<AppState> {
         )
         // Benchmark — run history
         .route("/runs", get(handlers::benchmark::history::list_runs))
-        .route("/runs/{id}", get(handlers::benchmark::history::get_run))
 }

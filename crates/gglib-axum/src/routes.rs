@@ -80,7 +80,6 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/mcp/servers/{id}/test",
             post(handlers::mcp::test_connection),
         )
-        .route("/mcp/tools/call", post(handlers::mcp::call_tool))
         // Proxy API
         .route("/proxy/status", get(handlers::proxy::status))
         .route("/proxy/start", post(handlers::proxy::start))
@@ -157,15 +156,7 @@ fn model_routes() -> Router<AppState> {
             "/{id}/projectors",
             get(handlers::model::models::projector_choices),
         )
-        // Benchmark history for this model
-        .route(
-            "/{id}/benchmark",
-            get(handlers::benchmark::history::model_benchmark),
-        )
-        .route(
-            "/{id}/tune-history",
-            get(handlers::benchmark::history::model_tune_history),
-        )
+        // Past raw-vs-gglib A/B reports for this model
         .route(
             "/{id}/agentic-history",
             get(handlers::benchmark::history::model_agentic_history),

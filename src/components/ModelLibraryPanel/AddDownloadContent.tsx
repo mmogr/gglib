@@ -4,7 +4,6 @@ import AddModel from '../AddModel';
 import { HuggingFaceBrowser } from '../HuggingFaceBrowser';
 import { HfModelSummary } from '../../types';
 import { Icon } from '../ui/Icon';
-import { Banner } from '../ui/Banner';
 import { Tabs, type TabItem } from '../ui/Tabs';
 
 export type AddDownloadSubTab = 'add' | 'browse';
@@ -18,8 +17,6 @@ interface AddDownloadContentProps {
   onModelAdded: (filePath: string) => Promise<void>;
   activeSubTab?: AddDownloadSubTab;
   onSubTabChange?: (subtab: AddDownloadSubTab) => void;
-  /** Optional error message if the backend download system failed to initialize */
-  downloadSystemError?: string | null;
   /** Callback when an HF model is selected for preview */
   onSelectHfModel?: (model: HfModelSummary | null) => void;
   /** Currently selected HF model ID */
@@ -30,7 +27,6 @@ const AddDownloadContent: FC<AddDownloadContentProps> = ({
   onModelAdded,
   activeSubTab: externalActiveSubTab,
   onSubTabChange,
-  downloadSystemError,
   onSelectHfModel,
   selectedHfModelId,
 }) => {
@@ -51,11 +47,6 @@ const AddDownloadContent: FC<AddDownloadContentProps> = ({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {downloadSystemError && (
-        <Banner variant="danger" title="Downloads unavailable" className="mb-md">
-          <span className="whitespace-pre-wrap">{downloadSystemError}</span>
-        </Banner>
-      )}
       {/* px-base matches the gutter on the search row and list rows. Without
           it this control bled to the panel's left edge and clipped its icon. */}
       <Tabs

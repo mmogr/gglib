@@ -4,7 +4,7 @@
 
 Real-time event subscription layer over SSE (Server-Sent Events), the one implementation for every mode — no Tauri-event branch remains *in this layer*. Presents a unified `subscribe(eventType, handler)` interface, and `onEventStreamOpen(handler)`, which fires each time the connection opens, reconnections included. The SSE implementation uses a single pooled connection to avoid exhausting the browser's HTTP/1.1 per-origin connection limit (6 slots).
 
-Tauri's `listen()` is still used elsewhere for OS-level notifications that are not daemon news — menu commands, llama-install progress, download system status. Those are not product events and do not belong on this bus.
+Tauri's `listen()` is still used elsewhere for OS-level notifications that are not daemon news — menu commands and llama-install progress. Those are not product events and do not belong on this bus.
 
 ## Architecture
 

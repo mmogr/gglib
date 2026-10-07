@@ -9,8 +9,7 @@ use gglib_mcp::{
 use crate::error::GuiError;
 use crate::types::{
     CreateMcpServerRequest, McpEnvEntryDto, McpServerConfigDto, McpServerDto, McpServerInfo,
-    McpServerStatusDto, McpTestResult, McpToolCallRequest, McpToolCallResponse, McpToolInfo,
-    UpdateMcpServerRequest,
+    McpServerStatusDto, McpTestResult, McpToolInfo, UpdateMcpServerRequest,
 };
 
 /// Dependencies for MCP operations.
@@ -288,26 +287,6 @@ impl McpOps {
                 tools: Vec::new(),
             }),
         }
-    }
-
-    /// Call a tool on a running MCP server.
-    pub async fn call_tool(
-        &self,
-        id: i64,
-        req: McpToolCallRequest,
-    ) -> Result<McpToolCallResponse, GuiError> {
-        let result = self
-            .mcp
-            .call_tool(id, &req.tool_name, req.arguments)
-            .await
-            .map_err(|e| GuiError::Internal(e.to_string()))?;
-
-        // McpToolResult has: success, data, error
-        Ok(McpToolCallResponse {
-            success: result.success,
-            data: result.data,
-            error: result.error,
-        })
     }
 
     /// Resolve MCP server executable path (thin wrapper for diagnostics/auto-fix).

@@ -483,27 +483,6 @@ pub struct McpTestResult {
     pub tools: Vec<McpToolInfo>,
 }
 
-/// Request to call an MCP tool.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct McpToolCallRequest {
-    pub tool_name: String,
-    /// Tool arguments, shaped by the tool's own schema and opaque here.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "Record<string, unknown>"))]
-    pub arguments: std::collections::HashMap<String, serde_json::Value>,
-}
-
-/// Response from an MCP tool call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct McpToolCallResponse {
-    pub success: bool,
-    /// Whatever the tool returned. Opaque here, as in [`McpToolInfo`].
-    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown"))]
-    pub data: Option<serde_json::Value>,
-    pub error: Option<String>,
-}
-
 // ============================================================================
 // Server Log Types
 // ============================================================================
