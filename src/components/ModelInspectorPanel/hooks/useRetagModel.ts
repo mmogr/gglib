@@ -10,6 +10,7 @@ import { useCallback, useState } from 'react';
 import { retagModel } from '../../../services/transport/api/models/local';
 import type { ToastType } from '../../Toast/Toast';
 import type { ConfirmOptions } from '../../ui/ConfirmDialog';
+import { formatError } from '../../../utils/errors';
 
 interface UseRetagModelConfig {
   modelId: number | null | undefined;
@@ -73,7 +74,7 @@ export function useRetagModel({
         }
         await reload();
       } catch (err) {
-        showToast(err instanceof Error ? err.message : String(err), 'error');
+        showToast(formatError(err), 'error');
       } finally {
         setRetagging(false);
       }

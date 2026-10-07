@@ -7,7 +7,7 @@
 
 The core platform abstraction layer. Provides `getTransport()` — a factory that spreads the HTTP API client and the SSE event bus into one instance, memoised after the first call. Its type is inferred from those two factories rather than restated as an interface, so it cannot drift from what they return.
 
-There is no branch **between transports**: desktop and web both talk to the gglib daemon over HTTP+SSE. Platform does still matter inside `api/client.ts`, which uses its own local `isTauri()` to resolve the daemon's base URL through the `get_embedded_api_info` IPC command and to pick the retry path. That is the layer's job — absorbing the difference so callers never see it.
+There is no branch **between transports**: desktop and web both talk to the gglib daemon over HTTP+SSE. Platform does still matter inside `api/client.ts`, which asks `isDesktop()` (`platform/detect.ts`, the one check) to resolve the daemon's base URL through the `get_embedded_api_info` IPC command and to pick the retry path. That is the layer's job — absorbing the difference so callers never see it.
 
 ## Architecture
 

@@ -5,9 +5,9 @@
  * live stream go over HTTP/SSE — the desktop WebView uses the same endpoints
  * a browser tab does.
  *
- * The base URL comes from the transport client, which is the one thing that
- * knows where this session's daemon actually is. A second helper used to live
- * in `src/config/api.ts` returning `''` in production builds — correct for a
+ * Both go through the transport client, which is the one thing that knows
+ * where this session's daemon actually is. A second helper used to live in
+ * `src/config/api.ts` returning `''` in production builds — correct for a
  * browser tab served by the daemon, and wrong for the desktop app, where a
  * relative path resolves against the WebView's own origin rather than
  * 127.0.0.1:9887. That made these two functions the only ones in the app that
@@ -15,8 +15,8 @@
  */
 
 import { appLogger } from './index';
-import { getApiBaseUrl, getAuthHeaders } from '../transport/api/client';
-import { createSSEStream } from '../../utils/sse';
+import { apiFetch, get } from '../transport/api/client';
+import { readSse } from '../../utils/sse';
 import { renewAfterRefusal } from '../transport/api/renew';
 
 export interface ServerLogEntry {
@@ -52,18 +52,11 @@ function normalizeServerLogSnapshot(payload: unknown): ServerLogEntry[] {
 }
 
 /**
- * Get initial server logs for a specific port.
+ * Get initial server logs for a specific port. A refusal rejects, as any
+ * other request's does.
  */
 export async function getServerLogs(port: number): Promise<ServerLogEntry[]> {
-  const baseUrl = getApiBaseUrl();
-  const response = await fetch(`${baseUrl}/api/servers/${port}/logs`, {
-    headers: getAuthHeaders(),
-  });
-  if (response.ok) {
-    const json = await response.json();
-    return normalizeServerLogSnapshot(json);
-  }
-  return [];
+  return normalizeServerLogSnapshot(await get<unknown>(`/api/servers/${port}/logs`));
 }
 
 /** How long to wait before reopening a log stream that dropped. */
@@ -81,16 +74,14 @@ export async function listenToServerLogs(
   port: number,
   callback: (entry: ServerLogEntry) => void
 ): Promise<() => void> {
-  const url = `${getApiBaseUrl()}/api/servers/${port}/logs/stream`;
+  const path = `/api/servers/${port}/logs/stream`;
   const controller = new AbortController();
 
   void (async () => {
     while (!controller.signal.aborted) {
       try {
-        for await (const message of createSSEStream(url, {
-          headers: getAuthHeaders(),
-          signal: controller.signal,
-        })) {
+        const response = await apiFetch(path, { signal: controller.signal });
+        for await (const message of readSse(response)) {
           if (!message.data || message.data.trim() === '' || message.data === 'ping') continue;
           try {
             callback(JSON.parse(message.data) as ServerLogEntry);

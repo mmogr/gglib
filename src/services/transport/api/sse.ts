@@ -1,16 +1,18 @@
 /**
- * Reading a POST server-sent-event stream.
+ * Starting a POST server-sent-event stream and handing its frames to
+ * callbacks.
  *
- * `EventSource` cannot issue a POST, so every streaming endpoint gglib
- * exposes has to be read by hand off `fetch`. This is that loop, written
- * once: llama install, build-from-source and update all speak the same
- * `event:`/`data:` wire format and differ only in which event names they
- * emit and what the payloads mean.
+ * `EventSource` cannot issue a POST, so llama install and update are a
+ * `fetch` (`apiFetch`) whose body the shared reader (`utils/sse`) reads. They
+ * speak the same `event:`/`data:` wire format and differ only in which event
+ * names they emit and what the payloads mean.
  */
 
-import { getApiBaseUrl, getAuthHeaders } from './client';
+import { formatError, isAbortError } from '../../../utils/errors';
+import { readSse } from '../../../utils/sse';
+import { apiFetch } from './client';
 
-/** One decoded frame: the SSE event name and its raw `data:` payload. */
+/** One decoded frame: the SSE event name ('' when it has none) and its raw `data:` payload. */
 export interface SseFrame {
   event: string;
   data: string;
@@ -21,7 +23,10 @@ export interface StreamSseHandlers {
   onFrame: (frame: SseFrame) => void;
   /** Called once when the server closes the stream cleanly. */
   onClose?: () => void;
-  /** Transport-level failure. Not called when the caller aborts. */
+  /**
+   * Transport-level failure, in the daemon's words when it refused the
+   * request. Not called when the caller aborts.
+   */
   onError: (message: string) => void;
 }
 
@@ -39,55 +44,26 @@ export function streamSse(
 ): () => void {
   const controller = new AbortController();
 
-  void fetch(`${getApiBaseUrl()}${path}`, {
-    method: 'POST',
-    headers: {
-      ...getAuthHeaders(),
-      Accept: 'text/event-stream',
-      ...(body !== undefined && { 'Content-Type': 'application/json' }),
-    },
-    ...(body !== undefined && { body: JSON.stringify(body) }),
-    signal: controller.signal,
-  })
-    .then(async (response) => {
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  void (async () => {
+    try {
+      const response = await apiFetch(path, {
+        method: 'POST',
+        headers: {
+          Accept: 'text/event-stream',
+          ...(body !== undefined && { 'Content-Type': 'application/json' }),
+        },
+        ...(body !== undefined && { body: JSON.stringify(body) }),
+        signal: controller.signal,
+      });
+      for await (const { event = '', data } of readSse(response)) {
+        handlers.onFrame({ event, data });
       }
-      if (!response.body) {
-        throw new Error('No response body for SSE stream');
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let currentEvent = '';
-
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        // A frame can straddle a chunk boundary, so the trailing partial
-        // line stays in the buffer until the next read completes it.
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            currentEvent = line.slice(7).trim();
-          } else if (line.startsWith('data: ')) {
-            handlers.onFrame({ event: currentEvent, data: line.slice(6) });
-            currentEvent = '';
-          }
-        }
-      }
-
       handlers.onClose?.();
-    })
-    .catch((err: unknown) => {
-      if (err instanceof Error && err.name === 'AbortError') return;
-      handlers.onError(err instanceof Error ? err.message : String(err));
-    });
+    } catch (err) {
+      if (isAbortError(err)) return;
+      handlers.onError(formatError(err));
+    }
+  })();
 
   return () => controller.abort();
 }

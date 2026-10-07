@@ -173,7 +173,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
             'success',
           );
         } catch (err) {
-          const raw = err instanceof Error ? err.message : String(err);
+          const raw = formatError(err);
           showToast(
             raw.includes('already running')
               ? 'The proxy is already running — stop it from the Proxy menu, then pin.'
@@ -212,7 +212,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         }
       }
       
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = formatError(error);
       if (errorMessage.toLowerCase().includes('port') && errorMessage.toLowerCase().includes('in use')) {
         showToast(errorMessage, 'error');
       } else {

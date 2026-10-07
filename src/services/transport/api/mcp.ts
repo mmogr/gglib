@@ -13,6 +13,7 @@ import type {
   ResolutionStatus,
   McpTestResult,
 } from '../types/mcp';
+import { formatError } from '../../../utils/errors';
 
 /**
  * List all configured MCP servers with their status.
@@ -121,7 +122,7 @@ export async function callMcpTool(
     };
   } catch (error) {
     // Network or HTTP error - convert to McpToolResult format
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatError(error);
     return {
       success: false,
       // `null` for the same reason `error` is on the success path: the handler

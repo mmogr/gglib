@@ -9,6 +9,7 @@ import {
 } from "react";
 import { AppSettings, UpdateSettingsRequest } from "../types";
 import { getTransport } from '../services/transport';
+import { formatError } from '../utils/errors';
 
 export type ShowToastFn = (message: string, type?: "success" | "error" | "info" | "warning") => void;
 
@@ -45,7 +46,7 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children, showToas
       const result = await getTransport().getSettings();
       setSettings(result);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = formatError(err);
       setError(message);
     } finally {
       setLoading(false);
@@ -62,7 +63,7 @@ export const SettingsProvider: FC<SettingsProviderProps> = ({ children, showToas
         showToast?.("Settings applied", "success");
         return result;
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = formatError(err);
         setError(message);
         showToast?.(message, "error");
         throw err;

@@ -1,16 +1,15 @@
 /**
  * Benchmark service client.
  *
- * Provides REST + SSE access to the benchmark API endpoints.
- * Uses `getAuthenticatedFetchConfig()` for platform-agnostic auth headers
- * (works in both Tauri and web mode).
- *
- * Manual SSE parser over a chunked `TextDecoder` buffer.
+ * Provides REST + SSE access to the benchmark API endpoints, through the
+ * transport client: `get`/`post` for the plain calls, and `apiFetch` with the
+ * shared SSE reader (`utils/sse`) for the four runs that stream.
  *
  * @module services/clients/benchmark
  */
 
-import { get, getAuthenticatedFetchConfig } from '../transport/api/client';
+import { apiFetch, get, post } from '../transport/api/client';
+import { readSse } from '../../utils/sse';
 import type {
   AgenticEvalConfig,
   AgenticEvalReport,
@@ -54,78 +53,49 @@ export async function getModelAgenticHistory(
   return response.reports;
 }
 
-// ─── SSE streaming helpers ────────────────────────────────────────────────────
+// ─── SSE endpoints ────────────────────────────────────────────────────────────
 
 /**
- * Shared SSE reader — parses a `text/event-stream` response body and calls
- * `onEvent` for each complete `data:` line.  Resolves when the stream ends.
+ * POST `config` to `/api/benchmark/{run}` and hand each event of the reply to
+ * `onEvent`, resolving when the stream ends.
+ *
+ * A request the daemon refuses rejects with the transport's `TransportError`.
+ * A stream that breaks, or `signal` firing, rejects with what the read threw,
+ * as a run's stream does. A payload that is not a JSON event is skipped.
  */
-async function consumeSseStream(
-  response: Response,
+async function streamRun(
+  run: 'compare' | 'perf' | 'tune' | 'agentic',
+  config: unknown,
   onEvent: (event: BenchmarkEvent) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('No response body for benchmark SSE stream');
+  const response = await apiFetch(`/api/benchmark/${run}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+    signal,
+  });
 
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split('\n\n');
-    buffer = parts.pop() ?? '';
-    for (const part of parts) {
-      for (const line of part.split('\n')) {
-        if (line.startsWith('data:')) {
-          const json = line.slice(5).trim();
-          if (json) {
-            try {
-              onEvent(JSON.parse(json) as BenchmarkEvent);
-            } catch {
-              // skip malformed events
-            }
-          }
-        }
-      }
+  for await (const { data } of readSse(response)) {
+    try {
+      onEvent(JSON.parse(data) as BenchmarkEvent);
+    } catch {
+      // skip malformed events
     }
   }
 }
-
-// ─── SSE endpoints ────────────────────────────────────────────────────────────
 
 /**
  * POST /api/benchmark/compare  (SSE)
  * Start a compare run for the given config and stream events via `onEvent`.
  * Resolves when the stream ends; throws on HTTP errors.
  */
-export async function startCompareRun(
+export function startCompareRun(
   config: CompareConfig,
   onEvent: (event: BenchmarkEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
-
-  const response = await fetch(`${baseUrl}/api/benchmark/compare`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(headers as Record<string, string>),
-    },
-    body: JSON.stringify(config),
-    signal,
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(
-      (body as { error?: string }).error ??
-        `Compare run failed: ${response.status}`,
-    );
-  }
-
-  await consumeSseStream(response, onEvent);
+  return streamRun('compare', config, onEvent, signal);
 }
 
 /**
@@ -133,32 +103,12 @@ export async function startCompareRun(
  * Start a perf run for the given config and stream events via `onEvent`.
  * Resolves when the stream ends; throws on HTTP errors.
  */
-export async function startPerfRun(
+export function startPerfRun(
   config: PerfConfig,
   onEvent: (event: BenchmarkEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
-
-  const response = await fetch(`${baseUrl}/api/benchmark/perf`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(headers as Record<string, string>),
-    },
-    body: JSON.stringify(config),
-    signal,
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(
-      (body as { error?: string }).error ??
-        `Perf run failed: ${response.status}`,
-    );
-  }
-
-  await consumeSseStream(response, onEvent);
+  return streamRun('perf', config, onEvent, signal);
 }
 
 /**
@@ -172,32 +122,12 @@ export async function startPerfRun(
  * (the same shape `gglib benchmark tune --task-suite path.json` reads from
  * disk) and wrap it in the `custom` shape before calling this function.
  */
-export async function startTuneRun(
+export function startTuneRun(
   config: TuneConfig,
   onEvent: (event: BenchmarkEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
-
-  const response = await fetch(`${baseUrl}/api/benchmark/tune`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(headers as Record<string, string>),
-    },
-    body: JSON.stringify(config),
-    signal,
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(
-      (body as { error?: string }).error ??
-        `Tune run failed: ${response.status}`,
-    );
-  }
-
-  await consumeSseStream(response, onEvent);
+  return streamRun('tune', config, onEvent, signal);
 }
 
 /**
@@ -206,32 +136,12 @@ export async function startTuneRun(
  * Aborting the signal genuinely cancels the server-side run (the stream
  * guard drop-cancels the eval task). Resolves when the stream ends.
  */
-export async function startAgenticRun(
+export function startAgenticRun(
   config: AgenticEvalConfig,
   onEvent: (event: BenchmarkEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
-
-  const response = await fetch(`${baseUrl}/api/benchmark/agentic`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(headers as Record<string, string>),
-    },
-    body: JSON.stringify(config),
-    signal,
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(
-      (body as { error?: string }).error ??
-        `Agentic eval failed: ${response.status}`,
-    );
-  }
-
-  await consumeSseStream(response, onEvent);
+  return streamRun('agentic', config, onEvent, signal);
 }
 
 /**
@@ -240,16 +150,5 @@ export async function startAgenticRun(
  * Refusals come back as verdicts, never as HTTP errors.
  */
 export async function applyTuneRun(runId: number): Promise<ApplyOutcome> {
-  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
-  const response = await fetch(`${baseUrl}/api/benchmark/tune/${runId}/apply`, {
-    method: 'POST',
-    headers: headers as Record<string, string>,
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(
-      (body as { error?: string }).error ?? `apply failed: ${response.status}`,
-    );
-  }
-  return (await response.json()) as ApplyOutcome;
+  return post<ApplyOutcome>(`/api/benchmark/tune/${runId}/apply`);
 }

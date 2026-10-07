@@ -12,6 +12,7 @@
  */
 
 import { appLogger } from '../platform';
+import { formatError } from '../../utils/errors';
 
 /**
  * Standardized error codes for transport operations.
@@ -213,12 +214,12 @@ export async function readData<T>(response: Response): Promise<T> {
     appLogger.warn('transport.error', '[readData] failed to decode response body', {
       status: response.status,
       contentType,
-      error: error instanceof Error ? error.message : String(error),
+      error: formatError(error),
     });
     throw new TransportError(code, `Failed to decode response body (HTTP ${response.status})`, {
       status: response.status,
       contentType,
-      cause: error instanceof Error ? error.message : String(error),
+      cause: formatError(error),
     });
   }
 }

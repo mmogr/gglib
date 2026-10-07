@@ -26,6 +26,7 @@ import type {
   TuneConfig,
 } from '../../../types/benchmark';
 import { applyTuneRun, startTuneRun } from '../../../services/clients/benchmark';
+import { isAbortError } from '../../../utils/errors';
 import { TuneConfigForm } from './TuneConfigForm';
 import { TuneLiveProgress, TuneTaskLogEntry, TunePrunedEntry } from './TuneLiveProgress';
 import { TuneLeaderboard } from './TuneLeaderboard';
@@ -242,9 +243,8 @@ export const TuneTab: FC<TuneTabProps> = ({ models, onRunComplete }) => {
         });
       })
       .catch(err => {
-        if ((err as Error).name !== 'AbortError') {
-          setRunState(prev => ({ ...prev, status: 'failed', error: (err as Error).message }));
-        }
+        if (isAbortError(err)) return;
+        setRunState(prev => ({ ...prev, status: 'failed', error: (err as Error).message }));
       });
   }, [handleEvent, handleGatedApply]);
 

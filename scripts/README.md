@@ -81,11 +81,13 @@ Enforces "HTTP-first, OS-glue-only" Tauri command policy:
 
 Three rules over `src/`:
 
-1. no `isTauriApp` inside `src/services/clients/`;
+1. no platform check (`isDesktop`, `__TAURI_INTERNALS__`) inside
+   `src/services/clients/`;
 2. a client module may import `transport/api/client` (the base-URL/auth
    primitive) and `transport/types/*` (declarations), but not a transport
    *domain* API — needing one means the module should not be a client;
-3. remaining `isTauriApp` uses carry a `TRANSPORT_EXCEPTION:` comment (warning
+3. a file outside `transport/` that reads the Tauri bridge
+   (`__TAURI_INTERNALS__`) carries a `TRANSPORT_EXCEPTION:` comment (warning
    only).
 
 Rule 2 self-tests against known-bad and known-good fixtures before the real scan,

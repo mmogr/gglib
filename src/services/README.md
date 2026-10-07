@@ -43,10 +43,11 @@ dialogs, menu sync, llama installation, the frontend log bridge. That is OS
 integration, not a transport.
 
 `serverLogs.ts` is the exception and is misfiled: logs live on the daemon in
-every mode, so it uses `fetch` and a raw `EventSource` against the same HTTP
-API as everything else, bypassing the pooled SSE connection in
-`transport/events/`. It is listed below because it is here, not because it
-belongs here.
+every mode, so it goes through the transport client against the same HTTP API
+as everything else (`get` for the lines so far, `apiFetch` and the shared SSE
+reader for the live stream), on a stream of its own rather than the pooled
+SSE connection in `transport/events/`. It is listed below because it is here,
+not because it belongs here.
 
 ## Directory Structure
 
