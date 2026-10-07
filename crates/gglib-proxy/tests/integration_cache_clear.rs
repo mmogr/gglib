@@ -9,14 +9,15 @@ mod fixtures;
 use std::sync::Arc;
 
 use reqwest::Client;
-use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
-use gglib_core::ports::ModelCatalogPort;
 use gglib_core::ports::{ModelRuntimeError, ModelRuntimePort, RunningTarget};
+use gglib_proxy::ServeConfig;
+
+use fixtures::spawn::{defaults, spawn};
 
 /// Runtime port that counts `stop_current()` calls, so a test can assert the
 /// model was actually recycled — the only way to drop llama-server's host-RAM
@@ -56,45 +57,17 @@ async fn spawn_proxy(
     cache_enabled: bool,
     slot_dir: Option<std::path::PathBuf>,
 ) -> (String, CancellationToken, Arc<AtomicUsize>) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
     let stops = Arc::new(AtomicUsize::new(0));
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(RecordingRuntime {
-        stops: Arc::clone(&stops),
-    });
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(fixtures::common::EmptyCatalog);
-    let mcp = fixtures::common::make_mcp_service();
-
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            // Device memory readable: this suite is not about the fit.
-            true,
-            runtime,
-            catalog,
-            mcp,
-            cancel_clone,
-            None, // daemon_cancel: no daemon in tests
-            Arc::new(fixtures::common::MockSettingsRepo),
-            None, // inference_override
-            None, // default_profile
-            cache_enabled,
-            slot_dir,
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &gglib_core::ProxyAccessConfig::default(),
-        )
-        .await
-        .ok();
-    });
-
-    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-    (format!("http://{addr}"), cancel, stops)
+    let proxy = spawn(ServeConfig {
+        runtime_port: Arc::new(RecordingRuntime {
+            stops: Arc::clone(&stops),
+        }),
+        cache_enabled,
+        slot_dir,
+        ..defaults().await
+    })
+    .await;
+    (proxy.base, proxy.cancel, stops)
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────

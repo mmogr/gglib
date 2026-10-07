@@ -115,6 +115,7 @@ pub mod runs;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod sampling_audit;
+pub(crate) mod serve_config;
 #[allow(
     clippy::option_if_let_else,
     clippy::single_match_else,
@@ -163,6 +164,7 @@ pub(crate) mod usage_reading;
 // What `POST /v1/models/{name}/load` answers, for a paired machine that reads it.
 pub use load_endpoint::LoadResponse;
 pub use observers::ProxyObservers;
+pub use serve_config::ServeConfig;
 pub use server::serve;
 // An agent run reads llama-server's reply past the proxy, under this same
 // bound (`gglib-runtime`'s completion adapter; #1212).

@@ -91,29 +91,29 @@ impl ProxyArm {
         let token = cancel.clone();
         let default_ctx = Some(target.effective_ctx);
         let task = tokio::spawn(async move {
-            let served = gglib_proxy::serve(
+            let served = gglib_proxy::serve(gglib_proxy::ServeConfig {
                 listener,
                 default_ctx,
                 // Only the context fit reads it, and the pinned target
                 // never fits anything.
-                true,
-                Arc::new(PinnedTarget { target }),
-                catalog,
-                Arc::new(McpService::new(Arc::new(NoMcpServers))),
-                token,
-                None,
-                Arc::new(fixed),
-                None,
-                None,
+                device_memory_readable: true,
+                runtime_port: Arc::new(PinnedTarget { target }),
+                catalog_port: catalog,
+                mcp: Arc::new(McpService::new(Arc::new(NoMcpServers))),
+                cancel: token,
+                daemon_cancel: None,
+                settings_repo: Arc::new(fixed),
+                inference_override: None,
+                default_profile: None,
                 // No prompt cache, as in the eval's own runtime: one would
                 // perturb what the other arms measure without it.
-                false,
-                None,
-                gglib_proxy::slot_eviction::DiskBudget::Auto,
-                Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
+                cache_enabled: false,
+                slot_dir: None,
+                disk_budget: gglib_proxy::slot_eviction::DiskBudget::Auto,
+                agent_metrics: Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
                 observers,
-                &ProxyAccessConfig::default(),
-            )
+                access: ProxyAccessConfig::default(),
+            })
             .await;
             if let Err(e) = served {
                 warn!("agentic eval: the proxy arm's proxy stopped with an error: {e:#}");

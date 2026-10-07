@@ -28,12 +28,12 @@ use tokio_util::sync::CancellationToken;
 use gglib_core::LoopGuardMode;
 use gglib_core::domain::loop_guard_log::LoopGuardTripEvent;
 use gglib_core::ports::{LoopGuardTripSink, ModelCatalogPort, ModelRuntimePort};
+use gglib_proxy::ServeConfig;
 
-use fixtures::common::{
-    MockSettingsRepo, MultiModelCatalog, ResidentSimRuntime, make_mcp_service, parse_sse_frames,
-};
+use fixtures::common::{MultiModelCatalog, ResidentSimRuntime, parse_sse_frames};
 use fixtures::loop_guard::{chat_body, dashboard_of, looping_history};
 use fixtures::pinned::{EnforcingPinnedRuntime, StaticCatalog};
+use fixtures::spawn::{defaults, spawn};
 
 /// The pinned model, `qwen`, is id 3; `llama` is id 7.
 fn catalog() -> StaticCatalog {
@@ -147,39 +147,17 @@ async fn spawn_proxy(
     catalog: Arc<dyn ModelCatalogPort>,
     guard_log: Option<Arc<GuardLog>>,
 ) -> (String, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let base = format!("http://{}", listener.local_addr().unwrap());
-    let cancel = CancellationToken::new();
-    let observers = gglib_proxy::ProxyObservers {
-        loop_guard_trips: guard_log.map(|log| log as Arc<dyn LoopGuardTripSink>),
-        ..Default::default()
-    };
-    let token = cancel.clone();
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            true,
-            runtime,
-            catalog,
-            make_mcp_service(),
-            token,
-            None,
-            Arc::new(MockSettingsRepo),
-            None,
-            None,
-            false,
-            None,
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            observers,
-            &gglib_core::ProxyAccessConfig::default(),
-        )
-        .await
-        .ok();
-    });
-    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-    (base, cancel)
+    let proxy = spawn(ServeConfig {
+        runtime_port: runtime,
+        catalog_port: catalog,
+        observers: gglib_proxy::ProxyObservers {
+            loop_guard_trips: guard_log.map(|log| log as Arc<dyn LoopGuardTripSink>),
+            ..Default::default()
+        },
+        ..defaults().await
+    })
+    .await;
+    (proxy.base, proxy.cancel)
 }
 
 /// What a chat request for `model` replaying a loop is refused with, as a 404.

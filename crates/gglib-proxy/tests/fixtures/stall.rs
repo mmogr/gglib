@@ -25,12 +25,13 @@ use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::ports::{
-    Admission, AdmissionLease, AdmissionRelease, LaunchOverrides, ModelCatalogPort,
-    ModelRuntimeError, ModelRuntimePort, RunningTarget,
+    Admission, AdmissionLease, AdmissionRelease, LaunchOverrides, ModelRuntimeError,
+    ModelRuntimePort, RunningTarget,
 };
-use gglib_proxy::{StreamBounds, TEST_STREAM_BOUNDS};
+use gglib_proxy::{ServeConfig, StreamBounds};
 
-use super::common::{MockSettingsRepo, TaggedCatalog, make_mcp_service};
+use super::common::TaggedCatalog;
+use super::spawn::{defaults, spawn_under};
 
 /// The model every request in these tests asks for.
 pub(crate) const MODEL: &str = "stall-model";
@@ -252,37 +253,17 @@ pub(crate) async fn spawn_proxy_under(
     slot_dir: Option<PathBuf>,
     cancel: CancellationToken,
 ) -> String {
-    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
-    let addr = listener.local_addr().expect("bound");
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
-        name: MODEL.into(),
-        tags,
-        dialect: None,
-    });
-    let serve = async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            true,
-            runtime,
-            catalog,
-            make_mcp_service(),
-            cancel,
-            None,
-            Arc::new(MockSettingsRepo),
-            None,
-            None,
-            slot_dir.is_some(),
-            slot_dir,
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &gglib_core::ProxyAccessConfig::default(),
-        )
-        .await
-        .ok();
+    let config = ServeConfig {
+        runtime_port: runtime,
+        catalog_port: Arc::new(TaggedCatalog {
+            name: MODEL.into(),
+            tags,
+            dialect: None,
+        }),
+        cancel,
+        cache_enabled: slot_dir.is_some(),
+        slot_dir,
+        ..defaults().await
     };
-    tokio::spawn(TEST_STREAM_BOUNDS.scope(bounds, serve));
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    format!("http://{addr}")
+    spawn_under(bounds, config).await.base
 }

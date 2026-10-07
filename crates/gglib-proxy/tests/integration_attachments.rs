@@ -1,9 +1,10 @@
 //! `/v1/attachments` on the real proxy: a paired device sends an image and
-//! reads one back, and nothing else reaches them.
+//! reads one back.
 //!
 //! The hub's chats are the stand-in `fixtures::chats`, whose images go
 //! through the real ingest, so what is refused here is refused by the one
-//! rule every surface shares.
+//! rule every surface shares. Who reaches these routes at all is the door
+//! they share with `/v1/chats`, tested once in `integration_chats.rs`.
 
 use std::sync::Arc;
 
@@ -13,30 +14,12 @@ use reqwest::{Client, RequestBuilder, StatusCode};
 
 mod fixtures;
 use fixtures::chats::{FakeChats, png, serve};
+use fixtures::remote::from_device;
 use fixtures::runs::{code, json};
-use fixtures::tunnel::DEVICE;
 
 /// An id no image has.
 fn unknown() -> AttachmentId {
     AttachmentId::of(b"never uploaded")
-}
-
-/// Both routes, as a client reaches them.
-fn routes(base: &str) -> Vec<RequestBuilder> {
-    let client = Client::new();
-    vec![
-        client
-            .post(format!("{base}/v1/attachments"))
-            .body(png(640, 480, 0)),
-        client.get(format!("{base}/v1/attachments/{}", unknown())),
-    ]
-}
-
-/// A request as the tunnel edge marks one from a named device.
-fn from_device(request: RequestBuilder) -> RequestBuilder {
-    request
-        .header("via", "1.1 modelpipe")
-        .header("x-modelpipe-device", DEVICE)
 }
 
 fn upload(base: &str, bytes: Vec<u8>) -> RequestBuilder {
@@ -137,56 +120,6 @@ async fn an_unknown_id_is_404_attachment_not_found() {
         assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
         assert_eq!(code(&body), "attachment_not_found", "{body}");
         assert!(!body.to_string().contains("zzq-private-words"), "{body}");
-    }
-    cancel.cancel();
-}
-
-/// This machine sends its images at `/api`; a local client, or one holding
-/// the key on a LAN bind, reaches none here.
-#[tokio::test]
-async fn a_request_not_tunnelled_from_a_named_device_is_refused() {
-    let chats = Arc::new(FakeChats::default());
-    let (base, cancel) = serve(None, Some(Arc::clone(&chats))).await;
-    for request in routes(&base) {
-        let (status, body) = json(request.send().await.unwrap()).await;
-        assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
-        assert_eq!(code(&body), "device_not_named", "{body}");
-    }
-    assert_eq!(chats.calls(), 0, "nothing reached the chats");
-    cancel.cancel();
-}
-
-/// The routes are in the protected group: the key is asked for first, and
-/// a tunnelled request that names no device is the gate's to refuse.
-#[tokio::test]
-async fn the_images_sit_behind_the_bearer_and_the_device_gate() {
-    let chats = Arc::new(FakeChats::default());
-    let (base, cancel) = serve(Some("secret123"), Some(Arc::clone(&chats))).await;
-    for request in routes(&base) {
-        let (status, body) = json(from_device(request).send().await.unwrap()).await;
-        assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
-    }
-    for request in routes(&base) {
-        let request = request
-            .bearer_auth("secret123")
-            .header("via", "1.1 modelpipe");
-        let (status, body) = json(request.send().await.unwrap()).await;
-        assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
-        assert_eq!(code(&body), "device_not_paired", "{body}");
-    }
-    assert_eq!(chats.calls(), 0);
-    let sent = upload(&base, png(640, 480, 0)).bearer_auth("secret123");
-    assert_eq!(sent.send().await.unwrap().status(), StatusCode::OK);
-    cancel.cancel();
-}
-
-#[tokio::test]
-async fn a_proxy_without_the_chats_answers_503_with_a_code() {
-    let (base, cancel) = serve(None, None).await;
-    for request in routes(&base) {
-        let (status, body) = json(from_device(request).send().await.unwrap()).await;
-        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
-        assert_eq!(code(&body), "chats_unavailable");
     }
     cancel.cancel();
 }

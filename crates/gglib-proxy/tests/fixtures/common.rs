@@ -23,6 +23,9 @@ use gglib_core::ports::{
 };
 use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer};
 use gglib_mcp::McpService;
+use gglib_proxy::ServeConfig;
+
+use super::spawn::{defaults, spawn};
 
 // ─── ModelRuntimePort mock ────────────────────────────────────────────────
 
@@ -899,40 +902,14 @@ pub(crate) async fn spawn_proxy_with_settings(
     catalog: Arc<dyn ModelCatalogPort>,
     settings_repo: Arc<dyn SettingsRepository>,
 ) -> (String, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let mcp = make_mcp_service();
-
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            // Device memory readable: this suite is not about the fit.
-            true,
-            runtime,
-            catalog,
-            mcp,
-            cancel_clone,
-            None, // daemon_cancel: no daemon in tests
-            settings_repo,
-            None, // inference_override
-            None, // default_profile
-            false,
-            None,
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &gglib_core::ProxyAccessConfig::default(),
-        )
-        .await
-        .ok();
-    });
-
-    tokio::time::sleep(Duration::from_millis(30)).await;
-    (format!("http://{addr}"), cancel)
+    let proxy = spawn(ServeConfig {
+        runtime_port: runtime,
+        catalog_port: catalog,
+        settings_repo,
+        ..defaults().await
+    })
+    .await;
+    (proxy.base, proxy.cancel)
 }
 
 /// Spawn a proxy server with cache enabled, pointing at the given upstream
@@ -945,52 +922,24 @@ pub(crate) async fn spawn_proxy_with_cache_for_model(
     slot_restore_supported: bool,
     pinned: bool,
 ) -> (String, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(FixedUpstream {
-        port: upstream_port,
-        model_name: model_name.into(),
-        slot_restore_supported,
-        pinned,
-    });
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
-        name: model_name.into(),
-        tags: vec![],
-        dialect: None,
-    });
-    let mcp = make_mcp_service();
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
-
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            // Device memory readable: this suite is not about the fit.
-            true,
-            runtime,
-            catalog,
-            mcp,
-            cancel_clone,
-            None, // daemon_cancel: no daemon in tests
-            Arc::new(MockSettingsRepo),
-            None, // inference_override
-            None, // default_profile
-            true, // cache_enabled
-            Some(slot_dir),
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &gglib_core::ProxyAccessConfig::default(),
-        )
-        .await
-        .ok();
-    });
-
-    // Give the proxy time to start listening.
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    (format!("http://{addr}"), cancel)
+    let proxy = spawn(ServeConfig {
+        runtime_port: Arc::new(FixedUpstream {
+            port: upstream_port,
+            model_name: model_name.into(),
+            slot_restore_supported,
+            pinned,
+        }),
+        catalog_port: Arc::new(TaggedCatalog {
+            name: model_name.into(),
+            tags: vec![],
+            dialect: None,
+        }),
+        cache_enabled: true,
+        slot_dir: Some(slot_dir),
+        ..defaults().await
+    })
+    .await;
+    (proxy.base, proxy.cancel)
 }
 
 /// [`spawn_proxy_with_cache_for_model`] with defaults matching the common

@@ -18,59 +18,17 @@
 mod fixtures;
 
 use std::sync::Arc;
-use std::time::Duration;
 
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort, SettingsRepository};
 use reqwest::Client;
 use serde_json::Value;
-use tokio::net::TcpListener;
-use tokio_util::sync::CancellationToken;
 
-use fixtures::common::{MockSettingsRepo, NoopRuntime, ProfileSettingsRepo, make_mcp_service};
+use fixtures::common::{
+    MockSettingsRepo, NoopRuntime, ProfileSettingsRepo, spawn_proxy_with_settings,
+};
 use fixtures::pinned::{EnforcingPinnedRuntime, PinnedRuntime, StaticCatalog};
 
 const PINNED: &str = "qwen2.5";
 const FOREIGN: &str = "llama-3-8b";
-
-/// Spawn a proxy over the given runtime, catalog and settings.
-async fn spawn(
-    runtime: Arc<dyn ModelRuntimePort>,
-    catalog: Arc<dyn ModelCatalogPort>,
-    settings: Arc<dyn SettingsRepository>,
-) -> (String, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let cancel = CancellationToken::new();
-    let proxy_cancel = cancel.clone();
-
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            // Device memory readable: this suite is not about the fit.
-            true,
-            runtime,
-            catalog,
-            make_mcp_service(),
-            proxy_cancel,
-            None, // daemon_cancel: no daemon in tests
-            settings,
-            None, // inference_override
-            None, // default_profile
-            false,
-            None,
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &gglib_core::ProxyAccessConfig::default(),
-        )
-        .await
-        .ok();
-    });
-
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    (format!("http://{addr}"), cancel)
-}
 
 /// The `id` of every entry `/v1/models` advertised.
 async fn model_ids(base: &str) -> Vec<String> {
@@ -95,7 +53,7 @@ async fn model_ids(base: &str) -> Vec<String> {
 /// The whole point: a pinned proxy must not advertise models it will refuse.
 #[tokio::test]
 async fn pinned_proxy_advertises_only_the_pinned_model() {
-    let (base, cancel) = spawn(
+    let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(PinnedRuntime(PINNED)),
         Arc::new(StaticCatalog::new(&[PINNED, FOREIGN, "mistral-7b"])),
         Arc::new(MockSettingsRepo),
@@ -121,7 +79,7 @@ async fn pinned_proxy_advertises_only_the_pinned_model() {
 /// offer the catalog and swap on demand.
 #[tokio::test]
 async fn unpinned_proxy_advertises_the_whole_catalog() {
-    let (base, cancel) = spawn(
+    let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(NoopRuntime),
         Arc::new(StaticCatalog::new(&[PINNED, FOREIGN])),
         Arc::new(MockSettingsRepo),
@@ -147,7 +105,7 @@ async fn unpinned_proxy_advertises_the_whole_catalog() {
 /// variants of a foreign model must not appear at all.
 #[tokio::test]
 async fn pinned_proxy_keeps_variants_of_the_pinned_model_only() {
-    let (base, cancel) = spawn(
+    let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(PinnedRuntime(PINNED)),
         Arc::new(StaticCatalog::new(&[PINNED, FOREIGN])),
         Arc::new(ProfileSettingsRepo("coding")),
@@ -172,7 +130,7 @@ async fn pinned_proxy_keeps_variants_of_the_pinned_model_only() {
 /// is a filter, not a synthesized entry.
 #[tokio::test]
 async fn pinned_proxy_advertises_nothing_when_the_model_is_absent() {
-    let (base, cancel) = spawn(
+    let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(PinnedRuntime(PINNED)),
         Arc::new(StaticCatalog::numbered(&[(2, FOREIGN)])),
         Arc::new(MockSettingsRepo),
@@ -196,7 +154,7 @@ async fn pinned_proxy_advertises_nothing_when_the_model_is_absent() {
 /// a 200.
 #[tokio::test]
 async fn pinned_proxy_serves_the_dashboard() {
-    let (base, cancel) = spawn(
+    let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(PinnedRuntime(PINNED)),
         Arc::new(StaticCatalog::new(&[PINNED])),
         Arc::new(MockSettingsRepo),
@@ -238,7 +196,7 @@ async fn pinned_proxy_serves_the_dashboard() {
 /// just at the `SwapState`/`ErrorResponse` unit level.
 #[tokio::test]
 async fn pinned_proxy_refuses_a_foreign_model_over_http() {
-    let (base, cancel) = spawn(
+    let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(EnforcingPinnedRuntime::over(PINNED, &[PINNED, FOREIGN])),
         Arc::new(StaticCatalog::new(&[PINNED, FOREIGN])),
         Arc::new(MockSettingsRepo),
@@ -280,7 +238,7 @@ async fn pinned_proxy_refuses_a_foreign_model_over_http() {
 /// enforcing runtime — the guard rejects on identity, not universally.
 #[tokio::test]
 async fn pinned_proxy_still_admits_the_pinned_model_over_http() {
-    let (base, cancel) = spawn(
+    let (base, cancel) = spawn_proxy_with_settings(
         Arc::new(EnforcingPinnedRuntime::over(PINNED, &[PINNED, FOREIGN])),
         Arc::new(StaticCatalog::new(&[PINNED, FOREIGN])),
         Arc::new(MockSettingsRepo),

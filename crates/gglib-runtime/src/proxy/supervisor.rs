@@ -315,14 +315,14 @@ impl ProxySupervisor {
                 "Proxy task starting"
             );
 
-            let result = gglib_proxy::serve(
+            let result = gglib_proxy::serve(gglib_proxy::ServeConfig {
                 listener,
                 default_ctx,
                 device_memory_readable,
                 runtime_port,
                 catalog_port,
                 mcp,
-                cancel_clone,
+                cancel: cancel_clone,
                 daemon_cancel,
                 settings_repo,
                 inference_override,
@@ -332,8 +332,8 @@ impl ProxySupervisor {
                 disk_budget,
                 agent_metrics,
                 observers,
-                &access,
-            )
+                access,
+            })
             .await;
 
             // Publish exit status: cancelled = Stopped, otherwise = Crashed

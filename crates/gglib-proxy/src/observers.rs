@@ -1,7 +1,7 @@
 //! What a proxy run reports to that outlives the run.
 //!
-//! [`serve`](crate::serve) takes one of these rather than a parameter per
-//! observer. Everything in it is owned a level up — by the supervisor, which
+//! [`ServeConfig`](crate::ServeConfig) holds one of these rather than a field
+//! per observer. Everything in it is owned a level up — by the supervisor, which
 //! restarts a proxy without ending the process — so a stop and a start keep
 //! counting into the same place. Both fields are observers only: nothing the
 //! proxy decides reads them back.
