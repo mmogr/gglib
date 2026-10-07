@@ -19,10 +19,20 @@ impl ModelVerificationService {
     ///
     /// [`RepositoryError::Storage`] when the rows cannot be read.
     pub async fn files_of(&self, model_id: i64) -> Result<Vec<ModelFile>, RepositoryError> {
-        self.model_files_repo
-            .get_by_model_id(model_id)
-            .await
-            .map_err(|e| RepositoryError::Storage(e.to_string()))
+        self.model_files_repo.get_by_model_id(model_id).await
+    }
+
+    /// The files a verification reads, or the message it stops with: what a
+    /// store that failed said, alone, and an error of any other kind under
+    /// its label.
+    pub(super) async fn files_to_verify(&self, model_id: i64) -> Result<Vec<ModelFile>, String> {
+        self.files_of(model_id).await.map_err(|e| {
+            let said = match e {
+                RepositoryError::Storage(said) => said,
+                labelled => labelled.to_string(),
+            };
+            format!("Failed to get model files: {said}")
+        })
     }
 }
 

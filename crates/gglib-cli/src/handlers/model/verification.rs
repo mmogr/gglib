@@ -31,11 +31,7 @@ pub(crate) async fn execute_verify(
     identifier: &str,
     per_shard: bool,
 ) -> Result<()> {
-    // Get verification service
-    let verification = ctx
-        .app
-        .verification()
-        .ok_or_else(|| anyhow::anyhow!("Verification service not available"))?;
+    let verification = ctx.app.verification();
 
     // Resolve name-or-id to a model record.
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
@@ -169,11 +165,7 @@ pub(crate) async fn execute_repair(
     shards: Option<String>,
     force: bool,
 ) -> Result<()> {
-    // Get verification service
-    let verification = ctx
-        .app
-        .verification()
-        .ok_or_else(|| anyhow::anyhow!("Verification service not available"))?;
+    let verification = ctx.app.verification();
 
     // Resolve name-or-id to a model record.
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;

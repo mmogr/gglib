@@ -19,7 +19,7 @@ use tokio::sync::{RwLock, mpsc};
 use tokio::task::JoinHandle;
 
 use crate::domain::ModelFile;
-use crate::ports::{HfClientPort, ModelRepository, RepositoryError};
+use crate::ports::{HfClientPort, ModelFilesRepositoryPort, ModelRepository, RepositoryError};
 
 // ============================================================================
 // Domain Types
@@ -241,23 +241,6 @@ impl Default for ModelOperationLock {
 // Service
 // ============================================================================
 
-/// Port trait for accessing model files repository.
-///
-/// This is a minimal trait that wraps the concrete `ModelFilesRepository`
-/// to avoid circular dependencies.
-#[async_trait]
-pub trait ModelFilesReaderPort: Send + Sync {
-    /// Get all model files for a specific model.
-    async fn get_by_model_id(&self, model_id: i64) -> anyhow::Result<Vec<ModelFile>>;
-
-    /// Update the last verified timestamp for a model file.
-    async fn update_verification_time(
-        &self,
-        id: i64,
-        verified_at: chrono::DateTime<Utc>,
-    ) -> anyhow::Result<()>;
-}
-
 /// Port trait for triggering downloads.
 ///
 /// This abstracts the download manager to avoid tight coupling.
@@ -276,7 +259,7 @@ pub struct ModelVerificationService {
     /// Repository for model metadata.
     pub(super) model_repo: Arc<dyn ModelRepository>,
     /// Repository for model file metadata.
-    pub(super) model_files_repo: Arc<dyn ModelFilesReaderPort>,
+    pub(super) model_files_repo: Arc<dyn ModelFilesRepositoryPort>,
     /// `HuggingFace` client for update checks.
     pub(super) hf_client: Arc<dyn HfClientPort>,
     /// Download trigger for repairs.
@@ -289,7 +272,7 @@ impl ModelVerificationService {
     /// Create a new verification service.
     pub fn new(
         model_repo: Arc<dyn ModelRepository>,
-        model_files_repo: Arc<dyn ModelFilesReaderPort>,
+        model_files_repo: Arc<dyn ModelFilesRepositoryPort>,
         hf_client: Arc<dyn HfClientPort>,
         download_trigger: Arc<dyn DownloadTriggerPort>,
     ) -> Self {
@@ -337,11 +320,7 @@ impl ModelVerificationService {
             .await
             .map_err(|e| format!("Failed to get model: {e}"))?;
 
-        let model_files = self
-            .model_files_repo
-            .get_by_model_id(model_id)
-            .await
-            .map_err(|e| format!("Failed to get model files: {e}"))?;
+        let model_files = self.files_to_verify(model_id).await?;
 
         if model_files.is_empty() {
             return Err("No model files found for verification".to_string());

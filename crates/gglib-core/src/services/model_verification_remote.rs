@@ -253,8 +253,12 @@ impl ModelVerificationService {
 
 #[cfg(test)]
 #[path = "model_verification_remote_tests.rs"]
-mod tests;
+pub(super) mod tests;
 
 #[cfg(test)]
 #[path = "model_verification_two_projector_tests.rs"]
 mod two_projector_tests;
+
+#[cfg(test)]
+#[path = "model_verification_store_tests.rs"]
+mod store_tests;

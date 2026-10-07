@@ -7,10 +7,10 @@ use anyhow::Result;
 use gglib_core::ModelRegistrar;
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, GgufParserPort, HfClientPort,
-    ModelRegistrarPort, ModelRepository,
+    ModelRegistrarPort,
 };
-use gglib_core::services::{AppCore, ModelVerificationService};
-use gglib_db::{CoreFactory, ModelFilesRepository, setup_database};
+use gglib_core::services::AppCore;
+use gglib_db::{CoreFactory, setup_database};
 use gglib_download::{DownloadManagerDeps, build_download_manager};
 // GGUF_BOOTSTRAP_EXCEPTION: Parser injected at composition root only
 use gglib_gguf::GgufParser;
@@ -48,15 +48,13 @@ impl CoreBootstrap {
         config: BootstrapConfig,
         emitter: Arc<dyn AppEventEmitter>,
     ) -> Result<BuiltCore> {
-        // 1. Database pool + repositories
+        // 1. Database pool + repositories. The model-files repository among
+        //    them is the one the registrar and the verification service share.
         let pool = setup_database(&config.db_path).await?;
         let repos = CoreFactory::build_repos(pool.clone());
 
         // 2. GGUF parser (shared: model registrar + capability detection)
         let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(GgufParser::new());
-
-        // 4. Model-files repository (used by registrar + verification service)
-        let model_files_repo = Arc::new(ModelFilesRepository::new(pool.clone()));
 
         // 5. HuggingFace client. Built before the registrar because the
         //    registrar uses it to look up a model author's published sampling
@@ -77,8 +75,7 @@ impl CoreBootstrap {
             ModelRegistrar::new(
                 repos.models.clone(),
                 gguf_parser.clone(),
-                Some(Arc::clone(&model_files_repo)
-                    as Arc<dyn gglib_core::services::ModelFilesRepositoryPort>),
+                Some(Arc::clone(&repos.model_files)),
             )
             .with_hf_client(hf_client.clone()),
         );
@@ -102,22 +99,18 @@ impl CoreBootstrap {
             }));
 
         // 10. Download trigger adapter (bridges DownloadManagerPort →
-        //     DownloadTriggerPort for ModelVerificationService)
+        //     DownloadTriggerPort for the verification service)
         let download_trigger = Arc::new(DownloadTriggerAdapter {
             download_manager: Arc::clone(&downloads),
         });
 
-        // 11. Model verification service
-        let model_repo: Arc<dyn ModelRepository> = repos.models.clone();
-        let verification_service = Arc::new(ModelVerificationService::new(
-            Arc::clone(&model_repo),
-            Arc::clone(&model_files_repo) as Arc<dyn gglib_core::services::ModelFilesReaderPort>,
+        // 11. AppCore, whose verification service checks for updates against
+        //     the HF client and queues a repair through the trigger
+        let app = Arc::new(AppCore::new(
+            repos.clone(),
             hf_client.clone(),
             download_trigger,
         ));
-
-        // 12. AppCore — fully wired with verification
-        let app = Arc::new(AppCore::new(repos.clone()).with_verification(verification_service));
 
         tracing::debug!(
             db_path = %config.db_path.display(),

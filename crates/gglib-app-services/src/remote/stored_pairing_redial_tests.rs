@@ -129,7 +129,7 @@ async fn a_dial_to_the_machine_already_recorded_writes_nothing() {
     let pool = setup_test_database().await.expect("in-memory DB");
     let mut repos = CoreFactory::build_repos(pool);
     repos.settings = Arc::new(Unwritable(Arc::clone(&repos.settings)));
-    let core = AppCore::new(repos);
+    let core = AppCore::bare(repos);
     let held = RemotePairing {
         ticket: TICKET_A.to_owned(),
         api_key: KEY_A.to_owned(),

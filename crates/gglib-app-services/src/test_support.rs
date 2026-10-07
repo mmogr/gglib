@@ -226,7 +226,7 @@ impl SystemProbePort for MockSystemProbePort {
 pub(crate) async fn test_core() -> Arc<AppCore> {
     gglib_core::paths::isolate_data_root();
     let pool = setup_test_database().await.expect("in-memory DB");
-    Arc::new(CoreFactory::build_app_core(pool))
+    Arc::new(AppCore::bare(CoreFactory::build_repos(pool)))
 }
 
 /// An `AppCore` and a `ProxyOps` sharing one in-memory database.
@@ -273,7 +273,7 @@ pub(crate) fn test_core_and_proxy_on(
     runtime: Arc<dyn gglib_core::ports::ModelRuntimePort>,
 ) -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
     gglib_core::paths::isolate_data_root();
-    let core = Arc::new(AppCore::new(repos.clone()));
+    let core = Arc::new(AppCore::bare(repos.clone()));
     let proxy = Arc::new(crate::proxy::ProxyOps::new(crate::proxy::ProxyDeps {
         supervisor: Arc::new(gglib_runtime::proxy::ProxySupervisor::new()),
         model_repo: repos.models.clone(),
