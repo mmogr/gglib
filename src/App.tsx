@@ -26,7 +26,7 @@ import { syncBuiltinTools } from "./services/tools";
 function AppContent() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showLlamaModal, setShowLlamaModal] = useState(false);
-  const { servers, loadServers, stopServer } = useServers();
+  const { servers, stopServer } = useServers();
   const { toasts, showToast, dismissToast } = useToastContext();
   const { 
     status: llamaStatus, 
@@ -164,12 +164,10 @@ function AppContent() {
           servers={servers}
           onStopServer={stopServer}
           onSelectModel={handleSelectModelFromHeader}
-          onRefreshServers={loadServers}
         />
         <div className="flex-1 min-h-0 overflow-hidden flex">
           <ModelControlCenterPage
             servers={servers}
-            loadServers={loadServers}
             stopServer={stopServer}
             onRegisterMenuActions={registerMenuActions}
           />

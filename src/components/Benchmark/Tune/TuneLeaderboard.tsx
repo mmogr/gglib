@@ -124,5 +124,3 @@ export const TuneLeaderboard: FC<TuneLeaderboardProps> = ({
     </table>
   );
 };
-
-export default TuneLeaderboard;

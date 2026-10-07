@@ -117,5 +117,3 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({ toolName, 
     </div>
   );
 };
-
-export default ToolResultDisplay;

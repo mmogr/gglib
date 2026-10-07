@@ -83,7 +83,6 @@ vi.mock('../../../src/hooks/useMcpServers', () => ({
     loading: false,
     error: null,
     refresh: vi.fn(),
-    callTool: vi.fn(),
   }),
 }));
 

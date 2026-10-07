@@ -11,7 +11,6 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 // Mock the transport BEFORE importing the hook
 const transport = vi.hoisted(() => ({
   listMcpServers: vi.fn(),
-  callMcpTool: vi.fn(),
 }));
 
 vi.mock('../../../src/services/transport', async (importOriginal) => ({
@@ -20,7 +19,6 @@ vi.mock('../../../src/services/transport', async (importOriginal) => ({
 }));
 
 const mockListMcpServers = transport.listMcpServers;
-const mockCallMcpTool = transport.callMcpTool;
 
 import { useMcpTools } from '../../../src/hooks/useMcpServers';
 
@@ -143,37 +141,6 @@ describe('useMcpTools', () => {
 
       expect(result.current.error).toBeNull();
       expect(result.current.tools).toEqual(expectedTools);
-    });
-  });
-
-  describe('callTool', () => {
-    it('calls callMcpTool with correct arguments', async () => {
-      const toolResult = { success: true, data: 'result' };
-      mockCallMcpTool.mockResolvedValue(toolResult);
-
-      const { result } = renderHook(() => useMcpTools());
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      const callResult = await result.current.callTool(1, 'search', { query: 'test' });
-
-      expect(mockCallMcpTool).toHaveBeenCalledWith(1, 'search', { query: 'test' });
-      expect(callResult).toEqual(toolResult);
-    });
-
-    it('can be called before loading completes', async () => {
-      const toolResult = { success: true };
-      mockCallMcpTool.mockResolvedValue(toolResult);
-
-      const { result } = renderHook(() => useMcpTools());
-
-      // Don't wait for loading - call immediately
-      const callResult = await result.current.callTool(1, 'tool1', {});
-
-      expect(mockCallMcpTool).toHaveBeenCalledWith(1, 'tool1', {});
-      expect(callResult).toEqual(toolResult);
     });
   });
 });

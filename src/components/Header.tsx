@@ -12,7 +12,6 @@ interface HeaderProps {
   servers: ServerViewModel[];
   onStopServer: (modelId: number) => Promise<void>;
   onSelectModel: (modelId: number, view?: 'chat' | 'console') => void;
-  onRefreshServers?: () => void;
 }
 
 const Header: FC<HeaderProps> = ({
@@ -20,7 +19,6 @@ const Header: FC<HeaderProps> = ({
   servers,
   onStopServer,
   onSelectModel,
-  onRefreshServers,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isRunsPopoverOpen, setIsRunsPopoverOpen] = useState(false);
@@ -86,7 +84,6 @@ const Header: FC<HeaderProps> = ({
                 servers={servers}
                 onStopServer={onStopServer}
                 onSelectModel={onSelectModel}
-                onRefresh={onRefreshServers}
               />
             </div>
             <Button

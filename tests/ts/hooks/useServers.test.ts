@@ -2,8 +2,7 @@
  * Tests for useServers hook.
  *
  * useServers is event-driven (backed by serverRegistry), not polling-based.
- * Tests cover: registry state mapping, static interface contracts, and
- * delegation to safeStopServer.
+ * Tests cover: registry state mapping and delegation to safeStopServer.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -46,16 +45,6 @@ describe('useServers', () => {
     ]);
   });
 
-  it('loading is always false (event-driven, no async fetch)', () => {
-    const { result } = renderHook(() => useServers());
-    expect(result.current.loading).toBe(false);
-  });
-
-  it('error is always null (errors handled by registry, not hook)', () => {
-    const { result } = renderHook(() => useServers());
-    expect(result.current.error).toBeNull();
-  });
-
   it('reflects updated registry state on re-render', () => {
     const updated: ServerStateInfo[] = [
       { modelId: '3', modelName: 'gemma-7b', port: MOCK_BASE_PORT + 2, status: 'running', updatedAt: 3 },
@@ -80,17 +69,6 @@ describe('useServers', () => {
 
     expect(safeStopServer).toHaveBeenCalledWith(1);
     expect(safeStopServer).toHaveBeenCalledTimes(1);
-  });
-
-  it('loadServers is a no-op that resolves cleanly', async () => {
-    const { result } = renderHook(() => useServers());
-
-    // loadServers is intentionally a no-op; the registry is event-driven.
-    await act(async () => {
-      await result.current.loadServers();
-    });
-
-    expect(vi.mocked(useAllServerStates)).toHaveBeenCalled();
   });
 
   it('falls back to "Model #id" when modelName is missing', () => {
@@ -121,7 +99,5 @@ describe('useServers', () => {
     const { result } = renderHook(() => useServers());
 
     expect(result.current.servers).toEqual([]);
-    expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBeNull();
   });
 });

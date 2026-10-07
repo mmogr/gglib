@@ -1,18 +1,12 @@
 /**
- * Tool registry for managing and executing tools.
- * Provides a centralized registry for tool definitions and executors.
+ * Tool registry: what the UI knows about the tools the daemon can run.
+ *
+ * It holds each tool's definition, which ones the person has enabled, the
+ * daemon's name for each, and how to draw its result. It runs nothing: a run
+ * names its enabled tools in `tool_filter` and the daemon executes them.
  */
 
-import type {
-  ToolDefinition,
-  ToolExecutor,
-  ToolResult,
-  ToolResultRenderer,
-  RegisteredTool,
-  ParsedToolCall,
-} from './types';
-import { parseToolCall, ToolCall } from './types';
-import { formatError } from '../../utils/errors';
+import type { ToolDefinition, ToolResultRenderer, RegisteredTool } from './types';
 
 /**
  * Source identifier for tool registration.
@@ -27,13 +21,8 @@ export type ToolSource =
  */
 interface RegisteredToolWithSource extends RegisteredTool {
   source: ToolSource;
-  renderer?: ToolResultRenderer;
 }
 
-/**
- * Registry for managing tools available to the LLM.
- * Handles tool registration, lookup, and execution.
- */
 /**
  * Metadata stored in the reverse name map for each sanitized MCP tool name.
  */
@@ -44,6 +33,10 @@ export interface NameMapEntry {
   serverId: string;
 }
 
+/**
+ * Registry of the tools available to the LLM.
+ * Handles tool registration, lookup and enablement.
+ */
 export class ToolRegistry {
   private tools = new Map<string, RegisteredToolWithSource>();
   // Secure-by-default: tools are disabled unless explicitly enabled.
@@ -58,25 +51,24 @@ export class ToolRegistry {
   private _nameMap = new Map<string, NameMapEntry>();
 
   /**
-   * Register a tool with its definition and executor.
+   * Register a tool with its definition.
    * @param definition - OpenAI-compatible tool definition
-   * @param execute - Function to execute when tool is called
    * @param source - Source identifier for the tool (default: 'builtin')
    * @param renderer - Optional renderer for displaying results in the chat UI
    * @throws Error if tool with same name already exists
    */
-  register(definition: ToolDefinition, execute: ToolExecutor, source: ToolSource = 'builtin', renderer?: ToolResultRenderer): void {
+  register(definition: ToolDefinition, source: ToolSource = 'builtin', renderer?: ToolResultRenderer): void {
     const name = definition.function.name;
     if (this.tools.has(name)) {
       // Allow silent re-registration from the same source (idempotent sync)
       const existing = this.tools.get(name)!;
       if (existing.source === source) {
-        this.tools.set(name, { definition, execute, source, renderer });
+        this.tools.set(name, { definition, source, renderer });
         return;
       }
       throw new Error(`Tool "${name}" is already registered`);
     }
-    this.tools.set(name, { definition, execute, source, renderer });
+    this.tools.set(name, { definition, source, renderer });
     // Newly registered tools are disabled by default.
     // Intentionally do not mutate enable-state here so that if a tool is
     // re-registered after being enabled (e.g., MCP resync), it stays enabled.
@@ -93,7 +85,6 @@ export class ToolRegistry {
    * @param serverId     - MCP server ID that owns this tool
    * @param sanitizedName - Sanitized name used as the registry key
    * @param definition   - ToolDefinition whose function.name must equal sanitizedName
-   * @param execute      - Executor (must call MCP with originalName, not sanitizedName)
    * @param source       - Tool source (e.g. 'mcp:server-id')
    * @param renderer     - Optional renderer for displaying results in the chat UI
    */
@@ -102,12 +93,11 @@ export class ToolRegistry {
     serverId: string,
     sanitizedName: string,
     definition: ToolDefinition,
-    execute: ToolExecutor,
     source: ToolSource,
     renderer?: ToolResultRenderer,
   ): void {
     this._nameMap.set(sanitizedName, { originalName, serverId });
-    this.register(definition, execute, source, renderer);
+    this.register(definition, source, renderer);
   }
 
   /**
@@ -163,7 +153,6 @@ export class ToolRegistry {
    * @param name - Function name
    * @param description - Description for the LLM
    * @param parameters - JSON Schema for parameters (optional)
-   * @param execute - Executor function
    * @param source - Source identifier for the tool (default: 'builtin')
    * @param renderer - Optional renderer for displaying results in the chat UI
    */
@@ -171,7 +160,6 @@ export class ToolRegistry {
     name: string,
     description: string,
     parameters: ToolDefinition['function']['parameters'] | undefined,
-    execute: ToolExecutor,
     source: ToolSource = 'builtin',
     renderer?: ToolResultRenderer
   ): void {
@@ -184,7 +172,6 @@ export class ToolRegistry {
           parameters,
         },
       },
-      execute,
       source,
       renderer
     );
@@ -248,72 +235,11 @@ export class ToolRegistry {
   }
 
   /**
-   * Get a specific tool's executor.
-   */
-  getExecutor(name: string): ToolExecutor | undefined {
-    return this.tools.get(name)?.execute;
-  }
-
-  /**
    * Get the registered renderer for a tool, if one was provided.
    * Returns undefined for tools without a renderer or unknown tool names.
    */
   getRenderer(toolName: string): ToolResultRenderer | undefined {
     return this.tools.get(toolName)?.renderer;
-  }
-
-  /**
-   * Execute a tool by name with given arguments.
-   * Handles errors gracefully, returning error result instead of throwing.
-   */
-  async execute(
-    name: string,
-    args: Record<string, unknown>
-  ): Promise<ToolResult> {
-    const tool = this.tools.get(name);
-    if (!tool) {
-      return { success: false, error: `Unknown tool: ${name}` };
-    }
-
-    try {
-      const result = await tool.execute(args);
-      return result;
-    } catch (err) {
-      return { success: false, error: formatError(err) };
-    }
-  }
-
-  /**
-   * Execute a parsed tool call.
-   * Convenience method that takes a ParsedToolCall directly.
-   */
-  async executeCall(call: ParsedToolCall): Promise<ToolResult> {
-    return this.execute(call.name, call.arguments);
-  }
-
-  /**
-   * Execute a raw ToolCall from the LLM.
-   *
-   * For MCP tools the name arriving here is the **sanitized** registry key
-   * (e.g. `mcp_my_server_get_data`).  No extra name-resolution is required at
-   * this level: the executor stored under that key was created via
-   * `createMcpExecutor` in `mcpIntegration.ts`, which closes over the raw
-   * original MCP tool name and server ID.  When the executor runs it calls
-   * `callMcpTool(serverId, originalName, args)` — the MCP server therefore
-   * always receives its own naming scheme, never the sanitized key.
-   *
-   * This keeps the registry fully agnostic about the MCP protocol: it knows
-   * only about sanitized names and generic executors.
-   */
-  async executeRawCall(toolCall: ToolCall): Promise<ToolResult> {
-    const parsed = parseToolCall(toolCall);
-    if (!parsed) {
-      return {
-        success: false,
-        error: `Failed to parse arguments for tool call ${toolCall.id}`,
-      };
-    }
-    return this.executeCall(parsed);
   }
 
   /**

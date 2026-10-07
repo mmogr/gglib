@@ -193,12 +193,11 @@ const CONNECTED = {
 };
 
 const stopServer = vi.fn(async () => {});
-const loadServers = vi.fn(async () => {});
 
 /** Render the page with nothing served here — the laptop this PR is about. */
 function renderPage() {
   return render(
-    <ModelControlCenterPage servers={[]} loadServers={loadServers} stopServer={stopServer} />,
+    <ModelControlCenterPage servers={[]} stopServer={stopServer} />,
     { wrapper },
   );
 }
@@ -224,7 +223,6 @@ describe('ModelControlCenterPage', () => {
     far.hang = false;
     resetRemoteState();
     stopServer.mockClear();
-    loadServers.mockClear();
   });
 
   it("opens a chat with the paired machine's model with nothing served here", async () => {
@@ -305,7 +303,7 @@ describe('ModelControlCenterPage', () => {
     library.models = [guiModel({ id: 7, name: 'qwen3-8b', isServing: true })];
     const running = [{ modelId: 7, modelName: 'qwen3-8b', port: 9123, status: 'running' as const }];
     render(
-      <ModelControlCenterPage servers={running} loadServers={loadServers} stopServer={stopServer} />,
+      <ModelControlCenterPage servers={running} stopServer={stopServer} />,
       { wrapper },
     );
     const user = userEvent.setup();
@@ -339,7 +337,7 @@ describe('ModelControlCenterPage', () => {
     library.models = [guiModel({ id: 7, name: 'qwen3-8b', isServing: true }), guiModel({ id: 9, name: 'gemma-3-12b' })];
     const running = [{ modelId: 7, modelName: 'qwen3-8b', port: 9123, status: 'running' as const }, ...extra];
     render(
-      <ModelControlCenterPage servers={running} loadServers={loadServers} stopServer={stopServer} />,
+      <ModelControlCenterPage servers={running} stopServer={stopServer} />,
       { wrapper },
     );
     const user = userEvent.setup();

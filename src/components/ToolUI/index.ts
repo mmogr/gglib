@@ -4,4 +4,3 @@
 
 export { GenericToolUI } from './GenericToolUI';
 export { ToolResultDisplay } from './ToolResultDisplay';
-export { default } from './GenericToolUI';

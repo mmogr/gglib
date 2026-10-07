@@ -19,7 +19,6 @@ interface UseMccMenuActionsArgs {
   selectedModelId: number | null;
   servers: ServerViewModel[];
   models: Array<{ id?: number; name?: string }>;
-  loadServers: () => Promise<void>;
   stopServer: (modelId: number) => Promise<void>;
   removeModel: (id: number, force?: boolean) => Promise<void>;
   selectModel: (id: number | null) => void;
@@ -39,7 +38,6 @@ export function useMccMenuActions({
   selectedModelId,
   servers,
   models,
-  loadServers,
   stopServer,
   removeModel,
   selectModel,
@@ -92,13 +90,8 @@ export function useMccMenuActions({
         }
       },
       startServer: () => {
-        if (selectedModelId && onOpenServeModal) {
-          // Open the serve modal for the selected model
-          onOpenServeModal();
-        } else if (selectedModelId) {
-          // Fallback: if no modal callback, just load servers (old behavior)
-          loadServers();
-        }
+        // Open the serve modal for the selected model
+        if (selectedModelId) onOpenServeModal?.();
       },
       stopServer: async () => {
         if (!selectedModelId) return;
@@ -147,7 +140,6 @@ export function useMccMenuActions({
     selectedModelId,
     servers,
     models,
-    loadServers,
     stopServer,
     removeModel,
     selectModel,

@@ -11,7 +11,7 @@ Floating popover listing currently running llama-server instances with per-serve
 
 | File | Role |
 |------|------|
-| `RunsPopover.tsx` | Fixed-position popover wrapping `ServerList`; auto-close effect; refresh button |
+| `RunsPopover.tsx` | Fixed-position popover wrapping `ServerList`; auto-close effect |
 
 When `servers.length` drops to 0, a `useEffect` triggers `onClose()` automatically so the popover doesn't linger as an empty panel.
 

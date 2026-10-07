@@ -147,5 +147,3 @@ export const ProxyCachePanel: FC<ProxyCachePanelProps> = ({ cache }) => {
     </div>
   );
 };
-
-export default ProxyCachePanel;

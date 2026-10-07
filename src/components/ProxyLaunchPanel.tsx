@@ -74,5 +74,3 @@ export const ProxyLaunchPanel: FC<ProxyLaunchPanelProps> = ({ launch }) => {
     </div>
   );
 };
-
-export default ProxyLaunchPanel;

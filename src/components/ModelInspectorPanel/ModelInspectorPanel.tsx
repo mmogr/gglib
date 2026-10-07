@@ -42,7 +42,6 @@ const panelContainer = "flex flex-col overflow-hidden relative flex-1 bg-surface
 interface ModelInspectorPanelProps {
   model: GgufModel | null;
   selectedHfModel?: HfModelSummary | null;
-  onStartServer: () => void;
   onServerStarted?: (serverInfo: ServerViewModel) => void;
   /** Open the chat screen on this model's running server. */
   onOpenChat?: (modelId: number) => void;
@@ -63,7 +62,6 @@ interface ModelInspectorPanelProps {
 const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   model,
   selectedHfModel,
-  onStartServer,
   onServerStarted,
   onOpenChat,
   onStopServer,
@@ -135,7 +133,6 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
     onStopServer,
     onRemoveModel,
     onUpdateModel,
-    onStartServer,
     onServerStarted,
     onLlamaServerNotInstalled: modals.handleLlamaServerNotInstalled,
     setIsServing: serveModal.setIsServing,

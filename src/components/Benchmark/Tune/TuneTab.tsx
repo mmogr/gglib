@@ -233,11 +233,13 @@ export const TuneTab: FC<TuneTabProps> = ({ models, onRunComplete }) => {
     startTuneRun(config, handleEvent, abort.signal)
       .then(() => {
         setRunState(prev => {
+          // A stream that closes with no terminal event must not hang the UI.
+          if (prev.status === 'running') {
+            return { ...prev, status: 'failed', error: 'The tune stream ended without completing.' };
+          }
           if (applyBest && prev.status !== 'failed') {
             const runId = completedRunIdRef.current;
-            if (runId != null) {
-              void handleGatedApply(runId);
-            }
+            if (runId != null) void handleGatedApply(runId);
           }
           return prev;
         });
@@ -302,5 +304,3 @@ export const TuneTab: FC<TuneTabProps> = ({ models, onRunComplete }) => {
     </div>
   );
 };
-
-export default TuneTab;

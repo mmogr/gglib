@@ -56,24 +56,8 @@ export interface ToolDefinition {
 }
 
 // =============================================================================
-// Tool Execution Types
+// Tool Rendering Types
 // =============================================================================
-
-/**
- * Result from executing a tool.
- * Uses discriminated union for type-safe success/error handling.
- */
-export type ToolResult =
-  | { success: true; data: unknown }
-  | { success: false; error: string };
-
-/**
- * Function signature for tool executors.
- * Takes parsed arguments, returns a ToolResult.
- */
-export type ToolExecutor = (
-  args: Record<string, unknown>
-) => Promise<ToolResult> | ToolResult;
 
 /**
  * Interface for rendering a tool result in the chat UI.
@@ -87,68 +71,11 @@ export interface ToolResultRenderer {
 }
 
 /**
- * A registered tool with its definition and executor.
+ * A registered tool: its definition, and how its result is drawn.
  */
 export interface RegisteredTool {
   /** Tool definition for the LLM */
   definition: ToolDefinition;
-  /** Function to execute when the tool is called */
-  execute: ToolExecutor;
   /** Optional renderer for displaying results in the chat UI */
   renderer?: ToolResultRenderer;
-}
-
-// =============================================================================
-// Tool Call Types (from LLM responses)
-// =============================================================================
-
-/**
- * Function call details within a tool call.
- * Matches Rust ToolCallFunction.
- */
-export interface ToolCallFunction {
-  /** Name of the function to call */
-  name: string;
-  /** JSON string of arguments */
-  arguments: string;
-}
-
-/**
- * A complete tool call from the assistant.
- * Matches Rust ToolCall.
- */
-export interface ToolCall {
-  /** Unique ID for this tool call */
-  id: string;
-  /** Tool type - always "function" */
-  type: 'function';
-  /** Function call details */
-  function: ToolCallFunction;
-}
-
-/**
- * Parsed tool call with arguments as object.
- * Convenience type for after JSON parsing.
- */
-export interface ParsedToolCall {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-}
-
-/**
- * Parse a ToolCall into a ParsedToolCall.
- * Returns null if arguments JSON is invalid.
- */
-export function parseToolCall(toolCall: ToolCall): ParsedToolCall | null {
-  try {
-    const args = JSON.parse(toolCall.function.arguments);
-    return {
-      id: toolCall.id,
-      name: toolCall.function.name,
-      arguments: typeof args === 'object' && args !== null ? args : {},
-    };
-  } catch {
-    return null;
-  }
 }

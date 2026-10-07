@@ -20,7 +20,7 @@ import {
   updateConversationSystemPrompt,
   updateConversationTitle,
 } from '../../../../src/services/transport/api/chat';
-import { addMcpServer, callMcpTool, updateMcpServer } from '../../../../src/services/transport/api/mcp';
+import { addMcpServer, updateMcpServer } from '../../../../src/services/transport/api/mcp';
 import {
   addModel,
   removeModel,
@@ -176,14 +176,6 @@ describe('what a typed request body sends', () => {
   it("setting a conversation's system prompt sends it", async () => {
     expect((await sent(() => updateConversationSystemPrompt(5, 'Be brief.'))).body).toStrictEqual({
       system_prompt: 'Be brief.',
-    });
-  });
-
-  it('calling an MCP tool sends the server, the tool and its arguments flat', async () => {
-    expect(await sent(() => callMcpTool(3, 'echo', { text: 'hi' }))).toStrictEqual({
-      method: 'POST',
-      path: '/api/mcp/tools/call',
-      body: { server_id: 3, tool_name: 'echo', arguments: { text: 'hi' } },
     });
   });
 

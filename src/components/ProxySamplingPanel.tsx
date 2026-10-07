@@ -401,5 +401,3 @@ export const ProxySamplingPanel: FC<ProxySamplingPanelProps> = ({ audit }) => {
     </div>
   );
 };
-
-export default ProxySamplingPanel;

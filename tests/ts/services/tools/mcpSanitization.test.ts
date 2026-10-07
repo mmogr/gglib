@@ -2,19 +2,19 @@
  * Round-trip tests for MCP tool name sanitization.
  *
  * Covers the full lifecycle:
- *   register (sanitized name) → LLM ToolCall (sanitized name) → executeRawCall
- *   → executor closure (original name) → callMcpTool(serverId, originalName)
+ *   register (sanitized name) → the person enables it → a run's `tool_filter`
+ *   names it to the daemon as `serverId:originalName`
  *
- * These tests prove that the Phase-1 executor closure is the sole mechanism
- * responsible for translating sanitized names back to original MCP names, and
- * that the registry itself remains agnostic about MCP tool naming.
+ * The daemon runs the tool, and the MCP server only knows its own naming. So
+ * what must survive sanitization is the server and the original name, read
+ * back from the sanitized key the UI holds.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { registerMcpTools } from '../../../../src/services/tools/mcpIntegration';
 import { resetToolRegistry, getToolRegistry } from '../../../../src/services/tools/registry';
+import { buildRunRequest } from '../../../../src/hooks/useGglibRuntime/runRequest';
 import type { McpTool } from '../../../../src/services/transport';
-import type { ToolCall } from '../../../../src/services/tools/types';
 import type { McpServerId } from '../../../../src/services/transport';
 
 // ── McpServerId in tests ──────────────────────────────────────────────────────
@@ -35,7 +35,6 @@ const srv = (id: string) => id as unknown as McpServerId;
 
 const transport = vi.hoisted(() => ({
   listMcpServers: vi.fn(),
-  callMcpTool: vi.fn(),
 }));
 
 vi.mock('../../../../src/services/transport', async (importOriginal) => ({
@@ -69,19 +68,15 @@ function makeTool(name: string, description = `Description for ${name}`): McpToo
   };
 }
 
-/**
- * Build a ToolCall object as the LLM would produce it — the name is always
- * the sanitized registry key because that is what was sent in the tool definitions.
- */
-function makeToolCall(sanitizedName: string, args: Record<string, unknown> = {}, id = 'call-1'): ToolCall {
-  return {
-    id,
-    type: 'function',
-    function: {
-      name: sanitizedName,
-      arguments: JSON.stringify(args),
-    },
-  };
+/** Enable every registered tool, as the person does in the tools popover. */
+function enableAll(): void {
+  const registry = getToolRegistry();
+  for (const definition of registry.getDefinitions()) registry.enable(definition.function.name);
+}
+
+/** The tool filter of a run started now, as the daemon receives it. */
+function toolFilter(): string[] | null {
+  return buildRunRequest({ messages: [], conversationId: 1, selectedServerPort: 9000 }).tool_filter;
 }
 
 // =============================================================================
@@ -89,198 +84,89 @@ function makeToolCall(sanitizedName: string, args: Record<string, unknown> = {},
 // =============================================================================
 
 describe('MCP tool name sanitization round-trip', () => {
-  let callMcpTool: ReturnType<typeof vi.fn>;
-
   beforeEach(() => {
     resetToolRegistry();
     mockWarn.mockClear();
-    callMcpTool = transport.callMcpTool;
-    callMcpTool.mockReset();
   });
 
-  // ── Core closure proof ─────────────────────────────────────────────────────
+  // ── Core proof ─────────────────────────────────────────────────────────────
 
-  it('calls MCP server with the exact original name, not the sanitized key', async () => {
+  it('names the tool to the daemon by its exact original name, not the sanitized key', () => {
     // Tool 'get-weather.v2' from server 'test' sanitizes to 'mcp_test_get-weather_v2'
-    callMcpTool.mockResolvedValueOnce({ success: true, data: 'sunny' });
-
     registerMcpTools(srv('test'), [makeTool('get-weather.v2')]);
+    const registry = getToolRegistry();
 
-    const toolCall = makeToolCall('mcp_test_get-weather_v2', { city: 'London' });
-    await getToolRegistry().executeRawCall(toolCall);
+    // The LLM is shown the sanitized key…
+    expect(registry.getDefinitions().map((d) => d.function.name)).toEqual(['mcp_test_get-weather_v2']);
+    // …and the daemon is told the server and the raw original name.
+    expect(registry.getBackendName('mcp_test_get-weather_v2')).toBe('test:get-weather.v2');
 
-    // Strict assertion: the MCP server must receive the raw original name
-    expect(callMcpTool).toHaveBeenCalledOnce();
-    expect(callMcpTool).toHaveBeenCalledWith(
-      'test',           // serverId — unchanged
-      'get-weather.v2', // raw original name — NOT 'mcp_test_get-weather_v2'
-      { city: 'London' },
-    );
+    enableAll();
+    expect(toolFilter()).toEqual(['test:get-weather.v2']);
   });
 
-  it('passes arguments through unmodified', async () => {
-    callMcpTool.mockResolvedValueOnce({ success: true, data: null });
+  it('leaves a tool that is registered but not enabled out of the filter', () => {
+    registerMcpTools(srv('srv'), [makeTool('echo'), makeTool('ping')]);
+    getToolRegistry().enable('mcp_srv_echo');
 
-    registerMcpTools(srv('srv'), [makeTool('echo')]);
-    const args = { message: 'hello', count: 3, flag: true };
-
-    await getToolRegistry().executeRawCall(makeToolCall('mcp_srv_echo', args));
-
-    expect(callMcpTool).toHaveBeenCalledWith('srv', 'echo', args);
-  });
-
-  // ── Success / error forwarding ─────────────────────────────────────────────
-
-  it('returns a success result with data from the MCP server', async () => {
-    callMcpTool.mockResolvedValueOnce({ success: true, data: { temp: 20, unit: 'C' } });
-
-    registerMcpTools(srv('weather'), [makeTool('get-temp')]);
-    const result = await getToolRegistry().executeRawCall(
-      makeToolCall('mcp_weather_get-temp', { city: 'Paris' }),
-    );
-
-    expect(result).toEqual({ success: true, data: { temp: 20, unit: 'C' } });
-  });
-
-  it('returns an error result when the MCP server responds with failure', async () => {
-    callMcpTool.mockResolvedValueOnce({ success: false, error: 'city not found' });
-
-    registerMcpTools(srv('weather'), [makeTool('get-temp')]);
-    const result = await getToolRegistry().executeRawCall(
-      makeToolCall('mcp_weather_get-temp', { city: 'Atlantis' }),
-    );
-
-    expect(result).toEqual({ success: false, error: 'city not found' });
-  });
-
-  it('falls back to a generic error message when MCP responds with success:false but no error string', async () => {
-    callMcpTool.mockResolvedValueOnce({ success: false });
-
-    registerMcpTools(srv('srv'), [makeTool('flaky')]);
-    const result = await getToolRegistry().executeRawCall(makeToolCall('mcp_srv_flaky'));
-
-    expect(result).toMatchObject({ success: false });
-    expect((result as { success: false; error: string }).error).toBeTruthy();
-  });
-
-  // ── Rejection / network failure ────────────────────────────────────────────
-
-  it('returns an error result when callMcpTool rejects (does not throw)', async () => {
-    callMcpTool.mockRejectedValueOnce(new Error('network failure'));
-
-    registerMcpTools(srv('srv'), [makeTool('risky-op')]);
-    const result = await getToolRegistry().executeRawCall(makeToolCall('mcp_srv_risky-op'));
-
-    expect(result).toMatchObject({
-      success: false,
-      error: 'MCP call failed: network failure',
-    });
-  });
-
-  it('handles non-Error rejections gracefully', async () => {
-    callMcpTool.mockRejectedValueOnce('something broke');
-
-    registerMcpTools(srv('srv'), [makeTool('tool_a')]);
-    const result = await getToolRegistry().executeRawCall(makeToolCall('mcp_srv_tool_a'));
-
-    expect(result).toMatchObject({ success: false });
-    expect((result as { success: false; error: string }).error).toContain('MCP call failed');
-  });
-
-  // ── Argument JSON parsing ──────────────────────────────────────────────────
-
-  it('returns a parse-error result when the LLM sends invalid arguments JSON', async () => {
-    registerMcpTools(srv('srv'), [makeTool('my_tool')]);
-
-    const badCall: ToolCall = {
-      id: 'call-bad',
-      type: 'function',
-      function: { name: 'mcp_srv_my_tool', arguments: 'not-json{{' },
-    };
-    const result = await getToolRegistry().executeRawCall(badCall);
-
-    expect(result).toMatchObject({ success: false });
-    expect((result as { success: false; error: string }).error).toContain('Failed to parse');
-    // The MCP server must NOT have been contacted
-    expect(callMcpTool).not.toHaveBeenCalled();
+    expect(toolFilter()).toEqual(['srv:echo']);
   });
 
   // ── Unknown / unregistered tool name ──────────────────────────────────────
 
-  it('returns an unknown-tool error for a sanitized name that was never registered', async () => {
-    const result = await getToolRegistry().executeRawCall(
-      makeToolCall('mcp_ghost_server_nonexistent'),
-    );
+  it('has no original name for a sanitized name that was never registered', () => {
+    const registry = getToolRegistry();
 
-    expect(result).toMatchObject({
-      success: false,
-      error: expect.stringContaining('Unknown tool'),
-    });
-    expect(callMcpTool).not.toHaveBeenCalled();
+    expect(registry.has('mcp_ghost_server_nonexistent')).toBe(false);
+    expect(registry.getOriginalName('mcp_ghost_server_nonexistent')).toBeUndefined();
+    // With nothing to map, the name is passed through as it is.
+    expect(registry.getBackendName('mcp_ghost_server_nonexistent')).toBe('mcp_ghost_server_nonexistent');
   });
 
   // ── Multiple tools from the same server ───────────────────────────────────
 
-  it('routes multiple tools from the same server to their respective original names', async () => {
-    callMcpTool
-      .mockResolvedValueOnce({ success: true, data: 'weather-result' })
-      .mockResolvedValueOnce({ success: true, data: 'files-result' });
-
+  it('names multiple tools from the same server by their respective original names', () => {
     registerMcpTools(srv('multi'), [
       makeTool('get-weather.v2'),
       makeTool('list files'),
     ]);
+    enableAll();
 
-    await getToolRegistry().executeRawCall(makeToolCall('mcp_multi_get-weather_v2', {}, 'call-1'));
-    await getToolRegistry().executeRawCall(makeToolCall('mcp_multi_list_files', {}, 'call-2'));
-
-    expect(callMcpTool).toHaveBeenNthCalledWith(1, 'multi', 'get-weather.v2', {});
-    expect(callMcpTool).toHaveBeenNthCalledWith(2, 'multi', 'list files', {});
+    expect(toolFilter()).toEqual(['multi:get-weather.v2', 'multi:list files']);
   });
 
   // ── Two servers, same tool name (namespace isolation) ─────────────────────
 
-  it('routes tools with the same name from different servers to the correct server', async () => {
-    callMcpTool
-      .mockResolvedValueOnce({ success: true, data: 'from-alpha' })
-      .mockResolvedValueOnce({ success: true, data: 'from-beta' });
-
+  it('names tools with the same name from different servers by the correct server', () => {
     registerMcpTools(srv('alpha'), [makeTool('ping')]);
     registerMcpTools(srv('beta'),  [makeTool('ping')]);
+    enableAll();
 
-    await getToolRegistry().executeRawCall(makeToolCall('mcp_alpha_ping', {}, 'c1'));
-    await getToolRegistry().executeRawCall(makeToolCall('mcp_beta_ping',  {}, 'c2'));
-
-    expect(callMcpTool).toHaveBeenNthCalledWith(1, 'alpha', 'ping', {});
-    expect(callMcpTool).toHaveBeenNthCalledWith(2, 'beta',  'ping', {});
+    expect(toolFilter()).toEqual(['alpha:ping', 'beta:ping']);
   });
 
-  // ── Collision: skipped tools must not be callable ─────────────────────────
+  // ── Collision: skipped tools must not be offered ──────────────────────────
 
-  it('does not register either tool when two names collide, so calling the sanitized key returns an error', async () => {
+  it('does not register either tool when two names collide, so neither can be enabled or named', () => {
     // 'get!data' and 'get?data' both sanitize to 'mcp_s_get_data' — both are skipped
     registerMcpTools(srv('s'), [makeTool('get!data'), makeTool('get?data')]);
+    const registry = getToolRegistry();
 
-    const result = await getToolRegistry().executeRawCall(makeToolCall('mcp_s_get_data'));
+    registry.enable('mcp_s_get_data');
 
-    expect(result).toMatchObject({
-      success: false,
-      error: expect.stringContaining('Unknown tool'),
-    });
-    expect(callMcpTool).not.toHaveBeenCalled();
+    expect(registry.has('mcp_s_get_data')).toBe(false);
+    expect(registry.isEnabled('mcp_s_get_data')).toBe(false);
+    expect(registry.getOriginalName('mcp_s_get_data')).toBeUndefined();
+    // No tool enabled means no filter at all, not a filter naming the collision.
+    expect(toolFilter()).toBeNull();
   });
 
   // ── Clean name requires no sanitization ───────────────────────────────────
 
-  it('works correctly when the tool name needs no sanitization at all', async () => {
-    callMcpTool.mockResolvedValueOnce({ success: true, data: 42 });
-
+  it('works correctly when the tool name needs no sanitization at all', () => {
     registerMcpTools(srv('srv'), [makeTool('get_current_time')]);
-    const result = await getToolRegistry().executeRawCall(
-      makeToolCall('mcp_srv_get_current_time'),
-    );
+    enableAll();
 
-    expect(result).toEqual({ success: true, data: 42 });
-    expect(callMcpTool).toHaveBeenCalledWith('srv', 'get_current_time', {});
+    expect(toolFilter()).toEqual(['srv:get_current_time']);
   });
 });
