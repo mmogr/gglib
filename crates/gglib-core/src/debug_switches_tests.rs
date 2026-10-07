@@ -24,8 +24,7 @@ fn truthy_values_are_the_ones_the_tree_already_accepted() {
 /// invisible to the mismatch warning forever, and one listed here that
 /// nothing reads reports a difference that cannot matter. So the source
 /// tree is the reference, read at test time — the same trick
-/// `sampler_wire_semantics.py` uses on the floor and
-/// `settingsBounds.test.ts` uses on the bounds.
+/// `sampler_wire_semantics.py` uses on the floor.
 #[test]
 fn all_lists_every_switch_the_tree_reads() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

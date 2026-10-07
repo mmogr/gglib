@@ -1,7 +1,7 @@
 /**
- * Drift guards for PR8's settings-parity additions, in the style of
- * `settingsBounds.test.ts`: read the Rust source off disk and assert the
- * GUI's transcriptions match, so the two surfaces cannot drift silently.
+ * Drift guards for PR8's settings-parity additions: read the Rust source off
+ * disk and assert the GUI's transcriptions match, so the two surfaces cannot
+ * drift silently.
  */
 
 import { readFileSync } from 'node:fs';

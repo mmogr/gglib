@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{InferenceConfig, InferenceProfile};
 
+#[path = "settings_bounds.rs"]
+mod settings_bounds;
+pub use settings_bounds::*;
+
 #[path = "settings_loop_guard.rs"]
 mod settings_loop_guard;
 pub use settings_loop_guard::LoopGuardMode;
@@ -48,19 +52,6 @@ pub const DEFAULT_REMOTE_PORT: u16 = 8180;
 /// Default context size for models when not specified by the user.
 pub const DEFAULT_CONTEXT_SIZE: u64 = 4096;
 
-/// The context sizes a person is allowed to configure.
-///
-/// One constant because more than one surface describes this range and they
-/// have to agree — [`validate_settings`] rejects anything outside it, and so do
-/// the flags that write this setting or default it. Spelling the numbers out
-/// separately on each is how they drift.
-///
-/// Not every context-size flag is bounded by it: `--ctx-size` names a
-/// per-launch value rather than this setting, and `CtxSizeArg::parse` accepts
-/// any `u64`. That is a separate surface with a separate contract, not an
-/// omission here.
-pub const CONTEXT_SIZE_RANGE: std::ops::RangeInclusive<u64> = 512..=1_000_000;
-
 /// Application settings structure.
 ///
 /// All fields are optional to support partial updates and graceful defaults.
@@ -87,7 +78,7 @@ pub struct Settings {
     /// Note: The OpenAI-compatible proxy listens on `proxy_port`.
     pub llama_base_port: Option<u16>,
 
-    /// Maximum number of downloads that can be queued (1-50).
+    /// Maximum number of downloads that can be queued, within [`DOWNLOAD_QUEUE_RANGE`].
     pub max_download_queue_size: Option<u32>,
 
     /// Whether to show memory fit indicators in `HuggingFace` browser.
@@ -511,21 +502,21 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
 
     // Validate proxy port
     if let Some(port) = settings.proxy_port
-        && port < 1024
+        && port < MIN_PORT
     {
         return Err(SettingsError::InvalidPort(port));
     }
 
     // Validate llama-server base port
     if let Some(port) = settings.llama_base_port
-        && port < 1024
+        && port < MIN_PORT
     {
         return Err(SettingsError::InvalidPort(port));
     }
 
     // Validate max download queue size
     if let Some(queue_size) = settings.max_download_queue_size
-        && !(1..=50).contains(&queue_size)
+        && !DOWNLOAD_QUEUE_RANGE.contains(&queue_size)
     {
         return Err(SettingsError::InvalidQueueSize(queue_size));
     }

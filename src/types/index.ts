@@ -116,9 +116,9 @@ export type { SamplingLayerName };
  *
  * Membership here is a claim that `tests/ts/contracts/settingsBounds.test.ts`
  * can check: every key needs a `{ default, min, max, step }` entry that the
- * test reads Rust's `validate_inference_config` and `with_hardcoded_defaults`
- * to verify. `reasoningBudgetTokens` qualifies — Rust bounds it at `>= -1` and
- * floors it at unset — and joins for exactly that reason.
+ * test holds to what Rust's `validate_inference_config` accepts and
+ * `with_hardcoded_defaults` sets. `reasoningBudgetTokens` qualifies — Rust
+ * gives it a floor and no default — and joins for exactly that reason.
  *
  * `reasoningEffort` does not, and cannot: it is a string enum with no bounds
  * and no numeric default, so an entry for it would be a fabricated row in a

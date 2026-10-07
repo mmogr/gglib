@@ -1,0 +1,121 @@
+{
+  "settings": {
+    "default_context_size": {
+      "min": 512,
+      "max": 1000000
+    },
+    "llama_base_port": {
+      "min": 1024
+    },
+    "max_download_queue_size": {
+      "min": 1,
+      "max": 50
+    },
+    "proxy_port": {
+      "min": 1024
+    }
+  },
+  "settings_defaults": {
+    "default_context_size": null,
+    "llama_base_port": 9000,
+    "max_download_queue_size": 10,
+    "max_tool_iterations": 25,
+    "proxy_port": 8080
+  },
+  "inference": {
+    "dryAllowedLength": {
+      "min": 0
+    },
+    "dryBase": {
+      "above": 1.0
+    },
+    "dryMultiplier": {
+      "min": 0.0,
+      "max": 5.0
+    },
+    "dryPenaltyLastN": {
+      "min": -1
+    },
+    "dynatempExponent": {
+      "above": 0.0
+    },
+    "dynatempRange": {
+      "min": 0.0
+    },
+    "frequencyPenalty": {
+      "min": -2.0,
+      "max": 2.0
+    },
+    "maxTokens": {
+      "min": 1
+    },
+    "minP": {
+      "min": 0.0,
+      "max": 1.0
+    },
+    "presencePenalty": {
+      "min": 0.0,
+      "max": 2.0
+    },
+    "reasoningBudgetTokens": {
+      "min": -1
+    },
+    "repeatPenalty": {
+      "above": 0.0
+    },
+    "temperature": {
+      "min": 0.0,
+      "max": 2.0
+    },
+    "topK": {
+      "min": 1
+    },
+    "topNSigma": {
+      "min": -1.0
+    },
+    "topP": {
+      "min": 0.0,
+      "max": 1.0
+    }
+  },
+  "inference_floor": {
+    "temperature": 0.7,
+    "topP": null,
+    "topK": null,
+    "maxTokens": null,
+    "repeatPenalty": null,
+    "presencePenalty": null,
+    "frequencyPenalty": null,
+    "minP": null,
+    "dynatempRange": null,
+    "dynatempExponent": null,
+    "topNSigma": null,
+    "dryMultiplier": null,
+    "dryBase": null,
+    "dryAllowedLength": null,
+    "dryPenaltyLastN": null,
+    "seed": null,
+    "reasoningEffort": null,
+    "reasoningBudgetTokens": null
+  },
+  "reasoning_floor": {
+    "temperature": 0.7,
+    "topP": null,
+    "topK": null,
+    "maxTokens": null,
+    "repeatPenalty": null,
+    "presencePenalty": 1.0,
+    "frequencyPenalty": null,
+    "minP": 0.0,
+    "dynatempRange": null,
+    "dynatempExponent": null,
+    "topNSigma": null,
+    "dryMultiplier": null,
+    "dryBase": null,
+    "dryAllowedLength": null,
+    "dryPenaltyLastN": null,
+    "seed": null,
+    "reasoningEffort": null,
+    "reasoningBudgetTokens": null
+  }
+}

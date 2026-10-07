@@ -980,7 +980,7 @@ fn read_reasoning_budget_tokens(
     // `read_i32` has already reported anything unreadable as the key the
     // client sent, so only the range check is left.
     let n = read_i32(obj, field, issues)?;
-    if n < -1 {
+    if n < crate::settings::REASONING_BUDGET_TOKENS_MIN {
         issues.push(FieldIssue::Rejected {
             field,
             value: n.to_string(),

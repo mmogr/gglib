@@ -69,7 +69,7 @@ a separate instrument (`gglib benchmark agentic`) and a separate question.
 
 gglib's floor is read out of the Rust source at runtime rather than copied
 here, so this script cannot report a comparison against a floor that has since
-moved. `tests/ts/contracts/settingsBounds.test.ts` uses the same trick for the
+moved. `tests/ts/contracts/settingsParity.test.ts` uses the same trick for the
 same reason.
 
 Exit status is 0 whatever the findings — this reports, it does not judge.
