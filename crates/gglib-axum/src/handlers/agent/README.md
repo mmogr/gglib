@@ -39,7 +39,8 @@ why the model stopped.
 
 `remote_upstream` decides, before anything else, whether the loop drives a
 llama-server this daemon started (the request's `port`, validated against
-the servers it owns, the model resolved against this catalog) or a model of
+the servers it owns; the turn is shaped for the model that port serves, by
+its row in this catalog, whatever `model` the request names) or a model of
 the machine on the other end of the remote tunnel (`far`, that machine and
 the model's id there: the port the tunnel bound, the key from the pairing as
 the bearer, and no shaping, because the far proxy runs its own pipeline). A
@@ -58,6 +59,22 @@ turns are sent with the id as the model, so no other model of its name
 answers, and the run is counted under, and its turns made by, the name and
 quantisation that machine has for it. Locally an absent `model` is the
 ordinary case and means "whatever llama-server loaded".
+
+# Sampling
+
+A local turn's sampling is resolved by the rules every chat resolves by, in
+the one place they are: `gglib_core::request_pipeline::apply`, which the
+completion adapter calls as it shapes each request. `compose::prepare` hands
+it the pieces unfolded: the two reasoning controls, which are all the
+sampling a request can name (`AgentChatRequest::sampling_layer`), and from
+`remote_upstream::local` the served model's context, which carries its own
+stored values, and this machine's global defaults. No profile, since nothing
+in the request can name one. So a turn that names nothing and carries no
+tools is sent what `gglib model explain` reports for its model, and one with
+tools has a temperature nobody chose capped, as `gglib chat`'s is, unless the
+model is tagged `reasoning`. The same context switches on the pipeline's
+other per-model stages: capability shaping, the truncation budget, the effort
+gate and the tool-call dialect parser.
 
 # Cancellation
 

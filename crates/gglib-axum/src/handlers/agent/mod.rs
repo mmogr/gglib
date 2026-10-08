@@ -159,3 +159,5 @@ mod run_thinking_tests;
 #[cfg(test)]
 #[path = "transcript_images_tests.rs"]
 mod transcript_images_tests;
+#[cfg(test)]
+mod turn_fixture;

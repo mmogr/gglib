@@ -2,9 +2,12 @@
 
 gglib treats sampling as server-side configuration, not something every client
 gets to improvise. Every request that reaches llama-server — from the proxy,
-`gglib serve`, `gglib chat`, or `gglib q` — resolves its sampling parameters
-through the same hierarchy, and `gglib model explain` shows exactly how any
-given model resolves.
+`gglib serve`, `gglib chat`, `gglib q`, or a chat in the app, on the chat page
+or from a paired device — resolves its sampling parameters through the same
+hierarchy, and `gglib model explain` shows exactly how any given model
+resolves. A chat in the app can name no profile and no sampler parameter, so
+its turns resolve from the model's own defaults, the global settings and the
+floor.
 
 ## The 5-level merge hierarchy
 
@@ -593,9 +596,9 @@ gglib config settings set --trust-client-sampling false
 `{model}:{profile}` selection is unaffected either way — that is not a client
 sampling parameter, it is part of the requested model name, and profiles remain the
 sanctioned way for a client to express a sampling preference without needing to be
-trusted (see below). In-process callers (`gglib chat`, `gglib q`) are also
-unaffected: their sampling parameters are gglib's own typed configuration, not an
-external client's request body, so they are always honoured.
+trusted (see below). In-process callers (`gglib chat`, `gglib q`, a chat in the
+app) are also unaffected: their sampling parameters are gglib's own typed
+configuration, not an external client's request body, so they are always honoured.
 
 ## Inference profiles (`<model>:<profile>`)
 
@@ -714,7 +717,8 @@ gglib chat 7 --profile chat --presence-penalty 1.2
 Pass `--temperature` as well to set them together. `gglib chat` and `gglib q`
 warn whenever a flag is passed over this way — including without a profile,
 since a model with stored `inference_defaults` naming a temperature does the
-same thing. The warning is suppressed under `gglib q -Q`, which promises
+same thing. The warning comes with the session's first message, which is when
+the hierarchy is resolved. It is suppressed under `gglib q -Q`, which promises
 silence on stderr.
 
 `gglib serve` does not warn: its flags are resolved per request by the proxy,
@@ -892,7 +896,9 @@ adjustment, not a tool-emission one — it applies to prose turns in an agentic
 session too, which is why the cap is mild rather than near-greedy.
 
 Disable it with `gglib config settings set --agentic-sampling false`, or
-per-process with `GGLIB_DISABLE_AGENTIC_SAMPLING=1`.
+per-process with `GGLIB_DISABLE_AGENTIC_SAMPLING=1`. The setting is the
+proxy's: `gglib chat`, `gglib q` and a chat in the app apply the cap whatever
+it says, and only the environment variable switches it off for them.
 
 Two surfaces cannot report it, both by construction: `gglib model explain` and
 the GUI's sampling provenance explain *stored configuration* with no request in

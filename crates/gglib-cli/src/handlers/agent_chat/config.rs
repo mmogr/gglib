@@ -17,11 +17,11 @@ use std::sync::Arc;
 use anyhow::Result;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::AgentLoopPort;
+use gglib_core::request_pipeline::SamplingLayers;
 use gglib_runtime::compose_agent_loop_with_sampling;
 
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
-use crate::handlers::inference::shared::resolve_inference_config;
 use crate::target::{Target, TurnModel};
 
 // =============================================================================
@@ -126,31 +126,36 @@ pub(crate) async fn compose(
     //    the daemon) or the paired machine's tunnel port.
     let upstream = params.target.upstream(ctx, params, banner).await?;
 
-    // 2. Resolve inference parameters via the 4-level hierarchy.
-    //    Look up the model so model-level defaults can be applied.  When the
-    //    identifier is unknown (external port reuse with no catalog entry) the
-    //    sampling is forwarded as-is — and the target says whether this
-    //    catalog is the one that applies at all.
-    //    The provenance travels with the values so a later stage can say which
-    //    rung supplied each one; an unknown identifier yields none, because no
-    //    ladder was run.
-    let local_model = params
+    // 2. Gather the stored sampling layers beneath the flags: the selected
+    //    profile and this machine's global defaults. They go to the adapter
+    //    unfolded, beside the flags (`sampling`) and the model's own values
+    //    (`model_context`, below): the ladder is folded once, where each
+    //    request is shaped, and a value resolved here would reach that fold
+    //    as one a person typed. When the identifier is unknown (external port
+    //    reuse with no catalog entry) the flags are forwarded with nothing
+    //    stored beneath them — and the target says whether this catalog is
+    //    the one that applies at all.
+    let catalogued = params
         .target
         .local_model(ctx, &params.model_identifier)
-        .await?;
-    let (resolved_sampling, _sources) = match local_model {
-        Some(model) => {
-            let named = sampling.clone().unwrap_or_default();
-            let (resolved, sources) =
-                resolve_inference_config(ctx, named.clone(), params.profile.as_ref(), &model)
-                    .await?;
-            if !banner.quiet {
-                super::sampling_warning::warn_discarded_flags(&named, &resolved, &sources);
-            }
-            (Some(resolved), Some(sources))
+        .await?
+        .is_some();
+    let layers = if catalogued {
+        let settings = ctx.app.settings().get().await?;
+        SamplingLayers {
+            profile: params.profile.as_ref().map(|chosen| chosen.config.clone()),
+            global: settings.inference_defaults,
+            ..SamplingLayers::default()
         }
-        None => (sampling, None),
+    } else {
+        SamplingLayers::default()
     };
+    // Only that fold knows whether it passed over a flag, so it says so
+    // through this; never under `-Q`, which promises silence on stderr.
+    let sampling_observer = sampling
+        .clone()
+        .filter(|_| catalogued && !banner.quiet)
+        .map(super::sampling_warning::discarded_flags);
 
     // 3. Initialise MCP servers (CLI bootstrap intentionally skips this).
     //    A failure is logged as a warning rather than aborting the session:
@@ -180,7 +185,9 @@ pub(crate) async fn compose(
         Arc::clone(&ctx.mcp),
         tool_filter,
         sandbox_root,
-        resolved_sampling,
+        sampling,
+        layers,
+        sampling_observer,
         // No proxy dashboard in the CLI process — nowhere to report reuse.
         None,
         // Nor anywhere to report the guard's decisions: the ledger the GUI
@@ -198,6 +205,10 @@ pub(crate) async fn compose(
 // =============================================================================
 // Tests
 // =============================================================================
+
+#[cfg(test)]
+#[path = "config_sampling_tests.rs"]
+mod sampling_tests;
 
 #[cfg(test)]
 mod tests {
@@ -230,7 +241,7 @@ mod tests {
 
     /// A `ChatArgs` with every knob at rest, so each test states only the two
     /// or three fields it is actually about.
-    fn chat_args() -> ChatArgs {
+    pub(super) fn chat_args() -> ChatArgs {
         ChatArgs {
             identifier: String::new(),
             context: crate::shared_args::ContextArgs::default(),

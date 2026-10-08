@@ -62,8 +62,8 @@ export interface RunRequestOptions {
   /**
    * The two reasoning controls, which the request takes at the **top level**
    * rather than inside `config` — they are per-turn shape, not agent-loop
-   * tuning. An omitted field resolves from the profile, per-model, global and
-   * floor layers.
+   * tuning. An omitted field resolves, on a local turn, from the served
+   * model's own values, this machine's global defaults and the floor.
    */
   reasoning?: { reasoning_effort?: string; reasoning_budget_tokens?: number };
   /**

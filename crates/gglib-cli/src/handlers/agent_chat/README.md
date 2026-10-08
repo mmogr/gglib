@@ -6,7 +6,12 @@ Interactive agentic chat handler for `gglib chat`.
 
 Entry point: [`run`].  Sub-modules keep each concern small and
 independently readable:
-- [`config`]   — resolves MCP tools + sampling, composes an [`gglib_core::ports::AgentLoopPort`]
+- [`config`]   — readies the MCP tools, gathers the flags and the stored
+  sampling layers beneath them, and composes an
+  [`gglib_core::ports::AgentLoopPort`]. It folds no ladder: the adapter's
+  request pipeline does, once a request, as it does for the daemon's turns
+- [`sampling_warning`] — says on stderr, with the session's first request,
+  which sampling flags that fold passed over
 - [`upstream`] — the llama-server a local session talks to: one already running
   here (`--port`) or one the daemon starts. Which *machine* answers is
   `crate::target`'s decision (ADR 0013), not this module's

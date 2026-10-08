@@ -1,6 +1,7 @@
 //! A data directory for a test to point `GGLIB_DATA_DIR` at, with its
-//! settings written and read, a chat saved and read back, and an MCP server
-//! stored, through the stores the binary's bootstrap wires.
+//! settings written and read, a chat saved and read back, an MCP server
+//! stored, and a model added to its catalogue, through the stores the
+//! binary's bootstrap wires.
 //!
 //! Lives in a subdirectory because anything directly under `tests/` is built
 //! as its own test binary; `#[path]`-included from the suites that need it.
@@ -11,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
+use gglib_core::domain::NewModel;
 use gglib_core::domain::chat::{Conversation, NewConversation};
 use gglib_core::domain::mcp::NewMcpServer;
 use gglib_core::{NoopEmitter, Settings};
@@ -83,6 +85,17 @@ pub(crate) fn store_mcp_server(root: &Path, server: NewMcpServer) {
         let stored = built.repos.mcp_servers.insert(server).await;
         built.pool.close().await;
         stored.expect("the server is stored");
+    });
+}
+
+/// Add `model` to the catalogue in `root`'s database, creating the database
+/// first if there is none.
+pub(crate) fn add_model(root: &Path, model: NewModel) {
+    runtime().block_on(async {
+        let built = open(root).await;
+        let added = built.app.models().add(model).await;
+        built.pool.close().await;
+        added.expect("the model is added");
     });
 }
 

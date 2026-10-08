@@ -197,8 +197,10 @@ impl AgentChatRequest {
     /// This endpoint has never taken a `temperature`, a `top_p`, or anything
     /// else the sampler reads, and this does not open that door: the returned
     /// config names these two and leaves every other field `None`, so each one
-    /// still gap-fills from the profile, per-model, global and floor layers
-    /// exactly as before.
+    /// resolves from the layers beneath it. For a local run those are the
+    /// values of the model its port serves, this machine's global defaults
+    /// and the floor (`remote_upstream::local`); no profile, which nothing
+    /// in the request can name.
     ///
     /// The asymmetry is deliberate rather than an oversight to tidy up later.
     /// The sampler parameters are per-*model* tuning — they belong to the model

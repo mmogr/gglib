@@ -12,7 +12,7 @@ use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
     ports::{AttachmentStore, LlmCompletionPort, RetryObserver, UsageSink},
-    request_pipeline::{self, ModelContext, SamplingLayers},
+    request_pipeline::{self, ModelContext, SamplingDecision, SamplingLayers},
     retry::RetryPolicy,
 };
 
@@ -67,11 +67,27 @@ pub struct LlmCompletionAdapter {
     /// Where the images a message names by id are read from (`images.rs`).
     /// `None` for a caller whose messages carry none.
     attachments: Option<Arc<dyn AttachmentStore>>,
-    /// The caller's own sampling parameters — the top layer of the hierarchy,
-    /// equivalent to what an external client sends the proxy. Written into the
-    /// body by [`body::build_chat_body`] and read back out by
-    /// [`request_pipeline::apply()`], which resolves the layers beneath them.
+    /// What a person chose for this turn, and nothing a stored layer supplied
+    /// — the top layer of the hierarchy, equivalent to what an external client
+    /// sends the proxy. Written into the body by [`body::build_chat_body`] and
+    /// read back out by [`request_pipeline::apply()`], which folds
+    /// [`Self::layers`], the model's own defaults and the floor beneath it.
+    /// A value that fold passes over is taken back out of the body
+    /// ([`erase_passed_over`]).
+    ///
+    /// A value a stored layer supplied must never be handed in here: it would
+    /// reach the pipeline as a person's choice, which outranks every layer
+    /// and which the agentic temperature ceiling never lowers.
     sampling: Option<InferenceConfig>,
+    /// The stored layers beneath [`Self::sampling`]: the profile the caller
+    /// selected and the settings' global defaults. Handed to
+    /// [`request_pipeline::apply()`] as they are, so the ladder is folded
+    /// there and nowhere before it. Empty (the default) for a caller with
+    /// neither.
+    layers: SamplingLayers,
+    /// Told what each request's sampling resolved to. `None` (the default)
+    /// for a caller with nothing to say about it.
+    sampling_observer: Option<SamplingObserver>,
     /// Timeout (seconds) for the `.send()` phase (connect through response
     /// headers).  Defaults to [`DEFAULT_SEND_TIMEOUT_SECS`].
     send_timeout_secs: u64,
@@ -143,6 +159,15 @@ pub struct LlmCompletionAdapter {
     first_turn_pending: AtomicBool,
 }
 
+/// Told what one request's sampling resolved to, once the pipeline has
+/// decided it: the values sent and the rung that supplied each.
+///
+/// The ladder is folded in [`request_pipeline::apply()`] and nowhere else, so
+/// a caller that has something to say about the outcome — the terminal, of a
+/// flag the ladder passed over — is told here rather than folding a ladder
+/// of its own to find out.
+pub type SamplingObserver = Arc<dyn Fn(&SamplingDecision) + Send + Sync>;
+
 /// Build the completions endpoint URL from a base URL.
 ///
 /// Trims any trailing slash from `base_url` before appending the path so
@@ -192,22 +217,18 @@ impl LlmCompletionAdapter {
             return Ok(body);
         }
 
-        // The same pipeline, in the same order, that the proxy runs.
-        // `build_chat_body` has already written the caller's sampling
-        // parameters into the body, which is exactly where an external client's
-        // would be, so `apply` reads them back as the top layer and resolves
-        // the model and hardcoded layers beneath them.
-        //
-        // Neither remaining layer applies in-process: there is no
-        // `{model}:{profile}` suffix to select a profile, and the global
-        // settings layer is already folded into `sampling` by the callers that
-        // have one.
+        // The same pipeline, in the same order, that the proxy runs, and the
+        // one place this turn's sampling ladder is folded. `build_chat_body`
+        // has already written the caller's own parameters into the body, which
+        // is exactly where an external client's would be, so `apply` reads
+        // them back as the top layer and resolves the caller's stored layers
+        // (`self.layers`), the model's and the floor beneath them.
         //
         // `trust_client_sampling: true` unconditionally: `Settings.trust_client_sampling`
         // gates an *external* client's request body against a boilerplate value it
         // may have no user-facing control over (VS Code Copilot's hardcoded
         // `temperature: 0`, for one). `self.sampling` is not that — it is gglib's own
-        // typed caller config (CLI flags, the agent loop's resolved settings), built by
+        // typed caller config (terminal flags, a run's reasoning controls), built by
         // trusted in-process code, so it must always resolve as the top layer
         // regardless of that setting.
         //
@@ -220,16 +241,25 @@ impl LlmCompletionAdapter {
             &self.model_context,
             &SamplingLayers {
                 trust_client_sampling: true,
-                // Unconditionally on: there is no settings snapshot in
-                // process, and this path is the agent loop, whose turns with
-                // tools are exactly what the ceiling exists for. The
-                // `GGLIB_DISABLE_AGENTIC_SAMPLING` env switch still reaches it.
+                // Unconditionally on: no caller hands over
+                // `Settings.agentic_sampling`, and this path is the agent
+                // loop, whose turns with tools are exactly what the ceiling
+                // exists for. The `GGLIB_DISABLE_AGENTIC_SAMPLING` env switch
+                // still reaches it.
                 agentic_adjustments: true,
-                ..Default::default()
+                ..self.layers.clone()
             },
             self.model_context.context_budget(),
         )
         .map_err(|e| anyhow!("conversation exceeds the model's context budget: {e}"))?;
+
+        if let Some(named) = sampling {
+            erase_passed_over(&mut body, named, &report.sampling);
+        }
+
+        if let Some(observe) = &self.sampling_observer {
+            observe(&report.sampling);
+        }
 
         if report.truncation.messages_truncated > 0 {
             tracing::info!(
@@ -241,6 +271,39 @@ impl LlmCompletionAdapter {
         }
 
         Ok(body)
+    }
+}
+
+/// Take out of `body` each parameter of `named` that the fold read and did
+/// not adopt, so the request carries what `decision` says and nothing beside
+/// it.
+///
+/// [`body::build_chat_body`] wrote `named` into the body for the fold to read
+/// as its top layer, and the fold only inserts what it resolved. A penalty
+/// named without the temperature it travels with is passed over when a layer
+/// beneath names one, and where the floor has no value to write over it the
+/// caller's key would ride on to the model.
+///
+/// A value the reader did not take as written stays: it was never in the fold
+/// to be passed over, and the pipeline leaves it for llama-server to answer,
+/// as it does an external client's.
+fn erase_passed_over(
+    body: &mut serde_json::Value,
+    named: &InferenceConfig,
+    decision: &SamplingDecision,
+) {
+    let Some(sent) = body.as_object_mut() else {
+        return;
+    };
+    let adopted = decision.resolved.to_openai_json_patch();
+    let unread = |key: &str| {
+        let issues = &decision.client_fields_rejected;
+        issues.iter().any(|issue| issue.field() == key)
+    };
+    for key in named.to_openai_json_patch().keys() {
+        if !adopted.contains_key(key) && !unread(key) {
+            sent.remove(key);
+        }
     }
 }
 
