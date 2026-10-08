@@ -6,6 +6,8 @@ pub(crate) mod benchmark;
 pub mod chat_history;
 pub(crate) mod download;
 pub(crate) mod download_manager;
+#[cfg(any(test, feature = "test-utils"))]
+mod download_manager_fixture;
 pub(crate) mod event_emitter;
 pub(crate) mod gguf_parser;
 pub(crate) mod hub_chats;
@@ -17,6 +19,9 @@ pub(crate) mod mcp_dto;
 pub(crate) mod mcp_error;
 pub(crate) mod mcp_repository;
 pub mod model_catalog;
+#[cfg(any(test, feature = "test-utils"))]
+mod model_catalog_fixture;
+pub(crate) mod model_files;
 pub(crate) mod model_registrar;
 pub(crate) mod model_repository;
 pub mod model_runtime;
@@ -28,7 +33,8 @@ pub(crate) mod remote_gateway;
 pub(crate) mod retry_observer;
 pub(crate) mod runs;
 pub(crate) mod server_health;
-pub(crate) mod server_log_sink;
+#[cfg(any(test, feature = "test-utils"))]
+mod settings_fixture;
 pub(crate) mod settings_repository;
 pub(crate) mod system_probe;
 pub(crate) mod tool_executor_filter;
@@ -43,7 +49,7 @@ pub use agent::{AgentError, AgentLoopPort, AgentRunOutput, ToolExecutorPort};
 pub use agent_guard_sink::{AgentGuardReporter, AgentGuardSink};
 // Re-export LLM completion port (LlmStreamEvent lives in domain::agent)
 pub use llm_completion::LlmCompletionPort;
-pub use loop_guard_trips::{LoopGuardTripLog, LoopGuardTripSink};
+pub use loop_guard_trips::LoopGuardTripSink;
 // Re-export tool-executor filter decorators
 pub use tool_executor_filter::{EmptyToolExecutor, FilteredToolExecutor, TOOL_NOT_AVAILABLE_MSG};
 
@@ -52,20 +58,26 @@ pub use attachment_store::{AttachmentError, AttachmentStore};
 pub use benchmark::BenchmarkRepositoryPort;
 pub use chat_history::{ChatHistoryError, ChatHistoryRepository};
 pub use download::{QuantizationResolver, Resolution, ResolvedFile};
-pub use download_manager::{DownloadManagerConfig, DownloadManagerPort, DownloadRequest};
+pub use download_manager::{DownloadManagerConfig, DownloadManagerPort};
+#[cfg(any(test, feature = "test-utils"))]
+pub use download_manager_fixture::AskedDownloads;
 pub use event_emitter::{AppEventEmitter, NoopEmitter};
 pub use gguf_parser::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopGgufParser,
 };
 pub use hub_chats::{AgentRunStarter, HubChatsError, HubChatsPort, TurnRefused};
 pub use huggingface::{
-    HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult,
+    HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
+    HfSearchResult, HfSortField,
 };
 pub use jinja_mode::JinjaMode;
 pub use mcp_dto::{ResolutionAttempt, ResolutionStatus};
 pub use mcp_error::McpServiceError;
 pub use mcp_repository::{McpRepositoryError, McpServerRepository};
 pub use model_catalog::{CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelSummary};
+#[cfg(any(test, feature = "test-utils"))]
+pub use model_catalog_fixture::NamedCatalog;
+pub use model_files::ModelFilesRepositoryPort;
 pub use model_registrar::{CompletedDownload, ModelRegistrarPort, RegisteredDownload};
 pub use model_repository::ModelRepository;
 pub use model_runtime::{
@@ -77,7 +89,8 @@ pub use remote_gateway::RemoteGatewayPort;
 pub use retry_observer::RetryObserver;
 pub use runs::{Created, RunEvent, RunEvents, RunScope, RunsError, RunsPort};
 pub use server_health::ServerHealthStatus;
-pub use server_log_sink::ServerLogSinkPort;
+#[cfg(any(test, feature = "test-utils"))]
+pub use settings_fixture::InMemorySettings;
 pub use settings_repository::{SettingsChange, SettingsRepository};
 pub use system_probe::SystemProbePort;
 pub use tool_support::{
@@ -95,17 +108,21 @@ pub use usage_sink::UsageSink;
 /// # Example
 ///
 /// ```ignore
-/// // In gglib-db factory:
-/// pub fn build_repos(pool: &SqlitePool) -> Repos { ... }
+/// // In gglib-db:
+/// impl CoreFactory {
+///     pub fn build_repos(pool: SqlitePool) -> Repos { ... }
+/// }
 ///
-/// // In adapter bootstrap:
-/// let repos = gglib_db::factory::build_repos(&pool);
-/// let core = AppCore::new(repos);
+/// // In gglib-bootstrap:
+/// let repos = gglib_db::CoreFactory::build_repos(pool);
+/// let core = AppCore::new(repos, hf_client, downloads);
 /// ```
 #[derive(Clone)]
 pub struct Repos {
     /// Model repository for CRUD operations on models.
     pub models: Arc<dyn ModelRepository>,
+    /// Model files repository for the per-file rows of each model.
+    pub model_files: Arc<dyn ModelFilesRepositoryPort>,
     /// Settings repository for application settings.
     pub settings: Arc<dyn SettingsRepository>,
     /// MCP server repository for MCP server configurations.
@@ -120,6 +137,7 @@ impl Repos {
     /// Create a new Repos container.
     pub fn new(
         models: Arc<dyn ModelRepository>,
+        model_files: Arc<dyn ModelFilesRepositoryPort>,
         settings: Arc<dyn SettingsRepository>,
         mcp_servers: Arc<dyn McpServerRepository>,
         chat_history: Arc<dyn ChatHistoryRepository>,
@@ -127,6 +145,7 @@ impl Repos {
     ) -> Self {
         Self {
             models,
+            model_files,
             settings,
             mcp_servers,
             chat_history,

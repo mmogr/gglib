@@ -13,13 +13,14 @@ use tracing::{debug, error, warn};
 use crate::cache_lifecycle::{StreamConfig, save_after_generation};
 use crate::client_send::ClientSender;
 use crate::connections::ConnectionGuard;
-use crate::forward::{drain_events, visible_content_frame};
+use crate::forward::{drain_events, failed_turn_body};
 use crate::repair::{RepairContext, RepairTurn};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
 use crate::upstream_read::{StreamBounds, first_byte_timeout_frame, upstream_events};
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::DialectSpec;
+use gglib_core::sse::SseEncoder;
 
 /// Maximum number of retry attempts for the pre-generation connection phase
 /// (TCP send / first-byte-deadline wait) before falling back to an inline
@@ -301,72 +302,13 @@ pub(crate) fn spawn_and_return(
                     bytes = error_bytes.len(),
                     "upstream returned error during slot-queue wait"
                 );
-                // Preserve the upstream error's `type` and `code` so the
-                // LLM Gateway extension (and VS Code) can identify errors
-                // like `context_length_exceeded` rather than seeing an
-                // opaque `server_error` wrapper.  Falls back to the
-                // generic envelope only when the body is not valid JSON.
-                // No panic paths: every operation is Option/Result-safe.
-                let payload = match serde_json::from_slice::<serde_json::Value>(&error_bytes) {
-                    Ok(upstream) => {
-                        let msg = upstream
-                            .pointer("/error/message")
-                            .and_then(serde_json::Value::as_str)
-                            .unwrap_or("upstream returned an error");
-                        let typ = upstream
-                            .pointer("/error/type")
-                            .and_then(serde_json::Value::as_str)
-                            .unwrap_or("server_error");
-                        let code = upstream
-                            .pointer("/error/code")
-                            .and_then(serde_json::Value::as_str)
-                            .unwrap_or("upstream_error");
-                        serde_json::json!({
-                            "error": { "message": msg, "type": typ, "code": code }
-                        })
-                    }
-                    Err(_) => {
-                        // Non-JSON body — fall back to a generic wrapper
-                        // that includes the raw bytes as context.
-                        let body_str = String::from_utf8_lossy(&error_bytes);
-                        serde_json::json!({
-                            "error": {
-                                "message": format!(
-                                    "upstream returned {}: {}",
-                                    status, body_str
-                                ),
-                                "type": "server_error",
-                                "code": "upstream_error",
-                            }
-                        })
-                    }
-                };
-                let frame = format!("data: {payload}\n\ndata: [DONE]\n\n");
-                let human = payload
-                    .pointer("/error/message")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("upstream returned an error");
-                let visible = visible_content_frame(
-                    &model_name_owned,
-                    &format!("⚠️ [proxy] upstream model server error ({status}): {human}"),
-                );
-                tx.send(Bytes::from(format!("{visible}{frame}"))).await;
+                let body = upstream_error_body(&model_name_owned, status, &error_bytes);
+                tx.send(Bytes::from(body)).await;
             }
             Err(e) => {
                 error!("upstream llama-server unreachable during slot-queue wait: {e}");
-                let payload = serde_json::json!({
-                    "error": {
-                        "message": format!("upstream llama-server unavailable: {e}"),
-                        "type": "server_error",
-                        "code": "upstream_error",
-                    }
-                });
-                let frame = format!("data: {payload}\n\ndata: [DONE]\n\n");
-                let visible = visible_content_frame(
-                    &model_name_owned,
-                    &format!("⚠️ [proxy] upstream llama-server unavailable: {e}"),
-                );
-                tx.send(Bytes::from(format!("{visible}{frame}"))).await;
+                let body = unreachable_body(&model_name_owned, &e);
+                tx.send(Bytes::from(body)).await;
             }
         }
     });
@@ -388,3 +330,52 @@ pub(crate) fn spawn_and_return(
         .body(body)
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
 }
+
+/// The body a streaming client is sent when the upstream answers with an
+/// error `status`: a visible notice, the error frame, then `[DONE]`.
+///
+/// The frame keeps the upstream error's `type` and `code`, so the LLM Gateway
+/// extension (and VS Code) can identify errors like `context_length_exceeded`
+/// rather than seeing an opaque `server_error` wrapper. It falls back to the
+/// generic envelope, around the raw bytes, only when `body` is not JSON.
+fn upstream_error_body(model: &str, status: StatusCode, body: &[u8]) -> String {
+    let (message, error) = match serde_json::from_slice::<serde_json::Value>(body) {
+        Ok(upstream) => {
+            let msg = upstream
+                .pointer("/error/message")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("upstream returned an error");
+            let typ = upstream
+                .pointer("/error/type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("server_error");
+            let code = upstream
+                .pointer("/error/code")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("upstream_error");
+            let error = SseEncoder::upstream_error_frame(msg, typ, code);
+            (msg.to_owned(), error)
+        }
+        Err(_) => {
+            let raw = String::from_utf8_lossy(body);
+            let msg = format!("upstream returned {status}: {raw}");
+            let error = SseEncoder::upstream_error_frame(&msg, "server_error", "upstream_error");
+            (msg, error)
+        }
+    };
+    let notice = format!("⚠️ [proxy] upstream model server error ({status}): {message}");
+    failed_turn_body(model, &notice, &error)
+}
+
+/// The body a streaming client is sent when the request could not be sent,
+/// or no response came back, for the reason `error` gives: a visible notice,
+/// the error frame, then `[DONE]`.
+fn unreachable_body(model: &str, error: &impl std::fmt::Display) -> String {
+    let message = format!("upstream llama-server unavailable: {error}");
+    let frame = SseEncoder::upstream_error_frame(&message, "server_error", "upstream_error");
+    failed_turn_body(model, &format!("⚠️ [proxy] {message}"), &frame)
+}
+
+#[cfg(test)]
+#[path = "sse_stream_tests.rs"]
+mod tests;

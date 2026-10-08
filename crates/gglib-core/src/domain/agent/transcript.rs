@@ -1,10 +1,13 @@
-//! Agent messages as the rows of a saved conversation.
+//! Agent messages as the rows of a saved conversation, and the rows back as
+//! the messages its next turn starts from.
 //!
 //! One mapping, shared by every writer of an agent transcript, so the CLI's
 //! sessions and the daemon's runs are saved in the one shape the chat page
-//! loads.
+//! loads. And one reading back, shared by every surface that continues a
+//! saved chat, so a row means the same to a resumed CLI session as to a
+//! paired device's turn.
 
-use crate::domain::chat::{MessageRole, NewMessage};
+use crate::domain::chat::{Message, MessageRole, NewMessage};
 
 use super::messages::AgentMessage;
 
@@ -58,6 +61,25 @@ pub fn to_new_message(msg: &AgentMessage, conversation_id: i64) -> NewMessage {
             images: Vec::new(),
         },
     }
+}
+
+/// A saved conversation as the messages its next turn starts from.
+///
+/// `prompt`, trimmed, is the system message, unless that leaves nothing;
+/// then comes every saved row but a system one, in order. The prompt is the
+/// conversation's own, or the one a surface puts in its place, and is never
+/// read from a row: a saved system row would send it twice.
+#[must_use]
+pub fn saved_history(prompt: Option<&str>, rows: &[Message]) -> Vec<AgentMessage> {
+    let prompt = prompt.map(str::trim).filter(|p| !p.is_empty());
+    let system = prompt.map(|p| AgentMessage::System {
+        content: p.to_owned(),
+    });
+    let saved = rows.iter().filter(|row| row.role != MessageRole::System);
+    system
+        .into_iter()
+        .chain(saved.map(Message::to_agent_message))
+        .collect()
 }
 
 #[cfg(test)]

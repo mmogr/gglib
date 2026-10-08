@@ -9,8 +9,11 @@ use serde::Serialize;
 
 use gglib_core::ports::SystemProbePort;
 use gglib_core::services::AppCore;
+use gglib_core::utils::system::SystemMemoryInfo;
 
 use crate::error::GuiError;
+use crate::settings::{models_directory_info, system_memory};
+use crate::types::ModelsDirectoryInfo;
 
 /// Combined setup status returned by the setup-status endpoint.
 ///
@@ -29,14 +32,14 @@ pub struct SetupStatus {
     /// GPU information.
     pub gpu_info: GpuInfoDto,
     /// Models directory information.
-    pub models_directory: ModelsDirectoryDto,
+    pub models_directory: ModelsDirectoryInfo,
     /// Whether Python 3 is available, i.e. whether the optional `hf_xet`
     /// accelerator *could* be provisioned. Downloading does not depend on it.
     pub python_available: bool,
     /// Whether the `hf_xet` accelerator is already provisioned.
     pub fast_download_ready: bool,
     /// System memory information.
-    pub system_memory: Option<SystemMemoryDto>,
+    pub system_memory: Option<SystemMemoryInfo>,
 }
 
 /// GPU detection results.
@@ -50,24 +53,6 @@ pub struct GpuInfoDto {
     pub vulkan_headers_installed: bool,
     pub vulkan_glslc_installed: bool,
     pub vulkan_spirv_headers_installed: bool,
-}
-
-/// Models directory status.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelsDirectoryDto {
-    pub path: String,
-    pub exists: bool,
-    pub writable: bool,
-}
-
-/// System memory summary.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SystemMemoryDto {
-    pub total_ram_bytes: u64,
-    pub gpu_memory_bytes: Option<u64>,
-    pub is_unified_memory: bool,
 }
 
 /// Dependencies for setup operations.
@@ -89,13 +74,7 @@ impl SetupOps {
     /// Get the full setup status for the wizard.
     pub async fn get_status(&self) -> Result<SetupStatus, GuiError> {
         // Check if setup was previously completed
-        let settings = self
-            .deps
-            .core
-            .settings()
-            .get()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to get settings: {e}")))?;
+        let settings = self.deps.core.settings().get().await?;
         let mut setup_completed = settings.setup_completed.unwrap_or(false);
 
         // Check llama installation
@@ -122,24 +101,9 @@ impl SetupOps {
             vulkan_spirv_headers_installed: gpu_info_raw.vulkan_spirv_headers,
         };
 
-        // Models directory
-        let models_directory = gglib_core::paths::resolve_models_dir(None).map_or(
-            ModelsDirectoryDto {
-                path: String::new(),
-                exists: false,
-                writable: false,
-            },
-            |r| {
-                let exists = r.path.exists();
-                let writable =
-                    exists && std::fs::metadata(&r.path).is_ok_and(|m| !m.permissions().readonly());
-                ModelsDirectoryDto {
-                    path: r.path.to_string_lossy().to_string(),
-                    exists,
-                    writable,
-                }
-            },
-        );
+        // Models directory. One that cannot be resolved reads as absent, so
+        // the wizard still opens.
+        let models_directory = models_directory_info().unwrap_or_default();
 
         // Optional hf_xet accelerator. Neither of these gates downloading —
         // that runs natively over HTTP — they only tell the wizard whether the
@@ -151,16 +115,7 @@ impl SetupOps {
         let fast_download_ready = gglib_download::cli_exec::fast_helper_provisioned();
 
         // System memory
-        let mem_info = self.deps.system_probe.get_system_memory_info();
-        let system_memory = if mem_info.total_ram_bytes > 256 * 1024 * 1024 {
-            Some(SystemMemoryDto {
-                total_ram_bytes: mem_info.total_ram_bytes,
-                gpu_memory_bytes: mem_info.gpu_memory_bytes,
-                is_unified_memory: mem_info.is_unified_memory,
-            })
-        } else {
-            None
-        };
+        let system_memory = system_memory(self.deps.system_probe.as_ref());
 
         // Auto-complete setup if the system is already functional.
         // This avoids forcing users who build from source (or install via
@@ -299,20 +254,33 @@ impl SetupOps {
     }
 }
 
-/// What acceleration a build would use, with detection failure carried as data.
-#[derive(Debug, Clone)]
+/// What acceleration a build would use.
+///
+/// Detection is deliberately fallible — it refuses to fall back to CPU so
+/// callers can surface install hints — so the failure is carried as data
+/// rather than failing the whole diagnostics request.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
 pub struct AccelerationInfo {
     pub detected: Option<String>,
     pub detection_error: Option<String>,
 }
 
 /// The optional `hf_xet` download accelerator's state.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
 pub struct FastDownloadsInfo {
+    /// Whether a usable environment is present — the same question, and the
+    /// same answer, that selects the backend for a download.
     pub provisioned: bool,
     pub env_dir: String,
+    /// True when the environment sits at the pre-rename location.
     pub legacy_path: bool,
+    /// Which tool built it, per its marker.
     pub builder: Option<String>,
+    /// The tool that would build it now.
     pub available_builder: String,
     /// Why the status could not be read, when it could not.
     pub error: Option<String>,
@@ -329,22 +297,5 @@ pub struct Diagnostics {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use super::*;
-    use crate::test_support::{MockSystemProbePort, test_core};
-
-    #[tokio::test]
-    async fn get_status_returns_ok_without_panicking() {
-        let core = test_core().await;
-        let ops = SetupOps::new(SetupDeps {
-            core,
-            system_probe: Arc::new(MockSystemProbePort::default()),
-        });
-        // get_status calls gglib_runtime directly; we only verify it returns Ok
-        // (no panic, no internal unwrap) in a test environment.
-        let result = ops.get_status().await;
-        assert!(result.is_ok(), "get_status should not fail, got {result:?}");
-    }
-}
+#[path = "setup_tests.rs"]
+mod tests;

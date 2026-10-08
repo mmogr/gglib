@@ -18,17 +18,32 @@
  * is a second thing to keep true.
  */
 
+import { bridgeEvents } from './bridgeEvents';
 import { getTransport } from './transport';
-import type { Unsubscribe } from './transport/types/common';
 import { ingestServerEvent } from './serverRegistry';
 import {
   normalizeServerEventFromAppEvent,
   normalizeServerSnapshotFromList,
 } from './serverEvents.normalize';
 
-let initialized = false;
-let unsubscribe: Unsubscribe | null = null;
-let eventVersion = 0;
+// The ordering is `bridgeEvents`'s: subscribe first, then fetch the list, and
+// drop a list that a live event or a cleanup overtook. No `reset`: this
+// registry keeps what it holds across a cleanup.
+const bridge = bridgeEvents({
+  category: 'server',
+  onEvent: (payload) => {
+    const normalized = normalizeServerEventFromAppEvent(payload);
+    if (normalized) {
+      ingestServerEvent(normalized);
+    }
+  },
+  // Hydration: seed the registry with servers already running at load. No
+  // event carries those, so they are read from the REST list, which has the
+  // normalizer's own entry point for one: it is snake_case where the event
+  // frames are camelCase.
+  read: () => getTransport().listServers(),
+  apply: (servers) => ingestServerEvent(normalizeServerSnapshotFromList(servers)),
+});
 
 /**
  * Start bridging server lifecycle events into the registry.
@@ -36,51 +51,14 @@ let eventVersion = 0;
  * Safe to call multiple times — only the first call does anything.
  */
 export function initServerEvents(): void {
-  if (initialized) {
-    return;
-  }
-
-  eventVersion = 0;
-
-  // Subscribe FIRST so no event is missed during the hydration fetch below.
-  unsubscribe = getTransport().subscribe('server', (payload) => {
-    eventVersion++;
-    const normalized = normalizeServerEventFromAppEvent(payload);
-    if (normalized) {
-      ingestServerEvent(normalized);
-    }
-  });
-
-  // Hydration: seed the registry with servers already running at load. This
-  // is a REST list, not an event, so it goes through the normalizer's own
-  // entry point for one rather than being dressed up as a `server_snapshot`
-  // frame — the two shapes differ, and pretending otherwise is what left the
-  // event path quietly accepting snake_case it never receives.
-  const versionBeforeFetch = eventVersion;
-  getTransport()
-    .listServers()
-    .then((servers) => {
-      // Drop stale hydration if a live event already arrived.
-      if (eventVersion !== versionBeforeFetch) return;
-      ingestServerEvent(normalizeServerSnapshotFromList(servers));
-    })
-    .catch(() => {
-      // Non-fatal — live events will populate state as servers start.
-    });
-
-  initialized = true;
+  bridge.init();
 }
 
 /**
  * Stop bridging server lifecycle events. Call on app unmount.
  */
 export function cleanupServerEvents(): void {
-  if (unsubscribe) {
-    unsubscribe();
-    unsubscribe = null;
-  }
-  eventVersion = 0;
-  initialized = false;
+  bridge.cleanup();
 }
 
 // Re-export registry types and hooks for convenience

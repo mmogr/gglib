@@ -12,14 +12,11 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use super::JinjaMode;
-use crate::domain::InferenceConfig;
 
 /// Configuration for starting a model server.
 ///
 /// This is an intent-based configuration — it expresses what the caller
-/// wants, not how the server should be started. All typed fields are
-/// handled by `build_and_spawn()`; `extra_args` is an escape hatch for
-/// flags not yet promoted to first-class fields.
+/// wants, not how the server should be started.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     /// Database ID of the model to serve.
@@ -39,8 +36,6 @@ pub struct ServerConfig {
     pub base_port: u16,
     /// Context size to use (if None, use model default).
     pub context_size: Option<u64>,
-    /// Number of GPU layers to offload (if None, use default).
-    pub gpu_layers: Option<i32>,
     /// What this launch says about Jinja templating for chat formats.
     ///
     /// See [`JinjaMode`] — [`JinjaMode::Defer`] emits nothing, which leaves
@@ -60,21 +55,6 @@ pub struct ServerConfig {
     /// draft tokens is especially important on Apple Silicon (Metal) to avoid
     /// throughput regression.  Recommended value: `0.75`.
     pub spec_draft_p_min: Option<f32>,
-    /// Inference sampling parameters (temperature, `top_p`, etc.).
-    ///
-    /// **Nothing reads this.** No sampler value becomes a command-line
-    /// argument (ADR 0003), and the launch narration reports sampling from
-    /// `llama::args::sampling`'s constants rather than from here. The field is
-    /// written by `build_server_config` and read by nobody.
-    ///
-    /// Kept for now rather than removed because the plumbing that fills it
-    /// (`ServerConfigOptions::inference_params`, threaded from four call
-    /// sites) is a larger removal than it looks and belongs in its own change.
-    /// Said out loud so the next reader does not wire something to it on the
-    /// assumption that it already does something.
-    pub inference_config: Option<InferenceConfig>,
-    /// Additional server-specific options (escape hatch).
-    pub extra_args: Vec<String>,
     /// Directory for llama-server KV cache slot persistence (`--slot-save-path`).
     ///
     /// `None` means the disk slot-persistence feature is disabled — no
@@ -134,13 +114,10 @@ impl ServerConfig {
             port: None,
             base_port,
             context_size: None,
-            gpu_layers: None,
             jinja: JinjaMode::Defer,
             reasoning_format: None,
             spec_draft_n_max: None,
             spec_draft_p_min: None,
-            inference_config: None,
-            extra_args: Vec::new(),
             slot_save_path: None,
             cache_ram_mb: None,
             cache_reuse: None,
@@ -169,13 +146,6 @@ impl ServerConfig {
     #[must_use]
     pub fn with_mmproj(mut self, projector: Option<PathBuf>) -> Self {
         self.mmproj = projector;
-        self
-    }
-
-    /// Set the number of GPU layers.
-    #[must_use]
-    pub const fn with_gpu_layers(mut self, layers: i32) -> Self {
-        self.gpu_layers = Some(layers);
         self
     }
 
@@ -224,13 +194,6 @@ impl ServerConfig {
     #[must_use]
     pub const fn with_spec_draft_p_min(mut self, p: f32) -> Self {
         self.spec_draft_p_min = Some(p);
-        self
-    }
-
-    /// Set inference sampling parameters.
-    #[must_use]
-    pub const fn with_inference_config(mut self, config: InferenceConfig) -> Self {
-        self.inference_config = Some(config);
         self
     }
 

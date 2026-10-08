@@ -527,10 +527,9 @@ fn shape_request_body(
 }
 
 /// Bundles the arguments to [`forward_chat_completion`] that stay constant
-/// across the cache-branching in `chat_completions` — only the trailing
-/// `(permit, config, session_id)` triple passed to [`Self::send`] varies
-/// between the non-streaming/streaming/fail-open/cache-disabled branches, and
-/// between a request's primary attempt and its post-`UpstreamDead` retry.
+/// across the cache-branching of one attempt at a request (`server::attempt`)
+/// — only the trailing `(permit, config, session_id)` triple varies between
+/// its non-streaming/streaming/fail-open/cache-disabled branches.
 pub(crate) struct ForwardRequest<'a> {
     /// HTTP client to use for the request.
     pub client: &'a Client,
@@ -580,10 +579,11 @@ pub(crate) struct ForwardRequest<'a> {
     /// [`crate::token_calibration::TokenCalibration::session_chars_per_token`]);
     /// `None` when no session id was resolved, which falls back to the live
     /// per-model ratio. Distinct from the `session_id` parameter of
-    /// [`Self::send`]: that one is only populated when disk KV-slot caching is
-    /// enabled, but the frozen budget must hold even when it's off (e.g. for
-    /// hybrid/sliding-window-attention models, where disk caching is disabled
-    /// but the host-RAM prompt cache it protects still applies).
+    /// [`forward_chat_completion`]: that one is only populated when disk
+    /// KV-slot caching is enabled, but the frozen budget must hold even when
+    /// it's off (e.g. for hybrid/sliding-window-attention models, where disk
+    /// caching is disabled but the host-RAM prompt cache it protects still
+    /// applies).
     pub calibration_session_id: Option<&'a str>,
     /// Cache-hit telemetry sink, fed from both the streaming and
     /// non-streaming response paths.
@@ -612,35 +612,23 @@ pub(crate) struct ForwardRequest<'a> {
     pub loop_guard_trip: Option<LoopGuardTrip>,
 }
 
-impl ForwardRequest<'_> {
-    /// Forward this request to the upstream llama-server, participating in
-    /// the disk KV cache according to `(permit, config, session_id)`.
-    ///
-    /// * `permit` - KV cache semaphore permit (streaming path only), moved
-    ///   into the spawned task and held for its entire lifetime. `None`
-    ///   when the KV cache is disabled.
-    /// * `config` - KV cache lifecycle configuration (streaming path only).
-    ///   `None` when the KV cache is disabled.
-    /// * `session_id` - Session identifier used to key the KV cache save
-    ///   (streaming path only). `None` when the KV cache is disabled.
-    ///
-    /// Returns the response from llama-server, with the streaming SSE body
-    /// re-emitted through the universal normalization pipeline when
-    /// `is_streaming` is true.
-    pub(crate) async fn send(
-        self,
-        permit: Option<tokio::sync::OwnedSemaphorePermit>,
-        config: Option<crate::cache_lifecycle::StreamConfig>,
-        session_id: Option<String>,
-    ) -> Result<Response, ForwardError> {
-        forward_chat_completion(self, permit, config, session_id).await
-    }
-}
-
-/// Forward a chat completion request to the upstream llama-server.
+/// Forward a chat completion request to the upstream llama-server,
+/// participating in the disk KV cache according to
+/// `(permit, config, session_id)`.
 ///
-/// See [`ForwardRequest`] for what `req`'s fields mean, and
-/// [`ForwardRequest::send`] (its sole caller) for the trailing cache triple.
+/// See [`ForwardRequest`] for what `req`'s fields mean.
+///
+/// * `permit` - KV cache semaphore permit (streaming path only), moved
+///   into the spawned task and held for its entire lifetime. `None`
+///   when the KV cache is disabled.
+/// * `config` - KV cache lifecycle configuration (streaming path only).
+///   `None` when the KV cache is disabled.
+/// * `session_id` - Session identifier used to key the KV cache save
+///   (streaming path only). `None` when the KV cache is disabled.
+///
+/// Returns the response from llama-server, with the streaming SSE body
+/// re-emitted through the universal normalization pipeline when
+/// `is_streaming` is true.
 pub(crate) async fn forward_chat_completion(
     req: ForwardRequest<'_>,
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
@@ -930,16 +918,15 @@ fn host_port_from_url(url: &str) -> String {
         )
 }
 
-/// Build a single SSE `chat.completion.chunk` frame carrying visible assistant
-/// `content`.
+/// The whole body a streaming client is sent when its turn fails before any
+/// of the answer is streamed: `notice` as a `chat.completion.chunk` of visible
+/// assistant text, then `error_frame`, then `[DONE]`.
 ///
-/// Used to surface proxy/upstream failures as text the human can actually read
-/// in the chat pane. Some clients (notably the VS Code LLM Gateway) do not
-/// render bare inline `{"error": {...}}` frames inside an already-committed
-/// 200 stream, so an error delivered only as a structured error frame looks
-/// like an empty response. Pairing every such error with a visible content
-/// frame guarantees the cause is shown.
-pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
+/// The notice is what a person reads in the chat pane. Some clients (notably
+/// the VS Code LLM Gateway) do not render bare inline `{"error": {...}}`
+/// frames inside an already-committed 200 stream, so an error delivered only
+/// as a structured error frame looks like an empty response.
+pub(crate) fn failed_turn_body(model: &str, notice: &str, error_frame: &str) -> String {
     let created = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
@@ -951,11 +938,11 @@ pub(crate) fn visible_content_frame(model: &str, content: &str) -> String {
         "model": model,
         "choices": [{
             "index": 0,
-            "delta": { "content": content },
+            "delta": { "content": notice },
             "finish_reason": serde_json::Value::Null,
         }],
     });
-    format!("data: {value}\n\n")
+    format!("data: {value}\n\n{error_frame}{DONE_SENTINEL}")
 }
 
 /// [`drain_events`] over a whole upstream response, under the production idle
@@ -1247,14 +1234,11 @@ pub(crate) async fn drain_events(
                     }
                     None => {
                         outcome.saw_visible_output = true;
-                        let payload = serde_json::json!({
-                            "error": {
-                                "message": e.to_string(),
-                                "type": "server_error",
-                                "code": "upstream_error",
-                            }
-                        });
-                        Some(Bytes::from(format!("data: {payload}\n\n")))
+                        Some(Bytes::from(SseEncoder::upstream_error_frame(
+                            &e.to_string(),
+                            "server_error",
+                            "upstream_error",
+                        )))
                     }
                 }
             }
@@ -1497,8 +1481,8 @@ mod forward_repair_grammar_tests;
 #[path = "forward_stall_fixtures.rs"]
 mod forward_stall_fixtures;
 
-/// What the client is sent when the upstream goes silent mid-reply, and what
-/// is not mistaken for that.
+/// What the client is sent when the upstream goes silent or its connection
+/// breaks mid-reply, and what is not mistaken for silence.
 #[cfg(test)]
 #[path = "forward_stall_tests.rs"]
 mod forward_stall_tests;

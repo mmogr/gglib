@@ -1,6 +1,8 @@
 #![doc = include_str!("README.md")]
 mod native;
+mod progress;
 
+use std::future::Future;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
@@ -10,11 +12,14 @@ use tokio_util::sync::CancellationToken;
 use gglib_core::download::DownloadError;
 
 use crate::cli_exec::{
-    FastDownloadRequest, NoticeCallback, ProgressCallback, PythonBridgeError,
-    fast_helper_provisioned, run_fast_download,
+    FastDownloadRequest, NoticeCallback, PythonBridgeError, fast_helper_provisioned,
+    run_fast_download,
 };
 
 use native::{NativeError, existing_len};
+
+pub(crate) use progress::{FileCounter, known_size};
+pub use progress::{FileProgress, ProgressCallback, RawCallback, RawProgress};
 
 /// Shared HTTP client. `reqwest::Client` owns a connection pool, so building one
 /// per file would throw away connection reuse across a sharded model.
@@ -26,45 +31,68 @@ fn http_client() -> &'static Client {
     CLIENT.get_or_init(native::build_client)
 }
 
-/// A set of files to fetch into one directory.
+/// One file to fetch into a directory.
 pub(crate) struct DownloadPlan<'a> {
     /// `owner/name` on `HuggingFace`.
     pub repo_id: &'a str,
     /// Branch, tag, or commit SHA.
     pub revision: &'a str,
-    /// Directory the files land in.
+    /// Directory the file lands in.
     pub destination: &'a Path,
-    /// Paths within the repository, relative to its root.
-    pub files: &'a [String],
+    /// Path within the repository, relative to its root.
+    pub file: &'a str,
     /// Bearer token for private repositories.
     pub token: Option<&'a str>,
     /// Re-fetch even if the file is already on disk.
     pub force: bool,
-    /// Sink for `(downloaded, total)` byte counts, aggregated across `files`.
+    /// Sink for the file's progress.
     pub progress: Option<ProgressCallback>,
     /// Sink for transient notes that carry no byte progress.
     pub notice: Option<NoticeCallback>,
-    /// Total size from `HuggingFace` metadata, when known.
-    pub expected_total: Option<u64>,
-    /// Cancellation token for the whole plan.
+    /// The file's size from `HuggingFace` metadata, when known.
+    pub expected_size: Option<u64>,
+    /// Cancellation token for the download.
     pub cancel: Option<CancellationToken>,
 }
 
-/// Fetch every file in `plan`.
+/// Fetch the file `plan` names.
 ///
 /// The native Rust path is the default. The `hf_xet` accelerator is used only
 /// when its environment is **already** provisioned on this machine — it is never
 /// built implicitly, because that put a Python toolchain in the way of a new
 /// user's first download. If the accelerator is present but fails, this falls
 /// back to the native path rather than failing the download.
-pub(crate) async fn download_files(plan: &DownloadPlan<'_>) -> Result<(), DownloadError> {
-    if plan.files.is_empty() {
-        return Ok(());
-    }
+///
+/// Both transports report to one [`FileCounter`], so the caller sees one
+/// count for the file whichever of them moved its bytes, and sees it reach
+/// the file's size only here, once the file is in place.
+pub(crate) async fn download_file(plan: &DownloadPlan<'_>) -> Result<(), DownloadError> {
+    let url = gglib_hf::build_file_url(plan.repo_id, plan.file, Some(plan.revision));
+    let accelerator =
+        fast_helper_provisioned().then_some(|progress| run_accelerated(plan, progress));
+    fetch(plan, accelerator, &url).await
+}
 
-    if fast_helper_provisioned() {
-        match run_accelerated(plan).await {
-            Ok(()) => return Ok(()),
+/// [`download_file`], given the accelerator to try first, when there is one,
+/// and the address the native transport fetches from.
+async fn fetch<A, F>(
+    plan: &DownloadPlan<'_>,
+    accelerator: Option<A>,
+    url: &str,
+) -> Result<(), DownloadError>
+where
+    A: FnOnce(RawCallback) -> F,
+    F: Future<Output = Result<(), PythonBridgeError>>,
+{
+    let dest = plan.destination.join(plan.file);
+    let counter = Arc::new(FileCounter::new(plan.expected_size, plan.progress.clone()));
+
+    if let Some(accelerate) = accelerator {
+        match accelerate(counter.raw_callback()).await {
+            Ok(()) => {
+                counter.finish(existing_len(&dest));
+                return Ok(());
+            }
             // A cancelled download is the user's decision, not an accelerator
             // failure — retrying it natively would be the opposite of what they
             // asked for.
@@ -78,13 +106,18 @@ pub(crate) async fn download_files(plan: &DownloadPlan<'_>) -> Result<(), Downlo
                     plan,
                     "accelerated download unavailable, using direct transfer…",
                 );
+                // The native path keeps its own partial file, so the count
+                // of bytes on disk may start again. The notice says why.
+                counter.restart();
             }
         }
     } else {
         suggest_accelerator_once(plan);
     }
 
-    run_native(plan).await
+    run_native(plan, &dest, url, &counter).await?;
+    counter.finish(existing_len(&dest));
+    Ok(())
 }
 
 /// One-time (per process) hint that the parallel accelerator exists.
@@ -105,79 +138,53 @@ fn suggest_accelerator_once(plan: &DownloadPlan<'_>) {
 }
 
 /// Drive the pre-existing `hf_xet` helper.
-async fn run_accelerated(plan: &DownloadPlan<'_>) -> Result<(), PythonBridgeError> {
+async fn run_accelerated(
+    plan: &DownloadPlan<'_>,
+    progress: RawCallback,
+) -> Result<(), PythonBridgeError> {
     let request = FastDownloadRequest {
         repo_id: plan.repo_id,
         revision: plan.revision,
         repo_type: "model",
         destination: plan.destination,
-        files: plan.files,
+        file: plan.file,
         token: plan.token,
         force: plan.force,
-        progress: plan.progress.clone(),
+        progress: Some(progress),
         notice: plan.notice.clone(),
-        expected_total: plan.expected_total,
         cancel_token: plan.cancel.clone(),
     };
 
     run_fast_download(&request).await
 }
 
-/// Fetch each file over plain HTTPS.
-async fn run_native(plan: &DownloadPlan<'_>) -> Result<(), DownloadError> {
-    // Progress is reported across the whole plan, not per file, so a sharded
-    // model does not reset its bar to zero on every shard.
-    let mut completed_bytes: u64 = 0;
-
-    for file in plan.files {
-        let dest = plan.destination.join(file);
-
-        if plan.force {
-            let _ = std::fs::remove_file(&dest);
-        } else if dest.exists() {
-            // Already here. The manager removes files that fail validation
-            // before we are called, so anything still present is trusted.
-            completed_bytes += existing_len(&dest);
-            continue;
-        }
-
-        let url = gglib_hf::build_file_url(plan.repo_id, file, Some(plan.revision));
-
-        // Only a single-file plan can attribute `expected_total` to one file;
-        // for a multi-file plan the per-file size is not known here.
-        let expected_size = (plan.files.len() == 1)
-            .then_some(plan.expected_total)
-            .flatten();
-
-        let request = native::NativeDownload {
-            url: &url,
-            dest: &dest,
-            token: plan.token,
-            expected_size,
-            progress: offset_progress(plan.progress.as_ref(), completed_bytes),
-            cancel: plan.cancel.clone(),
-        };
-
-        native::download_file(http_client(), &request)
-            .await
-            .map_err(to_download_error)?;
-
-        completed_bytes += existing_len(&dest);
+/// Fetch the file from `url` over plain HTTPS.
+async fn run_native(
+    plan: &DownloadPlan<'_>,
+    dest: &Path,
+    url: &str,
+    counter: &Arc<FileCounter>,
+) -> Result<(), DownloadError> {
+    if plan.force {
+        let _ = std::fs::remove_file(dest);
+    } else if dest.exists() {
+        // Already here. The manager removes files that fail validation
+        // before we are called, so anything still present is trusted.
+        return Ok(());
     }
 
-    Ok(())
-}
+    let request = native::NativeDownload {
+        url,
+        dest,
+        token: plan.token,
+        expected_size: known_size(plan.expected_size),
+        progress: Some(counter.raw_callback()),
+        cancel: plan.cancel.clone(),
+    };
 
-/// Shift a per-file progress callback by the bytes already finished, so the
-/// aggregate reported to the caller only ever moves forward.
-fn offset_progress(progress: Option<&ProgressCallback>, offset: u64) -> Option<ProgressCallback> {
-    let inner = Arc::clone(progress?);
-    if offset == 0 {
-        return Some(inner);
-    }
-    Some(Arc::new(move |downloaded, total| {
-        inner(downloaded + offset, total + offset);
-    }))
+    native::download_file(http_client(), &request)
+        .await
+        .map_err(to_download_error)
 }
 
 fn notify(plan: &DownloadPlan<'_>, message: &str) {
@@ -210,37 +217,16 @@ fn to_download_error(e: NativeError) -> DownloadError {
 }
 
 #[cfg(test)]
+#[path = "native_progress_tests.rs"]
+mod native_progress_tests;
+
+#[cfg(test)]
+#[path = "fetch_tests.rs"]
+mod fetch_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn offset_progress_shifts_both_counts() {
-        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
-        let sink = Arc::clone(&seen);
-        let inner: ProgressCallback = Arc::new(move |d, t| sink.lock().unwrap().push((d, t)));
-
-        let shifted = offset_progress(Some(&inner), 100).expect("callback present");
-        shifted(50, 400);
-
-        assert_eq!(*seen.lock().unwrap(), vec![(150, 500)]);
-    }
-
-    #[test]
-    fn offset_progress_passes_through_at_zero() {
-        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
-        let sink = Arc::clone(&seen);
-        let inner: ProgressCallback = Arc::new(move |d, t| sink.lock().unwrap().push((d, t)));
-
-        let shifted = offset_progress(Some(&inner), 0).expect("callback present");
-        shifted(50, 400);
-
-        assert_eq!(*seen.lock().unwrap(), vec![(50, 400)]);
-    }
-
-    #[test]
-    fn offset_progress_is_none_without_a_sink() {
-        assert!(offset_progress(None, 10).is_none());
-    }
 
     #[test]
     fn not_found_maps_to_the_domain_not_found() {

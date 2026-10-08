@@ -47,9 +47,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                            │
-│  │   main.rs   │ ──► │ bootstrap.rs│ ──► │  routes.rs  │                            │
-│  │  Entry pt   │     │  DI setup   │     │   Router    │                            │
-│  │             │     │  & wiring   │     │  mounting   │                            │
+│  │   daemon/   │ ──► │ bootstrap.rs│ ──► │  routes.rs  │                            │
+│  │ run_daemon: │     │  DI setup   │     │   Router    │                            │
+│  │ lock, serve │     │  & wiring   │     │  mounting   │                            │
 │  └─────────────┘     └─────────────┘     └─────────────┘                            │
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐                                                │
@@ -62,9 +62,10 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ```
 
 **Module Descriptions:**
+- **`daemon/`** — `run_daemon`, which `gglib daemon run` calls: the one process per machine that owns llama-server, and its singleton lock
 - **`bootstrap.rs`** — Dependency injection and service wiring
 - **`config.rs`** — `ServerConfig`: what the server is given
-- **`chat_api.rs`** — Chat completion API endpoints and streaming
+- **`chat_api.rs`** — Conversations and their messages
 - **`error.rs`** — HTTP error types and JSON error responses
 - **`routes.rs`** — Route definitions and handler mounting
 - **`sse.rs`** — Server-Sent Events utilities for streaming
@@ -72,6 +73,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`dto/`** — Request/response DTOs for API endpoints
 - **`handlers/model/`** — Model CRUD, verification, downloads, `HuggingFace` discovery handlers
 - **`handlers/config/`** — Settings and system setup handlers
+- **`handlers/chat_title.rs`** — A chat's title, asked of the model the chat runs on
 
 ## Endpoints
 
@@ -85,15 +87,20 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `POST` | `/api/servers/start` | Start llama-server (id in the body) |
 | `POST` | `/api/servers/stop` | Stop llama-server (id in the body) |
 | `POST` | `/api/models/hf/search` | Search `HuggingFace` |
-| `POST` | `/api/models/downloads/queue` | Queue a download |
+| `POST` | `/api/models/downloads/queue` | Queue a download; answers `{ "id" }`, the download's ID |
 | `GET` | `/api/models/downloads/queue` | Download queue snapshot |
+| `POST` | `/api/models/downloads/:id/cancel` | Cancel a waiting or running download, every file of it |
+| `DELETE` | `/api/models/downloads/:id` | The same; for a download that has ended, drop its finished entry |
 | `GET` | `/api/config/settings` | Get application settings |
 | `PUT` | `/api/config/settings` | Update application settings |
 | `GET` | `/api/mcp/servers` | List MCP servers |
 | `POST` | `/api/mcp/servers/:id/start` | Start MCP server |
 | `POST` | `/api/models/:id/verify` | Verify model integrity (streams progress via SSE) |
 | `GET` | `/api/models/:id/updates` | Check for `HuggingFace` updates |
-| `POST` | `/api/models/:id/repair` | Re-download corrupt shards |
+| `POST` | `/api/models/:id/repair` | Delete a model's unhealthy files and queue the download that fetches them again; answers that download's id and the files |
+| `GET` | `/api/events` | The event stream (SSE) every client of the daemon reads |
+| `POST` | `/api/events` | Put one event on that stream: what a `gglib` command sends for a change it made to the library in its own process |
+| `POST` | `/api/chat` | A chat's title: the text the model on a port answers a title request with (messages, a temperature and a token cap, and no other key) |
 | `POST` | `/api/attachments` | Store an image, the raw body (a PNG or a JPEG of at most 8 MiB), and answer its id, type, size and estimated prompt tokens |
 | `GET` | `/api/attachments/:id` | A stored image's bytes, as they were sent |
 | `GET` | `/api/remote/models` | The paired machine's models, read through the tunnel, with what may be done to them there |
@@ -115,20 +122,9 @@ gglib daemon run
 gglib up
 ```
 
-```rust,ignore
-// Programmatic usage
-use gglib_axum::start_server;
-use gglib_axum::bootstrap::ServerConfig;
-
-async fn run() -> anyhow::Result<()> {
-    let config = ServerConfig::with_defaults()?;
-    start_server(config).await
-}
-```
-
 ## Design Decisions
 
 1. **Axum Framework** — Chosen for async-first design and tower middleware ecosystem
-2. **Shared `GuiBackend`** — Same façade as Tauri for feature parity
+2. **Shared backend** — Handlers call `gglib-app-services`, the facade `gglib-cli` and `src-tauri` use too
 3. **Thin Handlers** — No logic, just parse → delegate → serialize
 4. **CORS Support** — Configurable CORS for web UI development

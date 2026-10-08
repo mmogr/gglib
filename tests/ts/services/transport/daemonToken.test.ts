@@ -153,7 +153,8 @@ describe('the daemon token from the link', () => {
       expect(authOf(fetchMock, 0)).toBe('Bearer old-token');
       expect(authOf(fetchMock, 1)).toBe('Bearer new-token');
       expect(String(fetchMock.mock.calls[1][0])).toBe('http://127.0.0.1:9887/api/models');
-      expect(api.getAuthHeaders()).toEqual({ Authorization: 'Bearer new-token' });
+      await api.apiFetch('/api/events');
+      expect(authOf(fetchMock, 2)).toBe('Bearer new-token');
       expect(prompt).not.toHaveBeenCalled();
     });
 
@@ -182,6 +183,61 @@ describe('the daemon token from the link', () => {
       const auth = (n: number) => new Headers((fetchMock.mock.calls[n][1] as RequestInit).headers);
       expect(auth(0).get('Authorization')).toBe('Bearer old-token');
       expect(auth(1).get('Authorization')).toBe('Bearer new-token');
+    });
+
+    it('keeps trying to open the event stream when the desktop cannot yet say where the daemon is', async () => {
+      invoke.mockReset().mockRejectedValueOnce(new Error('not ready')).mockResolvedValue({ port: 9887, token: 'new-token' });
+      fetchMock.mockImplementation(async () => new Response(new ReadableStream({ start() {} }), { status: 200 }));
+      await client();
+      const { SSEConnectionManager } = await import('../../../../src/services/transport/events/sse');
+
+      const manager = new SSEConnectionManager('/api/events');
+      const opened = vi.fn();
+      manager.opened.listen(opened);
+      const stop = manager.subscribe(() => {});
+      await vi.waitFor(() => expect(opened).toHaveBeenCalledTimes(1), { timeout: 3000 });
+      stop();
+
+      expect(invoke).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(String(fetchMock.mock.calls[0][0])).toBe('http://127.0.0.1:9887/api/events');
+    });
+
+    it('renews for a stream the daemon refused with a 401, and for nothing else', async () => {
+      const api = await client();
+      const { renewAfterRefusal } = await import('../../../../src/services/transport/api/renew');
+      const { TransportError } = await import('../../../../src/services/transport/errors');
+      const { SSEHttpError } = await import('../../../../src/utils/sse');
+      await api.getClient();
+      expect(invoke).toHaveBeenCalledTimes(1);
+
+      await renewAfterRefusal(new TransportError('UNAUTHORIZED', 'forbidden', { status: 403 }));
+      await renewAfterRefusal(new TransportError('INTERNAL', 'broken', { status: 500 }));
+      await renewAfterRefusal(new TransportError('UNAUTHORIZED', 'no status'));
+      await renewAfterRefusal(new TypeError('network error'));
+      await renewAfterRefusal(new SSEHttpError(401, 'Unauthorized')); // a proxy's refusal, not the daemon's
+      expect(invoke).toHaveBeenCalledTimes(1);
+
+      await renewAfterRefusal(new TransportError('UNAUTHORIZED', SENTENCE, { status: 401, type: 'DAEMON_TOKEN_REQUIRED' }));
+      expect(invoke).toHaveBeenCalledTimes(2);
+      await api.apiFetch('/api/events');
+      expect(authOf(fetchMock, fetchMock.mock.calls.length - 1)).toBe('Bearer new-token');
+    });
+
+    it('renews the server log stream before it reopens after a 401', async () => {
+      const open = new Response(new ReadableStream({ start() {} }), { status: 200 });
+      fetchMock.mockImplementationOnce(async () => refusal()).mockImplementation(async () => open);
+      await client();
+      const { listenToServerLogs } = await import('../../../../src/services/platform/serverLogs');
+
+      const stop = await listenToServerLogs(9001, () => {});
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), { timeout: 4000 });
+      stop();
+
+      const auth = (n: number) => new Headers((fetchMock.mock.calls[n][1] as RequestInit).headers);
+      expect(auth(0).get('Authorization')).toBe('Bearer old-token');
+      expect(auth(1).get('Authorization')).toBe('Bearer new-token');
+      expect(String(fetchMock.mock.calls[1][0])).toBe('http://127.0.0.1:9887/api/servers/9001/logs/stream');
     });
   });
 

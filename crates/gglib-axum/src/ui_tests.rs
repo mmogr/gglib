@@ -192,7 +192,7 @@ async fn traversal_is_refused() {
 }
 
 /// A binary built with no frontend must serve nothing rather than panic or
-/// fail to compile. This is what keeps `cli-cross-os` and `docs.yml` green.
+/// fail to compile. This is what keeps `cli-cross-os` and `deploy-docs` green.
 #[tokio::test]
 async fn an_empty_embed_serves_nothing() {
     let (status, _, _) = parts(respond::<fixture::Empty>("/", &HeaderMap::new())).await;

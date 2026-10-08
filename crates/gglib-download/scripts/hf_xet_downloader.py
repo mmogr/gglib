@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Auxiliary downloader that uses `huggingface_hub` + `hf_xet` for fast transfers.
 
-The script is intentionally lightweight: Rust invokes it with a download plan and
+The script is intentionally lightweight: Rust invokes it once per file and
 receives newline-delimited JSON events describing progress. The helper keeps all
 stdout structured so the parent process can parse it deterministically.
+
+The Hub token is read from the `HF_TOKEN` environment variable, never from the
+command line.
 """
 from __future__ import annotations
 
@@ -11,11 +14,9 @@ import argparse
 import json
 import os
 import sys
-import threading
 import time
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Optional
 
 try:  # Import once so we can exit early if dependency resolution failed.
     from huggingface_hub import hf_hub_download  # type: ignore
@@ -38,19 +39,13 @@ except ImportError:  # Python <3.8 fallback, not expected but harmless.
 
 
 MIN_PROGRESS_INTERVAL_S = 0.2
-_LAST_PROGRESS_EMIT = 0.0
-
-
-def record_progress_emit() -> None:
-    global _LAST_PROGRESS_EMIT
-    _LAST_PROGRESS_EMIT = time.monotonic()
 
 
 def emit(status: str, **payload) -> None:
     """Emit a JSON protocol message with explicit status field.
     
     Protocol schema:
-    - {"status": "progress", "file": "...", "downloaded": N, "total": N}
+    - {"status": "progress", "written": N, "received": N, "total": N}
     - {"status": "unavailable", "reason": "..."}
     - {"status": "error", "message": "..."}
     - {"status": "complete"}
@@ -76,35 +71,32 @@ def require_hf_xet() -> str:
         return "unknown"
 
 
-@dataclass
-class FileSpec:
-    path: str
-    size: Optional[int]
-
-    @property
-    def display_name(self) -> str:
-        return self.path
-
-
-
 class JsonProgressBar(tqdm):
-    """tqdm subclass that emits progress deltas as JSON."""
+    """tqdm subclass that reports one file's progress as JSON.
+
+    Two counts, because they are different numbers. `written` is tqdm's own
+    `n`: bytes of the file on disk, starting at whatever a resume found there.
+    `received` is bytes off the network during this run, starting at 0.
+
+    `huggingface_hub` builds one bar per file for a class that has
+    `update_transfer`, and reports network bytes through it. For a class
+    without it, it builds a second bar for them, and the two bars' counts
+    arrive interleaved on one stream.
+    """
 
     def __init__(self, *args, **kwargs):
         # `huggingface_hub` sometimes forwards a `name` kwarg that vanilla tqdm
         # doesn't know about, so strip it here before delegating to super().
         kwargs.pop("name", None)
-        desc = kwargs.get("desc") or ""
-        super().__init__(*args, **kwargs)
-        # tqdm 4.67 tightened attribute slots, so guard access to desc.
-        self._label = getattr(self, "desc", None) or desc or ""
+        self._received = 0
         self._last_emit = 0.0
-        # Skip the initial forced emit when the total is unknown — emitting
-        # `progress {0,0}` at construction misleads the Rust bridge into
-        # showing "0 B/0 B" for the entire transfer on the hf-xet path
-        # (where tqdm is never driven). The Rust-side stat fallback
-        # (`xet_poller`) handles this case; only emit here when we actually
-        # have a non-zero total to advertise.
+        # A bar that never finished being built has nothing to report: tqdm
+        # still closes it when it is collected.
+        self._final_emitted = True
+        super().__init__(*args, **kwargs)
+        self._final_emitted = False
+        # Nothing to say before the size is known: a `0 of 0` line would only
+        # be noise for the parent.
         if self.total:
             self._emit(force=True)
 
@@ -118,44 +110,40 @@ class JsonProgressBar(tqdm):
             super().update(n)
         self._emit()
 
+    def update_transfer(self, n=1) -> None:
+        """Count `n` bytes received from the network.
+
+        A negative `n` is the Hub taking back bytes it re-fetches after a
+        server ignored a range request. They were received all the same, so
+        the count never falls.
+        """
+        if n > 0:
+            self._received += int(n)
+            self._emit()
+
+    def set_transfer_postfix_str(self, *args, **kwargs) -> None:
+        """The Hub's own speed text for the network bytes. Not used."""
+
+    def close(self):  # type: ignore[override]
+        # The throttle can swallow the last update, so say where the bar
+        # ended. Once only: tqdm calls close() again when the bar is
+        # collected.
+        if not self._final_emitted:
+            self._final_emitted = True
+            self._emit(force=True)
+        super().close()
+
     def _emit(self, force: bool = False) -> None:
         now = time.monotonic()
         if not force and now - self._last_emit < MIN_PROGRESS_INTERVAL_S:
             return
         emit(
             "progress",
-            file=self._label,
-            downloaded=int(self.n),
+            written=int(self.n),
+            received=self._received,
             total=int(self.total or 0),
         )
         self._last_emit = now
-        record_progress_emit()
-
-
-def parse_file_specs(raw_values: Iterable[str]) -> List[FileSpec]:
-    specs: List[FileSpec] = []
-    for raw in raw_values:
-        raw = raw.strip()
-        if not raw:
-            continue
-        size: Optional[int] = None
-        path = raw
-        for separator in ("::", "="):
-            if separator in raw:
-                candidate_path, candidate_size = raw.rsplit(separator, 1)
-                path = candidate_path
-                try:
-                    size = int(candidate_size)
-                except ValueError:
-                    size = None
-                break
-        normalized_path = path.lstrip("/ ")
-        if not normalized_path:
-            raise ValueError(f"Invalid file specification: '{raw}'")
-        specs.append(FileSpec(path=normalized_path, size=size))
-    if not specs:
-        raise ValueError("At least one --file argument is required")
-    return specs
 
 
 def ensure_dest_dir(path: Path) -> None:
@@ -164,7 +152,7 @@ def ensure_dest_dir(path: Path) -> None:
 
 def download_file(
     *,
-    spec: FileSpec,
+    path: str,
     args: argparse.Namespace,
     dest_root: Path,
     cache_dir: Optional[Path],
@@ -172,12 +160,12 @@ def download_file(
 ) -> None:
     # Note: file-start is informational, not part of core protocol
     started = time.monotonic()
-    destination_path = dest_root / spec.path
+    destination_path = dest_root / path
     ensure_dest_dir(destination_path.parent)
 
     downloaded_path = hf_hub_download(
         repo_id=args.repo_id,
-        filename=spec.path,
+        filename=path,
         revision=args.revision,
         repo_type=args.repo_type,
         token=hf_token,
@@ -186,7 +174,6 @@ def download_file(
         force_download=args.force,
         local_files_only=args.local_only,
         tqdm_class=JsonProgressBar,
-        resume_download=True,
     )
 
     if downloaded_path != destination_path:
@@ -196,7 +183,7 @@ def download_file(
     finished = time.monotonic()
     # Note: file-complete is informational logging, not protocol
     duration_ms = int((finished - started) * 1000)
-    sys.stderr.write(f"Downloaded {spec.display_name} in {duration_ms}ms\n")
+    sys.stderr.write(f"Downloaded {path} in {duration_ms}ms\n")
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -206,13 +193,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo-type", default="model", help="Hub repo type")
     parser.add_argument("--dest", required=True, help="Directory for outputs")
     parser.add_argument("--cache-dir", help="Optional explicit cache directory")
-    parser.add_argument("--token", help="Hub auth token")
     parser.add_argument(
-        "--file",
-        dest="files",
-        action="append",
-        required=True,
-        help="File to fetch. Use '<path>::<size>' to hint size in bytes.",
+        "--file", required=True, help="Path of the file within the repo"
     )
     parser.add_argument(
         "--force",
@@ -251,33 +233,31 @@ def main() -> int:
         )
         return 0
 
-    try:
-        file_specs = parse_file_specs(args.files)
-    except ValueError as exc:
-        emit("error", message=str(exc))
+    path = args.file.strip().lstrip("/ ")
+    if not path:
+        emit("error", message="A --file argument is required")
         return 64
 
     dest_root = Path(args.dest).expanduser().resolve()
     cache_dir = Path(args.cache_dir).expanduser().resolve() if args.cache_dir else None
-    hf_token = args.token or None
+    hf_token = os.environ.get("HF_TOKEN") or None
 
     # Log session info to stderr (not part of protocol)
     sys.stderr.write(
         f"Downloading from {args.repo_id}@{args.revision} to {dest_root}\n"
     )
 
-    for spec in file_specs:
-        try:
-            download_file(
-                spec=spec,
-                args=args,
-                dest_root=dest_root,
-                cache_dir=cache_dir,
-                hf_token=hf_token,
-            )
-        except Exception as exc:  # pragma: no cover - bubbled to Rust.
-            emit("error", message=f"Failed to download {spec.display_name}: {exc}")
-            return 65
+    try:
+        download_file(
+            path=path,
+            args=args,
+            dest_root=dest_root,
+            cache_dir=cache_dir,
+            hf_token=hf_token,
+        )
+    except Exception as exc:  # pragma: no cover - bubbled to Rust.
+        emit("error", message=f"Failed to download {path}: {exc}")
+        return 65
 
     emit("complete")
     return 0

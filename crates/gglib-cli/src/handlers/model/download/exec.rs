@@ -5,6 +5,8 @@
 //! The daemon owns the download and registers the model when it completes, so
 //! detaching this command does not interrupt anything.
 
+use std::sync::Arc;
+
 use anyhow::Result;
 use gglib_download::cli_exec::list_quantizations;
 
@@ -20,33 +22,29 @@ pub(crate) struct DownloadArgs<'a> {
     pub list_quants: bool,
     /// `HuggingFace` token for private models.
     ///
-    /// Used only for `--list-quants`. For downloads, prefer the `HF_TOKEN`
-    /// environment variable which is read at startup and wired into the
-    /// download manager config, mirroring how the GUI handles authentication.
+    /// Used only for `--list-quants`. A download runs on the daemon, with the
+    /// `HF_TOKEN` of the environment the daemon started in.
     pub token: Option<&'a str>,
 }
 
 /// Execute the download command.
 ///
-/// Queues `model_id` on the daemon and watches the queue until it drains.
+/// Queues `model_id` on the daemon and watches the queue until the download
+/// the daemon answered with has ended.
 /// Ctrl-C detaches; the daemon keeps downloading and registers the model
 /// itself.
 pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
-    let _ = ctx;
-
     // --list-quants: show available quantizations and exit (uses cli_exec directly).
     if args.list_quants {
         list_quantizations(args.model_id, args.token.map(String::from)).await?;
         return Ok(());
     }
 
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
-    handle
-        .queue_download(&daemon_client::QueueDownloadBody {
-            model_id: args.model_id.to_string(),
-            quant: args.quantization.map(String::from),
-        })
-        .await?;
-    remote::monitor(&handle).await
+    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let body = daemon_client::QueueDownloadBody {
+        model_id: args.model_id.to_string(),
+        quant: args.quantization.map(String::from),
+    };
+    let queue = handle.queue_download(&body);
+    remote::monitor(&handle, Arc::clone(&ctx.console), queue).await
 }

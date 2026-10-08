@@ -5,11 +5,14 @@
 //! stored settings is a different job, and the file had reached its size
 //! budget. What a new session saves for a later resume is built here too,
 //! with the conversation it saves it on, so the two sides are read together.
+//! The chat's Thinking choice is settled here as well ([`settle_thinking`]),
+//! against the command line, for a new session and a resumed one.
 //! Which machine a resume goes back to, and what it saves, is
 //! `resume_machine`'s; what a resume reprints is `memory_jogger`'s.
 
-use gglib_core::domain::InferenceProfile;
 use gglib_core::domain::chat::ConversationSettings;
+use gglib_core::domain::thinking::{self, Remember};
+use gglib_core::domain::{InferenceProfile, Thinking};
 
 use super::persistence::Conversation;
 use crate::bootstrap::CliContext;
@@ -75,7 +78,8 @@ pub(crate) fn restore_profile(
 
 /// Merge saved [`ConversationSettings`] into [`ChatArgs`].
 ///
-/// CLI-provided values always win; saved settings fill in blanks.
+/// CLI-provided values always win; saved settings fill in blanks. The chat's
+/// Thinking choice is not merged here: [`settle_thinking`] reads it.
 #[allow(
     clippy::assigning_clones,
     clippy::ref_option,
@@ -153,6 +157,43 @@ pub(crate) fn apply_saved_settings(
     merged
 }
 
+/// Settle a session's Thinking choice by the rule the daemon reads a turn by
+/// ([`thinking::settle`]): what `--thinking` named, against what the chat
+/// `remembered` (nothing, for a new chat) and the budget
+/// `--reasoning-budget-tokens` typed. The budget the session runs with goes
+/// into `args`, and what the chat is to remember comes back.
+///
+/// A named choice wins: `off` runs with a budget of `0`, `on` with the budget
+/// typed. With none named the chat runs as it remembers: switched off, its
+/// budget is `0` whatever was typed, and the session says so when that sets
+/// a typed budget aside.
+pub(crate) fn settle_thinking(args: &mut ChatArgs, remembered: Option<Thinking>) -> Remember {
+    let typed = args.sampling.reasoning_budget_tokens;
+    let settled = thinking::settle(args.thinking, remembered, typed);
+    // With nothing named the rule changes a budget only for a chat switched
+    // off, so a typed budget that is not the one settled was set aside by a
+    // choice this command line did not make.
+    if args.thinking.is_none()
+        && let Some(typed) = typed.filter(|_| settled.budget != typed)
+    {
+        note_budget_set_aside(typed);
+    }
+    args.sampling.reasoning_budget_tokens = settled.budget;
+    settled.remember
+}
+
+/// Say that a resumed chat has Thinking switched off, that the budget its
+/// command line typed was not applied, and the flag that switches it back.
+///
+/// On stderr, with a session's other notices, and from the one place a
+/// session reads the choice: once a session, before its first turn.
+fn note_budget_set_aside(typed: i32) {
+    eprintln!(
+        "  This chat has Thinking switched off, so --reasoning-budget-tokens {typed} was not \
+         applied. Add --thinking on to switch it back on."
+    );
+}
+
 /// Create a new conversation for a fresh session on `turn`'s model.
 pub(super) async fn new_conversation<'a>(
     ctx: &'a CliContext,
@@ -165,8 +206,8 @@ pub(super) async fn new_conversation<'a>(
     match Conversation::create(
         ctx.app.chat_history(),
         args.system_prompt.clone(),
-        None,
         Some(settings),
+        turn.made_by(),
     )
     .await
     {
@@ -179,5 +220,14 @@ pub(super) async fn new_conversation<'a>(
 }
 
 #[cfg(test)]
+#[path = "resume_limits_tests.rs"]
+mod resume_limits_tests;
+#[cfg(test)]
+#[path = "resume_rows_tests.rs"]
+mod resume_rows_tests;
+#[cfg(test)]
+#[path = "resume_thinking_tests.rs"]
+mod resume_thinking_tests;
+#[cfg(test)]
 #[path = "resume_settings_tests.rs"]
-mod tests;
+pub(super) mod tests;

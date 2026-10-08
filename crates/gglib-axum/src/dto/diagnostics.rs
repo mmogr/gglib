@@ -1,10 +1,13 @@
 //! Wire types for the system diagnostics surface.
 //!
-//! `gglib config check-deps` / `paths` / `fast-downloads status` print
-//! directly from types that live in `gglib-core` and `gglib-download` and
-//! carry no `Serialize`. Rather than derive serde onto domain types for the
-//! benefit of one HTTP route, this mirrors them here.
+//! `gglib config check-deps` and `paths` print directly from types that live
+//! in `gglib-core` and carry no `Serialize`, with an enum or a path where the
+//! wire has a string. Rather than derive serde onto domain types for the
+//! benefit of one HTTP route, this reshapes them here. The acceleration and
+//! fast-downloads halves need no reshaping: they go out as the service's own
+//! types.
 
+use gglib_app_services::setup::{AccelerationInfo, FastDownloadsInfo};
 use gglib_core::paths::{ModelsDirSource, ResolvedPaths};
 use gglib_core::utils::system::{Dependency, DependencyStatus};
 use serde::Serialize;
@@ -80,38 +83,6 @@ impl From<ResolvedPaths> for ResolvedPathsDto {
     }
 }
 
-/// What acceleration a build would use.
-///
-/// Detection is deliberately fallible — it refuses to fall back to CPU so
-/// callers can surface install hints — so the failure is carried as data
-/// rather than failing the whole diagnostics request.
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AccelerationDto {
-    pub detected: Option<String>,
-    pub detection_error: Option<String>,
-}
-
-/// The optional `hf_xet` download accelerator.
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct FastDownloadsDto {
-    /// Whether a usable environment is present — the same question, and the
-    /// same answer, that selects the backend for a download.
-    pub provisioned: bool,
-    pub env_dir: String,
-    /// True when the environment sits at the pre-rename location.
-    pub legacy_path: bool,
-    /// Which tool built it, per its marker.
-    pub builder: Option<String>,
-    /// The tool that would build it now.
-    pub available_builder: String,
-    /// Why the status could not be read, when it could not.
-    pub error: Option<String>,
-}
-
 /// Everything the diagnostics panel shows, in one request.
 ///
 /// One route rather than four because these are read together: the panel is
@@ -123,8 +94,8 @@ pub(crate) struct FastDownloadsDto {
 pub(crate) struct DiagnosticsDto {
     pub dependencies: Vec<DependencyDto>,
     pub paths: ResolvedPathsDto,
-    pub acceleration: AccelerationDto,
-    pub fast_downloads: FastDownloadsDto,
+    pub acceleration: AccelerationInfo,
+    pub fast_downloads: FastDownloadsInfo,
 }
 
 /// A hardware-sized model suggestion — what `gglib up` picks on a first run.

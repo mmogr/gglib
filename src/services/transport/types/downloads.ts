@@ -3,51 +3,22 @@
  * Handles download queue management.
  */
 
-import type { DownloadId, HfModelId } from './ids';
+import type { HfModelId } from './ids';
 
 /**
- * Download status.
- */
-import type { DownloadStatus } from '../../../types/generated/DownloadStatus';
-export type { DownloadStatus };
-
-/**
- * Shard information for multi-file downloads.
+ * The download queue as the daemon serves it, on `GET
+ * /api/models/downloads/queue` and in every `queue_snapshot` event alike.
  *
- * The hand-written mirror declared four of the six fields and outlived the
- * pair that fixed sharded progress: `preceding_bytes` and `group_total_bytes`
- * carry the exact byte offsets of a shard within the model, and without them
- * the only aggregate a client can compute is `file_size * total_shards` —
- * wrong whenever the last shard is smaller, which is almost always, and
- * discontinuous at every boundary. It also typed `file_size` as
- * `number | null`, a value the wire cannot send: the Rust field carries
- * `skip_serializing_if`, so the key is omitted rather than nulled.
+ * The GUI holds this as its download state and prints each row's `text`. It
+ * does not group, label or format a download itself; the one number it works
+ * out is how many rows are waiting.
  */
-import type { ShardInfo } from '../../../types/generated/ShardInfo';
-export type { ShardInfo };
-
-/**
- * Download queue item.
- */
-export interface DownloadQueueItem {
-  id: DownloadId;
-  display_name: string;
-  status: DownloadStatus;
-  position: number;
-  error?: string | null;
-  group_id?: string | null;
-  shard_info?: ShardInfo | null;
-}
-
-/**
- * Download queue status.
- */
-export interface DownloadQueueStatus {
-  current?: DownloadQueueItem | null;
-  pending: DownloadQueueItem[];
-  failed: DownloadQueueItem[];
-  max_size: number;
-}
+export type { QueueSnapshot } from '../../../types/generated/QueueSnapshot';
+export type { DownloadRow } from '../../../types/generated/DownloadRow';
+export type { DownloadRowText } from '../../../types/generated/DownloadRowText';
+export type { DownloadPhase } from '../../../types/generated/DownloadPhase';
+export type { FinishedDownload } from '../../../types/generated/FinishedDownload';
+export type { DownloadOutcome } from '../../../types/generated/DownloadOutcome';
 
 /**
  * Parameters for queueing a download.
@@ -56,7 +27,6 @@ export interface QueueDownloadParams {
   modelId: HfModelId;
   /** Optional quantization. If omitted, smart selection picks the best available. */
   quantization?: string;
-  targetPath?: string;
 }
 
 /**
@@ -67,17 +37,21 @@ import type { QueueDownloadResponse } from '../../../types/generated/QueueDownlo
 export type { QueueDownloadResponse };
 
 /**
- * Typed payload for download completion events.
- * Used by the UI effects layer (useDownloadCompletionEffects) to trigger
- * model refresh and toast notifications.
+ * A download that completed, for the model refresh and the toast.
  */
 export interface DownloadCompletionInfo {
   /** Canonical download ID (model_id:quantization or model_id) */
-  modelId: string;
-  /** Quantization variant if applicable (e.g., "Q4_K_M") */
-  quantization?: string;
-  /** Human-readable display name for toast messages */
-  displayName?: string;
-  /** Source of the download for potential future handling differentiation */
-  source: 'huggingface' | 'local' | 'unknown';
+  id: string;
+  /** How it ended, in the daemon's words: its finished entry's text */
+  text: string;
+}
+
+/**
+ * A download that failed, for the toast.
+ */
+export interface DownloadFailureInfo {
+  /** Canonical download ID (model_id:quantization or model_id) */
+  id: string;
+  /** How it ended, in the daemon's words: its finished entry's text */
+  text: string;
 }

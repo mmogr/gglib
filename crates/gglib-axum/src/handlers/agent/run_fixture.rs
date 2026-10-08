@@ -1,5 +1,5 @@
-//! A scripted agent loop and a daemon context of its own, for the agent
-//! run's tests.
+//! A scripted agent loop for the agent run's tests, and a daemon context of
+//! its own for any handler's.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolResult};
-use gglib_core::domain::chat::Message;
+use gglib_core::domain::chat::{Message, NewConversation};
 use gglib_core::domain::runs::RunInfo;
 use gglib_core::ports::{AgentError, AgentLoopPort, AgentRunOutput, RunScope, RunsPort as _};
 use serde_json::{Value, json};
@@ -77,16 +77,12 @@ impl AgentLoopPort for Scripted {
     }
 }
 
-pub(super) async fn state() -> (tempfile::TempDir, AppState) {
+pub(in crate::handlers) async fn state() -> (tempfile::TempDir, AppState) {
     let dir = tempfile::tempdir().unwrap();
     let state = crate::bootstrap::bootstrap(crate::ServerConfig {
-        host: "127.0.0.1".into(),
-        port: 0,
         base_port: Some(19_200),
         llama_server_path: "/nonexistent/llama-server".into(),
         max_concurrent_agent_loops: 1,
-        static_dir: None,
-        cors: gglib_core::CorsConfig::AllowAll,
         db_path: Some(dir.path().join("gglib.db")),
         device_keys_path: Some(dir.path().join("remote_devices")),
     })
@@ -129,7 +125,7 @@ pub(super) fn paced(
         model: "qwen".to_owned(),
         // A run on no model of this machine's; a test of what a local run
         // is made by resolves one (see `run_made_tests`).
-        made_by: super::compose::MadeBy {
+        made_by: gglib_app_services::transcript::MadeBy {
             model: "qwen".to_owned(),
             quantization: None,
             device: None,
@@ -194,7 +190,10 @@ pub(super) async fn conversation(state: &AppState) -> i64 {
     state
         .core
         .chat_history()
-        .create_conversation("t".to_owned(), None, None)
+        .create_conversation(NewConversation {
+            title: "t".to_owned(),
+            ..NewConversation::default()
+        })
         .await
         .unwrap()
 }

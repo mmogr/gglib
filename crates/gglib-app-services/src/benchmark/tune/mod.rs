@@ -305,10 +305,10 @@ const MAX_CANDIDATES: usize = 256;
 /// thing for its `gglib` arm. Without it a candidate resolves against
 /// [`ModelContext::passthrough`], which quietly changes three things: a
 /// `reasoning`-tagged model is tuned against the neutral floor instead of
-/// `reasoning_floor`, the agentic temperature ceiling resolves to the
-/// non-reasoning 0.3 rather than 0.6, and no dialect or capability shaping
-/// applies. Values tuned that way do not transfer to production, which is the
-/// whole point of tuning them.
+/// `reasoning_floor`, the agentic temperature ceiling is the non-reasoning
+/// 0.3 where a reasoning model has none, and no dialect or capability
+/// shaping applies. Values tuned that way do not transfer to production,
+/// which is the whole point of tuning them.
 pub(super) fn model_context_for(model: &Model) -> ModelContext {
     ModelContext {
         capabilities: model.capabilities,
@@ -586,6 +586,10 @@ async fn run_task(
                     Some(model.name.clone()),
                 )
                 .with_sampling(Some(candidate.clone()))
+                // A candidate is what the sweep measures, not a flag for the
+                // ladder to judge: no value it names is taken back out of
+                // its request.
+                .with_passed_over_kept(true)
                 // Resolve against the real model, not `passthrough` — see
                 // `model_context_for`.
                 .with_model_context(model_context.clone())
@@ -1331,3 +1335,7 @@ mod tests {
         )
     }
 }
+
+#[cfg(test)]
+#[path = "candidate_request_tests.rs"]
+mod candidate_request_tests;

@@ -1,41 +1,34 @@
 /**
- * Fetch-based Server-Sent Events (SSE) utility with authentication support.
+ * Reading Server-Sent Events (SSE) off a `fetch` response.
  *
- * This implementation replaces native EventSource to support:
- * - Authorization headers (Bearer token)
- * - Spec-compliant SSE parsing (multi-line data, event types, comments)
- * - Exponential backoff reconnection with jitter
- * - Proper cleanup and abort handling
+ * `EventSource` can send neither an `Authorization` header nor a POST, so
+ * every stream the app reads is a `fetch` whose body is read here. `readSse`
+ * is the one reader: the event bus, a run's events, the server log, the setup
+ * streams, the benchmark streams and the proxy dashboard all call it, so a
+ * change in how a stream is framed reaches every one of them or none.
  */
 
-/**
- * Parsed SSE message.
- */
-export interface SSEMessage {
-  /** Event type (default: 'message') */
-  event: string;
-  /** Message data (multi-line data: fields joined with \n) */
+/** One event: its data, and its name and id when the stream gave them. */
+export interface SseEvent {
+  /** The event's `data:` lines, joined with a newline. Never empty. */
   data: string;
-  /** Last event ID (for resuming streams) */
+  /** The `event:` field. */
+  event?: string;
+  /** The `id:` field. */
   id?: string;
 }
 
 /**
- * Options for creating an SSE stream.
+ * Options for opening an SSE stream.
  */
 export interface SSEStreamOptions {
   /** HTTP headers (typically includes Authorization) */
   headers?: HeadersInit;
   /** Abort signal for canceling the stream */
   signal?: AbortSignal;
-  /** Last event ID (for resuming from a specific point) */
-  lastEventId?: string;
 }
 
-/**
- * The stream was refused with an HTTP status, which a caller may act on: a
- * 401 is a credential gone stale, not a network that dropped.
- */
+/** The stream was refused with an HTTP status. */
 export class SSEHttpError extends Error {
   readonly status: number;
 
@@ -47,14 +40,79 @@ export class SSEHttpError extends Error {
 }
 
 /**
- * Creates an async iterable SSE stream from a URL.
+ * Reads the events of a response body until it closes.
  *
- * Parses Server-Sent Events according to the spec:
- * - Lines starting with ':' are comments (keepalive)
- * - 'data:' lines accumulate (joined with \n)
- * - 'event:' sets the message type
- * - 'id:' sets the event ID
- * - Blank lines dispatch the accumulated message
+ * Framed as the specification frames them: a blank line ends an event, a line
+ * ends in LF or CRLF, a line starting with `:` is a comment, the `data:`
+ * lines of one event are joined with a newline, and one space after a field's
+ * colon is not part of its value. An event with no data is not yielded, and
+ * an event the stream closes in the middle of is dropped. Bytes are decoded as
+ * a stream, so a character split across two reads arrives whole.
+ *
+ * A body from a `fetch` that was given a signal rejects its pending read when
+ * the signal fires, and that rejection is thrown from here. `signal` is for
+ * the caller that wants the reading to end quietly instead once it has
+ * fired: it is checked before each read, and the body is then cancelled.
+ */
+export async function* readSse(
+  response: Response,
+  signal?: AbortSignal,
+): AsyncGenerator<SseEvent> {
+  if (!response.body) throw new Error('SSE: no response body');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let data: string[] = [];
+  let event: string | undefined;
+  let id: string | undefined;
+
+  try {
+    while (!signal?.aborted) {
+      const { done, value: bytes } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(bytes, { stream: true });
+      const lines = buffer.split('\n');
+      // The last piece is a line still arriving: it waits for its ending.
+      buffer = lines.pop() ?? '';
+
+      for (const raw of lines) {
+        const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+
+        if (line === '') {
+          const joined = data.join('\n');
+          if (joined !== '') {
+            yield { data: joined, ...(event !== undefined && { event }), ...(id !== undefined && { id }) };
+          }
+          data = [];
+          event = undefined;
+          id = undefined;
+          continue;
+        }
+
+        // A comment's field name is empty, so it matches nothing below.
+        const colon = line.indexOf(':');
+        const field = colon === -1 ? line : line.slice(0, colon);
+        const value = colon === -1 ? '' : line.slice(colon + 1).replace(/^ /, '');
+        if (field === 'data') data.push(value);
+        else if (field === 'event') event = value;
+        else if (field === 'id' && !value.includes('\0')) id = value;
+      }
+    }
+  } finally {
+    // A body left open after its signal fired would go on being consumed.
+    if (signal?.aborted) await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
+/**
+ * Opens a GET event stream at `url` and reads it with `readSse`.
+ *
+ * For a stream that is not this session's daemon's, such as a running
+ * proxy's dashboard, which has its own origin and its own credential. A
+ * stream of the daemon's is opened with `apiFetch` instead.
  *
  * @example
  * ```typescript
@@ -69,115 +127,13 @@ export class SSEHttpError extends Error {
 export async function* createSSEStream(
   url: string,
   options: SSEStreamOptions = {}
-): AsyncGenerator<SSEMessage, void, unknown> {
-  const { headers = {}, signal, lastEventId } = options;
+): AsyncGenerator<SseEvent, void, unknown> {
+  const { headers, signal } = options;
 
-  // Add Last-Event-ID header if resuming
-  const fetchHeaders = new Headers(headers);
-  if (lastEventId) {
-    fetchHeaders.set('Last-Event-ID', lastEventId);
-  }
-
-  // Fetch with streaming enabled
-  const response = await fetch(url, {
-    headers: fetchHeaders,
-    signal,
-  });
-
+  const response = await fetch(url, { headers, signal });
   if (!response.ok) {
     throw new SSEHttpError(response.status, response.statusText);
   }
 
-  if (!response.body) {
-    throw new Error('SSE response has no body');
-  }
-
-  // Read the stream
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-
-  let buffer = '';
-  let currentMessage: Partial<SSEMessage> = { event: 'message', data: '' };
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-
-      if (done) {
-        break;
-      }
-
-      // Decode chunk and add to buffer
-      buffer += decoder.decode(value, { stream: true });
-
-      // Process complete lines
-      const lines = buffer.split('\n');
-      // Keep the last incomplete line in the buffer
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        // Empty line dispatches the message
-        if (line === '' || line === '\r') {
-          if (currentMessage.data) {
-            // Remove trailing newline from multi-line data
-            if (currentMessage.data.endsWith('\n')) {
-              currentMessage.data = currentMessage.data.slice(0, -1);
-            }
-            yield currentMessage as SSEMessage;
-          }
-          // Reset for next message
-          currentMessage = { event: 'message', data: '' };
-          continue;
-        }
-
-        // Comment lines (keepalive) - ignore
-        if (line.startsWith(':')) {
-          continue;
-        }
-
-        // Parse field
-        const colonIndex = line.indexOf(':');
-        if (colonIndex === -1) {
-          // Line with no colon is treated as field with empty value
-          continue;
-        }
-
-        const field = line.slice(0, colonIndex);
-        // Value starts after colon, skip leading space if present
-        let value = line.slice(colonIndex + 1);
-        if (value.startsWith(' ')) {
-          value = value.slice(1);
-        }
-
-        // Process field
-        switch (field) {
-          case 'event':
-            currentMessage.event = value;
-            break;
-          case 'data':
-            // Accumulate data with newlines between multiple data: fields
-            if (currentMessage.data) {
-              currentMessage.data += '\n' + value;
-            } else {
-              currentMessage.data = value;
-            }
-            break;
-          case 'id':
-            // Update the last event ID (for resuming)
-            if (!value.includes('\0')) {
-              // Spec: ignore if contains null
-              currentMessage.id = value;
-            }
-            break;
-          case 'retry':
-            // Ignore retry field (not used in this implementation)
-            break;
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
+  yield* readSse(response);
 }
-
-

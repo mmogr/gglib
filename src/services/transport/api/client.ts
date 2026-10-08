@@ -3,15 +3,20 @@
  * 
  * Handles embedded API discovery in Tauri mode, bearer token authentication,
  * and recoverable error handling with single retry on 401/network errors.
+ *
+ * Two doors reach the daemon: `request`, behind `get`/`post`/`put`/`patch`/
+ * `del`, for a JSON call, and `apiFetch` for what that cannot carry.
  */
 
 import { readData } from '../errors';
 import { appLogger } from '../../platform';
+import { isDesktop } from '../../platform/detect';
 import { isDaemonTokenRefusal, serviceRestarted, takeDaemonToken } from './daemonToken';
 
 /**
- * Module-level API session context.
- * Shared between HTTP client and SSE streaming.
+ * Module-level API session context: where the daemon is and the token that
+ * opens it. Empty until `getClient` has resolved, so nothing outside this
+ * module reads it.
  */
 let apiBaseUrl = '';
 let apiAuthToken: string | undefined;
@@ -28,22 +33,6 @@ export function setApiSession(baseUrl: string, authToken?: string): void {
     baseUrl,
     hasToken: !!authToken,
   });
-}
-
-/**
- * Get the current API base URL.
- * Used by SSE and other fetch-based utilities.
- */
-export function getApiBaseUrl(): string {
-  return apiBaseUrl;
-}
-
-/**
- * Get auth headers for the current API session.
- * Used by SSE and other fetch-based utilities that need authentication.
- */
-export function getAuthHeaders(): HeadersInit {
-  return apiAuthToken ? { Authorization: `Bearer ${apiAuthToken}` } : {};
 }
 
 /**
@@ -78,22 +67,6 @@ interface RequestOptions {
 }
 
 /**
- * Detect if running in Tauri environment.
- */
-function isTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-}
-
-/**
- * Invoke Tauri command.
- */
-async function invokeTauri<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  // @ts-expect-error - Tauri API is injected at runtime
-  const { invoke } = window.__TAURI_INTERNALS__;
-  return invoke(cmd, args);
-}
-
-/**
  * Discover embedded API info from Tauri.
  * Throws on failure and clears cache to allow retry.
  */
@@ -101,7 +74,8 @@ async function discoverEmbeddedApi(): Promise<EmbeddedApiInfo> {
   try {
     appLogger.debug('transport.api', '[ApiClient] Discovering embedded API...');
     
-    const info = await invokeTauri<EmbeddedApiInfo>('get_embedded_api_info');
+    // Only reached on the desktop, where the bridge is always there.
+    const info: EmbeddedApiInfo = await window.__TAURI_INTERNALS__!.invoke('get_embedded_api_info');
     
     appLogger.debug('transport.api', '[ApiClient] Embedded API discovered', {
       port: info.port,
@@ -220,7 +194,7 @@ function buildClient(config: HttpClientConfig): HttpClient {
       // rebuild an identically tokenless client here and fail again.
       const refused = await isDaemonTokenRefusal(response);
       if (refused) resetClientCache(); // the next call rereads a token minted since
-      if (refused && isTauri()) { // the desktop rereads the file: retry once, never the sentence
+      if (refused && isDesktop()) { // the desktop rereads the file: retry once, never the sentence
         if (isRetry) throw serviceRestarted();
         return (await getClient()).request<T>(path, options, true);
       }
@@ -234,7 +208,7 @@ function buildClient(config: HttpClientConfig): HttpClient {
       return await readData<T>(response);
     } catch (error) {
       // On network error (ECONNREFUSED, etc), clear cache and retry once
-      if (!isRetry && isTauri() && error instanceof TypeError) {
+      if (!isRetry && isDesktop() && error instanceof TypeError) {
         appLogger.warn('transport.api', '[ApiClient] Network error - clearing cache and retrying', { errorMessage: error.message });
         resetClientCache();
         const newClient = await getClient();
@@ -270,10 +244,10 @@ export async function getClient(): Promise<HttpClient> {
       // stays for it, on both surfaces.
       const token = takeDaemonToken() ?? readStoredApiKey() ?? apiAuthToken;
 
-      if (isTauri()) {
+      if (isDesktop()) {
         const info = await discoverEmbeddedApi();
         const config = { baseUrl: `http://127.0.0.1:${info.port}`, token: info.token ?? token };
-        // Set module-level session for SSE and other fetch-based utilities
+        // Set the module-level session `apiFetch` reads
         setApiSession(config.baseUrl, config.token);
         return buildClient(config);
       } else {
@@ -334,28 +308,27 @@ export async function del<T>(path: string, body?: unknown): Promise<T> {
 }
 
 /**
- * Get base URL and auth headers for direct fetch calls (e.g., streaming).
- * 
- * @returns Object with baseUrl and headers for authentication
+ * `fetch` against this session's daemon, for what `request` cannot carry: a
+ * stream, a body that is not JSON, a reply that is not JSON.
+ *
+ * `path` is joined to the daemon's base URL and the session's credential is
+ * added, over any `Authorization` the caller gave. Both are the client's,
+ * once it has resolved them: the desktop app asks Tauri where the daemon is
+ * once, not per call, and a call made before any other still gets the token.
+ * A refusal throws the `TransportError` `readData` builds from it, so the
+ * response returned is one the daemon accepted. Nothing is retried: a caller
+ * that reconnects renews the credential itself (`renew.ts`).
  */
-export async function getAuthenticatedFetchConfig(): Promise<{
-  baseUrl: string;
-  headers: HeadersInit;
-}> {
-  // `getAuthHeaders` rather than `{}`: these callers stream agent chat and the
-  // five benchmark runs, and were the only `/api/*` requests carrying no
-  // credential — so against a `--share-lan` daemon they answered 401 even once
-  // the user had entered the key. It yields `{}` when there is no token.
-  if (isTauri()) {
-    const info = await discoverEmbeddedApi();
-    return {
-      baseUrl: `http://127.0.0.1:${info.port}`,
-      headers: getAuthHeaders(),
-    };
-  } else {
-    return {
-      baseUrl: '',
-      headers: getAuthHeaders(),
-    };
-  }
+export async function apiFetch(
+  path: string,
+  init: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {},
+): Promise<Response> {
+  await getClient();
+  const credential: Record<string, string> = apiAuthToken ? { Authorization: `Bearer ${apiAuthToken}` } : {};
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
+    headers: { ...init.headers, ...credential },
+  });
+  if (!response.ok) await readData(response);
+  return response;
 }

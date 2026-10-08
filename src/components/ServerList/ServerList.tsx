@@ -1,5 +1,5 @@
 import { FC, useState } from 'react';
-import { RotateCcw, ServerOff, Square } from 'lucide-react';
+import { ServerOff, Square } from 'lucide-react';
 import { appLogger } from '../../services/platform';
 import type { ServerViewModel } from '../../hooks/useServers';
 import { ChatPageTabId, CHAT_PAGE_TABS } from '../../pages/chatTabs';
@@ -16,9 +16,6 @@ interface ServerListProps {
   onSelectModel?: (modelId: number, view?: 'chat' | 'console') => void;
   /** Compact mode for popover display */
   compact?: boolean;
-  /** Show header with count and refresh button */
-  showHeader?: boolean;
-  onRefresh?: () => void;
 }
 
 const ServerList: FC<ServerListProps> = ({
@@ -26,8 +23,6 @@ const ServerList: FC<ServerListProps> = ({
   onStopServer,
   onSelectModel,
   compact = false,
-  showHeader = false,
-  onRefresh,
 }) => {
   // Track which server has expanded tabs (only one at a time)
   const [expandedServerId, setExpandedServerId] = useState<number | null>(null);
@@ -64,25 +59,6 @@ const ServerList: FC<ServerListProps> = ({
 
   return (
     <div className={cn("flex flex-col", compact && "gap-xs")}>
-      {showHeader && (
-        <div className="flex justify-between items-center pb-sm border-b border-border mb-sm">
-          <span className="text-sm font-semibold text-text">
-            Active Servers ({servers.length})
-          </span>
-          {onRefresh && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onRefresh}
-              title="Refresh servers"
-              iconOnly
-            >
-              <Icon icon={RotateCcw} size={14} />
-            </Button>
-          )}
-        </div>
-      )}
-
       <div className="flex flex-col gap-sm">
         {servers.map((server) => (
           <div

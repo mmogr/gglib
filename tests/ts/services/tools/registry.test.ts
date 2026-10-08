@@ -8,8 +8,7 @@ describe('ToolRegistry (secure-by-default enablement)', () => {
     registry.registerFunction(
       'test_tool',
       'A test tool',
-      undefined,
-      () => ({ success: true, data: 'ok' })
+      undefined
     );
 
     expect(registry.isEnabled('test_tool')).toBe(false);
@@ -22,8 +21,7 @@ describe('ToolRegistry (secure-by-default enablement)', () => {
     registry.registerFunction(
       'test_tool',
       'A test tool',
-      undefined,
-      () => ({ success: true, data: 'ok' })
+      undefined
     );
 
     registry.enable('test_tool');
@@ -42,7 +40,6 @@ describe('ToolRegistry (secure-by-default enablement)', () => {
       'mcp_tool',
       'An MCP-provided tool',
       undefined,
-      () => ({ success: true, data: 'ok' }),
       'mcp:server-1'
     );
 
@@ -57,7 +54,6 @@ describe('ToolRegistry (secure-by-default enablement)', () => {
       'mcp_tool',
       'An MCP-provided tool (re-registered)',
       undefined,
-      () => ({ success: true, data: 'ok' }),
       'mcp:server-1'
     );
 
@@ -72,7 +68,6 @@ describe('ToolRegistry (secure-by-default enablement)', () => {
       'mcp_tool',
       'An MCP-provided tool',
       undefined,
-      () => ({ success: true, data: 'ok' }),
       'mcp:server-1'
     );
 
@@ -84,7 +79,6 @@ describe('ToolRegistry (secure-by-default enablement)', () => {
       'mcp_tool',
       'An MCP-provided tool (re-registered)',
       undefined,
-      () => ({ success: true, data: 'ok' }),
       'mcp:server-1'
     );
 

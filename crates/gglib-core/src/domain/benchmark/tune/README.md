@@ -1,8 +1,5 @@
 # tune
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-benchmark-tune-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-benchmark-tune-complexity.json)
-
 <!-- module-docs:start -->
 
 Inference-tuning domain types: sweep a model's sampling parameters

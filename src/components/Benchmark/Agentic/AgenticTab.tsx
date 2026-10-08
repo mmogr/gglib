@@ -22,6 +22,7 @@ import { AgenticHistoryList } from './AgenticHistoryList';
 import type { GgufModel } from '../../../types';
 import type { AgenticEvalConfig, AgenticEvalReport, BenchmarkEvent } from '../../../types/benchmark';
 import { startAgenticRun } from '../../../services/clients/benchmark';
+import { isAbortError } from '../../../utils/errors';
 
 interface AgenticRunState {
   status: 'idle' | 'running' | 'complete' | 'failed';
@@ -130,7 +131,7 @@ export const AgenticTab: FC<AgenticTabProps> = ({ models, onRunComplete }) => {
           );
         })
         .catch((err: Error) => {
-          if (err.name !== 'AbortError') {
+          if (!isAbortError(err)) {
             setRunState((prev) => ({ ...prev, status: 'failed', error: err.message }));
           }
         });

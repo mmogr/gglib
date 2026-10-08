@@ -1,12 +1,73 @@
-//! Build configuration storage and management.
+//! The record of how the installed llama.cpp got there: `llama-config.json`.
 
-#[cfg(feature = "cli")]
 use super::detect::Acceleration;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+
+/// What `llama-config.json` holds.
+///
+/// Two shapes have been written to that file, by the two ways of installing,
+/// and both are read here. Neither names itself, so the keys decide: a file
+/// with a source build's five keys is a [`BuildConfig`], and one with a
+/// download's four is a [`PrebuiltRecord`]. Each install writes its own shape
+/// over whatever was there; nothing else writes the file, and reading it
+/// never does.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub(super) enum InstallRecord {
+    /// llama.cpp was built from source on this machine.
+    Built(BuildConfig),
+    /// llama.cpp was downloaded as a pre-built release.
+    Prebuilt(PrebuiltRecord),
+}
+
+impl InstallRecord {
+    /// Save the record to `path`, replacing what is there.
+    pub(super) fn save(&self, path: &Path) -> Result<()> {
+        let json = serde_json::to_string_pretty(self).context("Failed to serialize config")?;
+        fs::write(path, json).context("Failed to write config file")?;
+        Ok(())
+    }
+
+    /// Load the record at `path`, whichever install wrote it.
+    pub(super) fn load(path: &Path) -> Result<Self> {
+        let json = fs::read_to_string(path).context("Failed to read config file")?;
+        let record = serde_json::from_str(&json).context("Failed to parse config file")?;
+        Ok(record)
+    }
+
+    /// The source build's record, when that is how llama.cpp was installed.
+    pub(super) fn into_build(self) -> Option<BuildConfig> {
+        match self {
+            Self::Built(config) => Some(config),
+            Self::Prebuilt(_) => None,
+        }
+    }
+}
+
+/// The source build recorded at `path`, when one is.
+///
+/// `None` is no file, or a pre-built download's record: neither is a build
+/// to report. A file that is there and cannot be read is an error.
+pub(super) fn recorded_build(path: &Path) -> Result<Option<BuildConfig>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    Ok(InstallRecord::load(path)?.into_build())
+}
+
+/// The acceleration the installed llama.cpp was built for, when a source
+/// build recorded one at `path`.
+///
+/// `None` also when the file cannot be read: the caller is a launch naming
+/// its backend, and a line left out is the honest outcome there.
+#[must_use]
+pub(crate) fn recorded_acceleration(path: &Path) -> Option<String> {
+    Some(recorded_build(path).ok()??.acceleration)
+}
 
 /// Build configuration for llama.cpp
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,7 +86,6 @@ pub struct BuildConfig {
 
 impl BuildConfig {
     /// Create a new build configuration
-    #[cfg(feature = "cli")]
     pub fn new(version: String, commit_sha: String, acceleration: Acceleration) -> Self {
         Self {
             version,
@@ -39,48 +99,33 @@ impl BuildConfig {
                 .collect(),
         }
     }
+}
 
-    /// Save configuration to file
-    #[cfg(feature = "cli")]
-    pub fn save(&self, path: &Path) -> Result<()> {
-        let json = serde_json::to_string_pretty(self).context("Failed to serialize config")?;
-        fs::write(path, json).context("Failed to write config file")?;
-        Ok(())
-    }
+/// What a pre-built download records about itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct PrebuiltRecord {
+    /// The llama.cpp release tag that was installed (e.g. `b10327`).
+    pub(super) version: String,
+    /// The platform build that was chosen (e.g. `macOS ARM64 (Metal)`).
+    pub(super) platform: String,
+    /// Always `prebuilt`.
+    pub(super) install_type: String,
+    /// When it was installed, as RFC 3339.
+    pub(super) installed_at: String,
+}
 
-    /// Load configuration from file
-    pub fn load(path: &Path) -> Result<Self> {
-        let json = fs::read_to_string(path).context("Failed to read config file")?;
-        let config = serde_json::from_str(&json).context("Failed to parse config file")?;
-        Ok(config)
+impl PrebuiltRecord {
+    /// The record of a download made now.
+    pub(super) fn new(version: &str, platform: &str) -> Self {
+        Self {
+            version: version.to_string(),
+            platform: platform.to_string(),
+            install_type: "prebuilt".to_string(),
+            installed_at: Utc::now().to_rfc3339(),
+        }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    #[cfg(feature = "cli")]
-    use super::*;
-    #[cfg(feature = "cli")]
-    use tempfile::tempdir;
-
-    #[test]
-    #[cfg(feature = "cli")]
-    fn test_build_config_roundtrip() {
-        let dir = tempdir().unwrap();
-        let config_path = dir.path().join("test-config.json");
-
-        let original = BuildConfig::new(
-            "b1234".to_string(),
-            "abc123def456".to_string(),
-            Acceleration::Metal,
-        );
-
-        original.save(&config_path).unwrap();
-        let loaded = BuildConfig::load(&config_path).unwrap();
-
-        assert_eq!(original.version, loaded.version);
-        assert_eq!(original.commit_sha, loaded.commit_sha);
-        assert_eq!(original.acceleration, loaded.acceleration);
-        assert_eq!(original.cmake_flags, loaded.cmake_flags);
-    }
-}
+#[path = "config_tests.rs"]
+mod tests;

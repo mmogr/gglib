@@ -12,6 +12,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{InferenceConfig, InferenceProfile};
 
+use super::settings_bounds::{
+    CONTEXT_SIZE_RANGE, DOWNLOAD_QUEUE_RANGE, MAX_DEVICE_ID_LEN, MIN_PORT,
+};
 use super::{Device, LoopGuardMode, RemotePairing, RemoteServe};
 
 /// Partial settings update.
@@ -40,13 +43,7 @@ pub struct SettingsUpdate {
     pub proxy_api_key: Option<Option<String>>,
     pub trust_client_sampling: Option<Option<bool>>,
     /// See [`Settings::loop_guard_mode`](super::Settings::loop_guard_mode).
-    /// Writing it **to a value** clears [`Self::proxy_loop_detection`], and
-    /// the other way round; `Some(None)` — the explicit clear — clears only
-    /// itself, because "forget this field" is not "forget both".
     pub loop_guard_mode: Option<Option<LoopGuardMode>>,
-    /// **Deprecated**; see
-    /// [`Settings::proxy_loop_detection`](super::Settings::proxy_loop_detection).
-    pub proxy_loop_detection: Option<Option<bool>>,
     pub tool_call_repair: Option<Option<bool>>,
     /// See [`Settings::agentic_sampling`](super::Settings::agentic_sampling).
     pub agentic_sampling: Option<Option<bool>>,
@@ -71,13 +68,21 @@ pub struct SettingsUpdate {
 /// Settings validation error.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum SettingsError {
-    #[error("Context size must be between 512 and 1,000,000, got {0}")]
+    #[error(
+        "Context size must be between {min} and {max}, got {0}",
+        min = CONTEXT_SIZE_RANGE.start(),
+        max = CONTEXT_SIZE_RANGE.end()
+    )]
     InvalidContextSize(u64),
 
-    #[error("Port should be >= 1024 (privileged ports require root), got {0}")]
+    #[error("Port should be >= {MIN_PORT} (privileged ports require root), got {0}")]
     InvalidPort(u16),
 
-    #[error("Max download queue size must be between 1 and 50, got {0}")]
+    #[error(
+        "Max download queue size must be between {min} and {max}, got {0}",
+        min = DOWNLOAD_QUEUE_RANGE.start(),
+        max = DOWNLOAD_QUEUE_RANGE.end()
+    )]
     InvalidQueueSize(u32),
 
     #[error("Download path cannot be empty")]
@@ -102,6 +107,8 @@ pub enum SettingsError {
     BlankRemoteTicket,
 
     /// An id the tunnel edge would refuse to hold a token under.
-    #[error("Device id {0:?} must be 1-64 of ASCII letters, digits, '.', '_' or '-'")]
+    #[error(
+        "Device id {0:?} must be 1-{MAX_DEVICE_ID_LEN} of ASCII letters, digits, '.', '_' or '-'"
+    )]
     InvalidDeviceId(String),
 }

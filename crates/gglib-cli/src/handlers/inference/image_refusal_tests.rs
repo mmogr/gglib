@@ -7,8 +7,13 @@
 
 use std::path::PathBuf;
 
+use gglib_core::domain::agent::MADE_KEYS;
+use gglib_core::domain::chat::MessageRole;
+
 use super::*;
 use crate::bootstrap::test_context;
+use crate::daemon_client::STAND_IN_PORT;
+use crate::daemon_client::handle_tests::nobody;
 use crate::handlers::agent_chat::images::images_tests::{file, png};
 use crate::handlers::agent_chat::sight::sight_tests::props_server;
 use crate::handlers::inference::agent_question::{self, QuestionArgs};
@@ -35,9 +40,9 @@ fn chat_args(port: u16, images: Vec<PathBuf>) -> ChatArgs {
         model: None,
         profile: None,
         continue_id: None,
+        thinking: None,
         observation_tools: Vec::new(),
         max_observation_steps: None,
-        max_stagnation_steps: None,
     }
 }
 
@@ -136,7 +141,8 @@ async fn a_file_that_cannot_be_attached_ends_q_before_a_request() {
 
 /// The whole path of `gglib q --image`: the file is stored as it is on
 /// disk, the request carries it as a data URL after the question, and the
-/// saved turn is linked to it.
+/// saved turn is linked to it: the question, then the reply as it arrived,
+/// named for the model that made it.
 #[tokio::test]
 async fn q_sends_the_image_to_a_server_that_can_see_and_saves_the_turn_with_it() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -180,6 +186,15 @@ async fn q_sends_the_image_to_a_server_that_can_see_and_saves_the_turn_with_it()
         gglib_core::domain::AttachmentId::of(&bytes).as_str()
     );
     assert_eq!((asked[0].width, asked[0].height), (64, 32));
+    let said: Vec<_> = saved.iter().map(|r| (r.role, &*r.content)).collect();
+    let turn = [
+        (MessageRole::User, "what is this? {}"),
+        (MessageRole::Assistant, "A cat."),
+    ];
+    assert_eq!(said, turn);
+    let made = saved[1].metadata.as_ref().expect("how the reply was made");
+    assert_eq!(made[MADE_KEYS.model], "qwen");
+    assert_eq!(made[MADE_KEYS.finish_reason], "stop");
 }
 
 /// `gglib chat --continue <id>` with no `--image`: the chat's history is
@@ -187,14 +202,14 @@ async fn q_sends_the_image_to_a_server_that_can_see_and_saves_the_turn_with_it()
 /// server that cannot see, as a new image would be.
 #[tokio::test]
 async fn chat_refuses_to_resume_a_chat_that_holds_an_image_on_a_server_that_cannot_see() {
-    use gglib_core::domain::chat::{MessageRole, NewConversation, NewMessage};
+    use gglib_core::domain::chat::{NewConversation, NewMessage};
 
     let dir = tempfile::tempdir().expect("tempdir");
     let ctx = test_context(dir.path()).await;
     let stored = ctx.app.attachments().ingest(&png(64, 32)).await.unwrap();
     let history = ctx.app.chat_history();
     let conversation_id = history
-        .create_conversation_with_settings(NewConversation {
+        .create_conversation(NewConversation {
             title: "Screenshots".to_owned(),
             model_id: None,
             system_prompt: None,
@@ -218,7 +233,8 @@ async fn chat_refuses_to_resume_a_chat_that_holds_an_image_on_a_server_that_cann
         continue_id: Some(conversation_id),
         ..chat_args(server.port, Vec::new())
     };
-    let refused = execute(&ctx, args).await;
+    // A resume asks a running daemon about its chat: here there is none.
+    let refused = STAND_IN_PORT.scope(nobody(), execute(&ctx, args)).await;
 
     let refused = refused.expect_err("the server cannot see").to_string();
     assert!(

@@ -1,14 +1,15 @@
 //! Observable events for the llama.cpp pre-built install pipeline.
 //!
 //! `LlamaProgressEvent` is produced by `download_prebuilt_binaries` and
-//! consumed by all three surfaces, each adapting the stream to its own output
-//! medium:
+//! consumed by two adapters, each putting the stream on its own output medium:
 //!
 //! | Consumer    | Crate         | Output                                                              |
 //! |-------------|---------------|---------------------------------------------------------------------|
-//! | CLI         | `gglib-cli`   | `indicatif` progress bar via `consume_install_events_cli`            |
+//! | CLI         | `gglib-cli`   | `indicatif` progress bar via `render_install_events`                 |
 //! | Axum        | `gglib-axum`  | SSE stream at `POST /api/config/system/install-llama`               |
-//! | Tauri       | `gglib-tauri` | `llama-install-progress` event to the `WebView`                       |
+//!
+//! The desktop app has no consumer of its own: its `WebView` reads the Axum
+//! stream, as a browser tab does.
 //!
 //! The sender end is a `tokio::sync::mpsc::Sender<LlamaProgressEvent>` with
 //! capacity 64. When the sender is dropped the consumer loop terminates
@@ -19,11 +20,6 @@
 //! path uses. Surfaces render [`LlamaProgressEvent::Progress`] and must not
 //! derive a rate of their own from successive `downloaded` values — three
 //! surfaces each deriving their own is what this event type replaced.
-//!
-//! The event type is **not** feature-gated: [`LlamaProgressEvent`] and
-//! [`InstallPhase`] are imported unconditionally. Only the pipeline that
-//! *produces* the events (in `download/`) is gated behind
-//! `feature = "prebuilt"`.
 
 use serde::Serialize;
 
@@ -84,8 +80,8 @@ impl InstallPhase {
 /// An observable event emitted by the llama.cpp pre-built install pipeline.
 ///
 /// Every notable state change produces exactly one variant. Consumers decide
-/// how to render them: the CLI drives an `indicatif` bar; Axum serialises to
-/// `data: <json>\n\n` frames; Tauri emits them to the `WebView`.
+/// how to render them: the CLI drives an `indicatif` bar, and Axum serialises
+/// to `data: <json>\n\n` frames that the desktop app and a browser both read.
 ///
 /// # Serde tag
 ///

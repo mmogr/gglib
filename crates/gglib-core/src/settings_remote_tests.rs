@@ -193,7 +193,6 @@ fn a_remote_machine() -> Settings {
         share_lan: Some(true),
         trust_client_sampling: Some(true),
         loop_guard_mode: Some(LoopGuardMode::Refuse),
-        proxy_loop_detection: Some(false),
         tool_call_repair: Some(false),
         agentic_sampling: Some(true),
         proxy_autostart: Some(true),
@@ -257,5 +256,26 @@ fn a_reset_still_puts_every_preference_back_to_its_default() {
             remote_devices: before.remote_devices,
             ..Settings::with_defaults()
         }
+    );
+}
+
+/// A device's id may be as long as modelpipe lets a token's name be and no
+/// longer, and the refusal says how long that is.
+#[test]
+fn a_device_id_is_refused_one_byte_past_the_longest_that_stores() {
+    let roster_of = |id: &str| -> Settings {
+        serde_json::from_value(serde_json::json!({
+            "remote_devices": [{"id": id, "joinedAt": 0}],
+        }))
+        .expect("settings")
+    };
+
+    assert!(validate_settings(&roster_of(&"d".repeat(64))).is_ok());
+    assert!(validate_settings(&roster_of("")).is_err());
+    let too_long = "d".repeat(65);
+    let refused = validate_settings(&roster_of(&too_long)).expect_err("one byte too long");
+    assert_eq!(
+        refused.to_string(),
+        format!("Device id {too_long:?} must be 1-64 of ASCII letters, digits, '.', '_' or '-'")
     );
 }

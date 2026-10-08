@@ -2,11 +2,11 @@
 # them, so `make test` and `make setup` were one stray directory away from
 # being skipped as up-to-date.
 .PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri \
-        test check fmt lint doc doc-check dev pre-commit release \
-        lint-web typecheck-web deadcode-web test-web boundaries enforce \
+        test test-helper check fmt lint doc doc-check dev pre-commit release \
+        lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
         bindings bindings-check \
         clean clean-gui clean-llama clean-db clean-all \
-        check-deps check-deps-bootstrap check-deps-verify check-rust \
+        check-deps check-deps-bootstrap check-rust \
         llama-install llama-install-auto llama-update llama-status llama-rebuild \
         run-serve run-proxy run-gui run-web
 
@@ -40,8 +40,10 @@ CARGO := $(CARGO_ENV) $(CARGO_BIN)
 
 ##@ Dependencies
 
-# Bootstrap dependency check - runs WITHOUT requiring Rust compilation
-check-deps-bootstrap: ## Run the bash dependency check (no Rust needed)
+# Bootstrap dependency check - runs WITHOUT requiring Rust compilation.
+# It checks the toolchains a build needs, and then, when a gglib binary
+# exists, hands over to `gglib config check-deps` for the rest of the list.
+check-deps-bootstrap: ## Check the build toolchains, then the rest if gglib is built
 	@chmod +x scripts/check-deps.sh
 	@./scripts/check-deps.sh
 
@@ -58,21 +60,10 @@ check-rust: ## Verify Rust and Cargo are installed
 		exit 1; \
 	fi
 
-# Comprehensive dependency check.
-# `setup` only depends on the bootstrap (bash) check, which is fast,
-# pre-build, and authoritative for SPIR-V/Vulkan readiness. The Rust
-# `config check-deps` adds extra parity checks for the GUI bootstrap
-# path; run it explicitly via `make check-deps-verify` when you want
-# both reports.
+# The dependency check `setup` starts with. The list of what gglib needs is
+# `gglib config check-deps`'s, in Rust, and the bash script holds only what
+# has to be there before that command can be built.
 check-deps: check-deps-bootstrap ## Check system dependencies
-
-# Run BOTH the bash bootstrap check and the Rust `config check-deps`
-# command. Useful for cross-validating that the two implementations
-# agree on which deps are missing. Not part of `make setup`.
-check-deps-verify: check-deps-bootstrap ## Cross-validate the bash and Rust dependency checks
-	@echo ""
-	@echo "Running detailed dependency verification..."
-	@$(CARGO) run -p gglib-cli --quiet -- config check-deps
 
 ##@ Help
 
@@ -87,13 +78,18 @@ help: ## Show this help
 
 ##@ Build and install
 
+# Where `install` puts the binary, and so what `uninstall` removes. It is a
+# plain copy: no `cargo install` ever ran, so `cargo uninstall` has nothing to
+# remove.
+INSTALLED_BIN := $$HOME/.cargo/bin/gglib
+
 # Uses pre-built binary from target/release/ (built by build-tauri or cargo build)
 install: ## Build and install gglib to ~/.cargo/bin/
 	@echo "Installing gglib..."
 	@mkdir -p "$$HOME/.cargo/bin"
-	@cp target/release/gglib "$$HOME/.cargo/bin/gglib"
+	@cp target/release/gglib "$(INSTALLED_BIN)"
 ifeq ($(UNAME_S),Darwin)
-	@codesign --force --sign - "$$HOME/.cargo/bin/gglib"
+	@codesign --force --sign - "$(INSTALLED_BIN)"
 endif
 	@echo "✓ Installed gglib to ~/.cargo/bin/gglib"
 
@@ -111,7 +107,7 @@ uninstall: ## Uninstall gglib and remove local state
 	read REPLY; \
 	if [ "$$REPLY" = "y" ] || [ "$$REPLY" = "Y" ]; then \
 		echo "Uninstalling binary..."; \
-		$(CARGO) uninstall gglib || true; \
+		rm -f "$(INSTALLED_BIN)"; \
 		if [ "$$REMOVE_DATA" = "y" ] || [ "$$REMOVE_DATA" = "Y" ]; then \
 			echo "Removing system data..."; \
 			rm -rf "$$HOME/Library/Application Support/gglib" 2>/dev/null || true; \
@@ -176,6 +172,22 @@ test: ## Run Rust tests
 	@echo "Running all tests..."
 	$(CARGO) test
 
+# The download accelerator's helper is Python, so `cargo test` does not run
+# it. Its tests need a venv holding the packages of hf_xet_requirements.txt,
+# which CI builds on every run and a machine has only if someone built it:
+#   python3 -m venv target/helper-venv
+#   target/helper-venv/bin/pip install -r crates/gglib-download/scripts/hf_xet_requirements.txt
+# Without one this says so and passes, and it is not part of `pre-commit`.
+HELPER_VENV ?= target/helper-venv
+HELPER_DIR := crates/gglib-download/scripts
+
+test-helper: ## Run the download helper's Python tests, if its venv is there
+	@if [ -x "$(HELPER_VENV)/bin/python" ]; then \
+		cd $(HELPER_DIR) && "$(abspath $(HELPER_VENV))/bin/python" -m unittest test_hf_xet_downloader; \
+	else \
+		echo "⚠ no venv at $(HELPER_VENV): skipping the download helper's tests (see the Makefile for how to build one)"; \
+	fi
+
 # Check code without building
 check: ## Check Rust code without building
 	@echo "Checking code..."
@@ -213,7 +225,7 @@ doc-check: export RUSTDOCFLAGS := -D warnings
 
 doc-check: ## Build rustdoc with warnings denied, exactly as CI does
 	@echo "Checking rustdoc..."
-	@# The same invocation as ci.yml, docs.yml and release.yml. Every flag
+	@# The same invocation as ci.yml and release.yml. Every flag
 	@# matters: `--document-private-items` is what makes these docs worth
 	@# reading (most of this codebase is private), and it is also what the
 	@# workspace's `private_intra_doc_links = "allow"` is predicated on.
@@ -243,9 +255,28 @@ test-web: ## Run the frontend test suite
 	@echo "Running frontend tests..."
 	npm run test:run
 
+# `boundaries`, `unused-deps` and `enforce` are what ci.yml runs: its
+# `boundaries` job calls the first two and its `enforcement` job the third, so
+# a check added to one of these recipes runs in CI and in `pre-commit` alike.
 boundaries: ## Check crate boundaries
 	@./scripts/check_boundaries.sh
 
+# The Rust sibling of `deadcode-web`. cargo-shear is a tool of its own: CI
+# installs a prebuilt binary, and `cargo binstall cargo-shear` or
+# `brew install cargo-shear` does the same here. Building it with
+# `cargo install` can need a newer rustc than rust-toolchain.toml pins.
+unused-deps: ## Find dependencies no crate uses (needs cargo-shear)
+	@echo "Checking for unused dependencies..."
+	@$(CARGO) shear --version >/dev/null 2>&1 || { \
+		echo "✗ cargo-shear is not installed: cargo binstall cargo-shear, or brew install cargo-shear"; \
+		exit 1; \
+	}
+	@# `--deny-warnings`: an optional dependency nothing uses and an `ignored`
+	@# entry that is no longer needed fail too.
+	$(CARGO) shear --deny-warnings
+
+# The architecture checks. This recipe is the only list of them: CONTRIBUTING
+# and scripts/README point here and keep no list of their own.
 enforce: ## Run the architecture enforcement checks
 	@./scripts/check-tauri-commands.sh
 	@./scripts/check-frontend-ipc.sh
@@ -265,15 +296,13 @@ enforce: ## Run the architecture enforcement checks
 	@# fitted rung. The same construct shipped in #925, #926 and #934, each time
 	@# found months later by reading. The construct is the tell.
 	@./scripts/check_context_floor.sh
-	@# The repo's "small files" constraint was enforced only over src/ (TS and
-	@# CSS); Rust was never checked, and 175 files are already over the same
-	@# budget. A ratchet rather than a threshold, so the rule can bite today
-	@# instead of after a refactor nobody has scheduled.
-	@./scripts/check_rust_complexity.sh
-	@# Its TypeScript sibling, which CONTRIBUTING documented and nothing ran:
-	@# a hard 300-LOC threshold cannot be switched on when 24 files are already
-	@# over it. Same ratchet, same escape hatch.
-	@./scripts/check_file_complexity.sh
+	@# The file-size check, once per language with that language's baseline.
+	@# The 300-LOC budget is a guide for noticing a file that has taken on a
+	@# second job, so this stops on growth and not on size: a file past the
+	@# budget passes at its recorded size, and one that is a single concept
+	@# has its row raised by hand (CONTRIBUTING, "File size").
+	@./scripts/check_file_size.sh rust scripts/rust-complexity-baseline.txt
+	@./scripts/check_file_size.sh ts scripts/ts-complexity-baseline.txt
 	@./scripts/check_lint_inheritance.sh
 	@# CI runs this too, but it cannot catch a break in ci.yml itself: GitHub
 	@# starts no jobs at all in a workflow file it will not parse. Local is the
@@ -444,12 +473,15 @@ clean-all: ## Remove everything (git clean -xffd)
 
 ##@ llama.cpp
 
+# The gglib a llama.cpp target runs: the release build, else the debug build,
+# else one `cargo run` builds first. Expanded when a recipe runs, so it sees a
+# binary built earlier in the same `make`.
+GGLIB = $(or $(addprefix ./,$(firstword $(wildcard target/release/gglib target/debug/gglib))),$(CARGO) run -p gglib-cli --)
+
 # llama.cpp management targets
 llama-install: ## Install llama.cpp (manual)
 	@echo "Installing llama.cpp (manual)..."
-	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib config llama install; \
-	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib config llama install; \
-	else $(CARGO) run -p gglib-cli -- config llama install; fi
+	@$(GGLIB) config llama install
 
 llama-install-auto: ## Install llama.cpp (auto-detect GPU)
 	@echo "Installing llama.cpp with auto-detected GPU support..."
@@ -457,14 +489,10 @@ llama-install-auto: ## Install llama.cpp (auto-detect GPU)
 
 llama-update: ## Update llama.cpp
 	@echo "Updating llama.cpp..."
-	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib config llama update; \
-	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib config llama update; \
-	else $(CARGO) run -p gglib-cli -- config llama update; fi
+	@$(GGLIB) config llama update
 
 llama-status: ## Show llama.cpp status
-	@if [ -f "./target/release/gglib" ]; then ./target/release/gglib config llama status; \
-	elif [ -f "./target/debug/gglib" ]; then ./target/debug/gglib config llama status; \
-	else $(CARGO) run -p gglib-cli -- config llama status; fi
+	@$(GGLIB) config llama status
 
 llama-rebuild: clean-llama llama-install-auto ## Reinstall llama.cpp from scratch
 	@echo "✓ llama.cpp rebuilt"
@@ -530,13 +558,12 @@ build-tauri: ## Build Tauri desktop app
 ##@ Workflows
 
 # Full setup from scratch
-# Note: build-tauri builds both gglib-app and gglib-cli, install just copies the binary
-# llama-install-auto runs last and is REQUIRED to succeed when a GPU
-# runtime is detected: it would otherwise silently produce a CPU-only
-# llama-server, which is almost certainly not what the user wants if
-# they have a GPU. The script itself short-circuits to --cpu-only on
-# bare-CPU machines.
-setup: check-deps build-gui build-tauri install ## Full setup (check deps + build + install)
+# Note: build-tauri builds the web UI, gglib-app and gglib-cli, so nothing
+# else here builds; install just copies the binary
+# llama-install-auto runs last and is REQUIRED to succeed: the command it
+# runs refuses a machine with no GPU, and one whose GPU lacks what building
+# for it needs, sooner than produce a CPU-only llama-server.
+setup: check-deps build-tauri install ## Full setup (check deps + build + install)
 	@echo "Configuring models directory (press Enter to accept the default)"
 	@./target/release/gglib config models-dir prompt
 	@# Optional accelerator. The command already refuses to fail — it skips
@@ -554,10 +581,11 @@ dev: fmt lint test ## Format, lint and test
 #
 # These are exactly the jobs ci-success requires, in the same order: fmt,
 # clippy, cargo test, the eslint/tsc gate, the unimported-file check, the
-# frontend suite, the boundary and architecture scripts, the binding staleness
-# gate and rustdoc. It used to be `fmt lint check test` — all Cargo — which
-# meant a clean local run could still fail CI on eslint, on a type error in a
-# test file, or on any of the five shell checks.
+# frontend suite, the boundary script, the unused-dependency check, the
+# architecture scripts, the binding staleness gate and rustdoc. It used to be
+# `fmt lint check test` — all Cargo — which meant a clean local run could
+# still fail CI on eslint, on a type error in a test file, or on any of the
+# five shell checks.
 #
 # `bindings-check` earns its place for the same reason `doc-check` did: the
 # `test` job runs it, so a stale binding fails CI, and `enforce`'s
@@ -566,7 +594,7 @@ dev: fmt lint test ## Format, lint and test
 # Without it, adding a Rust wire field and forgetting `make bindings` passed
 # a target whose help text reads "everything CI requires" and then cost a
 # full Rust CI leg to discover.
-pre-commit: fmt lint check test lint-web typecheck-web deadcode-web test-web boundaries enforce bindings-check doc-check ## Run everything CI requires
+pre-commit: fmt lint test lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce bindings-check doc-check ## Run everything CI requires
 	@echo "✓ All pre-commit checks passed"
 
 # Release workflow

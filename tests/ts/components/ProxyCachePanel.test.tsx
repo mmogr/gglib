@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import ProxyCachePanel from '../../../src/components/ProxyCachePanel';
+import { ProxyCachePanel } from '../../../src/components/ProxyCachePanel';
 import type { CacheStatus, CacheUsage } from '../../../src/services/transport/types/dashboard';
 
 const emptyUsage: CacheUsage = {

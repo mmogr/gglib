@@ -23,6 +23,8 @@ pub(crate) struct ChatArgs {
     pub port: Option<u16>,
     /// Which machine the turn runs on (ADR 0013).
     pub target: Target,
+    /// `--max-iterations`, or on a resume the limit the chat saved: the
+    /// turn's own, which `TurnLimits::resolve` puts before the stored one.
     pub max_iterations: Option<usize>,
     pub tools: Vec<String>,
     pub tool_timeout_ms: Option<u64>,
@@ -37,15 +39,14 @@ pub(crate) struct ChatArgs {
     pub profile: Option<String>,
     /// Resume a previous conversation by ID.
     pub continue_id: Option<i64>,
+    /// `--thinking`: the Thinking choice this command line names for the
+    /// chat, as a turn says one (`on` is the turn's `default`).
+    pub thinking: Option<gglib_core::domain::Thinking>,
     /// Observation-tool name patterns for the dual-threshold loop guard.
     /// An empty vec means "use defaults" (see `AgentConfig::observation_tools`).
     pub observation_tools: Vec<String>,
     /// Elevated repetition limit for observation-only tool batches.
     pub max_observation_steps: Option<usize>,
-    /// Session-wide identical-response limit before the stagnation guard
-    /// aborts.  Filled from the persisted `max_stagnation_steps` setting —
-    /// there is deliberately no per-run CLI flag.
-    pub max_stagnation_steps: Option<usize>,
 }
 
 /// Execute the chat command — always routes to the agentic REPL.

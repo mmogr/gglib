@@ -13,30 +13,27 @@ import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { AgenticReportVerdicts } from '../../../src/components/Benchmark/Agentic/AgenticReportVerdicts';
 import type { AgenticEvalReport, ArmScores } from '../../../src/types/benchmark';
+import { agenticReport, armDelta, armScores } from '../fixtures/agentic';
 
 const arm = (overrides: Partial<ArmScores> = {}): ArmScores =>
-  ({
+  armScores({
     tool_accuracy: 0.9,
     loop_eligible: 2,
     task_completion: 0.9,
     composite: 0.9,
     total_wall_ms: 1000,
     runs: 63,
-    unmeasured_runs: 0,
-    transport_retries: 0,
     ...overrides,
-  }) as ArmScores;
+  });
 
 const report = (gglib: ArmScores): AgenticEvalReport =>
-  ({
+  agenticReport({
     model_name: 'Qwen3-4B',
-    param_count_b: 4,
     ctx_size: 32768,
     raw: arm(),
     gglib,
-    delta: { tool_accuracy: 0, task_completion: 0, composite: 0 },
-    tasks: [],
-  }) as AgenticEvalReport;
+    delta: armDelta({ tool_accuracy: 0, task_completion: 0, composite: 0 }),
+  });
 
 describe('AgenticReportVerdicts — transport retries', () => {
   it('reports an arm that was retried, even though every run was measured', () => {

@@ -1,10 +1,5 @@
 # presentation
 
-![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-presentation-tests.json)
-![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-presentation-coverage.json)
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-presentation-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-presentation-complexity.json)
-
 <!-- module-docs:start -->
 
 CLI presentation layer providing formatting and display utilities.
@@ -65,6 +60,27 @@ Quantization: Q4_K_M
 Context Length: 4096
 ```
 
+### Capability Flags
+**Module:** `capability_flags.rs`
+
+The one table of capability flags: each flag's name, its bit, and the field of
+an override request that sets it. `gglib model capabilities` takes its `--set`
+and `--unset` values from the table, and that command and `gglib model inspect`
+print from it. The module's tests write the table to
+`contracts/models/capability_flags.json` and fail when the file is stale; the
+page's test of its own four flags reads that file.
+
+**Key Items:**
+- `CAPABILITY_FLAGS` - The four flags, in the order they are listed
+- `capability_lines(caps)` - One `name : yes|no` line per flag
+- `capability_names()` - The names as the values clap accepts
+
+### Sampling Values
+**Module:** `sampling_values.rs`
+
+**Key Functions:**
+- `stated_parameters(config: &InferenceConfig)` - Every field the config sets, by name, rendered as it was typed. The serve banner and `gglib model inspect` both list from it.
+
 ### Tables
 **Module:** `tables.rs`
 
@@ -73,6 +89,10 @@ Provides table formatting utilities and helper functions.
 **Key Functions:**
 - `format_relative_time(datetime_str: &str)` - Renders a `SQLite` timestamp as "5 min ago"
 - `truncate_string(s: &str, max_len: usize)` - Safely truncates with ellipsis
+- `truncate_with(s: &str, max_len: usize, marker: &str)` - The same cut, ending in `marker`
+- `first_chars(s: &str, max: usize)` - The first `max` characters, never part of one
+- `short_sha(sha: &str)` - The first 8 characters of a hash
+- `format_number(n: u64)` - Renders a count as `500`, `1.5K` or `1.5M`
 - `print_separator(width: usize)` - Prints a horizontal separator
 
 **Example:**

@@ -1,264 +1,50 @@
 //! Download events - discriminated union for all download state changes.
 
 use super::completion::QueueRunSummary;
-use super::shard_info::ShardInfo;
+use super::queue::{DownloadOutcome, FinishedDownload, QueueSnapshot};
 use serde::{Deserialize, Serialize};
-
-/// A summary of a download in the queue (for snapshots and API responses).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct DownloadSummary {
-    /// Canonical ID string (`model_id:quantization` or just `model_id`).
-    pub id: String,
-    /// Human-readable display name.
-    pub display_name: String,
-    /// Current status of this download.
-    pub status: DownloadStatus,
-    /// Position in queue (1 = currently downloading, 2+ = waiting).
-    pub position: u32,
-    /// Error message if status is Failed.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    /// Group ID for sharded downloads (all shards share the same `group_id`).
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub group_id: Option<String>,
-    /// Shard information if this is part of a sharded model.
-    #[cfg_attr(feature = "ts-bindings", ts(optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub shard_info: Option<ShardInfo>,
-}
-
-/// Status of a download.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-#[serde(rename_all = "snake_case")]
-pub enum DownloadStatus {
-    /// Waiting in the queue.
-    Queued,
-    /// Currently being downloaded.
-    Downloading,
-    /// Bytes are on disk; verifying / collecting metadata before registration.
-    Finalizing,
-    /// Registering the completed download in the model database.
-    Registering,
-    /// Completed successfully.
-    Completed,
-    /// Failed with an error.
-    Failed,
-    /// Cancelled by user.
-    Cancelled,
-}
-
-impl DownloadStatus {
-    /// Convert to string representation for database storage.
-    #[must_use]
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            Self::Queued => "queued",
-            Self::Downloading => "downloading",
-            Self::Finalizing => "finalizing",
-            Self::Registering => "registering",
-            Self::Completed => "completed",
-            Self::Failed => "failed",
-            Self::Cancelled => "cancelled",
-        }
-    }
-
-    /// Parse from string representation.
-    #[must_use]
-    pub fn parse(s: &str) -> Self {
-        match s {
-            "downloading" => Self::Downloading,
-            "finalizing" => Self::Finalizing,
-            "registering" => Self::Registering,
-            "completed" => Self::Completed,
-            "failed" => Self::Failed,
-            "cancelled" => Self::Cancelled,
-            // "queued" or unknown values default to Queued
-            _ => Self::Queued,
-        }
-    }
-
-    /// Human-readable label for UI display.
-    #[must_use]
-    pub const fn label(&self) -> &'static str {
-        match self {
-            Self::Queued => "Queued",
-            Self::Downloading => "Downloading",
-            Self::Finalizing => "Finalizing",
-            Self::Registering => "Registering",
-            Self::Completed => "Completed",
-            Self::Failed => "Failed",
-            Self::Cancelled => "Cancelled",
-        }
-    }
-}
 
 /// Single discriminated union for all download events.
 ///
-/// The frontend handles this as a TypeScript discriminated union:
-///
-/// ```typescript
-/// type DownloadEvent =
-///   | { type: "queue_snapshot"; items: DownloadSummary[]; max_size: number }
-///   | { type: "download_started"; id: string; shard_index?: number; total_shards?: number }
-///   | { type: "download_progress"; id: string; downloaded: number; total: number;
-///       speed_bps?: number; eta_seconds?: number; percentage: number }
-///   | { type: "shard_progress"; id: string; shard_index: number;
-///       speed_bps?: number; eta_seconds?: number; ... }
-///   | { type: "download_completed"; id: string }
-///   | { type: "download_failed"; id: string; error: string }
-///   | { type: "download_cancelled"; id: string }
-///   | { type: "download_notice"; id: string; message: string };
-/// ```
-///
-/// `speed_bps` and `eta_seconds` are **optional and omitted when unknown** — a
-/// download that has just started has no meaningful rate yet. Renderers must
-/// show a placeholder for the absent case rather than substituting `0`, and
-/// must never compute a rate of their own from successive `downloaded` values;
-/// the manager's `RateEstimator` is the only source. TypeScript reads this
-/// type through its generated binding; there is no mirror to keep in step.
+/// The queue itself travels as [`DownloadEvent::QueueSnapshot`]: the same
+/// [`QueueSnapshot`] the REST route serves, with every row's bytes, speed and
+/// text. The other four say that something ended, for a notice to the user
+/// and a refresh of the library; they carry no state a snapshot lacks. An
+/// ending's `text` is its finished entry's, ready to print; the outcome
+/// itself, with its message or error, is on that entry and not repeated here.
+/// TypeScript reads this type through its generated binding; there is no
+/// mirror to keep in step.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DownloadEvent {
-    /// Snapshot of the entire queue state.
-    QueueSnapshot {
-        /// All items currently in the queue.
-        items: Vec<DownloadSummary>,
-        /// Maximum queue capacity.
-        max_size: u32,
-    },
-
-    /// A download has started.
-    DownloadStarted {
-        /// Canonical ID of the download.
-        id: String,
-        /// Current shard index (0-based), present only for sharded downloads.
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        #[serde(skip_serializing_if = "Option::is_none")]
-        shard_index: Option<u32>,
-        /// Total number of shards, present only for sharded downloads.
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        #[serde(skip_serializing_if = "Option::is_none")]
-        total_shards: Option<u32>,
-    },
-
-    /// Progress update for a non-sharded download.
-    DownloadProgress {
-        /// Canonical ID of the download.
-        id: String,
-        /// Bytes downloaded so far.
-        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-        downloaded: u64,
-        /// Total bytes to download.
-        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-        total: u64,
-        /// Current download speed in bytes per second.
-        ///
-        /// Absent until the estimator has warmed up. This is deliberately not
-        /// `0.0`: zero is a real reading meaning "stalled", and conflating the
-        /// two is what rendered `ETA: 0s` on a healthy download.
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        #[serde(skip_serializing_if = "Option::is_none")]
-        speed_bps: Option<f64>,
-        /// Estimated time remaining in seconds; absent when not yet known.
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        #[serde(skip_serializing_if = "Option::is_none")]
-        eta_seconds: Option<f64>,
-        /// Progress percentage (0.0 - 100.0).
-        percentage: f64,
-    },
-
-    /// Progress update for a sharded download.
-    ShardProgress {
-        /// Canonical ID of the download (group ID).
-        id: String,
-        /// Current shard index (0-based).
-        shard_index: u32,
-        /// Total number of shards.
-        total_shards: u32,
-        /// Filename of the current shard.
-        shard_filename: String,
-        /// Bytes downloaded for current shard.
-        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-        shard_downloaded: u64,
-        /// Total bytes for current shard.
-        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-        shard_total: u64,
-        /// Aggregate bytes downloaded across all shards.
-        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-        aggregate_downloaded: u64,
-        /// Aggregate total bytes across all shards.
-        #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
-        aggregate_total: u64,
-        /// Current download speed in bytes per second; absent until known.
-        ///
-        /// Measured across the whole shard group, not reset per shard.
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        #[serde(skip_serializing_if = "Option::is_none")]
-        speed_bps: Option<f64>,
-        /// Estimated time remaining in seconds; absent when not yet known.
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        #[serde(skip_serializing_if = "Option::is_none")]
-        eta_seconds: Option<f64>,
-        /// Aggregate progress percentage (0.0 - 100.0).
-        percentage: f64,
-    },
+    /// The whole queue. Sent when it changes, and four times a second while
+    /// a download is transferring. Boxed because it is far the largest
+    /// variant; the wire shape is the snapshot's own.
+    QueueSnapshot(Box<QueueSnapshot>),
 
     /// Download completed successfully.
     DownloadCompleted {
         /// Canonical ID of the download.
         id: String,
-        /// Optional success message.
-        #[cfg_attr(feature = "ts-bindings", ts(optional))]
-        #[serde(skip_serializing_if = "Option::is_none")]
-        message: Option<String>,
+        /// How it ended, in words: its finished entry's text.
+        text: String,
     },
 
     /// Download failed with an error.
     DownloadFailed {
         /// Canonical ID of the download.
         id: String,
-        /// Error message describing what went wrong.
-        error: String,
+        /// How it ended, in words: its finished entry's text.
+        text: String,
     },
 
     /// Download was cancelled by the user.
     DownloadCancelled {
         /// Canonical ID of the download.
         id: String,
-    },
-
-    /// Lifecycle status transition for a download (e.g.
-    /// `Downloading` → `Finalizing` → `Registering`).
-    ///
-    /// Emitted at the boundaries between phases so transports can render a
-    /// non-frozen state while the manager is verifying bytes and writing the
-    /// model row to the database. Terminal states (`Completed`, `Failed`,
-    /// `Cancelled`) keep their dedicated event variants.
-    DownloadStatusChanged {
-        /// Canonical ID of the download.
-        id: String,
-        /// New status of the download.
-        status: DownloadStatus,
-    },
-
-    /// A transient, human-readable note about work happening for this
-    /// download that produces no byte progress of its own — e.g. building
-    /// the first-run Python environment for the fast downloader.
-    ///
-    /// Unlike [`Self::DownloadStatusChanged`] this carries free-form text
-    /// rather than a fixed [`DownloadStatus`] and is not persisted; it exists
-    /// purely so the renderer has something to show instead of looking
-    /// frozen while setup work happens before the first progress event.
-    DownloadNotice {
-        /// Canonical ID of the download.
-        id: String,
-        /// Human-readable note to display in place of progress.
-        message: String,
+        /// How it ended, in words: its finished entry's text.
+        text: String,
     },
 
     /// Queue run completed (all downloads in the queue finished).
@@ -273,112 +59,21 @@ pub enum DownloadEvent {
 }
 
 impl DownloadEvent {
-    /// Create a queue snapshot event.
+    /// The event that carries `snapshot`.
     #[must_use]
-    pub const fn queue_snapshot(items: Vec<DownloadSummary>, max_size: u32) -> Self {
-        Self::QueueSnapshot { items, max_size }
+    pub fn queue_snapshot(snapshot: QueueSnapshot) -> Self {
+        Self::QueueSnapshot(Box::new(snapshot))
     }
 
-    /// Create a download started event.
-    pub fn started(id: impl Into<String>) -> Self {
-        Self::DownloadStarted {
-            id: id.into(),
-            shard_index: None,
-            total_shards: None,
+    /// The event that says a download ended as `ended` records.
+    #[must_use]
+    pub fn ended(ended: &FinishedDownload) -> Self {
+        let (id, text) = (ended.id.clone(), ended.text.clone());
+        match &ended.outcome {
+            DownloadOutcome::Completed { .. } => Self::DownloadCompleted { id, text },
+            DownloadOutcome::Failed { .. } => Self::DownloadFailed { id, text },
+            DownloadOutcome::Cancelled => Self::DownloadCancelled { id, text },
         }
-    }
-
-    /// Create a download started event with shard information.
-    pub fn started_shard(id: impl Into<String>, shard_index: u32, total_shards: u32) -> Self {
-        Self::DownloadStarted {
-            id: id.into(),
-            shard_index: Some(shard_index),
-            total_shards: Some(total_shards),
-        }
-    }
-
-    /// Percentage complete, clamped to 0-100.
-    #[allow(clippy::cast_precision_loss)]
-    fn percent_of(downloaded: u64, total: u64) -> f64 {
-        if total == 0 {
-            return 0.0;
-        }
-        ((downloaded as f64 / total as f64) * 100.0).clamp(0.0, 100.0)
-    }
-
-    /// Create a non-sharded progress event.
-    ///
-    /// `speed_bps` and `eta_seconds` come from the manager's
-    /// [`RateEstimator`](crate::download::RateEstimator) — this constructor
-    /// deliberately does not derive an ETA of its own. Two estimators for one
-    /// number is how the CLI and the GUI ended up disagreeing.
-    pub fn progress(
-        id: impl Into<String>,
-        downloaded: u64,
-        total: u64,
-        speed_bps: Option<f64>,
-        eta_seconds: Option<f64>,
-    ) -> Self {
-        Self::DownloadProgress {
-            id: id.into(),
-            downloaded,
-            total,
-            speed_bps,
-            eta_seconds,
-            percentage: Self::percent_of(downloaded, total),
-        }
-    }
-
-    /// Create a sharded progress event.
-    ///
-    /// See [`progress`](Self::progress) on where the rate values come from.
-    #[allow(clippy::too_many_arguments)]
-    pub fn shard_progress(
-        id: impl Into<String>,
-        shard_index: u32,
-        total_shards: u32,
-        shard_filename: impl Into<String>,
-        shard_downloaded: u64,
-        shard_total: u64,
-        aggregate_downloaded: u64,
-        aggregate_total: u64,
-        speed_bps: Option<f64>,
-        eta_seconds: Option<f64>,
-    ) -> Self {
-        Self::ShardProgress {
-            id: id.into(),
-            shard_index,
-            total_shards,
-            shard_filename: shard_filename.into(),
-            shard_downloaded,
-            shard_total,
-            aggregate_downloaded,
-            aggregate_total,
-            speed_bps,
-            eta_seconds,
-            percentage: Self::percent_of(aggregate_downloaded, aggregate_total),
-        }
-    }
-
-    /// Create a download completed event.
-    pub fn completed(id: impl Into<String>, message: Option<impl Into<String>>) -> Self {
-        Self::DownloadCompleted {
-            id: id.into(),
-            message: message.map(Into::into),
-        }
-    }
-
-    /// Create a download failed event.
-    pub fn failed(id: impl Into<String>, error: impl Into<String>) -> Self {
-        Self::DownloadFailed {
-            id: id.into(),
-            error: error.into(),
-        }
-    }
-
-    /// Create a download cancelled event.
-    pub fn cancelled(id: impl Into<String>) -> Self {
-        Self::DownloadCancelled { id: id.into() }
     }
 
     /// Create a queue run complete event.
@@ -390,89 +85,14 @@ impl DownloadEvent {
     #[must_use]
     pub fn id(&self) -> Option<&str> {
         match self {
-            Self::QueueSnapshot { .. } | Self::QueueRunComplete { .. } => None,
-            Self::DownloadStarted { id, .. }
-            | Self::DownloadProgress { id, .. }
-            | Self::ShardProgress { id, .. }
-            | Self::DownloadCompleted { id, .. }
+            Self::QueueSnapshot(_) | Self::QueueRunComplete { .. } => None,
+            Self::DownloadCompleted { id, .. }
             | Self::DownloadFailed { id, .. }
-            | Self::DownloadCancelled { id }
-            | Self::DownloadStatusChanged { id, .. }
-            | Self::DownloadNotice { id, .. } => Some(id),
-        }
-    }
-
-    /// Colon-separated names — nine, reached through `AppEvent`'s one download
-    /// arm; `download_event_names_are_stable` pins five of them. **Not the
-    /// wire format**: `AppEvent`'s `type` tag is `download`, and these retired
-    /// Tauri-bus spellings are read by nothing. `ShardProgress` and
-    /// `DownloadProgress` share `download:progress`, split by the discriminator.
-    #[must_use]
-    pub const fn event_name(&self) -> &'static str {
-        match self {
-            Self::QueueSnapshot { .. } => "download:queue_snapshot",
-            Self::DownloadStarted { .. } => "download:started",
-            Self::DownloadProgress { .. } | Self::ShardProgress { .. } => "download:progress",
-            Self::DownloadCompleted { .. } => "download:completed",
-            Self::DownloadFailed { .. } => "download:failed",
-            Self::DownloadCancelled { .. } => "download:cancelled",
-            Self::DownloadStatusChanged { .. } => "download:status_changed",
-            Self::DownloadNotice { .. } => "download:notice",
-            Self::QueueRunComplete { .. } => "download:queue_run_complete",
+            | Self::DownloadCancelled { id, .. } => Some(id),
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_progress_event_calculations() {
-        let event = DownloadEvent::progress("id", 500, 1000, Some(100.0), Some(5.0));
-        match event {
-            DownloadEvent::DownloadProgress {
-                percentage,
-                eta_seconds,
-                speed_bps,
-                ..
-            } => {
-                assert!((percentage - 50.0).abs() < 0.01);
-                assert_eq!(eta_seconds, Some(5.0), "ETA is passed through, not derived");
-                assert_eq!(speed_bps, Some(100.0));
-            }
-            _ => panic!("Expected DownloadProgress"),
-        }
-    }
-
-    #[test]
-    fn unknown_rate_is_omitted_from_the_wire() {
-        let event = DownloadEvent::progress("id", 500, 1000, None, None);
-        let json = serde_json::to_string(&event).expect("serializes");
-        assert!(
-            !json.contains("speed_bps") && !json.contains("eta_seconds"),
-            "an unknown rate must be absent, never 0: {json}"
-        );
-    }
-
-    #[test]
-    fn percentage_is_clamped_and_safe_at_zero_total() {
-        let over = DownloadEvent::progress("id", 1500, 1000, None, None);
-        let unknown = DownloadEvent::progress("id", 500, 0, None, None);
-        for (event, expected) in [(over, 100.0), (unknown, 0.0)] {
-            match event {
-                DownloadEvent::DownloadProgress { percentage, .. } => {
-                    assert!((percentage - expected).abs() < f64::EPSILON);
-                }
-                _ => panic!("Expected DownloadProgress"),
-            }
-        }
-    }
-
-    #[test]
-    fn test_event_id_extraction() {
-        assert_eq!(DownloadEvent::started("test").id(), Some("test"));
-        assert_eq!(DownloadEvent::cancelled("test").id(), Some("test"));
-        assert!(DownloadEvent::queue_snapshot(vec![], 10).id().is_none());
-    }
-}
+#[path = "events_tests.rs"]
+mod tests;

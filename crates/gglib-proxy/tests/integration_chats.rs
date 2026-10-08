@@ -4,19 +4,26 @@
 //! The chats are a stand-in (`fixtures::chats`) that counts its calls,
 //! because what is under test is the door: who passes, the bodies and the
 //! error shape. What the list holds is the port's, tested where it lives.
+//!
+//! The door is one layer over one router group, which holds `/v1/attachments`
+//! too, so the three tests of who passes run over all four routes here and
+//! nowhere else. What an upload or a fetch answers is in
+//! `integration_attachments.rs`.
 
 use std::sync::Arc;
 
+use gglib_core::domain::AttachmentId;
 use gglib_core::ports::HubChatsPort;
 use reqwest::{Client, RequestBuilder, StatusCode};
 
 mod fixtures;
-use fixtures::chats::{FakeChats, OPEN_ID, listed, opened, serve};
+use fixtures::chats::{FakeChats, OPEN_ID, listed, opened, png, serve};
+use fixtures::remote::from_device;
 use fixtures::runs::{code, json};
 use fixtures::tunnel::{DEVICE, DEVICE_KEY, PROXY_KEY, get, spawn_proxy_holding, tunnel_to};
 
-/// Both routes, as a client reaches them.
-fn routes(base: &str) -> Vec<RequestBuilder> {
+/// Both chat routes, as a client reaches them.
+fn chat_routes(base: &str) -> Vec<RequestBuilder> {
     let client = Client::new();
     vec![
         client.get(format!("{base}/v1/chats")),
@@ -24,11 +31,21 @@ fn routes(base: &str) -> Vec<RequestBuilder> {
     ]
 }
 
-/// A request as the tunnel edge marks one from a named device.
-fn from_device(request: RequestBuilder) -> RequestBuilder {
-    request
-        .header("via", "1.1 modelpipe")
-        .header("x-modelpipe-device", DEVICE)
+/// An image, as a client sends one.
+fn upload(base: &str) -> RequestBuilder {
+    Client::new()
+        .post(format!("{base}/v1/attachments"))
+        .body(png(640, 480, 0))
+}
+
+/// Every route behind the door: the chats, an upload, and a fetch of an id
+/// no image has.
+fn routes(base: &str) -> Vec<RequestBuilder> {
+    let unknown = AttachmentId::of(b"never uploaded");
+    let mut routes = chat_routes(base);
+    routes.push(upload(base));
+    routes.push(Client::new().get(format!("{base}/v1/attachments/{unknown}")));
+    routes
 }
 
 #[tokio::test]
@@ -71,8 +88,8 @@ async fn an_unknown_chat_is_404_not_found_and_echoes_nothing() {
     cancel.cancel();
 }
 
-/// This machine reads its chats at `/api`; a local client, or one holding
-/// the key on a LAN bind, reads none here.
+/// This machine reads its chats and sends its images at `/api`; a local
+/// client, or one holding the key on a LAN bind, reaches none here.
 #[tokio::test]
 async fn a_request_not_tunnelled_from_a_named_device_is_refused() {
     let chats = Arc::new(FakeChats::default());
@@ -96,7 +113,7 @@ async fn a_request_not_tunnelled_from_a_named_device_is_refused() {
 /// The routes are in the protected group: the key is asked for first, and
 /// a tunnelled request that names no device is the gate's to refuse.
 #[tokio::test]
-async fn the_chats_sit_behind_the_bearer_and_the_device_gate() {
+async fn the_chats_and_the_images_sit_behind_the_bearer_and_the_device_gate() {
     let chats = Arc::new(FakeChats::default());
     let (base, cancel) = serve(Some("secret123"), Some(Arc::clone(&chats))).await;
     for request in routes(&base) {
@@ -112,10 +129,12 @@ async fn the_chats_sit_behind_the_bearer_and_the_device_gate() {
         assert_eq!(code(&body), "device_not_paired", "{body}");
     }
     assert_eq!(chats.calls(), 0);
-    for request in routes(&base) {
+    for request in chat_routes(&base) {
         let request = from_device(request.bearer_auth("secret123"));
         assert_eq!(request.send().await.unwrap().status(), StatusCode::OK);
     }
+    let sent = from_device(upload(&base)).bearer_auth("secret123");
+    assert_eq!(sent.send().await.unwrap().status(), StatusCode::OK);
     cancel.cancel();
 }
 

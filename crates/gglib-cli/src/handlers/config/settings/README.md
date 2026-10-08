@@ -1,8 +1,5 @@
 # settings
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-config-settings-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-handlers-config-settings-complexity.json)
-
 <!-- module-docs:start -->
 
 Settings, default-model, and models-directory handlers.

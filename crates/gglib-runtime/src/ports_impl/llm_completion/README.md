@@ -1,8 +1,5 @@
 # LLM Completion
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-ports_impl-llm_completion-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-ports_impl-llm_completion-complexity.json)
-
 <!-- module-docs:start -->
 
 Concrete [`LlmCompletionPort`] adapter for a llama-server instance.
@@ -45,6 +42,30 @@ was. An id the store lacks, or images over 16 MiB together, end the request
 before anything is sent.
 
 [`AttachmentStore`]: gglib_core::ports::AttachmentStore
+
+# Sampling
+
+The adapter resolves no sampling of its own. A caller hands over what a
+person chose for the turn ([`LlmCompletionAdapter::with_sampling`]: flags
+typed at a terminal, the reasoning controls a run's request names) and,
+apart from it, the stored layers beneath ([`LlmCompletionAdapter::with_layers`]:
+the selected profile and the settings' global defaults). With those layers
+goes whether a turn with tools gets the agentic temperature ceiling: a chat
+on one of this machine's models hands over the settings' switch, and a caller
+with no settings to follow turns it on, as an adapter handed no layers has
+it. The model's own values arrive in its context.
+`gglib_core::request_pipeline::apply` folds them once, as each request is
+shaped, which is what lets it tell a temperature a person chose from one
+nobody did. A caller that folds a layer into the first argument defeats that:
+the value arrives as a choice. What a request carries is what that fold
+resolved: a parameter the caller named and the fold passed over (a penalty
+without the temperature it travels with, beneath a layer that names one) is
+taken back out before the request is sent.
+One caller asks for it to be left in
+([`LlmCompletionAdapter::with_passed_over_kept`]): a tune sweep, whose
+candidate is what the sweep measures and not a flag for the ladder to judge.
+[`LlmCompletionAdapter::with_sampling_observer`] tells a caller how a request
+resolved, so none has a reason to fold a ladder to find out.
 
 # Layout
 

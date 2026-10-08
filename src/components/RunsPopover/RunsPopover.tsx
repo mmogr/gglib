@@ -1,10 +1,7 @@
 import { FC, useRef, useEffect } from 'react';
-import { RotateCcw } from 'lucide-react';
 import type { ServerViewModel } from '../../hooks/useServers';
 import { ServerList } from '../ServerList';
 import { useClickOutside } from '../../hooks/useClickOutside';
-import { Icon } from '../ui/Icon';
-import { Button } from '../ui/Button';
 
 interface RunsPopoverProps {
   isOpen: boolean;
@@ -12,7 +9,6 @@ interface RunsPopoverProps {
   servers: ServerViewModel[];
   onStopServer: (modelId: number) => Promise<void>;
   onSelectModel: (modelId: number, view?: 'chat' | 'console') => void;
-  onRefresh?: () => void;
 }
 
 const RunsPopover: FC<RunsPopoverProps> = ({
@@ -21,7 +17,6 @@ const RunsPopover: FC<RunsPopoverProps> = ({
   servers,
   onStopServer,
   onSelectModel,
-  onRefresh,
 }) => {
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -51,17 +46,6 @@ const RunsPopover: FC<RunsPopoverProps> = ({
     <div className="absolute top-full right-0 mt-xs bg-surface-elevated rounded-lg shadow-lg min-w-[280px] max-w-[360px] z-popover overflow-hidden" ref={popoverRef}>
       <div className="flex items-center justify-between px-md py-sm border-b border-border bg-surface-elevated">
         <span className="text-sm font-semibold text-text">Running Servers</span>
-        {onRefresh && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onRefresh}
-            title="Refresh servers"
-            iconOnly
-          >
-            <Icon icon={RotateCcw} size={14} />
-          </Button>
-        )}
       </div>
       <div className="max-h-[300px] overflow-y-auto">
         <ServerList

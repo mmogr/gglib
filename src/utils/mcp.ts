@@ -21,6 +21,14 @@ export function isServerRunning(info: McpServerInfo): boolean {
 }
 
 /**
+ * Check if a server is of a kind gglib cannot run. Which kinds those are is
+ * the daemon's to say, and it says so in the status.
+ */
+export function isServerUnsupported(info: McpServerInfo): boolean {
+  return info.status === 'unsupported';
+}
+
+/**
  * Check if a server has an error.
  */
 export function hasServerError(

@@ -1,11 +1,8 @@
 # clients
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-clients-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-clients-complexity.json)
-
 <!-- module-docs:start -->
 
-Clients that own real request logic of their own. Each one exists because it does something `getTransport()` cannot: parse a streaming response by hand, or talk to a server that is not the app's own backend. Everything else — plain request/response against the backend — belongs in a `transport/api/` module and is called directly as `getTransport().method()`. There is no facade layer in between.
+Clients that own real request logic of their own. Each one exists because it does something `getTransport()` cannot: follow a streaming response, or talk to a server that is not the app's own backend. Everything else — plain request/response against the backend — belongs in a `transport/api/` module and is called directly as `getTransport().method()`. There is no facade layer in between.
 
 ## Architecture
 
@@ -27,7 +24,7 @@ Clients that own real request logic of their own. Each one exists because it doe
 └─────────────────────────────────────────────────────┘
 ```
 
-`benchmark.ts` reaches the backend through `transport/api/client`'s authenticated fetch helpers. `proxyDashboard.ts` bypasses the transport entirely — a running proxy serves its dashboard stream on its own port, and carries that proxy's own credential (the `proxyApiKey` setting, passed in by callers) rather than the backend session's.
+`benchmark.ts` reaches the backend through `transport/api/client`: `get`/`post` for its plain calls and `apiFetch`, the authenticated fetch, for its streams. Both clients read their streams with the one reader, `readSse` in `utils/sse`. `proxyDashboard.ts` bypasses the transport entirely — a running proxy serves its dashboard stream on its own port, and carries that proxy's own credential (the `proxyApiKey` setting, passed in by callers) rather than the backend session's.
 
 ## Key Files
 

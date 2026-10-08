@@ -15,10 +15,12 @@ use gglib_core::domain::benchmark::{
     BenchmarkModelResult, CompareConfig, DeltaWithheld, ModelCompareResult, ModelPerfResult,
     PerfConfig,
 };
+use gglib_core::format_duration_human;
 
 use crate::benchmark_commands::BenchmarkCommand;
 use crate::bootstrap::CliContext;
 use crate::daemon_client;
+use crate::handlers::model::resolver;
 use crate::presentation::style;
 
 #[path = "benchmark_verdicts.rs"]
@@ -133,8 +135,7 @@ async fn run_on_daemon(
     body: &impl serde::Serialize,
     mut on_event: impl FnMut(&BenchmarkEvent),
 ) -> Result<()> {
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
     let url = format!("{}{path}", daemon_client::base_url());
     let stream = daemon_client::sse::stream_json::<BenchmarkEvent, _>(
         &handle.client,
@@ -157,13 +158,7 @@ async fn run_on_daemon(
 async fn resolve_model_ids(ctx: &CliContext, identifiers: &[String]) -> Result<Vec<i64>> {
     let mut ids = Vec::with_capacity(identifiers.len());
     for name in identifiers {
-        let model = ctx
-            .app
-            .models()
-            .find_by_identifier(name)
-            .await
-            .with_context(|| format!("model not found: {name}"))?;
-        ids.push(model.id);
+        ids.push(resolver::resolve_model_identifier(ctx, name).await?.id);
     }
     Ok(ids)
 }
@@ -262,11 +257,7 @@ async fn cmd_tune(
     ctx_size: Option<u64>,
     apply: bool,
 ) -> Result<()> {
-    let model_id = resolve_model_ids(ctx, std::slice::from_ref(&model))
-        .await?
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow!("model not found: {model}"))?;
+    let model_id = resolver::resolve_model_identifier(ctx, &model).await?.id;
 
     let sweep_spec = parse_sweep_args(&sweep)?;
     let resolved_task_suite = load_task_suite(&task_suite)?;
@@ -345,8 +336,7 @@ async fn apply_gated(ctx: &CliContext, run_id: i64) -> Result<()> {
     use gglib_app_services::benchmark::tune::apply_run::ApplyOutcome;
     use gglib_core::domain::benchmark::tune::apply::ApplyVerdict;
 
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
     let outcome: ApplyOutcome = handle
         .tune_apply(run_id)
         .send()
@@ -394,11 +384,7 @@ async fn cmd_agentic(
     json: bool,
     output: Option<std::path::PathBuf>,
 ) -> Result<()> {
-    let model_id = resolve_model_ids(ctx, std::slice::from_ref(&model))
-        .await?
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow!("model not found: {model}"))?;
+    let model_id = resolver::resolve_model_identifier(ctx, &model).await?.id;
 
     let seeds = crate::benchmark_commands::resolve_seeds(seeds);
     let config = AgenticEvalConfig {
@@ -942,8 +928,8 @@ fn render_efficiency_block(report: &AgenticEvalReport) {
     );
     eprintln!(
         "  wall / run      {raw} {gglib} {colour}{factor}{RESET}",
-        raw = format_args!("{:>7}", fmt_duration(per_run_ms(&report.raw))),
-        gglib = format_args!("{:>8}", fmt_duration(per_run_ms(&report.gglib))),
+        raw = format_args!("{:>7}", format_duration_human(per_run_ms(&report.raw))),
+        gglib = format_args!("{:>8}", format_duration_human(per_run_ms(&report.gglib))),
         colour = factor_colour(report.delta.wall_time_speedup),
         factor = fmt_factor(report.delta.wall_time_speedup),
         RESET = style::RESET,
@@ -1000,8 +986,8 @@ fn render_efficiency_block(report: &AgenticEvalReport) {
     eprintln!(
         "  {MUTED}suite wall clock: raw {raw}, gglib {gglib} (all runs, timeouts \
          included){RESET}",
-        raw = fmt_duration(report.raw.total_wall_ms),
-        gglib = fmt_duration(report.gglib.total_wall_ms),
+        raw = format_duration_human(report.raw.total_wall_ms),
+        gglib = format_duration_human(report.gglib.total_wall_ms),
         MUTED = style::MUTED,
         RESET = style::RESET,
     );
@@ -1068,19 +1054,9 @@ fn fmt_factor(factor: Option<f64>) -> String {
     )
 }
 
-/// Milliseconds as `4.8s` past a second, `336ms` below it.
-fn fmt_duration(millis: u64) -> String {
-    if millis >= 1_000 {
-        #[allow(clippy::cast_precision_loss)]
-        let secs = millis as f64 / 1_000.0;
-        format!("{secs:.1}s")
-    } else {
-        format!("{millis}ms")
-    }
-}
-
 fn fmt_ms(millis: Option<f64>) -> String {
-    millis.map_or_else(|| "—".to_owned(), |m| fmt_duration(m.round() as u64))
+    let time = millis.map(|m| format_duration_human(m.round() as u64));
+    time.unwrap_or_else(|| "—".to_owned())
 }
 
 fn fmt_count(count: Option<u64>) -> String {
@@ -1112,23 +1088,11 @@ fn fmt_delta(value: Option<f64>) -> String {
 /// setup-status endpoint. `null` when unavailable — the report is still
 /// valid, just unpinned to a machine.
 async fn fetch_hardware_snapshot(ctx: &CliContext) -> serde_json::Value {
-    let url = format!(
-        "{}{}",
-        daemon_client::base_url(),
-        daemon_client::paths::SETUP_STATUS_PATH
-    );
-    let request = gglib_proxy::loopback::client().get(&url);
-    let request = match daemon_client::auth::daemon_api_key(ctx).await {
-        Some(key) => request.bearer_auth(key),
-        None => request,
-    };
-    match request.send().await {
-        Ok(resp) => resp
-            .json::<serde_json::Value>()
-            .await
-            .unwrap_or(serde_json::Value::Null),
-        Err(_) => serde_json::Value::Null,
-    }
+    daemon_client::DaemonHandle::new(ctx, gglib_proxy::loopback::client())
+        .await
+        .setup_status()
+        .await
+        .unwrap_or(serde_json::Value::Null)
 }
 
 /// Parse `--sweep DIM=V1,V2,...` arguments into a [`SweepSpec`].
@@ -1559,6 +1523,15 @@ mod tests {
             first_call_skew(&arm_with_first_call(Some(500.0), Some(0.0))).is_none(),
             "a zero median must not divide into an infinite factor"
         );
+    }
+
+    /// The dash and the rounding are this function's; the shapes are the shared formatter's.
+    #[test]
+    fn a_time_is_rounded_to_a_millisecond_and_a_missing_one_is_a_dash() {
+        assert_eq!(fmt_ms(None), "—");
+        assert_eq!(fmt_ms(Some(335.6)), "336ms");
+        assert_eq!(fmt_ms(Some(4_807.4)), "4.8s");
+        assert_eq!(fmt_ms(Some(94_000.0)), "1m 34s");
     }
 
     #[test]

@@ -15,7 +15,7 @@ mod slots;
 mod test_root;
 
 #[cfg(test)]
-mod test_utils;
+pub(crate) mod test_utils;
 
 // Re-export public API
 
@@ -34,7 +34,8 @@ pub use database::database_path;
 
 // Llama binaries
 pub use llama::{
-    gglib_data_dir, llama_bench_path, llama_config_path, llama_cpp_dir, llama_server_path,
+    LLAMA_INSTALL_COMMAND, gglib_data_dir, llama_bench_path, llama_config_path, llama_cpp_dir,
+    llama_server_path,
 };
 
 // Models directory
@@ -42,7 +43,7 @@ pub use llama::{
 pub use models::DEFAULT_MODELS_DIR_RELATIVE;
 pub use models::{
     ModelsDirResolution, ModelsDirSource, canonical_model_path, canonical_model_path_string,
-    default_models_dir, resolve_models_dir,
+    default_models_dir, resolve_models_dir, set_models_dir,
 };
 
 // PID tracking
@@ -52,13 +53,11 @@ pub use pids::pids_dir;
 pub use remote::{remote_identity_location, remote_identity_path, remote_join_dir};
 
 // Directories and files this user alone can read
+pub(crate) use private::create_new_private_file;
 pub use private::{create_private_dir, create_private_file, make_private};
 
 // Directory operations
 pub use ensure::{DirectoryCreationStrategy, ensure_directory};
-
-// Configuration persistence
-pub use config::persist_models_dir;
 
 // Pure resolver for testing and CLI
 pub use resolver::ResolvedPaths;

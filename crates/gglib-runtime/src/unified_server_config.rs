@@ -4,8 +4,8 @@
 //!
 //! Before this, proxy-level settings ([`ProxyConfig`]) and per-model launch
 //! parameters ([`ServerConfigOptions`]) were two unrelated bags of options with
-//! no enforced precedence between them. Fields such as `mlock`, `gpu_layers`
-//! and `cache_ram_mb` were direct pass-throughs: whichever surface happened to
+//! no enforced precedence between them. Fields such as `mlock` and
+//! `cache_ram_mb` were direct pass-throughs: whichever surface happened to
 //! populate them won, and a surface that forgot silently got llama-server's
 //! default instead of gglib's.
 //!
@@ -41,9 +41,7 @@
 use std::path::PathBuf;
 
 use gglib_core::domain::InferenceConfig;
-use gglib_core::server_config::{
-    ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
-};
+use gglib_core::server_config::{ServerConfigOptions, chosen_context_size};
 use gglib_proxy::slot_eviction::DiskBudget;
 
 use crate::proxy::ProxyConfig;
@@ -74,7 +72,8 @@ pub struct GlobalDefaults {
     /// Byte budget for the on-disk slot eviction sweep.
     pub disk_budget: DiskBudget,
     /// Operator-supplied sampling overrides for this process
-    /// (`gglib proxy --temperature …`). Sits below the explicit tier.
+    /// (`gglib serve --temperature …`). No launch option: it reaches the
+    /// proxy through [`UnifiedServerConfig::to_proxy_config`].
     pub inference_override: Option<InferenceConfig>,
     /// Bearer token demanded of clients (`--api-key` / `GGLIB_API_KEY`).
     /// `None` defers to the stored setting, then to generating one for a
@@ -169,7 +168,6 @@ impl UnifiedServerConfig {
         let tier3 = ServerConfigOptions {
             global_default_ctx: self.globals.default_ctx,
             slot_save_path: self.resolved_slot_dir(),
-            inference_params: self.globals.inference_override.clone(),
             ..Default::default()
         };
 
@@ -197,13 +195,7 @@ impl UnifiedServerConfig {
         ProxyConfig {
             host: self.globals.host.clone(),
             port: self.globals.proxy_port,
-            // Only a value somebody actually chose. Falling through to the
-            // built-in floor here would hand the proxy `Some(4096)` and make
-            // the fitted rung unreachable in pinned mode.
-            default_context: match resolve_context_size_with_source(&self.resolved_options()) {
-                (_, ContextSizeSource::BuiltInDefault) => None,
-                (ctx, _) => Some(ctx),
-            },
+            default_context: chosen_context_size(&self.resolved_options()),
             cache_enabled: self.globals.cache_enabled,
             slot_dir: self.resolved_slot_dir(),
             disk_budget: self.globals.disk_budget,
@@ -280,49 +272,6 @@ mod tests {
     // ---------------------------------------------------------------
     // Tier 1 over tier 3, per field
     // ---------------------------------------------------------------
-
-    #[test]
-    fn explicit_inference_params_beat_global_override() {
-        let global = InferenceConfig {
-            temperature: Some(0.2),
-            ..Default::default()
-        };
-        let explicit = InferenceConfig {
-            temperature: Some(0.9),
-            ..Default::default()
-        };
-
-        let mut cfg = bare(GlobalDefaults {
-            inference_override: Some(global),
-            ..Default::default()
-        });
-        cfg.explicit.inference_params = Some(explicit);
-
-        assert_eq!(
-            cfg.resolved_options()
-                .inference_params
-                .and_then(|c| c.temperature),
-            Some(0.9)
-        );
-    }
-
-    #[test]
-    fn global_inference_override_applies_when_no_explicit() {
-        let cfg = bare(GlobalDefaults {
-            inference_override: Some(InferenceConfig {
-                temperature: Some(0.2),
-                ..Default::default()
-            }),
-            ..Default::default()
-        });
-
-        assert_eq!(
-            cfg.resolved_options()
-                .inference_params
-                .and_then(|c| c.temperature),
-            Some(0.2)
-        );
-    }
 
     /// jinja, reasoning format and MTP have no tier-3 source — they are tier 1
     /// over tag-driven tier 2, and the tag half is resolved downstream. All
@@ -462,17 +411,25 @@ mod tests {
         );
     }
 
-    /// The proxy advertises the model's own resolved context, not the bare
-    /// global setting — in pinned mode that is the only model it will serve.
+    /// The proxy advertises the context somebody chose for this model, from
+    /// whichever rung holds one — in pinned mode that is the only model it
+    /// will serve — and none when nobody chose: never the built-in floor.
     #[test]
-    fn proxy_config_default_context_is_the_resolved_context() {
-        let mut cfg = bare(GlobalDefaults {
-            default_ctx: Some(4096),
-            ..Default::default()
-        });
-        cfg.explicit.context_size = Some(32_768);
-
-        assert_eq!(cfg.to_proxy_config().default_context, Some(32_768));
+    fn proxy_config_default_context_is_the_chosen_context() {
+        for (explicit, model, global, fitted, want) in [
+            (Some(32_768), Some(16_384), Some(4096), None, Some(32_768)),
+            (None, Some(16_384), Some(4096), None, Some(16_384)),
+            (None, None, Some(4096), None, Some(4096)),
+            (None, None, None, Some(65_536), Some(65_536)),
+            (None, None, None, None, None),
+        ] {
+            let mut cfg = bare(GlobalDefaults::default());
+            cfg.globals.default_ctx = global;
+            cfg.explicit.context_size = explicit;
+            cfg.explicit.model_server_ctx = model;
+            cfg.explicit.fitted_ctx = fitted;
+            assert_eq!(cfg.to_proxy_config().default_context, want);
+        }
     }
 
     /// `GlobalDefaults::default` is defined *as* `ProxyConfig::default`, so a

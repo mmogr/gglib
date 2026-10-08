@@ -1,18 +1,15 @@
 //! Observable events for the llama.cpp source-build pipeline.
 //!
 //! [`BuildEvent`] is produced by the build-from-source pipeline and consumed by
-//! one surface, which adapts the event stream to its own output medium:
+//! two surfaces, each adapting the event stream to its own output medium:
 //!
 //! | Consumer    | Crate        | Output                                                                    |
 //! |-------------|--------------|--------------------------------------------------------------------------|
-//! | CLI         | `gglib-cli`  | `indicatif` spinner + progress bar via `consume_build_events_cli`         |
+//! | CLI         | `gglib-cli`  | `indicatif` spinner + progress bar via `render_build_events`              |
+//! | Axum        | `gglib-axum` | SSE stream at `POST /api/config/system/update-llama`                      |
 //!
 //! The sender end is a `tokio::sync::mpsc::Sender<BuildEvent>` with capacity 64.
 //! When the sender is dropped the consumer loop terminates naturally.
-//!
-//! The event type is **not** feature-gated: [`BuildEvent`] and [`BuildPhase`] are
-//! imported unconditionally. Only the pipeline that *produces* the events
-//! (in `build/` and `install/`) is gated behind `feature = "cli"`.
 
 use serde::Serialize;
 
@@ -28,9 +25,6 @@ use serde::Serialize;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BuildPhase {
-    /// Checking that cmake, git, and a suitable C++ compiler are present.
-    DependencyCheck,
-
     /// Cloning the llama.cpp repository or pulling the latest commit.
     CloneOrUpdateRepo,
 
@@ -52,8 +46,8 @@ pub enum BuildPhase {
 ///
 /// Events are the unit of SSE emission for the build pipeline. Every notable
 /// state change produces exactly one variant. Consumers decide how to render
-/// them: the CLI produces `indicatif` progress bars; Axum serialises to
-/// `data: <json>\n\n` frames; Tauri emits them to the `WebView`.
+/// them: the CLI produces `indicatif` progress bars, and Axum serialises to
+/// `data: <json>\n\n` frames that the desktop app and a browser both read.
 ///
 /// # Serde tag
 ///

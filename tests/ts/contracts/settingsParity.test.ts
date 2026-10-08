@@ -1,7 +1,7 @@
 /**
- * Drift guards for PR8's settings-parity additions, in the style of
- * `settingsBounds.test.ts`: read the Rust source off disk and assert the
- * GUI's transcriptions match, so the two surfaces cannot drift silently.
+ * Drift guards for PR8's settings-parity additions: read the Rust source off
+ * disk and assert the GUI's transcriptions match, so the two surfaces cannot
+ * drift silently.
  */
 
 import { readFileSync } from 'node:fs';
@@ -10,7 +10,6 @@ import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { MAX_STAGNATION_STEPS } from '../../../src/constants/settingsDefaults';
 import { REASONING_EFFORT_LEVELS } from '../../../src/constants/reasoningEffort';
-import { STARTER_PROFILES } from '../../../src/components/SettingsModal/InferenceProfiles';
 
 import { fnSource, rust } from './rustSource';
 
@@ -43,92 +42,13 @@ describe('the GUI effort ladder mirrors ReasoningEffort', () => {
   });
 });
 
-describe('starter profiles mirror builtin_templates()', () => {
-  const FILE = rust('crates/gglib-core/src/domain/inference_profile.rs');
-  // Anchored and uniqueness-checked, per this directory's rule: an unanchored
-  // `indexOf` takes the first match, so a same-named decoy declared earlier
-  // satisfies the guard for a function that has drifted.
-  //
-  // `builtin_templates` is now a composition of two families, so the guard
-  // reads each family's own function. The composition itself is checked below,
-  // which is what stops a family being dropped from the installed set while
-  // its literals stay in the file.
-  const SAMPLING = fnSource(FILE, 'sampling_templates');
-  const REASONING = fnSource(FILE, 'reasoning_templates');
-  const BUILTIN = fnSource(FILE, 'builtin_templates');
-
-  /** Extract one template's literal block from the sampling family by name. */
-  const templateBlock = (name: string): string => {
-    const index = SAMPLING.indexOf(`name: "${name}"`);
-    expect(index, `template "${name}" not found in sampling_templates()`).toBeGreaterThan(-1);
-    return SAMPLING.slice(index, SAMPLING.indexOf('list_in_models', index) + 40);
-  };
-
-  it('installs both families, so neither can be quietly dropped', () => {
-    expect(BUILTIN).toContain('sampling_templates()');
-    expect(BUILTIN).toContain('reasoning_templates()');
-  });
-
-  it('transcribes every sampling template the Rust defines, and no others', () => {
-    const rustNames = [...SAMPLING.matchAll(/name: "([a-z-]+)"\.to_owned\(\)/g)].map((m) => m[1]);
-    expect(rustNames.length).toBeGreaterThan(0);
-    expect(STARTER_PROFILES.map((p) => p.name).sort()).toEqual([...new Set(rustNames)].sort());
-  });
-
-  it.each(STARTER_PROFILES.map((p) => [p.name, p] as const))(
-    'matches the Rust literal for %s',
-    (_name, profile) => {
-      const block = templateBlock(profile.name);
-      expect(block).toContain(`temperature: Some(${profile.config.temperature})`);
-      expect(block).toContain(`top_p: Some(${profile.config.topP})`);
-      expect(block).toContain(`list_in_models: ${profile.listInModels}`);
-      if (profile.description) {
-        expect(block).toContain(`Some("${profile.description}".to_owned())`);
-      }
-    },
-  );
-
-  it('keeps templates sparse — temperature and top-p only', () => {
-    for (const profile of STARTER_PROFILES) {
-      expect(Object.keys(profile.config).sort()).toEqual(['temperature', 'topP']);
-    }
-  });
-
-  /**
-   * The reasoning family is still *not* in `STARTER_PROFILES`, and the reason
-   * has changed: the GUI's `InferenceConfig` now carries `reasoningEffort` and
-   * `reasoningBudgetTokens`, so the blocker is no longer the type.
-   *
-   * Nor is it `InferenceProfileEditor` any more. That form used to rebuild a
-   * profile's config from its own eleven-name `PARAMS` list and drop every
-   * key not on it — seven of `InferenceConfig`'s eighteen fields, both
-   * reasoning controls included — so seeding a `high` profile here would have
-   * installed something the first edit silently emptied. The editor now
-   * derives its list from `INFERENCE_CONFIG_KEYS` and renders the effort
-   * control, so that blocker is gone.
-   *
-   * What remains is simply that nobody has transcribed the family. The guard
-   * stays: it is what fails when somebody does, so the pairing of effort with
-   * budget gets checked against the Rust rather than assumed.
-   */
-  it('defines a reasoning family the GUI does not transcribe yet', () => {
-    const rungs = [...REASONING.matchAll(/\("([a-z]+)", ReasoningEffort::/g)].map((m) => m[1]);
-    expect(rungs).toEqual(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
-
-    // Each rung sets both halves: an effort alone is inert on a template that
-    // does not read the variable, which is the whole reason for the pairing.
-    expect(REASONING).toContain('reasoning_effort: Some(effort)');
-    expect(REASONING).toContain('reasoning_budget_tokens: Some(budget)');
-
-    const guiNames = STARTER_PROFILES.map((p) => p.name);
-    for (const rung of rungs) {
-      expect(
-        guiNames,
-        'teach InferenceProfileEditor the reasoning fields before seeding these',
-      ).not.toContain(rung);
-    }
-  });
-
+/**
+ * The starter profiles have no copy on this side: the settings page asks the
+ * daemon to install them, by the function `gglib config profile
+ * install-templates` runs. What this side guards is the editor, which has to
+ * keep every field one of the nine sets.
+ */
+describe('the profile editor keeps what a starter profile sets', () => {
   it('rebuilds a profile from a list it cannot silently shorten', () => {
     // This used to assert the opposite — that the editor iterated a hand-kept
     // `PARAMS` and therefore dropped everything else. That was true and it

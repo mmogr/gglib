@@ -1,7 +1,7 @@
 //! Route definitions and router construction.
 //!
 //! This module defines the HTTP routes and creates the main router.
-//! Handlers delegate to the shared `GuiBackend` facade.
+//! Handlers delegate to the services on [`AppState`].
 
 use axum::Json;
 use axum::Router;
@@ -11,35 +11,16 @@ use axum::routing::{delete, get, post, put};
 use serde_json::{Value, json};
 use std::path::Path;
 use std::sync::Arc;
-use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::access::{DaemonAccess, host_guard, origin_guard};
+use crate::access::DaemonAccess;
 use crate::chat_api::chat_routes_no_prefix;
 use crate::handlers;
 use crate::state::AppState;
 use crate::trust::{ApiCredentials, bearer_guard};
 use gglib_core::CorsConfig;
 use gglib_core::services::SettingsCache;
-
-/// Build CORS layer from configuration. It lets an origin read exactly when
-/// [`CorsConfig::allows_origin`] does, the test `origin_guard` asks too.
-fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
-    let origins = if matches!(config, CorsConfig::AllowAll) {
-        AllowOrigin::any()
-    } else {
-        let config = config.clone();
-        AllowOrigin::predicate(move |origin: &axum::http::HeaderValue, _req_headers| {
-            origin
-                .to_str()
-                .is_ok_and(|origin| config.allows_origin(origin))
-        })
-    };
-    CorsLayer::new()
-        .allow_origin(origins)
-        .allow_methods(Any)
-        .allow_headers(Any)
-}
+use gglib_proxy::access::{build_cors_layer, host_guard, origin_guard};
 
 /// Build all API routes without `/api` prefix (for nesting under /api).
 ///
@@ -99,7 +80,6 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/mcp/servers/{id}/test",
             post(handlers::mcp::test_connection),
         )
-        .route("/mcp/tools/call", post(handlers::mcp::call_tool))
         // Proxy API
         .route("/proxy/status", get(handlers::proxy::status))
         .route("/proxy/start", post(handlers::proxy::start))
@@ -108,8 +88,12 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/proxy/loop-guard-trips", get(handlers::proxy::trips))
         // Daemon lifecycle
         .route("/daemon/shutdown", post(handlers::daemon::shutdown))
-        // Events (SSE)
-        .route("/events", get(handlers::events::stream))
+        // Events (SSE), and the event a `gglib` command posts for a change
+        // it made to the library in its own process.
+        .route(
+            "/events",
+            get(handlers::events::stream).post(handlers::events::relay),
+        )
         // Agent (server-side agentic loop with SSE streaming)
         //
         // Body limit: **4 MiB** (vs the Axum default of 2 MiB).
@@ -176,15 +160,7 @@ fn model_routes() -> Router<AppState> {
             "/{id}/projectors",
             get(handlers::model::models::projector_choices),
         )
-        // Benchmark history for this model
-        .route(
-            "/{id}/benchmark",
-            get(handlers::benchmark::history::model_benchmark),
-        )
-        .route(
-            "/{id}/tune-history",
-            get(handlers::benchmark::history::model_tune_history),
-        )
+        // Past raw-vs-gglib A/B reports for this model
         .route(
             "/{id}/agentic-history",
             get(handlers::benchmark::history::model_agentic_history),
@@ -243,14 +219,6 @@ fn model_fetch_routes() -> Router<AppState> {
             "/downloads/reorder-full",
             post(handlers::model::downloads::reorder_full),
         )
-        .route(
-            "/downloads/shard-group/{id}/cancel",
-            post(handlers::model::downloads::cancel_shard_group),
-        )
-        .route(
-            "/downloads/failed/clear",
-            post(handlers::model::downloads::clear_failed),
-        )
         // HuggingFace discovery
         .route("/hf/search", post(handlers::model::hf::search))
         .route(
@@ -278,6 +246,12 @@ fn config_routes() -> Router<AppState> {
             get(handlers::config::settings::get)
                 .put(handlers::config::settings::update)
                 .patch(handlers::config::settings::update),
+        )
+        // The starter profiles, as `gglib config profile install-templates`
+        // adds them without `--force`.
+        .route(
+            "/profiles/install-templates",
+            post(handlers::config::settings::install_profile_templates),
         )
         // System
         .route("/system/memory", get(handlers::config::settings::memory))
@@ -354,7 +328,7 @@ pub(crate) fn base_router(state: AppState, cfg: &CorsConfig, access: &Arc<Daemon
         .layer(middleware::from_fn_with_state(credentials, bearer_guard))
         .layer(middleware::from_fn_with_state(
             Arc::new(cfg.clone()),
-            origin_guard,
+            origin_guard::<DaemonAccess>,
         ))
         .layer(cors);
 
@@ -384,8 +358,10 @@ pub fn create_router(
     cors_config: &CorsConfig,
     access: Arc<DaemonAccess>,
 ) -> Router {
-    base_router(state, cors_config, &access)
-        .layer(middleware::from_fn_with_state(access, host_guard))
+    base_router(state, cors_config, &access).layer(middleware::from_fn_with_state(
+        access,
+        host_guard::<DaemonAccess>,
+    ))
 }
 
 /// Create a router with API routes and static asset serving.
@@ -427,7 +403,10 @@ pub fn create_spa_router<P: AsRef<Path>>(
     // after the fallback so a rebound page cannot even load the dashboard.
     base_router(state, cors_config, &access)
         .fallback_service(serve_dir)
-        .layer(middleware::from_fn_with_state(access, host_guard))
+        .layer(middleware::from_fn_with_state(
+            access,
+            host_guard::<DaemonAccess>,
+        ))
 }
 
 /// Health check endpoint.

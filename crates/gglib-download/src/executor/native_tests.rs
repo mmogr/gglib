@@ -23,7 +23,7 @@ use reqwest::header::ETAG;
 
 /// How the server should answer one request.
 #[derive(Clone)]
-enum Reply {
+pub(in crate::executor) enum Reply {
     /// Serve `body`, honouring `Range` and advertising `etag` when set.
     File { body: Vec<u8>, etag: Option<String> },
     /// Serve only the first `limit` bytes of `body`, then drop the connection
@@ -43,7 +43,7 @@ enum Reply {
     CdnFile { body: Vec<u8>, decoy_etag: String },
 }
 
-struct TestServer {
+pub(in crate::executor) struct TestServer {
     base_url: String,
     /// `Range` header value seen on each request, in order.
     ranges: Arc<Mutex<Vec<Option<String>>>>,
@@ -54,7 +54,7 @@ struct TestServer {
 impl TestServer {
     /// Bind an ephemeral loopback port. Replies are served in order; the last
     /// one repeats for any further requests.
-    async fn start(script: Vec<Reply>) -> Self {
+    pub(in crate::executor) async fn start(script: Vec<Reply>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind ephemeral loopback port");
@@ -80,7 +80,7 @@ impl TestServer {
         }
     }
 
-    fn url(&self) -> String {
+    pub(in crate::executor) fn url(&self) -> String {
         format!("{}/model.gguf", self.base_url)
     }
 
@@ -255,7 +255,7 @@ fn etag_header(etag: Option<&str>) -> String {
 // Fixtures
 // ============================================================================
 
-fn body_of(len: usize) -> Vec<u8> {
+pub(in crate::executor) fn body_of(len: usize) -> Vec<u8> {
     // A repeating non-power-of-two pattern, so a mis-sliced resume shows up as a
     // content mismatch rather than lining up by accident.
     (0..len)
@@ -274,27 +274,27 @@ fn sha256_of(bytes: &[u8]) -> String {
     hex(&Sha256::digest(bytes))
 }
 
-/// Collects every `(downloaded, total)` the downloader reports.
-fn recording_progress() -> (ProgressCallback, ProgressLog) {
-    let seen = Arc::new(Mutex::new(Vec::new()));
+/// Collects every `(written, total)` the downloader reports.
+fn recording_progress() -> (RawCallback, ProgressLog) {
+    let seen = ProgressLog::default();
     let sink = Arc::clone(&seen);
-    let cb: ProgressCallback = Arc::new(move |d, t| sink.lock().unwrap().push((d, t)));
-    (cb, seen)
+    let cb = move |p: RawProgress| sink.lock().unwrap().push((p.written, p.total.unwrap_or(0)));
+    (Arc::new(cb), seen)
 }
 
-struct Fixture {
+pub(in crate::executor) struct Fixture {
     _dir: tempfile::TempDir,
-    dest: PathBuf,
+    pub(in crate::executor) dest: PathBuf,
 }
 
 impl Fixture {
-    fn new() -> Self {
+    pub(in crate::executor) fn new() -> Self {
         let dir = tempfile::tempdir().expect("create temp dir");
         let dest = dir.path().join("model.gguf");
         Self { _dir: dir, dest }
     }
 
-    fn part(&self) -> PathBuf {
+    pub(in crate::executor) fn part(&self) -> PathBuf {
         part_path_for(&self.dest)
     }
 }
@@ -303,7 +303,7 @@ fn request<'a>(
     url: &'a str,
     dest: &'a Path,
     expected_size: Option<u64>,
-    progress: Option<ProgressCallback>,
+    progress: Option<RawCallback>,
 ) -> NativeDownload<'a> {
     NativeDownload {
         url,

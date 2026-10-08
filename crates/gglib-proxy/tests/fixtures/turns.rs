@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::domain::runs::RunKind;
 use gglib_core::ports::{AgentRunStarter, Created, RunsPort, TurnRefused};
-use gglib_core::{CorsConfig, ProxyAccessConfig};
+use gglib_core::{CorsConfig, DevicePorts, ProxyAccessConfig};
 
 use super::runs::{FakeRuns, info};
 
@@ -49,8 +49,11 @@ pub(crate) async fn serve(
     runs: Arc<FakeRuns>,
 ) -> (String, tokio_util::sync::CancellationToken) {
     let access = ProxyAccessConfig::new(CorsConfig::LocalOnly, None, "127.0.0.1", vec![])
-        .with_runs(Some(runs as Arc<dyn RunsPort>))
-        .with_turns(turns.map(|t| t as Arc<dyn AgentRunStarter>));
+        .with_devices(DevicePorts {
+            runs: Some(runs as Arc<dyn RunsPort>),
+            turns: turns.map(|t| t as Arc<dyn AgentRunStarter>),
+            ..DevicePorts::default()
+        });
     let (base, _, cancel) = super::access::spawn_proxy(access).await;
     (base, cancel)
 }

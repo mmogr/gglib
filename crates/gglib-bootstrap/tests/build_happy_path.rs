@@ -2,10 +2,9 @@ mod common;
 
 use chrono::Utc;
 use gglib_core::NewModel;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
-use common::{build_core, minimal_config, noop_emitter};
+use common::build_core;
 
 /// Bootstrapping with valid config must succeed.
 #[tokio::test]
@@ -33,33 +32,6 @@ async fn repos_are_isolated_between_separate_builds() {
 
     let build2 = build_core(&dir2).await;
     assert!(build2.repos.models.list().await.unwrap().is_empty());
-}
-
-/// Providing an HF token must not cause a build failure.
-#[tokio::test]
-async fn hf_token_config_accepted() {
-    let dir = TempDir::new().unwrap();
-    let mut cfg = minimal_config(&dir);
-    cfg.hf_token = Some("test_token_abc".to_string());
-    assert!(
-        gglib_bootstrap::CoreBootstrap::build(cfg, noop_emitter())
-            .await
-            .is_ok()
-    );
-}
-
-/// A non-existent llama-server binary is accepted at build time; failure
-/// is deferred to the point where a llama-server is actually spawned.
-#[tokio::test]
-async fn nonexistent_llama_server_path_is_accepted() {
-    let dir = TempDir::new().unwrap();
-    let mut cfg = minimal_config(&dir);
-    cfg.llama_server_path = PathBuf::from("/does/not/exist/llama-server");
-    assert!(
-        gglib_bootstrap::CoreBootstrap::build(cfg, noop_emitter())
-            .await
-            .is_ok()
-    );
 }
 
 /// `build()` result includes a populated `BuiltCore` — spot-check the downloads Arc.

@@ -175,7 +175,7 @@ fn the_tracker_completes_a_group_whose_projector_finished_first() {
 fn the_message_counts_the_weights_shards_and_names_the_projector() {
     let download = complete(&THREE, true).into_completed_download(vec![]);
 
-    let message = completion_message(&download, None);
+    let message = completion_message(&download, None, None);
 
     assert!(message.starts_with("Downloaded 3 shards to "), "{message}");
     assert!(
@@ -188,7 +188,7 @@ fn the_message_counts_the_weights_shards_and_names_the_projector() {
 fn the_message_of_one_weights_file_and_a_projector_says_model() {
     let download = complete(&["zeta.Q8_0.gguf"], true).into_completed_download(vec![]);
 
-    let message = completion_message(&download, None);
+    let message = completion_message(&download, None, None);
 
     assert!(message.starts_with("Downloaded model to "), "{message}");
     assert!(!message.contains("shards"), "{message}");
@@ -198,7 +198,7 @@ fn the_message_of_one_weights_file_and_a_projector_says_model() {
 fn the_message_reports_a_projector_that_was_not_linked() {
     let download = complete(&["zeta.Q8_0.gguf"], true).into_completed_download(vec![]);
 
-    let message = completion_message(&download, Some("it holds weights"));
+    let message = completion_message(&download, None, Some("it holds weights"));
 
     assert!(
         message.ends_with(". Its projector mmproj-F16.gguf was not linked: it holds weights"),
@@ -211,10 +211,47 @@ fn the_message_without_a_projector_is_the_download_alone() {
     let download = complete(&["zeta.Q8_0.gguf"], false).into_completed_download(vec![]);
 
     assert_eq!(
-        completion_message(&download, None),
+        completion_message(&download, None, None),
         format!(
             "Downloaded model to {}",
             dir().join("zeta.Q8_0.gguf").display()
         )
+    );
+}
+
+#[test]
+fn the_message_names_weights_the_reader_refused_and_gives_its_reason() {
+    let download = complete(&["zeta.Q8_0.gguf"], false).into_completed_download(vec![]);
+
+    assert_eq!(
+        completion_message(&download, Some("Invalid GGUF format: no magic"), None),
+        format!(
+            "Downloaded model to {}. zeta.Q8_0.gguf was added without its details: \
+             Invalid GGUF format: no magic",
+            dir().join("zeta.Q8_0.gguf").display()
+        )
+    );
+}
+
+/// The refused weights are the last thing said, after the projector, linked
+/// or not. Of a sharded model they are the first shard, the file that was
+/// read.
+#[test]
+fn the_message_reports_refused_weights_after_what_it_says_of_the_projector() {
+    let download = complete(&THREE, true).into_completed_download(vec![]);
+    let unread = format!(". {} was added without its details: no magic", THREE[0]);
+
+    let linked = completion_message(&download, Some("no magic"), None);
+    let unlinked = completion_message(&download, Some("no magic"), Some("it holds weights"));
+
+    assert!(
+        linked.ends_with(&format!(", with its projector mmproj-F16.gguf{unread}")),
+        "{linked}"
+    );
+    assert!(
+        unlinked.ends_with(&format!(
+            ". Its projector mmproj-F16.gguf was not linked: it holds weights{unread}"
+        )),
+        "{unlinked}"
     );
 }

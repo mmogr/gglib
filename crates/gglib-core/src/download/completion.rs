@@ -114,70 +114,6 @@ pub struct AttemptCounts {
     pub cancelled: u32,
 }
 
-impl AttemptCounts {
-    /// Create counts with a single attempt of the given kind.
-    #[must_use]
-    pub const fn from_kind(kind: CompletionKind) -> Self {
-        match kind {
-            CompletionKind::Downloaded => Self {
-                downloaded: 1,
-                failed: 0,
-                cancelled: 0,
-            },
-            CompletionKind::Failed => Self {
-                downloaded: 0,
-                failed: 1,
-                cancelled: 0,
-            },
-            CompletionKind::Cancelled => Self {
-                downloaded: 0,
-                failed: 0,
-                cancelled: 1,
-            },
-            CompletionKind::AlreadyPresent => Self {
-                downloaded: 0,
-                failed: 0,
-                cancelled: 0,
-            },
-        }
-    }
-
-    /// Increment the count for the given kind.
-    pub const fn increment(&mut self, kind: CompletionKind) {
-        match kind {
-            CompletionKind::Downloaded => self.downloaded += 1,
-            CompletionKind::Failed => self.failed += 1,
-            CompletionKind::Cancelled => self.cancelled += 1,
-            CompletionKind::AlreadyPresent => {
-                // AlreadyPresent doesn't increment attempt counts
-                // (it's informational, not a retry)
-            }
-        }
-    }
-
-    /// Total number of attempts across all kinds.
-    ///
-    /// Test-only: where production wants these summed it reads the three
-    /// fields directly — `gglib-download`'s `calculate_total_attempts` folds
-    /// them into `QueueRunSummary`'s own `total_attempts_*` fields. Gated so
-    /// `dead_code` keeps telling the truth about production reach.
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) const fn total(&self) -> u32 {
-        self.downloaded + self.failed + self.cancelled
-    }
-
-    /// Check if there were any retry attempts (more than one total attempt).
-    ///
-    /// Test-only, and gated for the same reason as [`Self::total`]: nothing in
-    /// production asks an `AttemptCounts` whether it retried.
-    #[cfg(test)]
-    #[must_use]
-    pub(crate) const fn has_retries(&self) -> bool {
-        self.total() > 1
-    }
-}
-
 /// Details for a single completed artifact in a queue run.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -423,72 +359,10 @@ mod tests {
     }
 
     #[test]
-    fn test_attempt_counts() {
-        let mut counts = AttemptCounts::from_kind(CompletionKind::Downloaded);
-        assert_eq!(counts.downloaded, 1);
-        assert_eq!(counts.total(), 1);
-        assert!(!counts.has_retries());
-
-        counts.increment(CompletionKind::Failed);
-        assert_eq!(counts.failed, 1);
-        assert_eq!(counts.total(), 2);
-        assert!(counts.has_retries());
-
-        counts.increment(CompletionKind::Downloaded);
-        assert_eq!(counts.downloaded, 2);
-        assert_eq!(counts.total(), 3);
-    }
-
-    #[test]
-    fn test_attempt_counts_all_kinds() {
-        // from_kind(Failed) — single failed attempt
-        let failed = AttemptCounts::from_kind(CompletionKind::Failed);
-        assert_eq!(failed.failed, 1);
-        assert_eq!(failed.downloaded, 0);
-        assert_eq!(failed.cancelled, 0);
-        assert_eq!(failed.total(), 1);
-
-        // from_kind(Cancelled) — single cancelled attempt
-        let cancelled = AttemptCounts::from_kind(CompletionKind::Cancelled);
-        assert_eq!(cancelled.cancelled, 1);
-        assert_eq!(cancelled.downloaded, 0);
-        assert_eq!(cancelled.failed, 0);
-        assert_eq!(cancelled.total(), 1);
-
-        // from_kind(AlreadyPresent) — produces all zeros, identical to Default
-        let already = AttemptCounts::from_kind(CompletionKind::AlreadyPresent);
-        let default_counts = AttemptCounts::default();
-        assert_eq!(already, default_counts);
-        assert_eq!(already.downloaded, 0);
-        assert_eq!(already.failed, 0);
-        assert_eq!(already.cancelled, 0);
-        assert_eq!(already.total(), 0);
-
-        // increment(Cancelled) — properly increments the cancelled counter
-        let mut counts = AttemptCounts::default();
-        counts.increment(CompletionKind::Cancelled);
-        assert_eq!(counts.cancelled, 1);
-        assert_eq!(counts.total(), 1);
-
-        // increment(AlreadyPresent) — no-op: counts before == counts after
-        let before = AttemptCounts {
-            downloaded: 2,
-            failed: 1,
-            cancelled: 0,
-        };
-        let mut counts = before;
-        counts.increment(CompletionKind::AlreadyPresent);
-        assert_eq!(
-            counts, before,
-            "increment(AlreadyPresent) should be a no-op"
-        );
-    }
-
-    #[test]
     fn test_completion_detail_serde_roundtrip() {
         // Construct a retry scenario: same model downloaded via two different DownloadIds
         // (first attempt failed, second succeeded).
-        let id1 = DownloadId::from_model("llama-3");
+        let id1 = DownloadId::from("llama-3");
         let id2 = DownloadId::new("unsloth/llama-3-gguf", Some("Q4_K_M"));
 
         let key = CompletionKey::HfFile {
@@ -498,9 +372,11 @@ mod tests {
             quantization: Some("Q4_K_M".to_string()),
         };
 
-        let mut counts = AttemptCounts::default();
-        counts.increment(CompletionKind::Failed);
-        counts.increment(CompletionKind::Downloaded);
+        let counts = AttemptCounts {
+            downloaded: 1,
+            failed: 1,
+            cancelled: 0,
+        };
 
         let detail = CompletionDetail {
             key,
@@ -526,7 +402,6 @@ mod tests {
         assert_eq!(restored.download_ids[1], id2);
         assert_eq!(restored.attempt_counts.failed, 1);
         assert_eq!(restored.attempt_counts.downloaded, 1);
-        assert_eq!(restored.attempt_counts.total(), 2);
 
         // Verify the JSON contains expected keys (wire-shape sanity)
         let value: serde_json::Value = serde_json::from_str(&json).expect("should parse as Value");

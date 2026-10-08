@@ -112,6 +112,70 @@ describe('runs transport', () => {
     ]);
   });
 
+  it('asks for an event stream, and passes the reader\'s signal to the request', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 200 }));
+    const signal = new AbortController().signal;
+    for await (const item of readRunEvents('r 1', 3, signal)) void item;
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/runs/r%201/events?after=3');
+    expect(init.headers).toEqual({ Accept: 'text/event-stream' });
+    expect(init.signal).toBe(signal);
+  });
+
+  it('a keepalive sent as a ping payload is not a frame', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('data: ping\n\n' + 'id: 1\ndata: {"type":"text_delta","content":"a"}\n\n', { status: 200 }),
+    );
+    const items: RunStreamItem[] = [];
+    for await (const item of readRunEvents('r1', 0, new AbortController().signal)) items.push(item);
+
+    expect(items).toEqual([{ type: 'frame', seq: 1, data: '{"type":"text_delta","content":"a"}' }]);
+  });
+
+  it('a frame with no id is numbered 0, and nothing after the end is read', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        'data: {"type":"text_delta","content":"a"}\n\n' +
+          `event: run\ndata: ${JSON.stringify(info)}\n\n` +
+          'id: 9\ndata: {"type":"text_delta","content":"late"}\n\n',
+        { status: 200 },
+      ),
+    );
+    const items: RunStreamItem[] = [];
+    for await (const item of readRunEvents('r1', 0, new AbortController().signal)) items.push(item);
+
+    expect(items).toEqual([
+      { type: 'frame', seq: 0, data: '{"type":"text_delta","content":"a"}' },
+      { type: 'end', info },
+    ]);
+  });
+
+  it('stops quietly, between reads, once its signal has fired', async () => {
+    const encoder = new TextEncoder();
+    const frames = ['id: 1\ndata: {"n":1}\n\n', 'id: 2\ndata: {"n":2}\n\n'];
+    let next = 0;
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          pull(body) {
+            if (next < frames.length) body.enqueue(encoder.encode(frames[next++]));
+            else body.close();
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    const controller = new AbortController();
+    const items: RunStreamItem[] = [];
+    for await (const item of readRunEvents('r1', 0, controller.signal)) {
+      items.push(item);
+      controller.abort();
+    }
+
+    expect(items).toEqual([{ type: 'frame', seq: 1, data: '{"n":1}' }]);
+  });
+
   it('a run the daemon does not have rejects the read', async () => {
     fetchMock.mockResolvedValueOnce(json({ error: 'no run has id r9', status: 404 }, 404));
     const read = async () => {

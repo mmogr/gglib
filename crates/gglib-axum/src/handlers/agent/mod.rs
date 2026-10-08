@@ -9,7 +9,6 @@ mod launch;
 mod remote_upstream;
 mod retry_notice;
 mod run;
-mod thinking;
 mod transcript;
 
 pub(crate) use dto::AgentChatRequest;
@@ -129,7 +128,7 @@ mod run_busy_tests;
 #[path = "run_end_tests.rs"]
 mod run_end_tests;
 #[cfg(test)]
-mod run_fixture;
+pub(in crate::handlers) mod run_fixture;
 #[cfg(test)]
 #[path = "run_hold_tests.rs"]
 mod run_hold_tests;
@@ -149,6 +148,9 @@ mod run_privacy_tests;
 #[path = "run_replace_tests.rs"]
 mod run_replace_tests;
 #[cfg(test)]
+#[path = "run_rows_tests.rs"]
+mod run_rows_tests;
+#[cfg(test)]
 #[path = "run_tests.rs"]
 mod run_tests;
 #[cfg(test)]
@@ -157,3 +159,5 @@ mod run_thinking_tests;
 #[cfg(test)]
 #[path = "transcript_images_tests.rs"]
 mod transcript_images_tests;
+#[cfg(test)]
+mod turn_fixture;

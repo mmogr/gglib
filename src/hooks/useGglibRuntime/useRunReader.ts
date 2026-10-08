@@ -29,6 +29,7 @@ import type { ChatSource } from '../../services/transport';
 import type { GglibMessage } from '../../types/messages';
 import { mkAssistantMessage } from '../../types/messages';
 import type { HubChatOpen } from '../../types/generated/HubChatOpen';
+import type { RunInfo } from '../../types/generated/RunInfo';
 import type { ThreadConversation } from '../useChatPersistence/buildThreadMessages';
 import { ReasoningTimingTracker } from './reasoningTiming';
 import { performanceClock } from './clock';
@@ -84,6 +85,8 @@ export function useRunReader(
   const runRef = useRef<string | null>(null);
   /** A conversation a send created and is already reading. */
   const adoptRef = useRef<number | null>(null);
+  /** The run last read to its end here, as it ended: never one that ended unread. None once the conversation is left. */
+  const [endedRun, setEndedRun] = useState<RunInfo | null>(null);
   const [currentStreamingAssistantMessageId, setCurrentStreamingAssistantMessageId] =
     useState<string | null>(null);
 
@@ -118,6 +121,7 @@ export function useRunReader(
     readerRef.current?.abort();
     readerRef.current = null;
     setRunning(false);
+    setEndedRun(null);
   }, [setRunning]);
 
   /** The reading `signal` belongs to came to its own end. */
@@ -172,6 +176,7 @@ export function useRunReader(
     }
     if (signal.aborted) return;
     endReading(signal);
+    setEndedRun(outcome.info);
     latest.current.onConversationChanged?.(cid);
     if (outcome.error) latest.current.onError?.(outcome.error);
   }, [endReading, showSaved, timingTracker]);
@@ -276,6 +281,7 @@ export function useRunReader(
     messagesRef,
     isRunning,
     isLoading,
+    endedRun,
     timingTracker,
     currentStreamingAssistantMessageId,
     /** The run being read here, if the daemon has accepted it. */

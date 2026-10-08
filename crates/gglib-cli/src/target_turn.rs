@@ -15,6 +15,7 @@
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use gglib_app_services::far_credentials;
+use gglib_app_services::transcript::MadeBy;
 use gglib_core::Settings;
 use gglib_core::domain::{Machine, Model, ModelLookup, ModelRef};
 use gglib_core::ports::SettingsRepository;
@@ -37,6 +38,8 @@ pub(crate) struct TurnModel {
     /// The name the model goes by on its machine, as it is shown and saved;
     /// the identifier when it did not resolve.
     pub name: String,
+    /// The quantisation that machine's catalogue has for the model, if any.
+    pub quantization: Option<String>,
     /// The profile the identifier named on the paired machine, which that
     /// machine applies. A profile here is `profile_selection`'s.
     pub far_profile: Option<String>,
@@ -52,6 +55,7 @@ impl TurnModel {
             name: model
                 .as_ref()
                 .map_or_else(|| identifier.clone(), |m| m.name.clone()),
+            quantization: model.as_ref().and_then(|m| m.quantization.clone()),
             model_ref: model.map(|m| ModelRef {
                 machine: Machine::Local,
                 id: m.id,
@@ -73,8 +77,21 @@ impl TurnModel {
                 id,
             }),
             name: lookup.detail.name,
+            quantization: lookup.detail.quantization,
             far_profile: lookup.profile,
             machine: Some(machine),
+        }
+    }
+
+    /// The model as each reply of a saved turn names it, the way an agent
+    /// run's does: its name and quantisation on its machine. The context it
+    /// was launched with is not known here, so it is left out.
+    pub(crate) fn made_by(&self) -> MadeBy {
+        MadeBy {
+            model: self.name.clone(),
+            quantization: self.quantization.clone(),
+            device: None,
+            context_size: None,
         }
     }
 
@@ -104,9 +121,10 @@ impl Target {
     ///
     /// # Errors
     ///
-    /// On the paired machine, a daemon that is not running or not
-    /// connected, a model that machine does not have — before any turn
-    /// starts — and a settings write that failed.
+    /// Locally, a catalogue that cannot be read. On the paired machine, a
+    /// daemon that is not running or not connected, a model that machine
+    /// does not have — before any turn starts — and a settings write that
+    /// failed.
     pub(crate) async fn resolve_turn(
         self,
         ctx: &CliContext,
@@ -114,7 +132,7 @@ impl Target {
     ) -> Result<TurnModel> {
         match self {
             Self::Local => {
-                let model = self.local_model(ctx, &identifier).await;
+                let model = self.local_model(ctx, &identifier).await?;
                 Ok(TurnModel::here(identifier, model))
             }
             Self::Remote => {

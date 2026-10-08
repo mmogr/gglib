@@ -5,7 +5,8 @@
  */
 export type QueueDownloadRequest = { model_id: string, 
 /**
- * Quantization to download. Accepts both "quant" and "quantization" field names
- * for compatibility with different frontends (Tauri uses "quantization", legacy uses "quant").
+ * Quantization to download; left out, one is chosen. The page sends it
+ * as "quantization" and the CLI as "quant", so both field names are
+ * accepted.
  */
-quant: string | null, };
+quantization?: string, };

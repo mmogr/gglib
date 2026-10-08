@@ -21,7 +21,7 @@ use anyhow::Result;
 use gglib_core::domain::loop_guard_log::{
     LOOP_GUARD_LOG_RETENTION_DAYS, LoopGuardTripDay, first_day_of_window,
 };
-use gglib_core::ports::LoopGuardTripLog;
+use gglib_db::SqliteLoopGuardTripLog;
 
 use crate::bootstrap::CliContext;
 
@@ -31,7 +31,7 @@ pub(crate) async fn execute(ctx: &CliContext, since_days: u32) -> Result<()> {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    let days = read(ctx.loop_guard_trips.as_ref(), since_days, now).await?;
+    let days = read(&ctx.loop_guard_trips, since_days, now).await?;
     render(&mut std::io::stdout().lock(), &days, since_days)?;
     Ok(())
 }
@@ -39,7 +39,7 @@ pub(crate) async fn execute(ctx: &CliContext, since_days: u32) -> Result<()> {
 /// The log's days in the window of `since_days` ending with the day `now`
 /// falls on.
 async fn read(
-    log: &dyn LoopGuardTripLog,
+    log: &SqliteLoopGuardTripLog,
     since_days: u32,
     now: u64,
 ) -> Result<Vec<LoopGuardTripDay>> {

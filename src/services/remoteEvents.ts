@@ -8,62 +8,33 @@
  * event moves the panel now and the re-read fills in paths, peers and
  * counters a moment later.
  *
- * Same hydration-race care as the proxy side: subscribe first, then fetch,
- * and drop a fetch that a live event overtook.
+ * Same hydration-race care as the proxy side, from the same `bridgeEvents`:
+ * subscribe first, then fetch, and drop a fetch that a live event overtook.
  */
 
-import { subscribeSseEvent } from './transport/events/sse';
+import { bridgeEvents } from './bridgeEvents';
 import { getTransport } from './transport';
 import { applyRemoteStatus, ingestRemoteEvent, resetRemoteState } from './remoteRegistry';
-import type { Unsubscribe } from './transport/types/common';
-import type { RemoteEvent } from './transport/types/events';
 
-let unsubscribe: Unsubscribe | null = null;
-let eventVersion = 0;
-
-/** What became of one status re-read. */
-type Reread = 'applied' | 'superseded' | 'failed';
-
-/**
- * Re-read the status; ignored if an event arrived while it was in flight.
- *
- * `superseded` is not a failure: the read worked, and an event overtook it,
- * so its answer is dropped in favour of the re-read that event starts. Never
- * rejects, so an ignored result cannot become an unhandled one.
- */
-function refresh(): Promise<Reread> {
-  const versionBeforeFetch = eventVersion;
-  return getTransport()
-    .getRemoteStatus()
-    .then((status): Reread => {
-      if (eventVersion !== versionBeforeFetch) return 'superseded';
-      applyRemoteStatus(status);
-      return 'applied';
-    })
-    .catch((): Reread => {
-      // Non-fatal: the next event, or the next open of the panel, tries again.
-      return 'failed';
-    });
-}
+const bridge = bridgeEvents({
+  category: 'remote',
+  onEvent: (evt) => {
+    ingestRemoteEvent(evt);
+    // The event overtook any read still out, so that answer is dropped in
+    // favour of this one's.
+    void bridge.refresh();
+  },
+  read: () => getTransport().getRemoteStatus(),
+  apply: applyRemoteStatus,
+  reset: resetRemoteState,
+});
 
 /**
  * Initialize remote event handling.
  * Safe to call multiple times — only initializes once.
  */
 export function initRemoteEvents(): void {
-  if (unsubscribe) return;
-
-  eventVersion = 0;
-
-  // 1. Subscribe FIRST so no events are missed during hydration fetch
-  unsubscribe = subscribeSseEvent('remote', (evt: RemoteEvent) => {
-    eventVersion++;
-    ingestRemoteEvent(evt);
-    void refresh();
-  });
-
-  // 2. Hydration fetch — seed initial state from the daemon
-  void refresh();
+  bridge.init();
 }
 
 /**
@@ -77,8 +48,8 @@ export function initRemoteEvents(): void {
  * wait for the state to catch up, and can tell whether it did.
  */
 export async function refreshRemoteStatus(): Promise<boolean> {
-  const first = await refresh();
-  return (first === 'superseded' ? await refresh() : first) === 'applied';
+  const first = await bridge.refresh();
+  return (first === 'superseded' ? await bridge.refresh() : first) === 'applied';
 }
 
 /**
@@ -86,10 +57,5 @@ export async function refreshRemoteStatus(): Promise<boolean> {
  * Should be called on app unmount or hot-reload.
  */
 export function cleanupRemoteEvents(): void {
-  if (unsubscribe) {
-    unsubscribe();
-    unsubscribe = null;
-  }
-  eventVersion = 0;
-  resetRemoteState();
+  bridge.cleanup();
 }

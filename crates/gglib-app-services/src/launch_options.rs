@@ -1,17 +1,19 @@
-//! The pinned-launch cascade, shared by every surface that pins the proxy.
+//! The launch cascade, shared by every surface that starts a model.
 //!
 //! `gglib serve` and the GUI's pinned start must produce byte-identical
 //! launch options for the same inputs — both call [`plan_pinned_launch`];
 //! the CLI keeps its banners by reading the plan's resolved fields rather
-//! than recomputing them. [`crate::ServerOps`]'s bare-start builder remains
-//! a deliberate sibling: its explicit tier passes raw values through because
-//! the spawn path re-gates them per launch.
+//! than recomputing them. A bare start ([`plan_bare_launch`]) is the same
+//! cascade with no proxy inputs, so a request is turned into options in one
+//! place. That place passes the request's jinja, reasoning-format and MTP
+//! values through as sent: they are the tag-driven half, which the spawn
+//! resolves against the model's tags at each launch.
 
 use std::path::PathBuf;
 
 use gglib_core::domain::{FieldSources, InferenceConfig, ModelSamplingContext};
-use gglib_core::ports::PinnedSpec;
-use gglib_core::server_config::{ServerConfigOptions, resolve_context_size};
+use gglib_core::ports::{LaunchOverrides, PinnedSpec};
+use gglib_core::server_config::{ServerConfigOptions, chosen_context_size, resolve_context_size};
 use gglib_core::{Model, Settings};
 use gglib_runtime::llama::{MtpResolution, resolve_mtp_args};
 use gglib_runtime::unified_server_config::{GlobalDefaults, UnifiedServerConfig};
@@ -61,7 +63,9 @@ pub struct PinnedLaunch {
     /// Carried so a caller can tell a flag that won from one the coupling rule
     /// discarded — the two are indistinguishable in `inference` alone.
     pub sources: FieldSources,
-    /// MTP resolution (explicit overrides layered over model tags).
+    /// MTP as the request and the model's tags resolve it now, for the CLI
+    /// banner. The pin carries the request's values, not these: the spawn
+    /// resolves them again, against the tags it finds then.
     pub mtp: MtpResolution,
     /// The context size the model will actually get.
     pub effective_ctx: u64,
@@ -128,9 +132,11 @@ pub fn plan_pinned_launch(
             mlock: request.mlock.then_some(true),
             jinja: request.jinja,
             reasoning_format: request.reasoning_format.clone(),
-            inference_params: Some(inference.clone()),
-            mtp_draft_n_max: mtp.enabled.then_some(mtp.draft_n_max),
-            mtp_draft_p_min: mtp.enabled.then_some(mtp.draft_p_min),
+            // As sent, never the resolution above: `Some(0)` is the only way
+            // to say "off", and a `None` in its place lets the tag turn MTP
+            // back on at spawn.
+            mtp_draft_n_max: request.mtp_draft_n_max,
+            mtp_draft_p_min: request.mtp_draft_p_min,
             ..Default::default()
         },
         globals: tier3,
@@ -153,6 +159,36 @@ pub fn plan_pinned_launch(
     }
 }
 
+/// Resolve a bare model start: the fallback context somebody chose, and the
+/// launch options.
+///
+/// The cascade above with no proxy-process inputs: a request means the same
+/// options here as on a pin made with none.
+///
+/// Cache sizing is deliberately absent: the process manager resolves the RAM
+/// budget and KV cache types at spawn, against live system memory and the
+/// model's actual KV footprint; a copy of that arithmetic here could only
+/// drift from it.
+#[must_use]
+pub fn plan_bare_launch(
+    model: &Model,
+    settings: &Settings,
+    request: &StartServerRequest,
+) -> (Option<u64>, LaunchOverrides) {
+    let options = plan_pinned_launch(model, settings, request, ProxyGlobals::default())
+        .pinned
+        .launch_overrides;
+    let overrides = LaunchOverrides {
+        options,
+        cache_ram: None,
+    };
+    (chosen_context_size(&overrides.options), overrides)
+}
+
 #[cfg(test)]
 #[path = "launch_options_tests.rs"]
 mod launch_options_tests;
+
+#[cfg(test)]
+#[path = "launch_options_mapping_tests.rs"]
+mod mapping_tests;

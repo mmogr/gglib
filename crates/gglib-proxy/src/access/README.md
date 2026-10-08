@@ -2,9 +2,23 @@
 
 <!-- module-docs:start -->
 
-The three request guards, as axum middleware. The policy they enforce —
-which hosts, which pages, which token — is [`gglib_core::access`], which is
-pure; this module is only the part that needs to know what an HTTP request is.
+The three request guards and the CORS layer, as axum middleware. The policy
+they enforce — which hosts, which pages, which token — is
+[`gglib_core::access`], which is pure; this module is only the part that needs
+to know what an HTTP request is.
+
+# One copy, two routers
+
+`host_guard`, `origin_guard` and `build_cors_layer` are the daemon's too:
+`gglib-axum` installs the same three in its own router. What differs between
+the two is said once each, in an [`Endpoint`]: which `Host` it answers to, and
+the body it refuses in. `ProxyAccessConfig` is the proxy's, here;
+`DaemonAccess` is the daemon's, in `gglib-axum`. `bearer_guard` is the proxy's
+alone, since the daemon asks its token by a rule of its own.
+
+Each router keeps its own layer order. The proxy's is below. The daemon puts
+`host_guard` outermost, over its dashboard too, and the CORS layer and
+`origin_guard` over `/api` alone (`gglib-axum/src/routes.rs`).
 
 # Layer order
 
@@ -41,6 +55,9 @@ protected group — stays reachable without a token, and a 404 stays a 404
 instead of becoming a 401 that tells an unauthenticated caller which paths
 exist. It is installed whether or not a token is set, and decides on each
 request which token, if any, it asks for; with none set it asks nothing.
+Whether a request presents that token is for
+[`gglib_core::access::bearer_matches`] to say; the comparison is
+constant-time, and [`gglib_core::access::constant_time_eq`] says why.
 
 # Failure responses
 
@@ -51,17 +68,11 @@ request which token, if any, it asks for; with none set it asks nothing.
 | `bearer_guard` | 401 | `invalid_api_key` | `WWW-Authenticate: Bearer` |
 
 All three use the `OpenAI` error envelope, which is what the rest of `/v1/*` already
-speaks. `/mcp` is the exception on paper: it answers errors as JSON-RPC. A
+speaks. The daemon answers the first two rows with the same status in the
+shape `/api` speaks, `{"error", "status", "type"}`, the code in capitals as
+its `type`. `/mcp` is the exception on paper: it answers errors as JSON-RPC. A
 middleware runs before the body is parsed, so it has no request `id` to echo
 back and cannot construct a valid JSON-RPC error anyway — MCP clients key off
 the status code, and 401/403 are unambiguous there.
-
-# Comparing the token
-
-`constant_time_eq` folds every byte rather than returning at the first
-mismatch. A `==` leaks, through timing, how many leading bytes an attacker got
-right, which over enough requests recovers the token a byte at a time. The
-length is compared first and does leak, which is fine — the token's length is
-not the secret.
 
 <!-- module-docs:end -->

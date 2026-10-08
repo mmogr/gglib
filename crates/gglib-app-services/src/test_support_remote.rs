@@ -1,7 +1,7 @@
 //! The fixture the remote tunnel's tests are built on (ADR 0012).
 //!
 //! Beside `test_support.rs` rather than inside it. That file is 285 of the
-//! 300 lines `scripts/check_rust_complexity.sh` allows, and a file that
+//! 300 lines `scripts/check_file_size.sh` allows, and a file that
 //! crosses the line *joins* the baseline — the one thing the ratchet exists
 //! to stop. Splitting is the house answer to a file at its budget, the same
 //! answer `gglib-core`'s `settings_remote_tests.rs` is.
@@ -17,14 +17,13 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, LazyLock};
 
-use gglib_core::events::AppEvent;
 use gglib_core::ports::AppEventEmitter;
 use gglib_core::services::AppCore;
 use gglib_core::{RemotePairing, SettingsUpdate};
 
-use crate::test_support::test_core_and_proxy;
+use crate::test_support::{RecordingEmitter, test_core_and_proxy};
 
 /// Vector 1: the minimal v0 ticket, no transport addresses.
 pub(crate) const TICKET_A: &str =
@@ -85,34 +84,6 @@ pub(crate) async fn remember_a_model(core: &AppCore, model: &str) {
         })
         .await
         .expect("the model is remembered");
-}
-
-/// An emitter that keeps what it was told, in the order it was told.
-///
-/// The shape `remote/gateway_tests.rs` already uses. `RemoteOps` emits on
-/// every lifecycle edge, and "emitted nothing" is as much a claim worth
-/// asserting as "emitted this" — a refused `disable` that still announced
-/// the tunnel was down would be a lie no return value catches.
-#[derive(Default)]
-pub(crate) struct RecordingEmitter(Mutex<Vec<AppEvent>>);
-
-impl RecordingEmitter {
-    /// Everything emitted so far, oldest first.
-    pub(crate) fn events(&self) -> Vec<AppEvent> {
-        self.0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
-    }
-}
-
-impl AppEventEmitter for RecordingEmitter {
-    fn emit(&self, event: AppEvent) {
-        self.0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(event);
-    }
 }
 
 /// A `RemoteOps` over its own in-memory database, plus what it emitted.

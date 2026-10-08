@@ -1,11 +1,12 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
-#![deny(unsafe_code)]
 // A std MutexGuard held across an .await starves the whole runtime the moment
-// two tasks contend — the #721 daemon wedge was this bug class. Denied here
-// because neither crate inherits the workspace clippy lints yet.
+// two tasks contend — the #721 daemon wedge was this bug class. The workspace
+// lints only warn on it; here it is an error wherever clippy runs.
 #![deny(clippy::await_holding_lock, clippy::await_holding_refcell_ref)]
 
-mod access;
+// Public, like the nine named below: gglib-axum installs this module's Host
+// guard, origin guard and CORS layer in the daemon's router too.
+pub mod access;
 mod admin;
 #[allow(
     clippy::redundant_closure_for_method_calls,
@@ -22,12 +23,11 @@ pub(crate) mod client_send;
 // `server` is internal too — the root re-exports `serve`, which is all
 // anyone needs from it.
 // Without `test-support` the re-export below is absent, which is the point of
-// gating it — but that also leaves `StreamConfig`, `restore_with_retry` and
-// `LastLoadedSession` (a public field type of the first, so it rides along) with
-// no public path, and this crate denies `unreachable_pub`. Said once here rather
-// than at each of the three, and only for the configuration where it is true:
-// with the feature on the lint applies normally, which is the configuration CI's
-// `--all-features` clippy run checks.
+// gating it — but that also leaves `StreamConfig` and `restore_with_retry`
+// with no public path, and this crate denies `unreachable_pub`. Said once
+// here rather than at each of the two, and only for the configuration where
+// it is true: with the feature on the lint applies normally, which is the
+// configuration CI's `--all-features` clippy run checks.
 #[cfg_attr(not(any(test, feature = "test-support")), allow(unreachable_pub))]
 #[allow(
     clippy::redundant_clone,
@@ -114,6 +114,7 @@ pub mod runs;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod sampling_audit;
+pub(crate) mod serve_config;
 #[allow(
     clippy::option_if_let_else,
     clippy::single_match_else,
@@ -121,6 +122,7 @@ pub(crate) mod sampling_audit;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod server;
+pub(crate) mod slot_cache_state;
 pub mod slot_eviction;
 #[allow(
     clippy::cast_precision_loss,
@@ -162,6 +164,7 @@ pub(crate) mod usage_reading;
 // What `POST /v1/models/{name}/load` answers, for a paired machine that reads it.
 pub use load_endpoint::LoadResponse;
 pub use observers::ProxyObservers;
+pub use serve_config::ServeConfig;
 pub use server::serve;
 // An agent run reads llama-server's reply past the proxy, under this same
 // bound (`gglib-runtime`'s completion adapter; #1212).

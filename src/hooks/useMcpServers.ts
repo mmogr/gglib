@@ -205,20 +205,10 @@ export function useMcpTools() {
     refresh();
   }, [refresh]);
 
-  const callToolFn = useCallback(
-    async (serverId: McpServerId, toolName: string, args: Record<string, unknown>) => {
-      return getTransport().callMcpTool(serverId, toolName, args);
-    },
-    []
-  );
-
   return {
     tools,
     loading,
     error,
     refresh,
-    callTool: callToolFn,
   };
 }
-
-export default useMcpServers;

@@ -1,5 +1,4 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
-#![deny(unused_crate_dependencies)]
 
 pub mod access;
 pub mod cache_config;
@@ -10,6 +9,7 @@ pub mod debug_switches;
 pub mod domain;
 pub mod download;
 pub mod events;
+pub mod hf_token;
 pub mod is_local_origin;
 pub mod normalize;
 pub mod paths;
@@ -39,20 +39,19 @@ pub use domain::{
 };
 pub use download::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, DownloadError, DownloadEvent,
-    DownloadId, DownloadStatus, DownloadSummary, FailedDownload, GgufFileRole, Quantization,
-    QueueRunSummary, QueueSnapshot, QueuedDownload, ShardInfo,
+    DownloadId, DownloadOutcome, DownloadPhase, DownloadRow, DownloadRowText, FinishedDownload,
+    GgufFileRole, Quantization, QueueRunSummary, QueueSnapshot, ShardInfo,
 };
 pub use events::{AppEvent, ModelSummary};
 pub use ports::{
     AgentError, AgentLoopPort, AgentRunOutput, AppEventEmitter, ChatHistoryError,
     ChatHistoryRepository, CompletedDownload, CoreError, DownloadManagerConfig,
-    DownloadManagerPort, DownloadRequest, EmptyToolExecutor, FilteredToolExecutor,
-    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HfClientPort, HfFileInfo,
-    HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult, JinjaMode,
-    LlmCompletionPort, McpRepositoryError, McpServerRepository, McpServiceError,
-    ModelRegistrarPort, ModelRepository, NoopEmitter, NoopGgufParser, ProcessHandle,
-    QuantizationResolver, Repos, RepositoryError, Resolution, ResolvedFile, ServerConfig,
-    SettingsRepository, ToolExecutorPort, UsageSink,
+    DownloadManagerPort, EmptyToolExecutor, FilteredToolExecutor, GgufCapabilities, GgufMetadata,
+    GgufParseError, GgufParserPort, HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo,
+    HfSearchOptions, HfSearchResult, JinjaMode, LlmCompletionPort, McpRepositoryError,
+    McpServerRepository, McpServiceError, ModelRegistrarPort, ModelRepository, NoopEmitter,
+    NoopGgufParser, ProcessHandle, QuantizationResolver, Repos, RepositoryError, Resolution,
+    ResolvedFile, ServerConfig, SettingsRepository, ToolExecutorPort, UsageSink,
 };
 pub use services::{ChatHistoryService, ModelRegistrar};
 pub use settings::{
@@ -70,11 +69,5 @@ pub use utils::timing::{elapsed_ms, format_duration_human};
 pub use paths::{
     DirectoryCreationStrategy, ModelsDirSource, PathError, data_root, database_path,
     default_models_dir, ensure_directory, is_prebuilt_binary, llama_config_path, llama_cpp_dir,
-    llama_server_path, persist_models_dir, resolve_models_dir, resource_root,
+    llama_server_path, resolve_models_dir, resource_root, set_models_dir,
 };
-
-// Silence unused dev-dependency warnings until we add mock-based tests
-#[cfg(test)]
-use mockall as _;
-#[cfg(test)]
-use tokio_test as _;

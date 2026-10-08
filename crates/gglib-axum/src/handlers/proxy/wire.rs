@@ -5,16 +5,13 @@
 //! rather than "use the compile-time default" — can be read and tested
 //! without the routing around them.
 
-use gglib_app_services::types::AppSettings;
-use gglib_core::server_config::{
-    ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
-};
-use gglib_core::settings::DEFAULT_PROXY_PORT;
+use gglib_core::Settings;
+use gglib_core::server_config::{ServerConfigOptions, chosen_context_size};
 use gglib_runtime::proxy::ProxyConfig as RuntimeProxyConfig;
 use gglib_runtime::proxy::ProxyStatus as RuntimeProxyStatus;
 
-/// Proxy status response.
-/// Matches Tauri's `ProxyStatus` for frontend compatibility.
+/// Proxy status response: what the proxy's status, start, start-pinned and stop
+/// routes answer.
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct ProxyStatus {
@@ -122,25 +119,17 @@ pub(super) fn to_api_status(s: RuntimeProxyStatus, pinned_model: Option<String>)
 /// the user's saved settings.
 ///
 /// An omitted field means "use what is configured", not "use the compile-time
-/// default" — a caller that sends no port, as the tray panel does, must land on
-/// the same port as the desktop app, `gglib proxy` and
-/// `ProxyOps::ensure_running`. Going straight to `DEFAULT_PROXY_PORT` here
-/// would silently ignore a changed `proxy_port` for every client of this
-/// endpoint.
-pub(super) fn to_runtime_config(
-    cfg: &StartProxyConfig,
-    settings: &AppSettings,
-) -> RuntimeProxyConfig {
-    // Only a value somebody chose. Resolving to the built-in floor here would
-    // hand the proxy `Some(4096)` and make the fitted rung unreachable.
-    let default_context = match resolve_context_size_with_source(&ServerConfigOptions {
+/// default" — a caller that sends no port, as the tray panel does and as
+/// `gglib proxy`, `serve` and `up` do without `--port`, must land on the same
+/// port as the desktop app and `ProxyOps::ensure_running`. Going straight to
+/// `DEFAULT_PROXY_PORT` here would silently ignore a changed `proxy_port` for
+/// every client of this endpoint.
+pub(super) fn to_runtime_config(cfg: &StartProxyConfig, settings: &Settings) -> RuntimeProxyConfig {
+    let default_context = chosen_context_size(&ServerConfigOptions {
         context_size: cfg.default_context,
         global_default_ctx: settings.default_context_size,
         ..Default::default()
-    }) {
-        (_, ContextSizeSource::BuiltInDefault) => None,
-        (ctx, _) => Some(ctx),
-    };
+    });
 
     let cache_enabled = cfg.cache.unwrap_or(false);
     // Resolved here rather than left `None`: the Axum proxy path errors
@@ -156,11 +145,7 @@ pub(super) fn to_runtime_config(
 
     RuntimeProxyConfig {
         host: cfg.host.clone().unwrap_or_else(|| "127.0.0.1".to_string()),
-        // Same fallback chain as `Settings::effective_proxy_port`.
-        port: cfg
-            .port
-            .or(settings.proxy_port)
-            .unwrap_or(DEFAULT_PROXY_PORT),
+        port: cfg.port.unwrap_or_else(|| settings.effective_proxy_port()),
         default_context,
         cache_enabled,
         slot_dir,

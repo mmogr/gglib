@@ -302,3 +302,6 @@ fn transport_fields_survive_the_pipeline() {
 
 #[path = "eval_arm_tests.rs"]
 mod eval_arms;
+
+#[path = "layers_tests.rs"]
+mod layers;

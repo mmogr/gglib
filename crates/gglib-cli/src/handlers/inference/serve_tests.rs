@@ -1,8 +1,17 @@
+use clap::Parser as _;
+use gglib_core::Settings;
+use gglib_core::ports::PinnedSpec;
 use gglib_core::server_config::{
     CtxSizeArg, ServerConfigOptions, parse_ctx_size_flag, resolve_context_size,
 };
 use gglib_runtime::unified_server_config::{GlobalDefaults, UnifiedServerConfig};
 use std::path::PathBuf;
+
+use super::start_body;
+use crate::commands::Commands;
+use crate::daemon_client::StartProxyBody;
+use crate::handlers::inference::proxy::tests::started;
+use crate::parser::Cli;
 
 /// Mirrors how `execute` assembles its config, minus the I/O.
 fn unified(explicit: ServerConfigOptions, globals: GlobalDefaults) -> UnifiedServerConfig {
@@ -79,13 +88,13 @@ fn proxy_and_llama_ports_are_carried_separately() {
     let cfg = unified(
         ServerConfigOptions::default(),
         GlobalDefaults {
-            proxy_port: 8080,
+            proxy_port: 8123,
             llama_base_port: 5500,
             ..Default::default()
         },
     );
 
-    assert_eq!(cfg.to_proxy_config().port, 8080);
+    assert_eq!(cfg.to_proxy_config().port, 8123);
     assert_eq!(cfg.globals.llama_base_port, 5500);
 }
 
@@ -165,4 +174,47 @@ fn cache_flag_without_slot_dir_uses_the_default_directory() {
     );
 
     assert!(cfg.resolved_options().slot_save_path.is_some());
+}
+
+// ---------------------------------------------------------------
+// The port
+// ---------------------------------------------------------------
+
+/// The body `gglib serve` sends for `argv`, over a plan made the way
+/// `serve_here` makes it: the port flag where there is one, the built-in
+/// default where there is not.
+fn body_for(argv: &[&str]) -> StartProxyBody {
+    let Some(Commands::Serve { options, cache, .. }) = Cli::parse_from(argv).command else {
+        panic!("{argv:?} is not `gglib serve`");
+    };
+    let mut globals = GlobalDefaults::default();
+    if let Some(port) = options.port {
+        globals.proxy_port = port;
+    }
+    let planned = unified(ServerConfigOptions::default(), globals).to_proxy_config();
+    start_body(planned, PinnedSpec::default(), options.port, &cache, None)
+}
+
+/// Without `--port` the plan still carries a port, the built-in default, and
+/// the daemon must not be sent it: sent, it is a port somebody chose as far
+/// as the daemon can tell, and the stored `proxy_port` is never consulted.
+/// The port reported is the one the daemon answers.
+#[tokio::test]
+async fn without_a_port_flag_the_plans_default_port_is_not_sent() {
+    let body = body_for(&["gglib", "serve", "qwen3"]);
+
+    let started = started(&body, Some(9000), &Settings::default()).await;
+
+    assert!(started.sent_no_port(), "{}", started.sent);
+    assert_eq!(started.port, 9000);
+}
+
+#[tokio::test]
+async fn a_port_flag_is_sent_as_typed() {
+    let body = body_for(&["gglib", "serve", "qwen3", "--port", "8123"]);
+
+    let started = started(&body, Some(8123), &Settings::default()).await;
+
+    assert_eq!(started.sent["port"], 8123);
+    assert_eq!(started.port, 8123);
 }

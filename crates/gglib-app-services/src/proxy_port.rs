@@ -3,6 +3,7 @@
 //! Resolved once, in `service_graph`, and handed to the one `ProcessManager`
 //! it builds.
 
+use gglib_core::settings::MIN_PORT;
 use gglib_core::{DEFAULT_LLAMA_BASE_PORT, Settings};
 use tracing::info;
 
@@ -12,7 +13,7 @@ use crate::error::GuiError;
 ///
 /// Precedence: override → `settings.llama_base_port` → `DEFAULT_LLAMA_BASE_PORT`
 ///
-/// Validates that the port is in the valid range (1024-65535).
+/// Validates that the port is [`MIN_PORT`] or above, as a stored one must be.
 ///
 /// Returns (port, `source_description`) for logging.
 #[allow(
@@ -31,10 +32,10 @@ pub(crate) fn resolve_llama_base_port(
         (DEFAULT_LLAMA_BASE_PORT, "default")
     };
 
-    // Validate port range
-    if !(1024..=65535).contains(&port) {
+    if port < MIN_PORT {
         return Err(GuiError::Internal(format!(
-            "Invalid llama-server base port {port}: must be in range 1024-65535"
+            "Invalid llama-server base port {port}: must be in range {MIN_PORT}-{}",
+            u16::MAX
         )));
     }
 
@@ -84,6 +85,7 @@ mod tests {
         let result = resolve_llama_base_port(Some(80), &settings);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("1024-65535"));
+        assert!(resolve_llama_base_port(Some(1023), &settings).is_err());
     }
 
     #[test]

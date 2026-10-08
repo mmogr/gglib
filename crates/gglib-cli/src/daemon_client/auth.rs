@@ -33,7 +33,7 @@ const API_KEY_ENV: &str = "GGLIB_API_KEY";
 
 /// The credential to present to the daemon; [`Local::credential`] says which.
 pub(crate) async fn daemon_api_key(ctx: &CliContext) -> Option<String> {
-    Local::here().credential(stored_key(ctx)).await
+    Local::here().credential(proxy_key(ctx, None)).await
 }
 
 /// The daemon's token, when there is one this account can read.
@@ -81,20 +81,38 @@ impl Local {
 /// The token in the file at `path`, when it can be read, is not blank, and
 /// is open to nobody else ([`read_daemon_token`] refuses one that is).
 fn token_at(path: &Path) -> Option<String> {
+    #[cfg(test)]
+    if let Ok(left) = STAND_IN_TOKEN.try_with(Clone::clone) {
+        return left;
+    }
     read_daemon_token(path)
         .ok()
         .flatten()
         .map(|token| token.as_str().to_owned())
 }
 
-/// The API key stored as `proxy_api_key`, or `None`.
+#[cfg(test)]
+tokio::task_local! {
+    /// In a test, the token a stand-in daemon left, or `None` for one that
+    /// left none. A task that sets it reads that in place of any token
+    /// file: the one under the data root is one file for every test in the
+    /// binary.
+    pub(crate) static STAND_IN_TOKEN: Option<String>;
+}
+
+/// The key a proxy on this machine is sent: `flag` when one was given, and
+/// otherwise the key stored as `proxy_api_key`, when one is and it is not
+/// blank. The daemon is presented the same stored key when there is neither a
+/// token nor an operator's key ([`Local::credential`]).
 ///
-/// An unreadable settings store yields `None` rather than an error, matching
-/// `resolve_client_api_key`'s reasoning for the proxy: failing the command
-/// outright would turn a maybe-irrelevant local problem into a hard stop. A
-/// daemon that wants something else answers 401 with a message that names the
-/// remedy.
-async fn stored_key(ctx: &CliContext) -> Option<String> {
+/// An unreadable settings store yields `None` rather than an error: failing
+/// the command outright would turn a maybe-irrelevant local problem into a
+/// hard stop. A server that wants a key answers 401 with a message that names
+/// the remedy.
+pub(crate) async fn proxy_key(ctx: &CliContext, flag: Option<String>) -> Option<String> {
+    if flag.is_some() {
+        return flag;
+    }
     ctx.app
         .settings()
         .get()

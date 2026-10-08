@@ -9,9 +9,12 @@
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
-use gglib_core::download::QueueSnapshot;
+use gglib_app_services::types::QueueDownloadResponse;
+use gglib_core::download::{DownloadId, QueueSnapshot};
 
-use super::wire::{ProxyStatusDto, QueueDownloadBody, StartProxyBody, StartServerDto};
+use super::wire::{
+    ProxyStatusDto, QueueDownloadBody, StartProxyBody, StartServerBody, StartServerDto,
+};
 use super::{DaemonHandle, auth, base_url, paths};
 
 impl DaemonHandle {
@@ -113,35 +116,31 @@ impl DaemonHandle {
     /// Long timeout: the daemon holds the request open while the model loads.
     pub(crate) async fn start_model_server(
         &self,
-        model_id: i64,
-        context_length: Option<u64>,
+        body: &StartServerBody,
     ) -> Result<StartServerDto> {
         let response = self
             .post(paths::SERVERS_START_PATH)
-            .json(&serde_json::json!({ "id": model_id, "context_length": context_length }))
+            .json(body)
             .timeout(Duration::from_mins(3))
             .send()
             .await?;
         Ok(Self::expect_ok(response).await?.json().await?)
     }
 
-    /// Queue a model download on the daemon.
+    /// Queue a model download on the daemon, and answer the ID the daemon
+    /// gave it: the download this request is, whatever else the queue holds.
     ///
     /// Long timeout: the daemon resolves the repo and its shard list against
     /// `HuggingFace` before answering.
-    /// The response body carries a queue position and shard count. Nothing
-    /// reads them — the caller goes straight to watching the queue — so this
-    /// checks the status and discards the body rather than deserializing a
-    /// shape no one inspects.
-    pub(crate) async fn queue_download(&self, body: &QueueDownloadBody) -> Result<()> {
+    pub(crate) async fn queue_download(&self, body: &QueueDownloadBody) -> Result<DownloadId> {
         let response = self
             .post(paths::DOWNLOADS_QUEUE_PATH)
             .json(body)
             .timeout(Duration::from_secs(30))
             .send()
             .await?;
-        Self::expect_ok(response).await?;
-        Ok(())
+        let queued: QueueDownloadResponse = Self::expect_ok(response).await?.json().await?;
+        Ok(queued_id(&queued))
     }
 
     /// The daemon's download queue snapshot — what the dashboard renders.
@@ -157,6 +156,14 @@ impl DaemonHandle {
             .send()
             .await?;
         Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// The daemon's setup status as the JSON it answers with, whatever the
+    /// status code: the benchmark report reads this machine's hardware from
+    /// it, and has nothing to say about a refusal.
+    pub(crate) async fn setup_status(&self) -> Result<serde_json::Value> {
+        let response = self.get(paths::SETUP_STATUS_PATH).send().await?;
+        Ok(response.json().await?)
     }
 
     /// The request that asks the daemon to judge tune run `run_id` against the
@@ -191,9 +198,75 @@ impl DaemonHandle {
     }
 }
 
+/// The download a queue request was answered with.
+fn queued_id(queued: &QueueDownloadResponse) -> DownloadId {
+    DownloadId::from(queued.id.as_str())
+}
+
 #[cfg(test)]
 mod tests {
+    use std::io::Write as _;
+    use std::net::TcpListener;
+
     use super::*;
+    use crate::daemon_client::STAND_IN_PORT;
+    use crate::handlers::agent_chat::sight::sight_tests::read_request;
+
+    /// A queue request is a POST of the body to the queue route, and its
+    /// answer is the ID in the daemon's reply: here one with a quantization
+    /// the request did not name.
+    #[tokio::test]
+    async fn a_queue_request_answers_the_id_the_daemon_replied_with() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+        let port = listener.local_addr().expect("its address").port();
+        let daemon = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("the request");
+            let request = read_request(&mut stream);
+            let reply = r#"{"id":"owner/repo:Q8_0"}"#;
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\
+                 content-length: {}\r\nconnection: close\r\n\r\n{reply}",
+                reply.len()
+            );
+            request
+        });
+        let handle = DaemonHandle {
+            client: gglib_proxy::loopback::client(),
+            api_key: None,
+        };
+        let body = QueueDownloadBody {
+            model_id: "owner/repo".to_owned(),
+            quant: None,
+        };
+
+        let queued = STAND_IN_PORT
+            .scope(port, handle.queue_download(&body))
+            .await
+            .expect("the daemon's answer");
+
+        assert_eq!(queued, DownloadId::new("owner/repo", Some("Q8_0")));
+        let (line, sent) = daemon.join().expect("the stand-in ran");
+        let route = paths::DOWNLOADS_QUEUE_PATH;
+        assert_eq!(line, format!("POST {route} HTTP/1.1"));
+        let sent: serde_json::Value = serde_json::from_str(&sent).expect("a JSON body");
+        assert_eq!(sent["model_id"], "owner/repo");
+        assert!(sent["quant"].is_null(), "{sent}");
+    }
+
+    /// The ID read from the daemon's answer is the one the daemon wrote: a
+    /// quantization stays part of it, and a repository alone is itself.
+    #[test]
+    fn the_queued_id_is_the_one_the_daemon_answered() {
+        let answer = |id: &str| -> QueueDownloadResponse {
+            serde_json::from_value(serde_json::json!({ "id": id })).expect("the daemon's shape")
+        };
+
+        let with_quant = queued_id(&answer("owner/repo:Q8_0"));
+        assert_eq!(with_quant, DownloadId::new("owner/repo", Some("Q8_0")));
+        assert_eq!(with_quant.to_string(), "owner/repo:Q8_0");
+        assert_eq!(queued_id(&answer("owner/repo")).to_string(), "owner/repo");
+    }
 
     /// Every call carries the credential, the one that posts a tune's verdict
     /// included: it was the one raw post left, and 401'd on every daemon.

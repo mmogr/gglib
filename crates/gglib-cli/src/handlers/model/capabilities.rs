@@ -14,6 +14,7 @@ use gglib_core::ModelCapabilities;
 
 use super::resolver;
 use crate::bootstrap::CliContext;
+use crate::presentation::capability_flags::{CAPABILITY_FLAGS, capability_lines};
 
 /// Execute `gglib model capabilities <id> [--set FLAG]... [--unset FLAG]...`.
 ///
@@ -31,10 +32,9 @@ pub(crate) async fn execute(
     let core_model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
     // Build-once — ModelOps is cheap and constructed the same way as in Axum/Tauri.
-    //
-    // `NoopModelRuntime` rather than `ctx.runner`: a one-shot CLI command has
-    // no shared `ProcessManager` to check, and this handler never touches
-    // serving status anyway (`get`/`set_capabilities` only).
+    // What it is built with, and why, is `one_shot_model_ops`'s to say. This
+    // handler shows and sets capabilities, and uses nothing of the serving
+    // status `get` carries.
     let ops = super::one_shot_model_ops(ctx);
 
     // Read-only: no flags provided.
@@ -65,48 +65,28 @@ pub(crate) async fn execute(
     Ok(())
 }
 
-/// Parse a capability flag name and set/clear the corresponding field.
-fn apply_flag(req: &mut SetCapabilitiesRequest, flag: &str, value: bool) -> Result<()> {
-    match flag {
-        "supports-system-role" => req.supports_system_role = Some(value),
-        "requires-strict-turns" => req.requires_strict_turns = Some(value),
-        "supports-tool-calls" => req.supports_tool_calls = Some(value),
-        "supports-reasoning" => req.supports_reasoning = Some(value),
-        other => {
-            return Err(anyhow!(
-                "Unknown capability flag '{other}'.\n\
-                 Valid flags: supports-system-role, requires-strict-turns, \
-                 supports-tool-calls, supports-reasoning"
-            ));
-        }
-    }
+/// Set or clear the field of `req` that the flag called `name` is
+/// overridden by. Clap takes `--set` and `--unset` values from
+/// [`CAPABILITY_FLAGS`], so a name that is not in it does not reach here.
+fn apply_flag(req: &mut SetCapabilitiesRequest, name: &str, value: bool) -> Result<()> {
+    let mut flags = CAPABILITY_FLAGS.iter();
+    let flag = flags.find(|flag| flag.name == name);
+    let flag = flag.ok_or_else(|| anyhow!("Unknown capability flag '{name}'."))?;
+    *(flag.field)(req) = Some(value);
     Ok(())
 }
 
 /// Pretty-print the capability state for a model.
 fn print_capabilities(id: i64, name: &str, caps: ModelCapabilities) {
     println!("Capabilities for model {id} ({name}):");
-    println!(
-        "  supports-system-role  : {}",
-        flag_str(caps.contains(ModelCapabilities::SUPPORTS_SYSTEM_ROLE))
-    );
-    println!(
-        "  requires-strict-turns : {}",
-        flag_str(caps.contains(ModelCapabilities::REQUIRES_STRICT_TURNS))
-    );
-    println!(
-        "  supports-tool-calls   : {}",
-        flag_str(caps.contains(ModelCapabilities::SUPPORTS_TOOL_CALLS))
-    );
-    println!(
-        "  supports-reasoning    : {}",
-        flag_str(caps.contains(ModelCapabilities::SUPPORTS_REASONING))
-    );
+    for line in capability_lines(caps) {
+        println!("{line}");
+    }
     if caps.is_empty() {
         println!("  (all flags unset — pass-through mode)");
     }
 }
 
-fn flag_str(v: bool) -> &'static str {
-    if v { "true" } else { "false" }
-}
+#[cfg(test)]
+#[path = "capabilities_tests.rs"]
+mod tests;

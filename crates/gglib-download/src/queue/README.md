@@ -13,10 +13,30 @@ No I/O is performed here; the orchestrator (`DownloadManager`) handles I/O.
 - Commands produce events that the caller can use for side effects
 - Deterministic: same inputs always produce same outputs
 
+# Downloads and files
+
+- The queue holds one item per file; every file of a download carries the
+  download's id
+- Rows, positions and capacity count downloads, never files (`rows.rs`)
+- The running download is the one being fetched, or the one between two of
+  its files. Its pending files stay at the head of the queue: they are not a
+  row, take no place, and nothing is moved in front of them
+
 # Position Semantics
 
-- Position 1 = currently downloading
-- Position 2+ = waiting in queue
-- Failed items have position 0 (not in active queue)
+- Position 1 = the running download
+- Position 2+ = the waiting downloads, in the order they will run
+- With nothing running, the first waiting download is at position 1
+- A download that has ended has no position: it is in the finished list
+
+# How downloads ended
+
+- The queue keeps the outcome of the latest 16 downloads, one entry per
+  download: completed, failed, or cancelled
+- Queued again, a download loses its old entry, so its new run is not read
+  as its last
+- A download that is stopped or fails leaves the queue with every pending
+  file of it (`take_pending`), and its outcome is recorded by the same caller
+  under the same lock
 
 <!-- module-docs:end -->

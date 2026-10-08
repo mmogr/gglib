@@ -77,88 +77,34 @@ pub(crate) fn resolve_executable_with_deps(
 }
 
 /// Resolve a relative command (not an absolute path).
+///
+/// The steps run in the order `resolve_executable` lists them. Each adds what
+/// it checked to `attempts`, and the first to find the command ends the search.
 fn resolve_relative_command(
     command: &str,
     user_search_paths: &[String],
     env: &dyn EnvProvider,
     fs: &dyn FsProvider,
-    mut all_attempts: Vec<Attempt>,
+    mut attempts: Vec<Attempt>,
     warnings: Vec<String>,
 ) -> Result<ResolveResult, ResolveError> {
     let searcher = ExecutableSearcher::new(env, fs);
 
-    // Step 2: Search in PATH
-    let path_attempts = searcher.search_in_path(command);
-    if let Some(success) = find_success(&path_attempts) {
-        let resolved_path = success.candidate.clone();
-        all_attempts.extend(path_attempts);
-        return Ok(ResolveResult {
+    let found = searcher
+        .search_in_path(command, &mut attempts)
+        .or_else(|| searcher.search_in_etc_paths(command, &mut attempts))
+        .or_else(|| searcher.search_platform_defaults(command, &mut attempts))
+        .or_else(|| searcher.search_node_managers(command, &mut attempts))
+        .or_else(|| searcher.search_user_paths(command, user_search_paths, &mut attempts));
+
+    match found {
+        Some(resolved_path) => Ok(ResolveResult {
             resolved_path,
-            attempts: all_attempts,
+            attempts,
             warnings,
-        });
+        }),
+        None => Err(ResolveError::not_resolved(command, &attempts)),
     }
-    all_attempts.extend(path_attempts);
-
-    // Step 3: Search /etc/paths (macOS)
-    let etc_attempts = searcher.search_in_etc_paths(command);
-    if let Some(success) = find_success(&etc_attempts) {
-        let resolved_path = success.candidate.clone();
-        all_attempts.extend(etc_attempts);
-        return Ok(ResolveResult {
-            resolved_path,
-            attempts: all_attempts,
-            warnings,
-        });
-    }
-    all_attempts.extend(etc_attempts);
-
-    // Step 4: Search platform defaults
-    let platform_attempts = searcher.search_platform_defaults(command);
-    if let Some(success) = find_success(&platform_attempts) {
-        let resolved_path = success.candidate.clone();
-        all_attempts.extend(platform_attempts);
-        return Ok(ResolveResult {
-            resolved_path,
-            attempts: all_attempts,
-            warnings,
-        });
-    }
-    all_attempts.extend(platform_attempts);
-
-    // Step 5: Search Node.js version managers
-    let node_attempts = searcher.search_node_managers(command);
-    if let Some(success) = find_success(&node_attempts) {
-        let resolved_path = success.candidate.clone();
-        all_attempts.extend(node_attempts);
-        return Ok(ResolveResult {
-            resolved_path,
-            attempts: all_attempts,
-            warnings,
-        });
-    }
-    all_attempts.extend(node_attempts);
-
-    // Step 6: Search user-provided paths
-    let user_attempts = searcher.search_user_paths(command, user_search_paths);
-    if let Some(success) = find_success(&user_attempts) {
-        let resolved_path = success.candidate.clone();
-        all_attempts.extend(user_attempts);
-        return Ok(ResolveResult {
-            resolved_path,
-            attempts: all_attempts,
-            warnings,
-        });
-    }
-    all_attempts.extend(user_attempts);
-
-    // Nothing found
-    Err(ResolveError::not_resolved(command, &all_attempts))
-}
-
-/// Find the first successful attempt in a list.
-fn find_success(attempts: &[Attempt]) -> Option<&Attempt> {
-    attempts.iter().find(|a| a.outcome == AttemptOutcome::Ok)
 }
 
 #[cfg(test)]
@@ -249,3 +195,7 @@ mod tests {
         assert_eq!(resolved.resolved_path, PathBuf::from("/custom/bin/npx"));
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "resolve_order_tests.rs"]
+mod order_tests;

@@ -3,12 +3,15 @@
 //! All types are `pub(crate)` and only compiled under `#[cfg(test)]`
 //! (the module is declared with `#[cfg(test)] mod test_support;` in lib.rs).
 
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use gglib_core::download::{DownloadError, DownloadId, QueueSnapshot};
+use gglib_core::events::AppEvent;
 use gglib_core::ports::{
-    DownloadManagerPort, DownloadRequest, SystemProbePort, ToolSupportDetection,
+    Admission, AppEventEmitter, DownloadManagerPort, LaunchOverrides, ModelRuntimeError,
+    ModelRuntimePort, ProcessHandle, RunningTarget, SystemProbePort, ToolSupportDetection,
     ToolSupportDetectionInput, ToolSupportDetectorPort,
 };
 use gglib_core::services::AppCore;
@@ -18,6 +21,37 @@ use gglib_db::{CoreFactory, setup_test_database};
 pub(crate) use crate::test_support_hf::MockHfClient;
 
 // ---------------------------------------------------------------------------
+// RecordingEmitter
+// ---------------------------------------------------------------------------
+
+/// An emitter that keeps what it was told, in the order it was told.
+///
+/// The one recording emitter this crate's tests share. "Emitted nothing" is
+/// as much a claim worth asserting as "emitted this": a refused mutation
+/// that still announced itself would be a lie no return value catches.
+#[derive(Default)]
+pub(crate) struct RecordingEmitter(Mutex<Vec<AppEvent>>);
+
+impl RecordingEmitter {
+    /// Everything emitted so far, oldest first.
+    pub(crate) fn events(&self) -> Vec<AppEvent> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+}
+
+impl AppEventEmitter for RecordingEmitter {
+    fn emit(&self, event: AppEvent) {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(event);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // MockDownloadManager
 // ---------------------------------------------------------------------------
 
@@ -25,9 +59,11 @@ pub(crate) use crate::test_support_hf::MockHfClient;
 ///
 /// - `fail_cancel = true` → `cancel_download` returns `DownloadError::NotFound`
 /// - `reorder_position` → the position value returned by `reorder_queue`
+/// - `calls` → the cancel, remove and clear calls it was sent, in order
 pub(crate) struct MockDownloadManager {
     pub fail_cancel: bool,
     pub reorder_position: u32,
+    pub calls: Arc<Mutex<Vec<String>>>,
 }
 
 impl Default for MockDownloadManager {
@@ -35,6 +71,7 @@ impl Default for MockDownloadManager {
         Self {
             fail_cancel: false,
             reorder_position: 1,
+            calls: Arc::default(),
         }
     }
 }
@@ -48,23 +85,24 @@ impl MockDownloadManager {
     pub(crate) fn failing_cancel() -> Self {
         Self {
             fail_cancel: true,
-            reorder_position: 1,
+            ..Self::default()
         }
+    }
+
+    /// Keep that `call` was sent.
+    fn record(&self, call: String) {
+        self.calls.lock().unwrap().push(call);
     }
 }
 
 #[async_trait]
 impl DownloadManagerPort for MockDownloadManager {
-    async fn queue_download(&self, _request: DownloadRequest) -> Result<DownloadId, DownloadError> {
-        Ok(DownloadId::from_model("mock-model"))
-    }
-
     async fn queue_smart(
         self: Arc<Self>,
         _repo_id: String,
         _quantization: Option<String>,
-    ) -> Result<(usize, usize), DownloadError> {
-        Ok((1, 1))
+    ) -> Result<DownloadId, DownloadError> {
+        Ok(DownloadId::new("mock/model", Some("Q8_0")))
     }
 
     async fn get_queue_snapshot(&self) -> Result<QueueSnapshot, DownloadError> {
@@ -72,6 +110,7 @@ impl DownloadManagerPort for MockDownloadManager {
     }
 
     async fn cancel_download(&self, id: &DownloadId) -> Result<(), DownloadError> {
+        self.record(format!("cancel_download {id}"));
         if self.fail_cancel {
             Err(DownloadError::NotFound {
                 message: id.to_string(),
@@ -89,7 +128,8 @@ impl DownloadManagerPort for MockDownloadManager {
         Ok(0)
     }
 
-    async fn remove_from_queue(&self, _id: &DownloadId) -> Result<(), DownloadError> {
+    async fn remove_from_queue(&self, id: &DownloadId) -> Result<(), DownloadError> {
+        self.record(format!("remove_from_queue {id}"));
         Ok(())
     }
 
@@ -99,14 +139,6 @@ impl DownloadManagerPort for MockDownloadManager {
         _new_position: u32,
     ) -> Result<u32, DownloadError> {
         Ok(self.reorder_position)
-    }
-
-    async fn cancel_group(&self, _group_id: &str) -> Result<(), DownloadError> {
-        Ok(())
-    }
-
-    async fn clear_failed(&self) -> Result<(), DownloadError> {
-        Ok(())
     }
 
     async fn set_max_queue_size(&self, _size: u32) -> Result<(), DownloadError> {
@@ -177,6 +209,76 @@ impl SystemProbePort for MockSystemProbePort {
 }
 
 // ---------------------------------------------------------------------------
+// RunningRuntime
+// ---------------------------------------------------------------------------
+
+/// A runtime with one model being served, on one port. It keeps whether it
+/// was told to stop, and how many times it was asked what is running.
+///
+/// Stands in for the runtime `ServerOps` starts models through, which is the
+/// one `ModelOps` asks what is being served.
+#[derive(Debug)]
+pub(crate) struct RunningRuntime {
+    model_id: i64,
+    port: u16,
+    stopped: AtomicBool,
+    asked: AtomicUsize,
+}
+
+impl RunningRuntime {
+    pub(crate) fn new(model_id: i64, port: u16) -> Self {
+        Self {
+            model_id,
+            port,
+            stopped: AtomicBool::new(false),
+            asked: AtomicUsize::new(0),
+        }
+    }
+
+    pub(crate) fn stopped(&self) -> bool {
+        self.stopped.load(Ordering::SeqCst)
+    }
+
+    /// How many times it has been asked what is running.
+    pub(crate) fn asked(&self) -> usize {
+        self.asked.load(Ordering::SeqCst)
+    }
+}
+
+#[async_trait]
+impl ModelRuntimePort for RunningRuntime {
+    async fn admit(
+        &self,
+        _model_name: &str,
+        _num_ctx: Option<u64>,
+        _default_ctx: Option<u64>,
+        _overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
+        unimplemented!("a removal and an upgrade start nothing")
+    }
+
+    async fn current_model(&self) -> Option<RunningTarget> {
+        None
+    }
+
+    async fn list_running(&self) -> Vec<ProcessHandle> {
+        self.asked.fetch_add(1, Ordering::SeqCst);
+        vec![ProcessHandle::new(
+            self.model_id,
+            "running-model".to_string(),
+            None,
+            self.port,
+            0,
+        )]
+    }
+
+    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+        self.stopped.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // AppCore test helper
 // ---------------------------------------------------------------------------
 
@@ -187,7 +289,7 @@ impl SystemProbePort for MockSystemProbePort {
 pub(crate) async fn test_core() -> Arc<AppCore> {
     gglib_core::paths::isolate_data_root();
     let pool = setup_test_database().await.expect("in-memory DB");
-    Arc::new(CoreFactory::build_app_core(pool))
+    Arc::new(AppCore::bare(CoreFactory::build_repos(pool)))
 }
 
 /// An `AppCore` and a `ProxyOps` sharing one in-memory database.
@@ -210,33 +312,38 @@ pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>
 pub(crate) fn test_core_and_proxy_over(
     repos: &gglib_core::ports::Repos,
 ) -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
-    use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
-    use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
-    use gglib_mcp::McpService;
+    use gglib_core::cache_config::CacheRamSetting;
+    use gglib_core::ports::ModelCatalogPort;
+    use gglib_core::server_config::ServerConfigOptions;
     use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
     use gglib_runtime::process::ProcessManager;
-    use gglib_runtime::proxy::ProxySupervisor;
 
     gglib_core::paths::isolate_data_root();
-    let core = Arc::new(AppCore::new(repos.clone()));
-
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(repos.models.clone()));
-    let runtime: Arc<dyn ModelRuntimePort> =
-        Arc::new(RuntimePortImpl::new(Arc::new(ProcessManager::new(
-            9000,
-            "llama-server",
-            catalog,
-            ServerConfigOptions::default(),
-            CacheRamSetting::Auto,
-        ))));
+    let runtime = Arc::new(RuntimePortImpl::new(Arc::new(ProcessManager::new(
+        9000,
+        "llama-server",
+        catalog,
+        ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+    ))));
+    test_core_and_proxy_on(repos, runtime)
+}
 
+/// [`test_core_and_proxy_over`] with the runtime the proxy drives models
+/// through supplied too, so a test can script what a start and a stop meet.
+pub(crate) fn test_core_and_proxy_on(
+    repos: &gglib_core::ports::Repos,
+    runtime: Arc<dyn gglib_core::ports::ModelRuntimePort>,
+) -> (Arc<AppCore>, Arc<crate::ProxyOps>) {
+    gglib_core::paths::isolate_data_root();
+    let core = Arc::new(AppCore::bare(repos.clone()));
     let proxy = Arc::new(crate::proxy::ProxyOps::new(crate::proxy::ProxyDeps {
-        supervisor: Arc::new(ProxySupervisor::new()),
+        supervisor: Arc::new(gglib_runtime::proxy::ProxySupervisor::new()),
         model_repo: repos.models.clone(),
-        mcp: Arc::new(McpService::new(repos.mcp_servers.clone())),
+        mcp: Arc::new(gglib_mcp::McpService::new(repos.mcp_servers.clone())),
         core: Arc::clone(&core),
         runtime,
     }));
-
     (core, proxy)
 }

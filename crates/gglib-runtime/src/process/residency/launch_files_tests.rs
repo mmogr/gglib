@@ -4,8 +4,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::ports::{LaunchOverrides, ModelLaunchSpec, ModelRuntimeError};
-use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
+use gglib_core::server_config::ServerConfigOptions;
 use tokio::sync::RwLock;
 
 use super::ensure_present;

@@ -1,8 +1,5 @@
 # HuggingFaceBrowser
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-HuggingFaceBrowser-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-HuggingFaceBrowser-complexity.json)
-
 <!-- module-docs:start -->
 
 Full-page model browser for searching and browsing GGUF models on HuggingFace Hub. Supports free-text search, parameter count filtering, sort options (downloads, likes, modified, created, alphabetical), and load-more pagination. Also handles `user/repo:quant` shorthand for direct download without browsing.

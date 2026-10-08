@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ModelsDirectoryInfo } from "../types";
 import { getTransport } from '../services/transport';
+import { formatError } from '../utils/errors';
 
 export function useModelsDirectory() {
   const [info, setInfo] = useState<ModelsDirectoryInfo | null>(null);
@@ -15,7 +16,7 @@ export function useModelsDirectory() {
       const result = await getTransport().getModelsDirectory();
       setInfo(result);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = formatError(err);
       setError(message);
     } finally {
       setLoading(false);
@@ -32,7 +33,7 @@ export function useModelsDirectory() {
       setInfo(result);
       return result;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = formatError(err);
       setError(message);
       throw err;
     } finally {

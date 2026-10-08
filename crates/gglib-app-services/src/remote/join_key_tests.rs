@@ -18,10 +18,10 @@ use tokio::net::TcpListener;
 use super::super::types::JoinRequest;
 use super::super::{RemoteGateway, RemoteOps};
 use crate::error::GuiError;
-use crate::test_support::test_core_and_proxy;
+use crate::test_support::{RecordingEmitter, test_core_and_proxy};
 use crate::test_support_remote::{
-    FINGERPRINT_A, KEY_A, RecordingEmitter, TICKET_A, TICKET_A_MOVED, TICKET_B, paired_with,
-    scratch_join_keys, test_remote_ops_joining_from, ticket,
+    FINGERPRINT_A, KEY_A, TICKET_A, TICKET_A_MOVED, TICKET_B, paired_with, scratch_join_keys,
+    test_remote_ops_joining_from, ticket,
 };
 
 /// One machine is one file, named by its endpoint's fingerprint: the same

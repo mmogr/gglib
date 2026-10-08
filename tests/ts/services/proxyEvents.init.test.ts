@@ -16,10 +16,8 @@ const getProxyStatus = vi.fn();
 const ingestProxyEvent = vi.fn();
 const resetProxyState = vi.fn();
 
-vi.mock('../../../src/services/transport/events/sse', () => ({ subscribeSseEvent }));
-
 vi.mock('../../../src/services/transport', () => ({
-  getTransport: () => ({ getProxyStatus }),
+  getTransport: () => ({ subscribe: subscribeSseEvent, getProxyStatus }),
 }));
 
 vi.mock('../../../src/services/proxyRegistry', () => ({
@@ -168,6 +166,59 @@ describe('initProxyEvents', () => {
 
     initProxyEvents();
     expect(subscribeSseEvent).toHaveBeenCalledTimes(2);
+
+    cleanupProxyEvents();
+  });
+
+  /**
+   * Cleanup is newer than a fetch still out. Its status was asked for by a
+   * bridge that is gone, and landing it would start a proxy in a registry
+   * that cleanup had just emptied.
+   */
+  it('writes nothing from a status that answers after cleanup', async () => {
+    let resolveStatus: (v: unknown) => void = () => {};
+    getProxyStatus.mockReturnValue(
+      new Promise((resolve) => {
+        resolveStatus = resolve;
+      }),
+    );
+
+    const { initProxyEvents, cleanupProxyEvents } = await loadFresh();
+    initProxyEvents();
+    expect(getProxyStatus).toHaveBeenCalledTimes(1);
+    cleanupProxyEvents();
+
+    resolveStatus({
+      running: true,
+      port: PORT,
+      current_model: null,
+      model_port: null,
+      pinned_model: null,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ingestProxyEvent).not.toHaveBeenCalled();
+  });
+
+  // `running` and `port` are separate fields that the daemon sets together.
+  // A status with only one of them is not a running proxy with a port.
+  it.each([
+    ['running with no port', { running: true, port: null }],
+    ['a port but not running', { running: false, port: PORT }],
+  ])('says nothing for a status that is %s', async (_label, half) => {
+    getProxyStatus.mockResolvedValue({
+      ...half,
+      current_model: null,
+      model_port: null,
+      pinned_model: null,
+    });
+
+    const { initProxyEvents, cleanupProxyEvents } = await loadFresh();
+    initProxyEvents();
+    expect(getProxyStatus).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ingestProxyEvent).not.toHaveBeenCalled();
 
     cleanupProxyEvents();
   });

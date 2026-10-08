@@ -169,4 +169,29 @@ describe('initServerEvents', () => {
 
     cleanupServerEvents();
   });
+
+  /**
+   * Cleanup is newer than a fetch still out. Its list was asked for by a
+   * bridge that is gone, and must not land in the registry after it.
+   */
+  it('writes nothing from a list that answers after cleanup', async () => {
+    let resolveList: (v: ServerInfo[]) => void = () => {};
+    listServers.mockReturnValue(
+      new Promise<ServerInfo[]>((resolve) => {
+        resolveList = resolve;
+      }),
+    );
+
+    const { initServerEvents, cleanupServerEvents } = await loadFresh();
+    initServerEvents();
+    expect(listServers).toHaveBeenCalledTimes(1);
+    cleanupServerEvents();
+
+    resolveList([
+      { model_id: 1, model_name: 'Loaded', pid: 4242, port: 8080, started_at: 1_700_000_000 },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ingestServerEvent).not.toHaveBeenCalled();
+  });
 });

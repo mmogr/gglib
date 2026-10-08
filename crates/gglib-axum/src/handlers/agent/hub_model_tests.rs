@@ -3,7 +3,9 @@
 //! hub, before the hub's default.
 
 use gglib_app_services::types::ServerInfo;
-use gglib_core::domain::chat::{Conversation, ConversationSettings, Message, MessageRole};
+use gglib_core::domain::chat::{
+    Conversation, ConversationSettings, Message, MessageRole, NewConversation,
+};
 use gglib_core::domain::{Machine, ModelRef};
 
 use super::{choose, serving};
@@ -41,7 +43,10 @@ async fn registered_at(state: &AppState, name: &str, path: &str) -> i64 {
 async fn bare(state: &AppState) -> (Conversation, Vec<Message>) {
     let history = state.core.chat_history();
     let id = history
-        .create_conversation("t".to_owned(), None, None)
+        .create_conversation(NewConversation {
+            title: "t".to_owned(),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
     (

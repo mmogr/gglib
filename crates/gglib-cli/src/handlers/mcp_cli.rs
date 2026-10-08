@@ -3,8 +3,9 @@
 //! All handlers delegate to `McpService` via `ctx.mcp` — no business logic
 //! lives here, only CLI input parsing and output formatting.
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use gglib_core::domain::mcp::{McpLifecycle, McpServerStatus, McpServerType, NewMcpServer};
+use gglib_mcp::McpServerInfo;
 
 use crate::bootstrap::CliContext;
 use crate::mcp_commands::McpCommand;
@@ -72,32 +73,41 @@ async fn list(ctx: &CliContext) -> Result<()> {
 
     for info in servers {
         let s = &info.server;
-        let type_str = match s.server_type {
-            McpServerType::Stdio => "stdio",
-            McpServerType::Sse => "sse",
-        };
-        let status_str = match &info.status {
-            McpServerStatus::Stopped => "stopped".to_string(),
-            McpServerStatus::Starting => "starting".to_string(),
-            McpServerStatus::Running => "running".to_string(),
-            McpServerStatus::Error(e) => format!("error: {}", truncate_string(e, 20)),
-        };
+        let type_str = s.server_type.to_string();
         let enabled_str = if s.enabled { "yes" } else { "no" };
         let lifecycle_str = s.lifecycle.to_string();
 
         println!(
-            "{:<4} {:<25} {:<6} {:<9} {:<11} {:<10} {:<6}",
+            "{:<4} {:<25} {:<6} {:<9} {:<11} {}",
             s.id,
             truncate_string(&s.name, 24),
             type_str,
             enabled_str,
             lifecycle_str,
-            truncate_string(&status_str, 9),
-            info.tools.len()
+            status_and_tools(&info)
         );
     }
 
     Ok(())
+}
+
+/// A row's Status and Tools cells.
+///
+/// A server gglib cannot run has no status and no tools to count. It says so
+/// across the two cells, which the words fill exactly.
+fn status_and_tools(info: &McpServerInfo) -> String {
+    let status = match &info.status {
+        McpServerStatus::Unsupported => return "not supported yet".to_string(),
+        McpServerStatus::Stopped => "stopped".to_string(),
+        McpServerStatus::Starting => "starting".to_string(),
+        McpServerStatus::Running => "running".to_string(),
+        McpServerStatus::Error(e) => format!("error: {}", truncate_string(e, 20)),
+    };
+    format!(
+        "{:<10} {:<6}",
+        truncate_string(&status, 9),
+        info.tools.len()
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -114,16 +124,17 @@ async fn add(
     lifecycle: String,
     disabled: bool,
 ) -> Result<()> {
+    let server_type = server_type
+        .parse::<McpServerType>()
+        .map_err(|e| anyhow!("Invalid --type value: {e}"))?;
     let mut new_server = match server_type {
-        "stdio" => {
+        McpServerType::Stdio => {
             let cmd = command.ok_or_else(|| anyhow!("--command is required for stdio servers"))?;
             NewMcpServer::new_stdio(name, cmd, args, path_extra)
         }
-        "sse" => {
-            let server_url = url.ok_or_else(|| anyhow!("--url is required for sse servers"))?;
-            NewMcpServer::new_sse(name, server_url)
-        }
-        _ => bail!("--type must be 'stdio' or 'sse'"),
+        // The service refuses an SSE server whatever its URL is, so a missing
+        // one is not asked for first.
+        McpServerType::Sse => NewMcpServer::new_sse(name, url.unwrap_or_default()),
     };
 
     // Apply optional settings
@@ -155,7 +166,7 @@ async fn remove(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
 
     if !force {
         println!(
-            "Server: {} (id: {}, type: {:?})",
+            "Server: {} (id: {}, type: {})",
             server.name, server.id, server.server_type
         );
         if !input::prompt_confirmation("Remove this MCP server?")? {
@@ -236,17 +247,7 @@ async fn test(ctx: &CliContext, identifier: &str) -> Result<()> {
     let server = resolve_server(ctx, identifier).await?;
     println!("Testing connection to '{}'...", server.name);
 
-    // Build a NewMcpServer from the existing server for test_connection
-    let new_server = NewMcpServer {
-        name: server.name.clone(),
-        server_type: server.server_type,
-        config: server.config.clone(),
-        enabled: server.enabled,
-        lifecycle: server.lifecycle,
-        env: server.env.clone(),
-    };
-
-    let tools = ctx.mcp.test_connection(new_server).await?;
+    let tools = ctx.mcp.test_server(server.id).await?;
     println!(
         "✓ Connection successful — {} tool(s) discovered",
         tools.len()

@@ -13,6 +13,7 @@ use thiserror::Error;
 use tokio::process::Command;
 
 use super::python_bridge::NoticeCallback;
+use super::python_requirements::requirements;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -44,8 +45,6 @@ const ENV_PARENT_DIR: &str = ".python";
 /// is there rather than silently rebuilding under [`ENV_PARENT_DIR`].
 const LEGACY_ENV_PARENT_DIR: &str = ".conda";
 
-const PY_REQUIREMENTS: &[&str] = &["huggingface_hub>=1.1.5", "hf_xet>=0.6.0"];
-
 /// Interpreter names looked up on `PATH`, in preference order.
 ///
 /// The versioned names matter more than they look: pyenv and asdf install
@@ -61,7 +60,6 @@ const PYTHON_CANDIDATES: &[&str] = &[
     "python3.12",
     "python3.11",
     "python3.10",
-    "python3.9",
 ];
 
 #[cfg(not(target_os = "windows"))]
@@ -73,15 +71,14 @@ const PYTHON_CANDIDATES: &[&str] = &[
     "python3.12",
     "python3.11",
     "python3.10",
-    "python3.9",
 ];
 
 /// Oldest interpreter the requirements will install against.
 ///
 /// Checked at discovery rather than left to fail during the install: a user
 /// with a stale `python3` on `PATH` and a current one under pyenv should get
-/// the current one, not an error about a wheel that has no build for 3.8.
-const MIN_PYTHON: (u32, u32) = (3, 9);
+/// the current one, not an error about a wheel that has no build for 3.9.
+const MIN_PYTHON: (u32, u32) = (3, 10);
 
 /// Conda-family install prefixes, relative to the home directory.
 const CONDA_HOME_PREFIXES: &[&str] = &["miniforge3", "mambaforge", "miniconda3", "anaconda3"];
@@ -160,7 +157,7 @@ impl EnvMarker {
     fn current(builder: &Builder) -> Self {
         Self {
             helper_version: env!("CARGO_PKG_VERSION").to_string(),
-            requirements: PY_REQUIREMENTS.iter().copied().map(String::from).collect(),
+            requirements: requirements(),
             builder: builder.label().to_string(),
         }
     }
@@ -175,13 +172,7 @@ impl EnvMarker {
     /// environment uv had built. What matters is the helper version and the
     /// requirements, which is what this compares.
     fn matches(&self, _builder: &Builder) -> bool {
-        self.helper_version == env!("CARGO_PKG_VERSION")
-            && self.requirements
-                == PY_REQUIREMENTS
-                    .iter()
-                    .copied()
-                    .map(String::from)
-                    .collect::<Vec<_>>()
+        self.helper_version == env!("CARGO_PKG_VERSION") && self.requirements == requirements()
     }
 }
 
@@ -348,11 +339,26 @@ impl PythonEnvironment {
         }
 
         if !self.marker_is_fresh(&builder)? {
+            // The packages need `MIN_PYTHON`. An environment built from an
+            // older interpreter cannot take them, so it is built again.
+            if self.interpreter_too_old().await {
+                fs::remove_dir_all(&self.env_dir).map_err(|e| EnvSetupError::CreateEnvFailed {
+                    path: self.env_dir.clone(),
+                    reason: e.to_string(),
+                })?;
+                self.create_env(&builder, notice, python).await?;
+            }
             self.install_requirements(&builder, notice).await?;
             self.write_marker(&builder)?;
         }
 
         Ok(())
+    }
+
+    /// Whether the environment's own interpreter is older than [`MIN_PYTHON`].
+    async fn interpreter_too_old(&self) -> bool {
+        let probe = validate_python_interpreter(&self.python_path()).await;
+        matches!(probe, Err(EnvSetupError::PythonTooOld { .. }))
     }
 
     async fn create_env(
@@ -363,10 +369,11 @@ impl PythonEnvironment {
     ) -> Result<(), EnvSetupError> {
         let bootstrap = find_bootstrap_python_validated(python).await?;
 
-        // With a notice sink (the queued-download path), the note lands on
-        // the bar itself and stays terse — no path, it wouldn't fit and
-        // isn't actionable there. Without one (preflight, `model upgrade`),
-        // fall back to a console line with the full path for context.
+        // With a notice sink (a queued download, or a `model upgrade` whose
+        // row is shown), the note lands on the bar itself and stays terse —
+        // no path, it wouldn't fit and isn't actionable there. Without one
+        // (`ensure_fast_helper_ready`, or an upgrade nobody is shown the row
+        // of), fall back to a console line with the full path for context.
         notify(
             notice,
             "preparing fast downloader (first run, this can take a minute)…",
@@ -452,6 +459,8 @@ impl PythonEnvironment {
         );
 
         let python = self.python_path();
+        let packages = requirements();
+        let packages = packages.iter().map(String::as_str);
 
         match builder {
             Builder::Uv(uv) => {
@@ -460,14 +469,14 @@ impl PythonEnvironment {
                 let mut args = vec!["pip", "install", "--python"];
                 let python = python.to_string_lossy().into_owned();
                 args.push(&python);
-                args.extend(PY_REQUIREMENTS);
+                args.extend(packages);
                 run_setup_command(uv, &args).await?;
             }
             Builder::Venv => {
                 run_setup_command(&python, &["-m", "pip", "install", "--upgrade", "pip"]).await?;
 
                 let mut args = vec!["-m", "pip", "install", "--upgrade"];
-                args.extend(PY_REQUIREMENTS);
+                args.extend(packages);
                 run_setup_command(&python, &args).await?;
             }
         }
@@ -1105,6 +1114,10 @@ fn ensure_parent_dir(path: &Path) -> Result<(), EnvSetupError> {
 // ============================================================================
 
 #[cfg(test)]
+#[path = "python_env_process_tests.rs"]
+mod process_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1118,7 +1131,7 @@ mod tests {
     fn test_env_marker_version_mismatch() {
         let marker = EnvMarker {
             helper_version: "0.0.0".to_string(),
-            requirements: PY_REQUIREMENTS.iter().copied().map(String::from).collect(),
+            requirements: requirements(),
             builder: Builder::VENV_LABEL.to_string(),
         };
         assert!(!marker.matches(&Builder::Venv));
@@ -1171,7 +1184,7 @@ mod tests {
         let legacy = format!(
             r#"{{"helper_version":"{}","requirements":{}}}"#,
             env!("CARGO_PKG_VERSION"),
-            serde_json::to_string(PY_REQUIREMENTS).expect("serialize requirements"),
+            serde_json::to_string(&requirements()).expect("serialize requirements"),
         );
 
         let marker: EnvMarker = serde_json::from_str(&legacy).expect("deserialize legacy marker");
@@ -1394,8 +1407,8 @@ mod tests {
     /// still to try, rather than during `pip install` with nothing left.
     #[test]
     fn version_gate_rejects_below_the_floor_and_accepts_above() {
-        assert!((3, 8) < MIN_PYTHON);
-        assert!((3, 9) >= MIN_PYTHON);
+        assert!((3, 9) < MIN_PYTHON);
+        assert!((3, 10) >= MIN_PYTHON);
         assert!((3, 12) >= MIN_PYTHON);
         assert!((4, 0) >= MIN_PYTHON);
     }
@@ -1527,98 +1540,5 @@ mod tests {
         // section) — just the bare "exited with <status>" whatever ExitStatus's
         // own Display happens to contain.
         assert_eq!(reason, format!("venv exited with {status}"));
-    }
-
-    /// Test that environment isolation properly removes polluted environment variables
-    /// and sets PYTHONNOUSERSITE=1 to prevent stdlib resolution issues.
-    ///
-    /// This test simulates a dirty environment by setting polluted variables directly
-    /// on the Command object, then verifies that `apply_python_subprocess_isolation`
-    /// removes them and sets PYTHONNOUSERSITE=1.
-    #[tokio::test]
-    async fn test_environment_isolation_removes_polluted_vars() {
-        // Find a working Python interpreter
-        let Ok(python) = which::which("python3").or_else(|_| which::which("python")) else {
-            eprintln!("Python not available for test, skipping environment isolation test");
-            return;
-        };
-
-        // Create a command with a "dirty" environment simulating a conda/virtualenv shell
-        let mut cmd = async_cmd(python);
-
-        // Simulate polluted environment by setting variables on the Command
-        cmd.env("PYTHONHOME", "/fake/python/home")
-            .env("PYTHONPATH", "/fake/python/path")
-            .env("PYTHONUSERBASE", "/fake/user/base")
-            .env("VIRTUAL_ENV", "/fake/venv")
-            .env("CONDA_PREFIX", "/fake/conda")
-            .env("CONDA_DEFAULT_ENV", "fake_env")
-            .env("CONDA_PROMPT_MODIFIER", "(fake_env)")
-            .env("CONDA_SHLVL", "1");
-
-        // Apply our isolation function - this should remove the polluted vars
-        apply_python_subprocess_isolation(&mut cmd);
-
-        // Use Python to print its environment variables that we care about
-        cmd.arg("-c").arg(
-            "import os, sys; \
-             print('PYTHONHOME=' + os.getenv('PYTHONHOME', 'UNSET')); \
-             print('PYTHONPATH=' + os.getenv('PYTHONPATH', 'UNSET')); \
-             print('PYTHONUSERBASE=' + os.getenv('PYTHONUSERBASE', 'UNSET')); \
-             print('VIRTUAL_ENV=' + os.getenv('VIRTUAL_ENV', 'UNSET')); \
-             print('CONDA_PREFIX=' + os.getenv('CONDA_PREFIX', 'UNSET')); \
-             print('CONDA_DEFAULT_ENV=' + os.getenv('CONDA_DEFAULT_ENV', 'UNSET')); \
-             print('PYTHONNOUSERSITE=' + os.getenv('PYTHONNOUSERSITE', 'UNSET')); \
-             print('SUCCESS')",
-        );
-
-        let output = cmd.output().await.expect("Failed to run Python subprocess");
-
-        // Verify the Python subprocess ran successfully
-        assert!(
-            output.status.success(),
-            "Python subprocess failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-
-        // Assert that all polluted variables were removed (should be UNSET)
-        assert!(
-            stdout.contains("PYTHONHOME=UNSET"),
-            "PYTHONHOME should be removed, got: {stdout}"
-        );
-        assert!(
-            stdout.contains("PYTHONPATH=UNSET"),
-            "PYTHONPATH should be removed, got: {stdout}"
-        );
-        assert!(
-            stdout.contains("PYTHONUSERBASE=UNSET"),
-            "PYTHONUSERBASE should be removed, got: {stdout}"
-        );
-        assert!(
-            stdout.contains("VIRTUAL_ENV=UNSET"),
-            "VIRTUAL_ENV should be removed, got: {stdout}"
-        );
-        assert!(
-            stdout.contains("CONDA_PREFIX=UNSET"),
-            "CONDA_PREFIX should be removed, got: {stdout}"
-        );
-        assert!(
-            stdout.contains("CONDA_DEFAULT_ENV=UNSET"),
-            "CONDA_DEFAULT_ENV should be removed, got: {stdout}"
-        );
-
-        // Assert that PYTHONNOUSERSITE was explicitly set to '1'
-        assert!(
-            stdout.contains("PYTHONNOUSERSITE=1"),
-            "PYTHONNOUSERSITE should be set to '1', got: {stdout}"
-        );
-
-        // Verify Python ran successfully (can import encodings)
-        assert!(
-            stdout.contains("SUCCESS"),
-            "Python should successfully import stdlib and print SUCCESS"
-        );
     }
 }

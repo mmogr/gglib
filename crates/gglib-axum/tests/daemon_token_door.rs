@@ -28,11 +28,12 @@ fn api_routes() -> Vec<(Method, String)> {
         .iter()
         .filter(|(_, path)| path.starts_with("/api/"))
         .map(|(methods, path)| (*methods, (*path).to_owned()));
-    let more: [(&[&str], String); 9] = [
+    let more: [(&[&str], String); 10] = [
         (
             daemon::REMOTE_FORGET_METHODS,
             daemon::remote_forget_path("dev-0a1b2c3d"),
         ),
+        (daemon::MODEL_REPAIR_METHODS, daemon::model_repair_path(1)),
         (
             daemon::BENCHMARK_TUNE_APPLY_METHODS,
             daemon::benchmark_tune_apply_path(1),

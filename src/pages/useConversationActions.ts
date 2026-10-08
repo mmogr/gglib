@@ -11,6 +11,7 @@ import { appLogger } from '../services/platform';
 import { DEFAULT_SYSTEM_PROMPT } from '../hooks/useGglibRuntime';
 import { getTransport } from '../services/transport';
 import type { ConversationSummary } from '../services/transport';
+import { formatError } from '../utils/errors';
 
 interface ConversationActionsOptions {
   /** A far chat is open: nothing here may act. */
@@ -47,7 +48,7 @@ export function useConversationActions({
       await getTransport().deleteConversation(conversationId);
       await syncConversations();
     } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
+      onError(formatError(error));
     }
   };
 
@@ -61,7 +62,8 @@ export function useConversationActions({
       });
       await getTransport().updateConversationTitle(activeConversation.id, title);
       appLogger.debug('component.chat', 'Title update succeeded, syncing');
-      await syncConversations({ preferredId: activeConversation.id, silent: true });
+      // The open chat stays open: a title can arrive after its chat was left.
+      await syncConversations({ silent: true });
       appLogger.debug('component.chat', 'Rename conversation completed successfully');
     } catch (error) {
       appLogger.error('component.chat', 'Rename conversation failed', {
@@ -69,7 +71,7 @@ export function useConversationActions({
         conversationId: activeConversation.id,
         title
       });
-      onError(error instanceof Error ? error.message : String(error));
+      onError(formatError(error));
     }
   };
 
@@ -91,7 +93,7 @@ export function useConversationActions({
       });
       await syncConversations({ preferredId: newId });
     } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
+      onError(formatError(error));
     }
   };
 
@@ -108,7 +110,7 @@ export function useConversationActions({
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
+      onError(formatError(error));
     }
   };
 
@@ -118,7 +120,7 @@ export function useConversationActions({
       await getTransport().updateConversationSystemPrompt(activeConversation.id, prompt);
       await syncConversations({ preferredId: activeConversation.id, silent: true });
     } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
+      onError(formatError(error));
     }
   };
 

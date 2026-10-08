@@ -1,8 +1,29 @@
-//! Tests for the daemon wire bodies: the keys `StartProxyBody` puts on the
-//! wire, and the start-server narrowing read from what the daemon sends.
+//! Tests for the daemon wire bodies: the keys `StartProxyBody` and
+//! `StartServerBody` put on the wire, and the start-server narrowing read from
+//! what the daemon sends.
 
 use super::*;
-use gglib_core::contracts::http::daemon::PROXY_START_CLI_FIELDS;
+use gglib_core::contracts::http::daemon::{PROXY_START_CLI_FIELDS, SERVERS_START_CLI_FIELDS};
+
+/// The keys `body` puts on the wire, sorted.
+fn keys_of(body: &impl Serialize) -> Vec<String> {
+    let json = serde_json::to_value(body).expect("the body serialises");
+    let mut keys: Vec<String> = json
+        .as_object()
+        .expect("a JSON object")
+        .keys()
+        .cloned()
+        .collect();
+    keys.sort();
+    keys
+}
+
+/// `contract`, sorted, to compare with [`keys_of`].
+fn sorted(contract: &[&str]) -> Vec<String> {
+    let mut names: Vec<String> = contract.iter().map(|s| (*s).to_owned()).collect();
+    names.sort();
+    names
+}
 
 /// The keys the CLI actually puts on the wire, against the shared list the
 /// daemon's own test reads.
@@ -14,7 +35,7 @@ use gglib_core::contracts::http::daemon::PROXY_START_CLI_FIELDS;
 fn a_populated_start_body_sends_exactly_the_contract_fields() {
     let body = StartProxyBody {
         host: Some("127.0.0.1".into()),
-        port: Some(8080),
+        port: Some(8123),
         default_context: Some(4096),
         cache: Some(true),
         slot_dir: Some("/slots".into()),
@@ -28,21 +49,59 @@ fn a_populated_start_body_sends_exactly_the_contract_fields() {
         allowed_hosts: vec!["example.test".into()],
     };
 
-    let json = serde_json::to_value(&body).expect("StartProxyBody serialises");
-    let mut got: Vec<String> = json
-        .as_object()
-        .expect("a JSON object")
-        .keys()
-        .cloned()
-        .collect();
-    got.sort();
-    let mut want: Vec<String> = PROXY_START_CLI_FIELDS
-        .iter()
-        .map(|s| (*s).to_owned())
-        .collect();
-    want.sort();
+    assert_eq!(
+        keys_of(&body),
+        sorted(PROXY_START_CLI_FIELDS),
+        "CLI body keys have drifted from the contract"
+    );
+}
 
-    assert_eq!(got, want, "CLI body keys have drifted from the contract");
+/// The start-server body's keys, against the list the daemon's own test reads
+/// every one of.
+///
+/// Both literals are exhaustive on purpose, as above: a field added to
+/// `StartServerRequest` fails to compile here until the contract names it.
+#[test]
+fn a_populated_start_server_body_sends_exactly_the_contract_fields() {
+    let body = StartServerBody {
+        id: 7,
+        config: StartServerRequest {
+            context_length: Some(8192),
+            port: Some(9001),
+            jinja: Some(true),
+            reasoning_format: Some("none".into()),
+            mtp_draft_n_max: Some(0),
+            mtp_draft_p_min: Some(0.6),
+            inference_params: Some(gglib_core::domain::InferenceConfig::default()),
+            mlock: true,
+        },
+    };
+
+    assert_eq!(
+        keys_of(&body),
+        sorted(SERVERS_START_CLI_FIELDS),
+        "CLI body keys have drifted from the contract"
+    );
+}
+
+/// The context a session asks for travels as `contextLength`, the name the
+/// daemon reads, flat beside the model's `id`.
+#[test]
+fn a_start_server_body_carries_its_context_as_context_length() {
+    let body = StartServerBody {
+        id: 7,
+        config: StartServerRequest {
+            context_length: Some(8192),
+            ..Default::default()
+        },
+    };
+
+    let json = serde_json::to_value(&body).expect("StartServerBody serialises");
+
+    assert_eq!(json["id"], 7);
+    assert_eq!(json["contextLength"], 8192);
+    assert!(json.get("context_length").is_none(), "{json}");
+    assert!(json.get("config").is_none(), "{json}");
 }
 
 /// `gglib up`, and any `gglib proxy` without `--allowed-host`, send no
@@ -58,6 +117,18 @@ fn an_empty_allowed_hosts_omits_the_key() {
             .expect("a JSON object")
             .contains_key("allowed_hosts"),
         "an empty allowed_hosts must not put a key on the wire"
+    );
+}
+
+/// A body with no port puts none on the wire: the key is null or absent. The
+/// daemon reads either as no port and falls back to the stored `proxy_port`,
+/// which its `a_null_port_comes_from_settings_as_an_omitted_one_does` pins.
+#[test]
+fn a_start_body_with_no_port_puts_none_on_the_wire() {
+    let json = serde_json::to_value(StartProxyBody::default()).expect("serialises");
+    assert!(
+        json.get("port").is_none_or(serde_json::Value::is_null),
+        "{json}"
     );
 }
 

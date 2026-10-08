@@ -1,21 +1,19 @@
 //! What the proxy's loop guard does when a replayed history trips it.
 //!
 //! A `#[path]` sibling of `settings.rs` because the type is a settings value
-//! with a wire spelling and a generated TypeScript mirror, and because the
-//! precedence rule that reconciles it with the boolean it replaces is a page
-//! of argument that belongs beside it rather than in the middle of the
-//! `Settings` struct.
+//! with a wire spelling and a generated TypeScript mirror, and what each of
+//! its answers costs is a page of argument that belongs beside it rather than
+//! in the middle of the `Settings` struct.
 
 use serde::{Deserialize, Serialize};
 
 /// What the loop guard does with a request whose replayed history trips it.
 ///
-/// Replaces the boolean [`proxy_loop_detection`](super::Settings::proxy_loop_detection),
-/// which could only say "scan" or "do not scan" and made the scan's only
-/// answer a terminal HTTP 400. ADR 0011 records that 400 ending a Copilot
-/// session on its sixth turn: an external agentic client has no recovery path
-/// from a refusal, and because it replays the whole conversation every turn,
-/// the refusal repeats for the rest of the session.
+/// Three answers rather than a switch, because "scan" or "do not scan" leaves
+/// the scan one answer, a terminal HTTP 400. ADR 0011 records that 400 ending
+/// a Copilot session on its sixth turn: an external agentic client has no
+/// recovery path from a refusal, and because it replays the whole
+/// conversation every turn, the refusal repeats for the rest of the session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -23,8 +21,7 @@ pub enum LoopGuardMode {
     /// Do not scan at all.
     ///
     /// The escape hatch for a client that legitimately repeats identical
-    /// tool-call batches with nothing in between, or repeats a response. What
-    /// `proxy_loop_detection = Some(false)` meant, and still means.
+    /// tool-call batches with nothing in between, or repeats a response.
     Off,
     /// Forward the request, with a note appended to the last message saying
     /// what repeated and how often.

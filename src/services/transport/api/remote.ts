@@ -17,16 +17,6 @@
  */
 
 import { del, get, post } from './client';
-import {
-  REMOTE_DEVICES_PATH,
-  REMOTE_DISABLE_PATH,
-  REMOTE_DISCONNECT_PATH,
-  REMOTE_ENABLE_PATH,
-  REMOTE_INVITE_PATH,
-  REMOTE_JOIN_PATH,
-  REMOTE_KILL_PATH,
-  REMOTE_STATUS_PATH,
-} from '../../api/routes';
 import type {
   RemoteEnableBody,
   RemoteEnableResponse,
@@ -35,10 +25,11 @@ import type {
   RemoteJoinResponse,
   RemoteStatus,
 } from '../types/remote';
+import type { RemoteKillBody } from '../../../types/generated/RemoteKillBody';
 
 /** The tunnel as the daemon reports it: both sides, fingerprints only. */
 export async function getRemoteStatus(): Promise<RemoteStatus> {
-  return get<RemoteStatus>(REMOTE_STATUS_PATH);
+  return get<RemoteStatus>('/api/remote/status');
 }
 
 /**
@@ -49,12 +40,12 @@ export async function getRemoteStatus(): Promise<RemoteStatus> {
  * and let it go when a device pairs or the code expires.
  */
 export async function enableRemote(body: Partial<RemoteEnableBody> = {}): Promise<RemoteEnableResponse> {
-  return post<RemoteEnableResponse>(REMOTE_ENABLE_PATH, body);
+  return post<RemoteEnableResponse>('/api/remote/enable', body);
 }
 
 /** Take the tunnel down. Idempotent; nothing answers the ticket until `enable`. */
 export async function disableRemote(): Promise<RemoteStatus> {
-  return post<RemoteStatus>(REMOTE_DISABLE_PATH, {});
+  return post<RemoteStatus>('/api/remote/disable', {});
 }
 
 /**
@@ -63,12 +54,12 @@ export async function disableRemote(): Promise<RemoteStatus> {
  * and stored; omitted, the last ticket is dialled with the stored key.
  */
 export async function joinRemote(body: Partial<RemoteJoinBody> = {}): Promise<RemoteJoinResponse> {
-  return post<RemoteJoinResponse>(REMOTE_JOIN_PATH, body);
+  return post<RemoteJoinResponse>('/api/remote/join', body);
 }
 
 /** Close the loopback port. Idempotent; the stored pairing stays. */
 export async function disconnectRemote(): Promise<RemoteStatus> {
-  return post<RemoteStatus>(REMOTE_DISCONNECT_PATH, {});
+  return post<RemoteStatus>('/api/remote/disconnect', {});
 }
 
 /**
@@ -80,7 +71,8 @@ export async function disconnectRemote(): Promise<RemoteStatus> {
  * accidental empty POST — the caller has already asked the person.
  */
 export async function killRemote(): Promise<RemoteStatus> {
-  return post<RemoteStatus>(REMOTE_KILL_PATH, { confirm: 'shutdown' });
+  const body: RemoteKillBody = { confirm: 'shutdown' };
+  return post<RemoteStatus>('/api/remote/kill', body);
 }
 
 /**
@@ -94,7 +86,7 @@ export async function killRemote(): Promise<RemoteStatus> {
  * is the same thing.
  */
 export async function inviteRemote(): Promise<RemoteEnableResponse> {
-  return post<RemoteEnableResponse>(REMOTE_INVITE_PATH, {});
+  return post<RemoteEnableResponse>('/api/remote/invite', {});
 }
 
 /**
@@ -106,5 +98,5 @@ export async function inviteRemote(): Promise<RemoteEnableResponse> {
  * held under that name, and none is.
  */
 export async function forgetDevice(device: string): Promise<RemoteForgotten> {
-  return del<RemoteForgotten>(`${REMOTE_DEVICES_PATH}/${encodeURIComponent(device)}`);
+  return del<RemoteForgotten>(`/api/remote/devices/${encodeURIComponent(device)}`);
 }

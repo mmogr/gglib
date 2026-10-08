@@ -1,7 +1,7 @@
 //! Unit tests for [`super`]: the pre-dispatch loop and stagnation guard.
 //!
 //! Split out of `loop_guard.rs` to keep that file under the repo's file-size
-//! ratchet; see `scripts/check_rust_complexity.sh`.
+//! ratchet; see `scripts/check_file_size.sh`.
 
 use super::*;
 use gglib_core::domain::agent::{batch_results_hash, hash_result_content};
@@ -1154,14 +1154,14 @@ fn null_content_with_tool_calls_feeds_loop_only() {
 // ── Configuration ────────────────────────────────────────────────────────
 
 #[test]
-fn from_settings_gates_on_proxy_loop_detection() {
+fn from_settings_gates_on_the_loop_guard_mode() {
     let mut settings = Settings::with_defaults();
     assert!(LoopGuardConfig::from_settings(&settings).is_some());
 
-    settings.proxy_loop_detection = Some(true);
+    settings.loop_guard_mode = Some(LoopGuardMode::Refuse);
     assert!(LoopGuardConfig::from_settings(&settings).is_some());
 
-    settings.proxy_loop_detection = Some(false);
+    settings.loop_guard_mode = Some(LoopGuardMode::Off);
     assert!(LoopGuardConfig::from_settings(&settings).is_none());
 }
 

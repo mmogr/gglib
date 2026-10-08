@@ -4,12 +4,14 @@ mod choose;
 mod probe;
 mod warm;
 
+use std::ffi::OsStr;
 use std::io::IsTerminal;
 
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, StartProxyBody};
+use crate::handlers::inference::proxy;
 
 /// Loopback only. `up` is the "get me working" path; exposing an
 /// unauthenticated endpoint to a network is a decision, and decisions belong to
@@ -30,8 +32,26 @@ pub(crate) struct UpArgs {
     pub yes: bool,
     /// Load this model rather than the recommended (or most recent) one.
     pub model: Option<String>,
-    /// Port the endpoint binds to.
-    pub port: u16,
+    /// Port the endpoint binds to; `None` leaves it to the daemon, which
+    /// binds the stored `proxy_port`.
+    pub port: Option<u16>,
+}
+
+/// What `up` asks the daemon to start: the unpinned proxy on loopback.
+///
+/// `port` is the `--port` flag as typed. An absent flag travels as no port,
+/// so a stored `proxy_port` is where the endpoint comes up and what the
+/// client configuration then prints.
+fn start_body(port: Option<u16>, default_context: Option<u64>) -> StartProxyBody {
+    StartProxyBody {
+        host: Some(HOST.to_string()),
+        port,
+        default_context,
+        // Unpinned: `/v1/models` has to work for Cline and Open WebUI to
+        // discover anything. `up` warms one model; it does not restrict
+        // to it. Everything else is deliberately unconfigurable here.
+        ..Default::default()
+    }
 }
 
 /// Execute the up command.
@@ -64,25 +84,11 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     // The stored key, if any, is what the proxy about to start will demand of
     // this very probe: `up` binds loopback and passes no `--api-key`, so the
     // supervisor resolves the same settings row we read here.
-    let api_key = settings
-        .proxy_api_key
-        .clone()
-        .filter(|key| !key.trim().is_empty());
+    let api_key = daemon_client::auth::proxy_key(ctx, None).await;
 
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
-    let status = handle
-        .start_proxy(&StartProxyBody {
-            host: Some(HOST.to_string()),
-            port: Some(args.port),
-            default_context,
-            // Unpinned: `/v1/models` has to work for Cline and Open WebUI to
-            // discover anything. `up` warms one model; it does not restrict
-            // to it. Everything else is deliberately unconfigurable here.
-            ..Default::default()
-        })
-        .await?;
-    let proxy_port = status.port.unwrap_or(args.port);
+    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let body = start_body(args.port, default_context);
+    let proxy_port = proxy::start_on(&handle, &body, &settings).await?;
 
     // Step 5: prove it. The warm request loads the model through the very
     // endpoint the user is about to point their client at.
@@ -91,7 +97,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     // The endpoint now outlives this command — the daemon owns it. Attach the
     // dashboard so `up` keeps its "foreground until Ctrl-C" feel; detaching
     // leaves the endpoint serving.
-    crate::handlers::inference::proxy::attach_dashboard(ctx, proxy_port, None).await
+    proxy::attach_dashboard(ctx, proxy_port, None).await
 }
 
 // ─── Shared output helpers ───────────────────────────────────────────────────
@@ -102,7 +108,18 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
 /// stdout), because the two blocks appear in the same output and disagreeing
 /// about colour would be visible.
 pub(super) fn use_color() -> bool {
-    std::env::var_os("NO_COLOR").is_none() && std::io::stdout().is_terminal()
+    color_allowed(
+        std::env::var_os("NO_COLOR").as_deref(),
+        std::io::stdout().is_terminal(),
+    )
+}
+
+/// The rule [`use_color`] applies, given what `NO_COLOR` holds and whether
+/// stdout is a terminal, so that a test can state it whatever terminal the
+/// tests are run from. `NO_COLOR` set to anything, an empty value included,
+/// turns colour off.
+fn color_allowed(no_color: Option<&OsStr>, stdout_is_terminal: bool) -> bool {
+    no_color.is_none() && stdout_is_terminal
 }
 
 /// An ANSI sequence, or nothing when colour is off.
@@ -113,17 +130,20 @@ pub(super) fn use_color() -> bool {
 /// the middle — the client configuration is the block most likely to be pasted
 /// somewhere, so partial honouring of `NO_COLOR` is worse than none.
 pub(super) fn sgr(code: &'static str) -> &'static str {
-    if use_color() { code } else { "" }
+    sgr_when(use_color(), code)
+}
+
+/// [`sgr`], given whether colour is on.
+fn sgr_when(color: bool, code: &'static str) -> &'static str {
+    if color { code } else { "" }
 }
 
 /// Refuse to ask a question nobody is there to answer.
 ///
-/// Closed stdin reads as EOF, and both confirmation paths resolve EOF to their
-/// default: `CliPrompt` defaults to yes, so `gglib up </dev/null` would kick
-/// off a half-hour llama.cpp build unprompted, and `prompt_confirmation`
-/// defaults to no, so the user would be told they cancelled a download they
-/// never saw offered. Neither is an answer. The flag that *is* an answer is
-/// one word long, so name it.
+/// Closed stdin reads as EOF, which every confirmation takes for a no: the
+/// user would be told llama.cpp is required, or that they cancelled a
+/// download, over a question they never saw. That is not an answer. The flag
+/// that *is* an answer is one word long, so name it.
 pub(super) fn require_tty(action: &str) -> anyhow::Result<()> {
     anyhow::ensure!(
         std::io::stdin().is_terminal(),
@@ -179,7 +199,63 @@ pub(super) fn render_row(label: &str, value: &str, note: Option<&str>, color: bo
 
 #[cfg(test)]
 mod tests {
+    use clap::Parser as _;
+    use gglib_core::Settings;
+
     use super::*;
+    use crate::commands::Commands;
+    use crate::handlers::inference::proxy::tests::started;
+    use crate::parser::Cli;
+
+    /// The body `gglib up` sends for `argv`.
+    fn body_for(argv: &[&str]) -> StartProxyBody {
+        let Some(Commands::Up { port, .. }) = Cli::parse_from(argv).command else {
+            panic!("{argv:?} is not `gglib up`");
+        };
+        start_body(port, None)
+    }
+
+    /// Without `--port` the daemon is sent no port, so the endpoint comes up
+    /// on the stored `proxy_port`, where the desktop app would put it; and
+    /// the port the client configuration prints is the one the daemon answers.
+    #[tokio::test]
+    async fn without_a_port_flag_the_daemon_chooses_the_port_and_its_answer_is_reported() {
+        let body = body_for(&["gglib", "up"]);
+
+        let started = started(&body, Some(9000), &Settings::default()).await;
+
+        assert!(started.sent_no_port(), "{}", started.sent);
+        assert_eq!(started.port, 9000);
+    }
+
+    #[tokio::test]
+    async fn a_port_flag_is_sent_as_typed() {
+        let body = body_for(&["gglib", "up", "--port", "8123"]);
+
+        let started = started(&body, Some(8123), &Settings::default()).await;
+
+        assert_eq!(started.sent["port"], 8123);
+        assert_eq!(started.port, 8123);
+    }
+
+    /// `--model` names a model that has to be here, and one that is not is
+    /// missed in the sentence every other command misses in.
+    #[tokio::test]
+    async fn a_requested_model_that_is_not_here_is_missed_as_everywhere_else() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = crate::bootstrap::test_context(dir.path()).await;
+
+        let missed = choose::run(&ctx, &None, Some("__no_such_model__"), true)
+            .await
+            .expect_err("no such model")
+            .to_string();
+
+        assert_eq!(
+            missed,
+            "No model found matching: '__no_such_model__'\n\
+             Use 'gglib model list' to see available models."
+        );
+    }
 
     #[test]
     fn a_note_renders_in_parentheses_after_the_value() {
@@ -208,14 +284,47 @@ mod tests {
         assert!(!lines[0].contains('\u{1b}'));
     }
 
-    /// Test stdout is never a TTY, so this pins the suppression path every
-    /// inline escape in this command now goes through. It regressed once:
-    /// `row` honoured `NO_COLOR` while the `✓` markers printed raw green, so a
-    /// redirected run came out almost-clean, which is the worst of both.
+    /// Colour needs both answers: `NO_COLOR` unset, and a terminal to draw on.
+    #[test]
+    fn colour_is_on_only_for_a_terminal_with_no_color_unset() {
+        let set = |value: &'static str| Some(OsStr::new(value));
+
+        assert!(color_allowed(None, true));
+        assert!(!color_allowed(set("1"), true), "NO_COLOR is honoured");
+        assert!(!color_allowed(set(""), true), "set to nothing is still set");
+        assert!(!color_allowed(None, false), "a pipe gets no escapes");
+        assert!(!color_allowed(set("1"), false));
+    }
+
+    /// The suppression path every inline escape in this command goes through.
+    /// It regressed once: `row` honoured `NO_COLOR` while the `✓` markers
+    /// printed raw green, so a redirected run came out almost-clean, which is
+    /// the worst of both.
     #[test]
     fn sgr_emits_nothing_when_color_is_off() {
-        assert!(!use_color(), "test stdout should not be a terminal");
-        assert_eq!(sgr(crate::presentation::style::SUCCESS), "");
-        assert_eq!(sgr(crate::presentation::style::BOLD), "");
+        use crate::presentation::style::{BOLD, SUCCESS};
+
+        assert_eq!(sgr_when(false, SUCCESS), "");
+        assert_eq!(sgr_when(false, BOLD), "");
+        assert_eq!(sgr_when(true, SUCCESS), SUCCESS);
+    }
+
+    /// `sgr` is that path under this run's own answer. The tests may be run
+    /// from a terminal or into a pipe, so the answer is not assumed here.
+    #[test]
+    fn sgr_follows_what_use_color_answers() {
+        let code = crate::presentation::style::SUCCESS;
+        assert_eq!(sgr(code), sgr_when(use_color(), code));
+    }
+
+    /// Where this run says colour must be off, `use_color` says so: with
+    /// `NO_COLOR` set, or with stdout not a terminal, which is how CI runs
+    /// these tests. From a terminal with `NO_COLOR` unset colour is on, and
+    /// there is nothing here to hold it to.
+    #[test]
+    fn use_color_is_off_wherever_this_run_needs_it_off() {
+        if std::env::var_os("NO_COLOR").is_some() || !std::io::stdout().is_terminal() {
+            assert!(!use_color());
+        }
     }
 }

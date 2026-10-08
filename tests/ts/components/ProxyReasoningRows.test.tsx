@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import ProxyReasoningRows, {
+import {
   DroppedClientFields,
+  ProxyReasoningRows,
 } from '../../../src/components/ProxyReasoningRows';
 import type {
   SamplingEffortSupport,

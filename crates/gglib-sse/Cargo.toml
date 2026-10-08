@@ -26,7 +26,7 @@ test-support = []
 # scripts/check_boundaries.sh.
 axum = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
-tokio-stream = { version = "0.1", features = ["sync"] }
+tokio-stream = { workspace = true, features = ["sync"] }
 futures-util = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

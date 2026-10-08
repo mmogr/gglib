@@ -12,6 +12,7 @@
  */
 
 import { appLogger } from '../platform';
+import { formatError } from '../../utils/errors';
 
 /**
  * Standardized error codes for transport operations.
@@ -135,7 +136,9 @@ export async function readData<T>(response: Response): Promise<T> {
     appLogger.debug('transport.error', '[readData] response not ok, extracting error');
     let errorMessage = response.statusText || `HTTP ${response.status}`;
     let errorCode = httpStatusToCode(response.status);
-    let details: unknown = { status: response.status };
+    // The status line as it came, for a caller with its own sentence for a refusal.
+    const statusLine = { status: response.status, statusText: response.statusText };
+    let details: unknown = statusLine;
     
     // Try to extract structured error from response body
     try {
@@ -145,7 +148,7 @@ export async function readData<T>(response: Response): Promise<T> {
       }
       // The daemon's code (`attachment_not_found`, `agent_busy`, …), for a
       // caller that answers one refusal differently from another.
-      if (body.type) details = { status: response.status, type: body.type };
+      if (body.type) details = { ...statusLine, type: body.type };
       
       // Check for llama-server not installed error
       if (body.type === 'LLAMA_SERVER_NOT_INSTALLED') {
@@ -213,12 +216,12 @@ export async function readData<T>(response: Response): Promise<T> {
     appLogger.warn('transport.error', '[readData] failed to decode response body', {
       status: response.status,
       contentType,
-      error: error instanceof Error ? error.message : String(error),
+      error: formatError(error),
     });
     throw new TransportError(code, `Failed to decode response body (HTTP ${response.status})`, {
       status: response.status,
       contentType,
-      cause: error instanceof Error ? error.message : String(error),
+      cause: formatError(error),
     });
   }
 }

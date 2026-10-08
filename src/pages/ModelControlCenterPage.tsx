@@ -8,7 +8,6 @@ import { useDownloadCompletionEffects } from '../hooks/useDownloadCompletionEffe
 import { useModelLibraryEvents } from '../hooks/useModelLibraryEvents';
 import { useModelFilterOptions } from '../hooks/useModelFilterOptions';
 import { useToastContext } from '../contexts/ToastContext';
-import { useDownloadSystemStatus } from '../hooks/useDownloadSystemStatus';
 import ModelLibraryPanel from '../components/ModelLibraryPanel/ModelLibraryPanel';
 import { FarModelInspector, ModelInspectorPanel } from '../components/ModelInspectorPanel';
 import { GlobalDownloadStatus } from '../components/GlobalDownloadStatus';
@@ -29,7 +28,6 @@ import { getTransport } from '../services/transport';
 
 interface ModelControlCenterPageProps {
   servers: ServerViewModel[];
-  loadServers: () => Promise<void>;
   stopServer: (modelId: number) => Promise<void>;
   onRegisterMenuActions?: (actions: {
     refreshModels: () => void;
@@ -45,7 +43,6 @@ interface ModelControlCenterPageProps {
 
 export default function ModelControlCenterPage({
   servers,
-  loadServers,
   stopServer,
   onRegisterMenuActions,
 }: ModelControlCenterPageProps) {
@@ -68,28 +65,24 @@ export default function ModelControlCenterPage({
   // that appeared but cannot filter to it.
   useModelLibraryEvents(handleRefreshAll);
 
-  // Download completion effects - batches completions, triggers refresh, shows toast
-  const { onCompleted } = useDownloadCompletionEffects({
+  // Download ending effects - batches completions, triggers refresh, shows toasts
+  const { onCompleted, onFailed } = useDownloadCompletionEffects({
     refreshModels: handleRefreshAll,
   });
   
-  // Global download progress - lifted to page level so it's always visible
+  // The download queue - lifted to page level so it's always visible
   const {
-    currentProgress,
-    queueStatus,
-    downloadUiState,
+    snapshot: downloadQueue,
+    cancellingId,
     lastQueueSummary,
     cancel: cancelDownload,
     refreshQueue,
     clearQueueSummary,
   } = useDownloadManager({
     onCompleted,
+    onFailed,
   });
 
-  // Backend download system initialization (Python fast helper)
-  const downloadSystem = useDownloadSystemStatus();
-  const downloadSystemError = downloadSystem.status === 'error' ? downloadSystem.message : null;
-  
   // Track whether user dismissed completion banner
   const [downloadDismissed] = useState(false);
   
@@ -121,7 +114,6 @@ export default function ModelControlCenterPage({
     selectedModelId,
     servers,
     models,
-    loadServers,
     stopServer,
     removeModel,
     selectModel: pickLocal,
@@ -272,7 +264,6 @@ export default function ModelControlCenterPage({
             onModelAdded={handleModelAdded}
             activeSubTab={activeSubTab}
             onSubTabChange={handleSubTabChange}
-            downloadSystemError={downloadSystemError}
             onSelectHfModel={handleSelectHfModel}
             selectedHfModelId={selectedHfModel?.id}
             activeTab={sidebarTab}
@@ -287,9 +278,8 @@ export default function ModelControlCenterPage({
           <>
             {!downloadDismissed && (
               <GlobalDownloadStatus
-                progress={currentProgress}
-                queueStatus={queueStatus}
-                downloadUiState={downloadUiState}
+                snapshot={downloadQueue}
+                cancellingId={cancellingId}
                 lastQueueSummary={lastQueueSummary}
                 onCancel={cancelDownload}
                 onDismissSummary={clearQueueSummary}
@@ -302,7 +292,6 @@ export default function ModelControlCenterPage({
               <ModelInspectorPanel
                 model={selectedModel}
                 selectedHfModel={selectedHfModel}
-                onStartServer={loadServers}
                 onServerStarted={handleServerStarted}
                 onOpenChat={(modelId) => openChatSession(modelId, 'chat')}
                 onStopServer={stopServer}
@@ -313,7 +302,7 @@ export default function ModelControlCenterPage({
                 onRemoveTag={removeTagFromModel}
                 getModelDetail={(id) => getTransport().getModelDetail(id)}
                 onRefresh={handleRefreshAll}
-                queueStatus={queueStatus}
+                downloadQueue={downloadQueue}
                 onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
                 onBenchmark={(modelId) => setBenchmarkModelId(modelId)}
               />

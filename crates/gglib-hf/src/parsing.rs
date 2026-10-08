@@ -4,7 +4,8 @@
 //! responses into typed domain objects.
 
 use crate::error::{HfError, HfResult};
-use crate::models::{HfEntryType, HfFileEntry, HfModelSummary, HfQuantization, HfSearchResponse};
+use crate::models::{HfEntryType, HfFileEntry, HfQuantization};
+use gglib_core::ports::huggingface::HfRepoInfo;
 use gglib_core::{Quantization, repo_short_name};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -13,114 +14,97 @@ use std::collections::HashMap;
 // Model Summary Parsing
 // ============================================================================
 
-/// Parse a single model JSON object into an `HfModelSummary`.
+/// The summary of one model object off the Hub, whichever endpoint gave it:
+/// a search hit and the model-info answer are read by the same rules, so a
+/// repository found by search and one looked up by its ID show the same
+/// thing. `None` for an object that names no ID.
 ///
-/// Returns None if the model doesn't have the required fields or
-/// doesn't contain actual GGUF files.
-pub(crate) fn parse_model_summary(json: &Value) -> Option<HfModelSummary> {
-    // Check if the model actually contains .gguf files
-    let has_gguf_files = json
-        .get("siblings")
-        .and_then(|s| s.as_array())
+/// A search asks the Hub for a hit's `siblings`, `gguf`, `likes`, `downloads`
+/// and `tags` alone, and the model info carries more; a field a response does
+/// not hold is absent from the summary.
+pub(crate) fn repo_info_from_json(json: &Value) -> Option<HfRepoInfo> {
+    let text = |path: &[&str]| at(json, path).and_then(Value::as_str).map(str::to_owned);
+    let count = |key: &str| json.get(key).and_then(Value::as_u64).unwrap_or(0);
+
+    let model_id = text(&["id"]).filter(|id| !id.is_empty())?;
+
+    // The GGUF header's own count first: it is the one a GGUF repository
+    // has. The other two are what a repository of safetensors weights gives.
+    let parameters_b = [
+        &["gguf", "total"][..],
+        &["safetensors", "total"],
+        &["config", "num_parameters"],
+    ]
+    .iter()
+    .find_map(|path| at(json, path).and_then(Value::as_f64))
+    .map(|parameters| parameters / 1_000_000_000.0);
+
+    let tags = json
+        .get("tags")
+        .and_then(Value::as_array)
+        .map(|tags| {
+            tags.iter()
+                .filter_map(|tag| tag.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Some(HfRepoInfo {
+        name: repo_short_name(&model_id).to_owned(),
+        author: model_id.split('/').next().map(str::to_owned),
+        downloads: count("downloads"),
+        likes: count("likes"),
+        parameters_b,
+        description: text(&["description"])
+            .or_else(|| text(&["cardData", "model_summary"]))
+            .map(|description| cut_description(&description)),
+        last_modified: text(&["lastModified"]),
+        chat_template: text(&["gguf", "chat_template"])
+            .or_else(|| text(&["config", "chat_template"])),
+        tags,
+        model_id,
+    })
+}
+
+/// The value at `path` in `json`, one key per level.
+fn at<'a>(json: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    path.iter().try_fold(json, |value, key| value.get(key))
+}
+
+/// A description of at most 200 bytes: a longer one is its first 197, back
+/// to a character boundary, and `...`.
+fn cut_description(description: &str) -> String {
+    if description.len() <= 200 {
+        description.to_owned()
+    } else {
+        let kept = &description[..description.floor_char_boundary(197)];
+        format!("{kept}...")
+    }
+}
+
+/// The hits of a search page that hold a GGUF file, each as its summary.
+pub(crate) fn search_hits(hits: &[Value]) -> Vec<HfRepoInfo> {
+    hits.iter()
+        .filter(|hit| holds_a_gguf_file(hit))
+        .filter_map(repo_info_from_json)
+        .collect()
+}
+
+/// Whether a search hit lists a `.gguf` file among its siblings.
+fn holds_a_gguf_file(hit: &Value) -> bool {
+    hit.get("siblings")
+        .and_then(Value::as_array)
         .is_some_and(|siblings| {
             siblings.iter().any(|file| {
                 file.get("rfilename")
-                    .and_then(|f| f.as_str())
+                    .and_then(Value::as_str)
                     .is_some_and(|name| {
                         std::path::Path::new(name)
                             .extension()
                             .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"))
                     })
             })
-        });
-
-    if !has_gguf_files {
-        return None;
-    }
-
-    let id = json.get("id").and_then(|v| v.as_str())?.to_string();
-
-    if id.is_empty() {
-        return None;
-    }
-
-    // Extract author from id (format: "author/model-name")
-    let author = id.split('/').next().map(std::string::ToString::to_string);
-
-    // Extract model name (last part of id)
-    let name = repo_short_name(&id).to_string();
-
-    // Extract parameter count from gguf.total
-    #[allow(clippy::cast_precision_loss)] // Precision loss acceptable for parameter display
-    let parameters_b = json
-        .get("gguf")
-        .and_then(|s| s.get("total"))
-        .and_then(serde_json::Value::as_u64)
-        .map(|params| params as f64 / 1_000_000_000.0);
-
-    let downloads = json
-        .get("downloads")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(0);
-
-    let likes = json
-        .get("likes")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(0);
-
-    let last_modified = json
-        .get("lastModified")
-        .and_then(|v| v.as_str())
-        .map(std::string::ToString::to_string);
-
-    let description = json.get("description").and_then(|v| v.as_str()).map(|s| {
-        // Truncate long descriptions
-        if s.len() > 200 {
-            format!("{}...", &s[..197])
-        } else {
-            s.to_string()
-        }
-    });
-
-    let tags = json
-        .get("tags")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|t| t.as_str().map(std::string::ToString::to_string))
-                .collect()
         })
-        .unwrap_or_default();
-
-    Some(HfModelSummary {
-        id,
-        name,
-        author,
-        downloads,
-        likes,
-        last_modified,
-        parameters_b,
-        description,
-        tags,
-    })
-}
-
-/// Parse a list of model JSON objects into `HfModelSummary` items.
-pub(crate) fn parse_model_list(json_array: &[Value]) -> Vec<HfModelSummary> {
-    json_array.iter().filter_map(parse_model_summary).collect()
-}
-
-/// Parse a search response including pagination info.
-pub(crate) fn parse_search_response(
-    json_array: &[Value],
-    has_more: bool,
-    page: u32,
-) -> HfSearchResponse {
-    HfSearchResponse {
-        items: parse_model_list(json_array),
-        has_more,
-        page,
-    }
 }
 
 // ============================================================================
@@ -248,6 +232,10 @@ pub(crate) fn filter_files_by_quantization(
 }
 
 #[cfg(test)]
+#[path = "summary_tests.rs"]
+pub(crate) mod summary_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::HfEntryType;
@@ -308,67 +296,6 @@ mod tests {
         let dynamic = filter_files_by_quantization(&files, "UD-Q6_K");
         assert_eq!(dynamic.len(), 1);
         assert_eq!(dynamic[0].path, "UD-Q6_K/model-UD-Q6_K.gguf");
-    }
-
-    #[test]
-    fn test_parse_model_summary_with_all_fields() {
-        let json = json!({
-            "id": "TheBloke/Llama-2-7B-GGUF",
-            "downloads": 50000,
-            "likes": 42,
-            "lastModified": "2024-01-15T10:30:00Z",
-            "siblings": [
-                {"rfilename": "llama-2-7b.Q4_K_M.gguf"}
-            ],
-            "gguf": {
-                "total": 7_000_000_000_u64
-            },
-            "tags": ["llama", "gguf"],
-            "description": "A fine model for testing"
-        });
-
-        let model = parse_model_summary(&json).unwrap();
-
-        assert_eq!(model.id, "TheBloke/Llama-2-7B-GGUF");
-        assert_eq!(model.name, "Llama-2-7B-GGUF");
-        assert_eq!(model.author, Some("TheBloke".to_string()));
-        assert_eq!(model.downloads, 50000);
-        assert_eq!(model.likes, 42);
-        assert!(model.parameters_b.is_some());
-        assert!((model.parameters_b.unwrap() - 7.0).abs() < 0.1);
-        assert_eq!(
-            model.description,
-            Some("A fine model for testing".to_string())
-        );
-        assert_eq!(model.tags, vec!["llama", "gguf"]);
-    }
-
-    #[test]
-    fn test_parse_model_summary_no_gguf_files_returns_none() {
-        let json = json!({
-            "id": "meta-llama/Llama-3.1-8B",
-            "downloads": 100_000,
-            "likes": 500,
-            "siblings": [
-                {"rfilename": "model.safetensors"},
-                {"rfilename": "config.json"}
-            ]
-        });
-
-        assert!(parse_model_summary(&json).is_none());
-    }
-
-    #[test]
-    fn test_parse_model_summary_missing_id_returns_none() {
-        let json = json!({
-            "downloads": 1000,
-            "likes": 10,
-            "siblings": [
-                {"rfilename": "model.Q4_K_M.gguf"}
-            ]
-        });
-
-        assert!(parse_model_summary(&json).is_none());
     }
 
     #[test]
@@ -498,26 +425,5 @@ mod tests {
 
         let filtered = filter_files_by_quantization(&files, "q4_k_m"); // case insensitive
         assert_eq!(filtered.len(), 1);
-    }
-
-    #[test]
-    fn test_parse_search_response() {
-        let json_array = vec![
-            json!({
-                "id": "Org/Model1-GGUF",
-                "downloads": 1000,
-                "siblings": [{"rfilename": "model.gguf"}]
-            }),
-            json!({
-                "id": "Org/Model2-GGUF",
-                "downloads": 2000,
-                "siblings": [{"rfilename": "model.gguf"}]
-            }),
-        ];
-
-        let response = parse_search_response(&json_array, true, 0);
-        assert_eq!(response.items.len(), 2);
-        assert!(response.has_more);
-        assert_eq!(response.page, 0);
     }
 }

@@ -1,5 +1,6 @@
 //! The two verification operations that ask the repository: the update
-//! check, and repair.
+//! check, and repair. With the repair, what it answers with, and what is said
+//! of its files when the download does not bring them back.
 //!
 //! A model's files are its weights and, when it was downloaded with one, a
 //! projector. Both operations cover both: the update check compares the
@@ -7,7 +8,9 @@
 //! projector only when the download it queues brings that file back.
 
 use std::path::Path;
+use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use super::model_verification::{
@@ -15,13 +18,41 @@ use super::model_verification::{
     UpdateDetails,
 };
 use crate::domain::ModelFile;
-use crate::download::{GgufFileRole, Quantization};
+use crate::download::{DownloadId, GgufFileRole, Quantization};
 use crate::ports::RepositoryError;
 use crate::ports::huggingface::download_group;
 
 /// Whether a model's file row is its projector's.
 fn is_projector(file: &ModelFile) -> bool {
     GgufFileRole::classify(Path::new(&file.file_path)).is_projector()
+}
+
+/// A repair under way: its unhealthy files are off the disk, and the
+/// download that fetches them again is queued and started.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct RepairStarted {
+    /// The download's canonical ID: the row to watch in the queue.
+    pub id: String,
+    /// The files the download is to bring back, as the model's rows name
+    /// them. None of them is on disk when the repair answers.
+    pub files: Vec<String>,
+}
+
+/// What to say of `files`, missing from a model's folder since a repair, when
+/// `download` did not bring them back: their names, and the command that
+/// fetches them.
+#[must_use]
+pub fn missing_after_repair(download: &DownloadId, files: &[String]) -> String {
+    let quantization = download
+        .quantization()
+        .map_or_else(String::new, |q| format!(" --quantization {q}"));
+    format!(
+        "Missing from the model's folder: {}. Run `gglib model download {}{quantization}` to \
+         fetch what is missing.",
+        files.join(", "),
+        download.model_id()
+    )
 }
 
 impl ModelVerificationService {
@@ -108,9 +139,14 @@ impl ModelVerificationService {
     /// Repair a model by re-downloading corrupt or missing files.
     ///
     /// The unhealthy files are deleted and the model's download is queued
-    /// again, which fetches what is missing. An unhealthy projector is
-    /// deleted only when that download fetches it; one it would not bring
-    /// back stays on disk and stays linked.
+    /// again, at the quantization the model was stored with, which fetches
+    /// what is missing. An unhealthy projector is deleted only when that
+    /// download fetches it; one it would not bring back stays on disk and
+    /// stays linked.
+    ///
+    /// What the download fetches is read from the repository before any file
+    /// is deleted, so a repository that cannot be read, or that does not hold
+    /// the stored quantization, costs the model nothing.
     ///
     /// # Arguments
     ///
@@ -122,13 +158,15 @@ impl ModelVerificationService {
     ///
     /// A message when the model has no repository or quantization, when
     /// nothing is unhealthy, when every unhealthy file is a projector the
-    /// download would not bring back, and when the repository cannot be read
-    /// or the download cannot be queued.
+    /// download would not bring back, when the repository cannot be read, and
+    /// when no unhealthy file could be deleted: in each of those nothing was
+    /// deleted. A download that cannot be queued after the files are gone is
+    /// a message that names them, with [`missing_after_repair`]'s words.
     pub async fn repair_model(
         &self,
         model_id: i64,
         shard_indices: Option<Vec<usize>>,
-    ) -> Result<String, String> {
+    ) -> Result<RepairStarted, String> {
         // Acquire downloading lock
         let _guard = self
             .operation_lock
@@ -189,10 +227,13 @@ impl ModelVerificationService {
             return Err("No unhealthy shards found to repair".to_string());
         }
 
-        // A projector is deleted only when the download queued below fetches
-        // that same file. Each one is judged on its own.
+        // What the download queued below fetches, asked while every file is
+        // still in place.
+        let (asked, fetched) = self.fetched_group(repo_id, quantization).await?;
+
+        // A projector is deleted only when that download fetches that same
+        // file. Each one is judged on its own.
         if to_repair.iter().any(|file| is_projector(file)) {
-            let fetched = self.fetched_projector(repo_id, quantization).await?;
             let (repaired, left): (Vec<&ModelFile>, Vec<&ModelFile>) =
                 to_repair.into_iter().partition(|file| {
                     !is_projector(file) || fetched.as_deref() == Some(file.file_path.as_str())
@@ -209,7 +250,9 @@ impl ModelVerificationService {
             to_repair = repaired;
         }
 
-        // Delete corrupt/missing files
+        // Delete the unhealthy files. One that cannot be deleted is not
+        // fetched again, since a download takes a file on disk as it is.
+        let mut gone = Vec::new();
         for file in &to_repair {
             let resolved_path = base_dir.join(&file.file_path);
             if resolved_path.exists()
@@ -221,40 +264,62 @@ impl ModelVerificationService {
                     error = %e,
                     "Failed to delete corrupt file"
                 );
+                continue;
             }
+            gone.push(file.file_path.clone());
+        }
+        if gone.is_empty() {
+            return Err("No unhealthy file could be deleted, so nothing was queued".to_string());
         }
 
-        // Trigger re-download
-        let download_id = self
-            .download_trigger
-            .queue_download(repo_id.clone(), Some(quantization.clone()))
+        // Queue the download and start it. The files are gone by now, so a
+        // refusal says which, and what fetches them.
+        let asked = asked.to_string();
+        match Arc::clone(&self.downloads)
+            .queue_smart(repo_id.clone(), Some(asked.clone()))
             .await
-            .map_err(|e| format!("Failed to queue download: {e}"))?;
-
-        Ok(download_id)
+        {
+            Ok(download) => Ok(RepairStarted {
+                id: download.to_string(),
+                files: gone,
+            }),
+            Err(e) => Err(format!(
+                "The download that fetches them again could not be queued: {e}. {}",
+                missing_after_repair(&DownloadId::new(repo_id, Some(asked)), &gone)
+            )),
+        }
     }
 
-    /// The path of the projector a download of `quantization` from `repo_id`
-    /// fetches, when it fetches one.
-    async fn fetched_projector(
+    /// What a download of the stored `quantization` from `repo_id` asks for
+    /// and fetches: the quantization, and the path of the projector that
+    /// comes with it, when one does.
+    async fn fetched_group(
         &self,
         repo_id: &str,
         quantization: &str,
-    ) -> Result<Option<String>, String> {
-        let quantization: Quantization = quantization
+    ) -> Result<(Quantization, Option<String>), String> {
+        let asked: Quantization = quantization
             .parse()
             .map_err(|()| format!("{quantization} is not a quantization a download asks for"))?;
-        let group = download_group(self.hf_client.as_ref(), repo_id, quantization)
+        let group = download_group(self.hf_client.as_ref(), repo_id, asked)
             .await
             .map_err(|e| format!("Failed to read what a download of {repo_id} fetches: {e}"))?;
-        Ok(group.projector.map(|projector| projector.path))
+        Ok((asked, group.projector.map(|projector| projector.path)))
     }
 }
 
 #[cfg(test)]
 #[path = "model_verification_remote_tests.rs"]
-mod tests;
+pub(super) mod tests;
+
+#[cfg(test)]
+#[path = "model_verification_requeue_tests.rs"]
+mod requeue_tests;
 
 #[cfg(test)]
 #[path = "model_verification_two_projector_tests.rs"]
 mod two_projector_tests;
+
+#[cfg(test)]
+#[path = "model_verification_store_tests.rs"]
+mod store_tests;

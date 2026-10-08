@@ -14,7 +14,7 @@ use tokio::time::{MissedTickBehavior, interval};
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
-use crate::health::check_http_health;
+use crate::process::check_http_health;
 
 /// Pure functions for checking server health.
 ///
@@ -25,28 +25,15 @@ pub struct ServerHealthChecker;
 impl ServerHealthChecker {
     /// Check HTTP health endpoint.
     ///
-    /// Returns health status based on HTTP response from /health endpoint.
+    /// `Healthy` on a 2xx from `/health`. Anything else — another status, a
+    /// refused connection, a timeout — is `Unreachable` with one message,
+    /// because [`check_http_health`] reports them all the same way.
     pub async fn check_http(port: u16) -> ServerHealthStatus {
-        match check_http_health(port).await {
-            Ok(true) => ServerHealthStatus::Healthy,
-            Ok(false) => ServerHealthStatus::Unreachable {
+        if check_http_health(port).await {
+            ServerHealthStatus::Healthy
+        } else {
+            ServerHealthStatus::Unreachable {
                 last_error: "HTTP health check returned non-success status".to_string(),
-            },
-            Err(e) => {
-                let error_msg = e.to_string();
-                if error_msg.contains("timeout") {
-                    ServerHealthStatus::Unreachable {
-                        last_error: "Health check timeout".to_string(),
-                    }
-                } else if error_msg.contains("Connection refused") {
-                    ServerHealthStatus::Unreachable {
-                        last_error: "Connection refused".to_string(),
-                    }
-                } else {
-                    ServerHealthStatus::Unreachable {
-                        last_error: format!("Health check failed: {e}"),
-                    }
-                }
             }
         }
     }

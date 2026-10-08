@@ -7,9 +7,8 @@
 
 Shared composition root for gglib adapters.
 
-Wiring happens once, here, so every surface gets the same runtime, the same
-database, and the same shared process manager — the structural reason a model
-launched from one interface is the same model another sees.
+Wiring happens once, here, so every adapter gets its database, repositories,
+download manager and `AppCore` built the same way.
 
 This crate consolidates the infrastructure-wiring steps that were previously duplicated
 across the CLI, Axum, and Tauri bootstrap modules into a single
@@ -22,12 +21,12 @@ This crate is the **Composition Root** — sitting between adapter crates and pu
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                                 Adapter Layer                                       │
-│   ┌───────────────┐   ┌───────────────┐   ┌───────────────┐   ┌───────────────┐    │
-│   │  gglib-tauri  │   │  gglib-axum   │   │   gglib-cli   │   │  gglib-gui    │    │
-│   │ (Desktop IPC) │   │  (HTTP API)   │   │   (CLI UX)    │   │ (App Services)│    │
-│   └───────┬───────┘   └───────┬───────┘   └───────┬───────┘   └───────┬───────┘    │
-│           │                   │                   │                   │            │
-│           └───────────────────┴───────────────────┴───────────────────┘            │
+│                  ┌───────────────┐             ┌───────────────┐                    │
+│                  │   gglib-axum  │             │   gglib-cli   │                    │
+│                  │   (HTTP API)  │             │    (CLI UX)   │                    │
+│                  └───────┬───────┘             └───────┬───────┘                    │
+│                          │                             │                            │
+│                          └──────────────┬──────────────┘                            │
 │                                         │                                           │
 └─────────────────────────────────────────┼───────────────────────────────────────────┘
                                           ▼
@@ -49,11 +48,11 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ## What it wires
 
 1. `SQLite` database pool + repository set
-2. `GgufParser` + `ModelFilesRepository` + `ModelRegistrar`
+2. `GgufParser` + `ModelRegistrar`
 3. `HfClient` (`HuggingFace` HTTP client)
 4. Download manager (using the injected `AppEventEmitter`)
-5. `DownloadTriggerAdapter` (bridges `DownloadManagerPort` → `DownloadTriggerPort`)
-6. `ModelVerificationService` + fully configured `AppCore`
+5. `AppCore`, with the `ModelVerificationService` it builds from the above,
+   whose repair queues on that download manager
 
 ## Internal Structure
 
@@ -62,11 +61,11 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │                                 gglib-bootstrap                                     │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                     │
-│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌────────────────────┐        │
-│   │ config.rs   │  │ built.rs    │  │ builder.rs  │  │ download_trigger.rs│        │
-│   │BootstrapCfg │  │ BuiltCore   │  │CoreBootstrap│  │  (private adapter) │        │
-│   └─────────────┘  └─────────────┘  └─────────────┘  └────────────────────┘        │
-│         └───────────────┴────────┬───────┴────────────────┘                         │
+│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                                 │
+│   │ config.rs   │  │ built.rs    │  │ builder.rs  │                                 │
+│   │BootstrapCfg │  │ BuiltCore   │  │CoreBootstrap│                                 │
+│   └─────────────┘  └─────────────┘  └─────────────┘                                 │
+│         └───────────────┴────────┬───────┘                                          │
 │                                  ▼                                                  │
 │                 lib.rs (declares modules + re-exports)                              │
 │                                                                                     │
@@ -84,12 +83,14 @@ Does **not** depend on adapter crates (`gglib-mcp`, `gglib-axum`, `gglib-tauri`,
 
 ## Testing
 
-The test suite is split into three layers:
+The test suite is split into these layers:
 
 | Layer | Location | Purpose |
 |-------|----------|---------|
-| Unit | `src/download_trigger.rs` `#[cfg(test)]` | Inline tests for `DownloadTriggerAdapter` using a `MockDownloadManager`. Validates quantization mapping and error propagation without touching the database. |
-| Happy path / config | `tests/build_happy_path.rs` | Full `CoreBootstrap::build()` calls that confirm the wiring succeeds and the returned `BuiltCore` is live. Also validates config variants (HF token, `max_concurrent`, non-existent binary path). |
+| Repair | `src/builder_repair_tests.rs` | A repair through the wired core queues its download on the manager the adapters hold, and that manager runs it. The Hub is a stand-in. |
+| Happy path / config | `tests/build_happy_path.rs` | Full `CoreBootstrap::build()` calls that confirm the wiring succeeds and the returned `BuiltCore` is live. |
+| Models directory | `src/builder.rs` `#[cfg(test)]` | The download manager's config names no models directory. What the manager does with none is tested in `gglib-download`. |
+| Hub token | `src/builder.rs` `#[cfg(test)]`, `tests/hub_token.rs` | Inline: one token is handed to the Hub client's config, the download manager's config and `AppCore`, or to none of them. `tests/hub_token.rs`: `build()` reads `HF_TOKEN` itself, and the `AppCore` it returns holds it. That test runs itself again in a process started with the variable, since a running process cannot safely set it. |
 | Error cases | `tests/build_error_cases.rs` | Exercises the failure paths of `build()` — missing DB directory and DB path pointing at a directory. |
 | Functional round-trips | `tests/functional.rs` | End-to-end data round-trips through the wired repositories: model insert/list, settings save/reload, empty-state assertions for downloads, chat history, and MCP servers. |
 
@@ -106,7 +107,7 @@ cargo test -p gglib-bootstrap
 
 1. **No Adapter Dependencies** — Must not depend on tauri, axum, tower, or CLI crates
 2. **Single Call** — All infrastructure wired via one `CoreBootstrap::build()` async call
-3. **Emitter Injection** — Event emission strategy supplied by the caller (Tauri/Axum/CLI each provide their own)
+3. **Emitter Injection** — Event emission strategy supplied by the caller (the daemon passes its SSE broadcaster, the CLI a `NoopEmitter`)
 4. **Owned Output** — `BuiltCore` owns all constructed values; adapters clone `Arc`s as needed
 
 ## Usage
@@ -114,16 +115,25 @@ cargo test -p gglib-bootstrap
 ```rust,ignore
 use std::sync::Arc;
 use gglib_bootstrap::{BootstrapConfig, CoreBootstrap};
-use gglib_core::paths::{database_path, llama_server_path, resolve_models_dir};
+use gglib_core::paths::database_path;
 
 let emitter: Arc<dyn AppEventEmitter> = Arc::new(MyAdapterEmitter::new());
 let config = BootstrapConfig {
     db_path: database_path()?,
-    llama_server_path: llama_server_path()?,
-    max_concurrent: 4,
-    models_dir: resolve_models_dir(None)?.path,
-    hf_token: std::env::var("HF_TOKEN").ok(),
 };
 let core = CoreBootstrap::build(config, emitter).await?;
-// core.app, core.runner, core.downloads, core.hf_client … all ready
+// core.app, core.downloads, core.hf_client … all ready
 ```
+
+`build()` reads the `HuggingFace` token from `HF_TOKEN` itself
+(`gglib_core::hf_token::from_env`, the one place it is read) and hands it to
+the Hub client, the download manager and `AppCore`. The config has no field
+for it, so an adapter cannot be wired without it.
+
+The config has no field for the models directory either. An adapter that
+resolved one would hand over the directory as it started, and a daemon would
+download there for the rest of its life. The download manager is handed none,
+and asks `gglib_core::paths::resolve_models_dir` as each download starts, so
+a download goes where the directory resolves then: for a running daemon, one
+stored since from the settings page or with `gglib config models-dir set`,
+unless the daemon's own environment names one.

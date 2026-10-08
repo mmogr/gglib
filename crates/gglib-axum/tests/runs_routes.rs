@@ -7,50 +7,15 @@
 
 mod common;
 
-use axum::Router;
-use axum::body::Body;
 use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon::{RUNS_PATH, run_cancel_path, run_events_path, run_path};
 use gglib_core::domain::runs::{RunInfo, RunList, RunStatus};
 use gglib_core::ports::{RunScope, RunsPort};
-use http_body_util::BodyExt;
 use serde_json::{Value, json};
-use tower::ServiceExt;
 
 use common::harness::test_state_and_app;
-use common::origin::authed;
-
-async fn call(
-    app: &Router,
-    method: Method,
-    uri: &str,
-    body: Option<Value>,
-) -> (StatusCode, String) {
-    let mut request = authed()
-        .method(method)
-        .uri(uri)
-        .header("Host", "127.0.0.1:9887");
-    if body.is_some() {
-        request = request.header("content-type", "application/json");
-    }
-    let body = body.map_or_else(Body::empty, |value| Body::from(value.to_string()));
-    let response = app
-        .clone()
-        .oneshot(request.body(body).unwrap())
-        .await
-        .unwrap();
-    let status = response.status();
-    let bytes = tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        response.into_body().collect(),
-    )
-    .await
-    .expect("the body ends")
-    .unwrap()
-    .to_bytes();
-    (status, String::from_utf8_lossy(&bytes).into_owned())
-}
+use common::origin::call;
 
 fn chat() -> Value {
     json!({ "model": "qwen", "messages": [{ "role": "user", "content": "hi" }] })

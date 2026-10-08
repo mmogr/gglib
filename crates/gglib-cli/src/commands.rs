@@ -19,6 +19,7 @@ use crate::shared_args::{
     AccessArgs, CacheArgs, ContextArgs, MtpArgs, RetryArgs, SamplingArgs, ServeOptions,
 };
 pub(crate) use crate::subcommands::{ChatCommand, DaemonCommand, ProxyCommand, RemoteCommand};
+use crate::thinking_arg::ThinkingArg;
 use crate::tool_limit_args::ToolLimitArgs;
 use crate::upstream_args::UpstreamArgs;
 
@@ -47,9 +48,9 @@ pub enum Commands {
         /// Load this model instead of the recommended (or most recent) one
         #[arg(long)]
         model: Option<String>,
-        /// Port to bind the endpoint to
-        #[arg(short, long, default_value = "8080")]
-        port: u16,
+        /// Port to bind the endpoint to. Omit to use the stored `proxy_port` setting
+        #[arg(short, long)]
+        port: Option<u16>,
     },
 
     // ── Management (these have subcommands — use `<command> --help`) ────
@@ -134,7 +135,8 @@ pub enum Commands {
         #[command(flatten)]
         upstream: UpstreamArgs,
         /// Maximum agent iterations before giving up
-        /// [default: persisted setting, or 25 if unset]
+        /// [default: the limit the chat saved, with --continue; else the
+        /// persisted setting, or 25 if unset]
         #[arg(long = "max-iterations")]
         max_iterations: Option<usize>,
         /// Tool allowlist; may be repeated or comma-separated.
@@ -156,6 +158,14 @@ pub enum Commands {
         /// Resume a previous conversation by ID (use `gglib chat history` to find IDs)
         #[arg(long = "continue")]
         continue_id: Option<i64>,
+        /// Switch the chat's Thinking on or off, as the chat page's switch does
+        ///
+        /// The choice applies to this session and the chat remembers it. `off`
+        /// runs with a thinking budget of 0, whatever --reasoning-budget-tokens
+        /// says; `on` runs with the budget typed, if any. Omitted, a resumed
+        /// chat runs as it remembers.
+        #[arg(long, value_enum)]
+        thinking: Option<ThinkingArg>,
         /// Observation-only tool name patterns for the dual-threshold loop guard.
         /// A tool whose name ends with or contains any pattern is classified as
         /// observation-only and subject to the higher --max-observation-steps limit.

@@ -111,13 +111,6 @@ pub trait BenchmarkRepositoryPort: Send + Sync {
         model_id: i64,
     ) -> Result<i64, RepositoryError>;
 
-    /// Get tune candidate results for one model, most recent first.
-    async fn get_model_tune_history(
-        &self,
-        model_id: i64,
-        limit: i64,
-    ) -> Result<Vec<TuneCandidateResult>, RepositoryError>;
-
     /// Every candidate of one tune run, in insertion order — the input the
     /// apply gate (`tune::apply::evaluate_apply`) judges.
     async fn get_tune_results(

@@ -1,8 +1,5 @@
 # ChatMessagesPanel
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ChatMessagesPanel-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ChatMessagesPanel-complexity.json)
-
 <!-- module-docs:start -->
 
 Central chat interface, laid out as a notebook (each turn a row: a margin saying who and how it was made, then the body), managing the message thread, system prompt, conversation operations (rename, clear, export), and AI title generation. `ChatMessagesPanel.tsx` is a thin composition root: it owns the `@assistant-ui/react` thread runtime and the state that touches it, and delegates everything else to the named children in `components/` and the hooks in `hooks/`.

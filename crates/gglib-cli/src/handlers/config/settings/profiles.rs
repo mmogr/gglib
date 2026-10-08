@@ -8,12 +8,17 @@
 //! back through `SettingsUpdate`. That keeps validation in one place — the
 //! settings service validates the merged result before saving, so an invalid
 //! name or an out-of-range parameter is rejected here by exactly the same
-//! rules that reject it over HTTP.
+//! rules that reject it over HTTP. `install-templates` is the settings
+//! service's own install, the one the settings page asks the daemon for.
+
+use std::fmt::Write as _;
 
 use anyhow::{Result, bail};
 
 use gglib_core::SettingsUpdate;
-use gglib_core::domain::{InferenceConfig, InferenceProfile, builtin_templates};
+use gglib_core::domain::inference_profile::not_found_message;
+use gglib_core::domain::{InferenceConfig, InferenceProfile};
+use gglib_core::services::TemplateInstall;
 
 use crate::bootstrap::CliContext;
 use crate::config_commands::ProfileCommand;
@@ -258,38 +263,30 @@ async fn remove(ctx: &CliContext, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Add the starter profiles through the settings service's one install, the
+/// one the settings page's button runs, and say what it did.
 async fn install_templates(ctx: &CliContext, force: bool) -> Result<()> {
-    let mut profiles = load(ctx).await?;
-    let mut added = Vec::new();
-    let mut skipped = Vec::new();
-
-    for template in builtin_templates() {
-        match profiles.iter().position(|p| p.name == template.name) {
-            Some(index) if force => {
-                added.push(template.name.clone());
-                profiles[index] = template;
-            }
-            Some(_) => skipped.push(template.name),
-            None => {
-                added.push(template.name.clone());
-                profiles.push(template);
-            }
-        }
-    }
-
-    if added.is_empty() {
-        println!("All starter profiles are already installed.");
-        println!("Pass --force to overwrite them with the defaults.");
-        return Ok(());
-    }
-
-    save(ctx, profiles).await?;
-    println!("✓ Installed: {}", added.join(", "));
-    if !skipped.is_empty() {
-        println!("  Skipped (already present): {}", skipped.join(", "));
-        println!("  Pass --force to overwrite.");
-    }
+    let settings = ctx.app.settings();
+    let (_, done) = settings.install_profile_templates(force).await?;
+    print!("{}", installed_report(&done));
     Ok(())
+}
+
+/// What `install-templates` prints: the profiles it stored and the ones it
+/// kept, or that there was nothing left to add.
+fn installed_report(done: &TemplateInstall) -> String {
+    if done.installed.is_empty() {
+        return "All starter profiles are already installed.\n\
+                Pass --force to overwrite them with the defaults.\n"
+            .to_owned();
+    }
+    let mut report = format!("✓ Installed: {}\n", done.installed.join(", "));
+    if !done.kept.is_empty() {
+        let kept = done.kept.join(", ");
+        let _ = writeln!(report, "  Skipped (already present): {kept}");
+        report.push_str("  Pass --force to overwrite.\n");
+    }
+    report
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -407,21 +404,6 @@ fn summarize(config: &InferenceConfig) -> String {
         parts.push(format!("reasoning-budget-tokens={v}"));
     }
     parts.join("  ")
-}
-
-/// Error text for a name that does not match a configured profile.
-pub(crate) fn not_found_message(name: &str, profiles: &[InferenceProfile]) -> String {
-    if profiles.is_empty() {
-        return format!(
-            "no profile named '{name}'; none are configured \
-             (run `gglib config profile install-templates`)"
-        );
-    }
-    let names: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
-    format!(
-        "no profile named '{name}'; configured profiles are: {}",
-        names.join(", ")
-    )
 }
 
 fn print_opt<T: std::fmt::Display>(label: &str, value: Option<T>) {

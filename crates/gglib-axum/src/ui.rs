@@ -28,9 +28,10 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use rust_embed::RustEmbed;
 
-use crate::access::{DaemonAccess, host_guard};
+use crate::access::DaemonAccess;
 use crate::state::AppState;
 use gglib_core::CorsConfig;
+use gglib_proxy::access::host_guard;
 
 mod embed {
     #![allow(unreachable_pub)]
@@ -89,7 +90,10 @@ pub fn create_embedded_spa_router(
     // answers 405, matching what ServeDir did, instead of handing back HTML.
     crate::routes::base_router(state, cors_config, &access)
         .fallback_service(get(embedded_handler::<embed::WebUi>))
-        .layer(middleware::from_fn_with_state(access, host_guard))
+        .layer(middleware::from_fn_with_state(
+            access,
+            host_guard::<DaemonAccess>,
+        ))
 }
 
 /// Axum entry point. The work is in [`respond`], which needs no runtime.
@@ -126,9 +130,8 @@ fn respond<E: RustEmbed>(path: &str, headers: &HeaderMap) -> Response {
     // success and then fails parsing the shell as JSON, which reports a
     // deserialisation error instead of "no such route".
     //
-    // Every daemon that carries a dashboard and is given no directory serves
-    // through this router, so this path is the common one. Hence the guard
-    // here rather than in the frontend.
+    // Every daemon that carries a dashboard serves through this router.
+    // Hence the guard here rather than in the frontend.
     if rel == "api" || rel.starts_with("api/") {
         return StatusCode::NOT_FOUND.into_response();
     }

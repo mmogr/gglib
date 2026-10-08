@@ -1,8 +1,5 @@
 # base
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-styles-base-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-styles-base-complexity.json)
-
 <!-- module-docs:start -->
 
 Root CSS custom-property design token system establishing the application's complete visual language: colour palette, spacing scale, typography, border radii, shadows, transitions, and z-index tiers. Tailwind's `@theme inline` maps these tokens to utility classes, making every token available as both a CSS variable and a Tailwind utility.

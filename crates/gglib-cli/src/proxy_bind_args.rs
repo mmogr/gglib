@@ -13,9 +13,9 @@ pub struct ProxyBindArgs {
     /// Host to bind to
     #[arg(long, default_value = "127.0.0.1")]
     pub host: String,
-    /// Port to bind the proxy to
-    #[arg(short, long, default_value = "8080")]
-    pub port: u16,
+    /// Port to bind the proxy to. Omit to use the stored `proxy_port` setting
+    #[arg(short, long)]
+    pub port: Option<u16>,
     /// Default context size when not specified by client.
     /// Falls back to the app settings `default_context_size`; with neither
     /// set, each launch is sized by the daemon — fitted to this machine

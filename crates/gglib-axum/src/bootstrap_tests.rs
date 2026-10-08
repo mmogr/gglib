@@ -30,7 +30,6 @@ async fn bootstrap_deletes_an_old_unlinked_image_and_keeps_a_fresh_one() {
     let dir = tempfile::tempdir().unwrap();
     let db_path = dir.path().join("gglib.db");
     let config = || ServerConfig {
-        port: 0,
         base_port: Some(19_300),
         llama_server_path: "/nonexistent/llama-server".into(),
         db_path: Some(db_path.clone()),

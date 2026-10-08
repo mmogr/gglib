@@ -182,3 +182,24 @@ fn a_conversation_id_is_a_number_and_absent_when_there_is_none() {
     let without = serde_json::to_value(run("r", RunKind::Chat, RunStatus::Queued)).unwrap();
     assert!(without.get("conversation_id").is_none(), "{without}");
 }
+
+/// A run holds the conversation it writes for as long as it is reported
+/// going, and no other conversation, and none once it is reported ended.
+#[test]
+fn a_run_holds_its_conversation_until_it_is_reported_ended() {
+    for (status, held) in [
+        (RunStatus::Queued, true),
+        (RunStatus::InProgress, true),
+        (RunStatus::Completed, false),
+        (RunStatus::Failed, false),
+        (RunStatus::Cancelled, false),
+    ] {
+        let on_seven = RunInfo {
+            conversation_id: Some(7),
+            ..run("r", RunKind::Agent, status)
+        };
+        assert_eq!(on_seven.holds(7), held, "{status:?}");
+        assert!(!on_seven.holds(8), "{status:?}");
+        assert!(!run("r", RunKind::Agent, status).holds(7), "{status:?}");
+    }
+}

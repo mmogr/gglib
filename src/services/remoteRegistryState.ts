@@ -2,7 +2,7 @@
  * What the remote registry holds, and what an empty tunnel looks like.
  *
  * Split out of `remoteRegistry.ts` when the shape and the reducer together
- * crossed the 300-line budget `scripts/check_file_complexity.sh` allows.
+ * crossed the 300-line budget `scripts/check_file_size.sh` allows.
  * The state is a description and the registry is behaviour, so the seam was
  * already there; a component that only needs the shape now imports the
  * shape.

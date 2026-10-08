@@ -2,9 +2,12 @@
 
 gglib treats sampling as server-side configuration, not something every client
 gets to improvise. Every request that reaches llama-server — from the proxy,
-`gglib serve`, `gglib chat`, or `gglib q` — resolves its sampling parameters
-through the same hierarchy, and `gglib model explain` shows exactly how any
-given model resolves.
+`gglib serve`, `gglib chat`, `gglib q`, or a chat in the app, on the chat page
+or from a paired device — resolves its sampling parameters through the same
+hierarchy, and `gglib model explain` shows exactly how any given model
+resolves. A chat in the app can name no profile and no sampler parameter, so
+its turns resolve from the model's own defaults, the global settings and the
+floor.
 
 ## The 5-level merge hierarchy
 
@@ -136,9 +139,28 @@ chat, in its Tools popover, and once one is set sends it with every message,
 and a chat that was switched off does not start thinking again because of it.
 Nothing else is remembered. A request's own budget and `reasoning_effort` are
 that request's, and with `default`, or with nothing remembered, the budget
-resolves through the hierarchy as it always has. The CLI's own chat
-(`gglib chat`, `gglib q`) does not apply a remembered `off`: pass
-`--reasoning-budget-tokens 0` there.
+resolves through the hierarchy as it always has.
+
+`gglib chat` reads a chat by the same rule, and `--thinking on|off` is what
+its turn says: `off` is the turn's `off`, and `on` its `default`. A choice
+named there runs the session, on a new chat or one resumed with `--continue`,
+and the chat remembers it from the session's start, before its first message.
+It is written by the function the daemon's runs write it with, so the page's
+switch and a paired device read it as their own. `--thinking off` runs with a
+budget of `0`, whatever `--reasoning-budget-tokens` says, and `--thinking on`
+runs with the budget typed. With no `--thinking` the command line says
+nothing: a chat switched off runs with a budget of `0`, whatever
+`--reasoning-budget-tokens` says, and stays switched off. A resume whose
+typed budget is set aside that way says so once, in a line on stderr: the
+chat has Thinking switched off, the budget was not applied, and
+`--thinking on` switches it back. A chat the CLI starts remembers `off` only
+when `--thinking off` says it.
+
+`gglib q` has no `--thinking`. It asks one question of a chat it saves only
+once the answer is in, and it saves none of its command line's sampling with
+that chat. Pass `--reasoning-budget-tokens 0` to stop the question's
+thinking, and switch the chat it saved with
+`gglib chat --continue <id> --thinking off`.
 
 On the chat page the choice is the **Thinking** switch in the composer's
 margin, drawn only for a model that thinks: one tagged `reasoning` here, or
@@ -574,9 +596,9 @@ gglib config settings set --trust-client-sampling false
 `{model}:{profile}` selection is unaffected either way — that is not a client
 sampling parameter, it is part of the requested model name, and profiles remain the
 sanctioned way for a client to express a sampling preference without needing to be
-trusted (see below). In-process callers (`gglib chat`, `gglib q`) are also
-unaffected: their sampling parameters are gglib's own typed configuration, not an
-external client's request body, so they are always honoured.
+trusted (see below). In-process callers (`gglib chat`, `gglib q`, a chat in the
+app) are also unaffected: their sampling parameters are gglib's own typed
+configuration, not an external client's request body, so they are always honoured.
 
 ## Inference profiles (`<model>:<profile>`)
 
@@ -695,7 +717,8 @@ gglib chat 7 --profile chat --presence-penalty 1.2
 Pass `--temperature` as well to set them together. `gglib chat` and `gglib q`
 warn whenever a flag is passed over this way — including without a profile,
 since a model with stored `inference_defaults` naming a temperature does the
-same thing. The warning is suppressed under `gglib q -Q`, which promises
+same thing. The warning comes with the session's first message, which is when
+the hierarchy is resolved. It is suppressed under `gglib q -Q`, which promises
 silence on stderr.
 
 `gglib serve` does not warn: its flags are resolved per request by the proxy,
@@ -739,12 +762,10 @@ gglib config profile set chat --list-in-models
 Listing is opt-in per profile because the full cross product of models and
 profiles would swamp a client's model picker. Unlisted profiles remain fully
 usable by name. Profiles can also be managed from the GUI under
-**Settings → Inference Profiles** — with one gap worth knowing about: the GUI's
-"Install starter templates" seeds the three sampling profiles only. Its profile
-editor rebuilds a profile's config from its own field list on every save and
-drops anything not on that list, so seeding the six reasoning rungs there would
-install profiles the first edit silently empties. `gglib config profile
-install-templates` installs all nine.
+**Settings → Inference Profiles**. Its "Install starter profiles" button runs
+the install `gglib config profile install-templates` runs, so it adds the same
+nine. A profile you already have under one of their names is kept as it is;
+only the command's `--force` puts the starter profile in its place.
 
 ## Server launch defaults
 
@@ -875,7 +896,24 @@ adjustment, not a tool-emission one — it applies to prose turns in an agentic
 session too, which is why the cap is mild rather than near-greedy.
 
 Disable it with `gglib config settings set --agentic-sampling false`, or
-per-process with `GGLIB_DISABLE_AGENTIC_SAMPLING=1`.
+per-process with `GGLIB_DISABLE_AGENTIC_SAMPLING=1`. The setting is this
+machine's. The proxy follows it, and so does a chat with one of this machine's
+models: `gglib chat` and `gglib q` on a model in the library, and a chat in
+the app, on the chat page or from a paired device.
+
+Four callers read no stored setting and keep the cap whatever it says:
+
+- a turn sent to a paired machine's model. It is capped as it leaves here, and
+  that machine's proxy then resolves it by its own settings;
+- `gglib chat` or `gglib q` against a `--port` server whose model the library
+  does not hold;
+- `gglib benchmark agentic`, in each arm that runs the pipeline;
+- `gglib benchmark tune`.
+
+The environment variable switches the cap off for every caller, these four
+included, in the process that shapes the request: the command itself for
+`gglib chat` and `gglib q`, and the daemon for the proxy, a chat in the app
+and a benchmark.
 
 Two surfaces cannot report it, both by construction: `gglib model explain` and
 the GUI's sampling provenance explain *stored configuration* with no request in

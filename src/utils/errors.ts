@@ -19,12 +19,15 @@ export function isAbortError(err: unknown): err is DOMException {
  * Template-interpolating a caught value (`` `Failed: ${err}` ``) prints
  * "[object Object]" for anything that isn't an Error or string — use this
  * instead wherever an error reaches user-facing text or log messages.
+ *
+ * Always a string: a value JSON has no form for (`undefined`, a function, a
+ * symbol) is rendered as `String` renders it.
  */
 export function formatError(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'string') return err;
   try {
-    return JSON.stringify(err);
+    return JSON.stringify(err) ?? String(err);
   } catch {
     return String(err);
   }

@@ -15,9 +15,7 @@ use gglib_app_services::{
     ServiceGraphParams, SettingsOps, SetupOps, build_service_graph,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
-use gglib_core::ports::{
-    AppEventEmitter, HfClientPort, LoopGuardTripLog, ModelCatalogPort, ModelRuntimePort,
-};
+use gglib_core::ports::{AppEventEmitter, HfClientPort, ModelCatalogPort, ModelRuntimePort};
 use gglib_core::services::AppCore;
 use gglib_db::{
     LoopGuardTripWriter, SqliteBenchmarkRepository, SqliteLoopGuardTripLog, repair_at_daemon_start,
@@ -80,7 +78,7 @@ pub struct AxumContext {
     pub loop_guard_trip_writer: Arc<LoopGuardTripWriter>,
     /// The loop guard's log read back: what the daemon's route answers with,
     /// from the same database the writer writes to.
-    pub loop_guard_trips: Arc<dyn LoopGuardTripLog>,
+    pub loop_guard_trips: Arc<SqliteLoopGuardTripLog>,
     /// Benchmark operations: `run_compare` and `run_perf` with SSE streaming.
     pub benchmark: Arc<BenchmarkOps>,
     /// Shared `ModelRuntimePort` wrapping the one `ProcessManager`.
@@ -108,7 +106,9 @@ pub struct AxumContext {
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
-    // Log resolved paths at startup for diagnostics
+    // Log resolved paths at startup for diagnostics. The models directory is
+    // the one current now, and is not kept: each download asks again as it
+    // starts.
     let db_path = match &config.db_path {
         Some(path) => path.clone(),
         None => database_path()?,
@@ -133,12 +133,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     let sse = Arc::new(SseBroadcaster::with_defaults());
 
     // 2. Shared infrastructure via gglib-bootstrap.
-    let bootstrap_config = BootstrapConfig {
-        db_path,
-        llama_server_path: config.llama_server_path.clone(),
-        models_dir: models_resolution.path,
-        hf_token: None,
-    };
+    let bootstrap_config = BootstrapConfig { db_path };
     let emitter: Arc<dyn AppEventEmitter> = sse.clone();
     let BuiltCore {
         app: core,
@@ -146,7 +141,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         hf_client,
         gguf_parser,
         repos,
-        model_registrar: _,
         pool,
     } = CoreBootstrap::build(bootstrap_config, emitter).await?;
 
@@ -169,12 +163,11 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
 
     // 5. Build the shared domain-ops graph.
     //
-    // Assembly lives in gglib-app-services so this adapter and the Tauri one
-    // cannot drift; only genuinely Axum-shaped wiring stays here.
+    // Assembly lives in gglib-app-services, which owns every `*Ops` type and so
+    // knows how they fit together; only genuinely Axum-shaped wiring stays here.
     let bench_repo = Arc::new(SqliteBenchmarkRepository::new(pool.clone()));
     let loop_guard_trip_writer = LoopGuardTripWriter::spawn(pool.clone());
-    let loop_guard_trips: Arc<dyn LoopGuardTripLog> =
-        Arc::new(SqliteLoopGuardTripLog::new(pool.clone()));
+    let loop_guard_trips = Arc::new(SqliteLoopGuardTripLog::new(pool.clone()));
 
     let AppServices {
         models,
@@ -200,7 +193,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         tool_detector: Arc::new(ToolSupportDetector::new()),
         mcp: mcp.clone(),
         emitter: sse.clone(),
-        server_events: Arc::new(crate::sse::AxumServerEvents::new((*sse).clone())),
         bench_repo: Arc::clone(&bench_repo) as Arc<dyn gglib_core::ports::BenchmarkRepositoryPort>,
         loop_guard_trips: Arc::clone(&loop_guard_trip_writer)
             as Arc<dyn gglib_core::ports::LoopGuardTripSink>,
@@ -209,14 +201,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         device_keys_path: config.device_keys_path.clone(),
     })
     .await?;
-
-    // Emit initial server snapshot after initialization
-    tokio::spawn({
-        let servers = Arc::clone(&servers);
-        async move {
-            servers.emit_initial_snapshot().await;
-        }
-    });
 
     crate::proxy_watch::spawn(&proxy, &sse);
 
@@ -246,50 +230,6 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         catalog,
         daemon_shutdown: None,
     })
-}
-
-/// Start the web server on the specified port.
-///
-/// Dashboard resolution matches [`crate::run_daemon`]: explicit
-/// `config.static_dir`, then the copy compiled in, then API-only.
-pub async fn start_server(config: ServerConfig) -> Result<()> {
-    use tokio::net::TcpListener;
-    use tracing::info;
-
-    let ctx = bootstrap(config.clone()).await?;
-    let state: crate::state::AppState = Arc::new(ctx);
-    crate::handlers::agent::hub_turn::bind(&state);
-
-    // Host-guarded, tokenless: this entry point holds no daemon lock, so it
-    // mints no token (it would overwrite a running daemon's) and its `/api`
-    // serves nothing. The daemon path (`run_daemon`) resolves and mints them.
-    let access = Arc::new(crate::access::DaemonAccess::new(
-        None,
-        &config.host,
-        Vec::new(),
-    ));
-
-    let app = if let Some(ref static_dir) = config.static_dir {
-        info!("Serving static assets from: {}", static_dir.display());
-        crate::routes::create_spa_router(state, static_dir, &config.cors, access)
-    } else if crate::ui::has_embedded_ui() {
-        info!("serving the dashboard compiled into this binary");
-        crate::ui::create_embedded_spa_router(state, &config.cors, access)
-    } else {
-        crate::routes::create_router(state, &config.cors, access)
-    };
-
-    let addr = format!("{}:{}", config.host, config.port);
-    let listener = TcpListener::bind(&addr).await?;
-
-    if config.static_dir.is_some() || crate::ui::has_embedded_ui() {
-        info!("gglib web server (with UI) listening on http://{}", addr);
-    } else {
-        info!("gglib web server (API only) listening on http://{}", addr);
-    }
-
-    axum::serve(listener, app).await?;
-    Ok(())
 }
 
 #[cfg(test)]

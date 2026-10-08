@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{InferenceConfig, InferenceProfile};
 
+#[path = "settings_bounds.rs"]
+mod settings_bounds;
+pub use settings_bounds::*;
+
 #[path = "settings_loop_guard.rs"]
 mod settings_loop_guard;
 pub use settings_loop_guard::LoopGuardMode;
@@ -48,19 +52,6 @@ pub const DEFAULT_REMOTE_PORT: u16 = 8180;
 /// Default context size for models when not specified by the user.
 pub const DEFAULT_CONTEXT_SIZE: u64 = 4096;
 
-/// The context sizes a person is allowed to configure.
-///
-/// One constant because more than one surface describes this range and they
-/// have to agree — [`validate_settings`] rejects anything outside it, and so do
-/// the flags that write this setting or default it. Spelling the numbers out
-/// separately on each is how they drift.
-///
-/// Not every context-size flag is bounded by it: `--ctx-size` names a
-/// per-launch value rather than this setting, and `CtxSizeArg::parse` accepts
-/// any `u64`. That is a separate surface with a separate contract, not an
-/// omission here.
-pub const CONTEXT_SIZE_RANGE: std::ops::RangeInclusive<u64> = 512..=1_000_000;
-
 /// Application settings structure.
 ///
 /// All fields are optional to support partial updates and graceful defaults.
@@ -87,7 +78,7 @@ pub struct Settings {
     /// Note: The OpenAI-compatible proxy listens on `proxy_port`.
     pub llama_base_port: Option<u16>,
 
-    /// Maximum number of downloads that can be queued (1-50).
+    /// Maximum number of downloads that can be queued, within [`DOWNLOAD_QUEUE_RANGE`].
     pub max_download_queue_size: Option<u32>,
 
     /// Whether to show memory fit indicators in `HuggingFace` browser.
@@ -205,34 +196,15 @@ pub struct Settings {
     /// [`Self::max_stagnation_steps`], shared with the built-in agent loop so
     /// the two paths cannot drift.
     ///
-    /// Read through [`Self::effective_loop_guard_mode`], never directly: the
-    /// deprecated [`Self::proxy_loop_detection`] still answers for a settings
-    /// file written by an older build.
+    /// Read through [`Self::effective_loop_guard_mode`], which supplies the
+    /// default.
     pub loop_guard_mode: Option<LoopGuardMode>,
-
-    /// **Deprecated**, for one release: the boolean [`Self::loop_guard_mode`]
-    /// replaces.
-    ///
-    /// `Some(false)` still means [`LoopGuardMode::Off`]. `Some(true)` means
-    /// the guard is on, which is now [`LoopGuardMode::Note`] rather than a
-    /// refusal — a deliberate behaviour change for anyone who asked for the
-    /// guard by name, and the point of #1052.
-    ///
-    /// The two never disagree on disk: [`Self::merge`] clears each when the
-    /// other is **written to a value** — clearing one leaves the other alone,
-    /// since an explicit null means "forget this field", not "forget both" —
-    /// so precedence is only ever consulted for a settings file an older build
-    /// wrote. `gglib config settings set
-    /// --proxy-loop-detection false` therefore keeps working for the release
-    /// it is promised, for anyone who scripted it while the guard's own 400
-    /// bodies still named it.
-    pub proxy_loop_detection: Option<bool>,
 
     /// Whether a tool call that fails schema validation is re-issued, with
     /// `tool_choice: "required"` or as a second draw under gglib's grammar.
     ///
     /// `None` (the default) means **on**, the same inverse polarity as
-    /// [`Self::proxy_loop_detection`] and for the same reason: it is
+    /// [`Self::loop_guard_mode`] and for the same reason: it is
     /// protection the endpoint should not lose silently. `Some(false)`
     /// forwards every call as emitted.
     ///
@@ -258,8 +230,10 @@ pub struct Settings {
     /// gates nothing. Anything set by a person stands. `Some(false)` disables
     /// the cap.
     ///
-    /// Same polarity as [`Self::proxy_loop_detection`], and for the same
+    /// Same polarity as [`Self::loop_guard_mode`], and for the same
     /// reason: this is a correction the endpoint should not silently lose.
+    /// A chat reads it through [`Self::effective_agentic_sampling`], which
+    /// supplies the default.
     ///
     /// The `tool_call_floor` alias is the name #741 gave this setting; it keeps
     /// a config that uses that name loading.
@@ -361,7 +335,6 @@ impl Settings {
             proxy_api_key: None,
             trust_client_sampling: None,
             loop_guard_mode: None,
-            proxy_loop_detection: None,
             tool_call_repair: None,
             proxy_autostart: None,
             close_to_tray: None,
@@ -382,36 +355,27 @@ impl Settings {
         }
     }
 
-    /// Get the effective llama-server base port (with default fallback).
-    #[must_use]
-    pub const fn effective_llama_base_port(&self) -> u16 {
-        match self.llama_base_port {
-            Some(port) => port,
-            None => DEFAULT_LLAMA_BASE_PORT,
-        }
-    }
-
-    /// What the loop guard does, reconciling [`Self::loop_guard_mode`] with
-    /// the deprecated [`Self::proxy_loop_detection`].
+    /// What the loop guard does: the stored [`Self::loop_guard_mode`], or the
+    /// default, [`LoopGuardMode::Note`], when none is stored.
     ///
-    /// The new setting wins outright when present. The boolean is consulted
-    /// only when it is absent, which [`Self::merge`] makes true of anything
-    /// this build has *written to a value* — an explicit clear of one spelling
-    /// leaves the other standing, so both can be absent and the default
-    /// answers: `Some(false)` is [`LoopGuardMode::Off`], and
-    /// `Some(true)` or absent is the default, [`LoopGuardMode::Note`]. An
-    /// explicit old "on" therefore becomes a note rather than a refusal,
-    /// which is the behaviour change #1052 exists to make.
-    ///
-    /// The one place this precedence is decided, so the proxy, the CLI and
+    /// The one place the default is supplied, so the proxy, the CLI and
     /// anything that reports the setting cannot disagree about it.
     #[must_use]
     pub const fn effective_loop_guard_mode(&self) -> LoopGuardMode {
-        match (self.loop_guard_mode, self.proxy_loop_detection) {
-            (Some(mode), _) => mode,
-            (None, Some(false)) => LoopGuardMode::Off,
-            (None, _) => LoopGuardMode::Note,
+        match self.loop_guard_mode {
+            Some(mode) => mode,
+            None => LoopGuardMode::Note,
         }
+    }
+
+    /// Whether a turn with tools gets the agentic temperature ceiling: the
+    /// stored [`Self::agentic_sampling`], and on when none is stored.
+    ///
+    /// The one place the switch is read, so the page, a paired device, the
+    /// terminal and the proxy cannot disagree about it.
+    #[must_use]
+    pub const fn effective_agentic_sampling(&self) -> bool {
+        !matches!(self.agentic_sampling, Some(false))
     }
 
     /// Merge another settings into this one, only updating fields that are Some.
@@ -470,28 +434,8 @@ impl Settings {
         if let Some(v) = other.tool_call_repair {
             self.tool_call_repair = v;
         }
-        // The loop guard's two spellings clear each other when one is
-        // *written to a value*, in this order, so they cannot disagree on
-        // disk and an update carrying both has one answer: the new setting's.
-        // An explicit null clears only itself — see below — so the pair can
-        // also end up both absent, which the default covers. That is what
-        // keeps `--proxy-loop-detection false` working for the release it is
-        // promised.
-        if let Some(ref v) = other.proxy_loop_detection {
-            self.proxy_loop_detection = *v;
-            // Only a *write* clears the other spelling. `Some(None)` is the
-            // "clear this field" update every `UpdateSettingsRequest` field
-            // must support, and clearing one spelling must not silently
-            // discard what the other says.
-            if v.is_some() {
-                self.loop_guard_mode = None;
-            }
-        }
         if let Some(ref v) = other.loop_guard_mode {
             self.loop_guard_mode = *v;
-            if v.is_some() {
-                self.proxy_loop_detection = None;
-            }
         }
         if let Some(ref v) = other.agentic_sampling {
             self.agentic_sampling = *v;
@@ -520,21 +464,21 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
 
     // Validate proxy port
     if let Some(port) = settings.proxy_port
-        && port < 1024
+        && port < MIN_PORT
     {
         return Err(SettingsError::InvalidPort(port));
     }
 
     // Validate llama-server base port
     if let Some(port) = settings.llama_base_port
-        && port < 1024
+        && port < MIN_PORT
     {
         return Err(SettingsError::InvalidPort(port));
     }
 
     // Validate max download queue size
     if let Some(queue_size) = settings.max_download_queue_size
-        && !(1..=50).contains(&queue_size)
+        && !DOWNLOAD_QUEUE_RANGE.contains(&queue_size)
     {
         return Err(SettingsError::InvalidQueueSize(queue_size));
     }

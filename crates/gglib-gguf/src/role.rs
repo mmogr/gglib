@@ -19,13 +19,11 @@ pub(crate) fn file_role(raw: &RawMetadata) -> GgufFileRole {
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
-
     use gglib_core::domain::gguf::GgufValue;
     use gglib_core::{GgufParseError, GgufParserPort};
 
     use super::*;
-    use crate::GgufParser;
+    use crate::{GgufParser, write_string_gguf};
 
     fn header(pairs: &[(&str, &str)]) -> RawMetadata {
         pairs
@@ -78,40 +76,19 @@ mod tests {
         assert_eq!(file_role(&numeric), GgufFileRole::Weights);
     }
 
-    /// A GGUF v3 file holding only `pairs` as string metadata, no tensors.
-    fn write_gguf(dir: &Path, name: &str, pairs: &[(&str, &str)]) -> PathBuf {
-        let string = |text: &str| {
-            let mut bytes = (text.len() as u64).to_le_bytes().to_vec();
-            bytes.extend_from_slice(text.as_bytes());
-            bytes
-        };
-        let mut bytes = b"GGUF".to_vec();
-        bytes.extend_from_slice(&3_u32.to_le_bytes());
-        bytes.extend_from_slice(&0_u64.to_le_bytes());
-        bytes.extend_from_slice(&(pairs.len() as u64).to_le_bytes());
-        for (key, value) in pairs {
-            bytes.extend(string(key));
-            bytes.extend_from_slice(&8_u32.to_le_bytes());
-            bytes.extend(string(value));
-        }
-        let path = dir.join(name);
-        std::fs::write(&path, bytes).unwrap();
-        path
-    }
-
     /// Through the port, from bytes on disk: the name says one thing and the
     /// header the other, and the parsed role is the header's.
     #[test]
     fn the_parser_reports_the_role_the_file_header_states() {
         let dir = tempfile::tempdir().unwrap();
-        let projector = write_gguf(
-            dir.path(),
-            "tower.Q8_0.gguf",
+        let projector = dir.path().join("tower.Q8_0.gguf");
+        write_string_gguf(
+            &projector,
             &[("general.architecture", "clip"), ("general.type", "mmproj")],
         );
-        let weights = write_gguf(
-            dir.path(),
-            "mmproj-F16.gguf",
+        let weights = dir.path().join("mmproj-F16.gguf");
+        write_string_gguf(
+            &weights,
             &[("general.architecture", "qwen3"), ("general.type", "model")],
         );
 

@@ -84,12 +84,13 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 |---------|-------------|
 | `add <path>` | Add a GGUF model to the library |
 | `list` | List all models with metadata; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
-| `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata); `--remote` reads the paired machine's |
+| `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata), and the port it is being served on when it is; `--remote` reads the paired machine's |
 | `explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
-| `remove <id\|name>` | Remove a model from the library |
+| `remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--force` skips the confirmation only) |
 | `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`) |
 | `chat <id\|name>` | Start interactive llama-cli chat |
-| `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on |
+| `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on; refused while the daemon is still replying to it, for the web page or a paired device |
+| `chat … --thinking on\|off` | Switch the chat's Thinking on or off, as the chat page's switch does: the choice runs the session and the chat remembers it, on a new chat or with `--continue` |
 | `question <text>` | Ask a question (with optional piped context) |
 | `question <text>` | Ask a question; filesystem tools are on unless `--no-tools` |
 | `question --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |
@@ -136,7 +137,7 @@ gglib proxy
 
 # In another
 gglib proxy dashboard
-gglib proxy dashboard --host 127.0.0.1 --port 8080
+gglib proxy dashboard --host 127.0.0.1 --port 8123
 ```
 
 This is a simple redraw-in-place view (via `crossterm` cursor moves), not a full raw-mode TUI — consistent with this crate's existing terminal-handling conventions (see `handlers/model/download/interactive.rs`). Falls back to plain sequential prints on a non-TTY stdout. Press `Ctrl+C` to exit.
@@ -152,7 +153,7 @@ Proxy cache-clear options:
 | Flag | Description |
 |---|---|
 | `--host` | Proxy host (default: 127.0.0.1) |
-| `-p`, `--port` | Proxy port (default: 8080) |
+| `-p`, `--port` | Proxy port (default: the stored `proxy_port` setting) |
 | `--session-id` | Optional session ID to target (without it, clears all sessions) |
 
 Cache flags (`gglib proxy`, `gglib serve`):
@@ -332,7 +333,7 @@ gglib model update 1 --projector ~/models/mmproj-F16.gguf
 gglib model update 1 --no-projector
 
 # Pin one model to an OpenAI-compatible endpoint (proxy stack, dashboard included)
-gglib serve 1 --port 8080
+gglib serve 1 --port 8123
 
 # Same, with KV cache session persistence on disk
 gglib serve 1 --cache --slot-dir ~/.gglib/slots
@@ -356,6 +357,6 @@ gglib model download unsloth/Qwen3-Coder-Next-GGUF --quantization UD-Q6_K
 1. **Composition Root** — `bootstrap.rs` wires all dependencies (DI without framework)
 2. **Clap Derive** — Uses clap's derive macros for type-safe argument parsing
 3. **Handler Pattern** — Each command has a dedicated handler for testability
-4. **No Event Emitter** — Renders download progress straight to stdout via `CliDownloadEventEmitter`, with no broadcast bus
+4. **No Event Emitter** — Download progress is read as queue snapshots and drawn on stderr by the download board (`handlers/model/download/board.rs`) through `CliConsole`, with no broadcast bus
 
 <!-- module-docs:end -->

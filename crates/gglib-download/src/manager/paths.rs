@@ -1,11 +1,68 @@
 //! Destination path planning for downloads.
 //!
-//! This module handles the planning and creation of download destinations,
-//! including model directories and temporary file management.
+//! This module handles the planning and creation of download destinations:
+//! the models directory a download goes under, and its model's folder there.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{MutexGuard, PoisonError};
 
 use gglib_core::download::{DownloadError, DownloadId};
+use gglib_core::paths::resolve_models_dir;
+
+use super::DownloadManagerImpl;
+use crate::queue::QueuedItem;
+
+impl DownloadManagerImpl {
+    /// The models directory of each download that has started. A std mutex:
+    /// it is taken for a moment, with no other std mutex held, and never
+    /// across an await.
+    pub(super) fn directories(&self) -> MutexGuard<'_, HashMap<DownloadId, PathBuf>> {
+        self.directories
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// The models directory a download starting now goes under: the one the
+    /// config names, or with none the one [`resolve_models_dir`] answers now.
+    fn current_models_directory(&self) -> Result<PathBuf, DownloadError> {
+        if let Some(named) = &self.config.models_directory {
+            return Ok(named.clone());
+        }
+        let resolved = resolve_models_dir(None).map_err(|e| {
+            DownloadError::other(format!("Could not resolve the models directory: {e}"))
+        })?;
+        Ok(resolved.path)
+    }
+
+    /// Where `item`'s file goes: in its model's folder, under the models
+    /// directory its download started with.
+    ///
+    /// A download's first file takes the directory current as it starts,
+    /// and the files after it take the same one, until the download ends
+    /// and `end_download` drops it. So the next download, the same one
+    /// queued again included, goes where the directory resolves then, and a
+    /// download part fetched is not split across two.
+    pub(super) fn destination(
+        &self,
+        item: &QueuedItem,
+    ) -> Result<DownloadDestination, DownloadError> {
+        let started_under = self.directories().get(&item.id).cloned();
+        let models_directory = if let Some(kept) = started_under {
+            kept
+        } else {
+            let current = self.current_models_directory()?;
+            self.directories().insert(item.id.clone(), current.clone());
+            current
+        };
+        let files = Self::extract_files(item);
+        Ok(DownloadDestination::plan(
+            &models_directory,
+            &item.id,
+            files,
+        ))
+    }
+}
 
 /// A planned download destination.
 #[derive(Debug, Clone)]
@@ -51,6 +108,10 @@ impl DownloadDestination {
         self.files.iter().map(|f| self.model_dir.join(f)).collect()
     }
 }
+
+#[cfg(test)]
+#[path = "models_directory_tests.rs"]
+mod models_directory_tests;
 
 #[cfg(test)]
 mod tests {

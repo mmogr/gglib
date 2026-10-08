@@ -1,9 +1,10 @@
 //! Search functionality for the `HuggingFace` client.
 
+use gglib_core::ports::huggingface::{HfSearchOptions, HfSearchResult};
+
 use crate::error::HfResult;
 use crate::http::HttpBackend;
-use crate::models::{HfSearchQuery, HfSearchResponse};
-use crate::parsing::parse_search_response;
+use crate::parsing::search_hits;
 use crate::url::build_search_url;
 
 use super::HfClient;
@@ -14,23 +15,20 @@ impl<B: HttpBackend> HfClient<B> {
     /// Returns a single page of results with pagination info.
     pub(crate) async fn search_models_page(
         &self,
-        query: &HfSearchQuery,
-    ) -> HfResult<HfSearchResponse> {
+        query: &HfSearchOptions,
+    ) -> HfResult<HfSearchResult> {
         // Fetch more models than requested since we filter out models without GGUF files
-        let fetch_query = HfSearchQuery {
+        let fetch_query = HfSearchOptions {
             limit: 100,
             ..query.clone()
         };
 
         let url = build_search_url(&self.config, &fetch_query);
-        let (json_array, has_more): (Vec<serde_json::Value>, bool) =
+        let (hits, has_more): (Vec<serde_json::Value>, bool) =
             self.backend.get_json_paginated(&url).await?;
 
-        let mut response = parse_search_response(&json_array, has_more, query.page);
-
         // Apply parameter filtering (client-side)
-        response.items = response
-            .items
+        let items = search_hits(&hits)
             .into_iter()
             .filter(|model| {
                 // Min params filter
@@ -54,7 +52,11 @@ impl<B: HttpBackend> HfClient<B> {
             .take(query.limit as usize)
             .collect();
 
-        Ok(response)
+        Ok(HfSearchResult {
+            items,
+            has_more,
+            page: query.page,
+        })
     }
 }
 
@@ -79,13 +81,13 @@ mod tests {
         );
 
         let client = HfClient::with_backend(test_config(), backend);
-        let query = HfSearchQuery::new().with_query("llama");
+        let query = HfSearchOptions::new().with_query("llama");
 
         let response = client.search_models_page(&query).await.unwrap();
 
         assert_eq!(response.items.len(), 2);
         assert!(response.has_more);
-        assert_eq!(response.items[0].id, "Org/Model1-GGUF");
+        assert_eq!(response.items[0].model_id, "Org/Model1-GGUF");
     }
 
     #[tokio::test]
@@ -114,11 +116,11 @@ mod tests {
         let client = HfClient::with_backend(test_config(), backend);
 
         // Filter for models between 5B and 100B params
-        let query = HfSearchQuery::new().with_params_filter(Some(5.0), Some(100.0));
+        let query = HfSearchOptions::new().with_params_filter(Some(5.0), Some(100.0));
 
         let response = client.search_models_page(&query).await.unwrap();
 
         assert_eq!(response.items.len(), 1);
-        assert_eq!(response.items[0].id, "Org/Large-GGUF");
+        assert_eq!(response.items[0].model_id, "Org/Large-GGUF");
     }
 }

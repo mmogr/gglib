@@ -19,10 +19,8 @@ use gglib_core::domain::UNNAMED_PAIRED;
 use gglib_core::ports::AppEventEmitter;
 
 use super::super::{RemoteGateway, RemoteOps};
-use crate::test_support::test_core_and_proxy;
-use crate::test_support_remote::{
-    FINGERPRINT_A, KEY_A, RecordingEmitter, TICKET_A, paired_with, test_remote_ops,
-};
+use crate::test_support::{RecordingEmitter, test_core_and_proxy};
+use crate::test_support_remote::{FINGERPRINT_A, KEY_A, TICKET_A, paired_with, test_remote_ops};
 
 /// The child's path in this test binary.
 const CHILD: &str = "remote::status::status_tests::the_child_reads_status_over_a_fresh_root";

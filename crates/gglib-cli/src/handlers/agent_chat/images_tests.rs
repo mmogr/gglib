@@ -10,21 +10,27 @@ use gglib_core::ports::AttachmentStore;
 
 use super::*;
 
-/// A store in memory.
+/// A store in memory: what each image is, and how many bytes it holds.
 #[derive(Default)]
 pub(crate) struct MemoryStore {
     pub(super) kept: Mutex<BTreeMap<AttachmentId, AttachmentInfo>>,
+    pub(super) sizes: Mutex<BTreeMap<AttachmentId, usize>>,
 }
 
 #[async_trait]
 impl AttachmentStore for MemoryStore {
-    async fn put(&self, info: &AttachmentInfo, _bytes: &[u8]) -> Result<(), AttachmentError> {
+    async fn put(&self, info: &AttachmentInfo, bytes: &[u8]) -> Result<(), AttachmentError> {
         let kept = info.clone();
         self.kept
             .lock()
             .unwrap()
             .entry(info.id.clone())
             .or_insert(kept);
+        self.sizes
+            .lock()
+            .unwrap()
+            .entry(info.id.clone())
+            .or_insert(bytes.len());
         Ok(())
     }
 
@@ -32,8 +38,8 @@ impl AttachmentStore for MemoryStore {
         Ok(self.kept.lock().unwrap().get(id).cloned())
     }
 
-    async fn size(&self, _id: &AttachmentId) -> Result<Option<usize>, AttachmentError> {
-        Ok(None)
+    async fn size(&self, id: &AttachmentId) -> Result<Option<usize>, AttachmentError> {
+        Ok(self.sizes.lock().unwrap().get(id).copied())
     }
 
     async fn blob(&self, _id: &AttachmentId) -> Result<Option<AttachmentBlob>, AttachmentError> {
@@ -196,11 +202,17 @@ async fn a_bad_file_after_a_good_one_fails_the_whole_command() {
 }
 
 /// One user message carrying an image, as a resumed chat's history has it.
-fn image_turn() -> AgentMessage {
+pub(super) fn image_turn() -> AgentMessage {
     AgentMessage::User {
         content: "what is this?".to_owned(),
         images: vec![AttachmentId::of(b"an image sent earlier")],
     }
+}
+
+/// Keep the image [`image_turn`] names in `store`, at `size` bytes.
+pub(super) fn keep_earlier(store: &MemoryStore, size: usize) {
+    let id = AttachmentId::of(b"an image sent earlier");
+    store.sizes.lock().unwrap().insert(id, size);
 }
 
 #[tokio::test]
@@ -222,14 +234,20 @@ async fn an_attached_image_is_refused_for_a_model_that_cannot_see() {
 
 #[tokio::test]
 async fn an_image_in_the_history_is_refused_for_a_model_that_cannot_see() {
-    let (service, _) = service();
+    let (service, store) = service();
+    keep_earlier(&store, 64);
     let (mut images, _) = attached(&service, &[], true).await.unwrap();
 
     let refused = images
         .judge(Sight::catalogue("qwen", false), &[image_turn()])
         .await;
 
-    assert!(refused.is_err());
+    assert!(
+        refused
+            .expect_err("qwen has no projector")
+            .to_string()
+            .starts_with("Model 'qwen' cannot read images")
+    );
 }
 
 #[tokio::test]

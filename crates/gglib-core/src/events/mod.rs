@@ -12,7 +12,6 @@ use crate::ports::RuntimeErrorEnvelope;
 
 // Re-export event types
 pub use app::ModelSummary;
-pub use server::{NoopServerEvents, ServerEvents, ServerSnapshotEntry, ServerSummary};
 
 // Import download types for AppEvent::Download wrapper
 use crate::download::DownloadEvent;
@@ -55,7 +54,7 @@ pub enum AppEvent {
     ServerError {
         /// ID of the model being served (if known).
         ///
-        /// Serde always sends the key — an unparseable model ID arrives as
+        /// Serde always sends the key — a model that is not known arrives as
         /// `null`, not as an absent field.
         #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
         #[serde(rename = "modelId")]
@@ -68,17 +67,11 @@ pub enum AppEvent {
         error: RuntimeErrorEnvelope,
     },
 
-    /// Snapshot of all currently running servers.
-    ServerSnapshot {
-        /// List of currently running servers.
-        servers: Vec<ServerSnapshotEntry>,
-    },
-
     // ========== Download Events ==========
-    /// Download lifecycle + progress events (including shard progress).
+    /// The download queue's snapshot, and the events that say a download
+    /// ended.
     ///
-    /// Wraps `DownloadEvent` verbatim to preserve all detail including
-    /// shard-specific progress information.
+    /// Wraps `DownloadEvent` verbatim.
     #[serde(rename = "download")]
     Download {
         /// The download event payload.
@@ -222,44 +215,6 @@ pub enum AppEvent {
         /// The loopback port, unchanged.
         port: u16,
     },
-}
-
-impl AppEvent {
-    /// Colon-separated event names.
-    ///
-    /// **Not what goes on the wire.** `AppEvent` is `#[serde(tag = "type",
-    /// rename_all = "snake_case")]`, so SSE carries `download`/`model_added`;
-    /// these `download:started` spellings are the Tauri-bus vocabulary from
-    /// before the GUI backend moved into the daemon, and the Tauri event
-    /// branch that subscribed to them is gone.
-    ///
-    /// Nothing outside this module's tests calls it. Retiring it belongs with
-    /// the rest of the residual-Rust sweep, not here.
-    pub const fn event_name(&self) -> &'static str {
-        match self {
-            Self::ServerStarted { .. } => "server:started",
-            Self::ServerStopped { .. } => "server:stopped",
-            Self::ServerError { .. } => "server:error",
-            Self::ServerSnapshot { .. } => "server:snapshot",
-            Self::ServerHealthChanged { .. } => "server:health_changed",
-            Self::Download { event } => event.event_name(),
-            Self::ModelAdded { .. } => "model:added",
-            Self::ModelRemoved { .. } => "model:removed",
-            Self::ModelUpdated { .. } => "model:updated",
-            Self::VerificationProgress { .. } => "verification:progress",
-            Self::VerificationComplete { .. } => "verification:complete",
-            Self::ProxyStarted { .. } => "proxy:started",
-            Self::ProxyStopped => "proxy:stopped",
-            Self::ProxyCrashed => "proxy:crashed",
-            Self::RemoteEnabled { .. } => "remote:enabled",
-            Self::RemoteDisabled => "remote:disabled",
-            Self::RemotePaired { .. } => "remote:paired",
-            Self::RemoteJoined { .. } => "remote:joined",
-            Self::RemoteDisconnected => "remote:disconnected",
-            Self::RemoteAway { .. } => "remote:away",
-            Self::RemoteBack { .. } => "remote:back",
-        }
-    }
 }
 
 impl AppEvent {

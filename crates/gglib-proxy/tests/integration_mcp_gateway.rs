@@ -3,61 +3,14 @@
 //! Spins up the proxy with mocked ports and exercises the full
 //! `POST /mcp`, `GET /mcp`, and `DELETE /mcp` protocol flow.
 
-use std::sync::Arc;
-
+use gglib_core::ProxyAccessConfig;
 use reqwest::Client;
 use serde_json::{Value, json};
-use tokio::net::TcpListener;
-use tokio_util::sync::CancellationToken;
-
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
 
 mod fixtures;
-use fixtures::common::{EmptyCatalog, MockSettingsRepo, NoopRuntime, make_mcp_service};
+use fixtures::access::spawn_proxy;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
-
-/// Start the proxy on a random port and return (`base_url`, `cancel_token`).
-async fn start_proxy() -> (String, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(NoopRuntime);
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(EmptyCatalog);
-
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
-
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            // Device memory readable: this suite is not about the fit.
-            true,
-            runtime,
-            catalog,
-            make_mcp_service(),
-            cancel_clone,
-            None, // daemon_cancel: no daemon in tests
-            Arc::new(MockSettingsRepo),
-            None, // inference_override
-            None, // default_profile
-            false,
-            None,
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &gglib_core::ProxyAccessConfig::default(),
-        )
-        .await
-        .ok();
-    });
-
-    // Give the server a moment to start
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-    (format!("http://{addr}"), cancel)
-}
 
 /// Send a JSON-RPC request to POST /mcp.
 async fn post_mcp(
@@ -77,7 +30,7 @@ async fn post_mcp(
 
 #[tokio::test]
 async fn get_mcp_returns_405() {
-    let (base_url, cancel) = start_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
     let client = Client::new();
 
     let resp = client.get(format!("{base_url}/mcp")).send().await.unwrap();
@@ -89,7 +42,7 @@ async fn get_mcp_returns_405() {
 
 #[tokio::test]
 async fn post_mcp_invalid_json_returns_parse_error() {
-    let (base_url, cancel) = start_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
     let client = Client::new();
 
     let resp = client
@@ -109,7 +62,7 @@ async fn post_mcp_invalid_json_returns_parse_error() {
 
 #[tokio::test]
 async fn post_mcp_unknown_method_returns_method_not_found() {
-    let (base_url, cancel) = start_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
     let client = Client::new();
 
     // First initialize to get a session
@@ -159,7 +112,7 @@ async fn post_mcp_unknown_method_returns_method_not_found() {
 
 #[tokio::test]
 async fn full_happy_path_initialize_list_delete() {
-    let (base_url, cancel) = start_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
     let client = Client::new();
 
     // ── Step 1: Initialize ──
@@ -285,7 +238,7 @@ async fn full_happy_path_initialize_list_delete() {
 
 #[tokio::test]
 async fn missing_session_id_on_non_initialize_returns_400() {
-    let (base_url, cancel) = start_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
     let client = Client::new();
 
     let resp = post_mcp(
@@ -309,7 +262,7 @@ async fn missing_session_id_on_non_initialize_returns_400() {
 
 #[tokio::test]
 async fn invalid_session_id_returns_404() {
-    let (base_url, cancel) = start_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
     let client = Client::new();
 
     let resp = post_mcp(
@@ -333,7 +286,7 @@ async fn invalid_session_id_returns_404() {
 
 #[tokio::test]
 async fn delete_mcp_without_session_header_returns_400() {
-    let (base_url, cancel) = start_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
     let client = Client::new();
 
     let resp = client
@@ -349,7 +302,7 @@ async fn delete_mcp_without_session_header_returns_400() {
 
 #[tokio::test]
 async fn delete_mcp_with_unknown_session_returns_404() {
-    let (base_url, cancel) = start_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
     let client = Client::new();
 
     let resp = client
@@ -366,7 +319,7 @@ async fn delete_mcp_with_unknown_session_returns_404() {
 
 #[tokio::test]
 async fn disallowed_origin_returns_403() {
-    let (base_url, cancel) = start_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
     let client = Client::new();
 
     let resp = client
@@ -394,7 +347,7 @@ async fn disallowed_origin_returns_403() {
 
 #[tokio::test]
 async fn localhost_origin_is_allowed() {
-    let (base_url, cancel) = start_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
     let client = Client::new();
 
     let resp = client
@@ -423,7 +376,7 @@ async fn localhost_origin_is_allowed() {
 
 #[tokio::test]
 async fn tools_call_unknown_tool_returns_error() {
-    let (base_url, cancel) = start_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
     let client = Client::new();
 
     // Initialize first

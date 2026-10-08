@@ -1,15 +1,19 @@
 //! Interactive download monitor for the CLI.
 //!
-//! Runs a monitoring loop while the download manager is active, rendering
-//! progress bars and — in TTY environments — listening for keypresses so
-//! the user can queue additional models without restarting the command.
+//! Runs a monitoring loop while the download manager is active, drawing the
+//! queue on the download board and — in TTY environments — listening for
+//! keypresses so the user can queue additional models without restarting the
+//! command. Every tick reads one queue snapshot and hands it to a
+//! [`QueueWatch`], which draws it on the board and asks
+//! [`MonitorState::step`](super::monitor::MonitorState::step) whether the
+//! downloads have ended.
 //!
 //! # TTY vs. non-TTY
 //!
 //! | Environment | Behaviour |
 //! |---|---|
-//! | TTY (normal terminal) | Single-keystroke `[a]` / `[q]` hotkeys via `console::Term` |
-//! | Non-TTY (CI, pipe)    | Plain 250 ms polling loop; exits when queue empties |
+//! | TTY (normal terminal) | Bars, and single-keystroke `[a]` / `[q]` hotkeys via `console::Term` |
+//! | Non-TTY (CI, pipe)    | A plain line per download every 2 s; exits when the queue empties |
 //!
 //! # Why `console`, not `crossterm` raw mode
 //!
@@ -58,34 +62,43 @@ use console::{Key, Term};
 use indicatif::{ProgressBar, ProgressStyle};
 use tokio::sync::mpsc;
 
-use gglib_core::download::QueueSnapshot;
 use gglib_core::ports::DownloadManagerPort;
-use gglib_download::CliDownloadEventEmitter;
+
+use crate::console::CliConsole;
+
+use super::monitor::QueueWatch;
+
+/// How often the queue is read and redrawn. Matches the download manager's
+/// own sampling tick, so the board is at most one tick behind.
+const TICK: Duration = Duration::from_millis(250);
 
 // ─── Public entry point ──────────────────────────────────────────────────────
 
 /// Run the interactive download monitor.
 ///
 /// Blocks until all queued downloads complete, fail, or are cancelled.
-/// Failures encountered during the session are printed to stderr on exit.
+/// When the queue drains, how each ended is printed, failures included, and
+/// the monitor itself returns `Ok`. A forced quit cancels what is left,
+/// takes the bars down and prints no outcomes.
 ///
 /// The calling `execute()` handler simply awaits this future — all queue
 /// interaction and progress rendering is encapsulated here.
 pub(crate) async fn run_interactive_monitor(
     downloads: Arc<dyn DownloadManagerPort>,
-    emitter: Arc<CliDownloadEventEmitter>,
+    console: Arc<CliConsole>,
 ) -> Result<()> {
+    let watch = QueueWatch::everything(Arc::clone(&console));
     // Checks stderr, not stdout: the progress bars draw to stderr (indicatif's
-    // `MultiProgress` default, used by `CliDownloadEventEmitter`), so that is
-    // what decides whether we're actually interactive. Checking stdout would
-    // silently fall back to the plain polling loop — and disable the `[a]`/`[q]`
-    // hotkeys, since `console::Term::stderr()`'s own TTY check follows the same
-    // stream — whenever stdout was redirected but the terminal remained
-    // attached via stderr.
+    // `MultiProgress` default, used by `CliConsole`), so that is what decides
+    // whether we're actually interactive. Checking stdout would silently fall
+    // back to the plain polling loop — and disable the `[a]`/`[q]` hotkeys,
+    // since `console::Term::stderr()`'s own TTY check follows the same stream
+    // — whenever stdout was redirected but the terminal remained attached via
+    // stderr.
     if std::io::stderr().is_terminal() {
-        run_tty_monitor(downloads, emitter).await
+        run_tty_monitor(downloads, &console, watch).await
     } else {
-        run_plain_monitor(downloads).await
+        run_plain_monitor(downloads, watch).await
     }
 }
 
@@ -93,35 +106,19 @@ pub(crate) async fn run_interactive_monitor(
 
 /// Plain polling loop for non-interactive environments (CI, pipes).
 ///
-/// indicatif degrades gracefully on non-TTY stdout, so progress bars
-/// still emit periodic lines. We just poll for completion.
-///
-/// The loop will not exit until it has observed at least one non-empty
-/// snapshot (`seen_items`), which prevents a premature exit caused by
-/// the Tokio runner task not yet being scheduled when the first poll
-/// fires. Fast-fail exits early if `recent_failures` appears before any
-/// items were ever seen active (e.g. instant auth error).
-async fn run_plain_monitor(downloads: Arc<dyn DownloadManagerPort>) -> Result<()> {
-    // Brief initial yield so the async runner task can be scheduled and
-    // move the queued item from pending → active before we first poll.
-    tokio::time::sleep(Duration::from_millis(50)).await;
-
-    let mut interval = tokio::time::interval(Duration::from_millis(250));
-    let mut seen_items = false;
+/// The board prints a line per download instead of drawing bars. The loop
+/// goes on until the watch says the downloads have ended, which it does not
+/// say of a queue nothing has reached yet: the runner task may not have been
+/// scheduled when the first tick fires.
+async fn run_plain_monitor(
+    downloads: Arc<dyn DownloadManagerPort>,
+    mut watch: QueueWatch,
+) -> Result<()> {
+    let mut interval = tokio::time::interval(TICK);
     loop {
         interval.tick().await;
         let snapshot = downloads.get_queue_snapshot().await?;
-
-        if snapshot.active_count > 0 || snapshot.pending_count > 0 {
-            seen_items = true;
-        }
-
-        // Fast-fail: a failure appeared before we ever saw activity.
-        // This covers instant errors (auth, missing Python helper, etc.).
-        let has_failure = !snapshot.recent_failures.is_empty();
-
-        if (seen_items || has_failure) && is_queue_finished(&snapshot) {
-            print_failures(&snapshot);
+        if watch.take(&snapshot).is_some() {
             return Ok(());
         }
     }
@@ -144,9 +141,10 @@ enum ReaderCmd {
 /// `select!`s between the key channel, a 250 ms render tick, and Ctrl-C.
 async fn run_tty_monitor(
     downloads: Arc<dyn DownloadManagerPort>,
-    emitter: Arc<CliDownloadEventEmitter>,
+    console: &CliConsole,
+    mut watch: QueueWatch,
 ) -> Result<()> {
-    let mp = emitter.multi_progress();
+    let mp = console.multi_progress();
 
     // ── Channels ───────────────────────────────────────────────────────────
     // key_tx/key_rx: reader → main, one slot (rendezvous-ish; reader can
@@ -194,25 +192,24 @@ async fn run_tty_monitor(
 
     // ── Render state ───────────────────────────────────────────────────────
     // The hint bar is created eagerly, before any download bar exists, and
-    // registered as the emitter's footer so every `DownloadStarted` bar is
-    // inserted above it (see `CliDownloadEventEmitter::set_footer`). This
-    // keeps it pinned to the bottom without the remove-then-re-add dance the
-    // previous seen-items-gated, re-anchor-on-growth version needed.
+    // registered as the console's footer so every bar the board adds is
+    // inserted above it (see `CliConsole::set_footer`). This keeps it pinned
+    // to the bottom without the remove-then-re-add dance the previous
+    // seen-items-gated, re-anchor-on-growth version needed.
     let hint_style =
         ProgressStyle::with_template("{msg}").unwrap_or_else(|_| ProgressStyle::default_bar());
     let hint_bar = ProgressBar::new(0);
     hint_bar.set_style(hint_style);
     hint_bar.set_message(build_hint_message(0, 0));
     let hint_bar = mp.add(hint_bar);
-    emitter.set_footer(&hint_bar);
+    console.set_footer(&hint_bar);
 
-    let mut seen_items = false;
     // Two-step quit: first `q`/Ctrl-C arms `quitting=true` and lets active
     // downloads drain naturally; the second press calls `cancel_all()`.
     // Auto-exit fires when the queue empties on its own.
     let mut quitting = false;
 
-    let mut tick = tokio::time::interval(Duration::from_millis(250));
+    let mut tick = tokio::time::interval(TICK);
     // Skip the initial fire-immediately tick so we don't redraw before
     // the runner task has had a chance to populate the queue.
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -227,7 +224,7 @@ async fn run_tty_monitor(
                         // Reader is now parked on cmd_rx.recv() — stdin is
                         // free for us to call Term::read_line() inside the
                         // suspend block.
-                        handle_add_to_queue(&downloads, &emitter, &mp).await;
+                        handle_add_to_queue(&downloads, &mp).await;
                         // Tell reader to resume reading keys.
                         let _ = cmd_tx.send(ReaderCmd::Continue).await;
                     }
@@ -235,6 +232,7 @@ async fn run_tty_monitor(
                         if quitting {
                             // Second press → force quit.
                             downloads.cancel_all().await.ok();
+                            watch.clear();
                             let _ = cmd_tx.send(ReaderCmd::Stop).await;
                             break Ok(());
                         }
@@ -250,9 +248,10 @@ async fn run_tty_monitor(
                         let _ = cmd_tx.send(ReaderCmd::Continue).await;
                     }
                     None => {
-                        // Reader thread exited unexpectedly — fall through
-                        // to plain polling for the rest of the session.
-                        break run_plain_monitor(downloads.clone()).await;
+                        // Reader thread exited unexpectedly — go on without
+                        // the hotkeys for the rest of the session.
+                        hint_bar.finish_and_clear();
+                        return run_plain_monitor(downloads, watch).await;
                     }
                 }
             }
@@ -261,6 +260,7 @@ async fn run_tty_monitor(
             _ = tokio::signal::ctrl_c() => {
                 if quitting {
                     downloads.cancel_all().await.ok();
+                    watch.clear();
                     let _ = cmd_tx.send(ReaderCmd::Stop).await;
                     break Ok(());
                 }
@@ -273,11 +273,6 @@ async fn run_tty_monitor(
             // ── 250 ms render / completion tick ────────────────────────────
             _ = tick.tick() => {
                 let snapshot = downloads.get_queue_snapshot().await?;
-                let item_count = snapshot.active_count + snapshot.pending_count;
-
-                if item_count > 0 {
-                    seen_items = true;
-                }
 
                 // Update live counts in the hint message every tick.
                 // While quitting, keep the drain hint pinned so the user
@@ -288,15 +283,12 @@ async fn run_tty_monitor(
                     );
                 } else {
                     hint_bar.set_message(build_hint_message(
-                        snapshot.active_count,
-                        snapshot.pending_count,
+                        u32::from(snapshot.active.is_some()),
+                        snapshot.waiting.len(),
                     ));
                 }
 
-                // Fast-fail: exit if a failure appeared before any activity.
-                let has_failure = !snapshot.recent_failures.is_empty();
-                if (seen_items || has_failure) && is_queue_finished(&snapshot) {
-                    print_failures(&snapshot);
+                if watch.take(&snapshot).is_some() {
                     let _ = cmd_tx.send(ReaderCmd::Stop).await;
                     break Ok(());
                 }
@@ -318,18 +310,12 @@ async fn run_tty_monitor(
 /// and queue it. Runs entirely in cooked mode inside `MultiProgress::suspend`,
 /// so termios `OPOST` stays enabled and indicatif resumes cleanly afterward.
 ///
-/// Steady-tick animation on all active bars is paused for the duration of the
-/// prompt. Without this, indicatif's per-bar background ticker can race with
-/// `suspend` and emit one last redraw frame just as suspend is clearing the
-/// region, leaving that frame stranded in scrollback above the prompt.
+/// No bar ticks on its own: the board redraws them from this task, which is
+/// here, prompting. So nothing draws into the region `suspend` has cleared.
 async fn handle_add_to_queue(
     downloads: &Arc<dyn DownloadManagerPort>,
-    emitter: &Arc<CliDownloadEventEmitter>,
     mp: &indicatif::MultiProgress,
 ) {
-    // Quiesce indicatif's animation threads so suspend has exclusive control.
-    emitter.pause_animation();
-
     // block_in_place: Tokio moves other tasks away from this thread while
     // we block on stdin, ensuring background downloads keep progressing.
     let prompt_result = tokio::task::block_in_place(|| {
@@ -365,9 +351,6 @@ async fn handle_add_to_queue(
         })
     });
 
-    // Restart steady-tick now that suspend has returned and bars are back.
-    emitter.resume_animation();
-
     let entry = match prompt_result {
         Ok(Some(entry)) => entry,
         Ok(None) => return, // user pressed Enter with no input
@@ -390,8 +373,8 @@ async fn handle_add_to_queue(
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/// Build the hint bar message including live queue counts.
-fn build_hint_message(active: u32, pending: u32) -> String {
+/// Build the hint bar message with live counts of downloads, not files.
+fn build_hint_message(active: u32, pending: usize) -> String {
     format!("[a] queue another  [q] quit   ({active} active, {pending} queued)")
 }
 
@@ -410,16 +393,4 @@ fn parse_inline_quant(s: &str) -> (String, Option<String>) {
         }
     }
     (s.trim().to_string(), None)
-}
-
-/// Returns `true` when there are no active or pending downloads.
-fn is_queue_finished(snapshot: &QueueSnapshot) -> bool {
-    snapshot.active_count == 0 && snapshot.pending_count == 0
-}
-
-/// Print any recorded failures to stderr.
-fn print_failures(snapshot: &QueueSnapshot) {
-    for failure in &snapshot.recent_failures {
-        eprintln!("✗ {}: {}", failure.display_name, failure.error);
-    }
 }

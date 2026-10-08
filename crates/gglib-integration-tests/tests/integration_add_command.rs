@@ -1,7 +1,5 @@
-//! Integration tests for the add command functionality.
-//!
-//! This module tests the complete add workflow including file validation,
-//! metadata extraction, database operations, and error handling.
+//! What the model repository stores for a `NewModel` naming a file on disk:
+//! its fields, its metadata, and one row per file path.
 //!
 //! Exact float comparisons below check that `param_count_b` round-trips
 //! through the DB bit-for-bit, so `clippy::float_cmp` is intentionally
@@ -17,92 +15,17 @@ use std::fs;
 use std::sync::Arc;
 use tempfile::tempdir;
 
-use gglib_core::utils::validation;
 use gglib_core::{Model, ModelRepository, NewModel};
 use gglib_db::SqliteModelRepository;
-
-/// Create a test GGUF file with minimal valid header
-fn create_test_gguf_file(temp_dir: &std::path::Path, name: &str) -> std::path::PathBuf {
-    let file_path = temp_dir.join(format!("{name}.gguf"));
-    // Create a minimal GGUF file with correct header
-    // GGUF magic number is "GGUF" (0x46554747)
-    let gguf_header = [
-        0x47, 0x47, 0x55, 0x46, // Magic "GGUF"
-        0x03, 0x00, 0x00, 0x00, // Version 3
-        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Tensor count (1)
-        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Metadata count (1)
-    ];
-    fs::write(&file_path, gguf_header).unwrap();
-    file_path
-}
-
-#[tokio::test]
-async fn test_add_command_file_validation_success() {
-    let temp_dir = tempdir().unwrap();
-    let file_path = create_test_gguf_file(temp_dir.path(), "test_model");
-
-    // Test that file validation passes for valid GGUF file
-    let result = validation::validate_file(file_path.to_str().unwrap());
-    assert!(
-        result.is_ok(),
-        "File validation should succeed for valid GGUF file"
-    );
-}
-
-#[tokio::test]
-async fn test_add_command_file_validation_failure() {
-    let temp_dir = tempdir().unwrap();
-    let file_path = temp_dir.path().join("invalid.txt");
-    fs::write(&file_path, "not a gguf file").unwrap();
-
-    // Test that file validation fails for non-GGUF file
-    let result = validation::validate_file(file_path.to_str().unwrap());
-    assert!(
-        result.is_err(),
-        "File validation should fail for non-GGUF file"
-    );
-}
-
-#[tokio::test]
-async fn test_add_command_nonexistent_file() {
-    let result = validation::validate_file("/path/that/does/not/exist.gguf");
-    assert!(
-        result.is_err(),
-        "File validation should fail for nonexistent file"
-    );
-
-    let error_msg = result.unwrap_err().to_string();
-    assert!(
-        error_msg.contains("File does not exist"),
-        "Error should mention file doesn't exist"
-    );
-}
-
-#[tokio::test]
-async fn test_add_command_wrong_extension() {
-    let temp_dir = tempdir().unwrap();
-    let file_path = temp_dir.path().join("model.bin");
-    fs::write(&file_path, "some content").unwrap();
-
-    let result = validation::validate_file(file_path.to_str().unwrap());
-    assert!(
-        result.is_err(),
-        "File validation should fail for wrong extension"
-    );
-
-    let error_msg = result.unwrap_err().to_string();
-    assert!(
-        error_msg.contains("Wrong extension"),
-        "Error should mention wrong extension, got: {error_msg}"
-    );
-}
+use gglib_gguf::write_string_gguf;
 
 #[tokio::test]
 async fn test_add_command_database_integration() {
     let pool = setup_test_pool().await.unwrap();
     let repo: Arc<dyn ModelRepository> = Arc::new(SqliteModelRepository::new(pool));
     let temp_dir = tempdir().unwrap();
-    let file_path = create_test_gguf_file(temp_dir.path(), "integration_test");
+    let file_path = temp_dir.path().join("integration_test.gguf");
+    write_string_gguf(&file_path, &[]);
 
     // Create a model to add to database
     let mut metadata = HashMap::new();
@@ -149,7 +72,8 @@ async fn test_add_command_duplicate_model_handling() {
     let pool = setup_test_pool().await.unwrap();
     let repo: Arc<dyn ModelRepository> = Arc::new(SqliteModelRepository::new(pool));
     let temp_dir = tempdir().unwrap();
-    let file_path = create_test_gguf_file(temp_dir.path(), "duplicate_test");
+    let file_path = temp_dir.path().join("duplicate_test.gguf");
+    write_string_gguf(&file_path, &[]);
 
     // Create first model
     let mut new_model1 = NewModel::new(
@@ -212,7 +136,8 @@ async fn test_add_command_with_complex_metadata() {
     let pool = setup_test_pool().await.unwrap();
     let repo: Arc<dyn ModelRepository> = Arc::new(SqliteModelRepository::new(pool));
     let temp_dir = tempdir().unwrap();
-    let file_path = create_test_gguf_file(temp_dir.path(), "metadata_test");
+    let file_path = temp_dir.path().join("metadata_test.gguf");
+    write_string_gguf(&file_path, &[]);
 
     // Create model with complex metadata
     let mut metadata = HashMap::new();
@@ -266,7 +191,8 @@ async fn test_add_command_with_minimal_data() {
     let pool = setup_test_pool().await.unwrap();
     let repo: Arc<dyn ModelRepository> = Arc::new(SqliteModelRepository::new(pool));
     let temp_dir = tempdir().unwrap();
-    let file_path = create_test_gguf_file(temp_dir.path(), "minimal_test");
+    let file_path = temp_dir.path().join("minimal_test.gguf");
+    write_string_gguf(&file_path, &[]);
 
     // Create model with minimal required data
     let new_model = NewModel::new(

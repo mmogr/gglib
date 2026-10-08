@@ -4,7 +4,6 @@ import type { ModelSummary } from "./ModelSummary";
 import type { OverallHealth } from "./OverallHealth";
 import type { RuntimeErrorEnvelope } from "./RuntimeErrorEnvelope";
 import type { ServerHealthStatus } from "./ServerHealthStatus";
-import type { ServerSnapshotEntry } from "./ServerSnapshotEntry";
 
 /**
  * Canonical event types for all adapters.
@@ -37,7 +36,7 @@ modelName: string, } | { "type": "server_error",
 /**
  * ID of the model being served (if known).
  *
- * Serde always sends the key — an unparseable model ID arrives as
+ * Serde always sends the key — a model that is not known arrives as
  * `null`, not as an absent field.
  */
 modelId: number | null, 
@@ -49,11 +48,7 @@ modelName: string,
  * Structured error detail (message, type discriminant, retryable
  * flag), mirroring the HTTP layer's `ErrorResponse` shape.
  */
-error: RuntimeErrorEnvelope, } | { "type": "server_snapshot", 
-/**
- * List of currently running servers.
- */
-servers: Array<ServerSnapshotEntry>, } | { "type": "download", 
+error: RuntimeErrorEnvelope, } | { "type": "download", 
 /**
  * The download event payload.
  */

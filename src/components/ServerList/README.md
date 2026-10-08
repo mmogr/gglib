@@ -1,8 +1,5 @@
 # ServerList
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ServerList-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ServerList-complexity.json)
-
 <!-- module-docs:start -->
 
 Renderable list of running llama-server instances with per-server expand/collapse for view-tab selection (Chat / Console), a stop button, and a server health indicator. Supports `compact` mode for embedding inside `RunsPopover`.

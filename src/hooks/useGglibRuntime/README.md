@@ -72,7 +72,7 @@ loop detection) lives in the Rust `gglib-agent` crate.
 | File | Role |
 |---|---|
 | `useGglibRuntime.ts` | The runtime: send, edit, regenerate and Stop, as runs; each start says the chat's Thinking choice when the caller gives one, and tells the caller once that turn is accepted |
-| `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end; hands up each reading of a far chat, unless it was left first |
+| `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end; keeps how the run it last read to its end ended (`endedRun`) until the conversation is left, which is how the page knows a reply finished in front of it; hands up each reading of a far chat, unless it was left first |
 | `drawRun.ts` | Reads one run's events from the first and draws them |
 | `runRequest.ts` | The run's body (`AgentRunRequest`), and the run id; a turn on the paired machine's model carries it as `far`, that machine and the model's id there, and no name; `thinking` is in the body only when the run changes the chat's choice |
 | `savedRows.ts` | A conversation's saved thread, its live run, and the row a message is; a far chat's from the far machine, handed on as that machine answered it, its live run from the far listing's `live_run` |
@@ -105,16 +105,21 @@ preserves the multi-message UI layout from the previous client-side loop.
 
 | Option | Backend field | Default |
 |---|---|---|
-| `maxToolIterations` | `AgentConfig::max_iterations` | persisted setting, or 25 |
 | `supportsToolCalls` | `tool_filter: []` when `false` | all tools |
 | Tools popover → Agent limits | `AgentConfig` fields, via `agentOverridesToWire()` | backend defaults |
-| Tools popover → Reasoning | **top-level** `reasoning_effort` / `reasoning_budget_tokens`, via `reasoningOverridesToWire()` | resolved from the profile / model / global / floor layers |
+| Tools popover → Reasoning | **top-level** `reasoning_effort` / `reasoning_budget_tokens`, via `reasoningOverridesToWire()` | resolved from the model / global / floor layers |
 
 The last row is the one that is easy to get wrong. Both reasoning controls sit
 at the top level of `AgentRunRequest`, not inside `config` — they are per-turn
 shape rather than agent-loop tuning, and `AgentRequestConfig` declares neither,
 so a level routed through `config` would be dropped by serde without a word.
 That is why the store has two wire mappers rather than one.
+
+The page sends no iteration limit. For a run that names none the daemon
+takes the limit the conversation saved (a chat `gglib chat --max-iterations`
+started has one), then the persisted `maxToolIterations` setting, as it does
+for a paired device's turn, so the limit is the same whichever client sent
+the message.
 
 Internal tuning parameters (`max_stagnation_steps`, `context_budget_chars`,
 etc.) are controlled by the backend's `AgentConfig::default()` and are not

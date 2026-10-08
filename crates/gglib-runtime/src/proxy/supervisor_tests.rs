@@ -11,8 +11,8 @@ use gglib_core::domain::mcp::{McpServer, NewMcpServer};
 use gglib_core::ports::{
     CatalogError, ModelLaunchSpec, ModelRuntimeError, ModelSummary, RunningTarget,
 };
+use gglib_core::ports::{InMemorySettings, SettingsRepository};
 use gglib_core::ports::{McpRepositoryError, McpServerRepository};
-use gglib_core::ports::{RepositoryError, SettingsRepository};
 
 /// Empty MCP repository for testing — all reads return empty/not-found.
 #[derive(Debug)]
@@ -99,20 +99,8 @@ fn make_mcp() -> Arc<McpService> {
     Arc::new(McpService::new(Arc::new(EmptyMcpRepo)))
 }
 
-struct MockSettingsRepo;
-
-#[async_trait]
-impl SettingsRepository for MockSettingsRepo {
-    async fn load(&self) -> Result<gglib_core::Settings, RepositoryError> {
-        Ok(gglib_core::Settings::with_defaults())
-    }
-    async fn save(&self, _settings: &gglib_core::Settings) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-}
-
 fn make_settings_repo() -> Arc<dyn SettingsRepository> {
-    Arc::new(MockSettingsRepo)
+    Arc::new(InMemorySettings::default())
 }
 
 #[tokio::test]

@@ -396,7 +396,8 @@ command that links a projector, to be run on the desktop.
 model by machine and by id there, and `gglib chat --continue <id>` goes back
 to it: a chat that ran on the desktop resumes on the desktop without
 `--remote`, and says so, and refuses `--port`, which names a server on the
-laptop; one that ran on the laptop refuses `--remote`. After joining a
+laptop; one that ran on the laptop refuses `--remote`, an older one that
+stores only its model's id there included. After joining a
 different desktop, a chat that ran on the first one is refused, rather than
 sent to whatever has its id on the new one. A model named on the command line
 follows the flag, as does a conversation that stored no model, and the

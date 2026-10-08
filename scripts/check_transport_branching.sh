@@ -2,7 +2,8 @@
 # check_transport_branching.sh
 # 
 # Enforcement gate for frontend transport unification.
-# Ensures platform-specific code (isTauriApp) never appears in client modules.
+# Ensures a platform check (isDesktop(), or the Tauri bridge it reads) never
+# appears in client modules.
 #
 # Usage: ./scripts/check_transport_branching.sh
 #
@@ -29,15 +30,15 @@ echo ""
 VIOLATIONS=0
 
 # ============================================================================
-# Rule 1: No isTauriApp in src/services/clients/
+# Rule 1: No isDesktop or __TAURI_INTERNALS__ in src/services/clients/
 # ============================================================================
 echo "📋 Rule 1: No platform branching in client modules"
 
 if [ -d "$PROJECT_ROOT/src/services/clients" ]; then
-    CLIENTS_MATCHES=$(grep -rn "isTauriApp" "$PROJECT_ROOT/src/services/clients" 2>/dev/null || true)
+    CLIENTS_MATCHES=$(grep -rnE "isDesktop|__TAURI_INTERNALS__" "$PROJECT_ROOT/src/services/clients" 2>/dev/null || true)
     
     if [ -n "$CLIENTS_MATCHES" ]; then
-        echo -e "${RED}❌ VIOLATION: isTauriApp found in src/services/clients/${NC}"
+        echo -e "${RED}❌ VIOLATION: a platform check found in src/services/clients/${NC}"
         echo "$CLIENTS_MATCHES"
         VIOLATIONS=$((VIOLATIONS + 1))
     else
@@ -101,7 +102,7 @@ const { streamSse } = await import('../transport/api/sse');
 const { get } = await import(`../transport/api/models/local`);
 EOF
 cat > "$SELFTEST_DIR/known_good.ts" <<'EOF'
-import { get, getAuthenticatedFetchConfig } from '../transport/api/client';
+import { get, apiFetch } from '../transport/api/client';
 import type { DashboardSnapshot } from '../transport/types/dashboard';
 import type { ProxyStatus } from '../transport/types';
 import { appLogger } from '../platform';
@@ -148,16 +149,16 @@ fi
 echo ""
 
 # ============================================================================
-# Rule 3: All isTauriApp usages must have TRANSPORT_EXCEPTION comment (warning only)
+# Rule 3: A file that reads the Tauri bridge must have a TRANSPORT_EXCEPTION comment (warning only)
 # ============================================================================
-echo "📋 Rule 3: Remaining isTauriApp usages should be documented exceptions"
+echo "📋 Rule 3: Files reading the Tauri bridge should be documented exceptions"
 
-# Find all files with isTauriApp
-ALL_TAURI_FILES=$(grep -rl "isTauriApp" "$PROJECT_ROOT/src" --include="*.ts" --include="*.tsx" 2>/dev/null | grep -v "node_modules" | grep -v "transport/" || true)
+# Find all files that name the bridge; `isDesktop()` is how everything else asks
+ALL_TAURI_FILES=$(grep -rl "__TAURI_INTERNALS__" "$PROJECT_ROOT/src" --include="*.ts" --include="*.tsx" 2>/dev/null | grep -v "node_modules" | grep -v "transport/" || true)
 
 UNDOCUMENTED=0
 if [ -n "$ALL_TAURI_FILES" ]; then
-    echo "Files with isTauriApp:"
+    echo "Files reading __TAURI_INTERNALS__:"
     for file in $ALL_TAURI_FILES; do
         # Check if file has TRANSPORT_EXCEPTION comment
         if grep -q "TRANSPORT_EXCEPTION:" "$file" 2>/dev/null; then
@@ -168,7 +169,7 @@ if [ -n "$ALL_TAURI_FILES" ]; then
         fi
     done
 else
-    echo -e "${GREEN}✓ No isTauriApp usages found outside transport layer${NC}"
+    echo -e "${GREEN}✓ Nothing reads the Tauri bridge outside the transport layer${NC}"
 fi
 
 echo ""

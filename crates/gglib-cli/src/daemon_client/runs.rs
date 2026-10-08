@@ -9,6 +9,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use futures_util::StreamExt as _;
 use gglib_core::domain::runs::{RunInfo, RunList};
+use gglib_core::sse::DataFrames;
 use serde_json::Value;
 
 use super::{DaemonHandle, paths};
@@ -88,19 +89,10 @@ where
     B: AsRef<[u8]>,
     E: std::error::Error + Send + Sync + 'static,
 {
-    let mut pending = Vec::new();
-    let mut buffer = String::new();
+    let mut frames = DataFrames::unbounded();
     while let Some(chunk) = bytes.next().await {
         let chunk = chunk.context("reading the run's events")?;
-        // Decoded only up to the last whole event, so a character split
-        // across two reads is decoded whole.
-        pending.extend_from_slice(chunk.as_ref());
-        let Some(cut) = pending.windows(2).rposition(|w| w == b"\n\n") else {
-            continue;
-        };
-        let whole: Vec<u8> = pending.drain(..cut + 2).collect();
-        buffer.push_str(&String::from_utf8_lossy(&whole));
-        for item in drain_items(&mut buffer)? {
+        for item in drain_items(&mut frames, chunk.as_ref())? {
             let flow = on(&item);
             if let RunItem::End(info) = item {
                 return Ok(Some(info));
@@ -113,37 +105,29 @@ where
     Ok(None)
 }
 
-/// Take every complete event out of `buffer`: `id:` and `data:` make a
-/// frame, `event: run` the run's end. Keep-alive comments are skipped.
-pub(crate) fn drain_items(buffer: &mut String) -> Result<Vec<RunItem>> {
-    let mut items = Vec::new();
-    while let Some(end) = buffer.find("\n\n") {
-        let event: String = buffer.drain(..end + 2).collect();
-        let (mut id, mut name, mut data) = (None, None, Vec::new());
-        for line in event.lines() {
-            if let Some(rest) = line.strip_prefix("id:") {
-                id = Some(rest.trim().to_owned());
-            } else if let Some(rest) = line.strip_prefix("event:") {
-                name = Some(rest.trim().to_owned());
-            } else if let Some(rest) = line.strip_prefix("data:") {
-                data.push(rest.strip_prefix(' ').unwrap_or(rest));
+/// Take `chunk`, and return every item it completed: `id:` and `data:` make
+/// a frame, `event: run` the run's end. Keep-alive comments are skipped.
+pub(crate) fn drain_items(frames: &mut DataFrames, chunk: &[u8]) -> Result<Vec<RunItem>> {
+    frames
+        .push_events(chunk)
+        .into_iter()
+        .map(|event| {
+            if event.name.as_deref() == Some("run") {
+                let info =
+                    serde_json::from_str(&event.data).context("reading the run's final state")?;
+                Ok(RunItem::End(info))
+            } else {
+                let seq = event
+                    .id
+                    .and_then(|id| id.parse().ok())
+                    .context("an event without its number")?;
+                Ok(RunItem::Frame {
+                    seq,
+                    data: event.data,
+                })
             }
-        }
-        if data.is_empty() {
-            continue;
-        }
-        let data = data.join("\n");
-        if name.as_deref() == Some("run") {
-            let info = serde_json::from_str(&data).context("reading the run's final state")?;
-            items.push(RunItem::End(info));
-        } else {
-            let seq = id
-                .and_then(|id| id.parse().ok())
-                .context("an event without its number")?;
-            items.push(RunItem::Frame { seq, data });
-        }
-    }
-    Ok(items)
+        })
+        .collect()
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@
  * Rust structs that deserialise it.
  *
  * This replaces a test that pinned a Tauri `serve_model` IPC command. There
- * is no such command — the Tauri surface is seven commands, allowlisted by
+ * is no such command — the Tauri surface is five commands, allowlisted by
  * name in `scripts/check-frontend-ipc.sh`, and `git log -S serve_model` finds
  * it in no `.rs` file in this repository's history. The old test asserted a
  * nested `{ id, request }` envelope that nothing sends, and asserted it
@@ -134,8 +134,8 @@ const FULL_CONFIG: ServeConfig = {
   port: MOCK_PROXY_PORT,
   mlock: true,
   jinja: true,
-  specDraftNMax: 4,
-  specDraftPMin: 0.75,
+  mtpDraftNMax: 4,
+  mtpDraftPMin: 0.75,
   temperature: 0.7,
   topP: 0.95,
   topK: 40,
@@ -176,8 +176,8 @@ describe('POST /api/servers/start request body', () => {
       jinja: FULL_CONFIG.jinja,
       // Omitted on purpose: the backend auto-detects it from model tags.
       reasoningFormat: undefined,
-      mtpDraftNMax: FULL_CONFIG.specDraftNMax,
-      mtpDraftPMin: FULL_CONFIG.specDraftPMin,
+      mtpDraftNMax: FULL_CONFIG.mtpDraftNMax,
+      mtpDraftPMin: FULL_CONFIG.mtpDraftPMin,
       inferenceParams: {
         temperature: FULL_CONFIG.temperature,
         topP: FULL_CONFIG.topP,

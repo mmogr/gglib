@@ -1,11 +1,8 @@
 # platform
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-platform-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-platform-complexity.json)
-
 <!-- module-docs:start -->
 
-OS-specific utilities that cannot be cleanly abstracted through the transport layer: shell integration (URL opening, native file dialogs), menu bar state synchronization, llama.cpp binary management, and the unified application logger. Modules here are intentionally marked `TRANSPORT_EXCEPTION` — they touch OS APIs directly rather than routing through the standard transport interface.
+OS-specific utilities that cannot be cleanly abstracted through the transport layer: shell integration (URL opening, native file dialogs), menu bar state synchronization, and the unified application logger. Modules here are intentionally marked `TRANSPORT_EXCEPTION` — they touch OS APIs directly rather than routing through the standard transport interface.
 
 ## Architecture
 
@@ -37,12 +34,11 @@ OS-specific utilities that cannot be cleanly abstracted through the transport la
 | `fileDialogs.ts` | Native GGUF file picker (Tauri only) |
 | `menuSync.ts` | Synchronises native menu bar item state with application state |
 | `menuEvents.ts` | Listens for native menu click events |
-| `llamaInstall.ts` | Drives llama.cpp binary download and installation |
 | `serverLogs.ts` | Fetches and streams llama-server log output |
 | `logging/` | Strictly typed logger with categories, levels, and multi-target transports |
 
 ## Transport Exception Policy
 
-Components needing shell integration import from `platform/` directly. All other backend communication must go through `clients/` → `transport/`. Never import `platform/` from within `clients/` or `transport/`.
+Components needing shell integration import from `platform/` directly. All other backend communication must go through `clients/` → `transport/`. `clients/` and `transport/` never reach the backend through `platform/`: what they import from here is the logger and, in `transport/api/client.ts` alone, `isDesktop()`.
 
 <!-- module-docs:end -->

@@ -1,25 +1,19 @@
 //! One file's place in the group of files a model is downloaded as.
 
-use serde::{Deserialize, Serialize};
-
 use super::file_role::GgufFileRole;
+use super::row::FilePlace;
 
 /// Information about one file within a model's download group.
 ///
 /// A group is the model's weights, one file or several shards, followed by
 /// the projector fetched with them when the repository has one. Shards are
 /// numbered among the weights alone: [`total_shards`](Self::total_shards)
-/// never counts a projector, while the byte offsets cover every file.
+/// never counts a projector, while
+/// [`group_total_bytes`](Self::group_total_bytes) covers every file.
 ///
-/// [`preceding_bytes`](Self::preceding_bytes) and
-/// [`group_total_bytes`](Self::group_total_bytes) carry the exact byte offsets
-/// of this shard within the whole model, so aggregate progress does not have to
-/// assume every shard is the same size. GGUF shard sets almost always end with
-/// a smaller final shard, and estimating the group total as
-/// `this_shard_size * shard_count` made the percentage both wrong and
-/// discontinuous at every shard boundary.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+/// This is the queue's own record. What a client is shown of it is the
+/// [`FilePlace`] in a row's text.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ShardInfo {
     /// 0-based position of this file in its group. Weights come first, so a
     /// shard's position is its shard number; a projector follows the last
@@ -31,18 +25,12 @@ pub struct ShardInfo {
     pub filename: String,
     /// What this file is: a shard of the weights, or the projector.
     pub role: GgufFileRole,
-    /// Size of this shard file in bytes (if known).
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Size of this file in bytes (if known).
     pub file_size: Option<u64>,
-    /// Summed size of every shard before this one (if all sizes are known).
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub preceding_bytes: Option<u64>,
-    /// Summed size of every shard in the group (if all sizes are known).
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Summed size of every file in the group (if all sizes are known).
     pub group_total_bytes: Option<u64>,
+    /// Whether the group has a projector after its weights.
+    pub has_projector: bool,
 }
 
 impl ShardInfo {
@@ -55,8 +43,8 @@ impl ShardInfo {
             filename: filename.into(),
             role: GgufFileRole::Weights,
             file_size: None,
-            preceding_bytes: None,
             group_total_bytes: None,
+            has_projector: false,
         }
     }
 
@@ -81,37 +69,46 @@ impl ShardInfo {
         self
     }
 
-    /// Attach the exact byte offsets of this shard within its group.
-    ///
-    /// Only call this when *every* shard size in the group is known; a partial
-    /// offset is worse than none, because the fallback estimate at least stays
-    /// self-consistent.
+    /// Record what is known of the whole group: the size of every file
+    /// together, when every one is known, and whether a projector is among
+    /// them.
     #[must_use]
-    pub const fn with_group_offsets(mut self, preceding: u64, group_total: u64) -> Self {
-        self.preceding_bytes = Some(preceding);
-        self.group_total_bytes = Some(group_total);
+    pub const fn in_group(mut self, group_total: Option<u64>, has_projector: bool) -> Self {
+        self.group_total_bytes = group_total;
+        self.has_projector = has_projector;
         self
     }
 
-    /// Exact aggregate progress for the group, given this shard's own progress.
-    ///
-    /// Returns `None` when the group's byte layout is unknown, leaving the
-    /// caller to fall back to an equal-shard-size estimate.
+    /// Whether this is the only file of its group.
     #[must_use]
-    pub fn aggregate(&self, shard_downloaded: u64) -> Option<(u64, u64)> {
-        let preceding = self.preceding_bytes?;
-        let group_total = self.group_total_bytes?;
-        let downloaded = preceding.saturating_add(shard_downloaded).min(group_total);
-        Some((downloaded, group_total))
+    pub const fn is_alone(&self) -> bool {
+        self.total_shards <= 1 && !self.has_projector
     }
 
-    /// Format as display string: "Part 1/3" for a shard, "Projector" for a
-    /// projector.
+    /// How this file is named on the row of a running download: its number
+    /// among the shards, `weights` when one weights file is fetched with a
+    /// projector, `projector`, and nothing for a download of one file.
     #[must_use]
-    pub fn display(&self) -> String {
+    pub const fn place(&self) -> Option<FilePlace> {
         match self.role {
-            GgufFileRole::Weights => format!("Part {}/{}", self.shard_index + 1, self.total_shards),
-            GgufFileRole::Projector => "Projector".to_string(),
+            GgufFileRole::Projector => Some(FilePlace::Projector),
+            GgufFileRole::Weights if self.total_shards > 1 => Some(FilePlace::Part {
+                number: self.shard_index + 1,
+                of: self.total_shards,
+            }),
+            GgufFileRole::Weights if self.has_projector => Some(FilePlace::Weights),
+            GgufFileRole::Weights => None,
+        }
+    }
+
+    /// How the group is named on the row of a waiting download: by its
+    /// number of shards, when it has more than one.
+    #[must_use]
+    pub const fn waiting_place(&self) -> Option<FilePlace> {
+        if self.total_shards > 1 {
+            Some(FilePlace::Parts(self.total_shards))
+        } else {
+            None
         }
     }
 }
@@ -121,17 +118,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_shard_info_display() {
+    fn a_shard_is_placed_by_its_number() {
         let shard = ShardInfo::new(1, 5, "model-00002-of-00005.gguf");
-        assert_eq!(shard.display(), "Part 2/5");
+
+        assert_eq!(shard.place(), Some(FilePlace::Part { number: 2, of: 5 }));
+        assert_eq!(shard.waiting_place(), Some(FilePlace::Parts(5)));
     }
 
     /// A projector follows the shards and is not one of them, so it is not
-    /// shown as "Part 4/3".
+    /// "part 4/3".
     #[test]
-    fn a_projector_is_displayed_by_its_role() {
-        let projector = ShardInfo::new(3, 3, "mmproj-F16.gguf").with_role(GgufFileRole::Projector);
-        assert_eq!(projector.display(), "Projector");
+    fn a_projector_is_placed_by_its_role() {
+        let projector = ShardInfo::new(3, 3, "mmproj-F16.gguf")
+            .with_role(GgufFileRole::Projector)
+            .in_group(None, true);
+
+        assert_eq!(projector.place(), Some(FilePlace::Projector));
+    }
+
+    /// One weights file is "weights" only beside a projector: alone, the row
+    /// is about the whole download and names no file.
+    #[test]
+    fn a_single_weights_file_is_named_only_beside_a_projector() {
+        let alone = ShardInfo::new(0, 1, "m.gguf");
+        let beside = ShardInfo::new(0, 1, "m.gguf").in_group(None, true);
+
+        assert_eq!(alone.place(), None);
+        assert!(alone.is_alone());
+        assert_eq!(beside.place(), Some(FilePlace::Weights));
+        assert!(!beside.is_alone());
+        assert_eq!(beside.waiting_place(), None);
     }
 
     #[test]

@@ -25,7 +25,7 @@ pub struct HfRepoInfo {
     pub description: Option<String>,
     /// Last modified timestamp (ISO 8601)
     pub last_modified: Option<String>,
-    /// Chat template (from `config.chat_template` or `cardData`)
+    /// Chat template (from `gguf.chat_template`, else `config.chat_template`)
     pub chat_template: Option<String>,
     /// Model tags
     #[serde(default)]
@@ -67,6 +67,25 @@ impl HfQuantInfo {
     }
 }
 
+/// Sort field options for `HuggingFace` model search.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "lowercase")]
+pub enum HfSortField {
+    /// Sort by download count (default)
+    #[default]
+    Downloads,
+    /// Sort by number of likes
+    Likes,
+    /// Sort by last modified date
+    Modified,
+    /// Sort by creation date
+    Created,
+    /// Sort alphabetically by name
+    #[serde(rename = "id")]
+    Alphabetical,
+}
+
 /// Options for searching `HuggingFace` models.
 #[derive(Debug, Clone, Default)]
 pub struct HfSearchOptions {
@@ -80,8 +99,8 @@ pub struct HfSearchOptions {
     pub limit: u32,
     /// Page number (0-indexed)
     pub page: u32,
-    /// Sort field: "downloads", "likes", "modified", "created"
-    pub sort_by: String,
+    /// Sort field
+    pub sort_by: HfSortField,
     /// Sort ascending (false = descending)
     pub sort_ascending: bool,
 }
@@ -92,8 +111,6 @@ impl HfSearchOptions {
     pub fn new() -> Self {
         Self {
             limit: 30,
-            sort_by: "downloads".to_string(),
-            sort_ascending: false,
             ..Default::default()
         }
     }
@@ -129,8 +146,8 @@ impl HfSearchOptions {
 
     /// Set sort options.
     #[must_use]
-    pub fn with_sort(mut self, field: impl Into<String>, ascending: bool) -> Self {
-        self.sort_by = field.into();
+    pub const fn with_sort(mut self, field: HfSortField, ascending: bool) -> Self {
+        self.sort_by = field;
         self.sort_ascending = ascending;
         self
     }
@@ -158,14 +175,14 @@ mod tests {
             .with_limit(50)
             .with_page(2)
             .with_params_filter(Some(7.0), Some(70.0))
-            .with_sort("likes", true);
+            .with_sort(HfSortField::Likes, true);
 
         assert_eq!(opts.query, Some("llama".to_string()));
         assert_eq!(opts.limit, 50);
         assert_eq!(opts.page, 2);
         assert_eq!(opts.min_params_b, Some(7.0));
         assert_eq!(opts.max_params_b, Some(70.0));
-        assert_eq!(opts.sort_by, "likes");
+        assert_eq!(opts.sort_by, HfSortField::Likes);
         assert!(opts.sort_ascending);
     }
 

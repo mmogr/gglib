@@ -12,12 +12,12 @@
 //!    primary is already using, so the primary's own footprint is netted out
 //!    first.
 
+use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::{
     BUDGET_UTILISATION, RESIDENCY_UTILISATION, SecondarySlotDecision, SlotFootprint,
     decide_secondary_slot,
 };
 use gglib_core::ports::ModelLaunchSpec;
-use gglib_core::server_config::CacheRamSetting;
 
 use crate::llama::args::KvCacheTypeResolution;
 use crate::process::admission::Resident;

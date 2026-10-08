@@ -12,8 +12,8 @@ infrastructure concerns (database, process management, etc.).
 - `McpServer` - A persisted MCP server with ID
 - `NewMcpServer` - An MCP server to be inserted (no ID yet)
 - `McpServerConfig` - Execution configuration (`exe_path`, args, URL, `path_extra`)
-- `McpServerType` - Connection type (stdio or SSE)
-- `McpServerStatus` - Runtime status (stopped, starting, running, error)
+- `McpServerType` - Connection type (stdio, or SSE, which is stored and read but not yet run)
+- `McpServerStatus` - Runtime status (stopped, starting, running, error, unsupported)
 - `McpLifecycle` - Startup lifecycle policy (eager, lazy, manual)
 - `McpEnvEntry` - Environment variable entry
 - `McpTool` - Tool exposed by an MCP server

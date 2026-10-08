@@ -81,11 +81,11 @@ pub struct BenchmarkDeps {
 // Service struct
 // ────────────────────────────────────────────────────────────────────────────
 
-/// Benchmark service shared by CLI and HTTP adapters.
+/// The benchmark service: the compare, perf, tune and agentic runs.
 ///
-/// Constructed once at bootstrap and injected into both the CLI handler and
-/// the Axum HTTP handler.  All heavy lifting is delegated to [`compare`] and
-/// [`perf`] submodules.
+/// Built once in `service_graph.rs` and called only by the daemon's HTTP
+/// handlers; the CLI and the GUI reach a run through those routes. Each run
+/// is delegated to its submodule: [`compare`], [`perf`], [`tune`], [`agentic`].
 pub struct BenchmarkOps {
     deps: BenchmarkDeps,
 }
@@ -100,9 +100,9 @@ impl BenchmarkOps {
     /// sequentially, emit [`BenchmarkEvent`]s on `tx`.
     ///
     /// The caller must pass a [`CancellationToken`] that fires when the client
-    /// disconnects (HTTP) or receives `Ctrl+C` (CLI).  The loop checks the
-    /// token cooperatively between models; on cancellation it calls
-    /// `stop_current()` and marks the run as `Failed`.
+    /// goes away: the handler's [`guard::BenchmarkTaskGuard`] cancels it on
+    /// drop.  The loop checks the token before each model; on cancellation it
+    /// marks the run as `Failed` and calls `stop_current()`.
     pub async fn run_compare(
         &self,
         config: CompareConfig,

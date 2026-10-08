@@ -7,25 +7,22 @@ license.workspace = true
 publish = false
 
 [features]
-default = ["mmap"]
-mmap = ["dep:memmap2"]
-std = []
+# `write_string_gguf`, a GGUF file written without a model. Other crates
+# enable it from `[dev-dependencies]` only.
+test-utils = []
 
 [dependencies]
 # Core domain types and port definitions
-gglib-core = { path = "../gglib-core" }
+gglib-core = { workspace = true }
 
 # Logging
 tracing = { workspace = true }
 
 # Template render-and-diff dialect derivation (capabilities::template_probe).
-# Adapter-specific deps stay local to this crate per the workspace policy.
+# Only this crate uses the two minijinja crates, so their versions are here.
 minijinja = { version = "2", features = ["json", "loop_controls"] }
 minijinja-contrib = { version = "2", features = ["pycompat"] }
 serde_json = { workspace = true }
-
-# Memory-mapped file reading (optional, default enabled)
-memmap2 = { version = "0.9", optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

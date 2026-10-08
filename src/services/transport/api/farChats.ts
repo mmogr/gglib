@@ -17,22 +17,21 @@ import type { RemoteTurnBody } from '../../../types/generated/RemoteTurnBody';
 import type { RunInfo } from '../../../types/generated/RunInfo';
 import type { RunList } from '../../../types/generated/RunList';
 import type { Thinking } from '../../../types/generated/Thinking';
-import { REMOTE_CHATS_PATH, REMOTE_RUNS_PATH } from '../../api/routes';
 import { get, post, put } from './client';
 import { readRunStream, type RunStreamItem } from './runs';
 
 function farRunPath(id: string): string {
-  return `${REMOTE_RUNS_PATH}/${encodeURIComponent(id)}`;
+  return `/api/remote/runs/${encodeURIComponent(id)}`;
 }
 
 /** The far machine's chats, newest first. */
 export async function listFarChats(): Promise<HubChat[]> {
-  return (await get<HubChatList>(REMOTE_CHATS_PATH)).chats;
+  return (await get<HubChatList>('/api/remote/chats')).chats;
 }
 
 /** One far chat and its rows, oldest first. */
 export async function openFarChat(id: number): Promise<HubChatOpen> {
-  return get<HubChatOpen>(`${REMOTE_CHATS_PATH}/${id}`);
+  return get<HubChatOpen>(`/api/remote/chats/${id}`);
 }
 
 /**
@@ -55,12 +54,12 @@ export async function addFarTurn(
     ...(images.length > 0 && { images }),
     ...(thinking !== undefined && { thinking }),
   };
-  return put<RunInfo>(`${REMOTE_CHATS_PATH}/${id}/turns/${encodeURIComponent(runId)}`, body);
+  return put<RunInfo>(`/api/remote/chats/${id}/turns/${encodeURIComponent(runId)}`, body);
 }
 
 /** The far runs this machine may see, newest first. */
 export async function listFarRuns(): Promise<RunInfo[]> {
-  return (await get<RunList>(REMOTE_RUNS_PATH)).runs;
+  return (await get<RunList>('/api/remote/runs')).runs;
 }
 
 /** Cancel a far run. */

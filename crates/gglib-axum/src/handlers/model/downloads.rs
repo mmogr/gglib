@@ -2,10 +2,11 @@
 
 use axum::Json;
 use axum::extract::{Path, State};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::error::HttpError;
 use crate::state::AppState;
+use gglib_app_services::types::QueueDownloadResponse;
 use gglib_core::download::QueueSnapshot;
 
 /// Request to queue a download.
@@ -13,21 +14,13 @@ use gglib_core::download::QueueSnapshot;
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub(crate) struct QueueDownloadRequest {
     pub model_id: String,
-    /// Quantization to download. Accepts both "quant" and "quantization" field names
-    /// for compatibility with different frontends (Tauri uses "quantization", legacy uses "quant").
-    #[serde(alias = "quantization")]
-    pub quant: Option<String>,
-}
-
-/// Response from `queue_download`.
-/// Canonical shape returned to all clients - never a tuple.
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct QueueDownloadResponse {
-    /// Position in the queue (0 = downloading now).
-    pub position: usize,
-    /// Number of shards queued (1 for single file, N for sharded models).
-    pub shard_count: usize,
+    /// Quantization to download; left out, one is chosen. The page sends it
+    /// as "quantization" and the CLI as "quant", so both field names are
+    /// accepted.
+    #[serde(alias = "quant")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub quantization: Option<String>,
 }
 
 /// Request to reorder a single download.
@@ -51,32 +44,30 @@ pub(crate) async fn list(State(state): State<AppState>) -> Json<QueueSnapshot> {
 
     tracing::debug!(
         target: "gglib.download",
-        active_count = snapshot.active_count,
-        pending_count = snapshot.pending_count,
-        total_items = snapshot.items.len(),
-        items = ?snapshot.items.iter().map(|i| (&i.id, &i.status)).collect::<Vec<_>>(),
+        revision = snapshot.revision,
+        active = ?snapshot.active.as_ref().map(|row| (&row.id, row.phase)),
+        waiting = snapshot.waiting.len(),
+        finished = snapshot.finished.len(),
         "Queue snapshot returned from /api/downloads/queue",
     );
 
     Json(snapshot)
 }
 
-/// Queue a new download.
+/// Queue a new download, and answer its ID.
 pub(crate) async fn queue(
     State(state): State<AppState>,
     Json(req): Json<QueueDownloadRequest>,
 ) -> Result<Json<QueueDownloadResponse>, HttpError> {
-    let (position, shard_count) = state
+    let queued = state
         .downloads
-        .queue_download(req.model_id, req.quant)
+        .queue_download(req.model_id, req.quantization)
         .await?;
-    Ok(Json(QueueDownloadResponse {
-        position,
-        shard_count,
-    }))
+    Ok(Json(queued))
 }
 
-/// Remove a pending download from the queue.
+/// Take a download off the queue: cancel it when it is waiting or running,
+/// and otherwise drop its finished entry.
 pub(crate) async fn remove(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -85,10 +76,10 @@ pub(crate) async fn remove(
     Ok(())
 }
 
-/// Cancel an active download.
+/// Cancel a download that is waiting or running, every file of it.
 ///
-/// This endpoint is idempotent: returns 204 No Content whether or not
-/// the download exists. This prevents client-side errors during race
+/// This endpoint is idempotent: it answers 200 whether or not the download
+/// is in the queue. This prevents client-side errors during race
 /// conditions (e.g., SSE removes download while cancel is in-flight).
 #[allow(
     clippy::match_same_arms,
@@ -128,27 +119,12 @@ pub(crate) async fn reorder_full(
     Ok(())
 }
 
-/// Cancel all shards in a shard group.
-pub(crate) async fn cancel_shard_group(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Result<(), HttpError> {
-    state.downloads.cancel_shard_group(&id).await?;
-    Ok(())
-}
-
-/// Clear all failed downloads.
-pub(crate) async fn clear_failed(State(state): State<AppState>) {
-    state.downloads.clear_failed().await;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Contract test: ensures the HTTP API accepts both "quant" and "quantization" field names.
-    /// This prevents regression of the field name mismatch bug where the frontend sends
-    /// "quantization" but the backend expected "quant".
+    /// Contract test: the HTTP API accepts both "quantization", which the
+    /// page sends, and "quant", which the CLI sends.
     #[test]
     fn queue_request_accepts_quantization_field() {
         let json = serde_json::json!({
@@ -158,7 +134,7 @@ mod tests {
 
         let req: QueueDownloadRequest = serde_json::from_value(json).unwrap();
         assert_eq!(req.model_id, "test/model");
-        assert_eq!(req.quant.as_deref(), Some("Q8_0"));
+        assert_eq!(req.quantization.as_deref(), Some("Q8_0"));
     }
 
     #[test]
@@ -170,18 +146,21 @@ mod tests {
 
         let req: QueueDownloadRequest = serde_json::from_value(json).unwrap();
         assert_eq!(req.model_id, "test/model");
-        assert_eq!(req.quant.as_deref(), Some("Q4_K_M"));
+        assert_eq!(req.quantization.as_deref(), Some("Q4_K_M"));
     }
 
+    /// The page names no quantization by leaving the key out, and the CLI
+    /// by sending its own as `null`.
     #[test]
     fn queue_request_allows_missing_quant() {
-        let json = serde_json::json!({
-            "model_id": "test/model"
-        });
-
-        let req: QueueDownloadRequest = serde_json::from_value(json).unwrap();
-        assert_eq!(req.model_id, "test/model");
-        assert!(req.quant.is_none());
+        for json in [
+            serde_json::json!({ "model_id": "test/model" }),
+            serde_json::json!({ "model_id": "test/model", "quant": null }),
+        ] {
+            let req: QueueDownloadRequest = serde_json::from_value(json).unwrap();
+            assert_eq!(req.model_id, "test/model");
+            assert!(req.quantization.is_none());
+        }
     }
 
     /// When both fields are present, serde rejects the request as a duplicate field error.
@@ -197,21 +176,5 @@ mod tests {
         let result: Result<QueueDownloadRequest, _> = serde_json::from_value(json);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("duplicate field"));
-    }
-
-    /// Contract test: ensures the response is a JSON object with named fields,
-    /// not a tuple. This is the canonical shape expected by all clients.
-    #[test]
-    fn queue_response_has_named_fields() {
-        let response = QueueDownloadResponse {
-            position: 2,
-            shard_count: 4,
-        };
-        let json = serde_json::to_value(&response).unwrap();
-
-        // Must be an object, not an array (tuple)
-        assert!(json.is_object());
-        assert_eq!(json["position"], 2);
-        assert_eq!(json["shard_count"], 4);
     }
 }

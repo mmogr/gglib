@@ -6,11 +6,11 @@
 
 /// RAM reserved for the OS, other applications, and llama.cpp's own
 /// compute/scratch buffers — never handed to the prompt cache.
-pub const CACHE_RAM_HEADROOM_BYTES: u64 = 16 * 1024 * 1024 * 1024;
+const CACHE_RAM_HEADROOM_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 
 /// Below this, a prompt cache holds too little to be worth the memory
 /// pressure, so the budget collapses to `0` (explicitly disabled).
-pub const CACHE_RAM_FLOOR_BYTES: u64 = 1024 * 1024 * 1024;
+const CACHE_RAM_FLOOR_BYTES: u64 = 1024 * 1024 * 1024;
 
 /// KV allowance assumed when the model's metadata doesn't permit an estimate.
 /// Deliberately generous: over-reserving shrinks the cache (safe), whereas

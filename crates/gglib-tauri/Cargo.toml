@@ -16,8 +16,7 @@ serde = { workspace = true }
 tracing = { workspace = true }
 
 # Tauri-specific dependencies
-# Note: version should match src-tauri/Cargo.toml
-tauri = "2.8"
+tauri = { workspace = true }
 
 [lints]
 workspace = true

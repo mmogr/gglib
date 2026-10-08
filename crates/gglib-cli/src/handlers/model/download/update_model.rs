@@ -4,32 +4,38 @@
 //! The check, the download and the row rewrite all live in
 //! [`ModelOps::check_upgrade`]/[`ModelOps::apply_upgrade`], the single shared
 //! implementation consumed by this CLI, the Axum `WebUI` and the Tauri app.
-//! What stays here is what only a terminal has: the plan, the prompt and the
-//! printed result.
+//! What stays here is what only a terminal has: the plan, the prompt, the
+//! printed result, and the download board the upgrade's row is drawn on.
+//!
+//! A model that is being served is refused before any of that, by the rule
+//! `apply_upgrade` refuses it by ([`ModelOps::refuse_if_served`]).
 //!
 //! [`ModelOps::check_upgrade`]: gglib_app_services::ModelOps::check_upgrade
 //! [`ModelOps::apply_upgrade`]: gglib_app_services::ModelOps::apply_upgrade
+//! [`ModelOps::refuse_if_served`]: gglib_app_services::ModelOps::refuse_if_served
 
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::handlers::model::resolver;
+use crate::presentation::short_sha;
+use crate::utils::input;
+
+use super::board::SoloBoard;
 
 /// Execute the update-model command.
 ///
 /// Upgrades a model to the latest revision from `HuggingFace`. `force` skips
 /// the confirmation prompt; everything else is identical to the GUI path.
-#[allow(
-    clippy::items_after_statements,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
-    // `NoopModelRuntime` rather than `ctx.runner`: a one-shot CLI command has
-    // no shared `ProcessManager`, and the upgrade path never touches serving
-    // status. Same construction as `model capabilities`.
+    // What it is built with, and why, is `one_shot_model_ops`'s to say.
     let ops = crate::handlers::model::one_shot_model_ops(ctx);
+
+    // Asked first, so the Hub is not asked about an upgrade that would be
+    // refused, and nobody is asked to confirm one.
+    ops.refuse_if_served(&model).await?;
 
     println!("Updating model {} (ID: {})...", model.name, model.id);
     if let Some(repo) = model.hf_repo_id.as_deref() {
@@ -65,21 +71,19 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> 
         println!("  • Re-download the model at the latest revision");
         println!("  • Replace the current file and update the database row");
         println!();
-        print!("Proceed? (y/N): ");
-
-        use std::io::{self, Write};
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-
-        if !input.trim().eq_ignore_ascii_case("y") {
+        if !input::prompt_confirmation("Proceed?")? {
             println!("Upgrade cancelled.");
             return Ok(());
         }
     }
 
-    let outcome = ops.apply_upgrade(model.id).await?;
+    // The upgrade is not on the download queue, so it hands over its own
+    // row, and the board draws it as it draws a queued download's, until
+    // the upgrade is over.
+    let board = SoloBoard::new(std::sync::Arc::clone(&ctx.console));
+    let outcome = board
+        .during(|rows| ops.apply_upgrade(model.id, Some(rows)))
+        .await?;
 
     if outcome.updated {
         println!("✓ Model updated successfully");
@@ -93,30 +97,4 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> 
     }
 
     Ok(())
-}
-
-/// First 8 characters of a commit SHA, without assuming there are 8.
-/// `HuggingFace` returns 40, but a truncated or empty value must not panic a
-/// command whose whole job is repairing a model.
-pub(super) fn short_sha(sha: &str) -> &str {
-    &sha[..sha.len().min(8)]
-}
-
-#[cfg(test)]
-mod tests {
-    use super::short_sha;
-
-    #[test]
-    fn short_sha_truncates_a_full_sha() {
-        assert_eq!(
-            short_sha("0123456789abcdef0123456789abcdef01234567"),
-            "01234567"
-        );
-    }
-
-    #[test]
-    fn short_sha_tolerates_shorter_input() {
-        assert_eq!(short_sha("abc"), "abc");
-        assert_eq!(short_sha(""), "");
-    }
 }

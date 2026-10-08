@@ -1,8 +1,5 @@
 # ToolExecutionProgress
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ToolExecutionProgress-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ToolExecutionProgress-complexity.json)
-
 <!-- module-docs:start -->
 
 Real-time parallel tool execution status display embedded within a streaming assistant message. Derives one row per tool call from the message content tree, showing tool name, status icon (running/complete/error), elapsed duration, and a compact error summary on failure.

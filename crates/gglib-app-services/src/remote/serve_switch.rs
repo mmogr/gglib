@@ -58,9 +58,7 @@ impl RemoteOps {
                 ..SettingsUpdate::default()
             })
             .await
-            .map_err(|e| {
-                GuiError::Internal(format!("could not record that remote access is on: {e}"))
-            })?;
+            .map_err(|e| GuiError::from(e).context("could not record that remote access is on"))?;
         if disables.has_changed().unwrap_or(false) {
             // The `disable` wrote the switch off and the write above put it
             // back on. A switch that cannot be written off again is still on

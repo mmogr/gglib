@@ -311,41 +311,31 @@ fn test_trust_client_sampling_defaults_to_none_and_merges_like_any_bool_setting(
     assert_eq!(settings.trust_client_sampling, None);
 }
 
+/// The stored port, and the default only when none is stored.
 #[test]
-fn test_proxy_loop_detection_defaults_to_none_and_merges_like_any_bool_setting() {
-    // None means enabled — the guard is on unless explicitly disabled.
-    let defaults = Settings::with_defaults();
-    assert_eq!(defaults.proxy_loop_detection, None);
-
-    let mut settings = Settings::with_defaults();
-    settings.merge(&SettingsUpdate {
-        proxy_loop_detection: Some(Some(false)),
-        ..Default::default()
-    });
-    assert_eq!(settings.proxy_loop_detection, Some(false));
-
-    settings.merge(&SettingsUpdate {
-        proxy_loop_detection: Some(None),
-        ..Default::default()
-    });
-    assert_eq!(settings.proxy_loop_detection, None);
+fn the_effective_proxy_port_is_the_stored_one_then_the_default() {
+    let stored = Settings {
+        proxy_port: Some(9123),
+        ..Settings::default()
+    };
+    assert_eq!(stored.effective_proxy_port(), 9123);
+    assert_eq!(
+        Settings::default().effective_proxy_port(),
+        DEFAULT_PROXY_PORT
+    );
 }
 
+/// Agentic sampling is off only when it is stored off: on when stored on,
+/// and on when nothing is stored.
 #[test]
-fn test_effective_ports() {
-    let settings = Settings::with_defaults();
-    assert_eq!(settings.effective_proxy_port(), DEFAULT_PROXY_PORT);
-    assert_eq!(
-        settings.effective_llama_base_port(),
-        DEFAULT_LLAMA_BASE_PORT
-    );
-
-    let settings_none = Settings::default();
-    assert_eq!(settings_none.effective_proxy_port(), DEFAULT_PROXY_PORT);
-    assert_eq!(
-        settings_none.effective_llama_base_port(),
-        DEFAULT_LLAMA_BASE_PORT
-    );
+fn agentic_sampling_is_on_unless_it_is_stored_off() {
+    let stored = |agentic_sampling| Settings {
+        agentic_sampling,
+        ..Settings::default()
+    };
+    assert!(stored(None).effective_agentic_sampling());
+    assert!(stored(Some(true)).effective_agentic_sampling());
+    assert!(!stored(Some(false)).effective_agentic_sampling());
 }
 
 // ── Inference profiles ──────────────────────────────────────────────

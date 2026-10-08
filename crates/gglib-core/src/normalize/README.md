@@ -1,8 +1,5 @@
 # normalize
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-normalize-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-normalize-complexity.json)
-
 <!-- module-docs:start -->
 
 Universal local-LLM consistency layer.
@@ -28,6 +25,10 @@ the decode-time GBNF grammar, so parsing and enforcement cannot drift.
   tag → builtin-spec fallback map.
 - [`residue`] — chunk-safe scanner for dialect markup that survived
   normalization into client-visible text (the proxy's drift alarm).
+- [`stream`] — [`NormalizingStream`], the one wrap point, and
+  `strip_think_tags`, which removes a stray `<think>` or `</think>` tag from
+  a reply's text: one function, called by the stream and by the
+  non-streaming path.
 
 ## Adding a new dialect
 
@@ -50,9 +51,9 @@ The registry is the only place that knows the full set of parsers, by
 design — see the module docs there.
 
 Future work: `<think>` handling still lives outside the spec —
-[`stream`] strips think tags unconditionally and `history` keeps its own
-marker constants. Folding reasoning markers into `DialectSpec` is
-deliberate follow-up scope, since it changes behaviour for untagged
-models.
+[`stream`]'s `strip_think_tags` strips think tags unconditionally, streamed
+or not, and `history` keeps its own marker constants. Folding reasoning
+markers into `DialectSpec` is deliberate follow-up scope, since it changes
+behaviour for untagged models.
 
 <!-- module-docs:end -->

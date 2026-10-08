@@ -17,10 +17,6 @@ pub enum McpRepositoryError {
     #[error("MCP server not found: {0}")]
     NotFound(String),
 
-    /// An MCP server with the same name already exists.
-    #[error("MCP server already exists: {0}")]
-    Conflict(String),
-
     /// Storage backend error (database, etc.).
     #[error("Storage error: {0}")]
     Internal(String),
@@ -34,8 +30,10 @@ pub enum McpRepositoryError {
 /// # Design Rules
 ///
 /// - Environment variables are embedded in `McpServer` - no separate env API
-/// - `update()` replaces the entire server including env atomically
-/// - Constraint: unique `name` across all servers
+/// - `insert()` and `update()` each write a server whole, its env included,
+///   or not at all
+/// - Names are not unique here. The service refuses a name another server
+///   has, and a database written before it did can hold two of one name
 ///
 /// # Example
 ///
@@ -53,11 +51,11 @@ pub enum McpRepositoryError {
 pub trait McpServerRepository: Send + Sync {
     /// Insert a new MCP server.
     ///
-    /// Returns the server with its assigned ID and timestamps.
+    /// Returns the server with its assigned ID and timestamps. A failure
+    /// leaves nothing stored: no server without its env.
     ///
     /// # Errors
     ///
-    /// - `Conflict` if a server with the same name already exists
     /// - `Internal` for storage errors
     async fn insert(&self, server: NewMcpServer) -> Result<McpServer, McpRepositoryError>;
 
@@ -69,7 +67,8 @@ pub trait McpServerRepository: Send + Sync {
     /// - `Internal` for storage errors
     async fn get_by_id(&self, id: i64) -> Result<McpServer, McpRepositoryError>;
 
-    /// Get an MCP server by its unique name.
+    /// Get an MCP server by its name: one of them, where older data holds
+    /// several of that name.
     ///
     /// # Errors
     ///
@@ -86,12 +85,12 @@ pub trait McpServerRepository: Send + Sync {
 
     /// Update an existing MCP server.
     ///
-    /// This atomically replaces the entire server including environment variables.
+    /// Replaces the entire server, environment variables included, in one
+    /// step: a failure leaves the stored server as it was.
     ///
     /// # Errors
     ///
     /// - `NotFound` if no server with the given ID exists
-    /// - `Conflict` if the new name conflicts with another server
     /// - `Internal` for storage errors
     async fn update(&self, server: &McpServer) -> Result<(), McpRepositoryError>;
 

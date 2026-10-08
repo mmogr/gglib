@@ -122,7 +122,8 @@ pub(super) async fn learn_name_through(
 ///
 /// # Errors
 ///
-/// `Internal` when settings cannot be read or written.
+/// `Internal` when settings cannot be read, and whatever [`remember`] says
+/// of the write.
 pub(super) async fn keep_name(core: &AppCore, connected: &str, raw: &str) -> Result<(), GuiError> {
     let Some(name) = machine_name(raw) else {
         return Ok(());
@@ -132,7 +133,7 @@ pub(super) async fn keep_name(core: &AppCore, connected: &str, raw: &str) -> Res
         .settings()
         .get()
         .await
-        .map_err(|e| GuiError::Internal(format!("could not read settings: {e}")))?
+        .map_err(|e| GuiError::from(e).context("could not read settings"))?
         .remote_pairing;
     if held
         .as_ref()

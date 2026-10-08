@@ -1,8 +1,5 @@
 # `proxy_dashboard`
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-proxy_dashboard-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-proxy_dashboard-complexity.json)
-
 <!-- module-docs:start -->
 
 `gglib proxy dashboard` — a live terminal view of an already-running proxy.
@@ -11,7 +8,7 @@ Three concerns, along the line that makes the interesting one testable:
 
 | Concern | Files |
 |---------|-------|
-| The IO: connect, read the SSE stream, move the cursor, restore the terminal | `mod.rs` |
+| The IO: connect, read the SSE stream (`gglib_core::sse::DataFrames` cuts it into events), move the cursor, restore the terminal | `mod.rs` |
 | The server's JSON contract, mirrored `Deserialize`-only | `wire.rs`, and `wire_sampling.rs` for the sampling readback |
 | Snapshot → the text of one frame. Pure, and where nearly all the tests are | `render.rs`, with two sections in files of their own: `render_reasoning.rs` and `render_defects.rs` |
 

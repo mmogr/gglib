@@ -13,6 +13,7 @@ use gglib_core::utils::system::SystemMemoryInfo;
 use super::{require_tty, row, sgr, step};
 use crate::bootstrap::CliContext;
 use crate::handlers::model::download::run_interactive_monitor;
+use crate::handlers::model::resolver;
 use crate::presentation::style::{BOLD, RESET, SUCCESS};
 use crate::utils::input;
 
@@ -30,7 +31,7 @@ pub(super) async fn run(
     step(3, "Model");
 
     if let Some(identifier) = requested {
-        let model = ctx.app.models().find_by_identifier(identifier).await?;
+        let model = resolver::resolve_model_identifier(ctx, identifier).await?;
         row("model", &model.name, Some("requested with --model"));
         return Ok(model);
     }
@@ -106,11 +107,7 @@ async fn download_recommended(
     Arc::clone(&ctx.downloads)
         .queue_smart(repo.clone(), Some(quant))
         .await?;
-    run_interactive_monitor(
-        Arc::clone(&ctx.downloads),
-        Arc::clone(&ctx.download_emitter),
-    )
-    .await?;
+    run_interactive_monitor(Arc::clone(&ctx.downloads), Arc::clone(&ctx.console)).await?;
 
     // The monitor reports its own failures and still returns `Ok`, so the
     // catalog — not its return value — is what says whether this worked.

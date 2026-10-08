@@ -133,7 +133,7 @@ async fn prompt() -> Result<()> {
         println!("{INFO}○ Skipping the optional download accelerator.{RESET}");
         println!("  {e}");
         println!("  Downloads will run natively over HTTP, which always works.");
-        println!("  Install Python 3.9+ and run `gglib config fast-downloads enable` to add it.");
+        println!("  Install Python 3.10+ and run `gglib config fast-downloads enable` to add it.");
         return Ok(());
     }
 

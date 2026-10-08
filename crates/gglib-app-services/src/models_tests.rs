@@ -13,27 +13,8 @@ use tokio::fs;
 use super::*;
 use crate::error::GuiError;
 use crate::sampling_explain::ProvenanceKindDto;
-use crate::test_support::test_core;
+use crate::test_support::{RecordingEmitter, RunningRuntime, test_core};
 use gglib_core::ports::{NoopGgufParser, NoopModelRuntime};
-
-/// An emitter that keeps what it was handed, so a test can assert on what
-/// a mutation broadcast rather than only on what it returned.
-#[derive(Default)]
-struct RecordingEmitter {
-    events: std::sync::Mutex<Vec<AppEvent>>,
-}
-
-impl RecordingEmitter {
-    fn events(&self) -> Vec<AppEvent> {
-        self.events.lock().expect("emitter lock").clone()
-    }
-}
-
-impl AppEventEmitter for RecordingEmitter {
-    fn emit(&self, event: AppEvent) {
-        self.events.lock().expect("emitter lock").push(event);
-    }
-}
 
 fn make_ops(core: Arc<AppCore>) -> ModelOps {
     make_ops_with_emitter(core, Arc::new(gglib_core::ports::NoopEmitter::new()))
@@ -52,8 +33,8 @@ fn make_ops_with_emitter(core: Arc<AppCore>, emitter: Arc<dyn AppEventEmitter>) 
 async fn list_returns_empty_on_fresh_db() {
     let core = test_core().await;
     let ops = make_ops(core);
-    let models = ops.list().await.expect("list should succeed");
-    assert!(models.is_empty());
+    let models = ops.list_with_query(ModelListQuery::default()).await;
+    assert!(models.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -89,13 +70,16 @@ async fn add_and_list_model() {
         file_path: gguf_path.to_str().unwrap().to_string(),
     };
 
-    let added = ops.add(req).await.expect("add should succeed");
+    let added = ops
+        .add(req, None, ImportMode::Fresh)
+        .await
+        .expect("add should succeed");
     let canonical = std::fs::canonicalize(&gguf_path).unwrap();
     assert_eq!(added.file_path, canonical.to_str().unwrap());
 
-    let models = ops.list().await.unwrap();
-    assert_eq!(models.len(), 1);
-    assert_eq!(models[0].id, added.id);
+    let models = ops.list_with_query(ModelListQuery::default()).await;
+    let ids: Vec<i64> = models.unwrap().iter().map(|m| m.id).collect();
+    assert_eq!(ids, [added.id]);
 }
 
 /// **The link production actually crosses.** The duplicate leaves the core
@@ -114,13 +98,16 @@ async fn adding_a_file_already_in_the_library_is_a_conflict() {
     fs::write(&gguf_path, b"placeholder").await.unwrap();
     let file_path = gguf_path.to_str().unwrap().to_string();
 
-    ops.add(AddModelRequest {
+    let first = AddModelRequest {
         file_path: file_path.clone(),
-    })
-    .await
-    .expect("first add should succeed");
+    };
+    ops.add(first, None, ImportMode::Fresh)
+        .await
+        .expect("first add should succeed");
 
-    let result = ops.add(AddModelRequest { file_path }).await;
+    let result = ops
+        .add(AddModelRequest { file_path }, None, ImportMode::Fresh)
+        .await;
     assert!(
         matches!(result, Err(GuiError::Conflict(_))),
         "expected Conflict, got {result:?}"
@@ -275,7 +262,7 @@ async fn add_nonexistent_file_returns_validation_error() {
     let req = AddModelRequest {
         file_path: "/no/such/file.gguf".to_string(),
     };
-    let result = ops.add(req).await;
+    let result = ops.add(req, None, ImportMode::Fresh).await;
     assert!(
         matches!(result, Err(GuiError::ValidationFailed(_))),
         "expected ValidationFailed, got {result:?}"
@@ -299,68 +286,6 @@ async fn remove_unknown_id_returns_not_found() {
     );
 }
 
-/// A runtime that reports one fixed model as running, and records
-/// whether `stop_current` was called.
-///
-/// Stands in for the shared `ProcessManager`-backed runtime `ServerOps`
-/// starts models through. Before this fix, `ModelOps` consulted its own
-/// `ProcessRunner` instead — a registry `ServerOps` never wrote to — so a
-/// model actually running under the proxy looked idle here and the force
-/// guard below never fired.
-#[derive(Debug)]
-struct RunningRuntime {
-    model_id: i64,
-    port: u16,
-    stopped: std::sync::atomic::AtomicBool,
-}
-
-impl RunningRuntime {
-    fn new(model_id: i64, port: u16) -> Self {
-        Self {
-            model_id,
-            port,
-            stopped: std::sync::atomic::AtomicBool::new(false),
-        }
-    }
-
-    fn stopped(&self) -> bool {
-        self.stopped.load(std::sync::atomic::Ordering::SeqCst)
-    }
-}
-
-#[async_trait::async_trait]
-impl gglib_core::ports::ModelRuntimePort for RunningRuntime {
-    async fn admit(
-        &self,
-        _model_name: &str,
-        _num_ctx: Option<u64>,
-        _default_ctx: Option<u64>,
-        _overrides: gglib_core::ports::LaunchOverrides,
-    ) -> Result<gglib_core::ports::Admission, gglib_core::ports::ModelRuntimeError> {
-        unimplemented!("not exercised by the remove() tests")
-    }
-
-    async fn current_model(&self) -> Option<gglib_core::ports::RunningTarget> {
-        None
-    }
-
-    async fn list_running(&self) -> Vec<gglib_core::ports::ProcessHandle> {
-        vec![gglib_core::ports::ProcessHandle::new(
-            self.model_id,
-            "running-model".to_string(),
-            None,
-            self.port,
-            0,
-        )]
-    }
-
-    async fn stop_current(&self) -> Result<(), gglib_core::ports::ModelRuntimeError> {
-        self.stopped
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-        Ok(())
-    }
-}
-
 /// Add a placeholder model on disk and register it, returning the DTO.
 async fn add_placeholder_model(core: Arc<AppCore>, dir: &tempfile::TempDir) -> GuiModel {
     add_placeholder_model_with(&make_ops(core), dir).await
@@ -373,11 +298,12 @@ async fn add_placeholder_model_with(ops: &ModelOps, dir: &tempfile::TempDir) -> 
     fs::write(&gguf_path, b"placeholder").await.unwrap();
     let gguf_path = gguf_path.canonicalize().unwrap();
 
-    ops.add(AddModelRequest {
+    let request = AddModelRequest {
         file_path: gguf_path.to_str().unwrap().to_string(),
-    })
-    .await
-    .expect("add should succeed")
+    };
+    ops.add(request, None, ImportMode::Fresh)
+        .await
+        .expect("add should succeed")
 }
 
 /// Library changes must reach every client of this daemon, not just the one
@@ -386,8 +312,8 @@ async fn add_placeholder_model_with(ops: &ModelOps, dir: &tempfile::TempDir) -> 
 /// A GUI refetches its own list after its own edit, which makes a single tab
 /// look correct and hides the real gap: a second window or browser tab
 /// against the same daemon stays on the old row until someone hits refresh.
-/// `AppEvent` has carried these three variants — and `event_name()` has
-/// mapped them — since before anything emitted one.
+/// `AppEvent` has carried these three variants since before anything
+/// emitted one.
 #[tokio::test]
 async fn adding_a_model_broadcasts_it() {
     let core = test_core().await;
@@ -404,6 +330,65 @@ async fn adding_a_model_broadcasts_it() {
             assert_eq!(model.file_path, added.file_path);
         }
         other => panic!("expected exactly one ModelAdded, got {other:?}"),
+    }
+}
+
+/// The first of the two things only a terminal asks of an add: the count
+/// it hands over is stored in place of the one read from the file.
+#[tokio::test]
+async fn an_add_stores_the_parameter_count_it_is_handed() {
+    let ops = make_ops(test_core().await);
+    let dir = tempdir().unwrap();
+    let gguf_path = dir.path().join("model.gguf");
+    fs::write(&gguf_path, b"placeholder").await.unwrap();
+    let request = AddModelRequest {
+        file_path: gguf_path.to_str().unwrap().to_string(),
+    };
+
+    let added = ops
+        .add(request, Some(7.5), ImportMode::Fresh)
+        .await
+        .expect("add should succeed");
+
+    assert!((added.param_count_b - 7.5).abs() < f64::EPSILON);
+    let stored = ops.get(added.id).await.expect("the row reads");
+    assert!((stored.param_count_b - 7.5).abs() < f64::EPSILON);
+}
+
+/// The second: a re-import. One of a file that has a row rewrites that row,
+/// so every client is told the row changed, not that a model was added. One
+/// of a file with no row adds it.
+#[tokio::test]
+async fn a_reimport_broadcasts_the_row_it_rewrote_as_updated() {
+    let core = test_core().await;
+    let dir = tempdir().unwrap();
+    let emitter = Arc::new(RecordingEmitter::default());
+    let ops = make_ops_with_emitter(core, Arc::clone(&emitter) as Arc<dyn AppEventEmitter>);
+    let gguf_path = dir.path().join("model.gguf");
+    fs::write(&gguf_path, b"placeholder").await.unwrap();
+    let request = AddModelRequest {
+        file_path: gguf_path.to_str().unwrap().to_string(),
+    };
+
+    let added = ops
+        .add(request.clone(), None, ImportMode::Refresh)
+        .await
+        .expect("a file with no row is added");
+    let rewritten = ops
+        .add(request, None, ImportMode::Refresh)
+        .await
+        .expect("the row is rewritten");
+
+    assert_eq!(rewritten.id, added.id);
+    match emitter.events().as_slice() {
+        [
+            AppEvent::ModelAdded { model: new },
+            AppEvent::ModelUpdated { model: changed },
+        ] => {
+            assert_eq!(new.id, added.id);
+            assert_eq!(changed.id, added.id);
+        }
+        other => panic!("expected ModelAdded then ModelUpdated, got {other:?}"),
     }
 }
 
@@ -660,6 +645,37 @@ async fn remove_with_force_stops_the_server_through_the_shared_runtime() {
     );
 }
 
+/// A listing says which of its models is being served, and asks the runtime
+/// once for all of them: a runtime that has to look, as the CLI's does in
+/// the pid files, would otherwise look once a row.
+#[tokio::test]
+async fn a_listing_asks_once_what_is_running_and_reads_every_row_off_the_answer() {
+    let core = test_core().await;
+    let (first_dir, second_dir) = (tempdir().unwrap(), tempdir().unwrap());
+    let idle = add_placeholder_model(Arc::clone(&core), &first_dir).await;
+    let served = add_placeholder_model(Arc::clone(&core), &second_dir).await;
+
+    let runtime = Arc::new(RunningRuntime::new(served.id, 5500));
+    let ops = ModelOps::new(ModelDeps {
+        core,
+        runtime: Arc::clone(&runtime) as Arc<dyn ModelRuntimePort>,
+        gguf_parser: Arc::new(NoopGgufParser),
+        emitter: Arc::new(gglib_core::ports::NoopEmitter::new()),
+    });
+
+    let listed = ops.list_with_query(ModelListQuery::default()).await;
+
+    let mut rows: Vec<_> = (listed.unwrap().iter())
+        .map(|m| (m.id, m.is_serving, m.port))
+        .collect();
+    rows.sort_unstable();
+    assert_eq!(
+        rows,
+        [(idle.id, false, None), (served.id, true, Some(5500))]
+    );
+    assert_eq!(runtime.asked(), 1);
+}
+
 #[tokio::test]
 async fn list_tags_empty_on_fresh_db() {
     let core = test_core().await;
@@ -683,10 +699,11 @@ async fn update_server_defaults_json_round_trip() {
     fs::write(&gguf_path, b"placeholder").await.unwrap();
     let gguf_path = gguf_path.canonicalize().unwrap();
 
+    let request = AddModelRequest {
+        file_path: gguf_path.to_str().unwrap().to_string(),
+    };
     let added = ops
-        .add(AddModelRequest {
-            file_path: gguf_path.to_str().unwrap().to_string(),
-        })
+        .add(request, None, ImportMode::Fresh)
         .await
         .expect("add should succeed");
     assert!(
@@ -748,12 +765,13 @@ async fn update_server_defaults_json_round_trip() {
 async fn seed_model(ops: &ModelOps, dir: &tempfile::TempDir) -> i64 {
     let gguf_path = dir.path().join("model.gguf");
     fs::write(&gguf_path, b"placeholder").await.unwrap();
-    ops.add(AddModelRequest {
+    let request = AddModelRequest {
         file_path: gguf_path.to_str().unwrap().to_string(),
-    })
-    .await
-    .expect("add should succeed")
-    .id
+    };
+    ops.add(request, None, ImportMode::Fresh)
+        .await
+        .expect("add should succeed")
+        .id
 }
 
 fn profile(name: &str, temperature: f32) -> gglib_core::domain::InferenceProfile {

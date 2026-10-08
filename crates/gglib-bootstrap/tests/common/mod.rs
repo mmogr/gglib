@@ -4,8 +4,6 @@
 //! The `TempDir` returned by `minimal_config` must be kept alive for the
 //! duration of the test — `SQLite` holds the file open.
 
-use std::fs;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use tempfile::TempDir;
@@ -13,18 +11,13 @@ use tempfile::TempDir;
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{AppEventEmitter, NoopEmitter};
 
-/// Build a minimal, valid [`BootstrapConfig`] pointing at temp-dir paths.
+/// Build a minimal, valid [`BootstrapConfig`] whose database is in `dir`.
 ///
 /// The caller must keep the returned [`TempDir`] alive for the duration of
 /// the test; dropping it deletes the directory and will break open DB handles.
 pub(crate) fn minimal_config(dir: &TempDir) -> BootstrapConfig {
-    let models_dir = dir.path().join("models");
-    fs::create_dir_all(&models_dir).expect("create models dir");
     BootstrapConfig {
         db_path: dir.path().join("gglib.db"),
-        llama_server_path: PathBuf::from("/nonexistent/llama-server"),
-        models_dir,
-        hf_token: None,
     }
 }
 

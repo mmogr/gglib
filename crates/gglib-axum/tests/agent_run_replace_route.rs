@@ -5,30 +5,18 @@
 mod common;
 
 use axum::Router;
-use axum::body::Body;
 use axum::http::{Method, StatusCode};
 use gglib_core::CorsConfig;
 use gglib_core::contracts::http::daemon::run_path;
-use gglib_core::domain::chat::{MessageRole, NewMessage};
-use http_body_util::BodyExt;
+use gglib_core::domain::chat::{MessageRole, NewConversation, NewMessage};
 use serde_json::{Value, json};
-use tower::ServiceExt;
 
 use common::harness::test_state_and_app;
-use common::origin::authed;
+use common::origin::call_json;
 
 async fn put(app: &Router, id: &str, body: Value) -> (StatusCode, Value) {
-    let request = authed()
-        .method(Method::PUT)
-        .uri(format!("{}?kind=agent", run_path(id)))
-        .header("Host", "127.0.0.1:9887")
-        .header("content-type", "application/json")
-        .body(Body::from(body.to_string()))
-        .unwrap();
-    let response = app.clone().oneshot(request).await.unwrap();
-    let status = response.status();
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
-    (status, serde_json::from_slice(&bytes).unwrap_or_default())
+    let uri = format!("{}?kind=agent", run_path(id));
+    call_json(app, Method::PUT, &uri, Some(body)).await
 }
 
 /// A conversation holding a question and its answer; its id and the
@@ -36,7 +24,10 @@ async fn put(app: &Router, id: &str, body: Value) -> (StatusCode, Value) {
 async fn conversation(state: &gglib_axum::AppState) -> (i64, i64) {
     let history = state.core.chat_history();
     let id = history
-        .create_conversation("t".into(), None, None)
+        .create_conversation(NewConversation {
+            title: "t".into(),
+            ..NewConversation::default()
+        })
         .await
         .unwrap();
     let row = |role, content: &str| NewMessage {

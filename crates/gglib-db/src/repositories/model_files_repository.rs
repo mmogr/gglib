@@ -6,6 +6,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use gglib_core::domain::{ModelFile, NewModelFile};
+use gglib_core::ports::{ModelFilesRepositoryPort, RepositoryError};
 use sqlx::SqlitePool;
 
 use super::row_mappers::map_model_file_row;
@@ -16,13 +17,17 @@ pub struct ModelFilesRepository {
     pool: SqlitePool,
 }
 
-// Implement the trait from gglib_core
+/// A failure of the database, in its own words.
+fn storage(e: &sqlx::Error) -> RepositoryError {
+    RepositoryError::Storage(e.to_string())
+}
+
 #[async_trait::async_trait]
-impl gglib_core::services::ModelFilesRepositoryPort for ModelFilesRepository {
+impl ModelFilesRepositoryPort for ModelFilesRepository {
     /// A model downloaded again, by a repair or an update, already has a row
     /// per file. That row takes the new index, size and OID, and the time it
     /// was verified is kept only while the OID is the one verified.
-    async fn insert(&self, file: &NewModelFile) -> anyhow::Result<()> {
+    async fn insert(&self, file: &NewModelFile) -> Result<(), RepositoryError> {
         sqlx::query(
             r"
             INSERT INTO model_files 
@@ -44,38 +49,13 @@ impl gglib_core::services::ModelFilesRepositoryPort for ModelFilesRepository {
         .bind(&file.hf_oid)
         .execute(&self.pool)
         .await
-        .map_err(|e: sqlx::Error| anyhow::Error::from(e))?;
+        .map_err(|e| storage(&e))?;
 
         Ok(())
     }
-}
 
-// Implement the reader trait for verification service
-#[async_trait::async_trait]
-impl gglib_core::services::ModelFilesReaderPort for ModelFilesRepository {
-    async fn get_by_model_id(&self, model_id: i64) -> anyhow::Result<Vec<ModelFile>> {
-        self.get_by_model_id(model_id).await
-    }
-
-    async fn update_verification_time(
-        &self,
-        id: i64,
-        verified_at: chrono::DateTime<chrono::Utc>,
-    ) -> anyhow::Result<()> {
-        self.update_verification_time(id, verified_at).await
-    }
-}
-
-impl ModelFilesRepository {
-    /// Create a new `ModelFilesRepository`.
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
-    }
-
-    /// Get all model files for a specific model.
-    ///
     /// Returns files ordered by `file_index`.
-    pub async fn get_by_model_id(&self, model_id: i64) -> Result<Vec<ModelFile>> {
+    async fn get_by_model_id(&self, model_id: i64) -> Result<Vec<ModelFile>, RepositoryError> {
         let rows = sqlx::query(
             r"
             SELECT id, model_id, file_path, file_index, expected_size, hf_oid, last_verified_at
@@ -86,15 +66,19 @@ impl ModelFilesRepository {
         )
         .bind(model_id)
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| storage(&e))?;
 
         rows.iter()
-            .map(|row| map_model_file_row(row).map_err(Into::into))
+            .map(|row| map_model_file_row(row).map_err(|e| storage(&e)))
             .collect()
     }
 
-    /// Update the `last_verified_at` timestamp for a model file.
-    pub async fn update_verification_time(&self, id: i64, timestamp: DateTime<Utc>) -> Result<()> {
+    async fn update_verification_time(
+        &self,
+        id: i64,
+        verified_at: DateTime<Utc>,
+    ) -> Result<(), RepositoryError> {
         sqlx::query(
             r"
             UPDATE model_files
@@ -102,12 +86,20 @@ impl ModelFilesRepository {
             WHERE id = ?
             ",
         )
-        .bind(timestamp.to_rfc3339())
+        .bind(verified_at.to_rfc3339())
         .bind(id)
         .execute(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| storage(&e))?;
 
         Ok(())
+    }
+}
+
+impl ModelFilesRepository {
+    /// Create a new `ModelFilesRepository`.
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
     }
 
     /// Get a specific model file by ID.
@@ -135,7 +127,6 @@ mod tests {
     use super::*;
     use crate::setup::setup_test_database;
     use gglib_core::domain::NewModel;
-    use gglib_core::services::ModelFilesRepositoryPort;
     use std::path::PathBuf;
 
     async fn setup_test_model(pool: &SqlitePool) -> Result<i64> {
@@ -252,5 +243,57 @@ mod tests {
         let rows = repo.get_by_model_id(model_id).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert!(rows[0].last_verified_at.is_some());
+    }
+
+    /// What the database says of a failure is the whole of the error: a
+    /// caller that reports it adds only the `Storage` label.
+    #[tokio::test]
+    async fn a_failure_of_the_database_is_a_storage_error_in_its_words() {
+        let pool = setup_test_database().await.unwrap();
+        let model_id = setup_test_model(&pool).await.unwrap();
+        sqlx::query("DROP TABLE model_files")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let repo = ModelFilesRepository::new(pool);
+        let file = NewModelFile::new(model_id, "m.gguf".to_string(), 0, 100, None);
+
+        let failures = [
+            repo.insert(&file).await.unwrap_err(),
+            repo.get_by_model_id(model_id).await.unwrap_err(),
+            repo.update_verification_time(1, Utc::now())
+                .await
+                .unwrap_err(),
+        ];
+
+        let said = "error returned from database: (code: 1) no such table: model_files";
+        for failure in failures {
+            assert!(
+                matches!(&failure, RepositoryError::Storage(why) if why == said),
+                "{failure:?}"
+            );
+        }
+    }
+
+    /// The table is not `STRICT`: a column can hold what a row cannot take.
+    #[tokio::test]
+    async fn a_row_that_cannot_be_decoded_is_a_storage_error_in_its_words() {
+        let pool = setup_test_database().await.unwrap();
+        let model_id = setup_test_model(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO model_files (model_id, file_path, file_index, expected_size)
+             VALUES (?, 'm.gguf', 'not a number', 1)",
+        )
+        .bind(model_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let repo = ModelFilesRepository::new(pool);
+
+        let failure = repo.get_by_model_id(model_id).await.unwrap_err();
+
+        let said = "error occurred while decoding column \"file_index\": mismatched types; \
+                    Rust type `i32` (as SQL type `INTEGER`) is not compatible with SQL type `TEXT`";
+        assert_eq!(failure.to_string(), format!("Storage error: {said}"));
     }
 }

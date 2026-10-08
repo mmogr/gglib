@@ -13,7 +13,9 @@ separated from the queue-based
 - [`list_quantizations`] — `HuggingFace` quant listing for `--list-quants`: the
   quantizations, then the repository's projectors, each marked with the
   quantizations whose download fetches it
-- [`check_update`] / [`update_model`] — update path for `model upgrade`
+- [`check_update`] / [`update_model`] — update path for `model upgrade`.
+  `update_model` hands the download's row to a [`RowCallback`] while its
+  files are fetched
 - The optional `hf_xet` accelerator: [`ensure_fast_helper_ready`] provisions it
   (only from an explicit opt-in — never from a download),
   [`fast_helper_provisioned`] reports whether it is already here, and
@@ -36,8 +38,8 @@ Every `println!`-shaped line this layer produces (venv setup notes, the
 `[fast-path]` passthrough for non-protocol Python output, `model upgrade`'s
 status lines) goes through `gglib_core::telemetry::console_println` instead
 of a direct `println!`/`eprintln!`. With no hook installed it's a plain
-`eprintln!`; the queued-download path installs a hook
-(`CliDownloadEventEmitter`) that routes it through the live
+`eprintln!`; the CLI installs a hook
+(`CliConsole`, in `gglib-cli`) that routes it through the live
 `MultiProgress::println` so it can't corrupt a bar's redraw bookkeeping. See
 [`gglib_core::telemetry`](../../../gglib-core/src/telemetry.rs) and the
 [`exec/`](exec/) submodule below for `FastDownloadRequest::notice`, which

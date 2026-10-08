@@ -12,22 +12,6 @@ use tracing::error;
 /// These match the existing frontend event listeners.
 /// Keep strings stable to avoid frontend breakage.
 pub mod names {
-    // Download events
-
-    // Download system initialization.
-    //
-    // Downloads run natively over HTTP and need nothing provisioned, so startup
-    // always resolves to READY. ERROR is reserved for a subsystem that genuinely
-    // cannot download — the absence of the optional hf_xet accelerator is not
-    // that, and must not be reported here.
-    pub const DOWNLOAD_SYSTEM_READY: &str = "download-system:ready";
-    pub const DOWNLOAD_SYSTEM_ERROR: &str = "download-system:error";
-
-    // Server log event stream (separate from AppEvent::* server lifecycle events)
-
-    // Llama installation events
-    pub const LLAMA_INSTALL_PROGRESS: &str = "llama-install-progress";
-
     // Menu action events (menu -> frontend)
     pub const MENU_ADD_MODEL_FILE: &str = "menu:add-model-file";
     pub const MENU_SHOW_DOWNLOADS: &str = "menu:show-downloads";

@@ -5,9 +5,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gglib_core::GgufFileRole;
+use gglib_core::domain::{ModelListQuery, NewModelFile};
 use gglib_core::ports::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopEmitter, NoopModelRuntime,
 };
+use gglib_core::services::{AppCore, ImportMode};
+use gglib_db::{CoreFactory, setup_test_database};
 use tempfile::TempDir;
 
 use super::*;
@@ -39,8 +42,12 @@ impl GgufParserPort for FirstBytesParser {
 }
 
 async fn ops() -> ModelOps {
+    ops_over(test_core().await)
+}
+
+fn ops_over(core: Arc<AppCore>) -> ModelOps {
     ModelOps::new(ModelDeps {
-        core: test_core().await,
+        core,
         runtime: Arc::new(NoopModelRuntime),
         gguf_parser: Arc::new(FirstBytesParser),
         emitter: Arc::new(NoopEmitter::new()),
@@ -56,7 +63,9 @@ fn file(dir: &TempDir, name: &str, bytes: &[u8]) -> PathBuf {
 
 async fn add(ops: &ModelOps, dir: &TempDir, name: &str) -> GuiModel {
     let file_path = file(dir, name, b"weights").to_string_lossy().into_owned();
-    ops.add(AddModelRequest { file_path }).await.unwrap()
+    ops.add(AddModelRequest { file_path }, None, ImportMode::Fresh)
+        .await
+        .unwrap()
 }
 
 fn link(path: &Path) -> UpdateModelRequest {
@@ -89,7 +98,8 @@ async fn an_update_links_the_projector_and_every_dto_says_the_model_reads_images
 
     assert!(updated.image_input);
     assert!(ops.get(model.id).await.unwrap().image_input);
-    assert!(ops.list().await.unwrap()[0].image_input);
+    let listed = ops.list_with_query(ModelListQuery::default()).await;
+    assert!(listed.unwrap()[0].image_input);
     let detail = ops.get_detail(model.id).await.unwrap();
     assert!(detail.image_input);
     assert_eq!(
@@ -191,6 +201,28 @@ async fn the_picker_offers_a_projector_another_model_loads() {
     }];
     assert_eq!(ops.projector_choices(other.id).await.unwrap(), expected);
     assert_eq!(ops.projector_choices(linked.id).await.unwrap(), expected);
+}
+
+/// A projector downloaded with a model is one of that model's file rows:
+/// the picker offers it though no model is linked to it.
+#[tokio::test]
+async fn the_picker_offers_a_projector_among_the_models_own_files() {
+    gglib_core::paths::isolate_data_root();
+    let repos = CoreFactory::build_repos(setup_test_database().await.unwrap());
+    let ops = ops_over(Arc::new(AppCore::bare(repos.clone())));
+    let dir = tempfile::tempdir().unwrap();
+    let model = add(&ops, &dir, "qwen.gguf").await;
+    let projector = file(&dir, "mmproj-F16.gguf", b"projector");
+    let row = NewModelFile::new(model.id, "mmproj-F16.gguf".to_owned(), 1, 9, None);
+    repos.model_files.insert(&row).await.unwrap();
+
+    let offered = ops.projector_choices(model.id).await.unwrap();
+
+    let expected = vec![ProjectorChoice {
+        path: projector.to_string_lossy().into_owned(),
+        name: "mmproj-F16.gguf".to_owned(),
+    }];
+    assert_eq!(offered, expected);
 }
 
 #[tokio::test]

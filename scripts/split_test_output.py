@@ -6,9 +6,9 @@ again, fifteen times over, one `cargo test -p <crate>` per crate, purely so
 `badges.yml` would have a `rust-test-<crate>.txt` to count. That loop cost
 23m15s of a 57m job, and it did not merely repeat work: naming a crate with
 `-p` changes feature unification, so `cargo test -p gglib-runtime` ran 329
-tests where the workspace build runs 352 — the 23 in `llama::{build,config,
-deps,download,update}` are behind features `gglib-cli` turns on. The loop
-tested a configuration no real build uses, and the badge was 23 short.
+tests where the workspace build ran 352 — the 23 in `llama::{build,config,
+deps,download,update}` were behind features `gglib-cli` turned on. The loop
+tested a configuration no real build used, and the badge was 23 short.
 
 The whole-workspace run already contains everything the loop produced; it is
 just not divided by crate. This divides it.
@@ -22,11 +22,10 @@ the package for every artifact it builds. That stream is emitted on a fully
 warm build too, with `"fresh": true` and `executable` still populated, so the
 map does not evaporate when nothing recompiles.
 
-Lines are copied out **verbatim**, ANSI escapes and all. `badges.yml` parses
-two different things out of these files — `test result: ok. N passed` for the
-per-crate badges and `^test <module>::<name> ... ok` for some fifty per-module
-ones — and the cheapest guarantee that both keep working is that the bytes are
-the ones cargo wrote.
+Lines are copied out **verbatim**, ANSI escapes and all. `badges.yml` counts
+`test result: ok. N passed` and `N failed` out of these files for the
+per-crate badges, and the cheapest guarantee that it keeps working is that the
+bytes are the ones cargo wrote.
 
 What this does NOT do, so nobody reads more into a pass than is there:
 

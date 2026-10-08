@@ -7,7 +7,7 @@ use std::io::{IsTerminal as _, Write as _};
 use anyhow::Result;
 
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, DaemonProbe};
+use crate::daemon_client::{self, Absent, DaemonProbe};
 use crate::presentation::style;
 use crate::target::Target;
 use gglib_axum::{DaemonLock, DaemonOptions, run_daemon};
@@ -25,7 +25,6 @@ pub(crate) async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<(
             host: "0.0.0.0".into(),
             cors: CorsConfig::AllowAll,
             allowed_hosts,
-            ..DaemonOptions::default()
         }
     } else {
         DaemonOptions {
@@ -53,21 +52,15 @@ pub(crate) async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<(
 
 /// Execute `gglib daemon status`.
 pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
-    let client = gglib_proxy::loopback::client();
-
     style::print_info_banner("Daemon", "\u{2139}\u{fe0f}");
-    match daemon_client::probe(&client).await {
-        DaemonProbe::Running => {
+    match daemon_client::running(ctx).await {
+        Ok(handle) => {
             eprintln!("  Status:  running at {}", daemon_client::base_url());
             if let Ok(dir) = gglib_core::paths::data_root()
                 && let Some(holder) = DaemonLock::read_holder(&dir)
             {
                 eprintln!("  PID:     {}", holder.pid);
             }
-            let handle = daemon_client::DaemonHandle {
-                client,
-                api_key: daemon_client::auth::daemon_api_key(ctx).await,
-            };
             match handle.proxy_status().await {
                 Ok(proxy) if proxy.running => {
                     eprintln!(
@@ -82,11 +75,11 @@ pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
                 Err(e) => eprintln!("  Proxy:   status unavailable ({e})"),
             }
         }
-        DaemonProbe::NotRunning => {
+        Err(Absent::NotRunning) => {
             eprintln!("  Status:  not running");
             eprintln!("  Start it with any runtime command, or `gglib daemon run`.");
         }
-        DaemonProbe::ForeignServer => {
+        Err(Absent::ForeignServer) => {
             eprintln!(
                 "  Status:  port {DAEMON_PORT} is held by another program (not a gglib daemon)"
             );
@@ -109,22 +102,15 @@ pub(crate) async fn stop(ctx: &CliContext, target: Target, yes: bool) -> Result<
 
 /// Request shutdown from the daemon on this machine and wait for it to land.
 async fn stop_here(ctx: &CliContext) -> Result<()> {
-    let client = gglib_proxy::loopback::client();
-
-    match daemon_client::probe(&client).await {
-        DaemonProbe::NotRunning => {
+    let handle = match daemon_client::running(ctx).await {
+        Ok(handle) => handle,
+        Err(Absent::NotRunning) => {
             eprintln!("  Daemon is not running.");
             return Ok(());
         }
-        DaemonProbe::ForeignServer => anyhow::bail!(
+        Err(Absent::ForeignServer) => anyhow::bail!(
             "port {DAEMON_PORT} is held by another program (not a gglib daemon) — nothing to stop"
         ),
-        DaemonProbe::Running => {}
-    }
-
-    let handle = daemon_client::DaemonHandle {
-        client,
-        api_key: daemon_client::auth::daemon_api_key(ctx).await,
     };
     if !handle.shutdown_daemon().await? {
         anyhow::bail!(
@@ -171,14 +157,8 @@ fn print_share_lan_warning() {
 /// does this for the desktop app, and the request it sends asks the far
 /// proxy to type the same word.
 async fn stop_far(ctx: &CliContext, yes: bool) -> Result<()> {
-    let client = gglib_proxy::loopback::client();
-    match daemon_client::probe(&client).await {
-        DaemonProbe::Running => {}
-        _ => anyhow::bail!("the daemon is not running, so nothing is connected to a remote"),
-    }
-    let handle = daemon_client::DaemonHandle {
-        client,
-        api_key: daemon_client::auth::daemon_api_key(ctx).await,
+    let Ok(handle) = daemon_client::running(ctx).await else {
+        anyhow::bail!("the daemon is not running, so nothing is connected to a remote")
     };
     let status = handle.remote_status().await?;
     if status.connected.is_none() {

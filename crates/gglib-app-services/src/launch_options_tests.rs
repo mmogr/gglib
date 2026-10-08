@@ -1,6 +1,6 @@
 use super::*;
 
-fn model() -> Model {
+pub(super) fn model() -> Model {
     Model {
         dialect_spec: None,
         id: 1,
@@ -99,10 +99,10 @@ fn absent_mlock_expresses_no_opinion() {
     assert_eq!(plan.pinned.launch_overrides.mlock, None);
 }
 
-/// Resolved sampling must land on the pin's launch options — sampling
-/// rides the pinned model, never a proxy-wide override.
+/// A request's sampling reaches the plan's resolved sampling. It is no launch
+/// option: the pin's options have nowhere to carry it.
 #[test]
-fn resolved_sampling_reaches_the_pin() {
+fn a_requests_sampling_reaches_the_plans_resolved_sampling() {
     let plan = plan_pinned_launch(
         &model(),
         &Settings::default(),
@@ -115,13 +115,7 @@ fn resolved_sampling_reaches_the_pin() {
         },
         ProxyGlobals::default(),
     );
-    let params = plan
-        .pinned
-        .launch_overrides
-        .inference_params
-        .as_ref()
-        .unwrap();
-    assert_eq!(params.temperature, Some(0.4));
+    assert_eq!(plan.inference.temperature, Some(0.4));
 }
 
 /// The cache master switch outranks the directory: cache off means no
@@ -204,10 +198,9 @@ fn default_globals_bind_loopback() {
     assert_eq!(plan.unified.to_proxy_config().host, "127.0.0.1");
 }
 
-/// The pin's `inference_params` are written to `ServerConfig::inference_config`,
-/// which is read by nobody — gglib emits no sampler flags to llama-server at
-/// all (ADR 0003/0004). So sampling only reaches a request if it travels as
-/// the proxy-wide override, and this pins that it does.
+/// A pin's launch options carry no sampling — gglib emits no sampler flags to
+/// llama-server at all (ADR 0003/0004). So sampling only reaches a request if
+/// it travels as the proxy-wide override, and this pins that it does.
 #[test]
 fn stated_sampling_reaches_the_proxy_override() {
     let plan = plan_pinned_launch(

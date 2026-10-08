@@ -1,8 +1,5 @@
 # ui
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ui-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ui-complexity.json)
-
 <!-- module-docs:start -->
 
 High-level interactive UI primitives: `Button`, `IconButton`, `Tabs`, `Chip`, `Banner`, `Checkbox`, `Input`, `Modal`, `Select`, `Textarea`, `Icon`, and `ConfirmDialog`. Built on Radix UI primitives and styled with Tailwind design tokens. Every clickable or form-input element in the app uses components from here — enforced by ESLint (`no-restricted-syntax` bans raw `<button>`/checkbox inputs outside this directory).

@@ -40,7 +40,7 @@ use tracing::warn;
 use gglib_core::domain::benchmark::{
     BenchmarkEvent, BenchmarkModelResult, BenchmarkRunType, ModelPerfResult, PerfConfig,
 };
-use gglib_core::paths::llama_bench_path;
+use gglib_core::paths::{LLAMA_INSTALL_COMMAND, llama_bench_path};
 
 use super::BenchmarkDeps;
 use super::mapper::{PerfBenchOutput, parse_perf_output};
@@ -101,7 +101,7 @@ pub(crate) async fn run_perf(
                     model_id,
                     model_name: model.name.clone(),
                     error: format!(
-                        "llama-bench not found at {}. Run: gglib config install-llama",
+                        "llama-bench not found at {}. Run: {LLAMA_INSTALL_COMMAND}",
                         bench_path.display()
                     ),
                 })

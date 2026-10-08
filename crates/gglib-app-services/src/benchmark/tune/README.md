@@ -1,8 +1,5 @@
 # tune
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-benchmark-tune-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-benchmark-tune-complexity.json)
-
 <!-- module-docs:start -->
 
 Tune-mode benchmark service — sweeps a model's sampling parameters against
@@ -79,5 +76,17 @@ run. Every candidate varies only the per-request `InferenceConfig` passed
 to a fresh `LlmCompletionAdapter::with_sampling(..)` — sampling parameters
 are per-request, not part of the loaded llama-server process, so a sweep
 across dozens of candidates never triggers a costly model reload.
+
+# What A Candidate's Request Carries
+
+A candidate is a statement of exactly what to measure, not a flag for the
+sampling ladder to judge. Its request is what the shared pipeline makes of
+one that names the candidate's values, with nothing taken out afterwards
+(`LlmCompletionAdapter::with_passed_over_kept`). The case that matters is
+`min_p` or `repeat_penalty` named without a temperature, on a model whose
+stored defaults set a temperature: the ladder passes it over, and it is sent
+all the same unless those defaults or the model's class floor name the same
+parameter, in which case theirs is written over it. `gglib chat` given such
+a flag does not send it.
 
 <!-- module-docs:end -->

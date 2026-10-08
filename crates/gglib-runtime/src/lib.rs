@@ -1,8 +1,7 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
-#![deny(unsafe_code)]
 // A std MutexGuard held across an .await starves the whole runtime the moment
-// two tasks contend (the bug class of #721). Denied here because this crate
-// does not inherit the workspace clippy lints.
+// two tasks contend (the bug class of #721). The workspace lints only warn on
+// it; here it is an error wherever clippy runs.
 #![deny(clippy::await_holding_lock, clippy::await_holding_refcell_ref)]
 
 mod command;
@@ -32,14 +31,8 @@ pub(crate) mod server_config;
 pub mod system;
 pub mod unified_server_config;
 
-// Re-export health utilities for direct use if needed
-pub use health::check_http_health;
-
 // Re-export health monitoring primitives
 pub use health_monitor::{ServerHealthChecker, ServerHealthMonitor};
-
-// Re-export log sink utilities
-pub use command::NoopLogSink;
 
 // Re-export GUI process management types
 pub use process::{
@@ -49,7 +42,9 @@ pub use process::{
 };
 
 // Re-export port implementations for runtime adapters
-pub use ports_impl::{CatalogPortImpl, FarMachine, LlmCompletionAdapter, RuntimePortImpl};
+pub use ports_impl::{
+    CatalogPortImpl, FarMachine, LlmCompletionAdapter, RuntimePortImpl, SamplingObserver,
+};
 
 // Re-export composition root factory
 pub use compose::{compose_agent_loop, compose_agent_loop_with_sampling};

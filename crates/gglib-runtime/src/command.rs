@@ -5,11 +5,10 @@
 
 use crate::llama::{LlamaServerError, resolve_llama_server};
 use crate::process::spawn_stream_reader;
-use crate::system::is_truthy_flag;
-use gglib_core::ports::{JinjaMode, ServerConfig, ServerLogSinkPort};
+use gglib_core::debug_switches;
+use gglib_core::ports::{JinjaMode, ServerConfig};
 use gglib_core::utils::process::cmd;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use tokio::process::Child;
 use tracing::{debug, info, warn};
 
@@ -30,9 +29,7 @@ pub(crate) const SERVER_PARALLEL: u32 = 1;
 /// Truthy values (case-insensitive): `1`, `true`, `yes`, `on`. Anything else
 /// (including unset) leaves MTP enabled.
 fn mtp_disabled_via_env() -> bool {
-    std::env::var("GGLIB_DISABLE_MTP")
-        .ok()
-        .is_some_and(|v| is_truthy_flag(&v))
+    debug_switches::enabled("GGLIB_DISABLE_MTP")
 }
 
 /// Whether the `GGLIB_DISABLE_CACHE_REUSE` environment variable requests that
@@ -44,9 +41,7 @@ fn mtp_disabled_via_env() -> bool {
 /// suspect without editing whatever launch profile/script set it, e.g.
 /// `GGLIB_DISABLE_CACHE_REUSE=1 gglib proxy --cache-reuse 256`.
 fn cache_reuse_disabled_via_env() -> bool {
-    std::env::var("GGLIB_DISABLE_CACHE_REUSE")
-        .ok()
-        .is_some_and(|v| is_truthy_flag(&v))
+    debug_switches::enabled("GGLIB_DISABLE_CACHE_REUSE")
 }
 
 /// Select the llama-server path to use.
@@ -203,11 +198,6 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
         cmd.arg("-c").arg(ctx.to_string());
     }
 
-    // Add GPU layers if specified
-    if let Some(layers) = config.gpu_layers {
-        cmd.arg("-ngl").arg(layers.to_string());
-    }
-
     // Jinja. Both flags are emitted, and the third state emits neither.
     //
     // `--no-jinja` is not redundant with saying nothing: llama-server starts
@@ -318,42 +308,21 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
         cmd.arg(arg);
     }
 
-    // Add extra arguments
-    for arg in &config.extra_args {
-        cmd.arg(arg);
-    }
-
     cmd
 }
 
 /// Spawn background tasks to stream stdout/stderr logs asynchronously.
 ///
-/// The tasks read lines from the process output and log them
-/// via tracing. If a log sink is provided, lines are also forwarded there.
-/// They exit when the streams close.
-pub(crate) fn spawn_log_readers(
-    child: &mut Child,
-    port: u16,
-    log_sink: Option<Arc<dyn ServerLogSinkPort>>,
-) {
+/// The tasks read lines from the process output, log them via tracing and
+/// hand them to the log manager under `port`. They exit when the streams
+/// close.
+pub(crate) fn spawn_log_readers(child: &mut Child, port: u16) {
     if let Some(stdout) = child.stdout.take() {
-        spawn_stream_reader(stdout, port, "stdout", log_sink.clone());
+        spawn_stream_reader(stdout, port, "stdout");
     }
 
     if let Some(stderr) = child.stderr.take() {
-        spawn_stream_reader(stderr, port, "stderr", log_sink);
-    }
-}
-
-/// A no-op log sink that discards all log lines.
-///
-/// Useful for CLI usage where structured log capture is not needed.
-#[derive(Debug, Clone, Default)]
-pub struct NoopLogSink;
-
-impl ServerLogSinkPort for NoopLogSink {
-    fn append(&self, _port: u16, _stream_type: &str, _line: String) {
-        // Intentionally empty - logs are already going to tracing
+        spawn_stream_reader(stderr, port, "stderr");
     }
 }
 
@@ -364,16 +333,6 @@ mod tests {
     // Only the `#[cfg(unix)]` tests below write an executable stub to disk.
     #[cfg(unix)]
     use {std::fs, std::os::unix::fs::PermissionsExt, tempfile::TempDir};
-
-    #[test]
-    fn is_truthy_flag_recognises_on_values() {
-        for v in ["1", "true", "TRUE", " yes ", "On", "  on"] {
-            assert!(crate::system::is_truthy_flag(v), "{v:?} should be truthy");
-        }
-        for v in ["0", "false", "no", "off", "", "2", "disable"] {
-            assert!(!crate::system::is_truthy_flag(v), "{v:?} should be falsy");
-        }
-    }
 
     /// Minimal `ServerConfig` for `build_command` arg-emission tests — every
     /// cache-related field defaults off so each test only sets what it cares
@@ -387,13 +346,10 @@ mod tests {
             base_port: 9000,
             port: None,
             context_size: None,
-            gpu_layers: None,
             jinja: JinjaMode::Defer,
             reasoning_format: None,
             spec_draft_n_max: None,
             spec_draft_p_min: None,
-            inference_config: None,
-            extra_args: vec![],
             slot_save_path: None,
             cache_ram_mb: None,
             cache_reuse: None,
@@ -727,3 +683,7 @@ mod tests {
 #[cfg(test)]
 #[path = "command_projector_tests.rs"]
 mod projector_tests;
+
+#[cfg(test)]
+#[path = "command_argv_tests.rs"]
+mod argv_tests;

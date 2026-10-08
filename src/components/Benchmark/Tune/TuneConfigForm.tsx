@@ -287,5 +287,3 @@ export const TuneConfigForm: FC<TuneConfigFormProps> = ({ models, disabled, onSu
     </div>
   );
 };
-
-export default TuneConfigForm;

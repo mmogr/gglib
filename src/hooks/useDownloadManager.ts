@@ -1,369 +1,140 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { appLogger } from '../services/platform';
-import type { DownloadQueueStatus, DownloadQueueItem, DownloadCompletionInfo, QueueDownloadResponse } from '../services/transport/types/downloads';
-import type { DownloadEvent, DownloadSummary, QueueRunSummary } from '../services/transport/types/events';
-import { isDesktop } from '../services/platform';
+import type {
+  DownloadCompletionInfo,
+  DownloadFailureInfo,
+  QueueDownloadResponse,
+  QueueSnapshot,
+} from '../services/transport/types/downloads';
+import type { DownloadEvent, QueueRunSummary } from '../services/transport/types/events';
 import { getTransport } from '../services/transport';
-import { bucketQueue, queueIsBusy } from '../services/transport/downloadQueue';
-
-/**
- * Returns true if a queue snapshot indicates active work (busy state).
- *
- * One caller, and it *clears* a stale banner when busy — widening this makes
- * the banner go sooner, never later.
- */
-function snapshotIsBusy(items: DownloadSummary[]): boolean {
-  return queueIsBusy(items);
-}
-
-export type DownloadProgressStatus = 'started' | 'progress' | 'finalizing' | 'registering' | 'notice' | 'completed' | 'error';
-
-export interface DownloadProgressView {
-  status: DownloadProgressStatus;
-  id: string;
-  message?: string;
-  downloaded?: number;
-  total?: number;
-  speedBps?: number;
-  etaSeconds?: number;
-  percentage?: number;
-  shard?: {
-    index: number;
-    total: number;
-    filename?: string;
-    downloaded?: number;
-    totalBytes?: number;
-    aggregateDownloaded?: number;
-    aggregateTotal?: number;
-  } | null;
-}
-
-/**
- * Download UI state - single source of truth for what should be displayed.
- * This prevents stale progress state from keeping the UI mounted.
- */
-export interface DownloadUiState {
-  /** The download ID currently being displayed (null = no active download) */
-  activeId: string | null;
-  /** Current phase of the active download */
-  phase: 'active' | 'cancelling' | null;
-}
 
 export interface UseDownloadManagerResult {
-  queueStatus: DownloadQueueStatus | null;
-  currentProgress: DownloadProgressView | null;
-  /** Single source of truth for UI mounting/display logic */
-  downloadUiState: DownloadUiState;
+  /**
+   * The download queue as the daemon last served it, or null before the
+   * first answer. This is the whole of the download state: the rows are
+   * drawn from it as they are.
+   */
+  snapshot: QueueSnapshot | null;
+  /** The download a cancel has been sent for and that has not yet ended. */
+  cancellingId: string | null;
   /** Summary of the last completed queue run (null if no run completed or dismissed) */
   lastQueueSummary: QueueRunSummary | null;
-  queueLength: number;
-  connectionMode: string;
   error: string | null;
   setError: (msg: string | null) => void;
   refreshQueue: () => Promise<void>;
   queueModel: (modelId: string, quantization?: string) => Promise<QueueDownloadResponse>;
   cancel: (id: string) => Promise<void>;
-  cancelGroup: (groupId: string) => Promise<void>;
-  clearFailed: () => Promise<void>;
   /** Dismiss the queue run summary banner */
   clearQueueSummary: () => void;
 }
 
-/**
- * Progress events arrive already rate-limited by the download manager's 250ms
- * bridge tick. A second throttle here aliased against that near-equal period
- * and produced visible stutter, so there is deliberately none.
- */
-
 interface UseDownloadManagerOptions {
-  /**
-   * Called when a download completes. Receives typed completion info
-   * for the UI effects layer to handle refresh and toast logic.
-   */
+  /** Called when a download completes, for the model refresh and the toast. */
   onCompleted?: (info: DownloadCompletionInfo) => void;
+  /** Called when a download fails, for the toast. */
+  onFailed?: (info: DownloadFailureInfo) => void;
 }
 
 /**
- * A wire row as the queue UI holds it.
+ * The download queue, held as the daemon's own snapshot.
  *
- * No longer translates anything: `DownloadQueueItem.status` is the same
- * seven-member `DownloadStatus` the wire sends. The `Record` of four it used
- * to map through narrowed a type to less than the one it assigned into —
- * moot on the two statuses a snapshot carries, where it was the identity.
+ * The state is seeded from `GET /api/models/downloads/queue` on mount and
+ * replaced by every `queue_snapshot` event. Both carry the same type from one
+ * numbered sequence, so a snapshot with a `revision` no higher than the last
+ * one taken is out of date and is dropped, whichever way it came.
+ *
+ * The numbering starts again when the daemon restarts. Each time the event
+ * stream opens the last revision is forgotten and the queue is read again, so
+ * a new daemon's first snapshot is taken rather than dropped as old.
  */
-function normalizeQueueItem(item: DownloadSummary): DownloadQueueItem {
-  return {
-    id: item.id,
-    display_name: item.display_name,
-    status: item.status,
-    position: item.position,
-    error: item.error,
-    group_id: item.group_id,
-    shard_info: item.shard_info,
-  };
-}
-
-function snapshotToQueueStatus(items: DownloadSummary[], maxSize: number): DownloadQueueStatus {
-  return bucketQueue(items.map(normalizeQueueItem), maxSize);
-}
-
-function eventToProgress(event: DownloadEvent): DownloadProgressView | null {
-  switch (event.type) {
-    case 'download_started':
-      return {
-        status: 'started',
-        id: event.id,
-        // Populate shard info immediately so the UI shows "shard X/Y"
-        // from the moment the download starts, rather than waiting for
-        // the first progress tick.
-        shard: event.shard_index != null && event.total_shards != null
-          ? { index: event.shard_index, total: event.total_shards }
-          : undefined,
-      };
-    case 'download_progress':
-      return {
-        status: 'progress',
-        id: event.id,
-        downloaded: event.downloaded,
-        total: event.total,
-        speedBps: event.speed_bps,
-        etaSeconds: event.eta_seconds,
-        percentage: event.percentage,
-      };
-    case 'shard_progress':
-      return {
-        status: 'progress',
-        id: event.id,
-        percentage: event.percentage,
-        speedBps: event.speed_bps,
-        etaSeconds: event.eta_seconds,
-        downloaded: event.aggregate_downloaded,
-        total: event.aggregate_total,
-        shard: {
-          index: event.shard_index,
-          total: event.total_shards,
-          filename: event.shard_filename,
-          downloaded: event.shard_downloaded,
-          totalBytes: event.shard_total,
-          aggregateDownloaded: event.aggregate_downloaded,
-          aggregateTotal: event.aggregate_total,
-        },
-      };
-    case 'download_completed':
-      return { status: 'completed', id: event.id, message: event.message ?? 'Download completed' };
-    case 'download_failed':
-      return { status: 'error', id: event.id, message: event.error };
-    case 'download_cancelled':
-      return { status: 'error', id: event.id, message: 'Cancelled' };
-    case 'download_status_changed':
-      // Non-terminal lifecycle transitions (Finalizing, Registering) emitted
-      // after bytes are on disk but before the model row is written. Treated
-      // as progress so the UI keeps the download card mounted with a clear
-      // status label instead of looking frozen at 100%.
-      //
-      // These are merged into the previous view, so the byte counts and
-      // percentage carry over and the bar stays full. The rate and ETA are
-      // explicitly cleared: nothing is transferring during these phases, and a
-      // stale "118 MB/s" would be a lie.
-      if (event.status === 'finalizing') {
-        return {
-          status: 'finalizing',
-          id: event.id,
-          message: 'Finalizing…',
-          speedBps: undefined,
-          etaSeconds: undefined,
-        };
-      }
-      if (event.status === 'registering') {
-        return {
-          status: 'registering',
-          id: event.id,
-          message: 'Registering…',
-          speedBps: undefined,
-          etaSeconds: undefined,
-        };
-      }
-      return null;
-    case 'download_notice':
-      // Transient setup note (e.g. first-run Python env creation for the
-      // fast downloader) that carries no byte progress. Merged into the
-      // previous view like finalizing/registering above, so the bar and
-      // byte counts don't reset — only the message and phase change.
-      return {
-        status: 'notice',
-        id: event.id,
-        message: event.message,
-        speedBps: undefined,
-        etaSeconds: undefined,
-      };
-    default:
-      return null;
-  }
-}
-
-/**
- * Extract completion info from a download ID and queue status.
- * Parses the ID format (model_id:quantization) and looks up display name from queue.
- */
-function extractCompletionInfo(id: string, queueStatus: DownloadQueueStatus | null): DownloadCompletionInfo {
-  // Parse ID format: "repo/model:quantization" or just "repo/model"
-  const colonIndex = id.lastIndexOf(':');
-  const quantization = colonIndex > 0 ? id.slice(colonIndex + 1) : undefined;
-  
-  // Try to find display name from current or recently completed item in queue
-  const displayName = queueStatus?.current?.id === id 
-    ? queueStatus.current.display_name 
-    : undefined;
-
-  return {
-    modelId: id,
-    quantization,
-    displayName,
-    source: 'huggingface', // All SSE downloads are from HuggingFace
-  };
-}
-
 export function useDownloadManager(options: UseDownloadManagerOptions = {}): UseDownloadManagerResult {
-  const { onCompleted } = options;
-  const [queueStatus, setQueueStatus] = useState<DownloadQueueStatus | null>(null);
-  const [currentProgress, setCurrentProgress] = useState<DownloadProgressView | null>(null);
-  const [downloadUiState, setDownloadUiState] = useState<DownloadUiState>({
-    activeId: null,
-    phase: null,
-  });
+  const { onCompleted, onFailed } = options;
+  const [snapshot, setSnapshot] = useState<QueueSnapshot | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [lastQueueSummary, setLastQueueSummary] = useState<QueueRunSummary | null>(null);
-  const [connectionMode, setConnectionMode] = useState<string>('Initializing...');
   const [error, setError] = useState<string | null>(null);
 
-  const cancelInFlightRef = useRef<Set<string>>(new Set());
-  
-  // Ref to access current queue status in event handler without causing re-subscriptions
-  const queueStatusRef = useRef<DownloadQueueStatus | null>(null);
-  queueStatusRef.current = queueStatus;
-
-  // Ref to access current summary in event handler
-  const lastQueueSummaryRef = useRef<QueueRunSummary | null>(null);
-  lastQueueSummaryRef.current = lastQueueSummary;
-
-  // Ref to access current UI state in callbacks
-  const downloadUiStateRef = useRef<DownloadUiState>(downloadUiState);
-  downloadUiStateRef.current = downloadUiState;
-
-  /**
-   * Terminal cleanup - clears all download UI state and stops any polling/timers.
-   * This is the single point of cleanup to prevent stuck progress bars.
-   */
-  const cleanupTerminal = useCallback((id: string) => {
-    // Only cleanup if this is the currently active download
-    if (downloadUiStateRef.current.activeId === id) {
-      setDownloadUiState({ activeId: null, phase: null });
-      setCurrentProgress(null);
-    }
-    // Remove from in-flight cancel tracking
-    cancelInFlightRef.current.delete(id);
-  }, []);
-
-  /**
-   * Merge an update into the current view rather than replacing it.
-   *
-   * The `finalizing` and `registering` events carry only a status and a
-   * message. Replacing wholesale dropped `percentage`, which flipped the
-   * progress bar from a full determinate bar to an indeterminate shimmer for
-   * the last few seconds of every download.
-   */
-  const applyProgress = useCallback((next: DownloadProgressView) => {
-    setCurrentProgress((prev) =>
-      prev && prev.id === next.id ? { ...prev, ...next } : next
-    );
-  }, []);
-
-  // Use refs to avoid re-creating event handler and causing subscription loops
-  const applyProgressRef = useRef(applyProgress);
-  applyProgressRef.current = applyProgress;
+  // The snapshot the handlers below read, kept beside the state so that two
+  // snapshots arriving before a render are still compared with each other.
+  const snapshotRef = useRef<QueueSnapshot | null>(null);
+  // The highest revision taken since the event stream last opened.
+  const revisionRef = useRef(0);
+  // The download being cancelled, for the handlers; `cancellingId` is its copy
+  // for rendering.
+  const cancellingRef = useRef<string | null>(null);
 
   const onCompletedRef = useRef(onCompleted);
   onCompletedRef.current = onCompleted;
+  const onFailedRef = useRef(onFailed);
+  onFailedRef.current = onFailed;
+
+  /** The cancel of `id` is over: it ended, or the request for it failed. */
+  const cancelSettled = useCallback((id: string) => {
+    if (cancellingRef.current !== id) return;
+    cancellingRef.current = null;
+    setCancellingId(null);
+  }, []);
+
+  const takeSnapshot = useCallback((next: QueueSnapshot) => {
+    if (next.revision <= revisionRef.current) return;
+    revisionRef.current = next.revision;
+    snapshotRef.current = next;
+    setSnapshot(next);
+    // A download is running, so a banner about the run before it is stale.
+    if (next.active) setLastQueueSummary(null);
+    // The download being cancelled is no longer the one running.
+    if (cancellingRef.current && next.active?.id !== cancellingRef.current) {
+      cancelSettled(cancellingRef.current);
+    }
+  }, [cancelSettled]);
 
   const refreshQueue = useCallback(async () => {
     try {
-      const snapshot = await getTransport().getDownloadQueue();
-      setQueueStatus(snapshot);
+      takeSnapshot(await getTransport().getDownloadQueue());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load queue');
     }
-  }, []);
+  }, [takeSnapshot]);
 
   useEffect(() => {
     refreshQueue();
 
-    // Stable event handler that reads from refs
-    const handleEvent = (wrappedEvent: { type: 'download'; event: DownloadEvent }) => {
-      // Unwrap the download event from the AppEvent wrapper
-      const event = wrappedEvent.event;
-      
-      if (event.type === 'queue_snapshot') {
-        const snapshot = snapshotToQueueStatus(event.items, event.max_size);
-        setQueueStatus(snapshot);
-        
-        // Clear old summary when new run starts (prevent stale success banner)
-        if (snapshotIsBusy(event.items) && lastQueueSummaryRef.current) {
-          setLastQueueSummary(null);
-        }
-        
-        // Update activeId based on queue state
-        if (snapshot.current) {
-          setDownloadUiState(prev => ({
-            activeId: snapshot.current!.id,
-            phase: prev.phase === 'cancelling' ? 'cancelling' : 'active',
-          }));
-        } else if (downloadUiStateRef.current.phase !== 'cancelling') {
-          // Queue is empty and not cancelling - cleanup
-          setDownloadUiState({ activeId: null, phase: null });
-          setCurrentProgress(null);
-        }
-        return;
-      }
-
-      if (event.type === 'queue_run_complete') {
-        // Queue run finished - store summary for banner display
-        setLastQueueSummary(event.summary);
-        return;
-      }
-
-      const progress = eventToProgress(event);
-      if (progress) {
-        applyProgressRef.current(progress);
-
-        // Ensure activeId is set for any progress event (prevents snapshot lag issues)
-        if (downloadUiStateRef.current.activeId !== progress.id && 
-            downloadUiStateRef.current.phase !== 'cancelling') {
-          setDownloadUiState({
-            activeId: progress.id,
-            phase: 'active',
-          });
-        }
-
-        if (progress.status === 'completed' && event.type === 'download_completed') {
-          // Extract completion info from event for UI effects layer
-          const completionInfo = extractCompletionInfo(event.id, queueStatusRef.current);
-          onCompletedRef.current?.(completionInfo);
-          // Keep completed state visible briefly, then cleanup
-          setTimeout(() => cleanupTerminal(event.id), 2000);
-        } else if (event.type === 'download_cancelled' || event.type === 'download_failed') {
-          // Terminal events: cleanup immediately
-          cleanupTerminal(event.id);
-        }
+    const handleEvent = (wrapped: { type: 'download'; event: DownloadEvent }) => {
+      const event = wrapped.event;
+      switch (event.type) {
+        case 'queue_snapshot':
+          takeSnapshot(event);
+          return;
+        case 'queue_run_complete':
+          setLastQueueSummary(event.summary);
+          return;
+        case 'download_completed':
+          cancelSettled(event.id);
+          onCompletedRef.current?.({ id: event.id, text: event.text });
+          return;
+        case 'download_failed':
+          cancelSettled(event.id);
+          onFailedRef.current?.({ id: event.id, text: event.text });
+          return;
+        case 'download_cancelled':
+          cancelSettled(event.id);
+          return;
       }
     };
 
-    // Subscribe to download events via Transport (sync unsubscribe)
-    const unsubscribe = getTransport().subscribe('download', handleEvent);
-    setConnectionMode(isDesktop() ? 'Desktop (Tauri)' : 'Web (SSE)');
+    const transport = getTransport();
+    const unsubscribe = transport.subscribe('download', handleEvent);
+    const stopWatchingOpen = transport.onEventStreamOpen(() => {
+      revisionRef.current = 0;
+      refreshQueue();
+    });
 
     return () => {
       unsubscribe();
+      stopWatchingOpen();
     };
-  }, [refreshQueue, cleanupTerminal]); // Only depend on refreshQueue, not handleEvent
+  }, [refreshQueue, takeSnapshot, cancelSettled]);
 
   const queueModel = useCallback(async (modelId: string, quantization?: string) => {
     const response = await getTransport().queueDownload({ modelId, quantization });
@@ -372,79 +143,42 @@ export function useDownloadManager(options: UseDownloadManagerOptions = {}): Use
   }, [refreshQueue]);
 
   const cancel = useCallback(async (id: string) => {
-    // Guard: prevent duplicate cancel calls for same ID
-    if (cancelInFlightRef.current.has(id)) {
-      return;
-    }
-    
-    cancelInFlightRef.current.add(id);
-    
-    // Optimistic UI: immediately show cancelling state
-    setDownloadUiState(prev => ({
-      ...prev,
-      phase: 'cancelling',
-    }));
-    
+    // One cancel per download: the button is disabled while this one is out.
+    if (cancellingRef.current === id) return;
+    cancellingRef.current = id;
+    setCancellingId(id);
+
     try {
       await getTransport().cancelDownload(id);
-      // Success - cleanup will happen via SSE event or we'll do it now
-      cleanupTerminal(id);
+      // The download ends a moment later. Its ending, or a snapshot without
+      // it, settles the cancel.
     } catch (error) {
-      // Treat 404 as success (idempotent cancel)
-      const is404 = error instanceof Error && 
+      // A download that ended before the cancel arrived is not found, which
+      // is the outcome that was asked for.
+      const gone = error instanceof Error &&
         (error.message.includes('not found') || error.message.includes('404'));
-      
-      if (is404) {
-        // Expected race condition - cleanup
-        cleanupTerminal(id);
-      } else {
-        // Unexpected error - still cleanup UI to prevent stuck state
+      if (!gone) {
         appLogger.error('hook.download', 'Cancel failed', { error });
-        cleanupTerminal(id);
-        // Could show error toast here if desired
       }
+      cancelSettled(id);
     } finally {
-      // Always refresh queue as best-effort
-      try {
-        await refreshQueue();
-      } catch (e) {
-        // Ignore refresh errors - don't let them break cleanup
-        appLogger.warn('hook.download', 'Failed to refresh queue after cancel', { error: e });
-      }
+      await refreshQueue();
     }
-  }, [refreshQueue, cleanupTerminal]);
-
-  const cancelGroup = useCallback(async (groupId: string) => {
-    await getTransport().cancelShardGroup(groupId);
-    await refreshQueue();
-  }, [refreshQueue]);
-
-  const clearFailed = useCallback(async () => {
-    await getTransport().clearFailedDownloads();
-    await refreshQueue();
-  }, [refreshQueue]);
+  }, [refreshQueue, cancelSettled]);
 
   const clearQueueSummary = useCallback(() => {
     setLastQueueSummary(null);
   }, []);
 
-  // Calculate queue length: pending items + 1 if there's an active download
-  const queueLength = (queueStatus?.pending?.length || 0) + (downloadUiState.activeId ? 1 : 0);
-
   return {
-    queueStatus,
-    currentProgress,
-    downloadUiState,
+    snapshot,
+    cancellingId,
     lastQueueSummary,
-    queueLength,
-    connectionMode,
     error,
     setError,
     refreshQueue,
     queueModel,
     cancel,
-    cancelGroup,
-    clearFailed,
     clearQueueSummary,
   };
 }

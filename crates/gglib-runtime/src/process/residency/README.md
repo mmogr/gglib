@@ -1,8 +1,5 @@
 # Residency
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-process-residency-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-process-residency-complexity.json)
-
 <!-- module-docs:start -->
 
 Turning admission decisions into running llama-server processes.

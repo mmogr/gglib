@@ -5,15 +5,17 @@
 //! Axum `system/llama-status` route serialises it directly, so the two
 //! surfaces cannot drift.
 
-use super::config::BuildConfig;
+use super::config::{BuildConfig, InstallRecord, PrebuiltRecord};
 use gglib_core::domain::RuntimeCapabilities;
 use gglib_core::paths::{llama_config_path, llama_server_path};
 use serde::Serialize;
+use std::path::Path;
 
 /// The recorded build, when one exists.
 ///
-/// Absent for a prebuilt download: that path never writes a `BuildConfig`.
-/// An installed binary with no build record is normal, not an error.
+/// Absent for a pre-built download, which records a [`LlamaPrebuiltInfo`]
+/// in its place. An installed binary with no build record is normal, not an
+/// error.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LlamaBuildInfo {
@@ -33,6 +35,27 @@ impl From<BuildConfig> for LlamaBuildInfo {
             build_date: config.build_date.to_rfc3339(),
             acceleration: config.acceleration,
             cmake_flags: config.cmake_flags,
+        }
+    }
+}
+
+/// The recorded pre-built download, when that is how llama.cpp was installed.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LlamaPrebuiltInfo {
+    /// The llama.cpp release tag that was downloaded.
+    pub version: String,
+    /// The platform build that was chosen.
+    pub platform: String,
+    pub installed_at: String,
+}
+
+impl From<PrebuiltRecord> for LlamaPrebuiltInfo {
+    fn from(record: PrebuiltRecord) -> Self {
+        Self {
+            version: record.version,
+            platform: record.platform,
+            installed_at: record.installed_at,
         }
     }
 }
@@ -85,8 +108,10 @@ pub struct LlamaStatus {
     /// Why validation failed, including its remediation text.
     pub health_error: Option<String>,
     pub build: Option<LlamaBuildInfo>,
-    /// Set when a build record exists but could not be read.
+    /// Set when a record of the install exists but could not be read.
     pub build_error: Option<String>,
+    /// The download's record, for an install that was not built here.
+    pub prebuilt: Option<LlamaPrebuiltInfo>,
     /// What the binary says it is. Absent when nothing is installed to probe;
     /// present-but-unidentified when the probe could not parse a build number.
     pub runtime: Option<LlamaRuntimeInfo>,
@@ -99,9 +124,11 @@ pub struct LlamaStatus {
 /// in the returned struct. Only a failure to resolve the data directory
 /// itself is an `Err`.
 pub fn llama_status() -> anyhow::Result<LlamaStatus> {
-    let binary_path = llama_server_path().map_err(|e| anyhow::anyhow!("{e}"))?;
-    let config_path = llama_config_path().map_err(|e| anyhow::anyhow!("{e}"))?;
+    Ok(status_at(&llama_server_path()?, &llama_config_path()?))
+}
 
+/// [`llama_status`] for a binary and a record at the paths given.
+fn status_at(binary_path: &Path, config_path: &Path) -> LlamaStatus {
     let mut status = LlamaStatus {
         installed: binary_path.exists(),
         binary_path: binary_path.display().to_string(),
@@ -110,107 +137,44 @@ pub fn llama_status() -> anyhow::Result<LlamaStatus> {
         health_error: None,
         build: None,
         build_error: None,
+        prebuilt: None,
         runtime: None,
     };
 
     if !status.installed {
-        return Ok(status);
+        return status;
     }
 
-    // Read the build record BEFORE validating. Reading a JSON file is safe on
-    // a broken binary, and provenance is exactly what someone debugging an
+    // Read the install's record BEFORE validating. Reading a JSON file is safe
+    // on a broken binary, and provenance is exactly what someone debugging an
     // unhealthy install needs — reporting "no build record" merely because we
     // returned early would assert the install came from somewhere it did not.
     if config_path.exists() {
-        match BuildConfig::load(&config_path) {
-            Ok(config) => status.build = Some(config.into()),
+        match InstallRecord::load(config_path) {
+            Ok(InstallRecord::Built(config)) => status.build = Some(config.into()),
+            Ok(InstallRecord::Prebuilt(record)) => status.prebuilt = Some(record.into()),
             Err(e) => status.build_error = Some(e.to_string()),
         }
     }
 
-    match super::validate_llama_binary(&binary_path) {
+    match super::validate_llama_binary(binary_path) {
         Ok(()) => status.healthy = true,
         Err(e) => {
             status.health_error = Some(e.to_string());
             // A binary that fails validation cannot be trusted to answer
             // `--version` sensibly, so stop before probing it.
-            return Ok(status);
+            return status;
         }
     }
 
     // Read through the probe rather than a local `--version` call so this
     // surface and the launch banner cannot report different runtimes for the
     // same binary.
-    status.runtime = Some((&super::runtime_probe::probe(&binary_path)).into());
+    status.runtime = Some((&super::runtime_probe::probe(binary_path)).into());
 
-    Ok(status)
+    status
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The GUI's `LlamaStatus` in `types/setup.ts` is hand-mirrored, so the
-    /// casing is a contract rather than an implementation detail.
-    #[test]
-    fn status_serialises_as_camel_case() {
-        let status = LlamaStatus {
-            installed: true,
-            binary_path: "/tmp/llama-server".into(),
-            config_path: "/tmp/llama-config.json".into(),
-            healthy: false,
-            health_error: Some("not executable".into()),
-            build: None,
-            build_error: None,
-            runtime: None,
-        };
-
-        let json = serde_json::to_value(&status).unwrap();
-        assert_eq!(json["binaryPath"], "/tmp/llama-server");
-        assert_eq!(json["configPath"], "/tmp/llama-config.json");
-        assert_eq!(json["healthError"], "not executable");
-        assert!(json.get("binary_path").is_none());
-    }
-
-    /// The runtime block is a projection, not the core type — serialising
-    /// `RuntimeCapabilities` directly would put `snake_case` keys inside this
-    /// camelCase payload, which is what the TS mirror silently tripped over.
-    #[test]
-    #[allow(
-        clippy::default_trait_access,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
-    fn runtime_block_is_camel_case() {
-        let caps = gglib_core::domain::RuntimeCapabilities {
-            build: Some(9656),
-            commit: None,
-            version_line: "version: 9656 (deadbee)".into(),
-            flags: Default::default(),
-        };
-
-        let json = serde_json::to_value(LlamaRuntimeInfo::from(&caps)).unwrap();
-        assert_eq!(json["versionLine"], "version: 9656 (deadbee)");
-        assert_eq!(json["build"], 9656);
-        assert!(json.get("version_line").is_none());
-        // Rendered, not structural — no consumer branches on flag names.
-        assert!(json["flags"].is_string());
-    }
-
-    #[test]
-    fn build_info_carries_both_notions_of_version() {
-        let info = LlamaBuildInfo::from(BuildConfig {
-            version: "abc1234".into(),
-            commit_sha: "abc1234def".into(),
-            build_date: chrono::Utc::now(),
-            acceleration: "Metal".into(),
-            cmake_flags: vec!["-DGGML_METAL=ON".into()],
-        });
-
-        let json = serde_json::to_value(&info).unwrap();
-        assert_eq!(json["version"], "abc1234");
-        assert_eq!(json["commitSha"], "abc1234def");
-        assert_eq!(json["cmakeFlags"][0], "-DGGML_METAL=ON");
-        // RFC 3339 rather than a locale-formatted string: the GUI parses it.
-        assert!(json["buildDate"].as_str().unwrap().contains('T'));
-    }
-}
+#[path = "status_tests.rs"]
+mod tests;

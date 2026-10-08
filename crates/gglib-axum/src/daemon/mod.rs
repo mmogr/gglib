@@ -4,14 +4,15 @@ mod lock;
 mod shutdown;
 mod watchdog;
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use gglib_core::{CorsConfig, DAEMON_PORT, SettingsUpdate, paths::data_root};
+use gglib_core::ports::SettingsRepository;
+use gglib_core::{ApiKeySource, CorsConfig, DAEMON_PORT, paths::data_root};
+use gglib_runtime::proxy::resolve_api_key;
 
 use crate::bootstrap::bootstrap;
 use crate::config::ServerConfig;
@@ -36,7 +37,7 @@ pub(crate) fn daemon_cors_origins() -> Vec<String> {
     ]
 }
 
-/// How the daemon binds and what it serves alongside the API.
+/// How the daemon binds, and which origins and hosts it answers.
 #[derive(Debug, Clone)]
 pub struct DaemonOptions {
     /// Bind host. The default is loopback; anything else is an explicit,
@@ -44,18 +45,6 @@ pub struct DaemonOptions {
     pub host: String,
     /// CORS policy for `/api`.
     pub cors: CorsConfig,
-    /// Directory with a built frontend to serve as an SPA. `None` — the only
-    /// value anything in this workspace sets — means serve the dashboard
-    /// compiled into this binary. Nothing sets it implicitly, so the working
-    /// directory does not decide what is served.
-    ///
-    /// `Some` overrides the embed with a directory. Note that no CLI flag or
-    /// env var reaches this today: it is settable only by constructing
-    /// `DaemonOptions` directly. It is kept because pointing a release build at
-    /// a local `npm run build` is the obvious thing to want, and wiring a flag
-    /// is a small change — but until one exists, calling it "the frontend
-    /// developer's override" overstates what is here.
-    pub static_dir: Option<PathBuf>,
     /// `Host` header values accepted in addition to loopback (and, on a
     /// non-loopback bind, IP literals). The mDNS name and `--allowed-host`
     /// entries arrive here.
@@ -67,7 +56,6 @@ impl Default for DaemonOptions {
         Self {
             host: "127.0.0.1".into(),
             cors: CorsConfig::AllowOrigins(daemon_cors_origins()),
-            static_dir: None,
             allowed_hosts: Vec::new(),
         }
     }
@@ -85,8 +73,8 @@ impl Default for DaemonOptions {
 /// 4. Resolve the access policy — Host allowlist always, bearer token for
 ///    non-loopback binds, a new daemon token on every `/api` route — then
 ///    bind
-///    `{host}:{DAEMON_PORT}` and serve the management API (+ SPA when a
-///    frontend build is found).
+///    `{host}:{DAEMON_PORT}` and serve the management API (and the dashboard,
+///    when this binary carries one).
 /// 5. Honour `proxy_autostart` so the `OpenAI` endpoint comes up with the
 ///    daemon rather than with the desktop app, then `remote_enabled` so a
 ///    machine told once to be reachable is reachable again after a reboot,
@@ -113,12 +101,7 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     }
 
     // 3. One context, one ProcessManager.
-    let config = ServerConfig {
-        host: opts.host.clone(),
-        port: DAEMON_PORT,
-        ..ServerConfig::with_defaults()?
-    };
-    let mut ctx = bootstrap(config).await?;
+    let mut ctx = bootstrap(ServerConfig::with_defaults()?).await?;
 
     let shutdown_token = CancellationToken::new();
     ctx.daemon_shutdown = Some(shutdown_token.clone());
@@ -134,22 +117,15 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     // 4. Access policy, then the router. The Host guard is always on; the
     //    bearer token exists only for non-loopback binds, where the socket
     //    stops being the boundary; the daemon token, minted anew, always.
-    let api_key = resolve_daemon_api_key(&opts.host, &state).await;
+    let api_key = resolve_daemon_api_key(&opts.host, &state.core.settings().repo()).await;
     let access = Arc::new(
         crate::access::DaemonAccess::new(api_key, &opts.host, opts.allowed_hosts.clone())
             .with_daemon_token(crate::trust::daemon_token()),
     );
 
-    // Router. The dashboard is compiled in (see `crate::ui`); a directory is
-    // only ever an explicit override, never found by probing the working
-    // directory.
-    let app = if let Some(dir) = opts.static_dir.clone() {
-        info!(
-            "serving dashboard from {} (explicit override)",
-            dir.display()
-        );
-        crate::routes::create_spa_router(Arc::clone(&state), &dir, &opts.cors, access)
-    } else if crate::ui::has_embedded_ui() {
+    // Router. The dashboard is compiled in (see `crate::ui`), never found by
+    // probing the working directory.
+    let app = if crate::ui::has_embedded_ui() {
         info!("serving the dashboard compiled into this binary");
         crate::ui::create_embedded_spa_router(Arc::clone(&state), &opts.cors, access)
     } else {
@@ -236,56 +212,33 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
 
 /// Settle the bearer token for a daemon about to bind `bind_host`.
 ///
-/// Same policy as the proxy supervisor's key resolution: loopback binds get
-/// no token (the socket is the boundary, and demanding one would break every
-/// existing local client for no gain); anything else uses the stored
-/// `proxy_api_key` — one machine key across both surfaces — minting and
-/// persisting a fresh one when the setting is empty. The key is printed so a
-/// `--share-lan` operator can copy it; the eprintln lands in `daemon.log`
-/// for detached daemons, which cannot bind non-loopback today anyway.
-async fn resolve_daemon_api_key(bind_host: &str, state: &AppState) -> Option<String> {
+/// A loopback bind gets no token, whatever is stored: the socket is the
+/// boundary, and demanding one would break every existing local client for
+/// no gain. That question comes first here, where the proxy asks it last.
+/// Anything else takes the proxy's own answer, [`resolve_api_key`]: the
+/// stored `proxy_api_key` — one machine key across both surfaces — or a
+/// fresh one, minted and stored, when the setting is empty or blank. The key
+/// is printed so a `--share-lan` operator can copy it; the eprintln lands in
+/// `daemon.log` for detached daemons, which cannot bind non-loopback today
+/// anyway.
+async fn resolve_daemon_api_key(
+    bind_host: &str,
+    settings: &Arc<dyn SettingsRepository>,
+) -> Option<String> {
     if gglib_core::access::is_loopback_host(bind_host) {
         return None;
     }
 
-    let settings = state.core.settings();
-    let stored = match settings.get().await {
-        Ok(s) => s,
-        Err(e) => {
-            // Fail closed with an unsaved key: an unauthenticated management
-            // API on a network is strictly worse than a token that changes
-            // next run.
-            warn!("could not read settings while resolving the daemon API key: {e}");
-            let key = gglib_core::access::generate_api_key();
-            announce_api_key(&key, "generated, not saved");
-            return Some(key);
-        }
-    };
-
-    if let Some(key) = stored
-        .proxy_api_key
-        .clone()
-        .filter(|key| !key.trim().is_empty())
-    {
-        announce_api_key(&key, "from settings");
-        return Some(key);
+    let (key, source) = resolve_api_key(None, bind_host, settings).await;
+    if let Some(key) = &key {
+        let source = if source == ApiKeySource::Settings {
+            "from settings"
+        } else {
+            "generated"
+        };
+        announce_api_key(key, source);
     }
-
-    let key = gglib_core::access::generate_api_key();
-    // An update, not a save of the record read above, which would put every
-    // field back as it was read and lose any write landed since.
-    let update = SettingsUpdate {
-        proxy_api_key: Some(Some(key.clone())),
-        ..SettingsUpdate::default()
-    };
-    match settings.update(update).await {
-        Ok(_) => announce_api_key(&key, "generated"),
-        Err(e) => {
-            warn!("generated a daemon API key but could not save it: {e}");
-            announce_api_key(&key, "generated, not saved");
-        }
-    }
-    Some(key)
+    key
 }
 
 /// Print the management-API key at startup, once, where the operator who
@@ -295,3 +248,7 @@ fn announce_api_key(key: &str, source: &str) {
     eprintln!("  \u{1f511} Management API key ({source}): {key}");
     eprintln!("     Clients on the network must send: Authorization: Bearer {key}");
 }
+
+#[cfg(test)]
+#[path = "api_key_tests.rs"]
+mod api_key_tests;

@@ -1,25 +1,28 @@
-//! llama.cpp source-build installation — CLI surface adapter.
+//! `config llama install` and `rebuild`, and the source build — CLI surface
+//! adapter.
 //!
-//! Wraps [`run_llama_source_build`] with CLI concerns: dependency checks,
-//! the interactive Y/n prompt, and `indicatif` progress rendering.
-//! Surface-agnostic build logic lives in `gglib-runtime::llama`.
+//! How to install is `llama_method`'s to choose. The source build here wraps
+//! [`run_llama_source_build`] with CLI concerns: dependency checks, the
+//! interactive Y/n prompt, and progress rendering. Surface-agnostic build
+//! logic lives in `gglib-runtime::llama`.
 
 use anyhow::{Result, bail};
-use indicatif::{ProgressBar, ProgressStyle};
-use std::io::{self, Write};
-use std::time::Duration;
+use std::path::Path;
 use tokio::sync::mpsc;
 
+use super::llama_events::{
+    BuildEnding, CLONING, DownloadEnding, built_and_installed, downloaded_and_installed,
+    render_build_events, render_install_events,
+};
+use super::llama_method::{AccelerationFlags, choose_install_method, install_by};
+use crate::utils::input;
 use gglib_core::paths::{gglib_data_dir, is_prebuilt_binary, llama_cpp_dir, llama_server_path};
 use gglib_runtime::llama::{
-    Acceleration, BuildEvent, BuildPhase, PrebuiltAvailability, check_dependencies,
-    check_disk_space, check_prebuilt_availability, detect_optimal_acceleration,
+    Acceleration, BuildEvent, BuildTool, LlamaProgressEvent, MissingPackage, VulkanStatus,
+    build_tool_install_lines, build_tools, check_prebuilt_availability,
+    detect_optimal_acceleration, download_prebuilt_binaries, missing_build_tools,
     run_llama_source_build, vulkan_status,
 };
-
-fn path_err<T>(r: Result<T, gglib_core::paths::PathError>) -> Result<T> {
-    r.map_err(|e| anyhow::anyhow!("{e}"))
-}
 
 /// Handle the install command.
 ///
@@ -36,7 +39,7 @@ pub(crate) async fn handle_install(
     build_from_source: bool,
 ) -> Result<()> {
     // Check if already installed
-    let server_path = path_err(llama_server_path())?;
+    let server_path = llama_server_path()?;
     if server_path.exists() && !force {
         let install_dir = server_path.parent().map_or_else(
             || server_path.display().to_string(),
@@ -47,42 +50,76 @@ pub(crate) async fn handle_install(
         return Ok(());
     }
 
-    // Determine installation method
-    let should_build = build_from_source
-        || !is_prebuilt_binary() // Running from source repo
-        || cuda
-        || metal
-        || vulkan // User specified acceleration flags
-        || matches!(
-            check_prebuilt_availability(),
-            PrebuiltAvailability::NotAvailable { .. }
-        );
+    let flags = AccelerationFlags {
+        cuda,
+        metal,
+        vulkan,
+    };
+    let method = choose_install_method(
+        build_from_source,
+        flags,
+        !is_prebuilt_binary(),
+        check_prebuilt_availability,
+    );
 
-    if !should_build {
-        // Try downloading pre-built binaries
-        println!("Attempting to download pre-built llama.cpp binaries...");
-        match super::llama_prebuilt::install().await {
-            Ok(()) => return Ok(()),
-            Err(e) => {
-                println!();
-                println!("⚠️  Failed to download pre-built binaries: {e}");
-                println!("Falling back to building from source...");
-                println!();
-            }
-        }
+    install_by(
+        &method,
+        async || {
+            println!("Attempting to download pre-built llama.cpp binaries...");
+            install_prebuilt(downloaded_and_installed).await
+        },
+        async || build_from_source_impl(flags, force, built_and_installed).await,
+    )
+    .await
+}
+
+/// Download and install pre-built llama.cpp binaries, rendering progress.
+pub(super) async fn install_prebuilt(ending: DownloadEnding) -> Result<()> {
+    let (tx, rx) = mpsc::channel::<LlamaProgressEvent>(64);
+    let install = tokio::spawn(download_prebuilt_binaries(tx));
+    render_install_events(rx, ending, &mut std::io::stdout()).await;
+    install.await?
+}
+
+/// What the dependency check prints: each build tool as found or missing,
+/// and how to install the tools when one is missing.
+fn dependency_lines(tools: &[BuildTool]) -> Vec<String> {
+    let mut lines = vec!["Checking build dependencies...".to_owned()];
+    lines.extend(tools.iter().map(|tool| match &tool.found {
+        Some(found) if tool.name == "C++ compiler" => format!("✓ {} {found}", tool.name),
+        Some(found) => format!("✓ {} (version {found})", tool.name),
+        None => format!("✗ {} not found", tool.name),
+    }));
+
+    if !missing_build_tools(tools).is_empty() {
+        lines.push(String::new());
+        lines.push("Missing dependencies detected. Please install:".to_owned());
+        lines.push(String::new());
+        lines.extend(build_tool_install_lines());
+        lines.push(String::new());
+        lines.push("After installing, run 'gglib config llama install' again.".to_owned());
     }
-
-    // Build from source
-    build_from_source_impl(cuda, metal, vulkan, force).await
+    lines
 }
 
 /// CLI-only wrapper for the source-build pipeline.
 ///
 /// Performs dependency checks and the interactive Y/n prompt (CLI concerns), then
-/// delegates the actual build work to [`run_llama_source_build`].
-async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bool) -> Result<()> {
+/// delegates the actual build work to [`run_llama_source_build`]. `force`
+/// skips the prompt: the caller has the user's yes already.
+pub(super) async fn build_from_source_impl(
+    flags: AccelerationFlags,
+    force: bool,
+    ending: BuildEnding,
+) -> Result<()> {
     // Step 1: Check dependencies.
-    check_dependencies()?;
+    let tools = build_tools();
+    for line in dependency_lines(&tools) {
+        println!("{line}");
+    }
+    if !missing_build_tools(&tools).is_empty() {
+        bail!("Missing required build dependencies");
+    }
     println!();
 
     // Step 2: Determine acceleration. Whether the user passed an
@@ -91,7 +128,7 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
     // actionable hints. We do **not** silently degrade to a CPU
     // build when a GPU runtime is detected — the user almost
     // certainly wants to fix the missing package and re-run.
-    let acceleration = determine_acceleration(cuda, metal, vulkan)?;
+    let acceleration = determine_acceleration(flags)?;
     println!("Selected acceleration: {}", acceleration.display_name());
 
     // Step 2b: Vulkan build-readiness pre-flight.
@@ -102,79 +139,30 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
     if acceleration == Acceleration::Vulkan {
         let vk = vulkan_status();
         if !vk.ready_for_build() {
-            println!();
-            println!("\x1b[1;31m✗ Vulkan build requirements not met\x1b[0m");
-            println!();
-            println!(
-                "  Vulkan runtime (loader): {}",
-                if vk.has_loader {
-                    "✓ found"
-                } else {
-                    "✗ missing"
-                }
-            );
-            println!(
-                "  Vulkan dev headers:      {}",
-                if vk.has_headers {
-                    "✓ found"
-                } else {
-                    "✗ missing"
-                }
-            );
-            println!(
-                "  SPIR-V compiler (glslc): {}",
-                if vk.has_glslc {
-                    "✓ found"
-                } else {
-                    "✗ missing"
-                }
-            );
-            println!(
-                "  SPIR-V headers:          {}",
-                if vk.has_spirv_headers {
-                    "✓ found"
-                } else {
-                    "✗ missing"
-                }
-            );
-            println!();
-            println!("Install the missing components to build with Vulkan:");
-            println!();
-            for pkg in &vk.missing {
-                println!("  {}:", pkg.label());
-                for (distro, cmd) in pkg.install_hints() {
-                    println!("    {distro:16} {cmd}");
-                }
+            for line in vulkan_unready_lines(&vk) {
+                println!("{line}");
             }
-            println!();
-            bail!(
-                "Missing Vulkan build dependencies: {}",
-                vk.missing
-                    .iter()
-                    .map(gglib_runtime::llama::MissingPackage::label)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
+            let missing: Vec<&str> = vk.missing.iter().map(MissingPackage::label).collect();
+            bail!("Missing Vulkan build dependencies: {}", missing.join(", "));
         }
     }
     println!();
 
     // Step 3: Interactive pre-flight prompt.
     if !force {
-        print_preflight_info(&acceleration)?;
-        print!("Continue? [Y/n]: ");
-        io::stdout().flush()?;
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        if input.trim().eq_ignore_ascii_case("n") {
+        let install_dir = gglib_data_dir()?.join("bin");
+        for line in preflight_lines(acceleration, &install_dir) {
+            println!("{line}");
+        }
+        if !input::prompt_confirmation_default_yes("Continue?")? {
             println!("Installation cancelled.");
             return Ok(());
         }
     }
 
     // Steps 4-7: delegate to the pure streaming core.
-    let llama_dir = path_err(llama_cpp_dir())?;
-    let server_path = path_err(llama_server_path())?;
+    let llama_dir = llama_cpp_dir()?;
+    let server_path = llama_server_path()?;
     let (tx, rx) = mpsc::channel::<BuildEvent>(64);
     let build = tokio::spawn(run_llama_source_build(
         acceleration,
@@ -182,13 +170,51 @@ async fn build_from_source_impl(cuda: bool, metal: bool, vulkan: bool, force: bo
         server_path,
         tx,
     ));
-    consume_build_events_cli(rx).await;
+    render_build_events(rx, CLONING, ending, &mut std::io::stdout()).await;
     build.await??;
 
     Ok(())
 }
 
-fn determine_acceleration(cuda: bool, metal: bool, vulkan: bool) -> Result<Acceleration> {
+/// What is said of a Vulkan build that cannot start: each of its four
+/// requirements as found or missing, then how to install what is missing.
+fn vulkan_unready_lines(vk: &VulkanStatus) -> Vec<String> {
+    let mut lines = vec![
+        String::new(),
+        "\x1b[1;31m✗ Vulkan build requirements not met\x1b[0m".to_owned(),
+        String::new(),
+    ];
+    lines.extend(
+        [
+            ("Vulkan runtime (loader):", vk.has_loader),
+            ("Vulkan dev headers:", vk.has_headers),
+            ("SPIR-V compiler (glslc):", vk.has_glslc),
+            ("SPIR-V headers:", vk.has_spirv_headers),
+        ]
+        .map(|(what, found)| {
+            let state = if found { "✓ found" } else { "✗ missing" };
+            format!("  {what:<24} {state}")
+        }),
+    );
+    lines.push(String::new());
+    lines.push("Install the missing components to build with Vulkan:".to_owned());
+    lines.push(String::new());
+    for pkg in &vk.missing {
+        lines.push(format!("  {}:", pkg.label()));
+        for (distro, cmd) in pkg.install_hints() {
+            lines.push(format!("    {distro:16} {cmd}"));
+        }
+    }
+    lines.push(String::new());
+    lines
+}
+
+fn determine_acceleration(flags: AccelerationFlags) -> Result<Acceleration> {
+    let AccelerationFlags {
+        cuda,
+        metal,
+        vulkan,
+    } = flags;
     let flags_set = [cuda, metal, vulkan].iter().filter(|&&x| x).count();
 
     if flags_set > 1 {
@@ -210,132 +236,30 @@ fn determine_acceleration(cuda: bool, metal: bool, vulkan: bool) -> Result<Accel
         // the build deps are incomplete, the strict detector
         // returns Err and we propagate it — a missing
         // `spirv-headers` should be surfaced, not silently
-        // swapped for a slow CPU build. Step 2b above (when the
-        // user passes --vulkan) and `check_dependencies()` in
-        // step 1 already cover the explicit-opt-in case with
-        // tailored install hints.
+        // swapped for a slow CPU build. Its error names the
+        // Vulkan packages that are missing; step 2b above covers
+        // the explicit `--vulkan` case with tailored install hints.
         detect_optimal_acceleration()
     }
 }
 
-fn print_preflight_info(acceleration: &Acceleration) -> Result<()> {
-    println!("Pre-flight check:");
-    println!("✓ Build dependencies installed");
-
-    // Check disk space
-    if check_disk_space(800)? {
-        println!("✓ Disk space available");
-    }
-
-    println!("✓ Detected: {}", acceleration.display_name());
-    println!();
-    println!("This will:");
-    println!("  1. Clone llama.cpp repository (~150 MB)");
-    println!(
-        "  2. Configure with CMake ({} enabled)",
-        acceleration.display_name()
-    );
-    println!("  3. Compile llama-server (~3-5 minutes)");
-
-    let gglib_dir = path_err(gglib_data_dir())?;
-    println!("  4. Install to {}", gglib_dir.join("bin").display());
-    println!();
-
-    Ok(())
+/// What the pre-flight says before it asks whether to continue.
+fn preflight_lines(acceleration: Acceleration, install_dir: &Path) -> Vec<String> {
+    let name = acceleration.display_name();
+    vec![
+        "Pre-flight check:".to_owned(),
+        "✓ Build dependencies installed".to_owned(),
+        format!("✓ Detected: {name}"),
+        String::new(),
+        "This will:".to_owned(),
+        "  1. Clone llama.cpp repository (~150 MB)".to_owned(),
+        format!("  2. Configure with CMake ({name} enabled)"),
+        "  3. Compile llama-server (~3-5 minutes)".to_owned(),
+        format!("  4. Install to {}", install_dir.display()),
+        String::new(),
+    ]
 }
 
-/// Consumes [`BuildEvent`] values from the build pipeline channel and renders
-/// them as `indicatif` spinners and progress bars.
-///
-/// A single `Option<ProgressBar>` tracks the active indicator. Phases are
-/// strictly sequential so there is never more than one active bar at a time.
-async fn consume_build_events_cli(mut rx: mpsc::Receiver<BuildEvent>) {
-    let spinner_style = ProgressStyle::default_spinner()
-        .template("{spinner:.green} [{elapsed_precise}] {msg}")
-        .expect("valid spinner template");
-
-    let bar_style = ProgressStyle::default_bar()
-        .template(
-            "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({percent}%) {msg}",
-        )
-        .expect("valid bar template")
-        .progress_chars("#>-");
-
-    let mut active: Option<ProgressBar> = None;
-
-    while let Some(event) = rx.recv().await {
-        match event {
-            BuildEvent::PhaseStarted { phase } => {
-                // Clean up any previous indicator before starting a new one.
-                if let Some(pb) = active.take() {
-                    pb.finish_and_clear();
-                }
-                let pb = match phase {
-                    BuildPhase::Compile => {
-                        // Length unknown until the first Progress event.
-                        let pb = ProgressBar::new(0);
-                        pb.set_style(bar_style.clone());
-                        pb.set_message("Compiling...");
-                        pb
-                    }
-                    BuildPhase::DependencyCheck => {
-                        // CLI performs its own dep-check output before the channel
-                        // opens, so no indicatif bar is needed here.
-                        continue;
-                    }
-                    _ => {
-                        let msg = match phase {
-                            BuildPhase::CloneOrUpdateRepo => "Cloning llama.cpp repository...",
-                            BuildPhase::Configure => "Configuring with CMake...",
-                            BuildPhase::InstallBinaries => "Installing binaries...",
-                            _ => unreachable!(),
-                        };
-                        let pb = ProgressBar::new_spinner();
-                        pb.set_style(spinner_style.clone());
-                        pb.set_message(msg);
-                        pb.enable_steady_tick(Duration::from_millis(100));
-                        pb
-                    }
-                };
-                active = Some(pb);
-            }
-            BuildEvent::PhaseCompleted { .. } => {
-                if let Some(pb) = active.take() {
-                    pb.finish_and_clear();
-                }
-            }
-            BuildEvent::Progress { current, total } => {
-                if let Some(pb) = &active {
-                    pb.set_length(total);
-                    pb.set_position(current);
-                }
-            }
-            BuildEvent::Log { message } => {
-                if let Some(pb) = &active {
-                    pb.println(&message);
-                } else {
-                    println!("{message}");
-                }
-            }
-            BuildEvent::Completed {
-                version,
-                acceleration,
-            } => {
-                if let Some(pb) = active.take() {
-                    pb.finish_and_clear();
-                }
-                println!();
-                println!("✓ llama.cpp installed successfully!");
-                println!("  Version:       {version}");
-                println!("  Acceleration:  {acceleration}");
-                println!("You can now use 'gglib serve', 'gglib proxy', and 'gglib chat'.");
-            }
-            BuildEvent::Failed { message } => {
-                if let Some(pb) = active.take() {
-                    pb.finish_and_clear();
-                }
-                eprintln!("✗ Build failed: {message}");
-            }
-        }
-    }
-}
+#[cfg(test)]
+#[path = "llama_install_tests.rs"]
+mod tests;

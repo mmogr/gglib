@@ -17,7 +17,7 @@ import { useConfirmContext } from "../contexts/ConfirmContext";
 import { useToastContext } from "../contexts/ToastContext";
 import { getTransport } from '../services/transport';
 import type { McpServerInfo, McpTestResult } from '../services/transport';
-import { isServerRunning, hasServerError, getServerErrorMessage } from '../utils/mcp';
+import { isServerRunning, isServerUnsupported, hasServerError, getServerErrorMessage } from '../utils/mcp';
 
 const statusRow = "inline-flex items-center gap-xs text-xs text-text-muted";
 const statusDot = "w-1.5 h-1.5 rounded-full";
@@ -177,6 +177,13 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
   );
 
   const getStatusBadge = (info: McpServerInfo) => {
+    if (isServerUnsupported(info)) {
+      return (
+        <span className={statusRow}>
+          <span aria-hidden className={cn(statusDot, 'bg-text-muted')} />Not supported yet
+        </span>
+      );
+    }
     if (isServerRunning(info)) {
       return (
         <span className={statusRow}>
@@ -370,47 +377,52 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                       Auto-fix
                     </Button>
                   )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleTest(info)}
-                    disabled={isLoading || testing}
-                    title="Start a throwaway instance, list its tools, then stop it"
-                  >
-                    {isLoading ? "..." : "Test"}
-                  </Button>
-                  {isRunning ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => handleStop(info)}
-                      disabled={isLoading}
-                    >
-                      {isLoading ? "..." : "Stop"}
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => handleStart(info)}
-                      disabled={isLoading || !info.server.enabled}
-                    >
-                      {isLoading ? "..." : "Start"}
-                    </Button>
-                  )}
-                  {onEditServer && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => onEditServer(info)}
-                      disabled={isLoading}
-                    >
-                      Edit
-                    </Button>
+                  {/* A server that cannot be run is only listed and removed. */}
+                  {!isServerUnsupported(info) && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleTest(info)}
+                        disabled={isLoading || testing}
+                        title="Start a throwaway instance, list its tools, then stop it"
+                      >
+                        {isLoading ? "..." : "Test"}
+                      </Button>
+                      {isRunning ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleStop(info)}
+                          disabled={isLoading}
+                        >
+                          {isLoading ? "..." : "Stop"}
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleStart(info)}
+                          disabled={isLoading || !info.server.enabled}
+                        >
+                          {isLoading ? "..." : "Start"}
+                        </Button>
+                      )}
+                      {onEditServer && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => onEditServer(info)}
+                          disabled={isLoading}
+                        >
+                          Edit
+                        </Button>
+                      )}
+                    </>
                   )}
                   <Button
                     type="button"
@@ -445,5 +457,3 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
     </div>
   );
 };
-
-export default McpServersPanel;

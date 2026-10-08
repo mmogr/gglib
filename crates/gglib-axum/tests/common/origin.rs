@@ -2,12 +2,14 @@
 //! check the daemon's origin guard.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::Router;
 use axum::body::Body;
 use axum::http::request::Builder;
 use axum::http::{Method, Request, StatusCode};
 use http_body_util::BodyExt;
+use serde_json::Value;
 use tower::ServiceExt;
 
 use gglib_axum::{CorsConfig, DaemonAccess, DaemonOptions};
@@ -22,6 +24,8 @@ pub(crate) const ELSEWHERE: &str = "https://evil.example";
 pub(crate) const JSON: (&str, &str) = ("content-type", "application/json");
 /// What a form post sends, which no preflight is asked for.
 pub(crate) const FORM: (&str, &str) = ("content-type", "text/plain");
+/// How long an answer's body may take to end.
+const BODY_LIMIT: Duration = Duration::from_secs(5);
 
 /// `Authorization: Bearer <test_token()>`, the value a client holding the
 /// daemon token sends.
@@ -44,7 +48,7 @@ pub(crate) fn shipped_cors() -> CorsConfig {
 /// The router a shipped daemon builds, over a context of its own, with
 /// `access` asking [`test_token`] as a shipped daemon asks the one it minted.
 pub(crate) async fn shipped(cors: &CorsConfig, access: DaemonAccess) -> Router {
-    let state = test_state(cors.clone()).await;
+    let state = test_state().await;
     let access = Arc::new(with_test_token(access));
     gglib_axum::create_embedded_spa_router(state, cors, access)
 }
@@ -90,11 +94,44 @@ pub(crate) async fn send_request(app: &Router, request: Request<Body>) -> Answer
         .headers()
         .get("access-control-allow-origin")
         .map(|v| v.to_str().unwrap().to_owned());
-    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let bytes = tokio::time::timeout(BODY_LIMIT, response.into_body().collect())
+        .await
+        .expect("the body ends")
+        .unwrap()
+        .to_bytes();
     let body = String::from_utf8_lossy(&bytes).into_owned();
     Answer {
         status,
         body,
         allow_origin,
     }
+}
+
+/// Send `body` as JSON, or no body, to `uri` on [`HOST`] as a client that
+/// holds the daemon token, and read the answer's status and its body as text.
+pub(crate) async fn call(
+    app: &Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+) -> (StatusCode, String) {
+    let mut request = authed().method(method).uri(uri).header("host", HOST);
+    if body.is_some() {
+        request = request.header(JSON.0, JSON.1);
+    }
+    let body = body.map_or_else(Body::empty, |value| Body::from(value.to_string()));
+    let answer = send_request(app, request.body(body).unwrap()).await;
+    (answer.status, answer.body)
+}
+
+/// [`call`], with the body read as JSON. A body that is not JSON reads as
+/// `null`.
+pub(crate) async fn call_json(
+    app: &Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+) -> (StatusCode, Value) {
+    let (status, body) = call(app, method, uri, body).await;
+    (status, serde_json::from_str(&body).unwrap_or_default())
 }

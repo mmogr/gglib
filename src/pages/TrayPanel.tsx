@@ -33,6 +33,7 @@ import { useProxyState } from '../services/proxyRegistry';
 import { initProxyEvents, cleanupProxyEvents } from '../services/proxyEvents';
 import { getTransport } from '../services/transport';
 import { appLogger } from '../services/platform';
+import { formatError } from '../utils/errors';
 
 /** Host the desktop app's proxy is always bound to. */
 const PROXY_HOST = '127.0.0.1';
@@ -51,7 +52,7 @@ const MAX_ERROR_CHARS = 160;
  * is the difference between a bug in the app and a port already in use.
  */
 function describeError(err: unknown): string {
-  const text = (err instanceof Error ? err.message : String(err)).trim();
+  const text = formatError(err).trim();
 
   if (!text) {
     return 'No further detail was reported.';
@@ -217,5 +218,3 @@ export const TrayPanel: FC = () => {
     </div>
   );
 };
-
-export default TrayPanel;

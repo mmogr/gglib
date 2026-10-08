@@ -4,9 +4,10 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 
 use super::*;
-use crate::domain::{Model, NewModel};
+use crate::domain::{Model, ModelFile, NewModel};
 use crate::download::Quantization;
 use crate::paths::canonical_model_path;
 use crate::ports::ResolvedFile;
@@ -57,18 +58,28 @@ struct RecordedRows(Mutex<Vec<(String, i32, Option<String>)>>);
 
 #[async_trait]
 impl ModelFilesRepositoryPort for RecordedRows {
-    async fn insert(&self, file: &NewModelFile) -> anyhow::Result<()> {
+    async fn insert(&self, file: &NewModelFile) -> Result<(), RepositoryError> {
         self.0
             .lock()
             .unwrap()
             .push((file.file_path.clone(), file.file_index, file.hf_oid.clone()));
         Ok(())
     }
+    async fn get_by_model_id(&self, _model_id: i64) -> Result<Vec<ModelFile>, RepositoryError> {
+        unimplemented!("a registration only stores rows")
+    }
+    async fn update_verification_time(
+        &self,
+        _id: i64,
+        _at: DateTime<Utc>,
+    ) -> Result<(), RepositoryError> {
+        unimplemented!("a registration only stores rows")
+    }
 }
 
 /// A finished download in `dir`: the weights `zeta.Q8_0.gguf`, whose name
 /// sorts after the projector's, and `mmproj-F16.gguf` holding `projector`.
-fn downloaded(dir: &Path, projector: &str) -> CompletedDownload {
+pub(super) fn downloaded(dir: &Path, projector: &str) -> CompletedDownload {
     let weights = dir.join("zeta.Q8_0.gguf");
     let projector_path = dir.join("mmproj-F16.gguf");
     std::fs::write(&weights, "weights").unwrap();
@@ -90,13 +101,13 @@ fn downloaded(dir: &Path, projector: &str) -> CompletedDownload {
     }
 }
 
-struct Registered {
-    answer: RegisteredDownload,
-    stored: Model,
+pub(super) struct Registered {
+    pub(super) answer: RegisteredDownload,
+    pub(super) stored: Model,
     rows: Vec<(String, i32, Option<String>)>,
 }
 
-async fn register(download: &CompletedDownload) -> Registered {
+pub(super) async fn register(download: &CompletedDownload) -> Registered {
     register_into(Arc::new(OneSlotRepo::default()), download).await
 }
 
@@ -229,4 +240,45 @@ async fn a_model_linked_to_the_downloaded_projector_reports_nothing() {
 
     assert_eq!(registered.stored.projector_path, Some(linked));
     assert_eq!(registered.answer.projector_refusal, None);
+}
+
+/// Refuses every row.
+struct RefusedRows;
+
+#[async_trait]
+impl ModelFilesRepositoryPort for RefusedRows {
+    async fn insert(&self, _file: &NewModelFile) -> Result<(), RepositoryError> {
+        Err(RepositoryError::Storage("the table is gone".to_owned()))
+    }
+    async fn get_by_model_id(&self, _model_id: i64) -> Result<Vec<ModelFile>, RepositoryError> {
+        unimplemented!("a registration only stores rows")
+    }
+    async fn update_verification_time(
+        &self,
+        _id: i64,
+        _at: DateTime<Utc>,
+    ) -> Result<(), RepositoryError> {
+        unimplemented!("a registration only stores rows")
+    }
+}
+
+/// The rows are what verification reads later. A store that refuses them
+/// does not lose the download: the model is in the library all the same.
+#[tokio::test]
+async fn a_model_whose_file_rows_are_refused_is_still_registered() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = Arc::new(OneSlotRepo::default());
+    let registrar = ModelRegistrar::new(
+        repo.clone(),
+        Arc::new(FirstBytesParser),
+        Some(Arc::new(RefusedRows)),
+    );
+
+    let answer = registrar
+        .register_model(&downloaded(dir.path(), "projector"))
+        .await
+        .expect("a refused row is not a failed registration");
+
+    assert_eq!(answer.model.id, 1);
+    assert!(repo.0.lock().unwrap().is_some(), "the model is stored");
 }

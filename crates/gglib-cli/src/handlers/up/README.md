@@ -1,10 +1,5 @@
 # Up
 
-![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-up-tests.json)
-![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-up-coverage.json)
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-up-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-up-complexity.json)
-
 <!-- module-docs:start -->
 
 `gglib up` — the first-run path, from a clean machine to a working
@@ -17,7 +12,7 @@ stands in for.
 | Step | Delegates to |
 |------|--------------|
 | 1. Hardware | [`gglib_app_services::SetupOps::get_status`] — the same status the GUI wizard renders |
-| 2. llama.cpp | [`gglib_runtime::llama::ensure_llama_initialized`], as `gglib serve` uses |
+| 2. llama.cpp | [`ensure_installed`](crate::handlers::config::llama_ensure::ensure_installed), as `gglib serve` uses |
 | 3. Model | [`gglib_core::domain::recommend`], then `DownloadManagerPort::queue_smart` + the shared interactive monitor |
 | 4. Proxy | [`DaemonHandle::start_proxy`], unpinned — identical to `gglib proxy` |
 | 5. Warm-up | one HTTP request to the endpoint it just started |

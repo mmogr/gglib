@@ -10,11 +10,11 @@ use std::sync::atomic::AtomicBool;
 
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::{AttachmentStore, RetryObserver, UsageSink};
-use gglib_core::request_pipeline::ModelContext;
+use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use gglib_core::retry::RetryPolicy;
 use reqwest::Client;
 
-use super::{DEFAULT_SEND_TIMEOUT_SECS, FarMachine, LlmCompletionAdapter};
+use super::{DEFAULT_SEND_TIMEOUT_SECS, FarMachine, LlmCompletionAdapter, SamplingObserver};
 
 fn completions_url(base_url: &str) -> String {
     format!("{}/v1/chat/completions", base_url.trim_end_matches('/'))
@@ -59,6 +59,14 @@ impl LlmCompletionAdapter {
             far_machine: None,
             attachments: None,
             sampling: None,
+            keep_passed_over: false,
+            // No stored layer, and the ceiling on: a caller with no settings
+            // to follow (a benchmark arm, a tune sweep) hands over none.
+            layers: SamplingLayers {
+                agentic_adjustments: true,
+                ..SamplingLayers::default()
+            },
+            sampling_observer: None,
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
             stream_idle_timeout: gglib_proxy::STREAM_IDLE_TIMEOUT,
             model_context: ModelContext::passthrough(),
@@ -102,14 +110,60 @@ impl LlmCompletionAdapter {
         self
     }
 
-    /// Set the caller's own sampling parameters.
+    /// Set the caller's own sampling parameters: what a person chose for this
+    /// turn, and only that.
     ///
     /// These are the *highest* layer of the hierarchy, not the final word: the
-    /// model's stored defaults and the hardcoded fallbacks still fill in every
-    /// field left unset. Pass `None` to resolve entirely from those layers.
+    /// layers given to [`with_layers`](Self::with_layers), the model's stored
+    /// defaults and the hardcoded fallbacks still fill in every field left
+    /// unset. Pass `None` to resolve entirely from those layers.
     #[must_use]
     pub fn with_sampling(mut self, sampling: Option<InferenceConfig>) -> Self {
         self.sampling = sampling;
+        self
+    }
+
+    /// Leave in the request each parameter given to
+    /// [`with_sampling`](Self::with_sampling) that the fold passed over.
+    ///
+    /// For a tune sweep, whose candidate is a statement of exactly what to
+    /// measure rather than a flag for the ladder to judge. Leave off (the
+    /// default) for a person's turn, so that a flag the ladder passed over is
+    /// not sent. A parameter kept this way is in the request, and is not
+    /// among the resolved values a
+    /// [sampling observer](Self::with_sampling_observer) is told.
+    #[must_use]
+    pub fn with_passed_over_kept(mut self, keep: bool) -> Self {
+        self.keep_passed_over = keep;
+        self
+    }
+
+    /// Set the stored layers beneath the caller's own parameters: the profile
+    /// it selected and the settings' global defaults.
+    ///
+    /// The caller hands them over unfolded and the pipeline folds them with
+    /// the model's own, once, when a request is shaped.
+    ///
+    /// These replace the layers the adapter was built with, the agentic
+    /// switch among them, and [`SamplingLayers::default`] leaves that switch
+    /// off. So a caller says which it means: a chat on one of this machine's
+    /// models hands over `Settings::effective_agentic_sampling`, and a caller
+    /// with no settings to follow turns it on. The trust switch is not the
+    /// caller's to set: the adapter trusts its own typed parameters whatever
+    /// arrives here.
+    #[must_use]
+    pub fn with_layers(mut self, layers: SamplingLayers) -> Self {
+        self.layers = layers;
+        self
+    }
+
+    /// Tell `observer` what each request's sampling resolved to.
+    ///
+    /// Called once a request, after the pipeline has shaped it and before it
+    /// is sent. `None` (the default) tells nobody.
+    #[must_use]
+    pub fn with_sampling_observer(mut self, observer: Option<SamplingObserver>) -> Self {
+        self.sampling_observer = observer;
         self
     }
 

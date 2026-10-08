@@ -19,7 +19,7 @@ use gglib_core::ports::{
     Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, PinnedSpec, RunningTarget,
 };
 
-use fixtures::common::{ProfileSettingsRepo, spawn_proxy_with_catalog, spawn_proxy_with_settings};
+use fixtures::common::{settings_listing, spawn_proxy_with_catalog, spawn_proxy_with_settings};
 use fixtures::pinned::{StaticCatalog, pin};
 
 /// The context the running model was launched with.
@@ -119,7 +119,7 @@ async fn each_entry_carries_its_catalog_id_and_variants_share_it() {
     let (base, cancel) = spawn_proxy_with_settings(
         runtime,
         Arc::new(catalog),
-        Arc::new(ProfileSettingsRepo("coding")),
+        Arc::new(settings_listing("coding")),
     )
     .await;
     let body: Value = Client::new()

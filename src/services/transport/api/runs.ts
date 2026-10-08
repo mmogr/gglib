@@ -10,9 +10,8 @@
 import type { AgentRunRequest } from '../../../types/generated/AgentRunRequest';
 import type { RunInfo } from '../../../types/generated/RunInfo';
 import type { RunList } from '../../../types/generated/RunList';
-import { readData } from '../errors';
-import { get, post, put, getAuthenticatedFetchConfig } from './client';
-import { readSseEvents } from './sseEvents';
+import { readSse } from '../../../utils/sse';
+import { apiFetch, get, post, put } from './client';
 
 /** One item of a run's stream: a logged frame, or the run's final state. */
 export type RunStreamItem =
@@ -59,14 +58,10 @@ export async function* readRunStream(
   path: string,
   signal: AbortSignal,
 ): AsyncGenerator<RunStreamItem> {
-  const { baseUrl, headers } = await getAuthenticatedFetchConfig();
-  const response = await fetch(`${baseUrl}${path}`, {
-    headers: { ...(headers as Record<string, string>), Accept: 'text/event-stream' },
-    signal,
-  });
-  if (!response.ok) await readData(response);
+  const response = await apiFetch(path, { headers: { Accept: 'text/event-stream' }, signal });
 
-  for await (const event of readSseEvents(response, signal)) {
+  for await (const event of readSse(response, signal)) {
+    if (event.data === 'ping') continue; // a keepalive sent as data, not a frame
     if (event.event === 'run') {
       yield { type: 'end', info: JSON.parse(event.data) as RunInfo };
       return;

@@ -100,15 +100,7 @@ impl NormalizingStream {
     /// Translate one parser output batch into the queued event sequence.
     fn enqueue_parser_output(&mut self, mut out: ParserOutput) {
         if !out.forward_text.is_empty() {
-            // Strip stray `<think>` / `</think>` boundary tags from text
-            // content.  Reasoning models (e.g. Qwen3) send their chain-of-
-            // thought in `reasoning_content` SSE fields but leak the closing
-            // `</think>` marker into the regular `content` field when
-            // transitioning back to output mode.  These tags carry no
-            // semantic meaning for the client and produce visible artefacts
-            // (e.g. `</think>` appearing verbatim in Zed's chat pane).
-            let text = std::mem::take(&mut out.forward_text);
-            let text = text.replace("</think>", "").replace("<think>", "");
+            let text = strip_think_tags(&out.forward_text);
             if !text.is_empty() {
                 self.queued
                     .push_back(LlmStreamEvent::TextDelta { content: text });
@@ -266,6 +258,21 @@ impl Stream for NormalizingStream {
             }
         }
     }
+}
+
+/// `text` without its `<think>` and `</think>` tags; what is between them
+/// stays.
+///
+/// A reasoning model (Qwen3, for one) sends its chain of thought in
+/// `reasoning_content` but leaks the closing `</think>` into `content` as
+/// it turns to its answer. The tag means nothing to a client and shows up
+/// verbatim in its chat pane.
+///
+/// The one function both paths call: [`NormalizingStream`] on each text
+/// delta, and [`super::oneshot::normalize_chat_completion_body`] on a whole
+/// reply.
+pub(crate) fn strip_think_tags(text: &str) -> String {
+    text.replace("</think>", "").replace("<think>", "")
 }
 
 #[cfg(test)]
@@ -649,3 +656,7 @@ mod tests {
         assert!(texts.iter().any(|t| t.contains("real text")));
     }
 }
+
+#[cfg(test)]
+#[path = "think_tags_tests.rs"]
+mod think_tags_tests;

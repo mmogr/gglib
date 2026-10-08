@@ -14,8 +14,8 @@
 //! 2. Calls `runtime.stop_current()` to free GPU memory.
 //! 3. Returns immediately — no further models are processed.
 //!
-//! The token is fired by [`super::guard::BenchmarkTaskGuard`] on SSE stream
-//! drop (HTTP client disconnect) or by a CLI `Ctrl+C` handler.
+//! The token is fired by [`super::guard::BenchmarkTaskGuard`] when the SSE
+//! stream is dropped: the run's stream ended, or the client went away.
 //!
 //! # Defensive SSE Parsing
 //!
@@ -36,6 +36,7 @@ use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::benchmark::{
     BenchmarkEvent, BenchmarkModelResult, BenchmarkRunType, CompareConfig, ModelCompareResult,
 };
+use gglib_core::sse::DataFrames;
 
 use super::BenchmarkDeps;
 use super::mapper::{
@@ -214,7 +215,7 @@ async fn run_single_compare(
     let mut completion_tokens: Option<i64> = None;
 
     let mut byte_stream = response.bytes_stream();
-    let mut line_buf = Vec::<u8>::new();
+    let mut frames = DataFrames::unbounded();
 
     while let Some(chunk_result) = byte_stream.next().await {
         let chunk = match chunk_result {
@@ -228,74 +229,42 @@ async fn run_single_compare(
             }
         };
 
-        for byte in chunk {
-            if byte == b'\n' {
-                if !line_buf.is_empty() {
-                    let line = String::from_utf8_lossy(&line_buf);
-                    if let Some(data) = line.strip_prefix("data: ") {
-                        let data = data.trim();
-                        if data == "[DONE]" {
-                            line_buf.clear();
-                            // Stream ended cleanly — exit the outer loop.
-                            // We'll handle this by breaking out of byte
-                            // iteration; the outer while exits naturally
-                            // when the stream is exhausted.
-                        } else {
-                            match serde_json::from_str::<serde_json::Value>(data) {
-                                Ok(val) => {
-                                    // Text delta
-                                    if let Some(delta) = extract_text_delta(&val) {
-                                        response_text.push_str(&delta);
-                                        let _ = tx
-                                            .send(BenchmarkEvent::ModelTextDelta {
-                                                model_id,
-                                                text: delta,
-                                            })
-                                            .await;
-                                    }
-                                    // Finish reason
-                                    if matches!(
-                                        extract_finish_reason(&val).as_deref(),
-                                        Some("length")
-                                    ) {
-                                        was_truncated = true;
-                                    }
-                                    // Timings (update only when present)
-                                    let (pm, gm, pt, gt) = extract_compare_timings(&val);
-                                    if pm.is_some() {
-                                        prompt_ms = pm;
-                                    }
-                                    if gm.is_some() {
-                                        generation_ms = gm;
-                                    }
-                                    if pt.is_some() {
-                                        prompt_tps = pt;
-                                    }
-                                    if gt.is_some() {
-                                        generation_tps = gt;
-                                    }
-                                    // Usage
-                                    let (ptu, ctu) = extract_usage(&val);
-                                    if ptu.is_some() {
-                                        prompt_tokens = ptu;
-                                    }
-                                    if ctu.is_some() {
-                                        completion_tokens = ctu;
-                                    }
-                                }
-                                Err(e) => {
-                                    warn!(
-                                        "benchmark: failed to parse SSE chunk for '{}': {e}",
-                                        model.name
-                                    );
-                                }
-                            }
-                        }
-                    }
-                    line_buf.clear();
-                }
-            } else {
-                line_buf.push(byte);
+        for val in reply_chunks(&mut frames, &chunk, &model.name) {
+            // Text delta
+            if let Some(delta) = extract_text_delta(&val) {
+                response_text.push_str(&delta);
+                let _ = tx
+                    .send(BenchmarkEvent::ModelTextDelta {
+                        model_id,
+                        text: delta,
+                    })
+                    .await;
+            }
+            // Finish reason
+            if matches!(extract_finish_reason(&val).as_deref(), Some("length")) {
+                was_truncated = true;
+            }
+            // Timings (update only when present)
+            let (pm, gm, pt, gt) = extract_compare_timings(&val);
+            if pm.is_some() {
+                prompt_ms = pm;
+            }
+            if gm.is_some() {
+                generation_ms = gm;
+            }
+            if pt.is_some() {
+                prompt_tps = pt;
+            }
+            if gt.is_some() {
+                generation_tps = gt;
+            }
+            // Usage
+            let (ptu, ctu) = extract_usage(&val);
+            if ptu.is_some() {
+                prompt_tokens = ptu;
+            }
+            if ctu.is_some() {
+                completion_tokens = ctu;
             }
         }
     }
@@ -321,6 +290,23 @@ async fn run_single_compare(
         generation_tps,
         created_at: Utc::now(),
     })
+}
+
+/// Take `chunk` off a model's reply, and return every JSON chunk it
+/// completed. `[DONE]` is not one, and a payload that is not JSON is skipped.
+fn reply_chunks(frames: &mut DataFrames, chunk: &[u8], model: &str) -> Vec<serde_json::Value> {
+    frames
+        .push(chunk)
+        .iter()
+        .filter(|data| *data != "[DONE]")
+        .filter_map(|data| match serde_json::from_str(data) {
+            Ok(val) => Some(val),
+            Err(e) => {
+                warn!("benchmark: failed to parse SSE chunk for '{model}': {e}");
+                None
+            }
+        })
+        .collect()
 }
 
 /// Build `messages` array for the chat completions body.
@@ -372,3 +358,7 @@ fn build_compare_request_body(
 
     body
 }
+
+#[cfg(test)]
+#[path = "compare_tests.rs"]
+mod compare_tests;

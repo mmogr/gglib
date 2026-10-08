@@ -4,7 +4,6 @@
 
 use super::*;
 use crate::unified_server_config::{GlobalDefaults, UnifiedServerConfig};
-use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::JinjaMode;
 
 const BASE_PORT: u16 = 9000;
@@ -61,10 +60,6 @@ fn cascade_reaches_the_built_config_with_fully_specified_options() {
         mtp_draft_p_min: Some(0.8),
         cache_ram_mb: Some(4096),
         cache_reuse: Some(256),
-        inference_params: Some(InferenceConfig {
-            temperature: Some(0.7),
-            ..Default::default()
-        }),
         mlock: Some(true),
         ..Default::default()
     };

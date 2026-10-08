@@ -14,59 +14,11 @@
 //! mock ports with the other integration tests via `tests/fixtures` rather
 //! than duplicating them.
 
-use std::sync::Arc;
-
+use gglib_core::ProxyAccessConfig;
 use reqwest::Client;
-use tokio::net::TcpListener;
-use tokio_util::sync::CancellationToken;
-
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
 
 mod fixtures;
-use fixtures::common::{EmptyCatalog, MockSettingsRepo, NoopRuntime, make_mcp_service};
-
-// ─── Proxy harness ─────────────────────────────────────────────────────────
-
-/// Spawn the real `gglib_proxy::serve` with no upstream configured (not
-/// needed — these tests only exercise `/v1/proxy/status`, which doesn't
-/// touch the runtime/catalog ports). Returns `(proxy_base_url, cancel)`.
-async fn spawn_proxy() -> (String, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(NoopRuntime);
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(EmptyCatalog);
-
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            // Device memory readable: this suite is not about the fit.
-            true,
-            runtime,
-            catalog,
-            make_mcp_service(),
-            cancel_clone,
-            None, // daemon_cancel: no daemon in tests
-            Arc::new(MockSettingsRepo),
-            None, // inference_override
-            None, // default_profile
-            false,
-            None,
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &gglib_core::ProxyAccessConfig::default(),
-        )
-        .await
-        .ok();
-    });
-
-    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-    (format!("http://{addr}"), cancel)
-}
+use fixtures::access::spawn_proxy;
 
 // ─── Tests ──────────────────────────────────────────────────────────────
 
@@ -77,7 +29,7 @@ async fn spawn_proxy() -> (String, CancellationToken) {
 /// enforces CORS on the response.
 #[tokio::test]
 async fn get_request_from_tauri_origin_receives_cors_header() {
-    let (base_url, cancel) = spawn_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
 
     let resp = Client::new()
         .get(format!("{base_url}/v1/proxy/status"))
@@ -107,7 +59,7 @@ async fn get_request_from_tauri_origin_receives_cors_header() {
 /// call through.
 #[tokio::test]
 async fn preflight_request_to_sse_endpoint_is_allowed() {
-    let (base_url, cancel) = spawn_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
 
     let resp = Client::new()
         .request(
@@ -142,7 +94,7 @@ async fn preflight_request_to_sse_endpoint_is_allowed() {
 /// and reflects it back.
 #[tokio::test]
 async fn get_request_from_vite_dev_origin_receives_cors_header() {
-    let (base_url, cancel) = spawn_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
 
     let resp = Client::new()
         .get(format!("{base_url}/v1/proxy/status"))
@@ -167,7 +119,7 @@ async fn get_request_from_vite_dev_origin_receives_cors_header() {
 /// is accepted and reflected back by the `LocalOnly` CORS policy.
 #[tokio::test]
 async fn get_request_from_tauri_localhost_origin_receives_cors_header() {
-    let (base_url, cancel) = spawn_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
 
     let resp = Client::new()
         .get(format!("{base_url}/v1/proxy/status"))
@@ -194,7 +146,7 @@ async fn get_request_from_tauri_localhost_origin_receives_cors_header() {
 /// the block client-side.
 #[tokio::test]
 async fn get_request_from_external_origin_is_rejected() {
-    let (base_url, cancel) = spawn_proxy().await;
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
 
     let resp = Client::new()
         .get(format!("{base_url}/v1/proxy/status"))

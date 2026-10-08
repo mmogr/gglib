@@ -20,7 +20,7 @@ use super::{GuardStep, run};
 #[test]
 fn a_guard_switched_off_scans_nothing_and_forwards() {
     let mut settings = Settings::with_defaults();
-    settings.proxy_loop_detection = Some(false);
+    settings.loop_guard_mode = Some(LoopGuardMode::Off);
     let (metrics, ledger) = store();
 
     let step = run(&settings, &body(looping(3)), MODEL, &observing(&metrics));

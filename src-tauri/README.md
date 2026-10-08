@@ -27,7 +27,8 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
 3. **Frontend (React)**: The React application in `src/` communicates **exclusively via HTTP** to the daemon:
    - `/api/models` - List and manage models
    - `/api/servers` - Control llama-server instances
-   - `/api/chat` - Chat history and conversations
+   - `/api/conversations`, `/api/messages` - Chat history and conversations
+   - `/api/chat` - A chat's title
    - `/api/proxy` - Proxy management
    - `/api/downloads` - Download queue management
    - `/api/mcp` - MCP server configuration
@@ -39,12 +40,11 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
    - `get_embedded_api_info` - Discover the daemon's port (the name predates the daemon)
    - `open_url` - Open URLs in system browser
    - `set_selected_model`, `sync_menu_state` - Native menu synchronization
-   - `check_llama_status`, `install_llama` - llama.cpp binary management
    - `log_from_frontend` - Forward frontend logs to the Rust logger
 
 6. **Real-Time Events**: The daemon's `/api/events` endpoint streams Server-Sent Events to each webview:
    - `server:*` events - Server lifecycle updates
-   - `download:*` events - Download progress
+   - `download:*` events - The download queue's snapshot, and how each download ended
    - `proxy:*` events - Proxy lifecycle
 
    The Rust side deliberately does not subscribe: it polls instead, because the lifecycle events are deltas that a lagging subscriber drops silently, and a tray rebuilt from deltas drifts. See `src/daemon/watch.rs`.
@@ -108,7 +108,7 @@ The output binary will be located in `target/release/bundle/`.
 
 For more details on the architecture and how all interfaces work together, see:
 - [Interfaces](../README.md#interfaces) in the main README
-- [Architecture Overview](../README.md#architecture) for backend details
+- [Architecture Overview](../crates/README.md#architecture-overview) for the layer diagram and the backend crates
 
 ## Project Structure
 
@@ -150,9 +150,9 @@ The Rust backend is organized into three main modules:
 │  │    app/      │  │   menu/    │  │   tray/    │   │  commands/   │    │
 │  │              │  │  (macOS)   │  │  (all OS)  │   │              │    │
 │  │ • AppState   │◄─┤ • AppMenu  │  │ • build    │   │ • util       │    │
-│  │ • Events     │  │ • MenuState│  │ • icon     │   │ • llama      │    │
-│  │ • emit_or_log│  │ • build    │  │ • handlers │   │ • app_logs   │    │
-│  │              │  │ • handlers │  │ • confirm  │   │   (OS-only)  │    │
+│  │ • Events     │  │ • MenuState│  │ • icon     │   │ • app_logs   │    │
+│  │ • emit_or_log│  │ • build    │  │ • handlers │   │   (OS-only)  │    │
+│  │              │  │ • handlers │  │ • confirm  │   │              │    │
 │  │              │  │ • state_sync──►│ • window  │   │              │    │
 │  │              │  │            │  │            │   │              │    │
 │  └──────┬───────┘  └────────────┘  └─────┬──────┘   └──────┬───────┘    │
@@ -196,7 +196,7 @@ the three ways it comes by one and what quitting is allowed to take with it.
 | **proxy_actions.rs** | Proxy start/stop outside a request | Used by the tray and autostart; calls the daemon's `/api/proxy/*` directly and asks for a fresh poll — it deliberately does **not** publish what it expects to be true |
 | **autostart.rs** | Launch visibility & login item | `start_at_login` login item, `should_start_hidden()` (pure launch decision, fails visible). Proxy autostart is the daemon's job |
 | **dock.rs** | macOS Dock icon visibility | `hide()` / `show()` via activation policy; no-ops off macOS so callers need no `cfg` |
-| **commands/** | 6 OS integration commands in 3 modules | `util.rs` (API discovery, shell, menu), `llama.rs` (binary management), `app_logs.rs` (frontend log ingestion) |
+| **commands/** | 5 OS integration commands in 2 modules | `util.rs` (API discovery, shell, menu), `app_logs.rs` (frontend log ingestion) |
 
 ### Communication Flow
 

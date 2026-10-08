@@ -14,61 +14,15 @@
 //! Uses the real `gglib_proxy::serve` and keeps the join handle, since the
 //! assertion here is specifically about `serve` returning.
 
-use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::net::TcpListener;
-use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
-
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
-
 mod fixtures;
-use fixtures::common::{EmptyCatalog, MockSettingsRepo, NoopRuntime, make_mcp_service};
+use fixtures::spawn::{Spawned, defaults, spawn};
 
 /// The supervisor aborts the task after this long, turning a slow shutdown
 /// into a user-visible error. Assert well inside it so the test fails on a
 /// regression rather than on a slow machine.
 const SUPERVISOR_ABORT_AFTER: Duration = Duration::from_secs(5);
-
-/// Spawn the real `serve`, returning its join handle so shutdown can be awaited.
-async fn spawn_proxy() -> (String, CancellationToken, JoinHandle<()>) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(NoopRuntime);
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(EmptyCatalog);
-
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
-    let handle = tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            // Device memory readable: this suite is not about the fit.
-            true,
-            runtime,
-            catalog,
-            make_mcp_service(),
-            cancel_clone,
-            None, // daemon_cancel: no daemon in tests
-            Arc::new(MockSettingsRepo),
-            None, // inference_override
-            None, // default_profile
-            false,
-            None,
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &gglib_core::ProxyAccessConfig::default(),
-        )
-        .await
-        .ok();
-    });
-
-    tokio::time::sleep(Duration::from_millis(30)).await;
-    (format!("http://{addr}"), cancel, handle)
-}
 
 /// The regression: with a subscriber attached, `serve` must still return.
 ///
@@ -76,7 +30,12 @@ async fn spawn_proxy() -> (String, CancellationToken, JoinHandle<()>) {
 /// supervisor's abort ended it — which is what produced the timeout error.
 #[tokio::test]
 async fn shutdown_completes_while_a_dashboard_stream_is_open() {
-    let (base, cancel, handle) = spawn_proxy().await;
+    let Spawned {
+        base,
+        cancel,
+        handle,
+        ..
+    } = spawn(defaults().await).await;
 
     // Hold a real SSE connection open, and read the hydration frame so the
     // stream is definitely established before shutdown is requested.
@@ -103,7 +62,7 @@ async fn shutdown_completes_while_a_dashboard_stream_is_open() {
 /// cannot hide behind an unrelated hang.
 #[tokio::test]
 async fn shutdown_completes_with_no_subscribers() {
-    let (_base, cancel, handle) = spawn_proxy().await;
+    let Spawned { cancel, handle, .. } = spawn(defaults().await).await;
 
     cancel.cancel();
 
@@ -124,7 +83,12 @@ async fn shutdown_completes_with_no_subscribers() {
     reason = "grandfathered at lint inheritance, #1157"
 )]
 async fn shutdown_completes_with_several_streams_open() {
-    let (base, cancel, handle) = spawn_proxy().await;
+    let Spawned {
+        base,
+        cancel,
+        handle,
+        ..
+    } = spawn(defaults().await).await;
 
     let client = reqwest::Client::new();
     let mut streams = Vec::new();

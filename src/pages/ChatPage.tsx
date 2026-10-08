@@ -32,6 +32,7 @@ import type { ConversationSummary } from '../services/transport';
 import type { HubChatOpen } from '../types/generated/HubChatOpen';
 import type { ModelRef } from '../types/generated/ModelRef';
 import type { ChatDraft } from '../types/messages';
+import { formatError } from '../utils/errors';
 
 const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 
@@ -130,10 +131,9 @@ export default function ChatPage(props: ChatPageProps) {
   const { showToast } = useToastContext();
   const { confirm } = useConfirmContext();
 
-  // Settings for title generation prompt and agent loop
+  // Settings for title generation prompt
   const { settings } = useSettings();
   const titleGenerationPrompt = settings?.titleGenerationPrompt || DEFAULT_TITLE_GENERATION_PROMPT;
-  const maxToolIterations = settings?.maxToolIterations ?? undefined;
 
   // Tool support and quantisation for the active model. The model is fixed
   // for the lifetime of ChatPage: a switch from the composer's picker
@@ -152,7 +152,7 @@ export default function ChatPage(props: ChatPageProps) {
 
   // Runtime: sends start runs the daemon owns and saves; opening a
   // conversation shows what is saved, then the run still going in it.
-  const { runtime, isLoading: messageLoading, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({
+  const { runtime, isLoading: messageLoading, endedRun, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({
     conversationId: activeConversationId ?? undefined,
     conversation: activeConversation,
     source,
@@ -164,7 +164,6 @@ export default function ChatPage(props: ChatPageProps) {
     // rather than `chatError`, which renders as a failed turn.
     onSystemWarning: (message, suggestedAction) =>
       showToast(suggestedAction ? `${message} — ${suggestedAction}` : message, 'warning'),
-    maxToolIterations,
     supportsToolCalls,
     // assistant-ui only logs a paste or a drop that fails; this is the person told.
     onImageRefused: (sentence) => showToast(sentence, 'error'),
@@ -243,7 +242,6 @@ export default function ChatPage(props: ChatPageProps) {
         title,
         model_id: null,
         system_prompt: systemPrompt,
-        settings: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -257,7 +255,7 @@ export default function ChatPage(props: ChatPageProps) {
       // Reconcile with server ordering in background
       void syncConversations({ preferredId: newId, silent: true });
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : String(error));
+      setChatError(formatError(error));
     } finally {
       setCreatingConversation(false);
     }
@@ -310,7 +308,7 @@ export default function ChatPage(props: ChatPageProps) {
               activeConversation={activeConversation}
               activeConversationId={activeConversationId}
               isServerConnected={isServerRunning}
-              serverPort={serverPort}
+              serverPort={far ? undefined : serverPort}
               titleGenerationPrompt={titleGenerationPrompt}
               onRenameConversation={handleRenameConversation}
               onClearConversation={handleClearConversation}
@@ -323,6 +321,7 @@ export default function ChatPage(props: ChatPageProps) {
               showToast={showToast}
               timingTracker={timingTracker}
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
+              endedRun={endedRun}
               supportsToolCalls={far ? null : supportsToolCalls}
               toolFormat={far ? null : toolFormat}
               modelName={far ? 'The other machine picks the model' : paired ? `${modelName} on ${paired.machineName}` : modelName}

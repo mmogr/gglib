@@ -93,16 +93,6 @@ import type { McpServerInfo as McpServerInfoDto } from '../../../types/generated
 export type McpServerInfo = Omit<McpServerInfoDto, 'server'> & { server: McpServer };
 
 /**
- * Result of calling an MCP tool.
- *
- * `error` is a required nullable, not an optional key: the handler builds the
- * field on both paths, so a successful call sends `"error": null` rather than
- * omitting it.
- */
-import type { McpToolCallResponse } from '../../../types/generated/McpToolCallResponse';
-export type McpToolResult = McpToolCallResponse;
-
-/**
  * Resolution attempt for diagnostics.
  */
 export interface ResolutionAttempt {

@@ -15,6 +15,8 @@ mod config;
 )]
 pub mod supervisor;
 
+// The daemon settles its own bearer token by the proxy's rule.
+pub use api_key::resolve_api_key;
 // Re-export supervisor types
 pub use config::ProxyConfig;
 pub use supervisor::{ProxyBind, ProxyStatus, ProxySupervisor, SupervisorError};

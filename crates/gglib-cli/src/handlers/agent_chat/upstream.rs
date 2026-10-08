@@ -8,14 +8,15 @@
 //! that depend on which machine a turn runs on.
 
 use anyhow::{Context as _, Result};
+use gglib_app_services::types::StartServerRequest;
 use gglib_core::server_config::parse_ctx_size_flag;
 
 use super::config::{AgentSessionParams, BannerInfo};
 use crate::bootstrap::CliContext;
-use crate::daemon_client;
+use crate::daemon_client::{self, StartServerBody};
 use crate::handlers::model::resolver;
 use crate::presentation::style;
-use gglib_core::domain::{InferenceConfig, ModelAction};
+use gglib_core::domain::{InferenceConfig, Model, ModelAction};
 
 /// Resolve the llama-server port for this session.
 ///
@@ -35,12 +36,7 @@ pub(crate) async fn resolve_port(
 
     // Look up the model so the context flag can resolve against its metadata.
     let model = resolver::resolve_for(ctx, &params.model_identifier, ModelAction::Chat).await?;
-
-    // Resolve the per-request context tier here (this is what makes
-    // `--ctx-size max` work); the daemon applies the per-model and global
-    // tiers itself, exactly as it does for every other start request.
-    let ctx_arg = parse_ctx_size_flag(params.ctx_size.as_deref())?;
-    let context_length = ctx_arg.and_then(|arg| arg.resolve(model.context_length));
+    let body = start_body(&model, params.ctx_size.as_deref())?;
 
     if !banner.quiet {
         style::print_info_banner("Info", "\u{2139}\u{fe0f}");
@@ -50,10 +46,9 @@ pub(crate) async fn resolve_port(
         );
     }
 
-    let handle =
-        crate::daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
+    let handle = daemon_client::ensure_daemon(ctx).await?;
     let started = handle
-        .start_model_server(model.id, context_length)
+        .start_model_server(&body)
         .await
         .context("failed to start llama-server via the daemon")?;
 
@@ -78,6 +73,23 @@ pub(crate) async fn resolve_port(
     Ok(started.port)
 }
 
+/// What the daemon is asked to start for a session on `model`, at the context
+/// `--ctx-size` names.
+///
+/// Only that tier is resolved here, which is what makes `--ctx-size max` work:
+/// it needs the model's own context length. The daemon applies the per-model
+/// and global tiers itself, as it does for every other start request.
+fn start_body(model: &Model, ctx_size: Option<&str>) -> Result<StartServerBody> {
+    let ctx_arg = parse_ctx_size_flag(ctx_size)?;
+    Ok(StartServerBody {
+        id: model.id,
+        config: StartServerRequest {
+            context_length: ctx_arg.and_then(|arg| arg.resolve(model.context_length)),
+            ..Default::default()
+        },
+    })
+}
+
 /// Print non-default sampling parameter lines in the info banner.
 pub(crate) fn print_sampling_lines(s: &InferenceConfig) {
     if let Some(v) = s.temperature {
@@ -96,3 +108,7 @@ pub(crate) fn print_sampling_lines(s: &InferenceConfig) {
         eprintln!("  Repeat penalty: {v}");
     }
 }
+
+#[cfg(test)]
+#[path = "upstream_tests.rs"]
+mod tests;

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useToastContext } from '../contexts/ToastContext';
 import { createBatchWithinWindow, DEFAULT_BATCH_WINDOW_MS } from '../utils/batchWithinWindow';
-import type { DownloadCompletionInfo } from '../services/transport/types/downloads';
+import type { DownloadCompletionInfo, DownloadFailureInfo } from '../services/transport/types/downloads';
 
 export interface UseDownloadCompletionEffectsOptions {
   /**
@@ -25,8 +25,9 @@ export interface UseDownloadCompletionEffectsOptions {
  * - Batches completion events within a time window
  * - Triggers model refresh once per batch
  * - Dispatches aggregated toast notifications
+ * - Says at once, in an error toast, that a download failed, in the daemon's words
  * 
- * @returns A stable onCompleted callback to pass to useDownloadManager
+ * @returns Stable onCompleted and onFailed callbacks to pass to useDownloadManager
  * 
  * @example
  * const { onCompleted } = useDownloadCompletionEffects({
@@ -37,7 +38,10 @@ export interface UseDownloadCompletionEffectsOptions {
  */
 export function useDownloadCompletionEffects(
   options: UseDownloadCompletionEffectsOptions
-): { onCompleted: (info: DownloadCompletionInfo) => void } {
+): {
+  onCompleted: (info: DownloadCompletionInfo) => void;
+  onFailed: (info: DownloadFailureInfo) => void;
+} {
   const { refreshModels, windowMs = DEFAULT_BATCH_WINDOW_MS } = options;
   const { showToast } = useToastContext();
 
@@ -57,11 +61,9 @@ export function useDownloadCompletionEffects(
       // Trigger single refresh for all completions in batch
       refreshModelsRef.current();
       
-      // Show aggregated toast
+      // One download is announced in the daemon's words; several are counted
       if (items.length === 1) {
-        const item = items[0];
-        const name = item.displayName ?? item.modelId;
-        showToastRef.current(`Downloaded ${name}`, 'success');
+        showToastRef.current(items[0].text, 'success');
       } else {
         showToastRef.current(`${items.length} models downloaded`, 'success');
       }
@@ -81,5 +83,10 @@ export function useDownloadCompletionEffects(
     batcherRef.current?.push(info);
   }, []);
 
-  return { onCompleted };
+  // A failure is not batched: each one is its own toast, in the daemon's words.
+  const onFailed = useCallback((info: DownloadFailureInfo) => {
+    showToastRef.current(info.text, 'error');
+  }, []);
+
+  return { onCompleted, onFailed };
 }

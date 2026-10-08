@@ -13,18 +13,16 @@ import '@testing-library/jest-dom';
 import { AgenticProxyPair } from '../../../src/components/Benchmark/Agentic/AgenticProxyPair';
 import type { AgenticEvalReport, ArmScores, ProxyArms } from '../../../src/types/benchmark';
 import type { ModelDefectCounts } from '../../../src/types/generated/ModelDefectCounts';
+import { agenticReport, armDelta, armScores } from '../fixtures/agentic';
 
 const arm = (composite: number): ArmScores =>
-  ({
+  armScores({
     tool_accuracy: composite,
-    loop_eligible: 0,
     task_completion: composite,
     composite,
     total_wall_ms: 1000,
     runs: 18,
-    unmeasured_runs: 0,
-    transport_retries: 0,
-  }) as ArmScores;
+  });
 
 const counts = (overrides: Partial<ModelDefectCounts> = {}): ModelDefectCounts => ({
   requests: 24,
@@ -51,28 +49,26 @@ const counts = (overrides: Partial<ModelDefectCounts> = {}): ModelDefectCounts =
 });
 
 const report = (proxy?: Partial<ProxyArms>): AgenticEvalReport =>
-  ({
+  agenticReport({
     model_name: 'Llama-3.2-3B',
     param_count_b: 3,
-    ctx_size: 8192,
     raw: arm(0.5),
     gglib: arm(0.6),
-    delta: { tool_accuracy: 0.1, task_completion: 0.1, composite: 0.1 },
-    tasks: [],
+    delta: armDelta({ tool_accuracy: 0.1, task_completion: 0.1, composite: 0.1 }),
     proxy:
       proxy === undefined
-        ? undefined
+        ? null
         : {
             raw_auto: arm(0.4),
             proxy: arm(0.9),
-            delta: { tool_accuracy: 0.5, task_completion: 0.5, composite: 0.5 },
+            delta: armDelta({ tool_accuracy: 0.5, task_completion: 0.5, composite: 0.5 }),
             paired: { pairs: 18, unmeasured_pairs: 0, wins: 9, losses: 1, ties: 8, mean_delta: 0.4, p_value: 0.004 },
             defects: counts(),
             settings: { tool_call_repair: true, loop_guard_mode: 'note' },
             tasks: [],
             ...proxy,
           },
-  }) as AgenticEvalReport;
+  });
 
 describe('AgenticProxyPair', () => {
   it('renders nothing for a report without the proxy pair', () => {
@@ -106,12 +102,9 @@ describe('AgenticProxyPair', () => {
   });
 
   it('names the unmeasured runs when the delta is withheld', () => {
-    const withheld = {
-      tool_accuracy: null,
-      task_completion: null,
-      composite: null,
-      withheld: { kind: 'contaminated_by_unmeasured_runs' as const, raw: 2, gglib: 3 },
-    };
+    const withheld = armDelta({
+      withheld: { kind: 'contaminated_by_unmeasured_runs', raw: 2, gglib: 3 },
+    });
     render(<AgenticProxyPair report={report({ delta: withheld })} />);
     expect(
       screen.getByText(/Delta withheld: 2 raw \(auto\) and 3 proxy runs never reached/),

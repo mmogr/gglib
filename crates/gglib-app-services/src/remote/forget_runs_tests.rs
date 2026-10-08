@@ -19,8 +19,8 @@ use super::super::RemoteOps;
 use super::super::device_keys::{read_keys, write_keys};
 use crate::runs::RunRegistry;
 use crate::runs::test_executor::{Cmd, body, next, registry};
-use crate::test_support::test_core_and_proxy_over;
-use crate::test_support_remote::{RecordingEmitter, scratch_device_keys, test_remote_ops};
+use crate::test_support::{RecordingEmitter, test_core_and_proxy_over};
+use crate::test_support_remote::{scratch_device_keys, test_remote_ops};
 
 const DEVICE: &str = "dev-11112222";
 
@@ -140,7 +140,7 @@ impl SettingsRepository for Unwritable {
 #[tokio::test]
 async fn a_forget_whose_roster_write_fails_still_drops_the_runs_once_the_key_is_out() {
     let mut repos = CoreFactory::build_repos(setup_test_database().await.expect("in-memory DB"));
-    gglib_core::services::AppCore::new(repos.clone())
+    gglib_core::services::AppCore::bare(repos.clone())
         .settings()
         .update(SettingsUpdate {
             remote_devices: Some(Some(vec![gglib_core::Device {

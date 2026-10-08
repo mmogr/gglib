@@ -1,8 +1,5 @@
 # models
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-transport-api-models-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-transport-api-models-complexity.json)
-
 <!-- module-docs:start -->
 
 Splits model API operations into two domains — local GGUF models and HuggingFace Hub models — and composes them into a single module. The separation keeps filesystem and remote-API concerns independent while presenting a unified surface to callers.

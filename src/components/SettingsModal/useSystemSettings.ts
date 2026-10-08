@@ -16,10 +16,10 @@ import {
 } from '../../services/transport/api/setup';
 import type { BuildEvent, LlamaStatus, LlamaUpdateCheck } from '../../types/setup';
 import { appLogger } from '../../services/platform';
+import { formatError } from '../../utils/errors';
 
 /** Human-readable names for the build phases, in the order they run. */
 const PHASE_LABELS: Record<string, string> = {
-  dependency_check: 'Checking dependencies',
   clone_or_update_repo: 'Updating repository',
   configure: 'Configuring',
   compile: 'Compiling',
@@ -100,7 +100,7 @@ export function useSystemSettings(): SystemSettingsState {
     void getLlamaStatus()
       .then(setStatus)
       .catch((err: unknown) => {
-        setStatusError(err instanceof Error ? err.message : String(err));
+        setStatusError(formatError(err));
       })
       .finally(() => setLoadingStatus(false));
   }, []);
@@ -118,7 +118,7 @@ export function useSystemSettings(): SystemSettingsState {
     void checkLlamaUpdates()
       .then(setUpdateCheck)
       .catch((err: unknown) => {
-        setCheckError(err instanceof Error ? err.message : String(err));
+        setCheckError(formatError(err));
       })
       .finally(() => setCheckingUpdates(false));
   }, []);
@@ -183,7 +183,7 @@ export function useSystemSettings(): SystemSettingsState {
       setUpdateCheck(null);
       reloadStatus();
     } catch (err) {
-      setStatusError(err instanceof Error ? err.message : String(err));
+      setStatusError(formatError(err));
     } finally {
       setUninstalling(false);
     }

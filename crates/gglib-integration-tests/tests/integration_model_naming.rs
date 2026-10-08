@@ -12,12 +12,12 @@ mod common;
 use std::path::Path;
 use std::sync::Arc;
 
-use common::{setup_test_pool, write_gguf_fixture};
+use common::setup_test_pool;
 
 use gglib_core::services::{ImportMode, ModelService};
 use gglib_core::{CompletedDownload, ModelRegistrarPort, ModelRepository, Quantization};
 use gglib_db::{CoreFactory, SqliteModelRepository};
-use gglib_gguf::GgufParser;
+use gglib_gguf::{GgufParser, write_string_gguf};
 
 async fn import_locally(file_path: &Path) -> gglib_core::Model {
     let pool = setup_test_pool().await.unwrap();
@@ -55,7 +55,7 @@ async fn register_from_hf(
 async fn local_and_hf_agree_on_name_when_general_name_is_present() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("qwen3-8b-q4_k_m.gguf");
-    write_gguf_fixture(
+    write_string_gguf(
         &path,
         &[
             ("general.name", "Qwen3-8B"),
@@ -74,7 +74,7 @@ async fn local_and_hf_agree_on_name_when_general_name_is_present() {
 async fn local_and_hf_diverge_predictably_without_general_name() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("qwen3-8b-q4_k_m.gguf");
-    write_gguf_fixture(&path, &[("general.architecture", "qwen3")]);
+    write_string_gguf(&path, &[("general.architecture", "qwen3")]);
 
     let local = import_locally(&path).await;
     let hf = register_from_hf(&path, "unsloth/Qwen3-8B-GGUF", "Q4_K_M").await;
@@ -91,8 +91,8 @@ async fn duplicate_names_from_distinct_repos_both_persist_and_resolve() {
     let dir = tempfile::tempdir().unwrap();
     let path_a = dir.path().join("model-a.gguf");
     let path_b = dir.path().join("model-b.gguf");
-    write_gguf_fixture(&path_a, &[("general.name", "Qwen3-8B")]);
-    write_gguf_fixture(&path_b, &[("general.name", "Qwen3-8B")]);
+    write_string_gguf(&path_a, &[("general.name", "Qwen3-8B")]);
+    write_string_gguf(&path_b, &[("general.name", "Qwen3-8B")]);
 
     let pool = setup_test_pool().await.unwrap();
     let repo = Arc::new(SqliteModelRepository::new(pool.clone()));

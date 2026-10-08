@@ -118,6 +118,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 
 **Module Descriptions:**
 - **`server.rs`** — Axum application setup, routing, `/v1/chat/completions`, `/v1/proxy/status`, and `/v1/proxy/status/stream` handlers
+- **`serve_config.rs`** — `ServeConfig`: everything `serve()` is started with, one named field each
 - **`models.rs`** — OpenAI-compatible request, response and error types, and the error response factories
 - **`models_list.rs`** — The `/v1/models` list (`ModelsResponse`, `ModelInfo`), built from the catalogue's summaries; it serializes and deserializes, for a reader of the list on another machine
 - **`model_detail_endpoint.rs`** — `GET /v1/models/{name}/detail`: one model in full, resolved as a chat request would resolve it, without its file path or port
@@ -137,6 +138,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`canonicalization.rs`** — System prompt stabilization (the IDE's dynamic date/time/line-count lines are coarsened in place so the prompt stops changing between requests) and `tools[]` order canonicalization, both for cache-prefix stability
 - **`fallback_session.rs`** — The session id of a request that names none: a hash of its system prompt and its first user message, that message's images included
 - **`cache_lifecycle.rs`** — KV cache save→forward→save orchestration with semaphore gating and retry logic
+- **`slot_cache_state.rs`** — `SlotCacheState`, the one value holding what is remembered of the slot cache between requests: the session held in RAM, what was cleared, and when the running llama-server started; a clear and a restart each change it through one method
 - **`sse_stream.rs`** — SSE stream extraction helper for separating chat completion responses from Server-Sent Events
 - **`usage_reading.rs`** — What a streamed reply's usage frame also says of its context (the answering server's launched context and how many messages were shortened to fit), and that only a client whose own body set `return_progress` is told (see [The context reading](#the-context-reading))
 - **`client_send.rs`** — Each send of a streamed reply to its client waits at most the send bound, so a client that stopped reading is let go (see [When the upstream stops talking](#when-the-upstream-stops-talking))
@@ -170,7 +172,10 @@ resume from prior context without re-computation.
   runs at a time (single-slot llama-server constraint).
 - **Fail-open mtime guard:** If a cached slot file predates the current
   llama-server process's start time (indicating a stale cache from a prior
-  server instance), restore is skipped.
+  server instance), restore is skipped. The start is recorded wherever an
+  admission reports a freshly started server: a chat completion's first
+  attempt, its retry after it found the upstream dead, and
+  `POST /v1/models/{name}/load`.
 - **Partial-KV models bypass the layer entirely:** sliding-window, hybrid, and
   recurrent/SSM architectures keep only part of the token history in KV memory.
   llama-server's slot files omit the context checkpoints those models need to
@@ -341,7 +346,10 @@ started without it answers `/v1/embeddings` with a 501.  The mode is therefore
 a property of the launch, not of the request, and gglib decides it from the
 model's `"embedding"` tag — detected at import time from the GGUF's
 `{arch}.pooling_type` or an encoder-only `general.architecture`, and
-re-derivable at any point with `gglib model retag`.
+re-derivable at any point with `gglib model retag`.  The launch and the
+endpoints here read the tag through one predicate,
+`capability_tags::is_embedding`, which ignores case: a model hand-tagged
+`Embedding` is an embedding model to all of them.
 
 Two consequences follow, both deliberate:
 
@@ -521,28 +529,28 @@ or defaults if there is none.
 
 ## Usage
 
-This crate is used by `gglib-runtime`'s `ProxySupervisor`. The supervisor binds a `TcpListener` and passes it to `gglib_proxy::serve()` along with port trait implementations:
+This crate is used by `gglib-runtime`'s `ProxySupervisor`. The supervisor binds a `TcpListener` and passes it to `gglib_proxy::serve()` in a `ServeConfig`, along with port trait implementations. Every field of the config is set by name and none has a default:
 
 ```rust,ignore
-use gglib_proxy;
-use std::sync::Arc;
+use gglib_proxy::ServeConfig;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 let listener = TcpListener::bind("127.0.0.1:8080").await?;
 let cancel = CancellationToken::new();
 
-gglib_proxy::serve(
+gglib_proxy::serve(ServeConfig {
     listener,
-    4096,                    // default context size
+    default_ctx: Some(4096), // default context size
     runtime_port,            // Arc<dyn ModelRuntimePort>
     catalog_port,            // Arc<dyn ModelCatalogPort>
     mcp,                     // Arc<McpService>
     cancel,
-).await?;
+    // ...and the eleven other fields
+}).await?;
 ```
 
-See the [full doctest](src/lib.rs) for a complete example with mock implementations.
+[`src/serve_config.rs`](src/serve_config.rs) documents each field, and `tests/fixtures/spawn.rs` builds a complete one over mock ports.
 
 ## Streaming
 
@@ -810,8 +818,7 @@ no recovery path from a 400 gets something it can act on. `refuse` is the old
 behaviour — HTTP 400 before any of that cost, `type` and `code` being
 `loop_detected` or `stagnation_detected` (mirroring `context_length_exceeded`'s
 shape), and the message naming `--loop-guard-mode note`. `off` does not scan at
-all, which is what `--proxy-loop-detection false` meant and, for one release,
-still means. Either spelling clears the other when written.
+all.
 
 The note is delivered inside the last message rather than as a trailing
 `system` message because a `system` message at the tail raises on Qwen3.5,

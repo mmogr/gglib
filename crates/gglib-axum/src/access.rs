@@ -6,8 +6,10 @@
 //! DNS-rebinding guard, always on) and a bearer token: the daemon's own,
 //! always, and on a `--share-lan` daemon its API key besides. The pure
 //! policy — normalization, loopback detection, the allowlist itself — is
-//! [`gglib_core::ProxyAccessConfig`], shared with the proxy; this module
-//! only adapts it to the daemon's router and error shape.
+//! [`gglib_core::ProxyAccessConfig`], shared with the proxy, and the guard
+//! that applies it, [`host_guard`], is the one the proxy installs. This
+//! module holds what is the daemon's own: [`DaemonAccess`] and, as its
+//! [`Endpoint`], the error shape a refusal is written in.
 //!
 //! A third gate, [`origin_guard`], refuses a change a browser sends from a
 //! page on another site. A page can post to `127.0.0.1:9887` with a loopback
@@ -20,21 +22,22 @@
 //! rebound page always presents the attacker's domain, never a bare IP —
 //! so refusing `192.168.1.5:9887` would break "reachable by IP" LAN use
 //! while stopping nobody. Loopback binds keep the strict policy.
+//!
+//! [`host_guard`]: gglib_proxy::access::host_guard
+//! [`origin_guard`]: gglib_proxy::access::origin_guard
 
 use std::sync::Arc;
 
 use axum::{
     Json,
-    extract::{Request, State},
-    http::{Method, StatusCode, header},
-    middleware::Next,
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
-use gglib_core::access::{BearerPolicy, DaemonToken, is_loopback_host, may_change, normalize_host};
+use gglib_core::access::{BearerPolicy, DaemonToken, is_loopback_host, normalize_host};
 use gglib_core::services::SettingsCache;
 use gglib_core::{CorsConfig, ProxyAccessConfig};
+use gglib_proxy::access::Endpoint;
 use serde_json::json;
-use tracing::warn;
 
 /// Who may reach the daemon's management API, and how they prove it.
 #[derive(Debug, Clone)]
@@ -62,8 +65,8 @@ impl DaemonAccess {
     /// daemon token whatever the key ([`Self::with_daemon_token`]); without
     /// one it serves nothing. A page in a browser that is not the daemon's
     /// own, nor one the router's CORS lets read, changes nothing:
-    /// [`origin_guard`] refuses it. `docs/remote.md`, "How it stays private",
-    /// says so.
+    /// [`origin_guard`](gglib_proxy::access::origin_guard) refuses it.
+    /// `docs/remote.md`, "How it stays private", says so.
     #[must_use]
     pub fn new(api_key: Option<String>, bind_host: &str, extra_hosts: Vec<String>) -> Self {
         Self {
@@ -133,9 +136,6 @@ impl DaemonAccess {
     /// undo it.
     ///
     /// So a keyless daemon gets a policy that names no key, permanently.
-    /// [`crate::bootstrap::start_server`] builds its access the same way and is
-    /// loopback-only by design; anything reaching this machine from another one
-    /// goes through the tunnel, which is guarded at the proxy.
     #[must_use]
     #[allow(
         clippy::option_if_let_else,
@@ -149,41 +149,16 @@ impl DaemonAccess {
     }
 }
 
-/// Reject any request whose `Host` header is not one this daemon answers to.
-///
-/// Applied as the outermost layer so it covers every route — `/health`, the
-/// SPA assets, and paths that match nothing. A check this cheap has no
-/// reason to have holes in it.
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-pub(crate) async fn host_guard(
-    State(access): State<Arc<DaemonAccess>>,
-    req: Request,
-    next: Next,
-) -> Response {
-    let host = req
-        .headers()
-        .get(header::HOST)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
+/// The daemon, to the guards it shares with the proxy: the allowlist with
+/// the IP-literal exemption above, and the error shape `/api` answers in.
+impl Endpoint for DaemonAccess {
+    const NAME: &'static str = "daemon";
 
-    if access.host_allowed(host) {
-        return next.run(req).await;
+    fn answers_to(&self, host_header: &str) -> bool {
+        self.host_allowed(host_header)
     }
 
-    warn!(
-        host,
-        path = %req.uri().path(),
-        "rejected request with a Host header this daemon does not answer to"
-    );
-    let remedy = match normalize_host(host) {
-        Some(name) => format!(" Add --allowed-host {name} if that is how you reach it."),
-        None => String::new(),
-    };
-    (
-        StatusCode::FORBIDDEN,
+    fn host_refusal(host: &str, remedy: &str) -> Response {
         Json(json!({
             "error": format!(
                 "Host '{host}' is not allowed. The daemon answers to loopback and to hosts \
@@ -191,58 +166,20 @@ pub(crate) async fn host_guard(
             ),
             "status": StatusCode::FORBIDDEN.as_u16(),
             "type": "HOST_NOT_ALLOWED",
-        })),
-    )
+        }))
         .into_response()
-}
-
-/// Refuse a change a browser sends from a page on another site.
-///
-/// [`may_change`] is the policy, asked of everything but `GET`, `HEAD` and
-/// `OPTIONS`; `cors` is the config the router's CORS layer answers from, so
-/// a page that names any origin but the endpoint's own may change something
-/// exactly when the CORS layer lets it read the answer. Sound only where
-/// [`host_guard`] runs too, since it is what vouches for the `Host` a
-/// same-origin request is matched against.
-pub(crate) async fn origin_guard(
-    State(cors): State<Arc<CorsConfig>>,
-    req: Request,
-    next: Next,
-) -> Response {
-    if matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS) {
-        return next.run(req).await;
-    }
-    let headers = req.headers();
-    // An `Origin` that is not text is refused as `""`, never read as absent.
-    let origin = headers
-        .get(header::ORIGIN)
-        .map(|v| v.to_str().unwrap_or_default());
-    let fetch_site = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok());
-    let host = headers
-        .get(header::HOST)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
-    if may_change(&cors, origin, fetch_site, host) {
-        return next.run(req).await;
     }
 
-    warn!(
-        origin,
-        fetch_site,
-        path = %req.uri().path(),
-        "refused a change sent by a page on another site"
-    );
-    (
-        StatusCode::FORBIDDEN,
+    fn origin_refusal() -> Response {
         Json(json!({
             "error": "A page on another site may not change anything here. The daemon takes \
                       changes from its own pages, from the origins it lets read its answers, \
                       and from programs, which send no Origin.",
             "status": StatusCode::FORBIDDEN.as_u16(),
             "type": "ORIGIN_NOT_ALLOWED",
-        })),
-    )
+        }))
         .into_response()
+    }
 }
 
 #[cfg(test)]

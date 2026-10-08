@@ -23,8 +23,6 @@ gglib-core (ports)          gglib-runtime                       External
 │ ModelCatalogPort     │    │ CatalogPortImpl      │    │  llama-cli       │
 │ LlmCompletionPort    │    │ LlmCompletionAdapter │    └──────────────────┘
 │ SystemProbePort      │    │ DefaultSystemProbe   │
-│ ServerLogSinkPort    │    │ NoopLogSink,         │
-│                      │    │ LogManagerSink       │
 │ AdmissionRelease     │    │ AdmissionQueue       │
 └──────────────────────┘    └──────────────────────┘
                                      │
@@ -52,8 +50,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐                                                │
 │  │  health.rs  │     │   system/   │                                                │
-│  │ Health check│     │ GPU, memory │                                                │
-│  │  endpoints  │     │   probes    │                                                │
+│  │ Health-check│     │ GPU, memory │                                                │
+│  │ HTTP client │     │   probes    │                                                │
 │  └─────────────┘     └─────────────┘                                                │
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                            │
@@ -75,7 +73,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 **Module Descriptions:**
 - **`command.rs`** — Command builder for llama processes
 - **`health_monitor.rs`** — Continuous health monitoring for processes
-- **`health.rs`** — Health check endpoint polling
+- **`health.rs`** — The loopback HTTP client the health checks in `process/` use
 - **`compose.rs`** — Agent loop composition root (wires LLM adapter + tool executors)
 - **`launch_narration.rs`** — Human-readable account of how a launch was configured
 - **`server_config.rs`** / **`unified_server_config.rs`** — Launch argument resolution

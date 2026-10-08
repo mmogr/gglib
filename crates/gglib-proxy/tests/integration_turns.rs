@@ -13,6 +13,7 @@ use reqwest::{Client, RequestBuilder, StatusCode};
 use serde_json::json;
 
 mod fixtures;
+use fixtures::remote::from_device;
 use fixtures::runs::{FakeRuns, code, json};
 use fixtures::tunnel::DEVICE;
 use fixtures::turns::{FakeTurns, serve};
@@ -21,12 +22,6 @@ fn put(base: &str, body: &serde_json::Value) -> RequestBuilder {
     Client::new()
         .put(format!("{base}/v1/runs/d1?kind=agent"))
         .json(body)
-}
-
-fn from_device(request: RequestBuilder) -> RequestBuilder {
-    request
-        .header("via", "1.1 modelpipe")
-        .header("x-modelpipe-device", DEVICE)
 }
 
 fn body() -> serde_json::Value {

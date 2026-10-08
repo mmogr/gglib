@@ -14,7 +14,7 @@ use gglib_core::domain::hub_chats::{HubChat, HubChatList, HubChatOpen};
 use gglib_core::domain::{AttachmentBlob, AttachmentId, AttachmentInfo, AttachmentUpload};
 use gglib_core::ports::{AttachmentError, AttachmentStore, HubChatsError, HubChatsPort};
 use gglib_core::services::AttachmentService;
-use gglib_core::{CorsConfig, ProxyAccessConfig};
+use gglib_core::{CorsConfig, DevicePorts, ProxyAccessConfig};
 
 /// The one chat that opens.
 pub(crate) const OPEN_ID: i64 = 7;
@@ -184,7 +184,10 @@ pub(crate) async fn serve(
         "127.0.0.1",
         vec![],
     )
-    .with_chats(chats.map(|c| c as Arc<dyn HubChatsPort>));
+    .with_devices(DevicePorts {
+        chats: chats.map(|c| c as Arc<dyn HubChatsPort>),
+        ..DevicePorts::default()
+    });
     let (base, _, cancel) = super::access::spawn_proxy(access).await;
     (base, cancel)
 }

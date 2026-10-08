@@ -25,16 +25,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use gglib_core::ports::{
-    HubChatsPort, ModelCatalogPort, ModelRuntimePort, RemoteGatewayPort, RunsPort,
-};
-use gglib_core::{CorsConfig, ProxyAccessConfig};
+use gglib_core::ports::{HubChatsPort, RemoteGatewayPort, RunsPort};
+use gglib_core::{CorsConfig, DevicePorts, ProxyAccessConfig};
 use modelpipe::{ConnectOptions, ServeOptions, TokenPolicy};
 use reqwest::{Client, StatusCode};
-use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use super::common::{EmptyCatalog, MockSettingsRepo, NoopRuntime, make_mcp_service};
 use super::remote::StubGateway;
 
 /// The credential the *proxy* demands, and the one the tunnel edge presents
@@ -73,11 +69,6 @@ pub(crate) async fn spawn_proxy_holding(
     runs: Option<Arc<dyn RunsPort>>,
     chats: Option<Arc<dyn HubChatsPort>>,
 ) -> (String, CancellationToken, Arc<StubGateway>) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(NoopRuntime);
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(EmptyCatalog);
     let gateway = Arc::new(StubGateway::new(false));
     let access = ProxyAccessConfig::new(
         CorsConfig::LocalOnly,
@@ -86,37 +77,13 @@ pub(crate) async fn spawn_proxy_holding(
         vec![],
     )
     .with_remote(Some(Arc::clone(&gateway) as Arc<dyn RemoteGatewayPort>))
-    .with_runs(runs)
-    .with_chats(chats);
-
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            true,
-            runtime,
-            catalog,
-            make_mcp_service(),
-            cancel_clone,
-            None,
-            Arc::new(MockSettingsRepo),
-            None,
-            None,
-            false,
-            None,
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &access,
-        )
-        .await
-        .ok();
+    .with_devices(DevicePorts {
+        runs,
+        chats,
+        ..DevicePorts::default()
     });
-
-    tokio::time::sleep(Duration::from_millis(30)).await;
-    (format!("http://{addr}"), cancel, gateway)
+    let (base, _, cancel) = super::access::spawn_proxy(access).await;
+    (base, cancel, gateway)
 }
 
 /// Put a tunnel in front of the proxy and dial it, returning the loopback base

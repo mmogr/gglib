@@ -13,9 +13,10 @@ import '@testing-library/jest-dom';
 import { AgenticReportVerdicts } from '../../../src/components/Benchmark/Agentic/AgenticReportVerdicts';
 import { effectVerdict } from '../../../src/components/Benchmark/Agentic/verdicts';
 import type { AgenticEvalReport, ArmDelta, ArmScores } from '../../../src/types/benchmark';
+import { agenticReport, armDelta, armScores } from '../fixtures/agentic';
 
 const arm = (composite: number, overrides: Partial<ArmScores> = {}): ArmScores =>
-  ({
+  armScores({
     tool_accuracy: composite,
     loop_eligible: 2,
     loop_avoidance: 1.0,
@@ -24,33 +25,25 @@ const arm = (composite: number, overrides: Partial<ArmScores> = {}): ArmScores =
     total_wall_ms: 1000,
     measured_wall_ms: 1000,
     runs: 63,
-    unmeasured_runs: 0,
-    transport_retries: 0,
     ...overrides,
-  }) as ArmScores;
+  });
 
 const report = (delta: ArmDelta, gglib: ArmScores): AgenticEvalReport =>
-  ({
+  agenticReport({
     model_name: 'Qwen3-4B',
-    param_count_b: 4,
     ctx_size: 32768,
     raw: arm(0.947),
     gglib,
     delta,
-    tasks: [],
     // An A/A arm is present, so a verdict would be computable if the delta were.
     raw_replicate: arm(0.954),
     replicate_seeds: [1, 2, 3],
-  }) as AgenticEvalReport;
+  });
 
 describe('AgenticReportVerdicts — withheld delta', () => {
-  const withheldDelta: ArmDelta = {
-    tool_accuracy: null,
-    loop_avoidance: null,
-    task_completion: null,
-    composite: null,
+  const withheldDelta = armDelta({
     withheld: { kind: 'contaminated_by_unmeasured_runs', raw: 0, gglib: 5 },
-  };
+  });
 
   it('names the runs that never reached the model', () => {
     render(
@@ -66,13 +59,7 @@ describe('AgenticReportVerdicts — withheld delta', () => {
   });
 
   it('stays silent on a clean report', () => {
-    const clean: ArmDelta = {
-      tool_accuracy: -0.04,
-      loop_avoidance: null,
-      task_completion: -0.016,
-      composite: -0.058,
-      withheld: null,
-    };
+    const clean = armDelta({ tool_accuracy: -0.04, task_completion: -0.016, composite: -0.058 });
     render(<AgenticReportVerdicts report={report(clean, arm(0.889))} />);
 
     expect(screen.queryByText(/Delta withheld/i)).not.toBeInTheDocument();

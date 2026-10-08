@@ -1,5 +1,7 @@
 #![doc = include_str!("README.md")]
 mod app_core;
+#[cfg(any(test, feature = "test-utils"))]
+mod app_core_fixture;
 mod attachments;
 mod chat_history;
 mod model_import;
@@ -19,13 +21,13 @@ pub use model_import::{
     HfOrigin, MAX_GENERATION_CONFIG_LOOKUPS, ModelOrigin, build_new_model, fetch_published_sampling,
 };
 pub use model_projector::ProjectorError;
-pub use model_registrar::{ModelFilesRepositoryPort, ModelRegistrar};
+pub use model_registrar::ModelRegistrar;
 pub use model_service::{ImportMode, ModelService, RetagDiff};
 pub use model_verification::{
-    DownloadTriggerPort, ModelFilesReaderPort, ModelVerificationService, OverallHealth,
-    ShardHealth, ShardHealthReport, ShardProgress, UpdateCheckResult, UpdateDetails,
-    VerificationProgress, VerificationReport,
+    ModelVerificationService, OverallHealth, ShardHealth, ShardHealthReport, ShardProgress,
+    UpdateCheckResult, UpdateDetails, VerificationProgress, VerificationReport,
 };
+pub use model_verification_remote::{RepairStarted, missing_after_repair};
 pub use projector_choices::projector_choices;
 pub use settings_cache::{DEFAULT_TTL as SETTINGS_CACHE_TTL, SettingsCache};
-pub use settings_service::SettingsService;
+pub use settings_service::{SettingsService, TemplateInstall};

@@ -1,4 +1,5 @@
-//! Tests for the duplicate-enqueue guard in `queue_download_smart`.
+//! Tests for the duplicate-enqueue guard in `enqueue_group`, which every
+//! request queues through.
 //!
 //! Kept out of `mod.rs`: the port stubs a real `DownloadManagerImpl` needs are
 //! bulky and self-contained, and that file is already well over the size
@@ -90,15 +91,13 @@ async fn start_head(manager: &DownloadManagerImpl) -> DownloadId {
         .dequeue()
         .expect("something must be pending");
     let id = item.id.clone();
-    let (progress_tx, _rx) = watch::channel(ProgressUpdate::new(0, 0, 0));
     manager.active.lock().await.insert(
         id.clone(),
         ActiveJob {
             lease: LeaseId(1),
             cancel: CancellationToken::new(),
-            progress_tx,
-            shard_info: None,
-            group_id: None,
+            item,
+            phase: DownloadPhase::Downloading,
         },
     );
     id
@@ -123,7 +122,7 @@ async fn repeat_request_while_active_attaches_instead_of_duplicating() {
         .await
         .expect("a repeat request attaches rather than failing");
 
-    assert_eq!(again.root_id, active_id, "must attach to the live download");
+    assert_eq!(again, active_id, "must attach to the live download");
     assert_eq!(
         manager.queue.read().await.pending_len(),
         0,
@@ -156,6 +155,49 @@ async fn repeat_request_while_pending_attaches_instead_of_duplicating() {
     );
 }
 
+/// A repeat request, a repair of a model already being fetched among them,
+/// attaches while the download is pending and while it is active, and
+/// leaves the files kept for registration as they are.
+#[tokio::test]
+async fn a_repeat_request_leaves_the_files_kept_for_registration() {
+    let manager = test_manager();
+    let request = || manager.queue_download_smart(REPO, Some("Q8_0".to_string()));
+
+    let first = request().await.expect("first");
+    // Stand a marker in for the files kept for registration: an attach
+    // must leave them as they are, not write the repeat request's over them.
+    let marker = vec![ResolvedFile::new("kept-from-the-first-request.gguf")];
+    manager
+        .file_entries_map
+        .lock()
+        .await
+        .insert(first.to_string(), marker.clone());
+    let again = request().await;
+    assert_eq!(again.expect("attaches while pending"), first);
+    assert_eq!(manager.queue.read().await.pending_len(), 1);
+
+    let active_id = start_head(&manager).await;
+    let again = request().await;
+    assert_eq!(again.expect("attaches while active"), active_id);
+
+    assert_eq!(
+        manager.queue.read().await.pending_len(),
+        0,
+        "a repeat request may not queue the running download again"
+    );
+    let kept = manager
+        .file_entries_map
+        .lock()
+        .await
+        .get(&first.to_string())
+        .cloned();
+    assert_eq!(
+        kept,
+        Some(marker),
+        "an attach must not replace the files kept for registration"
+    );
+}
+
 /// Why the guard checks `active` and `pending` by hand rather than asking
 /// whether the queue knows the id at all: a check that also matched *failed*
 /// downloads would make a failure permanently un-retryable.
@@ -170,7 +212,12 @@ async fn a_failed_download_can_still_be_requeued() {
     {
         let mut queue = manager.queue.write().await;
         let item = queue.dequeue().expect("something must be pending");
-        queue.mark_failed(item, "network died");
+        queue.record_outcome(
+            &item.id,
+            DownloadOutcome::Failed {
+                error: "network died".to_string(),
+            },
+        );
     }
     assert_eq!(manager.queue.read().await.pending_len(), 0);
 
@@ -183,5 +230,9 @@ async fn a_failed_download_can_still_be_requeued() {
         manager.queue.read().await.pending_len(),
         1,
         "retry after failure must enqueue again"
+    );
+    assert!(
+        manager.queue.read().await.finished().is_empty(),
+        "and the retry starts without the old failure"
     );
 }

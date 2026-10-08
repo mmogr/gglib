@@ -16,7 +16,7 @@ vi.mock('../../../src/components/SettingsModal', () => ({ default: () => null })
 vi.mock('../../../src/components/LlamaInstallModal', () => ({ default: () => null }));
 vi.mock('../../../src/components/SetupWizard', () => ({ default: () => null }));
 vi.mock('../../../src/hooks/useServers', () => {
-  const servers = { servers: [], loadServers: vi.fn(), stopServer: vi.fn() };
+  const servers = { servers: [], stopServer: vi.fn() };
   return { useServers: () => servers };
 });
 vi.mock('../../../src/hooks/useLlamaStatus', () => {
@@ -24,9 +24,6 @@ vi.mock('../../../src/hooks/useLlamaStatus', () => {
     status: { installed: true, canDownload: false },
     loading: false,
     error: null,
-    installing: false,
-    installProgress: null,
-    installLlama: vi.fn(),
     checkStatus: vi.fn(),
   };
   return { useLlamaStatus: () => llama };

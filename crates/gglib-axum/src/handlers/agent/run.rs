@@ -19,8 +19,10 @@ use serde_json::Value;
 use tokio::sync::OwnedSemaphorePermit;
 
 use gglib_app_services::RunLog;
+use gglib_app_services::transcript::FrameTimes;
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::runs::RunError;
+use gglib_core::domain::thinking;
 use gglib_core::ports::{AgentError, Created, RunScope};
 
 use super::AgentChatRequest;
@@ -28,8 +30,6 @@ use super::compose::{Prepared, frame, prepare, take_permit};
 use super::dto::AgentRunRequest;
 use super::launch::{Transcript, launch};
 use super::remote_upstream;
-use super::thinking;
-use super::transcript::FrameTimes;
 use crate::error::HttpError;
 use crate::state::AppState;
 
@@ -120,7 +120,8 @@ pub(crate) async fn create_run(
 /// A run's request read against the conversation it names: the chat request
 /// with the thinking budget the run uses (`thinking::settle`, over what the
 /// request says, what the conversation remembers and the request's own
-/// budget), and what the run writes to the conversation once it starts.
+/// budget) and, where it names no iteration limit, the one the conversation
+/// saved; and what the run writes to the conversation once it starts.
 ///
 /// # Errors
 ///
@@ -147,7 +148,7 @@ pub(super) async fn plan(
             "replace_from needs a conversation_id and a last message that is the user's",
         ));
     }
-    let remembered = if let Some(conversation_id) = conversation_id {
+    let saved = if let Some(conversation_id) = conversation_id {
         let found = state
             .core
             .chat_history()
@@ -167,12 +168,20 @@ pub(super) async fn plan(
                 format!("no conversation has id {conversation_id}"),
             ));
         };
-        conversation.settings.and_then(|settings| settings.thinking)
+        conversation.settings
     } else {
         None
     };
+    let remembered = saved.as_ref().and_then(|settings| settings.thinking);
     let settled = thinking::settle(said, remembered, chat.reasoning_budget_tokens);
     chat.reasoning_budget_tokens = settled.budget;
+    // The conversation's saved limit stands in where the request names none,
+    // as a device's turn has it (`hub_turn::config_of`) and the CLI's resume;
+    // `config_for` then gives the stored setting and the default their turn.
+    if let Some(limit) = saved.and_then(|settings| settings.max_iterations) {
+        let config = chat.config.get_or_insert_default();
+        config.max_iterations.get_or_insert(limit);
+    }
     let transcript = Transcript {
         conversation_id,
         replace_from,

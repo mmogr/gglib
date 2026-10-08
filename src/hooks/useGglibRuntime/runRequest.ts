@@ -23,11 +23,12 @@ import { convertToWireMessages } from './wireMessages';
  * backend DTO to prevent resource exhaustion by untrusted callers.
  *
  * All fields are optional; omitted fields use the backend's
- * `AgentConfig::default()` values.
+ * `AgentConfig::default()` values. `max_iterations` is not among them: the
+ * page names no iteration limit, and for a run that names none the daemon
+ * takes the limit its conversation saved, then the stored
+ * `maxToolIterations` setting.
  */
 export interface PartialAgentConfig {
-  /** Maps to `AgentConfig::max_iterations` (default 25). */
-  max_iterations?: number;
   /** Maps to `AgentConfig::max_parallel_tools` (default 25). */
   max_parallel_tools?: number;
   /** Maps to `AgentConfig::tool_timeout_ms` (default 30 000). */
@@ -61,8 +62,8 @@ export interface RunRequestOptions {
   /**
    * The two reasoning controls, which the request takes at the **top level**
    * rather than inside `config` — they are per-turn shape, not agent-loop
-   * tuning. An omitted field resolves from the profile, per-model, global and
-   * floor layers.
+   * tuning. An omitted field resolves, on a local turn, from the served
+   * model's own values, this machine's global defaults and the floor.
    */
   reasoning?: { reasoning_effort?: string; reasoning_budget_tokens?: number };
   /**

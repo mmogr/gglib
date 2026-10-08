@@ -1,8 +1,5 @@
 # hooks
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-HuggingFaceBrowser-hooks-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-HuggingFaceBrowser-hooks-complexity.json)
-
 <!-- module-docs:start -->
 
 State management hooks for the HuggingFace model browser.

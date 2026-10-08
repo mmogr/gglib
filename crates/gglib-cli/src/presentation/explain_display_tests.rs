@@ -1,28 +1,75 @@
 //! Tests for [`super`] — the `gglib model explain` table.
 
-use super::*;
+use gglib_app_services::{ParamProvenanceDto, SuppressedEffortDto};
+use gglib_core::domain::InferenceConfig;
 
-fn ctx() -> ExplainContext<'static> {
-    ExplainContext {
+use super::*;
+use ProvenanceKindDto::{Floor, FloorCoupled, Layer, SuppressedByTemplate, Unset};
+use SamplingLayerDto::{Global, ModelAutoDetected, ModelUserSet, Profile};
+
+/// `resolved`, explained by [`auto_detected_sources`] for a model that
+/// publishes nothing.
+fn explained(resolved: InferenceConfig) -> SamplingExplanationDto {
+    SamplingExplanationDto {
+        resolved,
+        sources: auto_detected_sources(),
         profile: None,
         is_reasoning: false,
         trust_client_sampling: false,
-        model_sampling: ModelSamplingDefaults::default(),
+        published: Vec::new(),
         defaults_origin: None,
         effort_suppressed: None,
     }
 }
 
-/// A context for a model that published `general.sampling.*` keys.
-fn ctx_publishing(pairs: &[(&str, &str)]) -> ExplainContext<'static> {
-    let metadata: std::collections::HashMap<String, String> = pairs
-        .iter()
-        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
-        .collect();
-    ExplainContext {
-        model_sampling: ModelSamplingDefaults::from_metadata(&metadata),
-        ..ctx()
-    }
+/// The floor's own values under [`auto_detected_sources`].
+fn plain() -> SamplingExplanationDto {
+    explained(InferenceConfig::with_hardcoded_defaults())
+}
+
+/// `explanation`, with `param`'s row saying `kind` and `layer`.
+fn sourced(
+    mut explanation: SamplingExplanationDto,
+    param: &str,
+    kind: ProvenanceKindDto,
+    layer: Option<SamplingLayerDto>,
+) -> SamplingExplanationDto {
+    let rows = &mut explanation.sources;
+    let row = rows.iter_mut().find(|row| row.param == param).unwrap();
+    (row.kind, row.layer) = (kind, layer);
+    explanation
+}
+
+/// `explanation`, for a model whose GGUF publishes `key` for `param`, with
+/// `state` being what gglib does about it.
+fn publishing(
+    mut explanation: SamplingExplanationDto,
+    param: &str,
+    key: &str,
+    state: PublishedStateDto,
+) -> SamplingExplanationDto {
+    explanation.published.push(PublishedDefaultDto {
+        param: param.to_owned(),
+        key: key.to_owned(),
+        state,
+    });
+    explanation
+}
+
+/// `explanation`, on a model whose template ignores the `level` that `layer`
+/// asked for: what the gate leaves is no value, and the marker for a rung.
+fn suppressing(
+    explanation: SamplingExplanationDto,
+    level: ReasoningEffort,
+    layer: SamplingLayerDto,
+) -> SamplingExplanationDto {
+    let mut explanation = sourced(explanation, "reasoningEffort", SuppressedByTemplate, None);
+    explanation.resolved.reasoning_effort = None;
+    explanation.effort_suppressed = Some(SuppressedEffortDto {
+        level,
+        layer: Some(layer),
+    });
+    explanation
 }
 
 /// The line reporting what the model published for `field`, if any.
@@ -36,60 +83,65 @@ fn note_for(lines: &[String], field: &str) -> Option<String> {
 
 /// A model whose auto-detected recipe claims the temperature, with global
 /// settings winning the one parameter it left alone — the shape this
-/// command exists to make legible.
-fn auto_detected_sources() -> FieldSources {
-    FieldSources {
-        temperature: ParamSource::Layer(4),
-        top_p: ParamSource::Layer(4),
-        top_k: ParamSource::Layer(3),
-        presence_penalty: ParamSource::Layer(4),
-        repeat_penalty: ParamSource::FloorCoupled,
-        min_p: ParamSource::FloorCoupled,
-        dry_multiplier: ParamSource::FloorCoupled,
-        dynatemp_range: ParamSource::Unset,
-        dynatemp_exponent: ParamSource::Unset,
-        top_n_sigma: ParamSource::Unset,
-        dry_base: ParamSource::Unset,
-        dry_allowed_length: ParamSource::Unset,
-        dry_penalty_last_n: ParamSource::Unset,
-        frequency_penalty: ParamSource::Unset,
-        max_tokens: ParamSource::Unset,
-        reasoning_effort: ParamSource::Unset,
-        reasoning_budget_tokens: ParamSource::Unset,
-    }
+/// command exists to make legible. In the order the wire carries them.
+fn auto_detected_sources() -> Vec<ParamProvenanceDto> {
+    let auto = (Layer, Some(ModelAutoDetected));
+    let (coupled, unset) = ((FloorCoupled, None), (Unset, None));
+    let sources = [
+        ("temperature", auto),
+        ("topP", auto),
+        ("topK", (Layer, Some(Global))),
+        ("presencePenalty", auto),
+        ("repeatPenalty", coupled),
+        ("minP", coupled),
+        ("frequencyPenalty", unset),
+        ("dynatempRange", unset),
+        ("dynatempExponent", unset),
+        ("topNSigma", unset),
+        ("dryMultiplier", coupled),
+        ("dryBase", unset),
+        ("dryAllowedLength", unset),
+        ("dryPenaltyLastN", unset),
+        ("maxTokens", unset),
+        ("reasoningEffort", unset),
+        ("reasoningBudgetTokens", unset),
+    ];
+    let row = |(param, (kind, layer)): (&str, _)| ParamProvenanceDto {
+        param: param.to_owned(),
+        kind,
+        layer,
+    };
+    sources.into_iter().map(row).collect()
 }
 
 /// **No row may go quiet, and there is no longer a list of exceptions.**
 ///
 /// `explanation_lines` pairs provenance with values by `zip`, which truncates
-/// silently — a field added to `FieldSources` and not to the value column
+/// silently — a field added to the provenance and not to the value column
 /// vanishes from this table with no compile error and no failing count. The two
 /// reasoning controls spent an arc in a `DEFERRED_ROWS` register waiting for a
 /// wider name column; this asserts the register is not needed, so the next
 /// omission fails here rather than being added to it.
 #[test]
 fn every_provenance_row_is_rendered() {
-    let lines = explanation_lines(
-        &InferenceConfig::with_hardcoded_defaults(),
-        &auto_detected_sources(),
-        ctx(),
-    );
+    let lines = explanation_lines(&plain());
 
-    for (field, _) in auto_detected_sources().iter() {
+    for row in auto_detected_sources() {
+        let named = |line: &String| {
+            let name = line.split(' ').next().unwrap_or_default();
+            name.replace('_', "") == row.param.to_lowercase()
+        };
         assert!(
-            lines.iter().any(|line| line.starts_with(field)),
-            "{field} carries provenance and no row in {lines:#?}"
+            lines.iter().any(named),
+            "{} carries provenance and no row in {lines:#?}",
+            row.param
         );
     }
 }
 
 #[test]
 fn every_parameter_gets_exactly_one_line() {
-    let lines = explanation_lines(
-        &InferenceConfig::with_hardcoded_defaults(),
-        &auto_detected_sources(),
-        ctx(),
-    );
+    let lines = explanation_lines(&plain());
     assert_eq!(lines.len(), 17, "{lines:#?}");
     for field in [
         "temperature",
@@ -118,8 +170,8 @@ fn every_parameter_gets_exactly_one_line() {
 /// them apart is the whole point of the #685 distinction.
 #[test]
 fn user_set_and_auto_detected_defaults_are_worded_differently() {
-    let user = describe(ParamSource::Layer(2), ctx());
-    let auto = describe(ParamSource::Layer(4), ctx());
+    let user = describe(Layer, Some(ModelUserSet), &plain());
+    let auto = describe(Layer, Some(ModelAutoDetected), &plain());
 
     assert!(user.contains("user-set"), "{user}");
     assert!(auto.contains("auto-detected"), "{auto}");
@@ -130,10 +182,10 @@ fn user_set_and_auto_detected_defaults_are_worded_differently() {
 /// must not look like one nobody ever set a value for.
 #[test]
 fn a_coupled_floor_says_why_it_is_the_floor() {
-    let plain = describe(ParamSource::Floor, ctx());
-    let coupled = describe(ParamSource::FloorCoupled, ctx());
+    let floor = describe(Floor, None, &plain());
+    let coupled = describe(FloorCoupled, None, &plain());
 
-    assert!(!plain.contains("coupled"), "{plain}");
+    assert!(!floor.contains("coupled"), "{floor}");
     assert!(
         coupled.contains("coupled to temperature layer"),
         "{coupled}"
@@ -144,22 +196,21 @@ fn a_coupled_floor_says_why_it_is_the_floor() {
 /// not say so.
 #[test]
 fn the_floor_is_named_so_the_two_are_distinguishable() {
-    let reasoning = ExplainContext {
+    let reasoning = SamplingExplanationDto {
         is_reasoning: true,
-        ..ctx()
+        ..plain()
     };
-    assert!(describe(ParamSource::Floor, reasoning).contains("reasoning floor"));
-    assert!(describe(ParamSource::Floor, ctx()).contains("default floor"));
+    assert!(describe(Floor, None, &reasoning).contains("reasoning floor"));
+    assert!(describe(Floor, None, &plain()).contains("default floor"));
 }
 
 /// `max_tokens` has no floor value on purpose; it must read as a decision
 /// rather than as a missing number.
 #[test]
 fn an_absent_max_tokens_reads_as_deliberate() {
-    let resolved = InferenceConfig::with_hardcoded_defaults();
-    assert_eq!(resolved.max_tokens, None, "guards the premise");
+    assert_eq!(plain().resolved.max_tokens, None, "guards the premise");
 
-    let lines = explanation_lines(&resolved, &auto_detected_sources(), ctx());
+    let lines = explanation_lines(&plain());
     let line = lines
         .iter()
         .find(|l| l.starts_with("max_tokens"))
@@ -173,12 +224,12 @@ fn an_absent_max_tokens_reads_as_deliberate() {
 /// for, not the generic word.
 #[test]
 fn the_profile_rung_carries_the_selected_name() {
-    let with_profile = ExplainContext {
-        profile: Some("coding"),
-        ..ctx()
+    let with_profile = SamplingExplanationDto {
+        profile: Some("coding".to_owned()),
+        ..plain()
     };
     assert_eq!(
-        describe(ParamSource::Layer(1), with_profile),
+        describe(Layer, Some(Profile), &with_profile),
         "profile 'coding'"
     );
 }
@@ -191,7 +242,7 @@ fn values_come_from_the_resolved_config() {
         top_k: Some(20),
         ..InferenceConfig::with_hardcoded_defaults()
     };
-    let lines = explanation_lines(&resolved, &auto_detected_sources(), ctx());
+    let lines = explanation_lines(&explained(resolved));
 
     assert!(lines[0].contains("0.2"), "{}", lines[0]);
     assert!(lines[2].contains("20"), "{}", lines[2]);
@@ -226,11 +277,16 @@ fn an_overridden_published_value_names_both_numbers() {
         temperature: Some(1.0),
         ..InferenceConfig::with_hardcoded_defaults()
     };
-    let lines = explanation_lines(
-        &resolved,
-        &auto_detected_sources(),
-        ctx_publishing(&[("general.sampling.temp", "0.33")]),
-    );
+    let overridden = PublishedStateDto::Overridden {
+        published: 0.33,
+        sending: 1.0,
+    };
+    let lines = explanation_lines(&publishing(
+        explained(resolved),
+        "temperature",
+        "general.sampling.temp",
+        overridden,
+    ));
 
     let note = note_for(&lines, "temperature").expect("temperature carries a note");
     assert!(note.starts_with(MARK_OVERRIDE), "{note}");
@@ -247,14 +303,12 @@ fn a_deferred_field_says_the_missing_number_is_the_models() {
         top_k: None,
         ..InferenceConfig::with_hardcoded_defaults()
     };
-    let lines = explanation_lines(
-        &resolved,
-        &FieldSources {
-            top_k: ParamSource::Unset,
-            ..auto_detected_sources()
-        },
-        ctx_publishing(&[("general.sampling.top_k", "17")]),
-    );
+    let lines = explanation_lines(&publishing(
+        sourced(explained(resolved), "topK", Unset, None),
+        "topK",
+        "general.sampling.top_k",
+        PublishedStateDto::Deferred { published: 17.0 },
+    ));
 
     let row = lines
         .iter()
@@ -307,11 +361,12 @@ fn a_restated_value_is_marked_as_information_not_as_an_override() {
         temperature: Some(0.7),
         ..InferenceConfig::with_hardcoded_defaults()
     };
-    let lines = explanation_lines(
-        &resolved,
-        &auto_detected_sources(),
-        ctx_publishing(&[("general.sampling.temp", "0.7")]),
-    );
+    let lines = explanation_lines(&publishing(
+        explained(resolved),
+        "temperature",
+        "general.sampling.temp",
+        PublishedStateDto::Restated { published: 0.7 },
+    ));
 
     let note = note_for(&lines, "temperature").expect("temperature carries a note");
     assert!(note.starts_with(MARK_INFO), "{note}");
@@ -322,11 +377,12 @@ fn a_restated_value_is_marked_as_information_not_as_an_override() {
 /// gglib does not know what it displaced.
 #[test]
 fn an_unreadable_published_value_reads_as_unknown() {
-    let lines = explanation_lines(
-        &InferenceConfig::with_hardcoded_defaults(),
-        &auto_detected_sources(),
-        ctx_publishing(&[("general.sampling.temp", "warm")]),
-    );
+    let lines = explanation_lines(&publishing(
+        plain(),
+        "temperature",
+        "general.sampling.temp",
+        PublishedStateDto::Unreadable,
+    ));
 
     let note = note_for(&lines, "temperature").expect("temperature carries a note");
     assert!(note.starts_with(MARK_UNKNOWN), "{note}");
@@ -337,31 +393,29 @@ fn an_unreadable_published_value_reads_as_unknown() {
 /// A note on every row would train the reader to ignore all of them.
 #[test]
 fn a_model_that_publishes_nothing_gains_no_notes() {
-    let lines = explanation_lines(
-        &InferenceConfig::with_hardcoded_defaults(),
-        &auto_detected_sources(),
-        ctx(),
-    );
+    let lines = explanation_lines(&plain());
 
     assert_eq!(lines.len(), 17, "one row per parameter and nothing else");
     assert!(lines.iter().all(|l| !l.starts_with(' ')), "{lines:#?}");
 }
 
-/// `presence_penalty` has no GGUF key, so gglib naming it can never be
-/// overriding a model author — however the metadata is spelled.
+/// `presence_penalty` has no GGUF key, so the explanation never carries an
+/// entry for it, and a note hangs under the field it is about and no other.
 #[test]
 fn a_field_no_model_can_reach_never_gains_a_note() {
     let resolved = InferenceConfig {
         presence_penalty: Some(1.5),
         ..InferenceConfig::with_hardcoded_defaults()
     };
-    let lines = explanation_lines(
-        &resolved,
-        &auto_detected_sources(),
-        ctx_publishing(&[("general.sampling.presence_penalty", "0.0")]),
-    );
+    let lines = explanation_lines(&publishing(
+        explained(resolved),
+        "temperature",
+        "general.sampling.temp",
+        PublishedStateDto::Restated { published: 0.7 },
+    ));
 
     assert_eq!(note_for(&lines, "presence_penalty"), None, "{lines:#?}");
+    assert_eq!(lines.iter().filter(|l| l.starts_with(' ')).count(), 1);
 }
 
 /// **The regression guard for the bug this column had.** `{:<NAME_WIDTH$}`
@@ -371,11 +425,7 @@ fn a_field_no_model_can_reach_never_gains_a_note() {
 /// did exactly that for as long as they have existed.
 #[test]
 fn every_name_fits_its_column() {
-    let lines = explanation_lines(
-        &InferenceConfig::with_hardcoded_defaults(),
-        &auto_detected_sources(),
-        ctx(),
-    );
+    let lines = explanation_lines(&plain());
 
     for line in lines.iter().filter(|l| !l.starts_with(' ')) {
         let name = line.split_whitespace().next().expect("a name");
@@ -396,17 +446,27 @@ fn every_name_fits_its_column() {
 /// alignment the rest of this module maintains is pointless.
 #[test]
 fn notes_fit_within_the_table_width() {
-    let lines = explanation_lines(
-        &InferenceConfig::with_hardcoded_defaults(),
-        &auto_detected_sources(),
-        ctx_publishing(&[
-            ("general.sampling.temp", "0.33"),
-            ("general.sampling.top_p", "0.71"),
-            ("general.sampling.top_k", "17"),
-            ("general.sampling.min_p", "0.011"),
-            ("general.sampling.penalty_repeat", "1.07"),
-        ]),
-    );
+    // The widest note, an override naming both numbers, on every key.
+    let published = [
+        ("temperature", "general.sampling.temp", 0.33, 0.7),
+        ("topP", "general.sampling.top_p", 0.71, 0.95),
+        ("topK", "general.sampling.top_k", 17.0, 40.0),
+        ("minP", "general.sampling.min_p", 0.011, 0.05),
+        (
+            "repeatPenalty",
+            "general.sampling.penalty_repeat",
+            1.07,
+            1.15,
+        ),
+    ];
+    let explanation =
+        published
+            .into_iter()
+            .fold(plain(), |explanation, (param, key, published, sending)| {
+                let state = PublishedStateDto::Overridden { published, sending };
+                publishing(explanation, param, key, state)
+            });
+    let lines = explanation_lines(&explanation);
 
     // Every reachable field published, so every one carries a note.
     assert_eq!(lines.iter().filter(|l| l.starts_with(' ')).count(), 5);
@@ -422,13 +482,13 @@ fn notes_fit_within_the_table_width() {
 /// Both caveats are always shown, and the client one reflects the setting.
 #[test]
 fn caveats_report_the_client_trust_setting() {
-    assert!(caveats(ctx()).iter().any(|n| n.contains("is ignored")));
+    assert!(caveats(&plain()).iter().any(|n| n.contains("is ignored")));
 
-    let trusted = ExplainContext {
+    let trusted = SamplingExplanationDto {
         trust_client_sampling: true,
-        ..ctx()
+        ..plain()
     };
-    assert!(caveats(trusted).iter().any(|n| n.contains("is trusted")));
+    assert!(caveats(&trusted).iter().any(|n| n.contains("is trusted")));
 }
 
 /// The caveat that describes the trust boundary names all of it.
@@ -441,7 +501,7 @@ fn caveats_report_the_client_trust_setting() {
 /// `contains` call that enforces it.
 #[test]
 fn caveats_name_every_client_authoritative_key() {
-    let notes = caveats(ctx());
+    let notes = caveats(&plain());
     for key in CLIENT_AUTHORITATIVE_KEYS {
         assert!(
             notes.iter().any(|n| n.contains(key)),
@@ -458,11 +518,11 @@ fn caveats_name_every_client_authoritative_key() {
 /// `print_explanation` indents by two, so that is the budget.
 #[test]
 fn caveats_fit_within_the_table_width() {
-    let trusted = ExplainContext {
+    let trusted = SamplingExplanationDto {
         trust_client_sampling: true,
-        ..ctx()
+        ..plain()
     };
-    for note in caveats(ctx()).iter().chain(caveats(trusted).iter()) {
+    for note in caveats(&plain()).iter().chain(caveats(&trusted).iter()) {
         assert!(
             note.chars().count() + 2 <= SEP_WIDTH,
             "{} chars: {note}",
@@ -475,31 +535,24 @@ fn caveats_fit_within_the_table_width() {
 // The reasoning controls
 // =============================================================================
 
-/// A resolution where a profile named an effort and a budget.
-fn reasoning_sources() -> FieldSources {
-    FieldSources {
-        reasoning_effort: ParamSource::Layer(1),
-        reasoning_budget_tokens: ParamSource::Layer(1),
-        ..auto_detected_sources()
-    }
-}
-
-fn reasoning_config() -> InferenceConfig {
-    InferenceConfig {
+/// A resolution where the `high` profile named an effort and a budget.
+fn reasoning() -> SamplingExplanationDto {
+    let resolved = InferenceConfig {
         reasoning_effort: Some(ReasoningEffort::High),
         reasoning_budget_tokens: Some(16384),
         ..InferenceConfig::with_hardcoded_defaults()
+    };
+    let named = sourced(explained(resolved), "reasoningEffort", Layer, Some(Profile));
+    SamplingExplanationDto {
+        profile: Some("high".to_owned()),
+        ..sourced(named, "reasoningBudgetTokens", Layer, Some(Profile))
     }
 }
 
 /// The row that could not be drawn before this table's name column grew.
 #[test]
 fn both_reasoning_controls_render_their_value_and_their_rung() {
-    let with_profile = ExplainContext {
-        profile: Some("high"),
-        ..ctx()
-    };
-    let lines = explanation_lines(&reasoning_config(), &reasoning_sources(), with_profile);
+    let lines = explanation_lines(&reasoning());
 
     let effort = lines
         .iter()
@@ -528,11 +581,9 @@ fn a_level_renders_as_its_wire_name() {
 /// rather than being read as a missing value.
 #[test]
 fn the_defer_sentinel_is_a_value_not_an_absence() {
-    let resolved = InferenceConfig {
-        reasoning_budget_tokens: Some(-1),
-        ..InferenceConfig::with_hardcoded_defaults()
-    };
-    let line = explanation_lines(&resolved, &reasoning_sources(), ctx())
+    let mut deferring = reasoning();
+    deferring.resolved.reasoning_budget_tokens = Some(-1);
+    let line = explanation_lines(&deferring)
         .into_iter()
         .find(|l| l.starts_with("reasoning_budget_tokens"))
         .expect("rendered");
@@ -547,26 +598,9 @@ fn the_defer_sentinel_is_a_value_not_an_absence() {
 /// nobody configured.
 #[test]
 fn a_suppressed_effort_reads_differently_from_one_nobody_set() {
-    let suppressed = ExplainContext {
-        profile: Some("high"),
-        effort_suppressed: Some(SuppressedEffort {
-            level: ReasoningEffort::High,
-            source: ParamSource::Layer(1),
-        }),
-        ..ctx()
-    };
-    // What the gate leaves behind: no value, and the marker in place of the
-    // rung.
-    let resolved = InferenceConfig {
-        reasoning_effort: None,
-        ..reasoning_config()
-    };
-    let sources = FieldSources {
-        reasoning_effort: ParamSource::SuppressedByTemplate,
-        ..reasoning_sources()
-    };
+    let suppressed = suppressing(reasoning(), ReasoningEffort::High, Profile);
 
-    let lines = explanation_lines(&resolved, &sources, suppressed);
+    let lines = explanation_lines(&suppressed);
     let row = lines
         .iter()
         .find(|l| l.starts_with("reasoning_effort"))
@@ -575,11 +609,7 @@ fn a_suppressed_effort_reads_differently_from_one_nobody_set() {
     assert!(row.contains("suppressed"), "{row}");
     assert!(row.contains("template"), "{row}");
 
-    let unset = explanation_lines(
-        &InferenceConfig::with_hardcoded_defaults(),
-        &auto_detected_sources(),
-        ctx(),
-    );
+    let unset = explanation_lines(&plain());
     let never_set = unset
         .iter()
         .find(|l| l.starts_with("reasoning_effort"))
@@ -591,33 +621,14 @@ fn a_suppressed_effort_reads_differently_from_one_nobody_set() {
 /// **The actionable half.** Knowing a level was suppressed does not tell an
 /// operator what to change; knowing it was *the `:high` profile's* level does.
 /// Both facts are destroyed by the gate — it clears the value and overwrites
-/// the rung — so they reach the table on the context or not at all.
+/// the rung — so they reach the table on the explanation or not at all.
 #[test]
 fn the_suppression_note_names_the_level_and_the_rung() {
-    let suppressed = ExplainContext {
-        profile: Some("high"),
-        effort_suppressed: Some(SuppressedEffort {
-            level: ReasoningEffort::High,
-            source: ParamSource::Layer(1),
-        }),
-        ..ctx()
-    };
-    let lines = explanation_lines(
-        &InferenceConfig {
-            reasoning_effort: None,
-            ..reasoning_config()
-        },
-        &FieldSources {
-            reasoning_effort: ParamSource::SuppressedByTemplate,
-            ..reasoning_sources()
-        },
-        suppressed,
-    );
+    let suppressed = suppressing(reasoning(), ReasoningEffort::High, Profile);
+    let lines = explanation_lines(&suppressed);
 
     let note = note_for(&lines, "reasoning_effort").expect("carries a note");
-    assert!(note.starts_with(MARK_OVERRIDE), "{note}");
-    assert!(note.contains("'high'"), "{note}");
-    assert!(note.contains("profile 'high'"), "{note}");
+    assert_eq!(note, "! 'high' from profile 'high'; not sent");
 }
 
 /// This command explains stored configuration and has sent nothing, so nothing
@@ -626,15 +637,9 @@ fn the_suppression_note_names_the_level_and_the_rung() {
 /// a claim about one that ran.
 #[test]
 fn nothing_in_the_suppression_claims_a_request_happened() {
-    let suppressed = ExplainContext {
-        effort_suppressed: Some(SuppressedEffort {
-            level: ReasoningEffort::Max,
-            source: ParamSource::Layer(3),
-        }),
-        ..ctx()
-    };
-    let row = describe(ParamSource::SuppressedByTemplate, suppressed);
-    let note = suppression_note("reasoning_effort", suppressed).expect("a note");
+    let suppressed = suppressing(plain(), ReasoningEffort::Max, Global);
+    let row = describe(SuppressedByTemplate, None, &suppressed);
+    let note = suppression_note("reasoning_effort", &suppressed).expect("a note");
 
     assert!(
         row.contains("this model's template"),
@@ -651,15 +656,9 @@ fn nothing_in_the_suppression_claims_a_request_happened() {
 /// reasoning fact to a budget nobody suppressed.
 #[test]
 fn only_the_effort_row_carries_the_suppression_note() {
-    let suppressed = ExplainContext {
-        effort_suppressed: Some(SuppressedEffort {
-            level: ReasoningEffort::High,
-            source: ParamSource::Layer(1),
-        }),
-        ..ctx()
-    };
+    let suppressed = suppressing(reasoning(), ReasoningEffort::High, Profile);
     for field in ["temperature", "max_tokens", "reasoning_budget_tokens"] {
-        assert_eq!(suppression_note(field, suppressed), None, "{field}");
+        assert_eq!(suppression_note(field, &suppressed), None, "{field}");
     }
 }
 
@@ -667,7 +666,7 @@ fn only_the_effort_row_carries_the_suppression_note() {
 /// must gain no note at all — the overwhelming majority of rows.
 #[test]
 fn an_unsuppressed_effort_gains_no_note() {
-    let lines = explanation_lines(&reasoning_config(), &reasoning_sources(), ctx());
+    let lines = explanation_lines(&reasoning());
     assert_eq!(note_for(&lines, "reasoning_effort"), None, "{lines:#?}");
 }
 
@@ -676,29 +675,21 @@ fn an_unsuppressed_effort_gains_no_note() {
 /// the longest name, so this is the corner both constants were sized for.
 #[test]
 fn the_reasoning_rows_and_their_note_fit_the_table_width() {
-    let suppressed = ExplainContext {
-        effort_suppressed: Some(SuppressedEffort {
-            level: ReasoningEffort::Minimal,
-            // The rung with the longest label: "per-model defaults
-            // (auto-detected: reasoning tag)".
-            source: ParamSource::Layer(4),
-        }),
-        ..ctx()
+    let resolved = InferenceConfig {
+        reasoning_budget_tokens: Some(32768),
+        ..InferenceConfig::with_hardcoded_defaults()
     };
-    let lines = explanation_lines(
-        &InferenceConfig {
-            reasoning_effort: None,
-            reasoning_budget_tokens: Some(32768),
-            ..InferenceConfig::with_hardcoded_defaults()
-        },
-        &FieldSources {
-            reasoning_effort: ParamSource::SuppressedByTemplate,
-            reasoning_budget_tokens: ParamSource::Layer(4),
-            ..auto_detected_sources()
-        },
-        suppressed,
-    );
+    // The rung with the longest label: "per-model defaults (auto-detected:
+    // reasoning tag)".
+    let longest = Some(ModelAutoDetected);
+    let budgeted = sourced(explained(resolved), "reasoningBudgetTokens", Layer, longest);
+    let lines = explanation_lines(&suppressing(
+        budgeted,
+        ReasoningEffort::Minimal,
+        ModelAutoDetected,
+    ));
 
+    assert_eq!(lines.len(), 18, "seventeen rows and the note: {lines:#?}");
     for line in &lines {
         assert!(
             line.chars().count() + 2 <= SEP_WIDTH,

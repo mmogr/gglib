@@ -14,7 +14,6 @@ mod tray;
 use std::sync::Arc;
 
 use app::AppState;
-use app::events::{emit_or_log, names};
 use daemon::Daemon;
 use dotenvy::dotenv;
 use tauri::Manager;
@@ -63,10 +62,6 @@ fn main() {
             let app_state = AppState::new(Arc::new(daemon));
             app.manage(app_state);
             info!(?ownership, "daemon connection established");
-
-            // Downloads run on the daemon and need nothing provisioned in
-            // this process, so the subsystem is ready by construction.
-            emit_or_log(app.handle(), names::DOWNLOAD_SYSTEM_READY, true);
 
             // Continue with rest of setup
             setup_app(app);
@@ -137,9 +132,6 @@ fn main() {
             // OS integration: menu sync
             commands::util::set_selected_model,
             commands::util::sync_menu_state,
-            // OS integration: llama.cpp binary management
-            commands::llama::check_llama_status,
-            commands::llama::install_llama,
             // Frontend logging: bridge to Rust tracing
             commands::app_logs::log_from_frontend,
         ])

@@ -26,7 +26,6 @@
 //! };
 //! ```
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{Context, anyhow};
@@ -34,6 +33,7 @@ use async_trait::async_trait;
 use gglib_core::ports::ToolExecutorPort;
 use gglib_core::{ToolCall, ToolDefinition, ToolResult};
 
+use crate::builtin::parse_args;
 use crate::service::McpService;
 
 // =============================================================================
@@ -127,18 +127,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             };
 
         // ---- Convert arguments Value → HashMap<String, Value> ---------------
-        let arguments: HashMap<String, serde_json::Value> = match call.arguments.clone() {
-            serde_json::Value::Object(map) => map.into_iter().collect(),
-            // Zero-argument tools: LLMs often emit `null` instead of `{}`.
-            serde_json::Value::Null => HashMap::new(),
-            other => {
-                return Err(anyhow!(
-                    "tool '{}' arguments must be a JSON object; got {}",
-                    call.name,
-                    other
-                ));
-            }
-        };
+        let arguments = parse_args(call)?;
 
         // ---- Execute --------------------------------------------------------
         let result = self

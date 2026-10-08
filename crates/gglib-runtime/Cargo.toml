@@ -6,17 +6,11 @@ description = "Process runtime and OS-level concerns for gglib"
 license.workspace = true
 publish = false
 
-[features]
-default = []
-# Feature flags still gate code, but dependencies are always available to avoid missing crates on CI
-prebuilt = []
-cli = ["prebuilt"]
-
 [dependencies]
-gglib-agent = { path = "../gglib-agent" }
-gglib-core = { path = "../gglib-core" }
-gglib-mcp = { path = "../gglib-mcp" }
-gglib-proxy = { path = "../gglib-proxy" }
+gglib-agent = { workspace = true }
+gglib-core = { workspace = true }
+gglib-mcp = { workspace = true }
+gglib-proxy = { workspace = true }
 
 # Runtime dependencies
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
@@ -26,7 +20,7 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 
 # HTTP client for health checks and downloads
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["json", "stream", "rustls", "system-proxy"] }
 
 # Serialization
 serde = { workspace = true }
@@ -36,8 +30,8 @@ chrono = { workspace = true }
 # Async utilities
 futures-core = { workspace = true }
 futures-util = { workspace = true }
-async-stream = "0.3"
-tokio-util = "0.7"
+async-stream = { workspace = true }
+tokio-util = { workspace = true }
 
 # System info
 num_cpus = "1.16"
@@ -55,10 +49,11 @@ tar = "0.4"
 nix = { version = "0.30", features = ["signal", "process"] }
 
 [dev-dependencies]
-tokio-test = { workspace = true }
+# The virtual clock the timing tests pause and advance.
+tokio = { workspace = true, features = ["test-util"] }
 tempfile = { workspace = true }
 # Tests that write pidfiles do it in a data root of this binary's own (#955).
-gglib-core = { path = "../gglib-core", features = ["test-utils"] }
+gglib-core = { workspace = true, features = ["test-utils"] }
 
 [lints]
 workspace = true

@@ -23,8 +23,9 @@ mod serve_far;
 use gglib_app_services::launch_options::{ProxyGlobals, plan_pinned_launch};
 use gglib_app_services::types::StartServerRequest;
 use gglib_core::domain::ModelAction;
+use gglib_core::ports::PinnedSpec;
 use gglib_core::server_config::parse_ctx_size_flag;
-use gglib_runtime::llama::{CliPrompt, ensure_llama_initialized};
+use gglib_runtime::proxy::ProxyConfig;
 use serve_far::serve_far;
 
 use super::shared::{log_inference_info, log_mlock_info};
@@ -90,7 +91,7 @@ async fn serve_here(
     verbose: bool,
 ) -> Result<()> {
     // Ensure llama.cpp is installed before the daemon needs it.
-    ensure_llama_initialized(&CliPrompt::new()).await?;
+    crate::handlers::config::llama_ensure::ensure_installed(false).await?;
 
     let settings = ctx.app.settings().get().await?;
 
@@ -134,7 +135,7 @@ async fn serve_here(
         ProxyGlobals {
             host: Some(options.host.clone()),
             default_ctx: None,
-            proxy_port: Some(options.port),
+            proxy_port: options.port,
             // The daemon owns llama-server port allocation; a per-run value
             // has nothing to attach to. `config settings set --llama-base-port`.
             llama_base_port: None,
@@ -180,42 +181,59 @@ async fn serve_here(
     if verbose {
         tracing::debug!(
             model = %model.name,
-            proxy_port = options.port,
+            proxy_port = ?options.port,
             "starting pinned proxy on the daemon"
         );
     }
 
-    let proxy_config = plan.unified.to_proxy_config();
+    let body = start_body(
+        plan.unified.to_proxy_config(),
+        plan.pinned,
+        options.port,
+        &cache,
+        // The profile is carried by name: the proxy re-reads its list per
+        // request, so an edit takes effect without restarting this endpoint.
+        selection.profile.as_ref().map(|p| p.name.clone()),
+    );
 
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
-    let status = handle
-        .start_proxy(&StartProxyBody {
-            host: Some(proxy_config.host),
-            port: Some(proxy_config.port),
-            default_context: proxy_config.default_context,
-            cache: Some(cache.cache),
-            // `slot_dir` comes from the cascade rather than the raw flag: it
-            // has already had the `cache_enabled` master switch applied and
-            // the default directory filled in.
-            slot_dir: proxy_config.slot_dir,
-            pinned: Some(plan.pinned),
-            cache_disk_gb: cache.cache_disk_gb,
-            // Sampling rides the proxy-wide override, not the pinned model's
-            // launch options: those write to `ServerConfig::inference_config`,
-            // which is documented as read by nobody, so a sampling flag sent
-            // that way would be resolved, printed, and discarded.
-            inference_override: proxy_config.inference_override.clone(),
-            // The profile is carried by name: the proxy re-reads its list per
-            // request, so an edit takes effect without restarting this endpoint.
-            default_profile: selection.profile.as_ref().map(|p| p.name.clone()),
-            api_key: proxy_config.api_key,
-            allowed_hosts: proxy_config.allowed_hosts,
-        })
-        .await?;
-
-    let proxy_port = status.port.unwrap_or(options.port);
+    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let proxy_port = super::proxy::start_on(&handle, &body, &settings).await?;
     super::proxy::attach_dashboard(ctx, proxy_port, access.api_key).await
+}
+
+/// What `gglib serve` asks the daemon to start: the proxy as `planned`,
+/// pinned to `pinned`.
+///
+/// `port` is the `--port` flag as typed, and never `planned.port`. The plan
+/// resolves an absent flag to the built-in default, which the daemon would
+/// read as a port somebody chose; no port leaves it to the daemon's own
+/// fallback, the stored `proxy_port`, as the GUI's pinned start does.
+fn start_body(
+    planned: ProxyConfig,
+    pinned: PinnedSpec,
+    port: Option<u16>,
+    cache: &CacheArgs,
+    default_profile: Option<String>,
+) -> StartProxyBody {
+    StartProxyBody {
+        host: Some(planned.host),
+        port,
+        default_context: planned.default_context,
+        cache: Some(cache.cache),
+        // `slot_dir` comes from the cascade rather than the raw flag: it has
+        // already had the `cache_enabled` master switch applied and the
+        // default directory filled in.
+        slot_dir: planned.slot_dir,
+        pinned: Some(pinned),
+        cache_disk_gb: cache.cache_disk_gb,
+        // Sampling rides the proxy-wide override. The pinned model's launch
+        // options carry none: gglib passes llama-server no sampler flag
+        // (ADR 0003/0004).
+        inference_override: planned.inference_override,
+        default_profile,
+        api_key: planned.api_key,
+        allowed_hosts: planned.allowed_hosts,
+    }
 }
 
 #[cfg(test)]

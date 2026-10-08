@@ -18,9 +18,9 @@ This crate is in the **Infrastructure Layer** — it orchestrates downloads usin
 ```text
 gglib-core (types)          gglib-download            External
 ┌──────────────────┐        ┌──────────────────┐        ┌──────────────────┐
-│  DownloadTask    │◄───────│  DownloadManager │───────►│   HuggingFace    │
-│  DownloadStatus  │        │  DownloadQueue   │        │       Hub        │
-│  ProgressInfo    │        │  FileResolver    │        └──────────────────┘
+│  QueueSnapshot   │◄───────│  DownloadManager │───────►│   HuggingFace    │
+│  DownloadRow     │        │  DownloadQueue   │        │       Hub        │
+│  DownloadEvent   │        │  FileResolver    │        └──────────────────┘
 └──────────────────┘        └───────┬──────────┘                 
                                     │                            
                             ┌───────▼──────────┐        ┌──────────────────┐
@@ -38,15 +38,15 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │                             gglib-download                                          │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                     │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐        │
-│  │  manager/   │ ──► │   queue/    │ ──► │  executor/  │ ──► │ cli_emitter │        │
-│  │  Public API │     │  Task queue │     │  Download   │     │  Terminal   │        │
-│  │  & facade   │     │  & state    │     │  workers    │     │  rendering  │        │
-│  └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘        │
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                            │
+│  │  manager/   │ ──► │   queue/    │ ──► │  executor/  │                            │
+│  │  Public API │     │  Task queue │     │  Download   │                            │
+│  │  & facade   │     │  & state    │     │  workers    │                            │
+│  └─────────────┘     └─────────────┘     └─────────────┘                            │
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐                                                │
 │  │  resolver/  │     │  cli_exec/  │                                                │
-│  │ File URL &  │     │ OPTIONAL    │                                                │
+│  │ Files and   │     │ OPTIONAL    │                                                │
 │  │ shard logic │     │ hf_xet accel│                                                │
 │  └─────────────┘     └─────────────┘                                                │
 │                                                                                     │
@@ -63,32 +63,64 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 
 **Module Descriptions:**
 - **`quant_selector.rs`** — Quantization selection logic for model downloads
-- **`queue/`** — Download task queue with priority and state management
-- **`executor/`** — Async download workers with retry logic
-- **`cli_emitter.rs`** — Terminal progress bars for CLI contexts
-- **`resolver/`** — File URL resolution and shard detection
+- **`queue/`** — The queue's state: what waits, in what order, and how the
+  latest downloads ended
+- **`resolver/`** — Which files a quantization is, and whether its weights
+  are sharded
 - **`executor/`** — The download backends: `native.rs` (default, `reqwest`) and
   the dispatch that picks between it and the optional accelerator
-- **`cli_exec/`** — The optional `hf_xet` Python subprocess accelerator
+- **`cli_exec/`** — The optional `hf_xet` Python subprocess accelerator, and
+  what `gglib model` runs off the queue: the quantization listing, the update
+  check and the upgrade's download
 - **`manager/`** — High-level download manager facade
+- **`solo.rs`** — One download fetched without the queue (`model upgrade`),
+  as the row the queue would show for it
 
 ## Features
 
-- **Queued Downloads** — Multiple concurrent downloads with priority ordering
-- **Progress Tracking** — Real-time progress events for UI updates, including
-  non-terminal `Finalizing` and `Registering` lifecycle transitions emitted
-  between the last byte hitting disk and the model row being written.
-- **Speed and ETA** — Computed once, by the manager's progress bridge, using
-  `gglib_core::download::RateEstimator`, and shipped on the event for every
-  renderer to display verbatim. One estimator per *shard group*, so the
-  reported speed is continuous from the first shard to the last. Renderers must
+- **Queued Downloads** — One download runs at a time and the rest wait in the
+  order they were queued. A waiting one can be moved or taken off. There is
+  one way to queue (`queue_smart`), and it starts the runner, so a download
+  queued by a repair is fetched like one a user asked for.
+- **One Row per Download** — The queue is served as one `QueueSnapshot`, on
+  the REST route and the event stream alike: the running download, the waiting
+  ones, and how the latest ended. A download is one row however many files it
+  has, with its bytes over all of them, its phase (`Finalizing` and
+  `Registering` between the last byte hitting disk and the model row being
+  written), and its text ready to print. A snapshot is sent when the queue
+  changes and four times a second while a file is fetched, each with the next
+  `revision`.
+- **Speed and ETA** — Computed once, by the download's meter, using
+  `gglib_core::download::RateEstimator`, and carried on the row for every
+  renderer to display verbatim. The speed is taken from the bytes received
+  from the network and the time remaining from the bytes on disk (`meter.rs`):
+  the accelerator writes to disk in large steps while the network runs flat,
+  and a resumed or already-present file is bytes on disk that nobody
+  received. Those took no time to arrive, so the time remaining counts them
+  as done and leaves them out of its rate. One meter per *download*
+  (`manager/meter.rs`), so the reported speed is continuous from its first
+  file to its last. Renderers must
   not derive a rate from successive byte counts; `indicatif`'s built-in
   `{bytes_per_sec}` and `{eta}` are deliberately absent from every template
   here, because using them made the CLI and the GUI report different numbers
   for the same transfer. Both are `Option` on the wire and omitted when
   unknown — an absent rate is not a zero rate.
-- **Automatic Model Registration** — Downloads are automatically registered in the database with parsed GGUF metadata
-- **Resume Support** — Partial download resumption on failure
+- **One Row Off the Queue Too** — `gglib model upgrade` fetches its files
+  without the queue (`solo.rs`), and is one row all the same. The row is put
+  together where the queue's running row is (`queue::running_row`), from
+  files placed by the function that places a queued group's and a meter of
+  the kind a queued download has, so its bytes carry on from one file to
+  the next. The row is handed to the caller's `RowCallback` four times a
+  second while a file is fetched and as each file lands. This crate draws
+  nothing on a terminal and does not depend on `indicatif`.
+- **Automatic Model Registration** — Downloads are automatically registered in the database with parsed GGUF metadata.
+  A weights file the GGUF reader refuses is registered all the same, without that
+  metadata, and the download's completion message names the file and gives the
+  reader's reason
+- **Resume Support** — A native transfer cut off part-way leaves its `.part`
+  file, and the next download of that file asks only for the bytes that are
+  missing. A failed download is not retried: it ends as failed, and is
+  fetched again when it is queued again.
 - **Shard Handling** — Automatic detection and download of sharded models
 - **Projectors** — A download from a repository that has projectors fetches
   one with the model, as one more file of its group after the weights: the
@@ -103,40 +135,45 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
   renamed into place only once it checks out. Needs nothing installed.
 - **Optional Acceleration** — `hf_xet` is used for multi-gigabyte files when its
   environment is already provisioned; it is never provisioned implicitly, and
-  its absence or failure falls back to the native path. When the `hf-xet`
-  transport bypasses Python `tqdm`, a stat-based fallback poller
-  (`cli_exec/exec/xet_poller.rs`) emits synthetic progress events so the bar
-  keeps moving instead of freezing at `0 B / 0 B`.
-- **Bounded Drain on Cancel** — `cancel_all()` signals cancel tokens and
+  its absence or failure falls back to the native path. Either way each file
+  has one count (`executor/progress.rs`): bytes on disk for the bar, and bytes
+  off the network apart from them.
+- **The Models Directory, Asked as a Download Starts** — A download goes
+  under the models directory `gglib_core::paths::resolve_models_dir` answers
+  as its first file starts (`manager/paths.rs`), and every file of it goes
+  there. Unless its config names a directory, the manager keeps none from
+  when it was built, so a daemon's next download goes where the directory
+  resolves then: one stored while the daemon runs, unless the daemon's own
+  environment names one.
+- **Whole-Download Endings** — A download ends as a whole
+  (`manager/ending.rs`). A file that fails, a cancel or a removal takes every
+  file of the download off the queue, and the download leaves one outcome:
+  completed, failed or cancelled. A cancel wins over a file that lands all
+  the same: the model is not registered.
+- **Bounded Drain on Cancel** — `cancel_all()` ends each waiting download as
+  cancelled, tells the transfer in flight to stop, and
   then waits up to 5 s for in-flight jobs to finalize before returning,
   so callers (CLI, Tauri, Axum) don't exit while in-flight transfers (or an
   accelerator subprocess) are still cleaning up.
-- **Retry Logic** — Automatic retry with exponential backoff
 
 ## Usage
 
 ```rust,ignore
 use std::sync::Arc;
 use gglib_download::{build_download_manager, DownloadManagerDeps, DownloadManagerPort};
-use gglib_core::download::Quantization;
-use gglib_core::ports::DownloadRequest;
 
 // Build the manager with dependencies
 let manager: Arc<dyn DownloadManagerPort> = Arc::new(build_download_manager(deps));
 
-// Queue a download with explicit quantization
-let request = DownloadRequest::new("TheBloke/Llama-2-7B-GGUF", Quantization::Q4KM);
-let id = manager.queue_download(request).await?;
-
-// Or use queue_smart for automatic quantization selection:
-// - Single quant available → auto-picks it
-// - Multiple quants → uses default preference (Q5_K_M, Q4_K_M, etc.)
+// Queue a download. It answers the download's ID, and starts the runner.
 // - Explicit quant → validates it exists
+// - No quant, single one available → auto-picks it
+// - No quant, several → uses default preference (Q5_K_M, Q4_K_M, etc.)
 //
 // Note: Unsloth Dynamic ("UD-") quants (e.g. "UD-Q6_K") are always distinct,
 // separately selectable entries from their plain counterparts ("Q6_K") -- they
 // are never picked by the default preference list, so request them explicitly.
-let (position, shard_count) = Arc::clone(&manager)
+let id = Arc::clone(&manager)
     .queue_smart("user/model".to_string(), Some("Q8_0".to_string()))
     .await?;
 

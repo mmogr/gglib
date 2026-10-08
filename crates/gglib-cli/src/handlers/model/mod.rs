@@ -5,6 +5,7 @@ pub(crate) mod download;
 pub(crate) mod explain;
 pub(crate) mod inspect;
 pub(crate) mod list;
+mod recorded_servers;
 pub(crate) mod remove;
 pub(crate) mod resolver;
 pub(crate) mod retag;
@@ -22,6 +23,13 @@ pub(crate) mod update;
 mod update_projector;
 pub(crate) mod verification;
 
+#[cfg(test)]
+mod test_library;
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;
+
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -30,34 +38,63 @@ use gglib_app_services::{ModelDeps, ModelOps};
 use crate::bootstrap::CliContext;
 use crate::model_commands::ModelCommand;
 use crate::target::Target;
+use recorded_servers::RecordedServers;
 
 /// `ModelOps` for a one-shot CLI command.
 ///
-/// Three handlers built this identically, each with a comment pointing at the
-/// last one, so the reasons live here once:
+/// A listing, an explanation, an add, an edit, a retag and a removal made in
+/// a terminal go through it, so each runs the operation the GUI's runs, as a
+/// capability change and an upgrade do.
+/// The reasons for what it is built with live here once:
 ///
-/// - `NoopModelRuntime` rather than `ctx.runner`: a one-shot command has no
-///   shared `ProcessManager` to consult, and a runner scoped to this single
-///   invocation could only ever answer "nothing is running".
-/// - `NoopEmitter`: library events exist to tell *other* clients what changed.
-///   A CLI process that is about to exit has nobody to tell, and no broadcast
-///   channel to tell them on.
+/// - [`RecordedServers`] rather than a runner of this process's own: a
+///   one-shot command starts no llama-server, so a runner scoped to this
+///   single invocation could only ever answer "nothing is running". What is
+///   being served is read from the pid files kept under this data root, so
+///   `model remove` and `model upgrade` refuse a model that is being served
+///   and `model inspect` says that it is.
+/// - The context's [`LibraryChanges`] rather than an emitter of this
+///   process's own: library events exist to tell *other* clients what
+///   changed, and a command that is about to exit has none. The daemon that
+///   serves this library may, so the events `ModelOps` emits are kept, and
+///   [`dispatch`] has that daemon told them.
+///
+/// [`LibraryChanges`]: crate::daemon_client::LibraryChanges
 pub(crate) fn one_shot_model_ops(ctx: &CliContext) -> ModelOps {
     ModelOps::new(ModelDeps {
         core: ctx.app.clone(),
-        runtime: Arc::new(gglib_core::ports::NoopModelRuntime),
+        runtime: Arc::new(RecordedServers),
         gguf_parser: ctx.gguf_parser.clone(),
-        emitter: Arc::new(gglib_core::ports::NoopEmitter::new()),
+        emitter: ctx.library_changes.clone(),
     })
 }
 
-/// Dispatch a `model` subcommand to its handler.
+/// Dispatch a `model` subcommand to its handler, and then tell the daemon
+/// that serves this library what the command changed in it.
+///
+/// Told here, once, for every command that changes the library through
+/// [`one_shot_model_ops`]; no handler tells anybody for itself. Told
+/// whatever the command answered, because a change that was stored is one
+/// an open app does not show yet.
+pub(crate) async fn dispatch(
+    ctx: &CliContext,
+    command: ModelCommand,
+    target: Target,
+) -> Result<()> {
+    let done = dispatch_with(ctx, &one_shot_model_ops(ctx), command, target).await;
+    ctx.library_changes.tell_daemon(ctx).await;
+    done
+}
+
+/// [`dispatch`], with the `ModelOps` a command reads and writes the library
+/// through, so a test can watch what it does with them.
 #[allow(
     clippy::too_many_lines,
     reason = "grandfathered at lint inheritance, #1157"
 )]
-pub(crate) async fn dispatch(
+async fn dispatch_with(
     ctx: &CliContext,
+    ops: &ModelOps,
     command: ModelCommand,
     target: Target,
 ) -> Result<()> {
@@ -66,13 +103,13 @@ pub(crate) async fn dispatch(
             file_path,
             reimport,
         } => {
-            add::execute(ctx, &file_path, reimport).await?;
+            add::execute(ctx, ops, &file_path, reimport).await?;
         }
         ModelCommand::List(args) => {
-            list::execute(target, ctx, args).await?;
+            list::execute(target, ctx, ops, args).await?;
         }
         ModelCommand::Remove { identifier, force } => {
-            remove::execute(ctx, &identifier, force).await?;
+            remove::execute(ctx, ops, &identifier, force).await?;
         }
         ModelCommand::Update {
             identifier,
@@ -140,14 +177,14 @@ pub(crate) async fn dispatch(
                 force,
                 projector,
             };
-            update::execute(ctx, args).await?;
+            update::execute(ctx, ops, args).await?;
         }
         ModelCommand::Retag {
             identifier,
             all,
             full,
         } => {
-            retag::execute(ctx, identifier, all, full).await?;
+            retag::execute(ctx, ops, identifier, all, full).await?;
         }
         ModelCommand::Verify {
             identifier,
@@ -196,20 +233,15 @@ pub(crate) async fn dispatch(
         ModelCommand::Upgrade { identifier, force } => {
             download::update_model(ctx, &identifier, force).await?;
         }
-        ModelCommand::Search {
-            query,
-            limit,
-            sort,
-            gguf_only,
-        } => {
-            download::search(query, limit, sort, gguf_only).await?;
+        ModelCommand::Search { query, limit, sort } => {
+            download::search(ctx.hf_client.as_ref(), query, limit, sort.into()).await?;
         }
         ModelCommand::Browse {
             category,
             limit,
             size,
         } => {
-            download::browse(category, limit, size).await?;
+            download::browse(ctx.hf_client.as_ref(), category, limit, size).await?;
         }
         ModelCommand::Capabilities {
             identifier,
@@ -229,7 +261,7 @@ pub(crate) async fn dispatch(
             identifier,
             profile,
         } => {
-            explain::execute(ctx, &identifier, profile.as_deref()).await?;
+            explain::execute(ctx, ops, &identifier, profile.as_deref()).await?;
         }
     }
     Ok(())

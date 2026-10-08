@@ -26,6 +26,7 @@ import type {
   TuneConfig,
 } from '../../../types/benchmark';
 import { applyTuneRun, startTuneRun } from '../../../services/clients/benchmark';
+import { isAbortError } from '../../../utils/errors';
 import { TuneConfigForm } from './TuneConfigForm';
 import { TuneLiveProgress, TuneTaskLogEntry, TunePrunedEntry } from './TuneLiveProgress';
 import { TuneLeaderboard } from './TuneLeaderboard';
@@ -232,19 +233,20 @@ export const TuneTab: FC<TuneTabProps> = ({ models, onRunComplete }) => {
     startTuneRun(config, handleEvent, abort.signal)
       .then(() => {
         setRunState(prev => {
+          // A stream that closes with no terminal event must not hang the UI.
+          if (prev.status === 'running') {
+            return { ...prev, status: 'failed', error: 'The tune stream ended without completing.' };
+          }
           if (applyBest && prev.status !== 'failed') {
             const runId = completedRunIdRef.current;
-            if (runId != null) {
-              void handleGatedApply(runId);
-            }
+            if (runId != null) void handleGatedApply(runId);
           }
           return prev;
         });
       })
       .catch(err => {
-        if ((err as Error).name !== 'AbortError') {
-          setRunState(prev => ({ ...prev, status: 'failed', error: (err as Error).message }));
-        }
+        if (isAbortError(err)) return;
+        setRunState(prev => ({ ...prev, status: 'failed', error: (err as Error).message }));
       });
   }, [handleEvent, handleGatedApply]);
 
@@ -302,5 +304,3 @@ export const TuneTab: FC<TuneTabProps> = ({ models, onRunComplete }) => {
     </div>
   );
 };
-
-export default TuneTab;

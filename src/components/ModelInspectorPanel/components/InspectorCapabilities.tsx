@@ -2,6 +2,7 @@ import { FC, useState } from 'react';
 import { Checkbox } from '../../ui/Checkbox';
 import { CAPABILITY_FLAGS, type CapabilityFlagName } from '../../../types';
 import { setModelCapabilities } from '../../../services/transport/api/models/local';
+import { formatError } from '../../../utils/errors';
 
 interface InspectorCapabilitiesProps {
   modelId: number;
@@ -51,7 +52,7 @@ export const InspectorCapabilities: FC<InspectorCapabilitiesProps> = ({
       await setModelCapabilities(modelId, { [flag]: value });
       onChanged();
     } catch (err) {
-      onError(err instanceof Error ? err.message : String(err));
+      onError(formatError(err));
     } finally {
       setSaving(false);
     }

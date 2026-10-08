@@ -116,9 +116,9 @@ export type { SamplingLayerName };
  *
  * Membership here is a claim that `tests/ts/contracts/settingsBounds.test.ts`
  * can check: every key needs a `{ default, min, max, step }` entry that the
- * test reads Rust's `validate_inference_config` and `with_hardcoded_defaults`
- * to verify. `reasoningBudgetTokens` qualifies — Rust bounds it at `>= -1` and
- * floors it at unset — and joins for exactly that reason.
+ * test holds to what Rust's `validate_inference_config` accepts and
+ * `with_hardcoded_defaults` sets. `reasoningBudgetTokens` qualifies — Rust
+ * gives it a floor and no default — and joins for exactly that reason.
  *
  * `reasoningEffort` does not, and cannot: it is a string enum with no bounds
  * and no numeric default, so an entry for it would be a fabricated row in a
@@ -296,9 +296,9 @@ export interface ServeConfig extends SparseInferenceConfig {
   port?: number;
   jinja?: boolean;
   /** Number of MTP draft tokens. undefined = auto-detect from tags; 0 = disable. */
-  specDraftNMax?: number;
+  mtpDraftNMax?: number;
   /** Minimum acceptance probability for MTP draft tokens (default 0.75). */
-  specDraftPMin?: number;
+  mtpDraftPMin?: number;
 }
 
 /**
@@ -376,7 +376,8 @@ export type UpdateSettingsRequest = Omit<
 // ============================================================================
 
 /**
- * What the host has to run a model on — `GET /api/system/memory`.
+ * What the host has to run a model on — `GET /api/config/system/memory`, and
+ * the `systemMemory` of the setup status, which is the same Rust type.
  *
  * `gpuMemoryBytes` is optional and *not* nullable, which is the correction:
  * it is the one field carrying `skip_serializing_if`, so a machine with no
@@ -384,8 +385,7 @@ export type UpdateSettingsRequest = Omit<
  * admitted both, so a reader had two absent-shapes to handle and only one
  * could ever arrive.
  */
-import type { SystemMemoryInfoDto as SystemMemoryInfo } from './generated/SystemMemoryInfoDto';
-export type { SystemMemoryInfo };
+export type { SystemMemoryInfo } from './generated/SystemMemoryInfo';
 
 /**
  * Fit status for a model quantization based on available memory.
@@ -456,23 +456,6 @@ export function getHealthDisplay(health?: ServerHealthStatus): { tone: HealthTon
 }
 
 // ============================================================================
-// Download Types (re-exported from transport types for convenience)
-// ============================================================================
-
-export type {
-  DownloadStatus,
-  ShardInfo,
-  DownloadQueueItem,
-  DownloadQueueStatus,
-  DownloadCompletionInfo,
-} from '../services/transport/types/downloads';
-
-export type {
-  DownloadSummary,
-  DownloadEvent,
-} from '../services/transport/types/events';
-
-// ============================================================================
 // HuggingFace Browser Types
 // ============================================================================
 
@@ -525,11 +508,6 @@ export type { ToolSupportResponse } from './generated/ToolSupportResponse';
 // ============================================================================
 // Model Filter Options Types
 // ============================================================================
-
-/**
- * A range of numeric values with min and max.
- */
-export type { RangeValues } from './generated/RangeValues';
 
 /**
  * Filter options for the model library UI.

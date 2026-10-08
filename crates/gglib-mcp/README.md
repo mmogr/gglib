@@ -129,8 +129,10 @@ Manages running MCP server processes:
 ### `McpService`
 
 High-level facade combining persistence and lifecycle:
-- CRUD operations for server configurations
+- CRUD operations for server configurations; an add or a rename to a name another server has is refused
+- One rule for the kind of server that is run: stdio. An SSE server is refused on add, on update and on every start, a stored one is listed as unsupported and left alone at start-up, and it can still be removed
 - Server start/stop with event emission
+- A test of a stored server (`test_server`): resolve its executable, start a throwaway instance, list its tools, stop it
 - Tool listing and invocation across all running servers
 - Executable path resolution with caching and diagnostics
 
@@ -148,8 +150,8 @@ See [`resolver/mod.rs`](src/resolver/mod.rs) for detailed documentation and usag
 ### `path` Module
 
 Path validation and environment utilities:
-- **Validation functions**: Check executable paths, working directories
-- **PATH building**: Construct effective PATH from user paths and executable directory
+- **Validation functions**: Check executable paths, working directories. The executable check is the resolver's
+- **PATH building**: Construct effective PATH from user paths and executable directory. On macOS the resolver's default directories are added, and `/usr/sbin` and `/sbin` after them
 - **De-duplication**: Ensures no duplicate entries in PATH
 
 ## Usage
@@ -192,4 +194,4 @@ async fn example(repo: impl McpServerRepository + 'static) {
 
 ## Testing
 
-The crate uses trait-based testing. See `gglib-db` for `SqliteMcpRepository` unit tests (8 tests covering all CRUD operations).
+The crate uses trait-based testing: `McpService` is tested over a repository held in memory (`service_tests.rs`). The order the resolver tries candidates in, and the attempts it records, are pinned case by case over a mock environment and filesystem (`resolver/resolve_order_tests.rs`). See `gglib-db` for `SqliteMcpRepository`'s own tests, which run on the schema production creates.

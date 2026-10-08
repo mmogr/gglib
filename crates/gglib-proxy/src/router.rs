@@ -29,9 +29,8 @@ use axum::{
     Router,
     routing::{get, post, put},
 };
+use gglib_core::ProxyAccessConfig;
 use gglib_core::access::{ApiKeySource, BearerPolicy};
-use gglib_core::{CorsConfig, ProxyAccessConfig};
-use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
 use crate::mcp::handlers::{delete_mcp, get_mcp, post_mcp};
 use crate::server::{
@@ -143,42 +142,24 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
         // against; outside the marker, so a refused request is not counted.
         .layer(axum::middleware::from_fn_with_state(
             Arc::new(access.cors.clone()),
-            crate::access::origin_guard,
+            crate::access::origin_guard::<ProxyAccessConfig>,
         ))
         // Host allowlist: always on, and outside the router so it covers
         // `/health` and unmatched paths too. This is the DNS-rebinding guard;
         // see the `access` module for why CORS alone does not cover it.
         .layer(axum::middleware::from_fn_with_state(
             Arc::new(access.clone()),
-            crate::access::host_guard,
+            crate::access::host_guard::<ProxyAccessConfig>,
         ))
-        // LocalOnly CORS: mirrors the Axum web server's default security posture.
-        // Only localhost, 127.0.0.1, ::1, and tauri://localhost origins are accepted.
+        // CORS, built from `access.cors`, whichever policy that is: an origin
+        // reads an answer exactly when the policy allows it, which is the test
+        // the origin guard above asks too.
         //
         // Outermost deliberately: it answers OPTIONS preflight itself, and a
         // preflight that reached the guards above would be refused for carrying
         // credentials it is not allowed to carry yet.
-        .layer(build_cors_layer(&access.cors))
+        .layer(crate::access::build_cors_layer(&access.cors))
         .with_state(state)
-}
-
-/// Build CORS layer from configuration. It lets an origin read exactly when
-/// [`CorsConfig::allows_origin`] does, the test `origin_guard` asks too.
-fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
-    let origins = if matches!(config, CorsConfig::AllowAll) {
-        AllowOrigin::any()
-    } else {
-        let config = config.clone();
-        AllowOrigin::predicate(move |origin: &axum::http::HeaderValue, _req_headers| {
-            origin
-                .to_str()
-                .is_ok_and(|origin| config.allows_origin(origin))
-        })
-    };
-    CorsLayer::new()
-        .allow_origin(origins)
-        .allow_methods(Any)
-        .allow_headers(Any)
 }
 
 #[cfg(test)]

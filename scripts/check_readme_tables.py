@@ -6,9 +6,9 @@ markers. Nothing asked whether what it says is true, so a table could name a
 file that had been deleted, or omit one that had been added, and stay green.
 
 A first-cell code span names a file when it carries a code extension or a
-trailing slash. That is what keeps the two tables which are *not* file
-listings out of it: `src/commands/README.md` tabulates CLI command names and
-`src/types/README.md` tabulates type names, and neither carries an extension.
+trailing slash. That is what keeps a table which is *not* a file listing out
+of it: `src/types/README.md` tabulates type names, and none carries an
+extension.
 
 What this does NOT check, so that nobody reads more into a pass than is
 there:
@@ -59,11 +59,10 @@ ROW = re.compile(r"^\|\s*(?:\[`([^`]+)`\]\([^)]*\)|`([^`]+)`)\s*\|")
 def names_a_file(span: str) -> bool:
     """Whether a first-cell code span refers to a file or directory.
 
-    The extension is what decides, and it is what keeps the two tables that
-    are *not* file listings out of this check: `src/commands/README.md`
-    tabulates CLI command names (`model`, `chat`, `q`) against anchors in the
-    same document, and `src/types/README.md` tabulates TypeScript type names.
-    Neither carries an extension, so neither is mistaken for a missing file.
+    The extension is what decides, and it is what keeps a table that is *not*
+    a file listing out of this check: `src/types/README.md` tabulates
+    TypeScript type names. None carries an extension, so none is mistaken for
+    a missing file.
     """
     return span.endswith(CODE_SUFFIXES) or span.endswith("/")
 
@@ -156,11 +155,9 @@ HEADER = """\
 # tick. Recording one is a reviewable line in a diff, which is the same
 # bargain `scripts/rust-complexity-baseline.txt` strikes.
 #
-# Three are exemptions by design — `src/types`, `src/commands` and
-# `src/styles` tabulate type names, command names and migration phases rather
-# than files. The rest are stubs from `generate_submodule_readmes.sh`, which
-# emits TypeScript READMEs with no table at all; each is a directory nothing
-# compares, and shortening this list is the way to fix that.
+# One is an exemption by design: `src/types` tabulates type names rather than
+# files. The rest describe their directory with no file table; each is a
+# directory nothing compares, and shortening this list is the way to fix that.
 """
 
 
@@ -224,7 +221,7 @@ def main() -> int:
             print(f"  skip {readme} (no file rows)")
 
     # Liveness: a walk that compared nothing prints exactly what a clean run
-    # prints, which is the shape `check_file_complexity.sh` guards against for
+    # prints, which is the shape `check_file_size.sh` guards against for
     # the same reason.
     if checked == 0:
         print("❌ no README with file-naming rows was found — nothing was compared.")

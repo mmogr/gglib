@@ -14,16 +14,13 @@
 //!   one-way door — nothing brings the daemon back but physical access;
 //! * it says so rather than pretending when there is no daemon to stop.
 
-use std::sync::Arc;
-
-use gglib_core::ports::{ModelCatalogPort, ModelRuntimePort};
 use gglib_core::{CorsConfig, ProxyAccessConfig};
+use gglib_proxy::ServeConfig;
 use reqwest::{Client, StatusCode};
-use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 mod fixtures;
-use fixtures::common::{EmptyCatalog, MockSettingsRepo, NoopRuntime, make_mcp_service};
+use fixtures::spawn::{defaults, spawn};
 
 /// Spawn the real `gglib_proxy::serve`, optionally under a daemon.
 ///
@@ -33,40 +30,13 @@ async fn spawn_proxy(
     access: ProxyAccessConfig,
     daemon: Option<CancellationToken>,
 ) -> (String, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(NoopRuntime);
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(EmptyCatalog);
-
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            true,
-            runtime,
-            catalog,
-            make_mcp_service(),
-            cancel_clone,
-            daemon,
-            Arc::new(MockSettingsRepo),
-            None,  // inference_override
-            None,  // default_profile
-            false, // cache_enabled
-            None,  // slot_dir
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &access,
-        )
-        .await
-        .ok();
-    });
-
-    tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-    (format!("http://{addr}"), cancel)
+    let proxy = spawn(ServeConfig {
+        access,
+        daemon_cancel: daemon,
+        ..defaults().await
+    })
+    .await;
+    (proxy.base, proxy.cancel)
 }
 
 fn with_key(key: &str) -> ProxyAccessConfig {

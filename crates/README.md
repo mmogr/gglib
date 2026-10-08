@@ -1,6 +1,6 @@
 # gglib Crates
 
-This directory contains all the crates that make up gglib's modular architecture.
+This directory holds every crate of the workspace except the desktop app, which is `src-tauri`. The diagram below is the workspace's layer diagram: the root README and CONTRIBUTING link to it and draw none of their own. CONTRIBUTING's [Crate Boundaries](../CONTRIBUTING.md#crate-boundaries) holds the dependency rules and says which of them CI checks.
 
 ## Architecture Overview
 
@@ -66,20 +66,6 @@ and `gglib-proxy`. `gglib-build-info` and `gglib-sse` depend on no gglib crate.
 `src-tauri` is the desktop app and lives outside `crates/`;
 `gglib-integration-tests` holds cross-crate tests and has only dev-dependencies.
 
-## Dependency Flow
-
-```text
-Adapter layer          gglib-cli, gglib-axum, src-tauri, gglib-tauri
-    ↓
-Facade layer           gglib-app-services, gglib-bootstrap
-    ↓
-Infrastructure layer   gglib-db, gglib-gguf, gglib-hf, gglib-mcp,
-    ↓                  gglib-runtime, gglib-download, gglib-proxy
-Application layer      gglib-agent
-    ↓
-Core layer             gglib-core; utility crates gglib-build-info, gglib-sse
-```
-
 **Key Principle**: no crate depends on a layer above its own, and `gglib-core`
 depends on no other gglib crate. Infrastructure crates such as `gglib-db`
 implement its port traits, and `gglib-cli` and `gglib-axum` wire them together
@@ -87,11 +73,13 @@ through `gglib-bootstrap`.
 
 ## Crate Catalog
 
+Each row links the crate, whose own README says what it is responsible for and how it is laid out.
+
 ### Core Layer
 
 | Crate | Purpose | Lines of Code |
 |-------|---------|---------------|
-| **[gglib-core](gglib-core/)** | Domain types, port traits and application services. Depends on no other gglib crate and on no database, HTTP or UI crate; it does local file I/O. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loc.json) |
+| **[gglib-core](gglib-core/)** | Domain types, port traits, application services and the event types adapters are notified with. Depends on no other gglib crate and on no database, HTTP or UI crate; it does local file I/O, and holds the helpers other crates build child-process commands with. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loc.json) |
 
 ### Application Layer
 
@@ -103,13 +91,13 @@ through `gglib-bootstrap`.
 
 | Crate | Purpose | Lines of Code |
 |-------|---------|---------------|
-| **[gglib-db](gglib-db/)** | SQLite repositories implementing `gglib-core` port traits for data persistence. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-loc.json) |
-| **[gglib-gguf](gglib-gguf/)** | GGUF file format parser for extracting model metadata and capabilities. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-loc.json) |
-| **[gglib-hf](gglib-hf/)** | HuggingFace API client for model search and metadata retrieval. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-hf-loc.json) |
-| **[gglib-mcp](gglib-mcp/)** | Model Context Protocol SDK for managing MCP server lifecycle. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-loc.json) |
-| **[gglib-runtime](gglib-runtime/)** | llama.cpp installation, configuration, and process management. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-loc.json) |
-| **[gglib-download](gglib-download/)** | Multi-file download manager with queue, progress tracking, and resume capability. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-loc.json) |
-| **[gglib-proxy](gglib-proxy/)** | OpenAI-compatible proxy with automatic model routing and swapping. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loc.json) |
+| **[gglib-db](gglib-db/)** | SQLite repositories implementing `gglib-core` port traits for data persistence: `ModelRepository`, `McpServerRepository`, `ChatHistoryRepository` and `SettingsRepository` among them, each as a `Sqlite…` type. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-loc.json) |
+| **[gglib-gguf](gglib-gguf/)** | GGUF file format parser: a model's architecture, quantization, context size and capabilities, and whether a file is a model's weights or a projector. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-loc.json) |
+| **[gglib-hf](gglib-hf/)** | HuggingFace API client: model search, repository metadata, and the files and quantizations a repository holds. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-hf-loc.json) |
+| **[gglib-mcp](gglib-mcp/)** | Model Context Protocol server management: starting and stopping servers, the stdio JSON-RPC client, tool discovery and invocation, and the built-in tools. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-loc.json) |
+| **[gglib-runtime](gglib-runtime/)** | llama.cpp installation and updates, launch-argument building (context size resolution included), process spawning and monitoring, health checks and port allocation. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-loc.json) |
+| **[gglib-download](gglib-download/)** | Multi-file download manager with a queue, progress tracking, resume and cancel. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-loc.json) |
+| **[gglib-proxy](gglib-proxy/)** | OpenAI-compatible proxy (`/v1/chat/completions`, `/v1/embeddings`, `/v1/models`, streaming included) with automatic model routing and swapping, and the MCP gateway at `/mcp`. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loc.json) |
 
 ### Facade Layer
 
@@ -122,9 +110,9 @@ through `gglib-bootstrap`.
 
 | Crate | Purpose | Lines of Code |
 |-------|---------|---------------|
-| **[gglib-cli](gglib-cli/)** | Command-line interface for all gglib operations. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-loc.json) |
-| **[gglib-axum](gglib-axum/)** | REST API server built with Axum for web/GUI clients. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-loc.json) |
-| **[gglib-tauri](gglib-tauri/)** | Tauri event-emission helpers for the desktop app in `src-tauri`. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-loc.json) |
+| **[gglib-cli](gglib-cli/)** | Command-line interface for all gglib operations; [docs/cli.md](../docs/cli.md) is the command reference. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-loc.json) |
+| **[gglib-axum](gglib-axum/)** | The daemon's HTTP API, built with Axum for the web UI, the desktop app and the CLI. The router is built in [`src/routes.rs`](gglib-axum/src/routes.rs), which serves `/health` and nests the API under `/api`. The daemon paths the CLI calls are named in `gglib_core::contracts::http::daemon`, and `gglib-axum/tests/daemon_route_contract.rs` fails when the daemon stops serving one of them. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-loc.json) |
+| **[gglib-tauri](gglib-tauri/)** | Tauri event-emission helpers (`emit_or_log` and the event names) for the desktop app. The Tauri commands, tray and menus live in `src-tauri` itself. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-loc.json) |
 
 ### Utility Crates
 
@@ -132,133 +120,6 @@ through `gglib-bootstrap`.
 |-------|---------|---------------|
 | **[gglib-build-info](gglib-build-info/)** | Compile-time version and git metadata for CLI/GUI version strings. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-loc.json) |
 | **[gglib-sse](gglib-sse/)** | Generic Server-Sent Events broadcast utility shared by `gglib-axum` and `gglib-proxy`. Zero `gglib-*` dependencies. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-sse-loc.json) |
-
-## Crate Responsibilities
-
-### Core Layer: gglib-core
-
-**What it contains:**
-- Domain models (`Model`, `Conversation`, `McpServer`)
-- Port trait definitions (interfaces for infrastructure)
-- Application services (business logic orchestration)
-- Event types for cross-layer communication
-- Local file I/O: data directories, the `.env` overrides file, device keys
-- The helpers other crates build child-process commands with
-
-**What it DOES NOT contain:**
-- Database code
-- HTTP clients or servers
-- CLI, web or desktop UI frameworks
-
-**Why this matters:**
-- Keeps business logic pure and testable
-- Enables infrastructure to be swapped without affecting logic
-- Clear contracts via port traits
-
-### Application Layer: gglib-agent
-
-**What it contains:**
-- `AgentLoop` — concrete `AgentLoopPort` implementation driving the ReAct-lite LLM→tool→LLM cycle
-- Loop detection (FNV-1a batch-signature tracking, ported from TypeScript)
-- Text stagnation detection
-- Parallel tool execution with bounded concurrency and per-tool timeout
-- Streaming response collection (forwards `TextDelta` events in real-time)
-- Context budget pruning
-
-**What it DOES NOT contain:**
-- HTTP clients or any networking
-- MCP SDK internals
-- Database access
-- Any reference to specific adapter/infrastructure crates
-
-**Why this matters:**
-- The full agentic loop runs as pure Rust domain logic, fully unit-testable with mocks
-- Concrete `LlmCompletionPort` and `ToolExecutorPort` implementations are injected at composition root
-- Port-parity with the TypeScript frontend ensures consistent behaviour across transports
-
-### Infrastructure Layer
-
-#### gglib-db
-Implements port traits for data persistence:
-- `ModelRepository` → `SqliteModelRepository`
-- `McpServerRepository` → `SqliteMcpRepository`
-- `ChatHistoryRepository` → `SqliteChatHistoryRepository`
-- `SettingsRepository` → `SqliteSettingsRepository`
-
-#### gglib-runtime
-Manages llama.cpp lifecycle:
-- Installation and updates
-- Configuration and argument building
-- Context size resolution (explicit flag → per-model server defaults → settings default → fitted to this machine → built-in floor)
-- Process spawning and monitoring
-- Health checking
-- Port allocation
-
-#### gglib-download
-Handles model file downloads:
-- Multi-file concurrent downloads
-- Progress tracking and reporting
-- Pause/resume/cancel
-- Queue management
-- Retry logic with exponential backoff
-
-#### gglib-proxy
-OpenAI-compatible HTTP proxy:
-- `/v1/chat/completions` endpoint
-- Automatic model routing
-- Model swapping for load balancing
-- Streaming support
-
-#### gglib-gguf
-Parses GGUF files to extract:
-- Model architecture
-- Quantization method
-- Context size
-- Capabilities (tool calling, reasoning, etc.)
-- Whether the file is a model's weights or a projector
-
-#### gglib-hf
-Interacts with HuggingFace:
-- Search models by name/tags
-- Retrieve model metadata
-- List model files
-- Check file availability
-
-#### gglib-mcp
-Model Context Protocol integration:
-- Start/stop MCP servers
-- Manage stdio communication
-- Track server health
-- Tool discovery
-
-### Adapter Layer
-
-#### gglib-cli
-Command-line interface:
-- `gglib model add` - Add models
-- `gglib model list` - List models
-- `gglib serve` - Pinned single-model OpenAI endpoint
-- `gglib chat` - Interactive chat
-- `gglib config` - Configuration management
-
-#### gglib-axum
-The daemon's HTTP API. The router is built in
-[`src/routes.rs`](gglib-axum/src/routes.rs), which serves `/health` and nests
-the API under `/api`. The daemon paths the CLI calls are named in
-`gglib_core::contracts::http::daemon`, and
-`gglib-axum/tests/daemon_route_contract.rs` fails when the daemon stops serving
-one of them.
-
-#### gglib-app-services
-Backend facade shared by `gglib-axum`, `gglib-cli` and `src-tauri`:
-- Backend service orchestration
-- State management
-- Event handling
-- Business logic for UI operations
-
-#### gglib-tauri
-Event-emission helpers (`emit_or_log` and the event names) for the desktop
-app. The Tauri commands, tray and menus live in `src-tauri` itself.
 
 ## Development Guidelines
 
@@ -278,22 +139,10 @@ app. The Tauri commands, tray and menus live in `src-tauri` itself.
 
 ### Adding Dependencies
 
-- **Core crate**: No other gglib crate, and no database, HTTP or UI crate; `scripts/check_boundaries.sh` holds the names it rejects
-- **Infrastructure crates**: Can depend on external services/libraries
-- **Presentation crates**: Can depend on UI frameworks
+What a crate in each layer may depend on, and which of those rules `scripts/check_boundaries.sh` checks, is in CONTRIBUTING's [Crate Boundaries](../CONTRIBUTING.md#crate-boundaries).
 
 ## Further Reading
 
 - [Main README](../README.md) - Project overview and getting started
-- [Architecture Overview](../README.md#architecture) - Detailed architecture explanation
+- [CONTRIBUTING](../CONTRIBUTING.md) - Conventions, the dependency rules, and the [Badges Pipeline](../CONTRIBUTING.md#badges-pipeline) that writes the LOC badges above
 - Individual crate READMEs linked in table above
-
-## Badge Information
-
-All badges are generated via CI and stored in the `badges` branch. They reflect:
-- **LOC**: Lines of code
-- **Complexity**: Cyclomatic complexity
-- **Coverage**: Test coverage percentage
-- **Tests**: Test pass/fail status
-
-See [`.github/workflows/badges.yml`](../.github/workflows/badges.yml) for badge generation logic.

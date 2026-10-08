@@ -96,6 +96,7 @@ pub async fn dispatch(
             images,
             model,
             continue_id,
+            thinking,
             observation_tools,
             max_observation_steps,
             command,
@@ -126,10 +127,9 @@ pub async fn dispatch(
                     verbose, // global flag forwarded here
                     model,
                     continue_id,
+                    thinking: thinking.map(Into::into),
                     observation_tools,
                     max_observation_steps,
-                    // Filled from persisted settings in agent_chat::run.
-                    max_stagnation_steps: None,
                 };
                 handlers::inference::chat::execute(ctx, args).await?;
             }

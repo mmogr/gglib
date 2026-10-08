@@ -12,6 +12,8 @@
 //! and evictable from this moment on. Nothing about what is *on* the machine
 //! changes, which is the line the use side does not cross.
 
+use std::time::SystemTime;
+
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use axum::{Json, http::StatusCode};
@@ -73,6 +75,12 @@ pub(crate) async fn load_model(
     {
         Ok(admission) => {
             let target = Admission::into_target(admission);
+            // A load that started the server is a restart to the slot cache,
+            // as a chat request's admission is: the next chat request finds
+            // the model running and would never report it.
+            if target.just_started {
+                state.slot_cache.on_restart(SystemTime::now());
+            }
             (
                 StatusCode::OK,
                 Json(LoadResponse {

@@ -1,6 +1,8 @@
-//! Tests for [`super`] — metadata parsing and the update merge.
+//! Tests for [`super`] — metadata parsing, and the row the flags' request
+//! leaves.
 
 use super::*;
+use gglib_core::domain::DefaultsOrigin;
 use std::path::PathBuf;
 
 fn create_test_model() -> Model {
@@ -79,7 +81,7 @@ fn test_parse_metadata_removals() {
 /// Written as a full literal rather than a `Default` impl so that adding a
 /// field to `UpdateArgs` breaks here, and each test below says only what it
 /// actually wants.
-fn bare_args() -> UpdateArgs {
+pub(super) fn bare_args() -> UpdateArgs {
     UpdateArgs {
         identifier: "1".to_string(),
         name: None,
@@ -124,10 +126,13 @@ fn model_with_defaults(config: InferenceConfig) -> Model {
     }
 }
 
+/// `existing` after the request `args` make of it is written onto it: the
+/// row the preview shows and `ModelOps::update` stores.
 fn apply(existing: &Model, args: &UpdateArgs) -> Model {
-    let updates = parse_metadata_updates(&args.metadata).expect("metadata parses");
-    let removals = parse_metadata_removals(&args.remove_metadata).expect("removals parse");
-    create_updated_model(existing, args, &updates, &removals).expect("update applies")
+    let request = build_request(existing, args).expect("the flags make a request");
+    let mut updated = existing.clone();
+    request.apply_to(&mut updated);
+    updated
 }
 
 #[test]
@@ -259,8 +264,7 @@ fn an_unknown_unset_name_fails_the_update() {
         unset: vec!["temprature".to_string()],
         ..bare_args()
     };
-    let error = create_updated_model(&create_test_model(), &args, &HashMap::new(), &[])
-        .expect_err("unknown parameter");
+    let error = build_request(&create_test_model(), &args).expect_err("unknown parameter");
 
     assert!(error.to_string().contains("temprature"), "got: {error}");
 }

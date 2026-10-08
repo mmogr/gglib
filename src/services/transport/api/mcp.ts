@@ -1,6 +1,6 @@
 /**
  * MCP API module.
- * Handles Model Context Protocol server lifecycle and tool invocation.
+ * Handles Model Context Protocol server configuration and lifecycle.
  */
 
 import { get, post, put, del } from './client';
@@ -9,10 +9,11 @@ import type {
   NewMcpServer,
   UpdateMcpServer,
   McpServerInfo,
-  McpToolResult,
   ResolutionStatus,
   McpTestResult,
 } from '../types/mcp';
+import type { CreateMcpServerRequest } from '../../../types/generated/CreateMcpServerRequest';
+import type { UpdateMcpServerRequest } from '../../../types/generated/UpdateMcpServerRequest';
 
 /**
  * List all configured MCP servers with their status.
@@ -25,8 +26,10 @@ export async function listMcpServers(): Promise<McpServerInfo[]> {
  * Add a new MCP server configuration.
  */
 export async function addMcpServer(server: NewMcpServer): Promise<McpServerInfo> {
-  // Convert NewMcpServer to CreateMcpServerRequest format expected by backend
-  const request = {
+  // The nested config flattened into the request. The daemon requires `name`
+  // and `server_type` alone; the four optional strings are left out when empty.
+  const request: Pick<CreateMcpServerRequest, 'name' | 'server_type'> &
+    Partial<CreateMcpServerRequest> = {
     name: server.name,
     server_type: server.server_type,
     command: server.config.command || undefined,
@@ -34,7 +37,7 @@ export async function addMcpServer(server: NewMcpServer): Promise<McpServerInfo>
     working_dir: server.config.working_dir || undefined,
     path_extra: server.config.path_extra || undefined,
     url: server.config.url || undefined,
-    env: server.env.map(e => [e.key, e.value] as [string, string]),
+    env: server.env.map(({ key, value }) => ({ key, value })),
     lifecycle: server.lifecycle,
   };
   return post<McpServerInfo>('/api/mcp/servers', request);
@@ -47,8 +50,8 @@ export async function updateMcpServer(
   id: McpServerId,
   updates: UpdateMcpServer
 ): Promise<McpServerInfo> {
-  // Convert UpdateMcpServer to UpdateMcpServerRequest format expected by backend
-  const request: Record<string, unknown> = {};
+  // The nested config flattened into the request; a key left out is a field left alone.
+  const request: Partial<UpdateMcpServerRequest> = {};
   if (updates.name !== undefined) request.name = updates.name;
   if (updates.config?.command !== undefined) request.command = updates.config.command;
   if (updates.config?.args !== undefined) request.args = updates.config.args;
@@ -56,7 +59,7 @@ export async function updateMcpServer(
   if (updates.config?.path_extra !== undefined) request.path_extra = updates.config.path_extra;
   if (updates.config?.url !== undefined) request.url = updates.config.url;
   if (updates.env !== undefined) {
-    request.env = updates.env.map(e => [e.key, e.value] as [string, string]);
+    request.env = updates.env.map(({ key, value }) => ({ key, value }));
   }
   if (updates.enabled !== undefined) request.enabled = updates.enabled;
   if (updates.lifecycle !== undefined) request.lifecycle = updates.lifecycle;
@@ -84,54 +87,6 @@ export async function startMcpServer(id: McpServerId): Promise<McpServerInfo> {
  */
 export async function stopMcpServer(id: McpServerId): Promise<McpServerInfo> {
   return post<McpServerInfo>(`/api/mcp/servers/${id}/stop`);
-}
-
-/**
- * Call an MCP tool on a specific server.
- * 
- * Note: The backend returns {success, data, error} but the HTTP client's readData()
- * function unwraps the `data` field. We handle both wrapped and unwrapped responses.
- */
-export async function callMcpTool(
-  serverId: McpServerId,
-  toolName: string,
-  args: Record<string, unknown>
-): Promise<McpToolResult> {
-  try {
-    const result = await post<unknown>('/api/mcp/tools/call', {
-      server_id: serverId,
-      tool_name: toolName,
-      arguments: args,
-    });
-    
-    // Check if result is already the full McpToolResult structure
-    if (typeof result === 'object' && result !== null && 'success' in result) {
-      return result as McpToolResult;
-    }
-    
-    // Result was unwrapped by readData() - it's just the data field
-    // This means the call succeeded (otherwise readData would have thrown)
-    return {
-      success: true,
-      data: result,
-      // `null`, not `undefined`: the handler builds this field on both paths,
-      // so a successful call sends `"error": null` and the client's own
-      // success value has to look like the one the wire produces.
-      error: null,
-    };
-  } catch (error) {
-    // Network or HTTP error - convert to McpToolResult format
-    const message = error instanceof Error ? error.message : String(error);
-    return {
-      success: false,
-      // `null` for the same reason `error` is on the success path: the handler
-      // builds both fields on both paths, so a real failure carries
-      // `"data": null`. `undefined` serialises to an absent key — a third
-      // shape neither side describes.
-      data: null,
-      error: message,
-    };
-  }
 }
 
 /**

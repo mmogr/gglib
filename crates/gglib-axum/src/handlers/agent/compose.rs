@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use tokio::sync::{OwnedSemaphorePermit, mpsc};
 
+use gglib_app_services::transcript::MadeBy;
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::ModelRef;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
@@ -14,7 +15,8 @@ use gglib_core::ports::{AdmissionLease, AgentGuardReporter, AgentLoopPort, Retry
 use gglib_runtime::compose_agent_loop;
 
 use super::AgentChatRequest;
-use super::remote_upstream;
+use super::dto::AgentRequestConfig;
+use super::remote_upstream::{self, Upstream};
 use super::retry_notice::RetryNotice;
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -31,7 +33,9 @@ pub(crate) struct Prepared {
     /// The model the loop is counted under: the request's, or the one
     /// running on its port.
     pub(crate) model: String,
-    /// The model each turn was made by, for its `turn_usage` event.
+    /// The model each turn was made by, for its `turn_usage` event. Its
+    /// context's size is read once the run holds the model
+    /// (`remote_upstream::hold_model`).
     pub(crate) made_by: MadeBy,
     /// The port and id of the local model the loop drives; otherwise none.
     pub(crate) local_model: Option<(u16, i64)>,
@@ -41,33 +45,6 @@ pub(crate) struct Prepared {
     /// A run's hold on that model (`remote_upstream::hold`); `prepare` takes
     /// none.
     pub(crate) hold: Option<AdmissionLease>,
-}
-
-/// The model a run drives, the context it was launched with, and the paired
-/// device whose turn it answers, which the loop does not know: stamped on
-/// each turn's usage before it is logged.
-pub(crate) struct MadeBy {
-    pub(crate) model: String,
-    pub(crate) quantization: Option<String>,
-    /// Absent for this machine's own turns.
-    pub(crate) device: Option<String>,
-    /// The context the model was launched with, read once the run holds it
-    /// (`remote_upstream::hold_model`). Absent when that is not known: a
-    /// paired machine's model, or one outside the primary slot.
-    pub(crate) context_size: Option<u64>,
-}
-
-impl MadeBy {
-    /// Name the model and its context's size on a `turn_usage` event; any
-    /// other passes unchanged.
-    pub(crate) fn stamp(&self, event: &mut AgentEvent) {
-        if let AgentEvent::TurnUsage(usage) = event {
-            usage.model = Some(self.model.clone());
-            usage.quantization.clone_from(&self.quantization);
-            usage.device.clone_from(&self.device);
-            usage.reading.context_size = self.context_size;
-        }
-    }
 }
 
 /// One slot of the agent semaphore, or `None` when every slot is taken.
@@ -86,9 +63,21 @@ pub(crate) async fn prepare(
     req: AgentChatRequest,
 ) -> Result<Prepared, HttpError> {
     // Local llama-server or the remote tunnel: settled first, because it
-    // decides the port check, the model context and the bearer together.
+    // decides the port check, the model context, the stored sampling layers
+    // and the bearer together.
     let upstream = remote_upstream::resolve(state, &req).await?;
+    Ok(prepare_over(state, req, upstream).await)
+}
 
+/// [`prepare`], once the upstream is settled.
+///
+/// Its own function because `prepare` cannot be driven in a test: no test
+/// has a running llama-server for `remote_upstream::resolve` to find.
+pub(super) async fn prepare_over(
+    state: &AppState,
+    req: AgentChatRequest,
+    upstream: Upstream,
+) -> Prepared {
     // Read before `tool_filter` consumes the request piecemeal, and before the
     // loop is composed: the two reasoning controls are the only sampling this
     // endpoint accepts, and they occupy the ladder's top rung.
@@ -127,25 +116,14 @@ pub(crate) async fn prepare(
         },
         Some(retry_observer),
         sampling,
+        upstream.layers,
         upstream.far_machine,
         state.core.attachments().store(),
     );
 
-    // Stagnation threshold is a persisted server-side setting, not a request
-    // field; a settings-read failure falls back to the built-in default.
-    let max_stagnation_steps = state
-        .settings
-        .get()
-        .await
-        .ok()
-        .and_then(|s| s.max_stagnation_steps)
-        .map(|v| v as usize);
-    let config: AgentConfig = req
-        .config
-        .unwrap_or_default()
-        .into_agent_config(max_stagnation_steps);
+    let config = config_for(state, req.config).await;
 
-    Ok(Prepared {
+    Prepared {
         agent_loop,
         messages: req.messages,
         config,
@@ -156,7 +134,25 @@ pub(crate) async fn prepare(
         local_model,
         far_model,
         hold: None,
-    })
+    }
+}
+
+/// The loop config a request runs with: what it names, and for the limits
+/// it leaves out this machine's stored ones (`TurnLimits::resolve`). A
+/// turn on a saved chat reaches here with that chat's saved iteration limit
+/// already standing in for one it did not name (`hub_turn::plan` for a
+/// paired device's turn, `run::plan` for the page's run). So a client that
+/// names no iteration limit runs with its chat's, and failing that with
+/// `max_tool_iterations`, and none has to send either. A settings read that
+/// fails leaves the built-in defaults.
+///
+/// Its own function because `prepare` cannot be driven in a test: it needs
+/// a running llama-server.
+pub(crate) async fn config_for(state: &AppState, named: Option<AgentRequestConfig>) -> AgentConfig {
+    let settings = state.core.settings().get().await.ok();
+    named
+        .unwrap_or_default()
+        .into_agent_config(settings.as_ref())
 }
 
 /// One event as the `data:` text of its SSE frame.
@@ -179,3 +175,10 @@ pub(crate) fn frame(event: &AgentEvent) -> String {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "compose_context_tests.rs"]
+mod context_tests;
+#[cfg(test)]
+#[path = "compose_sampling_tests.rs"]
+mod sampling_tests;

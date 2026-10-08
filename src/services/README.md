@@ -2,9 +2,6 @@
 
 # Services Module
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-services-complexity.json)
-
 The services module contains the TypeScript client layer for the gglib GUI frontends. These services provide a unified API for both Desktop (Tauri) and Web (Axum) platforms.
 
 ## Architecture
@@ -24,10 +21,10 @@ The services module contains the TypeScript client layer for the gglib GUI front
 │  │  API layer  │  │ HTTP + SSE  │  │ OS-specific │  │MCP tooling  │                 │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘                 │
 │                                                                                     │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
-│  │   server/   │  │    api/     │  │  registry   │  │  decoders/  │                 │
-│  │ Safe calls  │  │   Routes    │  │Server state │  │Event decode │                 │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                                  │
+│  │   server/   │  │  registry   │  │  decoders/  │                                  │
+│  │ Safe calls  │  │Server state │  │Event decode │                                  │
+│  └─────────────┘  └─────────────┘  └─────────────┘                                  │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                        │
@@ -43,10 +40,11 @@ dialogs, menu sync, llama installation, the frontend log bridge. That is OS
 integration, not a transport.
 
 `serverLogs.ts` is the exception and is misfiled: logs live on the daemon in
-every mode, so it uses `fetch` and a raw `EventSource` against the same HTTP
-API as everything else, bypassing the pooled SSE connection in
-`transport/events/`. It is listed below because it is here, not because it
-belongs here.
+every mode, so it goes through the transport client against the same HTTP API
+as everything else (`get` for the lines so far, `apiFetch` and the shared SSE
+reader for the live stream), on a stream of its own rather than the pooled
+SSE connection in `transport/events/`. It is listed below because it is here,
+not because it belongs here.
 
 ## Directory Structure
 
@@ -57,7 +55,6 @@ belongs here.
 | [`platform/`](platform/) | Platform-specific utilities (file dialogs, URL opening, menu sync) |
 | [`tools/`](tools/) | MCP tool integration and builtin tool registry |
 | [`server/`](server/) | Safe action wrappers for server operations |
-| [`api/`](api/) | Route definitions for API endpoints |
 | [`decoders/`](decoders/) | Runtime decoders that validate event payloads before ingestion |
 
 ## Key Files
@@ -72,7 +69,8 @@ belongs here.
 | `remoteRegistry.ts` | External store for the remote tunnel (ADR 0012): the daemon's status, both sides; and `stillPaired`, whether a far row, pick or chat held for the paired machine still holds once that status names another |
 | `remoteRegistryState.ts` | What that store holds and what an empty tunnel looks like: the `RemoteState` shape and `IDLE_STATUS`, split out so the registry file stays under budget; and `pairedName`, the name the paired machine is shown by, never its fingerprint |
 | `remoteEvents.ts` | Subscribes to `remote_*` events, ingests them into `remoteRegistry`, and re-reads the status after each |
-| `createEventStore.ts` | Shared factory behind both registries — subscribe-before-fetch with an `eventVersion` guard |
+| `createEventStore.ts` | Shared store factory behind the three registries: one value, replaced whole on each write, with a `useSyncExternalStore` hook over it |
+| `bridgeEvents.ts` | Shared bridge behind the three `*Events.ts` files: subscribe before the hydrating fetch, and drop a fetch that an event or a cleanup overtook |
 | `agentOverrides.ts` | Per-session chat overrides, in two halves: `agentOverridesToWire()` builds the `config` object, `reasoningOverridesToWire()` builds the top-level reasoning fields the request declares separately |
 
 ## Clients
@@ -92,18 +90,17 @@ Events are the source of truth for server state. They arrive from the daemon
 over SSE (`/api/events`) — one path, desktop and web alike — and are normalized
 into the registry's union by `serverEvents.normalize.ts`.
 
-There are two ingestion paths, not one. `server_snapshot` is emitted at daemon
-boot and never replayed, so a client connecting later never sees it; `initServerEvents`
-hydrates from `GET /api/servers` instead. That list is a REST DTO, snake_case,
-and has its own reader — writing `model_id` into an `AppEvent` fixture, or
-`modelId` into a REST one, yields a silently empty registry rather than an error.
+There are two ingestion paths, not one. The events are deltas, and none carries
+the servers that were already running, so `initServerEvents` hydrates from
+`GET /api/servers`. That list is a REST DTO, snake_case, and has its own
+reader — writing `model_id` into an `AppEvent` fixture, or `modelId` into a
+REST one, yields a silently empty registry rather than an error.
 Note that camelCase on `AppEvent` is per-field `#[serde(rename)]`, not a
 container rule: snake_case is serde's default here, so a newly added field is
 snake_case unless someone remembers otherwise.
 
 | `AppEvent` type | Description |
 |-------|-------------|
-| `server_snapshot` | Initial state of all running servers (emitted at daemon startup) |
 | `server_started` | Server started and ready |
 | `server_stopped` | Server stopped cleanly |
 | `server_error` | Server encountered an error |
@@ -123,7 +120,6 @@ The `platform/` directory provides OS-specific functionality:
 |---------|-------------|
 | `detect.ts` | Platform detection (Tauri vs Web) |
 | `fileDialogs.ts` | Native file picker integration |
-| `llamaInstall.ts` | llama.cpp installation helpers |
 | `menuEvents.ts` | Native menu bar event handling |
 | `menuSync.ts` | Menu state synchronization |
 | `openUrl.ts` | External URL opening |
@@ -137,6 +133,6 @@ The `transport/` directory provides a unified interface for backend communicatio
 
 - **Every mode**: HTTP fetch against the Axum API, plus SSE for events
 
-Desktop and web share one transport. The desktop WebView resolves its base URL through the `get_embedded_api_info` IPC command and then consumes the same HTTP+SSE surface a browser tab does, so there is no second transport to keep in step — though `transport/api/client.ts` does still branch on platform to resolve that base URL and to choose its retry path. Beyond that, `invoke()` is confined to OS integration: seven commands, allowlisted by name in `scripts/check-frontend-ipc.sh`.
+Desktop and web share one transport. The desktop WebView resolves its base URL through the `get_embedded_api_info` IPC command and then consumes the same HTTP+SSE surface a browser tab does, so there is no second transport to keep in step — though `transport/api/client.ts` does still branch on platform to resolve that base URL and to choose its retry path. Beyond that, `invoke()` is confined to OS integration: five commands, allowlisted by name in `scripts/check-frontend-ipc.sh`.
 
 <!-- module-docs:end -->

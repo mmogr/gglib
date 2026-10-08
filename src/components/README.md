@@ -1,8 +1,6 @@
 # Frontend Components
 
 <!-- module-docs:start -->
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-complexity.json)
 
 This directory contains the React components used in the Desktop GUI (Tauri) and Web UI.
 
@@ -78,10 +76,10 @@ When a model is served, users can switch between Chat and Console views:
 - **`ServerList/`**: List of running server instances
 - **`ProxyControl.tsx`**: OpenAI-compatible proxy controls
 - **`RemoteControl.tsx`**: The remote tunnel popover (ADR 0012) — this machine's proxy on another machine, or another's here; its two halves live in `remote/`
-- **`LlamaInstallModal.tsx`**: llama.cpp installation wizard
+- **`LlamaInstallModal.tsx`**: Offers to install llama.cpp and runs the daemon's install stream, the one the setup wizard uses
 
 ### Support Components
-- **`GlobalDownloadStatus/`**: Download progress indicator and queue popover
+- **`GlobalDownloadStatus/`**: The running download's card, drawn from the daemon's queue snapshot, and the popover of waiting downloads
 - **`Toast/`**: Reusable toast notification system for success/error/info messages
 
 <!-- module-docs:end -->

@@ -11,11 +11,11 @@ mod common;
 
 use std::sync::Arc;
 
-use common::{setup_test_pool, write_gguf_fixture};
+use common::setup_test_pool;
 
 use gglib_core::services::{ImportMode, ModelService};
 use gglib_db::SqliteModelRepository;
-use gglib_gguf::GgufParser;
+use gglib_gguf::{GgufParser, write_string_gguf};
 
 #[tokio::test]
 async fn local_import_resolves_unsloth_dynamic_quantization_from_filename() {
@@ -25,7 +25,7 @@ async fn local_import_resolves_unsloth_dynamic_quantization_from_filename() {
 
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("qwen3-8b-UD-Q4_K_M.gguf");
-    write_gguf_fixture(&path, &[("general.architecture", "qwen3")]);
+    write_string_gguf(&path, &[("general.architecture", "qwen3")]);
 
     let model = service
         .import_from_file(&path, &GgufParser::new(), None, ImportMode::Fresh)

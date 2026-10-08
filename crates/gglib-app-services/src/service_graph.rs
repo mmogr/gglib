@@ -8,9 +8,9 @@
 //!
 //! ## What stays with the adapter
 //!
-//! Only genuinely adapter-shaped concerns: the event emitter, server-event
-//! sink, HTTP client, the agent-loop semaphore, and the context's own extra
-//! fields. `AxumContext` is populated *from* an [`AppServices`].
+//! Only genuinely adapter-shaped concerns: the event emitter, HTTP client,
+//! the agent-loop semaphore, and the context's own extra fields.
+//! `AxumContext` is populated *from* an [`AppServices`].
 //!
 //! ## Ordering invariant
 //!
@@ -25,13 +25,13 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use gglib_core::events::ServerEvents;
+use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::ports::{
     AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GgufParserPort, HfClientPort,
     LoopGuardTripSink, ModelCatalogPort, ModelRepository, ModelRuntimePort, RemoteGatewayPort,
     Repos, RunsPort, SystemProbePort, ToolSupportDetectorPort,
 };
-use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
+use gglib_core::server_config::ServerConfigOptions;
 use gglib_core::services::AppCore;
 use gglib_mcp::McpService;
 use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
@@ -52,7 +52,7 @@ use crate::setup::{SetupDeps, SetupOps};
 /// Inputs to [`build_service_graph`].
 ///
 /// Everything the adapter has already built — shared infrastructure from
-/// `CoreBootstrap`, plus its own emitter and event sink.
+/// `CoreBootstrap`, plus its own emitter.
 pub struct ServiceGraphParams {
     /// Core application facade.
     pub core: Arc<AppCore>,
@@ -72,8 +72,6 @@ pub struct ServiceGraphParams {
     pub mcp: Arc<McpService>,
     /// Adapter-specific application event emitter.
     pub emitter: Arc<dyn AppEventEmitter>,
-    /// Adapter-specific server lifecycle event sink.
-    pub server_events: Arc<dyn ServerEvents>,
     /// Benchmark run persistence.
     pub bench_repo: Arc<dyn BenchmarkRepositoryPort>,
     /// Where every proxy the graph's supervisor starts records the loop
@@ -82,7 +80,7 @@ pub struct ServiceGraphParams {
     pub loop_guard_trips: Arc<dyn LoopGuardTripSink>,
     /// Adapter-supplied base port for llama-server allocation.
     ///
-    /// `Some` is an explicit override (a CLI `--base-port`); `None` defers to
+    /// `Some` is an explicit override; `None` defers to
     /// `Settings.llama_base_port`, then the compiled default. See
     /// [`resolve_llama_base_port`](crate::proxy_port::resolve_llama_base_port).
     pub base_port: Option<u16>,
@@ -147,7 +145,6 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         gguf_parser,
         mcp,
         emitter,
-        server_events,
         tool_detector,
         bench_repo,
         loop_guard_trips,
@@ -238,7 +235,6 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         core: Arc::clone(&core),
         proxy: Arc::clone(&proxy),
         emitter,
-        server_events,
         tool_detector: Arc::clone(&tool_detector),
     }));
 

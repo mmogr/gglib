@@ -31,9 +31,19 @@ pub enum GgufInternalError {
     /// An unknown value type was encountered.
     InvalidValueType(u32),
 
-    /// Memory mapping failed.
-    #[cfg(feature = "mmap")]
-    MmapError(String),
+    /// The file declares a size its remaining bytes cannot hold.
+    DeclaredTooLarge {
+        /// The field that holds the size, as a message names it.
+        what: &'static str,
+        /// The size the file declares.
+        declared: u64,
+        /// The bytes the file has left after that field.
+        remaining: u64,
+    },
+
+    /// The file nests arrays deeper than this many levels, which is as far
+    /// as the reader follows them.
+    ArraysTooDeep(usize),
 }
 
 impl std::fmt::Display for GgufInternalError {
@@ -45,8 +55,17 @@ impl std::fmt::Display for GgufInternalError {
             Self::Io(e) => write!(f, "I/O error: {e}"),
             Self::Utf8Error => write!(f, "Invalid UTF-8 string in GGUF file"),
             Self::InvalidValueType(t) => write!(f, "Unknown GGUF value type: {t}"),
-            #[cfg(feature = "mmap")]
-            Self::MmapError(msg) => write!(f, "Memory mapping error: {msg}"),
+            Self::DeclaredTooLarge {
+                what,
+                declared,
+                remaining,
+            } => write!(
+                f,
+                "Invalid GGUF file: {what} {declared} is more than the {remaining} bytes left can hold"
+            ),
+            Self::ArraysTooDeep(limit) => {
+                write!(f, "Invalid GGUF file: arrays nested more than {limit} deep")
+            }
         }
     }
 }
@@ -86,8 +105,16 @@ impl From<GgufInternalError> for GgufParseError {
             GgufInternalError::InvalidValueType(t) => {
                 Self::InvalidFormat(format!("Unknown value type: {t}"))
             }
-            #[cfg(feature = "mmap")]
-            GgufInternalError::MmapError(msg) => Self::Io(msg),
+            GgufInternalError::DeclaredTooLarge {
+                what,
+                declared,
+                remaining,
+            } => Self::InvalidFormat(format!(
+                "{what} {declared} is more than the {remaining} bytes left can hold"
+            )),
+            GgufInternalError::ArraysTooDeep(limit) => {
+                Self::InvalidFormat(format!("arrays nested more than {limit} deep"))
+            }
         }
     }
 }

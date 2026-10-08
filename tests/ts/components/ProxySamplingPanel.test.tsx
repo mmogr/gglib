@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import ProxySamplingPanel, { formatValue } from '../../../src/components/ProxySamplingPanel';
+import { ProxySamplingPanel, formatValue } from '../../../src/components/ProxySamplingPanel';
 import type { SamplingAuditSnapshot } from '../../../src/services/transport/types/dashboard';
 import { samplingAudit } from '../fixtures/dashboard';
 

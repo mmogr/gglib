@@ -5,6 +5,8 @@
 
 use std::fmt;
 
+use gglib_core::paths::{LLAMA_INSTALL_COMMAND, llama_server_path};
+
 /// Semantic errors for GUI backend operations.
 ///
 /// Each variant represents a logical error condition that adapters
@@ -97,9 +99,68 @@ impl From<gglib_core::download::DownloadError> for GuiError {
     }
 }
 
+/// What a core error is to a caller: a rejected setting or input is the
+/// caller's to fix, a missing row is not found, a duplicate is a conflict,
+/// and only a failure of the store itself is internal. The same table as
+/// `gglib-axum`'s `From<CoreError> for HttpError`, so an error is the same
+/// status whether or not it passed through here.
 impl From<gglib_core::CoreError> for GuiError {
     fn from(err: gglib_core::CoreError) -> Self {
-        Self::Internal(err.to_string())
+        use gglib_core::CoreError;
+        match err {
+            CoreError::Repository(repository) => repository.into(),
+            CoreError::Settings(refused) => Self::ValidationFailed(refused.to_string()),
+            CoreError::Validation(msg) => Self::ValidationFailed(msg),
+        }
+    }
+}
+
+impl From<gglib_core::ports::RepositoryError> for GuiError {
+    fn from(err: gglib_core::ports::RepositoryError) -> Self {
+        use gglib_core::ports::RepositoryError;
+        match err {
+            // A repository names what it missed in its own words, not by id.
+            RepositoryError::NotFound(what) => Self::NotFound {
+                entity: "record",
+                id: what,
+            },
+            RepositoryError::AlreadyExists(msg) => Self::Conflict(msg),
+            RepositoryError::Constraint(msg) => Self::ValidationFailed(msg),
+            RepositoryError::Storage(_) | RepositoryError::Serialization(_) => {
+                Self::Internal(err.to_string())
+            }
+        }
+    }
+}
+
+impl GuiError {
+    /// The install prompt for a llama-server that cannot be used, and why.
+    ///
+    /// Names the path gglib looks for llama-server at and the command that
+    /// installs it. The path is empty when it cannot be resolved.
+    pub(crate) fn llama_server_not_installed(reason: &str) -> Self {
+        Self::LlamaServerNotInstalled {
+            expected_path: llama_server_path()
+                .map(|path| path.display().to_string())
+                .unwrap_or_default(),
+            suggested_command: LLAMA_INSTALL_COMMAND.to_string(),
+            reason: reason.to_string(),
+        }
+    }
+
+    /// This error, its message led by what was being done when it happened.
+    /// The kind is kept, so a refusal stays a refusal; a not-found already
+    /// names what was missing and is left as it is.
+    #[must_use]
+    pub fn context(self, doing: &str) -> Self {
+        let led = |msg: String| format!("{doing}: {msg}");
+        match self {
+            Self::ValidationFailed(msg) => Self::ValidationFailed(led(msg)),
+            Self::Conflict(msg) => Self::Conflict(led(msg)),
+            Self::Unavailable(msg) => Self::Unavailable(led(msg)),
+            Self::Internal(msg) => Self::Internal(led(msg)),
+            named @ (Self::NotFound { .. } | Self::LlamaServerNotInstalled { .. }) => named,
+        }
     }
 }
 
@@ -111,7 +172,16 @@ impl From<gglib_core::McpServiceError> for GuiError {
             McpServiceError::NotRunning(name) => {
                 Self::Conflict(format!("MCP server not running: {name}"))
             }
+            // The caller's to fix, by choosing another name.
+            McpServiceError::NameTaken(_) => Self::Conflict(err.to_string()),
+            // The caller's too: the request names a kind of server that is
+            // not run.
+            McpServiceError::SseNotSupported => Self::ValidationFailed(err.to_string()),
             _ => Self::Internal(err.to_string()),
         }
     }
 }
+
+#[cfg(test)]
+#[path = "error_tests.rs"]
+mod tests;

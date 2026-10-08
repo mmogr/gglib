@@ -124,12 +124,12 @@ async fn the_daemons_own_page_passes_under_a_name_it_answers_to() {
 /// DNS rebinding: `evil.com` resolves to this machine, so the page's origin
 /// names the very host its request was sent to. The origin guard alone would
 /// take that for the daemon's own page; the Host guard outside it is what
-/// refuses the name. Every router the daemon can build is checked, since each
+/// refuses the name. Every router this crate builds is checked, since each
 /// layers its own Host guard.
 #[tokio::test]
 async fn a_rebound_page_is_refused_unless_its_name_is_one_the_daemon_answers_to() {
     let cors = shipped_cors();
-    let state = test_state(cors.clone()).await;
+    let state = test_state().await;
     let spa_dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-dashboard");
     let routers = |access: DaemonAccess| {
         let access = Arc::new(with_test_token(access));

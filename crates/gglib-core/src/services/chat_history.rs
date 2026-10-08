@@ -26,58 +26,19 @@ impl ChatHistoryService {
         Self { repo }
     }
 
-    /// Create a new conversation.
+    /// Create a conversation: the one way one is made. Settings that name
+    /// its model decide its `model_id`, as
+    /// [`record_settings`](Self::record_settings) decides it: that model's
+    /// id when it is this machine's, and nothing when it is the paired
+    /// machine's. Settings that name no model, and no settings, leave
+    /// `model_id` as it is given.
     pub async fn create_conversation(
         &self,
-        title: String,
-        model_id: Option<i64>,
-        system_prompt: Option<String>,
+        mut conv: NewConversation,
     ) -> Result<i64, ChatHistoryError> {
-        self.repo
-            .create_conversation(NewConversation {
-                title,
-                model_id,
-                system_prompt,
-                settings: None,
-            })
-            .await
-    }
-
-    /// Create a conversation for `model`, by its machine, which its settings
-    /// keep as the model it runs on: a conversation's machine is fixed when
-    /// it is made. A model of this machine's is its `model_id` too, and one of
-    /// the paired machine's leaves that empty, as
-    /// [`record_settings`](Self::record_settings) does. With no `model`, this
-    /// is [`create_conversation`](Self::create_conversation).
-    pub async fn create_conversation_on(
-        &self,
-        title: String,
-        model_id: Option<i64>,
-        model: Option<ModelRef>,
-        system_prompt: Option<String>,
-    ) -> Result<i64, ChatHistoryError> {
-        let model_id = model.as_ref().map_or(model_id, |model| {
-            (model.machine == Machine::Local).then_some(model.id)
-        });
-        let settings = model.map(|model| ConversationSettings {
-            model: Some(model),
-            ..ConversationSettings::default()
-        });
-        self.repo
-            .create_conversation(NewConversation {
-                title,
-                model_id,
-                system_prompt,
-                settings,
-            })
-            .await
-    }
-
-    /// Create a new conversation with session settings for resume.
-    pub async fn create_conversation_with_settings(
-        &self,
-        conv: NewConversation,
-    ) -> Result<i64, ChatHistoryError> {
+        if let Some(model) = conv.settings.as_ref().and_then(|s| s.model.as_ref()) {
+            conv.model_id = local_id(model);
+        }
         self.repo.create_conversation(conv).await
     }
 
@@ -167,11 +128,7 @@ impl ChatHistoryService {
         id: i64,
         settings: ConversationSettings,
     ) -> Result<(), ChatHistoryError> {
-        let model_id = settings
-            .model
-            .as_ref()
-            .filter(|model| model.machine == Machine::Local)
-            .map(|model| model.id);
+        let model_id = settings.model.as_ref().and_then(local_id);
         self.repo
             .update_conversation(
                 id,
@@ -187,11 +144,6 @@ impl ChatHistoryService {
     /// Delete a conversation and all its messages.
     pub async fn delete_conversation(&self, id: i64) -> Result<(), ChatHistoryError> {
         self.repo.delete_conversation(id).await
-    }
-
-    /// Get conversation count.
-    pub async fn get_conversation_count(&self) -> Result<i64, ChatHistoryError> {
-        self.repo.get_conversation_count().await
     }
 
     /// Get all messages for a conversation.
@@ -218,16 +170,6 @@ impl ChatHistoryService {
         self.repo.replace_from(from, msg).await
     }
 
-    /// Update a message's content and optionally its metadata.
-    pub async fn update_message(
-        &self,
-        id: i64,
-        content: String,
-        metadata: Option<serde_json::Value>,
-    ) -> Result<(), ChatHistoryError> {
-        self.repo.update_message(id, content, metadata).await
-    }
-
     /// Delete a message and all subsequent messages.
     pub async fn delete_message_and_subsequent(&self, id: i64) -> Result<i64, ChatHistoryError> {
         self.repo.delete_message_and_subsequent(id).await
@@ -237,4 +179,11 @@ impl ChatHistoryService {
     pub async fn get_message_count(&self, conversation_id: i64) -> Result<i64, ChatHistoryError> {
         self.repo.get_message_count(conversation_id).await
     }
+}
+
+/// The `model_id` of a conversation on `model`: its id when it is this
+/// machine's, and none when it is the paired machine's, whose ids are not
+/// this catalogue's.
+fn local_id(model: &ModelRef) -> Option<i64> {
+    (model.machine == Machine::Local).then_some(model.id)
 }

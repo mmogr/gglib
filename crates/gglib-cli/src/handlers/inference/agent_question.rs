@@ -13,17 +13,16 @@ use anyhow::{Result, anyhow};
 use tokio::sync::mpsc;
 
 use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
-use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
+use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage, TurnLimits};
 
 use crate::bootstrap::CliContext;
 use crate::conversation_settings::ConversationSettingsBuilder;
 use crate::handlers::agent_chat::config::{AgentSessionParams, compose};
 use crate::handlers::agent_chat::drain::drain_event_stream;
 use crate::handlers::agent_chat::images::TurnImages;
-use crate::handlers::agent_chat::persistence::Conversation;
+use crate::handlers::agent_chat::persistence::{Conversation, Reply};
 use crate::handlers::agent_chat::repl::run_repl_with_history;
 use crate::handlers::agent_chat::sight::Sight;
-use crate::handlers::inference::shared::resolve_max_iterations;
 use crate::shared_args::{ContextArgs, SamplingArgs};
 use crate::target::Target;
 
@@ -158,6 +157,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     // where a `{model}:{profile}` suffix would name no model, and there the
     // id the far machine resolved, which carries its profile.
     let model_name = params.model_name.as_ref().map(|_| turn.identifier.clone());
+    let mut reply = Reply::new(turn.made_by());
     let params = AgentSessionParams {
         model_name: target.wire_model_name(model_name, &turn.identifier),
         model_identifier: turn.identifier.clone(),
@@ -173,7 +173,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         Some(inference_config)
     };
 
-    let sight = Sight::of_session(ctx, &params).await;
+    let sight = Sight::of_session(ctx, &params).await?;
     images.judge(sight, &[]).await?;
     let agent = compose(
         ctx,
@@ -188,16 +188,18 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     )
     .await?;
 
-    let resolved_max_iterations = resolve_max_iterations(max_iterations, &settings);
+    // The flag, then this machine's stored limits, as the daemon resolves a
+    // turn's.
+    let limits = TurnLimits::resolve(max_iterations, Some(&settings));
 
     let config = AgentConfig::from_user_params(
-        Some(resolved_max_iterations),
+        Some(limits.max_iterations),
         max_parallel,
         tool_timeout_ms,
         // Some(vec) replaces defaults; empty vec passes None to preserve defaults.
         Some(observation_tools).filter(|v| !v.is_empty()),
         max_observation_steps,
-        settings.max_stagnation_steps.map(|v| v as usize),
+        limits.max_stagnation_steps,
     )
     .map_err(|e| anyhow!("invalid agent config: {e}"))?;
 
@@ -214,6 +216,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         content: user_content,
         images: images.take(),
     });
+    let asked = messages.last().cloned();
 
     // Run the agent loop
     let (tx, mut rx) = mpsc::channel::<AgentEvent>(AGENT_EVENT_CHANNEL_CAPACITY);
@@ -233,7 +236,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     // Drain events with Ctrl+C support
     let completed = tokio::select! {
         biased;
-        result = drain_event_stream(&mut rx, verbose, quiet) => result,
+        result = drain_event_stream(&mut rx, verbose, quiet, Some(&mut reply)) => result,
         _ = tokio::signal::ctrl_c() => {
             handle.abort();
             while rx.try_recv().is_ok() {}
@@ -245,12 +248,12 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     let history = handle.await.ok().flatten();
 
     // ── Persist conversation ─────────────────────────────────────────────
-    // Save the full agent exchange to the DB so it appears in the GUI
-    // conversation list and can later be resumed.  Best-effort: a
+    // Save the question and the reply as it arrived to the DB so they appear
+    // in the GUI conversation list and can later be resumed.  Best-effort: a
     // persistence failure must never break the interactive session.
     let mut persistence = None;
     if completed
-        && let Some(ref history) = history
+        && history.is_some()
         && let Some(turn) = &params.turn
     {
         let settings =
@@ -259,16 +262,11 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
                 .tools(tools.clone(), false)
                 .agent_params(max_iterations, tool_timeout_ms, max_parallel)
                 .build();
-        match Conversation::create(
-            ctx.app.chat_history(),
-            Some(system_prompt),
-            None,
-            Some(settings),
-        )
-        .await
-        {
-            Ok(mut conv) => {
-                conv.save_new(history).await;
+        let (chats, made_by) = (ctx.app.chat_history(), turn.made_by());
+        match Conversation::create(chats, Some(system_prompt), Some(settings), made_by).await {
+            Ok(conv) => {
+                conv.save_user(asked.as_ref()).await;
+                conv.save_reply(&reply, true).await;
                 persistence = Some(conv);
             }
             Err(e) => tracing::warn!("failed to create agent conversation: {e}"),

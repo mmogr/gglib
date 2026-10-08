@@ -1,8 +1,5 @@
 # Agentic
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-Benchmark-Agentic-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-Benchmark-Agentic-complexity.json)
-
 <!-- module-docs:start -->
 
 Agentic-mode UI: the raw-vs-gglib A/B eval, run against a tool-calling task
@@ -41,7 +38,8 @@ The unit tests pin the TypeScript against dyadic fixtures, but note what that
 does and does not buy: each side is pinned to its own copy of the constants.
 Changing a threshold in the Rust leaves both suites green while the CLI and
 the GUI render contradictory verdicts for the same stored report. Treat the
-thresholds as a shared contract and change them in both places, or add a
-source-parsing guard in the style of `tests/ts/contracts/settingsBounds.test.ts`.
+thresholds as a shared contract and change them in both places, or have the
+Rust tests record them in a file both sides read, in the style of
+`contracts/settings/bounds.json` and `tests/ts/contracts/settingsBounds.test.ts`.
 
 <!-- module-docs:end -->

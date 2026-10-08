@@ -2,9 +2,6 @@
 
 # Hooks Module
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-hooks-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-hooks-complexity.json)
-
 Custom React hooks for gglib GUI functionality.
 
 ## Architecture
@@ -55,15 +52,14 @@ Custom React hooks for gglib GUI functionality.
 
 | Hook | Description |
 |------|-------------|
-| [`useDownloadManager.ts`](useDownloadManager.ts) | Download queue operations and progress |
-| [`useDownloadCompletionEffects.ts`](useDownloadCompletionEffects.ts) | Side effects on download completion |
-| [`useDownloadSystemStatus.ts`](useDownloadSystemStatus.ts) | Whether the desktop download backend has finished initialising, or failed |
+| [`useDownloadManager.ts`](useDownloadManager.ts) | Holds the daemon's queue snapshot, from the queue route and the event stream, newest `revision` winning; queue, cancel and clear |
+| [`useDownloadCompletionEffects.ts`](useDownloadCompletionEffects.ts) | Batches download completions into one library refresh and one toast; raises an error toast for each failure. A toast for one download is the daemon's own text for how it ended |
 
 ### System Hooks
 
 | Hook | Description |
 |------|-------------|
-| [`useLlamaStatus.ts`](useLlamaStatus.ts) | llama.cpp installation status |
+| [`useLlamaStatus.ts`](useLlamaStatus.ts) | Whether llama.cpp is installed and can be downloaded, from the daemon's setup-status route |
 | [`useSystemMemory.ts`](useSystemMemory.ts) | System memory probes |
 | [`useModelsDirectory.ts`](useModelsDirectory.ts) | Models directory configuration |
 | [`useServerLogs.ts`](useServerLogs.ts) | Server log streaming |

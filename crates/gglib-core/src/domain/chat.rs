@@ -12,7 +12,7 @@ use super::agent::messages::AgentMessage;
 use super::agent::messages::AssistantContent;
 use super::agent::tool_types::ToolCall;
 use super::attachment::{AttachmentId, AttachmentInfo};
-use super::machine::ModelRef;
+use super::machine::{Machine, ModelRef};
 use super::thinking::Thinking;
 
 /// A chat conversation.
@@ -31,6 +31,19 @@ pub struct Conversation {
     pub settings: Option<ConversationSettings>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+impl Conversation {
+    /// The machine the conversation ran on: its stored model's, or this one
+    /// for a row that stores only a `model_id`, which is this catalogue's.
+    /// `None` for a conversation that stores neither.
+    #[must_use]
+    pub fn machine(&self) -> Option<Machine> {
+        let stored = self.settings.as_ref().and_then(|s| s.model.as_ref());
+        stored
+            .map(|model| model.machine.clone())
+            .or_else(|| self.model_id.map(|_| Machine::Local))
+    }
 }
 
 /// A chat message within a conversation.
@@ -155,9 +168,11 @@ impl std::fmt::Display for MessageRole {
 }
 
 /// Data for creating a new conversation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct NewConversation {
     pub title: String,
+    /// The model it is for, of this machine's. Settings that name a model
+    /// decide it instead, when the conversation is made.
     pub model_id: Option<i64>,
     pub system_prompt: Option<String>,
     /// Session parameters to persist for resume.
@@ -265,9 +280,10 @@ pub struct ConversationSettings {
     pub no_tools: Option<bool>,
     /// The chat's Thinking choice, which a turn through gglib's turn routes
     /// runs with: a paired device's turn, a far turn, and this machine's own
-    /// agent run. The CLI's own chat keeps it on resume and does not apply
-    /// it. Only `off` is stored: a turn that says `default` removes the key,
-    /// and an absent key is a chat that remembers nothing.
+    /// agent run. `gglib chat --continue` reads it by the same rule: a chat
+    /// switched off runs there with a budget of 0. Only `off` is stored: a
+    /// turn that says `default` removes the key, and an absent key is a chat
+    /// that remembers nothing.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thinking: Option<Thinking>,

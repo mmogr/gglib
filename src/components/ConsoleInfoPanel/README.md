@@ -1,8 +1,5 @@
 # ConsoleInfoPanel
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ConsoleInfoPanel-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ConsoleInfoPanel-complexity.json)
-
 <!-- module-docs:start -->
 
 Left panel in the console view showing the served model's identity, real-time inference metrics (KV-cache usage, token throughput), uptime clock, and an Unload model button, which stops the model and leaves the chat open. Polls the llama-server `/metrics` endpoint and subscribes to server lifecycle events via `useServerState`.

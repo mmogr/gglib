@@ -1,8 +1,5 @@
 # benchmark
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-benchmark-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-domain-benchmark-complexity.json)
-
 <!-- module-docs:start -->
 
 Benchmark domain types.

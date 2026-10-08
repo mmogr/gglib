@@ -2,8 +2,9 @@
 
 use serde::Deserialize;
 
+use gglib_core::Settings;
 use gglib_core::domain::ModelRef;
-use gglib_core::domain::agent::{AgentConfig, AgentMessage};
+use gglib_core::domain::agent::{AgentConfig, AgentMessage, TurnLimits};
 
 /// User-facing configuration for a single agent chat request.
 ///
@@ -29,7 +30,9 @@ use gglib_core::domain::agent::{AgentConfig, AgentMessage};
 pub(crate) struct AgentRequestConfig {
     /// Maximum number of LLM→tool→LLM iterations.
     /// Clamped to [`MAX_ITERATIONS_CEILING`](gglib_core::domain::agent::config::MAX_ITERATIONS_CEILING)
-    /// server-side.
+    /// server-side. `None` (field absent) is the limit the run's conversation
+    /// saved, then the stored `max_tool_iterations` setting, and the built-in
+    /// default of 25 when none is stored.
     pub max_iterations: Option<usize>,
 
     /// Maximum number of tool calls dispatched in parallel per iteration.
@@ -74,19 +77,25 @@ pub(crate) struct AgentRequestConfig {
 }
 
 impl AgentRequestConfig {
-    /// Build the validated [`AgentConfig`] for this request.
+    /// Build the validated [`AgentConfig`] for this request, its limits
+    /// resolved against this machine's `settings` by the one rule the CLI
+    /// uses too ([`TurnLimits::resolve`]).
     ///
-    /// `max_stagnation_steps` comes from persisted settings, not the request —
-    /// it stays a server-side knob, consistent with this DTO's "safe subset"
-    /// policy of not exposing internal strike limits to untrusted callers.
-    pub(crate) fn into_agent_config(self, max_stagnation_steps: Option<usize>) -> AgentConfig {
+    /// An omitted `max_iterations` is the stored `max_tool_iterations`: a
+    /// conversation's saved limit is put in its place before this is called.
+    /// `max_stagnation_steps` comes from the settings alone, not the
+    /// request: it stays a server-side knob, consistent with this DTO's
+    /// "safe subset" policy of not exposing internal strike limits to
+    /// untrusted callers.
+    pub(crate) fn into_agent_config(self, settings: Option<&Settings>) -> AgentConfig {
+        let limits = TurnLimits::resolve(self.max_iterations, settings);
         AgentConfig::from_user_params(
-            self.max_iterations,
+            Some(limits.max_iterations),
             self.max_parallel_tools,
             self.tool_timeout_ms,
             self.observation_tools,
             self.max_observation_steps,
-            max_stagnation_steps,
+            limits.max_stagnation_steps,
         )
         .expect("clamped AgentConfig must pass validation")
     }
@@ -132,8 +141,9 @@ pub(crate) struct AgentChatRequest {
 
     /// Optional loop tuning, restricted to safe user-facing fields.
     ///
-    /// When `None` (or omitted), all fields default to the values in
-    /// [`AgentConfig::default`], which match the TypeScript frontend constants.
+    /// When `None` (or omitted), the iteration limit is the stored
+    /// `max_tool_iterations` setting and every other field defaults to the
+    /// value in [`AgentConfig::default`].
     pub config: Option<AgentRequestConfig>,
 
     /// Optional allowlist of tool names to expose to the model.
@@ -162,8 +172,7 @@ pub(crate) struct AgentChatRequest {
     /// Conditional by construction: a template that does not read
     /// `reasoning_effort` ignores it in perfect silence, and stage 5b of the
     /// request pipeline deletes the key outright on a model whose observed caps
-    /// say so (ADR 0007 decision 3). Unlike `/api/chat`, this path *does* run
-    /// the pipeline, so that gate is in force here.
+    /// say so (ADR 0007 decision 3).
     ///
     /// No `none` level exists: omitting the field is what leaves the template's
     /// own default in place.
@@ -188,8 +197,10 @@ impl AgentChatRequest {
     /// This endpoint has never taken a `temperature`, a `top_p`, or anything
     /// else the sampler reads, and this does not open that door: the returned
     /// config names these two and leaves every other field `None`, so each one
-    /// still gap-fills from the profile, per-model, global and floor layers
-    /// exactly as before.
+    /// resolves from the layers beneath it. For a local run those are the
+    /// values of the model its port serves, this machine's global defaults
+    /// and the floor (`remote_upstream::local`); no profile, which nothing
+    /// in the request can name.
     ///
     /// The asymmetry is deliberate rather than an oversight to tidy up later.
     /// The sampler parameters are per-*model* tuning — they belong to the model

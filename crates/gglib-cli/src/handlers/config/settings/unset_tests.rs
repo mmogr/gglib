@@ -1,6 +1,7 @@
 //! Unit tests for [`super`].
 
 use super::*;
+use crate::bootstrap::test_context;
 
 #[test]
 fn kebab_round_trips_through_camel() {
@@ -28,10 +29,32 @@ fn the_wire_type_is_its_own_manifest() {
         keys.len()
     );
     assert!(keys.contains_key("defaultContextSize"));
-    assert!(keys.contains_key("proxyLoopDetection"));
+    assert!(keys.contains_key("loopGuardMode"));
     for (k, v) in &keys {
         assert_eq!(v, &Value::Null, "{k} should serialise as null when unset");
     }
+}
+
+/// `proxy-loop-detection` named the loop guard's switch before
+/// `loop-guard-mode`, and is not a setting now: it is refused as any name the
+/// wire type does not carry is, and nothing is stored.
+#[tokio::test]
+async fn the_retired_loop_detection_key_is_refused_as_unknown() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = test_context(dir.path()).await;
+    let before = ctx.app.settings().get().await.expect("settings");
+
+    let refused = handle_unset(&ctx, "proxy-loop-detection")
+        .await
+        .expect_err("not a setting");
+
+    let said = format!("{refused:#}");
+    assert!(
+        said.starts_with("Unknown setting 'proxy-loop-detection'."),
+        "{said}"
+    );
+    assert!(said.contains("\n  loop-guard-mode\n"), "{said}");
+    assert_eq!(ctx.app.settings().get().await.expect("settings"), before);
 }
 
 /// The motivating case. `settings set` can only write a value, so before this

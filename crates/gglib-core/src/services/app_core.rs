@@ -3,7 +3,7 @@
 //! This is the composition root for core services. Adapters (CLI, GUI, Web)
 //! receive an `AppCore` instance and use it to access all functionality.
 
-use crate::ports::Repos;
+use crate::ports::{DownloadManagerPort, HfClientPort, Repos};
 use std::sync::Arc;
 
 use super::{
@@ -19,8 +19,8 @@ use super::{
 /// # Example
 ///
 /// ```ignore
-/// let repos = Repos { models: model_repo, settings: settings_repo };
-/// let core = AppCore::new(repos);
+/// let repos = Repos::new(models, model_files, settings, mcp_servers, chat_history, attachments);
+/// let core = AppCore::new(repos, hf_client, downloads);
 ///
 /// // Access services
 /// let models = core.models().list().await?;
@@ -30,28 +30,32 @@ pub struct AppCore {
     settings: SettingsService,
     chat_history: ChatHistoryService,
     attachments: AttachmentService,
-    verification: Option<Arc<ModelVerificationService>>,
+    verification: ModelVerificationService,
+    hf_token: Option<String>,
 }
 
 impl AppCore {
-    /// Create a new `AppCore` with the given repositories.
-    pub fn new(repos: Repos) -> Self {
+    /// Create a new `AppCore` with the given repositories. Its verification
+    /// service asks `hf_client` for updates, and a repair queues its download
+    /// on `downloads`.
+    pub fn new(
+        repos: Repos,
+        hf_client: Arc<dyn HfClientPort>,
+        downloads: Arc<dyn DownloadManagerPort>,
+    ) -> Self {
         Self {
+            verification: ModelVerificationService::new(
+                Arc::clone(&repos.models),
+                repos.model_files,
+                hf_client,
+                downloads,
+            ),
             models: ModelService::new(repos.models),
             settings: SettingsService::new(repos.settings),
             chat_history: ChatHistoryService::new(repos.chat_history),
             attachments: AttachmentService::new(repos.attachments),
-            verification: None,
+            hf_token: None,
         }
-    }
-
-    /// Set the verification service (optional).
-    ///
-    /// This should be called during bootstrap if verification features are needed.
-    #[must_use]
-    pub fn with_verification(mut self, verification: Arc<ModelVerificationService>) -> Self {
-        self.verification = Some(verification);
-        self
     }
 
     /// Access the model service.
@@ -74,14 +78,30 @@ impl AppCore {
         &self.attachments
     }
 
-    /// Access the verification service (if available).
-    pub fn verification(&self) -> Option<&ModelVerificationService> {
-        self.verification.as_deref()
+    /// Access the verification service.
+    pub const fn verification(&self) -> &ModelVerificationService {
+        &self.verification
+    }
+
+    /// This core, holding the token its process asks the Hub with.
+    #[must_use]
+    pub fn with_hf_token(mut self, token: Option<String>) -> Self {
+        self.hf_token = token;
+        self
+    }
+
+    /// The Hub token, for a request to `HuggingFace` that this core's own
+    /// Hub client does not make: an upgrade's check and its download. `None`
+    /// asks as nobody.
+    #[must_use]
+    pub fn hf_token(&self) -> Option<String> {
+        self.hf_token.clone()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::model_verification_remote::tests::Rows;
     use super::*;
     use crate::domain::chat::{
         Conversation, ConversationUpdate, Message, NewConversation, NewMessage,
@@ -90,12 +110,10 @@ mod tests {
     use crate::domain::{AttachmentBlob, AttachmentId, AttachmentInfo, Model, NewModel};
     use crate::ports::{
         AttachmentError, AttachmentStore, ChatHistoryError, ChatHistoryRepository,
-        McpRepositoryError, McpServerRepository, ModelRepository, RepositoryError,
-        SettingsRepository,
+        InMemorySettings, McpRepositoryError, McpServerRepository, ModelRepository,
+        RepositoryError,
     };
-    use crate::settings::Settings;
     use async_trait::async_trait;
-    use std::sync::Mutex;
 
     struct MockModelRepo;
 
@@ -208,14 +226,6 @@ mod tests {
         ) -> Result<i64, ChatHistoryError> {
             Ok(0)
         }
-        async fn update_message(
-            &self,
-            _id: i64,
-            _content: String,
-            _metadata: Option<serde_json::Value>,
-        ) -> Result<(), ChatHistoryError> {
-            Ok(())
-        }
         async fn delete_message_and_subsequent(&self, _id: i64) -> Result<i64, ChatHistoryError> {
             Ok(0)
         }
@@ -248,40 +258,18 @@ mod tests {
         }
     }
 
-    struct MockSettingsRepo {
-        settings: Mutex<Settings>,
-    }
-
-    impl MockSettingsRepo {
-        fn new() -> Self {
-            Self {
-                settings: Mutex::new(Settings::with_defaults()),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl SettingsRepository for MockSettingsRepo {
-        async fn load(&self) -> Result<Settings, RepositoryError> {
-            Ok(self.settings.lock().unwrap().clone())
-        }
-        async fn save(&self, settings: &Settings) -> Result<(), RepositoryError> {
-            *self.settings.lock().unwrap() = settings.clone();
-            Ok(())
-        }
-    }
-
     #[tokio::test]
     async fn test_app_core_creation() {
         let repos = Repos {
             models: Arc::new(MockModelRepo),
-            settings: Arc::new(MockSettingsRepo::new()),
+            model_files: Arc::new(Rows(Vec::new())),
+            settings: Arc::new(InMemorySettings::default()),
             mcp_servers: Arc::new(MockMcpRepo),
             chat_history: Arc::new(MockChatHistoryRepo),
             attachments: Arc::new(MockAttachmentStore),
         };
 
-        let core = AppCore::new(repos);
+        let core = AppCore::bare(repos);
 
         // Verify services are accessible
         let models = core.models().list().await.unwrap();

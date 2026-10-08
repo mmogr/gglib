@@ -3,22 +3,24 @@
 //!
 //! One decision, taken before anything else in the handler, because the two
 //! cases differ in every input the adapter takes: the local case validates
-//! the port against the servers this daemon owns and resolves the model
-//! against this machine's catalog; the far case takes the port the tunnel
-//! bound, attaches the key from the pairing (ADR 0012, decision 7 — the
-//! listener does not inject it), looks the model up there by its id, and
-//! shapes nothing, because the far proxy runs its own pipeline over its own
-//! models.
+//! the port against the servers this daemon owns, shapes the turn for the
+//! model that port serves, by its row in this machine's catalog, and hands
+//! over this machine's global sampling defaults and its agentic sampling
+//! switch; the far case takes the port the tunnel bound, attaches the key
+//! from the pairing (ADR 0012, decision 7 — the listener does not inject
+//! it), looks the model up there by its id, and shapes nothing, because the
+//! far proxy runs its own pipeline over its own models.
 
 use gglib_app_services::FarProxy;
+use gglib_app_services::transcript::MadeBy;
 use gglib_app_services::types::ServerInfo;
 use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::{AdmissionLease, ModelRuntimePort};
-use gglib_core::request_pipeline::{self, ModelContext};
+use gglib_core::request_pipeline::{self, ModelContext, SamplingLayers};
 use gglib_runtime::FarMachine;
 
 use super::AgentChatRequest;
-use super::compose::{MadeBy, Prepared};
+use super::compose::Prepared;
 use crate::handlers::remote::far_error;
 use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppState};
 
@@ -29,9 +31,14 @@ pub(super) struct Upstream {
     /// The far machine on the far path — its key and the name it is
     /// shown by; nothing locally.
     pub far_machine: Option<FarMachine>,
-    /// Resolved locally; passthrough for the far machine, whose proxy
-    /// resolves.
+    /// Locally, the context of the model the port serves; passthrough for
+    /// the far machine, whose proxy resolves.
     pub model_context: ModelContext,
+    /// The stored sampling layers beneath what the request names. Locally,
+    /// this machine's global defaults and its agentic sampling switch, and
+    /// no profile: a run's request can name none. For the far machine, whose
+    /// proxy folds its own, no layer, and the ceiling on.
+    pub layers: SamplingLayers,
     /// What goes in the body's `model` field.
     ///
     /// Locally `None` is the ordinary case and means "whatever llama-server
@@ -133,12 +140,25 @@ pub(super) async fn local(
     server: ServerInfo,
 ) -> Result<Upstream, HttpError> {
     super::image_gate::served(state, server.model_id, &req.messages).await?;
-    let model_context =
-        request_pipeline::resolve(state.catalog.as_ref(), req.model.as_deref()).await;
+    // By its id: the catalog row the server was started from. Never by the
+    // request's `model`, which the page and a paired device leave empty and
+    // which names only what llama-server is to route by.
+    let by_id = server.model_id.to_string();
+    let model_context = request_pipeline::resolve(state.catalog.as_ref(), Some(&by_id)).await;
+    // A settings read that fails leaves the global layer out and the agentic
+    // switch on, as it leaves the limits at their defaults
+    // (`compose::config_for`).
+    let settings = state.core.settings().get().await.unwrap_or_default();
+    let layers = SamplingLayers {
+        agentic_adjustments: settings.effective_agentic_sampling(),
+        global: settings.inference_defaults,
+        ..SamplingLayers::default()
+    };
     Ok(Upstream {
         base_url: format!("http://127.0.0.1:{}", req.port),
         far_machine: None,
         model_context,
+        layers,
         model: req.model.clone(),
         counted_as: counted_as(req, &server),
         made_by: MadeBy {
@@ -234,6 +254,12 @@ pub(super) async fn remote(far: &FarProxy, model: &ModelRef) -> Result<Upstream,
         // asked.
         far_machine: Some(far.far_machine()),
         model_context: ModelContext::passthrough(),
+        // Nothing stored here applies to that machine's model, this
+        // machine's agentic switch included: the ceiling stays on.
+        layers: SamplingLayers {
+            agentic_adjustments: true,
+            ..SamplingLayers::default()
+        },
         // The far machine counts its own guard decisions under this name, in
         // its own ledger; this one counts what it composed here.
         counted_as: detail.name.clone(),

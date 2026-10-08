@@ -7,7 +7,6 @@
 use anyhow::{Result, anyhow};
 use std::path::PathBuf;
 
-use crate::domain::InferenceConfig;
 use crate::settings::DEFAULT_CONTEXT_SIZE;
 
 // =============================================================================
@@ -173,10 +172,6 @@ pub struct ServerConfigOptions {
     /// `gglib_runtime::llama::args::kv_cache_type` module docs.
     pub cache_type_v: Option<crate::cache_config::KvCacheType>,
 
-    /// Inference parameter overrides (temperature, top-p, etc.) forwarded
-    /// directly to llama-server.
-    pub inference_params: Option<InferenceConfig>,
-
     /// Whether to memory-lock the model into RAM (`--mlock`).
     /// `None` defaults to `false` in `build_server_config()`.
     pub mlock: Option<bool>,
@@ -219,7 +214,6 @@ impl ServerConfigOptions {
             cache_reuse,
             cache_type_k,
             cache_type_v,
-            inference_params,
             mlock,
         } = over;
 
@@ -242,9 +236,6 @@ impl ServerConfigOptions {
             cache_reuse: cache_reuse.or(self.cache_reuse),
             cache_type_k: cache_type_k.or(self.cache_type_k),
             cache_type_v: cache_type_v.or(self.cache_type_v),
-            inference_params: inference_params
-                .clone()
-                .or_else(|| self.inference_params.clone()),
             mlock: mlock.or(self.mlock),
         }
     }
@@ -333,23 +324,19 @@ pub const fn resolve_context_size(opts: &ServerConfigOptions) -> u64 {
     resolve_context_size_with_source(opts).0
 }
 
-// =============================================================================
-// Host-RAM prompt cache budget (`--cache-ram`)
-// =============================================================================
-
-// `CacheRamSetting` now lives in `crate::cache_config`, alongside
-// `KvCacheType` — cache-related config resolution has one home. Re-exported
-// here so existing `gglib_core::server_config::CacheRamSetting` call sites
-// keep working.
-pub use crate::cache_config::CacheRamSetting;
-
-// Cache-RAM budget constants and [`compute_auto_cache_ram_mb`] now live in
-// `crate::domain::cache_budget` (re-exported from `crate::domain`), alongside
-// the rest of the domain's pure calculations.
-pub use crate::domain::cache_budget::{
-    CACHE_RAM_FLOOR_BYTES, CACHE_RAM_HEADROOM_BYTES, CACHE_RAM_UNKNOWN_KV_ALLOWANCE_BYTES,
-    compute_auto_cache_ram_mb,
-};
+/// The context the chain resolves, unless that is the built-in floor: only a
+/// value some rung supplied.
+///
+/// For a caller that hands its answer on as the *fallback* of a later
+/// resolution. The floor handed on as `Some(4096)` reads there as a number
+/// somebody chose, and the fitted rung beneath it is never reached.
+#[must_use]
+pub const fn chosen_context_size(opts: &ServerConfigOptions) -> Option<u64> {
+    match resolve_context_size_with_source(opts) {
+        (_, ContextSizeSource::BuiltInDefault) => None,
+        (ctx, _) => Some(ctx),
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -417,17 +404,6 @@ mod tests {
             resolve_context_size(&opts),
             resolve_context_size_with_source(&opts).0
         );
-    }
-
-    // Cache-RAM budget math tests now live in
-    // `crate::domain::cache_budget::tests`, alongside the function itself.
-    use crate::server_config::CacheRamSetting;
-
-    /// Every launch surface should auto-size unless it opts out, so `Auto`
-    /// has to be the `Default` variant.
-    #[test]
-    fn cache_ram_setting_defaults_to_auto() {
-        assert_eq!(CacheRamSetting::default(), CacheRamSetting::Auto);
     }
 
     #[test]
@@ -551,6 +527,32 @@ mod tests {
         assert_eq!(resolve_context_size(&opts), 0);
     }
 
+    /// Each rung is an answer while it is the highest one set, and the floor
+    /// is none: it is what is left when nobody chose. A rung that holds the
+    /// floor's own number is still somebody's choice.
+    #[test]
+    fn the_chosen_context_is_whichever_rung_holds_one_and_never_the_floor() {
+        use crate::server_config::chosen_context_size;
+
+        let mut opts = ServerConfigOptions {
+            context_size: Some(32_768),
+            model_server_ctx: Some(16_384),
+            global_default_ctx: Some(DEFAULT_CONTEXT_SIZE),
+            fitted_ctx: Some(65_536),
+            ..Default::default()
+        };
+        assert_eq!(chosen_context_size(&opts), Some(32_768), "explicit");
+        opts.context_size = None;
+        assert_eq!(chosen_context_size(&opts), Some(16_384), "model default");
+        opts.model_server_ctx = None;
+        let global = Some(DEFAULT_CONTEXT_SIZE);
+        assert_eq!(chosen_context_size(&opts), global, "global default");
+        opts.global_default_ctx = None;
+        assert_eq!(chosen_context_size(&opts), Some(65_536), "fitted");
+        opts.fitted_ctx = None;
+        assert_eq!(chosen_context_size(&opts), None, "the floor");
+    }
+
     // -------------------------------------------------------------------
     // CtxSizeArg / parse_ctx_size_flag
     // -------------------------------------------------------------------
@@ -604,7 +606,6 @@ mod tests {
     // -------------------------------------------------------------------
 
     use crate::cache_config::KvCacheType;
-    use crate::domain::InferenceConfig;
     use std::path::PathBuf;
 
     /// Every field set, so a merge that drops one is visible. `marker` is a
@@ -625,10 +626,6 @@ mod tests {
             cache_reuse: Some(u32::from(marker)),
             cache_type_k: Some(KvCacheType::Q8_0),
             cache_type_v: Some(KvCacheType::F16),
-            inference_params: Some(InferenceConfig {
-                temperature: Some(f32::from(marker)),
-                ..Default::default()
-            }),
             mlock: Some(true),
         }
     }
@@ -652,10 +649,6 @@ mod tests {
         assert_eq!(merged.cache_reuse, Some(2));
         assert_eq!(merged.cache_type_k, Some(KvCacheType::Q8_0));
         assert_eq!(merged.cache_type_v, Some(KvCacheType::F16));
-        assert_eq!(
-            merged.inference_params.and_then(|c| c.temperature),
-            Some(2.0)
-        );
         assert_eq!(merged.mlock, Some(true));
     }
 
@@ -679,10 +672,6 @@ mod tests {
         assert_eq!(merged.cache_reuse, Some(1));
         assert_eq!(merged.cache_type_k, Some(KvCacheType::Q8_0));
         assert_eq!(merged.cache_type_v, Some(KvCacheType::F16));
-        assert_eq!(
-            merged.inference_params.and_then(|c| c.temperature),
-            Some(1.0)
-        );
         assert_eq!(merged.mlock, Some(true));
     }
 

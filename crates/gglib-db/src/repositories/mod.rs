@@ -15,10 +15,6 @@ mod sqlite_benchmark_repository;
 )]
 mod sqlite_chat_history_repository;
 pub(crate) mod sqlite_loop_guard_trip_log;
-#[allow(
-    clippy::needless_pass_by_value,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 mod sqlite_mcp_repository;
 #[allow(
     clippy::cast_lossless,
@@ -26,7 +22,7 @@ mod sqlite_mcp_repository;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod sqlite_model_repository;
-mod sqlite_settings_repository;
+pub(crate) mod sqlite_settings_repository;
 
 pub use model_files_repository::ModelFilesRepository;
 pub use sqlite_attachment_store::SqliteAttachmentStore;

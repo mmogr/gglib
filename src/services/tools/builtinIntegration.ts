@@ -5,14 +5,14 @@
  * into the ToolRegistry under the `'builtin'` source, replacing any
  * stale TypeScript-defined entries.
  *
- * Execution is handled entirely by the backend; the executor stored here
- * is a guard that should never be called in normal operation.
+ * Execution is handled entirely by the backend: what is registered here is
+ * the definition and, for the tools that have one, a result renderer.
  */
 
 import { getTransport } from '../transport';
 import type { McpTool } from '../transport';
 import { getToolRegistry } from './registry';
-import type { ToolDefinition, ToolExecutor, ToolResult } from './types';
+import type { ToolDefinition } from './types';
 import { timeRenderer } from './renderers/TimeRenderer';
 import { appLogger } from '../platform';
 
@@ -39,18 +39,6 @@ function builtinToolToDefinition(tool: McpTool): ToolDefinition {
   };
 }
 
-/**
- * Executor placeholder for built-in tools.
- * Execution is handled by the backend agent loop — this path is never
- * reached in normal operation.
- */
-function createBuiltinExecutor(toolName: string): ToolExecutor {
-  return async (_args: Record<string, unknown>): Promise<ToolResult> => ({
-    success: false,
-    error: `Built-in tool '${toolName}' must be executed by the backend agent loop.`,
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -74,7 +62,6 @@ export async function syncBuiltinTools(): Promise<{ added: number; removed: numb
     const tools: McpTool[] = await getTransport().listBuiltinTools();
     for (const tool of tools) {
       const definition = builtinToolToDefinition(tool);
-      const executor = createBuiltinExecutor(tool.name);
       const renderer = BUILTIN_RENDERERS[tool.name];
 
       try {
@@ -83,7 +70,6 @@ export async function syncBuiltinTools(): Promise<{ added: number; removed: numb
           'builtin',
           tool.name,
           definition,
-          executor,
           'builtin',
           renderer,
         );

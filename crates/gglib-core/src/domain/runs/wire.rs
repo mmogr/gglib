@@ -94,6 +94,18 @@ pub struct RunInfo {
     pub error: Option<RunError>,
 }
 
+impl RunInfo {
+    /// Whether the run holds `conversation_id`: it writes that conversation,
+    /// and is not yet reported ended, which a run is only once its reply is
+    /// saved. The daemon admits no second run to a held conversation, and a
+    /// client that writes a conversation itself asks this of the daemon's
+    /// listing once, before it starts.
+    #[must_use]
+    pub fn holds(&self, conversation_id: i64) -> bool {
+        self.conversation_id == Some(conversation_id) && !self.status.is_terminal()
+    }
+}
+
 /// A set of runs, as a listing returns them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]

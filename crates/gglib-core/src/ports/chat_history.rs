@@ -83,14 +83,6 @@ pub trait ChatHistoryRepository: Send + Sync {
     /// conversation; nothing is changed.
     async fn replace_from(&self, from: i64, msg: NewMessage) -> Result<i64, ChatHistoryError>;
 
-    /// Update a message's content and optionally its metadata.
-    async fn update_message(
-        &self,
-        id: i64,
-        content: String,
-        metadata: Option<serde_json::Value>,
-    ) -> Result<(), ChatHistoryError>;
-
     /// Delete a message and all subsequent messages in the same conversation.
     /// Returns the number of messages deleted.
     async fn delete_message_and_subsequent(&self, id: i64) -> Result<i64, ChatHistoryError>;

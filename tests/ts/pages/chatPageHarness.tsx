@@ -39,7 +39,6 @@ export function conversation(id: number, title: string): ConversationSummary {
     title,
     model_id: null,
     system_prompt: null,
-    settings: null,
     created_at: '2026-09-01T09:00:00Z',
     updated_at: '2026-09-01T09:00:00Z',
   };

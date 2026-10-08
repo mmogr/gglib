@@ -262,42 +262,6 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         Ok(id)
     }
 
-    async fn update_message(
-        &self,
-        id: i64,
-        content: String,
-        metadata: Option<serde_json::Value>,
-    ) -> Result<(), ChatHistoryError> {
-        // Serialize metadata to JSON string if present
-        let metadata_str = metadata
-            .as_ref()
-            .map(|m| serde_json::to_string(m).unwrap_or_default());
-
-        let result = sqlx::query("UPDATE chat_messages SET content = ?, metadata = ? WHERE id = ?")
-            .bind(&content)
-            .bind(&metadata_str)
-            .bind(id)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
-
-        if result.rows_affected() == 0 {
-            return Err(ChatHistoryError::MessageNotFound(id));
-        }
-
-        // Update the conversation timestamp
-        sqlx::query(
-            "UPDATE chat_conversations SET updated_at = datetime('now') 
-             WHERE id = (SELECT conversation_id FROM chat_messages WHERE id = ?)",
-        )
-        .bind(id)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
-
-        Ok(())
-    }
-
     async fn delete_message_and_subsequent(&self, id: i64) -> Result<i64, ChatHistoryError> {
         // First get the conversation_id for this message
         let row = sqlx::query("SELECT conversation_id FROM chat_messages WHERE id = ?")

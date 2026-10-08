@@ -69,11 +69,11 @@ pub struct SamplingLayers {
     /// Whether a request carrying tools gets the agentic-turn temperature
     /// ceiling — see [`InferenceConfig::agentic_temperature_ceiling`].
     ///
-    /// Set by the caller rather than defaulted on, because the two callers
-    /// decide it differently: the proxy reads `Settings.agentic_sampling`
-    /// (opt-out — absent means on), while the in-process agent path has no
-    /// settings snapshot and enables it unconditionally. `Default` leaves it
-    /// off so a bare `SamplingLayers::default()` applies no adjustment.
+    /// Set by the caller rather than defaulted on, because callers differ: the
+    /// proxy and a chat on this machine's model hand over the settings' switch
+    /// (`Settings.agentic_sampling`, on unless stored off), and a caller with
+    /// no settings to follow turns it on. `Default` leaves it off so a bare
+    /// `SamplingLayers::default()` applies no adjustment.
     pub agentic_adjustments: bool,
 }
 
@@ -346,8 +346,9 @@ fn strip_unmodelled_sampler_keys(body: &mut Value, trust_client_sampling: bool) 
 /// Remove from the body the client keys gglib must not forward: what the trust
 /// gate binned, the budget alias gglib never emits, and one refused field.
 ///
-/// The single place body keys leave this stage, so "what does gglib delete
-/// from a request" has one answer in one function.
+/// The single place body keys leave this stage. One more removal happens
+/// after it, on the in-process path only: the completion adapter takes
+/// back out a value its caller named that the fold passed over.
 ///
 /// # `discarded` — what the trust gate binned
 ///

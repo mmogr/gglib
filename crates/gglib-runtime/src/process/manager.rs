@@ -11,12 +11,13 @@
 
 use super::core::GuiProcessCore;
 use anyhow::Result;
+use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{
     Admission, AdmissionLease, LaunchOverrides, ModelCatalogPort, ModelRuntimeError, ProcessHandle,
     RunningTarget,
 };
-use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
+use gglib_core::server_config::ServerConfigOptions;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

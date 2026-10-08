@@ -41,7 +41,7 @@ pub use broadcaster::{ServerEventBroadcaster, get_event_broadcaster};
 pub use core::GuiProcessCore;
 pub use events::{ServerEvent, ServerStateInfo, ServerStatus};
 pub use health::{check_http_health, wait_for_http_health};
-pub use logs::{LogManagerSink, ServerLogEntry, ServerLogManager, get_log_manager};
+pub use logs::{ServerLogEntry, ServerLogManager, get_log_manager};
 pub use manager::ProcessManager;
 pub use residency::ResidentSet;
 pub use shutdown::{kill_pid, shutdown_child};

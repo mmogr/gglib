@@ -2,7 +2,7 @@
 //!
 //! [`settle`]'s codeless arm, split from `stored_pairing_tests.rs` when the
 //! two arms together crossed the 300-line budget
-//! `scripts/check_rust_complexity.sh` allows. The seam is the one the
+//! `scripts/check_file_size.sh` allows. The seam is the one the
 //! function already has: a dial that carries a code is pairing, and
 //! everything it decides is about the key that comes back; a dial without
 //! one is a machine this laptop already knows, and everything it decides is
@@ -129,7 +129,7 @@ async fn a_dial_to_the_machine_already_recorded_writes_nothing() {
     let pool = setup_test_database().await.expect("in-memory DB");
     let mut repos = CoreFactory::build_repos(pool);
     repos.settings = Arc::new(Unwritable(Arc::clone(&repos.settings)));
-    let core = AppCore::new(repos);
+    let core = AppCore::bare(repos);
     let held = RemotePairing {
         ticket: TICKET_A.to_owned(),
         api_key: KEY_A.to_owned(),

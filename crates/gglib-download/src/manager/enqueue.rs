@@ -10,20 +10,49 @@ impl DownloadManagerImpl {
     /// Queue every file of `resolution` as one group under `id`, and keep
     /// the group's files for registration.
     ///
-    /// Returns the 1-based queue position of the group's first file.
+    /// Returns the group's 1-based position among the downloads, or `None`
+    /// when `id` is already in flight and nothing was queued.
+    ///
+    /// Every way of queueing comes through here, so an id is on the queue or
+    /// running at most once, and a row or a progress bar can be keyed by it.
+    /// A download queued here starts with no meter and no outcome: an
+    /// earlier run of the same id dropped its meter when it ended, and the
+    /// queue forgets its outcome here.
     pub(super) async fn enqueue_group(
         &self,
         id: &DownloadId,
-        revision: Option<&str>,
         resolution: &Resolution,
-    ) -> Result<u32, DownloadError> {
-        let has_active = self.has_active().await;
-        let completion_key = completion_key(id, revision, resolution)?;
+    ) -> Result<Option<u32>, DownloadError> {
+        let completion_key = completion_key(id, resolution)?;
 
-        // Minimal lock scope: mutate the queue, nothing else
+        // Minimal lock scope: find what is running and mutate the queue
         let position = {
             let mut queue = self.queue.write().await;
-            queue.queue_sharded(id, &completion_key, &resolution.files, has_active)?
+            let running = self.running_id(&queue).await;
+
+            // A repeat request for a download already in flight attaches to
+            // it instead of enqueueing a second copy. `is_queued` scans only
+            // `pending`, so a file that has moved to `active` is asked after
+            // too: a retried `gglib model download`, or a repair of a model
+            // already being fetched, would otherwise queue the group a second
+            // time under the running id.
+            //
+            // Deliberately narrower than "does the queue know this id": a
+            // check that also matched a *failed* download would make failures
+            // permanently un-retryable. `queue_sharded` forgets the id's old
+            // outcome instead, so a download that ended can be queued again.
+            //
+            // The check and the enqueue share one queue guard, taken before
+            // `active`, so two requests for one id cannot both pass it.
+            if queue.is_queued(id) || running.as_ref() == Some(id) {
+                tracing::info!(
+                    id = %id,
+                    "Download already in flight - attaching rather than queueing a duplicate"
+                );
+                return Ok(None);
+            }
+
+            queue.queue_sharded(id, &completion_key, &resolution.files, running.as_ref())?
         };
 
         // The files with their OIDs and roles, for registration and for
@@ -33,15 +62,14 @@ impl DownloadManagerImpl {
             .await
             .insert(id.to_string(), resolution.files.clone());
 
-        Ok(position)
+        Ok(Some(position))
     }
 }
 
 /// The identity a group completes under: its first file, which is a weights
-/// file, with any shard numbering removed.
+/// file, with any shard numbering removed. No request names a revision.
 fn completion_key(
     id: &DownloadId,
-    revision: Option<&str>,
     resolution: &Resolution,
 ) -> Result<CompletionKey, DownloadError> {
     let first_path = resolution
@@ -56,7 +84,7 @@ fn completion_key(
         .unwrap_or(first_path);
     Ok(CompletionKey::HfFile {
         repo_id: id.model_id().to_string(),
-        revision: revision.unwrap_or("unspecified").to_string(),
+        revision: "unspecified".to_string(),
         filename_canon: base_shard_filename(filename),
         quantization: Some(resolution.quantization.to_string()),
     })
@@ -86,7 +114,7 @@ mod tests {
             ResolvedFile::projector("mmproj-F16.gguf", 300, None),
         ]);
 
-        let key = completion_key(&id, None, &group).unwrap();
+        let key = completion_key(&id, &group).unwrap();
 
         assert_eq!(
             key,
@@ -100,21 +128,15 @@ mod tests {
     }
 
     #[test]
-    fn the_completion_key_carries_a_given_revision_and_the_file_name_alone() {
+    fn the_completion_key_carries_the_file_name_alone() {
         let id = DownloadId::new("owner/zeta-GGUF", Some("Q8_0"));
         let group = resolution(vec![ResolvedFile::new("Q8_0/zeta.Q8_0.gguf")]);
 
-        let key = completion_key(&id, Some("v2"), &group).unwrap();
+        let key = completion_key(&id, &group).unwrap();
 
-        let CompletionKey::HfFile {
-            revision,
-            filename_canon,
-            ..
-        } = key
-        else {
+        let CompletionKey::HfFile { filename_canon, .. } = key else {
             panic!("a Hub file key, not {key:?}");
         };
-        assert_eq!(revision, "v2");
         assert_eq!(filename_canon, "zeta.Q8_0.gguf");
     }
 
@@ -122,6 +144,6 @@ mod tests {
     fn a_resolution_without_files_has_no_key() {
         let id = DownloadId::new("owner/zeta-GGUF", Some("Q8_0"));
 
-        assert!(completion_key(&id, None, &resolution(vec![])).is_err());
+        assert!(completion_key(&id, &resolution(vec![])).is_err());
     }
 }

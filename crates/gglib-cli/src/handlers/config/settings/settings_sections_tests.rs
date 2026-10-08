@@ -16,7 +16,7 @@ fn settings_to_sections_groups_correctly() {
             "0.75".to_owned(),
         ),
         ("inference-defaults.top-k".to_owned(), "20".to_owned()),
-        ("proxy-port".to_owned(), "8080".to_owned()),
+        ("proxy-port".to_owned(), "8123".to_owned()),
     ];
 
     let sections = settings_to_sections(&flat);

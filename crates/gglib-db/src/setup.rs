@@ -20,6 +20,8 @@ mod attachments;
 mod model_files;
 #[path = "setup_models.rs"]
 mod models;
+#[path = "setup_settings.rs"]
+mod settings;
 
 /// `PRAGMA user_version` once the canonical-path backfills have run.
 ///
@@ -49,11 +51,12 @@ fn is_unique_violation(error: &sqlx::Error) -> bool {
 /// already present is a skip; anything else the ALTER hits fails the boot
 /// ([#921]).
 ///
-/// **Deliberately not a `PRAGMA user_version` ladder.** A field database
-/// stamped `1` may or may not carry `template_caps`, depending on which build
-/// last opened it, so a version-gated ALTER that propagates errors would abort
-/// startup with `duplicate column name`. `CANONICAL_PATH_SCHEMA_VERSION` also
-/// gates the per-row path backfill, so bumping it re-runs that for every user.
+/// **Columns are not on the `PRAGMA user_version` ladder.** Its versions gate
+/// passes over rows that run once per database (the path backfill at `1`, the
+/// loop guard's fold at `2`) and say nothing of columns: a field database
+/// stamped `1` or later may or may not carry `template_caps`, depending on
+/// which build last opened it, so a version-gated ALTER that propagates
+/// errors would abort startup with `duplicate column name`.
 ///
 /// The identifiers are interpolated rather than bound: `SQLite` accepts no
 /// parameters in DDL. Every caller passes a literal.
@@ -134,20 +137,7 @@ pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
     // Create all tables and indexes
     create_schema(&pool).await?;
 
-    // Initialize settings table
-    init_settings_table(&pool).await?;
-
-    // No setting has the key `auto_tune`; reclaim that row.
-    //
-    // `Settings` is `#[serde(default)]` and nothing validates the key set, so
-    // a stale row is silently dropped at load and would never break anything —
-    // but `save()` iterates only the serialised struct, so it would also never
-    // be swept. House style reclaims dropped *tables*; an orphan key would
-    // otherwise sit in every existing database forever, reading like a setting
-    // that still does something.
-    sqlx::query("DELETE FROM settings_kv WHERE key = 'auto_tune'")
-        .execute(&pool)
-        .await?;
+    settings::reclaim_auto_tune(&pool).await?;
 
     Ok(pool)
 }
@@ -159,7 +149,6 @@ pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
 pub async fn setup_test_database() -> Result<SqlitePool> {
     let pool = SqlitePool::connect("sqlite::memory:").await?;
     create_schema(&pool).await?;
-    init_settings_table(&pool).await?;
     Ok(pool)
 }
 
@@ -217,18 +206,11 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     model_files::create_model_files_table(pool).await?;
     model_files::add_projector_column(pool).await?;
 
-    // Create settings table
-    sqlx::query(
-        r"
-        CREATE TABLE IF NOT EXISTS settings_kv (
-            key TEXT PRIMARY KEY NOT NULL,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-        ",
-    )
-    .execute(pool)
-    .await?;
+    // The settings table, from the one place that defines it. Here and not
+    // after the schema, because the models rebuild below reads it.
+    crate::SqliteSettingsRepository::new(pool.clone())
+        .ensure_table()
+        .await?;
 
     // A `chat_messages` table predating the 'tool' role cannot store a
     // tool-role message: its CHECK constraint rejects the insert. Startup
@@ -568,18 +550,13 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // A setting's row carried over into the setting that replaced it. After
+    // every table exists, so a schema refused above has had no row rewritten.
+    settings::fold_loop_guard_switch_into_mode(pool).await?;
+
     // Last, after every table it reads exists, however old the library.
     models::rebuild_models_if_needed(pool).await?;
 
-    Ok(())
-}
-
-/// Initialize the settings table with default values if empty.
-async fn init_settings_table(pool: &SqlitePool) -> Result<()> {
-    use crate::SqliteSettingsRepository;
-
-    let repo = SqliteSettingsRepository::new(pool.clone());
-    repo.ensure_table().await?;
     Ok(())
 }
 

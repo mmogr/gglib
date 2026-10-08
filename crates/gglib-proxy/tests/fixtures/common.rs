@@ -18,11 +18,14 @@ use gglib_core::Settings;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::inference_profile::InferenceProfile;
 use gglib_core::ports::{
-    Admission, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
-    ModelRuntimePort, ModelSummary, RepositoryError, RunningTarget, SettingsRepository,
+    Admission, CatalogError, InMemorySettings, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec,
+    ModelRuntimeError, ModelRuntimePort, ModelSummary, RunningTarget, SettingsRepository,
 };
 use gglib_core::{McpRepositoryError, McpServer, McpServerRepository, NewMcpServer};
 use gglib_mcp::McpService;
+use gglib_proxy::ServeConfig;
+
+use super::spawn::{defaults, spawn};
 
 // ─── ModelRuntimePort mock ────────────────────────────────────────────────
 
@@ -81,59 +84,20 @@ impl ModelCatalogPort for EmptyCatalog {
     }
 }
 
-// ─── SettingsRepository mock ──────────────────────────────────────────────
-
-/// Returns default settings; save is a no-op.
-pub(crate) struct MockSettingsRepo;
-
-#[async_trait]
-impl SettingsRepository for MockSettingsRepo {
-    async fn load(&self) -> Result<Settings, RepositoryError> {
-        Ok(Settings::with_defaults())
-    }
-
-    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-}
-
-/// Settings repository returning a caller-supplied [`Settings`] verbatim —
-/// for tests exercising settings-gated proxy behaviour (e.g. the
-/// `proxy_loop_detection` off switch).
-pub(crate) struct StaticSettingsRepo(pub Settings);
-
-#[async_trait]
-impl SettingsRepository for StaticSettingsRepo {
-    async fn load(&self) -> Result<Settings, RepositoryError> {
-        Ok(self.0.clone())
-    }
-
-    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
-        Ok(())
-    }
-}
+// ─── Settings ─────────────────────────────────────────────────────────────
 
 /// Settings carrying one listed inference profile, so `/v1/models` emits
 /// `{model}:{name}` variant entries.
-pub(crate) struct ProfileSettingsRepo(pub &'static str);
-
-#[async_trait]
-impl SettingsRepository for ProfileSettingsRepo {
-    async fn load(&self) -> Result<Settings, RepositoryError> {
-        Ok(Settings {
-            inference_profiles: Some(vec![InferenceProfile {
-                name: self.0.to_string(),
-                description: None,
-                config: InferenceConfig::default(),
-                list_in_models: true,
-            }]),
-            ..Settings::with_defaults()
-        })
-    }
-
-    async fn save(&self, _: &Settings) -> Result<(), RepositoryError> {
-        Ok(())
-    }
+pub(crate) fn settings_listing(profile: &str) -> InMemorySettings {
+    InMemorySettings::with(Settings {
+        inference_profiles: Some(vec![InferenceProfile {
+            name: profile.to_string(),
+            description: None,
+            config: InferenceConfig::default(),
+            list_in_models: true,
+        }]),
+        ..Settings::with_defaults()
+    })
 }
 
 // ─── McpServerRepository mock (includes update_last_connected) ────────────
@@ -296,21 +260,8 @@ impl TaggedCatalog {
     fn summary(&self) -> ModelSummary {
         ModelSummary {
             dialect: self.dialect.clone(),
-            template_caps: None,
-            id: 1,
-            name: self.name.clone(),
             tags: self.tags.clone(),
-            capabilities: gglib_core::domain::ModelCapabilities::empty(),
-            image_input: false,
-            param_count: "7B".into(),
-            quantization: None,
-            architecture: None,
-            created_at: 0,
-            file_size: 0,
-            context_length: None,
-            inference_defaults: None,
-            defaults_origin: None,
-            server_defaults: None,
+            ..ModelSummary::bare(1, &self.name)
         }
     }
 }
@@ -889,50 +840,24 @@ pub(crate) async fn spawn_proxy_with_catalog(
     runtime: Arc<dyn ModelRuntimePort>,
     catalog: Arc<dyn ModelCatalogPort>,
 ) -> (String, CancellationToken) {
-    spawn_proxy_with_settings(runtime, catalog, Arc::new(MockSettingsRepo)).await
+    spawn_proxy_with_settings(runtime, catalog, Arc::new(InMemorySettings::default())).await
 }
 
 /// [`spawn_proxy_with_catalog`] with the settings repository supplied too —
-/// for tests exercising settings-gated behaviour (see [`StaticSettingsRepo`]).
+/// for tests exercising settings-gated behaviour (see [`InMemorySettings`]).
 pub(crate) async fn spawn_proxy_with_settings(
     runtime: Arc<dyn ModelRuntimePort>,
     catalog: Arc<dyn ModelCatalogPort>,
     settings_repo: Arc<dyn SettingsRepository>,
 ) -> (String, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let mcp = make_mcp_service();
-
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            // Device memory readable: this suite is not about the fit.
-            true,
-            runtime,
-            catalog,
-            mcp,
-            cancel_clone,
-            None, // daemon_cancel: no daemon in tests
-            settings_repo,
-            None, // inference_override
-            None, // default_profile
-            false,
-            None,
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &gglib_core::ProxyAccessConfig::default(),
-        )
-        .await
-        .ok();
-    });
-
-    tokio::time::sleep(Duration::from_millis(30)).await;
-    (format!("http://{addr}"), cancel)
+    let proxy = spawn(ServeConfig {
+        runtime_port: runtime,
+        catalog_port: catalog,
+        settings_repo,
+        ..defaults().await
+    })
+    .await;
+    (proxy.base, proxy.cancel)
 }
 
 /// Spawn a proxy server with cache enabled, pointing at the given upstream
@@ -945,52 +870,24 @@ pub(crate) async fn spawn_proxy_with_cache_for_model(
     slot_restore_supported: bool,
     pinned: bool,
 ) -> (String, CancellationToken) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    let runtime: Arc<dyn ModelRuntimePort> = Arc::new(FixedUpstream {
-        port: upstream_port,
-        model_name: model_name.into(),
-        slot_restore_supported,
-        pinned,
-    });
-    let catalog: Arc<dyn ModelCatalogPort> = Arc::new(TaggedCatalog {
-        name: model_name.into(),
-        tags: vec![],
-        dialect: None,
-    });
-    let mcp = make_mcp_service();
-    let cancel = CancellationToken::new();
-    let cancel_clone = cancel.clone();
-
-    tokio::spawn(async move {
-        gglib_proxy::serve(
-            listener,
-            Some(4096),
-            // Device memory readable: this suite is not about the fit.
-            true,
-            runtime,
-            catalog,
-            mcp,
-            cancel_clone,
-            None, // daemon_cancel: no daemon in tests
-            Arc::new(MockSettingsRepo),
-            None, // inference_override
-            None, // default_profile
-            true, // cache_enabled
-            Some(slot_dir),
-            gglib_proxy::slot_eviction::DiskBudget::Auto,
-            std::sync::Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
-            gglib_proxy::ProxyObservers::default(),
-            &gglib_core::ProxyAccessConfig::default(),
-        )
-        .await
-        .ok();
-    });
-
-    // Give the proxy time to start listening.
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    (format!("http://{addr}"), cancel)
+    let proxy = spawn(ServeConfig {
+        runtime_port: Arc::new(FixedUpstream {
+            port: upstream_port,
+            model_name: model_name.into(),
+            slot_restore_supported,
+            pinned,
+        }),
+        catalog_port: Arc::new(TaggedCatalog {
+            name: model_name.into(),
+            tags: vec![],
+            dialect: None,
+        }),
+        cache_enabled: true,
+        slot_dir: Some(slot_dir),
+        ..defaults().await
+    })
+    .await;
+    (proxy.base, proxy.cancel)
 }
 
 /// [`spawn_proxy_with_cache_for_model`] with defaults matching the common

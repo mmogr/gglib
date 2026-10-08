@@ -1,10 +1,18 @@
-//! Daemon API route constants — the paths the CLI sends to `gglib daemon`.
+//! Daemon API route constants — the paths the CLI sends to `gglib daemon` —
+//! and the keys of the request bodies it sends there.
 //!
 //! These live here, in shared vocabulary, rather than inside the CLI, so the
 //! daemon's own test suite can walk them and fail when it stops serving one.
 //! `gglib-axum/tests/daemon_route_contract.rs` is what ties the client's paths
 //! to the router's; without it, deleting a route the CLI still calls leaves
 //! the whole suite green (#834).
+//!
+//! The two ends of a request body cannot meet in one test. The CLI's struct is
+//! `pub(crate)` inside `gglib-cli`'s `pub(crate) mod daemon_client`, and the
+//! daemon's is `pub(crate)` inside `gglib-axum`'s `pub(crate) mod handlers`;
+//! both crates deny `unreachable_pub`, and gglib-axum may not depend on
+//! gglib-cli. So each side pins itself against a `*_FIELDS` list here instead
+//! — the same trick [`CLI_ROUTE_CONTRACT`] uses for paths.
 
 /// Daemon identity probe.
 pub const HEALTH_PATH: &str = "/health";
@@ -37,6 +45,11 @@ pub const SERVERS_START_PATH: &str = "/api/servers/start";
 
 /// Ask the daemon to shut down.
 pub const DAEMON_SHUTDOWN_PATH: &str = "/api/daemon/shutdown";
+
+/// The daemon's event stream. `GET` is the stream the app reads. `POST`
+/// puts one event on it: a `gglib` command that changed the library in its
+/// own process sends the event its change emitted there.
+pub const EVENTS_PATH: &str = "/api/events";
 
 /// Bring the remote tunnel up and arm a pairing (ADR 0012).
 pub const REMOTE_ENABLE_PATH: &str = "/api/remote/enable";
@@ -152,6 +165,16 @@ pub const DOWNLOADS_QUEUE_PATH: &str = "/api/models/downloads/queue";
 /// Model list: the library, sorted and filtered as its query parameters ask.
 pub const MODELS_LIST_PATH: &str = "/api/models";
 
+/// Repair one model, interpolating `id` into [`MODELS_LIST_PATH`]: delete its
+/// unhealthy files and queue the download that fetches them again.
+#[must_use]
+pub fn model_repair_path(id: i64) -> String {
+    format!("{MODELS_LIST_PATH}/{id}/repair")
+}
+
+/// The verbs [`model_repair_path`] is called with.
+pub const MODEL_REPAIR_METHODS: &[&str] = &["POST"];
+
 /// Benchmark comparison run (SSE).
 pub const BENCHMARK_COMPARE_PATH: &str = "/api/benchmark/compare";
 
@@ -218,6 +241,7 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["GET"], PROXY_STATUS_PATH),
     (&["POST"], SERVERS_START_PATH),
     (&["POST"], DAEMON_SHUTDOWN_PATH),
+    (&["POST"], EVENTS_PATH),
     (&["POST"], REMOTE_ENABLE_PATH),
     (&["POST"], REMOTE_DISABLE_PATH),
     (&["GET"], REMOTE_STATUS_PATH),
@@ -269,14 +293,8 @@ pub fn remote_forget_path(device: &str) -> String {
 /// The verbs [`remote_forget_path`] is called with.
 pub const REMOTE_FORGET_METHODS: &[&str] = &["DELETE"];
 
-/// Every key the CLI puts in a `POST /api/proxy/start` body.
-///
-/// The two ends of that body cannot meet in one test. `StartProxyBody` is
-/// `pub(crate)` inside `gglib-cli`'s `pub(crate) mod daemon_client`, and
-/// `StartProxyConfig` is `pub(crate)` inside `gglib-axum`'s `pub(crate) mod
-/// handlers`; both crates deny `unreachable_pub`, and gglib-axum may not depend
-/// on gglib-cli. So each side pins itself against this list instead — the same
-/// trick [`CLI_ROUTE_CONTRACT`] uses for paths.
+/// Every key the CLI puts in a `POST /api/proxy/start` body: `StartProxyBody`
+/// there, `StartProxyConfig` in the daemon.
 pub const PROXY_START_CLI_FIELDS: &[&str] = &[
     "host",
     "port",
@@ -297,3 +315,20 @@ pub const PROXY_START_CLI_FIELDS: &[&str] = &[
 /// routes it through the launch cascade. `/api/proxy/start` deserializes it and
 /// never looks at it, so it is daemon-only by function rather than by omission.
 pub const PROXY_START_DAEMON_ONLY_FIELDS: &[&str] = &["llama_base_port"];
+
+/// Every key the CLI puts in a `POST /api/servers/start` body: `StartServerBody`
+/// at both ends, each an id beside a flattened `StartServerRequest`.
+///
+/// The daemon's body refuses no unknown key, so a key spelled another way is
+/// dropped without an error, and the setting it carried with it.
+pub const SERVERS_START_CLI_FIELDS: &[&str] = &[
+    "id",
+    "contextLength",
+    "port",
+    "jinja",
+    "reasoningFormat",
+    "mtpDraftNMax",
+    "mtpDraftPMin",
+    "inferenceParams",
+    "mlock",
+];

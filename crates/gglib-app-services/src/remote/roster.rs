@@ -164,7 +164,7 @@ pub(super) async fn read_roster(core: &AppCore) -> Result<Vec<Device>, GuiError>
         .settings()
         .get()
         .await
-        .map_err(|e| GuiError::Internal(format!("could not read the device roster: {e}")))?;
+        .map_err(|e| GuiError::from(e).context("could not read the device roster"))?;
     Ok(settings.remote_devices.unwrap_or_default())
 }
 
@@ -176,7 +176,8 @@ pub(super) async fn read_roster(core: &AppCore) -> Result<Vec<Device>, GuiError>
 ///
 /// # Errors
 ///
-/// `Internal` when settings cannot be written.
+/// `ValidationFailed` when settings refuse the roster, and `Internal` when
+/// they cannot be written.
 pub(super) async fn write_roster(core: &AppCore, roster: Vec<Device>) -> Result<(), GuiError> {
     core.settings()
         .update(SettingsUpdate {
@@ -184,7 +185,7 @@ pub(super) async fn write_roster(core: &AppCore, roster: Vec<Device>) -> Result<
             ..SettingsUpdate::default()
         })
         .await
-        .map_err(|e| GuiError::Internal(format!("could not write the device roster: {e}")))?;
+        .map_err(|e| GuiError::from(e).context("could not write the device roster"))?;
     Ok(())
 }
 

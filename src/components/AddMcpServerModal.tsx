@@ -285,5 +285,3 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
     </Modal>
   );
 };
-
-export default AddMcpServerModal;

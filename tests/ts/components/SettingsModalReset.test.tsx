@@ -38,9 +38,6 @@ const settings = {
   startAtLogin: true,
   trustClientSampling: true,
   loopGuardMode: 'refuse',
-  // Still a `Settings` field for one release, and still honoured when
-  // `loopGuardMode` is absent — but nothing in the GUI writes it now.
-  proxyLoopDetection: false,
   showMemoryFitIndicators: false,
   titleGenerationPrompt: 'a prompt the user wrote',
   agenticSampling: false,
@@ -78,7 +75,6 @@ vi.mock('../../../src/hooks/useMcpServers', () => ({
     loading: false,
     error: null,
     refresh: vi.fn(),
-    callTool: vi.fn(),
   }),
 }));
 

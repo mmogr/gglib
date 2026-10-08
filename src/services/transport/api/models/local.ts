@@ -6,27 +6,42 @@
 import { del, get, patch, post, put } from '../client';
 import { TransportError } from '../../errors';
 import type { ModelId } from '../../types/ids';
+import type { AddModelParams, UpdateModelBody, UpdateModelParams } from '../../types/models';
 import type {
   GgufModel,
   ModelDetail,
-  AddModelParams,
-  UpdateModelParams,
   ModelFilterOptions,
-  ProjectorChoice,
-  SystemMemoryInfo,
   ModelsDirectoryInfo,
   RetagResponse,
+  SamplingExplanation,
   SetCapabilitiesRequest,
+  SystemMemoryInfo,
   UpgradeCheck,
   UpgradeOutcome,
-} from '../../types/models';
-import type { SamplingExplanation } from '../../../../types';
+} from '../../../../types';
+import type { AddModelRequest } from '../../../../types/generated/AddModelRequest';
+import type { ModelListQueryParams } from '../../../../types/generated/ModelListQueryParams';
+import type { ProjectorChoice } from '../../../../types/generated/ProjectorChoice';
+import type { RemoveModelRequest } from '../../../../types/generated/RemoveModelRequest';
+import type { RetagBody } from '../../../../types/generated/RetagBody';
+import type { UpdateModelsDirectoryRequest } from '../../../../types/generated/UpdateModelsDirectoryRequest';
 
 /**
- * List all local models.
+ * The sort and filters `GET /api/models` reads, by the daemon's own names.
+ * A key left out, or `null`, is a filter that is not set.
  */
-export async function listModels(): Promise<GgufModel[]> {
-  return get<GgufModel[]>('/api/models');
+export type ModelListQuery = Partial<ModelListQueryParams>;
+
+/**
+ * List local models, sorted and narrowed by `query` when one is given.
+ */
+export async function listModels(query: ModelListQuery = {}): Promise<GgufModel[]> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== null && value !== undefined) params.set(key, String(value));
+  }
+  const search = params.toString();
+  return get<GgufModel[]>(search ? `/api/models?${search}` : '/api/models');
 }
 
 /**
@@ -88,31 +103,31 @@ export async function explainModelSampling(
  * Add a new model from a local file.
  */
 export async function addModel(params: AddModelParams): Promise<GgufModel> {
-  return post<GgufModel>('/api/models', {
-    file_path: params.filePath,
-    name: params.name,
-  });
+  const body: AddModelRequest = { file_path: params.filePath };
+  return post<GgufModel>('/api/models', body);
 }
 
 /**
  * Remove a model.
  */
 export async function removeModel(id: ModelId): Promise<void> {
-  await del<void>(`/api/models/${id}`, { force: false });
+  const body: RemoveModelRequest = { force: false };
+  await del<void>(`/api/models/${id}`, body);
 }
 
 /**
  * Update model metadata.
  */
 export async function updateModel(params: UpdateModelParams): Promise<GgufModel> {
-  return put<GgufModel>(`/api/models/${params.id}`, {
+  const body: UpdateModelBody = {
     name: params.name,
     quantization: params.quantization,
     filePath: params.filePath,
     inferenceDefaults: params.inferenceDefaults,
     serverDefaults: params.serverDefaults,
     projectorPath: params.projectorPath,
-  });
+  };
+  return put<GgufModel>(`/api/models/${params.id}`, body);
 }
 
 /**
@@ -129,7 +144,8 @@ export async function listProjectorChoices(id: ModelId): Promise<ProjectorChoice
  * (`gglib model retag`). `full` rebuilds the system-tag namespace.
  */
 export async function retagModel(modelId: number, full = false): Promise<RetagResponse> {
-  return post<RetagResponse>(`/api/models/${modelId}/retag`, { full });
+  const body: RetagBody = { full };
+  return post<RetagResponse>(`/api/models/${modelId}/retag`, body);
 }
 
 /** Set or clear a model's capability flags. Returns the updated model. */
@@ -140,7 +156,7 @@ export async function setModelCapabilities(
   return patch<GgufModel>(`/api/models/${modelId}/capabilities`, request);
 }
 
-/** Commit-SHA update check (`gglib model check-updates` for one model). */
+/** Commit-SHA update check: the one `gglib model upgrade` runs before it downloads. */
 export async function checkModelUpgrade(modelId: number): Promise<UpgradeCheck> {
   return get<UpgradeCheck>(`/api/models/${modelId}/upgrade-check`);
 }
@@ -179,5 +195,6 @@ export async function getModelsDirectory(): Promise<ModelsDirectoryInfo> {
  * Set models directory path.
  */
 export async function setModelsDirectory(path: string): Promise<void> {
-  await put<void>('/api/config/system/models-directory', { path });
+  const body: UpdateModelsDirectoryRequest = { path };
+  await put<void>('/api/config/system/models-directory', body);
 }

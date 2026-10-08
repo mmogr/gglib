@@ -5,23 +5,25 @@
 
 import { post, get } from './client';
 import type { ModelId } from '../types/ids';
-import type { ServeConfig, ServeResponse, ServerInfo } from '../types/servers';
-import type { ToolSupportResponse } from '../../../types';
+import type { ServeConfig, ServerInfo, ToolSupportResponse } from '../../../types';
+import type { StartServerResponse } from '../../../types/generated/StartServerResponse';
+import type { StopServerBody } from '../../../types/generated/StopServerBody';
 import { toStartServerRequest } from '../mappers';
 
 /**
  * Start a llama.cpp server for a model.
  */
-export async function serveModel(config: ServeConfig): Promise<ServeResponse> {
+export async function serveModel(config: ServeConfig): Promise<StartServerResponse> {
   const request = toStartServerRequest(config);
-  return post<ServeResponse>('/api/servers/start', { id: config.id, ...request });
+  return post<StartServerResponse>('/api/servers/start', { id: config.id, ...request });
 }
 
 /**
  * Stop a running server for a model.
  */
 export async function stopServer(modelId: ModelId): Promise<void> {
-  await post<void>('/api/servers/stop', { model_id: modelId });
+  const body: StopServerBody = { model_id: modelId };
+  await post<void>('/api/servers/stop', body);
 }
 
 /**

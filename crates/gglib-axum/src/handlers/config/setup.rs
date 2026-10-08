@@ -9,17 +9,15 @@ use futures_util::StreamExt;
 use futures_util::stream::Stream;
 use serde::Serialize;
 
-use crate::dto::diagnostics::{
-    AccelerationDto, DiagnosticsDto, FastDownloadsDto, RecommendationDto, ResolvedPathsDto,
-};
+use crate::dto::diagnostics::{DiagnosticsDto, RecommendationDto, ResolvedPathsDto};
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::setup::SetupStatus;
-use gglib_core::paths::{llama_cpp_dir, llama_server_path};
 use gglib_runtime::llama::{
-    Acceleration, BuildEvent, LlamaProgressEvent, LlamaStatus, LlamaUpdateCheck, UninstallOutcome,
-    llama_status, llama_update_check, run_llama_update, uninstall_llama, update_acceleration,
+    BuildEvent, LlamaProgressEvent, LlamaStatus, LlamaUpdateCheck, UninstallOutcome, UpdatePlan,
+    llama_status, llama_update_check, run_llama_update, uninstall_llama, update_preflight,
 };
+use tokio::sync::mpsc;
 
 /// Get the full system setup status for the first-run wizard.
 pub(crate) async fn status(State(state): State<AppState>) -> Result<Json<SetupStatus>, HttpError> {
@@ -106,18 +104,8 @@ pub(crate) async fn diagnostics(
     Ok(Json(DiagnosticsDto {
         dependencies: d.dependencies.iter().map(Into::into).collect(),
         paths: ResolvedPathsDto::from(d.paths),
-        acceleration: AccelerationDto {
-            detected: d.acceleration.detected,
-            detection_error: d.acceleration.detection_error,
-        },
-        fast_downloads: FastDownloadsDto {
-            provisioned: d.fast_downloads.provisioned,
-            env_dir: d.fast_downloads.env_dir,
-            legacy_path: d.fast_downloads.legacy_path,
-            builder: d.fast_downloads.builder,
-            available_builder: d.fast_downloads.available_builder,
-            error: d.fast_downloads.error,
-        },
+        acceleration: d.acceleration,
+        fast_downloads: d.fast_downloads,
     }))
 }
 
@@ -168,13 +156,6 @@ pub(crate) async fn uninstall_llama_handler() -> Result<Json<UninstallOutcome>, 
         .map_err(|e| HttpError::Internal(e.to_string()))
 }
 
-/// Pull upstream and rebuild llama.cpp, streaming [`BuildEvent`]s over SSE —
-/// the GUI face of `gglib config llama update`.
-///
-/// Rebuilds with the acceleration the current build recorded, so an update
-/// cannot silently change backend. Preflight failures are reported as a
-/// `failed` event rather than an HTTP status: by the time they are known the
-/// response has already committed to being a stream.
 /// One llama.cpp build at a time, process-wide.
 ///
 /// Two concurrent builds share a source checkout and a binary destination, so
@@ -182,6 +163,13 @@ pub(crate) async fn uninstall_llama_handler() -> Result<Json<UninstallOutcome>, 
 /// nothing about a second browser tab or a second client.
 static UPDATE_IN_FLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// Pull upstream and rebuild llama.cpp, streaming [`BuildEvent`]s over SSE —
+/// the GUI face of `gglib config llama update`.
+///
+/// Whether it may start is `update_preflight`'s to say, as it is for the
+/// command: one install gets one verdict and one remedy from both. A refusal
+/// is reported as a `failed` event rather than an HTTP status: by the time it
+/// is known the response has already committed to being a stream.
 pub(crate) async fn update_llama()
 -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
     let (tx, rx) = tokio::sync::mpsc::channel::<BuildEvent>(64);
@@ -218,32 +206,13 @@ pub(crate) async fn update_llama()
         }
         let _guard = Guard;
 
-        async fn preflight()
-        -> anyhow::Result<(Acceleration, std::path::PathBuf, std::path::PathBuf)> {
-            let llama_dir = llama_cpp_dir().map_err(|e| anyhow::anyhow!("{e}"))?;
-            let server_path = llama_server_path().map_err(|e| anyhow::anyhow!("{e}"))?;
-            if !llama_dir.exists() {
-                anyhow::bail!(
-                    "llama.cpp source checkout not found. A prebuilt install has no repository \
-                     to update — reinstall from source first."
-                );
-            }
-            Ok((update_acceleration()?, llama_dir, server_path))
-        }
+        let update = preflight_then_update(
+            update_preflight,
+            |plan, tx| run_llama_update(plan.acceleration, plan.llama_dir, plan.server_path, tx),
+            tx.clone(),
+        );
 
-        let (acceleration, llama_dir, server_path) = match preflight().await {
-            Ok(v) => v,
-            Err(e) => {
-                let _ = tx
-                    .send(BuildEvent::Failed {
-                        message: e.to_string(),
-                    })
-                    .await;
-                return;
-            }
-        };
-
-        if let Err(e) = run_llama_update(acceleration, llama_dir, server_path, tx.clone()).await {
+        if let Err(e) = update.await {
             let _ = tx
                 .send(BuildEvent::Failed {
                     message: e.to_string(),
@@ -259,6 +228,28 @@ pub(crate) async fn update_llama()
             .interval(std::time::Duration::from_secs(30))
             .text("ping"),
     )
+}
+
+/// Ask `preflight` whether the update may start, pass on what it wants said,
+/// and run `update` on the plan it made.
+///
+/// A caution is the stream's first event, a `log` in the preflight's own
+/// words, which are the ones the command prints before it asks. A refusal is
+/// the error, and `update` is not run. The preflight runs the build tools and
+/// git to see that they are there, which is blocking work.
+async fn preflight_then_update<Running>(
+    preflight: impl FnOnce() -> anyhow::Result<UpdatePlan> + Send + 'static,
+    update: impl FnOnce(UpdatePlan, mpsc::Sender<BuildEvent>) -> Running,
+    tx: mpsc::Sender<BuildEvent>,
+) -> anyhow::Result<()>
+where
+    Running: Future<Output = anyhow::Result<()>>,
+{
+    let plan = tokio::task::spawn_blocking(preflight).await??;
+    if let Some(message) = plan.caution.clone() {
+        let _ = tx.send(BuildEvent::Log { message }).await;
+    }
+    update(plan, tx).await
 }
 
 fn build_event_to_sse(event: BuildEvent) -> Result<Event, Infallible> {
@@ -285,3 +276,7 @@ pub(crate) async fn recommend_model(
 ) -> Result<Json<Option<RecommendationDto>>, HttpError> {
     Ok(Json(state.setup.recommend_model().map(Into::into)))
 }
+
+#[cfg(test)]
+#[path = "setup_tests.rs"]
+mod tests;

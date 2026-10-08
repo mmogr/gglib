@@ -33,10 +33,9 @@ use crate::target::Target;
 use anyhow::{Result, anyhow, bail};
 
 use gglib_core::domain::InferenceProfile;
+use gglib_core::domain::inference_profile::not_found_message;
 use gglib_core::ports::ModelCatalogPort;
 use gglib_core::request_pipeline::{ModelRoute, resolve_route};
-
-use crate::handlers::config::settings::profiles::not_found_message;
 
 /// What a command-line identifier plus an optional `--profile` resolved to.
 #[derive(Debug, Clone, PartialEq)]

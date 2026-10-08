@@ -12,6 +12,7 @@ use gglib_app_services::types::{
 };
 use gglib_core::ModelFilterOptions;
 use gglib_core::domain::{ModelDetailDto, ModelListQuery, ModelSortBy, SortOrder};
+use gglib_core::services::ImportMode;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Query-parameter struct for GET /api/models
@@ -88,12 +89,14 @@ pub(crate) async fn get(
     Ok(Json(state.models.get(id).await?))
 }
 
-/// Add a new model from a local file.
+/// Add a new model from a local file, with the parameter count read from it.
+/// A file already in the library is a 409: the body has no way to ask for
+/// the re-import `gglib model add --reimport` makes.
 pub(crate) async fn add(
     State(state): State<AppState>,
     Json(req): Json<AddModelRequest>,
 ) -> Result<Json<GuiModel>, HttpError> {
-    Ok(Json(state.models.add(req).await?))
+    Ok(Json(state.models.add(req, None, ImportMode::Fresh).await?))
 }
 
 /// Update an existing model.
@@ -198,8 +201,11 @@ pub(crate) async fn retag(
     Ok(Json(state.models.retag(id, body.full).await?))
 }
 
-/// Commit-SHA update check — `gglib model check-updates` for one model,
-/// distinct from the shard-level diff on `/{id}/updates`.
+/// Commit-SHA update check — the one `gglib model upgrade` runs before it
+/// downloads, distinct from the shard-level diff on `/{id}/updates`. It is
+/// the comparison `gglib model check-updates` makes, for a model an upgrade
+/// can be applied to: with no recorded revision it reports an update and no
+/// `currentSha`, which that command prints as nothing to compare with.
 pub(crate) async fn check_upgrade(
     State(state): State<AppState>,
     Path(id): Path<i64>,
@@ -209,11 +215,14 @@ pub(crate) async fn check_upgrade(
 
 /// Re-download at the latest `HuggingFace` revision and rewrite the row —
 /// `gglib model upgrade`. Blocking for the download's duration, like the CLI.
+/// No progress is reported for the download: it is on no queue snapshot, and
+/// its row is handed to nobody. A client gets the reply, and the
+/// `model_updated` event sent when the model's row is rewritten.
 pub(crate) async fn apply_upgrade(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<gglib_app_services::types::UpgradeOutcome>, HttpError> {
-    Ok(Json(state.models.apply_upgrade(id).await?))
+    Ok(Json(state.models.apply_upgrade(id, None).await?))
 }
 
 pub(crate) async fn set_capabilities(

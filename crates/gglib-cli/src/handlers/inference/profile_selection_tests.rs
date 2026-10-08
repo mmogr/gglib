@@ -1,45 +1,7 @@
 use super::*;
-use std::collections::HashSet;
 
-use async_trait::async_trait;
 use gglib_core::domain::InferenceConfig;
-use gglib_core::ports::model_catalog::{CatalogError, ModelLaunchSpec, ModelSummary};
-
-/// Catalog holding a fixed set of names, resolving by exact match — the
-/// behaviour of the real `SQLite` repository (`WHERE name = ?`).
-#[derive(Debug)]
-struct NamedCatalog {
-    names: HashSet<String>,
-}
-
-impl NamedCatalog {
-    fn new(names: &[&str]) -> Self {
-        Self {
-            names: names.iter().map(|n| (*n).to_owned()).collect(),
-        }
-    }
-}
-
-#[async_trait]
-impl ModelCatalogPort for NamedCatalog {
-    async fn list_models(&self) -> Result<Vec<ModelSummary>, CatalogError> {
-        Ok(vec![])
-    }
-
-    async fn resolve_model(&self, name: &str) -> Result<Option<ModelSummary>, CatalogError> {
-        Ok(self
-            .names
-            .contains(name)
-            .then(|| ModelSummary::bare(1, name)))
-    }
-
-    async fn resolve_for_launch(
-        &self,
-        _name: &str,
-    ) -> Result<Option<ModelLaunchSpec>, CatalogError> {
-        Ok(None)
-    }
-}
+use gglib_core::ports::NamedCatalog;
 
 fn profiles() -> Vec<InferenceProfile> {
     vec![InferenceProfile {

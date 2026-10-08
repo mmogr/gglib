@@ -21,7 +21,6 @@ export interface ServerActionsConfig {
   customPort: string;
   jinjaOverride: boolean | null;
   hasAgentTag: boolean;
-  hasMtpTag: boolean;
   mtpNMaxOverride: number | null;
   mtpPMinOverride: number | null;
   inferenceParams: SparseInferenceConfig | undefined;
@@ -32,7 +31,6 @@ export interface ServerActionsConfig {
   onStopServer: (modelId: number) => Promise<void>;
   onRemoveModel: (id: number, force: boolean) => void;
   onUpdateModel: (id: number, updates: { name?: string; quantization?: string; file_path?: string; inferenceDefaults?: SparseInferenceConfig; serverDefaults?: import('../../../types').ServerConfig | null }) => Promise<void>;
-  onStartServer: () => void;
   onServerStarted?: (serverInfo: ServerViewModel) => void;
   onLlamaServerNotInstalled?: (metadata: LlamaServerNotInstalledMetadata) => void;
   // State setters
@@ -70,14 +68,12 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     customPort,
     jinjaOverride,
     hasAgentTag,
-    hasMtpTag,
     mtpNMaxOverride,
     mtpPMinOverride,
     inferenceParams,
     onStopServer,
     onRemoveModel,
     onUpdateModel,
-    onStartServer,
     onServerStarted,
     onLlamaServerNotInstalled,
     setIsServing,
@@ -147,8 +143,8 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         mlock: false,
         jinja: jinjaOverride === null ? (hasAgentTag ? true : undefined) : jinjaOverride,
         // MTP: null = auto-detect from tag; 0 = disable; >0 = explicit token count
-        specDraftNMax: mtpNMaxOverride !== null ? mtpNMaxOverride : (hasMtpTag ? undefined : undefined),
-        specDraftPMin: mtpPMinOverride !== null ? mtpPMinOverride : undefined,
+        mtpDraftNMax: mtpNMaxOverride ?? undefined,
+        mtpDraftPMin: mtpPMinOverride ?? undefined,
       };
 
       if (pinProxy) {
@@ -173,7 +169,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
             'success',
           );
         } catch (err) {
-          const raw = err instanceof Error ? err.message : String(err);
+          const raw = formatError(err);
           showToast(
             raw.includes('already running')
               ? 'The proxy is already running — stop it from the Proxy menu, then pin.'
@@ -189,8 +185,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
 
       const result = await getTransport().serveModel(serveConfig);
       closeServeModal();
-      onStartServer();
-      
+
       if (onServerStarted && result) {
         onServerStarted({
           modelId: model.id,
@@ -212,7 +207,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
         }
       }
       
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = formatError(error);
       if (errorMessage.toLowerCase().includes('port') && errorMessage.toLowerCase().includes('in use')) {
         showToast(errorMessage, 'error');
       } else {
@@ -221,7 +216,7 @@ export function useServerActions(config: ServerActionsConfig): ServerActionsResu
     } finally {
       setIsServing(false);
     }
-  }, [model, customContext, customPort, jinjaOverride, hasAgentTag, hasMtpTag, mtpNMaxOverride, mtpPMinOverride, inferenceParams, onStartServer, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled, pinProxy]);
+  }, [model, customContext, customPort, jinjaOverride, hasAgentTag, mtpNMaxOverride, mtpPMinOverride, inferenceParams, onServerStarted, closeServeModal, setIsServing, showToast, onLlamaServerNotInstalled, pinProxy]);
 
   const handleToggleServer = useCallback(async () => {
     if (!model?.id) return;

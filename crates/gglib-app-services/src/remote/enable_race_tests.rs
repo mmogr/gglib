@@ -35,8 +35,8 @@ use super::serve_switch::CANCELLED_BY_DISABLE;
 use super::serve_watch_tests::{arming, offline, ops_with_key};
 use super::*;
 use crate::error::GuiError;
-use crate::test_support::test_core_and_proxy_over;
-use crate::test_support_remote::{RecordingEmitter, scratch_device_keys, scratch_join_keys};
+use crate::test_support::{RecordingEmitter, test_core_and_proxy_over};
+use crate::test_support_remote::{scratch_device_keys, scratch_join_keys};
 
 /// Long enough for a call that is not going to wait to have answered.
 const ANSWERED: Duration = Duration::from_millis(500);

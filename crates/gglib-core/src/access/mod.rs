@@ -27,7 +27,7 @@ pub use origin::may_change;
 use std::sync::Arc;
 
 use crate::cors::CorsConfig;
-use crate::ports::{AgentRunStarter, HubChatsPort, RemoteGatewayPort, RunsPort};
+use crate::ports::RemoteGatewayPort;
 
 /// Where the proxy's bearer token came from.
 ///
@@ -198,29 +198,8 @@ impl ProxyAccessConfig {
         self
     }
 
-    /// Attach the daemon's runs, for the same reason as
+    /// Attach every port a paired device reaches, for the same reason as
     /// [`with_remote`](Self::with_remote).
-    #[must_use]
-    pub fn with_runs(mut self, runs: Option<Arc<dyn RunsPort>>) -> Self {
-        self.devices.runs = runs;
-        self
-    }
-
-    /// Attach the hub's chats, for the same reason.
-    #[must_use]
-    pub fn with_chats(mut self, chats: Option<Arc<dyn HubChatsPort>>) -> Self {
-        self.devices.chats = chats;
-        self
-    }
-
-    /// Attach what starts a device's turn on a hub chat, for the same reason.
-    #[must_use]
-    pub fn with_turns(mut self, turns: Option<Arc<dyn AgentRunStarter>>) -> Self {
-        self.devices.turns = turns;
-        self
-    }
-
-    /// Attach every port a paired device reaches, for the same reason.
     #[must_use]
     pub fn with_devices(mut self, devices: DevicePorts) -> Self {
         self.devices = devices;

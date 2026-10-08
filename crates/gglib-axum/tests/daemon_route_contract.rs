@@ -36,6 +36,13 @@
 //! path constant the router itself composes from, which axum's `.nest()`
 //! prevents by building relative fragments against absolute client paths.
 //! These two probes catch every failure this codebase has actually produced.
+//!
+//! ## The other direction
+//!
+//! The second test here holds a short list of requests that have no client
+//! to having no route, and the page's own requests on the paths beside them
+//! to keeping theirs. It is a list, not a sweep: nothing here finds a route
+//! that lost its client since.
 
 mod common;
 
@@ -146,6 +153,10 @@ async fn every_daemon_path_the_cli_calls_is_routed() {
     if let Some(complaint) = check(&app, daemon::REMOTE_FORGET_METHODS, &forget).await {
         broken.push(format!("  {complaint}"));
     }
+    let repair = daemon::model_repair_path(1);
+    if let Some(complaint) = check(&app, daemon::MODEL_REPAIR_METHODS, &repair).await {
+        broken.push(format!("  {complaint}"));
+    }
     for (methods, path) in [
         (daemon::RUN_METHODS, daemon::run_path("run-1")),
         (
@@ -171,4 +182,52 @@ async fn every_daemon_path_the_cli_calls_is_routed() {
         broken.len(),
         broken.join("\n")
     );
+}
+
+/// Requests no client of the daemon sends and no document promises. A route
+/// for one reads as a feature that does not exist, so none is served.
+const WITHOUT_A_CLIENT: &[(&str, &str)] = &[
+    ("POST", "/api/messages"),
+    ("PUT", "/api/messages/1"),
+    ("GET", "/api/benchmark/runs/1"),
+    ("GET", "/api/models/1/benchmark"),
+    ("GET", "/api/models/1/tune-history"),
+    ("POST", "/api/mcp/tools/call"),
+    ("POST", "/api/models/downloads/finished/clear"),
+];
+
+/// What the page does send on the paths beside those.
+const BESIDE_THEM: &[(&[&str], &str)] = &[
+    (&["DELETE"], "/api/messages/1"),
+    (&["GET"], "/api/benchmark/runs"),
+    (&["GET"], "/api/models/1/agentic-history"),
+    (&["GET", "POST"], "/api/mcp/servers"),
+    (&["DELETE"], "/api/models/downloads/1"),
+    (&["POST"], "/api/models/downloads/1/cancel"),
+];
+
+#[tokio::test]
+async fn a_request_no_client_sends_has_no_route_and_its_neighbours_keep_theirs() {
+    let app = test_app(CorsConfig::AllowAll).await;
+
+    let mut wrong = Vec::new();
+    for (method, path) in WITHOUT_A_CLIENT {
+        // As in `check`: `TRACE` stops at method routing, so nothing runs.
+        let (status, allow, _) = probe(&app, Method::TRACE, path).await;
+        let served = match status {
+            StatusCode::NOT_FOUND => false,
+            StatusCode::METHOD_NOT_ALLOWED => allow.split(',').any(|m| m.trim() == *method),
+            _ => true,
+        };
+        if served {
+            wrong.push(format!("  {method} {path}: {status}, allows [{allow}]"));
+        }
+    }
+    for (methods, path) in BESIDE_THEM {
+        if let Some(complaint) = check(&app, methods, path).await {
+            wrong.push(format!("  {complaint}"));
+        }
+    }
+
+    assert!(wrong.is_empty(), "the routes moved:\n{}", wrong.join("\n"));
 }

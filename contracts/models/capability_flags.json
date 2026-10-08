@@ -1,0 +1,22 @@
+[
+  {
+    "name": "supports-system-role",
+    "bit": 1,
+    "field": "supportsSystemRole"
+  },
+  {
+    "name": "requires-strict-turns",
+    "bit": 2,
+    "field": "requiresStrictTurns"
+  },
+  {
+    "name": "supports-tool-calls",
+    "bit": 4,
+    "field": "supportsToolCalls"
+  },
+  {
+    "name": "supports-reasoning",
+    "bit": 8,
+    "field": "supportsReasoning"
+  }
+]

@@ -17,43 +17,17 @@
 
 use std::collections::HashMap;
 
-/// Result of MTP capability detection.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct MtpDetection {
-    /// Whether the model contains embedded MTP draft heads.
-    pub supported: bool,
-    /// Number of MTP prediction layers present (`nextn_predict_layers` value).
-    /// Zero when `supported` is `false`.
-    pub layer_count: u32,
-}
-
 /// Detect MTP support from raw GGUF key-value metadata.
 ///
 /// Scans all metadata keys for any key ending with `.nextn_predict_layers`.
 /// If such a key is found and its value parses to a `u32` strictly greater
-/// than zero, MTP is considered supported.
-///
-/// Returns [`MtpDetection`] with `supported = false` and `layer_count = 0`
-/// when no such key exists or the value is zero.
+/// than zero, the model contains embedded MTP draft heads and MTP is
+/// considered supported.
 #[must_use]
-pub(crate) fn detect_mtp_support(metadata: &HashMap<String, String>) -> MtpDetection {
-    for (key, value) in metadata {
-        if key.ends_with(".nextn_predict_layers") {
-            if let Ok(n) = value.parse::<u32>() {
-                if n > 0 {
-                    return MtpDetection {
-                        supported: true,
-                        layer_count: n,
-                    };
-                }
-            }
-        }
-    }
-
-    MtpDetection {
-        supported: false,
-        layer_count: 0,
-    }
+pub(crate) fn detect_mtp_support(metadata: &HashMap<String, String>) -> bool {
+    metadata.iter().any(|(key, value)| {
+        key.ends_with(".nextn_predict_layers") && value.parse::<u32>().is_ok_and(|n| n > 0)
+    })
 }
 
 #[cfg(test)]
@@ -70,17 +44,13 @@ mod tests {
     #[test]
     fn detects_qwen_mtp_key() {
         let m = meta(&[("qwen3_5_mtp.nextn_predict_layers", "1")]);
-        let det = detect_mtp_support(&m);
-        assert!(det.supported);
-        assert_eq!(det.layer_count, 1);
+        assert!(detect_mtp_support(&m));
     }
 
     #[test]
     fn detects_generic_arch_mtp_key() {
         let m = meta(&[("llama.nextn_predict_layers", "4")]);
-        let det = detect_mtp_support(&m);
-        assert!(det.supported);
-        assert_eq!(det.layer_count, 4);
+        assert!(detect_mtp_support(&m));
     }
 
     #[test]
@@ -89,24 +59,19 @@ mod tests {
             ("llama.context_length", "4096"),
             ("general.name", "MyModel"),
         ]);
-        let det = detect_mtp_support(&m);
-        assert!(!det.supported);
-        assert_eq!(det.layer_count, 0);
+        assert!(!detect_mtp_support(&m));
     }
 
     #[test]
     fn zero_value_returns_not_supported() {
         let m = meta(&[("qwen3_5_mtp.nextn_predict_layers", "0")]);
-        let det = detect_mtp_support(&m);
-        assert!(!det.supported);
-        assert_eq!(det.layer_count, 0);
+        assert!(!detect_mtp_support(&m));
     }
 
     #[test]
     fn non_numeric_value_returns_not_supported() {
         let m = meta(&[("llama.nextn_predict_layers", "unknown")]);
-        let det = detect_mtp_support(&m);
-        assert!(!det.supported);
+        assert!(!detect_mtp_support(&m));
     }
 
     #[test]
@@ -116,9 +81,8 @@ mod tests {
             ("general.name", "Qwen3-27B-MTP"),
             ("llama.context_length", "32768"),
         ]);
-        let det = detect_mtp_support(&m);
         assert!(
-            !det.supported,
+            !detect_mtp_support(&m),
             "name heuristics must not trigger MTP detection"
         );
     }

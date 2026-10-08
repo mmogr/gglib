@@ -1,8 +1,5 @@
 # RangeSlider
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-RangeSlider-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-RangeSlider-complexity.json)
-
 <!-- module-docs:start -->
 
 Dependency-free dual-handle range slider using two overlapping `<input type="range">` elements. The visual track fill is computed from handle positions and applied via inline `background-size`.

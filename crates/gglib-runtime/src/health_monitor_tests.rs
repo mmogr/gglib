@@ -3,7 +3,10 @@
 //! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
+use crate::health::health_proxy_tests::read_request_head;
 use futures_util::StreamExt;
+use std::io::Write;
+use std::net::TcpListener;
 use std::time::Duration;
 
 #[tokio::test]
@@ -128,4 +131,91 @@ fn a_live_process_reports_healthy_rather_than_dead() {
     let handle = ProcessHandle::new(1, "test".to_string(), Some(std::process::id()), 8080, 0);
     let status = ServerHealthChecker::check_process(&handle);
     assert_eq!(status, ServerHealthStatus::Healthy);
+}
+
+// ---------------------------------------------------------------
+// What the check answers, by what the port does
+// ---------------------------------------------------------------
+
+/// The one message a failed HTTP check carries, whatever failed.
+fn unreachable() -> ServerHealthStatus {
+    ServerHealthStatus::Unreachable {
+        last_error: "HTTP health check returned non-success status".to_string(),
+    }
+}
+
+/// A server that answers every request with `status_line`.
+fn answering(status_line: &'static str) -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind a health endpoint");
+    let port = listener.local_addr().expect("its address").port();
+    std::thread::spawn(move || {
+        for mut stream in listener.incoming().flatten() {
+            read_request_head(&stream);
+            let _ = write!(
+                stream,
+                "HTTP/1.1 {status_line}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            );
+            let _ = stream.flush();
+        }
+    });
+    port
+}
+
+/// A server that accepts connections and never answers one. It holds each
+/// open for as long as the test binary runs, so the client's own timeout is
+/// what ends the request.
+fn silent() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind a health endpoint");
+    let port = listener.local_addr().expect("its address").port();
+    std::thread::spawn(move || {
+        let held: Vec<_> = listener.incoming().flatten().collect();
+        drop(held);
+    });
+    port
+}
+
+/// A port nothing listens on: bound to learn a free one, then released.
+fn refusing() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind to find a free port");
+    listener.local_addr().expect("its address").port()
+}
+
+#[tokio::test]
+async fn a_200_from_health_is_healthy() {
+    let port = answering("200 OK");
+
+    assert!(crate::process::check_http_health(port).await);
+    assert_eq!(
+        ServerHealthChecker::check_http(port).await,
+        ServerHealthStatus::Healthy
+    );
+}
+
+#[tokio::test]
+async fn a_503_from_health_is_unreachable() {
+    let port = answering("503 Service Unavailable");
+
+    assert!(!crate::process::check_http_health(port).await);
+    assert_eq!(ServerHealthChecker::check_http(port).await, unreachable());
+}
+
+#[tokio::test]
+async fn a_refused_connection_is_unreachable() {
+    let port = refusing();
+
+    assert!(!crate::process::check_http_health(port).await);
+    assert_eq!(ServerHealthChecker::check_http(port).await, unreachable());
+}
+
+#[tokio::test]
+async fn a_server_that_never_answers_is_unreachable_once_the_check_times_out() {
+    let port = silent();
+
+    let (fast_path, monitor_side) = tokio::join!(
+        crate::process::check_http_health(port),
+        ServerHealthChecker::check_http(port)
+    );
+
+    assert!(!fast_path);
+    assert_eq!(monitor_side, unreachable());
 }

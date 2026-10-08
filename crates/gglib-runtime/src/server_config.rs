@@ -206,11 +206,6 @@ pub(crate) fn build_server_config_narrated(
         }
     };
 
-    // --- Inference parameters --------------------------------------------------
-    if let Some(params) = opts.inference_params {
-        config = config.with_inference_config(params);
-    }
-
     // --- KV cache slot persistence ----------------------------------------------
     // Direct pass-through, no tag-based auto-detection: `None` here means the
     // feature is disabled and `build_and_spawn` emits zero cache-related flags,

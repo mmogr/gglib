@@ -4,96 +4,71 @@
  */
 
 import { get, post, del } from './client';
-import { bucketQueue } from '../downloadQueue';
 import type { DownloadId } from '../types/ids';
 import type {
-  DownloadQueueStatus,
-  DownloadQueueItem,
+  QueueSnapshot,
   QueueDownloadParams,
   QueueDownloadResponse,
 } from '../types/downloads';
+import type { QueueDownloadRequest } from '../../../types/generated/QueueDownloadRequest';
+import type { ReorderFullRequest } from '../../../types/generated/ReorderFullRequest';
+import type { ReorderRequest } from '../../../types/generated/ReorderRequest';
 
 /**
- * Raw backend response shape for queue snapshot.
- * Backend returns a flat list of all items that we need to split.
+ * Get the download queue: the same snapshot a `queue_snapshot` event carries.
  */
-interface QueueSnapshotResponse {
-  items: DownloadQueueItem[];
-  max_size: number;
-  active_count: number;
-  pending_count: number;
+export async function getDownloadQueue(): Promise<QueueSnapshot> {
+  return get<QueueSnapshot>('/api/models/downloads/queue');
 }
 
 /**
- * Get current download queue status.
- * Transforms the backend's flat item list into categorized current/pending/failed.
- */
-export async function getDownloadQueue(): Promise<DownloadQueueStatus> {
-  const snapshot = await get<QueueSnapshotResponse>('/api/models/downloads/queue');
-  
-  // Bucketed by the same function the SSE `queue_snapshot` path uses. The
-  // comment here claimed that before it was true — this path read the raw
-  // status while the SSE side normalised first. The two agreed on every frame
-  // the server sends, so nothing was broken; they were two copies of one rule.
-  return bucketQueue(snapshot.items || [], snapshot.max_size);
-}
-
-/**
- * Queue a new download from HuggingFace.
+ * Queue a new download from HuggingFace. The answer is the download's id:
+ * its row's in the queue snapshot.
  */
 export async function queueDownload(params: QueueDownloadParams): Promise<QueueDownloadResponse> {
-  return post<QueueDownloadResponse>('/api/models/downloads/queue', {
-    model_id: params.modelId,
-    quantization: params.quantization,
-    target_path: params.targetPath,
-  });
+  // An absent `quantization` is `None` to the daemon: it chooses one.
+  const body: QueueDownloadRequest = { model_id: params.modelId, quantization: params.quantization };
+  return post<QueueDownloadResponse>('/api/models/downloads/queue', body);
 }
 
 /**
- * Cancel an active or queued download.
+ * Cancel a download that is waiting or running, every file of it. It ends
+ * with a cancelled outcome, unless the cancel came too late: its last file was
+ * already on disk and its model being registered, or a file of it had already
+ * failed. Then it ends completed or failed, as it was going to.
  */
 export async function cancelDownload(id: DownloadId): Promise<void> {
   await post<void>(`/api/models/downloads/${encodeURIComponent(id)}/cancel`);
 }
 
 /**
- * Remove a download from the queue (for failed/completed items).
+ * Take a download off the queue. One that is waiting or running is
+ * cancelled; one that has ended has its entry dropped from `finished`.
  */
 export async function removeFromQueue(id: DownloadId): Promise<void> {
   await del<void>(`/api/models/downloads/${encodeURIComponent(id)}`);
 }
 
 /**
- * Clear all failed downloads from the queue.
- */
-export async function clearFailedDownloads(): Promise<void> {
-  await post<void>('/api/models/downloads/failed/clear');
-}
-
-/**
- * Cancel all shards in a download group.
- */
-export async function cancelShardGroup(groupId: string): Promise<void> {
-  await post<void>(`/api/models/downloads/shard-group/${encodeURIComponent(groupId)}/cancel`);
-}
-
-/**
  * Reorder downloads in the queue.
+ * @param ids - The waiting downloads in the order wanted, one id per download.
+ *   Each is moved to its index + 1. That is its snapshot position only while
+ *   nothing is running; behind a running download the waiting places start at
+ *   2, so the order that results can differ from the one given.
  */
 export async function reorderQueue(ids: DownloadId[]): Promise<void> {
-  await post<void>('/api/models/downloads/reorder-full', { ids });
+  const body: ReorderFullRequest = { ids };
+  await post<void>('/api/models/downloads/reorder-full', body);
 }
 
 /**
  * Reorder a single download to a specific position.
  * @param id - Download ID to reorder
- * @param position - Target 1-based position in queue
+ * @param position - Target 1-based position, counted in downloads as the
+ *   snapshot's `position` is: the running download is 1, the first waiting one 2
  * @returns Actual position after reorder
  */
 export async function reorderQueueItem(id: DownloadId, position: number): Promise<number> {
-  const response = await post<number>('/api/models/downloads/reorder', {
-    model_id: id,
-    position,
-  });
-  return response;
+  const body: ReorderRequest = { model_id: id, position };
+  return post<number>('/api/models/downloads/reorder', body);
 }

@@ -9,7 +9,7 @@
 use anyhow::{Context, Result};
 
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, StartProxyBody};
+use crate::daemon_client::{self, DaemonHandle, StartProxyBody};
 use crate::shared_args::{AccessArgs, CacheArgs, SamplingArgs};
 use gglib_core::settings::CONTEXT_SIZE_RANGE;
 
@@ -50,13 +50,67 @@ fn resolve_default_context(
     };
     let parsed = trimmed.parse::<u64>().with_context(invalid)?;
     // Bounded here rather than left to the daemon. This is the same value
-    // `validate_settings` holds to 512..=1_000_000 and the same one
+    // `validate_settings` holds to `CONTEXT_SIZE_RANGE` and the same one
     // `--default-context-size` documents with that range, so accepting `1` on
     // this surface alone would make three descriptions of one number disagree.
     if !CONTEXT_SIZE_RANGE.contains(&parsed) {
         anyhow::bail!(invalid());
     }
     Ok(Some(parsed))
+}
+
+/// What `gglib proxy` asks the daemon to start.
+///
+/// `port` is the `--port` flag as typed. An absent flag travels as no port,
+/// which the daemon resolves to the stored `proxy_port`, as it does for the
+/// desktop app and the tray; a default filled in here would outrank that
+/// setting.
+fn start_body(
+    host: String,
+    port: Option<u16>,
+    default_context: Option<u64>,
+    sampling: SamplingArgs,
+    cache: &CacheArgs,
+    access: &AccessArgs,
+) -> StartProxyBody {
+    StartProxyBody {
+        host: Some(host),
+        port,
+        default_context,
+        cache: Some(cache.cache),
+        slot_dir: cache.slot_dir.clone(),
+        pinned: None,
+        cache_disk_gb: cache.cache_disk_gb,
+        inference_override: sampling.into_override(),
+        // `gglib proxy` serves every model; a single default profile has no
+        // model in scope to attach to. Its clients name `{model}:{profile}`.
+        default_profile: None,
+        api_key: access.api_key.clone(),
+        allowed_hosts: access.allowed_hosts.clone(),
+    }
+}
+
+/// Start the proxy `body` describes on the daemon, and answer the port it is
+/// on.
+///
+/// The daemon's answer is the port: with no `--port` the daemon chose it, and
+/// a proxy that was already running answers with the port it holds, whatever
+/// was asked. A daemon that reports none is not serving one; what is answered
+/// then is where the body asked for it, or the stored `proxy_port` the daemon
+/// falls back to.
+///
+/// Shared by `proxy`, `serve` and `up`, so none of them has a port of its own
+/// to report.
+pub(in crate::handlers) async fn start_on(
+    handle: &DaemonHandle,
+    body: &StartProxyBody,
+    settings: &gglib_core::Settings,
+) -> Result<u16> {
+    let status = handle.start_proxy(body).await?;
+    Ok(status
+        .port
+        .or(body.port)
+        .unwrap_or_else(|| settings.effective_proxy_port()))
 }
 
 /// Execute the proxy command.
@@ -67,7 +121,7 @@ fn resolve_default_context(
 pub(crate) async fn execute(
     ctx: &CliContext,
     host: String,
-    port: u16,
+    port: Option<u16>,
     default_context: Option<String>,
     sampling: SamplingArgs,
     cache: CacheArgs,
@@ -75,28 +129,10 @@ pub(crate) async fn execute(
 ) -> Result<()> {
     let settings = ctx.app.settings().get().await?;
     let default_context = resolve_default_context(default_context.as_deref(), &settings)?;
+    let body = start_body(host, port, default_context, sampling, &cache, &access);
 
-    let handle =
-        daemon_client::ensure_daemon(daemon_client::auth::daemon_api_key(ctx).await).await?;
-    let status = handle
-        .start_proxy(&StartProxyBody {
-            host: Some(host.clone()),
-            port: Some(port),
-            default_context,
-            cache: Some(cache.cache),
-            slot_dir: cache.slot_dir.clone(),
-            pinned: None,
-            cache_disk_gb: cache.cache_disk_gb,
-            inference_override: sampling.into_override(),
-            // `gglib proxy` serves every model; a single default profile has no
-            // model in scope to attach to. Its clients name `{model}:{profile}`.
-            default_profile: None,
-            api_key: access.api_key.clone(),
-            allowed_hosts: access.allowed_hosts.clone(),
-        })
-        .await?;
-
-    let proxy_port = status.port.unwrap_or(port);
+    let handle = daemon_client::ensure_daemon(ctx).await?;
+    let proxy_port = start_on(&handle, &body, &settings).await?;
     attach_dashboard(ctx, proxy_port, access.api_key).await
 }
 
@@ -117,17 +153,7 @@ pub(in crate::handlers) async fn attach_dashboard(
 
     // The stored key is the same row the daemon's supervisor resolves, so the
     // dashboard presents whatever the proxy demands.
-    let key = match api_key_flag {
-        Some(flag) => Some(flag),
-        None => ctx
-            .app
-            .settings()
-            .get()
-            .await
-            .ok()
-            .and_then(|s| s.proxy_api_key)
-            .filter(|k| !k.trim().is_empty()),
-    };
+    let key = daemon_client::auth::proxy_key(ctx, api_key_flag).await;
 
     let result =
         crate::handlers::proxy_dashboard::execute("127.0.0.1".into(), proxy_port, key.as_deref())
@@ -142,22 +168,10 @@ pub(in crate::handlers) async fn attach_dashboard(
 }
 
 /// Execute `gglib proxy stop`.
-#[allow(
-    clippy::single_match_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) async fn stop(ctx: &CliContext) -> Result<()> {
-    let client = gglib_proxy::loopback::client();
-    match daemon_client::probe(&client).await {
-        daemon_client::DaemonProbe::Running => {}
-        _ => {
-            eprintln!("  Daemon is not running \u{2014} no proxy to stop.");
-            return Ok(());
-        }
-    }
-    let handle = daemon_client::DaemonHandle {
-        client,
-        api_key: daemon_client::auth::daemon_api_key(ctx).await,
+    let Ok(handle) = daemon_client::running(ctx).await else {
+        eprintln!("  Daemon is not running \u{2014} no proxy to stop.");
+        return Ok(());
     };
     let status = handle.stop_proxy().await?;
     if status.running {
@@ -168,124 +182,5 @@ pub(crate) async fn stop(ctx: &CliContext) -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::resolve_default_context;
-    use gglib_core::Settings;
-
-    /// With nothing configured, the daemon is told nothing. A chain resolved
-    /// to a bare `u64` here would tell it the user had chosen 4096, and the
-    /// fitted rung ([#925]) would never be reached.
-    ///
-    /// [#925]: https://github.com/mmogr/gglib/pull/925
-    #[test]
-    fn nothing_configured_sends_nothing() {
-        let settings = Settings::default();
-        assert_eq!(resolve_default_context(None, &settings).unwrap(), None);
-    }
-
-    #[test]
-    fn a_stored_setting_is_passed_through_untouched() {
-        let settings = Settings {
-            default_context_size: Some(16_384),
-            ..Settings::default()
-        };
-        assert_eq!(
-            resolve_default_context(None, &settings).unwrap(),
-            Some(16_384)
-        );
-    }
-
-    #[test]
-    fn the_flag_outranks_a_stored_setting() {
-        let settings = Settings {
-            default_context_size: Some(16_384),
-            ..Settings::default()
-        };
-        assert_eq!(
-            resolve_default_context(Some("8192"), &settings).unwrap(),
-            Some(8192)
-        );
-    }
-
-    /// A flag parsed with `.ok()` would drop `8k` here without a word, and the
-    /// daemon would size the context as though no flag had been passed.
-    #[test]
-    fn a_malformed_flag_is_an_error_not_a_shrug() {
-        let err = resolve_default_context(Some("8k"), &Settings::default())
-            .expect_err("a value that is not a number must not be discarded");
-        let msg = format!("{err:#}");
-        assert!(
-            msg.contains("8k"),
-            "the message must name what was rejected: {msg}"
-        );
-    }
-
-    /// Zero parses as a `u64`; the help calls it invalid. The message and the
-    /// behaviour have to agree.
-    #[test]
-    fn zero_is_rejected_because_the_message_calls_it_invalid() {
-        resolve_default_context(Some("0"), &Settings::default())
-            .expect_err("0 is outside the configurable range");
-    }
-
-    /// One number, three surfaces, one range. `validate_settings` rejects
-    /// below 512 and `--default-context-size` documents that bound, so this
-    /// flag accepting 1 would make them disagree.
-    #[test]
-    fn the_flag_is_held_to_the_same_range_the_settings_are() {
-        use gglib_core::settings::CONTEXT_SIZE_RANGE;
-
-        let below = CONTEXT_SIZE_RANGE.start() - 1;
-        resolve_default_context(Some(&below.to_string()), &Settings::default())
-            .expect_err("below the range must be rejected");
-
-        let above = CONTEXT_SIZE_RANGE.end() + 1;
-        resolve_default_context(Some(&above.to_string()), &Settings::default())
-            .expect_err("above the range must be rejected");
-
-        for edge in [*CONTEXT_SIZE_RANGE.start(), *CONTEXT_SIZE_RANGE.end()] {
-            assert_eq!(
-                resolve_default_context(Some(&edge.to_string()), &Settings::default()).unwrap(),
-                Some(edge),
-                "the range's own endpoints must be accepted"
-            );
-        }
-    }
-
-    /// Omitting the flag falls back to the stored setting, and only reaches
-    /// per-launch sizing when that is unset too. The message said "omit the
-    /// flag to fit the context to this machine", which is false for anyone
-    /// with a `default_context_size` stored — and disagreed with this flag's
-    /// own `--help`, which has always described the fallback correctly.
-    #[test]
-    fn the_remedy_describes_the_fallback_and_not_just_the_fit() {
-        let err = resolve_default_context(Some("8k"), &Settings::default())
-            .expect_err("`8k` is not a number this flag accepts");
-        let msg = format!("{err:#}");
-        assert!(
-            msg.contains("default_context_size"),
-            "omitting the flag falls back to the setting; the message must say so: {msg}"
-        );
-        assert!(
-            !msg.contains("fit the context to this machine"),
-            "the message must not promise a fit that omitting the flag does not deliver: {msg}"
-        );
-    }
-
-    /// The help says `max` is unsupported here; the error must agree with it
-    /// rather than recommending it.
-    #[test]
-    fn max_is_rejected_and_never_recommended() {
-        let err = resolve_default_context(Some("max"), &Settings::default())
-            .expect_err("`max` has no meaning for a proxy serving every model");
-        let msg = format!("{err:#}");
-        assert!(
-            msg.contains("not supported"),
-            "the message must say `max` is unsupported: {msg}"
-        );
-        assert!(
-            !msg.contains("or 'max'"),
-            "the message must not offer `max` as the remedy for rejecting `max`: {msg}"
-        );
-    }
-}
+#[path = "proxy_tests.rs"]
+pub(in crate::handlers) mod tests;

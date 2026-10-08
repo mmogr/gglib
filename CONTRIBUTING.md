@@ -33,7 +33,7 @@ Code from outside contributors is not accepted yet. Issues, bug reports and idea
 
 ## Core Philosophy
 
-**Small, focused, low-complexity files.** If a module is growing, that is a signal to decompose it, not to add more to it. Functions should do one thing. Files should have one responsibility.
+**Files follow concepts.** A file holds one thing, whole: a type with its behaviour, one responsibility, a module's tests. Where a piece of code lives should say what it is, so that the structure itself can be read. Split a file at a real seam, where it has taken on a second job or grown a type with a life of its own, and never to make it shorter. Functions should do one thing. [File size](#file-size) below says what the 300-line budget is for.
 
 **DRY without ceremony.** When the same logic appears twice, extract it. When extraction requires a new abstraction, make sure that abstraction earns its existence — it should simplify the call sites, not complicate them.
 
@@ -41,36 +41,24 @@ Code from outside contributors is not accepted yet. Issues, bug reports and idea
 
 **Minimum viable surface area.** Do not add configuration knobs, trait objects, or generic parameters for hypothetical future requirements. The right abstraction is the one that solves the problem at hand with the fewest moving parts.
 
+### File size
+
+`scripts/check_file_size.sh` counts lines, once for Rust and once for TypeScript/CSS, and both run in CI through `make enforce`. Its 300-line budget is a guide, not a limit. It is there so that a file which has taken on a second job is noticed, and it was never meant to be read literally: nothing is to be shaped to fit the number.
+
+When the check stops on a file, the question is whether the file is still one thing.
+
+- **It has taken on a second job.** Split it at that seam, so that each file holds one responsibility, whole. A type keeps its behaviour with it. A module's tests in `x_tests.rs` beside it are the house layout, and the tests are whole there.
+- **It is one thing that grew.** Keep it whole and record the growth: raise the file's row in `scripts/rust-complexity-baseline.txt` or `scripts/ts-complexity-baseline.txt` by hand, or add one, so the diff shows the number going up, and say in the pull request why the file is one concept. Lower a row when its file shrinks.
+
+Never add a sibling file to get under the number. Half of a type's methods, one test moved out of a full test file, a list parked beside the module that reads it: each passes the check and leaves a reader two files to open for one idea.
+
+[`scripts/README.md`](scripts/README.md#check_file_sizesh) has the check's mechanics: the baseline's rows, and what `--update` rewrites.
+
 ---
 
 ## Architecture Overview
 
-The workspace is organized into layers. Dependencies flow strictly inward.
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Surfaces (one per interface)                                │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  gglib-cli   │  │  gglib-axum  │  │  gglib-tauri │      │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
-│         │                 │                  │               │
-├─────────▼─────────────────▼──────────────────▼──────────────┤
-│  Shared Backend                                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ gglib-runtime│  │  gglib-agent │  │  gglib-app-services   │      │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
-│         │                 │                  │               │
-├─────────▼─────────────────▼──────────────────▼──────────────┤
-│  Domain & Infrastructure                                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │  gglib-core  │  │   gglib-db   │  │  gglib-hf    │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-└──────────────────────────────────────────────────────────────┘
-```
-
-**`gglib-core`** is the pure domain layer: types, traits, error definitions, and path utilities. It has no adapter dependencies and must not acquire any. This is enforced in CI.
-
-**`gglib-runtime`** orchestrates processes (llama.cpp, llama-server). It owns the build and install pipelines.
+The workspace is organized into layers, and no crate depends on a layer above its own. [`crates/README.md`](crates/README.md#architecture-overview) has the layer diagram and the crate catalog, and [Crate Boundaries](#crate-boundaries) has the dependency rules. What that diagram calls the adapter layer, this document calls the *surfaces*: the CLI, the daemon's HTTP API and the desktop app.
 
 **Surface crates** (`gglib-cli`, `gglib-axum`, `gglib-tauri`) adapt the shared backend to their output medium. They contain no business logic. Any feature added to one surface must be achievable on all three; how quickly the other surfaces must follow depends on the capability's tier — see the [GUI Parity Principle](#gui-parity-principle).
 
@@ -88,15 +76,15 @@ State the tier in the PR description (recent PRs also carry it in the commit mes
 The event-channel pattern below is what makes Tier 1 parity cheap — use it for any long-running operation regardless of tier. Downloads, builds, agent loops, and model management all follow the same pattern:
 
 1. **Core logic in a runtime or domain crate** — emits typed events over a `tokio::sync::mpsc::Sender<T>` channel. It has no knowledge of the terminal, HTTP, or Tauri.
-2. **Surface adapters consume the channel** — the CLI renders events as an `indicatif` progress bar; the Axum layer streams them as SSE; the Tauri layer emits them as Tauri events to the WebView.
+2. **Surface adapters consume the channel** — the CLI renders events as an `indicatif` progress bar; the Axum layer streams them as SSE, which the desktop app's WebView reads as the browser does.
 
 Concrete examples of established patterns:
 
 | Domain | Event type | CLI consumer | Axum consumer | Tauri consumer |
 |---|---|---|---|---|
 | Agent loop | `AgentEvent` | spinner + streaming print | SSE at `POST /api/agent/chat` | same SSE stream — no Tauri event |
-| llama install | `LlamaProgressEvent` | spinner + progress bar via `consume_install_events_cli` | SSE at `POST /api/config/system/install-llama` | `llama-install-progress` |
-| llama build | `BuildEvent` | spinner + progress bar | none — #834 removed the route as dead | none — removed with it |
+| llama install | `LlamaProgressEvent` | spinner + progress bar via `render_install_events` | SSE at `POST /api/config/system/install-llama` | same SSE stream — no Tauri event |
+| llama build | `BuildEvent` | spinner + progress bar via `render_build_events`, for an install and an update alike | SSE at `POST /api/config/system/update-llama` | same SSE stream — no Tauri event |
 
 Every row is a claim about code that exists. The `llama install` row was not
 one for a long time: the event type was declared private inside `gglib-axum`,
@@ -109,25 +97,25 @@ When adding a new long-running operation:
 
 - Define the event enum in the relevant runtime or domain crate.
 - The function signature takes `tx: tokio::sync::mpsc::Sender<YourEvent>` as a parameter.
-- Wire the CLI adapter in its own function. Wire the Axum handler. Wire the Tauri command.
+- Wire the CLI adapter in its own function. Wire the Axum handler, which the desktop app's WebView calls as the browser does: a new operation gets no Tauri command, as the paragraph below says.
 - Tier 1: all three ship in the same PR. Tier 2: the CLI ships now and the remaining surfaces are tracked in a linked issue.
 
-**Tauri commands are OS integration only.** Product features are served over HTTP (Axum). The CI enforces that `#[tauri::command]` functions live only in a small set of approved files (`util.rs`, `llama.rs`, `app_logs.rs`). A new product feature does not get a Tauri command — it gets an Axum route that the WebView calls over HTTP, just like the browser-based UI does.
+**Tauri commands are OS integration only.** Product features are served over HTTP (Axum). The CI enforces that `#[tauri::command]` functions live only in a small set of approved files (`util.rs`, `app_logs.rs`). A new product feature does not get a Tauri command — it gets an Axum route that the WebView calls over HTTP, just like the browser-based UI does.
 
-**Frontend transport is unified.** The frontend client modules must not branch on `isTauriApp`. If you find yourself writing `if (isTauriApp()) { invoke(...) } else { fetch(...) }` in a service module, that is an architectural violation. `services/platform/` is where that distinction is absorbed: `detect.ts` is the one module that reads `isTauriApp`, exposing it as `isDesktop()`, and its sibling modules that reach for OS APIs carry a `TRANSPORT_EXCEPTION:` comment saying why.
+**Frontend transport is unified.** The frontend client modules must not branch on the platform. If you find yourself writing `if (isDesktop()) { invoke(...) } else { fetch(...) }` in a service module, that is an architectural violation. `services/platform/` is where that distinction is absorbed: `detect.ts` is the one module that asks whether this is the desktop app, as `isDesktop()`, and its sibling modules that reach for OS APIs carry a `TRANSPORT_EXCEPTION:` comment saying why.
 
 ---
 
 ## UI Conventions
 
-The design system already exists — use it rather than reinventing it inline:
+The design system already exists — use it rather than reinventing it inline. [`src/styles/README.md`](src/styles/README.md) holds its contracts in full: the tokens, the platform boundary, what ESLint enforces and the design language.
 
 - **Icons: `lucide-react` only, via `<Icon icon={...} />`** (`src/components/ui/Icon.tsx`). No emoji or unicode dingbats (`👈 🔽 🔍 ⚡ ✓ ✗ ▶ ▼`, etc.) anywhere in JSX or string literals — they render as full-colour, double-width glyphs that clash with lucide's thin monochrome strokes and can't inherit `currentColor`. This is enforced by an ESLint `no-restricted-syntax` rule (see `eslint.config.js`); it is not a style preference you can opt out of.
-- **Buttons: the `Button` primitive** (`src/components/ui/Button.tsx`), not raw `<button>`. It encodes a 4-level hierarchy — `primary` (one CTA per surface) → `secondary` (default action) → `outline` (emphasis without fill) → `ghost` (minimal) — plus semantic variants (`danger`, `success`, `warning`) and a `link` variant for inline text actions. Not yet lint-enforced (there is a large pre-existing surface of raw `<button>`s); new and touched code should still prefer it.
+- **Buttons: the `Button` primitive** (`src/components/ui/Button.tsx`), not raw `<button>`. It encodes a 4-level hierarchy — `primary` (one CTA per surface) → `secondary` (default action) → `outline` (emphasis without fill) → `ghost` (minimal) — plus `danger` and `dangerGhost` for destructive actions and a `link` variant for inline text actions. ESLint rejects a raw `<button>` in `src/components` and `src/pages` outside the primitive layer (`ui/` and `primitives/`).
 - **Colour is semantic, never decorative.** `primary` = action, `success` = running/healthy, `warning` = degraded, `danger` = destructive/failure. A fact about a model (its quantization, its parameter count, its throughput) is not a state and should not borrow a state colour. An idle/stopped state is not a failure — it gets `--color-offline` (GUI) or `style::MUTED` (CLI), not danger red.
 - **Spacing and radius come from the token scale** (`--spacing-*`, `--radius-*` in `src/styles/base/variables.css`, bridged into Tailwind's `p-xs/sm/md/base/lg/xl`, `rounded-sm/base/md/lg/xl`), not raw Tailwind numerics (`p-2`, `rounded-[6px]`) or arbitrary bracket values, except where a value is genuinely one-off (e.g. matching an icon's exact pixel size).
-- **Reach for the existing primitives** (`src/components/primitives/`: `Card`, `Row`, `Stack`, `Label`, `EmptyState`, `Skeleton`) before writing a bespoke `flex` wrapper or empty-state block by hand.
-- **Files stay small and single-responsibility.** `scripts/check_file_complexity.sh` and `scripts/check_rust_complexity.sh` hold a 300-LOC budget as a *ratchet*, both in CI: a file already over it may shrink but not grow, and a file under it may not cross. `--update` records a deliberate growth as a visible line in the diff. When a component grows past that, extract by responsibility (see `ModelInspectorPanel/` or `SettingsModal/fields/` for the pattern: a thin composition root plus small, named child components and a barrel `index.ts`), not by splitting arbitrarily in half.
+- **Reach for the existing primitives** (`src/components/primitives/`: `Row`, `Stack`, `Label`, `EmptyState`, `Skeleton`, `Readout`, `Sparkline`) before writing a bespoke `flex` wrapper or empty-state block by hand.
+- **A component file holds one responsibility.** When a component takes on a second one, extract by responsibility (see `ModelInspectorPanel/` or `SettingsModal/fields/` for the pattern: a thin composition root plus small, named child components and a barrel `index.ts`), not by splitting arbitrarily in half. `scripts/check_file_size.sh` covers TypeScript and CSS as it covers Rust. Its 300-line budget is a guide, and [File size](#file-size) says what it is for and how a file that is one thing records its growth.
 
 ---
 
@@ -332,18 +320,6 @@ CI's `boundaries` job runs `scripts/check_boundaries.sh` on every pull request i
 
 If your change requires adding a dependency from a lower layer to a higher layer, reconsider the design. The dependency should flow in the opposite direction via the channel/event pattern described above.
 
-### Feature flags in `gglib-runtime`
-
-`gglib-runtime` uses feature flags to gate compilation of heavy subsystems:
-
-| Feature | Includes | Use in |
-|---|---|---|
-| *(default)* | Inference and server management | No dependent crate: each turns on `prebuilt` or `cli` |
-| `prebuilt` | Pre-built binary download support | `gglib-app-services` |
-| `cli` | Source build pipeline (`build/`, `install/`) — implies `prebuilt` | `gglib-cli`, `gglib-axum`, `src-tauri` |
-
-When adding a new flag-gated import in a surface crate, ensure its `Cargo.toml` declares the correct `features = [...]` value. A missing feature flag will produce a confusing "function not found" compile error rather than a clear feature gate message.
-
 ---
 
 ## Documentation Standards
@@ -390,9 +366,6 @@ If part of a streaming pipeline, a table of consumers.
 ```markdown
 # download
 
-![LOC](https://img.shields.io/endpoint?url=...)
-![Complexity](https://img.shields.io/endpoint?url=...)
-
 <!-- module-docs:start -->
 
 Pre-built llama.cpp binary download support.
@@ -404,7 +377,8 @@ Pre-built llama.cpp binary download support.
 |----------|--------------------------------------------------------|
 | CLI      | `indicatif` progress bar                               |
 | Axum     | SSE stream at `POST /api/config/system/install-llama`  |
-| Tauri    | `llama-install-progress` event to the WebView          |
+
+The desktop app reads the Axum stream; it has no consumer of its own.
 
 It is **not** responsible for rendering: no `println!`, no progress bar, no
 knowledge of a terminal, an HTTP response or a WebView.
@@ -430,6 +404,8 @@ A new single-file module needs only its `//!` block. A new directory module:
 2. Add `#![doc = include_str!("README.md")]` as the **first line** of `mod.rs`.
 3. Fill the `<!-- module-docs:start/end -->` section with a description, ownership boundaries, and any consumer tables.
 4. Run `bash scripts/check_readmes.sh --strict` locally — CI enforces this and will fail if the README is missing, incomplete (contains `TODO:`), or if `mod.rs` is missing the `include_str!` attribute.
+
+`./scripts/generate_submodule_readmes.sh --create` writes a stub wherever a README is missing in a directory below a crate's `src/`, below `src-tauri/src/` or below the TypeScript `src/` (except `src/types/generated/`, which is ts-rs output that `check_readmes.sh` also skips); `--dry-run` lists them without writing. A stub has a title and the `module-docs` markers around the `//!` text of the directory's `mod.rs`, or around a `TODO:` line when there is none. In a directory it stubs whose `mod.rs` lacks the `include_str!` line, the script adds the line and puts a `// MIGRATION` comment above any `//!` block: delete that block and the comment yourself. It never touches a README that already exists.
 
 #### Clippy and README content
 
@@ -476,7 +452,7 @@ Private helper functions, unit-test modules (`#[cfg(test)]`), and generated code
 
 ### Cargo docs deployment
 
-`cargo doc` is deployed to GitHub Pages automatically when a release is published, via `.github/workflows/docs.yml`. It runs:
+`cargo doc` is deployed to GitHub Pages by the `deploy-docs` job of `.github/workflows/release.yml`, which runs for each release that is not a prerelease. It runs:
 
 ```bash
 cargo doc --workspace --no-deps --document-private-items --exclude gglib-app
@@ -526,70 +502,32 @@ A brief that carries work between sessions is not an ADR and does not need one's
 
 ## Badges Pipeline
 
-Badges in crate READMEs are **not** static images. They are shields.io endpoint badges that read JSON files from a dedicated `badges` branch. Do not author or edit badge JSON files manually.
+The version, test, coverage, LOC and complexity badges in the root README, in `crates/README.md` and in each crate's own `README.md` are shields.io endpoint badges that read JSON files from the `badges` branch. `badges.yml` writes those files when a CI or Coverage run on `main` completes: do not write or edit one by hand. No README below a crate's top level carries such a badge, because `badges.yml` writes no file for a directory.
 
-### How the pipeline works
+For each crate named in `ALL_CRATES` in `badges.yml` it writes `<crate>-<metric>.json`:
 
+| `<metric>` | Counted from |
+|---|---|
+| `tests` | The CI run's `rust-test-<crate>.txt` (see below) |
+| `coverage` | The Coverage run's `<crate>-lcov.info`, which `coverage.yml` makes only for the crates in its own lists |
+| `loc`, `complexity` | `scc` over `crates/<crate>` on `main` |
+
+The root README's version badge reads `version.json`, written from `Cargo.toml`.
+
+A new crate's README carries one line per metric, with its own name in place of `gglib-core`:
+
+```markdown
+![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json)
 ```
-CI run (ci.yml)
-  └─ cargo test --no-run --message-format=json   (builds, and names each binary's crate)
-  └─ cargo test --no-fail-fast | tee rust-test-output.txt
-  └─ scripts/split_test_output.py                (divides that output per crate)
-  └─ uploads artifacts: test-results, boundary-status.json, ts-test-results.json
-        │
-        ▼
-badges.yml (triggers after ci.yml completes)
-  └─ downloads CI artifacts
-  └─ generates badge JSON files (tests, boundaries, TS tests)
-  └─ commits JSON to the 'badges' branch
 
-coverage.yml (runs on push to main)
-  └─ generates lcov.info via cargo-llvm-cov
-  └─ triggers badges.yml (coverage variant)
-  └─ per-crate and per-module coverage JSONs pushed to 'badges' branch
-```
+Add the crate to `ALL_CRATES`, and to the lists in `coverage.yml` if it is to have a coverage badge. A badge has nothing to read until the first run on `main` that writes its file.
 
 ### Where the per-crate test numbers come from
 
-`badges.yml` counts tests out of one `rust-test-<crate>.txt` per crate. Those files used to
-come from running `cargo test -p <crate>` fifteen times after the aggregate run — 23m15s of a
-57m job, and wrong besides: naming a crate with `-p` changes feature unification, so
-`cargo test -p gglib-runtime` ran 329 tests where the workspace build runs 352.
+`scripts/split_test_output.py` cuts one `rust-test-<crate>.txt` per crate out of the single workspace `cargo test` run, by the package each test binary belongs to. Two consequences worth knowing:
 
-They now come from `scripts/split_test_output.py`, which divides the single workspace run's
-output by the package each test binary belongs to. Two consequences worth knowing:
-
-* **The crate list is no longer hand-kept.** Every package with test targets gets a file. If
-  you add a crate, its badge works as soon as you add its name to `ALL_CRATES` in
-  `badges.yml` — nothing needs adding to `ci.yml`.
-* **Do not add `--all-targets` to the test run.** It would silently drop the doctests, which
-  that run is now the only thing executing. `split_test_output.py` fails a green run that
-  produced no `Doc-tests` sections, so the mistake is caught rather than absorbed.
-
-Shields.io resolves badge URLs like:
-```
-https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json
-```
-
-### Adding a badge to a new crate README
-
-Badge URLs follow the pattern `gglib-{crate-name}-{metric}.json` on the `badges` branch. For a new crate `gglib-foo`:
-
-```markdown
-![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-foo-tests.json)
-![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-foo-coverage.json)
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-foo-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-foo-complexity.json)
-```
-
-The badge JSON files will appear on the `badges` branch automatically after the first CI run that includes the new crate. Until then, the badges render as "unknown" — that is expected.
-
-To scaffold READMEs for new directories, use `scripts/generate_submodule_readmes.sh --create`. It writes a stub wherever a README is missing in a directory below a crate's `src/`, below `src-tauri/src/` or below the TypeScript `src/` (except `src/types/generated/` and the directories below it, which are ts-rs output that `scripts/check_readmes.sh` also skips), and in `tests/` or a directory below it. A stub under a `src/` has a title, LOC and complexity badges, and the `module-docs` markers around the `//!` text of the directory's `mod.rs`, or around a `TODO:` line when there is none; a stub under `tests/` has a title and a `TODO:` line. For each directory it stubs whose `mod.rs` lacks `#![doc = include_str!("README.md")]`, it adds that line and puts a `// MIGRATION` comment above any `//!` block. It never deletes a `//!` block: delete it, and the comment, yourself, since a module with a README carries no `//!` block (see Surface 2). It never touches a README that already exists.
-
-```bash
-./scripts/generate_submodule_readmes.sh --create           # create missing READMEs
-./scripts/generate_submodule_readmes.sh --create --dry-run # preview without writing
-```
+* **The `test` job keeps no crate list.** Every package with test targets gets a file.
+* **Do not add `--all-targets` to the test run.** It would silently drop the doctests, which that run is the only thing executing. `split_test_output.py` fails a green run that produced no `Doc-tests` sections, so the mistake is caught rather than absorbed.
 
 ---
 
@@ -599,9 +537,9 @@ To scaffold READMEs for new directories, use `scripts/generate_submodule_readmes
 
 - Rust 1.97.1 (managed via `rust-toolchain.toml` — `rustup` will install it automatically)
 - Node.js 22.12+ (see below)
-- Platform system libraries (see `scripts/check-deps.sh` for a live dependency check)
+- Platform system libraries (`gglib config check-deps` is the live dependency check; `make check-deps` runs it once gglib is built, after checking the toolchains itself)
 
-Run `make setup` for a one-command first-time setup on macOS. On Linux, review `scripts/check-deps.sh` first to install system packages.
+Run `make setup` for a one-command first-time setup on macOS. On Linux, run `cargo run -p gglib-cli -- config check-deps` first: it lists the system packages to install.
 
 ### Node Version Management
 
@@ -651,9 +589,9 @@ make lint
 # Build and open Rustdoc locally
 make doc
 
-# Run all pre-commit checks in sequence: fmt, lint, check, test, lint-web,
-# typecheck-web, deadcode-web, test-web, boundaries, enforce, bindings-check,
-# doc-check
+# Run all pre-commit checks in sequence: fmt, lint, test, lint-web,
+# typecheck-web, deadcode-web, test-web, boundaries, unused-deps, enforce,
+# bindings-check, doc-check
 make pre-commit
 ```
 
@@ -671,13 +609,35 @@ npm run build        # Production build (required before integration tests)
 Some crates have conditional compilation gated on feature flags. A plain `cargo test` will use default features. To test a specific feature combination:
 
 ```bash
-cargo test -p gglib-runtime --features cli
-cargo doc  -p gglib-runtime --features cli
+cargo test -p gglib-db --features test-utils
+cargo doc  -p gglib-db --features test-utils
 ```
 
 ### Lockfile discipline
 
 `Cargo.lock` is committed and must stay consistent. Before anything builds, the `test` job runs `cargo metadata --locked` for the workspace and for `src-tauri`, which fails when the lock does not already satisfy every manifest. After editing a `Cargo.toml`, run `make check`, which records the change in the lock, and commit the result. To move one third-party crate, run `cargo update -p <crate> --precise <version>`, and name in the PR every version the lock diff moves. Never run `cargo generate-lockfile`: it re-resolves every dependency against whatever the registry holds that minute, so its diff carries third-party upgrades nobody reviewed.
+
+### Unused dependencies
+
+CI's `boundaries` job runs `make unused-deps`, which is `cargo shear --deny-warnings`. It fails on:
+
+- a dependency a crate declares and none of its targets names;
+- a dependency under `[dependencies]` that only the crate's `tests/` name, which belongs under `[dev-dependencies]`;
+- an entry in `[workspace.dependencies]` that no member takes;
+- an optional dependency nothing names;
+- an `ignored` entry that is not needed.
+
+[cargo-shear](https://github.com/Boshen/cargo-shear) reads the source as text and compiles nothing. Code for another platform or behind a feature therefore counts as a use, and so does a `#[cfg(test)]` module under `src/`: a dependency that only unit tests name passes under `[dependencies]`, so put it under `[dev-dependencies]` yourself.
+
+A dependency that no code names but the build needs goes in that crate's `ignored` list, with the reason on the line above it:
+
+```toml
+[package.metadata.cargo-shear]
+# Named nowhere in code: it sets the features of the SQLite that sqlx links.
+ignored = ["libsqlite3-sys"]
+```
+
+Install the tool with `cargo binstall cargo-shear` or `brew install cargo-shear`. `cargo install cargo-shear`, run from this checkout, builds it with the toolchain `rust-toolchain.toml` pins, which can be older than the tool needs.
 
 ### Dependency updates
 
@@ -723,9 +683,9 @@ A change that splits into several concerns goes up as a stack: one PR per concer
 | Job | Runs | What it enforces |
 |---|---|---|
 | `fmt` | `cargo fmt --all -- --check` | Consistent code style |
-| `quality` | `./scripts/check_workflow_yaml.sh`, `npm run lint -- --max-warnings 0`, `npm run typecheck` | No duplicate key in any YAML file under `.github/`, plus that script's `bump-version.yml` and `badges.yml` checks; the ESLint rules, warnings included; TypeScript types |
-| `boundaries` | `./scripts/check_boundaries.sh`, which also runs `check_readmes.sh --strict` | What [Crate Boundaries](#crate-boundaries) says `check_boundaries.sh` rejects or allow-lists; the `gglib-bootstrap` source guard; README coverage |
-| `enforcement` | `check-tauri-commands.sh`, `check-frontend-ipc.sh`, `check_transport_branching.sh`, `check_param_source_exhaustive.sh`, `check_context_floor.sh`, `check_settings_surfaces.sh`, `check_swallowed_db_errors.sh`, `check_rust_complexity.sh`, `check_file_complexity.sh`, `check_lint_inheritance.sh`, `check_ts_bindings.sh`, `check_readme_tables.py`, all in `scripts/` | Tauri commands only in the approved files; frontend `invoke()` only with allowlisted commands; no transport branching in frontend client modules; no catch-all over `ParamSource`; nothing outside the resolver fabricates the context floor; every setting reachable from a surface; no discarded `sqlx` result; the Rust and TypeScript/CSS file-size ratchets; every crate inherits the workspace lints, and allows no more lints than its baseline; the ts-rs binding annotations; TypeScript README tables that match their directories |
+| `quality` | `npm run lint -- --max-warnings 0`, `npm run typecheck` | The ESLint rules, warnings included; TypeScript types |
+| `boundaries` | `make boundaries`, which is `check_boundaries.sh` and the `check_readmes.sh --strict` it runs; `make unused-deps`, which is `cargo shear --deny-warnings` | What [Crate Boundaries](#crate-boundaries) says `check_boundaries.sh` rejects or allow-lists; the `gglib-bootstrap` source guard; README coverage; no dependency a crate declares and none of its targets uses (see [Unused dependencies](#unused-dependencies)) |
+| `enforcement` | `make enforce` | The repository rules that neither the compiler nor a linter checks. The `enforce` recipe in the `Makefile` is the only list of them, and each script's header says what it rejects |
 | `test` | `cargo metadata --locked` (the workspace and `src-tauri`), `npm run build`, `cargo test --no-fail-fast`, `scripts/split_test_output.py` | `Cargo.lock` is current; the Rust tests and doctests pass; the per-crate test output the badges read, from a run that ran doctests |
 | `bindings` | `make bindings-check` | The committed TypeScript bindings are what the Rust types generate |
 | `rustdoc` | `cargo doc --workspace --no-deps --document-private-items --exclude gglib-app`, with `RUSTDOCFLAGS=-D warnings` | No rustdoc warning |
@@ -738,7 +698,7 @@ When a CI or Coverage run on `main` completes, `badges.yml` downloads its artifa
 
 Coverage is measured on every push to `main` with `cargo-llvm-cov` and feeds into the same badge pipeline.
 
-Docs are deployed to GitHub Pages automatically when a release is published, via `docs.yml`.
+Docs are deployed to GitHub Pages by `release.yml`'s `deploy-docs` job, for each release that is not a prerelease.
 
 ---
 

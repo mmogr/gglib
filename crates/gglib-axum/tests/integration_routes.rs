@@ -105,10 +105,16 @@ async fn downloads_endpoint_returns_queue_snapshot() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    let body_str = std::str::from_utf8(&body).unwrap();
-    // Should contain queue snapshot fields
-    assert!(body_str.contains("items"));
-    assert!(body_str.contains("max_size"));
+    // An idle queue snapshot: its lists and limits, and no `active` key.
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(json["revision"].as_u64().is_some_and(|n| n > 0), "{json}");
+    assert_eq!(json["waiting"], serde_json::json!([]));
+    assert_eq!(json["finished"], serde_json::json!([]));
+    assert_eq!(json["full"], false);
+    assert!(json["max_size"].is_u64(), "{json}");
+    assert!(json.get("active").is_none(), "{json}");
+    let snapshot: gglib_core::download::QueueSnapshot = serde_json::from_value(json).unwrap();
+    assert!(snapshot.is_idle());
 }
 
 #[tokio::test]
@@ -144,7 +150,7 @@ async fn events_endpoint_not_intercepted_by_spa_fallback() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let state = test_state(CorsConfig::AllowAll).await;
+    let state = test_state().await;
 
     // Create a temp directory with an index.html (SPA fallback target)
     let temp_dir = TempDir::new().unwrap();
@@ -215,7 +221,7 @@ async fn spa_fallback_returns_index_html() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let state = test_state(CorsConfig::AllowAll).await;
+    let state = test_state().await;
 
     // Create a temp directory with an index.html
     let temp_dir = TempDir::new().unwrap();
@@ -561,14 +567,19 @@ async fn downloads_queue_accepts_get() {
         .await
         .unwrap();
 
-    // Should return 200 with queue snapshot
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    let body_str = std::str::from_utf8(&body).unwrap();
-    // Should contain queue snapshot fields
-    assert!(body_str.contains("items"));
-    assert!(body_str.contains("max_size"));
+    // An idle queue snapshot: its lists and limits, and no `active` key.
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(json["revision"].as_u64().is_some_and(|n| n > 0), "{json}");
+    assert_eq!(json["waiting"], serde_json::json!([]));
+    assert_eq!(json["finished"], serde_json::json!([]));
+    assert_eq!(json["full"], false);
+    assert!(json["max_size"].is_u64(), "{json}");
+    assert!(json.get("active").is_none(), "{json}");
+    let snapshot: gglib_core::download::QueueSnapshot = serde_json::from_value(json).unwrap();
+    assert!(snapshot.is_idle());
 }
 
 // ============================================================================
@@ -584,7 +595,7 @@ async fn model_get_by_id_returns_json_not_html() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let state = test_state(CorsConfig::AllowAll).await;
+    let state = test_state().await;
 
     // Create a temp directory with an index.html (SPA fallback target)
     let temp_dir = TempDir::new().unwrap();
@@ -629,7 +640,7 @@ async fn model_tags_by_id_returns_json_not_html() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let state = test_state(CorsConfig::AllowAll).await;
+    let state = test_state().await;
 
     let temp_dir = TempDir::new().unwrap();
     let index_path = temp_dir.path().join("index.html");
@@ -672,7 +683,7 @@ async fn a_path_param_route_returns_json_not_html() {
     use std::io::Write;
     use tempfile::TempDir;
 
-    let state = test_state(CorsConfig::AllowAll).await;
+    let state = test_state().await;
 
     let temp_dir = TempDir::new().unwrap();
     let index_path = temp_dir.path().join("index.html");

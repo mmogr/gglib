@@ -16,7 +16,7 @@ use super::*;
 use crate::bootstrap::{CliContext, test_context};
 
 /// A `ChatArgs` with every knob at rest.
-pub(super) fn chat_args() -> ChatArgs {
+pub(crate) fn chat_args() -> ChatArgs {
     ChatArgs {
         identifier: "qwen".to_owned(),
         context: crate::shared_args::ContextArgs::default(),
@@ -35,9 +35,9 @@ pub(super) fn chat_args() -> ChatArgs {
         model: None,
         profile: None,
         continue_id: None,
+        thinking: None,
         observation_tools: Vec::new(),
         max_observation_steps: None,
-        max_stagnation_steps: None,
     }
 }
 
@@ -209,7 +209,7 @@ async fn an_old_row_without_the_field_continues_unprofiled() {
     let id = ctx
         .app
         .chat_history()
-        .create_conversation_with_settings(NewConversation {
+        .create_conversation(NewConversation {
             title: "older".to_owned(),
             model_id: None,
             system_prompt: None,

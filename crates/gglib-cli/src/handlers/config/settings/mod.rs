@@ -3,7 +3,7 @@
     clippy::option_if_let_else,
     reason = "grandfathered at lint inheritance, #1157"
 )]
-pub(crate) mod profiles;
+mod profiles;
 mod reset;
 mod set;
 mod settings_display;
@@ -13,10 +13,10 @@ use anyhow::Result;
 
 use crate::bootstrap::CliContext;
 use crate::config_commands::{ModelsDirCommand, SettingsCommand};
+use crate::handlers::model::resolver;
 use crate::utils::input::prompt_string_with_default;
 use gglib_core::paths::{
-    DirectoryCreationStrategy, default_models_dir, ensure_directory, persist_models_dir,
-    resolve_models_dir,
+    DirectoryCreationStrategy, default_models_dir, resolve_models_dir, set_models_dir,
 };
 use gglib_core::{Settings, SettingsUpdate};
 
@@ -65,7 +65,7 @@ pub(crate) async fn handle_default_model(
     match identifier {
         Some(id) => {
             // Set the default model
-            let model = ctx.app.models().find_by_identifier(&id).await?;
+            let model = resolver::resolve_model_identifier(ctx, &id).await?;
             let update = SettingsUpdate {
                 default_model_id: Some(Some(model.id)),
                 ..Default::default()
@@ -112,9 +112,7 @@ pub(crate) fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
                 "Where should gglib store downloaded models?",
                 Some(&default_path),
             )?;
-            let resolved = resolve_models_dir(Some(&answer))?;
-            ensure_directory(&resolved.path, DirectoryCreationStrategy::AutoCreate)?;
-            persist_models_dir(&resolved.path)?;
+            let resolved = set_models_dir(&answer, DirectoryCreationStrategy::AutoCreate)?;
             println!(
                 "✓ Models directory updated to {} (interactive)",
                 resolved.path.display()
@@ -122,14 +120,12 @@ pub(crate) fn handle_models_dir(command: ModelsDirCommand) -> Result<()> {
             Ok(())
         }
         ModelsDirCommand::Set { path, no_create } => {
-            let resolved = resolve_models_dir(Some(&path))?;
             let strategy = if no_create {
                 DirectoryCreationStrategy::Disallow
             } else {
                 DirectoryCreationStrategy::AutoCreate
             };
-            ensure_directory(&resolved.path, strategy)?;
-            persist_models_dir(&resolved.path)?;
+            let resolved = set_models_dir(&path, strategy)?;
             println!(
                 "✓ Models directory updated to {} (non-interactive)",
                 resolved.path.display()

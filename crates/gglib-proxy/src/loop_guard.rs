@@ -89,10 +89,8 @@ impl LoopGuardConfig {
     /// Resolve the guard configuration from a settings snapshot.
     ///
     /// Returns `None` when nothing will be scanned — either because the mode
-    /// is [`LoopGuardMode::Off`] (which includes the deprecated
-    /// `proxy_loop_detection = Some(false)`, through
-    /// [`Settings::effective_loop_guard_mode`]) or because the shared agent
-    /// defaults disable loop detection entirely.
+    /// is [`LoopGuardMode::Off`] or because the shared agent defaults disable
+    /// loop detection entirely.
     pub(crate) fn from_settings(settings: &Settings) -> Option<Self> {
         let mode = settings.effective_loop_guard_mode();
         if !mode.scans() {

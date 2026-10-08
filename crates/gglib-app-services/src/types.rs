@@ -14,6 +14,9 @@ pub use types_hf::{
     HfModelSummary, HfProjector, HfQuantization, HfQuantizationsResponse, HfSearchRequest,
     HfSearchResponse, HfSortField, ToolSupportResponse,
 };
+#[path = "types_model_update.rs"]
+mod types_model_update;
+pub use types_model_update::UpdateModelRequest;
 
 // ============================================================================
 // GUI Model Types
@@ -168,6 +171,16 @@ pub struct StartServerRequest {
     pub mlock: bool,
 }
 
+/// Response for queueing a download: the one shape the daemon answers with
+/// and the CLI reads.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct QueueDownloadResponse {
+    /// The download's canonical ID: its row's `id` in the queue snapshot,
+    /// and its entry's in `finished` once it has ended.
+    pub id: String,
+}
+
 /// Response for starting a server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -219,43 +232,6 @@ pub struct AddModelRequest {
 pub struct RemoveModelRequest {
     #[serde(default)]
     pub force: bool,
-}
-
-/// Request body for updating a model.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateModelRequest {
-    pub name: Option<String>,
-    pub quantization: Option<String>,
-    pub file_path: Option<String>,
-    pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
-    /// Per-model server startup defaults.
-    /// - Some(Some(config)) — set/replace the model's server defaults
-    /// - Some(None) — clear the override (NULL in DB, revert to global default)
-    /// - None — don't touch this field (key omitted from payload)
-    ///
-    /// ts-rs cannot read a nested `Option`, so the three states are spelled
-    /// out by hand: absent, `null`, or a value.
-    // `as` rather than `type`: ts-rs registers a field's dependencies from its
-    // Rust type, and a `type = "…"` override replaces the type without
-    // registering anything, so the emitted file names `ServerConfig` and never
-    // imports it. `as` states a substitute type, which is both rendered and
-    // followed for imports. `optional = nullable` then gives `field?: T | null`
-    // — the same three states, with the import.
-    #[cfg_attr(
-        feature = "ts-bindings",
-        ts(as = "Option<gglib_core::domain::ServerConfig>", optional = nullable)
-    )]
-    #[serde(default, with = "serde_with::rust::double_option")]
-    pub server_defaults: Option<Option<gglib_core::domain::ServerConfig>>,
-    /// The projector the model loads beside its weights, by path.
-    /// - Some(Some(path)) — link the model to the projector at `path`
-    /// - Some(None) — unlink it
-    /// - None — don't touch the link (key omitted from payload)
-    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<String>", optional = nullable))]
-    #[serde(default, with = "serde_with::rust::double_option")]
-    pub projector_path: Option<Option<String>>,
 }
 
 /// One projector file the inspector's picker offers for a model.
@@ -341,7 +317,7 @@ pub struct UpgradeOutcome {
 // ============================================================================
 
 /// Current configuration for the models directory shown in settings UI.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelsDirectoryInfo {
     pub path: String,
@@ -353,7 +329,7 @@ pub struct ModelsDirectoryInfo {
 
 #[path = "types_settings.rs"]
 mod types_settings;
-pub use types_settings::{AppSettings, UpdateSettingsRequest};
+pub use types_settings::{AppSettings, InstalledTemplates, UpdateSettingsRequest};
 
 // ============================================================================
 // MCP Types
@@ -429,6 +405,8 @@ pub enum McpServerStatusDto {
     Starting,
     Running,
     Error(String),
+    /// Of a kind gglib cannot run: an SSE server.
+    Unsupported,
 }
 
 /// MCP server info for GUI display (nested structure matching TS expectations).
@@ -505,27 +483,6 @@ pub struct McpTestResult {
     pub error: Option<String>,
     /// What the server offered. Empty unless `ok`.
     pub tools: Vec<McpToolInfo>,
-}
-
-/// Request to call an MCP tool.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct McpToolCallRequest {
-    pub tool_name: String,
-    /// Tool arguments, shaped by the tool's own schema and opaque here.
-    #[cfg_attr(feature = "ts-bindings", ts(type = "Record<string, unknown>"))]
-    pub arguments: std::collections::HashMap<String, serde_json::Value>,
-}
-
-/// Response from an MCP tool call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub struct McpToolCallResponse {
-    pub success: bool,
-    /// Whatever the tool returned. Opaque here, as in [`McpToolInfo`].
-    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown"))]
-    pub data: Option<serde_json::Value>,
-    pub error: Option<String>,
 }
 
 // ============================================================================

@@ -2,95 +2,39 @@
 // Benchmark Domain Types
 // ============================================================================
 //
-// Mirrors the Rust `gglib-app-services::benchmark` domain types.
-// Serde config on the Rust side:
+// What the benchmark routes answer with is generated from the Rust types and
+// re-exported here, so importers read every benchmark shape from this module.
+//
+// What is written by hand is what Rust derives no binding for: the four
+// request configs, the task-suite schema a custom suite file is parsed into,
+// the SSE event union and the apply gate's verdict. Their serde config:
 //   - BenchmarkEvent: `#[serde(tag = "type", rename_all = "snake_case")]`
 //   - BenchmarkModelResult: `#[serde(tag = "kind", rename_all = "snake_case")]`
-//   - All structs: `#[serde(rename_all = "snake_case")]`
-//   - Tune's `TaskSuite`/`ExpectedOutcome`/`CandidateSource` use
-//     `#[serde(tag = "...")]` internal tagging (see each type below for its
-//     tag key); `InferenceConfig` is the one exception that serializes
-//     camelCase (`#[serde(rename_all = "camelCase")]`) — reused as-is from
-//     `../types` (this file and `../types/index.ts` have a type-only mutual
-//     import, which TypeScript permits and erases at compile time).
+//   - `TaskSuite`/`ExpectedOutcome` use `#[serde(tag = "...")]` internal
+//     tagging (see each type below for its tag key)
 //
 // @module types/benchmark
 
-import type { InferenceConfig } from './index';
-import type { AgenticEvalReport, EvalArm, PairedEffect } from './agenticEval';
+import type { AgenticEvalReport } from './generated/AgenticEvalReport';
+import type { ModelCompareResult } from './generated/ModelCompareResult';
+import type { ModelPerfResult } from './generated/ModelPerfResult';
+import type { PairedEffect } from './generated/PairedEffect';
+import type { TaskCategory } from './generated/TaskCategory';
+import type { TuneCandidateResult } from './generated/TuneCandidateResult';
+import type { EvalArm } from './agenticEval';
 
 export type * from './agenticEval';
-export type * from './agenticProxy';
 
-// ─── Enumerations ────────────────────────────────────────────────────────────
+// ─── Generated ───────────────────────────────────────────────────────────────
 
-export type BenchmarkRunType = 'compare' | 'perf' | 'tune' | 'agentic';
-export type BenchmarkRunStatus = 'running' | 'complete' | 'failed';
-
-// ─── Domain Entities ─────────────────────────────────────────────────────────
-
-export interface BenchmarkRun {
-  id: number;
-  run_type: BenchmarkRunType;
-  status: BenchmarkRunStatus;
-  model_ids: number[];
-  prompt_text?: string | null;
-  system_prompt?: string | null;
-  config_json?: string | null;
-  /**
-   * The gate's outcome record for a tune run (JSON ApplyRecord: verdict +
-   * applied config + displaced defaults). Refusals leave records too; null
-   * on runs never judged and on non-tune runs.
-   */
-  applied_json?: string | null;
-  error?: string | null;
-  created_at: string;       // ISO 8601 UTC
-  completed_at?: string | null;
-}
-
-export interface ModelCompareResult {
-  id?: number | null;
-  model_id: number;
-  run_id?: number | null;
-  prompt_text: string;
-  system_prompt?: string | null;
-  response_text: string;
-  was_truncated: boolean;
-  prompt_tokens?: number | null;
-  completion_tokens?: number | null;
-  prompt_ms?: number | null;
-  generation_ms?: number | null;
-  prompt_tps?: number | null;
-  generation_tps?: number | null;
-  created_at: string;
-}
-
-export interface ModelPerfResult {
-  id?: number | null;
-  model_id: number;
-  run_id?: number | null;
-  pp_tps: number;
-  tg_tps: number;
-  pp_tokens: number;
-  tg_tokens: number;
-  backend?: string | null;
-  ngl?: number | null;
-  context_size?: number | null;
-  repetitions: number;
-  created_at: string;
-}
-
-/**
- * A model's cached benchmark headline — the `benchmarkSummary` on a library
- * row and a model detail.
- *
- * Five fields are required nullables rather than optional keys — the four
- * `*_tps` figures and `latest_backend`. The row is built from a query that
- * names every column, so a model benchmarked only one way sends `null` for
- * the other rather than omitting the key.
- */
-import type { ModelBenchmarkSummary } from './generated/ModelBenchmarkSummary';
-export type { ModelBenchmarkSummary };
+export type { BenchmarkRun } from './generated/BenchmarkRun';
+export type { GeneratedOutput } from './generated/GeneratedOutput';
+/** Response of `GET /api/benchmark/runs`. */
+export type { ListRunsResponse } from './generated/ListRunsResponse';
+/** Response of `GET /api/models/{id}/agentic-history`, most recent first. */
+export type { ModelAgenticHistoryResponse } from './generated/ModelAgenticHistoryResponse';
+export type { ModelCompareResult, ModelPerfResult, TuneCandidateResult };
+export type { TuneTaskResult } from './generated/TuneTaskResult';
 
 // ─── Request Configs ─────────────────────────────────────────────────────────
 
@@ -110,17 +54,6 @@ export interface PerfConfig {
 }
 
 // ─── Tune: task schema ──────────────────────────────────────────────────────
-
-/**
- * BFCL-style category (plus `long_context`, gglib-specific) a
- * {@link TuneTask} belongs to.
- */
-export type TaskCategory =
-  | 'single_call'
-  | 'parallel_call'
-  | 'multi_turn'
-  | 'irrelevance'
-  | 'long_context';
 
 /**
  * One expected tool call within a task's `tool_calls` outcome. Matching is
@@ -220,94 +153,6 @@ export interface TuneConfig {
   ctx_size?: number | null;
 }
 
-// ─── Tune: results ────────────────────────────────────────────────────────────
-
-/**
- * Where a tune candidate's sampling settings came from.
- * Serde: `#[serde(tag = "kind", rename_all = "snake_case")]`.
- */
-export type CandidateSource =
-  | { kind: 'user_grid' }
-  | { kind: 'family_preset'; family: string }
-  | { kind: 'incumbent' }
-  | { kind: 'incumbent_calibration' };
-
-/**
- * The shape of what a run generated, as opposed to how much.
- *
- * A token total and a wall time cannot distinguish a model thinking at length
- * from one failing to stop, and those call for opposite responses.
- */
-export interface GeneratedOutput {
-  /**
-   * Characters emitted as reasoning (chain-of-thought).
-   *
-   * Only meaningful when the upstream splits thinking into its own
-   * `reasoning_content` field. Without that, a reasoning model's thinking is
-   * counted as `answer_chars` instead — so `0` here beside a large
-   * `answer_chars` means either "did not think" or "thought, unobservably".
-   */
-  reasoning_chars?: number;
-  /** Characters emitted as ordinary answer text, across every turn. */
-  answer_chars?: number;
-  /**
-   * Requests actually sent to the model. Distinct from `iterations`, which
-   * counts only tool-executing turns.
-   */
-  llm_calls?: number;
-  /**
-   * The largest single batch of tool calls any one turn executed — the
-   * fingerprint of a constrained-decoding runaway, which scoring cannot reveal
-   * because extra unrequested calls cost nothing.
-   */
-  max_tool_calls_in_batch?: number;
-  /** Recoverable conditions the loop reported, chiefly over-wide call batches. */
-  system_warnings?: number;
-}
-
-/** Result of evaluating one task against one candidate's sampling settings. */
-export interface TuneTaskResult {
-  task_id: string;
-  category: TaskCategory;
-  passed: boolean;
-  tool_match_score: number;
-  loop_detected: boolean;
-  stagnation_detected: boolean;
-  iterations: number;
-  latency_ms: number;
-  completion_tokens?: number | null;
-  /** Time to the model's first tool call; `null` when it never called one. */
-  time_to_first_tool_call_ms?: number | null;
-  detail?: string | null;
-  /**
-   * Why this run is **not a measurement of the model**, when it is not one.
-   *
-   * `null` on every run that reached the model, including every way of doing
-   * badly — a wrong call, a detected loop, an exhausted budget all score
-   * honestly. A non-null reason means the request never produced a response to
-   * score, so this row's `passed: false` and `tool_match_score: 0` are the
-   * absence of a measurement rather than a bad one, and must not be rendered
-   * as a failure the model is responsible for.
-   */
-  unmeasured?: string | null;
-  /** What the model generated, as opposed to how much. */
-  generated?: GeneratedOutput;
-}
-
-/**
- * Result of evaluating one candidate's sampling settings. `config` is a
- * plain {@link InferenceConfig} — pass it directly to `updateModel({
- * inferenceDefaults: result.config })` to apply it, no field mapping needed.
- */
-export interface TuneCandidateResult {
-  config: InferenceConfig;
-  source: CandidateSource;
-  task_results: TuneTaskResult[];
-  composite_score: number;
-  pruned: boolean;
-  tg_tps?: number | null;
-}
-
 // ─── SSE Event Discriminated Union ───────────────────────────────────────────
 
 /** Payload of a `model_complete` event; tagged by `kind`. */
@@ -361,29 +206,4 @@ export interface ApplyOutcome {
   model_id: number;
   /** Whether the model was actually written. */
   applied: boolean;
-}
-
-// ─── API Response Shapes ─────────────────────────────────────────────────────
-
-export interface ListBenchmarkRunsResponse {
-  runs: BenchmarkRun[];
-}
-
-export interface GetBenchmarkRunResponse {
-  run: BenchmarkRun;
-}
-
-export interface ModelBenchmarkHistoryResponse {
-  summary?: ModelBenchmarkSummary | null;
-  compare_history: ModelCompareResult[];
-  perf_history: ModelPerfResult[];
-}
-
-export interface ModelTuneHistoryResponse {
-  results: TuneCandidateResult[];
-}
-
-/** Response for `GET /api/models/{id}/agentic-history`, most recent first. */
-export interface ModelAgenticHistoryResponse {
-  reports: AgenticEvalReport[];
 }

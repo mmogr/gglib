@@ -9,7 +9,7 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::paths::create_private_dir;
+use crate::paths::{create_new_private_file, create_private_dir};
 
 /// Replace the file at `path` with `bytes`, `0600`, atomically.
 ///
@@ -80,47 +80,26 @@ static NEXT_TMP: AtomicU64 = AtomicU64::new(0);
 /// after a reboot or when pids wrap, starts the counter again — keeps the
 /// mode it has, and somebody may have opened it while that let them, holding
 /// a descriptor no chmod reaches; a symlink there sends the open, and its
-/// truncate, to whatever file it names. So `open_new` refuses a name that is
-/// taken, a link included, and the leftover is removed and the create tried
-/// once more: no other writer on this machine, in this pid namespace, can be
-/// using a name that carries this process's pid and a count only it drew.
-/// Removing a name writes nothing to the file it named, and removes a link
-/// rather than its target. A second refusal is returned rather than chased,
-/// and so is a leftover that cannot be removed, such as a directory.
+/// truncate, to whatever file it names. So [`create_new_private_file`] refuses
+/// a name that is taken, a link included, and the leftover is removed and the
+/// create tried once more: no other writer on this machine, in this pid
+/// namespace, can be using a name that carries this process's pid and a count
+/// only it drew. Removing a name writes nothing to the file it named, and
+/// removes a link rather than its target. A second refusal is returned rather
+/// than chased, and so is a leftover that cannot be removed, such as a
+/// directory.
 pub(super) fn create_private(path: &Path) -> io::Result<fs::File> {
-    match open_new(path) {
+    match create_new_private_file(path) {
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
             fs::remove_file(path)?;
-            open_new(path)
+            create_new_private_file(path)
         }
         opened => opened,
     }
 }
 
-/// `create_new`, with the mode asked of `open` itself.
-#[cfg(unix)]
-fn open_new(path: &Path) -> io::Result<fs::File> {
-    use std::os::unix::fs::OpenOptionsExt;
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(path)
-}
-
-/// Windows has no mode to ask for, so this is `create_new` alone, which
-/// refuses a taken name as the Unix twin does; `restrict` says what protects
-/// the file there.
-#[cfg(not(unix))]
-fn open_new(path: &Path) -> io::Result<fs::File> {
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-}
-
 /// `0600` exactly where the platform has a notion of it: the umask can take
-/// bits from the mode `open_new` asked for, the owner's own among them. Set
+/// bits from the mode the create asked for, the owner's own among them. Set
 /// on the descriptor, so what changes is the file this writer created and
 /// not whatever is under its name by now.
 #[cfg(unix)]

@@ -1,21 +1,20 @@
-import { FC, useRef, useState, useMemo } from 'react';
+import { FC, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { appLogger } from '../../services/platform';
 import { useClickOutside } from '../../hooks/useClickOutside';
-import type { DownloadQueueItem } from '../../services/transport/types/downloads';
+import type { DownloadRow } from '../../services/transport/types/downloads';
 import { Icon } from '../ui/Icon';
 import { Chip } from '../ui/Chip';
 import { IconButton } from '../ui/IconButton';
 import { getTransport } from '../../services/transport';
-import { groupPendingItems, type GroupedQueueItem } from './groupPendingItems';
 
 interface DownloadQueuePopoverProps {
   /** Whether the popover is open */
   isOpen: boolean;
   /** Called to close the popover */
   onClose: () => void;
-  /** Pending items from queue status */
-  pendingItems: DownloadQueueItem[];
+  /** The snapshot's waiting rows, one per download, in the order they will run */
+  waiting: DownloadRow[];
   /** Called after an item is removed/reordered to refresh queue */
   onRefresh?: () => void | Promise<void>;
 }
@@ -23,12 +22,13 @@ interface DownloadQueuePopoverProps {
 /**
  * Popover component showing queued downloads with reorder and cancel functionality.
  * Uses up/down buttons for reordering (works in both Tauri WebKit and web browsers).
- * A model's files are grouped and displayed as a single entry.
+ * A row is a whole download, however many files it has; its name and its
+ * "3 parts" are the row's own text.
  */
 const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
   isOpen,
   onClose,
-  pendingItems,
+  waiting,
   onRefresh,
 }) => {
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -37,23 +37,14 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
   // Close when clicking outside
   useClickOutside(popoverRef, onClose, isOpen);
 
-  // Group items for display
-  const groupedItems = useMemo(() => groupPendingItems(pendingItems), [pendingItems]);
-
-  // Handle cancel/remove from queue
-  const handleCancel = async (item: GroupedQueueItem) => {
+  // Take a waiting download, every file of it, out of the queue
+  const handleCancel = async (item: DownloadRow) => {
     if (isProcessing) return;
     setIsProcessing(true);
     
     try {
-      if (item.group_id) {
-        // Cancel entire shard group
-        await getTransport().cancelShardGroup(item.group_id);
-      } else {
-        // Remove single item
-        await getTransport().removeFromQueue(item.id);
-      }
-      onRefresh?.();;
+      await getTransport().removeFromQueue(item.id);
+      onRefresh?.();
     } catch (error) {
       appLogger.error('component.download', 'Failed to remove from queue', { error });
     } finally {
@@ -67,7 +58,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     
     setIsProcessing(true);
     
-    const item = groupedItems[index];
+    const item = waiting[index];
     const newPosition = item.position - 1; // Move to previous position
     
     try {
@@ -82,11 +73,11 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
 
   // Move item down in queue (swap with next item)
   const handleMoveDown = async (index: number) => {
-    if (isProcessing || index >= groupedItems.length - 1) return; // Can't move last item down
+    if (isProcessing || index >= waiting.length - 1) return; // Can't move last item down
     
     setIsProcessing(true);
     
-    const item = groupedItems[index];
+    const item = waiting[index];
     const newPosition = item.position + 1; // Move to next position
     
     try {
@@ -99,7 +90,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     }
   };
 
-  if (!isOpen || groupedItems.length === 0) {
+  if (!isOpen || waiting.length === 0) {
     return null;
   }
 
@@ -110,12 +101,12 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
     >
       <div className="flex items-center justify-between px-md py-sm border-b border-border-light bg-surface-elevated">
         <span className="text-sm font-semibold text-text-primary">Download Queue</span>
-        <span className="text-xs text-text-secondary bg-surface px-2 py-[2px] rounded-sm">{groupedItems.length} {groupedItems.length === 1 ? 'item' : 'items'}</span>
+        <span className="text-xs text-text-secondary bg-surface px-2 py-[2px] rounded-sm">{waiting.length} {waiting.length === 1 ? 'item' : 'items'}</span>
       </div>
       <div className="max-h-[300px] overflow-y-auto">
-        {groupedItems.map((item, index) => (
+        {waiting.map((item, index) => (
           <div
-            key={item.group_id || item.id}
+            key={item.id}
             className="flex items-center gap-sm px-md py-sm hover:bg-surface-hover transition-colors duration-150"
           >
             {/* Reorder buttons */}
@@ -136,7 +127,7 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
                 size="sm"
                 className="h-5 w-5"
                 onClick={() => handleMoveDown(index)}
-                disabled={isProcessing || index === groupedItems.length - 1}
+                disabled={isProcessing || index === waiting.length - 1}
               >
                 <Icon icon={ChevronDown} size={14} />
               </IconButton>
@@ -144,13 +135,13 @@ const DownloadQueuePopover: FC<DownloadQueuePopoverProps> = ({
             
             {/* Item info */}
             <div className="flex-1 min-w-0 flex flex-col gap-[2px]">
-              <div className="text-sm font-medium text-text-primary overflow-hidden text-ellipsis whitespace-nowrap" title={item.id}>
-                {item.display_name}
+              <div className="text-sm font-medium text-text-primary overflow-hidden text-ellipsis whitespace-nowrap" title={item.text.title}>
+                {item.text.title}
               </div>
               <div className="flex items-center gap-xs flex-wrap">
-                {item.shard_count > 1 && (
+                {item.text.file && (
                   <Chip variant="primary" size="sm" className="font-mono tabular-nums">
-                    {item.shard_count} parts
+                    {item.text.file}
                   </Chip>
                 )}
               </div>

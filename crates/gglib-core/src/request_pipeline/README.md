@@ -1,8 +1,5 @@
 # Request Pipeline
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-request_pipeline-complexity.json)
-
 <!-- module-docs:start -->
 
 Request shaping for every inference pipeline: what we know about the model, and
@@ -86,12 +83,11 @@ does either.
   line, rendered after 5b so it describes what was *sent* rather than what
   stage 4 folded. Its module docs carry the argument for that placement.
 
-Outside tests, two paths call [`apply()`]: the proxy's forwarding path
-(`gglib-proxy`'s `forward.rs`) and the runtime's completion adapter
-(`gglib-runtime`'s `llm_completion`), and neither runs the stages in an order
-of its own. `POST /api/chat` in `gglib-axum` does not call it and runs none of
-the stages: it posts straight to llama-server, as the note in its handler,
-`proxy_chat` in `chat_api.rs`, says.
+Outside tests, three paths call [`apply()`]: the proxy's forwarding path
+(`gglib-proxy`'s `forward.rs`), the runtime's completion adapter
+(`gglib-runtime`'s `llm_completion`) and the daemon's request for a chat's
+title (`gglib-axum`'s `handlers/chat_title.rs`). None runs the stages in an
+order of its own.
 
 ## The truncation budget
 

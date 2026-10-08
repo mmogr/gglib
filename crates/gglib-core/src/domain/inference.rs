@@ -26,15 +26,15 @@
 //! This module provides the core `InferenceConfig` type that is reused across:
 //! - Per-model defaults (`Model.inference_defaults`)
 //! - Global settings (`Settings.inference_defaults`)
-//! - Request-level overrides (flattened in `ChatProxyRequest`)
+//! - Request-level overrides (a run's reasoning controls, a chat title's cap)
 //! - `gglib proxy` — per-request injection into OpenAI-format request bodies
-//! - `gglib chat` / `gglib q` — hierarchy resolution for the agentic loop
+//! - `gglib chat` / `gglib q` — the flags a person typed for a turn
 //!
-//! All surfaces resolve inference parameters through
-//! [`InferenceConfig::resolve_with_profile`], which is the single source of
-//! truth for the hierarchy. [`InferenceConfig::resolve_with_defaults`] is the
-//! same resolution with no profile selected, for surfaces that have no notion
-//! of one.
+//! [`InferenceConfig::resolve_layers_with_sources`] is the single source of
+//! truth for the hierarchy. The proxy's requests and every chat's have it
+//! folded by [`crate::request_pipeline::sampling`]; `gglib model explain`, a
+//! `gglib serve` launch and a benchmark's compare request fold it through
+//! [`InferenceConfig::resolve_with_profile`] or one of its variants.
 
 use std::fmt;
 
@@ -980,7 +980,7 @@ fn read_reasoning_budget_tokens(
     // `read_i32` has already reported anything unreadable as the key the
     // client sent, so only the range check is left.
     let n = read_i32(obj, field, issues)?;
-    if n < -1 {
+    if n < crate::settings::REASONING_BUDGET_TOKENS_MIN {
         issues.push(FieldIssue::Rejected {
             field,
             value: n.to_string(),
@@ -1638,9 +1638,8 @@ impl InferenceConfig {
     /// Resolve inference parameters using the 4-level hierarchy.
     ///
     /// Equivalent to [`resolve_with_profile`] with no profile selected — see
-    /// there for the merge order. This is the entry point for surfaces that
-    /// have no notion of a named profile (`gglib serve`, `gglib chat`,
-    /// `gglib q`, the Web UI chat API).
+    /// there for the merge order. This is the entry point for a caller that
+    /// has no notion of a named profile: the benchmark's compare request.
     ///
     /// `model_ctx` carries the two facts about the target model that change
     /// how resolution behaves — see [`ModelSamplingContext`],

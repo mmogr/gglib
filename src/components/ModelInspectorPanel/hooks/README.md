@@ -1,8 +1,5 @@
 # hooks
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ModelInspectorPanel-hooks-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ModelInspectorPanel-hooks-complexity.json)
-
 <!-- module-docs:start -->
 
 Custom hooks encapsulating stateful logic for the model inspector panel.
@@ -18,7 +15,7 @@ Custom hooks encapsulating stateful logic for the model inspector panel.
 | `useServerActions.ts` | Orchestrates `serveModel()` / `stopServer()` calls with error boundaries |
 | `useInspectorModals.ts` | Modal state the panel opens reactively, chiefly the llama-server install prompt after a failed start |
 | `useSamplingExplanation.ts` | Fetches the resolved sampling explanation for the selected model |
-| `useHfDownload.ts` | Queues a HuggingFace preview's download and says whether the queue has room |
+| `useHfDownload.ts` | Queues a HuggingFace preview's download; the button is off when the queue snapshot says `full` |
 | `useRetagModel.ts` | Re-derives capability tags from the GGUF: confirm on a destructive rebuild, then toast and reload |
 
 <!-- module-docs:end -->

@@ -10,6 +10,8 @@ import type {
   UpdateCheckResult,
   CheckUpdatesResponse,
 } from '../types/verification';
+import type { RepairRequest } from '../../../types/generated/RepairRequest';
+import type { RepairStarted } from '../../../types/generated/RepairStarted';
 
 /**
  * Verify the integrity of a model by computing SHA256 hashes.
@@ -33,13 +35,19 @@ export async function checkModelUpdates(modelId: ModelId): Promise<UpdateCheckRe
 
 /**
  * Repair a model by re-downloading corrupt shards.
- * 
+ *
+ * The daemon answers once the files are deleted and their download is queued
+ * and started: that download's id, a row of the download queue from then on,
+ * and the files it is to bring back.
+ *
  * @param modelId - ID of the model to repair
  * @param shards - Optional list of shard indices to repair
  */
 export async function repairModel(
   modelId: ModelId,
   shards?: number[]
-): Promise<{ message: string }> {
-  return post<{ message: string }>(`/api/models/${modelId}/repair`, { shards });
+): Promise<RepairStarted> {
+  // An absent `shards` is `None` to the daemon: repair every corrupt shard.
+  const body: Partial<RepairRequest> = { shards };
+  return post<RepairStarted>(`/api/models/${modelId}/repair`, body);
 }

@@ -5,8 +5,7 @@
  * serving as the single source of truth for request shape construction.
  */
 
-import type { ServeConfig } from '../transport/types/models';
-import type { SparseInferenceConfig } from '../../types';
+import type { ServeConfig, SparseInferenceConfig } from '../../types';
 import { INFERENCE_CONFIG_KEYS } from '../../constants/inferenceDefaults';
 
 /**
@@ -53,8 +52,8 @@ export function toStartServerRequest(config: ServeConfig): StartServerRequest {
     jinja: config.jinja,
     // reasoning_format is auto-detected from model tags on backend when omitted
     reasoningFormat: undefined,
-    mtpDraftNMax: config.specDraftNMax,
-    mtpDraftPMin: config.specDraftPMin,
+    mtpDraftNMax: config.mtpDraftNMax,
+    mtpDraftPMin: config.mtpDraftPMin,
     inferenceParams: inferenceParamsFrom(config),
   };
 }

@@ -4,7 +4,7 @@
  * Alone among this directory's two clients, this one talks to a different
  * origin: an already-running proxy's own HTTP port, rather than the app's
  * backend. `benchmark.ts` still reaches the backend, through
- * `transport/api/client`'s authenticated fetch helpers; this one cannot,
+ * `transport/api/client`'s authenticated fetch; this one cannot,
  * because the proxy carries its own credential (the `proxyApiKey` setting)
  * and serves its dashboard stream on its own port — the same relationship
  * the CLI's `gglib proxy dashboard` command has to it

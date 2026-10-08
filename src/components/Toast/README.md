@@ -1,8 +1,5 @@
 # Toast
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-Toast-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-Toast-complexity.json)
-
 <!-- module-docs:start -->
 
 Toast notification system with auto-dismiss, pause-on-hover, keyboard-dismiss support, and enter/exit CSS animations. Supports `success`, `error`, `info`, and `warning` severity types.

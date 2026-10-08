@@ -1,16 +1,5 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
-#![deny(unsafe_code)]
-#![deny(unused_crate_dependencies)]
 
-// Silence unused dependency warnings - these are used transitively
-use async_trait as _;
-use gglib_hf as _;
-#[cfg(test)]
-use tempfile as _;
-use thiserror as _;
-use tokio as _;
-#[cfg(test)]
-use tokio_test as _;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
@@ -33,6 +22,7 @@ pub mod launch_options;
 mod mcp;
 mod models;
 mod models_projector;
+mod models_upgrade;
 mod proxy;
 mod proxy_guard;
 mod proxy_port;
@@ -59,6 +49,7 @@ mod settings;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub mod setup;
+pub mod transcript;
 pub mod types;
 
 // Primary exports
@@ -66,7 +57,7 @@ pub use error::GuiError;
 
 // Domain ops + their Deps
 pub use benchmark::BenchmarkOps;
-pub use downloads::DownloadOps;
+pub use downloads::{DownloadDeps, DownloadOps, search_hf_models};
 pub use hub_chats::HubChats;
 pub use mcp::McpOps;
 pub use models::{ModelDeps, ModelOps};
@@ -79,13 +70,10 @@ pub use remote::{
 };
 pub use runs::{Reservation, Reserved, RunEnded, RunLog, RunRegistry, RunSpec, RunWork, Stopped};
 pub use sampling_explain::{
-    ParamProvenanceDto, ProvenanceKindDto, SamplingExplanationDto, SamplingLayerDto,
+    ParamProvenanceDto, ProvenanceKindDto, PublishedDefaultDto, PublishedStateDto,
+    SamplingExplanationDto, SamplingLayerDto, SuppressedEffortDto,
 };
 pub use servers::ServerOps;
 pub use service_graph::{AppServices, ServiceGraphParams, build_service_graph};
 pub use settings::SettingsOps;
 pub use setup::{GpuInfoDto, SetupDeps, SetupOps, SetupStatus};
-
-// Re-export commonly used types from gglib-core for convenience
-pub use gglib_core::ModelFilterOptions;
-pub use gglib_core::download::QueueSnapshot;

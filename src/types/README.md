@@ -2,9 +2,6 @@
 
 # Types Module
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-types-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-types-complexity.json)
-
 TypeScript type definitions shared across the gglib GUI.
 
 ## Architecture
@@ -22,11 +19,6 @@ TypeScript type definitions shared across the gglib GUI.
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
 │  │                            Settings Types                                   │    │
 │  │  AppSettings, ModelsDirectoryInfo, etc.                                     │    │
-│  └─────────────────────────────────────────────────────────────────────────────┘    │
-│                                                                                     │
-│  ┌─────────────────────────────────────────────────────────────────────────────┐    │
-│  │                             Event Types                                     │    │
-│  │  ServerEvent, DownloadEvent, etc.                                           │    │
 │  └─────────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -62,12 +54,17 @@ TypeScript type definitions shared across the gglib GUI.
 | `TemplateSupport` | `'yes' \| 'no' \| 'unknown'` — whether a model's chat template reads a kwarg. Three states on purpose: capabilities are read from a *running* server, so `unknown` is the common answer and must never render as a `no` |
 | `ProvenanceParamKey` | Every key the explain endpoint attributes a source to — `SamplingParamKey` plus `reasoningEffort`, which has no numeric bounds and so cannot join the bounds table |
 
-### Event Types
+### Benchmark Types (`benchmark.ts`, with `agenticEval.ts` re-exported from it)
 
 | Type | Description |
 |------|-------------|
-| `ServerEvent` | Server lifecycle events (running, stopped, crashed) |
-| `DownloadProgress` | Download progress updates |
+| `BenchmarkRun` | One run as `GET /api/benchmark/runs` lists it |
+| `AgenticEvalReport` | The raw-versus-gglib report, with its arms' `ArmScores` and their `ArmDelta` |
+| `BenchmarkEvent` | The events a streaming run sends |
+
+Events, the download queue, chat, MCP and the remote tunnel are the
+transport's own: their types are in `services/transport/types/`, and the agent
+run's events in `events/`.
 
 ## Generated bindings (`generated/`)
 
@@ -94,7 +91,7 @@ types are all aliases over `generated/`, so the alignment table that used to
 live here is now the import list itself — and it cannot drift, because the
 export gate regenerates it from Rust.
 
-What is still written by hand falls into three groups, and each is deliberate:
+What is still written by hand falls into these groups, and each is deliberate:
 
 | Kind | Examples | Why |
 |------|----------|-----|
@@ -104,6 +101,7 @@ What is still written by hand falls into three groups, and each is deliberate:
 | | `UpdateSettingsRequest` | A different narrowing: two fields typed `InferenceConfig`/`InferenceProfile[]` on the generated body take their sparse form instead, because a settings save carries the parameters the form touched rather than a complete config. The other 21 fields are the generated ones untouched. |
 | Streams whose Rust type is `Serialize`-only | `BuildEvent`, `LlamaProgressEvent` | The producing enums live in `gglib-runtime` and derive plain `Serialize`, not `ts_rs::TS`, so there is nothing for `make bindings` to generate. The union here is the mirror, and it is kept in step by hand. |
 | | `Diagnostics` | The same shape again: `dependencies` takes the narrowed `DependencyInfo[]`, which needs `Omit` rather than an intersection because `.map` over `A[] & B[]` types its callback from the first constituent. `paths` narrows by plain intersection, being no array; `acceleration` and `fastDownloads` are the generated ones untouched. |
+| Benchmark requests, events and verdicts | `CompareConfig`, `PerfConfig`, `TuneConfig`, `AgenticEvalConfig`, `TaskSuite` and its `TuneTask`, `EvalArm`, `BenchmarkEvent`, `ApplyVerdict`, `ApplyOutcome` | Their Rust types derive no `ts_rs::TS`. The results they carry (`BenchmarkRun`, `ModelCompareResult`, `ModelPerfResult`, `TuneCandidateResult`, `AgenticEvalReport` and what those hold) are generated, and `benchmark.ts` re-exports them. |
 
 Anything else hand-written under `types/` mirroring a wire shape is drift, not
 design. The REST surface, the SSE event bus, the download queue and the proxy
@@ -128,7 +126,7 @@ function ModelCard({ model }: { model: GgufModel }) {
 
 ## Design Principles
 
-1. **Single Source** — All shared types exported from `index.ts`
+1. **One home** — A wire type is exported from here or from `services/transport/types/`, never both: neither re-exports the other
 2. **Backend Parity** — Types match Rust structs for seamless JSON exchange
 3. **Strict Typing** — No `any` types; full type coverage
 

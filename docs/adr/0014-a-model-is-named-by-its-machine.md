@@ -222,7 +222,9 @@ conversation's machine is fixed for its life.
 - A resumed conversation follows its stored machine, and the banner says
   so. A paired ref whose fingerprint is not the stored pairing's is refused,
   because that machine's id 3 is not this pairing's id 3. A local ref with
-  `--remote` is refused. With no stored ref, the flag decides, as before.
+  `--remote` is refused, as is a row from before the ref that stores only a
+  `model_id`, which is this machine's. With neither, the flag decides, as
+  before.
 - On the hub, `hub_model::choose` admits a local ref by id and refuses a
   paired one with 409: a turn there runs on this machine's models.
 - A web chat request names a far model as a `ModelRef`; a local ref there is

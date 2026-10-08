@@ -1,8 +1,5 @@
 # ToolUI
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ToolUI-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-ToolUI-complexity.json)
-
 <!-- module-docs:start -->
 
 Tool call rendering: collapsible cards showing execution arguments and results with status badges, a sortable data table for array results, and a dispatcher that routes to the appropriate registered renderer.

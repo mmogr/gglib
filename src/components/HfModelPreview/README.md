@@ -1,8 +1,5 @@
 # HfModelPreview
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-HfModelPreview-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-HfModelPreview-complexity.json)
-
 <!-- module-docs:start -->
 
 Detail preview card for a HuggingFace model showing metadata (params, architecture, license), available quantizations with per-quantization memory-fit indicators, tool support badges, download action buttons, and the projector that comes with the selected quantization.

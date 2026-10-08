@@ -20,7 +20,8 @@ on a `tokio::sync::mpsc::Sender` and is consumed by:
 |----------|--------------------------------------------------------|
 | CLI      | `indicatif` progress bar                               |
 | Axum     | SSE stream at `POST /api/config/system/install-llama`  |
-| Tauri    | `llama-install-progress` event to the `WebView`          |
+
+The desktop app reads the Axum stream; it has no consumer of its own.
 
 It is **not** responsible for rendering: no `println!`, no progress bar, no
 knowledge of a terminal, an HTTP response or a `WebView`. Rate and ETA are

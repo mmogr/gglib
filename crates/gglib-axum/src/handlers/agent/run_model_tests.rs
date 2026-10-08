@@ -97,7 +97,7 @@ async fn a_run_on_another_model_replaces_the_chats_and_keeps_its_settings() {
     let id = state
         .core
         .chat_history()
-        .create_conversation_with_settings(NewConversation {
+        .create_conversation(NewConversation {
             title: "t".to_owned(),
             model_id: Some(old),
             system_prompt: None,
@@ -192,7 +192,7 @@ async fn a_far_run_keeps_the_chats_paired_ref() {
     let id = state
         .core
         .chat_history()
-        .create_conversation_with_settings(NewConversation {
+        .create_conversation(NewConversation {
             title: "t".to_owned(),
             model_id: None,
             system_prompt: None,
@@ -236,7 +236,7 @@ async fn a_run_on_another_model_replaces_the_stored_model_too() {
     let id = state
         .core
         .chat_history()
-        .create_conversation_with_settings(NewConversation {
+        .create_conversation(NewConversation {
             title: "t".to_owned(),
             model_id: None,
             system_prompt: None,

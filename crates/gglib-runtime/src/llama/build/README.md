@@ -17,9 +17,10 @@ output (CLI spinner, SSE frames, Tauri events, etc.).
 
 ## Threading model
 
-The subprocess reader threads are spawned with [`std::thread::spawn`] and call
-`tx.blocking_send()`. This is safe because the threads are OS threads, not
-Tokio tasks — there is no risk of blocking the async executor.
+[`spawn_lines`] reads a subprocess's stdout and stderr on one OS thread each
+([`std::thread::spawn`]) and merges their lines into one channel. The configure
+and compile steps drain it and call `tx.blocking_send()`, so they run on an OS
+thread themselves, never on a Tokio worker.
 
 ## Compiler flags
 

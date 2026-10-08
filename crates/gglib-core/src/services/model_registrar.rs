@@ -15,19 +15,9 @@ use super::{HfOrigin, ModelOrigin, build_new_model};
 use crate::domain::NewModelFile;
 use crate::ports::huggingface::HfClientPort;
 use crate::ports::{
-    CompletedDownload, GgufParserPort, ModelRegistrarPort, ModelRepository, RegisteredDownload,
-    RepositoryError,
+    CompletedDownload, GgufParserPort, ModelFilesRepositoryPort, ModelRegistrarPort,
+    ModelRepository, RegisteredDownload, RepositoryError,
 };
-
-/// Repository trait for model files metadata.
-///
-/// We don't depend on `gglib_db` directly - adapters inject the implementation.
-/// This type is re-exported from `gglib_db` for use in adapters.
-#[async_trait]
-pub trait ModelFilesRepositoryPort: Send + Sync {
-    /// Store a model file record, replacing the one held for that model and path.
-    async fn insert(&self, model_file: &NewModelFile) -> anyhow::Result<()>;
-}
 
 /// Implementation of the model registrar port.
 ///
@@ -90,8 +80,21 @@ impl ModelRegistrarPort for ModelRegistrar {
     ) -> Result<RegisteredDownload, RepositoryError> {
         let file_path = download.db_path();
 
-        // Parse GGUF metadata from the downloaded file
-        let gguf_metadata = self.gguf_parser.parse(file_path).ok();
+        // Parse GGUF metadata from the downloaded file. A file the reader
+        // refuses is registered all the same, without the details its header
+        // would have given: the reader may be stricter than llama.cpp. Its
+        // words go back to the caller.
+        let (gguf_metadata, metadata_refusal) = match self.gguf_parser.parse(file_path) {
+            Ok(metadata) => (Some(metadata), None),
+            Err(refused) => {
+                tracing::warn!(
+                    path = %file_path.display(),
+                    reason = %refused,
+                    "GGUF metadata not read - registering the model without it"
+                );
+                (None, Some(refused.to_string()))
+            }
+        };
 
         // Best-effort, and deliberately before the row is built: a recipe the
         // author published is better evidence than the tag guess
@@ -162,10 +165,15 @@ impl ModelRegistrarPort for ModelRegistrar {
 
         Ok(RegisteredDownload {
             model: registered,
+            metadata_refusal,
             projector_refusal,
         })
     }
 }
+
+#[cfg(test)]
+#[path = "model_registrar_metadata_tests.rs"]
+mod metadata_tests;
 
 #[cfg(test)]
 #[path = "model_registrar_projector_tests.rs"]

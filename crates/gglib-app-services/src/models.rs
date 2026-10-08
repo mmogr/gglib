@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use gglib_core::events::AppEvent;
-use gglib_core::ports::{AppEventEmitter, GgufParserPort, ModelRuntimePort};
-use gglib_core::services::AppCore;
+use gglib_core::ports::{AppEventEmitter, GgufParserPort, ModelRuntimePort, ProcessHandle};
+use gglib_core::services::{AppCore, ImportMode};
 use gglib_core::{
-    ModelCapabilities, ModelFilterOptions,
+    Model, ModelCapabilities, ModelFilterOptions,
     domain::{ModelDetailDto, ModelListQuery, apply_query},
 };
 
@@ -15,7 +15,7 @@ use crate::error::GuiError;
 use crate::sampling_explain::{self, SamplingExplanationDto};
 use crate::types::{
     AddModelRequest, GuiModel, RemoveModelRequest, RetagResponse, SetCapabilitiesRequest,
-    UpdateModelRequest, UpgradeCheck, UpgradeOutcome,
+    UpdateModelRequest,
 };
 
 /// Dependencies for model operations.
@@ -24,6 +24,11 @@ pub struct ModelDeps {
     /// The runtime backing server lifecycle — the same one `ServerOps` starts
     /// models through, so serving status here agrees with what `ServerOps`
     /// actually has running rather than a second, independent registry.
+    ///
+    /// A `gglib model …` command in a terminal is a separate process with no
+    /// such runtime. It holds a read-only view of the pid files this one's
+    /// servers leave under the data root — see `one_shot_model_ops` in
+    /// `gglib-cli`.
     pub runtime: Arc<dyn ModelRuntimePort>,
     pub gguf_parser: Arc<dyn GgufParserPort>,
     /// Broadcasts library changes to every client attached to this daemon.
@@ -32,9 +37,9 @@ pub struct ModelDeps {
     /// GUI refetches its own list after its own edit, so a second window or
     /// browser tab keeps rendering the old row until someone hits refresh.
     ///
-    /// The reach is one daemon process. A `gglib model add` in a terminal is
-    /// a *separate* process holding a `NoopEmitter`, and does not route
-    /// through here at all — see `one_shot_model_ops` in `gglib-cli`.
+    /// The reach is one daemon process. A `gglib model …` command in a
+    /// terminal is a *separate* process: it keeps what is emitted here and
+    /// posts it to that daemon — see `one_shot_model_ops` in `gglib-cli`.
     pub emitter: Arc<dyn AppEventEmitter>,
 }
 
@@ -72,59 +77,60 @@ impl ModelOps {
         }
     }
 
-    /// Check if a model is currently being served.
-    async fn get_server_status(&self, model_id: i64) -> (bool, Option<u16>) {
-        self.deps
-            .runtime
-            .list_running()
-            .await
-            .into_iter()
+    /// Whether `model_id` is among `running`, and the port it is served on.
+    fn serving_status(running: &[ProcessHandle], model_id: i64) -> (bool, Option<u16>) {
+        running
+            .iter()
             .find(|h| h.model_id == model_id)
             .map_or((false, None), |h| (true, Some(h.port)))
     }
 
-    /// List all models with their serving status.
-    pub async fn list(&self) -> Result<Vec<GuiModel>, GuiError> {
-        let models = self
-            .deps
-            .core
-            .models()
-            .list()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to list models: {e}")))?;
+    /// Check if a model is currently being served.
+    async fn get_server_status(&self, model_id: i64) -> (bool, Option<u16>) {
+        Self::serving_status(&self.deps.runtime.list_running().await, model_id)
+    }
 
-        let mut gui_models = Vec::new();
-        for model in models {
-            let (is_serving, port) = self.get_server_status(model.id).await;
-            gui_models.push(GuiModel::from_model(model, is_serving, port));
+    /// Refuses to take `model` from under a llama-server that is serving
+    /// it: a conflict that names the model and the port, and says to stop
+    /// the server.
+    ///
+    /// The one rule for what drops a model's row or replaces its file:
+    /// [`remove`](Self::remove) and [`apply_upgrade`](Self::apply_upgrade)
+    /// both ask here. Public for a surface that asks before it prompts, as
+    /// `gglib model upgrade` does.
+    pub async fn refuse_if_served(&self, model: &Model) -> Result<(), GuiError> {
+        match self.get_server_status(model.id).await {
+            (_, Some(port)) => Err(GuiError::Conflict(format!(
+                "Model '{}' is being served on port {port}. Stop its server first.",
+                model.name
+            ))),
+            _ => Ok(()),
         }
-
-        Ok(gui_models)
     }
 
     /// List models filtered and sorted by the given query.
     ///
     /// Fetches all models from the repository, applies [`apply_query`] (the
     /// single source of truth for filter/sort semantics), then enriches each
-    /// surviving model with its current serving status.
+    /// surviving model with its current serving status. The one listing, for
+    /// `gglib model list` and `GET /api/models` alike.
+    ///
+    /// The runtime is asked what is running once, and every row is read off
+    /// that answer: a runtime that has to look, as the CLI's does in the pid
+    /// files, looks once for the listing and not once a row.
     pub async fn list_with_query(&self, query: ModelListQuery) -> Result<Vec<GuiModel>, GuiError> {
-        let models = self
-            .deps
-            .core
-            .models()
-            .list()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to list models: {e}")))?;
+        let models = self.deps.core.models().list().await?;
 
         let filtered = apply_query(models, &query);
 
-        let mut gui_models = Vec::new();
-        for model in filtered {
-            let (is_serving, port) = self.get_server_status(model.id).await;
-            gui_models.push(GuiModel::from_model(model, is_serving, port));
-        }
-
-        Ok(gui_models)
+        let running = self.deps.runtime.list_running().await;
+        Ok(filtered
+            .into_iter()
+            .map(|model| {
+                let (is_serving, port) = Self::serving_status(&running, model.id);
+                GuiModel::from_model(model, is_serving, port)
+            })
+            .collect())
     }
 
     /// Get a specific model by ID.
@@ -162,13 +168,7 @@ impl ModelOps {
         profile: Option<&str>,
     ) -> Result<SamplingExplanationDto, GuiError> {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
-        let settings = self
-            .deps
-            .core
-            .settings()
-            .get()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to load settings: {e}")))?;
+        let settings = self.deps.core.settings().get().await?;
 
         let selected = profile
             .map(|name| {
@@ -179,77 +179,69 @@ impl ModelOps {
         Ok(sampling_explain::explain(&model, &settings, selected))
     }
 
-    pub async fn add(&self, request: AddModelRequest) -> Result<GuiModel, GuiError> {
+    /// Import the GGUF file `request` names: the one add, for `POST
+    /// /api/models` and `gglib model add` alike.
+    ///
+    /// `param_count_override` and `mode` are what only a terminal asks for.
+    /// `gglib model add` prompts for a parameter count to store in place of
+    /// the one read from the file, and its `--reimport` is
+    /// [`ImportMode::Refresh`], which is explicit about overwriting a row
+    /// the caller already has. The HTTP surface has no way to ask for
+    /// either: its route passes `None` and [`ImportMode::Fresh`], so a
+    /// duplicate is always a 409 there.
+    ///
+    /// A re-import of a file that already has a row rewrites that row, and
+    /// is announced as `model_updated`. Every other import adds a row, and
+    /// is announced as `model_added`.
+    pub async fn add(
+        &self,
+        request: AddModelRequest,
+        param_count_override: Option<f64>,
+        mode: ImportMode,
+    ) -> Result<GuiModel, GuiError> {
         let path = PathBuf::from(&request.file_path);
+        let models = self.deps.core.models();
+
+        // Asked before the import, which answers with the same row whether
+        // it wrote a new one or rewrote this one. A lookup that fails is
+        // the import's to report.
+        let rewrites = mode == ImportMode::Refresh
+            && models
+                .find_by_path(&path)
+                .await
+                .is_ok_and(|row| row.is_some());
 
         // Delegate to shared core logic for model import with full metadata
-        // extraction. Always `Fresh`: the HTTP surface has no way to ask for
-        // the destructive re-import, so a duplicate is always a 409 here. The
-        // refresh workflow is `gglib model add --reimport`, which is explicit
-        // about overwriting a row the caller already has.
-        let model = self
-            .deps
-            .core
-            .models()
+        // extraction.
+        let model = models
             .import_from_file(
                 &path,
                 self.deps.gguf_parser.as_ref(),
-                None,
-                gglib_core::services::ImportMode::Fresh,
+                param_count_override,
+                mode,
             )
-            .await
-            .map_err(|e| match e {
-                gglib_core::ports::CoreError::Validation(msg) => GuiError::ValidationFailed(msg),
-                gglib_core::ports::CoreError::Repository(
-                    gglib_core::ports::RepositoryError::AlreadyExists(_),
-                ) => GuiError::Conflict(format!(
-                    "Model at path '{}' already exists in database",
-                    request.file_path
-                )),
-                _ => GuiError::Internal(format!("Failed to add model: {e}")),
-            })?;
+            .await?;
 
-        self.deps
-            .emitter
-            .emit(AppEvent::model_added((&model).into()));
+        let summary = (&model).into();
+        self.deps.emitter.emit(if rewrites {
+            AppEvent::model_updated(summary)
+        } else {
+            AppEvent::model_added(summary)
+        });
 
         // Return with serving status
         let (is_serving, port) = self.get_server_status(model.id).await;
         Ok(GuiModel::from_model(model, is_serving, port))
     }
 
-    /// Update a model in the database.
+    /// Update a model in the database: `request` is written onto its row by
+    /// [`UpdateModelRequest::apply_to`], which is also what `gglib model
+    /// update` previews an edit with.
     pub async fn update(&self, id: i64, request: UpdateModelRequest) -> Result<GuiModel, GuiError> {
         self.link_projector(id, &request).await?;
         let mut model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
-
-        if let Some(name) = request.name {
-            model.name = name;
-        }
-        if let Some(quantization) = request.quantization {
-            model.quantization = Some(quantization);
-        }
-        if let Some(file_path) = request.file_path {
-            model.file_path = PathBuf::from(file_path);
-        }
-        if let Some(inference_defaults) = request.inference_defaults {
-            model.inference_defaults = Some(inference_defaults);
-            // A deliberate WebUI edit, so this is a user-set value from
-            // here on — even if it happens to land on the same numbers
-            // gglib would have guessed. See `DefaultsOrigin`.
-            model.defaults_origin = Some(gglib_core::domain::DefaultsOrigin::User);
-        }
-        // `None` leaves the stored defaults alone; `Some(None)` clears them.
-        if let Some(server_defaults) = request.server_defaults {
-            model.server_defaults = server_defaults;
-        }
-
-        self.deps
-            .core
-            .models()
-            .update(&model)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to update model: {e}")))?;
+        request.apply_to(&mut model);
+        self.deps.core.models().update(&model).await?;
 
         // Answer with the row as stored, not as sent. `update` canonicalises
         // `file_path` on write, so echoing the in-memory copy would hand back
@@ -268,23 +260,17 @@ impl ModelOps {
     }
 
     /// Remove a model from the database.
+    ///
+    /// A model that is being served is refused
+    /// ([`refuse_if_served`](Self::refuse_if_served)), unless `request.force`
+    /// is set: then the runtime is told to stop its current model, and the
+    /// row is removed.
     pub async fn remove(&self, id: i64, request: RemoveModelRequest) -> Result<String, GuiError> {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
-        let running = self
-            .deps
-            .runtime
-            .list_running()
-            .await
-            .into_iter()
-            .find(|h| h.model_id == id);
-
-        if let Some(handle) = running {
+        if let Err(served) = self.refuse_if_served(&model).await {
             if !request.force {
-                return Err(GuiError::Conflict(format!(
-                    "Model is currently serving on port {}. Stop the server first or use force=true",
-                    handle.port
-                )));
+                return Err(served);
             }
             self.deps
                 .runtime
@@ -293,12 +279,7 @@ impl ModelOps {
                 .map_err(|e| GuiError::Internal(format!("Failed to stop server: {e}")))?;
         }
 
-        self.deps
-            .core
-            .models()
-            .delete(id)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to delete model: {e}")))?;
+        self.deps.core.models().delete(id).await?;
 
         self.deps.emitter.emit(AppEvent::model_removed(id));
 
@@ -307,22 +288,12 @@ impl ModelOps {
 
     /// List all unique tags.
     pub async fn list_tags(&self) -> Result<Vec<String>, GuiError> {
-        self.deps
-            .core
-            .models()
-            .list_tags()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to list tags: {e}")))
+        Ok(self.deps.core.models().list_tags().await?)
     }
 
     /// Add a tag to a model.
     pub async fn add_tag(&self, model_id: i64, tag: String) -> Result<(), GuiError> {
-        self.deps
-            .core
-            .models()
-            .add_tag(model_id, tag)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to add tag: {e}")))?;
+        self.deps.core.models().add_tag(model_id, tag).await?;
 
         // Tags are on `GuiModel` and drive the library filters, so a client
         // that missed this shows both the wrong chips and the wrong filter set.
@@ -332,12 +303,7 @@ impl ModelOps {
 
     /// Remove a tag from a model.
     pub async fn remove_tag(&self, model_id: i64, tag: String) -> Result<(), GuiError> {
-        self.deps
-            .core
-            .models()
-            .remove_tag(model_id, &tag)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to remove tag: {e}")))?;
+        self.deps.core.models().remove_tag(model_id, &tag).await?;
 
         self.announce_updated(model_id).await;
         Ok(())
@@ -345,22 +311,12 @@ impl ModelOps {
 
     /// Get all tags for a specific model.
     pub async fn get_tags(&self, model_id: i64) -> Result<Vec<String>, GuiError> {
-        self.deps
-            .core
-            .models()
-            .get_tags(model_id)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to get tags: {e}")))
+        Ok(self.deps.core.models().get_tags(model_id).await?)
     }
 
     /// Get filter options for the model library UI.
     pub async fn get_filter_options(&self) -> Result<ModelFilterOptions, GuiError> {
-        self.deps
-            .core
-            .models()
-            .get_filter_options()
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to get filter options: {e}")))
+        Ok(self.deps.core.models().get_filter_options().await?)
     }
 
     /// Override one or more capability flags on a model.
@@ -397,12 +353,7 @@ impl ModelOps {
 
         model.capabilities = caps;
 
-        self.deps
-            .core
-            .models()
-            .update(&model)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to update model capabilities: {e}")))?;
+        self.deps.core.models().update(&model).await?;
 
         // The same `models().update()` `Self::update` calls, so the same
         // announcement — capabilities are a field of `GuiModel`, and the
@@ -428,8 +379,7 @@ impl ModelOps {
             .core
             .models()
             .retag_model(id, self.deps.gguf_parser.as_ref(), full)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Retag failed: {e}")))?;
+            .await?;
 
         Ok(match diff {
             Some(diff) => {
@@ -452,119 +402,6 @@ impl ModelOps {
                 spec_changed: false,
             },
         })
-    }
-
-    /// Preconditions shared by the upgrade check and the upgrade itself.
-    fn upgrade_source(model: &gglib_core::Model) -> Result<(String, String), GuiError> {
-        let repo = model.hf_repo_id.clone().ok_or_else(|| {
-            GuiError::ValidationFailed("Model is not from HuggingFace, cannot update".into())
-        })?;
-        let quant = model.quantization.clone().ok_or_else(|| {
-            GuiError::ValidationFailed("Model has no quantization info stored".into())
-        })?;
-        Ok((repo, quant))
-    }
-
-    /// Whether a newer `HuggingFace` revision exists — the commit-SHA check
-    /// `gglib model upgrade` runs before downloading, distinct from the
-    /// shard-level diff on `/{id}/updates`.
-    ///
-    /// Not the same question as `gglib model check-updates`: with no recorded
-    /// revision this reports `has_update: true` (nothing to compare against)
-    /// where that command declines to answer. Callers should present a
-    /// `current_sha` of `None` as "no baseline recorded", not as a new release.
-    pub async fn check_upgrade(&self, id: i64) -> Result<UpgradeCheck, GuiError> {
-        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
-        let (repo, _quant) = Self::upgrade_source(&model)?;
-
-        let check = gglib_download::cli_exec::check_update(
-            &repo,
-            model.hf_commit_sha.as_deref(),
-            std::env::var("HF_TOKEN").ok(),
-        )
-        .await
-        .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
-
-        Ok(UpgradeCheck {
-            has_update: check.has_update,
-            current_sha: check.current_sha,
-            latest_sha: check.latest_sha,
-        })
-    }
-
-    /// Re-download the model at the latest `HuggingFace` revision and rewrite
-    /// the row — `gglib model upgrade`, shared by the CLI and the GUI route.
-    ///
-    /// Checks first and returns `updated: false` without downloading when the
-    /// model is already current. The HF token comes from the process
-    /// environment, matching the CLI. The call does not return until the
-    /// download finishes; queue integration is future work, as is any
-    /// serialisation between two upgrades of the same model (concurrent
-    /// callers both download and the last one wins the row).
-    pub async fn apply_upgrade(&self, id: i64) -> Result<UpgradeOutcome, GuiError> {
-        let mut model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
-        let (repo, quant) = Self::upgrade_source(&model)?;
-        let models_dir = gglib_core::paths::resolve_models_dir(None)
-            .map_err(|e| GuiError::Internal(format!("Could not resolve models dir: {e}")))?
-            .path;
-
-        let check = gglib_download::cli_exec::check_update(
-            &repo,
-            model.hf_commit_sha.as_deref(),
-            std::env::var("HF_TOKEN").ok(),
-        )
-        .await
-        .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
-        if !check.has_update {
-            return Ok(UpgradeOutcome {
-                updated: false,
-                latest_sha: check.latest_sha,
-                file_path: None,
-            });
-        }
-
-        // Detached deliberately. The forced re-download deletes the existing
-        // file before writing its replacement, so if this ran inline in an
-        // Axum request future a client disconnect would drop it mid-transfer
-        // and leave the user with no model at all — while the row still
-        // pointed at the deleted path. Spawning means the download and the row
-        // rewrite always finish as a pair; only the reply is lost.
-        let core = self.deps.core.clone();
-        let emitter = Arc::clone(&self.deps.emitter);
-        let request = gglib_download::cli_exec::CliUpdateRequest {
-            model_path: model.file_path.clone(),
-            repo_id: repo,
-            quantization: quant,
-            models_dir,
-            token: std::env::var("HF_TOKEN").ok(),
-        };
-
-        tokio::spawn(async move {
-            let result = gglib_download::cli_exec::update_model(request)
-                .await
-                .map_err(|e| GuiError::Internal(format!("Upgrade download failed: {e}")))?;
-
-            model.file_path = result.primary_path.clone();
-            model.hf_commit_sha = Some(result.commit_sha.clone());
-            model.last_update_check = Some(chrono::Utc::now());
-            core.models()
-                .update(&model)
-                .await
-                .map_err(|e| GuiError::Internal(format!("Failed to update model row: {e}")))?;
-
-            // The widest staleness window in the file: this lands minutes
-            // after the request that started it, having rewritten `file_path`
-            // and `hf_commit_sha`, and by then a second client is likely open.
-            emitter.emit(AppEvent::model_updated((&model).into()));
-
-            Ok(UpgradeOutcome {
-                updated: true,
-                latest_sha: result.commit_sha,
-                file_path: Some(result.primary_path.display().to_string()),
-            })
-        })
-        .await
-        .map_err(|e| GuiError::Internal(format!("Upgrade task panicked: {e}")))?
     }
 }
 

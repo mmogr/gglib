@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::HttpError;
 use crate::state::AppState;
+use gglib_core::Model;
 use gglib_core::ports::AppEventEmitter;
-use gglib_core::services::{UpdateCheckResult, VerificationReport};
+use gglib_core::services::{RepairStarted, UpdateCheckResult, VerificationReport};
 
 /// Response from verify endpoint.
 #[derive(Debug, Serialize)]
@@ -32,11 +33,19 @@ pub(crate) struct RepairRequest {
     pub shards: Option<Vec<usize>>,
 }
 
-/// Response from repair endpoint.
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-pub(crate) struct RepairResponse {
-    pub message: String,
+/// The model a verification route is asked about, whose name its logs and
+/// events carry.
+///
+/// # Errors
+///
+/// 404 when no model has that id.
+async fn model_named(state: &AppState, id: i64) -> Result<Model, HttpError> {
+    state
+        .core
+        .models()
+        .get_by_id(id)
+        .await?
+        .ok_or_else(|| HttpError::NotFound(format!("Model with ID {id} not found")))
 }
 
 /// Verify model integrity.
@@ -49,19 +58,7 @@ pub(crate) async fn verify(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<VerifyResponse>, HttpError> {
-    // Get verification service
-    let verification = state
-        .core
-        .verification()
-        .ok_or_else(|| HttpError::NotFound("Verification service not available".to_string()))?;
-
-    // Get model info for validation
-    let model = state
-        .core
-        .models()
-        .get_by_id(id)
-        .await?
-        .ok_or_else(|| HttpError::NotFound(format!("Model with ID {id} not found")))?;
+    let model = model_named(&state, id).await?;
 
     tracing::info!(
         target: "gglib.verification",
@@ -71,7 +68,9 @@ pub(crate) async fn verify(
     );
 
     // Start verification
-    let (mut progress_rx, handle) = verification
+    let (mut progress_rx, handle) = state
+        .core
+        .verification()
         .verify_model_integrity(id)
         .await
         .map_err(|e| HttpError::Internal(format!("Failed to start verification: {e}")))?;
@@ -145,19 +144,7 @@ pub(crate) async fn check_updates(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<CheckUpdatesResponse>, HttpError> {
-    // Get verification service
-    let verification = state
-        .core
-        .verification()
-        .ok_or_else(|| HttpError::NotFound("Verification service not available".to_string()))?;
-
-    // Get model info for validation
-    let model = state
-        .core
-        .models()
-        .get_by_id(id)
-        .await?
-        .ok_or_else(|| HttpError::NotFound(format!("Model with ID {id} not found")))?;
+    let model = model_named(&state, id).await?;
 
     tracing::info!(
         target: "gglib.verification",
@@ -167,7 +154,9 @@ pub(crate) async fn check_updates(
     );
 
     // Check for updates
-    let result = verification
+    let result = state
+        .core
+        .verification()
         .check_for_updates(id)
         .await
         .map_err(|e| HttpError::Internal(format!("Failed to check for updates: {e}")))?;
@@ -192,24 +181,16 @@ pub(crate) async fn check_updates(
 /// Repair model by re-downloading corrupt shards.
 ///
 /// POST /api/models/{id}/repair
+///
+/// Answers once the unhealthy files are deleted and their download is queued
+/// and started: the download's ID, and the files it is to bring back. A
+/// client follows the download in the queue, as it does one it queued.
 pub(crate) async fn repair(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Json(req): Json<RepairRequest>,
-) -> Result<Json<RepairResponse>, HttpError> {
-    // Get verification service
-    let verification = state
-        .core
-        .verification()
-        .ok_or_else(|| HttpError::NotFound("Verification service not available".to_string()))?;
-
-    // Get model info for validation
-    let model = state
-        .core
-        .models()
-        .get_by_id(id)
-        .await?
-        .ok_or_else(|| HttpError::NotFound(format!("Model with ID {id} not found")))?;
+) -> Result<Json<RepairStarted>, HttpError> {
+    let model = model_named(&state, id).await?;
 
     tracing::info!(
         target: "gglib.verification",
@@ -220,7 +201,9 @@ pub(crate) async fn repair(
     );
 
     // Repair model
-    let message = verification
+    let started = state
+        .core
+        .verification()
         .repair_model(id, req.shards)
         .await
         .map_err(|e| HttpError::Internal(format!("Failed to repair model: {e}")))?;
@@ -228,8 +211,14 @@ pub(crate) async fn repair(
     tracing::info!(
         target: "gglib.verification",
         model_id = id,
+        download = %started.id,
+        files = started.files.len(),
         "Repair initiated successfully",
     );
 
-    Ok(Json(RepairResponse { message }))
+    Ok(Json(started))
 }
+
+#[cfg(test)]
+#[path = "verification_tests.rs"]
+mod tests;

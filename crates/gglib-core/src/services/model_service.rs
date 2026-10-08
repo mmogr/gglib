@@ -104,14 +104,6 @@ impl ModelService {
         }
     }
 
-    /// Find a model by identifier — a numeric id, then an exact name (not an
-    /// HF id, despite what this said for a long time). Errors if not found.
-    pub async fn find_by_identifier(&self, identifier: &str) -> Result<Model, CoreError> {
-        self.get(identifier)
-            .await?
-            .ok_or_else(|| CoreError::Validation(format!("Model not found: {identifier}")))
-    }
-
     /// Add a new model from an already-built row.
     ///
     /// This is the raw registration door: it inherits
@@ -378,8 +370,7 @@ impl ModelService {
     ///
     /// If the tag doesn't exist on the model, this is a no-op. System tags
     /// (see [`crate::domain::is_system_tag`]) are protected and cannot be
-    /// removed through this API — use [`Self::remove_tag_force`] for
-    /// admin/debug paths that intentionally need to drop them.
+    /// removed through this API.
     pub async fn remove_tag(&self, model_id: i64, tag: &str) -> Result<(), CoreError> {
         if crate::domain::is_system_tag(tag) {
             return Err(CoreError::Validation(format!(
@@ -389,13 +380,9 @@ impl ModelService {
         self.remove_tag_force(model_id, tag).await
     }
 
-    /// Force-remove a tag from a model, including system tags.
-    ///
-    /// Bypasses the system-tag protection enforced by [`Self::remove_tag`].
-    /// Intended for admin/debug paths (e.g. the `gglib model retag --full`
-    /// rebuild) where the caller intentionally needs to drop a `format:*`
-    /// tag before re-detecting capabilities.
-    pub async fn remove_tag_force(&self, model_id: i64, tag: &str) -> Result<(), CoreError> {
+    /// Remove a tag from a model, a system tag included: what
+    /// [`Self::remove_tag`] does once its system-tag check has passed.
+    async fn remove_tag_force(&self, model_id: i64, tag: &str) -> Result<(), CoreError> {
         let mut model = self
             .repo
             .get_by_id(model_id)
@@ -1119,13 +1106,15 @@ mod tests {
         assert_eq!(found.unwrap().id, created.id);
     }
 
+    /// A miss is no model, not an error: what to say about one is the
+    /// caller's.
     #[tokio::test]
-    async fn test_find_by_identifier_not_found() {
-        let repo = Arc::new(MockRepo::new());
-        let service = ModelService::new(repo);
+    async fn an_identifier_that_matches_nothing_is_no_model() {
+        let service = ModelService::new(Arc::new(MockRepo::new()));
 
-        let result = service.find_by_identifier("nonexistent").await;
-        assert!(result.is_err());
+        let found = service.get("nonexistent").await.unwrap();
+
+        assert!(found.is_none());
     }
 
     #[tokio::test]

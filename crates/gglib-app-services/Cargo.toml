@@ -15,17 +15,16 @@ path = "src/lib.rs"
 # Core domain and ports, plus gglib-runtime and gglib-proxy for what they own
 # (the process runner, the one loopback HTTP client builder, and the proxy
 # itself); no UI adapters.
-gglib-core = { path = "../gglib-core" }
-gglib-download = { path = "../gglib-download" }
-gglib-mcp = { path = "../gglib-mcp" }
-gglib-hf = { path = "../gglib-hf" }
-gglib-runtime = { path = "../gglib-runtime", features = ["prebuilt"] }
+gglib-core = { workspace = true }
+gglib-download = { workspace = true }
+gglib-mcp = { workspace = true }
+gglib-runtime = { workspace = true }
 # For `loopback`, the one builder of an HTTP client for a server on this machine
 # (the far proxy over the pipe's local port, the benchmark's llama-server; see
 # #1085), for `serve`, which the agentic eval's proxy arm starts in-process in
 # front of the model it holds (#1047), and for the shapes the far proxy's model
 # list and load answer with, which this side reads them into.
-gglib-proxy = { path = "../gglib-proxy" }
+gglib-proxy = { workspace = true }
 # Pure-domain agentic loop (no HTTP/infra deps of its own — see its own
 # Cargo.toml). Used only by the tune service to drive AgentLoop::build()
 # directly with a local ScoringToolExecutorPort; compose_agent_loop() in
@@ -33,38 +32,35 @@ gglib-proxy = { path = "../gglib-proxy" }
 # executor. Only gglib-agent's [dependencies] (its library) are pulled in —
 # its [dev-dependencies] (e.g. test-only mock executors) never ship in any
 # downstream binary, Cargo excludes them by construction.
-gglib-agent = { path = "../gglib-agent" }
+gglib-agent = { workspace = true }
 # The p2p tunnel behind `gglib remote` (ADR 0012). This crate owns every
 # `*Ops` type, so it is where the tunnel's lifecycle lives; the CLI and the
 # GUI drive it over the daemon API and never see an iroh type.
-modelpipe = "0.8.1"
+modelpipe = { workspace = true }
 
 # Shared deps
 anyhow = { workspace = true }
 chrono = { workspace = true }
 futures-core = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["json", "stream", "rustls", "system-proxy"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
-dirs = { workspace = true }
 ts-rs = { workspace = true, optional = true }
 
 # Async
 tokio = { workspace = true, features = ["fs", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
-tokio-stream = { version = "0.1", features = ["sync"] }
-async-trait = "0.1"
-tokio-util = "0.7"
-futures-util = "0.3"
+tokio-stream = { workspace = true, features = ["sync"] }
+async-trait = { workspace = true }
+tokio-util = { workspace = true }
+futures-util = { workspace = true }
 
 [features]
 # Emit TypeScript for the wire types. Test-driven: `cargo test --features
 # ts-bindings export_bindings_` writes `src/types/generated/`. Off in every
 # ordinary build, so it costs nothing at runtime and nothing in the default
-# dependency graph — which is what keeps `#![deny(unused_crate_dependencies)]`
-# satisfied without the feature.
+# dependency graph.
 #
 # Forwards to `gglib-core`: the DTOs here embed domain types (`InferenceConfig`,
 # `DefaultsOrigin`, …), and ts-rs needs `TS` on the whole reachable graph, not
@@ -78,11 +74,10 @@ ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings", "gglib-proxy/ts-bindings"]
 # remote backend's watcher tests, and a dependency elsewhere in the graph
 # dropping `test-util` must not be what breaks them.
 tokio = { workspace = true, features = ["test-util"] }
-tokio-test = { workspace = true }
-gglib-db = { path = "../gglib-db", features = ["test-utils"] }
+gglib-db = { workspace = true, features = ["test-utils"] }
 # A test that arms a tunnel keeps its endpoint key in a data root of this
 # binary's own, not the checkout's (#955).
-gglib-core = { path = "../gglib-core", features = ["test-utils"] }
+gglib-core = { workspace = true, features = ["test-utils"] }
 tempfile = { workspace = true }
 # The runs' privacy test reads every log line a run writes.
 tracing-subscriber = { workspace = true }

@@ -7,8 +7,8 @@
  * context-usage donuts), backed by `useProxyDashboard()`'s SSE subscription.
  *
  * Triggered from `ProxyControl.tsx`'s "View Dashboard" button, following the
- * same self-contained `{isOpen, onClose}` Modal pattern as `SettingsModal`/
- * `LlamaInstallModal` rather than threading state through
+ * same self-contained `{isOpen, onClose}` Modal pattern as `SettingsModal`
+ * rather than threading state through
  * `ModelControlCenterPage` — the dashboard is proxy-wide, not tied to a
  * specific selected model.
  *
@@ -134,5 +134,3 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
     </Modal>
   );
 };
-
-export default ProxyDashboardModal;

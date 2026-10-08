@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import ProxyAdmissionPanel from '../../../src/components/ProxyAdmissionPanel';
+import { ProxyAdmissionPanel } from '../../../src/components/ProxyAdmissionPanel';
 import type {
   AdmissionSnapshot,
   ResidentSlotSnapshot,

@@ -33,17 +33,20 @@ export async function getSetupStatus(): Promise<SetupStatus> {
  *
  * @param onEvent Called for every install event, in arrival order
  * @param onError Called when the transport itself fails
- * @returns An abort function to cancel the installation
+ * @param onClose Called when the stream closes cleanly, whether or not it reported a result
+ * @returns A function that stops reading. The install continues on the daemon.
  */
 export function streamLlamaInstall(
   onEvent: (event: LlamaProgressEvent) => void,
   onError: (error: string) => void,
+  onClose?: () => void,
 ): () => void {
   return streamSse('/api/config/system/install-llama', {
     onFrame: (frame) => {
       const event = parseFrame<LlamaProgressEvent>(frame);
       if (event) onEvent(event);
     },
+    onClose,
     onError,
   });
 }

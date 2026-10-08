@@ -167,13 +167,13 @@ dependencies = [
 
 [[package]]
 name = "async-recursion"
-version = "1.1.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b43422f69d8ff38f95f1b2bb76517c91589a924d1559a0e935d7c8ce0274c11"
+checksum = "4f8abc12baad266b1c8cec146854c195b5864b4221d4b2ca7296a7ae82d9e451"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -478,18 +478,18 @@ dependencies = [
 
 [[package]]
 name = "bon"
-version = "3.10.1"
+version = "3.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60eafe0d77c3a2fc292c1d1346c3041b33c0a108085a2afabf672b70f69dbbc9"
+checksum = "214f5df094ce551a10a30ffb9c70243d61f121a3d985a6495933e181dee6a7d2"
 dependencies = [
  "bon-macros",
 ]
 
 [[package]]
 name = "bon-macros"
-version = "3.10.1"
+version = "3.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd0f9631d8aaaee112c41985d675ef269e02acbd4f33122836af4f0c5f699ff6"
+checksum = "2706da6c749998cc555d04184909608956a69ad3f8ab1a076fbc867b4a3c3ce5"
 dependencies = [
  "darling",
  "ident_case",
@@ -651,9 +651,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.5.1"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f360145194ee8e21db5ee7f3fcd4fe52210864c75c985dae33218202c8bbe040"
+checksum = "f74872d07caf508b30a21f6836e7d7016a2eaf7d9ff4f48deaa58cd8a0407630"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -1577,12 +1577,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
 
 [[package]]
-name = "downcast"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
-
-[[package]]
 name = "dpi"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1987,15 +1981,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fragile"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8878864ba14bb86e818a412bfd6f18f9eabd4ec0f008a28e8f7eb61db532fcf9"
-dependencies = [
- "futures-core",
-]
-
-[[package]]
 name = "fs_extra"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2293,14 +2278,13 @@ dependencies = [
 
 [[package]]
 name = "gglib-agent"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "futures-core",
  "futures-util",
  "gglib-core",
- "reqwest",
  "serde_json",
  "tokio",
  "tracing",
@@ -2308,7 +2292,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "dotenvy",
  "gglib-app-services",
@@ -2335,19 +2319,17 @@ dependencies = [
 
 [[package]]
 name = "gglib-app-services"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
- "dirs 6.0.0",
  "futures-core",
  "futures-util",
  "gglib-agent",
  "gglib-core",
  "gglib-db",
  "gglib-download",
- "gglib-hf",
  "gglib-mcp",
  "gglib-proxy",
  "gglib-runtime",
@@ -2357,10 +2339,8 @@ dependencies = [
  "serde_json",
  "serde_with",
  "tempfile",
- "thiserror 2.0.21",
  "tokio",
  "tokio-stream",
- "tokio-test",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
@@ -2369,7 +2349,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2388,7 +2368,6 @@ dependencies = [
  "gglib-runtime",
  "gglib-sse",
  "http-body-util",
- "hyper",
  "reqwest",
  "rust-embed",
  "serde",
@@ -2399,7 +2378,6 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tokio-stream",
- "tokio-test",
  "tokio-util",
  "tower",
  "tower-http",
@@ -2410,10 +2388,9 @@ dependencies = [
 
 [[package]]
 name = "gglib-bootstrap"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "chrono",
  "gglib-core",
  "gglib-db",
@@ -2428,14 +2405,14 @@ dependencies = [
 
 [[package]]
 name = "gglib-build-info"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "vergen-gix",
 ]
 
 [[package]]
 name = "gglib-cli"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2453,7 +2430,7 @@ dependencies = [
  "gglib-core",
  "gglib-db",
  "gglib-download",
- "gglib-hf",
+ "gglib-gguf",
  "gglib-mcp",
  "gglib-proxy",
  "gglib-runtime",
@@ -2468,14 +2445,12 @@ dependencies = [
  "tempfile",
  "termimad",
  "tokio",
- "tokio-test",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
 name = "gglib-core"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2483,16 +2458,15 @@ dependencies = [
  "bitflags 2.13.2",
  "chrono",
  "dirs 6.0.0",
+ "dotenvy",
  "futures-core",
  "getrandom 0.4.3",
- "mockall",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
- "tokio-test",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -2503,7 +2477,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2511,19 +2485,16 @@ dependencies = [
  "chrono",
  "gglib-core",
  "libsqlite3-sys",
- "serde",
  "serde_json",
  "sqlx",
  "tempfile",
- "thiserror 2.0.21",
  "tokio",
- "tokio-test",
  "tracing",
 ]
 
 [[package]]
 name = "gglib-download"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2534,8 +2505,6 @@ dependencies = [
  "gglib-core",
  "gglib-hf",
  "indexmap 2.14.2",
- "indicatif",
- "mockall",
  "reqwest",
  "serde",
  "serde_json",
@@ -2543,7 +2512,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
- "tokio-test",
  "tokio-util",
  "tracing",
  "uuid",
@@ -2552,10 +2520,9 @@ dependencies = [
 
 [[package]]
 name = "gglib-gguf"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "gglib-core",
- "memmap2",
  "minijinja",
  "minijinja-contrib",
  "serde_json",
@@ -2565,39 +2532,35 @@ dependencies = [
 
 [[package]]
 name = "gglib-hf"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "async-trait",
  "gglib-core",
- "mockall",
  "reqwest",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
- "tokio-test",
  "url",
  "urlencoding",
 ]
 
 [[package]]
 name = "gglib-integration-tests"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "chrono",
  "gglib-core",
  "gglib-db",
  "gglib-gguf",
- "gglib-hf",
  "serde_json",
  "tempfile",
  "tokio",
- "urlencoding",
 ]
 
 [[package]]
 name = "gglib-mcp"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2615,15 +2578,13 @@ dependencies = [
 
 [[package]]
 name = "gglib-proxy"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-stream",
  "async-trait",
  "axum",
  "bytes",
- "dashmap",
- "futures-core",
  "futures-util",
  "gglib-build-info",
  "gglib-core",
@@ -2640,10 +2601,7 @@ dependencies = [
  "sysinfo",
  "tempfile",
  "tokio",
- "tokio-stream",
- "tokio-test",
  "tokio-util",
- "tower",
  "tower-http",
  "tracing",
  "ts-rs",
@@ -2652,7 +2610,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-runtime"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2675,7 +2633,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
- "tokio-test",
  "tokio-util",
  "tracing",
  "zip",
@@ -2683,7 +2640,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-sse"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "axum",
  "futures-util",
@@ -2696,7 +2653,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-tauri"
-version = "0.23.1"
+version = "0.24.0"
 dependencies = [
  "serde",
  "tauri",
@@ -3118,7 +3075,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c91d8cffac8849493a82233811bd02b2b183b8cf39bf704de0fa0841b737595"
 dependencies = [
  "bstr",
- "hashbrown 0.15.5",
+ "hashbrown 0.17.1",
 ]
 
 [[package]]
@@ -4731,9 +4688,9 @@ dependencies = [
 
 [[package]]
 name = "lazy-regex"
-version = "3.6.1"
+version = "3.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4994ba703f78b083e2f7946dac9251abd83fd43a0365f030e99b69be5b4b9ef9"
+checksum = "f0a2cce8a22920a29fdcc8c9170aa5d29edd9fbcf8bea856e24c2cb1c2419f67"
 dependencies = [
  "lazy-regex-proc_macros",
  "once_cell",
@@ -4742,14 +4699,14 @@ dependencies = [
 
 [[package]]
 name = "lazy-regex-proc_macros"
-version = "3.6.1"
+version = "3.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd97232314824e6dbef1918a871bb93f51070455e3715bf26e19a6d01aa977a0"
+checksum = "6f1e4b1f1d8c71edb4ff2b2150ec4606445fd2ddf67ddc097655daf59286baa6"
 dependencies = [
  "proc-macro2",
  "quote",
  "regex",
- "syn 2.0.119",
+ "syn 3.0.5",
 ]
 
 [[package]]
@@ -4793,9 +4750,9 @@ checksum = "34b357333733e8260735ba5894eb928c02ecc69c78715f01a8019e7fa7f2db4c"
 
 [[package]]
 name = "libc"
-version = "0.2.189"
+version = "0.2.190"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
+checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 
 [[package]]
 name = "libdbus-sys"
@@ -5061,40 +5018,14 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "1.2.3"
+version = "1.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b18443e9c262bfe8fa82f51666e2642c53393f7e5c27b3e1aeab922cff5b9d8"
+checksum = "1788edb87fdc09c7e26304471e2f5be8cdefb1b6930d6e3985fc02ff53bf86ee"
 dependencies = [
  "libc",
  "log",
  "wasi",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "mockall"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f58d964098a5f9c6b63d0798e5372fd04708193510a7af313c22e9f29b7b620b"
-dependencies = [
- "cfg-if",
- "downcast",
- "fragile",
- "mockall_derive",
- "predicates",
- "predicates-tree",
-]
-
-[[package]]
-name = "mockall_derive"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca41ce716dda6a9be188b385aa78ee5260fc25cd3802cb2a8afdc6afbe6b6dbf"
-dependencies = [
- "cfg-if",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -5628,7 +5559,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate 3.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -6361,32 +6292,6 @@ name = "precomputed-hash"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
-
-[[package]]
-name = "predicates"
-version = "3.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ada8f2932f28a27ee7b70dd6c1c39ea0675c55a36879ab92f3a715eaa1e63cfe"
-dependencies = [
- "anstyle",
- "predicates-core",
-]
-
-[[package]]
-name = "predicates-core"
-version = "1.0.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cad38746f3166b4031b1a0d39ad9f954dd291e7854fcc0eed52ee41a0b50d144"
-
-[[package]]
-name = "predicates-tree"
-version = "1.0.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0de1b847b39c8131db0467e9df1ff60e6d0562ab8e9a16e568ad0fdb372e2f2"
-dependencies = [
- "predicates-core",
- "termtree",
-]
 
 [[package]]
 name = "prettyplease"
@@ -8479,12 +8384,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "termtree"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
-
-[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8584,9 +8483,9 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tokio"
-version = "1.53.1"
+version = "1.53.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
+checksum = "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044"
 dependencies = [
  "bytes",
  "libc",
@@ -8630,17 +8529,6 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
-]
-
-[[package]]
-name = "tokio-test"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12bc5db7778a8e08ee255090861e0e7aac55e784300077e7ed293c7be36168b2"
-dependencies = [
- "futures-core",
- "tokio",
- "tokio-stream",
 ]
 
 [[package]]
@@ -9210,9 +9098,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.26.1"
+version = "1.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ef6dac1e96601b4fb3acccccff2139741fcb757cb9a36089bf5be91cfb285ce"
+checksum = "97277d36b9c3ace13e58fa6e753f8b0bbbf302a18dd193240d70f9e29681059a"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",

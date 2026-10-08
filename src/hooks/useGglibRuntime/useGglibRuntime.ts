@@ -32,6 +32,7 @@ import type { GglibMessage, GglibContent } from '../../types/messages';
 import { mkUserMessage } from '../../types/messages';
 import { getTransport, type ChatSource } from '../../services/transport';
 import type { ModelRef } from '../../types/generated/ModelRef';
+import type { RunInfo } from '../../types/generated/RunInfo';
 import { DEFAULT_SYSTEM_PROMPT } from '../../constants/prompts';
 import {
   buildThreadMessages,
@@ -56,7 +57,6 @@ export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpen
   selectedServerPort?: number;
   /** The paired machine's model the chat is with, in place of a server here. */
   pairedModel?: ModelRef;
-  maxToolIterations?: number;
   onError?: (error: Error) => void;
   /**
    * Called for each non-fatal `system_warning` the loop emits — an upstream
@@ -89,12 +89,14 @@ export interface UseGglibRuntimeReturn {
   isRunning: boolean;
   /** Whether the open conversation's saved rows are still loading. */
   isLoading: boolean;
+  /** The run last read to its end in the open conversation, as it ended; null once it is left. */
+  endedRun: RunInfo | null;
   timingTracker: ReasoningTimingTracker;
   currentStreamingAssistantMessageId: string | null;
 }
 
 export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibRuntimeReturn {
-  const { conversationId, selectedServerPort, pairedModel, maxToolIterations, onError, supportsToolCalls } = options;
+  const { conversationId, selectedServerPort, pairedModel, onError, supportsToolCalls } = options;
   const source = options.source ?? 'this';
   const far = source === 'far';
   const reader = useRunReader(conversationId, options);
@@ -188,11 +190,10 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
         conversationId: cid,
         replaceFrom,
         selectedServerPort,
-        config: {
-          ...(maxToolIterations !== undefined && { max_iterations: maxToolIterations }),
-          // Per-chat limits from the Tools popover, read fresh per send.
-          ...agentOverridesToWire(),
-        },
+        // The limits from the Tools popover, read fresh per send. No
+        // iteration limit: for a run that names none the daemon takes the
+        // conversation's saved one, then the stored setting.
+        config: agentOverridesToWire(),
         reasoning: reasoningOverridesToWire(),
         thinking: thinking?.said,
         supportsToolCalls,
@@ -289,6 +290,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     setMessages,
     isRunning,
     isLoading: reader.isLoading,
+    endedRun: reader.endedRun,
     timingTracker: reader.timingTracker,
     currentStreamingAssistantMessageId: reader.currentStreamingAssistantMessageId,
   };

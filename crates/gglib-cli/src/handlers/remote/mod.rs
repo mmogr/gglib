@@ -22,7 +22,7 @@ use gglib_app_services::RemoteStatus;
 
 use crate::bootstrap::CliContext;
 use crate::commands::RemoteCommand;
-use crate::daemon_client::{self, DaemonProbe};
+use crate::daemon_client::{self, Absent};
 use crate::presentation::style;
 
 /// Route a `gglib remote` subcommand to its handler.
@@ -76,24 +76,19 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
 
 /// Execute `gglib remote status`.
 pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
-    let client = gglib_proxy::loopback::client();
     style::print_info_banner("Remote", "\u{1f517}");
-    match daemon_client::probe(&client).await {
-        DaemonProbe::Running => {}
-        DaemonProbe::NotRunning => {
+    let handle = match daemon_client::running(ctx).await {
+        Ok(handle) => handle,
+        Err(Absent::NotRunning) => {
             eprintln!("  Daemon:  not running \u{2014} nothing is being broadcast");
             style::print_banner_close();
             return Ok(());
         }
-        DaemonProbe::ForeignServer => {
+        Err(Absent::ForeignServer) => {
             eprintln!("  Daemon:  another program holds the daemon port");
             style::print_banner_close();
             return Ok(());
         }
-    }
-    let handle = daemon_client::DaemonHandle {
-        client,
-        api_key: daemon_client::auth::daemon_api_key(ctx).await,
     };
     let status = handle.remote_status().await?;
     print_status(&status);

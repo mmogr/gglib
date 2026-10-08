@@ -220,13 +220,22 @@ impl Target {
     }
 
     /// This machine's catalogue entry for `identifier`, when this machine's
-    /// catalogue is the one that applies. The paired machine runs the
-    /// sampling ladder over *its* models, and an entry here of the same
-    /// name describes a different file.
-    pub(crate) async fn local_model(self, ctx: &CliContext, identifier: &str) -> Option<Model> {
+    /// catalogue is the one that applies; `None` when it holds no such
+    /// model. The paired machine runs the sampling ladder over *its* models,
+    /// and an entry here of the same name describes a different file.
+    ///
+    /// # Errors
+    ///
+    /// A catalogue that cannot be read, reported as itself: a failed read
+    /// is not a model this machine lacks.
+    pub(crate) async fn local_model(
+        self,
+        ctx: &CliContext,
+        identifier: &str,
+    ) -> Result<Option<Model>> {
         match self {
-            Self::Local => ctx.app.models().find_by_identifier(identifier).await.ok(),
-            Self::Remote => None,
+            Self::Local => Ok(ctx.app.models().get(identifier).await?),
+            Self::Remote => Ok(None),
         }
     }
 
@@ -252,4 +261,4 @@ pub(crate) struct Upstream {
 
 #[cfg(test)]
 #[path = "target_tests.rs"]
-mod target_tests;
+pub(crate) mod target_tests;

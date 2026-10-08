@@ -11,12 +11,13 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::SecondarySlotDecision;
 use gglib_core::ports::{
     Admission, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
     PinnedSpec, RunningTarget,
 };
-use gglib_core::server_config::{CacheRamSetting, ServerConfigOptions};
+use gglib_core::server_config::ServerConfigOptions;
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
 

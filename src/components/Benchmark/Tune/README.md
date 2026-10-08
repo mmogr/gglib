@@ -1,8 +1,5 @@
 # Tune
 
-![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-Benchmark-Tune-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/ts-components-Benchmark-Tune-complexity.json)
-
 <!-- module-docs:start -->
 
 Tune-mode UI: sweep a model's sampling parameters against an agentic

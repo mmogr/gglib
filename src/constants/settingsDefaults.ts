@@ -1,12 +1,16 @@
 /**
  * Default values and accepted ranges for the numeric fields in the settings modal.
  *
- * The authoritative values live in Rust — `Settings::with_defaults()` and
- * `validate_settings()` in `crates/gglib-core/src/settings.rs`. These entries
- * mirror them so the GUI can show the user what the backend will fall back to
- * and reject out-of-range input before a round trip.
+ * The authoritative values live in Rust — `Settings::with_defaults()` in
+ * `crates/gglib-core/src/settings.rs`, and the bounds `validate_settings()`
+ * holds a setting to, each a constant in `settings_bounds.rs` beside it. These
+ * entries mirror them so the GUI can show the user what the backend will fall
+ * back to and reject out-of-range input before a round trip.
  *
- * Mirroring is not enforcement: nothing here fails if the Rust side changes.
+ * `tests/ts/contracts/settingsBounds.test.ts` reads
+ * `contracts/settings/bounds.json`, which the Rust tests write from those
+ * values, and fails when a range here admits a value the backend rejects, or a
+ * default here is not the Rust one, for the fields it lists.
  * What this module buys is that a Rust-side change is a one-file fix instead of
  * a hunt through five JSX literals, and that each value is written exactly once
  * (the ranges used to be spelled out twice per field — as `min`/`max` props and
@@ -52,7 +56,7 @@ export type NumericSettingSpec =
 /**
  * OpenAI-compatible proxy listener.
  *
- * Rust: `DEFAULT_PROXY_PORT`; ports below 1024 are rejected by
+ * Rust: `DEFAULT_PROXY_PORT`; ports below `MIN_PORT` are rejected by
  * `validate_settings`, and the field is a `u16`.
  */
 export const PROXY_PORT: NumericSettingSpec = {
@@ -75,7 +79,8 @@ export const LLAMA_BASE_PORT: NumericSettingSpec = {
 /**
  * How many model downloads may be queued at once.
  *
- * Rust: literal `10` in `with_defaults()`, range `1..=50` in `validate_settings`.
+ * Rust: literal `10` in `with_defaults()`, range `DOWNLOAD_QUEUE_RANGE` in
+ * `validate_settings`.
  */
 export const MAX_DOWNLOAD_QUEUE_SIZE: NumericSettingSpec = {
   default: '10',
@@ -86,7 +91,7 @@ export const MAX_DOWNLOAD_QUEUE_SIZE: NumericSettingSpec = {
 /**
  * Context window applied to a model with no per-model override.
  *
- * Rust: unset in `Settings::with_defaults()`, range `512..=1_000_000` in
+ * Rust: unset in `Settings::with_defaults()`, range `CONTEXT_SIZE_RANGE` in
  * `validate_settings`. Deliberately has no default: leaving this empty is what
  * lets the daemon size each launch, and a stored number — including one this
  * box put there — outranks that.

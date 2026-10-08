@@ -6,14 +6,15 @@ Source-build installation pipeline for llama.cpp.
 
 The primary streaming entry point is [`run_llama_source_build`], which emits
 [`BuildEvent`] values into a `Sender<BuildEvent>` channel. CLI surface concerns
-(dependency checks, user prompts, progress rendering) live in
-`gglib-cli::handlers::llama_install`.
+(dependency checks, user prompts, progress rendering) live in `gglib-cli`, in
+`handlers::config::llama_install` and `handlers::config::llama_events`.
 
 ## Consumer table
 
-| Consumer | Crate        | Output                                                          |
-|----------|--------------|-----------------------------------------------------------------|
-| CLI      | `gglib-cli`  | `indicatif` spinner + progress bar in `handlers::llama_install` |
+| Consumer | Crate        | Output                                                                       |
+|----------|--------------|------------------------------------------------------------------------------|
+| CLI      | `gglib-cli`  | `indicatif` spinner + progress bar in `handlers::config::llama_events`       |
+| Axum     | `gglib-axum` | SSE stream at `POST /api/config/system/update-llama`, via `run_llama_update` |
 
 There were two more. #834 removed both as dead end to end — the SSE route at
 `POST /api/system/build-llama-from-source` and the Tauri command behind it,

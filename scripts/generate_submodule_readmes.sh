@@ -2,7 +2,7 @@
 # generate_submodule_readmes.sh — Create missing README stubs
 #
 # --create:
-#   Creates README stubs for every src/ subdir (Rust/TypeScript/tests) that
+#   Creates README stubs for every src/ subdir (Rust/TypeScript) that
 #   currently lacks one, except src/types/generated/ and below (ts-rs output,
 #   which check_readmes.sh also skips). Extracts //! doc comments from mod.rs
 #   verbatim into the module-docs section, prepends
@@ -19,8 +19,6 @@ set -e
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CRATES_DIR="$ROOT_DIR/crates"
 TS_SRC_DIR="$ROOT_DIR/src"
-TESTS_DIR="$ROOT_DIR/tests"
-BADGE_BASE="https://raw.githubusercontent.com/mmogr/gglib/badges"
 DRY_RUN=false
 CREATE=false
 
@@ -41,63 +39,6 @@ if $DRY_RUN; then
 else
     echo "=== CREATE MODE ==="
 fi
-
-# Function to get crate name from path
-get_crate_name() {
-    local dir="$1"
-    if [[ "$dir" =~ .*/crates/(gglib-[^/]+)/.* ]]; then
-        echo "${BASH_REMATCH[1]}"
-    elif [[ "$dir" =~ .*/src-tauri/.* ]]; then
-        echo "src-tauri"
-    else
-        echo "$dir" | sed -E 's|.*/crates/(gglib-[^/]+)/.*|\1|'
-    fi
-}
-
-# Function to compute badge prefix from directory path
-# e.g., crates/gglib-core/src/domain -> gglib-core-domain
-# e.g., src-tauri/src/gui_backend  -> src-tauri-gui_backend
-get_badge_prefix() {
-    local dir="$1"
-    local crate_name
-    crate_name=$(get_crate_name "$dir")
-
-    # Get path relative to src/ — handles both crates/ and src-tauri/
-    local rel_path
-    if [[ "$dir" =~ .*/src-tauri/src/(.+) ]]; then
-        rel_path="${BASH_REMATCH[1]}"
-    else
-        rel_path=$(echo "$dir" | sed -E "s|.*/crates/$crate_name/src/||")
-    fi
-
-    # If we're at the crate root src/, rel_path will equal the full path
-    if [[ "$rel_path" == "$dir" ]]; then
-        echo "$crate_name"
-        return
-    fi
-
-    # Replace / with - and construct prefix
-    local module_path
-    module_path=$(echo "$rel_path" | tr '/' '-')
-
-    echo "${crate_name}-${module_path}"
-}
-
-# Function to get module name (directory name)
-get_module_name() {
-    basename "$1"
-}
-
-# ── TypeScript badge prefix ────────────────────────────────────────────────
-# Computes badge slug for a TypeScript src/ subdir.
-# e.g., src/services/transport -> ts-services-transport
-get_ts_badge_prefix() {
-    local dir="$1"
-    local rel="${dir#"$TS_SRC_DIR"/}"
-    local prefix
-    prefix=$(echo "$rel" | tr '/' '-')
-    echo "ts-${prefix}"
-}
 
 # ── mod.rs migration ───────────────────────────────────────────────────────
 # Prepend #![doc = include_str!("README.md")] to the very top of mod.rs.
@@ -141,9 +82,7 @@ modrs_needs_include() {
 generate_rust_stub() {
     local dir="$1"
     local module_name
-    module_name=$(get_module_name "$dir")
-    local badge_prefix
-    badge_prefix=$(get_badge_prefix "$dir")
+    module_name=$(basename "$dir")
     local modrs="$dir/mod.rs"
 
     # Extract //! doc content for the module-docs section
@@ -154,9 +93,6 @@ generate_rust_stub() {
 
 cat << EOF
 # ${module_name}
-
-![LOC](https://img.shields.io/endpoint?url=${BADGE_BASE}/${badge_prefix}-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=${BADGE_BASE}/${badge_prefix}-complexity.json)
 
 <!-- module-docs:start -->
 
@@ -173,19 +109,13 @@ EOF
 }
 
 # Generate a README stub for a TypeScript src/ subdir.
-# Includes LOC/Complexity badges and module-docs markers.
 generate_ts_stub() {
     local dir="$1"
     local module_name
     module_name=$(basename "$dir")
-    local badge_prefix
-    badge_prefix=$(get_ts_badge_prefix "$dir")
 
 cat << EOF
 # ${module_name}
-
-![LOC](https://img.shields.io/endpoint?url=${BADGE_BASE}/${badge_prefix}-loc.json)
-![Complexity](https://img.shields.io/endpoint?url=${BADGE_BASE}/${badge_prefix}-complexity.json)
 
 <!-- module-docs:start -->
 
@@ -195,25 +125,10 @@ TODO: Describe the purpose and responsibilities of this module.
 EOF
 }
 
-# Generate a minimal README stub for a tests/ subdir.
-# No badges or module markers — test directories are documentation, not modules.
-generate_tests_stub() {
-    local dir="$1"
-    local dir_name
-    dir_name=$(basename "$dir")
-
-cat << EOF
-# ${dir_name}
-
-TODO: Describe what this test suite covers.
-EOF
-}
-
 # ── CREATE mode: generate stubs for directories missing READMEs ────────────
 create_missing_readmes() {
     local CREATED_RUST=0
     local CREATED_TS=0
-    local CREATED_TESTS=0
     local MODRS_UPDATED=0
 
     # ── Rust crate src/ subdirs (crates/*/src/**/ + src-tauri/src/**/)
@@ -279,35 +194,6 @@ create_missing_readmes() {
         echo "  (src/ not found — skipping)"
     fi
 
-    # ── tests/ subdirs (root + all nested)
-    echo ""
-    echo "tests/ subdirs..."
-
-    if [[ -d "$TESTS_DIR" ]]; then
-        local -a test_dirs=("$TESTS_DIR")
-        while IFS= read -r d; do
-            test_dirs+=("$d")
-        done < <(find "$TESTS_DIR" -mindepth 1 -type d | sort)
-
-        for dir in "${test_dirs[@]}"; do
-            local readme="$dir/README.md"
-            [[ -f "$readme" ]] && continue
-
-            local rel="${dir#"$ROOT_DIR"/}"
-
-            if $DRY_RUN; then
-                echo "  [create] $rel/README.md"
-                continue
-            fi
-
-            echo "  Creating: $rel/README.md"
-            generate_tests_stub "$dir" > "$readme"
-            (( CREATED_TESTS++ )) || true
-        done
-    else
-        echo "  (tests/ not found — skipping)"
-    fi
-
     # ── Summary
     echo ""
     echo "Summary:"
@@ -317,8 +203,7 @@ create_missing_readmes() {
         echo "  Rust subdir READMEs created:  $CREATED_RUST"
         echo "  mod.rs files updated:         $MODRS_UPDATED"
         echo "  TypeScript READMEs created:   $CREATED_TS"
-        echo "  tests/ READMEs created:       $CREATED_TESTS"
-        local total=$(( CREATED_RUST + CREATED_TS + CREATED_TESTS ))
+        local total=$(( CREATED_RUST + CREATED_TS ))
         echo "  Total READMEs created:        $total"
     fi
     echo ""

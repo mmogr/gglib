@@ -6,8 +6,8 @@
 use crate::manager::McpManager;
 use gglib_core::ports::{ResolutionAttempt, ResolutionStatus};
 use gglib_core::{
-    McpLifecycle, McpServer, McpServerRepository, McpServerStatus, McpServiceError, McpTool,
-    McpToolResult, NewMcpServer,
+    McpLifecycle, McpRepositoryError, McpServer, McpServerRepository, McpServerStatus,
+    McpServerType, McpServiceError, McpTool, McpToolResult, NewMcpServer,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -31,6 +31,9 @@ pub struct McpServerInfo {
 pub struct McpService {
     repository: Arc<dyn McpServerRepository>,
     manager: Arc<McpManager>,
+    /// Held from the check that a name is free to the write that takes it,
+    /// so two requests for one name cannot both pass the check.
+    naming: tokio::sync::Mutex<()>,
 }
 
 impl McpService {
@@ -39,7 +42,31 @@ impl McpService {
         Self {
             repository,
             manager: Arc::new(McpManager::new()),
+            naming: tokio::sync::Mutex::new(()),
         }
+    }
+
+    /// Refuse a kind of server gglib cannot run: an SSE one, for which it has
+    /// no client yet.
+    ///
+    /// Every caller is answered from here. Adding a server, changing one and
+    /// running one all ask, as do the start-up passes and the listing, which
+    /// leave such a server alone instead of failing on it. A stored one is
+    /// still read and removed: a database written while SSE servers were
+    /// accepted can hold some.
+    fn refuse_unsupported(server_type: McpServerType) -> Result<(), McpServiceError> {
+        match server_type {
+            McpServerType::Stdio => Ok(()),
+            McpServerType::Sse => Err(McpServiceError::SseNotSupported),
+        }
+    }
+
+    /// The stored servers of a kind gglib can run: the ones a start-up pass
+    /// may start.
+    async fn runnable_servers(&self) -> Result<Vec<McpServer>, McpServiceError> {
+        let mut servers = self.repository.list().await?;
+        servers.retain(|server| Self::refuse_unsupported(server.server_type).is_ok());
+        Ok(servers)
     }
 
     /// Initialize the MCP service: validates all servers and starts `Eager` ones.
@@ -53,7 +80,7 @@ impl McpService {
         self.validate_all_servers().await?;
 
         // Start only Eager servers (Lazy: on-demand, Manual: never).
-        let servers = self.repository.list().await?;
+        let servers = self.runnable_servers().await?;
         for server in servers {
             if server.lifecycle == McpLifecycle::Eager && server.enabled && server.is_valid {
                 if let Err(e) = self.start_server(server.id).await {
@@ -82,7 +109,7 @@ impl McpService {
     /// right after `initialize` so that tools are ready before generation begins,
     /// avoiding per-tool spawn latency mid-stream.
     pub async fn prewarm_lazy(&self) {
-        let servers = match self.repository.list().await {
+        let servers = match self.runnable_servers().await {
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!(error = %e, "Failed to list servers for lazy prewarm");
@@ -114,16 +141,8 @@ impl McpService {
         let servers = self.repository.list().await?;
 
         for mut server in servers {
-            let (is_valid, last_error) = match Self::validate_server(&server) {
-                Ok(()) => (true, None),
-                Err(e) => (false, Some(e)),
-            };
-
             // Only update if status changed
-            if server.is_valid != is_valid || server.last_error != last_error {
-                server.is_valid = is_valid;
-                server.last_error.clone_from(&last_error);
-
+            if Self::stamp_validity(&mut server) {
                 if let Err(e) = self.repository.update(&server).await {
                     tracing::warn!(
                         server_id = server.id,
@@ -136,14 +155,28 @@ impl McpService {
                 tracing::debug!(
                     server_id = server.id,
                     server_name = %server.name,
-                    is_valid = is_valid,
-                    error = ?last_error,
+                    is_valid = server.is_valid,
+                    error = ?server.last_error,
                     "Updated MCP server validation status"
                 );
             }
         }
 
         Ok(())
+    }
+
+    /// Validate `server` and record the verdict on it, in `is_valid` and
+    /// `last_error`. Returns whether that changed either.
+    fn stamp_validity(server: &mut McpServer) -> bool {
+        let (is_valid, last_error) = match Self::validate_server(server) {
+            Ok(()) => (true, None),
+            Err(e) => (false, Some(e)),
+        };
+
+        let changed = server.is_valid != is_valid || server.last_error != last_error;
+        server.is_valid = is_valid;
+        server.last_error = last_error;
+        changed
     }
 
     /// Validate a single MCP server configuration and paths.
@@ -280,7 +313,11 @@ impl McpService {
             .config
             .path_extra
             .as_ref()
-            .map(|p| p.split(':').map(String::from).collect())
+            .map(|p| {
+                p.split(crate::resolver::PATH_SEPARATOR)
+                    .map(String::from)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -404,18 +441,34 @@ impl McpService {
     // Configuration CRUD
     // =========================================================================
 
+    /// Refuse `name` when a server already has it.
+    ///
+    /// The rule that names are unique lives here and not in the schema: a
+    /// database written before it was enforced can hold two servers of one
+    /// name, and must still open. The caller holds `naming`.
+    async fn refuse_taken_name(&self, name: &str) -> Result<(), McpServiceError> {
+        match self.repository.get_by_name(name).await {
+            Ok(_) => Err(McpServiceError::NameTaken(name.to_string())),
+            Err(McpRepositoryError::NotFound(_)) => Ok(()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Add a new MCP server configuration.
+    ///
+    /// Refused with [`McpServiceError::SseNotSupported`] when it is an SSE
+    /// server, and with [`McpServiceError::NameTaken`] when a server already
+    /// has the name.
     pub async fn add_server(&self, new_server: NewMcpServer) -> Result<McpServer, McpServiceError> {
+        Self::refuse_unsupported(new_server.server_type)?;
+
+        let _naming = self.naming.lock().await;
+        self.refuse_taken_name(&new_server.name).await?;
+
         let mut saved = self.repository.insert(new_server).await?;
 
         // Validate immediately after creation
-        let (is_valid, last_error) = match Self::validate_server(&saved) {
-            Ok(()) => (true, None),
-            Err(e) => (false, Some(e)),
-        };
-
-        saved.is_valid = is_valid;
-        saved.last_error.clone_from(&last_error);
+        Self::stamp_validity(&mut saved);
 
         // Update validation status in database
         if let Err(e) = self.repository.update(&saved).await {
@@ -429,7 +482,7 @@ impl McpService {
 
         tracing::info!(
             server_name = %saved.name,
-            is_valid = is_valid,
+            is_valid = saved.is_valid,
             "Added MCP server configuration"
         );
         Ok(saved)
@@ -451,8 +504,21 @@ impl McpService {
     }
 
     /// Update a server configuration.
+    ///
+    /// An SSE server is refused with [`McpServiceError::SseNotSupported`],
+    /// one that is stored as SSE as much as one being changed to it. A rename
+    /// to a name another server has is refused with
+    /// [`McpServiceError::NameTaken`]. Both refuse before anything is stopped
+    /// or written. A server keeps the name it has, even one it shares.
     pub async fn update_server(&self, mut server: McpServer) -> Result<(), McpServiceError> {
+        Self::refuse_unsupported(server.server_type)?;
+
         let id = server.id;
+
+        let _naming = self.naming.lock().await;
+        if self.repository.get_by_id(id).await?.name != server.name {
+            self.refuse_taken_name(&server.name).await?;
+        }
 
         // If server is running, stop it first
         if self.manager.is_running(id).await {
@@ -462,18 +528,12 @@ impl McpService {
         }
 
         // Validate before saving
-        let (is_valid, last_error) = match Self::validate_server(&server) {
-            Ok(()) => (true, None),
-            Err(e) => (false, Some(e)),
-        };
-
-        server.is_valid = is_valid;
-        server.last_error = last_error;
+        Self::stamp_validity(&mut server);
 
         self.repository.update(&server).await?;
         tracing::info!(
             server_name = %server.name,
-            is_valid = is_valid,
+            is_valid = server.is_valid,
             "Updated MCP server configuration"
         );
         Ok(())
@@ -502,6 +562,7 @@ impl McpService {
     /// Start an MCP server.
     pub async fn start_server(&self, id: i64) -> Result<Vec<McpTool>, McpServiceError> {
         let mut server = self.repository.get_by_id(id).await?;
+        Self::refuse_unsupported(server.server_type)?;
 
         // For stdio servers, ensure command is resolved before starting
         if server.server_type == gglib_core::McpServerType::Stdio {
@@ -532,7 +593,7 @@ impl McpService {
 
         let tools = self
             .manager
-            .start_server(server)
+            .start_server(&server)
             .await
             .map_err(|e| McpServiceError::StartFailed(e.to_string()))?;
 
@@ -557,21 +618,30 @@ impl McpService {
         self.manager.get_status(id).await
     }
 
-    /// Get full server info including runtime status and tools.
-    pub async fn get_server_info(&self, id: i64) -> Result<McpServerInfo, McpServiceError> {
-        let server = self.repository.get_by_id(id).await?;
-        let status = self.manager.get_status(id).await;
+    /// A server with its runtime status, and its tools while it runs. One of
+    /// a kind gglib cannot run is [`McpServerStatus::Unsupported`].
+    async fn info_for(&self, server: McpServer) -> McpServerInfo {
+        let status = match Self::refuse_unsupported(server.server_type) {
+            Ok(()) => self.manager.get_status(server.id).await,
+            Err(_) => McpServerStatus::Unsupported,
+        };
         let tools = if status == McpServerStatus::Running {
-            self.manager.get_tools(id).await.unwrap_or_default()
+            self.manager.get_tools(server.id).await.unwrap_or_default()
         } else {
             Vec::new()
         };
 
-        Ok(McpServerInfo {
+        McpServerInfo {
             server,
             status,
             tools,
-        })
+        }
+    }
+
+    /// Get full server info including runtime status and tools.
+    pub async fn get_server_info(&self, id: i64) -> Result<McpServerInfo, McpServiceError> {
+        let server = self.repository.get_by_id(id).await?;
+        Ok(self.info_for(server).await)
     }
 
     /// List all servers with their runtime status.
@@ -580,19 +650,7 @@ impl McpService {
         let mut infos = Vec::with_capacity(servers.len());
 
         for server in servers {
-            let id = server.id;
-            let status = self.manager.get_status(id).await;
-            let tools = if status == McpServerStatus::Running {
-                self.manager.get_tools(id).await.unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-
-            infos.push(McpServerInfo {
-                server,
-                status,
-                tools,
-            });
+            infos.push(self.info_for(server).await);
         }
 
         Ok(infos)
@@ -659,6 +717,7 @@ impl McpService {
         }
 
         let server = self.repository.get_by_id(server_id).await?;
+        Self::refuse_unsupported(server.server_type)?;
 
         match server.lifecycle {
             McpLifecycle::Manual => Err(McpServiceError::NotRunning(format!(
@@ -667,7 +726,7 @@ impl McpService {
             ))),
             McpLifecycle::Eager | McpLifecycle::Lazy => self
                 .manager
-                .ensure_started(server)
+                .ensure_started(&server)
                 .await
                 .map(|_| ())
                 .map_err(|e| McpServiceError::StartFailed(e.to_string())),
@@ -683,38 +742,34 @@ impl McpService {
         self.manager.stop_all().await;
     }
 
-    /// Test connection to a server configuration (starts, gets tools, then stops).
+    /// Test a stored server end to end: resolve its executable, start a
+    /// throwaway instance of what is stored, list its tools, then stop it.
+    ///
+    /// The executable is resolved first, as `start_server` resolves it. A
+    /// newly added stdio server has no resolved path yet, and without this
+    /// its test fails with "executable path must be absolute" while a start
+    /// of the same row succeeds. The resolution's own outcome is not judged
+    /// here: a command that cannot be resolved fails the start below, and
+    /// that failure is the one reported.
     ///
     /// The throwaway instance is registered under a unique negative id rather
     /// than a fixed one. Real servers use positive ids, so negatives are free;
     /// a *constant* negative was not, because two overlapping tests would both
     /// claim it and the first to finish would stop the other's process — one
     /// user would see a working configuration reported as broken.
-    pub async fn test_connection(
-        &self,
-        new_server: NewMcpServer,
-    ) -> Result<Vec<McpTool>, McpServiceError> {
+    pub async fn test_server(&self, id: i64) -> Result<Vec<McpTool>, McpServiceError> {
         static NEXT_TEST_ID: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(-2);
-        let test_id = NEXT_TEST_ID.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
 
-        // Create a temporary server with a private id for testing
-        let test_server = McpServer {
-            id: test_id,
-            name: new_server.name,
-            server_type: new_server.server_type,
-            config: new_server.config,
-            enabled: new_server.enabled,
-            lifecycle: new_server.lifecycle,
-            env: new_server.env,
-            created_at: chrono::Utc::now(),
-            last_connected_at: None,
-            is_valid: true,
-            last_error: None,
-        };
+        let _ = self.ensure_resolved(id).await;
+
+        let mut test_server = self.repository.get_by_id(id).await?;
+        Self::refuse_unsupported(test_server.server_type)?;
+        let test_id = NEXT_TEST_ID.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        test_server.id = test_id;
 
         let started = self
             .manager
-            .start_server(test_server)
+            .start_server(&test_server)
             .await
             .map_err(|e| McpServiceError::StartFailed(e.to_string()));
 
@@ -731,148 +786,5 @@ impl McpService {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use async_trait::async_trait;
-    use gglib_core::McpRepositoryError;
-    use std::sync::Mutex;
-
-    /// Mock repository for testing
-    struct MockMcpRepository {
-        servers: Mutex<Vec<McpServer>>,
-        next_id: Mutex<i64>,
-    }
-
-    impl MockMcpRepository {
-        fn new() -> Self {
-            Self {
-                servers: Mutex::new(Vec::new()),
-                next_id: Mutex::new(1),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl McpServerRepository for MockMcpRepository {
-        async fn insert(&self, new_server: NewMcpServer) -> Result<McpServer, McpRepositoryError> {
-            let id = {
-                let mut next_id = self.next_id.lock().unwrap();
-                let id = *next_id;
-                *next_id += 1;
-                id
-            };
-
-            let server = McpServer {
-                id,
-                name: new_server.name,
-                server_type: new_server.server_type,
-                config: new_server.config,
-                enabled: new_server.enabled,
-                lifecycle: new_server.lifecycle,
-                env: new_server.env,
-                created_at: chrono::Utc::now(),
-                last_connected_at: None,
-                is_valid: false,
-                last_error: None,
-            };
-
-            self.servers.lock().unwrap().push(server.clone());
-            Ok(server)
-        }
-
-        async fn get_by_id(&self, id: i64) -> Result<McpServer, McpRepositoryError> {
-            let servers = self.servers.lock().unwrap();
-            servers
-                .iter()
-                .find(|s| s.id == id)
-                .cloned()
-                .ok_or_else(|| McpRepositoryError::NotFound(id.to_string()))
-        }
-
-        async fn get_by_name(&self, name: &str) -> Result<McpServer, McpRepositoryError> {
-            let servers = self.servers.lock().unwrap();
-            servers
-                .iter()
-                .find(|s| s.name == name)
-                .cloned()
-                .ok_or_else(|| McpRepositoryError::NotFound(name.to_string()))
-        }
-
-        async fn list(&self) -> Result<Vec<McpServer>, McpRepositoryError> {
-            let servers = self.servers.lock().unwrap();
-            Ok(servers.clone())
-        }
-
-        async fn update(&self, server: &McpServer) -> Result<(), McpRepositoryError> {
-            let mut servers = self.servers.lock().unwrap();
-            servers.iter_mut().find(|s| s.id == server.id).map_or_else(
-                || Err(McpRepositoryError::NotFound(server.id.to_string())),
-                |s| {
-                    *s = server.clone();
-                    Ok(())
-                },
-            )
-        }
-
-        async fn delete(&self, id: i64) -> Result<(), McpRepositoryError> {
-            let mut servers = self.servers.lock().unwrap();
-            let len_before = servers.len();
-            servers.retain(|s| s.id != id);
-            if servers.len() < len_before {
-                Ok(())
-            } else {
-                Err(McpRepositoryError::NotFound(id.to_string()))
-            }
-        }
-
-        async fn update_last_connected(&self, id: i64) -> Result<(), McpRepositoryError> {
-            let mut servers = self.servers.lock().unwrap();
-            if let Some(s) = servers.iter_mut().find(|s| s.id == id) {
-                s.last_connected_at = Some(chrono::Utc::now());
-                Ok(())
-            } else {
-                Err(McpRepositoryError::NotFound(id.to_string()))
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_add_and_list_servers() {
-        let repo = Arc::new(MockMcpRepository::new());
-        let service = McpService::new(repo);
-
-        let new_server = NewMcpServer::new_stdio("Test", "echo", vec!["hello".to_string()], None);
-        let saved = service.add_server(new_server).await.unwrap();
-        assert!(saved.id > 0);
-
-        let servers = service.list_servers().await.unwrap();
-        assert_eq!(servers.len(), 1);
-        assert_eq!(servers[0].name, "Test");
-    }
-
-    #[tokio::test]
-    async fn test_remove_server() {
-        let repo = Arc::new(MockMcpRepository::new());
-        let service = McpService::new(repo);
-
-        let new_server = NewMcpServer::new_stdio("Test", "echo", vec![], None);
-        let saved = service.add_server(new_server).await.unwrap();
-
-        service.remove_server(saved.id).await.unwrap();
-
-        let result = service.get_server(saved.id).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_server_status_when_not_running() {
-        let repo = Arc::new(MockMcpRepository::new());
-        let service = McpService::new(repo);
-
-        let new_server = NewMcpServer::new_stdio("Test", "echo", vec![], None);
-        let saved = service.add_server(new_server).await.unwrap();
-
-        let status = service.get_server_status(saved.id).await;
-        assert_eq!(status, McpServerStatus::Stopped);
-    }
-}
+#[path = "service_tests.rs"]
+mod tests;
