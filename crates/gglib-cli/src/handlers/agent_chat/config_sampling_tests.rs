@@ -74,8 +74,19 @@ async fn settings(ctx: &CliContext, global: Option<InferenceConfig>, profile: Op
     ctx.app.settings().update(update).await.expect("stored");
 }
 
+/// Store the agentic sampling switch as `stored`: on, off, or not stored.
+async fn agentic_sampling(ctx: &CliContext, stored: Option<bool>) {
+    let update = SettingsUpdate {
+        agentic_sampling: Some(stored),
+        ..SettingsUpdate::default()
+    };
+    ctx.app.settings().update(update).await.expect("stored");
+}
+
 /// The request `gglib chat <args> --port <a recording server>` sends for its
-/// first message: the session prepared and composed as `run` does both.
+/// first message: the session prepared as `run` prepares it, then composed
+/// from its flags, quietly. `run` hands `compose` no flags at all when none
+/// was typed, and is not quiet.
 async fn chat_sends(ctx: &CliContext, args: ChatArgs) -> Value {
     let server = props_server("{}");
     let args = ChatArgs {
@@ -282,6 +293,26 @@ async fn an_ordinary_model_with_nothing_chosen_is_capped_on_a_turn_with_tools() 
     assert_eq!(tooled["temperature"], json!(0.3_f32));
 }
 
+/// `gglib chat` and `gglib q` on a model in the catalogue follow this
+/// machine's agentic sampling switch. Stored off, a turn with tools is sent
+/// the floor's 0.7, the temperature it resolves to; stored on, or not stored,
+/// 0.3.
+#[tokio::test]
+async fn a_catalogued_models_turn_with_tools_is_capped_unless_agentic_sampling_is_stored_off() {
+    for (stored, want) in [(None, 0.3_f32), (Some(true), 0.3), (Some(false), 0.7)] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = test_context(dir.path()).await;
+        model(&ctx, &[], None).await;
+        agentic_sampling(&ctx, stored).await;
+
+        let chatted = chat_sends(&ctx, chat(MODEL, false, SamplingArgs::default())).await;
+        let asked = q_sends(&ctx, question(&dir, MODEL, true)).await;
+        assert!(carries_tools(&chatted) && carries_tools(&asked));
+        let sent = [&chatted["temperature"], &asked["temperature"]];
+        assert_eq!(sent, [&json!(want); 2], "chat, then q; stored {stored:?}");
+    }
+}
+
 /// On a turn with tools a temperature a person chose stands, whichever layer
 /// they chose it in, and so does a reasoning model's recipe; a recipe gglib
 /// guessed for an ordinary model is capped like the floor.
@@ -321,12 +352,14 @@ async fn a_turn_with_tools_never_lowers_a_temperature_a_person_chose() {
 
 /// A server on `--port` whose model this catalogue does not hold is sent the
 /// flags and nothing stored: no global value beneath them, the floor's 0.7,
-/// and 0.3 on a turn with tools.
+/// and 0.3 on a turn with tools, with the agentic sampling switch stored
+/// off. The switch is for this catalogue's models.
 #[tokio::test]
 async fn a_server_this_catalogue_does_not_know_is_sent_the_flags_and_nothing_stored() {
     let dir = tempfile::tempdir().expect("tempdir");
     let ctx = test_context(dir.path()).await;
     settings(&ctx, Some(temperature(0.42)), None).await;
+    agentic_sampling(&ctx, Some(false)).await;
 
     let plain = chat_sends(&ctx, chat("stranger", true, SamplingArgs::default())).await;
     assert_eq!(plain["temperature"], json!(0.7_f32));
@@ -336,4 +369,6 @@ async fn a_server_this_catalogue_does_not_know_is_sent_the_flags_and_nothing_sto
     assert_eq!(flagged["temperature"], json!(0.9_f32));
     let asked = q_sends(&ctx, question(&dir, "stranger", false)).await;
     assert_eq!(asked["temperature"], json!(0.7_f32));
+    let asked = q_sends(&ctx, question(&dir, "stranger", true)).await;
+    assert_eq!(asked["temperature"], json!(0.3_f32), "and `gglib q` alike");
 }

@@ -7,71 +7,20 @@
 //! stderr, once, when the question is sent, which is when the ladder is
 //! folded; it says nothing when the flag took effect, and nothing under `-Q`.
 
-use std::io::{Read as _, Write as _};
-use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::sync::mpsc::{Receiver, channel};
 
 use gglib_core::domain::{DefaultsOrigin, InferenceConfig, InferenceProfile, NewModel};
 use serde_json::{Value, json};
 
 #[path = "support/data_dir.rs"]
 mod data_dir;
+#[path = "support/model_server.rs"]
+mod model_server;
+use model_server::model_server;
 
 const WARNING: &str = "  Warning: --presence-penalty did not take effect. Sampling penalties \
      travel with whichever layer sets the temperature; pass --temperature to set them together.";
-
-/// One short reply, as llama-server streams it.
-const REPLY: &str = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\
-     \"finish_reason\":null}]}\n\n\
-     data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n\
-     data: [DONE]\n\n";
-
-/// Read one request whole, so the answer is not sent over unread bytes: its
-/// request line and its body.
-fn read_request(stream: &mut TcpStream) -> (String, String) {
-    let mut head = Vec::new();
-    let mut byte = [0_u8; 1];
-    while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).is_ok_and(|n| n == 1) {
-        head.push(byte[0]);
-    }
-    let head = String::from_utf8_lossy(&head).into_owned();
-    let length = head
-        .lines()
-        .filter_map(|line| line.split_once(':'))
-        .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
-        .and_then(|(_, value)| value.trim().parse().ok())
-        .unwrap_or(0);
-    let mut body = vec![0_u8; length];
-    let _ = stream.read_exact(&mut body);
-    let line = head.lines().next().unwrap_or_default().to_owned();
-    (line, String::from_utf8_lossy(&body).into_owned())
-}
-
-/// A stand-in for llama-server on a loopback port: every request is answered
-/// with [`REPLY`], and each completion request's body is handed over.
-fn model_server() -> (u16, Receiver<String>) {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
-    let port = listener.local_addr().expect("its address").port();
-    let (received, completions) = channel();
-    std::thread::spawn(move || {
-        for stream in listener.incoming() {
-            let Ok(mut stream) = stream else { continue };
-            let (line, body) = read_request(&mut stream);
-            if line.starts_with("POST /v1/chat/completions") {
-                let _ = received.send(body);
-            }
-            let _ = write!(
-                stream,
-                "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\n\
-                 connection: close\r\n\r\n{REPLY}",
-                REPLY.len()
-            );
-        }
-    });
-    (port, completions)
-}
 
 /// A data directory whose catalogue holds `served`, and `tuned` with a
 /// temperature a person set on it, and whose settings hold a `chat` profile

@@ -91,10 +91,11 @@ pub struct LlmCompletionAdapter {
     /// a sweep of that parameter alone would measure nothing.
     keep_passed_over: bool,
     /// The stored layers beneath [`Self::sampling`]: the profile the caller
-    /// selected and the settings' global defaults. Handed to
-    /// [`request_pipeline::apply()`] as they are, so the ladder is folded
-    /// there and nowhere before it. Empty (the default) for a caller with
-    /// neither.
+    /// selected and the settings' global defaults, and with them whether a
+    /// turn with tools gets the agentic temperature ceiling. Handed to
+    /// [`request_pipeline::apply()`] unfolded, so the ladder is folded there
+    /// and nowhere before it. A caller that hands over none (the default)
+    /// has neither layer, and the ceiling on.
     layers: SamplingLayers,
     /// Told what each request's sampling resolved to. `None` (the default)
     /// for a caller with nothing to say about it.
@@ -233,7 +234,8 @@ impl LlmCompletionAdapter {
         // has already written the caller's own parameters into the body, which
         // is exactly where an external client's would be, so `apply` reads
         // them back as the top layer and resolves the caller's stored layers
-        // (`self.layers`), the model's and the floor beneath them.
+        // (`self.layers`), the model's and the floor beneath them. Whether a
+        // turn with tools is capped is those layers' to say.
         //
         // `trust_client_sampling: true` unconditionally: `Settings.trust_client_sampling`
         // gates an *external* client's request body against a boilerplate value it
@@ -252,12 +254,6 @@ impl LlmCompletionAdapter {
             &self.model_context,
             &SamplingLayers {
                 trust_client_sampling: true,
-                // Unconditionally on: no caller hands over
-                // `Settings.agentic_sampling`, and this path is the agent
-                // loop, whose turns with tools are exactly what the ceiling
-                // exists for. The `GGLIB_DISABLE_AGENTIC_SAMPLING` env switch
-                // still reaches it.
-                agentic_adjustments: true,
                 ..self.layers.clone()
             },
             self.model_context.context_budget(),

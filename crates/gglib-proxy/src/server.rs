@@ -816,8 +816,8 @@ async fn attempt(
         profile: ctx.profile.clone(),
         global: settings.inference_defaults.clone(),
         trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
-        // Opt-out: absent means on. See `Settings::agentic_sampling`.
-        agentic_adjustments: settings.agentic_sampling != Some(false),
+        // Opt-out: absent means on. The rule every chat reads it by.
+        agentic_adjustments: settings.effective_agentic_sampling(),
     };
 
     // Build StreamConfig for this attempt (Some only when cache is enabled).

@@ -127,14 +127,15 @@ pub(crate) async fn compose(
     let upstream = params.target.upstream(ctx, params, banner).await?;
 
     // 2. Gather the stored sampling layers beneath the flags: the selected
-    //    profile and this machine's global defaults. They go to the adapter
-    //    unfolded, beside the flags (`sampling`) and the model's own values
-    //    (`model_context`, below): the ladder is folded once, where each
-    //    request is shaped, and a value resolved here would reach that fold
-    //    as one a person typed. When the identifier is unknown (external port
-    //    reuse with no catalog entry) the flags are forwarded with nothing
-    //    stored beneath them — and the target says whether this catalog is
-    //    the one that applies at all.
+    //    profile and this machine's global defaults, and with them its
+    //    agentic sampling switch. They go to the adapter unfolded, beside
+    //    the flags (`sampling`) and the model's own values (`model_context`,
+    //    below): the ladder is folded once, where each request is shaped,
+    //    and a value resolved here would reach that fold as one a person
+    //    typed. When the identifier is unknown (external port reuse with no
+    //    catalog entry) the flags are forwarded with nothing stored beneath
+    //    them, the switch included, so the ceiling stays on — and the target
+    //    says whether this catalog is the one that applies at all.
     let catalogued = params
         .target
         .local_model(ctx, &params.model_identifier)
@@ -143,12 +144,16 @@ pub(crate) async fn compose(
     let layers = if catalogued {
         let settings = ctx.app.settings().get().await?;
         SamplingLayers {
+            agentic_adjustments: settings.effective_agentic_sampling(),
             profile: params.profile.as_ref().map(|chosen| chosen.config.clone()),
             global: settings.inference_defaults,
             ..SamplingLayers::default()
         }
     } else {
-        SamplingLayers::default()
+        SamplingLayers {
+            agentic_adjustments: true,
+            ..SamplingLayers::default()
+        }
     };
     // Only that fold knows whether it passed over a flag, so it says so
     // through this; never under `-Q`, which promises silence on stderr.

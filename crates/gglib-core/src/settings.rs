@@ -232,6 +232,8 @@ pub struct Settings {
     ///
     /// Same polarity as [`Self::loop_guard_mode`], and for the same
     /// reason: this is a correction the endpoint should not silently lose.
+    /// A chat reads it through [`Self::effective_agentic_sampling`], which
+    /// supplies the default.
     ///
     /// The `tool_call_floor` alias is the name #741 gave this setting; it keeps
     /// a config that uses that name loading.
@@ -364,6 +366,16 @@ impl Settings {
             Some(mode) => mode,
             None => LoopGuardMode::Note,
         }
+    }
+
+    /// Whether a turn with tools gets the agentic temperature ceiling: the
+    /// stored [`Self::agentic_sampling`], and on when none is stored.
+    ///
+    /// The one place the switch is read, so the page, a paired device, the
+    /// terminal and the proxy cannot disagree about it.
+    #[must_use]
+    pub const fn effective_agentic_sampling(&self) -> bool {
+        !matches!(self.agentic_sampling, Some(false))
     }
 
     /// Merge another settings into this one, only updating fields that are Some.

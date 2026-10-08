@@ -9,7 +9,8 @@ use serde_json::json;
 
 use crate::handlers::agent::run_fixture::state;
 use crate::handlers::agent::turn_fixture::{
-    carries_tools, doors, global, model, reasoning, sampling_of, sent, stored, temperature,
+    agentic_sampling, carries_tools, doors, global, model, reasoning, sampling_of, sent, stored,
+    temperature,
 };
 
 #[tokio::test]
@@ -76,6 +77,37 @@ async fn an_ordinary_model_with_nothing_chosen_is_capped_on_a_turn_with_tools() 
             let body = sent(&state, id, chat).await;
             assert_eq!(carries_tools(&body), tools, "{door}");
             assert_eq!(body["temperature"], json!(want), "{door}");
+        }
+    }
+}
+
+/// Both doors follow this machine's agentic sampling switch. Stored off, a
+/// turn with tools is sent the temperature it resolves to: the floor's 0.7,
+/// or the 0.9 gglib guessed for the model. Stored on, or not stored, each is
+/// capped.
+#[tokio::test]
+async fn a_turn_with_tools_is_capped_unless_agentic_sampling_is_stored_off() {
+    for (switch, floor, guess) in [
+        (None, 0.3_f32, 0.3_f32),
+        (Some(true), 0.3, 0.3),
+        (Some(false), 0.7, 0.9),
+    ] {
+        let (_dir, plain) = state().await;
+        let ordinary = model(&plain, |_| {}).await;
+        let (_dir, guessing) = state().await;
+        let recipe = stored(temperature(0.9), DefaultsOrigin::AutoDetected);
+        let guessed = model(&guessing, recipe).await;
+
+        for (state, id, want) in [(&plain, ordinary, floor), (&guessing, guessed, guess)] {
+            agentic_sampling(state, switch).await;
+            let mut sent_from = Vec::new();
+            for (door, chat) in doors(state, id, true).await {
+                let body = sent(state, id, chat).await;
+                assert!(carries_tools(&body), "{door}");
+                sent_from.push((door, body["temperature"].clone()));
+            }
+            let each = [("the page", json!(want)), ("a paired device", json!(want))];
+            assert_eq!(sent_from, each, "stored {switch:?}");
         }
     }
 }

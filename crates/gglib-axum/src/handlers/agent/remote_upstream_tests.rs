@@ -109,7 +109,8 @@ async fn a_local_model_without_a_quantisation_has_none() {
 /// A local run is shaped for the model its port serves, by that model's
 /// catalogue row, and not for a model the request's `model` happens to name:
 /// that name goes on the wire and picks nothing here. Beneath it sit this
-/// machine's global sampling defaults, and no profile.
+/// machine's global sampling defaults, and no profile; the agentic switch,
+/// which these settings do not store, is on.
 #[tokio::test]
 async fn a_local_run_is_shaped_for_the_model_its_port_serves_over_the_global_defaults() {
     let (_dir, state) = super::super::run_fixture::state().await;
@@ -148,6 +149,7 @@ async fn a_local_run_is_shaped_for_the_model_its_port_serves_over_the_global_def
         assert_eq!(upstream.model, asked.model, "the name on the wire");
         let layers = SamplingLayers {
             global: Some(global.clone()),
+            agentic_adjustments: true,
             ..SamplingLayers::default()
         };
         assert_eq!(upstream.layers, layers, "{body}");
@@ -203,13 +205,57 @@ async fn a_far_run_sends_the_id_and_is_made_by_the_far_name() {
     assert_eq!(upstream.base_url, far.server_root());
     // The far proxy shapes the turn and folds its own layers.
     assert_eq!(upstream.model_context, ModelContext::passthrough());
-    assert_eq!(upstream.layers, SamplingLayers::default());
     let seen = only(&fake);
     assert_eq!(
         (seen.method.as_str(), seen.uri.as_str()),
         ("GET", "/v1/models/3/detail")
     );
     assert!(carries_key(&seen), "{seen:?}");
+}
+
+/// A far run is handed nothing this machine stores: no global default
+/// reaches its request, and its turn with tools is capped whatever this
+/// machine's agentic sampling switch says. That switch is for this
+/// machine's models, and the far proxy follows its own.
+#[tokio::test]
+async fn a_far_turn_with_tools_is_capped_whatever_this_machine_stores() {
+    use super::super::compose::{Prepared, prepare_over};
+    use super::super::turn_fixture::{REPLY, TOOL, agentic_sampling, global, temperature};
+
+    for stored in [None, Some(true), Some(false)] {
+        let (_dir, state) = super::super::run_fixture::state().await;
+        agentic_sampling(&state, stored).await;
+        global(&state, temperature(0.42)).await;
+        let (fake, far) = fake_far(200, LOOKUP).await;
+        let upstream = remote(&far, &far_ref(3)).await.expect("looked up");
+        *fake.body.lock().unwrap() = REPLY.to_owned();
+        *fake.content_type.lock().unwrap() = "text/event-stream";
+
+        let hi = r#"{"role":"user","content":"hi"}"#;
+        let chat = format!(r#"{{"port":0,"messages":[{hi}],"tool_filter":["{TOOL}"]}}"#);
+        let prepared = prepare_over(&state, req(&chat), upstream).await;
+        let Prepared {
+            agent_loop,
+            messages,
+            config,
+            tx,
+            rx: _rx,
+            ..
+        } = prepared;
+        let ended = agent_loop.run(messages, config, tx).await;
+        assert!(ended.is_ok(), "{:?}", ended.err());
+
+        let turn = fake.seen.lock().unwrap().last().expect("a request").clone();
+        assert_eq!(turn.uri, "/v1/chat/completions");
+        let sent: serde_json::Value = serde_json::from_str(&turn.body).unwrap();
+        assert!(
+            sent["tools"]
+                .as_array()
+                .is_some_and(|tools| !tools.is_empty())
+        );
+        let capped = serde_json::json!(0.3_f32);
+        assert_eq!(sent["temperature"], capped, "stored {stored:?}");
+    }
 }
 
 /// An id the far machine does not have is its `404`, with its words, and

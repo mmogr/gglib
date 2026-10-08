@@ -234,6 +234,25 @@ async fn the_gglib_and_control_arms_send_every_value_they_name() {
     }
 }
 
+/// The gglib arm is handed no settings, so no agentic sampling switch
+/// reaches it: its turn with tools, on an ordinary model with nothing
+/// chosen, is capped at 0.3 whatever the machine it runs on has stored.
+#[tokio::test]
+async fn the_gglib_arm_caps_a_temperature_nobody_chose_on_its_turn_with_tools() {
+    let context = ModelContext {
+        capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS,
+        catalog_resolved: true,
+        ..ModelContext::passthrough()
+    };
+    let upstream = MockUpstream::spawn().await;
+
+    run_arm_with(EvalArm::Gglib, &upstream, None, Some(4242), &context).await;
+    let gglib = first_body_since(&upstream, 0);
+    let tools = gglib["tools"].as_array();
+    assert!(tools.is_some_and(|tools| !tools.is_empty()), "{gglib}");
+    assert_eq!(gglib["temperature"], json!(0.3_f32), "{gglib}");
+}
+
 /// Off unless asked for; when asked for, both run on the primary seeds,
 /// straight after the two real arms.
 #[test]
