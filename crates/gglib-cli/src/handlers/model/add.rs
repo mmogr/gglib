@@ -1,15 +1,18 @@
 //! Add command handler.
 //!
 //! Handles adding a new GGUF model to the database by validating
-//! the file, extracting metadata, prompting for missing info, and saving.
+//! the file, extracting metadata, prompting for missing info, and saving
+//! through `ModelOps::add`, the operation the app's add runs.
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use std::path::PathBuf;
 
 use crate::bootstrap::CliContext;
 use crate::presentation::{ModelSummaryOpts, display_model_summary};
 use crate::utils::input;
 
+use gglib_app_services::ModelOps;
+use gglib_app_services::types::AddModelRequest;
 use gglib_core::domain::{NameSource, resolve_model_name};
 use gglib_core::services::ImportMode;
 use gglib_core::utils::validation;
@@ -22,6 +25,7 @@ use gglib_core::utils::validation;
 /// # Arguments
 ///
 /// * `ctx` - The CLI context providing access to `AppCore` and parser
+/// * `ops` - The model operations the file is added through
 /// * `file_path` - Path to the GGUF file to add
 /// * `reimport` - Re-import a file already in the library, overwriting its row
 ///
@@ -36,18 +40,24 @@ use gglib_core::utils::validation;
 /// - GGUF metadata extraction fails
 /// - The file is already in the library and `reimport` was not passed
 /// - Database operations fail
-pub(crate) async fn execute(ctx: &CliContext, file_path: &str, reimport: bool) -> Result<()> {
+pub(crate) async fn execute(
+    ctx: &CliContext,
+    ops: &ModelOps,
+    file_path: &str,
+    reimport: bool,
+) -> Result<()> {
     let path = PathBuf::from(file_path);
 
     // Validate the GGUF file and extract metadata for CLI preview
     let gguf_metadata = validation::validate_and_parse_gguf(ctx.gguf_parser.as_ref(), file_path)?;
     println!("File validation and metadata extraction successful.");
 
-    // Refuse a duplicate here rather than after the prompts below. The core
-    // import checks too — that is the guard that actually protects the
-    // database — but reaching it costs the user a parameter-count prompt
-    // first, and answering questions about a model only to be told it was
-    // already there reads as a bug even though the refusal is correct.
+    // Refuse a duplicate here rather than after the prompts below. The
+    // import checks too, under `ops.add` — that is the guard that actually
+    // protects the database — but reaching it costs the user a
+    // parameter-count prompt first, and answering questions about a model
+    // only to be told it was already there reads as a bug even though the
+    // refusal is correct.
     if !reimport && let Some(existing) = ctx.app.models().find_by_path(&path).await? {
         anyhow::bail!(
             "'{}' is already in the library as \"{}\" (id {}).\n\
@@ -99,17 +109,26 @@ pub(crate) async fn execute(ctx: &CliContext, file_path: &str, reimport: bool) -
         Some(input::prompt_float("Parameter count (in billions)")?)
     };
 
-    // Delegate to shared core logic for model import
+    // The import the app's add makes, with what only a terminal asks of it:
+    // the count typed above, and the re-import.
     let mode = if reimport {
         ImportMode::Refresh
     } else {
         ImportMode::Fresh
     };
+    let request = AddModelRequest {
+        file_path: file_path.to_owned(),
+    };
+    let added = ops.add(request, param_count_override, mode).await?;
+
+    // `ops.add` answers with the row as a client lists it. The summary is of
+    // the row as stored.
     let saved_model = ctx
         .app
         .models()
-        .import_from_file(&path, ctx.gguf_parser.as_ref(), param_count_override, mode)
-        .await?;
+        .get_by_id(added.id)
+        .await?
+        .with_context(|| format!("model {} is no longer in the library", added.id))?;
 
     // Display clean summary using shared presentation
     if reimport {

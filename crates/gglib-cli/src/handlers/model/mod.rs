@@ -42,9 +42,9 @@ use recorded_servers::RecordedServers;
 
 /// `ModelOps` for a one-shot CLI command.
 ///
-/// A listing, an explanation, an edit and a removal made in a terminal go
-/// through it, so each runs the operation the GUI's runs, as a capability
-/// change and an upgrade do.
+/// A listing, an explanation, an add, an edit, a retag and a removal made in
+/// a terminal go through it, so each runs the operation the GUI's runs, as a
+/// capability change and an upgrade do.
 /// The reasons for what it is built with live here once:
 ///
 /// - [`RecordedServers`] rather than a runner of this process's own: a
@@ -73,11 +73,9 @@ pub(crate) fn one_shot_model_ops(ctx: &CliContext) -> ModelOps {
 /// that serves this library what the command changed in it.
 ///
 /// Told here, once, for every command that changes the library through
-/// [`one_shot_model_ops`]; no handler tells anybody for itself. `add` and
-/// `retag` write the library without `ModelOps`, which emits nothing for
-/// them, so there is nothing of theirs to tell. Told whatever the command
-/// answered, because a change that was stored is one an open app does not
-/// show yet.
+/// [`one_shot_model_ops`]; no handler tells anybody for itself. Told
+/// whatever the command answered, because a change that was stored is one
+/// an open app does not show yet.
 pub(crate) async fn dispatch(
     ctx: &CliContext,
     command: ModelCommand,
@@ -105,7 +103,7 @@ async fn dispatch_with(
             file_path,
             reimport,
         } => {
-            add::execute(ctx, &file_path, reimport).await?;
+            add::execute(ctx, ops, &file_path, reimport).await?;
         }
         ModelCommand::List(args) => {
             list::execute(target, ctx, ops, args).await?;
@@ -186,7 +184,7 @@ async fn dispatch_with(
             all,
             full,
         } => {
-            retag::execute(ctx, identifier, all, full).await?;
+            retag::execute(ctx, ops, identifier, all, full).await?;
         }
         ModelCommand::Verify {
             identifier,

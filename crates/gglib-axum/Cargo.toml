@@ -79,6 +79,8 @@ gglib-sse = { workspace = true, features = ["test-support"] }
 # A data root of each test binary's own, so a context resolves nothing into
 # the checkout (#955).
 gglib-core = { workspace = true, features = ["test-utils"] }
+# The GGUF file a test adds over the route.
+gglib-gguf = { workspace = true, features = ["test-utils"] }
 # The timestamp on a model row a test builds.
 chrono = { workspace = true }
 # Tests that read back what the code under test logged.

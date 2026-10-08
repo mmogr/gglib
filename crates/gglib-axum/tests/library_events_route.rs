@@ -4,6 +4,10 @@
 //! `gglib model update` in a terminal changes the library in its own
 //! process, through the `ModelOps` the daemon's routes run, and posts the
 //! event that emitted there. These read the stream as the app reads it.
+//!
+//! `gglib model add` is one of those commands, and asks two things of
+//! `ModelOps::add` that the app's add cannot: the last test is what the
+//! route does without them.
 
 mod common;
 
@@ -96,4 +100,34 @@ async fn an_event_a_command_posts_reaches_the_stream_as_the_apps_own_change_does
 
     post(&app, &removed).await;
     assert_eq!(next_frame(&mut events).await, frame_of(&removed));
+}
+
+/// An add from the app stores the parameter count read from the file, here
+/// from its name, and puts `model_added` with the row it stored on the
+/// stream, the event `gglib model add` posts for the file. Its body has no
+/// way to ask for a re-import, so a second add of the file is a conflict,
+/// and puts nothing on the stream: the next frame is one posted after it.
+#[tokio::test]
+async fn an_add_from_the_app_reaches_the_stream_and_a_second_is_a_conflict() {
+    let (state, app) = test_state_and_app(CorsConfig::AllowAll).await;
+    let dir = tempfile::tempdir().unwrap();
+    let weights = dir.path().join("qwen-7B.Q8_0.gguf");
+    gglib_gguf::write_string_gguf(&weights, &[]);
+    let add = Some(json!({ "file_path": weights }));
+    let mut events = stream(&app).await;
+
+    let (status, answer) = call(&app, Method::POST, daemon::MODELS_LIST_PATH, add.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{answer}");
+    let stored = state.core.models().find_by_path(&weights).await.unwrap();
+    let stored = stored.expect("the file has a row");
+    assert!((stored.param_count_b - 7.0).abs() < f64::EPSILON);
+    let added = AppEvent::model_added((&stored).into());
+    assert_eq!(next_frame(&mut events).await, frame_of(&added));
+
+    let (status, answer) = call(&app, Method::POST, daemon::MODELS_LIST_PATH, add).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{answer}");
+
+    let next = AppEvent::model_removed(0);
+    post(&app, &next).await;
+    assert_eq!(next_frame(&mut events).await, frame_of(&next));
 }

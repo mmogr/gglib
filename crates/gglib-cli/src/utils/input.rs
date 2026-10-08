@@ -25,12 +25,26 @@ use std::io::{self, BufRead, Write};
 pub(crate) fn prompt_string(prompt: &str) -> Result<String> {
     println!("{prompt}: ");
 
+    #[cfg(test)]
+    if let Ok(typed) = TYPED.try_with(|typed| *typed) {
+        return Ok(typed.trim().to_string());
+    }
+
     let mut input: String = String::new();
     io::stdin()
         .read_line(&mut input)
         .context("Failed to read user input")?;
 
     Ok(input.trim().to_string())
+}
+
+#[cfg(test)]
+tokio::task_local! {
+    /// In a test, the line typed in answer to [`prompt_string`]. A task that
+    /// sets it is answered with that each time it asks, in place of a line
+    /// from stdin: the test binary's stdin is whatever the tests were run
+    /// from, and one for every test in it.
+    pub(crate) static TYPED: &'static str;
 }
 
 /// Prompts the user for a string input with a default value.

@@ -7,8 +7,12 @@
 //! Default behaviour is additive: missing tags are appended, nothing is
 //! removed. `--full` drops and re-derives the entire auto-generated
 //! namespace while still preserving user-curated tags.
+//!
+//! Each model is retagged through `ModelOps::retag`, the operation the
+//! app's retag runs.
 
 use anyhow::{Context, Result};
+use gglib_app_services::ModelOps;
 
 use super::resolver;
 use crate::bootstrap::CliContext;
@@ -16,15 +20,14 @@ use crate::bootstrap::CliContext;
 /// Execute the retag command.
 pub(crate) async fn execute(
     ctx: &CliContext,
+    ops: &ModelOps,
     identifier: Option<String>,
     all: bool,
     full: bool,
 ) -> Result<()> {
-    let models = ctx.app.models();
-    let parser = ctx.gguf_parser.as_ref();
-
     let targets = if all {
-        models
+        ctx.app
+            .models()
             .list()
             .await
             .context("failed to list models")?
@@ -48,19 +51,19 @@ pub(crate) async fn execute(
 
     let mut total_changed = 0usize;
     for (id, name) in targets {
-        match models.retag_model(id, parser, full).await {
-            Ok(None) => {
+        match ops.retag(id, full).await {
+            Ok(pass) if !pass.changed => {
                 println!("  [{id}] {name} — already up to date");
             }
-            Ok(Some(diff)) => {
+            Ok(pass) => {
                 total_changed += 1;
-                if !diff.added.is_empty() {
-                    println!("  [{id}] {name} — added: {}", diff.added.join(", "));
+                if !pass.added.is_empty() {
+                    println!("  [{id}] {name} — added: {}", pass.added.join(", "));
                 }
-                if !diff.removed.is_empty() {
-                    println!("  [{id}] {name} — removed: {}", diff.removed.join(", "));
+                if !pass.removed.is_empty() {
+                    println!("  [{id}] {name} — removed: {}", pass.removed.join(", "));
                 }
-                if diff.spec_changed {
+                if pass.spec_changed {
                     println!("  [{id}] {name} — dialect spec re-derived");
                 }
             }

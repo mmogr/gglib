@@ -70,7 +70,10 @@ async fn add_and_list_model() {
         file_path: gguf_path.to_str().unwrap().to_string(),
     };
 
-    let added = ops.add(req).await.expect("add should succeed");
+    let added = ops
+        .add(req, None, ImportMode::Fresh)
+        .await
+        .expect("add should succeed");
     let canonical = std::fs::canonicalize(&gguf_path).unwrap();
     assert_eq!(added.file_path, canonical.to_str().unwrap());
 
@@ -95,13 +98,16 @@ async fn adding_a_file_already_in_the_library_is_a_conflict() {
     fs::write(&gguf_path, b"placeholder").await.unwrap();
     let file_path = gguf_path.to_str().unwrap().to_string();
 
-    ops.add(AddModelRequest {
+    let first = AddModelRequest {
         file_path: file_path.clone(),
-    })
-    .await
-    .expect("first add should succeed");
+    };
+    ops.add(first, None, ImportMode::Fresh)
+        .await
+        .expect("first add should succeed");
 
-    let result = ops.add(AddModelRequest { file_path }).await;
+    let result = ops
+        .add(AddModelRequest { file_path }, None, ImportMode::Fresh)
+        .await;
     assert!(
         matches!(result, Err(GuiError::Conflict(_))),
         "expected Conflict, got {result:?}"
@@ -256,7 +262,7 @@ async fn add_nonexistent_file_returns_validation_error() {
     let req = AddModelRequest {
         file_path: "/no/such/file.gguf".to_string(),
     };
-    let result = ops.add(req).await;
+    let result = ops.add(req, None, ImportMode::Fresh).await;
     assert!(
         matches!(result, Err(GuiError::ValidationFailed(_))),
         "expected ValidationFailed, got {result:?}"
@@ -292,11 +298,12 @@ async fn add_placeholder_model_with(ops: &ModelOps, dir: &tempfile::TempDir) -> 
     fs::write(&gguf_path, b"placeholder").await.unwrap();
     let gguf_path = gguf_path.canonicalize().unwrap();
 
-    ops.add(AddModelRequest {
+    let request = AddModelRequest {
         file_path: gguf_path.to_str().unwrap().to_string(),
-    })
-    .await
-    .expect("add should succeed")
+    };
+    ops.add(request, None, ImportMode::Fresh)
+        .await
+        .expect("add should succeed")
 }
 
 /// Library changes must reach every client of this daemon, not just the one
@@ -323,6 +330,65 @@ async fn adding_a_model_broadcasts_it() {
             assert_eq!(model.file_path, added.file_path);
         }
         other => panic!("expected exactly one ModelAdded, got {other:?}"),
+    }
+}
+
+/// The first of the two things only a terminal asks of an add: the count
+/// it hands over is stored in place of the one read from the file.
+#[tokio::test]
+async fn an_add_stores_the_parameter_count_it_is_handed() {
+    let ops = make_ops(test_core().await);
+    let dir = tempdir().unwrap();
+    let gguf_path = dir.path().join("model.gguf");
+    fs::write(&gguf_path, b"placeholder").await.unwrap();
+    let request = AddModelRequest {
+        file_path: gguf_path.to_str().unwrap().to_string(),
+    };
+
+    let added = ops
+        .add(request, Some(7.5), ImportMode::Fresh)
+        .await
+        .expect("add should succeed");
+
+    assert!((added.param_count_b - 7.5).abs() < f64::EPSILON);
+    let stored = ops.get(added.id).await.expect("the row reads");
+    assert!((stored.param_count_b - 7.5).abs() < f64::EPSILON);
+}
+
+/// The second: a re-import. One of a file that has a row rewrites that row,
+/// so every client is told the row changed, not that a model was added. One
+/// of a file with no row adds it.
+#[tokio::test]
+async fn a_reimport_broadcasts_the_row_it_rewrote_as_updated() {
+    let core = test_core().await;
+    let dir = tempdir().unwrap();
+    let emitter = Arc::new(RecordingEmitter::default());
+    let ops = make_ops_with_emitter(core, Arc::clone(&emitter) as Arc<dyn AppEventEmitter>);
+    let gguf_path = dir.path().join("model.gguf");
+    fs::write(&gguf_path, b"placeholder").await.unwrap();
+    let request = AddModelRequest {
+        file_path: gguf_path.to_str().unwrap().to_string(),
+    };
+
+    let added = ops
+        .add(request.clone(), None, ImportMode::Refresh)
+        .await
+        .expect("a file with no row is added");
+    let rewritten = ops
+        .add(request, None, ImportMode::Refresh)
+        .await
+        .expect("the row is rewritten");
+
+    assert_eq!(rewritten.id, added.id);
+    match emitter.events().as_slice() {
+        [
+            AppEvent::ModelAdded { model: new },
+            AppEvent::ModelUpdated { model: changed },
+        ] => {
+            assert_eq!(new.id, added.id);
+            assert_eq!(changed.id, added.id);
+        }
+        other => panic!("expected ModelAdded then ModelUpdated, got {other:?}"),
     }
 }
 
@@ -633,10 +699,11 @@ async fn update_server_defaults_json_round_trip() {
     fs::write(&gguf_path, b"placeholder").await.unwrap();
     let gguf_path = gguf_path.canonicalize().unwrap();
 
+    let request = AddModelRequest {
+        file_path: gguf_path.to_str().unwrap().to_string(),
+    };
     let added = ops
-        .add(AddModelRequest {
-            file_path: gguf_path.to_str().unwrap().to_string(),
-        })
+        .add(request, None, ImportMode::Fresh)
         .await
         .expect("add should succeed");
     assert!(
@@ -698,12 +765,13 @@ async fn update_server_defaults_json_round_trip() {
 async fn seed_model(ops: &ModelOps, dir: &tempfile::TempDir) -> i64 {
     let gguf_path = dir.path().join("model.gguf");
     fs::write(&gguf_path, b"placeholder").await.unwrap();
-    ops.add(AddModelRequest {
+    let request = AddModelRequest {
         file_path: gguf_path.to_str().unwrap().to_string(),
-    })
-    .await
-    .expect("add should succeed")
-    .id
+    };
+    ops.add(request, None, ImportMode::Fresh)
+        .await
+        .expect("add should succeed")
+        .id
 }
 
 fn profile(name: &str, temperature: f32) -> gglib_core::domain::InferenceProfile {
