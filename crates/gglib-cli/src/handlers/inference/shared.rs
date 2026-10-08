@@ -1,43 +1,7 @@
-//! Shared inference utilities.
-//!
-//! Functions used by `serve`, `chat`, and `question` handlers to resolve
-//! inference parameters via the 3-level merge hierarchy and log diagnostics.
+//! What `serve` says on stderr of the launch it was asked for.
 
-use anyhow::Result;
-
-use crate::bootstrap::CliContext;
 use crate::presentation::sampling_values::stated_parameters;
-use gglib_core::domain::{FieldSources, InferenceConfig};
-
-/// Resolve inference parameters via the full merge hierarchy.
-///
-/// Merge order: CLI args (already in `config`) → per-model defaults, if
-/// user-set → global defaults → per-model defaults, if auto-detected → the
-/// class floor. Each layer fills in only `None` fields, except for the
-/// parameters coupled to `temperature` — see
-/// [`InferenceConfig::resolve_with_profile`] for both rules.
-///
-/// `gglib model explain <id>` prints the outcome of this resolution for any
-/// model, naming the layer each parameter came from.
-///
-/// Returns the provenance alongside the values, so a caller can say *why* a
-/// parameter ended up where it did: without it, a flag the coupling rule
-/// discarded looks identical to one that was never passed.
-pub(crate) async fn resolve_inference_config(
-    ctx: &CliContext,
-    config: InferenceConfig,
-    profile: Option<&gglib_core::domain::InferenceProfile>,
-    model: &gglib_core::Model,
-) -> Result<(InferenceConfig, FieldSources)> {
-    let settings = ctx.app.settings().get().await?;
-    let model_ctx = gglib_core::domain::ModelSamplingContext::for_model(model);
-    Ok(config.resolve_with_profile_explained(
-        profile.map(|selected| &selected.config),
-        model.inference_defaults.as_ref(),
-        settings.inference_defaults.as_ref(),
-        model_ctx,
-    ))
-}
+use gglib_core::domain::InferenceConfig;
 
 /// Log mlock status to stderr.
 pub(crate) fn log_mlock_info(mlock: bool) {

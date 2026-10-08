@@ -20,6 +20,8 @@ crates/gglib-app-services/src/types.rs 501
 crates/gglib-axum/src/routes.rs 435
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 352
+crates/gglib-cli/src/handlers/agent_chat/config.rs 308
+crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 339
 crates/gglib-cli/src/handlers/agent_chat/mod.rs 305
 crates/gglib-cli/src/handlers/benchmark.rs 1613
 crates/gglib-cli/src/handlers/config/settings/profiles.rs 418
@@ -136,8 +138,9 @@ crates/gglib-runtime/src/llama/args/cache_ram.rs 328
 crates/gglib-runtime/src/llama/build/mod.rs 415
 crates/gglib-runtime/src/llama/download/mod.rs 980
 crates/gglib-runtime/src/llama/update.rs 348
+crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 361
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 340
-crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 304
+crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 307
 crates/gglib-runtime/src/process/admission/queue_tests.rs 972
 crates/gglib-runtime/src/process/admission/state.rs 690
 crates/gglib-runtime/src/process/residency/launch.rs 538

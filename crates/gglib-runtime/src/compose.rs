@@ -33,12 +33,12 @@ use gglib_core::ports::{
     AgentGuardReporter, AgentLoopPort, AttachmentStore, LlmCompletionPort, RetryObserver,
     ToolExecutorPort, UsageSink,
 };
-use gglib_core::request_pipeline::ModelContext;
+use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use gglib_core::retry::RetryPolicy;
 use gglib_mcp::{CombinedToolExecutor, McpService};
 use reqwest::Client;
 
-use crate::{FarMachine, LlmCompletionAdapter};
+use crate::{FarMachine, LlmCompletionAdapter, SamplingObserver};
 
 /// Compose a ready-to-run [`AgentLoopPort`] from infrastructure primitives.
 ///
@@ -69,11 +69,15 @@ use crate::{FarMachine, LlmCompletionAdapter};
 /// * `retry_observer` — `Some(observer)` surfaces upstream retries to a live
 ///   consumer, so a user waiting on a contended model is told why. `None` when
 ///   there is no stream to notify.
-/// * `sampling` — the caller's own top-rung sampling layer, or `None` to
-///   resolve entirely from the profile, per-model, global and floor layers.
-///   `POST /api/agent/chat` passes the request's reasoning controls and nothing
-///   else; see `AgentChatRequest::sampling_layer` for why that pair and not the
-///   sampler parameters.
+/// * `sampling` — what a person chose for this turn, the ladder's top rung,
+///   or `None` to resolve entirely from `layers`, the model's own defaults and
+///   the floor. `POST /api/agent/chat` passes the request's reasoning controls
+///   and nothing else; see `AgentChatRequest::sampling_layer` for why that pair
+///   and not the sampler parameters.
+/// * `layers` — the stored layers beneath `sampling`, handed over unfolded:
+///   the adapter gives them to [`gglib_core::request_pipeline::apply()`], the
+///   one place the ladder is folded. A run passes the settings' global
+///   defaults and no profile, since its request can name none.
 /// * `far_machine` — `Some(machine)` when `base_url` is the remote tunnel's
 ///   loopback port, which is another machine's proxy (ADR 0012): it carries
 ///   both the key that port demands, since the listener there injects none,
@@ -98,6 +102,7 @@ pub fn compose_agent_loop(
     guard: AgentGuardReporter,
     retry_observer: Option<Arc<dyn RetryObserver>>,
     sampling: Option<InferenceConfig>,
+    layers: SamplingLayers,
     far_machine: Option<FarMachine>,
     attachments: Arc<dyn AttachmentStore>,
 ) -> Arc<dyn AgentLoopPort> {
@@ -110,6 +115,10 @@ pub fn compose_agent_loop(
         tool_filter,
         None,
         sampling,
+        layers,
+        // A run's request names no sampler parameter the ladder could pass
+        // over, so nobody is waiting to hear how it resolved.
+        None,
         usage_sink,
         Some(guard),
         retry_observer,
@@ -121,6 +130,12 @@ pub fn compose_agent_loop(
 }
 
 /// Like [`compose_agent_loop`] with optional sampling overrides and sandbox.
+///
+/// `sampling` is the flags a person typed, and `layers` the profile they
+/// selected and the settings' global defaults, as [`compose_agent_loop`]
+/// takes them. `sampling_observer` is told what each request's sampling
+/// resolved to, which is how the terminal learns of a flag the ladder passed
+/// over without folding a ladder of its own.
 ///
 /// `retry_policy` bounds retrying of transient upstream failures; pass `None`
 /// to use the defaults with any `GGLIB_LLM_RETRY_*` overrides applied.
@@ -146,6 +161,8 @@ pub fn compose_agent_loop_with_sampling(
     tool_filter: Option<HashSet<String>>,
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
+    layers: SamplingLayers,
+    sampling_observer: Option<SamplingObserver>,
     usage_sink: Option<Arc<dyn UsageSink>>,
     guard: Option<AgentGuardReporter>,
     retry_policy: Option<RetryPolicy>,
@@ -161,6 +178,8 @@ pub fn compose_agent_loop_with_sampling(
         tool_filter,
         sandbox_root,
         sampling,
+        layers,
+        sampling_observer,
         usage_sink,
         guard,
         // The CLI renders the loop's events directly, so there is no separate
@@ -182,6 +201,8 @@ fn compose_agent_loop_inner(
     tool_filter: Option<HashSet<String>>,
     sandbox_root: Option<PathBuf>,
     sampling: Option<InferenceConfig>,
+    layers: SamplingLayers,
+    sampling_observer: Option<SamplingObserver>,
     usage_sink: Option<Arc<dyn UsageSink>>,
     guard: Option<AgentGuardReporter>,
     retry_observer: Option<Arc<dyn RetryObserver>>,
@@ -194,6 +215,8 @@ fn compose_agent_loop_inner(
             .with_far_machine(far_machine)
             .with_attachments(Some(attachments))
             .with_sampling(sampling)
+            .with_layers(layers)
+            .with_sampling_observer(sampling_observer)
             .with_model_context(model_context)
             .with_usage_sink(usage_sink)
             .with_retry_observer(retry_observer)

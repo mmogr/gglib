@@ -16,7 +16,7 @@ use gglib_runtime::compose_agent_loop;
 
 use super::AgentChatRequest;
 use super::dto::AgentRequestConfig;
-use super::remote_upstream;
+use super::remote_upstream::{self, Upstream};
 use super::retry_notice::RetryNotice;
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -63,9 +63,21 @@ pub(crate) async fn prepare(
     req: AgentChatRequest,
 ) -> Result<Prepared, HttpError> {
     // Local llama-server or the remote tunnel: settled first, because it
-    // decides the port check, the model context and the bearer together.
+    // decides the port check, the model context, the stored sampling layers
+    // and the bearer together.
     let upstream = remote_upstream::resolve(state, &req).await?;
+    Ok(prepare_over(state, req, upstream).await)
+}
 
+/// [`prepare`], once the upstream is settled.
+///
+/// Its own function because `prepare` cannot be driven in a test: no test
+/// has a running llama-server for `remote_upstream::resolve` to find.
+pub(super) async fn prepare_over(
+    state: &AppState,
+    req: AgentChatRequest,
+    upstream: Upstream,
+) -> Prepared {
     // Read before `tool_filter` consumes the request piecemeal, and before the
     // loop is composed: the two reasoning controls are the only sampling this
     // endpoint accepts, and they occupy the ladder's top rung.
@@ -104,13 +116,14 @@ pub(crate) async fn prepare(
         },
         Some(retry_observer),
         sampling,
+        upstream.layers,
         upstream.far_machine,
         state.core.attachments().store(),
     );
 
     let config = config_for(state, req.config).await;
 
-    Ok(Prepared {
+    Prepared {
         agent_loop,
         messages: req.messages,
         config,
@@ -121,7 +134,7 @@ pub(crate) async fn prepare(
         local_model,
         far_model,
         hold: None,
-    })
+    }
 }
 
 /// The loop config a request runs with: what it names, and for the limits
@@ -162,3 +175,10 @@ pub(crate) fn frame(event: &AgentEvent) -> String {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "compose_context_tests.rs"]
+mod context_tests;
+#[cfg(test)]
+#[path = "compose_sampling_tests.rs"]
+mod sampling_tests;
