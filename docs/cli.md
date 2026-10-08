@@ -234,10 +234,12 @@ winning settings straight back to the model's inference defaults.
 
 `list`, `add`, `remove`, `start`, `stop`, `enable`, `disable`, `tools`, `test`.
 
-Servers are `stdio` (a process) or `sse` (HTTP). The `lifecycle` policy decides
-when gglib spawns one: `eager` at host init, `lazy` on first tool use (default),
-`manual` never. A server's name is its own: `add` refuses a name another server
-already has.
+A server is `stdio`: a process gglib starts and talks to. `sse` (HTTP) servers
+are not supported yet. `add` refuses one, and one stored by an earlier version
+is listed as `not supported yet`, is never started, and can still be removed.
+The `lifecycle` policy decides when gglib spawns a server: `eager` at host
+init, `lazy` on first tool use (default), `manual` never. A server's name is
+its own: `add` refuses a name another server already has.
 
 ## Configuration
 

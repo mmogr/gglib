@@ -76,6 +76,7 @@ impl McpOps {
             McpServerStatus::Stopped => McpServerStatusDto::Stopped,
             McpServerStatus::Starting => McpServerStatusDto::Starting,
             McpServerStatus::Error(msg) => McpServerStatusDto::Error(msg),
+            McpServerStatus::Unsupported => McpServerStatusDto::Unsupported,
         }
     }
 

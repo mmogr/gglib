@@ -80,3 +80,7 @@ pub(crate) async fn resolve_path(
 ) -> Result<Json<gglib_core::ports::ResolutionStatus>, HttpError> {
     Ok(Json(state.mcp_ops.resolve_path(id).await?))
 }
+
+#[cfg(test)]
+#[path = "mcp_tests.rs"]
+mod tests;

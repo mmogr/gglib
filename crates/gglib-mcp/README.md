@@ -130,6 +130,7 @@ Manages running MCP server processes:
 
 High-level facade combining persistence and lifecycle:
 - CRUD operations for server configurations; an add or a rename to a name another server has is refused
+- One rule for the kind of server that is run: stdio. An SSE server is refused on add, on update and on every start, a stored one is listed as unsupported and left alone at start-up, and it can still be removed
 - Server start/stop with event emission
 - A test of a stored server (`test_server`): resolve its executable, start a throwaway instance, list its tools, stop it
 - Tool listing and invocation across all running servers

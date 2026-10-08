@@ -54,23 +54,62 @@ async fn add_server_appears_in_list() {
     assert_eq!(servers[0].server.server_type, "stdio");
 }
 
+/// What an SSE server is refused with, wherever it is refused.
+const SSE_NOT_SUPPORTED: &str = "SSE servers are not supported yet; only stdio servers can be run";
+
+/// Whether `result` is the refusal of an SSE server, as a request the caller
+/// is to change.
+fn is_the_sse_refusal<T>(result: &Result<T, GuiError>) -> bool {
+    matches!(result, Err(GuiError::ValidationFailed(why)) if why == SSE_NOT_SUPPORTED)
+}
+
 #[tokio::test]
-async fn an_sse_server_is_added_and_listed_as_sse() {
+async fn adding_an_sse_server_is_a_validation_failure_with_the_reason_and_stores_nothing() {
     let ops = make_ops().await;
     let mut req = stdio_req("remote");
     req.server_type = "sse".to_string();
     req.command = None;
     req.url = Some("http://localhost:3001/sse".to_string());
 
-    let added = ops.add(req).await.expect("add should succeed");
+    let result = ops.add(req).await;
 
-    assert_eq!(added.server.server_type, "sse");
-    let servers = ops.list().await.unwrap();
-    assert_eq!(servers[0].server.server_type, "sse");
-    assert_eq!(
-        servers[0].server.config.url,
-        Some("http://localhost:3001/sse".to_string())
+    assert!(is_the_sse_refusal(&result), "got {result:?}");
+    assert!(ops.list().await.unwrap().is_empty());
+}
+
+/// The row is stored by the repository, as a database written while SSE
+/// servers were accepted holds one.
+#[tokio::test]
+async fn a_stored_sse_server_is_listed_as_unsupported_refused_a_run_and_an_edit_and_still_removed()
+{
+    let (ops, _, repo) = make_ops_over().await;
+    let stored = NewMcpServer::new_sse("remote", "http://localhost:3001/sse");
+    let id = repo.insert(stored).await.unwrap().id;
+
+    let listed = ops.list().await.unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].server.server_type, "sse");
+    assert!(
+        matches!(listed[0].status, McpServerStatusDto::Unsupported),
+        "got {:?}",
+        listed[0].status
     );
+
+    let started = ops.start(id).await;
+    assert!(is_the_sse_refusal(&started), "got {started:?}");
+    let disable = UpdateMcpServerRequest {
+        enabled: Some(false),
+        ..UpdateMcpServerRequest::default()
+    };
+    let edited = ops.update(id, disable).await;
+    assert!(is_the_sse_refusal(&edited), "got {edited:?}");
+    assert!(ops.list().await.unwrap()[0].server.enabled);
+    let tested = ops.test_connection(id).await.unwrap();
+    assert!(!tested.ok);
+    assert_eq!(tested.error, Some(SSE_NOT_SUPPORTED.to_string()));
+
+    ops.remove(id).await.expect("remove should succeed");
+    assert!(ops.list().await.unwrap().is_empty());
 }
 
 #[tokio::test]

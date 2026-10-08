@@ -13,7 +13,7 @@ Shared TypeScript helpers used across the React frontend.
 | `sse.ts` | The one Server-Sent Events reader: `readSse` yields the events of a `fetch` response, and `createSSEStream` opens a stream that is not the daemon's and reads it. Reconnecting is the caller's |
 | `modelSearchParser.ts` | Parse HuggingFace search queries and filters |
 | `batchWithinWindow.ts` | Batch rapid events within a time window |
-| `mcp.ts` | MCP server status predicates (running / error state) |
+| `mcp.ts` | MCP server status predicates (running / unsupported / error state) |
 | `samplingProvenance.ts` | Render a resolved sampling parameter and the layer that supplied it; wording mirrors `gglib model explain` |
 | `errors.ts` | `isAbortError`, the predicate for the `DOMException` both `fetch()` and stream reads throw when a signal fires, and `formatError`, a thrown value as the message to show |
 | `formatPerSecond.ts` | Compact per-second count with no unit; the caller supplies "tok/s", "req/s" or whatever it counts |

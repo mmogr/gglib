@@ -5,7 +5,9 @@
 //! process spawning outside of the client.
 
 use crate::client::{McpClient, McpClientError};
-use gglib_core::{McpServer, McpServerStatus, McpServerType, McpTool, McpToolResult};
+use gglib_core::{
+    McpServer, McpServerStatus, McpServerType, McpServiceError, McpTool, McpToolResult,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -103,8 +105,9 @@ impl McpManager {
     /// Start an MCP server.
     ///
     /// For stdio servers, spawns the process and initializes the MCP session.
-    /// An SSE server can be stored but not started: starting one is refused
-    /// with [`McpManagerError::InvalidConfig`].
+    /// No other kind is started. `McpService` refuses an SSE server before it
+    /// asks for a start; one that reaches here all the same is refused with
+    /// [`McpManagerError::InvalidConfig`], in the service's words.
     pub(crate) async fn start_server(
         &self,
         server: &McpServer,
@@ -123,9 +126,8 @@ impl McpManager {
         let (client, tools) = match server.server_type {
             McpServerType::Stdio => self.start_stdio_server(server).await?,
             McpServerType::Sse => {
-                // SSE not yet implemented
                 return Err(McpManagerError::InvalidConfig(
-                    "SSE servers not yet supported".to_string(),
+                    McpServiceError::SseNotSupported.to_string(),
                 ));
             }
         };

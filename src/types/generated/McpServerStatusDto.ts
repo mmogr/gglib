@@ -3,4 +3,4 @@
 /**
  * MCP server status DTO.
  */
-export type McpServerStatusDto = "stopped" | "starting" | "running" | { "error": string };
+export type McpServerStatusDto = "stopped" | "starting" | "running" | { "error": string } | "unsupported";

@@ -16,7 +16,8 @@ pub enum McpCommand {
         #[arg(long)]
         name: String,
 
-        /// Server type: "stdio" (process) or "sse" (HTTP)
+        /// Server type: "stdio" (a process gglib starts). "sse" (HTTP) is not
+        /// supported yet, and is refused
         #[arg(long, value_name = "TYPE")]
         r#type: String,
 
@@ -28,7 +29,7 @@ pub enum McpCommand {
         #[arg(long, value_delimiter = ',')]
         args: Vec<String>,
 
-        /// URL to connect to (sse only)
+        /// URL of an sse server (not supported yet)
         #[arg(long)]
         url: Option<String>,
 

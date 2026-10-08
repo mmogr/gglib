@@ -5,6 +5,7 @@
 
 use anyhow::{Result, anyhow};
 use gglib_core::domain::mcp::{McpLifecycle, McpServerStatus, McpServerType, NewMcpServer};
+use gglib_mcp::McpServerInfo;
 
 use crate::bootstrap::CliContext;
 use crate::mcp_commands::McpCommand;
@@ -73,28 +74,40 @@ async fn list(ctx: &CliContext) -> Result<()> {
     for info in servers {
         let s = &info.server;
         let type_str = s.server_type.to_string();
-        let status_str = match &info.status {
-            McpServerStatus::Stopped => "stopped".to_string(),
-            McpServerStatus::Starting => "starting".to_string(),
-            McpServerStatus::Running => "running".to_string(),
-            McpServerStatus::Error(e) => format!("error: {}", truncate_string(e, 20)),
-        };
         let enabled_str = if s.enabled { "yes" } else { "no" };
         let lifecycle_str = s.lifecycle.to_string();
 
         println!(
-            "{:<4} {:<25} {:<6} {:<9} {:<11} {:<10} {:<6}",
+            "{:<4} {:<25} {:<6} {:<9} {:<11} {}",
             s.id,
             truncate_string(&s.name, 24),
             type_str,
             enabled_str,
             lifecycle_str,
-            truncate_string(&status_str, 9),
-            info.tools.len()
+            status_and_tools(&info)
         );
     }
 
     Ok(())
+}
+
+/// A row's Status and Tools cells.
+///
+/// A server gglib cannot run has no status and no tools to count. It says so
+/// across the two cells, which the words fill exactly.
+fn status_and_tools(info: &McpServerInfo) -> String {
+    let status = match &info.status {
+        McpServerStatus::Unsupported => return "not supported yet".to_string(),
+        McpServerStatus::Stopped => "stopped".to_string(),
+        McpServerStatus::Starting => "starting".to_string(),
+        McpServerStatus::Running => "running".to_string(),
+        McpServerStatus::Error(e) => format!("error: {}", truncate_string(e, 20)),
+    };
+    format!(
+        "{:<10} {:<6}",
+        truncate_string(&status, 9),
+        info.tools.len()
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -119,10 +132,9 @@ async fn add(
             let cmd = command.ok_or_else(|| anyhow!("--command is required for stdio servers"))?;
             NewMcpServer::new_stdio(name, cmd, args, path_extra)
         }
-        McpServerType::Sse => {
-            let server_url = url.ok_or_else(|| anyhow!("--url is required for sse servers"))?;
-            NewMcpServer::new_sse(name, server_url)
-        }
+        // The service refuses an SSE server whatever its URL is, so a missing
+        // one is not asked for first.
+        McpServerType::Sse => NewMcpServer::new_sse(name, url.unwrap_or_default()),
     };
 
     // Apply optional settings

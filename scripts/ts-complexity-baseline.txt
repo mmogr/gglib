@@ -1,7 +1,7 @@
 src/components/Benchmark/Tune/TuneTab.tsx 306
 src/components/FilterPopover/FilterPopover.tsx 340
 src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 339
-src/components/McpServersPanel.tsx 447
+src/components/McpServersPanel.tsx 459
 src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 323
 src/components/ModelInspectorPanel/components/ServeModal.tsx 337
 src/components/ProxyControl.tsx 345
