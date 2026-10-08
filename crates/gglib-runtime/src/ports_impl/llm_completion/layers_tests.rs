@@ -36,10 +36,12 @@ fn model(defaults: Option<(InferenceConfig, DefaultsOrigin)>) -> ModelContext {
     }
 }
 
+/// The stored layers of a caller whose settings leave the agentic switch on.
 fn layers(profile: Option<f32>, global: Option<f32>) -> SamplingLayers {
     SamplingLayers {
         profile: profile.map(temperature),
         global: global.map(temperature),
+        agentic_adjustments: true,
         ..SamplingLayers::default()
     }
 }
@@ -107,6 +109,21 @@ fn a_turn_with_tools_caps_a_temperature_nobody_chose_and_no_other() {
     assert!((sent(&adapter(set, None), true) - 0.9).abs() < 1e-9);
     let global = adapter(model(None), None).with_layers(layers(None, Some(0.9)));
     assert!((sent(&global, true) - 0.9).abs() < 1e-9);
+}
+
+/// Whether a turn with tools is capped is the caller's to say, in the layers
+/// it hands over: capped when they say so, and sent the floor's 0.7 when
+/// they do not, as a caller whose settings store the switch off hands them.
+#[test]
+fn the_ceiling_follows_the_switch_in_the_layers_a_caller_hands_over() {
+    let handed = |agentic_adjustments| {
+        adapter(model(None), None).with_layers(SamplingLayers {
+            agentic_adjustments,
+            ..SamplingLayers::default()
+        })
+    };
+    assert!((sent(&handed(true), true) - 0.3).abs() < 1e-9);
+    assert!((sent(&handed(false), true) - 0.7).abs() < 1e-9);
 }
 
 /// The sampling parameters a request carries, as the server reads them.

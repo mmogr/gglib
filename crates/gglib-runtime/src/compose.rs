@@ -77,7 +77,10 @@ use crate::{FarMachine, LlmCompletionAdapter, SamplingObserver};
 /// * `layers` — the stored layers beneath `sampling`, handed over unfolded:
 ///   the adapter gives them to [`gglib_core::request_pipeline::apply()`], the
 ///   one place the ladder is folded. A run passes the settings' global
-///   defaults and no profile, since its request can name none.
+///   defaults and no profile, since its request can name none. With them
+///   goes whether a turn with tools gets the agentic temperature ceiling:
+///   the settings' switch for a run on this machine's model, and on for one
+///   on a paired machine's.
 /// * `far_machine` — `Some(machine)` when `base_url` is the remote tunnel's
 ///   loopback port, which is another machine's proxy (ADR 0012): it carries
 ///   both the key that port demands, since the listener there injects none,
@@ -132,10 +135,10 @@ pub fn compose_agent_loop(
 /// Like [`compose_agent_loop`] with optional sampling overrides and sandbox.
 ///
 /// `sampling` is the flags a person typed, and `layers` the profile they
-/// selected and the settings' global defaults, as [`compose_agent_loop`]
-/// takes them. `sampling_observer` is told what each request's sampling
-/// resolved to, which is how the terminal learns of a flag the ladder passed
-/// over without folding a ladder of its own.
+/// selected, the settings' global defaults and the agentic switch, as
+/// [`compose_agent_loop`] takes them. `sampling_observer` is told what each
+/// request's sampling resolved to, which is how the terminal learns of a flag
+/// the ladder passed over without folding a ladder of its own.
 ///
 /// `retry_policy` bounds retrying of transient upstream failures; pass `None`
 /// to use the defaults with any `GGLIB_LLM_RETRY_*` overrides applied.

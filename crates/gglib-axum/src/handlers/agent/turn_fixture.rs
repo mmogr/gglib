@@ -23,7 +23,7 @@ use crate::handlers::remote::fake_far::far;
 use crate::state::AppState;
 
 /// One short reply, as llama-server streams it.
-const REPLY: &str = concat!(
+pub(super) const REPLY: &str = concat!(
     "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n",
     "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
     "data: [DONE]\n\n",
@@ -135,6 +135,15 @@ pub(super) fn reasoning(entry: &mut NewModel) {
 pub(super) async fn global(state: &AppState, config: InferenceConfig) {
     let update = SettingsUpdate {
         inference_defaults: Some(Some(config)),
+        ..SettingsUpdate::default()
+    };
+    state.core.settings().update(update).await.unwrap();
+}
+
+/// Store the agentic sampling switch as `stored`: on, off, or not stored.
+pub(super) async fn agentic_sampling(state: &AppState, stored: Option<bool>) {
+    let update = SettingsUpdate {
+        agentic_sampling: Some(stored),
         ..SettingsUpdate::default()
     };
     state.core.settings().update(update).await.unwrap();

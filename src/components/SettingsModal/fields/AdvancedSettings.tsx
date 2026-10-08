@@ -171,7 +171,11 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           On by default: a turn that may emit structured output has its temperature
           capped to 0.3 — but only over a value nobody deliberately chose, and never
           on a reasoning-tagged model, whose thinking block shares one sampler with
-          its tool call. Anything set by a person stands.
+          its tool call. Anything set by a person stands. The proxy follows this, and
+          so does a chat with one of this machine&apos;s models: here, from a paired
+          device, and in <code className="font-mono">gglib chat</code> and{' '}
+          <code className="font-mono">gglib q</code>. A chat with a paired
+          machine&apos;s model does not follow it: that machine&apos;s settings apply there.
         </ToggleField>
 
         <ToggleField

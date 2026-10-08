@@ -325,6 +325,19 @@ fn the_effective_proxy_port_is_the_stored_one_then_the_default() {
     );
 }
 
+/// Agentic sampling is off only when it is stored off: on when stored on,
+/// and on when nothing is stored.
+#[test]
+fn agentic_sampling_is_on_unless_it_is_stored_off() {
+    let stored = |agentic_sampling| Settings {
+        agentic_sampling,
+        ..Settings::default()
+    };
+    assert!(stored(None).effective_agentic_sampling());
+    assert!(stored(Some(true)).effective_agentic_sampling());
+    assert!(!stored(Some(false)).effective_agentic_sampling());
+}
+
 // ── Inference profiles ──────────────────────────────────────────────
 
 fn profile(name: &str, temperature: f32) -> InferenceProfile {

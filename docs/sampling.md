@@ -896,9 +896,24 @@ adjustment, not a tool-emission one — it applies to prose turns in an agentic
 session too, which is why the cap is mild rather than near-greedy.
 
 Disable it with `gglib config settings set --agentic-sampling false`, or
-per-process with `GGLIB_DISABLE_AGENTIC_SAMPLING=1`. The setting is the
-proxy's: `gglib chat`, `gglib q` and a chat in the app apply the cap whatever
-it says, and only the environment variable switches it off for them.
+per-process with `GGLIB_DISABLE_AGENTIC_SAMPLING=1`. The setting is this
+machine's. The proxy follows it, and so does a chat with one of this machine's
+models: `gglib chat` and `gglib q` on a model in the library, and a chat in
+the app, on the chat page or from a paired device.
+
+Four callers read no stored setting and keep the cap whatever it says:
+
+- a turn sent to a paired machine's model. It is capped as it leaves here, and
+  that machine's proxy then resolves it by its own settings;
+- `gglib chat` or `gglib q` against a `--port` server whose model the library
+  does not hold;
+- `gglib benchmark agentic`, in each arm that runs the pipeline;
+- `gglib benchmark tune`.
+
+The environment variable switches the cap off for every caller, these four
+included, in the process that shapes the request: the command itself for
+`gglib chat` and `gglib q`, and the daemon for the proxy, a chat in the app
+and a benchmark.
 
 Two surfaces cannot report it, both by construction: `gglib model explain` and
 the GUI's sampling provenance explain *stored configuration* with no request in

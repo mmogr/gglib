@@ -7,7 +7,8 @@ Interactive agentic chat handler for `gglib chat`.
 Entry point: [`run`].  Sub-modules keep each concern small and
 independently readable:
 - [`config`]   — readies the MCP tools, gathers the flags and the stored
-  sampling layers beneath them, and composes an
+  sampling layers beneath them, with the settings' agentic sampling switch
+  for a model in the catalogue, and composes an
   [`gglib_core::ports::AgentLoopPort`]. It folds no ladder: the adapter's
   request pipeline does, once a request, as it does for the daemon's turns
 - [`sampling_warning`] — says on stderr, with the session's first request,

@@ -68,13 +68,16 @@ completion adapter calls as it shapes each request. `compose::prepare` hands
 it the pieces unfolded: the two reasoning controls, which are all the
 sampling a request can name (`AgentChatRequest::sampling_layer`), and from
 `remote_upstream::local` the served model's context, which carries its own
-stored values, and this machine's global defaults. No profile, since nothing
-in the request can name one. So a turn that names nothing and carries no
-tools is sent what `gglib model explain` reports for its model, and one with
-tools has a temperature nobody chose capped, as `gglib chat`'s is, unless the
-model is tagged `reasoning`. The same context switches on the pipeline's
+stored values, and this machine's global defaults and agentic sampling
+switch. No profile, since nothing in the request can name one. So a turn that
+names nothing and carries no tools is sent what `gglib model explain` reports
+for its model, and one with tools has a temperature nobody chose capped, as
+`gglib chat`'s is, unless the model is tagged `reasoning` or the settings
+store `agentic_sampling` off. The same context switches on the pipeline's
 other per-model stages: capability shaping, the truncation budget, the effort
-gate and the tool-call dialect parser.
+gate and the tool-call dialect parser. A far turn is handed nothing this
+machine stores, that switch included: its turn with tools is capped as it
+leaves here, and the far proxy resolves it by its own settings.
 
 # Cancellation
 

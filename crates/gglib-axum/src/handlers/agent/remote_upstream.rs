@@ -5,11 +5,11 @@
 //! cases differ in every input the adapter takes: the local case validates
 //! the port against the servers this daemon owns, shapes the turn for the
 //! model that port serves, by its row in this machine's catalog, and hands
-//! over this machine's global sampling defaults; the far case takes the port
-//! the tunnel bound, attaches the key from the pairing (ADR 0012, decision 7
-//! — the listener does not inject it), looks the model up there by its id,
-//! and shapes nothing, because the far proxy runs its own pipeline over its
-//! own models.
+//! over this machine's global sampling defaults and its agentic sampling
+//! switch; the far case takes the port the tunnel bound, attaches the key
+//! from the pairing (ADR 0012, decision 7 — the listener does not inject
+//! it), looks the model up there by its id, and shapes nothing, because the
+//! far proxy runs its own pipeline over its own models.
 
 use gglib_app_services::FarProxy;
 use gglib_app_services::transcript::MadeBy;
@@ -35,8 +35,9 @@ pub(super) struct Upstream {
     /// the far machine, whose proxy resolves.
     pub model_context: ModelContext,
     /// The stored sampling layers beneath what the request names. Locally,
-    /// this machine's global defaults, and no profile: a run's request can
-    /// name none. Empty for the far machine, whose proxy folds its own.
+    /// this machine's global defaults and its agentic sampling switch, and
+    /// no profile: a run's request can name none. For the far machine, whose
+    /// proxy folds its own, no layer, and the ceiling on.
     pub layers: SamplingLayers,
     /// What goes in the body's `model` field.
     ///
@@ -144,11 +145,13 @@ pub(super) async fn local(
     // which names only what llama-server is to route by.
     let by_id = server.model_id.to_string();
     let model_context = request_pipeline::resolve(state.catalog.as_ref(), Some(&by_id)).await;
-    // A settings read that fails leaves the layer out, as it leaves the
-    // limits at their defaults (`compose::config_for`).
-    let global = state.core.settings().get().await.ok();
+    // A settings read that fails leaves the global layer out and the agentic
+    // switch on, as it leaves the limits at their defaults
+    // (`compose::config_for`).
+    let settings = state.core.settings().get().await.unwrap_or_default();
     let layers = SamplingLayers {
-        global: global.and_then(|settings| settings.inference_defaults),
+        agentic_adjustments: settings.effective_agentic_sampling(),
+        global: settings.inference_defaults,
         ..SamplingLayers::default()
     };
     Ok(Upstream {
@@ -251,7 +254,12 @@ pub(super) async fn remote(far: &FarProxy, model: &ModelRef) -> Result<Upstream,
         // asked.
         far_machine: Some(far.far_machine()),
         model_context: ModelContext::passthrough(),
-        layers: SamplingLayers::default(),
+        // Nothing stored here applies to that machine's model, this
+        // machine's agentic switch included: the ceiling stays on.
+        layers: SamplingLayers {
+            agentic_adjustments: true,
+            ..SamplingLayers::default()
+        },
         // The far machine counts its own guard decisions under this name, in
         // its own ledger; this one counts what it composed here.
         counted_as: detail.name.clone(),
