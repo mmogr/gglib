@@ -5,7 +5,8 @@
 //! assert that the adapter gives that fold everything it was handed and
 //! resolves nothing itself, which is what lets the pipeline tell a value a
 //! person chose from one nobody did, and that the request it sends carries
-//! what the fold resolved and no parameter beside it.
+//! what the fold resolved and no parameter beside it, unless its caller keeps
+//! what the fold passed over.
 
 use std::sync::Mutex;
 
@@ -143,6 +144,21 @@ fn a_parameter_the_fold_passes_over_is_not_sent() {
     assert_eq!(sampling_of(&typed), with_its_temperature, "{typed}");
     let unclaimed = body_of(&adapter(model(None), Some(penalty())), &[user("hi")]);
     assert_eq!(unclaimed["presence_penalty"], json!(1.2_f32), "{unclaimed}");
+}
+
+/// A caller that keeps what the fold passes over, a tune sweep, sends the
+/// penalty its candidate named beside the temperature the model's own value
+/// sets.
+#[test]
+fn a_parameter_the_fold_passes_over_is_sent_for_a_caller_that_keeps_it() {
+    let set = model(Some((temperature(0.55), DefaultsOrigin::User)));
+    let kept = adapter(set, Some(penalty())).with_passed_over_kept(true);
+    let body = body_of(&kept, &[user("hi")]);
+    let both = InferenceConfig {
+        temperature: Some(0.55),
+        ..penalty()
+    };
+    assert_eq!(sampling_of(&body), both, "{body}");
 }
 
 /// A value the pipeline's reader refuses is not the fold's to pass over: it

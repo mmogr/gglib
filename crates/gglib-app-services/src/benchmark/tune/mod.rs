@@ -586,6 +586,10 @@ async fn run_task(
                     Some(model.name.clone()),
                 )
                 .with_sampling(Some(candidate.clone()))
+                // A candidate is what the sweep measures, not a flag for the
+                // ladder to judge: no value it names is taken back out of
+                // its request.
+                .with_passed_over_kept(true)
                 // Resolve against the real model, not `passthrough` — see
                 // `model_context_for`.
                 .with_model_context(model_context.clone())
@@ -1331,3 +1335,7 @@ mod tests {
         )
     }
 }
+
+#[cfg(test)]
+#[path = "candidate_request_tests.rs"]
+mod candidate_request_tests;

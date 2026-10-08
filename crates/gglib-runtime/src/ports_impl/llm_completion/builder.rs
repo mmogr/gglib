@@ -59,6 +59,7 @@ impl LlmCompletionAdapter {
             far_machine: None,
             attachments: None,
             sampling: None,
+            keep_passed_over: false,
             layers: SamplingLayers::default(),
             sampling_observer: None,
             send_timeout_secs: DEFAULT_SEND_TIMEOUT_SECS,
@@ -114,6 +115,21 @@ impl LlmCompletionAdapter {
     #[must_use]
     pub fn with_sampling(mut self, sampling: Option<InferenceConfig>) -> Self {
         self.sampling = sampling;
+        self
+    }
+
+    /// Leave in the request each parameter given to
+    /// [`with_sampling`](Self::with_sampling) that the fold passed over.
+    ///
+    /// For a tune sweep, whose candidate is a statement of exactly what to
+    /// measure rather than a flag for the ladder to judge. Leave off (the
+    /// default) for a person's turn, so that a flag the ladder passed over is
+    /// not sent. A parameter kept this way is in the request, and is not
+    /// among the resolved values a
+    /// [sampling observer](Self::with_sampling_observer) is told.
+    #[must_use]
+    pub fn with_passed_over_kept(mut self, keep: bool) -> Self {
+        self.keep_passed_over = keep;
         self
     }
 

@@ -73,12 +73,23 @@ pub struct LlmCompletionAdapter {
     /// read back out by [`request_pipeline::apply()`], which folds
     /// [`Self::layers`], the model's own defaults and the floor beneath it.
     /// A value that fold passes over is taken back out of the body
-    /// ([`erase_passed_over`]).
+    /// ([`erase_passed_over`]), unless [`Self::keep_passed_over`] is set.
     ///
     /// A value a stored layer supplied must never be handed in here: it would
     /// reach the pipeline as a person's choice, which outranks every layer
     /// and which the agentic temperature ceiling never lowers.
     sampling: Option<InferenceConfig>,
+    /// Leave in the request each parameter of [`Self::sampling`] the fold
+    /// passed over, which [`erase_passed_over`] would take out.
+    ///
+    /// Off (the default) for a person's turn: the ladder judges a flag, and a
+    /// flag it passed over is not sent. On for a tune sweep, whose candidate
+    /// is a statement of exactly what to measure. A `min_p` or
+    /// `repeat_penalty` a candidate names without a temperature is passed
+    /// over on any model whose stored defaults set one; taken out, a
+    /// candidate naming nothing else would be sent as the incumbent is, and
+    /// a sweep of that parameter alone would measure nothing.
+    keep_passed_over: bool,
     /// The stored layers beneath [`Self::sampling`]: the profile the caller
     /// selected and the settings' global defaults. Handed to
     /// [`request_pipeline::apply()`] as they are, so the ladder is folded
@@ -253,7 +264,9 @@ impl LlmCompletionAdapter {
         )
         .map_err(|e| anyhow!("conversation exceeds the model's context budget: {e}"))?;
 
-        if let Some(named) = sampling {
+        if let Some(named) = sampling
+            && !self.keep_passed_over
+        {
             erase_passed_over(&mut body, named, &report.sampling);
         }
 

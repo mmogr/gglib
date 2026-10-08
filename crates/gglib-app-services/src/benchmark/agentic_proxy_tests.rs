@@ -8,8 +8,9 @@
 
 use super::super::mock_upstream::{MockUpstream, OneModelCatalog, read_lines_task};
 use super::*;
+use gglib_core::domain::ModelCapabilities;
 use gglib_core::ports::RunningTarget;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 const MODEL: &str = "mock-model";
 
@@ -53,6 +54,19 @@ async fn run_arm_with(
 /// The first chat body the upstream saw after `before` bodies.
 fn first_body_since(upstream: &MockUpstream, before: usize) -> Value {
     upstream.seen().into_iter().nth(before).expect("a request")
+}
+
+/// The context of a catalogued model whose stored defaults set `temperature`
+/// and nothing else.
+fn storing_a_temperature(temperature: f32) -> ModelContext {
+    ModelContext {
+        inference_defaults: Some(InferenceConfig {
+            temperature: Some(temperature),
+            ..InferenceConfig::default()
+        }),
+        catalog_resolved: true,
+        ..ModelContext::passthrough()
+    }
 }
 
 /// **The point of the arm.** Only the proxy arm's call is repaired: the
@@ -160,14 +174,7 @@ async fn the_proxy_arm_carries_its_seed_upstream() {
 /// the wire; the proxy arm, given the same context, must not.
 #[tokio::test]
 async fn the_proxy_arm_leaves_the_request_pipeline_to_the_proxy() {
-    let context = ModelContext {
-        inference_defaults: Some(gglib_core::domain::InferenceConfig {
-            temperature: Some(0.123),
-            ..Default::default()
-        }),
-        catalog_resolved: true,
-        ..ModelContext::passthrough()
-    };
+    let context = storing_a_temperature(0.123);
     let upstream = MockUpstream::spawn().await;
     let proxy = start_proxy(&upstream).await;
 
@@ -188,6 +195,43 @@ async fn the_proxy_arm_leaves_the_request_pipeline_to_the_proxy() {
         !temperature.is_some_and(|t| (t - 0.123).abs() < 1e-6),
         "the proxy arm's client applied the pipeline: {through_the_proxy}"
     );
+}
+
+/// The gglib and control arms shape their requests on the client, where a
+/// value a caller names can be taken back out of a request and a temperature
+/// nobody chose is capped on a turn with tools. Each still sends every value
+/// it names, on a model whose stored defaults set a temperature of their own:
+/// an arm that lost its seed could not be compared run for run, and the
+/// control is the four values it names.
+#[tokio::test]
+async fn the_gglib_and_control_arms_send_every_value_they_name() {
+    // The pipeline strips the tools from a request to a catalogued model that
+    // cannot call them. This one can, so each request read below is a turn
+    // with tools, the only kind the cap applies to.
+    let context = ModelContext {
+        capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS,
+        ..storing_a_temperature(0.123)
+    };
+    let upstream = MockUpstream::spawn().await;
+
+    run_arm_with(EvalArm::Gglib, &upstream, None, Some(4242), &context).await;
+    let gglib = first_body_since(&upstream, 0);
+    assert_eq!(gglib["seed"], 4242, "{gglib}");
+
+    let before = upstream.seen().len();
+    run_arm_with(EvalArm::Control, &upstream, None, Some(4242), &context).await;
+    let control = first_body_since(&upstream, before);
+    let (temperature, top_k, top_p, min_p) = control_sampling();
+    let named = json!({
+        "seed": 4242,
+        "temperature": temperature,
+        "top_k": top_k,
+        "top_p": top_p,
+        "min_p": min_p,
+    });
+    for (key, value) in named.as_object().expect("an object") {
+        assert_eq!(&control[key], value, "{key}: {control}");
+    }
 }
 
 /// Off unless asked for; when asked for, both run on the primary seeds,
