@@ -197,6 +197,11 @@ message when you send it, and the reply when the turn ends, with its reasoning
 and how it was made. A turn stopped by Ctrl+C or an error keeps what had
 arrived of its reply, marked as stopped.
 
+A chat the daemon is still replying to, for the web page or a paired device,
+is not continued: `--continue` says the chat is running elsewhere and names
+the run, before it stores anything. Wait for the reply, or stop it with
+`gglib run cancel <run>`.
+
 `--thinking on|off` is the chat page's Thinking switch, from the terminal:
 the choice runs this session and the chat remembers it, on a new chat or
 with `--continue`. `off` runs with a thinking budget of `0`, whatever

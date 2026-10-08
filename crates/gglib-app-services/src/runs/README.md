@@ -19,7 +19,8 @@ runs/
   admit.rs        — a run admitted under its id, and driven to its end; a
                     panic ends it `failed`; until its end is handled (an
                     agent run's reply saved) every reader sees `in_progress`
-                    and no other run is admitted to its conversation
+                    and no other run is admitted to its conversation, by
+                    `RunInfo::holds` on the run as it is shown
   local.rs        — a run the daemon starts with work it prepared (an
                     agent run): reserve in a scope, then start; never on
                     the port

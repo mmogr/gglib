@@ -42,4 +42,13 @@ write it with. With none named a chat switched off runs with a thinking
 budget of `0`, and the resume says so on stderr when that sets aside a
 budget its command line typed.
 
+A third is asked of the daemon, since a session writes its chat's rows
+itself. `--continue` on a chat the daemon is still replying to, for the page
+or a paired device, is refused before anything is stored, in a sentence that
+names the chat and the run: [`run`] reads a running daemon's listing of its
+runs and applies `gglib_core::domain::runs::RunInfo::holds`, which the
+daemon's registry refuses a second run by. No daemon is started to ask, and
+one that does not answer with its runs, as another data root's does not, is
+no refusal.
+
 <!-- module-docs:end -->
