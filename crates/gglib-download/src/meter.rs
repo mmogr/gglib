@@ -40,10 +40,10 @@ impl Meter {
 
     /// Take one sample, on every tick, moved or not.
     ///
-    /// `wire` is the bytes received. A count that starts again, as one kept
-    /// per file does at each file of a download, is taken by the estimator
-    /// as a new baseline. `bytes` of `total` are the download's bytes on
-    /// disk, with a `total` of 0 when the size is not known.
+    /// `wire` is the bytes received, which the manager counts over the whole
+    /// download. A count that starts again is taken by the estimator as a
+    /// new baseline. `bytes` of `total` are the download's bytes on disk,
+    /// with a `total` of 0 when the size is not known.
     pub(crate) fn record(&mut self, wire: u64, bytes: u64, total: u64, now: Instant) {
         self.speed.record(wire, 0, now);
 
@@ -98,9 +98,7 @@ mod tests {
         bytes
     }
 
-    /// The time remaining, against what is left at 20 MiB/s. The smoothed
-    /// figure trails the true one, and the ticks before the first byte count
-    /// as time in which nothing arrived.
+    /// The time remaining, against what is left at 20 MiB/s.
     fn assert_time_remaining(meter: &Meter, bytes: u64, total: u64) {
         let eta = meter.eta_seconds().expect("a time remaining");
         #[allow(clippy::cast_precision_loss)]

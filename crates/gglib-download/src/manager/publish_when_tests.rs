@@ -148,8 +148,7 @@ async fn a_two_file_download_has_a_time_remaining() {
         .active
         .unwrap();
     assert_eq!((row.downloaded_bytes, row.total_bytes), (400, Some(1_300)));
-    // 900 bytes are left at 40 bytes a second, which the estimator is
-    // still settling on.
+    // 900 bytes are left at 40 bytes a second.
     let eta = row.eta_seconds.expect("a time remaining");
     assert!((15.0..35.0).contains(&eta), "{eta}");
 }
