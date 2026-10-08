@@ -32,11 +32,16 @@ async fn context(dir: &tempfile::TempDir, key: Option<&str>) -> CliContext {
 
 /// Each request a stand-in was sent: its first line and its `Authorization`
 /// header.
-type Asked = Arc<Mutex<Vec<(String, Option<String>)>>>;
+pub(crate) type Asked = Arc<Mutex<Vec<(String, Option<String>)>>>;
 
 /// A server on a loopback port that answers `/health` with `health` and any
 /// other request with `{}`, and keeps what it was asked.
 fn stand_in(health: String) -> (u16, Asked) {
+    answering(health, "{}".to_owned())
+}
+
+/// [`stand_in`], answering any request but `/health` with `rest`.
+pub(crate) fn answering(health: String, rest: String) -> (u16, Asked) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
     let port = listener.local_addr().expect("its address").port();
     let asked = Asked::default();
@@ -57,9 +62,9 @@ fn stand_in(health: String) -> (u16, Asked) {
                 .find(|(name, _)| name.eq_ignore_ascii_case("authorization"))
                 .map(|(_, value)| value.trim().to_owned());
             let body = if line.starts_with("GET /health ") {
-                health.as_str()
+                &health
             } else {
-                "{}"
+                &rest
             };
             seen.lock().unwrap().push((line, authorization));
             let _ = write!(
@@ -74,7 +79,7 @@ fn stand_in(health: String) -> (u16, Asked) {
 }
 
 /// What this build's daemon answers `/health` with, as far as the probe reads.
-pub(super) fn daemon_health() -> String {
+pub(crate) fn daemon_health() -> String {
     serde_json::json!({
         "service": "gglib-daemon",
         "fingerprint": gglib_build_info::FINGERPRINT,

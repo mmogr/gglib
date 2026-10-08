@@ -47,11 +47,13 @@ impl Table {
         });
     }
 
-    /// The run whose reply to `conversation_id` is not yet saved, if any.
+    /// The run whose reply to `conversation_id` is not yet saved, if any:
+    /// judged on the run as every reader is shown it, so a client that reads
+    /// a listing sees a conversation held for as long as it is here.
     pub(super) fn live_on(&self, conversation_id: i64) -> Option<&Arc<RunCell>> {
         self.runs
             .values()
-            .find(|cell| !cell.is_ended() && cell.info().conversation_id == Some(conversation_id))
+            .find(|cell| cell.info().holds(conversation_id))
     }
 
     /// Make room for one more run, dropping the oldest ended run if every

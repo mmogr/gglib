@@ -25,6 +25,7 @@ use gglib_core::domain::agent::{AgentMessage, TurnLimits, saved_history};
 use gglib_core::domain::chat::ConversationSettings;
 
 use crate::bootstrap::CliContext;
+use crate::daemon_client;
 use crate::handlers::inference::chat::ChatArgs;
 
 use self::images::TurnImages;
@@ -36,12 +37,17 @@ use self::sight::Sight;
 /// Manages the server lifecycle (auto-start / stop) around the REPL session.
 /// When `args.continue_id` is set, loads a previous conversation and resumes
 /// with the original session parameters (saved settings fill in any CLI args
-/// the user didn't explicitly provide).
+/// the user didn't explicitly provide), unless the daemon is replying to
+/// that conversation ([`refuse_running_elsewhere`]).
 #[allow(
     clippy::default_trait_access,
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
+    // Before anything is stored: an image, a setting, a row.
+    if let Some(id) = args.continue_id {
+        refuse_running_elsewhere(ctx, id).await?;
+    }
     // A file that cannot be attached ends the command before a conversation
     // is made or a model asked for.
     let (attachments, mut receipts) = (ctx.app.attachments(), std::io::stderr());
@@ -83,6 +89,27 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     repl::run_repl_with_prior(agent, &args, limits, persistence, prior_messages, images).await
 }
 
+/// Refuse to continue chat `id` while the daemon is replying to it for the
+/// page or a paired device, and so writing its rows: the rule the daemon
+/// refuses a second run by ([`gglib_core::domain::runs::RunInfo::holds`]),
+/// read off its own listing. Refused only on the daemon's word. With none
+/// running no daemon run is replying; and one that does not list its runs for
+/// this data root's token, as another data root's does not, has said nothing
+/// of this chat.
+async fn refuse_running_elsewhere(ctx: &CliContext, id: i64) -> Result<()> {
+    if let Ok(daemon) = daemon_client::running(ctx).await
+        && let Ok(listed) = daemon.run_list().await
+        && let Some(run) = listed.runs.iter().find(|run| run.holds(id))
+    {
+        bail!(
+            "chat {id} is running elsewhere: the daemon is still replying to it (run {run}). \
+             Wait for the reply, or stop it with: gglib run cancel {run}",
+            run = run.id
+        );
+    }
+    Ok(())
+}
+
 /// A session ready to compose: the merged args, the parameters its agent is
 /// composed with, the limits its turns run with, the conversation it saves
 /// to, and the messages it resumes.
@@ -94,8 +121,8 @@ struct Session<'a> {
     prior_messages: Vec<AgentMessage>,
 }
 
-/// Everything [`run`] does before it reaches the daemon: read the settings,
-/// create or resume the conversation, and settle the model and the profile.
+/// What [`run`] does before it composes its agent: read the settings, create
+/// or resume the conversation, and settle the model and the profile.
 #[allow(
     clippy::useless_let_if_seq,
     reason = "grandfathered at lint inheritance, #1157"
@@ -272,3 +299,7 @@ async fn resume_conversation(
     let prior_messages = saved_history(merged.system_prompt.as_deref(), &db_messages);
     Ok((merged, prior_messages, conv.settings))
 }
+
+#[cfg(test)]
+#[path = "running_elsewhere_tests.rs"]
+mod running_elsewhere_tests;

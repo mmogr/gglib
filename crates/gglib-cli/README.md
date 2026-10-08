@@ -89,7 +89,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--force` skips the confirmation only) |
 | `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`) |
 | `chat <id\|name>` | Start interactive llama-cli chat |
-| `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on |
+| `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on; refused while the daemon is still replying to it, for the web page or a paired device |
 | `chat … --thinking on\|off` | Switch the chat's Thinking on or off, as the chat page's switch does: the choice runs the session and the chat remembers it, on a new chat or with `--continue` |
 | `question <text>` | Ask a question (with optional piped context) |
 | `question <text>` | Ask a question; filesystem tools are on unless `--no-tools` |

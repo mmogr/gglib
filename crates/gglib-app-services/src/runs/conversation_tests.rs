@@ -94,6 +94,27 @@ async fn a_second_run_is_refused_until_the_first_reply_is_saved() {
     assert!(admits(&runs, "a2", Some(7)));
 }
 
+/// What a client reads off a listing is what admission decides: a listed
+/// run holds its conversation for exactly as long as a second run for it is
+/// refused, the time between its end and its reply's save included.
+#[tokio::test]
+async fn a_listed_run_holds_its_conversation_for_as_long_as_a_second_run_is_refused() {
+    let (runs, _, _) = registry();
+    let (finish, save) = start(&runs, "a1", Some(7));
+    let listed = || runs.list(&RunScope::Local).runs;
+    let held = || listed().iter().any(|run| run.holds(7));
+
+    assert!(held() && !admits(&runs, "a2", Some(7)));
+
+    finish.send(()).unwrap();
+    until(|| runs.lock().runs["a1"].ending().status.is_terminal()).await;
+    assert!(held() && !admits(&runs, "a2", Some(7)), "not yet saved");
+
+    save.send(()).unwrap();
+    until(|| runs.lock().runs["a1"].is_ended()).await;
+    assert!(!held() && admits(&runs, "a2", Some(7)));
+}
+
 #[tokio::test]
 async fn a_cancelled_run_frees_its_conversation_once_settled() {
     let (runs, _, _) = registry();

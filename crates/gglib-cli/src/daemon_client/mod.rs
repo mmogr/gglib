@@ -164,8 +164,9 @@ pub(crate) enum Absent {
 }
 
 /// The daemon, when one is running, and never a launch. A command that only
-/// reports on the daemon, or stops something on it, asks here and says in
-/// its own words what [`Absent`] means for it.
+/// reports on the daemon, stops something on it, or asks it what only a
+/// running one knows, asks here and says in its own words what [`Absent`]
+/// means for it.
 pub(crate) async fn running(ctx: &CliContext) -> Result<DaemonHandle, Absent> {
     let client = gglib_proxy::loopback::client();
     match probe(&client).await {
@@ -291,4 +292,4 @@ pub(crate) use wire::{QueueDownloadBody, StartProxyBody, StartServerBody};
 
 #[cfg(test)]
 #[path = "handle_tests.rs"]
-mod handle_tests;
+pub(crate) mod handle_tests;

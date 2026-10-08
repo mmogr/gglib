@@ -12,6 +12,8 @@ use gglib_core::domain::chat::MessageRole;
 
 use super::*;
 use crate::bootstrap::test_context;
+use crate::daemon_client::STAND_IN_PORT;
+use crate::daemon_client::handle_tests::nobody;
 use crate::handlers::agent_chat::images::images_tests::{file, png};
 use crate::handlers::agent_chat::sight::sight_tests::props_server;
 use crate::handlers::inference::agent_question::{self, QuestionArgs};
@@ -231,7 +233,8 @@ async fn chat_refuses_to_resume_a_chat_that_holds_an_image_on_a_server_that_cann
         continue_id: Some(conversation_id),
         ..chat_args(server.port, Vec::new())
     };
-    let refused = execute(&ctx, args).await;
+    // A resume asks a running daemon about its chat: here there is none.
+    let refused = STAND_IN_PORT.scope(nobody(), execute(&ctx, args)).await;
 
     let refused = refused.expect_err("the server cannot see").to_string();
     assert!(
