@@ -106,9 +106,9 @@ pub(crate) async fn execute(
 /// What a terminal is told when the model it asked to remove is being
 /// served, by the llama-server on `port` when that is known.
 ///
-/// It names what stops a server from here. `ModelOps::remove` says "use
-/// force=true", which is a field of the daemon's request: `--force` on this
-/// command skips the prompt and stops nothing.
+/// It names what stops a server from here. `ModelOps`' refusal says to stop
+/// the server and not how, and no flag of this command does: `--force`
+/// skips the prompt and stops nothing.
 fn being_served(model: &Model, port: Option<u16>) -> anyhow::Error {
     let by = port.map_or_else(String::new, |port| {
         format!(" by a llama-server on port {port}")

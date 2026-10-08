@@ -7,7 +7,7 @@ use gglib_core::events::AppEvent;
 use gglib_core::ports::{AppEventEmitter, GgufParserPort, ModelRuntimePort, ProcessHandle};
 use gglib_core::services::AppCore;
 use gglib_core::{
-    ModelCapabilities, ModelFilterOptions,
+    Model, ModelCapabilities, ModelFilterOptions,
     domain::{ModelDetailDto, ModelListQuery, apply_query},
 };
 
@@ -88,6 +88,24 @@ impl ModelOps {
     /// Check if a model is currently being served.
     async fn get_server_status(&self, model_id: i64) -> (bool, Option<u16>) {
         Self::serving_status(&self.deps.runtime.list_running().await, model_id)
+    }
+
+    /// Refuses to take `model` from under a llama-server that is serving
+    /// it: a conflict that names the model and the port, and says to stop
+    /// the server.
+    ///
+    /// The one rule for what drops a model's row or replaces its file:
+    /// [`remove`](Self::remove) and [`apply_upgrade`](Self::apply_upgrade)
+    /// both ask here. Public for a surface that asks before it prompts, as
+    /// `gglib model upgrade` does.
+    pub async fn refuse_if_served(&self, model: &Model) -> Result<(), GuiError> {
+        match self.get_server_status(model.id).await {
+            (_, Some(port)) => Err(GuiError::Conflict(format!(
+                "Model '{}' is being served on port {port}. Stop its server first.",
+                model.name
+            ))),
+            _ => Ok(()),
+        }
     }
 
     /// List models filtered and sorted by the given query.
@@ -216,23 +234,17 @@ impl ModelOps {
     }
 
     /// Remove a model from the database.
+    ///
+    /// A model that is being served is refused
+    /// ([`refuse_if_served`](Self::refuse_if_served)), unless `request.force`
+    /// is set: then the runtime is told to stop its current model, and the
+    /// row is removed.
     pub async fn remove(&self, id: i64, request: RemoveModelRequest) -> Result<String, GuiError> {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
-        let running = self
-            .deps
-            .runtime
-            .list_running()
-            .await
-            .into_iter()
-            .find(|h| h.model_id == id);
-
-        if let Some(handle) = running {
+        if let Err(served) = self.refuse_if_served(&model).await {
             if !request.force {
-                return Err(GuiError::Conflict(format!(
-                    "Model is currently serving on port {}. Stop the server first or use force=true",
-                    handle.port
-                )));
+                return Err(served);
             }
             self.deps
                 .runtime

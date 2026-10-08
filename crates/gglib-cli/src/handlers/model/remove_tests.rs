@@ -3,7 +3,7 @@
 //!
 //! What is being served is a runtime the test holds. The view the command
 //! builds for itself, over the pid files under a data root, is tested
-//! against the built binary in `tests/model_remove_served.rs`.
+//! against the built binary in `tests/model_served.rs`.
 
 use std::sync::Arc;
 
@@ -44,8 +44,8 @@ async fn a_removed_model_leaves_the_library_and_is_announced() {
 /// model, on which port, and what stops it.
 ///
 /// `--force` skips the prompt and nothing else. It is not the request's
-/// `force`, which stops the server and removes the model from under it, and
-/// which the inspector's refusal offers: no flag of this command is that one.
+/// `force`, which stops the server and removes the model from under it: no
+/// flag of this command is that one.
 #[tokio::test]
 async fn a_model_being_served_is_refused_and_told_how_to_stop_it() {
     let dir = tempfile::tempdir().unwrap();
@@ -78,8 +78,7 @@ async fn a_model_being_served_is_refused_and_told_how_to_stop_it() {
 
 /// A server that came up after the command looked, as one can while the
 /// prompt waits, meets `ModelOps`' own refusal. The terminal is told the
-/// same thing as before, less the port, and never the inspector's
-/// `force=true`.
+/// same thing as before, less the port, and not in the inspector's words.
 #[tokio::test]
 async fn a_server_that_came_up_while_the_prompt_waited_is_refused_in_the_same_words() {
     let dir = tempfile::tempdir().unwrap();

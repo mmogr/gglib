@@ -1,7 +1,8 @@
-//! `gglib model remove` against a model that is being served, run as a
-//! person runs it: the built binary, over a library on disk.
+//! `gglib model remove` and `gglib model upgrade` against a model that is
+//! being served, run as a person runs them: the built binary, over a library
+//! on disk.
 //!
-//! The command is a process apart from whatever serves the model, so what
+//! A command is a process apart from whatever serves the model, so what
 //! it knows of a server is the pid file kept for it under the data root.
 //! Each test has a data root of its own in a temporary directory and writes
 //! the pid files there itself.
@@ -35,6 +36,10 @@ const REFUSED: &str = "Model 'qwen.Q8_0' (ID 1) is being served by a llama-serve
      so it was not removed.\n\
      Stop it first, in the gglib app or with `gglib daemon stop` (which stops \
      the daemon and every model it is serving), then remove it.";
+
+/// What `gglib model upgrade` says of that model then, in `ModelOps`' words.
+const NOT_UPGRADED: &str =
+    "conflict: Model 'qwen.Q8_0' is being served on port 9001. Stop its server first.";
 
 /// A running process that `gglib` takes for a llama-server of any root
 /// [`takes_sleep_for_llama_server`] was called on. Stopped when dropped.
@@ -221,4 +226,45 @@ fn a_server_recorded_under_another_data_root_does_not_block_a_removal_here() {
     assert!(!holds_the_model(here.path()));
     assert!(stderr(&refused).contains(REFUSED), "{}", stderr(&refused));
     assert!(holds_the_model(there.path()));
+}
+
+/// An upgrade replaces a model's file, so it is refused as a removal is,
+/// and before anything else: with `--force` or without, nothing is printed
+/// but the refusal.
+///
+/// Stopped, the same command gets as far as an upgrade of this model can.
+/// It was added from a file, so it has no repository, which is settled
+/// before the Hub is asked anything.
+#[test]
+fn an_upgrade_of_a_model_served_under_this_data_root_is_refused_first() {
+    let root = tempfile::tempdir().expect("temp data dir");
+    library(root.path());
+    takes_sleep_for_llama_server(root.path());
+    let server = StandIn::start();
+    record_a_server(root.path(), server.pid());
+
+    for args in [
+        &["model", "upgrade", "1", "--force"][..],
+        &["model", "upgrade", "1"],
+    ] {
+        let out = run(root.path(), args, "");
+
+        assert_eq!(out.status.code(), Some(1), "{args:?}: {}", stderr(&out));
+        assert!(
+            stderr(&out).contains(NOT_UPGRADED),
+            "{args:?}: {}",
+            stderr(&out)
+        );
+        assert_eq!(stdout(&out), "", "{args:?}");
+    }
+
+    drop(server);
+    let out = run(root.path(), &["model", "upgrade", "1", "--force"], "");
+    assert_eq!(out.status.code(), Some(1), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("Model is not from HuggingFace"),
+        "{}",
+        stderr(&out)
+    );
+    assert!(!stderr(&out).contains(NOT_UPGRADED), "{}", stderr(&out));
 }

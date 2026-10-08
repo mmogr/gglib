@@ -3,13 +3,15 @@
 //! All types are `pub(crate)` and only compiled under `#[cfg(test)]`
 //! (the module is declared with `#[cfg(test)] mod test_support;` in lib.rs).
 
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use gglib_core::download::{DownloadError, DownloadId, QueueSnapshot};
 use gglib_core::events::AppEvent;
 use gglib_core::ports::{
-    AppEventEmitter, DownloadManagerPort, SystemProbePort, ToolSupportDetection,
+    Admission, AppEventEmitter, DownloadManagerPort, LaunchOverrides, ModelRuntimeError,
+    ModelRuntimePort, ProcessHandle, RunningTarget, SystemProbePort, ToolSupportDetection,
     ToolSupportDetectionInput, ToolSupportDetectorPort,
 };
 use gglib_core::services::AppCore;
@@ -203,6 +205,76 @@ impl SystemProbePort for MockSystemProbePort {
             is_unified_memory: false,
             has_nvidia_gpu: false,
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// RunningRuntime
+// ---------------------------------------------------------------------------
+
+/// A runtime with one model being served, on one port. It keeps whether it
+/// was told to stop, and how many times it was asked what is running.
+///
+/// Stands in for the runtime `ServerOps` starts models through, which is the
+/// one `ModelOps` asks what is being served.
+#[derive(Debug)]
+pub(crate) struct RunningRuntime {
+    model_id: i64,
+    port: u16,
+    stopped: AtomicBool,
+    asked: AtomicUsize,
+}
+
+impl RunningRuntime {
+    pub(crate) fn new(model_id: i64, port: u16) -> Self {
+        Self {
+            model_id,
+            port,
+            stopped: AtomicBool::new(false),
+            asked: AtomicUsize::new(0),
+        }
+    }
+
+    pub(crate) fn stopped(&self) -> bool {
+        self.stopped.load(Ordering::SeqCst)
+    }
+
+    /// How many times it has been asked what is running.
+    pub(crate) fn asked(&self) -> usize {
+        self.asked.load(Ordering::SeqCst)
+    }
+}
+
+#[async_trait]
+impl ModelRuntimePort for RunningRuntime {
+    async fn admit(
+        &self,
+        _model_name: &str,
+        _num_ctx: Option<u64>,
+        _default_ctx: Option<u64>,
+        _overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
+        unimplemented!("a removal and an upgrade start nothing")
+    }
+
+    async fn current_model(&self) -> Option<RunningTarget> {
+        None
+    }
+
+    async fn list_running(&self) -> Vec<ProcessHandle> {
+        self.asked.fetch_add(1, Ordering::SeqCst);
+        vec![ProcessHandle::new(
+            self.model_id,
+            "running-model".to_string(),
+            None,
+            self.port,
+            0,
+        )]
+    }
+
+    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+        self.stopped.store(true, Ordering::SeqCst);
+        Ok(())
     }
 }
 

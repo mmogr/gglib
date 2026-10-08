@@ -47,8 +47,8 @@ use recorded_servers::RecordedServers;
 ///   one-shot command starts no llama-server, so a runner scoped to this
 ///   single invocation could only ever answer "nothing is running". What is
 ///   being served is read from the pid files kept under this data root, so
-///   `model remove` refuses a model that is being served and `model inspect`
-///   says that it is.
+///   `model remove` and `model upgrade` refuse a model that is being served
+///   and `model inspect` says that it is.
 /// - `NoopEmitter`: library events exist to tell *other* clients what changed.
 ///   A CLI process that is about to exit has no broadcast channel to tell
 ///   them on, so the events `ModelOps` emits end here.
