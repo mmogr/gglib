@@ -152,7 +152,7 @@ export default function ChatPage(props: ChatPageProps) {
 
   // Runtime: sends start runs the daemon owns and saves; opening a
   // conversation shows what is saved, then the run still going in it.
-  const { runtime, isLoading: messageLoading, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({
+  const { runtime, isLoading: messageLoading, endedRun, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({
     conversationId: activeConversationId ?? undefined,
     conversation: activeConversation,
     source,
@@ -308,7 +308,7 @@ export default function ChatPage(props: ChatPageProps) {
               activeConversation={activeConversation}
               activeConversationId={activeConversationId}
               isServerConnected={isServerRunning}
-              serverPort={serverPort}
+              serverPort={far ? undefined : serverPort}
               titleGenerationPrompt={titleGenerationPrompt}
               onRenameConversation={handleRenameConversation}
               onClearConversation={handleClearConversation}
@@ -321,6 +321,7 @@ export default function ChatPage(props: ChatPageProps) {
               showToast={showToast}
               timingTracker={timingTracker}
               currentStreamingAssistantMessageId={currentStreamingAssistantMessageId}
+              endedRun={endedRun}
               supportsToolCalls={far ? null : supportsToolCalls}
               toolFormat={far ? null : toolFormat}
               modelName={far ? 'The other machine picks the model' : paired ? `${modelName} on ${paired.machineName}` : modelName}
