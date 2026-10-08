@@ -30,15 +30,30 @@
 //! still add to `accum_time`, so a stall decays the reported rate toward zero
 //! rather than freezing it at the last value seen.
 //!
-//! Two further properties matter for how the manager drives this:
+//! Three further properties matter for how the manager drives this:
 //!
 //! * The first sample only establishes a baseline and yields no rate. A resumed
 //!   download reports its whole on-disk size in the first event; counting that
 //!   as bytes transferred "just now" is what produced multi-GB/s readings.
+//! * Nothing is measured until the count first moves, and the sample that sees
+//!   it move is a baseline too. A meter samples from before its connection
+//!   delivers anything, and that wait is not time spent transferring: counted,
+//!   it is what the first bytes are divided by. Nor do the first bytes seen say
+//!   how fast the transfer runs. They may be a single read, or a whole step of
+//!   a file written in steps, the bytes of many seconds landing in one tick.
 //! * A byte count that moves backwards re-baselines instead of underflowing.
-//!   The manager relies on it: the bytes received, which give the speed,
-//!   restart at zero on every file, and the aggregate bytes on disk are not
-//!   monotonic on the fallback path where shard sizes are unknown.
+//!   The manager relies on it: the aggregate bytes on disk are not monotonic
+//!   on the fallback path where shard sizes are unknown.
+//!
+//! # The time remaining
+//!
+//! What is left, divided by the rate smoothed once more. The second smoothing
+//! is of the rate and not of the figure, because the rate is what holds still
+//! on a steady transfer: the figure then counts down with the clock, and a
+//! stall lengthens it from its first tick. An average of the figure itself
+//! runs late by its own time constant, and nothing bounds what goes into it:
+//! one enormous early value, from a rate near zero, is still in it half a
+//! minute on.
 
 use std::time::Instant;
 
@@ -56,26 +71,32 @@ use std::time::Instant;
 /// 15s time constant, which is imperceptible against a multi-minute download.
 const RATE_TAU: f64 = 15.0;
 
-/// Time constant for the ETA average.
+/// Time constant for the second smoothing of the rate, which the time
+/// remaining divides by.
 ///
-/// Shorter than [`RATE_TAU`]: the ETA already inherits that smoothing through
-/// the rate it divides by, and this only removes the last of the twitch caused
-/// by the remaining-bytes term.
+/// The ripple [`RATE_TAU`] leaves reads as steady in a speed and not in a
+/// countdown: 7% either way moves a ten-minute figure by eighty seconds,
+/// gained between two bursts and lost at the next. Shorter than [`RATE_TAU`],
+/// so a real change in throughput reaches the figure almost as soon as it
+/// reaches the rate.
 const ETA_TAU: f64 = 5.0;
 
-/// Minimum accumulated observation time before any rate is reported.
+/// Minimum time measured before any rate is reported.
 ///
 /// Below this the average is dominated by whatever the first interval happened
 /// to contain, so [`RateEstimator::rate_bps`] reports `None` and callers render
 /// a placeholder instead of a number that is about to change by an order of
-/// magnitude.
+/// magnitude. It is time in which the transfer was under way: the wait before
+/// the count first moves is not measured, so it cannot stand in for the
+/// warm-up and leave the first bytes to be reported the moment they arrive.
 const WARMUP_SECS: f64 = 1.5;
 
 /// Time-decayed estimate of download throughput and time remaining.
 ///
 /// Feed it cumulative byte counts with [`record`](Self::record) — on *every*
 /// tick, including ticks where the count has not changed, since those are what
-/// make a stalled transfer decay toward zero.
+/// make a stalled transfer decay toward zero. The ticks before the count first
+/// moves are the exception: they are the wait for the transfer to begin.
 #[derive(Debug, Clone)]
 pub struct RateEstimator {
     /// Decayed sum of bytes transferred.
@@ -86,8 +107,14 @@ pub struct RateEstimator {
     prev_bytes: Option<u64>,
     /// Timestamp of the previous sample.
     prev_at: Instant,
-    /// Smoothed seconds remaining; `None` when unknown or complete.
-    smoothed_eta: Option<f64>,
+    /// The count has moved since the first sample: the transfer is under way,
+    /// and every sample from here on is measured.
+    started: bool,
+    /// The rate smoothed once more, for the time remaining to divide by;
+    /// `None` until there is a rate.
+    eta_rate: Option<f64>,
+    /// Seconds remaining; `None` when unknown or complete.
+    eta: Option<f64>,
 }
 
 impl RateEstimator {
@@ -99,7 +126,9 @@ impl RateEstimator {
             accum_secs: 0.0,
             prev_bytes: None,
             prev_at: now,
-            smoothed_eta: None,
+            started: false,
+            eta_rate: None,
+            eta: None,
         }
     }
 
@@ -111,7 +140,7 @@ impl RateEstimator {
     ///
     /// Call this on every tick of the download's meter. Ticks where `downloaded`
     /// has not moved are meaningful samples: they are how a stall pulls the
-    /// reported rate down.
+    /// reported rate down, once the count has moved at all.
     pub fn record(&mut self, downloaded: u64, total: u64, now: Instant) {
         let dt = now.saturating_duration_since(self.prev_at).as_secs_f64();
         self.prev_at = now;
@@ -133,6 +162,16 @@ impl RateEstimator {
         }
 
         self.prev_bytes = Some(downloaded);
+
+        if !self.started {
+            // The transfer has not begun, or this is the sample that sees it
+            // begin. Either way it is a baseline: the wait for a connection is
+            // not transfer time, and the first bytes seen are not the work of
+            // the tick that caught them. They are one read at its very end, or
+            // a step that took many seconds to fill.
+            self.started = downloaded > prev;
+            return;
+        }
 
         if dt > 0.0 {
             let decay = (-dt / RATE_TAU).exp();
@@ -159,37 +198,39 @@ impl RateEstimator {
         (rate.is_finite() && rate > 0.0).then_some(rate)
     }
 
-    /// Smoothed estimate of the seconds remaining.
+    /// The seconds remaining: what is left at the rate, smoothed once more.
     ///
     /// `None` when the total size is unknown, the transfer is complete, or no
     /// rate has been established yet.
     #[must_use]
     pub const fn eta_seconds(&self) -> Option<f64> {
-        self.smoothed_eta
+        self.eta
     }
 
-    /// Fold the latest raw ETA into the smoothed one.
+    /// Fold the latest rate into the smoothed one, and divide what is left by
+    /// it.
     fn update_eta(&mut self, downloaded: u64, total: u64, dt: f64) {
         let Some(rate) = self.rate_bps() else {
             return;
         };
+        let rate = self.eta_rate.map_or(rate, |prev| {
+            let alpha = 1.0 - (-dt / ETA_TAU).exp();
+            alpha.mul_add(rate - prev, prev)
+        });
+        self.eta_rate = Some(rate);
+
         if total == 0 || downloaded >= total {
-            self.smoothed_eta = None;
+            self.eta = None;
             return;
         }
 
         // Byte counts are far below f64's exact-integer range.
         #[allow(clippy::cast_precision_loss)]
         let remaining = (total - downloaded) as f64;
-        let raw = remaining / rate;
-        if !raw.is_finite() {
-            return;
+        let eta = remaining / rate;
+        if eta.is_finite() {
+            self.eta = Some(eta);
         }
-
-        self.smoothed_eta = Some(self.smoothed_eta.map_or(raw, |prev| {
-            let alpha = 1.0 - (-dt / ETA_TAU).exp();
-            alpha.mul_add(raw - prev, prev)
-        }));
     }
 }
 
@@ -374,5 +415,214 @@ mod tests {
             "rate is known even without a total"
         );
         assert_eq!(est.eta_seconds(), None, "unknown total means no ETA");
+    }
+
+    /// A tick of a download's meter.
+    const TICK: Duration = Duration::from_millis(250);
+    /// What a tick carries at 10 MB/s.
+    const PER_TICK: u32 = 2_500_000;
+    /// All that the tick which first sees bytes catches of them.
+    const FIRST_READ: u64 = 64 * 1024;
+
+    /// A download as its meter feeds it, up to its first bytes: two seconds
+    /// of ticks while the connection is made, then the first read. `ticks`
+    /// more at 10 MB/s complete it. Returns the estimator, the clock, the
+    /// bytes so far and the size.
+    fn connected(ticks: u32) -> (RateEstimator, Instant, u64, u64) {
+        let total = FIRST_READ + u64::from(ticks) * u64::from(PER_TICK);
+        let mut now = Instant::now();
+        let mut est = RateEstimator::new(now);
+        est.record(0, total, now);
+        for _ in 0..8 {
+            now += TICK;
+            est.record(0, total, now);
+        }
+        now += TICK;
+        est.record(FIRST_READ, total, now);
+        (est, now, FIRST_READ, total)
+    }
+
+    #[test]
+    fn the_time_remaining_is_right_from_the_first_figure_shown() {
+        // 300 MB at 10 MB/s: thirty seconds. Every figure shown is within a
+        // quarter of what is left at that rate, and there is one to show five
+        // seconds after the first byte.
+        let ticks = 120;
+        let (mut est, mut now, mut bytes, total) = connected(ticks);
+
+        for tick in 1..ticks {
+            now += TICK;
+            bytes += u64::from(PER_TICK);
+            est.record(bytes, total, now);
+
+            let since_first_byte = f64::from(tick) * 0.25;
+            let truth = f64::from(ticks - tick) * 0.25;
+            let Some(eta) = est.eta_seconds() else {
+                assert!(
+                    since_first_byte < 5.0,
+                    "no time remaining {since_first_byte}s after the first byte"
+                );
+                continue;
+            };
+            assert!(
+                (eta - truth).abs() <= truth * 0.25,
+                "{eta:.1}s shown with {truth:.1}s left, {since_first_byte}s after the first byte"
+            );
+        }
+    }
+
+    #[test]
+    fn nothing_is_reported_in_the_first_second_of_a_transfer() {
+        let (mut est, mut now, mut bytes, total) = connected(120);
+
+        for _ in 0..4 {
+            now += TICK;
+            bytes += u64::from(PER_TICK);
+            est.record(bytes, total, now);
+            assert_eq!(
+                (est.rate_bps(), est.eta_seconds()),
+                (None, None),
+                "the wait for the connection is not time spent measuring"
+            );
+        }
+    }
+
+    #[test]
+    fn the_time_remaining_counts_down_with_the_clock() {
+        // Five minutes of transfer, watched for the first of them.
+        let (mut est, mut now, mut bytes, total) = connected(1200);
+
+        let mut last = None;
+        let mut compared = 0;
+        for _ in 0..240 {
+            now += TICK;
+            bytes += u64::from(PER_TICK);
+            est.record(bytes, total, now);
+
+            let eta = est.eta_seconds();
+            if let (Some(before), Some(after)) = (last, eta) {
+                let fell: f64 = before - after;
+                assert!(
+                    (fell - 0.25).abs() < 0.025,
+                    "{before:.2}s then {after:.2}s, a quarter of a second apart"
+                );
+                compared += 1;
+            }
+            last = eta;
+        }
+        assert!(compared > 200, "only {compared} figures to compare");
+    }
+
+    #[test]
+    fn bursty_input_does_not_swing_the_time_remaining() {
+        // The shape of `bursty_input_reads_as_steady`: 100 MB every 2s, a
+        // mean of 50 MB/s, toward 60 GB.
+        let total_mb = 60_000_u32;
+        let total = u64::from(total_mb) * 1_000_000;
+        let start = Instant::now();
+        let mut est = RateEstimator::new(start);
+        est.record(0, total, start);
+
+        let mut now = start;
+        let mut bursts = 0_u32;
+        for i in 0..480 {
+            now += TICK;
+            if i % 8 == 0 {
+                bursts += 1;
+            }
+            est.record(u64::from(bursts) * 100_000_000, total, now);
+
+            // Past the ramp, every figure is what is left at the mean rate.
+            if i >= 240 {
+                let eta = est.eta_seconds().expect("a time remaining after a minute");
+                let truth = f64::from(total_mb - bursts * 100) / 50.0;
+                assert!(
+                    (eta - truth).abs() < truth * 0.02,
+                    "{eta:.0}s shown with {truth:.0}s left at the mean rate"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_stall_never_shortens_the_time_remaining() {
+        let start = Instant::now();
+        let mut est = RateEstimator::new(start);
+        let total = 10_000_000_000u64;
+        est.record(0, total, start);
+        let mut now = drive(&mut est, start, total, 100_000_000.0, 0.25, 120);
+        let before = est
+            .eta_seconds()
+            .expect("a time remaining before the stall");
+
+        let stalled_at = est.prev_bytes.unwrap();
+        let mut last = before;
+        for _ in 0..240 {
+            now += TICK;
+            est.record(stalled_at, total, now);
+            let eta = est.eta_seconds().expect("a time remaining in the stall");
+            assert!(
+                eta > last,
+                "{last:.2}s then {eta:.2}s with nothing arriving"
+            );
+            last = eta;
+        }
+        assert!(
+            last > before * 10.0,
+            "60s of nothing moved {before:.0}s to only {last:.0}s"
+        );
+    }
+
+    #[test]
+    fn a_shard_boundary_does_not_move_the_time_remaining() {
+        let start = Instant::now();
+        let mut est = RateEstimator::new(start);
+        let total = 10_000_000_000u64;
+        est.record(0, total, start);
+        let now = drive(&mut est, start, total, 100_000_000.0, 0.25, 160);
+        let before = est.eta_seconds().expect("a time remaining in shard 1");
+
+        // Next shard: the per-shard counter restarts at zero, and its size is
+        // what the shards before it left to fetch.
+        let left = total - est.prev_bytes.unwrap();
+        est.record(0, left, now + TICK);
+        assert_eq!(est.eta_seconds(), Some(before), "at the boundary");
+
+        // The countdown goes on from there: a tick later, a tick less.
+        est.record(25_000_000, left, now + TICK * 2);
+        let after = est.eta_seconds().expect("a time remaining in shard 2");
+        assert!(
+            (before - after - 0.25).abs() < 0.05,
+            "{before:.2}s at the boundary and {after:.2}s a tick after it"
+        );
+    }
+
+    #[test]
+    fn a_file_written_in_steps_is_not_timed_by_its_first_step() {
+        // The accelerator as the meter sees it: 700 MiB on disk every 13
+        // seconds, which is 52 ticks, toward a hundred such steps.
+        let step = 700 * 1024 * 1024_u64;
+        let start = Instant::now();
+        let mut est = RateEstimator::new(start);
+        est.record(0, 100 * step, start);
+
+        let mut now = start;
+        let mut steps = 0_u32;
+        let mut first = None;
+        for tick in 1..=120_u32 {
+            now += TICK;
+            if tick % 52 == 0 {
+                steps += 1;
+            }
+            est.record(u64::from(steps) * step, 100 * step, now);
+            first = first.or_else(|| est.eta_seconds().map(|eta| (eta, 100 - steps)));
+        }
+
+        // A step is the bytes of the thirteen seconds before it. One step
+        // alone is not a rate: taken over the tick it landed in, it would
+        // promise the file in a seventh of the time.
+        let (eta, steps_left) = first.expect("a time remaining within thirty seconds");
+        let truth = f64::from(steps_left) * 13.0;
+        assert!(eta > truth * 0.5, "{eta:.0}s shown with {truth:.0}s left");
     }
 }

@@ -51,7 +51,7 @@ crates/gglib-core/src/domain/recommendation.rs 381
 crates/gglib-core/src/domain/residency.rs 419
 crates/gglib-core/src/domain/runtime_capabilities.rs 408
 crates/gglib-core/src/download/completion.rs 432
-crates/gglib-core/src/download/rate.rs 378
+crates/gglib-core/src/download/rate.rs 628
 crates/gglib-core/src/download/types.rs 649
 crates/gglib-core/src/normalize/parsers/delimited.rs 984
 crates/gglib-core/src/normalize/stream.rs 662
