@@ -277,8 +277,8 @@ export const SystemSettings: FC = () => {
         <p className="m-0 mb-base text-xs text-text-muted">
           Everything here runs against the gglib daemon. Stopping it stops every running model
           with it, and this interface loses its backend until the daemon is started again — from
-          a terminal with <code className="font-mono">gglib daemon start</code>, or by reopening
-          the desktop app.
+          a terminal with <code className="font-mono">gglib web</code>, which starts it and opens
+          this interface in your browser, or by reopening the desktop app.
         </p>
         {shutdownRequested && (
           <Banner variant="info" className="mb-base">
