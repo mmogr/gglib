@@ -1,5 +1,6 @@
-//! `path_segment`: a model identifier as one URL path segment. And where an
-//! image is read by its id.
+//! `path_segment`: a model identifier as one URL path segment. Where an
+//! image is read by its id. And the event a command posts, among the routes
+//! the daemon's suite sweeps.
 
 use super::path_segment;
 
@@ -30,4 +31,14 @@ fn an_image_is_read_at_its_stores_path_and_its_id() {
     ] {
         assert!(swept.contains(&route), "{route:?}");
     }
+}
+
+/// The event a command posts for a library change is swept with the routes
+/// the CLI calls: for a route that takes it, for the daemon's token, and for
+/// the refusal a page on another site gets.
+#[test]
+fn the_event_a_command_posts_is_swept_with_the_routes_the_cli_calls() {
+    use super::daemon::{CLI_ROUTE_CONTRACT, EVENTS_PATH};
+
+    assert!(CLI_ROUTE_CONTRACT.contains(&(&["POST"][..], EVENTS_PATH)));
 }

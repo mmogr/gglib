@@ -46,6 +46,11 @@ pub const SERVERS_START_PATH: &str = "/api/servers/start";
 /// Ask the daemon to shut down.
 pub const DAEMON_SHUTDOWN_PATH: &str = "/api/daemon/shutdown";
 
+/// The daemon's event stream. `GET` is the stream the app reads. `POST`
+/// puts one event on it: a `gglib` command that changed the library in its
+/// own process sends the event its change emitted there.
+pub const EVENTS_PATH: &str = "/api/events";
+
 /// Bring the remote tunnel up and arm a pairing (ADR 0012).
 pub const REMOTE_ENABLE_PATH: &str = "/api/remote/enable";
 
@@ -236,6 +241,7 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["GET"], PROXY_STATUS_PATH),
     (&["POST"], SERVERS_START_PATH),
     (&["POST"], DAEMON_SHUTDOWN_PATH),
+    (&["POST"], EVENTS_PATH),
     (&["POST"], REMOTE_ENABLE_PATH),
     (&["POST"], REMOTE_DISABLE_PATH),
     (&["GET"], REMOTE_STATUS_PATH),

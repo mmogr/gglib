@@ -280,11 +280,13 @@ fn spawn_daemon() -> Result<std::path::PathBuf> {
 
 pub(crate) mod auth;
 mod calls;
+pub(crate) mod library_changes;
 mod remote;
 mod repair;
 pub(crate) mod runs;
 pub(crate) mod wire;
 
+pub(crate) use library_changes::LibraryChanges;
 pub(crate) use wire::{QueueDownloadBody, StartProxyBody, StartServerBody};
 
 #[cfg(test)]

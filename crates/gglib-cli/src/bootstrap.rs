@@ -20,6 +20,7 @@ use gglib_mcp::McpService;
 use gglib_runtime::CatalogPortImpl;
 
 use crate::console::CliConsole;
+use crate::daemon_client::LibraryChanges;
 
 // Path utilities from core
 use gglib_core::paths::{database_path, resolve_models_dir};
@@ -65,6 +66,10 @@ pub struct CliContext {
     /// The download monitors draw the queue on it, and the interactive one
     /// suspends it while prompting for additional model IDs.
     pub console: Arc<CliConsole>,
+    /// What this command's `ModelOps` change in the library, kept for the
+    /// daemon that serves it: `handlers::model::one_shot_model_ops` emits
+    /// into it, and `handlers::model::dispatch` has the daemon told.
+    pub(crate) library_changes: Arc<LibraryChanges>,
 }
 
 /// Bootstrap the CLI application.
@@ -118,6 +123,7 @@ pub(crate) async fn bootstrap_with(bootstrap_config: BootstrapConfig) -> Result<
         loop_guard_trips,
         settings_repo: repos.settings,
         console,
+        library_changes: Arc::default(),
     })
 }
 

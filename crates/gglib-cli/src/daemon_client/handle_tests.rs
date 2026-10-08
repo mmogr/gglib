@@ -74,7 +74,7 @@ fn stand_in(health: String) -> (u16, Asked) {
 }
 
 /// What this build's daemon answers `/health` with, as far as the probe reads.
-fn daemon_health() -> String {
+pub(super) fn daemon_health() -> String {
     serde_json::json!({
         "service": "gglib-daemon",
         "fingerprint": gglib_build_info::FINGERPRINT,
@@ -84,7 +84,7 @@ fn daemon_health() -> String {
 }
 
 /// A loopback port nothing listens on.
-fn nobody() -> u16 {
+pub(crate) fn nobody() -> u16 {
     TcpListener::bind("127.0.0.1:0")
         .and_then(|listener| listener.local_addr())
         .expect("a loopback port")

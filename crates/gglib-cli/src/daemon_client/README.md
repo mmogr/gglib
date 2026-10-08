@@ -23,6 +23,15 @@ thin request wrappers commands share. It is **not** responsible for
 rendering — handlers own their output — and it never falls back to
 instantiating a local runtime: single process ownership is the point.
 
+`library_changes.rs` keeps the events a command's `ModelOps` emit for what
+it changes in the library and, when the command is over, posts them to the
+daemon that serves that library, so an app open on it shows the change. It
+asks [`running`] for the daemon only when this data root holds a daemon's
+token, which is then the credential presented: a daemon that serves this
+library left it there, and a key says nothing of which library a daemon
+serves. A daemon that is not there, or does not take the event, fails
+nothing.
+
 `repair.rs` holds the call that has the daemon repair a model.
 `runs.rs` holds the run calls and reads a run's event stream, whose events
 `drain_items` turns into numbered frames and the run's final state. `sse.rs`

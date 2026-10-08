@@ -13,8 +13,10 @@ import type { ModelEvent } from '../services/transport/types/events';
  * remove, rename, retag, capability and upgrade all arrive as `model_added` /
  * `model_updated` / `model_removed` on `/api/events`.
  *
- * Scope is one daemon process. A `gglib model add` in a terminal does not
- * reach here — it is a separate process, and the broadcaster is in-process.
+ * Scope is one daemon. A `gglib model …` command in a terminal is a separate
+ * process, and reaches here when it changes the library through `ModelOps`:
+ * it posts the daemon the event its change emitted. `gglib model add` and
+ * `retag` write the library another way, emit nothing, and do not.
  * Downloads are covered separately, by the download event stream.
  *
  * Events are batched within a window because one user action can produce

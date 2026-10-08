@@ -26,6 +26,10 @@ pub(crate) mod verification;
 #[cfg(test)]
 mod test_library;
 
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod tests;
+
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -49,25 +53,39 @@ use recorded_servers::RecordedServers;
 ///   being served is read from the pid files kept under this data root, so
 ///   `model remove` and `model upgrade` refuse a model that is being served
 ///   and `model inspect` says that it is.
-/// - `NoopEmitter`: library events exist to tell *other* clients what changed.
-///   A CLI process that is about to exit has no broadcast channel to tell
-///   them on, so the events `ModelOps` emits end here.
+/// - The context's [`LibraryChanges`] rather than an emitter of this
+///   process's own: library events exist to tell *other* clients what
+///   changed, and a command that is about to exit has none. The daemon that
+///   serves this library may, so the events `ModelOps` emits are kept, and
+///   [`dispatch`] has that daemon told them.
+///
+/// [`LibraryChanges`]: crate::daemon_client::LibraryChanges
 pub(crate) fn one_shot_model_ops(ctx: &CliContext) -> ModelOps {
     ModelOps::new(ModelDeps {
         core: ctx.app.clone(),
         runtime: Arc::new(RecordedServers),
         gguf_parser: ctx.gguf_parser.clone(),
-        emitter: Arc::new(gglib_core::ports::NoopEmitter::new()),
+        emitter: ctx.library_changes.clone(),
     })
 }
 
-/// Dispatch a `model` subcommand to its handler.
+/// Dispatch a `model` subcommand to its handler, and then tell the daemon
+/// that serves this library what the command changed in it.
+///
+/// Told here, once, for every command that changes the library through
+/// [`one_shot_model_ops`]; no handler tells anybody for itself. `add` and
+/// `retag` write the library without `ModelOps`, which emits nothing for
+/// them, so there is nothing of theirs to tell. Told whatever the command
+/// answered, because a change that was stored is one an open app does not
+/// show yet.
 pub(crate) async fn dispatch(
     ctx: &CliContext,
     command: ModelCommand,
     target: Target,
 ) -> Result<()> {
-    dispatch_with(ctx, &one_shot_model_ops(ctx), command, target).await
+    let done = dispatch_with(ctx, &one_shot_model_ops(ctx), command, target).await;
+    ctx.library_changes.tell_daemon(ctx).await;
+    done
 }
 
 /// [`dispatch`], with the `ModelOps` a command reads and writes the library

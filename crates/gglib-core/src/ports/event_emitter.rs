@@ -13,9 +13,11 @@ use crate::events::AppEvent;
 ///
 /// # Implementations
 ///
-/// - `NoopEmitter` - For tests and for the CLI, which has no listener
+/// - `NoopEmitter` - For tests, and wherever nobody is listening
 /// - `SseBroadcaster` in `gglib-axum` - The daemon's, which sends each event
 ///   to its SSE subscribers
+/// - `LibraryChanges` in `gglib-cli` - A command's, which keeps what
+///   `ModelOps` emits and posts it to the daemon
 ///
 /// # Example
 ///
