@@ -71,9 +71,16 @@ impl CliConsole {
     /// which installs no hook, for a test of what is drawn.
     #[cfg(test)]
     pub(crate) fn unseen() -> Self {
-        Self::over(MultiProgress::with_draw_target(
-            indicatif::ProgressDrawTarget::term_like(Box::new(UnseenTerm)),
-        ))
+        Self::on_unseen_term().0
+    }
+
+    /// An [unseen](Self::unseen) console and its terminal, for a test of
+    /// what is printed.
+    #[cfg(test)]
+    pub(crate) fn on_unseen_term() -> (Self, UnseenTerm) {
+        let term = UnseenTerm::default();
+        let target = indicatif::ProgressDrawTarget::term_like(Box::new(term.clone()));
+        (Self::over(MultiProgress::with_draw_target(target)), term)
     }
 
     fn over(multi_progress: MultiProgress) -> Self {
@@ -149,10 +156,20 @@ fn print_through(multi_progress: &MultiProgress, line: &str) {
     }
 }
 
-/// A terminal 80 columns wide that keeps nothing written to it.
+/// A terminal 80 columns wide that nobody sees. It keeps what is written to
+/// it, for a test to read.
 #[cfg(test)]
-#[derive(Debug)]
-struct UnseenTerm;
+#[derive(Debug, Clone, Default)]
+pub(crate) struct UnseenTerm(Arc<Mutex<Vec<String>>>);
+
+#[cfg(test)]
+impl UnseenTerm {
+    /// What has been written, in order: each printed line and each frame of
+    /// a bar, without the blanks that fill a line out to the width.
+    pub(crate) fn written(&self) -> Vec<String> {
+        self.0.lock().unwrap().clone()
+    }
+}
 
 #[cfg(test)]
 impl indicatif::TermLike for UnseenTerm {
@@ -171,10 +188,13 @@ impl indicatif::TermLike for UnseenTerm {
     fn move_cursor_left(&self, _: usize) -> std::io::Result<()> {
         Ok(())
     }
-    fn write_line(&self, _: &str) -> std::io::Result<()> {
-        Ok(())
+    fn write_line(&self, line: &str) -> std::io::Result<()> {
+        self.write_str(line)
     }
-    fn write_str(&self, _: &str) -> std::io::Result<()> {
+    fn write_str(&self, text: &str) -> std::io::Result<()> {
+        if !text.trim().is_empty() {
+            self.0.lock().unwrap().push(text.to_string());
+        }
         Ok(())
     }
     fn clear_line(&self) -> std::io::Result<()> {

@@ -49,7 +49,10 @@ between the worker (core download logic) and publishing (the queue snapshot).
   then the projector fetched with them. The group is registered once every file
   is on disk (`group_completion.rs`), with the weights as the model's files and
   the projector handed to the registrar apart, to be linked. A projector's bytes
-  are the model's progress, and its row reads `projector`, never a shard.
+  are the model's progress, and its row reads `projector`, never a shard. The
+  completion message says what the registrar answered: a projector it did not
+  link, and weights the GGUF reader refused, which are in the library without
+  their details.
 - **Running download**: The group being fetched, or the one between two of its
   files (`running.rs`). The queue snapshot has it as `active`, at position 1,
   across its file boundaries, read from its meter; every other group is one

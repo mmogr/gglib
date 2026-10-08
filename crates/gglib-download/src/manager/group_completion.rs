@@ -87,9 +87,12 @@ pub(super) fn shard_count(download: &CompletedDownload) -> usize {
 /// The message a finished download is announced with.
 ///
 /// It counts the weights' shards, names the projector that was linked, and
-/// says why a projector that came with the weights was not.
+/// says why a projector that came with the weights was not. When the reader
+/// refused the weights, it names the file added without its details and
+/// gives the reader's reason.
 pub(super) fn completion_message(
     download: &CompletedDownload,
+    metadata_refusal: Option<&str>,
     projector_refusal: Option<&str>,
 ) -> String {
     let what = if download.is_sharded {
@@ -99,12 +102,19 @@ pub(super) fn completion_message(
     };
     let downloaded = format!("Downloaded {what} to {}", download.primary_path.display());
     let projector = download.projector_path.as_deref().map(file_name);
-    match (projector, projector_refusal) {
+    let message = match (projector, projector_refusal) {
         (Some(name), Some(refusal)) => {
             format!("{downloaded}. Its projector {name} was not linked: {refusal}")
         }
         (Some(name), None) => format!("{downloaded}, with its projector {name}"),
         (None, _) => downloaded,
+    };
+    match metadata_refusal {
+        Some(refusal) => format!(
+            "{message}. {} was added without its details: {refusal}",
+            file_name(&download.primary_path)
+        ),
+        None => message,
     }
 }
 

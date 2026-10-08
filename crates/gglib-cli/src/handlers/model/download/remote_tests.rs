@@ -1,11 +1,13 @@
 //! The daemon monitor's loop: which download it watches, when it stops
-//! polling, and what it exits with.
+//! polling, what it prints at the end, and what it exits with.
 
 use std::collections::VecDeque;
 use std::sync::Mutex;
 
+use gglib_core::download::DownloadOutcome;
+
 use super::super::monitor::tests::{
-    COMPLETED, MINE, THEIRS, ended, failed, mine, running, snapshot, waiting,
+    COMPLETED, MINE, MINE_ID, THEIRS, ended, failed, mine, running, snapshot, waiting,
 };
 use super::*;
 
@@ -112,6 +114,28 @@ async fn exits_ok_when_its_download_completed() {
 
     assert!(result.is_ok(), "{result:?}");
     assert_eq!(left, 1, "it stopped at its own ending");
+}
+
+/// A download whose file the reader refused did complete: the model is in
+/// the library. The command prints one line for it and no other, a tick and
+/// the file and the reason as the daemon worded them, and succeeds.
+#[tokio::test]
+async fn a_download_added_without_its_details_prints_one_ticked_line_and_succeeds() {
+    let note = "Downloaded model to models/zeta.Q8_0.gguf. zeta.Q8_0.gguf was added \
+                without its details: Invalid GGUF format: Invalid magic number";
+    let unread = DownloadOutcome::Completed {
+        message: Some(note.to_string()),
+    };
+    let done = snapshot(None, vec![], vec![ended(MINE, unread)]);
+    let (console, term) = CliConsole::on_unseen_term();
+
+    let result = watch_download(Arc::new(console), &mine(), Duration::ZERO, || async {
+        Ok(done.clone())
+    })
+    .await;
+
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(term.written(), [format!("✓ {MINE_ID}: {note}")]);
 }
 
 /// Another download's failure is not this command's, and its own is: the

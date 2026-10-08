@@ -113,7 +113,10 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
   the next. The row is handed to the caller's `RowCallback` four times a
   second while a file is fetched and as each file lands. This crate draws
   nothing on a terminal and does not depend on `indicatif`.
-- **Automatic Model Registration** — Downloads are automatically registered in the database with parsed GGUF metadata
+- **Automatic Model Registration** — Downloads are automatically registered in the database with parsed GGUF metadata.
+  A weights file the GGUF reader refuses is registered all the same, without that
+  metadata, and the download's completion message names the file and gives the
+  reader's reason
 - **Resume Support** — A native transfer cut off part-way leaves its `.part`
   file, and the next download of that file asks only for the bytes that are
   missing. A failed download is not retried: it ends as failed, and is

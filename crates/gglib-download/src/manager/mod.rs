@@ -776,9 +776,14 @@ impl DownloadManagerImpl {
                     );
                 }
 
-                // The outcome says so when the projector was not linked
+                // The outcome says so when the reader refused the weights,
+                // and when the projector was not linked
                 DownloadOutcome::Completed {
-                    message: Some(group_completion::completion_message(&completed, refusal)),
+                    message: Some(group_completion::completion_message(
+                        &completed,
+                        registered.metadata_refusal.as_deref(),
+                        refusal,
+                    )),
                 }
             }
             Err(e) => {

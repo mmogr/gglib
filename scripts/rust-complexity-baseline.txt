@@ -67,7 +67,7 @@ crates/gglib-core/src/request_pipeline/truncation_tests.rs 443
 crates/gglib-core/src/request_pipeline/validate.rs 497
 crates/gglib-core/src/server_config.rs 715
 crates/gglib-core/src/services/model_import.rs 689
-crates/gglib-core/src/services/model_registrar.rs 322
+crates/gglib-core/src/services/model_registrar.rs 340
 crates/gglib-core/src/services/model_service.rs 1446
 crates/gglib-core/src/services/model_verification.rs 583
 crates/gglib-core/src/services/model_verification_remote.rs 325
@@ -86,7 +86,7 @@ crates/gglib-download/src/cli_exec/exec/python_env.rs 1544
 crates/gglib-download/src/cli_exec/exec/python_protocol.rs 347
 crates/gglib-download/src/executor/native.rs 578
 crates/gglib-download/src/executor/native_tests.rs 859
-crates/gglib-download/src/manager/mod.rs 1161
+crates/gglib-download/src/manager/mod.rs 1166
 crates/gglib-download/src/quant_selector.rs 340
 crates/gglib-download/src/queue/mod.rs 1067
 crates/gglib-gguf/src/capabilities/template_probe.rs 501
