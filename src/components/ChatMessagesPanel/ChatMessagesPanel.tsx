@@ -28,6 +28,7 @@ import { useSharedTicker } from './hooks/useSharedTicker';
 import { ThinkingTimingProvider } from './context/ThinkingTimingContext';
 import type { ReasoningTimingTracker } from '../../hooks/useGglibRuntime/reasoningTiming';
 import type { ChatSource, ConversationSummary } from '../../services/transport';
+import type { RunInfo } from '../../types/generated/RunInfo';
 import type { ImageInput } from '../../hooks/useImageInput';
 import type { ThinkingSwitch } from '../../hooks/useThinkingSwitch';
 
@@ -50,6 +51,8 @@ interface ChatMessagesPanelProps {
   showToast: (message: string, type?: ToastType, duration?: number) => void;
   timingTracker: ReasoningTimingTracker | null;
   currentStreamingAssistantMessageId: string | null;
+  /** The run the page last read to its end, as it ended: a reply that finishes in a chat not yet titled titles it. */
+  endedRun: RunInfo | null;
   /**
    * Whether the active model supports tool/function calling.
    * null = unknown (capability status not yet resolved).
@@ -109,6 +112,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   showToast,
   timingTracker,
   currentStreamingAssistantMessageId,
+  endedRun,
   supportsToolCalls,
   toolFormat,
   modelName,
@@ -146,7 +150,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
     isGeneratingTitle,
     generateTitle,
   } = useTitleGeneration({
-    threadRuntime,
+    endedRun,
     activeConversation,
     activeConversationId,
     serverPort,

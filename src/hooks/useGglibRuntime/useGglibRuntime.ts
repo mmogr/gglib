@@ -32,6 +32,7 @@ import type { GglibMessage, GglibContent } from '../../types/messages';
 import { mkUserMessage } from '../../types/messages';
 import { getTransport, type ChatSource } from '../../services/transport';
 import type { ModelRef } from '../../types/generated/ModelRef';
+import type { RunInfo } from '../../types/generated/RunInfo';
 import { DEFAULT_SYSTEM_PROMPT } from '../../constants/prompts';
 import {
   buildThreadMessages,
@@ -88,6 +89,8 @@ export interface UseGglibRuntimeReturn {
   isRunning: boolean;
   /** Whether the open conversation's saved rows are still loading. */
   isLoading: boolean;
+  /** The run last read to its end in the open conversation, as it ended; null once it is left. */
+  endedRun: RunInfo | null;
   timingTracker: ReasoningTimingTracker;
   currentStreamingAssistantMessageId: string | null;
 }
@@ -287,6 +290,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     setMessages,
     isRunning,
     isLoading: reader.isLoading,
+    endedRun: reader.endedRun,
     timingTracker: reader.timingTracker,
     currentStreamingAssistantMessageId: reader.currentStreamingAssistantMessageId,
   };

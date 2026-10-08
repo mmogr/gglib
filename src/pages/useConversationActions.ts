@@ -62,7 +62,8 @@ export function useConversationActions({
       });
       await getTransport().updateConversationTitle(activeConversation.id, title);
       appLogger.debug('component.chat', 'Title update succeeded, syncing');
-      await syncConversations({ preferredId: activeConversation.id, silent: true });
+      // The open chat stays open: a title can arrive after its chat was left.
+      await syncConversations({ silent: true });
       appLogger.debug('component.chat', 'Rename conversation completed successfully');
     } catch (error) {
       appLogger.error('component.chat', 'Rename conversation failed', {

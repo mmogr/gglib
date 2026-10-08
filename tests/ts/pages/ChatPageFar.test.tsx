@@ -11,7 +11,7 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ChatMessage } from '../../../src/services/transport';
 import type { HubChat } from '../../../src/types/generated/HubChat';
-import { chatTransport, conversation, framesThenWait, wrapper, type ChatFixture } from './chatPageHarness';
+import { agentRun, chatTransport, conversation, framesThenWait, wrapper, type ChatFixture } from './chatPageHarness';
 import { UNREAD_STORAGE_KEY } from '../../../src/components/ConversationListPanel/useConversationActivity';
 import type { ChatDraft } from '../../../src/types/messages';
 import type { ModelChoice } from '../../../src/components/ChatMessagesPanel';
@@ -307,6 +307,32 @@ describe('ChatPage, the far machine’s chats', () => {
     const far = transport.current as { addFarTurn: ReturnType<typeof vi.fn> };
     // Its text and no image, and nothing said of thinking: the switch was not touched.
     expect(far.addFarTurn).toHaveBeenCalledWith(1, expect.stringMatching(/^chat-/), 'And how do I fix it?', [], undefined);
+  });
+
+  it('a far chat still called New Chat is not titled here when a reply finishes in it', async () => {
+    const user = userEvent.setup();
+    const far = transport.current as Record<string, unknown>;
+    far.listFarChats = vi.fn(async () => [{ ...FAR_CHATS[0], title: 'New Chat' }]);
+    // The run ends as soon as it is read, its reply finished.
+    far.readFarRunEvents = async function* (id: string) {
+      yield { type: 'end' as const, info: agentRun(id, 1, 'completed') };
+    };
+    const generateChatTitle = vi.fn(async () => 'Builds');
+    far.generateChatTitle = generateChatTitle;
+    joined();
+    renderPage();
+    await user.click(await screen.findByRole('button', FAR_SWITCH));
+    await screen.findByText('Why did the build break?');
+    expect(screen.getByRole('heading', { name: 'New Chat' })).toBeInTheDocument();
+
+    await user.type(screen.getByRole('textbox'), 'And how do I fix it?{Enter}');
+    // The run's end reads the far chat again: once at opening, once now.
+    await waitFor(() => expect(far.openFarChat).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /This machine/ }));
+    await screen.findByText('Asked here.');
+    expect(generateChatTitle).not.toHaveBeenCalled();
   });
 
   it('a model switch that lands while a far chat is open opens no conversation here', async () => {

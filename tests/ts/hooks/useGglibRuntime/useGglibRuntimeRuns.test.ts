@@ -140,6 +140,51 @@ describe('useGglibRuntime and a run that outlives the page', () => {
     expect(hook.result.current.isRunning).toBe(true);
   });
 
+  it('keeps how a run it read to its end ended, and forgets it on leaving', async () => {
+    daemon.save(2, { role: 'user', content: 'other' });
+    daemon.running('r-live', 1, [{ type: 'text_delta', content: 'Hel' }]);
+    const hook = await mount(open(1));
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(true));
+    expect(hook.result.current.endedRun).toBeNull();
+
+    daemon.finish('r-live', 'completed', [{ role: 'assistant', content: 'Hello' }]);
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
+    expect(hook.result.current.endedRun).toMatchObject({ id: 'r-live', status: 'completed', conversation_id: 1 });
+
+    hook.rerender(open(2));
+    await waitFor(() => expect(shown(hook.result.current.messages).at(-1)?.[2]).toBe('other'));
+    expect(hook.result.current.endedRun).toBeNull();
+
+    // Coming back finds the reply saved: a run that ended, but not one read to its end now.
+    hook.rerender(open(1));
+    await waitFor(() => expect(shown(hook.result.current.messages).at(-1)?.[2]).toBe('Hello'));
+    expect(hook.result.current.endedRun).toBeNull();
+  });
+
+  it('keeps nothing of a run whose conversation is left while its saved rows are read', async () => {
+    daemon.save(2, { role: 'user', content: 'other' });
+    daemon.running('r-live', 1, [{ type: 'text_delta', content: 'Hel' }]);
+    const hook = await mount(open(1));
+    await waitFor(() => expect(hook.result.current.isRunning).toBe(true));
+
+    let release = () => {};
+    const held = new Promise<void>((r) => {
+      release = r;
+    });
+    const reads = () => daemon.count('GET', '/api/conversations/1/messages');
+    const readBefore = reads();
+    daemon.before = async (method, path) => {
+      if (method === 'GET' && path === '/api/conversations/1/messages') await held;
+    };
+    daemon.finish('r-live', 'completed', [{ role: 'assistant', content: 'Hello' }]);
+    await waitFor(() => expect(reads()).toBe(readBefore + 1));
+    hook.rerender(open(2));
+    release();
+
+    await waitFor(() => expect(shown(hook.result.current.messages).at(-1)?.[2]).toBe('other'));
+    expect(hook.result.current.endedRun).toBeNull();
+  });
+
   it('Stop cancels the run, and shows the unfinished reply it saved', async () => {
     daemon.running('r-live', 1, [{ type: 'text_delta', content: 'Hel' }]);
     const hook = await mount(open(1));
@@ -152,6 +197,7 @@ describe('useGglibRuntime and a run that outlives the page', () => {
     const last = hook.result.current.messages.at(-1)!;
     expect(shown([last])).toEqual([['db-1', 'assistant', 'Hel']]);
     expect(last.status).toEqual({ type: 'incomplete', reason: 'cancelled' });
+    expect(hook.result.current.endedRun?.status).toBe('cancelled');
   });
 
   it('after Stop the page waits for the run to end, not for cancel to answer', async () => {
