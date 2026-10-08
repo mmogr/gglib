@@ -138,6 +138,13 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
   its absence or failure falls back to the native path. Either way each file
   has one count (`executor/progress.rs`): bytes on disk for the bar, and bytes
   off the network apart from them.
+- **The Models Directory, Asked as a Download Starts** — A download goes
+  under the models directory `gglib_core::paths::resolve_models_dir` answers
+  as its first file starts (`manager/paths.rs`), and every file of it goes
+  there. Unless its config names a directory, the manager keeps none from
+  when it was built, so a daemon's next download goes where the directory
+  resolves then: one stored while the daemon runs, unless the daemon's own
+  environment names one.
 - **Whole-Download Endings** — A download ends as a whole
   (`manager/ending.rs`). A file that fails, a cancel or a removal takes every
   file of the download off the queue, and the download leaves one outcome:

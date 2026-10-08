@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use gglib_core::domain::{NewModel, NewModelFile};
 use gglib_core::download::DownloadOutcome;
-use gglib_core::ports::NoopEmitter;
 use gglib_core::ports::huggingface::fake_hub::{FakeHub, hub_file};
+use gglib_core::ports::{DownloadManagerConfig, NoopEmitter};
 
 use super::*;
 
@@ -33,7 +33,10 @@ async fn a_repair_leaves_a_running_download() {
     let built = wire(
         pool,
         Arc::new(hub),
-        token_holders(None, models_dir).download_config,
+        DownloadManagerConfig {
+            models_directory: Some(models_dir),
+            ..DownloadManagerConfig::default()
+        },
         None,
         Arc::new(NoopEmitter::new()),
     );

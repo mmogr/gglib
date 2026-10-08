@@ -31,7 +31,8 @@ use super::paths::DownloadDestination;
 /// say, progress or a note, it writes to the job's `watch::Sender`.
 #[derive(Clone)]
 pub(crate) struct WorkerDeps {
-    /// Configuration (models directory, HF token, etc.).
+    /// Configuration: the Hub token the transfer asks with. Where the file
+    /// goes is the job's `destination`.
     pub config: DownloadManagerConfig,
 }
 

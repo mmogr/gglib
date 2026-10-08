@@ -23,7 +23,7 @@ use crate::console::CliConsole;
 use crate::daemon_client::LibraryChanges;
 
 // Path utilities from core
-use gglib_core::paths::{database_path, resolve_models_dir};
+use gglib_core::paths::database_path;
 
 /// Fully composed application context for CLI commands.
 ///
@@ -79,16 +79,14 @@ pub struct CliContext {
 /// client.
 pub async fn bootstrap() -> Result<CliContext> {
     // Resolve paths/env up-front so BootstrapConfig holds only resolved data.
-    let models_resolution = resolve_models_dir(None)?;
     let bootstrap_config = BootstrapConfig {
         db_path: database_path()?,
-        models_dir: models_resolution.path,
     };
     bootstrap_with(bootstrap_config).await
 }
 
-/// [`bootstrap`] over the database and models directory `bootstrap_config`
-/// names, so a test can point it at a temporary directory.
+/// [`bootstrap`] over the database `bootstrap_config` names, so a test can
+/// point it at a temporary directory.
 pub(crate) async fn bootstrap_with(bootstrap_config: BootstrapConfig) -> Result<CliContext> {
     // The console owns the progress bars and routes log lines around them.
     // The CLI subscribes to no application events: a download monitor reads
@@ -127,15 +125,11 @@ pub(crate) async fn bootstrap_with(bootstrap_config: BootstrapConfig) -> Result<
     })
 }
 
-/// [`bootstrap_with`] over a fresh database and models directory in `dir`,
-/// for a test.
+/// [`bootstrap_with`] over a fresh database in `dir`, for a test.
 #[cfg(test)]
 pub(crate) async fn test_context(dir: &std::path::Path) -> CliContext {
-    let models_dir = dir.join("models");
-    std::fs::create_dir_all(&models_dir).expect("models dir");
     bootstrap_with(BootstrapConfig {
         db_path: dir.join("gglib.db"),
-        models_dir,
     })
     .await
     .expect("the database opens")

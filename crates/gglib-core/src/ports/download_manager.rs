@@ -22,8 +22,15 @@ use crate::download::{DownloadError, DownloadId, QueueSnapshot};
 /// Infrastructure-specific options are handled internally.
 #[derive(Debug, Clone)]
 pub struct DownloadManagerConfig {
-    /// Directory where models are stored.
-    pub models_directory: PathBuf,
+    /// A directory every download goes under, whatever is stored: for a
+    /// caller that keeps its downloads in a directory of its own, as a test
+    /// does.
+    ///
+    /// With `None` each download asks
+    /// [`resolve_models_dir`](crate::paths::resolve_models_dir) for the
+    /// directory as it starts, and what resolved as the manager was built is
+    /// not kept.
+    pub models_directory: Option<PathBuf>,
     /// Maximum queue size.
     pub max_queue_size: u32,
     /// `HuggingFace` authentication token (for private repos).
@@ -33,7 +40,7 @@ pub struct DownloadManagerConfig {
 impl Default for DownloadManagerConfig {
     fn default() -> Self {
         Self {
-            models_directory: PathBuf::from("."),
+            models_directory: None,
             max_queue_size: 10,
             hf_token: None,
         }
@@ -41,15 +48,6 @@ impl Default for DownloadManagerConfig {
 }
 
 impl DownloadManagerConfig {
-    /// Create a new config with the models directory.
-    #[must_use]
-    pub fn new(models_directory: PathBuf) -> Self {
-        Self {
-            models_directory,
-            ..Default::default()
-        }
-    }
-
     /// Set the `HuggingFace` token.
     #[must_use]
     pub fn with_hf_token(mut self, token: Option<String>) -> Self {

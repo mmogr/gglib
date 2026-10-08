@@ -17,7 +17,10 @@ creates the directory and stores it in the data root's `.env`, quoted, so
 that a path with a space in it is still a line that file's loader reads.
 `resolve_models_dir` reads it back: an explicit path first, then
 `GGLIB_MODELS_DIR` in the environment, then the stored directory, read with
-the loader's own parser, then the default.
+the loader's own parser, then the default. A daemon's download manager asks
+it as each download starts and keeps the answer for that download's files
+alone, so a directory stored while the daemon runs is where its next download
+goes, unless the daemon's own environment names one.
 
 # Design
 

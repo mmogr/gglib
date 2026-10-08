@@ -30,7 +30,6 @@
 //! let emitter: Arc<dyn AppEventEmitter> = Arc::new(MyEmitter::new());
 //! let config = BootstrapConfig {
 //!     db_path: database_path()?,
-//!     models_dir: resolve_models_dir(None)?.path,
 //! };
 //! let core = CoreBootstrap::build(config, emitter).await?;
 //! // core.app, core.downloads, core.hf_client, … all ready
@@ -46,6 +45,9 @@
 //! - **Happy path / config** (`tests/build_happy_path.rs`): full
 //!   `CoreBootstrap::build()` calls that confirm wiring succeeds and the
 //!   returned [`BuiltCore`] is live.
+//! - **Models directory** (`src/builder.rs`): the download manager's config
+//!   names no models directory. What the manager does with none is tested in
+//!   `gglib-download`.
 //! - **Hub token** (`src/builder.rs`, `tests/hub_token.rs`): inline tests
 //!   that one token is handed to the Hub client's config, the download
 //!   manager's config and `AppCore`, or to none of them; and a test that

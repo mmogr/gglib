@@ -106,7 +106,9 @@ pub struct AxumContext {
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
-    // Log resolved paths at startup for diagnostics
+    // Log resolved paths at startup for diagnostics. The models directory is
+    // the one current now, and is not kept: each download asks again as it
+    // starts.
     let db_path = match &config.db_path {
         Some(path) => path.clone(),
         None => database_path()?,
@@ -131,10 +133,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     let sse = Arc::new(SseBroadcaster::with_defaults());
 
     // 2. Shared infrastructure via gglib-bootstrap.
-    let bootstrap_config = BootstrapConfig {
-        db_path,
-        models_dir: models_resolution.path,
-    };
+    let bootstrap_config = BootstrapConfig { db_path };
     let emitter: Arc<dyn AppEventEmitter> = sse.clone();
     let BuiltCore {
         app: core,

@@ -262,7 +262,9 @@ its own: `add` refuses a name another server already has.
   the model's own defaults.
 - **`default`** — view or set the default model.
 - **`models-dir`** — `show` (with its source), `prompt` (interactive), or
-  `set <PATH>`.
+  `set <PATH>`. A running daemon's next download goes to the new directory;
+  a download already running finishes where it started. `GGLIB_MODELS_DIR`
+  in the daemon's own environment outranks the stored directory.
 - **`llama`** — install, status, check-updates, update, rebuild, uninstall.
   gglib manages llama.cpp itself; see [Llama Management](../crates/gglib-runtime/src/llama/README.md).
 - **`check-deps`** — report what is missing and print your platform's exact

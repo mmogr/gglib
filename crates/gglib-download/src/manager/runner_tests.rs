@@ -23,12 +23,15 @@ fn manager_that_cannot_write(dir: &Path) -> Arc<DownloadManagerImpl> {
         Arc::new(NoRegistrar),
         Arc::new(RepoHub::new(&[("zeta.Q8_0.gguf", 1_000)])),
         Arc::new(NoopEmitter::new()),
-        DownloadManagerConfig::new(blocked),
+        DownloadManagerConfig {
+            models_directory: Some(blocked),
+            ..DownloadManagerConfig::default()
+        },
     ))
 }
 
 /// How the download `id` ended, once the queue says it has.
-async fn ended(manager: &DownloadManagerImpl, id: &DownloadId) -> FinishedDownload {
+pub(super) async fn ended(manager: &DownloadManagerImpl, id: &DownloadId) -> FinishedDownload {
     let id = id.to_string();
     let read = async {
         loop {

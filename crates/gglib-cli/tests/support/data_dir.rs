@@ -102,11 +102,8 @@ pub(crate) fn add_model(root: &Path, model: NewModel) {
 /// `root`'s database, opened through `CoreBootstrap::build` as the binary's
 /// own bootstrap opens it.
 async fn open(root: &Path) -> BuiltCore {
-    let models_dir = root.join("models");
-    std::fs::create_dir_all(&models_dir).expect("models dir");
     let config = BootstrapConfig {
         db_path: database(root),
-        models_dir,
     };
     CoreBootstrap::build(config, Arc::new(NoopEmitter::new()))
         .await
