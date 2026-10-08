@@ -3,7 +3,7 @@
 //! No llama-server is installed under this binary's data root, so no
 //! process here can be one. A record that counts, and the ways one stops
 //! counting, are tested against the built binary, with a data root and a
-//! stand-in server of the test's own, in `tests/model_remove_served.rs`.
+//! stand-in server of the test's own, in `tests/model_served.rs`.
 
 use gglib_core::ports::ModelRuntimePort;
 use gglib_runtime::pidfile::{delete_pidfile, list_pidfiles, write_pidfile};

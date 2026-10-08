@@ -7,8 +7,12 @@
 //! What stays here is what only a terminal has: the plan, the prompt, the
 //! printed result, and the download board the upgrade's row is drawn on.
 //!
+//! A model that is being served is refused before any of that, by the rule
+//! `apply_upgrade` refuses it by ([`ModelOps::refuse_if_served`]).
+//!
 //! [`ModelOps::check_upgrade`]: gglib_app_services::ModelOps::check_upgrade
 //! [`ModelOps::apply_upgrade`]: gglib_app_services::ModelOps::apply_upgrade
+//! [`ModelOps::refuse_if_served`]: gglib_app_services::ModelOps::refuse_if_served
 
 use anyhow::Result;
 
@@ -26,9 +30,12 @@ use super::board::SoloBoard;
 pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
-    // Same construction as `model capabilities`. The upgrade path never
-    // reads serving status.
+    // What it is built with, and why, is `one_shot_model_ops`'s to say.
     let ops = crate::handlers::model::one_shot_model_ops(ctx);
+
+    // Asked first, so the Hub is not asked about an upgrade that would be
+    // refused, and nobody is asked to confirm one.
+    ops.refuse_if_served(&model).await?;
 
     println!("Updating model {} (ID: {})...", model.name, model.id);
     if let Some(repo) = model.hf_repo_id.as_deref() {

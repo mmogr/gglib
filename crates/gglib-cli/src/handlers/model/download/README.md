@@ -226,11 +226,13 @@ Update a model to the latest version from `HuggingFace` Hub.
 - `--force` - Skip confirmation prompt
 
 **Flow:**
-1. Check if model has `HuggingFace` source
-2. Query Hub for latest version
-3. Download new version, drawn as one line on the download board
-4. Replace old file
-5. Update database metadata
+1. Refuse a model that is being served under this data root
+   (`ModelOps::refuse_if_served`)
+2. Check if model has `HuggingFace` source
+3. Query Hub for latest version
+4. Download new version, drawn as one line on the download board
+5. Replace old file
+6. Update database metadata
 
 **Example:**
 ```bash

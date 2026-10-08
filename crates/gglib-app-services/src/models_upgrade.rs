@@ -81,7 +81,9 @@ impl ModelOps {
 
     /// [`check_update`](Self::check_update) for a model an upgrade can be
     /// applied to: one with no stored quantization is refused here, as
-    /// [`apply_upgrade`](Self::apply_upgrade) would refuse it.
+    /// [`apply_upgrade`](Self::apply_upgrade) would refuse it. It does not
+    /// ask what is being served: a model the upgrade would refuse for that
+    /// is still checked.
     pub async fn check_upgrade(&self, id: i64) -> Result<UpgradeCheck, GuiError> {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
         Self::upgrade_source(&model)?;
@@ -90,6 +92,11 @@ impl ModelOps {
 
     /// Re-download the model at the latest `HuggingFace` revision and rewrite
     /// the row — `gglib model upgrade`, shared by the CLI and the GUI route.
+    ///
+    /// A model that is being served is refused before the Hub is asked
+    /// anything ([`refuse_if_served`](Self::refuse_if_served), the rule
+    /// [`remove`](Self::remove) refuses by): the forced download replaces
+    /// the file its llama-server has open.
     ///
     /// Checks first and returns `updated: false` without downloading when the
     /// model is already current. The HF token is the one the core was built
@@ -127,6 +134,7 @@ impl ModelOps {
         DF: Future<Output = anyhow::Result<CliDownloadResult>> + Send + 'static,
     {
         let mut model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
+        self.refuse_if_served(&model).await?;
         let (repo, quant) = Self::upgrade_source(&model)?;
         let models_dir = gglib_core::paths::resolve_models_dir(None)
             .map_err(|e| GuiError::Internal(format!("Could not resolve models dir: {e}")))?

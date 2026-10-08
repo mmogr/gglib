@@ -72,9 +72,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`hub_chats.rs`** — `HubChats`, the hub's chats as a paired device reads them, with each chat's live run
 - **`error.rs`** — `GuiError` semantic error type for all app-service operations, and what a core error becomes in it (`From<CoreError>`): a refused input is a validation failure, a missing row is not found, a duplicate is a conflict, and only a failure of the store is internal
 - **`mcp.rs`** — `McpOps` MCP server configuration and management
-- **`models.rs`** — `ModelOps` model CRUD and listing operations
+- **`models.rs`** — `ModelOps` model CRUD and listing operations, and `refuse_if_served`, the one rule that refuses a removal or an upgrade of a model a llama-server is serving
 - **`models_projector.rs`** — The projector link on `ModelOps`: an update's `projector_path` applied through `ModelService::set_projector`, and the choices the inspector's picker offers
-- **`models_upgrade.rs`** — `gglib model upgrade` on `ModelOps`: the commit check, and the download and row rewrite, whose progress is the download row handed to the caller's `RowCallback`
+- **`models_upgrade.rs`** — `gglib model upgrade` on `ModelOps`: the commit check, and the download and row rewrite, whose progress is the download row handed to the caller's `RowCallback`; a model that is being served is refused first
 - **`proxy.rs`** — `ProxyOps` OpenAI-compatible proxy lifecycle management
 - **`servers.rs`** — `ServerOps` llama.cpp server lifecycle management
 - **`settings.rs`** — `SettingsOps` application settings persistence

@@ -13,7 +13,7 @@ use tokio::fs;
 use super::*;
 use crate::error::GuiError;
 use crate::sampling_explain::ProvenanceKindDto;
-use crate::test_support::{RecordingEmitter, test_core};
+use crate::test_support::{RecordingEmitter, RunningRuntime, test_core};
 use gglib_core::ports::{NoopGgufParser, NoopModelRuntime};
 
 fn make_ops(core: Arc<AppCore>) -> ModelOps {
@@ -278,76 +278,6 @@ async fn remove_unknown_id_returns_not_found() {
         ),
         "expected NotFound, got {result:?}"
     );
-}
-
-/// A runtime that reports one fixed model as running, and records
-/// whether `stop_current` was called.
-///
-/// Stands in for the shared `ProcessManager`-backed runtime `ServerOps`
-/// starts models through. Before this fix, `ModelOps` consulted its own
-/// `ProcessRunner` instead — a registry `ServerOps` never wrote to — so a
-/// model actually running under the proxy looked idle here and the force
-/// guard below never fired.
-#[derive(Debug)]
-struct RunningRuntime {
-    model_id: i64,
-    port: u16,
-    stopped: std::sync::atomic::AtomicBool,
-    asked: std::sync::atomic::AtomicUsize,
-}
-
-impl RunningRuntime {
-    fn new(model_id: i64, port: u16) -> Self {
-        Self {
-            model_id,
-            port,
-            stopped: std::sync::atomic::AtomicBool::new(false),
-            asked: std::sync::atomic::AtomicUsize::new(0),
-        }
-    }
-
-    fn stopped(&self) -> bool {
-        self.stopped.load(std::sync::atomic::Ordering::SeqCst)
-    }
-
-    /// How many times it has been asked what is running.
-    fn asked(&self) -> usize {
-        self.asked.load(std::sync::atomic::Ordering::SeqCst)
-    }
-}
-
-#[async_trait::async_trait]
-impl gglib_core::ports::ModelRuntimePort for RunningRuntime {
-    async fn admit(
-        &self,
-        _model_name: &str,
-        _num_ctx: Option<u64>,
-        _default_ctx: Option<u64>,
-        _overrides: gglib_core::ports::LaunchOverrides,
-    ) -> Result<gglib_core::ports::Admission, gglib_core::ports::ModelRuntimeError> {
-        unimplemented!("not exercised by the remove() tests")
-    }
-
-    async fn current_model(&self) -> Option<gglib_core::ports::RunningTarget> {
-        None
-    }
-
-    async fn list_running(&self) -> Vec<gglib_core::ports::ProcessHandle> {
-        self.asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        vec![gglib_core::ports::ProcessHandle::new(
-            self.model_id,
-            "running-model".to_string(),
-            None,
-            self.port,
-            0,
-        )]
-    }
-
-    async fn stop_current(&self) -> Result<(), gglib_core::ports::ModelRuntimeError> {
-        self.stopped
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-        Ok(())
-    }
 }
 
 /// Add a placeholder model on disk and register it, returning the DTO.

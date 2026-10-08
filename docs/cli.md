@@ -144,6 +144,11 @@ served, and on which port.
 
 **HuggingFace** — `download`, `search`, `browse`, `check-updates`, `upgrade`.
 
+`upgrade` replaces a model's file with its repository's latest revision,
+when that is newer than the one recorded. Like `remove`, it refuses a model
+that is being served under the same data root, before it asks the Hub
+anything; `--force` skips the confirmation and stops nothing.
+
 Downloads route through the shared queue the GUI uses. In a TTY the terminal
 becomes a live monitor: **[a]** adds another model while one is in flight;
 **[q]** / `Esc` / `Ctrl-C` drains once, then force-quits on a second press. The

@@ -6,11 +6,13 @@ use std::sync::Mutex;
 
 use gglib_core::domain::NewModel;
 use gglib_core::download::{DownloadId, RowFacts, row};
-use gglib_core::ports::{NoopEmitter, NoopGgufParser, NoopModelRuntime};
+use gglib_core::ports::{ModelRuntimePort, NoopEmitter, NoopGgufParser, NoopModelRuntime};
 use gglib_core::services::AppCore;
 
 use super::*;
 use crate::models::ModelDeps;
+use crate::test_support::RunningRuntime;
+use crate::types::RemoveModelRequest;
 
 const REPO: &str = "owner/zeta-GGUF";
 const RECORDED: &str = "1111111111111111111111111111111111111111";
@@ -42,13 +44,18 @@ async fn library_asking_as(token: Option<&str>) -> (Arc<AppCore>, ModelOps, i64)
     model.quantization = Some("Q8_0".to_string());
     let id = core.models().add(model).await.expect("a model").id;
 
-    let ops = ModelOps::new(ModelDeps {
-        core: Arc::clone(&core),
-        runtime: Arc::new(NoopModelRuntime),
+    let ops = ops_asking(&core, Arc::new(NoopModelRuntime));
+    (core, ops, id)
+}
+
+/// `ModelOps` over `core` that asks `runtime` what is being served.
+fn ops_asking(core: &Arc<AppCore>, runtime: Arc<dyn ModelRuntimePort>) -> ModelOps {
+    ModelOps::new(ModelDeps {
+        core: Arc::clone(core),
+        runtime,
         gguf_parser: Arc::new(NoopGgufParser),
         emitter: Arc::new(NoopEmitter::new()),
-    });
-    (core, ops, id)
+    })
 }
 
 /// A sink that keeps the id of each row it is handed.
@@ -245,4 +252,119 @@ async fn a_model_with_no_repository_is_not_checked() {
         matches!(&refused, GuiError::ValidationFailed(why) if why.contains("HuggingFace")),
         "{refused}"
     );
+}
+
+/// What a llama-server serving the model has open.
+const WEIGHTS: &[u8] = b"the weights a llama-server has open";
+
+/// A model of [`REPO`] an upgrade can be applied to, whose file is on disk
+/// in `dir` and holds [`WEIGHTS`]: the model's id, and the file.
+async fn model_on_disk(core: &AppCore, dir: &std::path::Path) -> (i64, PathBuf) {
+    let weights = dir.join("other.Q8_0.gguf");
+    std::fs::write(&weights, WEIGHTS).expect("the file is written");
+    let weights = weights.canonicalize().expect("its canonical path");
+    let id = another_model(core, |model| {
+        model.file_path = weights.clone();
+        model.quantization = Some("Q8_0".to_string());
+    })
+    .await;
+    (id, weights)
+}
+
+/// Upgrade `id` through `ops` against a Hub holding [`NEWER`]: how it
+/// ended, and what it asked of the Hub, in order. The download does what a
+/// forced one does to the file it replaces: the file is gone before
+/// anything is written in its place.
+async fn upgrade(ops: &ModelOps, id: i64) -> (Result<UpgradeOutcome, GuiError>, Vec<&'static str>) {
+    let asked = Arc::new(Mutex::new(Vec::new()));
+
+    let checked = Arc::clone(&asked);
+    let check = move |repo: String, recorded, _| {
+        checked.lock().unwrap().push("check");
+        finds(&repo, recorded, NEWER)
+    };
+    let downloaded = Arc::clone(&asked);
+    let download = move |request: CliUpdateRequest, _| {
+        downloaded.lock().unwrap().push("download");
+        std::fs::remove_file(&request.model_path).expect("the file it replaces");
+        std::future::ready(Ok(CliDownloadResult {
+            downloaded_paths: vec![request.model_path.clone()],
+            primary_path: request.model_path,
+            quantization: request.quantization,
+            repo_id: request.repo_id,
+            commit_sha: NEWER.to_string(),
+        }))
+    };
+    let ended = ops.apply_upgrade_with(id, None, check, download).await;
+
+    let asked = asked.lock().unwrap().clone();
+    (ended, asked)
+}
+
+/// A llama-server has the file of the model it serves open. An upgrade of
+/// that model is refused before the Hub is asked anything, so the file is
+/// still there, as it was, and so is the row; the server is left running.
+#[tokio::test]
+async fn a_model_being_served_is_refused_before_the_hub_is_asked_and_keeps_its_file() {
+    let (core, _, _) = library().await;
+    let dir = tempfile::tempdir().unwrap();
+    let (id, weights) = model_on_disk(&core, dir.path()).await;
+    let runtime = Arc::new(RunningRuntime::new(id, 9001));
+    let ops = ops_asking(&core, Arc::clone(&runtime) as Arc<dyn ModelRuntimePort>);
+
+    let (ended, asked) = upgrade(&ops, id).await;
+
+    let refused = ended.expect_err("the model is being served");
+    assert_eq!(
+        refused.to_string(),
+        "conflict: Model 'other' is being served on port 9001. Stop its server first."
+    );
+    assert!(asked.is_empty(), "{asked:?}");
+    assert_eq!(std::fs::read(&weights).unwrap(), WEIGHTS);
+    let model = crate::helpers::resolve_model(core.models(), id)
+        .await
+        .unwrap();
+    assert_eq!(model.file_path, weights);
+    assert_eq!(model.hf_commit_sha.as_deref(), Some(RECORDED));
+    assert!(!runtime.stopped(), "a refused upgrade stopped the server");
+}
+
+/// One rule for the two things that take a model from under its server: a
+/// removal and an upgrade of a served model are refused in the same words,
+/// as the same kind of error.
+#[tokio::test]
+async fn a_removal_and_an_upgrade_of_a_served_model_are_refused_alike() {
+    let (core, _, _) = library().await;
+    let dir = tempfile::tempdir().unwrap();
+    let (id, _) = model_on_disk(&core, dir.path()).await;
+    let ops = ops_asking(&core, Arc::new(RunningRuntime::new(id, 9001)));
+
+    let (upgrade, _) = upgrade(&ops, id).await;
+    let removal = ops.remove(id, RemoveModelRequest::default()).await;
+
+    let (upgrade, removal) = (upgrade.unwrap_err(), removal.unwrap_err());
+    assert!(matches!(removal, GuiError::Conflict(_)), "{removal}");
+    assert!(matches!(upgrade, GuiError::Conflict(_)), "{upgrade}");
+    assert_eq!(upgrade.to_string(), removal.to_string());
+}
+
+/// A server is one model's. Another model in the same library is upgraded
+/// as it is when nothing is being served: checked, downloaded, and its row
+/// rewritten.
+#[tokio::test]
+async fn a_server_for_one_model_does_not_block_the_upgrade_of_another() {
+    let (core, _, served) = library().await;
+    let dir = tempfile::tempdir().unwrap();
+    let (id, weights) = model_on_disk(&core, dir.path()).await;
+    let ops = ops_asking(&core, Arc::new(RunningRuntime::new(served, 9001)));
+
+    let (ended, asked) = upgrade(&ops, id).await;
+
+    assert!(ended.expect("an upgrade").updated);
+    assert_eq!(asked, ["check", "download"]);
+    assert!(!weights.exists(), "the download left the file it replaces");
+    let model = crate::helpers::resolve_model(core.models(), id)
+        .await
+        .unwrap();
+    assert_eq!(model.hf_commit_sha.as_deref(), Some(NEWER));
 }
