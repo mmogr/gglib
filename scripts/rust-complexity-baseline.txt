@@ -24,6 +24,7 @@ crates/gglib-cli/src/handlers/model/download/interactive.rs 396
 crates/gglib-cli/src/handlers/model/update.rs 612
 crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 351
 crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 534
+crates/gglib-cli/src/handlers/up/mod.rs 330
 crates/gglib-cli/src/model_commands.rs 378
 crates/gglib-cli/src/presentation/explain_display.rs 426
 crates/gglib-cli/src/presentation/explain_display_tests.rs 700
