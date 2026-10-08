@@ -5,7 +5,7 @@ crates/gglib-agent/tests/integration_happy_path.rs 421
 crates/gglib-app-services/src/benchmark/agentic.rs 745
 crates/gglib-app-services/src/benchmark/compare.rs 364
 crates/gglib-app-services/src/benchmark/mapper.rs 529
-crates/gglib-app-services/src/benchmark/tune/mod.rs 1333
+crates/gglib-app-services/src/benchmark/tune/mod.rs 1341
 crates/gglib-app-services/src/models.rs 410
 crates/gglib-app-services/src/models_tests.rs 894
 crates/gglib-app-services/src/models_upgrade_tests.rs 370
@@ -138,7 +138,7 @@ crates/gglib-runtime/src/llama/args/cache_ram.rs 328
 crates/gglib-runtime/src/llama/build/mod.rs 415
 crates/gglib-runtime/src/llama/download/mod.rs 980
 crates/gglib-runtime/src/llama/update.rs 348
-crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 361
+crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 374
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 340
 crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 307
 crates/gglib-runtime/src/process/admission/queue_tests.rs 972
