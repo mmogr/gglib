@@ -4,6 +4,7 @@ mod choose;
 mod probe;
 mod warm;
 
+use std::ffi::OsStr;
 use std::io::IsTerminal;
 
 use anyhow::Result;
@@ -107,7 +108,18 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
 /// stdout), because the two blocks appear in the same output and disagreeing
 /// about colour would be visible.
 pub(super) fn use_color() -> bool {
-    std::env::var_os("NO_COLOR").is_none() && std::io::stdout().is_terminal()
+    color_allowed(
+        std::env::var_os("NO_COLOR").as_deref(),
+        std::io::stdout().is_terminal(),
+    )
+}
+
+/// The rule [`use_color`] applies, given what `NO_COLOR` holds and whether
+/// stdout is a terminal, so that a test can state it whatever terminal the
+/// tests are run from. `NO_COLOR` set to anything, an empty value included,
+/// turns colour off.
+fn color_allowed(no_color: Option<&OsStr>, stdout_is_terminal: bool) -> bool {
+    no_color.is_none() && stdout_is_terminal
 }
 
 /// An ANSI sequence, or nothing when colour is off.
@@ -118,7 +130,12 @@ pub(super) fn use_color() -> bool {
 /// the middle — the client configuration is the block most likely to be pasted
 /// somewhere, so partial honouring of `NO_COLOR` is worse than none.
 pub(super) fn sgr(code: &'static str) -> &'static str {
-    if use_color() { code } else { "" }
+    sgr_when(use_color(), code)
+}
+
+/// [`sgr`], given whether colour is on.
+fn sgr_when(color: bool, code: &'static str) -> &'static str {
+    if color { code } else { "" }
 }
 
 /// Refuse to ask a question nobody is there to answer.
@@ -267,14 +284,47 @@ mod tests {
         assert!(!lines[0].contains('\u{1b}'));
     }
 
-    /// Test stdout is never a TTY, so this pins the suppression path every
-    /// inline escape in this command now goes through. It regressed once:
-    /// `row` honoured `NO_COLOR` while the `✓` markers printed raw green, so a
-    /// redirected run came out almost-clean, which is the worst of both.
+    /// Colour needs both answers: `NO_COLOR` unset, and a terminal to draw on.
+    #[test]
+    fn colour_is_on_only_for_a_terminal_with_no_color_unset() {
+        let set = |value: &'static str| Some(OsStr::new(value));
+
+        assert!(color_allowed(None, true));
+        assert!(!color_allowed(set("1"), true), "NO_COLOR is honoured");
+        assert!(!color_allowed(set(""), true), "set to nothing is still set");
+        assert!(!color_allowed(None, false), "a pipe gets no escapes");
+        assert!(!color_allowed(set("1"), false));
+    }
+
+    /// The suppression path every inline escape in this command goes through.
+    /// It regressed once: `row` honoured `NO_COLOR` while the `✓` markers
+    /// printed raw green, so a redirected run came out almost-clean, which is
+    /// the worst of both.
     #[test]
     fn sgr_emits_nothing_when_color_is_off() {
-        assert!(!use_color(), "test stdout should not be a terminal");
-        assert_eq!(sgr(crate::presentation::style::SUCCESS), "");
-        assert_eq!(sgr(crate::presentation::style::BOLD), "");
+        use crate::presentation::style::{BOLD, SUCCESS};
+
+        assert_eq!(sgr_when(false, SUCCESS), "");
+        assert_eq!(sgr_when(false, BOLD), "");
+        assert_eq!(sgr_when(true, SUCCESS), SUCCESS);
+    }
+
+    /// `sgr` is that path under this run's own answer. The tests may be run
+    /// from a terminal or into a pipe, so the answer is not assumed here.
+    #[test]
+    fn sgr_follows_what_use_color_answers() {
+        let code = crate::presentation::style::SUCCESS;
+        assert_eq!(sgr(code), sgr_when(use_color(), code));
+    }
+
+    /// Where this run says colour must be off, `use_color` says so: with
+    /// `NO_COLOR` set, or with stdout not a terminal, which is how CI runs
+    /// these tests. From a terminal with `NO_COLOR` unset colour is on, and
+    /// there is nothing here to hold it to.
+    #[test]
+    fn use_color_is_off_wherever_this_run_needs_it_off() {
+        if std::env::var_os("NO_COLOR").is_some() || !std::io::stdout().is_terminal() {
+            assert!(!use_color());
+        }
     }
 }
