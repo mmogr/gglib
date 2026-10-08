@@ -28,7 +28,6 @@ async fn registered(ctx: &CliContext, dir: &tempfile::TempDir, name: &str) -> i6
 async fn stored_as_is(dir: &tempfile::TempDir, conv: NewConversation) -> i64 {
     let config = gglib_bootstrap::BootstrapConfig {
         db_path: dir.path().join("gglib.db"),
-        models_dir: dir.path().join("models"),
     };
     let emitter = std::sync::Arc::new(gglib_core::ports::NoopEmitter::new());
     let built = gglib_bootstrap::CoreBootstrap::build(config, emitter).await;

@@ -89,7 +89,7 @@ crates/gglib-download/src/cli_exec/exec/python_env.rs 1544
 crates/gglib-download/src/cli_exec/exec/python_protocol.rs 347
 crates/gglib-download/src/executor/native.rs 578
 crates/gglib-download/src/executor/native_tests.rs 859
-crates/gglib-download/src/manager/mod.rs 1166
+crates/gglib-download/src/manager/mod.rs 1174
 crates/gglib-download/src/quant_selector.rs 340
 crates/gglib-download/src/queue/mod.rs 1067
 crates/gglib-gguf/src/capabilities/template_probe.rs 501

@@ -50,7 +50,6 @@ use crate::resolver::HfQuantizationResolver;
 pub(crate) use meter::GroupMeter;
 use shard_group_tracker::{GroupMetadata, ShardGroupTracker};
 
-pub(crate) use paths::DownloadDestination;
 pub(crate) use worker::{CompletedJob, DownloadJob, ProgressUpdate, WorkerDeps};
 
 /// How often a download's meter samples the file being fetched and a
@@ -248,7 +247,8 @@ pub fn build_download_manager(deps: DownloadManagerDeps) -> DownloadManagerImpl 
 ///
 /// Lock order: `publish` → `queue` → `active` → `shard_tracker` → `meters`.
 /// A task takes them in that order and never the other way; `meters` is a
-/// std mutex, never held across an await. `current_run` is taken under
+/// std mutex, never held across an await, and so is `directories`, which
+/// is taken with no other std mutex held. `current_run` is taken under
 /// `publish` when a run starts or is summed up, and under `queue` when a
 /// download's ending is recorded in it; nothing else is taken while it is
 /// held.
@@ -289,6 +289,9 @@ pub struct DownloadManagerImpl {
     /// One meter per download that has started, kept from file to file so its
     /// bytes and speed run on, until the download ends.
     meters: std::sync::Mutex<HashMap<DownloadId, GroupMeter>>,
+    /// The models directory of each download that has started, kept from
+    /// file to file until the download ends. See `paths.rs`.
+    directories: std::sync::Mutex<HashMap<DownloadId, std::path::PathBuf>>,
 }
 
 impl DownloadManagerImpl {
@@ -321,6 +324,7 @@ impl DownloadManagerImpl {
             prev_is_drained: Mutex::new(true), // Start in drained state
             file_entries_map: Mutex::new(HashMap::new()),
             meters: std::sync::Mutex::new(HashMap::new()),
+            directories: std::sync::Mutex::new(HashMap::new()),
         }
     }
 
@@ -398,32 +402,8 @@ impl DownloadManagerImpl {
                     finished.clone(),
                 ));
 
-                // Create worker deps and job
-                let deps = WorkerDeps {
-                    config: self.config.clone(),
-                };
-
-                let files = Self::extract_files(&item);
-                let destination =
-                    DownloadDestination::plan(&self.config.models_directory, &item.id, files);
-
-                // Save primary file path before destination is moved into the job.
-                let primary_file_path = destination.primary_path();
-
-                // Remove corrupt cached files before hf_hub_download sees them.
-                Self::remove_corrupt_cached_file(&item, primary_file_path.as_ref());
-
-                let job = DownloadJob {
-                    id: item.id.clone(),
-                    destination,
-                    revision: item.revision.clone(),
-                    cancel: cancel.clone(),
-                    progress_tx,
-                    expected_size: known_size(item.shard_info.as_ref().and_then(|s| s.file_size)),
-                };
-
                 // Run the worker
-                let result = worker::run_job(job, &deps).await;
+                let result = self.fetch(&item, cancel.clone(), progress_tx).await;
 
                 // Tell the meter task the worker is done, then actually join
                 // it, so the meter has the file's final count before the
@@ -441,6 +421,34 @@ impl DownloadManagerImpl {
                 self.queue_notify.notified().await;
             }
         }
+    }
+
+    /// Run the worker on `item`'s file, to where its download goes
+    /// ([`Self::destination`]). A download with nowhere to go fails as one
+    /// whose transfer did.
+    async fn fetch(
+        &self,
+        item: &QueuedItem,
+        cancel: CancellationToken,
+        progress_tx: watch::Sender<ProgressUpdate>,
+    ) -> Result<CompletedJob, DownloadError> {
+        let destination = self.destination(item)?;
+
+        // Remove corrupt cached files before hf_hub_download sees them.
+        Self::remove_corrupt_cached_file(item, destination.primary_path().as_ref());
+
+        let job = DownloadJob {
+            id: item.id.clone(),
+            destination,
+            revision: item.revision.clone(),
+            cancel,
+            progress_tx,
+            expected_size: known_size(item.shard_info.as_ref().and_then(|s| s.file_size)),
+        };
+        let deps = WorkerDeps {
+            config: self.config.clone(),
+        };
+        worker::run_job(job, &deps).await
     }
 
     /// Emit one download event through the application-wide emitter.

@@ -27,13 +27,21 @@ between the worker (core download logic) and publishing (the queue snapshot).
   sent, so they leave in order. A snapshot is published when the queue
   changes, on every meter tick, and at each change of phase: `Downloading`,
   then `Finalizing` and `Registering` once the last file is in
+- **Destination** (`paths.rs`): A download goes under the models directory
+  current as its first file starts: the one `resolve_models_dir` answers then,
+  unless the manager's config names one. The files after it go under the same
+  one, and it is dropped when the download ends. So the next download goes
+  where the directory resolves then, which follows one stored while the
+  manager runs, from the settings page or by `gglib config models-dir set`,
+  and a download part fetched is not split across two
 - **Ending** (`ending.rs`): A download ends as a whole, in one place,
   `end_download`: its files still pending leave the queue, its group is closed
-  in the tracker, its meter is dropped, and its outcome joins the queue's
-  finished list and the run's summary, all under one queue guard, the one
-  that takes its file out of `active`. One event then says so. It ends when
-  its last file is registered, when a file of it fails, or when the user stops
-  it. A model the library refuses is a failed download
+  in the tracker, its meter and its models directory are dropped, and its
+  outcome joins the queue's finished list and the run's summary, all under
+  one queue guard, the one that takes its file out of `active`. One event
+  then says so. It ends when its last file is registered, when a file of it
+  fails, or when the user stops it. A model the library refuses is a failed
+  download
 - **Stopping**: A download waiting, or between two of its files, ends at once
   as cancelled. One with a file being fetched has its worker told to stop and
   ends when the worker returns: cancelled whatever the worker answered, and
@@ -64,7 +72,8 @@ between the worker (core download logic) and publishing (the queue snapshot).
 - `Notify` for efficient wake-on-work
 - Lease tokens prevent stale finalize commits
 - Lock order: publish → queue → active → tracker → meters (consistent
-  everywhere); the meters are a std mutex, never held across an await
+  everywhere); the meters are a std mutex, never held across an await, and so
+  are the started downloads' directories, taken with no other std mutex held
 - A file is started under the queue lock, so it is never off the queue and
   not yet active
 

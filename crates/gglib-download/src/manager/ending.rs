@@ -17,15 +17,16 @@ impl DownloadManagerImpl {
     /// `None` when nothing of it is left: no file pending, and no `job`.
     ///
     /// Its files still pending leave the queue, its group is closed in the
-    /// tracker so a file landing late cannot open it again, its meter is
-    /// dropped, and its outcome joins the finished list and the run's
-    /// summary. `job` is its file that was being fetched, already taken out
-    /// of `active` by the caller.
+    /// tracker so a file landing late cannot open it again, its meter and
+    /// the models directory it started with are dropped, and its outcome
+    /// joins the finished list and the run's summary. `job` is its file that
+    /// was being fetched, already taken out of `active` by the caller.
     ///
     /// The caller holds the queue's write guard and passes the queue, so
     /// all of that is one change to a reader: no snapshot shows a download
     /// gone with no outcome, or ended with a file still waiting. Locks taken
-    /// under it: the tracker, the meters, then the run's summary.
+    /// under it: the tracker, the meters, the directories, then the run's
+    /// summary.
     async fn end_download(
         &self,
         queue: &mut DownloadQueue,
@@ -44,6 +45,7 @@ impl DownloadManagerImpl {
             self.shard_tracker.lock().await.close(group);
         }
         self.meters().remove(id);
+        self.directories().remove(id);
         let kind = match &outcome {
             DownloadOutcome::Completed { .. } => CompletionKind::Downloaded,
             DownloadOutcome::Failed { .. } => CompletionKind::Failed,

@@ -89,6 +89,7 @@ The test suite is split into these layers:
 |-------|----------|---------|
 | Repair | `src/builder_repair_tests.rs` | A repair through the wired core queues its download on the manager the adapters hold, and that manager runs it. The Hub is a stand-in. |
 | Happy path / config | `tests/build_happy_path.rs` | Full `CoreBootstrap::build()` calls that confirm the wiring succeeds and the returned `BuiltCore` is live. |
+| Models directory | `src/builder.rs` `#[cfg(test)]` | The download manager's config names no models directory. What the manager does with none is tested in `gglib-download`. |
 | Hub token | `src/builder.rs` `#[cfg(test)]`, `tests/hub_token.rs` | Inline: one token is handed to the Hub client's config, the download manager's config and `AppCore`, or to none of them. `tests/hub_token.rs`: `build()` reads `HF_TOKEN` itself, and the `AppCore` it returns holds it. That test runs itself again in a process started with the variable, since a running process cannot safely set it. |
 | Error cases | `tests/build_error_cases.rs` | Exercises the failure paths of `build()` — missing DB directory and DB path pointing at a directory. |
 | Functional round-trips | `tests/functional.rs` | End-to-end data round-trips through the wired repositories: model insert/list, settings save/reload, empty-state assertions for downloads, chat history, and MCP servers. |
@@ -114,12 +115,11 @@ cargo test -p gglib-bootstrap
 ```rust,ignore
 use std::sync::Arc;
 use gglib_bootstrap::{BootstrapConfig, CoreBootstrap};
-use gglib_core::paths::{database_path, resolve_models_dir};
+use gglib_core::paths::database_path;
 
 let emitter: Arc<dyn AppEventEmitter> = Arc::new(MyAdapterEmitter::new());
 let config = BootstrapConfig {
     db_path: database_path()?,
-    models_dir: resolve_models_dir(None)?.path,
 };
 let core = CoreBootstrap::build(config, emitter).await?;
 // core.app, core.downloads, core.hf_client … all ready
@@ -129,3 +129,11 @@ let core = CoreBootstrap::build(config, emitter).await?;
 (`gglib_core::hf_token::from_env`, the one place it is read) and hands it to
 the Hub client, the download manager and `AppCore`. The config has no field
 for it, so an adapter cannot be wired without it.
+
+The config has no field for the models directory either. An adapter that
+resolved one would hand over the directory as it started, and a daemon would
+download there for the rest of its life. The download manager is handed none,
+and asks `gglib_core::paths::resolve_models_dir` as each download starts, so
+a download goes where the directory resolves then: for a running daemon, one
+stored since from the settings page or with `gglib config models-dir set`,
+unless the daemon's own environment names one.

@@ -1,6 +1,5 @@
 //! [`CoreBootstrap`] — the shared composition root for all gglib adapters.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -26,17 +25,18 @@ struct TokenHolders {
     /// The Hub client's config. Search, browse and the registrar's recipe
     /// lookup ask through that client.
     client_config: HfClientConfig,
-    /// The download manager's config, for its transfers.
+    /// The download manager's config, for its transfers. It names no models
+    /// directory: the manager asks for the current one as a download starts.
     download_config: DownloadManagerConfig,
     /// `AppCore`'s token, for an upgrade's check and its download.
     core_token: Option<String>,
 }
 
 /// Each holder, handed `hf_token`: all three hold it, or none does.
-fn token_holders(hf_token: Option<String>, models_dir: PathBuf) -> TokenHolders {
+fn token_holders(hf_token: Option<String>) -> TokenHolders {
     TokenHolders {
         client_config: HfClientConfig::default().with_optional_token(hf_token.clone()),
-        download_config: DownloadManagerConfig::new(models_dir).with_hf_token(hf_token.clone()),
+        download_config: DownloadManagerConfig::default().with_hf_token(hf_token.clone()),
         core_token: hf_token,
     }
 }
@@ -54,7 +54,7 @@ impl CoreBootstrap {
     ///
     /// # Arguments
     ///
-    /// * `config` — Resolved paths and runtime parameters.
+    /// * `config` — The database to open.
     /// * `emitter` — Adapter-specific event emitter: the daemon passes its
     ///   SSE broadcaster, and the CLI and tests a `NoopEmitter`, having no
     ///   listener. Download events flow through this emitter to the
@@ -87,7 +87,7 @@ impl CoreBootstrap {
             client_config,
             download_config,
             core_token,
-        } = token_holders(gglib_core::hf_token::from_env(), config.models_dir);
+        } = token_holders(gglib_core::hf_token::from_env());
         let hf_client: Arc<dyn HfClientPort> = Arc::new(DefaultHfClient::new(&client_config));
 
         let built = wire(pool, hf_client, download_config, core_token, emitter);
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn a_token_is_handed_to_the_hub_client_the_download_manager_and_the_core() {
-        let holders = token_holders(Some(FAKE_TOKEN.to_owned()), PathBuf::from("models"));
+        let holders = token_holders(Some(FAKE_TOKEN.to_owned()));
 
         assert!(holders.client_config.has_token());
         assert_eq!(
@@ -177,21 +177,20 @@ mod tests {
 
     #[test]
     fn with_no_token_none_of_the_three_is_handed_one() {
-        let holders = token_holders(None, PathBuf::from("models"));
+        let holders = token_holders(None);
 
         assert!(!holders.client_config.has_token());
         assert_eq!(holders.download_config.hf_token, None);
         assert_eq!(holders.core_token, None);
     }
 
+    /// A directory named here would be the one current as the adapter
+    /// started, and every download of a daemon's life would go under it.
     #[test]
-    fn the_download_manager_keeps_the_models_directory_it_is_given() {
-        let holders = token_holders(None, PathBuf::from("somewhere/models"));
+    fn the_download_manager_is_handed_no_models_directory_of_its_own() {
+        let holders = token_holders(Some(FAKE_TOKEN.to_owned()));
 
-        assert_eq!(
-            holders.download_config.models_directory,
-            PathBuf::from("somewhere/models")
-        );
+        assert_eq!(holders.download_config.models_directory, None);
     }
 }
 
