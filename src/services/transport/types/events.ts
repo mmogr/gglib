@@ -86,7 +86,8 @@ export type { ModelSummary as ModelEventSummary } from '../../../types/generated
  *
  * These let a second window or browser tab reach a list that would otherwise
  * refresh only when its own tab made the edit. A `gglib model add` in a
- * terminal is a separate process and does not reach here.
+ * terminal is a separate process, and posts the daemon the event its change
+ * emitted.
  */
 export type ModelEvent = Extract<AppEvent, { type: `model_${string}` }>;
 

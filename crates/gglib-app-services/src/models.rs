@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use gglib_core::events::AppEvent;
 use gglib_core::ports::{AppEventEmitter, GgufParserPort, ModelRuntimePort, ProcessHandle};
-use gglib_core::services::AppCore;
+use gglib_core::services::{AppCore, ImportMode};
 use gglib_core::{
     Model, ModelCapabilities, ModelFilterOptions,
     domain::{ModelDetailDto, ModelListQuery, apply_query},
@@ -179,29 +179,55 @@ impl ModelOps {
         Ok(sampling_explain::explain(&model, &settings, selected))
     }
 
-    pub async fn add(&self, request: AddModelRequest) -> Result<GuiModel, GuiError> {
+    /// Import the GGUF file `request` names: the one add, for `POST
+    /// /api/models` and `gglib model add` alike.
+    ///
+    /// `param_count_override` and `mode` are what only a terminal asks for.
+    /// `gglib model add` prompts for a parameter count to store in place of
+    /// the one read from the file, and its `--reimport` is
+    /// [`ImportMode::Refresh`], which is explicit about overwriting a row
+    /// the caller already has. The HTTP surface has no way to ask for
+    /// either: its route passes `None` and [`ImportMode::Fresh`], so a
+    /// duplicate is always a 409 there.
+    ///
+    /// A re-import of a file that already has a row rewrites that row, and
+    /// is announced as `model_updated`. Every other import adds a row, and
+    /// is announced as `model_added`.
+    pub async fn add(
+        &self,
+        request: AddModelRequest,
+        param_count_override: Option<f64>,
+        mode: ImportMode,
+    ) -> Result<GuiModel, GuiError> {
         let path = PathBuf::from(&request.file_path);
+        let models = self.deps.core.models();
+
+        // Asked before the import, which answers with the same row whether
+        // it wrote a new one or rewrote this one. A lookup that fails is
+        // the import's to report.
+        let rewrites = mode == ImportMode::Refresh
+            && models
+                .find_by_path(&path)
+                .await
+                .is_ok_and(|row| row.is_some());
 
         // Delegate to shared core logic for model import with full metadata
-        // extraction. Always `Fresh`: the HTTP surface has no way to ask for
-        // the destructive re-import, so a duplicate is always a 409 here. The
-        // refresh workflow is `gglib model add --reimport`, which is explicit
-        // about overwriting a row the caller already has.
-        let model = self
-            .deps
-            .core
-            .models()
+        // extraction.
+        let model = models
             .import_from_file(
                 &path,
                 self.deps.gguf_parser.as_ref(),
-                None,
-                gglib_core::services::ImportMode::Fresh,
+                param_count_override,
+                mode,
             )
             .await?;
 
-        self.deps
-            .emitter
-            .emit(AppEvent::model_added((&model).into()));
+        let summary = (&model).into();
+        self.deps.emitter.emit(if rewrites {
+            AppEvent::model_updated(summary)
+        } else {
+            AppEvent::model_added(summary)
+        });
 
         // Return with serving status
         let (is_serving, port) = self.get_server_status(model.id).await;

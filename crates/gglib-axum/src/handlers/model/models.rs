@@ -12,6 +12,7 @@ use gglib_app_services::types::{
 };
 use gglib_core::ModelFilterOptions;
 use gglib_core::domain::{ModelDetailDto, ModelListQuery, ModelSortBy, SortOrder};
+use gglib_core::services::ImportMode;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Query-parameter struct for GET /api/models
@@ -88,12 +89,14 @@ pub(crate) async fn get(
     Ok(Json(state.models.get(id).await?))
 }
 
-/// Add a new model from a local file.
+/// Add a new model from a local file, with the parameter count read from it.
+/// A file already in the library is a 409: the body has no way to ask for
+/// the re-import `gglib model add --reimport` makes.
 pub(crate) async fn add(
     State(state): State<AppState>,
     Json(req): Json<AddModelRequest>,
 ) -> Result<Json<GuiModel>, HttpError> {
-    Ok(Json(state.models.add(req).await?))
+    Ok(Json(state.models.add(req, None, ImportMode::Fresh).await?))
 }
 
 /// Update an existing model.

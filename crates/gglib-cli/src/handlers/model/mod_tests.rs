@@ -2,14 +2,16 @@
 //! what that daemon is sent of a change the command makes through
 //! `ModelOps`, and what the command answers when no daemon takes it.
 
+use gglib_core::domain::capability_tags;
 use gglib_core::events::AppEvent;
 use gglib_core::ports::AppEventEmitter as _;
 
-use super::test_library::{library, row, run, stored};
+use super::test_library::{library, row, run, stored, write_gguf};
 use crate::daemon_client::STAND_IN_PORT;
 use crate::daemon_client::library_changes::tests::{
     TOKEN, another_program, beside, daemon, nobody, told,
 };
+use crate::utils::input::TYPED;
 
 /// An edit, a capability flag and a removal each reach the daemon as the
 /// event `ModelOps` emits for it on every surface: the stored row for a
@@ -47,6 +49,86 @@ async fn each_command_that_changes_the_library_posts_the_daemon_its_event() {
     expected.extend(told(&[AppEvent::model_removed(model.id)]));
     assert_eq!(*asked.lock().unwrap(), expected);
     assert!(row(&ctx, model.id).await.is_none());
+}
+
+/// A file added from a terminal reaches the daemon as the event the app's
+/// add emits for it, `model_added` with the stored row. A re-import of a
+/// file that has a row rewrites that row, and reaches it as `model_updated`.
+///
+/// The file carries no parameter count, so the add asks for one, and the
+/// stored row holds the one typed. The re-import asks nothing.
+#[tokio::test]
+async fn a_file_added_from_a_terminal_posts_the_daemon_what_the_apps_add_emits() {
+    let dir = tempfile::tempdir().unwrap();
+    let (ctx, _) = library(dir.path()).await;
+    let (port, asked) = daemon("204 No Content");
+    let weights = write_gguf(dir.path(), "llama.Q4_K_M.gguf", &[]);
+    let file = weights.to_str().unwrap();
+    let by_path = || async {
+        let found = ctx.app.models().find_by_path(&weights).await;
+        found.unwrap().expect("the file has a row")
+    };
+
+    let add = ["gglib", "model", "add", file];
+    beside(port, Some(TOKEN), TYPED.scope("7.5", run(&ctx, &add)))
+        .await
+        .expect("the file is added");
+
+    let added = by_path().await;
+    assert!(
+        (added.param_count_b - 7.5).abs() < f64::EPSILON,
+        "{added:?}"
+    );
+    let mut expected = told(&[AppEvent::model_added((&added).into())]);
+    assert_eq!(*asked.lock().unwrap(), expected);
+
+    let reimport = ["gglib", "model", "add", file, "--reimport"];
+    beside(port, Some(TOKEN), run(&ctx, &reimport))
+        .await
+        .expect("the file is re-imported");
+
+    let rewritten = by_path().await;
+    assert_eq!(rewritten.id, added.id);
+    expected.extend(told(&[AppEvent::model_updated((&rewritten).into())]));
+    assert_eq!(*asked.lock().unwrap(), expected);
+}
+
+/// A retag reaches the daemon as the app's does: `model_updated` with the
+/// stored row for a model the pass changed, and nothing for one it left as
+/// it was. Detection derives no tag for either model here, so only a full
+/// pass changes anything, and only the model holding a tag it drops.
+#[tokio::test]
+async fn a_retag_posts_the_daemon_each_model_it_changed_and_no_other() {
+    let dir = tempfile::tempdir().unwrap();
+    let (ctx, model) = library(dir.path()).await;
+    let (port, asked) = daemon("204 No Content");
+    let other = write_gguf(dir.path(), "llama.Q4_K_M.gguf", &[]);
+    let file = other.to_str().unwrap();
+    let seed = ["gglib", "model", "add", file, "--reimport"];
+    beside(port, None, run(&ctx, &seed))
+        .await
+        .expect("a second model");
+    let stale = capability_tags::MOE.to_owned();
+    let models = ctx.app.models();
+    models.add_tag(model.id, stale.clone()).await.unwrap();
+
+    let additive = ["gglib", "model", "retag", "--all"];
+    beside(port, Some(TOKEN), run(&ctx, &additive))
+        .await
+        .expect("the additive pass runs");
+
+    assert_eq!(*asked.lock().unwrap(), []);
+    assert_eq!(stored(&ctx, model.id).await.tags, [stale]);
+
+    let full = ["gglib", "model", "retag", "--all", "--full"];
+    beside(port, Some(TOKEN), run(&ctx, &full))
+        .await
+        .expect("the full pass runs");
+
+    let retagged = stored(&ctx, model.id).await;
+    assert!(retagged.tags.is_empty(), "{:?}", retagged.tags);
+    let changed = AppEvent::model_updated((&retagged).into());
+    assert_eq!(*asked.lock().unwrap(), told(&[changed]));
 }
 
 /// A command that stores nothing has nothing to tell, and asks the daemon

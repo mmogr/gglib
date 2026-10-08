@@ -9,7 +9,7 @@ use gglib_core::domain::{ModelListQuery, NewModelFile};
 use gglib_core::ports::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopEmitter, NoopModelRuntime,
 };
-use gglib_core::services::AppCore;
+use gglib_core::services::{AppCore, ImportMode};
 use gglib_db::{CoreFactory, setup_test_database};
 use tempfile::TempDir;
 
@@ -63,7 +63,9 @@ fn file(dir: &TempDir, name: &str, bytes: &[u8]) -> PathBuf {
 
 async fn add(ops: &ModelOps, dir: &TempDir, name: &str) -> GuiModel {
     let file_path = file(dir, name, b"weights").to_string_lossy().into_owned();
-    ops.add(AddModelRequest { file_path }).await.unwrap()
+    ops.add(AddModelRequest { file_path }, None, ImportMode::Fresh)
+        .await
+        .unwrap()
 }
 
 fn link(path: &Path) -> UpdateModelRequest {
