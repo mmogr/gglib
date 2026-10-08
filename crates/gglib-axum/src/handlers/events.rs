@@ -1,12 +1,17 @@
 //! SSE events handler - real-time event streaming.
 //!
-//! Streams application events (downloads, servers, etc.) to connected clients.
+//! Streams application events (downloads, servers, etc.) to connected clients,
+//! and takes the event a `gglib` command posts for a change it made itself.
 
 use std::convert::Infallible;
 
+use axum::Json;
 use axum::extract::State;
+use axum::http::StatusCode;
 use axum::response::sse::{Event, Sse};
 use futures_util::stream::Stream;
+use gglib_core::events::AppEvent;
+use gglib_core::ports::AppEventEmitter as _;
 
 use crate::state::AppState;
 
@@ -37,4 +42,23 @@ pub(crate) async fn stream(
             None => std::future::pending::<()>().await,
         }
     })
+}
+
+/// Send on the stream an event that was emitted in another process.
+///
+/// A `gglib model …` command that changes the library through `ModelOps`
+/// runs the one this daemon's routes run, in a process of its own that no
+/// client is attached to. It posts here what its `ModelOps` emitted, so a
+/// client of this daemon is told of the change as it is told of one made
+/// through the daemon: the same event, sent the same way.
+///
+/// The event is sent as it arrived, whichever event it is. Nothing here
+/// reads the library, so the caller is taken at its word, as any caller the
+/// bearer guard lets through is.
+pub(crate) async fn relay(
+    State(state): State<AppState>,
+    Json(event): Json<AppEvent>,
+) -> StatusCode {
+    state.sse.emit(event);
+    StatusCode::NO_CONTENT
 }

@@ -88,8 +88,12 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/proxy/loop-guard-trips", get(handlers::proxy::trips))
         // Daemon lifecycle
         .route("/daemon/shutdown", post(handlers::daemon::shutdown))
-        // Events (SSE)
-        .route("/events", get(handlers::events::stream))
+        // Events (SSE), and the event a `gglib` command posts for a change
+        // it made to the library in its own process.
+        .route(
+            "/events",
+            get(handlers::events::stream).post(handlers::events::relay),
+        )
         // Agent (server-side agentic loop with SSE streaming)
         //
         // Body limit: **4 MiB** (vs the Axum default of 2 MiB).

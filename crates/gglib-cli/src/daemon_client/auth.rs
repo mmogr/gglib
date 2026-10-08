@@ -81,10 +81,23 @@ impl Local {
 /// The token in the file at `path`, when it can be read, is not blank, and
 /// is open to nobody else ([`read_daemon_token`] refuses one that is).
 fn token_at(path: &Path) -> Option<String> {
+    #[cfg(test)]
+    if let Ok(left) = STAND_IN_TOKEN.try_with(Clone::clone) {
+        return left;
+    }
     read_daemon_token(path)
         .ok()
         .flatten()
         .map(|token| token.as_str().to_owned())
+}
+
+#[cfg(test)]
+tokio::task_local! {
+    /// In a test, the token a stand-in daemon left, or `None` for one that
+    /// left none. A task that sets it reads that in place of any token
+    /// file: the one under the data root is one file for every test in the
+    /// binary.
+    pub(crate) static STAND_IN_TOKEN: Option<String>;
 }
 
 /// The key a proxy on this machine is sent: `flag` when one was given, and

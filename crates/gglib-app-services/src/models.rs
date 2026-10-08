@@ -37,9 +37,9 @@ pub struct ModelDeps {
     /// GUI refetches its own list after its own edit, so a second window or
     /// browser tab keeps rendering the old row until someone hits refresh.
     ///
-    /// The reach is one daemon process. A `gglib model add` in a terminal is
-    /// a *separate* process holding a `NoopEmitter`, and does not route
-    /// through here at all — see `one_shot_model_ops` in `gglib-cli`.
+    /// The reach is one daemon process. A `gglib model …` command in a
+    /// terminal is a *separate* process: it keeps what is emitted here and
+    /// posts it to that daemon — see `one_shot_model_ops` in `gglib-cli`.
     pub emitter: Arc<dyn AppEventEmitter>,
 }
 
