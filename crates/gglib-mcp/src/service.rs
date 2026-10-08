@@ -7,7 +7,7 @@ use crate::manager::McpManager;
 use gglib_core::ports::{ResolutionAttempt, ResolutionStatus};
 use gglib_core::{
     McpLifecycle, McpRepositoryError, McpServer, McpServerRepository, McpServerStatus,
-    McpServiceError, McpTool, McpToolResult, NewMcpServer,
+    McpServerType, McpServiceError, McpTool, McpToolResult, NewMcpServer,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -46,6 +46,29 @@ impl McpService {
         }
     }
 
+    /// Refuse a kind of server gglib cannot run: an SSE one, for which it has
+    /// no client yet.
+    ///
+    /// Every caller is answered from here. Adding a server, changing one and
+    /// running one all ask, as do the start-up passes and the listing, which
+    /// leave such a server alone instead of failing on it. A stored one is
+    /// still read and removed: a database written while SSE servers were
+    /// accepted can hold some.
+    fn refuse_unsupported(server_type: McpServerType) -> Result<(), McpServiceError> {
+        match server_type {
+            McpServerType::Stdio => Ok(()),
+            McpServerType::Sse => Err(McpServiceError::SseNotSupported),
+        }
+    }
+
+    /// The stored servers of a kind gglib can run: the ones a start-up pass
+    /// may start.
+    async fn runnable_servers(&self) -> Result<Vec<McpServer>, McpServiceError> {
+        let mut servers = self.repository.list().await?;
+        servers.retain(|server| Self::refuse_unsupported(server.server_type).is_ok());
+        Ok(servers)
+    }
+
     /// Initialize the MCP service: validates all servers and starts `Eager` ones.
     ///
     /// `Lazy` servers start on first tool use (see `ensure_started_for_call`).
@@ -57,7 +80,7 @@ impl McpService {
         self.validate_all_servers().await?;
 
         // Start only Eager servers (Lazy: on-demand, Manual: never).
-        let servers = self.repository.list().await?;
+        let servers = self.runnable_servers().await?;
         for server in servers {
             if server.lifecycle == McpLifecycle::Eager && server.enabled && server.is_valid {
                 if let Err(e) = self.start_server(server.id).await {
@@ -86,7 +109,7 @@ impl McpService {
     /// right after `initialize` so that tools are ready before generation begins,
     /// avoiding per-tool spawn latency mid-stream.
     pub async fn prewarm_lazy(&self) {
-        let servers = match self.repository.list().await {
+        let servers = match self.runnable_servers().await {
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!(error = %e, "Failed to list servers for lazy prewarm");
@@ -433,9 +456,12 @@ impl McpService {
 
     /// Add a new MCP server configuration.
     ///
-    /// Refused with [`McpServiceError::NameTaken`] when a server already has
-    /// the name.
+    /// Refused with [`McpServiceError::SseNotSupported`] when it is an SSE
+    /// server, and with [`McpServiceError::NameTaken`] when a server already
+    /// has the name.
     pub async fn add_server(&self, new_server: NewMcpServer) -> Result<McpServer, McpServiceError> {
+        Self::refuse_unsupported(new_server.server_type)?;
+
         let _naming = self.naming.lock().await;
         self.refuse_taken_name(&new_server.name).await?;
 
@@ -479,10 +505,14 @@ impl McpService {
 
     /// Update a server configuration.
     ///
-    /// A rename to a name another server has is refused with
-    /// [`McpServiceError::NameTaken`], before anything is stopped or
-    /// written. A server keeps the name it has, even one it shares.
+    /// An SSE server is refused with [`McpServiceError::SseNotSupported`],
+    /// one that is stored as SSE as much as one being changed to it. A rename
+    /// to a name another server has is refused with
+    /// [`McpServiceError::NameTaken`]. Both refuse before anything is stopped
+    /// or written. A server keeps the name it has, even one it shares.
     pub async fn update_server(&self, mut server: McpServer) -> Result<(), McpServiceError> {
+        Self::refuse_unsupported(server.server_type)?;
+
         let id = server.id;
 
         let _naming = self.naming.lock().await;
@@ -532,6 +562,7 @@ impl McpService {
     /// Start an MCP server.
     pub async fn start_server(&self, id: i64) -> Result<Vec<McpTool>, McpServiceError> {
         let mut server = self.repository.get_by_id(id).await?;
+        Self::refuse_unsupported(server.server_type)?;
 
         // For stdio servers, ensure command is resolved before starting
         if server.server_type == gglib_core::McpServerType::Stdio {
@@ -587,9 +618,13 @@ impl McpService {
         self.manager.get_status(id).await
     }
 
-    /// A server with its runtime status, and its tools while it runs.
+    /// A server with its runtime status, and its tools while it runs. One of
+    /// a kind gglib cannot run is [`McpServerStatus::Unsupported`].
     async fn info_for(&self, server: McpServer) -> McpServerInfo {
-        let status = self.manager.get_status(server.id).await;
+        let status = match Self::refuse_unsupported(server.server_type) {
+            Ok(()) => self.manager.get_status(server.id).await,
+            Err(_) => McpServerStatus::Unsupported,
+        };
         let tools = if status == McpServerStatus::Running {
             self.manager.get_tools(server.id).await.unwrap_or_default()
         } else {
@@ -682,6 +717,7 @@ impl McpService {
         }
 
         let server = self.repository.get_by_id(server_id).await?;
+        Self::refuse_unsupported(server.server_type)?;
 
         match server.lifecycle {
             McpLifecycle::Manual => Err(McpServiceError::NotRunning(format!(
@@ -727,6 +763,7 @@ impl McpService {
         let _ = self.ensure_resolved(id).await;
 
         let mut test_server = self.repository.get_by_id(id).await?;
+        Self::refuse_unsupported(test_server.server_type)?;
         let test_id = NEXT_TEST_ID.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
         test_server.id = test_id;
 

@@ -148,6 +148,6 @@ handwritten mock structs in `src/test_support.rs` (no external mocking framework
 | `downloads.rs` | 7 — queue snapshot, cancel, remove, reorder, clear, cancel-all |
 | `models.rs` | 6 — list empty, get not-found, add+list, missing file, remove not-found, tags |
 | `settings.rs` | 16 — get defaults, profiles and nulls through the API, memory threshold (Some/None), and the models directory: saved and read back, its default, a refused path |
-| `mcp.rs` | 10 — list empty, add+list, an SSE server, invalid type, remove, a taken name on add and on rename, servers already sharing a name, a failed test, a test of a missing server |
+| `mcp.rs` | 11 — list empty, add+list, an SSE server refused on add, a stored SSE server listed as unsupported and refused a run and an edit, invalid type, remove, a taken name on add and on rename, servers already sharing a name, a failed test, a test of a missing server |
 | `setup.rs` | 3 — smoke test (get_status returns Ok), and the memory floor and the directory and memory shapes the status shares with the settings routes |
 | `servers.rs` | 9 — 6 registry unit tests + list empty + stop not-found + stop-all no-op |

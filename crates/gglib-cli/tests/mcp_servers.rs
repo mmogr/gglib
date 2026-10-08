@@ -1,13 +1,52 @@
-//! `gglib mcp add`, `list` and `test`, run as a person runs them against a
-//! database on disk.
+//! `gglib mcp add`, `list`, `start`, `test`, `enable`, `disable` and
+//! `remove`, run as a person runs them against a database on disk, and what
+//! `gglib chat` and `gglib q` say of a stored server they cannot run.
 //!
 //! The unit tests hand the service a repository they built; these run the
 //! binary, so the tables are the ones its own bootstrap creates under
 //! `GGLIB_DATA_DIR`. Nothing here reaches a network: the one server that is
-//! started is a shell script in the test's own directory.
+//! started is a shell script in the test's own directory, and the chat
+//! commands are pointed at a port nothing listens on.
 
+use std::net::TcpListener;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
+
+use gglib_core::domain::mcp::{McpLifecycle, NewMcpServer};
+
+#[path = "support/data_dir.rs"]
+mod data_dir;
+
+/// What an SSE server is refused with, wherever it is refused.
+const SSE_NOT_SUPPORTED: &str = "SSE servers are not supported yet; only stdio servers can be run";
+
+/// Store an SSE server in `root`'s database, as one added while they were
+/// accepted is stored: `gglib mcp add` refuses one now.
+fn stored_sse(root: &Path, name: &str, lifecycle: McpLifecycle) {
+    let server = NewMcpServer::new_sse(name, "http://localhost:3001/sse").with_lifecycle(lifecycle);
+    data_dir::store_mcp_server(root, server);
+}
+
+/// A loopback port nothing listens on.
+fn closed_port() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+    listener.local_addr().expect("its address").port()
+}
+
+/// What `gglib <args>` printed, stdout then stderr, over the data directory
+/// `root`: at the log level a run has when nothing sets one, with nothing on
+/// stdin.
+fn printed(root: &Path, args: &[&str]) -> (String, String) {
+    let out = Command::new(env!("CARGO_BIN_EXE_gglib"))
+        .args(args)
+        .env("GGLIB_DATA_DIR", root)
+        .env_remove("RUST_LOG")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap_or_else(|e| panic!("running `gglib {}`: {e}", args.join(" ")));
+    let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
+    (text(&out.stdout), text(&out.stderr))
+}
 
 /// `gglib mcp <args>` over the data directory `root`.
 fn mcp(root: &Path, args: &[&str]) -> Output {
@@ -59,34 +98,122 @@ const STAND_IN_SERVER: &str = r#"while IFS= read -r line; do
 done
 "#;
 
+/// With a URL and without one: the type is what is refused, so a missing URL
+/// is not asked for first.
 #[test]
-fn an_sse_server_is_added_and_listed() {
+fn adding_an_sse_server_is_refused_with_the_reason_and_stores_nothing() {
     let root = tempfile::tempdir().expect("temp data dir");
+    let add = ["add", "--name", "remote", "--type", "sse"];
 
-    let added = mcp_ok(
-        root.path(),
-        &[
-            "add",
-            "--name",
-            "remote",
-            "--type",
-            "sse",
-            "--url",
-            "http://localhost:3001/sse",
-        ],
-    );
-    assert!(
-        added.contains("Added MCP server 'remote' (id: 1)"),
-        "got: {added}"
-    );
+    for url in [&["--url", "http://localhost:3001/sse"][..], &[]] {
+        let refused = mcp_err(root.path(), &[&add[..], url].concat());
+
+        assert!(
+            refused.contains(&format!("Error: {SSE_NOT_SUPPORTED}")),
+            "got: {refused}"
+        );
+    }
 
     let listed = mcp_ok(root.path(), &["list"]);
-    assert!(listed.contains("Found 1 MCP server(s)"), "got: {listed}");
+    assert!(
+        listed.contains("No MCP servers configured."),
+        "got: {listed}"
+    );
+}
+
+#[test]
+fn the_help_for_add_says_of_sse_and_its_url_that_they_are_not_supported_yet() {
+    let root = tempfile::tempdir().expect("temp data dir");
+
+    let help = mcp_ok(root.path(), &["add", "--help"]);
+
+    let said_of = |flag: &str| {
+        help.lines()
+            .find(|line| line.trim_start().starts_with(flag))
+            .unwrap_or_else(|| panic!("no line for {flag}, got: {help}"))
+    };
+    assert!(
+        said_of("--type").contains(r#""sse" (HTTP) is not supported yet"#),
+        "got: {help}"
+    );
+    assert!(
+        said_of("--url").contains("not supported yet"),
+        "got: {help}"
+    );
+}
+
+#[test]
+fn a_stored_sse_server_is_listed_as_not_supported_yet_refused_a_run_and_an_edit_and_still_removed()
+{
+    let root = tempfile::tempdir().expect("temp data dir");
+    stored_sse(root.path(), "remote", McpLifecycle::Lazy);
+
+    let listed = mcp_ok(root.path(), &["list"]);
     let row = listed
         .lines()
         .find(|line| line.contains("remote"))
         .unwrap_or_else(|| panic!("no row for the server, got: {listed}"));
-    assert!(row.contains(" sse "), "the row names its type, got: {row}");
+    assert!(
+        row.contains(" sse ") && row.ends_with("not supported yet"),
+        "the row names its type and says it is not supported, got: {row}"
+    );
+
+    for command in ["start", "test", "enable", "disable"] {
+        let refused = mcp_err(root.path(), &[command, "remote"]);
+
+        assert!(
+            refused.contains(&format!("Error: {SSE_NOT_SUPPORTED}")),
+            "`mcp {command}` got: {refused}"
+        );
+    }
+
+    let removed = mcp_ok(root.path(), &["remove", "remote", "--force"]);
+    assert!(
+        removed.contains("Removed MCP server 'remote'"),
+        "got: {removed}"
+    );
+    let listed = mcp_ok(root.path(), &["list"]);
+    assert!(
+        listed.contains("No MCP servers configured."),
+        "got: {listed}"
+    );
+}
+
+/// Both commands start the eager servers and then the lazy ones before the
+/// first turn, with tools switched off as with them on. Neither is to try a
+/// server it cannot run, so neither has a failure to warn of.
+///
+/// Each run is seen to get past that start: the chat session opens, and
+/// `gglib q` goes on to fail at the port nothing listens on.
+#[test]
+fn chat_commands_say_nothing_of_a_stored_sse_server() {
+    let root = tempfile::tempdir().expect("temp data dir");
+    stored_sse(root.path(), "remote-lazy", McpLifecycle::Lazy);
+    stored_sse(root.path(), "remote-eager", McpLifecycle::Eager);
+    let chat = (&["chat", "qwen"][..], "Agentic chat ready");
+    let question = (
+        &["q", "hi", "--model", "qwen"][..],
+        "request to llama-server failed",
+    );
+
+    for (command, past_the_start) in [chat, question] {
+        for tools in [&[][..], &["--no-tools"]] {
+            let port = closed_port().to_string();
+            let args = [command, &["--port", &port], tools].concat();
+
+            let (stdout, stderr) = printed(root.path(), &args);
+
+            let ran = format!(
+                "`gglib {}`\nstdout: {stdout}\nstderr: {stderr}",
+                args.join(" ")
+            );
+            assert!(
+                stdout.contains(past_the_start) || stderr.contains(past_the_start),
+                "{ran}"
+            );
+            assert!(!stderr.contains("MCP"), "{ran}");
+        }
+    }
 }
 
 #[test]

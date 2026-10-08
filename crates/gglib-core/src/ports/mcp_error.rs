@@ -39,4 +39,8 @@ pub enum McpServiceError {
     /// Another server already has the name a server was to be given.
     #[error("An MCP server named '{0}' already exists; choose another name")]
     NameTaken(String),
+
+    /// An SSE server was to be added, changed or run. gglib has no SSE client.
+    #[error("SSE servers are not supported yet; only stdio servers can be run")]
+    SseNotSupported,
 }

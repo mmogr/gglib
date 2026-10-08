@@ -51,17 +51,20 @@ export const ServerTypeConfig: FC<ServerTypeConfigProps> = ({
             />
             <span>Stdio (spawn process)</span>
           </label>
-          <label className="flex items-center gap-sm text-sm text-text cursor-pointer [&>input]:m-0 [&>input]:accent-primary">
+          {/* Shown and never selectable: the daemon refuses an SSE server. */}
+          <label className="flex items-center gap-sm text-sm text-text-muted cursor-not-allowed [&>input]:m-0">
             <input
               type="radio"
               name="serverType"
               checked={serverType === "sse"}
-              onChange={() => setServerType("sse")}
-              disabled={disabled}
+              disabled
             />
             <span>SSE (connect to URL)</span>
           </label>
         </div>
+        <span className="text-xs text-text-secondary">
+          SSE servers are not supported yet. Only stdio servers can be run.
+        </span>
       </Stack>
 
       {serverType === "stdio" && <StdioConfigFields {...stdioProps} />}

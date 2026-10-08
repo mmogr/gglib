@@ -1,6 +1,6 @@
 //! A data directory for a test to point `GGLIB_DATA_DIR` at, with its
-//! settings written and read, and a chat saved and read back, through the
-//! stores the binary's bootstrap wires.
+//! settings written and read, a chat saved and read back, and an MCP server
+//! stored, through the stores the binary's bootstrap wires.
 //!
 //! Lives in a subdirectory because anything directly under `tests/` is built
 //! as its own test binary; `#[path]`-included from the suites that need it.
@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::domain::chat::{Conversation, NewConversation};
+use gglib_core::domain::mcp::NewMcpServer;
 use gglib_core::{NoopEmitter, Settings};
 
 /// The database the binary opens when `GGLIB_DATA_DIR` is `root`.
@@ -71,6 +72,18 @@ pub(crate) fn read_chat(root: &Path, id: i64) -> Conversation {
         built.pool.close().await;
         read.expect("the chat is read").expect("the chat is there")
     })
+}
+
+/// Store `server` in `root`'s database, creating the database first if there
+/// is none. The row is written by the repository, past what `gglib mcp add`
+/// refuses.
+pub(crate) fn store_mcp_server(root: &Path, server: NewMcpServer) {
+    runtime().block_on(async {
+        let built = open(root).await;
+        let stored = built.repos.mcp_servers.insert(server).await;
+        built.pool.close().await;
+        stored.expect("the server is stored");
+    });
 }
 
 /// `root`'s database, opened through `CoreBootstrap::build` as the binary's

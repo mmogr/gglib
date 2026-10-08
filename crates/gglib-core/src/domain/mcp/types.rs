@@ -56,7 +56,9 @@ pub enum McpServerType {
     /// Stdio-based server - gglib spawns and manages the process
     #[default]
     Stdio,
-    /// SSE-based server - external process, gglib connects via HTTP
+    /// SSE-based server - an external process reached over HTTP. Not
+    /// supported yet: the type is kept so a stored one still reads, and the
+    /// service refuses to add, change or run one.
     Sse,
 }
 
@@ -96,6 +98,8 @@ pub enum McpServerStatus {
     Running,
     /// Server encountered an error
     Error(String),
+    /// Server is of a kind gglib cannot run
+    Unsupported,
 }
 
 /// Environment variable entry for MCP servers.

@@ -405,6 +405,8 @@ pub enum McpServerStatusDto {
     Starting,
     Running,
     Error(String),
+    /// Of a kind gglib cannot run: an SSE server.
+    Unsupported,
 }
 
 /// MCP server info for GUI display (nested structure matching TS expectations).
