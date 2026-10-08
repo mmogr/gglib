@@ -80,8 +80,21 @@ impl ModelRegistrarPort for ModelRegistrar {
     ) -> Result<RegisteredDownload, RepositoryError> {
         let file_path = download.db_path();
 
-        // Parse GGUF metadata from the downloaded file
-        let gguf_metadata = self.gguf_parser.parse(file_path).ok();
+        // Parse GGUF metadata from the downloaded file. A file the reader
+        // refuses is registered all the same, without the details its header
+        // would have given: the reader may be stricter than llama.cpp. Its
+        // words go back to the caller.
+        let (gguf_metadata, metadata_refusal) = match self.gguf_parser.parse(file_path) {
+            Ok(metadata) => (Some(metadata), None),
+            Err(refused) => {
+                tracing::warn!(
+                    path = %file_path.display(),
+                    reason = %refused,
+                    "GGUF metadata not read - registering the model without it"
+                );
+                (None, Some(refused.to_string()))
+            }
+        };
 
         // Best-effort, and deliberately before the row is built: a recipe the
         // author published is better evidence than the tag guess
@@ -152,10 +165,15 @@ impl ModelRegistrarPort for ModelRegistrar {
 
         Ok(RegisteredDownload {
             model: registered,
+            metadata_refusal,
             projector_refusal,
         })
     }
 }
+
+#[cfg(test)]
+#[path = "model_registrar_metadata_tests.rs"]
+mod metadata_tests;
 
 #[cfg(test)]
 #[path = "model_registrar_projector_tests.rs"]

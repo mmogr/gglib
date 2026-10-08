@@ -16,11 +16,13 @@ use crate::test_hub::RepoHub;
 
 const REPO: &str = "owner/zeta-GGUF";
 
-/// Keeps each download it is asked to register, and answers `refusal` as
-/// the reason the projector was not linked.
+/// Keeps each download it is asked to register, and answers
+/// `metadata_refusal` as the reader's reason for refusing the weights and
+/// `refusal` as the reason the projector was not linked.
 #[derive(Default)]
 pub(super) struct RecordingRegistrar {
     pub(super) registered: StdMutex<Vec<CompletedDownload>>,
+    pub(super) metadata_refusal: Option<String>,
     pub(super) refusal: Option<String>,
 }
 
@@ -39,6 +41,7 @@ impl ModelRegistrarPort for RecordingRegistrar {
         );
         Ok(RegisteredDownload {
             model: Model::stored(1, &new),
+            metadata_refusal: self.metadata_refusal.clone(),
             projector_refusal: self.refusal.clone(),
         })
     }

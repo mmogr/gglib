@@ -80,6 +80,43 @@ async fn a_completed_download_is_recorded_with_its_message() {
     assert_eq!(named, [ID]);
 }
 
+/// The reader refused the weights and the registrar added them all the same:
+/// the download completed, and the one text every surface prints names the
+/// file and gives the reader's reason, on the snapshot and as an event.
+#[tokio::test]
+async fn weights_the_reader_refused_complete_with_the_file_and_the_reason() {
+    let registrar = RecordingRegistrar {
+        metadata_refusal: Some("Invalid GGUF format: no magic".to_string()),
+        ..Default::default()
+    };
+    let f = queued(Arc::new(registrar)).await;
+
+    run_next(&f.manager, End::OnDisk).await;
+    run_next(&f.manager, End::OnDisk).await;
+
+    let served = f.manager.get_queue_snapshot().await.unwrap();
+    let [ended] = &served.finished[..] else {
+        panic!("one finished download, not {:?}", served.finished);
+    };
+    assert!(
+        matches!(ended.outcome, DownloadOutcome::Completed { .. }),
+        "{:?}",
+        ended.outcome
+    );
+    assert!(
+        ended.text.ends_with(
+            ". zeta.Q8_0.gguf was added without its details: Invalid GGUF format: no magic"
+        ),
+        "{}",
+        ended.text
+    );
+    let endings = f.recorded.endings();
+    assert!(
+        matches!(&endings[..], [DownloadEvent::DownloadCompleted { id, text }] if id == ID && *text == ended.text),
+        "{endings:?}"
+    );
+}
+
 /// The files are on disk and the library refused the model: that is a
 /// failed download, on the snapshot and as an event, and not a completed
 /// one.

@@ -259,7 +259,8 @@ After successful download:
 Handlers convert download errors to user-friendly messages:
 - Network errors → "Failed to connect to `HuggingFace` Hub"
 - Invalid repo → "Repository not found or private"
-- Parse errors → "Invalid GGUF file downloaded"
+- A file the GGUF reader refuses → not an error: the model is added without
+  its details, and the download's line names the file and gives the reader's reason
 - Database errors → "Failed to register model"
 
 ## Dependencies

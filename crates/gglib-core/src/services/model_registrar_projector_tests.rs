@@ -79,7 +79,7 @@ impl ModelFilesRepositoryPort for RecordedRows {
 
 /// A finished download in `dir`: the weights `zeta.Q8_0.gguf`, whose name
 /// sorts after the projector's, and `mmproj-F16.gguf` holding `projector`.
-fn downloaded(dir: &Path, projector: &str) -> CompletedDownload {
+pub(super) fn downloaded(dir: &Path, projector: &str) -> CompletedDownload {
     let weights = dir.join("zeta.Q8_0.gguf");
     let projector_path = dir.join("mmproj-F16.gguf");
     std::fs::write(&weights, "weights").unwrap();
@@ -101,13 +101,13 @@ fn downloaded(dir: &Path, projector: &str) -> CompletedDownload {
     }
 }
 
-struct Registered {
-    answer: RegisteredDownload,
-    stored: Model,
+pub(super) struct Registered {
+    pub(super) answer: RegisteredDownload,
+    pub(super) stored: Model,
     rows: Vec<(String, i32, Option<String>)>,
 }
 
-async fn register(download: &CompletedDownload) -> Registered {
+pub(super) async fn register(download: &CompletedDownload) -> Registered {
     register_into(Arc::new(OneSlotRepo::default()), download).await
 }
 

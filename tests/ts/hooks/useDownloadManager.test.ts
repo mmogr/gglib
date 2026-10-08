@@ -10,6 +10,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useDownloadManager } from '../../../src/hooks/useDownloadManager';
+import { useDownloadCompletionEffects } from '../../../src/hooks/useDownloadCompletionEffects';
+import { ToastProvider, useToastContext } from '../../../src/contexts/ToastContext';
 import type { DownloadEvent } from '../../../src/services/transport/types/events';
 import type { QueueSnapshot } from '../../../src/services/transport/types/downloads';
 import { queueSnapshot, runningRow, waitingRow } from '../fixtures/downloads';
@@ -135,6 +137,23 @@ describe('useDownloadManager', () => {
     emit({ type: 'download_completed', id: row.id, text: 'Zeta, eight bit: in the library' });
 
     expect(onCompleted).toHaveBeenCalledWith({ id: row.id, text: 'Zeta, eight bit: in the library' });
+  });
+
+  it('shows a file added without its details in the toast, as the daemon worded it', async () => {
+    const text = 'owner/zeta-GGUF:Q8_0: Downloaded model to models/zeta.Q8_0.gguf. '
+      + 'zeta.Q8_0.gguf was added without its details: Invalid GGUF format: Invalid magic number';
+    const refreshModels = vi.fn();
+    // The two hooks as the page wires them, under the page's toasts.
+    const { result } = renderHook(() => {
+      useDownloadManager(useDownloadCompletionEffects({ refreshModels, windowMs: 1 }));
+      return useToastContext().toasts;
+    }, { wrapper: ToastProvider });
+    await waitFor(() => expect(sendEvent).toBeTruthy());
+
+    emit({ type: 'download_completed', id: 'owner/zeta-GGUF:Q8_0', text });
+
+    await waitFor(() => expect(result.current.map((toast) => [toast.message, toast.type])).toEqual([[text, 'success']]));
+    expect(refreshModels).toHaveBeenCalledTimes(1);
   });
 
   it("reports a failure in the event's own words, whatever the snapshot holds", async () => {

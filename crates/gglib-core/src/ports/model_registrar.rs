@@ -48,6 +48,10 @@ pub struct CompletedDownload {
 pub struct RegisteredDownload {
     /// The model as stored.
     pub model: Model,
+    /// Why the model was stored without the details its file's header holds:
+    /// the GGUF reader's own words for refusing the file. `None` when the
+    /// reader accepted it.
+    pub metadata_refusal: Option<String>,
     /// Why the group's projector was not linked to the model: its header
     /// refused it, or the model keeps a link to another file. `None` when it
     /// is the model's projector, and when the group had no projector.
@@ -82,6 +86,9 @@ pub trait ModelRegistrarPort: Send + Sync {
     /// Register a downloaded model in the database.
     ///
     /// Parses GGUF metadata from the downloaded file and creates a database entry.
+    /// A file the reader refuses is registered all the same, without the
+    /// details its header would have given, and the answer carries the
+    /// reader's words.
     /// For sharded models, the primary (first shard) path is used for registration.
     /// A projector downloaded with the weights is linked to the model when its
     /// header says it is one; when it does not, the model is registered
@@ -94,8 +101,8 @@ pub trait ModelRegistrarPort: Send + Sync {
     ///
     /// # Returns
     ///
-    /// Returns the created `Model`, and why its projector was not linked, on
-    /// success.
+    /// Returns the created `Model`, why its metadata was not read and why its
+    /// projector was not linked, on success.
     async fn register_model(
         &self,
         download: &CompletedDownload,
