@@ -1,19 +1,22 @@
 /**
- * Edits and Retry on the chat page (ADR 0017). A reply is edited in place
- * on screen, by Save; a question by Send. An edit that would rewrite a saved
- * reply is saved on a new branch of the chat, which the page lists and
- * opens, saying the original is kept. A chat that ends in a question nothing
- * answers offers Retry beneath it, which answers it.
+ * Edits, branches and Retry on the chat page (ADR 0017). A reply is edited
+ * in place on screen, by Save; a question by Send. An edit that would
+ * rewrite a saved reply is saved on a new branch of the chat, which the page
+ * lists and opens, saying the original is kept; so is Branch from here. A
+ * turn where the chat's family parts shows its options in the margin, and
+ * one chosen opens its chat; the list marks a branch. A chat that ends in a
+ * question nothing answers offers Retry beneath it, which answers it.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ReactNode } from 'react';
 import { useToastContext } from '../../../src/contexts/ToastContext';
 import type { ChatMessage } from '../../../src/services/transport';
 import type { AgentRunRequest } from '../../../src/types/generated/AgentRunRequest';
+import type { BranchPoint } from '../../../src/types/generated/BranchPoint';
 import type { ChatChange } from '../../../src/types/generated/ChatChange';
 import { agentRun, chatTransport, conversation, wrapper as pageWrapper, type ChatFixture } from './chatPageHarness';
 
@@ -35,6 +38,8 @@ const wrapper = ({ children }: { children: ReactNode }) =>
 
 let fixture: ChatFixture;
 let nextRow: number;
+/** The branch points each chat's thread says, by chat. */
+let points: Record<number, BranchPoint[]>;
 
 type Stub = ReturnType<typeof pageTransport>;
 const stub = () => transport.current as Stub;
@@ -50,16 +55,23 @@ function pageTransport() {
     ...base,
     getThread: vi.fn(async (id: number) => {
       const messages = fixture.rows[id] ?? [];
-      return { messages, ...(messages.at(-1)?.role === 'user' && { answerable: true }) };
+      const along = points[id] ?? [];
+      return {
+        messages,
+        ...(along.length > 0 && { points: along }),
+        ...(messages.at(-1)?.role === 'user' && { answerable: true }),
+      };
     }),
-    // An edit of a reply, as the daemon makes it: a new chat holding the
-    // question, then the reply as written.
+    // An edit of a reply, or Branch from here, as the daemon makes either:
+    // a new chat holding the chat as far as the change, then the reply as
+    // written.
     changeConversation: vi.fn(async (id: number, change: ChatChange) => {
       const branch = Math.max(...fixture.conversations.map((c) => c.id)) + 1;
-      fixture.conversations.unshift(conversation(branch, 'Kyoto'));
-      const edited = fixture.rows[id].findIndex((r) => r.id === change.message_id);
-      fixture.rows[id].slice(0, edited).forEach((r) => save(branch, r.role as 'user', r.content));
-      save(branch, 'assistant', change.kind === 'edit' ? change.content : '');
+      fixture.conversations.unshift({ ...conversation(branch, 'Kyoto'), branch_of: id });
+      const at = fixture.rows[id].findIndex((r) => r.id === change.message_id);
+      const kept = change.kind === 'edit' ? at : at + 1;
+      fixture.rows[id].slice(0, kept).forEach((r) => save(branch, r.role as 'user', r.content));
+      if (change.kind === 'edit') save(branch, 'assistant', change.content);
       return { conversation_id: branch, forked: true, answer: false };
     }),
     startAgentRun: vi.fn(async (id: string, request: AgentRunRequest) => {
@@ -72,6 +84,7 @@ function pageTransport() {
 
 beforeEach(() => {
   nextRow = 1;
+  points = {};
   fixture = { conversations: [conversation(1, 'Kyoto')], rows: {}, runs: [], frames: {} };
   save(1, 'user', 'Plan a trip to Kyoto');
   save(1, 'assistant', 'Day 1: temples');
@@ -123,6 +136,41 @@ describe('ChatPage edits and Retry', () => {
     await waitFor(() => expect(stub().startAgentRun).toHaveBeenCalledTimes(1));
     expect(stub().startAgentRun.mock.calls[0][1]).toMatchObject({ conversation_id: 1, answer_saved: true, messages: [] });
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument());
+  });
+
+  it('a turn where the branches part shows them in its margin, and the next one opens its chat', async () => {
+    fixture.conversations.unshift({ ...conversation(2, 'Kyoto'), branch_of: 1 });
+    save(2, 'user', 'Plan a trip to Kyoto');
+    save(2, 'assistant', 'Day 1: gardens');
+    const options = [
+      { conversation_id: 1, message_id: 2, role: 'assistant' as const, preview: 'Day 1: temples' },
+      { conversation_id: 2, message_id: 4, role: 'assistant' as const, preview: 'Day 1: gardens' },
+    ];
+    points = { 1: [{ message_id: 2, index: 0, options }], 2: [{ message_id: 4, index: 1, options }] };
+    const user = userEvent.setup();
+    render(<ChatPage modelName="qwen3" modelId={7} serverPort={4321} onClose={async () => {}} conversationId={1} />, { wrapper });
+    await screen.findByText('Day 1: temples');
+
+    expect(screen.getByRole('button', { name: 'Branch 1 of 2' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Next branch' }));
+
+    expect(await screen.findByText('Day 1: gardens')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Branch 2 of 2' })).toBeInTheDocument();
+    expect(fixture.rows[1].map((r) => r.content)).toEqual(['Plan a trip to Kyoto', 'Day 1: temples']);
+    // The chat opened is the one the list marks a branch.
+    await waitFor(() => expect(within(screen.getByRole('option', { selected: true })).getByText('Branch')).toBeInTheDocument());
+    expect(screen.getAllByRole('option').filter((row) => within(row).queryByText('Branch'))).toHaveLength(1);
+  });
+
+  it('Branch from here copies the chat as far as that turn into a new branch, which opens', async () => {
+    const user = userEvent.setup();
+    await renderPage();
+
+    await user.click(screen.getAllByRole('button', { name: 'Branch from here' })[1]);
+
+    await waitFor(() => expect(stub().changeConversation).toHaveBeenCalledWith(1, { kind: 'branch', message_id: 2 }));
+    await waitFor(() => expect(stub().getThread).toHaveBeenLastCalledWith(2));
+    expect(stub().startAgentRun).not.toHaveBeenCalled();
   });
 
   it('a chat that ends in a reply offers no Retry', async () => {

@@ -12,13 +12,14 @@
  * @module branchChanges
  */
 
+import { useEffect, useMemo, useRef, type RefObject } from 'react';
 import type { AppendMessage } from '@assistant-ui/react';
 import { getTransport } from '../../services/transport';
 import type { ChatChange } from '../../types/generated/ChatChange';
 import type { ChatChanged } from '../../types/generated/ChatChanged';
 import type { GglibContent, GglibMessage } from '../../types/messages';
 import { turnText } from './chatSource';
-import { savedRowId } from './savedRows';
+import { savedRowId, type SavedView } from './savedRows';
 import { imagesOf, unsentImage } from './turnImages';
 
 /** The change an edit in the thread asks for, or why it cannot be made. */
@@ -40,6 +41,51 @@ export function regenerateOf(parentId: string | null, current: GglibMessage[]): 
   const at = parentId === null ? -1 : current.findIndex((m) => m.id === parentId);
   const id = savedRowId(current[at + 1]);
   return id === null ? null : { kind: 'regenerate', message_id: id };
+}
+
+/** The change Branch from here on `messageId` asks for, or null for a message not saved. */
+export function branchOf(messageId: string, current: GglibMessage[]): ChatChange | null {
+  const id = savedRowId(current.find((m) => m.id === messageId));
+  return id === null ? null : { kind: 'branch', message_id: id };
+}
+
+/** What the open chat offers of its branches (ADR 0017). */
+export interface Branching extends Omit<SavedView, 'messages'> {
+  /** Answer the question the chat ends in. */
+  retry: () => Promise<void>;
+  /** Copy the chat as far as the end of the turn holding `messageId` into a new branch, and open it. */
+  branchFrom: (messageId: string) => Promise<void>;
+  /** Open chat `cid`, an option at a branch point. */
+  open: (cid: number) => void;
+}
+
+/**
+ * What the open chat offers of its branches, as the thread reads it: a new
+ * object only when what the daemon says of the chat changes, so nothing
+ * under it draws again for a render of the page. Each action is made by
+ * the latest `change`, and opens through the latest `open`.
+ */
+export function useBranching(
+  said: Omit<SavedView, 'messages'>,
+  messages: RefObject<GglibMessage[]>,
+  change: (made: ChatChange | null) => Promise<void>,
+  open?: (cid: number) => void,
+): Branching {
+  const latest = useRef({ change, open });
+  useEffect(() => {
+    latest.current = { change, open };
+  });
+  const { answerable, points } = said;
+  return useMemo(() => ({
+    answerable,
+    points,
+    retry: () => latest.current.change(null),
+    branchFrom: async (messageId: string) => {
+      const made = branchOf(messageId, messages.current);
+      if (made) await latest.current.change(made);
+    },
+    open: (cid: number) => latest.current.open?.(cid),
+  }), [answerable, points, messages]);
 }
 
 /** What a change needs of the runtime it is made from. */

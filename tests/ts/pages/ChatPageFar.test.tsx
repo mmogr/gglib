@@ -183,7 +183,7 @@ describe('ChatPage, the far machine’s chats', () => {
     await user.click(await screen.findByRole('button', FAR_SWITCH));
     await screen.findByText('Why did the build break?');
 
-    for (const name of ['Edit message', 'Edit reply', 'Delete message', 'Regenerate reply']) {
+    for (const name of ['Edit message', 'Edit reply', 'Delete message', 'Regenerate reply', 'Branch from here']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
     }
     expect(screen.queryByRole('button', { name: /Rename conversation/ })).not.toBeInTheDocument();

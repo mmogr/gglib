@@ -21,3 +21,5 @@ export {
   EditComposer,
 } from './MessageBubbles';
 export { Unanswered } from './Unanswered';
+export { BranchingContext } from './BranchingContext';
+export { BranchEnd } from './BranchSwitcher';

@@ -1,13 +1,16 @@
 /**
  * gglib's branching rules (`crates/gglib-core/src/domain/branching`), for
  * the fake daemon: which change is made in place, which on a new branch of
- * the chat, and which is refused. `tests/ts/contracts/branching.test.ts`
+ * the chat, and which is refused; and the branch points a chat's family
+ * holds along it, each option shown by a line. `tests/ts/contracts/branching.test.ts`
  * holds them to the cases the Rust records in `contracts/chats/branching.json`.
  *
  * A question is one user row; a reply is the run of assistant and tool rows
  * after it.
  */
 
+import type { BranchOption } from '../../../src/types/generated/BranchOption';
+import type { BranchPoint } from '../../../src/types/generated/BranchPoint';
 import type { ChatChange } from '../../../src/types/generated/ChatChange';
 
 /** A saved message as the rules read it. */
@@ -88,4 +91,89 @@ export function plan(path: PathRow[], change: ChatChange, busy: boolean): Planne
 /** Whether a chat whose messages are `path` ends in a question with no reply. */
 export function answerable(path: PathRow[]): boolean {
   return units(path).at(-1)?.question ?? false;
+}
+
+/** A message of a chat of the family, as the points read it: `key` is the message it copies as first written, or its own id. */
+export interface LineRow {
+  id: number;
+  key: number;
+  role: string;
+  text: string;
+  images: number;
+}
+
+/** A chat of the family, and when it last changed. */
+export interface LineChat {
+  conversation_id: number;
+  updated_at: string;
+  rows: LineRow[];
+}
+
+/** The longest preview, in characters, before it is cut with "…". */
+const PREVIEW_CHARS = 80;
+
+function firstLine(text: string): string {
+  const line = text.split(/\r?\n/).map((l) => l.trim()).find((l) => l !== '') ?? '';
+  const chars = [...line];
+  return chars.length > PREVIEW_CHARS ? `${chars.slice(0, PREVIEW_CHARS).join('')}…` : line;
+}
+
+/** The line a turn is shown by among the options of a point. */
+export function preview(turn: Array<Pick<LineRow, 'role' | 'text' | 'images'>>): string {
+  const [first] = turn;
+  if (!first) return '';
+  if (first.role === 'user') {
+    const line = firstLine(first.text);
+    if (line !== '' || first.images === 0) return line;
+    return first.images === 1 ? 'An image' : `${first.images} images`;
+  }
+  const lines = turn.filter((r) => r.role === 'assistant').map((r) => firstLine(r.text)).reverse();
+  return lines.find((line) => line !== '') ?? '(no text)';
+}
+
+const startsTurn = (rows: LineRow[], at: number) =>
+  at < rows.length && (rows[at].role === 'user' || at === 0 || rows[at - 1].role === 'user');
+
+const rank = (c: LineChat) => [c.updated_at, c.conversation_id] as const;
+const newer = (a: LineChat, b: LineChat) =>
+  rank(a)[0] > rank(b)[0] || (rank(a)[0] === rank(b)[0] && rank(a)[1] > rank(b)[1]);
+
+function option(chat: LineChat, at: number): BranchOption {
+  const row = chat.rows[at];
+  const turn: LineRow[] = [row];
+  if (row.role !== 'user') {
+    for (const next of chat.rows.slice(at + 1)) {
+      if (next.role === 'user') break;
+      turn.push(next);
+    }
+  }
+  return { conversation_id: chat.conversation_id, message_id: row.id, role: row.role as BranchOption['role'], preview: preview(turn) };
+}
+
+function point(mine: LineChat, family: LineChat[], at: number): BranchPoint | null {
+  const shares = (chat: LineChat) => at === 0 || chat.rows[at - 1]?.key === mine.rows[at - 1].key;
+  const turns = new Map<number, LineChat>();
+  for (const chat of family.filter(shares)) {
+    if (!startsTurn(chat.rows, at)) continue;
+    const key = chat.rows[at].key;
+    const shown = turns.get(key);
+    if (!shown || (shown.conversation_id !== mine.conversation_id && (chat.conversation_id === mine.conversation_id || newer(chat, shown)))) {
+      turns.set(key, chat);
+    }
+  }
+  const empty = at === mine.rows.length;
+  if (turns.size + (empty ? 1 : 0) < 2) return null;
+  const options = [...turns.entries()].sort(([a], [b]) => a - b).map(([, chat]) => option(chat, at));
+  if (empty) options.push({ conversation_id: mine.conversation_id, message_id: null, role: null, preview: '' });
+  const index = options.findIndex((o) => o.conversation_id === mine.conversation_id);
+  if (index === -1) return null;
+  return { message_id: mine.rows[at]?.id ?? null, index, options };
+}
+
+/** The branch points chat `me`'s family holds along it. */
+export function points(me: number, family: LineChat[]): BranchPoint[] {
+  const mine = family.find((chat) => chat.conversation_id === me);
+  if (!mine) return [];
+  const starts = units(mine.rows.map((r) => ({ id: r.id, role: r.role, content: r.text }))).map((u) => u.start);
+  return [...starts, mine.rows.length].flatMap((at) => point(mine, family, at) ?? []);
 }

@@ -1,5 +1,6 @@
 /**
- * An edit, a regenerate and Retry, as the page makes them (ADR 0017). A
+ * An edit, a regenerate, Retry and Branch from here, as the page makes
+ * them (ADR 0017), and the options a chat's family holds along it. A
  * change is the daemon's to make: one that would rewrite a saved reply is
  * made on a new branch, which the page opens and answers there, and the
  * chat it was made on is left as it was. Only an edit of the last question,
@@ -116,6 +117,47 @@ describe('useGglibRuntime changes', () => {
     expect(daemon.count('PUT', '/api/runs/')).toBe(0);
     expect(saved(100)).toEqual([['user', 'q'], ['assistant', 'a, put better']]);
     expect(saved(1)).toEqual([['user', 'q'], ['assistant', 'a']]);
+  });
+
+  it('Branch from here copies the chat to the end of the turn into a branch, opened and not answered', async () => {
+    const onBranched = vi.fn();
+    const hook = await mount({ ...open, onBranched });
+    act(() => void hook.result.current.branching.branchFrom('db-1'));
+
+    await waitFor(() => expect(onBranched).toHaveBeenCalledWith(100, undefined));
+    expect(posted().body).toEqual({ kind: 'branch', message_id: 1 });
+    expect(saved(100)).toEqual([['user', 'q']]);
+    expect(daemon.count('PUT', '/api/runs/')).toBe(0);
+    expect(saved(1)).toEqual([['user', 'q'], ['assistant', 'a']]);
+  });
+
+  it('a chat reads the options its family holds where its branches part, and opens one through the page', async () => {
+    const first = await mount(open);
+    regenerate(first, 'db-1');
+    await waitFor(() => expect(daemon.conversations.has(100)).toBe(true));
+    void daemon.finish(daemon.only().info.id, 'completed', [{ role: 'assistant', content: 'a again' }]);
+    await waitFor(() => expect(saved(100)).toHaveLength(2));
+    first.unmount();
+
+    const onConversationChanged = vi.fn();
+    const hook = await mount({ ...open, onConversationChanged });
+    expect(hook.result.current.branching.points).toEqual([
+      {
+        message_id: 2,
+        index: 0,
+        options: [
+          { conversation_id: 1, message_id: 2, role: 'assistant', preview: 'a' },
+          { conversation_id: 100, message_id: 4, role: 'assistant', preview: 'a again' },
+        ],
+      },
+    ]);
+
+    const before = hook.result.current.branching;
+    hook.rerender({ ...open, onConversationChanged });
+    expect(hook.result.current.branching).toBe(before);
+
+    hook.result.current.branching.open(100);
+    expect(onConversationChanged).toHaveBeenCalledWith(100);
   });
 
   it('Retry answers the question the chat ends in, and is offered no more once it is', async () => {

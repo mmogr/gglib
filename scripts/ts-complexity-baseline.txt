@@ -1,5 +1,5 @@
 src/components/Benchmark/Tune/TuneTab.tsx 306
-src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 301
+src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 306
 src/components/FilterPopover/FilterPopover.tsx 340
 src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 339
 src/components/McpServersPanel.tsx 459

@@ -19,6 +19,8 @@ import {
   EditComposer,
   ImageInputContext,
   Unanswered,
+  BranchingContext,
+  BranchEnd,
 } from './components';
 import type { MessageActionsContextValue, ModelChoice } from './components';
 import {
@@ -90,7 +92,7 @@ interface ChatMessagesPanelProps {
   imageInput: ImageInput;
   /** The chat's Thinking switch, for the composer's margin. */
   thinking?: ThinkingSwitch;
-  /** What the chat says of its branches, and Retry; absent for a far chat. */
+  /** What the chat offers of its branches, and Retry; absent for a far chat. */
   branching?: UseGglibRuntimeReturn['branching'];
 }
 
@@ -248,40 +250,43 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
           </div>
         ) : (
           <MessageActionsContext.Provider value={messageActionsValue}>
-            <ImageInputContext.Provider value={imageInput}>
-              <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
-                <ThreadPrimitive.Root
-                  key={activeConversationId ?? 'thread-root'}
-                  className="flex flex-col flex-1 min-h-0"
-                >
-                  <ThreadPrimitive.Viewport className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col scroll-smooth" autoScroll>
-                    <NotebookColumn>
-                      {head}
-                      <ThreadPrimitive.Messages components={messageComponents} />
-                      {isServerConnected && branching && <Unanswered answerable={branching.answerable} retry={branching.retry} />}
-                    </NotebookColumn>
-                    <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center mt-auto py-xs px-md bg-primary text-text-inverse border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
-                      Jump to latest
-                    </ThreadPrimitive.ScrollToBottom>
-                  </ThreadPrimitive.Viewport>
+            <BranchingContext.Provider value={branching ?? null}>
+              <ImageInputContext.Provider value={imageInput}>
+                <ThinkingTimingProvider value={{ timingTracker, currentStreamingAssistantMessageId, tick }}>
+                  <ThreadPrimitive.Root
+                    key={activeConversationId ?? 'thread-root'}
+                    className="flex flex-col flex-1 min-h-0"
+                  >
+                    <ThreadPrimitive.Viewport className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col scroll-smooth" autoScroll>
+                      <NotebookColumn>
+                        {head}
+                        <ThreadPrimitive.Messages components={messageComponents} />
+                        <BranchEnd />
+                        {isServerConnected && <Unanswered />}
+                      </NotebookColumn>
+                      <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center mt-auto py-xs px-md bg-primary text-text-inverse border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
+                        Jump to latest
+                      </ThreadPrimitive.ScrollToBottom>
+                    </ThreadPrimitive.Viewport>
 
-                  <ComposerFooter
-                    isServerConnected={isServerConnected}
-                    isThreadRunning={isThreadRunning}
-                    onStopGeneration={() => threadRuntime?.cancelRun()}
-                    modelName={modelName}
-                    modelId={modelId}
-                    onPickModel={onPickModel}
-                    startingModel={startingModel}
-                    onUnloadModel={onUnloadModel}
-                    quantization={quantization}
-                    supportsToolCalls={supportsToolCalls}
-                    toolFormat={toolFormat}
-                    thinking={thinking}
-                  />
-                </ThreadPrimitive.Root>
-              </ThinkingTimingProvider>
-            </ImageInputContext.Provider>
+                    <ComposerFooter
+                      isServerConnected={isServerConnected}
+                      isThreadRunning={isThreadRunning}
+                      onStopGeneration={() => threadRuntime?.cancelRun()}
+                      modelName={modelName}
+                      modelId={modelId}
+                      onPickModel={onPickModel}
+                      startingModel={startingModel}
+                      onUnloadModel={onUnloadModel}
+                      quantization={quantization}
+                      supportsToolCalls={supportsToolCalls}
+                      toolFormat={toolFormat}
+                      thinking={thinking}
+                    />
+                  </ThreadPrimitive.Root>
+                </ThinkingTimingProvider>
+              </ImageInputContext.Provider>
+            </BranchingContext.Provider>
           </MessageActionsContext.Provider>
         )}
       </div>
