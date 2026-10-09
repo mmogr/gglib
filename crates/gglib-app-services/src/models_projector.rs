@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use gglib_core::ports::RepositoryError;
-use gglib_core::services::{ProjectorError, projector_choices};
+use gglib_core::services::{LinkError, projector_choices};
 
 use crate::error::GuiError;
 use crate::helpers::resolve_model;
@@ -63,13 +63,13 @@ impl ModelOps {
 /// A file that may not be linked is the caller's mistake, named as the rule
 /// names it; an unknown model is not found; any other failure of the store
 /// is what `From<RepositoryError>` makes of it.
-fn refusal(id: i64, error: ProjectorError) -> GuiError {
+fn refusal(id: i64, error: LinkError) -> GuiError {
     match error {
-        ProjectorError::Repository(RepositoryError::NotFound(_)) => GuiError::NotFound {
+        LinkError::Repository(RepositoryError::NotFound(_)) => GuiError::NotFound {
             entity: "model",
             id: id.to_string(),
         },
-        ProjectorError::Repository(other) => other.into(),
+        LinkError::Repository(other) => other.into(),
         refused => GuiError::ValidationFailed(refused.to_string()),
     }
 }

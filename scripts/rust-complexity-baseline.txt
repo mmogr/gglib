@@ -80,6 +80,7 @@ crates/gglib-core/src/request_pipeline/truncation_tests.rs 443
 crates/gglib-core/src/request_pipeline/validate.rs 497
 crates/gglib-core/src/server_config.rs 715
 crates/gglib-core/src/services/app_core.rs 305
+crates/gglib-core/src/services/model_components_tests.rs 574
 crates/gglib-core/src/services/model_import.rs 734
 crates/gglib-core/src/services/model_registrar.rs 340
 crates/gglib-core/src/services/model_service.rs 1477

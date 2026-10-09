@@ -6,6 +6,7 @@ mod attachments;
 mod chat_history;
 mod model_components;
 mod model_import;
+mod model_links;
 mod model_projector;
 mod model_registrar;
 mod model_service;
@@ -21,7 +22,7 @@ pub use chat_history::{ChangeError, ChatHistoryService};
 pub use model_import::{
     HfOrigin, MAX_GENERATION_CONFIG_LOOKUPS, ModelOrigin, build_new_model, fetch_published_sampling,
 };
-pub use model_projector::ProjectorError;
+pub use model_links::{LinkError, LinkRole};
 pub use model_registrar::ModelRegistrar;
 pub use model_service::{ImportMode, ModelService, RetagDiff};
 pub use model_verification::{
