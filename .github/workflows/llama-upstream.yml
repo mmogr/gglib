@@ -26,9 +26,13 @@
 # request or touches a branch; the bump stays a person's commit.
 #
 # The checkout and the issue use the GitHub App token update-deps.yml uses,
-# so the issue is the app's and issue-labels.yml runs on it. The labels are
-# set at creation because that workflow's parse step reads the issue form,
-# which this issue is not, and its verify step wants every category present.
+# so the issue is the app's and issue-labels.yml runs on it. That workflow's
+# parse step reads the issue form, which this issue is not, and its verify
+# step wants every category present, so this one sets them, once, when it
+# opens the issue, and leaves them to people after that. It sets them with
+# their own call: the first runs passed them to `gh issue create` and the
+# issues arrived with none, without an error. A label is therefore not how a
+# run finds its issue; the title and the app as author are.
 
 name: llama.cpp upstream
 
@@ -192,11 +196,15 @@ jobs:
           PIN: ${{ steps.collect.outputs.pin }}
           CANDIDATE: ${{ steps.collect.outputs.candidate }}
           UP_TO_DATE: ${{ steps.collect.outputs.up_to_date }}
+          APP: ${{ steps.app-token.outputs.app-slug }}
         run: |
-          existing=$(gh issue list --state open --label automated \
-            --search '"llama.cpp: pin" in:title' --json number,title --limit 1)
-          number=$(jq -r '.[0].number // empty' <<<"$existing")
-          old_title=$(jq -r '.[0].title // empty' <<<"$existing")
+          # The open issue this app opened with this title, by listing rather
+          # than search, which can miss an issue opened moments before.
+          existing=$(gh issue list --state open --limit 500 --json number,title,author \
+            | jq --arg app "$APP" '[.[] | select((.title | startswith("llama.cpp: pin "))
+                and (.author.login | IN("app/" + $app, $app + "[bot]", $app)))] | sort_by(.number) | last // {}')
+          number=$(jq -r '.number // empty' <<<"$existing")
+          old_title=$(jq -r '.title // empty' <<<"$existing")
           title="llama.cpp: pin $PIN, upstream $CANDIDATE"
 
           if [ "$UP_TO_DATE" = true ]; then
@@ -210,9 +218,12 @@ jobs:
           fi
 
           if [ -z "$number" ]; then
-            url=$(gh issue create --title "$title" --body-file "$RUNNER_TEMP/body.md" \
-              --label "component: runtime" --label "priority: medium" --label "size: s" \
-              --label "type: chore" --label dependencies --label automated)
+            url=$(gh issue create --title "$title" --body-file "$RUNNER_TEMP/body.md")
+            # Their own call: passed to `create`, they were dropped without an
+            # error; here a token that may not set them fails the step.
+            gh issue edit "${url##*/}" \
+              --add-label "component: runtime" --add-label "priority: medium" --add-label "size: s" \
+              --add-label "type: chore" --add-label dependencies --add-label automated
             echo "Opened $url" >> "$GITHUB_STEP_SUMMARY"
           else
             gh issue edit "$number" --title "$title" --body-file "$RUNNER_TEMP/body.md"
