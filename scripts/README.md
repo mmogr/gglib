@@ -62,6 +62,7 @@ deliberate growth is one row edited by hand.
 | `check_issue_form_mapping.mjs` | The issue form's field ids are the ones `issue-labels.yml` maps to labels | `check-issue-form.yml` |
 | `sync_versions.py` | Copies the workspace version into `package.json` | `bump-version.yml` |
 | `lock_changes.py` | Lists what moved between two copies of a lockfile | `update-deps.yml` |
+| `llama_upstream.py` | Collects what a llama.cpp release changes for gglib, against the pinned one: the relevant upstream commits, the `--help` diff, a launch with the flags gglib emits, the release assets, the sampler defaults and the diff of each file an ADR cites. CONTRIBUTING's [The llama.cpp pin](../CONTRIBUTING.md#the-llamacpp-pin) has the routine | `llama-upstream.yml` |
 | `backtest_label_heuristics.sh` | Measures the pull-request labelling heuristics against merged pull requests | By hand |
 | `macos-install.command`, `MACOS-README.txt` | The double-click installer in the macOS release bundle and its instructions: it clears the quarantine attribute and offers to move the app to `/Applications` | `release.yml` copies both into the bundle |
 | `experiments/` | The measurements that ADRs, `docs/sampling.md` and doc comments cite, kept so that they can be run again | By hand |
