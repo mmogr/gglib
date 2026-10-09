@@ -46,6 +46,14 @@ impl AttachmentStore for MemoryStore {
                 data: kept.1.clone(),
             }))
     }
+
+    async fn ids_starting_with(&self, prefix: &str) -> Result<Vec<AttachmentId>, AttachmentError> {
+        let kept = self.kept.lock().unwrap();
+        Ok(crate::ports::attachment_store::ids_starting_with(
+            kept.keys(),
+            prefix,
+        ))
+    }
 }
 
 fn service() -> (AttachmentService, Arc<MemoryStore>) {
@@ -235,4 +243,23 @@ async fn the_services_store_is_the_one_it_writes_to() {
     let blob = service.store().blob(&stored.info.id).await.unwrap();
 
     assert_eq!(blob.map(|blob| blob.data), Some(png(8, 8)));
+}
+
+#[tokio::test]
+async fn ids_are_found_by_their_start_in_order() {
+    let (service, _) = service();
+    let files = [png(1, 1), png(2, 2), jpeg(3, 3)];
+    let mut stored = Vec::new();
+    for bytes in &files {
+        stored.push(service.ingest(bytes).await.unwrap().info.id);
+    }
+    stored.sort();
+
+    assert_eq!(service.ids_starting_with("").await.unwrap(), stored);
+    let first = &stored[0];
+    assert_eq!(
+        service.ids_starting_with(first.as_str()).await.unwrap(),
+        vec![first.clone()]
+    );
+    assert!(service.ids_starting_with("g").await.unwrap().is_empty());
 }

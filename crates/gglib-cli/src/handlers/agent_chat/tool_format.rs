@@ -2,16 +2,25 @@
 //!
 //! Builtin filesystem tools (`read_file`, `list_directory`, `grep_search`) get
 //! compact, human-readable summaries.  Everything else falls back to a
-//! truncated preview via [`truncate_string`].
+//! truncated preview via [`truncate_string`]. The images a tool made follow
+//! the summary as markers ([`images::markers`]).
 
 use gglib_core::domain::agent::ToolResult;
 
+use super::images;
 use crate::presentation::tables::truncate_string;
 
 /// Format a tool result with a tool-specific summary instead of a generic
 /// truncation.  Builtin filesystem tools get richer output; everything else
-/// falls back to the standard 80-char preview.
+/// falls back to the standard 80-char preview. A marker for each image the
+/// tool made follows, with the start of its id, so it can be saved.
 pub(super) fn format_tool_result(tool_name: &str, result: &ToolResult) -> String {
+    let summary = summary(tool_name, result);
+    format!("{summary}{}", images::markers(&result.images))
+}
+
+/// The words of a result, without its images.
+fn summary(tool_name: &str, result: &ToolResult) -> String {
     if !result.success {
         return truncate_string(&result.content, 120);
     }
@@ -85,4 +94,36 @@ fn format_get_current_time(content: &str) -> String {
     }
     // Fallback: content is already human-readable or unexpected format.
     truncate_string(content, 80)
+}
+
+#[cfg(test)]
+mod tests {
+    use gglib_core::domain::attachment::{AttachmentId, AttachmentInfo};
+
+    use super::*;
+
+    /// A result without images is its summary alone.
+    #[test]
+    fn a_result_without_images_has_no_marker() {
+        let result = ToolResult::text("c1", "done", true);
+        assert_eq!(format_tool_result("server__tool", &result), "done");
+    }
+
+    /// Each image a tool made is named after the summary, with the start of
+    /// its id.
+    #[test]
+    fn a_tools_images_follow_its_summary_with_their_ids() {
+        let id = AttachmentId::parse(&format!("3f9a2c1e{}", "0".repeat(56))).unwrap();
+        let mut result = ToolResult::text("c1", "[image 1024x1024 PNG stored]", true);
+        result.images = vec![AttachmentInfo {
+            id,
+            mime: "image/png".to_owned(),
+            width: 1024,
+            height: 1024,
+        }];
+        assert_eq!(
+            format_tool_result("server__draw", &result),
+            "[image 1024x1024 PNG stored] [image 1024x1024 3f9a2c1e]"
+        );
+    }
 }

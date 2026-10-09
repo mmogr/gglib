@@ -34,9 +34,15 @@ fn a_resumed_chat_shows_a_marker_for_each_image_of_its_last_user_turn() {
 
     let jogger = memory_jogger(&history, "Agent session");
 
-    assert!(jogger.contains("You: what is the error? [image 2560x1440] [image 64x32]"));
+    let (wide, small) = (&history[0].images[0].id, &history[0].images[1].id);
+    assert!(jogger.contains(&format!(
+        "You: what is the error? [image 2560x1440 {}] [image 64x32 {}]",
+        &wide.as_str()[..8],
+        &small.as_str()[..8]
+    )));
     assert!(jogger.contains("Assistant: A missing semicolon."));
     assert!(!jogger.contains("semicolon. [image"));
+    assert!(!jogger.contains("Tool images"));
 }
 
 #[test]
@@ -56,5 +62,28 @@ fn the_jogger_clips_a_long_turn_on_a_character_and_keeps_its_markers() {
 
     let jogger = memory_jogger(&[stored_message(User, &long, &[(64, 32)])], "t");
 
-    assert!(jogger.contains(&format!("You: {}… [image 64x32]", "é".repeat(200))));
+    assert!(jogger.contains(&format!("You: {}… [image 64x32 ", "é".repeat(200))));
+}
+
+#[test]
+fn a_resumed_chat_shows_the_images_its_last_turns_tools_made() {
+    use MessageRole::{Assistant, Tool, User};
+    let history = [
+        stored_message(User, "draw a dot", &[]),
+        stored_message(Tool, "[image 16x16 PNG stored]", &[(16, 16)]),
+        stored_message(User, "and a square", &[]),
+        stored_message(Tool, "[image 1024x1024 PNG stored]", &[(1024, 1024)]),
+        stored_message(Tool, "no image", &[]),
+        stored_message(Assistant, "Here is a square.", &[]),
+    ];
+
+    let jogger = memory_jogger(&history, "Agent session");
+
+    let square = &history[3].images[0].id;
+    let line = format!("Tool images: [image 1024x1024 {}]", &square.as_str()[..8]);
+    assert!(jogger.contains(&line), "{jogger}");
+    assert!(
+        !jogger.contains("16x16"),
+        "an earlier turn's images: {jogger}"
+    );
 }

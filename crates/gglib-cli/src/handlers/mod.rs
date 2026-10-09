@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 
 pub(crate) mod agent_chat;
+pub(crate) mod attachment;
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,

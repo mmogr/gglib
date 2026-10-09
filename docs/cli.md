@@ -56,6 +56,7 @@ reported as an error.
 | [`model`](#models) | Add, list, download, verify, retag, inspect, explain |
 | [`chat`](#chat-and-ask) | Interactive tool-calling session |
 | [`q`](#chat-and-ask) | One-shot question, pipe-friendly (alias of `question`) |
+| [`attachment save`](#attachment-save) | Write a stored image, such as one a tool made, to a file |
 | [`benchmark`](#benchmark) | Compare outputs, measure throughput, tune sampling |
 | [`mcp`](#mcp-tool-servers) | Manage MCP tool servers |
 | [`config`](#configuration) | Settings, profiles, llama.cpp, dependencies, paths |
@@ -228,6 +229,24 @@ input. `-Q` / `--quiet` strips tool progress and reasoning tokens for scripting.
 gglib q "What is Rust?"
 cat file.rs | gglib q "Explain this code"
 gglib q --file README.md "Summarize this project"
+```
+
+### `attachment save`
+
+A chat stores the images it carries, yours and the ones a tool makes, in this
+machine's database, and shows each as a marker with its size and the start of
+its id: `[image 1024x1024 3f9a2c1e]`. A tool's images end its line in the
+live turn, and `--continue` shows the last turn's. `gglib attachment save
+<id> [path]` writes one to a file, as stored.
+
+The id may be whole, or its first 8 characters or more. A start two images
+share is refused with how many share it, and one no image has is refused too.
+Without a path the file is `./<id8>.png` (or `.jpg`); a directory takes that
+name inside it. An existing file is not replaced without `--force`.
+
+```bash
+gglib attachment save 3f9a2c1e
+gglib attachment save 3f9a2c1e ~/Pictures/dot.png --force
 ```
 
 ## Benchmark

@@ -87,6 +87,20 @@ impl AttachmentStore for SqliteAttachmentStore {
             data: row.get("data"),
         }))
     }
+
+    async fn ids_starting_with(&self, prefix: &str) -> Result<Vec<AttachmentId>, AttachmentError> {
+        let rows = sqlx::query(
+            "SELECT id FROM attachments WHERE substr(id, 1, length(?1)) = ?1 ORDER BY id",
+        )
+        .bind(prefix)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| storage(&e))?;
+        Ok(rows
+            .iter()
+            .filter_map(|row| AttachmentId::parse(row.get("id")).ok())
+            .collect())
+    }
 }
 
 #[cfg(test)]

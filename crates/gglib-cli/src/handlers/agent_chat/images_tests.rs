@@ -45,6 +45,14 @@ impl AttachmentStore for MemoryStore {
     async fn blob(&self, _id: &AttachmentId) -> Result<Option<AttachmentBlob>, AttachmentError> {
         Ok(None)
     }
+
+    async fn ids_starting_with(&self, prefix: &str) -> Result<Vec<AttachmentId>, AttachmentError> {
+        let kept = self.kept.lock().unwrap();
+        Ok(gglib_core::ports::attachment_store::ids_starting_with(
+            kept.keys(),
+            prefix,
+        ))
+    }
 }
 
 pub(crate) fn service() -> (AttachmentService, Arc<MemoryStore>) {

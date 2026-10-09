@@ -50,6 +50,14 @@ impl AttachmentStore for Kept {
     async fn blob(&self, _id: &AttachmentId) -> Result<Option<AttachmentBlob>, AttachmentError> {
         unreachable!("a tool's images are only stored")
     }
+
+    async fn ids_starting_with(&self, prefix: &str) -> Result<Vec<AttachmentId>, AttachmentError> {
+        let kept = self.0.lock().unwrap();
+        Ok(gglib_core::ports::attachment_store::ids_starting_with(
+            kept.keys(),
+            prefix,
+        ))
+    }
 }
 
 /// An attachment service over an empty [`Kept`], and the store.
@@ -179,6 +187,10 @@ impl AttachmentStore for Broken {
     }
 
     async fn blob(&self, _id: &AttachmentId) -> Result<Option<AttachmentBlob>, AttachmentError> {
+        unreachable!("a tool's images are only stored")
+    }
+
+    async fn ids_starting_with(&self, _prefix: &str) -> Result<Vec<AttachmentId>, AttachmentError> {
         unreachable!("a tool's images are only stored")
     }
 }

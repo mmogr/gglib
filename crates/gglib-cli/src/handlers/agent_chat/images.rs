@@ -177,11 +177,23 @@ fn receipt(path: &Path, upload: &AttachmentUpload) -> String {
     )
 }
 
-/// The images of a stored message as history shows them: ` [image WxH]`
-/// for each, in order, and nothing for a message with none.
+/// How many characters of an id a marker shows, and the fewest
+/// `gglib attachment save` takes.
+pub(crate) const SHORT_ID_LEN: usize = 8;
+
+/// The start of `id` a person reads and types: its first
+/// [`SHORT_ID_LEN`] characters.
+pub(crate) fn short_id(id: &AttachmentId) -> &str {
+    &id.as_str()[..SHORT_ID_LEN]
+}
+
+/// The images of a message or a tool result as the transcript shows them:
+/// ` [image WxH 3f9a2c1e]` for each, in order, with the start of its id for
+/// `gglib attachment save`, and nothing for one with none.
 pub(crate) fn markers(images: &[AttachmentInfo]) -> String {
     images.iter().fold(String::new(), |mut markers, image| {
-        let _ = write!(markers, " [image {}x{}]", image.width, image.height);
+        let (width, height, id) = (image.width, image.height, short_id(&image.id));
+        let _ = write!(markers, " [image {width}x{height} {id}]");
         markers
     })
 }

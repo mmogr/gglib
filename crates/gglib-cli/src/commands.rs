@@ -18,7 +18,9 @@ use crate::proxy_bind_args::ProxyBindArgs;
 use crate::shared_args::{
     AccessArgs, CacheArgs, ContextArgs, MtpArgs, RetryArgs, SamplingArgs, ServeOptions,
 };
-pub(crate) use crate::subcommands::{ChatCommand, DaemonCommand, ProxyCommand, RemoteCommand};
+pub(crate) use crate::subcommands::{
+    AttachmentCommand, ChatCommand, DaemonCommand, ProxyCommand, RemoteCommand,
+};
 use crate::thinking_arg::ThinkingArg;
 use crate::tool_limit_args::ToolLimitArgs;
 use crate::upstream_args::UpstreamArgs;
@@ -300,6 +302,13 @@ pub enum Commands {
     /// Start a reply the daemon finishes, and read it later
     #[command(display_order = 14)]
     Run(crate::handlers::run::RunArgs),
+
+    /// Save an image a chat stored, such as one a tool made, to a file
+    #[command(display_order = 15)]
+    Attachment {
+        #[command(subcommand)]
+        command: AttachmentCommand,
+    },
 
     /// Generate shell completion scripts (bash, zsh, fish, elvish, powershell)
     ///

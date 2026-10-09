@@ -50,6 +50,13 @@ impl AttachmentStore for Kept {
     async fn blob(&self, id: &AttachmentId) -> Result<Option<AttachmentBlob>, AttachmentError> {
         Ok(self.0.get(id).cloned())
     }
+
+    async fn ids_starting_with(&self, prefix: &str) -> Result<Vec<AttachmentId>, AttachmentError> {
+        Ok(gglib_core::ports::attachment_store::ids_starting_with(
+            self.0.keys(),
+            prefix,
+        ))
+    }
 }
 
 fn user(content: &str, images: &[&AttachmentId]) -> AgentMessage {

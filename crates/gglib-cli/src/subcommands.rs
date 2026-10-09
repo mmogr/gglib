@@ -1,7 +1,8 @@
 //! Nested subcommand enums for the commands that have them.
 //!
-//! `chat`, `proxy` and `daemon` each carry a second level of subcommands
-//! (`gglib chat history`, `gglib proxy stop`, `gglib daemon run`). They live
+//! `chat`, `proxy`, `daemon` and `attachment` each carry a second level of
+//! subcommands (`gglib chat history`, `gglib proxy stop`, `gglib daemon run`,
+//! `gglib attachment save`). They live
 //! here rather than beside [`Commands`](crate::commands::Commands) because
 //! that enum sits on the 300 LOC ratchet, and a nested enum is the part of it
 //! with no coupling to the top level — nothing here names a flag group, so the
@@ -20,6 +21,26 @@ pub enum ChatCommand {
         /// Maximum number of conversations to show
         #[arg(short = 'n', long, default_value = "20")]
         limit: usize,
+    },
+}
+
+/// Subcommands available under `gglib attachment`.
+#[derive(Subcommand)]
+pub enum AttachmentCommand {
+    /// Write a stored image to a file, by its id or the start of it
+    ///
+    /// A chat shows each image as `[image WxH 3f9a2c1e]`: those 8 characters,
+    /// or more of the id, name it. Without a path it is saved as
+    /// `<id8>.png` or `<id8>.jpg` here; a directory saves it there by that
+    /// name. An existing file is not replaced without `--force`.
+    Save {
+        /// The image's id, or at least its first 8 characters
+        id: String,
+        /// File or directory to write it to
+        path: Option<std::path::PathBuf>,
+        /// Replace the file if it exists
+        #[arg(long)]
+        force: bool,
     },
 }
 

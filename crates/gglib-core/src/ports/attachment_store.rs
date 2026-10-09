@@ -95,4 +95,24 @@ pub trait AttachmentStore: Send + Sync {
 
     /// The bytes of the image `id`, or `None` when no image has that id.
     async fn blob(&self, id: &AttachmentId) -> Result<Option<AttachmentBlob>, AttachmentError>;
+
+    /// The ids of the stored images that start with `prefix`, in order:
+    /// how a person who typed the start of an id finds the image.
+    async fn ids_starting_with(&self, prefix: &str) -> Result<Vec<AttachmentId>, AttachmentError>;
+}
+
+/// The ids among `ids` that start with `prefix`, in order: the answer to
+/// [`AttachmentStore::ids_starting_with`] for a store that holds its ids in
+/// memory.
+pub fn ids_starting_with<'a>(
+    ids: impl IntoIterator<Item = &'a AttachmentId>,
+    prefix: &str,
+) -> Vec<AttachmentId> {
+    let mut found: Vec<AttachmentId> = ids
+        .into_iter()
+        .filter(|id| id.as_str().starts_with(prefix))
+        .cloned()
+        .collect();
+    found.sort();
+    found
 }

@@ -89,6 +89,18 @@ impl AttachmentService {
             .ok_or_else(|| AttachmentError::NotFound(id.clone()))
     }
 
+    /// The ids of the stored images that start with `prefix`, in order.
+    ///
+    /// # Errors
+    ///
+    /// [`AttachmentError::Storage`] when the store fails.
+    pub async fn ids_starting_with(
+        &self,
+        prefix: &str,
+    ) -> Result<Vec<AttachmentId>, AttachmentError> {
+        self.store.ids_starting_with(prefix).await
+    }
+
     /// Check the images `messages` name, history included, before a run is
     /// made of them: the refusals the completion adapter would otherwise
     /// meet only once the run had started, and its model was loaded. Only

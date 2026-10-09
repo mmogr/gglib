@@ -270,6 +270,12 @@ pub async fn dispatch(
         Commands::Remote { command } => handlers::remote::dispatch(ctx, command).await?,
         // ── Runs: replies the daemon owns ───────────────────────────────────
         Commands::Run(args) => handlers::run::dispatch(ctx, args).await?,
+        // ── Stored images ───────────────────────────────────────────────────
+        Commands::Attachment { command } => match command {
+            crate::commands::AttachmentCommand::Save { id, path, force } => {
+                handlers::attachment::execute(ctx, &id, path.as_deref(), force).await?;
+            }
+        },
 
         // ── MCP tool gateway ────────────────────────────────────────────────
         Commands::Mcp { command } => {

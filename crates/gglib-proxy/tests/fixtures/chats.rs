@@ -63,6 +63,14 @@ impl AttachmentStore for Images {
             data,
         }))
     }
+
+    async fn ids_starting_with(&self, prefix: &str) -> Result<Vec<AttachmentId>, AttachmentError> {
+        let held = self.0.lock().unwrap();
+        Ok(gglib_core::ports::attachment_store::ids_starting_with(
+            held.keys(),
+            prefix,
+        ))
+    }
 }
 
 /// A PNG's signature and `IHDR` for `width` by `height`, then `padding`

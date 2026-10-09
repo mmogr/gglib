@@ -35,6 +35,13 @@ impl AttachmentStore for One {
     async fn blob(&self, id: &AttachmentId) -> Result<Option<AttachmentBlob>, AttachmentError> {
         Ok((*id == self.0).then(|| self.1.clone()))
     }
+
+    async fn ids_starting_with(&self, prefix: &str) -> Result<Vec<AttachmentId>, AttachmentError> {
+        Ok(gglib_core::ports::attachment_store::ids_starting_with(
+            [&self.0],
+            prefix,
+        ))
+    }
 }
 
 /// The end of a request's head, and where its body starts.
