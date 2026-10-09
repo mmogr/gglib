@@ -141,6 +141,7 @@ export function useHuggingFaceSearch(
       limit: 30,
       sort_by: sortBy,
       sort_ascending: sortAscending,
+      kind: 'chat',
     }),
     [searchQuery, minParams, maxParams, sortBy, sortAscending]
   );

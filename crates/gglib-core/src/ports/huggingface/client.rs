@@ -4,6 +4,16 @@ use super::error::HfPortResult;
 use super::types::{HfFileInfo, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult};
 use async_trait::async_trait;
 
+/// How much of a weights file's head is read to learn what it is before it
+/// is downloaded: 1 MiB.
+///
+/// An image model's GGUF header holds no metadata, only its tensor table:
+/// the measured Flux.1 schnell `Q8_0` header ends at byte 53,912 and the
+/// Qwen-Image 2.1 `Q8_0` header at 20,499. A chat model's metadata (its
+/// tokenizer above all) runs past this, and its head is then simply not read
+/// as an image model's.
+pub const SNIFF_HEAD_BYTES: u64 = 1 << 20;
+
 /// Port trait for `HuggingFace` Hub operations.
 ///
 /// This trait defines the interface that the core domain uses to interact
@@ -65,6 +75,21 @@ pub trait HfClientPort: Send + Sync {
 
     /// Get detailed information about a model.
     async fn get_model_info(&self, model_id: &str) -> HfPortResult<HfRepoInfo>;
+
+    /// Read the first bytes of the file at `path` in repository `model_id`,
+    /// at most `max_bytes` of them.
+    ///
+    /// A ranged read of the address a download reads the whole file from, so
+    /// a header can be read before the file is fetched. A file shorter than
+    /// `max_bytes` answers all of itself.
+    async fn read_head(&self, model_id: &str, path: &str, max_bytes: u64) -> HfPortResult<Vec<u8>>;
+
+    /// The file at `path` in repository `model_id`, with its size and LFS
+    /// OID, or `None` when the repository holds no file there.
+    ///
+    /// One file looked up by its path, for a file that is not a quantization
+    /// of the repository, such as an image model's VAE or text encoder.
+    async fn file_at(&self, model_id: &str, path: &str) -> HfPortResult<Option<HfFileInfo>>;
 
     /// Fetch a repository's `generation_config.json`, if it has one.
     ///

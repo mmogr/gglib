@@ -7,7 +7,7 @@
 use gglib_core::ports::HfRepoInfo;
 use serde::{Deserialize, Serialize};
 
-pub use gglib_core::ports::HfSortField;
+pub use gglib_core::ports::{HfModelKind, HfSortField};
 
 /// Summary of a `HuggingFace` model from the search API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,6 +67,9 @@ pub struct HfSearchRequest {
     pub sort_by: HfSortField,
     #[serde(default)]
     pub sort_ascending: bool,
+    /// Models that chat (the default) or models that draw.
+    #[serde(default)]
+    pub kind: HfModelKind,
 }
 
 impl Default for HfSearchRequest {
@@ -79,6 +82,7 @@ impl Default for HfSearchRequest {
             limit: 30,
             sort_by: HfSortField::default(),
             sort_ascending: false,
+            kind: HfModelKind::default(),
         }
     }
 }

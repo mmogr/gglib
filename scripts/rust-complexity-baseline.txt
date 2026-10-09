@@ -110,8 +110,9 @@ crates/gglib-download/src/queue/mod.rs 1067
 crates/gglib-gguf/src/capabilities/template_probe.rs 501
 crates/gglib-gguf/src/parser.rs 356
 crates/gglib-gguf/src/reader_tests.rs 416
-crates/gglib-hf/src/http.rs 381
+crates/gglib-hf/src/http.rs 514
 crates/gglib-hf/src/parsing.rs 429
+crates/gglib-hf/src/url.rs 403
 crates/gglib-mcp/src/builtin/mod.rs 325
 crates/gglib-mcp/src/client.rs 509
 crates/gglib-mcp/src/manager.rs 315

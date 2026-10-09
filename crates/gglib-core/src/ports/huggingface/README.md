@@ -17,4 +17,10 @@ fetches: a quantization's weights, and the projector chosen to go with them.
 `projector_fetched_with` is that choice alone, for a listing that shows which
 projector comes with each quantization.
 
+A search asks for one `HfModelKind`: models that chat (the default) or models
+that draw. `read_head` reads a file's first bytes (at most `SNIFF_HEAD_BYTES`
+are asked when a download wants to know what a weights file is before fetching
+it), and `file_at` looks one file up by its path, for a file that is no
+quantization, such as an image model's VAE.
+
 <!-- module-docs:end -->

@@ -223,7 +223,8 @@ impl DownloadOps {
     }
 }
 
-/// Search `hf` for GGUF text-generation models.
+/// Search `hf` for GGUF models of the kind the request names:
+/// text-generation models, or text-to-image ones.
 ///
 /// The one search every surface runs: the browser's, through
 /// [`DownloadOps::search_hf_models`], and `gglib model search` and `browse`,
@@ -240,6 +241,7 @@ pub async fn search_hf_models(
         limit: request.limit,
         sort_by: request.sort_by,
         sort_ascending: request.sort_ascending,
+        kind: request.kind,
     };
 
     let response = hf

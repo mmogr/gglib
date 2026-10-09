@@ -67,4 +67,19 @@ impl HfClientPort for MockHfClient {
             tags: vec![],
         })
     }
+    async fn read_head(
+        &self,
+        _model_id: &str,
+        _path: &str,
+        _max_bytes: u64,
+    ) -> Result<Vec<u8>, HfPortError> {
+        unimplemented!("the stub holds no file of its repository")
+    }
+    async fn file_at(
+        &self,
+        _model_id: &str,
+        _path: &str,
+    ) -> Result<Option<HfFileInfo>, HfPortError> {
+        unimplemented!("the stub holds no file of its repository")
+    }
 }

@@ -31,6 +31,33 @@ pub trait HttpBackend: Send + Sync {
         &self,
         url: &Url,
     ) -> HfResult<(T, bool)>;
+
+    /// Fetch at most the first `max_bytes` bytes of a URL's body, asking
+    /// with a `Range` header and stopping there even when the server answers
+    /// with the whole body.
+    async fn get_head(&self, url: &Url, max_bytes: u64) -> HfResult<Vec<u8>>;
+
+    /// Post `form` to a URL as `application/x-www-form-urlencoded` and
+    /// deserialize the JSON answer.
+    async fn post_form_json<T: DeserializeOwned + Send>(
+        &self,
+        url: &Url,
+        form: &[(&str, &str)],
+    ) -> HfResult<T>;
+}
+
+/// `form` encoded as a URL-encoded form body, in its order.
+pub(crate) fn form_body(form: &[(&str, &str)]) -> String {
+    form.iter()
+        .map(|(key, value)| {
+            format!(
+                "{}={}",
+                urlencoding::encode(key),
+                urlencoding::encode(value)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("&")
 }
 
 // ============================================================================
@@ -67,17 +94,31 @@ impl ReqwestBackend {
         }
     }
 
-    /// Build a request with optional authentication.
-    fn build_request(&self, url: &Url) -> reqwest::RequestBuilder {
-        let mut request = self.client.get(url.as_str());
+    /// `request` with the client's token on it, when it has one.
+    fn authorized(&self, mut request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
         if let Some(ref token) = self.auth_token {
             request = request.header("Authorization", format!("Bearer {token}"));
         }
         request
     }
 
+    /// Build a GET request with optional authentication.
+    fn build_request(&self, url: &Url) -> reqwest::RequestBuilder {
+        self.authorized(self.client.get(url.as_str()))
+    }
+
     /// Fetch a URL with automatic retry for transient errors.
     async fn fetch_with_retry(&self, url: &Url) -> HfResult<reqwest::Response> {
+        self.send_with_retry(url, || self.build_request(url)).await
+    }
+
+    /// Send the request `build` makes, built afresh for each attempt, with
+    /// automatic retry for transient errors.
+    async fn send_with_retry(
+        &self,
+        url: &Url,
+        build: impl Fn() -> reqwest::RequestBuilder + Send + Sync,
+    ) -> HfResult<reqwest::Response> {
         let mut last_error: Option<HfError> = None;
 
         for attempt in 0..=self.max_retries {
@@ -88,7 +129,7 @@ impl ReqwestBackend {
                 tokio::time::sleep(delay).await;
             }
 
-            match self.build_request(url).send().await {
+            match build().send().await {
                 Ok(response) => {
                     let status = response.status();
                     if status.is_success() {
@@ -170,6 +211,45 @@ impl HttpBackend for ReqwestBackend {
         let data: T = response.json().await?;
         Ok((data, has_more))
     }
+
+    async fn get_head(&self, url: &Url, max_bytes: u64) -> HfResult<Vec<u8>> {
+        if max_bytes == 0 {
+            return Ok(Vec::new());
+        }
+        let range = format!("bytes=0-{}", max_bytes - 1);
+        let mut response = self
+            .send_with_retry(url, || {
+                self.build_request(url).header("Range", range.as_str())
+            })
+            .await?;
+        let cap = usize::try_from(max_bytes).unwrap_or(usize::MAX);
+        let mut head = Vec::new();
+        while head.len() < cap {
+            let Some(chunk) = response.chunk().await? else {
+                break;
+            };
+            let room = cap - head.len();
+            head.extend_from_slice(&chunk[..chunk.len().min(room)]);
+        }
+        Ok(head)
+    }
+
+    async fn post_form_json<T: DeserializeOwned + Send>(
+        &self,
+        url: &Url,
+        form: &[(&str, &str)],
+    ) -> HfResult<T> {
+        let body = form_body(form);
+        let response = self
+            .send_with_retry(url, || {
+                self.authorized(self.client.post(url.as_str()))
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .body(body.clone())
+            })
+            .await?;
+        let data: T = response.json().await?;
+        Ok(data)
+    }
 }
 
 // ============================================================================
@@ -189,10 +269,21 @@ pub(crate) mod testing {
         pub has_more: bool,
     }
 
+    /// One request the fake backend was asked, as it was asked.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub(crate) enum Asked {
+        /// A ranged read of a URL, for at most this many bytes.
+        Head(String, u64),
+        /// A form posted to a URL, as its encoded body.
+        Form(String, String),
+    }
+
     /// A fake HTTP backend that returns canned responses.
     pub(crate) struct FakeBackend {
         responses: Arc<Mutex<HashMap<String, CannedResponse>>>,
         default_response: Option<CannedResponse>,
+        bodies: HashMap<String, Vec<u8>>,
+        asked: Mutex<Vec<Asked>>,
     }
 
     impl FakeBackend {
@@ -201,7 +292,20 @@ pub(crate) mod testing {
             Self {
                 responses: Arc::new(Mutex::new(HashMap::new())),
                 default_response: None,
+                bodies: HashMap::new(),
+                asked: Mutex::new(Vec::new()),
             }
+        }
+
+        /// Serve `body` to a ranged read of a URL containing `url_contains`.
+        pub(crate) fn with_body(mut self, url_contains: &str, body: &[u8]) -> Self {
+            self.bodies.insert(url_contains.to_string(), body.to_vec());
+            self
+        }
+
+        /// The ranged reads and posted forms asked of it, oldest first.
+        pub(crate) fn asked(&self) -> Vec<Asked> {
+            self.asked.lock().unwrap().clone()
         }
 
         /// Add a canned response for a URL pattern.
@@ -264,6 +368,35 @@ pub(crate) mod testing {
 
             let data: T = serde_json::from_value(response.json)?;
             Ok((data, response.has_more))
+        }
+
+        async fn get_head(&self, url: &Url, max_bytes: u64) -> HfResult<Vec<u8>> {
+            self.asked
+                .lock()
+                .unwrap()
+                .push(Asked::Head(url.to_string(), max_bytes));
+            let body = self
+                .bodies
+                .iter()
+                .find_map(|(pattern, body)| url.as_str().contains(pattern.as_str()).then_some(body))
+                .ok_or_else(|| HfError::ApiRequestFailed {
+                    status: 404,
+                    url: url.to_string(),
+                })?;
+            let cap = usize::try_from(max_bytes).unwrap_or(usize::MAX);
+            Ok(body[..body.len().min(cap)].to_vec())
+        }
+
+        async fn post_form_json<T: DeserializeOwned + Send>(
+            &self,
+            url: &Url,
+            form: &[(&str, &str)],
+        ) -> HfResult<T> {
+            self.asked
+                .lock()
+                .unwrap()
+                .push(Asked::Form(url.to_string(), form_body(form)));
+            self.get_json(url).await
         }
     }
 }

@@ -478,10 +478,16 @@ export type { HfSortField };
  * Request for searching HuggingFace models.
  *
  * Every field is required here, which the one construction site already
- * satisfies — it names all seven. `sort_by` and `sort_ascending` had defaults
- * in the mirror that the caller never relied on.
+ * satisfies — it names all eight. `sort_by` and `sort_ascending` had defaults
+ * in the mirror that the caller never relied on, and `kind` (chat or image)
+ * defaults to chat on the server for a client that names none.
  */
 export type { HfSearchRequest } from './generated/HfSearchRequest';
+
+/**
+ * What a HuggingFace search looks for: models that chat, or models that draw.
+ */
+export type { HfModelKind } from './generated/HfModelKind';
 
 /**
  * Response from HuggingFace model search.

@@ -105,4 +105,15 @@ impl HfClientPort for RepoHub {
             model_id: model_id.to_string(),
         })
     }
+    async fn read_head(
+        &self,
+        _model_id: &str,
+        _path: &str,
+        _max_bytes: u64,
+    ) -> HfPortResult<Vec<u8>> {
+        unimplemented!("a file list is all this hub answers")
+    }
+    async fn file_at(&self, _model_id: &str, _path: &str) -> HfPortResult<Option<HfFileInfo>> {
+        unimplemented!("a file list is all this hub answers")
+    }
 }
