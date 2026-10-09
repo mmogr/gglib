@@ -90,30 +90,22 @@ pub(super) async fn keep_machine(
 }
 
 /// Save the request's last message, when it is the user's, to
-/// `conversation_id`, as [`transcript::save_user`] writes it; with
-/// `replace_from`, in place of that row and every later one. A paired
+/// `conversation_id`, as [`transcript::save_user`] writes it. A paired
 /// `device`'s message says which.
 ///
 /// # Errors
 ///
-/// `message_not_found` (404) for a `replace_from` not in the conversation,
-/// the attachment store's refusal of an image the message names, and
+/// The attachment store's refusal of an image the message names, and
 /// `internal_error` for a write that failed.
 pub(super) async fn save_user(
     core: &AppCore,
     conversation_id: i64,
-    replace_from: Option<i64>,
     last: Option<&AgentMessage>,
     device: Option<&str>,
 ) -> Result<(), HttpError> {
     let history = core.chat_history();
-    let saved = transcript::save_user(history, conversation_id, replace_from, last, device).await;
+    let saved = transcript::save_user(history, conversation_id, last, device).await;
     saved.map_err(|e| match e {
-        ChatHistoryError::MessageNotFound(id) => coded(
-            StatusCode::NOT_FOUND,
-            "message_not_found",
-            format!("conversation {conversation_id} has no message {id} to replace"),
-        ),
         ChatHistoryError::Attachment(refusal) => refusal.into(),
         _ => coded(
             StatusCode::INTERNAL_SERVER_ERROR,

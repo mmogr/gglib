@@ -55,13 +55,13 @@ async fn only_a_users_last_message_is_saved_and_a_devices_says_which() {
     };
 
     for last in [None, Some(&assistant)] {
-        let saved = save_user(history, id, None, last, Some("phone")).await;
+        let saved = save_user(history, id, last, Some("phone")).await;
         saved.expect("nothing to save");
     }
     assert!(history.get_messages(id).await.expect("read").is_empty());
 
     for device in [None, Some("phone")] {
-        let saved = save_user(history, id, None, Some(&user("hi")), device).await;
+        let saved = save_user(history, id, Some(&user("hi")), device).await;
         saved.expect("saved");
     }
     let rows = history.get_messages(id).await.expect("read");
@@ -75,29 +75,43 @@ async fn only_a_users_last_message_is_saved_and_a_devices_says_which() {
     );
 }
 
-/// With a row to replace, the message takes the place of that row and every
-/// later one; a row the conversation does not hold is refused, and nothing
-/// changes.
+/// A turn that answers the question a chat ends in runs from the chat's
+/// prompt and every saved message; a chat that ends in a reply, or none,
+/// has nothing to answer.
 #[tokio::test]
-async fn a_message_replaces_its_row_and_every_later_one_or_nothing() {
+async fn an_answer_runs_from_the_saved_chat_and_only_one_that_ends_in_a_question() {
     let core = test_core().await;
     let history = core.chat_history();
-    let id = conversation(history).await;
-    for content in ["first", "second", "third"] {
-        let saved = save_user(history, id, None, Some(&user(content)), None).await;
+    let made = history.create_conversation(NewConversation {
+        title: "t".to_owned(),
+        system_prompt: Some("Be brief.".to_owned()),
+        ..NewConversation::default()
+    });
+    let id = made.await.expect("a conversation");
+    let empty = answer_history(history, id).await;
+    assert!(matches!(empty, Err(ChangeError::Refused(_))));
+    for content in ["first", "second"] {
+        let saved = save_user(history, id, Some(&user(content)), None).await;
         saved.expect("saved");
     }
-    let second = history.get_messages(id).await.expect("read")[1].id;
 
-    let missing = save_user(history, id, Some(second + 100), Some(&user("x")), None).await;
-    assert!(matches!(missing, Err(ChatHistoryError::MessageNotFound(_))));
-    assert_eq!(history.get_messages(id).await.expect("read").len(), 3);
+    let asked = answer_history(history, id).await.expect("answerable");
 
-    let edited = save_user(history, id, Some(second), Some(&user("edited")), None).await;
-    edited.expect("replaced");
-    let rows = history.get_messages(id).await.expect("read");
-    let contents: Vec<&str> = rows.iter().map(|r| &*r.content).collect();
-    assert_eq!(contents, ["first", "edited"]);
+    let system = AgentMessage::System {
+        content: "Be brief.".to_owned(),
+    };
+    let as_sent = |m: &[AgentMessage]| serde_json::to_value(m).expect("a value");
+    assert_eq!(
+        as_sent(&asked),
+        as_sent(&[system, user("first"), user("second")])
+    );
+    let nowhere = answer_history(history, id + 1).await;
+    assert!(matches!(
+        nowhere,
+        Err(ChangeError::History(
+            ChatHistoryError::ConversationNotFound(_)
+        ))
+    ));
 }
 
 /// A reply's rows are made of its frames, each with the time logged at its

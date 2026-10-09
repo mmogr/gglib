@@ -12,10 +12,11 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 
+use crate::chat_changes;
 use crate::error::HttpError;
 use crate::handlers::chat_title;
 use crate::state::AppState;
-use gglib_core::domain::chat::{Conversation, ConversationSettings, Message, NewConversation};
+use gglib_core::domain::chat::{Conversation, ConversationSettings, NewConversation};
 use gglib_core::ports::chat_history::ChatHistoryError;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -59,7 +60,8 @@ pub(crate) struct UpdateConversationRequest {
 /// This router provides:
 /// - `/api/conversations` - List/create conversations
 /// - `/api/conversations/{id}` - Get/update/delete conversation
-/// - `/api/conversations/{id}/messages` - Get messages for conversation
+/// - `/api/conversations/{id}/thread` - A chat with its branch points
+/// - `/api/conversations/{id}/changes` - Edit, regenerate or branch a chat
 /// - `/api/messages/{id}` - Delete a message and those after it
 /// - `/api/chat` - Ask the model a chat runs on for the chat's title
 ///
@@ -90,8 +92,9 @@ pub(crate) fn chat_routes_no_prefix() -> Router<AppState> {
                 .put(update_conversation)
                 .delete(delete_conversation),
         )
-        // Message endpoints
-        .route("/conversations/{id}/messages", get(get_messages))
+        // A chat read with its branch points, and changed (ADR 0017)
+        .route("/conversations/{id}/thread", get(chat_changes::thread))
+        .route("/conversations/{id}/changes", post(chat_changes::change))
         .route("/messages/{id}", delete(delete_message))
         // A chat's title, asked of the model it runs on
         .route("/chat", post(chat_title::generate))
@@ -177,20 +180,6 @@ pub(crate) async fn delete_conversation(
 // ─────────────────────────────────────────────────────────────────────────────
 // Message Handlers
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// Get all messages for a conversation.
-/// GET /api/conversations/:id/messages
-pub(crate) async fn get_messages(
-    State(state): State<AppState>,
-    Path(conversation_id): Path<i64>,
-) -> Result<Json<Vec<Message>>, HttpError> {
-    let messages = state
-        .core
-        .chat_history()
-        .get_messages(conversation_id)
-        .await?;
-    Ok(Json(messages))
-}
 
 /// Delete a message and all subsequent messages in the conversation, all or
 /// none; refused while a reply to the conversation is still being written.

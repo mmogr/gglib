@@ -18,6 +18,7 @@ import {
   SystemMessageBubble,
   EditComposer,
   ImageInputContext,
+  Unanswered,
 } from './components';
 import type { MessageActionsContextValue, ModelChoice } from './components';
 import {
@@ -31,6 +32,7 @@ import type { ChatSource, ConversationSummary } from '../../services/transport';
 import type { RunInfo } from '../../types/generated/RunInfo';
 import type { ImageInput } from '../../hooks/useImageInput';
 import type { ThinkingSwitch } from '../../hooks/useThinkingSwitch';
+import type { UseGglibRuntimeReturn } from '../../hooks/useGglibRuntime';
 
 interface ChatMessagesPanelProps {
   activeConversation: ConversationSummary | null;
@@ -88,6 +90,8 @@ interface ChatMessagesPanelProps {
   imageInput: ImageInput;
   /** The chat's Thinking switch, for the composer's margin. */
   thinking?: ThinkingSwitch;
+  /** What the chat says of its branches, and Retry; absent for a far chat. */
+  branching?: UseGglibRuntimeReturn['branching'];
 }
 
 /** The notebook's column: the width its rows are laid out in. */
@@ -126,6 +130,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   source = 'this',
   imageInput,
   thinking,
+  branching,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   const threadState = useThread({ optional: true });
@@ -253,6 +258,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                     <NotebookColumn>
                       {head}
                       <ThreadPrimitive.Messages components={messageComponents} />
+                      {isServerConnected && branching && <Unanswered answerable={branching.answerable} retry={branching.retry} />}
                     </NotebookColumn>
                     <ThreadPrimitive.ScrollToBottom className="sticky bottom-sm self-center mt-auto py-xs px-md bg-primary text-text-inverse border-none rounded-full text-sm cursor-pointer opacity-0 transition-opacity duration-200 data-[visible=true]:opacity-100">
                       Jump to latest

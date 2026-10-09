@@ -122,6 +122,9 @@ fn sse_event(event: &AgentEvent) -> Event {
 }
 
 #[cfg(test)]
+#[path = "run_answer_tests.rs"]
+mod run_answer_tests;
+#[cfg(test)]
 #[path = "run_busy_tests.rs"]
 mod run_busy_tests;
 #[cfg(test)]
@@ -144,9 +147,6 @@ mod run_model_tests;
 #[cfg(test)]
 #[path = "run_privacy_tests.rs"]
 mod run_privacy_tests;
-#[cfg(test)]
-#[path = "run_replace_tests.rs"]
-mod run_replace_tests;
 #[cfg(test)]
 #[path = "run_rows_tests.rs"]
 mod run_rows_tests;

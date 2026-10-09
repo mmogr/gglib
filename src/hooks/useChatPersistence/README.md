@@ -2,7 +2,7 @@
 
 <!-- module-docs:start -->
 
-Turning a conversation's saved rows into the messages the thread shows. The daemon writes every turn: the user's message when a run starts and the reply when it ends (`PUT /api/runs/{id}?kind=agent`). The page saves no turn; it loads rows, deletes them (the delete button), and renames conversations. An edit or a regenerate replaces rows through the run itself (`replace_from`).
+Turning a conversation's saved rows into the messages the thread shows. The daemon writes every turn: the user's message when a run starts and the reply when it ends (`PUT /api/runs/{id}?kind=agent`). The page saves no turn; it loads rows, deletes them (the delete button), and renames conversations. An edit or a regenerate is a change the daemon makes (`POST /api/conversations/{id}/changes`): never a rewrite of a saved reply, which it makes on a new branch of the chat instead (ADR 0017).
 
 ## Key Files
 

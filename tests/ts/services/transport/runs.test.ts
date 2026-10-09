@@ -33,7 +33,6 @@ const info: RunInfo = {
 
 const request: AgentRunRequest = {
   conversation_id: 4,
-  replace_from: null,
   port: 9000,
   far: null,
   messages: [{ role: 'user', content: 'hi' }],

@@ -131,7 +131,7 @@ export function useTitleGeneration({
     setIsGeneratingTitle(true);
     try {
       // Fetch fresh messages from the database
-      const messages = await getTransport().getMessages(activeConversationId);
+      const { messages } = await getTransport().getThread(activeConversationId);
       
       if (messages.length === 0) {
         showToast('Cannot generate title for empty conversation', 'warning');

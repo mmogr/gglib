@@ -194,11 +194,11 @@ pub(super) async fn conversation(state: &AppState) -> i64 {
         .unwrap()
 }
 
-/// A transcript saved to `conversation`, replacing nothing.
+/// A transcript saved to `conversation`, its message after the rest.
 pub(super) fn saving(conversation: i64) -> super::launch::Transcript {
     super::launch::Transcript {
         conversation_id: Some(conversation),
-        replace_from: None,
+        answer_saved: false,
         remember: None,
     }
 }
@@ -215,7 +215,7 @@ pub(super) async fn start(
         LOCAL,
         super::launch::Transcript {
             conversation_id: conversation,
-            replace_from: None,
+            answer_saved: false,
             remember: None,
         },
         p,

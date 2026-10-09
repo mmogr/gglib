@@ -22,12 +22,13 @@ use super::transcript::{keep_machine, record_model, save_reply, save_user};
 use crate::error::HttpError;
 use crate::state::AppState;
 
-/// Where a run's transcript goes, the rows its user's message replaces, and
-/// what the conversation is to remember of thinking (`thinking::settle`).
+/// Where a run's transcript goes, whether the run answers a question
+/// already saved there (and so saves no message of its own), and what the
+/// conversation is to remember of thinking (`thinking::settle`).
 #[derive(Clone, Copy)]
 pub(super) struct Transcript {
     pub(super) conversation_id: Option<i64>,
-    pub(super) replace_from: Option<i64>,
+    pub(super) answer_saved: bool,
     pub(super) remember: Remember,
 }
 
@@ -74,7 +75,7 @@ async fn reserve_and_start(
 ) -> Result<Created, HttpError> {
     let Transcript {
         conversation_id,
-        replace_from,
+        answer_saved,
         remember,
     } = transcript;
     let id = id.as_str();
@@ -107,14 +108,15 @@ async fn reserve_and_start(
                 .as_ref()
                 .map_or(Machine::Local, |far| far.machine.clone());
             keep_machine(&state.core, conversation_id, &machine).await?;
-            save_user(
-                &state.core,
-                conversation_id,
-                replace_from,
-                prepared.messages.last(),
-                device.as_deref(),
-            )
-            .await?;
+            if !answer_saved {
+                save_user(
+                    &state.core,
+                    conversation_id,
+                    prepared.messages.last(),
+                    device.as_deref(),
+                )
+                .await?;
+            }
             let ran_on = (prepared.local_model, prepared.far_model.as_ref());
             record_model(
                 &state.core,

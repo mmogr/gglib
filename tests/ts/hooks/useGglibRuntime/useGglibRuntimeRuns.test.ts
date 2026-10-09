@@ -171,10 +171,10 @@ describe('useGglibRuntime and a run that outlives the page', () => {
     const held = new Promise<void>((r) => {
       release = r;
     });
-    const reads = () => daemon.count('GET', '/api/conversations/1/messages');
+    const reads = () => daemon.count('GET', '/api/conversations/1/thread');
     const readBefore = reads();
     daemon.before = async (method, path) => {
-      if (method === 'GET' && path === '/api/conversations/1/messages') await held;
+      if (method === 'GET' && path === '/api/conversations/1/thread') await held;
     };
     daemon.finish('r-live', 'completed', [{ role: 'assistant', content: 'Hello' }]);
     await waitFor(() => expect(reads()).toBe(readBefore + 1));
@@ -208,7 +208,7 @@ describe('useGglibRuntime and a run that outlives the page', () => {
     daemon.running('r-live', 1, [{ type: 'text_delta', content: 'Hel' }]);
     const hook = await mount(open(1));
     await waitFor(() => expect(hook.result.current.isRunning).toBe(true));
-    const loads = () => daemon.count('GET', '/api/conversations/1/messages');
+    const loads = () => daemon.count('GET', '/api/conversations/1/thread');
     const loadedBefore = loads();
 
     act(() => hook.result.current.runtime.thread.cancelRun());

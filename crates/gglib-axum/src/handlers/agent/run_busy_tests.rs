@@ -30,11 +30,11 @@ async fn a_second_run_for_a_live_conversation_is_a_conflict_and_writes_nothing()
     let rows = saved(&state, id).await;
     assert_eq!(rows.len(), 1, "the first run's user message");
 
-    for replace_from in [None, Some(rows[0].id)] {
+    for answer_saved in [false, true] {
         let (p, _) = prepared(finished_reply(), End::Finish);
         let transcript = Transcript {
             conversation_id: Some(id),
-            replace_from,
+            answer_saved,
             remember: None,
         };
         let refused = launch(&state, "e2", LOCAL, transcript, p, spare_permit()).await;
@@ -50,7 +50,7 @@ async fn a_second_run_for_a_live_conversation_is_a_conflict_and_writes_nothing()
         assert_eq!((status, code), (StatusCode::CONFLICT, "conflict"));
         assert!(message.contains("run e1"), "{message}");
         let after: Vec<i64> = saved(&state, id).await.iter().map(|r| r.id).collect();
-        assert_eq!(after, [rows[0].id], "no user row written or replaced");
+        assert_eq!(after, [rows[0].id], "no user row written");
         assert!(state.runs.get(&LOCAL, "e2").is_err(), "no run left behind");
     }
 

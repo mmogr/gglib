@@ -85,7 +85,7 @@ describe('useGglibRuntime opening a conversation while its run ends', () => {
 
   it('ended between the lookup and the load: the saved reply, once', async () => {
     live();
-    endAt('/api/conversations/1/messages');
+    endAt('/api/conversations/1/thread');
     await settles(await mount(open));
     expect(daemon.requests.some((r) => r.url.includes('/events'))).toBe(true);
   });
@@ -181,7 +181,7 @@ describe('useGglibRuntime opening a conversation while its run ends', () => {
 
     it('rows that cannot load leave nothing to send from, until it is opened again', async () => {
       saved();
-      failing({ 'GET /api/runs': 1, 'GET /api/conversations/1/messages': 1 });
+      failing({ 'GET /api/runs': 1, 'GET /api/conversations/1/thread': 1 });
       const onError = vi.fn();
       const hook = await mount({ ...open, onError });
       await waitFor(() => expect(onError).toHaveBeenCalled());

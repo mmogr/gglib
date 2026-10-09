@@ -9,12 +9,14 @@ from start to end, so closing the page no longer stops one.
 ## Architecture
 
 ```
-useGglibRuntime                      send / edit / regenerate / Stop
+useGglibRuntime                      send / edit / regenerate / Retry / Stop
   │  PUT  /api/runs/{id}?kind=agent  (id minted here; the conversation exists first)
+  │  POST /api/conversations/{id}/changes  (edit, regenerate: branchChanges)
   │  POST /api/runs/{id}/cancel      (Stop; leaving never cancels)
   └── useRunReader                   the open conversation's messages
         ├── open:  GET /api/runs → the agent run still going in it, if any
-        │          GET /api/conversations/{id}/messages → saved rows
+        │          GET /api/conversations/{id}/thread → saved rows, branch
+        │          points, whether it ends in a question
         │          (sending waits for both)
         └── drawRun: GET /api/runs/{id}/events?after=0 → one frame per AgentEvent
               ├── text_delta / reasoning_delta → current assistant message
@@ -28,13 +30,23 @@ useGglibRuntime                      send / edit / regenerate / Stop
 The daemon saves the user's message when a run starts and the reply when it
 ends; the page saves no turn. What `drawRun` draws is provisional: at the end
 the thread becomes the saved rows, with their ids, tool rows folded, and an
-unfinished reply marked, and how long each turn thought. An edit or a
-regenerate names the edited message (or the regenerated question) as the
-run's `replace_from`; the daemon replaces it and every later row with the
-message only once it accepts the run, so a refused run changes nothing and
-the page never deletes. The live run is looked up before the rows load, so
-a run that ends during the opening is shown once. Nothing about a run is kept in browser storage; its
-id lives in memory while it is read.
+unfinished reply marked, and how long each turn thought. The live run is
+looked up before the rows load, so a run that ends during the opening is
+shown once. Nothing about a run is kept in browser storage; its id lives in
+memory while it is read.
+
+An edit (of a question or of a reply) and a regenerate are changes the daemon
+makes (`POST /api/conversations/{id}/changes`, ADR 0017), and the page holds
+no rule of when one branches. A change that would rewrite a saved reply is
+made on a new chat, a copy of the one it was made on as far as the change;
+the answer names it, and the page lists and opens it and tells the person the
+original is kept (`onBranched`). Only an edit of the last question, while
+nothing answers it, is made in place. When the answer says the chat it left
+is to be answered, a run answers it: `answer_saved` on the run's body, no
+messages, and the daemon runs from what is saved and saves only the reply.
+A chat that ends in a question nothing answers (`answerable`) offers Retry,
+which starts the same run. A refused change changes nothing, and the page
+never deletes.
 
 A far chat (`source: 'far'`) is the machine this one is joined to, read
 through this daemon's `/api/remote/*`: its rows from `/api/remote/chats/{id}`,
@@ -72,12 +84,13 @@ loop detection) lives in the Rust `gglib-agent` crate.
 
 | File | Role |
 |---|---|
-| `useGglibRuntime.ts` | The runtime: send, edit, regenerate and Stop, as runs; each start says the chat's Thinking choice when the caller gives one, and tells the caller once that turn is accepted |
-| `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end; keeps how the run it last read to its end ended (`endedRun`) until the conversation is left, which is how the page knows a reply finished in front of it; hands up each reading of a far chat, unless it was left first |
+| `useGglibRuntime.ts` | The runtime: send, edit, regenerate, Retry and Stop, as runs and changes; each start says the chat's Thinking choice when the caller gives one, and tells the caller once that turn is accepted; hands the page what the open chat says of its branches (`branching`) |
+| `branchChanges.ts` | An edit or a regenerate as the change it asks the daemon for, and the change made: the chat it leaves shown, or the branch it made opened, and answered by a run when the daemon says so; with no change, Retry |
+| `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end; keeps how the run it last read to its end ended (`endedRun`) until the conversation is left, which is how the page knows a reply finished in front of it; keeps what the daemon says beside the rows (`answerable`, `points`); hands up each reading of a far chat, unless it was left first |
 | `drawRun.ts` | Reads one run's events from the first and draws them |
-| `runRequest.ts` | The run's body (`AgentRunRequest`), and the run id; a turn on the paired machine's model carries it as `far`, that machine and the model's id there, and no name; `thinking` is in the body only when the run changes the chat's choice |
-| `savedRows.ts` | A conversation's saved thread, its live run, and the row a message is; a far chat's from the far machine, handed on as that machine answered it, its live run from the far listing's `live_run` |
-| `chatSource.ts` | Which machine a chat is on: that machine's runs (list, cancel, events) and image store (upload, read), and the text a far turn carries |
+| `runRequest.ts` | The run's body (`AgentRunRequest`), as sent now with the Tools popover's limits and reasoning controls (`runBodyFor`), and the run id; a turn on the paired machine's model carries it as `far`, that machine and the model's id there, and no name; `thinking` is in the body only when the run changes the chat's choice; `answer_saved` only on a run that answers the question the chat ends in |
+| `savedRows.ts` | A conversation's saved thread with its branch points and whether it ends in a question, its live run, and the row a message is; a far chat's from the far machine, handed on as that machine answered it, its live run from the far listing's `live_run` |
+| `chatSource.ts` | Which machine a chat is on: that machine's runs (list, cancel, events) and image store (upload, read), and the text a turn carries, to a far chat or as an edit |
 | `imageAttachments.ts` | The composer's image adapter: uploads an image when it is added (never when sent), says a refusal at once, turns a sent image into its stored id (only an id its own store answered: not one from the other machine's, as when the chat list moved there with images in the composer), and remembers each upload by its file so a draft handed back or carried over a model switch is not uploaded again |
 | `imagePrep.ts` | An image read as the store reads it (a PNG's or a JPEG's size from its header), kept as it is within 2560 px and 8 MiB, else redrawn smaller by a downscaler passed in (the canvas by default) |
 | `imageRefusals.ts` | The sentence for a refused image, at its upload or with its send, by the store's code; that a far gglib from before images cannot take one; and that an image was uploaded for another store than its chat's |

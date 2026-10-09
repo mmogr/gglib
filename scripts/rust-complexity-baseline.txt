@@ -17,6 +17,7 @@ crates/gglib-app-services/src/settings_tests.rs 325
 crates/gglib-app-services/src/setup.rs 301
 crates/gglib-app-services/src/test_support.rs 349
 crates/gglib-app-services/src/types.rs 501
+crates/gglib-axum/src/error.rs 326
 crates/gglib-axum/src/routes.rs 435
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 361

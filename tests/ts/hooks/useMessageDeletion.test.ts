@@ -14,7 +14,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import type { ThreadMessageLike } from '@assistant-ui/react';
 
 const transport = vi.hoisted(() => ({
-  getMessages: vi.fn(),
+  getThread: vi.fn(),
   deleteMessage: vi.fn(),
 }));
 
@@ -81,7 +81,7 @@ function setup(dbMessages: ChatMessage[], runtimeMessages: Array<{ id: string; r
   const syncConversations = vi.fn().mockResolvedValue(undefined);
   const showToast = vi.fn();
 
-  transport.getMessages.mockResolvedValue(dbMessages);
+  transport.getThread.mockResolvedValue({ messages: dbMessages });
   transport.deleteMessage.mockResolvedValue(1);
 
   const hook = renderHook(() =>

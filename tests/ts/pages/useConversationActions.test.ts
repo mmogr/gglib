@@ -12,7 +12,7 @@ const transport = vi.hoisted(() => ({
   createConversation: vi.fn(async () => 5),
   updateConversationTitle: vi.fn(async () => {}),
   updateConversationSystemPrompt: vi.fn(async () => {}),
-  getMessages: vi.fn(async () => []),
+  getThread: vi.fn(async () => ({ messages: [] })),
 }));
 vi.mock('../../../src/services/transport', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/services/transport')>()),

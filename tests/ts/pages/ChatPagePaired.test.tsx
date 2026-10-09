@@ -55,7 +55,7 @@ vi.mock('../../../src/services/transport', async () => {
         },
       ]),
       createConversation,
-      getMessages: vi.fn(async () => []),
+      getThread: vi.fn(async () => ({ messages: [] })),
       listRuns: vi.fn(async () => []),
       getSettings: vi.fn(async () => ({})),
       subscribe: vi.fn(() => () => {}),

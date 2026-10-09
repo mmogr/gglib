@@ -5,6 +5,7 @@
  * @module runRequest
  */
 
+import { agentOverridesToWire, reasoningOverridesToWire } from '../../services/agentOverrides';
 import { getToolRegistry } from '../../services/tools';
 import type { GglibMessage } from '../../types/messages';
 import type { AgentRequestConfig } from '../../types/generated/AgentRequestConfig';
@@ -40,17 +41,16 @@ export interface PartialAgentConfig {
 }
 
 export interface RunRequestOptions {
-  /** The history the run answers, its last message the user's. */
+  /** The history the run answers, its last message the user's; none for an answer run. */
   messages: GglibMessage[];
   /** The conversation the daemon saves the user's message and the reply to. */
   conversationId: number;
   /**
-   * The saved row the user's message replaces, with every later row: an
-   * edit names the edited message, a regenerate the question. The daemon
-   * deletes them only once the run is accepted, with the save of the new
-   * message, so a refused run changes nothing.
+   * Whether the run answers the question the conversation already ends in,
+   * as an edit, a regenerate or Retry leaves it: `messages` is then empty,
+   * and the daemon runs from what is saved and saves only the reply.
    */
-  replaceFrom?: number;
+  answerSaved?: boolean;
   /**
    * The local server this turn is for. Absent for a turn on a far model,
    * which has none: the body still carries a `port` because the wire type
@@ -123,7 +123,7 @@ function toolFilter(supportsToolCalls: boolean | null | undefined): string[] | n
 export function buildRunRequest(options: RunRequestOptions): AgentRunRequest {
   return {
     conversation_id: options.conversationId,
-    replace_from: options.replaceFrom ?? null,
+    ...(options.answerSaved && { answer_saved: true }),
     port: options.selectedServerPort ?? 0,
     far: options.far ?? null,
     messages: convertToWireMessages(options.messages),
@@ -134,4 +134,25 @@ export function buildRunRequest(options: RunRequestOptions): AgentRunRequest {
     reasoning_budget_tokens: options.reasoning?.reasoning_budget_tokens ?? null,
     ...(options.thinking !== undefined && { thinking: options.thinking }),
   };
+}
+
+/** Where a chat's runs go: the same for every run of it. */
+export type RunTarget = Pick<RunRequestOptions, 'selectedServerPort' | 'supportsToolCalls' | 'far'>;
+
+/**
+ * The body of a run sent now to `target`, with the limits from the Tools
+ * popover and the reasoning controls as they are at this send. It names no
+ * iteration limit: for a run that names none the daemon takes the
+ * conversation's saved one, then the stored setting.
+ */
+export function runBodyFor(
+  target: RunTarget,
+  run: Pick<RunRequestOptions, 'conversationId' | 'messages' | 'answerSaved' | 'thinking'>,
+): AgentRunRequest {
+  return buildRunRequest({
+    ...target,
+    ...run,
+    config: agentOverridesToWire(),
+    reasoning: reasoningOverridesToWire(),
+  });
 }

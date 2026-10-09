@@ -8,6 +8,7 @@ use axum::response::{IntoResponse, Response};
 use gglib_app_services::GuiError;
 use gglib_core::ports::chat_history::ChatHistoryError;
 use gglib_core::ports::{AttachmentError, RunsError};
+use gglib_core::services::ChangeError;
 use gglib_core::{CoreError, RepositoryError};
 use serde::Serialize;
 use thiserror::Error;
@@ -195,6 +196,32 @@ impl From<ChatHistoryError> for HttpError {
             }
             ChatHistoryError::Database(msg) => Self::Internal(format!("Database error: {msg}")),
             ChatHistoryError::Attachment(refusal) => refusal.into(),
+        }
+    }
+}
+
+impl From<ChangeError> for HttpError {
+    fn from(err: ChangeError) -> Self {
+        let coded = |status: u16, code, message: String| Self::Coded {
+            status: StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+            code,
+            message,
+        };
+        match err {
+            ChangeError::Refused(refused) => {
+                coded(refused.http_status(), refused.code(), refused.to_string())
+            }
+            ChangeError::History(ChatHistoryError::ConversationNotFound(id)) => coded(
+                404,
+                "conversation_not_found",
+                format!("no conversation has id {id}"),
+            ),
+            ChangeError::History(ChatHistoryError::MessageNotFound(id)) => coded(
+                404,
+                "message_not_found",
+                format!("message {id} is not in this conversation"),
+            ),
+            ChangeError::History(other) => other.into(),
         }
     }
 }
