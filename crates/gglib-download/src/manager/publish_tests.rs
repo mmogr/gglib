@@ -32,6 +32,7 @@ pub(super) async fn queued(registrar: Arc<dyn ModelRegistrarPort>) -> Fixture {
         ])),
         recorded.clone(),
         DownloadManagerConfig::default(),
+        Arc::new(gglib_core::ports::NoopGgufParser),
     ));
     manager
         .queue_download_smart(REPO, Some("Q8_0".to_string()))
@@ -146,6 +147,7 @@ fn snapshots_are_emitted_in_revision_order() {
         Arc::new(RepoHub::new(&[])),
         held.clone(),
         DownloadManagerConfig::default(),
+        Arc::new(gglib_core::ports::NoopGgufParser),
     ));
     let runtime = tokio::runtime::Builder::new_current_thread()
         .build()
@@ -249,6 +251,7 @@ async fn the_meter_task_ends_on_cancellation() {
         Arc::new(RepoHub::new(&[])),
         Arc::new(NoopEmitter::new()),
         DownloadManagerConfig::default(),
+        Arc::new(gglib_core::ports::NoopGgufParser),
     ));
     let (progress_tx, _rx) = watch::channel(ProgressUpdate::default());
     let cancel = CancellationToken::new();

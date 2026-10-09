@@ -24,9 +24,25 @@ pub(crate) struct QueuedItem {
     /// Stable artifact identity computed at enqueue time.
     /// Used for completion tracking and deduplication.
     pub completion_key: CompletionKey,
+    /// The repository the file is fetched from, when it is not the
+    /// download's own: an image model's companion. `None` for the download's
+    /// own files.
+    pub repo: Option<String>,
 }
 
 impl QueuedItem {
+    /// The repository the file is fetched from: its own, or the download's.
+    pub(crate) fn repo(&self) -> &str {
+        self.repo.as_deref().unwrap_or_else(|| self.id.model_id())
+    }
+
+    /// Fetch the file from `repo` rather than the download's own repository.
+    #[must_use]
+    pub(crate) fn fetched_from(mut self, repo: Option<String>) -> Self {
+        self.repo = repo;
+        self
+    }
+
     /// Create a new simple (non-sharded) queued download.
     #[cfg(test)]
     pub(crate) fn new(id: DownloadId, completion_key: CompletionKey) -> Self {
@@ -36,6 +52,7 @@ impl QueuedItem {
             shard_info: None,
             revision: None,
             completion_key,
+            repo: None,
         }
     }
 
@@ -52,6 +69,7 @@ impl QueuedItem {
             shard_info: Some(shard_info),
             revision: None,
             completion_key,
+            repo: None,
         }
     }
 }

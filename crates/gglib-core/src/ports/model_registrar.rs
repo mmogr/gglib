@@ -10,7 +10,7 @@ use std::path::Path;
 
 use super::RepositoryError;
 use super::download::ResolvedFile;
-use crate::domain::Model;
+use crate::domain::{ComponentRole, Model};
 use crate::download::Quantization;
 
 /// Information about a completed download for model registration.
@@ -22,10 +22,14 @@ pub struct CompletedDownload {
     /// Path to the primary downloaded file: the weights, or their first
     /// shard. Never the projector.
     pub primary_path: std::path::PathBuf,
-    /// All downloaded file paths: the weights, then the projector.
+    /// All downloaded file paths: the weights, then the projector, then an
+    /// image model's companions.
     pub all_paths: Vec<std::path::PathBuf>,
     /// The projector downloaded with the weights, when the group had one.
     pub projector_path: Option<std::path::PathBuf>,
+    /// An image model's companions downloaded with its weights, each with the
+    /// role it plays, in the group's order. Empty for any other model.
+    pub components: Vec<(ComponentRole, std::path::PathBuf)>,
     /// The resolved quantization.
     pub quantization: Quantization,
     /// Repository ID (e.g., "unsloth/Llama-3-GGUF").
@@ -39,7 +43,7 @@ pub struct CompletedDownload {
     /// `HuggingFace` tags for the model.
     pub hf_tags: Vec<String>,
     /// File entries with OIDs from `HuggingFace` (for `model_files` table),
-    /// one per file of the group, the projector included.
+    /// one per file of the group, the projector and companions included.
     pub hf_file_entries: Vec<ResolvedFile>,
 }
 
@@ -56,6 +60,11 @@ pub struct RegisteredDownload {
     /// refused it, or the model keeps a link to another file. `None` when it
     /// is the model's projector, and when the group had no projector.
     pub projector_refusal: Option<String>,
+    /// A sentence for each of the group's companions not linked to the
+    /// model: its tensors refused it for its role, or the model keeps a link
+    /// to another file. Empty when every one is linked, and for a group that
+    /// brought none.
+    pub component_refusals: Vec<String>,
 }
 
 impl CompletedDownload {
@@ -93,7 +102,9 @@ pub trait ModelRegistrarPort: Send + Sync {
     /// A projector downloaded with the weights is linked to the model when its
     /// header says it is one; when it does not, the model is registered
     /// without the link and the answer says why. A model already linked to
-    /// another file keeps that link, and the answer says so.
+    /// another file keeps that link, and the answer says so. An image
+    /// model's companions are linked the same way, each by the check a
+    /// hand-made link passes, and each one not linked is named with why.
     ///
     /// # Arguments
     ///

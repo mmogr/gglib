@@ -88,6 +88,7 @@ pub(super) fn downloaded(dir: &Path, projector: &str) -> CompletedDownload {
         primary_path: weights.clone(),
         all_paths: vec![weights, projector_path.clone()],
         projector_path: Some(projector_path),
+        components: vec![],
         quantization: Quantization::Q8_0,
         repo_id: "owner/zeta-GGUF".to_owned(),
         commit_sha: "abc123".to_owned(),

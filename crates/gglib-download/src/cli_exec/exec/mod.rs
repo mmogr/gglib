@@ -49,7 +49,9 @@ pub(super) async fn download(
 
     // Resolve files using the HuggingFace resolver
     gglib_core::telemetry::console_println(&format!("Looking for {quant} quantization..."));
-    let resolver = HfQuantizationResolver::new(hub);
+    // A forced fetch again of the model's own files: its companions, if it
+    // draws with any, are in their own folders and linked already.
+    let resolver = HfQuantizationResolver::weights_only(hub);
 
     let quantization = gglib_core::download::Quantization::from_filename(quant);
     let resolution = resolver.resolve(&request.model_id, quantization).await

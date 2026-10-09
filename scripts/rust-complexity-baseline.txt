@@ -82,10 +82,11 @@ crates/gglib-core/src/server_config.rs 715
 crates/gglib-core/src/services/app_core.rs 305
 crates/gglib-core/src/services/model_components_tests.rs 574
 crates/gglib-core/src/services/model_import.rs 734
-crates/gglib-core/src/services/model_registrar.rs 340
+crates/gglib-core/src/services/model_registrar.rs 392
+crates/gglib-core/src/services/model_registrar_components_tests.rs 341
 crates/gglib-core/src/services/model_service.rs 1477
 crates/gglib-core/src/services/model_verification.rs 583
-crates/gglib-core/src/services/model_verification_remote.rs 325
+crates/gglib-core/src/services/model_verification_remote.rs 393
 crates/gglib-core/src/settings.rs 540
 crates/gglib-core/src/settings_tests.rs 474
 crates/gglib-core/src/sse/parser.rs 781
@@ -95,7 +96,7 @@ crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 321
 crates/gglib-db/src/repositories/sqlite_chat_history_repository_tests.rs 322
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 354
 crates/gglib-db/src/repositories/sqlite_mcp_repository_tests.rs 377
-crates/gglib-db/src/repositories/sqlite_model_repository.rs 1091
+crates/gglib-db/src/repositories/sqlite_model_repository.rs 1095
 crates/gglib-db/src/repositories/sqlite_model_repository_components_tests.rs 372
 crates/gglib-db/src/setup.rs 718
 crates/gglib-db/src/setup_models_tests.rs 317
@@ -104,9 +105,12 @@ crates/gglib-download/src/cli_exec/exec/python_env.rs 1544
 crates/gglib-download/src/cli_exec/exec/python_protocol.rs 347
 crates/gglib-download/src/executor/native.rs 578
 crates/gglib-download/src/executor/native_tests.rs 859
-crates/gglib-download/src/manager/mod.rs 1174
+crates/gglib-download/src/manager/companion_group_tests.rs 475
+crates/gglib-download/src/manager/group_completion_tests.rs 366
+crates/gglib-download/src/manager/mod.rs 1229
 crates/gglib-download/src/quant_selector.rs 340
 crates/gglib-download/src/queue/mod.rs 1067
+crates/gglib-download/src/resolver/tests.rs 344
 crates/gglib-gguf/src/capabilities/template_probe.rs 501
 crates/gglib-gguf/src/parser.rs 356
 crates/gglib-gguf/src/reader_tests.rs 416

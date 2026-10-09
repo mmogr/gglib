@@ -97,6 +97,115 @@ fn the_tags_and_identity_are_carried_over() {
     assert_eq!(download.quantization, Quantization::Q8_0);
 }
 
+/// One weights file, a projector and two companions from their own folders:
+/// the weights alone are the model's files, and the projector and each
+/// companion, with its role, are handed over apart.
+#[test]
+fn a_companion_is_handed_over_apart_and_is_not_a_shard() {
+    let vae = PathBuf::from("models")
+        .join("unsloth_FLUX.1-schnell")
+        .join("ae.safetensors");
+    let t5 = PathBuf::from("models")
+        .join("comfyanonymous_flux_text_encoders")
+        .join("t5xxl_fp16.safetensors");
+    let entries = vec![
+        ResolvedFile::with_size("zeta.Q8_0.gguf", 1_000),
+        ResolvedFile::projector("mmproj-F16.gguf", 300, None),
+        ResolvedFile::companion(
+            ComponentRole::Vae,
+            "unsloth/FLUX.1-schnell",
+            "ae.safetensors",
+            10,
+            None,
+        ),
+        ResolvedFile::companion(
+            ComponentRole::T5xxl,
+            "comfyanonymous/flux_text_encoders",
+            "t5xxl_fp16.safetensors",
+            10,
+            None,
+        ),
+    ];
+    let complete = GroupComplete {
+        ordered_paths: vec![
+            dir().join("zeta.Q8_0.gguf"),
+            dir().join("mmproj-F16.gguf"),
+            vae.clone(),
+            t5.clone(),
+        ],
+        metadata: GroupMetadata::of(&job("zeta.Q8_0.gguf"), entries),
+    };
+
+    let download = complete.into_completed_download(vec![]);
+
+    assert_eq!(download.primary_path, dir().join("zeta.Q8_0.gguf"));
+    assert!(!download.is_sharded, "a companion is not a shard");
+    assert_eq!(download.file_paths, None);
+    assert_eq!(shard_count(&download), 1);
+    assert_eq!(download.projector_path, Some(dir().join("mmproj-F16.gguf")));
+    assert_eq!(
+        download.components,
+        [(ComponentRole::Vae, vae), (ComponentRole::T5xxl, t5)]
+    );
+    assert_eq!(download.all_paths.len(), 4);
+    assert_eq!(download.hf_file_entries.len(), 4, "a row for every file");
+}
+
+/// The roles linked are named after the rest of the message, and each
+/// companion not linked is named with why; a download that brought none is
+/// announced as it was.
+#[test]
+fn the_companions_linked_and_refused_are_announced() {
+    let message = with_companions(
+        "Downloaded model to m.gguf".to_string(),
+        &[ComponentRole::Vae, ComponentRole::ClipL],
+        &["t.safetensors is not a t5xxl for this model: expected a T5".to_string()],
+    );
+
+    assert_eq!(
+        message,
+        "Downloaded model to m.gguf. Linked its components: vae, clip_l. A component was not \
+         linked: t.safetensors is not a t5xxl for this model: expected a T5"
+    );
+    assert_eq!(
+        with_companions("Downloaded model to m.gguf".to_string(), &[], &[]),
+        "Downloaded model to m.gguf"
+    );
+}
+
+/// The roles named linked are those whose link is to the very file the
+/// download brought; a link the model keeps to another file is not one.
+#[test]
+fn a_kept_link_to_another_file_is_not_named_linked() {
+    let vae = PathBuf::from("models/unsloth_FLUX.1-schnell/ae.safetensors");
+    let clip = PathBuf::from("models/comfyanonymous_flux_text_encoders/clip_l.safetensors");
+    let mut download = complete(&["zeta.Q8_0.gguf"], false).into_completed_download(vec![]);
+    download.components = vec![
+        (ComponentRole::Vae, vae.clone()),
+        (ComponentRole::ClipL, clip),
+    ];
+    let mut new = gglib_core::domain::NewModel::new(
+        "zeta".to_string(),
+        dir().join("zeta.Q8_0.gguf"),
+        1.0,
+        chrono::Utc::now(),
+    );
+    new.components = vec![
+        gglib_core::domain::ModelComponent {
+            role: ComponentRole::Vae,
+            path: vae,
+        },
+        gglib_core::domain::ModelComponent {
+            role: ComponentRole::ClipL,
+            path: PathBuf::from("elsewhere/clip_l.safetensors"),
+        },
+    ];
+
+    let linked = linked_components(&download, &Model::stored(1, &new));
+
+    assert_eq!(linked, [ComponentRole::Vae]);
+}
+
 // ── One identity for every file of a group ───────────────────────────────
 
 /// The projector's own job names the projector as its file. The metadata it

@@ -90,11 +90,38 @@ pub(super) async fn insert_keeping(
 
 /// Replace model `model_id`'s components with `components`, on `conn`, which
 /// holds the transaction the model's own row is updated in.
+///
+/// A link the update removes or points elsewhere takes its `model_files` row
+/// with it. The registrar records a companion there, by the absolute path
+/// the link holds, only while the model links it; left behind, the row would
+/// read as one of the model's own files, and a repair would delete a file
+/// other models draw with.
 pub(super) async fn replace(
     conn: &mut SqliteConnection,
     model_id: i64,
     components: &[ModelComponent],
 ) -> Result<(), RepositoryError> {
+    let kept: Vec<(&str, String)> = components
+        .iter()
+        .map(|c| (c.role.as_str(), normalized_file_path_string(&c.path)))
+        .collect();
+    let held = sqlx::query("SELECT role, path FROM model_components WHERE model_id = ?")
+        .bind(model_id)
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(|e| storage(&e))?;
+    for row in &held {
+        let role: String = row.try_get("role").map_err(|e| storage(&e))?;
+        let path: String = row.try_get("path").map_err(|e| storage(&e))?;
+        if !kept.iter().any(|(r, p)| *r == role && *p == path) {
+            sqlx::query("DELETE FROM model_files WHERE model_id = ? AND file_path = ?")
+                .bind(model_id)
+                .bind(&path)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| storage(&e))?;
+        }
+    }
     sqlx::query("DELETE FROM model_components WHERE model_id = ?")
         .bind(model_id)
         .execute(&mut *conn)

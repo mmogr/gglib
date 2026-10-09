@@ -1089,3 +1089,7 @@ mod projector_tests;
 #[cfg(test)]
 #[path = "sqlite_model_repository_components_tests.rs"]
 mod components_tests;
+
+#[cfg(test)]
+#[path = "sqlite_model_repository_component_files_tests.rs"]
+mod component_files_tests;

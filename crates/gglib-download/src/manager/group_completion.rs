@@ -1,12 +1,15 @@
 //! What a finished download group is registered as.
 //!
-//! A group is a model's weights followed by the projector fetched with them.
-//! Its primary file, its shard list and its shard count are the weights'
-//! alone; the projector is handed over apart, to be linked.
+//! A group is a model's weights followed by the projector fetched with them,
+//! and by an image model's companions. Its primary file, its shard list and
+//! its shard count are the weights' alone; the projector and the companions
+//! are handed over apart, to be linked.
 
 use std::path::Path;
 
+use gglib_core::domain::{ComponentRole, Model};
 use gglib_core::download::ShardInfo;
+use gglib_core::paths::canonical_model_path;
 use gglib_core::ports::{CompletedDownload, ResolvedFile};
 use gglib_core::utils::shard_filename::base_shard_filename;
 
@@ -48,17 +51,22 @@ impl GroupMetadata {
 
 impl GroupComplete {
     /// The download as the registrar takes it: the weights as the model's
-    /// files, and the projector apart.
+    /// files, and the projector and the companions apart.
     pub(super) fn into_completed_download(self, hf_tags: Vec<String>) -> CompletedDownload {
         let entries = &self.metadata.file_entries;
-        let is_projector = |index: usize| entries.get(index).is_some_and(|f| f.role.is_projector());
-        let (projectors, weights): (Vec<_>, Vec<_>) = self
-            .ordered_paths
-            .iter()
-            .cloned()
-            .enumerate()
-            .partition(|(index, _)| is_projector(*index));
-        let weights: Vec<_> = weights.into_iter().map(|(_, path)| path).collect();
+        let mut weights = Vec::new();
+        let mut projectors = Vec::new();
+        let mut components = Vec::new();
+        for (index, path) in self.ordered_paths.iter().cloned().enumerate() {
+            match entries.get(index) {
+                Some(entry) if entry.role.is_projector() => projectors.push(path),
+                Some(entry) => match entry.component {
+                    Some(role) => components.push((role, path)),
+                    None => weights.push(path),
+                },
+                None => weights.push(path),
+            }
+        }
         let primary_path = weights
             .first()
             .cloned()
@@ -66,7 +74,8 @@ impl GroupComplete {
 
         CompletedDownload {
             primary_path,
-            projector_path: projectors.into_iter().next().map(|(_, path)| path),
+            projector_path: projectors.into_iter().next(),
+            components,
             is_sharded: weights.len() > 1,
             file_paths: (weights.len() > 1).then_some(weights),
             all_paths: self.ordered_paths,
@@ -77,6 +86,23 @@ impl GroupComplete {
             hf_file_entries: self.metadata.file_entries,
         }
     }
+}
+
+/// The roles of `download`'s companions that `model`, as registered, links
+/// to the very files the download brought, in the group's order.
+pub(super) fn linked_components(download: &CompletedDownload, model: &Model) -> Vec<ComponentRole> {
+    download
+        .components
+        .iter()
+        .filter(|(role, path)| {
+            let path = canonical_model_path(path).unwrap_or_else(|_| path.clone());
+            model
+                .components
+                .iter()
+                .any(|link| link.role == *role && link.path == path)
+        })
+        .map(|(role, _)| *role)
+        .collect()
 }
 
 /// How many weights shards `download` is made of.
@@ -116,6 +142,25 @@ pub(super) fn completion_message(
         ),
         None => message,
     }
+}
+
+/// `message` with what became of an image model's companions: the roles
+/// linked, `linked`, and why each one that came with it was not, `refusals`.
+/// A download that brought none is announced as it was.
+pub(super) fn with_companions(
+    message: String,
+    linked: &[ComponentRole],
+    refusals: &[String],
+) -> String {
+    let message = if linked.is_empty() {
+        message
+    } else {
+        let roles: Vec<&str> = linked.iter().map(|role| role.as_str()).collect();
+        format!("{message}. Linked its components: {}", roles.join(", "))
+    };
+    refusals.iter().fold(message, |message, refusal| {
+        format!("{message}. A component was not linked: {refusal}")
+    })
 }
 
 fn file_name(path: &Path) -> String {

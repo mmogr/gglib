@@ -12,6 +12,9 @@ use crate::download::Quantization;
 
 /// One repository: the weights files of its one quantization, and its
 /// projectors. Every quantization asked for answers the same weights.
+///
+/// It also holds the heads of files, for a head read, and files of other
+/// repositories, for a file looked up by its path.
 #[derive(Default)]
 pub struct FakeHub {
     /// The weights files, which every quantization asked for answers.
@@ -22,6 +25,14 @@ pub struct FakeHub {
     pub projector_listings: AtomicUsize,
     /// The quantization each request for weights named, oldest first.
     pub quantizations_asked: Mutex<Vec<String>>,
+    /// The bytes a file's head is read as, by its path in any repository. A
+    /// file with none cannot have its head read.
+    pub heads: Vec<(String, Vec<u8>)>,
+    /// Each head read asked of it, as repository, path and length, oldest
+    /// first.
+    pub heads_asked: Mutex<Vec<(String, String, u64)>>,
+    /// Files looked up by repository and path.
+    pub files_at: Vec<(String, HfFileInfo)>,
 }
 
 /// A GGUF file of the listing, with an OID.
@@ -80,15 +91,27 @@ impl HfClientPort for FakeHub {
     async fn get_model_info(&self, _model_id: &str) -> HfPortResult<HfRepoInfo> {
         unimplemented!("a listing is all this hub answers")
     }
-    async fn read_head(
-        &self,
-        _model_id: &str,
-        _path: &str,
-        _max_bytes: u64,
-    ) -> HfPortResult<Vec<u8>> {
-        unimplemented!("a listing is all this hub answers")
+    /// The head held for `path`, cut at `max_bytes`.
+    async fn read_head(&self, model_id: &str, path: &str, max_bytes: u64) -> HfPortResult<Vec<u8>> {
+        let mut asked = self.heads_asked.lock().unwrap();
+        asked.push((model_id.to_owned(), path.to_owned(), max_bytes));
+        drop(asked);
+        let (_, head) = self
+            .heads
+            .iter()
+            .find(|(held, _)| held == path)
+            .ok_or_else(|| HfPortError::FileNotFound {
+                model_id: model_id.to_owned(),
+                path: path.to_owned(),
+            })?;
+        let cap = usize::try_from(max_bytes).unwrap_or(usize::MAX);
+        Ok(head[..head.len().min(cap)].to_vec())
     }
-    async fn file_at(&self, _model_id: &str, _path: &str) -> HfPortResult<Option<HfFileInfo>> {
-        unimplemented!("a listing is all this hub answers")
+    async fn file_at(&self, model_id: &str, path: &str) -> HfPortResult<Option<HfFileInfo>> {
+        Ok(self
+            .files_at
+            .iter()
+            .find(|(repo, file)| repo == model_id && file.path == path)
+            .map(|(_, file)| file.clone()))
     }
 }

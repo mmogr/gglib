@@ -24,6 +24,15 @@ pub enum HfPortError {
         quantization: String,
     },
 
+    /// The repository holds no file at the path asked for.
+    #[error("No file {path} in {model_id}")]
+    FileNotFound {
+        /// The repository asked
+        model_id: String,
+        /// The path asked for
+        path: String,
+    },
+
     /// API rate limit exceeded.
     #[error("Rate limit exceeded, try again later")]
     RateLimited,

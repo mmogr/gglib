@@ -26,6 +26,7 @@ fn manager() -> DownloadManagerImpl {
         Arc::new(hub),
         Arc::new(NoopEmitter::new()),
         DownloadManagerConfig::default(),
+        Arc::new(gglib_core::ports::NoopGgufParser),
     )
 }
 

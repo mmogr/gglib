@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::format::{format_duration, format_rate, format_size};
 use super::types::DownloadId;
+use crate::domain::ComponentRole;
 
 /// One download: every file of one model, as one line.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -122,6 +123,8 @@ pub enum FilePlace {
     Weights,
     /// The projector fetched with the weights.
     Projector,
+    /// An image model's companion, named by its role: `vae`.
+    Component(ComponentRole),
     /// A waiting download whose weights are in this many shards: `3 parts`.
     Parts(u32),
 }
@@ -132,6 +135,7 @@ impl FilePlace {
             Self::Part { number, of } => format!("part {number}/{of}"),
             Self::Weights => "weights".to_string(),
             Self::Projector => "projector".to_string(),
+            Self::Component(role) => role.as_str().to_string(),
             Self::Parts(count) => format!("{count} parts"),
         }
     }

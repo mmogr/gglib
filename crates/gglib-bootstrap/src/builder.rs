@@ -114,7 +114,8 @@ fn wire(
     //    registrar and the verification service share.
     let repos = CoreFactory::build_repos(pool.clone());
 
-    // 4. GGUF parser (shared: model registrar + capability detection)
+    // 4. GGUF parser (shared: model registrar, the download manager's head
+    //    read of an image model's weights, and capability detection)
     let gguf_parser: Arc<dyn GgufParserPort> = Arc::new(GgufParser::new());
 
     // 5. Model registrar — composes model repository + GGUF parser so that
@@ -137,6 +138,7 @@ fn wire(
             hf_client: Arc::clone(&hf_client),
             event_emitter: emitter,
             config: download_config,
+            gguf_parser: gguf_parser.clone(),
         }));
 
     // 7. AppCore, whose verification service checks for updates against the

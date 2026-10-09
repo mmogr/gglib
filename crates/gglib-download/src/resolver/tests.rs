@@ -2,16 +2,17 @@
 
 use std::sync::Arc;
 
+use gglib_core::domain::{ComponentRole, ImageFamily};
 use gglib_core::download::GgufFileRole;
 
 use super::*;
 use crate::quant_selector::QuantizationSelector;
-use crate::test_hub::RepoHub;
+use crate::test_hub::{ImageHeadParser, RepoHub};
 
 const REPO: &str = "owner/zeta-GGUF";
 
 fn resolver(files: &[(&str, u64)]) -> HfQuantizationResolver {
-    HfQuantizationResolver::new(Arc::new(RepoHub::new(files)))
+    HfQuantizationResolver::new(Arc::new(RepoHub::new(files)), Arc::new(ImageHeadParser))
 }
 
 async fn resolve(files: &[(&str, u64)], quantization: Quantization) -> Resolution {
@@ -177,6 +178,133 @@ async fn a_quantization_the_repository_lacks_fails_to_resolve() {
         refused,
         Err(DownloadError::ResolutionFailed { .. })
     ));
+}
+
+// ── An image model's companions ──────────────────────────────────────────
+
+const FLUX_REPO: &str = "leejet/FLUX.1-schnell-gguf";
+
+/// A Flux.1 repository's download is its weights and then its three
+/// companions, each from its own repository and named by its role, in the
+/// group's size; the weights are still one unsharded file.
+#[tokio::test]
+async fn an_image_models_companions_follow_its_weights_from_their_own_repositories() {
+    let hub = RepoHub::image(
+        ImageFamily::Flux1,
+        &[("flux1-schnell-q8_0.gguf", 1_000)],
+        10,
+    );
+    let resolver = HfQuantizationResolver::new(Arc::new(hub), Arc::new(ImageHeadParser));
+
+    let resolution = resolver
+        .resolve(FLUX_REPO, Quantization::Q8_0)
+        .await
+        .unwrap();
+
+    assert_eq!(resolution.image_family, Some(ImageFamily::Flux1));
+    let files: Vec<_> = resolution
+        .files
+        .iter()
+        .map(|f| (f.path.as_str(), f.repo_or(FLUX_REPO), f.component))
+        .collect();
+    assert_eq!(
+        files,
+        [
+            ("flux1-schnell-q8_0.gguf", FLUX_REPO, None),
+            (
+                "ae.safetensors",
+                "unsloth/FLUX.1-schnell",
+                Some(ComponentRole::Vae)
+            ),
+            (
+                "clip_l.safetensors",
+                "comfyanonymous/flux_text_encoders",
+                Some(ComponentRole::ClipL)
+            ),
+            (
+                "t5xxl_fp16.safetensors",
+                "comfyanonymous/flux_text_encoders",
+                Some(ComponentRole::T5xxl)
+            ),
+        ]
+    );
+    assert_eq!(
+        resolution.files[1].oid.as_deref(),
+        Some("oid-ae.safetensors")
+    );
+    assert_eq!(resolution.total_size(), Some(1_030));
+    assert_eq!(resolution.shard_count(), 1);
+    assert!(!resolution.is_sharded);
+    assert_eq!(resolution.components().count(), 3);
+}
+
+/// A projector, when an image repository has one, stays between the
+/// weights and the companions.
+#[tokio::test]
+async fn the_companions_come_after_the_projector() {
+    let hub = RepoHub::image(
+        ImageFamily::QwenImage21,
+        &[("qwen_image_2.1-Q8_0.gguf", 1_000), ("mmproj-F16.gguf", 5)],
+        10,
+    );
+    let resolver = HfQuantizationResolver::new(Arc::new(hub), Arc::new(ImageHeadParser));
+
+    let resolution = resolver
+        .resolve("leejet/Qwen-Image-2.1-GGUF", Quantization::Q8_0)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        paths(&resolution),
+        [
+            "qwen_image_2.1-Q8_0.gguf",
+            "mmproj-F16.gguf",
+            "vae/qwen_image_2.1_vae_bf16.safetensors",
+            "Qwen3VL-8B-Instruct-Q8_0.gguf",
+        ]
+    );
+}
+
+/// A chat model's head names no family: its download is what it always
+/// was, and the head of its first weights file was asked once.
+#[tokio::test]
+async fn a_chat_models_download_has_no_family_and_no_companion() {
+    let hub = Arc::new(RepoHub::new(&THREE_SHARDS));
+    let resolver = HfQuantizationResolver::new(Arc::clone(&hub) as _, Arc::new(ImageHeadParser));
+
+    let resolution = resolver.resolve(REPO, Quantization::Q8_0).await.unwrap();
+
+    assert_eq!(resolution.image_family, None);
+    assert_eq!(resolution.components().count(), 0);
+    assert_eq!(resolution.files.len(), 3);
+    assert_eq!(
+        *hub.heads_asked.lock().unwrap(),
+        [(
+            REPO.to_string(),
+            "zeta.Q8_0-00001-of-00003.gguf".to_string()
+        )]
+    );
+}
+
+/// A resolver of the repository's own files reads no head and brings no
+/// companion, whatever the weights are.
+#[tokio::test]
+async fn a_weights_only_resolver_reads_no_head() {
+    let hub = Arc::new(RepoHub::image(
+        ImageFamily::Flux1,
+        &[("flux1-schnell-q8_0.gguf", 1_000)],
+        10,
+    ));
+    let resolver = HfQuantizationResolver::weights_only(Arc::clone(&hub) as _);
+
+    let resolution = resolver
+        .resolve(FLUX_REPO, Quantization::Q8_0)
+        .await
+        .unwrap();
+
+    assert_eq!(paths(&resolution), ["flux1-schnell-q8_0.gguf"]);
+    assert_eq!(resolution.image_family, None);
+    assert!(hub.heads_asked.lock().unwrap().is_empty());
 }
 
 // ── The quantizations on offer ───────────────────────────────────────────

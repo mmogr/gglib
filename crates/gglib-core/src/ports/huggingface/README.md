@@ -23,4 +23,9 @@ are asked when a download wants to know what a weights file is before fetching
 it), and `file_at` looks one file up by its path, for a file that is no
 quantization, such as an image model's VAE.
 
+`image_companions` is what an image model's download brings beside its weights:
+the head of the first weights file names the family, and each companion of the
+family's recipe is looked up in its own repository. A head that cannot be read,
+or that is a chat model's, is no image model and fails nothing.
+
 <!-- module-docs:end -->

@@ -24,7 +24,9 @@ impl ModelService {
     /// role, whether linking or unlinking. A file is accepted when its tensor
     /// names are the role's for the family, and stored under its canonical
     /// path, so two spellings of one file are one link. Linking replaces the
-    /// role's link, if it had one.
+    /// role's link, if it had one; the update that unlinks or replaces a link
+    /// drops the `model_files` row a download recorded for the old file, so a
+    /// repair never takes that shared file for one of the model's own.
     ///
     /// # Errors
     ///
@@ -65,13 +67,6 @@ impl ModelService {
 /// hand-made link passes, and a model the library already holds keeps every
 /// link it has, the answer naming the kept link when it is to another file. A
 /// refused file is named with the reason; the model is registered either way.
-#[cfg_attr(
-    not(test),
-    allow(
-        dead_code,
-        reason = "the download registrar calls it once downloads bring components"
-    )
-)]
 pub(super) async fn link_downloaded_components(
     repo: &dyn ModelRepository,
     model: &mut NewModel,
@@ -144,4 +139,4 @@ pub(super) fn sniff_missing_family(
 
 #[cfg(test)]
 #[path = "model_components_tests.rs"]
-mod tests;
+pub(super) mod tests;

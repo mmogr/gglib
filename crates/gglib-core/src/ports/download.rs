@@ -6,6 +6,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+use crate::domain::{ComponentRole, ImageFamily};
 use crate::download::{DownloadError, GgufFileRole, Quantization};
 
 // ============================================================================
@@ -17,12 +18,17 @@ use crate::download::{DownloadError, GgufFileRole, Quantization};
 pub struct Resolution {
     /// The resolved quantization type.
     pub quantization: Quantization,
-    /// The files to download. The weights come first, in shard order, and
-    /// the projector fetched with them, when there is one, is last.
+    /// The files to download. The weights come first, in shard order, then
+    /// the projector fetched with them, when there is one, and last an image
+    /// model's companions, each from its own repository.
     pub files: Vec<ResolvedFile>,
-    /// Whether the weights are sharded (multi-part). A projector is not a
-    /// shard.
+    /// Whether the weights are sharded (multi-part). A projector or a
+    /// companion is not a shard.
     pub is_sharded: bool,
+    /// The image family the weights' head names, when they are an image
+    /// model's; `None` for a chat model and whenever the head was not read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_family: Option<ImageFamily>,
 }
 
 impl Resolution {
@@ -32,14 +38,20 @@ impl Resolution {
         sizes.map(|s| s.iter().sum())
     }
 
-    /// Get the number of files, the projector included.
+    /// Get the number of files, the projector and companions included.
     pub const fn file_count(&self) -> usize {
         self.files.len()
     }
 
     /// The weights files, in shard order.
     pub fn weights(&self) -> impl Iterator<Item = &ResolvedFile> {
-        self.files.iter().filter(|f| !f.role.is_projector())
+        self.files.iter().filter(|f| f.is_weights())
+    }
+
+    /// An image model's companions: the files its family draws with beside
+    /// its weights, each fetched from its own repository.
+    pub fn components(&self) -> impl Iterator<Item = &ResolvedFile> {
+        self.files.iter().filter(|f| f.component.is_some())
     }
 
     /// The number of weights shards (1 for a single-file model).
@@ -64,8 +76,17 @@ pub struct ResolvedFile {
     /// Git LFS OID (SHA256 hash from `HuggingFace` tree API).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub oid: Option<String>,
-    /// What the file is: weights, or the projector fetched with them.
+    /// What the file is: weights, or the projector fetched with them. A
+    /// companion keeps the default and is told apart by `component`.
     pub role: GgufFileRole,
+    /// The repository the file is fetched from, when it is not the group's
+    /// own: an image model's companion. `None` for the group's own files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
+    /// The role the file plays for an image model, when it is one of its
+    /// companions. A companion is neither weights nor a projector.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub component: Option<ComponentRole>,
 }
 
 impl ResolvedFile {
@@ -76,6 +97,8 @@ impl ResolvedFile {
             size: None,
             oid: None,
             role: GgufFileRole::Weights,
+            repo: None,
+            component: None,
         }
     }
 
@@ -101,6 +124,33 @@ impl ResolvedFile {
             role: GgufFileRole::Projector,
             ..Self::with_size_and_oid(path, size, oid)
         }
+    }
+
+    /// Create a resolved companion: the file at `path` in `repo` that an
+    /// image model draws with in `component`.
+    pub fn companion(
+        component: ComponentRole,
+        repo: impl Into<String>,
+        path: impl Into<String>,
+        size: u64,
+        oid: Option<String>,
+    ) -> Self {
+        Self {
+            repo: Some(repo.into()),
+            component: Some(component),
+            ..Self::with_size_and_oid(path, size, oid)
+        }
+    }
+
+    /// Whether this is one of the model's weights files: neither its
+    /// projector nor a companion.
+    pub const fn is_weights(&self) -> bool {
+        !self.role.is_projector() && self.component.is_none()
+    }
+
+    /// The repository the file is fetched from: its own, or `group_repo`.
+    pub fn repo_or<'a>(&'a self, group_repo: &'a str) -> &'a str {
+        self.repo.as_deref().unwrap_or(group_repo)
     }
 }
 
@@ -149,6 +199,7 @@ mod tests {
                 ResolvedFile::with_size("model-00001-of-00002.gguf", 500),
             ],
             is_sharded: true,
+            image_family: None,
         };
 
         assert_eq!(resolution.file_count(), 2);
@@ -177,6 +228,7 @@ mod tests {
                 ResolvedFile::projector("mmproj-F16.gguf", 300, None),
             ],
             is_sharded: false,
+            image_family: None,
         };
 
         assert_eq!(resolution.shard_count(), 1);
@@ -195,12 +247,51 @@ mod tests {
         );
     }
 
+    /// A companion is a file of the group, in its size and its count, and
+    /// neither a shard of the weights nor the projector.
+    #[test]
+    fn a_companion_is_a_file_of_the_group_and_not_a_shard() {
+        let resolution = Resolution {
+            quantization: Quantization::Q8_0,
+            files: vec![
+                ResolvedFile::with_size("flux1-schnell-q8_0.gguf", 1000),
+                ResolvedFile::companion(
+                    ComponentRole::Vae,
+                    "unsloth/FLUX.1-schnell",
+                    "ae.safetensors",
+                    300,
+                    None,
+                ),
+            ],
+            is_sharded: false,
+            image_family: Some(ImageFamily::Flux1),
+        };
+
+        assert_eq!(resolution.shard_count(), 1);
+        assert_eq!(resolution.file_count(), 2);
+        assert_eq!(resolution.total_size(), Some(1300));
+        assert_eq!(resolution.projector(), None);
+        let companions: Vec<_> = resolution.components().collect();
+        assert_eq!(companions.len(), 1);
+        assert_eq!(companions[0].component, Some(ComponentRole::Vae));
+        assert_eq!(
+            companions[0].repo_or("leejet/FLUX.1-schnell-gguf"),
+            "unsloth/FLUX.1-schnell"
+        );
+        assert!(!companions[0].is_weights());
+        assert_eq!(
+            resolution.files[0].repo_or("leejet/FLUX.1-schnell-gguf"),
+            "leejet/FLUX.1-schnell-gguf"
+        );
+    }
+
     #[test]
     fn a_group_without_a_projector_has_none() {
         let resolution = Resolution {
             quantization: Quantization::Q8_0,
             files: vec![ResolvedFile::with_size("model-Q8_0.gguf", 1000)],
             is_sharded: false,
+            image_family: None,
         };
 
         assert_eq!(resolution.projector(), None);

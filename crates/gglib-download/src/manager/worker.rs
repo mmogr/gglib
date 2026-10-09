@@ -43,6 +43,9 @@ pub(crate) struct WorkerDeps {
 pub(crate) struct DownloadJob {
     /// The download ID.
     pub id: DownloadId,
+    /// The repository the file is fetched from: the download's own, or an
+    /// image model's companion's.
+    pub repo: String,
     /// Planned destination (model directory + files).
     pub destination: DownloadDestination,
     /// Git revision/tag/commit (e.g., "main", "v1.0", SHA).
@@ -212,19 +215,7 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
         return Ok(());
     };
 
-    // Build download plan
-    let plan = DownloadPlan {
-        repo_id: job.id.model_id(),
-        revision: "main",
-        destination: &job.destination.model_dir,
-        file,
-        token: deps.config.hf_token.as_deref(),
-        force: false,
-        progress: Some(progress_callback),
-        notice: Some(notice_callback),
-        expected_size: job.expected_size,
-        cancel: Some(job.cancel.clone()),
-    };
+    let plan = plan_for(job, file, deps, progress_callback, notice_callback);
 
     // Execute with cancellation support via select
     tokio::select! {
@@ -235,6 +226,30 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
         }
 
         result = download_file(&plan) => result,
+    }
+}
+
+/// The plan that fetches `file` of `job`: from the repository the file
+/// comes from, which is the download's own or an image model's companion's,
+/// on `main`, into the job's destination.
+fn plan_for<'a>(
+    job: &'a DownloadJob,
+    file: &'a str,
+    deps: &'a WorkerDeps,
+    progress: crate::cli_exec::ProgressCallback,
+    notice: crate::cli_exec::NoticeCallback,
+) -> DownloadPlan<'a> {
+    DownloadPlan {
+        repo_id: &job.repo,
+        revision: "main",
+        destination: &job.destination.model_dir,
+        file,
+        token: deps.config.hf_token.as_deref(),
+        force: false,
+        progress: Some(progress),
+        notice: Some(notice),
+        expected_size: job.expected_size,
+        cancel: Some(job.cancel.clone()),
     }
 }
 

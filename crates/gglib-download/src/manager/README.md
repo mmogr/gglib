@@ -54,13 +54,24 @@ between the worker (core download logic) and publishing (the queue snapshot).
 - **Tracker** (`shard_group_tracker.rs`): Counts a group's files in. A group
   that was closed stays closed to a file landing late
 - **Group**: A model is queued as one group of files (`enqueue.rs`): its weights,
-  then the projector fetched with them. The group is registered once every file
-  is on disk (`group_completion.rs`), with the weights as the model's files and
-  the projector handed to the registrar apart, to be linked. A projector's bytes
-  are the model's progress, and its row reads `projector`, never a shard. The
-  completion message says what the registrar answered: a projector it did not
-  link, and weights the GGUF reader refused, which are in the library without
-  their details.
+  then the projector fetched with them, then an image model's companions. The
+  group is registered once every file is on disk (`group_completion.rs`), with
+  the weights as the model's files and the projector and companions handed to
+  the registrar apart, to be linked. A projector's or a companion's bytes are
+  the model's progress, and its row reads `projector` or the companion's role
+  (`vae`), never a shard. The completion message says what the registrar
+  answered: a projector it did not link, the companions it linked and each it
+  did not, and weights the GGUF reader refused, which are in the library
+  without their details.
+- **Companions**: The resolver reads the first 1 MiB of an image model's
+  weights to know its family before anything is fetched, so its companions,
+  and their bytes, are in the group from the start. A companion is fetched
+  from its own repository into that repository's folder (`paths.rs`), one
+  place whichever model's download asks, under the download's one id and
+  completion key; a second model of the family finds it there and fetches
+  nothing. A file on disk is kept when it is the listed size, and a `.gguf`
+  only when it starts as one: a safetensors companion has no magic. With no
+  quantization asked, an image repository is fetched at `Q8_0` when it has it.
 - **Running download**: The group being fetched, or the one between two of its
   files (`running.rs`). The queue snapshot has it as `active`, at position 1,
   across its file boundaries, read from its meter; every other group is one

@@ -155,6 +155,7 @@ mod through_a_symlink {
             primary_path: weights.clone(),
             all_paths: vec![weights, projector.clone()],
             projector_path: Some(projector),
+            components: vec![],
             quantization: Quantization::Q8_0,
             repo_id: "owner/zeta-GGUF".to_owned(),
             commit_sha: "abc123".to_owned(),
