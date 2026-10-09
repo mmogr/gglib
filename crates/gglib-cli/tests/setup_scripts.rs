@@ -249,23 +249,46 @@ fn a_missing_toolchain_fails_the_dependency_script_before_any_hand_over() {
     );
 }
 
-/// `make setup` is the same steps in the same order. `make -n` prints the
-/// recipes without running them.
-#[test]
-fn make_setup_runs_its_steps_in_the_order_it_always_has() {
-    let repo = scripts_dir().join("..");
+/// What `make <target>` would run: `make -n` prints the recipes without
+/// running them.
+fn dry_run(target: &str) -> String {
     let out = Command::new("make")
-        .args(["-n", "setup"])
-        .current_dir(&repo)
+        .args(["-n", target])
+        .current_dir(scripts_dir().join(".."))
         .output()
         .expect("make is on this machine");
     assert!(out.status.success(), "{}", text(&out));
-    let listed = String::from_utf8_lossy(&out.stdout);
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// A build installs what `package-lock.json` says and leaves the file
+/// alone. `npm install` rewrites it, and a modified lockfile stops a
+/// `git pull` that changes it.
+#[test]
+fn a_build_installs_with_npm_ci() {
+    for target in ["build-gui", "build-tauri"] {
+        let listed = dry_run(target);
+        let installs: Vec<&str> = listed
+            .lines()
+            .filter(|line| line.ends_with("npm ci") || line.ends_with("npm install"))
+            .collect();
+        assert_eq!(
+            installs,
+            ["UV_USE_IO_URING=0 npm ci"],
+            "{target}:\n{listed}"
+        );
+    }
+}
+
+/// `make setup` is the same steps in the same order.
+#[test]
+fn make_setup_runs_its_steps_in_the_order_it_always_has() {
+    let listed = dry_run("setup");
 
     // A step, and how often it is printed: bundling prints both its arms.
     let steps = [
         ("./scripts/check-deps.sh", 1),
-        ("npm install", 1),
+        ("npm ci", 1),
         ("npm run build:tauri", 1),
         ("build --release -p gglib-cli -p gglib-app", 1),
         ("npm run tauri:bundle", 2),
