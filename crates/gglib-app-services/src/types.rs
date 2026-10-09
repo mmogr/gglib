@@ -166,7 +166,7 @@ pub struct StartServerRequest {
     /// Inference parameters for this serve session (overrides model/global defaults).
     #[serde(default)]
     pub inference_params: Option<gglib_core::domain::InferenceConfig>,
-    /// Memory-lock the model into RAM (`--mlock`).
+    /// Memory-lock the model into RAM (`--load-mode mmap+mlock`).
     #[serde(default)]
     pub mlock: bool,
 }

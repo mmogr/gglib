@@ -449,7 +449,7 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
     /// * `default_ctx` - Default context size if not specified
     /// * `overrides` - Per-call launch options layered on the runtime's
     ///   standing template, so one shared runtime can serve callers with
-    ///   different launch needs (a GUI start carrying `--mlock`, a benchmark
+    ///   different launch needs (a GUI start carrying `--load-mode mmap+mlock`, a benchmark
     ///   that must never gain a prompt cache). [`LaunchOverrides::default`]
     ///   means "no opinion".
     ///

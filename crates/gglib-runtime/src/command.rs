@@ -289,9 +289,11 @@ fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std
         }
     }
 
-    // Memory lock
+    // Memory lock. `--load-mode` is the only spelling llama.cpp accepts from
+    // b10875 (ggml-org/llama.cpp#28334); `mmap+mlock` is what `--mlock` meant,
+    // mmap being the default it was added to.
     if config.mlock {
-        cmd.arg("--mlock");
+        cmd.arg("--load-mode").arg("mmap+mlock");
     }
 
     // Sampling. Resolves to nothing — sampling is a per-request decision that
@@ -660,23 +662,24 @@ mod tests {
         let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
         let args = args_of(&cmd);
         assert!(
-            !args.contains(&"--mlock".to_string()),
-            "--mlock should not be present by default"
+            !args.contains(&"--load-mode".to_string()),
+            "--load-mode should not be present by default"
         );
     }
 
     #[test]
-    fn mlock_emits_flag_when_enabled() {
+    fn mlock_emits_load_mode_when_enabled() {
         let config = ServerConfig {
             mlock: true,
             ..minimal_config()
         };
         let cmd = build_command(Path::new("/fake/llama-server"), &config, 5500);
         let args = args_of(&cmd);
-        assert!(
-            args.contains(&"--mlock".to_string()),
-            "--mlock should be present when enabled"
-        );
+        let at = args
+            .iter()
+            .position(|a| a == "--load-mode")
+            .expect("--load-mode should be present when enabled");
+        assert_eq!(args.get(at + 1).map(String::as_str), Some("mmap+mlock"));
     }
 }
 

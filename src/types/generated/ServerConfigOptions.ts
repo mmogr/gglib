@@ -110,7 +110,7 @@ cache_type_k: KvCacheType | null,
  */
 cache_type_v: KvCacheType | null, 
 /**
- * Whether to memory-lock the model into RAM (`--mlock`).
+ * Whether to memory-lock the model into RAM (`--load-mode mmap+mlock`).
  * `None` defaults to `false` in `build_server_config()`.
  */
 mlock: boolean | null, };
