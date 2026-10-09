@@ -43,6 +43,7 @@ This crate provides MCP server lifecycle management, including:
 │                                                             │
 │  CombinedToolExecutor (tool dispatch)                       │
 │    ├── MCP tools  → McpService                              │
+│    │     └── images → AttachmentService (stored, named)     │
 │    └── Builtin tools → BuiltinToolExecutorAdapter           │
 │                                                             │
 │  builtin/ (in-process tools)                                │
@@ -108,6 +109,8 @@ This enables:
 - **`service.rs`** — High-level facade for MCP operations (CRUD + lifecycle)
 - **`path.rs`** — Path validation and PATH environment variable utilities
 - **`combined.rs`** — Unified tool executor dispatching to MCP and builtin tools
+- **`tool_executor.rs`** — The MCP side of that executor: runs a qualified tool on its server
+- **`tool_images.rs`** — An MCP tool's content split into the text the model reads and the images stored through `AttachmentService`, each named in the text, never sent as bytes
 - **`builtin/`** — In-process builtin tools (filesystem, time) with optional sandbox
 - **`resolver/`** — Cross-platform executable path resolution with 6-step search strategy
 

@@ -565,7 +565,8 @@ async fn a_tool_calls_arguments_are_an_object_or_nothing_for_an_mcp_tool_as_for_
     use gglib_core::ports::ToolExecutorPort;
 
     let (service, _) = service();
-    let executor = crate::CombinedToolExecutor::new(Arc::new(service));
+    let (images, _) = crate::tool_images::tool_images_tests::images();
+    let executor = crate::CombinedToolExecutor::new(Arc::new(service), images);
     let call = |name: &str, arguments: serde_json::Value| ToolCall {
         id: "call".to_string(),
         name: name.to_string(),

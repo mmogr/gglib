@@ -7,7 +7,8 @@
 //!    [`LlmCompletionPort`].
 //! 2. `CombinedToolExecutor::{new, with_sandbox}(…)` — wrap [`McpService`] as a
 //!    [`ToolExecutorPort`], routing qualified names to MCP and bare ones to the
-//!    built-ins.
+//!    built-ins, and storing an MCP tool's images in the same attachment store
+//!    the completion adapter reads.
 //! 3. `AgentLoop::build_observed(llm, tool_executor, tool_filter, guard)` —
 //!    compose both ports into an [`AgentLoopPort`], optionally filtering the
 //!    tool set, and say where the loop's guard decisions are counted.
@@ -35,6 +36,7 @@ use gglib_core::ports::{
 };
 use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use gglib_core::retry::RetryPolicy;
+use gglib_core::services::AttachmentService;
 use gglib_mcp::{CombinedToolExecutor, McpService};
 use reqwest::Client;
 
@@ -88,7 +90,8 @@ use crate::{FarMachine, LlmCompletionAdapter, SamplingObserver};
 ///   can say which machine refused it. `None` for a llama-server on loopback,
 ///   which demands nothing and is not another machine.
 /// * `attachments` — where the images a message names by id are read from,
-///   just before each request is sent.
+///   just before each request is sent, and where the images an MCP tool
+///   returns are stored.
 #[allow(clippy::too_many_arguments)]
 #[allow(
     clippy::implicit_hasher,
@@ -213,6 +216,7 @@ fn compose_agent_loop_inner(
     far_machine: Option<FarMachine>,
     attachments: Arc<dyn AttachmentStore>,
 ) -> Arc<dyn AgentLoopPort> {
+    let images = Arc::new(AttachmentService::new(Arc::clone(&attachments)));
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(
         LlmCompletionAdapter::with_client(base_url, http_client, model)
             .with_far_machine(far_machine)
@@ -226,8 +230,8 @@ fn compose_agent_loop_inner(
             .with_retry_policy(retry_policy.unwrap_or_else(RetryPolicy::from_env)),
     );
     let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
-        Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),
-        None => Arc::new(CombinedToolExecutor::new(mcp)),
+        Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, images, root)),
+        None => Arc::new(CombinedToolExecutor::new(mcp, images)),
     };
     AgentLoop::build_observed(llm, tool_executor, tool_filter, guard)
 }

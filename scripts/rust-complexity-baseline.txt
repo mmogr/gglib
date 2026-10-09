@@ -103,7 +103,7 @@ crates/gglib-mcp/src/builtin/mod.rs 325
 crates/gglib-mcp/src/client.rs 526
 crates/gglib-mcp/src/manager.rs 315
 crates/gglib-mcp/src/service.rs 790
-crates/gglib-mcp/src/service_tests.rs 618
+crates/gglib-mcp/src/service_tests.rs 619
 crates/gglib-proxy/src/audit_records.rs 309
 crates/gglib-proxy/src/cache_lifecycle.rs 480
 crates/gglib-proxy/src/canonicalization.rs 601

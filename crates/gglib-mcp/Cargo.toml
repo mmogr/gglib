@@ -21,6 +21,8 @@ async-trait = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
+# A tool's image items carry their bytes as base64
+base64 = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }

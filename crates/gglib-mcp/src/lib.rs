@@ -15,6 +15,7 @@ pub(crate) mod path;
 pub(crate) mod resolver;
 pub(crate) mod service;
 pub(crate) mod tool_executor;
+pub(crate) mod tool_images;
 
 // Re-export domain types from core for convenience
 pub use gglib_core::{
