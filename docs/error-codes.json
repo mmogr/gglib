@@ -39,6 +39,12 @@
       "meaning": "A chat request named an embedding model."
     },
     {
+      "code": "image_model_cannot_chat",
+      "type": "invalid_request_error",
+      "status": 400,
+      "meaning": "A chat request named an image model, which draws and cannot chat."
+    },
+    {
       "code": "model_cannot_read_images",
       "type": "invalid_request_error",
       "status": 400,

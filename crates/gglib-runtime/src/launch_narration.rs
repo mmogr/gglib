@@ -349,6 +349,7 @@ mod tests {
             name: "qwen3-30b-a3b".to_string(),
             file_path: "/models/q.gguf".into(),
             projector: None,
+            image_family: None,
             tags: tags.iter().map(|t| (*t).to_string()).collect(),
             architecture: None,
             quantization: Some("Q4_K_M".to_string()),

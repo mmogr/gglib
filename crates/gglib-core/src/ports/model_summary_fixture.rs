@@ -16,6 +16,7 @@ impl ModelSummary {
             tags: Vec::new(),
             capabilities: ModelCapabilities::empty(),
             image_input: false,
+            image_output: false,
             param_count: "7B".to_owned(),
             quantization: None,
             architecture: None,

@@ -76,7 +76,10 @@ impl ModelsResponse {
                     // is reachable, by the floor that will therefore be
                     // served. Advertising the trained window on a host gglib
                     // cannot probe overstates it by up to 32x, read once.
+                    // A model that draws has no chat context at all, whatever
+                    // its row says.
                     context_window: match cap_source {
+                        _ if summary.image_output => None,
                         ContextSizeSource::BuiltInDefault if fit_available => {
                             summary.context_length
                         }
@@ -111,6 +114,12 @@ pub fn this_machine_name() -> Option<String> {
 /// [`ModelSummary::image_input`], and what a client reads to offer images.
 pub const VISION_CAPABILITY: &str = "vision";
 
+/// What [`ModelInfo::capabilities`] lists for a model that draws images.
+///
+/// One whose weights name an image family: the `OpenAI`-side spelling of
+/// [`ModelSummary::image_output`]. Such a model is refused for chat.
+pub const IMAGE_GENERATION_CAPABILITY: &str = "image_generation";
+
 /// What [`ModelInfo::capabilities`] lists for a model that thinks: one
 /// tagged `reasoning`, which is what launches it with its thinking set apart
 /// from its answer. The tag, not the template-derived capability bit, and
@@ -118,7 +127,8 @@ pub const VISION_CAPABILITY: &str = "vision";
 pub(crate) const REASONING_CAPABILITY: &str = "reasoning";
 
 /// What a catalogued model can do beyond text chat, for
-/// [`ModelInfo::capabilities`]: serve embeddings, read images, think.
+/// [`ModelInfo::capabilities`]: serve embeddings, read images, draw images,
+/// think.
 ///
 /// `None` rather than an empty vec for an ordinary chat model, so the field
 /// disappears from the response instead of appearing as `[]` — an empty list
@@ -126,10 +136,12 @@ pub(crate) const REASONING_CAPABILITY: &str = "reasoning";
 fn capabilities_of(summary: &ModelSummary) -> Option<Vec<String>> {
     let embeddings = capability_tags::is_embedding(&summary.tags).then_some("embeddings");
     let vision = summary.image_input.then_some(VISION_CAPABILITY);
+    let draws = summary.image_output.then_some(IMAGE_GENERATION_CAPABILITY);
     let reasoning = capability_tags::is_reasoning(&summary.tags).then_some(REASONING_CAPABILITY);
     let capabilities: Vec<String> = embeddings
         .into_iter()
         .chain(vision)
+        .chain(draws)
         .chain(reasoning)
         .map(str::to_owned)
         .collect();
@@ -163,7 +175,8 @@ pub struct ModelInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Model's context window size, in tokens (llama.cpp's `/v1/models`
-    /// field-naming convention). `None` when unknown.
+    /// field-naming convention). `None` when unknown, and for a model that
+    /// draws images, which has no chat context.
     ///
     /// Set by [`ModelsResponse::from_summaries`], then adjusted by
     /// [`crate::models_endpoint::list_models`]: the running model is
@@ -178,8 +191,10 @@ pub struct ModelInfo {
     ///
     /// `"embeddings"` for a model tagged `embedding`, which serves
     /// `/v1/embeddings`; `"vision"` for a model linked to a projector, which
-    /// reads `image_url` parts; `"reasoning"` for a model tagged `reasoning`,
-    /// for which a client may offer a Thinking switch. In that order. `None`
+    /// reads `image_url` parts; `"image_generation"` for a model that draws
+    /// images, which is refused for chat; `"reasoning"` for a model tagged
+    /// `reasoning`, for which a client may offer a Thinking switch. In that
+    /// order. `None`
     /// — and so absent from the JSON entirely — for a model that is none of
     /// them, so a plain chat model's entry is byte-identical to what it was
     /// before this field existed.

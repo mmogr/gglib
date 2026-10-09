@@ -601,6 +601,20 @@ pub(crate) async fn chat_completions(
             .into_response();
     }
 
+    // Nor can a model that draws images: llama-server cannot load it, so it
+    // is refused here, before the swap admitting it would cost.
+    if model.image_output {
+        info!(
+            model = %model.name,
+            "refusing chat completion for an image model"
+        );
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::image_model_cannot_chat(&model.name)),
+        )
+            .into_response();
+    }
+
     // Nor can a model with no projector read an image, in this turn or in
     // the history: refused here by name, before a swap is paid for.
     if let Some(refusal) = crate::image_refusal::refuse_images(&model, &body) {

@@ -247,10 +247,12 @@ gglib adds:
   this machine; `id` is what a client sends.
 - `profile` — on a variant, the profile it selects; absent on a base entry.
 - `capabilities` — what the model does beyond text chat, in this order:
-  `"embeddings"` (tagged `embedding`), `"vision"` (linked to a projector) and
-  `"reasoning"` (tagged `reasoning`: a model that thinks, which a client reads
-  to offer a Thinking switch). Absent, never `[]`, on a model that is none of
-  them; a variant carries its base model's.
+  `"embeddings"` (tagged `embedding`), `"vision"` (linked to a projector),
+  `"image_generation"` (its weights name an image family: a model that draws,
+  which is refused for chat and has no `context_window`) and `"reasoning"`
+  (tagged `reasoning`: a model that thinks, which a client reads to offer a
+  Thinking switch). Absent, never `[]`, on a model that is none of them; a
+  variant carries its base model's.
 
 The list also carries `machine_name`, this machine's host name cut to its
 first label and kept only when that is 1 to 63 ASCII letters, digits, `-` or
@@ -367,7 +369,11 @@ Two consequences follow, both deliberate:
   (`not_an_embedding_model`), and a chat completion naming a tagged model is
   refused with 400 (`embedding_model_cannot_chat`) — both *before* `admit` is
   called.  Forwarding either would spend a VRAM slot starting a server that
-  could only reply 501.
+  could only reply 501. A chat completion naming an image model is refused
+  the same way, with 400 (`image_model_cannot_chat`), before the image check
+  and before `admit`; and should anything else ask the runtime to launch
+  one, the launch refuses it with the same code before it stops a resident
+  or reads a file.
 
 If a genuine embedding model is missing the tag, `gglib model retag <id>`
 re-derives it from the persisted GGUF metadata without re-reading the file.

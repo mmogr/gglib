@@ -150,6 +150,13 @@ async fn launch(
     } = request;
     let mut opts = opts.clone();
 
+    // First, before any file is read or any resident stopped: llama-server
+    // serves chat and cannot load a model that draws images, so a launch of
+    // one could only displace a working model to fail.
+    if spec.image_family.is_some() {
+        return Err(ModelRuntimeError::ImageModelCannotChat(spec.name.clone()));
+    }
+
     launch_files::ensure_present(spec).await?;
 
     // --- Stop whatever this launch is displacing ---

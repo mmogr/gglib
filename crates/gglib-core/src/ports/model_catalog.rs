@@ -11,6 +11,7 @@ use thiserror::Error;
 
 use crate::domain::DefaultsOrigin;
 use crate::domain::DialectSpec;
+use crate::domain::ImageFamily;
 use crate::domain::InferenceConfig;
 use crate::domain::KvElemsPerToken;
 use crate::domain::Model;
@@ -44,6 +45,9 @@ pub struct ModelSummary {
     /// Whether the model reads images: it is linked to a projector (see
     /// [`Model::image_input`]).
     pub image_input: bool,
+    /// Whether the model draws images: its weights name an image family (see
+    /// [`Model::generates_images`]). Such a model is not served for chat.
+    pub image_output: bool,
     /// Parameter count as string (e.g., "7B", "13B", "70B").
     pub param_count: String,
     /// Quantization type (e.g., "`Q4_K_M`", "`Q8_0`").
@@ -108,6 +112,10 @@ pub struct ModelLaunchSpec {
     /// Absolute path to the projector the launch loads beside the weights
     /// (`--mmproj`), when the model has one.
     pub projector: Option<PathBuf>,
+    /// The image family of a model that draws images; `None` for a model
+    /// that chats. llama-server cannot load such a model, so a launch of one
+    /// is refused before anything is stopped or spawned.
+    pub image_family: Option<ImageFamily>,
     /// Tags/labels associated with the model.
     pub tags: Vec<String>,
     /// Model architecture (for runtime configuration).

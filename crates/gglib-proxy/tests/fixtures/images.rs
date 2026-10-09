@@ -18,6 +18,8 @@ use tokio_util::sync::CancellationToken;
 pub(crate) const SEES: &str = "sees";
 /// The model with none.
 pub(crate) const BLIND: &str = "blind";
+/// The model that draws images, and so chats with nobody.
+pub(crate) const DRAWS: &str = "draws";
 
 /// The base64 of a PNG's signature and `IHDR` for 640x480: 33 bytes, so 44
 /// characters and no padding. 300 tokens by the estimate.
@@ -45,13 +47,22 @@ pub(crate) fn request(model: &str, messages: &[Value]) -> Value {
     json!({"model": model, "stream": true, "messages": messages})
 }
 
-/// [`SEES`] and [`BLIND`], which differ in `image_input` alone.
+/// [`SEES`] and [`BLIND`], which differ in `image_input` alone, and
+/// [`DRAWS`], an image model whose row still records a context length.
 #[derive(Debug)]
 pub(crate) struct Sight;
 
 impl Sight {
     fn models() -> Vec<ModelSummary> {
-        vec![Self::model(1, SEES, true), Self::model(2, BLIND, false)]
+        vec![
+            Self::model(1, SEES, true),
+            Self::model(2, BLIND, false),
+            ModelSummary {
+                image_output: true,
+                context_length: Some(8192),
+                ..ModelSummary::bare(3, DRAWS)
+            },
+        ]
     }
 
     fn model(id: u32, name: &str, image_input: bool) -> ModelSummary {

@@ -24,7 +24,8 @@ gglib_id: number,
 profile?: string, object: string, created: number, owned_by: string, description?: string, 
 /**
  * Model's context window size, in tokens (llama.cpp's `/v1/models`
- * field-naming convention). `None` when unknown.
+ * field-naming convention). `None` when unknown, and for a model that
+ * draws images, which has no chat context.
  *
  * Set by [`ModelsResponse::from_summaries`], then adjusted by
  * [`crate::models_endpoint::list_models`]: the running model is
@@ -39,8 +40,10 @@ context_window?: number,
  *
  * `"embeddings"` for a model tagged `embedding`, which serves
  * `/v1/embeddings`; `"vision"` for a model linked to a projector, which
- * reads `image_url` parts; `"reasoning"` for a model tagged `reasoning`,
- * for which a client may offer a Thinking switch. In that order. `None`
+ * reads `image_url` parts; `"image_generation"` for a model that draws
+ * images, which is refused for chat; `"reasoning"` for a model tagged
+ * `reasoning`, for which a client may offer a Thinking switch. In that
+ * order. `None`
  * — and so absent from the JSON entirely — for a model that is none of
  * them, so a plain chat model's entry is byte-identical to what it was
  * before this field existed.

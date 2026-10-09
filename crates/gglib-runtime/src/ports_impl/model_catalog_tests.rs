@@ -300,3 +300,21 @@ fn a_summary_carries_the_recorded_caps() {
         "never observed stays None, not a manufactured negative"
     );
 }
+
+/// A model whose weights name an image family is listed as one that draws,
+/// and its launch specification carries the family the launch refuses.
+#[test]
+fn an_image_model_is_listed_as_drawing_and_launched_with_its_family() {
+    let draws = Model {
+        image_family: Some(gglib_core::domain::ImageFamily::Flux1),
+        ..base_model()
+    };
+
+    assert!(model_to_summary(&draws).image_output);
+    assert!(!model_to_summary(&base_model()).image_output);
+    assert_eq!(
+        model_to_launch_spec(draws).image_family,
+        Some(gglib_core::domain::ImageFamily::Flux1)
+    );
+    assert_eq!(model_to_launch_spec(base_model()).image_family, None);
+}
