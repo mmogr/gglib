@@ -2,20 +2,31 @@
 //!
 //! Implements the MCP protocol over stdio (JSON-RPC 2.0).
 //! Reference: <https://spec.modelcontextprotocol.io/>
+//!
+//! The server's stdout is read asynchronously, so waiting on a slow server
+//! holds no runtime thread and the reply timeout fires. One request is in
+//! flight at a time: a request holds the pipes from writing its line until
+//! the reply whose `id` is its own arrives, and every other line before it
+//! (a notification, a reply to an earlier request that timed out, startup
+//! noise) is skipped.
 
-use gglib_core::utils::process::cmd;
+use gglib_core::utils::process::async_cmd;
 use gglib_core::{McpTool, McpToolResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, ChildStdin, ChildStdout, Stdio};
-use std::sync::Arc;
+use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use thiserror::Error;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::process::Child;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
+
+/// How long a request waits for its reply: long enough for a server started
+/// through `npx` to come up.
+const REPLY_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Errors that can occur during MCP client operations.
 #[derive(Debug, Error)]
@@ -139,14 +150,21 @@ struct McpToolSchema {
     annotations: Option<Value>,
 }
 
+/// The server's stdin and stdout, held together by the one request in
+/// flight.
+struct Pipes {
+    writer: Box<dyn AsyncWrite + Send + Unpin>,
+    reader: BufReader<Box<dyn AsyncRead + Send + Unpin>>,
+}
+
 /// Client for communicating with an MCP server via stdio.
 pub(crate) struct McpClient {
     /// Child process (for stdio servers)
     process: Option<Child>,
-    /// Stdin for sending requests (wrapped for async access)
-    stdin: Option<Arc<std::sync::Mutex<ChildStdin>>>,
-    /// Stdout reader for receiving responses
-    stdout_reader: Option<Arc<Mutex<BufReader<ChildStdout>>>>,
+    /// The server's stdin and stdout, while connected
+    pipes: Option<Mutex<Pipes>>,
+    /// How long a request waits for its reply
+    reply_timeout: Duration,
     /// Request ID counter
     request_id: AtomicU64,
     /// Server info after initialization
@@ -162,8 +180,8 @@ impl McpClient {
     pub(crate) const fn new() -> Self {
         Self {
             process: None,
-            stdin: None,
-            stdout_reader: None,
+            pipes: None,
+            reply_timeout: REPLY_TIMEOUT,
             request_id: AtomicU64::new(1),
             server_info: None,
             capabilities: None,
@@ -191,7 +209,7 @@ impl McpClient {
         // Build effective PATH for child process
         let effective_path = crate::path::build_effective_path(exe_path, path_extra);
 
-        let mut command = cmd(exe_path);
+        let mut command = async_cmd(exe_path);
         command
             .args(args)
             .stdin(Stdio::piped())
@@ -227,8 +245,10 @@ impl McpClient {
             .ok_or_else(|| McpClientError::SpawnFailed("Failed to get stdout".to_string()))?;
 
         self.process = Some(child);
-        self.stdin = Some(Arc::new(std::sync::Mutex::new(stdin)));
-        self.stdout_reader = Some(Arc::new(Mutex::new(BufReader::new(stdout))));
+        self.pipes = Some(Mutex::new(Pipes {
+            writer: Box::new(stdin),
+            reader: BufReader::new(Box::new(stdout)),
+        }));
 
         // Initialize the MCP session
         self.initialize().await
@@ -252,7 +272,7 @@ impl McpClient {
         self.protocol_version = Some(result.protocol_version.clone());
 
         // Send initialized notification
-        self.notify("notifications/initialized", None)?;
+        self.notify("notifications/initialized", None).await?;
 
         Ok(result)
     }
@@ -330,86 +350,43 @@ impl McpClient {
         }
     }
 
-    /// Send a JSON-RPC request and wait for response.
+    /// Send a JSON-RPC request and wait for the reply with its `id`.
+    ///
+    /// Lines that are not that reply are skipped, however many come first:
+    /// notifications and server requests (anything with a `method`), replies
+    /// to other ids, and lines that are not JSON. An error reply with a null
+    /// `id`, the server's answer to a line it could not read, is the reply.
+    ///
+    /// One request is in flight per server: callers queue on the pipes' lock,
+    /// and the wait for the lock is not counted against the reply timeout,
+    /// which bounds writing the request and reading its reply. A request
+    /// cancelled part way through writing its line leaves the rest unwritten,
+    /// and the server reads the next request run on from it; that request
+    /// then fails or times out.
     async fn request<T: for<'de> Deserialize<'de>>(
         &self,
         method: &str,
         params: Option<Value>,
     ) -> Result<T, McpClientError> {
-        let stdin = self.stdin.as_ref().ok_or(McpClientError::NotConnected)?;
-        let stdout_reader = self
-            .stdout_reader
-            .as_ref()
-            .ok_or(McpClientError::NotConnected)?;
-
+        let pipes = self.pipes.as_ref().ok_or(McpClientError::NotConnected)?;
         let id = self.request_id.fetch_add(1, Ordering::SeqCst);
-
         let request = JsonRpcRequest {
             jsonrpc: "2.0",
             id,
             method: method.to_string(),
             params,
         };
-
-        // Write request
         let request_line = serde_json::to_string(&request)? + "\n";
 
-        // Use blocking IO wrapped in std Mutex
-        {
-            let mut stdin_guard = stdin
-                .lock()
-                .map_err(|_| McpClientError::ProtocolError("Failed to lock stdin".to_string()))?;
-            stdin_guard.write_all(request_line.as_bytes())?;
-            stdin_guard.flush()?;
-        }
-
-        // Read response with timeout (30 seconds for initial startup, especially for npx)
-        let read_timeout = Duration::from_secs(30);
-
-        let read_result = timeout(read_timeout, async {
-            let mut reader = stdout_reader.lock().await;
-
-            // Try reading lines until we get a valid JSON-RPC response
-            // (skip any empty lines or non-JSON output from npx startup)
-            for _ in 0..10 {
-                let mut line = String::new();
-                match reader.read_line(&mut line) {
-                    Ok(0) => {
-                        // EOF - server closed stdout
-                        return Err(McpClientError::ProtocolError(
-                            "Server closed connection".to_string(),
-                        ));
-                    }
-                    Ok(_) => {
-                        let trimmed = line.trim();
-                        if trimmed.is_empty() {
-                            // Empty line, try again
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                            continue;
-                        }
-
-                        // Try to parse as JSON
-                        if let Ok(response) = serde_json::from_str::<JsonRpcResponse>(trimmed) {
-                            return Ok(response);
-                        }
-                        // Not valid JSON-RPC, might be npx output, skip it
-                        tracing::debug!(line = trimmed, "Skipping non-JSON-RPC output");
-                    }
-                    Err(e) => return Err(McpClientError::IoError(e)),
-                }
-            }
-
-            Err(McpClientError::ProtocolError(
-                "No valid JSON-RPC response received".to_string(),
-            ))
+        let mut pipes = pipes.lock().await;
+        let response = timeout(self.reply_timeout, async {
+            pipes.writer.write_all(request_line.as_bytes()).await?;
+            pipes.writer.flush().await?;
+            read_reply(&mut pipes.reader, id).await
         })
-        .await;
-
-        let response = match read_result {
-            Ok(Ok(r)) => r,
-            Ok(Err(e)) => return Err(e),
-            Err(_) => return Err(McpClientError::Timeout),
-        };
+        .await
+        .map_err(|_| McpClientError::Timeout)??;
+        drop(pipes);
 
         // Check for error
         if let Some(err) = response.error {
@@ -428,8 +405,8 @@ impl McpClient {
     }
 
     /// Send a JSON-RPC notification (no response expected).
-    fn notify(&self, method: &str, params: Option<Value>) -> Result<(), McpClientError> {
-        let stdin = self.stdin.as_ref().ok_or(McpClientError::NotConnected)?;
+    async fn notify(&self, method: &str, params: Option<Value>) -> Result<(), McpClientError> {
+        let pipes = self.pipes.as_ref().ok_or(McpClientError::NotConnected)?;
 
         // Notifications don't have an id
         let notification = json!({
@@ -440,13 +417,10 @@ impl McpClient {
 
         let line = serde_json::to_string(&notification)? + "\n";
 
-        {
-            let mut stdin_guard = stdin
-                .lock()
-                .map_err(|_| McpClientError::ProtocolError("Failed to lock stdin".to_string()))?;
-            stdin_guard.write_all(line.as_bytes())?;
-            stdin_guard.flush()?;
-        }
+        let mut pipes = pipes.lock().await;
+        pipes.writer.write_all(line.as_bytes()).await?;
+        pipes.writer.flush().await?;
+        drop(pipes);
 
         Ok(())
     }
@@ -454,24 +428,67 @@ impl McpClient {
     /// Disconnect from the MCP server.
     pub(crate) fn disconnect(&mut self) {
         // Drop stdin to signal EOF to the child process.
-        self.stdin = None;
-        self.stdout_reader = None;
+        self.pipes = None;
 
-        // Kill the process if still running, but do NOT block waiting for it
-        // to exit.  `process.wait()` in a synchronous Drop blocks the calling
-        // thread, which inside a tokio runtime can stall the whole runtime
-        // (observable as the CLI appearing to hang after an agent run
-        // completes).  `try_wait` is non-blocking: if the process has already
-        // exited we reap it; otherwise we send SIGKILL and let the OS clean up
-        // the zombie when this process exits.
+        // Kill the process without waiting for it to exit: this runs in a
+        // synchronous Drop, where waiting would block a runtime thread.
+        // `start_kill` sends SIGKILL and returns; `try_wait` reaps a child
+        // that has already exited, and tokio reaps one that has not once the
+        // dropped `Child` exits.
         if let Some(mut process) = self.process.take() {
-            let _ = process.kill();
+            let _ = process.start_kill();
             let _ = process.try_wait();
         }
 
         self.server_info = None;
         self.capabilities = None;
         self.protocol_version = None;
+    }
+}
+
+/// Read lines until the reply to request `id`.
+///
+/// # Errors
+///
+/// [`McpClientError::ProtocolError`] when the server closes its stdout first,
+/// [`McpClientError::IoError`] when reading fails.
+async fn read_reply<R>(reader: &mut R, id: u64) -> Result<JsonRpcResponse, McpClientError>
+where
+    R: AsyncBufReadExt + Unpin,
+{
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if reader.read_line(&mut line).await? == 0 {
+            return Err(McpClientError::ProtocolError(
+                "Server closed connection".to_string(),
+            ));
+        }
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let Ok(message) = serde_json::from_str::<Value>(trimmed) else {
+            // Not JSON: startup output from a launcher such as npx, or the
+            // rest of a reply cut off by a timeout, which can be image
+            // base64, so only its length is logged.
+            tracing::debug!(bytes = trimmed.len(), "Skipping non-JSON-RPC output");
+            continue;
+        };
+        if let Some(method) = message.get("method").and_then(Value::as_str) {
+            tracing::debug!(
+                method,
+                "Skipping a message from the MCP server while awaiting a reply"
+            );
+            continue;
+        }
+        let unreadable = message.get("id") == Some(&Value::Null) && message.get("error").is_some();
+        if !unreadable && message.get("id").and_then(Value::as_u64) != Some(id) {
+            // Only the id: a late reply to a timed-out call can be megabytes of image.
+            tracing::debug!(want = id, got = ?message.get("id"), "Skipping a reply to another request");
+            continue;
+        }
+        return serde_json::from_value(message).map_err(McpClientError::from);
     }
 }
 
@@ -488,39 +505,5 @@ impl Drop for McpClient {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_json_rpc_request_serialization() {
-        let request = JsonRpcRequest {
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/list".to_string(),
-            params: None,
-        };
-
-        let json = serde_json::to_string(&request).unwrap();
-        assert!(json.contains("\"jsonrpc\":\"2.0\""));
-        assert!(json.contains("\"method\":\"tools/list\""));
-        assert!(!json.contains("params")); // Should be omitted when None
-    }
-
-    #[test]
-    fn test_json_rpc_response_parsing() {
-        let json = r#"{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}"#;
-        let response: JsonRpcResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(response.id, Some(1));
-        assert!(response.result.is_some());
-        assert!(response.error.is_none());
-    }
-
-    #[test]
-    fn test_json_rpc_error_parsing() {
-        let json =
-            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid Request"}}"#;
-        let response: JsonRpcResponse = serde_json::from_str(json).unwrap();
-        assert!(response.error.is_some());
-        assert_eq!(response.error.as_ref().unwrap().code, -32600);
-    }
-}
+#[path = "client_tests.rs"]
+mod client_tests;

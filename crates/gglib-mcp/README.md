@@ -121,6 +121,7 @@ Low-level JSON-RPC 2.0 client for the MCP protocol:
 - Connects to MCP servers via stdio
 - Handles protocol initialization and capability negotiation
 - Provides `list_tools()` and `call_tool()` methods
+- Reads the server's stdout asynchronously, one request at a time, taking the reply whose `id` is the request's and skipping notifications and other lines before it; a request waits 30 s for its reply
 
 ### `McpManager`
 
@@ -197,4 +198,4 @@ async fn example(repo: impl McpServerRepository + 'static) {
 
 ## Testing
 
-The crate uses trait-based testing: `McpService` is tested over a repository held in memory (`service_tests.rs`). The order the resolver tries candidates in, and the attempts it records, are pinned case by case over a mock environment and filesystem (`resolver/resolve_order_tests.rs`). See `gglib-db` for `SqliteMcpRepository`'s own tests, which run on the schema production creates.
+The crate uses trait-based testing: `McpService` is tested over a repository held in memory (`service_tests.rs`). The client's wait for its reply (matched by id, timed out, ended by EOF) is pinned over an in-process pipe standing in for the server (`client_tests.rs`), and what a tool's content items become over an attachment store held in memory (`tool_images_tests.rs`). The order the resolver tries candidates in, and the attempts it records, are pinned case by case over a mock environment and filesystem (`resolver/resolve_order_tests.rs`). See `gglib-db` for `SqliteMcpRepository`'s own tests, which run on the schema production creates.
