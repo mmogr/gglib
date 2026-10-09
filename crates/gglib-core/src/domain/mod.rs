@@ -42,6 +42,7 @@ pub(crate) mod sampling_provenance;
 mod server_config;
 pub mod slot_eviction;
 pub(crate) mod template_caps;
+pub mod tensor_table;
 pub mod thinking;
 
 // Re-export model types at the domain level for convenience
@@ -134,6 +135,7 @@ pub use thinking::Thinking;
 
 // Re-export GGUF types at the domain level for convenience
 pub use gguf::{CapabilityFlags, GgufCapabilities, GgufMetadata, GgufValue, RawMetadata};
+pub use tensor_table::{TensorInfo, TensorTable, WeightsFormat};
 
 // Re-export dialect types at the domain level for convenience
 pub use dialect::{BodyCodec, DialectSpec, EmissionProfile};

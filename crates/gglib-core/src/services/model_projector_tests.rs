@@ -9,7 +9,7 @@ use chrono::Utc;
 use super::*;
 use crate::domain::NewModel;
 use crate::download::GgufFileRole;
-use crate::ports::{GgufCapabilities, GgufMetadata, GgufParseError, ModelRepository};
+use crate::ports::{GgufCapabilities, GgufMetadata, GgufParseError, ModelRepository, TensorTable};
 
 /// Holds model 1 and nothing else.
 pub(crate) struct OneModelRepo(pub(crate) Mutex<Model>);
@@ -67,6 +67,12 @@ impl GgufParserPort for FirstBytesParser {
     fn detect_capabilities(&self, _metadata: &GgufMetadata) -> GgufCapabilities {
         GgufCapabilities::empty()
     }
+    fn tensor_table(&self, _path: &Path) -> Result<TensorTable, GgufParseError> {
+        Err(GgufParseError::InvalidFormat("no tensor table".to_owned()))
+    }
+    fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
+        Err(GgufParseError::InvalidFormat("no tensor table".to_owned()))
+    }
 }
 
 /// Fails the test if a header is read at all.
@@ -78,6 +84,12 @@ impl GgufParserPort for NeverReadParser {
     }
     fn detect_capabilities(&self, _metadata: &GgufMetadata) -> GgufCapabilities {
         GgufCapabilities::empty()
+    }
+    fn tensor_table(&self, path: &Path) -> Result<TensorTable, GgufParseError> {
+        panic!("no header should be read, and {} was", path.display());
+    }
+    fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
+        panic!("no header should be read, and a head was");
     }
 }
 

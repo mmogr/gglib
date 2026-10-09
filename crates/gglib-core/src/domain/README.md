@@ -35,6 +35,9 @@ infrastructure concerns (database, filesystem, etc.).
   and the turn it adds (`HubTurn`)
 - `runs` - Wire shapes of a run, a reply the daemon owns (`RunInfo`, `RunStatus`)
 - `gguf` - GGUF metadata and capability types
+- `tensor_table` - The names and outermost-first shapes of the tensors a GGUF or
+  safetensors file declares (`TensorTable`), which is all an image model's GGUF
+  says about itself
 - `capabilities` - Model capability detection and inference
 - `thinking` - A chat's Thinking choice (`Thinking`: `off` or `default`), which a
   turn says and `ConversationSettings.thinking` remembers, and the one rule

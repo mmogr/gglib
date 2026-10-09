@@ -342,6 +342,24 @@ mod tests {
                 dialect: Some(crate::domain::DialectSpec::qwen_xml()),
             }
         }
+
+        fn tensor_table(
+            &self,
+            _path: &std::path::Path,
+        ) -> std::result::Result<crate::ports::TensorTable, crate::ports::GgufParseError> {
+            Err(crate::ports::GgufParseError::InvalidFormat(
+                "no tensor table".to_owned(),
+            ))
+        }
+
+        fn tensor_table_of_head(
+            &self,
+            _head: &[u8],
+        ) -> std::result::Result<crate::ports::TensorTable, crate::ports::GgufParseError> {
+            Err(crate::ports::GgufParseError::InvalidFormat(
+                "no tensor table".to_owned(),
+            ))
+        }
     }
 
     fn hf_origin<'a>(repo_id: &'a str, hf_tags: &'a [String]) -> ModelOrigin<'a> {

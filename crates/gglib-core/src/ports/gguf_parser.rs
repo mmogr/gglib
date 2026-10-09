@@ -15,6 +15,7 @@ use thiserror::Error;
 
 // Re-export domain types for convenience
 pub use crate::domain::gguf::{GgufCapabilities, GgufMetadata};
+pub use crate::domain::tensor_table::TensorTable;
 
 /// Errors that can occur during GGUF parsing.
 ///
@@ -70,6 +71,28 @@ pub trait GgufParserPort: Send + Sync {
     ///
     /// Returns structured capabilities (bitflags + extensions).
     fn detect_capabilities(&self, metadata: &GgufMetadata) -> GgufCapabilities;
+
+    /// Read the tensor table of the GGUF or safetensors file at `path`.
+    ///
+    /// The first four bytes choose the format: the GGUF magic, or else a
+    /// safetensors header length. Only the header is read, never a tensor's
+    /// data, and no size the file declares is trusted before it is held to
+    /// what the file can hold.
+    ///
+    /// # Errors
+    ///
+    /// When the file cannot be read, or its header is not a well-formed
+    /// GGUF or safetensors header.
+    fn tensor_table(&self, path: &Path) -> Result<TensorTable, GgufParseError>;
+
+    /// Read the tensor table from `head`, the first bytes of a weights file,
+    /// as [`Self::tensor_table`] reads it from the whole file.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::tensor_table`], and when the header runs past the end of
+    /// `head`.
+    fn tensor_table_of_head(&self, head: &[u8]) -> Result<TensorTable, GgufParseError>;
 }
 
 /// A no-op GGUF parser that returns default/empty metadata.
@@ -85,6 +108,23 @@ impl GgufParserPort for NoopGgufParser {
 
     fn detect_capabilities(&self, _metadata: &GgufMetadata) -> GgufCapabilities {
         GgufCapabilities::empty()
+    }
+
+    fn tensor_table(&self, _path: &Path) -> Result<TensorTable, GgufParseError> {
+        Ok(empty_table())
+    }
+
+    fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
+        Ok(empty_table())
+    }
+}
+
+/// A GGUF table of no tensors, which is what [`NoopGgufParser`] reads.
+const fn empty_table() -> TensorTable {
+    TensorTable {
+        format: crate::domain::tensor_table::WeightsFormat::Gguf,
+        architecture: None,
+        tensors: Vec::new(),
     }
 }
 

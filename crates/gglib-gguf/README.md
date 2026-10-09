@@ -61,11 +61,13 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 
 **Module Descriptions:**
 - **`error.rs`** — Parser error types
-- **`fixture.rs`** — `write_string_gguf`, a GGUF file written without a model for a test to parse; behind the `test-utils` feature
+- **`fixture.rs`** — `write_string_gguf`, `write_tensor_gguf` and `write_safetensors`, weights files written without a model for a test to parse; behind the `test-utils` feature
 - **`format.rs`** — GGUF format types, tensor types, and quantization enums
 - **`parser.rs`** — High-level metadata extraction and port implementation
 - **`reader.rs`** — Low-level file I/O and GGUF header parsing; a string length, array count or metadata count the file declares is held to the bytes it has left before anything is reserved or looped over
 - **`role.rs`** — Whether the header says the file is a model's weights or a projector
+- **`tensor_table.rs`** — A weights file's tensor table (`GgufParserPort::tensor_table` and `tensor_table_of_head`): every tensor's name and shape, outermost first, from a GGUF header or, when the first four bytes are not the GGUF magic, a safetensors header. The tensor count is held to the bytes left and a tensor of more than four dimensions refused before anything is reserved
+- **`safetensors.rs`** — A safetensors header as a tensor table; a header length over 100,000,000 bytes or over what the file holds is refused before anything is reserved
 - **`capabilities/`** — Model capability detection (context size, chat templates)
 
 ## Features

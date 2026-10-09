@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use gglib_core::domain::TensorTable;
 use gglib_core::domain::gguf::{GgufValue, RawMetadata};
 use gglib_core::{GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, Quantization};
 
@@ -13,10 +14,11 @@ use crate::capabilities;
 use crate::error::GgufResult;
 use crate::format::{CONTEXT_LENGTH_KEYS, quantization};
 use crate::reader::GgufReader;
+use crate::tensor_table;
 
 /// The fewest bytes a metadata pair takes in a file: the length of an empty
 /// key, the value type, and a one-byte value.
-const MIN_PAIR_BYTES: u64 = 8 + 4 + 1;
+pub(crate) const MIN_PAIR_BYTES: u64 = 8 + 4 + 1;
 
 /// GGUF file parser.
 ///
@@ -79,6 +81,14 @@ impl GgufParserPort for GgufParser {
 
     fn detect_capabilities(&self, metadata: &GgufMetadata) -> GgufCapabilities {
         capabilities::detect_all(&metadata.metadata)
+    }
+
+    fn tensor_table(&self, path: &Path) -> Result<TensorTable, GgufParseError> {
+        tensor_table::read_file(path).map_err(Into::into)
+    }
+
+    fn tensor_table_of_head(&self, head: &[u8]) -> Result<TensorTable, GgufParseError> {
+        tensor_table::read_head(head).map_err(Into::into)
     }
 }
 

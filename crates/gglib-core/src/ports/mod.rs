@@ -63,7 +63,7 @@ pub use download_manager::{DownloadManagerConfig, DownloadManagerPort};
 pub use download_manager_fixture::AskedDownloads;
 pub use event_emitter::{AppEventEmitter, NoopEmitter};
 pub use gguf_parser::{
-    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopGgufParser,
+    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopGgufParser, TensorTable,
 };
 pub use hub_chats::{AgentRunStarter, HubChatsError, HubChatsPort, TurnRefused};
 pub use huggingface::{
