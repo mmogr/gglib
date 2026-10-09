@@ -404,7 +404,7 @@ async fn alternating_traffic_does_not_swap_per_request() {
                     progressed = true;
                 }
                 AdmissionDecision::Wait => remaining.push(ticket),
-                AdmissionDecision::Expired => panic!("nothing should expire here"),
+                other => panic!("nothing should expire or be refused here, got {other:?}"),
             }
         }
         tickets = remaining;

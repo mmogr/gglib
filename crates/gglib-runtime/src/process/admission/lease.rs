@@ -24,11 +24,11 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 use tokio::time::Instant;
 
-use gglib_core::domain::{AdmissionSnapshot, SecondarySlotDecision};
+use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{AdmissionLease, AdmissionRelease};
 use tokio::sync::Notify;
 
-use super::state::{AdmissionDecision, QueueState, Resident, Ticket};
+use super::state::{AdmissionDecision, Candidate, QueueState, Resident, Ticket};
 
 /// The admission queue: who is resident, who is waiting, and whose turn it is.
 ///
@@ -88,9 +88,11 @@ impl AdmissionQueue {
 
     /// Ask what this request should do now.
     ///
-    /// `secondary` is the caller's verdict on whether this request's model may
-    /// co-reside in the second slot, computed against a free-VRAM reading taken
-    /// just before this call. A value rather than a callback, deliberately: a
+    /// `candidate` is the program that serves this request's model and the
+    /// caller's verdict on whether it may co-reside in the second slot,
+    /// computed against a free-VRAM reading taken just before this call; a
+    /// bare [`SecondarySlotDecision`](gglib_core::domain::SecondarySlotDecision)
+    /// is a model that chats. A value rather than a callback, deliberately: a
     /// callback would run caller code inside the critical section, which the
     /// module docs rule out. The price is a verdict up to one poll tick stale,
     /// which is well inside the staleness the probe's own cache already
@@ -98,8 +100,8 @@ impl AdmissionQueue {
     /// and a co-load is the alternative to a swap; callers re-poll on every
     /// tick, so the reading never outlives the wait the way an enqueue-time
     /// reading would.
-    pub fn poll(&self, ticket: &Ticket, secondary: SecondarySlotDecision) -> AdmissionDecision {
-        self.lock().poll(ticket, Instant::now(), secondary)
+    pub fn poll(&self, ticket: &Ticket, candidate: impl Into<Candidate>) -> AdmissionDecision {
+        self.lock().poll(ticket, Instant::now(), candidate.into())
     }
 
     /// A future that resolves the next time the state changes.

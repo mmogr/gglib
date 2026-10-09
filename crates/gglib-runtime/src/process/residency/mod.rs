@@ -317,6 +317,11 @@ impl ResidentSet {
                         () = tokio::time::sleep(POLL_TICK) => {}
                     }
                 }
+                AdmissionDecision::Refuse(refusal) => {
+                    return Err(ModelRuntimeError::AdmissionTimeout(
+                        refusal.describe(&model_name),
+                    ));
+                }
                 AdmissionDecision::Expired => {
                     warn!(
                         model = %model_name,

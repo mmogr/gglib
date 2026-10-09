@@ -13,7 +13,9 @@ mod state;
 mod timing;
 
 pub use lease::AdmissionQueue;
-pub use state::{AdmissionDecision, PRIMARY_SLOT, Resident, SLOT_COUNT, SlotState, Ticket};
+pub use state::{
+    AdmissionDecision, Candidate, PRIMARY_SLOT, Refusal, Resident, SLOT_COUNT, SlotState, Ticket,
+};
 pub(crate) use timing::launch_timeout;
 pub use timing::{ADMISSION_DEADLINE, DRAIN_QUANTUM};
 
@@ -29,3 +31,8 @@ mod queue_tests;
 #[cfg(test)]
 #[path = "state_tests.rs"]
 mod state_tests;
+
+/// Where an image model is placed, and what a held slot does to the line.
+#[cfg(test)]
+#[path = "state_placement_tests.rs"]
+mod state_placement_tests;

@@ -79,8 +79,11 @@ A run that talks to llama-server's port directly (an agent run) takes a
 *hold* instead (`hold.rs`): while held, the resident is neither swapped out
 nor recycled, yet none of its `SERVER_PARALLEL` capacity is taken. An
 explicit stop, or the proxy's restart of a dead server, still takes it. A rival
-waiting behind a held primary gets the ordinary stall 503 after
-[`ADMISSION_DEADLINE`], which does not mention the hold. A request for the
+that only a held slot could take is passed over at the front of the line, so
+it never blocks a request for another model that could go; it waits until its
+own [`ADMISSION_DEADLINE`] and then gets the ordinary stall 503, which does not
+mention the hold. An image model in that position is refused at once instead
+([`Refusal::HeldSlot`]), naming the held model. A request for the
 held model at another context gets a 503 at once; since VS Code's gateway
 treats a 503 as final, waiting up to the deadline would serve it better.
 
@@ -91,6 +94,15 @@ a title generator — can stay loaded instead of fighting the chat model for the
 only slot. Whether a candidate may take it is decided by
 [`decide_secondary_slot`](gglib_core::domain::decide_secondary_slot) against a
 live free-VRAM reading; this module only asks.
+
+An image model, served by `sd-server`, is placed differently
+(`state_placement.rs`). It never takes an empty primary, where the next large
+chat model would evict it. It takes the second slot when the memory check
+grants it, or whenever the primary is empty, since then there is nothing to
+share memory with; its verdict is judged by free memory alone, without the
+ceiling that keeps large chat models in the swap path. Otherwise it swaps into
+an evictable primary under the ordinary turn rules. The caller says which
+program serves a request in its [`Candidate`].
 
 # What this module is not responsible for
 

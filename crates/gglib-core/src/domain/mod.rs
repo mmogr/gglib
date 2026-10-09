@@ -108,6 +108,7 @@ pub use admission::{
 // Re-export the second-VRAM-slot decision at the domain level for convenience
 pub use residency::{
     RESIDENCY_UTILISATION, SecondarySlotDecision, SlotFootprint, decide_secondary_slot,
+    decide_secondary_slot_for,
 };
 pub use server_config::ServerConfig;
 
