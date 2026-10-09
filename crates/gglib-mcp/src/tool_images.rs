@@ -60,7 +60,7 @@ pub(crate) async fn split_content(content: &Value, attachments: &AttachmentServi
         }
     }
     if lines.is_empty() {
-        lines = items.iter().map(describe).collect();
+        lines = items.iter().map(describe_item).collect();
     }
     if lines.is_empty() {
         lines.push("[no content]".to_owned());
@@ -106,10 +106,12 @@ fn stored_sentence(info: &AttachmentInfo) -> String {
     format!("[image {}x{} {format} stored]", info.width, info.height)
 }
 
-/// A line naming an item that is neither text nor an image, without its
-/// payload: an embedded resource keeps its URI and any text it holds. A
-/// number, a boolean or `null` holds no payload, so it is its JSON text.
-fn describe(item: &Value) -> String {
+/// A line naming an MCP content item that is neither text nor an image.
+///
+/// The payload is left out: an embedded resource keeps its URI and any text
+/// it holds. A number, a boolean or `null` holds no payload, so it is its
+/// JSON text. The proxy's `/mcp` gateway names such items in the same words.
+pub fn describe_item(item: &Value) -> String {
     if matches!(item, Value::Number(_) | Value::Bool(_) | Value::Null) {
         return item.to_string();
     }

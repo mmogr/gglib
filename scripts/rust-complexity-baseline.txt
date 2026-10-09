@@ -114,7 +114,7 @@ crates/gglib-proxy/src/forward.rs 1499
 crates/gglib-proxy/src/forward_tests.rs 561
 crates/gglib-proxy/src/loop_guard.rs 443
 crates/gglib-proxy/src/loop_guard_tests.rs 1182
-crates/gglib-proxy/src/mcp/handlers.rs 530
+crates/gglib-proxy/src/mcp/handlers.rs 518
 crates/gglib-proxy/src/metrics.rs 391
 crates/gglib-proxy/src/models.rs 519
 crates/gglib-proxy/src/models_tests.rs 544
@@ -131,7 +131,7 @@ crates/gglib-proxy/tests/fixtures/common.rs 973
 crates/gglib-proxy/tests/integration_admission.rs 322
 crates/gglib-proxy/tests/integration_auth.rs 409
 crates/gglib-proxy/tests/integration_loop_guard.rs 376
-crates/gglib-proxy/tests/integration_mcp_gateway.rs 433
+crates/gglib-proxy/tests/integration_mcp_gateway.rs 469
 crates/gglib-proxy/tests/integration_proxy_pipeline.rs 644
 crates/gglib-proxy/tests/integration_slot_roundtrip.rs 593
 crates/gglib-runtime/src/command.rs 692

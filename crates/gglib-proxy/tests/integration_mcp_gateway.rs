@@ -431,3 +431,39 @@ async fn tools_call_unknown_tool_returns_error() {
 
     cancel.cancel();
 }
+
+/// `search_tools` answers as it always has: one text item holding the
+/// matches as JSON, and no `isError`.
+#[tokio::test]
+async fn search_tools_answers_one_text_item() {
+    let (base_url, _, cancel) = spawn_proxy(ProxyAccessConfig::default()).await;
+    let client = Client::new();
+    let init = json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "test"} }
+    });
+    let resp = post_mcp(&client, &base_url, init, None).await;
+    let session_id = resp.headers()["mcp-session-id"]
+        .to_str()
+        .unwrap()
+        .to_owned();
+
+    let call = json!({
+        "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+        "params": { "name": "search_tools", "arguments": { "query": "" } }
+    });
+    let resp = post_mcp(&client, &base_url, call, Some(&session_id)).await;
+    assert_eq!(resp.status(), 200);
+    let text = resp.text().await.unwrap();
+    let data = text
+        .lines()
+        .find_map(|line| line.strip_prefix("data: "))
+        .expect("one SSE data line");
+    let body: Value = serde_json::from_str(data).unwrap();
+    assert_eq!(
+        body["result"],
+        json!({ "content": [{ "type": "text", "text": "[]" }] })
+    );
+
+    cancel.cancel();
+}

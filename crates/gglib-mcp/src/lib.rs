@@ -26,3 +26,4 @@ pub use gglib_core::{
 pub use builtin::BuiltinToolExecutorAdapter;
 pub use combined::CombinedToolExecutor;
 pub use service::{McpServerInfo, McpService};
+pub use tool_images::describe_item;

@@ -168,19 +168,35 @@ pub(crate) struct ToolsListResult {
     pub tools: Vec<McpToolSpec>,
 }
 
-/// A single content item in a `tools/call` response.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ToolContent {
-    /// Content type (usually "text").
-    #[serde(rename = "type")]
-    pub content_type: String,
-    /// The content payload.
-    pub text: String,
+/// A single content item in a `tools/call` response, as MCP spells it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub(crate) enum ToolContent {
+    /// `{"type":"text","text":...}`.
+    Text {
+        /// The text.
+        text: String,
+    },
+    /// `{"type":"image","data":...,"mimeType":...}`: the image's bytes inline,
+    /// base64, as an MCP client expects them.
+    Image {
+        /// The image's bytes, base64.
+        data: String,
+        /// Its media type, such as `image/png`.
+        #[serde(rename = "mimeType")]
+        mime_type: String,
+    },
+}
+
+impl ToolContent {
+    /// A text item.
+    pub(crate) fn text(text: impl Into<String>) -> Self {
+        Self::Text { text: text.into() }
+    }
 }
 
 /// Result of the `tools/call` method.
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CallToolResult {
     /// Content items returned by the tool.
@@ -188,6 +204,24 @@ pub(crate) struct CallToolResult {
     /// Whether the tool call resulted in an error.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_error: Option<bool>,
+}
+
+impl CallToolResult {
+    /// A result whose whole content is one text item.
+    pub(crate) fn text(text: impl Into<String>) -> Self {
+        Self {
+            content: vec![ToolContent::text(text)],
+            is_error: None,
+        }
+    }
+
+    /// A failed call: one text item saying why, and `isError: true`.
+    pub(crate) fn error(message: impl Into<String>) -> Self {
+        Self {
+            content: vec![ToolContent::text(message)],
+            is_error: Some(true),
+        }
+    }
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
