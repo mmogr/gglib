@@ -1,0 +1,216 @@
+# Reports what moving the llama.cpp pin would meet, in one living issue.
+#
+# gglib installs the release `PINNED_LLAMA_RELEASE` names
+# (crates/gglib-runtime/src/llama/download/mod.rs), and ADR 0001 makes moving
+# it a deliberate event: bump, run the suite, ship with the differences
+# observed. llama.cpp cuts a release on nearly every merge, so "what changed"
+# is a thousand commits within a couple of months, and the reading was not
+# being taken. This workflow takes it.
+#
+# Weekly, or on demand, scripts/llama_upstream.py compares the pin with
+# upstream's newest release: the commits in subsystems gglib depends on, the
+# `--help` diff, a launch of the candidate with the flags gglib emits, the
+# release assets gglib downloads, the sampler defaults ADR 0003 defers to, and
+# the diff of every upstream file an ADR cites. That evidence is deterministic
+# and goes in the issue as collected. The verdict, whether gglib must change
+# and what the change is, is a reading of the evidence against gglib's code
+# and ADRs, and Claude writes it when ANTHROPIC_API_KEY is set; without the
+# key the issue carries the evidence and says the verdict was not taken.
+#
+# One issue, edited in place: the title names the pin and the candidate, each
+# run replaces the body, and a comment marks a run whose candidate moved. The
+# run that finds the pin caught up closes it. Nothing here opens a pull
+# request or touches a branch; the bump stays a person's commit.
+#
+# The checkout and the issue use the GitHub App token update-deps.yml uses,
+# so the issue is the app's and issue-labels.yml runs on it. The labels are
+# set at creation because that workflow's parse step reads the issue form,
+# which this issue is not, and its verify step wants every category present.
+
+name: llama.cpp upstream
+
+on:
+  schedule:
+    # Monday 06:17 Australia/Brisbane, after Dependabot's 06:00. A minute off
+    # the hour, which GitHub's scheduler is slowest on.
+    - cron: '17 20 * * 0'
+  workflow_dispatch:
+    inputs:
+      candidate:
+        description: 'The llama.cpp release to compare the pin with, or latest'
+        type: string
+        required: false
+        default: latest
+
+permissions: {}
+
+concurrency:
+  group: llama-upstream
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # `secrets.*` cannot appear in an `if`; this can.
+  HAS_ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+
+jobs:
+  report:
+    name: Compare the pin with upstream
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          # Nothing pushes, and the verdict step runs a model with a shell.
+          persist-credentials: false
+
+      - name: Clone llama.cpp
+        # Commits and tags only; the script fetches the blobs it diffs.
+        run: git clone --quiet --filter=tree:0 --bare https://github.com/ggml-org/llama.cpp "$RUNNER_TEMP/llama.cpp.git"
+
+      - name: Collect the evidence
+        id: collect
+        env:
+          CANDIDATE: ${{ inputs.candidate || 'latest' }}
+        run: |
+          python3 scripts/llama_upstream.py \
+            --repo "$RUNNER_TEMP/llama.cpp.git" \
+            --out "$RUNNER_TEMP/report" \
+            --candidate "$CANDIDATE"
+          python3 - "$RUNNER_TEMP/report/facts.json" >> "$GITHUB_OUTPUT" <<'EOF'
+          import json, sys
+          f = json.load(open(sys.argv[1]))
+          print(f"pin={f['pin']}")
+          print(f"candidate={f['candidate']}")
+          print(f"up_to_date={'true' if f['up_to_date'] else 'false'}")
+          EOF
+
+      - name: Upload the evidence
+        if: steps.collect.outputs.up_to_date == 'false'
+        uses: actions/upload-artifact@v7
+        with:
+          name: llama-upstream-${{ steps.collect.outputs.candidate }}
+          path: ${{ runner.temp }}/report
+          retention-days: 90
+
+      - name: Read the verdict
+        id: verdict
+        if: steps.collect.outputs.up_to_date == 'false' && env.HAS_ANTHROPIC_KEY == 'true'
+        # A verdict that fails to arrive is reported as missing, not as a
+        # failed run: the evidence is still worth an issue.
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app-token.outputs.token }}
+          claude_args: |
+            --max-turns 40
+            --allowedTools "Read,Grep,Glob,Bash(git:*)"
+            --json-schema '{"type":"object","properties":{"verdict":{"type":"string","enum":["compatible","changes needed","unclear"]},"summary":{"type":"string"},"body":{"type":"string"}},"required":["verdict","summary","body"]}'
+          prompt: |
+            You are reading what a llama.cpp release changes for gglib, the repository checked out here. gglib launches and proxies `llama-server`, and pins the release it installs: `PINNED_LLAMA_RELEASE` in crates/gglib-runtime/src/llama/download/mod.rs. The evidence for a candidate release is in ${{ runner.temp }}/report: facts.json, report.md, and evidence/ (the commit list, both `--help` texts and their diff, the launch logs and /props, and the diff of each upstream file an ADR cites). A bare clone of llama.cpp is at ${{ runner.temp }}/llama.cpp.git; `git -C ${{ runner.temp }}/llama.cpp.git show <tag>:<path>` reads a file at either tag.
+
+            Decide whether gglib can move its pin to the candidate as it is, and if not, what must change. Read against gglib's own code and documents, not from memory of llama.cpp:
+            - crates/gglib-runtime/src/command.rs builds the launch command line. A flag it emits that the candidate's `--help` no longer lists is a change needed; say the replacement, from the candidate's `--help` or common/arg.cpp.
+            - crates/gglib-proxy reads llama-server's HTTP responses. tools/server/README.md's diff says what the API changed.
+            - docs/adr/ holds the decisions. Each ADR has criteria that reopen it; report.md's "Files the ADRs cite" names which upstream files each one reads from. For each such file that changed, read the diff for the specific behaviour the ADR relies on (ADR 0005: the chat endpoint overwriting grammar_lazy, grammar_triggers and preserved_tokens; ADR 0003/0004: the sampler defaults; ADR 0007: chat_template_caps and reasoning_effort; ADR 0015: /props modalities and cache behaviour with a projector) and say whether that behaviour changed or only the code around it.
+            - docs/tool-call-repair.md and crates/gglib-proxy/src/repair.rs compensate for tool-call parsing; an upstream parser fix for a dialect gglib repairs is worth naming.
+
+            Write `body` as GitHub-flavoured Markdown with these sections, each short and concrete, every claim with the file and line it comes from, in gglib or in the upstream diff: "Verdict" (one paragraph), "Changes needed" (a list, each with the gglib file and line and the change, or "None"), "ADR criteria" (one line per ADR whose cited file changed: touched or not touched, and if touched which reading the ADR says to take), "Worth knowing" (upstream changes gglib does not need but might want, at most five). Say what you could not determine rather than guessing. `summary` is one sentence. `verdict` is "compatible" when nothing in "Changes needed" and no ADR criterion is touched, "changes needed" when the list is not empty, and "unclear" otherwise.
+
+      - name: Write the issue body
+        if: steps.collect.outputs.up_to_date == 'false'
+        env:
+          VERDICT_JSON: ${{ steps.verdict.outputs.structured_output }}
+          VERDICT_RAN: ${{ steps.verdict.outcome }}
+          HAS_KEY: ${{ env.HAS_ANTHROPIC_KEY }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPORT: ${{ runner.temp }}/report
+        run: |
+          python3 - > "$RUNNER_TEMP/body.md" <<'EOF'
+          import json, os
+          report = os.environ["REPORT"]
+          facts = json.load(open(f"{report}/facts.json"))
+          pin, cand = facts["pin"], facts["candidate"]
+          verdict = None
+          try:
+              verdict = json.loads(os.environ.get("VERDICT_JSON") or "null")
+          except json.JSONDecodeError:
+              verdict = None
+
+          out = []
+          if verdict and isinstance(verdict, dict) and verdict.get("body"):
+              out.append(f"**{verdict.get('verdict', 'unclear').capitalize()}.** {verdict.get('summary', '')}".strip())
+              out.append("")
+              out.append(verdict["body"].strip())
+          elif os.environ.get("HAS_KEY") != "true":
+              out.append("No verdict: `ANTHROPIC_API_KEY` is not set, so the evidence below was not read against gglib's code and ADRs.")
+          else:
+              out.append(f"No verdict: the reading step did not return one (outcome `{os.environ.get('VERDICT_RAN')}`); see the run.")
+          out.append("")
+          out.append("## Evidence")
+          out.append("")
+          out.append(open(f"{report}/report.md").read().strip())
+          out.append("")
+          out.append("## Moving the pin")
+          out.append("")
+          out.append(f"- Try it first: `GGLIB_LLAMA_RELEASE={cand} gglib config llama install`, then `gglib config llama status`.")
+          out.append(f"- Bump: set `PINNED_LLAMA_RELEASE` to `{cand}` in `crates/gglib-runtime/src/llama/download/mod.rs`, with any change named above, in one pull request whose message says what was observed (ADR 0001).")
+          out.append("- The readings an ADR says to take on a real model are not taken here; take the ones named above before merging.")
+          out.append("")
+          out.append(f"The full evidence is the `llama-upstream-{cand}` artifact of [the run]({os.environ['RUN_URL']}), kept 90 days. Edited in place by the llama.cpp upstream workflow on each run.")
+          body = "\n".join(out)
+          limit = 60000
+          if len(body) > limit:
+              body = body[:limit] + "\n\n… truncated to fit an issue; the artifact has the rest."
+          print(body)
+          EOF
+          wc -c "$RUNNER_TEMP/body.md"
+
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          PIN: ${{ steps.collect.outputs.pin }}
+          CANDIDATE: ${{ steps.collect.outputs.candidate }}
+          UP_TO_DATE: ${{ steps.collect.outputs.up_to_date }}
+        run: |
+          existing=$(gh issue list --state open --label automated \
+            --search '"llama.cpp: pin" in:title' --json number,title --limit 1)
+          number=$(jq -r '.[0].number // empty' <<<"$existing")
+          old_title=$(jq -r '.[0].title // empty' <<<"$existing")
+          title="llama.cpp: pin $PIN, upstream $CANDIDATE"
+
+          if [ "$UP_TO_DATE" = true ]; then
+            if [ -n "$number" ]; then
+              gh issue close "$number" --comment "The pin, \`$PIN\`, is upstream's newest release."
+              echo "Closed #$number: the pin is current." >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "The pin, $PIN, is upstream's newest release; nothing to report." >> "$GITHUB_STEP_SUMMARY"
+            fi
+            exit 0
+          fi
+
+          if [ -z "$number" ]; then
+            url=$(gh issue create --title "$title" --body-file "$RUNNER_TEMP/body.md" \
+              --label "component: runtime" --label "priority: medium" --label "size: s" \
+              --label "type: chore" --label dependencies --label automated)
+            echo "Opened $url" >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh issue edit "$number" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+            if [ "$old_title" != "$title" ]; then
+              gh issue comment "$number" --body "Upstream moved: now \`$CANDIDATE\` (was \`${old_title##* }\`). The body above is this run's."
+            fi
+            echo "Updated #$number for $CANDIDATE" >> "$GITHUB_STEP_SUMMARY"
+          fi
