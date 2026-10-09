@@ -49,6 +49,15 @@ the recipe turns flash attention on (Qwen-Image 2.1). Flags given at launch
 are the defaults for every request. `args_tests.rs` pins one whole argv per
 family.
 
+## Is it up?
+
+`sd-server` has no `/health`. Readiness and the health monitor ask
+`/v1/models` instead (`RuntimeKind::health_path`), which answers without the
+lock a render holds, and the body must list `sd-cpp-local`: a 200 from any
+other server on the port is not sd-server. `health_tests.rs` holds a render
+open on `fake_server.rs`, a test-only stand-in, and probes three times
+within the health client's two seconds.
+
 ## The source build
 
 `git clone --depth 1 --branch <tag> --recurse-submodules

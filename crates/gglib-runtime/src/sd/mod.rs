@@ -17,8 +17,15 @@ pub use uninstall::{sd_files_present, uninstall_sd};
 pub(crate) use spawn::build_and_spawn_sd;
 
 #[cfg(test)]
+pub(crate) mod fake_server;
+
+#[cfg(test)]
 #[path = "args_tests.rs"]
 mod args_tests;
+
+#[cfg(test)]
+#[path = "health_tests.rs"]
+mod health_tests;
 
 #[cfg(test)]
 #[path = "release_tests.rs"]

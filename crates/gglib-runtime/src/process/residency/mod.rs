@@ -388,7 +388,7 @@ impl ResidentSet {
             return Ok(None);
         }
 
-        if !check_http_health(resident.port).await {
+        if !check_http_health(resident.port, resident.runtime).await {
             warn!(
                 model_id = %resident.model_id,
                 port = %resident.port,

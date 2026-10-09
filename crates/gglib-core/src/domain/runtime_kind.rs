@@ -43,7 +43,53 @@ impl RuntimeKind {
             Self::StableDiffusion => "stable-diffusion.cpp",
         }
     }
+
+    /// The server program's name, as log lines and errors say it:
+    /// "llama-server" or "sd-server".
+    #[must_use]
+    pub const fn server_name(self) -> &'static str {
+        match self {
+            Self::Llama => "llama-server",
+            Self::StableDiffusion => "sd-server",
+        }
+    }
+
+    /// The path a readiness probe asks for.
+    ///
+    /// llama-server answers `/health`. `sd-server` has no health route; its
+    /// `/v1/models` answers without taking the lock a render holds, so it is
+    /// the one route that says the server is up even while it draws.
+    #[must_use]
+    pub const fn health_path(self) -> &'static str {
+        match self {
+            Self::Llama => "/health",
+            Self::StableDiffusion => "/v1/models",
+        }
+    }
+
+    /// Whether a 2xx body from [`Self::health_path`] comes from this runtime's
+    /// server and not from something else listening on the port.
+    ///
+    /// llama-server's `/health` is a small JSON object naming a status, its
+    /// slots or an error, or nothing at all. `sd-server` lists exactly one
+    /// model, `sd-cpp-local`, whatever it has loaded; a 200 without that id
+    /// is some other server.
+    #[must_use]
+    pub fn is_ready_body(self, body: &str) -> bool {
+        match self {
+            Self::Llama => {
+                body.contains("status")
+                    || body.contains("slots")
+                    || body.contains("error")
+                    || body.is_empty()
+            }
+            Self::StableDiffusion => body.contains(SD_SERVER_MODEL_ID),
+        }
+    }
 }
+
+/// The one model id `sd-server`'s `/v1/models` lists, whatever it loaded.
+const SD_SERVER_MODEL_ID: &str = "sd-cpp-local";
 
 #[cfg(test)]
 mod tests {
@@ -71,6 +117,40 @@ mod tests {
         for family in ImageFamily::ALL {
             assert_eq!(RuntimeKind::of(Some(family)), RuntimeKind::StableDiffusion);
         }
+    }
+
+    #[test]
+    fn each_runtime_is_probed_at_its_own_path() {
+        assert_eq!(RuntimeKind::Llama.health_path(), "/health");
+        assert_eq!(RuntimeKind::StableDiffusion.health_path(), "/v1/models");
+        assert_eq!(RuntimeKind::Llama.server_name(), "llama-server");
+        assert_eq!(RuntimeKind::StableDiffusion.server_name(), "sd-server");
+    }
+
+    #[test]
+    fn llama_keeps_its_health_body_test() {
+        for body in [
+            r#"{"status":"ok"}"#,
+            r#"{"slots":[]}"#,
+            r#"{"error":"x"}"#,
+            "",
+        ] {
+            assert!(RuntimeKind::Llama.is_ready_body(body), "{body:?}");
+        }
+        assert!(!RuntimeKind::Llama.is_ready_body("<html>nginx</html>"));
+    }
+
+    #[test]
+    fn sd_is_ready_only_when_it_lists_its_model() {
+        let sd = RuntimeKind::StableDiffusion;
+        assert!(sd.is_ready_body(
+            r#"{"object":"list","data":[{"id":"sd-cpp-local","object":"model","owned_by":"local"}]}"#
+        ));
+        // Another OpenAI-shaped server on the port, a llama-server among them.
+        assert!(!sd.is_ready_body(r#"{"object":"list","data":[]}"#));
+        assert!(!sd.is_ready_body(r#"{"data":[{"id":"qwen3-8b"}]}"#));
+        assert!(!sd.is_ready_body(r#"{"status":"ok"}"#));
+        assert!(!sd.is_ready_body(""));
     }
 
     #[test]

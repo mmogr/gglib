@@ -339,7 +339,7 @@ async fn launch(
     // — never answers `/health`, and polling a dead port until a budget sized
     // for a large model runs out would make a failed launch take minutes to
     // report.
-    let health = wait_for_http_health(port, deadline_secs);
+    let health = wait_for_http_health(port, deadline_secs, spec.runtime());
     tokio::pin!(health);
     loop {
         tokio::select! {
