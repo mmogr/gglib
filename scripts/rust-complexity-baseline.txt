@@ -133,11 +133,11 @@ crates/gglib-proxy/tests/integration_loop_guard.rs 376
 crates/gglib-proxy/tests/integration_mcp_gateway.rs 433
 crates/gglib-proxy/tests/integration_proxy_pipeline.rs 644
 crates/gglib-proxy/tests/integration_slot_roundtrip.rs 593
-crates/gglib-runtime/src/command.rs 689
+crates/gglib-runtime/src/command.rs 692
 crates/gglib-runtime/src/launch_narration.rs 694
 crates/gglib-runtime/src/llama/args/cache_ram.rs 328
 crates/gglib-runtime/src/llama/build/mod.rs 415
-crates/gglib-runtime/src/llama/download/mod.rs 980
+crates/gglib-runtime/src/llama/download/mod.rs 982
 crates/gglib-runtime/src/llama/update.rs 348
 crates/gglib-runtime/src/ports_impl/llm_completion/layers_tests.rs 312
 crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 370
