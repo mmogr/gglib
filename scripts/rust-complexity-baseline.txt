@@ -34,6 +34,7 @@ crates/gglib-cli/src/model_commands.rs 378
 crates/gglib-cli/src/presentation/explain_display.rs 426
 crates/gglib-cli/src/presentation/explain_display_tests.rs 700
 crates/gglib-cli/tests/mcp_servers.rs 338
+crates/gglib-cli/tests/setup_scripts.rs 313
 crates/gglib-core/src/contracts/http/daemon.rs 334
 crates/gglib-core/src/domain/admission.rs 325
 crates/gglib-core/src/domain/agent/config.rs 744

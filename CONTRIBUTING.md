@@ -598,7 +598,7 @@ make pre-commit
 ### Working on the frontend
 
 ```bash
-npm install
+npm ci               # Install what package-lock.json says, without rewriting it
 npm run dev          # Start Vite dev server
 npm run test:run     # Run Vitest suite
 npm run build        # Production build (required before integration tests)
