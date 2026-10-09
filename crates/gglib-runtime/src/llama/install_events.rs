@@ -71,6 +71,18 @@ impl InstallPhase {
             Self::Verify => "Verifying installation...",
         }
     }
+
+    /// [`Self::label`] for an install of `product`: the download names it,
+    /// every other phase reads the same for every product.
+    ///
+    /// `label_for("llama.cpp")` is `label()`.
+    #[must_use]
+    pub fn label_for(self, product: &str) -> String {
+        match self {
+            Self::Download => format!("Downloading {product} binaries..."),
+            _ => self.label().to_owned(),
+        }
+    }
 }
 
 // =============================================================================
@@ -132,3 +144,7 @@ pub enum LlamaProgressEvent {
         message: String,
     },
 }
+
+#[cfg(test)]
+#[path = "install_events_tests.rs"]
+mod tests;

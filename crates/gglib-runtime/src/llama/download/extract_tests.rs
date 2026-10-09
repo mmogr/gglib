@@ -3,7 +3,7 @@
 //!
 //! Unix only: the permission bits are half of what these pin.
 
-use super::extract_binaries;
+use super::tests::extract_binaries;
 use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::Write;

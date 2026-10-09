@@ -4,6 +4,7 @@
 // it; here it is an error wherever clippy runs.
 #![deny(clippy::await_holding_lock, clippy::await_holding_refcell_ref)]
 
+pub(crate) mod binary_install;
 mod command;
 // Crate-internal: no consumer names these four by path — `compose`,
 // `health_monitor` and `server_config` are reached through the re-exports

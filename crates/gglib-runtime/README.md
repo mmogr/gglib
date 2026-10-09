@@ -78,6 +78,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`launch_narration.rs`** — Human-readable account of how a launch was configured
 - **`server_config.rs`** / **`unified_server_config.rs`** — Launch argument resolution
 - **`pidfile/`** — PID file writing and cleanup for spawned servers
+- **`binary_install/`** — Installing a server binary from a pinned GitHub release, for any product
 - **`llama/`** — llama-server and llama-cli process management
 - **`proxy/`** — Proxy supervisor and routing logic
 - **`process/`** — Generic process lifecycle (start, stop, signal)
