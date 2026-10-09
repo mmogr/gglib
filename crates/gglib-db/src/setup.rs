@@ -18,6 +18,8 @@ pub use attachments::sweep_unlinked_attachments;
 mod attachments;
 #[path = "setup_branches.rs"]
 mod branches;
+#[path = "setup_model_components.rs"]
+mod model_components;
 #[path = "setup_model_files.rs"]
 mod model_files;
 #[path = "setup_models.rs"]
@@ -207,6 +209,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
 
     model_files::create_model_files_table(pool).await?;
     model_files::add_projector_column(pool).await?;
+    model_components::create_model_components_table(pool).await?;
 
     // The settings table, from the one place that defines it. Here and not
     // after the schema, because the models rebuild below reads it.

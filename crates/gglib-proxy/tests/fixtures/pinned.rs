@@ -76,6 +76,7 @@ impl StaticCatalog {
     /// `-vision` is linked to a projector there too.
     fn row(id: u32, name: &str) -> Model {
         Model {
+            components: Vec::new(),
             image_family: None,
             id: i64::from(id),
             name: name.to_owned(),

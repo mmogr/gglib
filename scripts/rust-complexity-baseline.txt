@@ -59,7 +59,7 @@ crates/gglib-core/src/domain/inference.rs 1915
 crates/gglib-core/src/domain/inference_tests.rs 1409
 crates/gglib-core/src/domain/kv_estimate.rs 341
 crates/gglib-core/src/domain/mcp/types.rs 574
-crates/gglib-core/src/domain/model.rs 317
+crates/gglib-core/src/domain/model.rs 399
 crates/gglib-core/src/domain/model_sampling.rs 674
 crates/gglib-core/src/domain/query.rs 408
 crates/gglib-core/src/domain/recommendation.rs 381
@@ -94,8 +94,9 @@ crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 321
 crates/gglib-db/src/repositories/sqlite_chat_history_repository_tests.rs 322
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 354
 crates/gglib-db/src/repositories/sqlite_mcp_repository_tests.rs 377
-crates/gglib-db/src/repositories/sqlite_model_repository.rs 1063
-crates/gglib-db/src/setup.rs 715
+crates/gglib-db/src/repositories/sqlite_model_repository.rs 1091
+crates/gglib-db/src/repositories/sqlite_model_repository_components_tests.rs 372
+crates/gglib-db/src/setup.rs 718
 crates/gglib-db/src/setup_models_tests.rs 317
 crates/gglib-download/src/cli_exec/exec/python_bridge.rs 331
 crates/gglib-download/src/cli_exec/exec/python_env.rs 1544
@@ -156,7 +157,7 @@ crates/gglib-runtime/src/ports_impl/llm_completion/layers_tests.rs 312
 crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 370
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 340
 crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 307
-crates/gglib-runtime/src/ports_impl/model_catalog_tests.rs 301
+crates/gglib-runtime/src/ports_impl/model_catalog_tests.rs 302
 crates/gglib-runtime/src/process/admission/queue_tests.rs 972
 crates/gglib-runtime/src/process/admission/state.rs 690
 crates/gglib-runtime/src/process/residency/launch.rs 538

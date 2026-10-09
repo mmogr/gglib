@@ -11,6 +11,7 @@ fn create_test_model() -> Model {
     metadata.insert("test.key".to_string(), "test.value".to_string());
 
     Model {
+        components: Vec::new(),
         image_family: None,
         dialect_spec: None,
         id: 1,

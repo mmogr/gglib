@@ -162,6 +162,8 @@ pub(crate) fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, Repos
             .ok()
             .flatten()
             .and_then(|name| name.parse().ok()),
+        // Rows of their own table; the repository reads them beside this one.
+        components: Vec::new(),
     })
 }
 

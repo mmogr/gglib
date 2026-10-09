@@ -65,8 +65,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`loop_guard_trip_writer.rs`** — The loop guard's batched writer: the sink the proxy records into, and the task that writes and prunes the log
 - **`setup.rs`** — Schema migrations and database initialization
 - **`setup_attachments.rs`** — The `attachments` table (an image's bytes under the SHA-256 of them) and `message_attachments` (the images each message carries, in order), and the sweep of images no message carries
-- **`setup_models.rs`** — The `models` table: its definition, the columns added to it since, its indexes, and the one-time rebuild that stops it reusing ids
+- **`setup_models.rs`** — The `models` table: its definition, the columns added to it since (`image_family` the latest), its indexes, and the one-time rebuild that stops it reusing ids
 - **`setup_model_files.rs`** — The `model_files` table, and `models.projector_path` with the one-time link of each model to the projector among its own files
+- **`setup_model_components.rs`** — The `model_components` table: the files an image model draws with beside its weights, one row per role, gone with their model, indexed by path
 - **`setup_settings.rs`** — Settings rows whose setting is gone: the `auto_tune` row reclaimed, and the one-time fold of the loop guard's `proxy_loop_detection` row into `loop_guard_mode`
 - **`repositories/`** — `SQLite` implementations of all repository ports
 

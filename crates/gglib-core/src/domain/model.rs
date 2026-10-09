@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use super::capabilities::ModelCapabilities;
-use super::image_family::ImageFamily;
+use super::image_family::{ComponentRole, ImageFamily};
 use super::inference::{DefaultsOrigin, InferenceConfig};
 use super::server_config::ServerConfig;
 
@@ -166,6 +166,10 @@ pub struct Model {
     /// import or retag; `None` for a model that chats.
     #[serde(default)]
     pub image_family: Option<ImageFamily>,
+    /// The files this image model draws with beside its weights, one per
+    /// role at most. Several models may name one file.
+    #[serde(default)]
+    pub components: Vec<ModelComponent>,
 }
 
 /// A model to be inserted into the system (no ID yet).
@@ -236,6 +240,18 @@ pub struct NewModel {
     /// See [`Model::image_family`].
     #[serde(default)]
     pub image_family: Option<ImageFamily>,
+    /// See [`Model::components`].
+    #[serde(default)]
+    pub components: Vec<ModelComponent>,
+}
+
+/// A file an image model draws with beside its weights, in the role it plays.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelComponent {
+    /// The role the file plays.
+    pub role: ComponentRole,
+    /// Absolute path to the file.
+    pub path: PathBuf,
 }
 
 impl Model {
@@ -251,6 +267,22 @@ impl Model {
     #[must_use]
     pub const fn generates_images(&self) -> bool {
         self.image_family.is_some()
+    }
+
+    /// The roles this model's family needs that it has no file linked for,
+    /// in the recipe's order; empty for a model that chats.
+    #[must_use]
+    pub fn missing_components(&self) -> Vec<ComponentRole> {
+        let Some(family) = self.image_family else {
+            return Vec::new();
+        };
+        family
+            .recipe()
+            .components
+            .iter()
+            .map(|spec| spec.role)
+            .filter(|role| !self.components.iter().any(|c| c.role == *role))
+            .collect()
     }
 }
 
@@ -291,6 +323,7 @@ impl NewModel {
             server_defaults: None,
             dialect_spec: None,
             image_family: None,
+            components: Vec::new(),
         }
     }
 }
@@ -313,5 +346,54 @@ mod tests {
         assert!((model.param_count_b - 7.0).abs() < f64::EPSILON);
         assert!(model.architecture.is_none());
         assert!(model.tags.is_empty());
+    }
+
+    fn flux(components: &[ComponentRole]) -> Model {
+        let mut new = NewModel::new(
+            "flux".to_owned(),
+            PathBuf::from("/models/flux1-schnell-q8_0.gguf"),
+            12.0,
+            Utc::now(),
+        );
+        new.image_family = Some(ImageFamily::Flux1);
+        new.components = components
+            .iter()
+            .map(|role| ModelComponent {
+                role: *role,
+                path: PathBuf::from(format!("/models/{role}.safetensors")),
+            })
+            .collect();
+        Model::stored(1, &new)
+    }
+
+    #[test]
+    fn missing_components_are_the_recipe_roles_with_no_link() {
+        assert_eq!(
+            flux(&[]).missing_components(),
+            [
+                ComponentRole::Vae,
+                ComponentRole::ClipL,
+                ComponentRole::T5xxl
+            ]
+        );
+        assert_eq!(
+            flux(&[ComponentRole::ClipL]).missing_components(),
+            [ComponentRole::Vae, ComponentRole::T5xxl]
+        );
+        let all = [
+            ComponentRole::T5xxl,
+            ComponentRole::Vae,
+            ComponentRole::ClipL,
+        ];
+        assert!(flux(&all).missing_components().is_empty());
+    }
+
+    #[test]
+    fn a_chat_model_misses_no_component() {
+        let model = Model::stored(
+            1,
+            &NewModel::new("qwen".to_owned(), PathBuf::from("/m.gguf"), 7.0, Utc::now()),
+        );
+        assert!(model.missing_components().is_empty());
     }
 }
