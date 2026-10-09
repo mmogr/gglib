@@ -465,7 +465,14 @@ fn map_runtime_error(err: &ModelRuntimeError) -> GuiError {
         ),
         // Serving an image model is the caller's mistake, said as the runtime
         // says it, and not a failure of the server.
-        ModelRuntimeError::ImageModelCannotChat(_) => GuiError::ValidationFailed(err.to_string()),
+        ModelRuntimeError::ImageModelCannotChat(_)
+        | ModelRuntimeError::ImageModelIncomplete { .. } => {
+            GuiError::ValidationFailed(err.to_string())
+        }
+        // Not the server failing: nothing to draw with yet, or no room beside
+        // a held model. The runtime's words name the remedy.
+        ModelRuntimeError::ImageRuntimeNotInstalled
+        | ModelRuntimeError::ImageModelDoesNotFit { .. } => GuiError::Unavailable(err.to_string()),
         _ => GuiError::Internal(format!("Failed to start server: {err}")),
     }
 }
@@ -761,6 +768,38 @@ mod tests {
             }
             other => panic!("expected ValidationFailed, got {other:?}"),
         }
+    }
+
+    /// An image model missing a file is the caller's to fix; no runtime to
+    /// draw with, or no room beside a held model, is unavailability, not a
+    /// server failure. Each keeps the runtime's words.
+    #[test]
+    fn image_refusals_map_to_validation_and_unavailable() {
+        let incomplete = map_runtime_error(&ModelRuntimeError::ImageModelIncomplete {
+            model: "flux".to_owned(),
+            missing: vec![gglib_core::domain::ComponentRole::Vae],
+        });
+        assert!(
+            matches!(&incomplete, GuiError::ValidationFailed(m) if m.contains("VAE")),
+            "{incomplete:?}"
+        );
+
+        let not_installed = map_runtime_error(&ModelRuntimeError::ImageRuntimeNotInstalled);
+        assert!(
+            matches!(&not_installed, GuiError::Unavailable(m) if m.contains("gglib config sd install")),
+            "{not_installed:?}"
+        );
+
+        let no_room = map_runtime_error(&ModelRuntimeError::ImageModelDoesNotFit {
+            model: "flux".to_owned(),
+            held_model: "qwen".to_owned(),
+            needed_bytes: Some(1),
+            free_bytes: None,
+        });
+        assert!(
+            matches!(&no_room, GuiError::Unavailable(m) if m.contains("'qwen'")),
+            "{no_room:?}"
+        );
     }
 }
 

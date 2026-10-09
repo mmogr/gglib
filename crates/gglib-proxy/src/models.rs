@@ -528,6 +528,23 @@ impl From<ModelRuntimeError> for ErrorResponse {
                 "pinned_model_mismatch",
             ),
             ModelRuntimeError::ImageModelCannotChat(name) => Self::image_model_cannot_chat(&name),
+            // The runtime's words, which already name the command, every
+            // missing role, or the held model and the bytes.
+            ModelRuntimeError::ImageRuntimeNotInstalled => Self::with_code(
+                err.to_string(),
+                "server_error",
+                "image_runtime_not_installed",
+            ),
+            ModelRuntimeError::ImageModelIncomplete { .. } => Self::with_code(
+                err.to_string(),
+                "invalid_request_error",
+                "image_model_incomplete",
+            ),
+            ModelRuntimeError::ImageModelDoesNotFit { .. } => Self::with_code(
+                err.to_string(),
+                "service_unavailable",
+                "image_model_does_not_fit",
+            ),
             ModelRuntimeError::Internal(msg) => Self::internal_error(&msg),
         }
     }

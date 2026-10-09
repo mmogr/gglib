@@ -250,3 +250,99 @@ fn an_image_model_cannot_chat_is_an_invalid_request() {
     assert_eq!(envelope.r#type, error_type::INVALID_REQUEST);
     assert!(envelope.message.contains("'flux'"), "{}", envelope.message);
 }
+
+/// No runtime to draw with is a 503 the caller cannot retry its way out of:
+/// the server-error type, and words that name the install command.
+#[test]
+fn an_image_runtime_not_installed_is_a_503_that_names_the_command() {
+    let refused = ModelRuntimeError::ImageRuntimeNotInstalled;
+
+    assert_eq!(refused.suggested_status_code(), 503);
+    assert!(!refused.is_retryable());
+    let envelope = RuntimeErrorEnvelope::from(&refused);
+    assert_eq!(envelope.r#type, error_type::SERVER_ERROR);
+    assert!(!envelope.retryable);
+    assert!(
+        envelope.message.contains("`gglib config sd install`"),
+        "{}",
+        envelope.message
+    );
+    assert!(
+        envelope.message.contains("sd-server"),
+        "{}",
+        envelope.message
+    );
+}
+
+/// A model missing a file is the caller's to fix: a 400, and every missing
+/// role named with the flag that links it.
+#[test]
+fn an_incomplete_image_model_is_a_400_that_names_every_missing_role() {
+    let refused = ModelRuntimeError::ImageModelIncomplete {
+        model: "flux1-schnell".to_owned(),
+        missing: vec![
+            ComponentRole::Vae,
+            ComponentRole::ClipL,
+            ComponentRole::T5xxl,
+        ],
+    };
+
+    assert_eq!(refused.suggested_status_code(), 400);
+    assert!(!refused.is_retryable());
+    let envelope = RuntimeErrorEnvelope::from(&refused);
+    assert_eq!(envelope.r#type, error_type::INVALID_REQUEST);
+    assert_eq!(
+        envelope.message,
+        "Image model 'flux1-schnell' has no VAE, CLIP-L or T5-XXL linked, so it cannot draw. \
+         Link each with `gglib model update \"flux1-schnell\" --component vae=<path> \
+         --component clip_l=<path> --component t5xxl=<path>`."
+    );
+
+    let one = ModelRuntimeError::ImageModelIncomplete {
+        model: "sdxl".to_owned(),
+        missing: vec![ComponentRole::Vae],
+    };
+    assert_eq!(
+        one.to_string(),
+        "Image model 'sdxl' has no VAE linked, so it cannot draw. Link it with \
+         `gglib model update \"sdxl\" --component vae=<path>`."
+    );
+}
+
+/// No room beside a held model is a retryable 503, and the words name the
+/// held model and both sizes, or say the free memory could not be read.
+#[test]
+fn an_image_model_that_does_not_fit_is_a_retryable_503_naming_the_held_model_and_bytes() {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let refused = ModelRuntimeError::ImageModelDoesNotFit {
+        model: "flux1-schnell".to_owned(),
+        held_model: "qwen3-27b".to_owned(),
+        needed_bytes: Some(28 * GIB),
+        free_bytes: Some(9 * GIB),
+    };
+
+    assert_eq!(refused.suggested_status_code(), 503);
+    assert!(refused.is_retryable());
+    let envelope = RuntimeErrorEnvelope::from(&refused);
+    assert_eq!(envelope.r#type, error_type::SERVICE_UNAVAILABLE);
+    assert!(envelope.retryable);
+    assert_eq!(
+        envelope.message,
+        "Image model 'flux1-schnell' needs 28.00 GiB; 9.00 GiB is free beside 'qwen3-27b', \
+         which a chat is using. Use a smaller family, stop the chat model, or draw from a chat \
+         on the paired machine."
+    );
+
+    let unknown = ModelRuntimeError::ImageModelDoesNotFit {
+        model: "flux1-schnell".to_owned(),
+        held_model: "qwen3-27b".to_owned(),
+        needed_bytes: None,
+        free_bytes: None,
+    };
+    assert_eq!(
+        unknown.to_string(),
+        "Image model 'flux1-schnell' needs more memory than is free; how much is free beside \
+         'qwen3-27b' cannot be read, which a chat is using. Use a smaller family, stop the chat \
+         model, or draw from a chat on the paired machine."
+    );
+}

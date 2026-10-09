@@ -24,7 +24,8 @@ use thiserror::Error;
 
 use crate::cache_config::CacheRamSetting;
 use crate::domain::{
-    AdmissionSnapshot, CacheRamHealth, LaunchNarration, ModelSamplingDefaults, RuntimeKind,
+    AdmissionSnapshot, CacheRamHealth, ComponentRole, LaunchNarration, ModelSamplingDefaults,
+    RuntimeKind,
 };
 use crate::ports::ProcessHandle;
 pub use crate::ports::pinned::PinnedSpec;
@@ -343,6 +344,47 @@ pub enum ModelRuntimeError {
     #[error("Model '{0}' is an image model: it draws images and cannot be served for chat")]
     ImageModelCannotChat(String),
 
+    /// An image model was asked for and stable-diffusion.cpp's `sd-server`,
+    /// which draws, is not installed. Not retryable: installing it is the
+    /// fix, and the message names the command.
+    #[error(
+        "The image runtime, stable-diffusion.cpp's sd-server, is not installed. Install it \
+         with `{cmd}`, or from Settings → Image runtime.",
+        cmd = crate::paths::SD_INSTALL_COMMAND
+    )]
+    ImageRuntimeNotInstalled,
+
+    /// An image model's family needs files it has none linked for, so
+    /// `sd-server` could not load it.
+    #[error("{}", image_refusal::incomplete(model, missing))]
+    ImageModelIncomplete {
+        /// The model's name.
+        model: String,
+        /// Every role its family needs and it has no file for, in the
+        /// recipe's order.
+        missing: Vec<ComponentRole>,
+    },
+
+    /// Retryable: an image model needs more memory than is free, and the
+    /// model it would displace is held by a run, so it cannot be swapped out
+    /// now. Refused at once rather than queued: the hold can last as long as
+    /// the run does.
+    #[error(
+        "{}",
+        image_refusal::does_not_fit(model, held_model, *needed_bytes, *free_bytes)
+    )]
+    ImageModelDoesNotFit {
+        /// The image model's name.
+        model: String,
+        /// The resident model that is held and would have to go.
+        held_model: String,
+        /// What the image model needs, its files and its family's margin,
+        /// when the verdict knew it.
+        needed_bytes: Option<u64>,
+        /// What is free beside the held model, when it can be read.
+        free_bytes: Option<u64>,
+    },
+
     /// Internal error during runtime operations.
     #[error("Internal error: {0}")]
     Internal(String),
@@ -353,21 +395,28 @@ impl ModelRuntimeError {
     /// where retrying may succeed.
     #[must_use]
     pub const fn is_retryable(&self) -> bool {
-        matches!(self, Self::ModelLoading | Self::AdmissionTimeout(_))
+        matches!(
+            self,
+            Self::ModelLoading | Self::AdmissionTimeout(_) | Self::ImageModelDoesNotFit { .. }
+        )
     }
 
     /// Returns a suggested HTTP status code for this error.
     #[must_use]
     pub const fn suggested_status_code(&self) -> u16 {
         match self {
-            Self::ModelLoading | Self::AdmissionTimeout(_) => 503,
+            Self::ModelLoading
+            | Self::AdmissionTimeout(_)
+            | Self::ImageModelDoesNotFit { .. }
+            | Self::ImageRuntimeNotInstalled => 503,
             // A pinned mismatch is 404, not 403: from the client's point of
             // view the model it asked for does not exist on this endpoint.
             Self::ModelNotFound(_)
             | Self::ModelFileNotFound(_)
             | Self::PinnedModelMismatch { .. } => 404,
-            // The model exists; the request named the wrong kind of model.
-            Self::ImageModelCannotChat(_) => 400,
+            // The model exists; the request named the wrong kind of model,
+            // or one that is missing a file it needs.
+            Self::ImageModelCannotChat(_) | Self::ImageModelIncomplete { .. } => 400,
             Self::SpawnFailed(_) | Self::HealthCheckFailed(_) | Self::Internal(_) => 500,
         }
     }
@@ -419,15 +468,19 @@ pub struct RuntimeErrorEnvelope {
 impl From<&ModelRuntimeError> for RuntimeErrorEnvelope {
     fn from(err: &ModelRuntimeError) -> Self {
         let discriminant = match err {
-            ModelRuntimeError::ModelLoading | ModelRuntimeError::AdmissionTimeout(_) => {
-                error_type::SERVICE_UNAVAILABLE
-            }
+            ModelRuntimeError::ModelLoading
+            | ModelRuntimeError::AdmissionTimeout(_)
+            | ModelRuntimeError::ImageModelDoesNotFit { .. } => error_type::SERVICE_UNAVAILABLE,
             ModelRuntimeError::ModelNotFound(_)
             | ModelRuntimeError::ModelFileNotFound(_)
             | ModelRuntimeError::PinnedModelMismatch { .. }
-            | ModelRuntimeError::ImageModelCannotChat(_) => error_type::INVALID_REQUEST,
+            | ModelRuntimeError::ImageModelCannotChat(_)
+            | ModelRuntimeError::ImageModelIncomplete { .. } => error_type::INVALID_REQUEST,
+            // A 503 that retrying cannot fix: nothing changes until someone
+            // installs the runtime.
             ModelRuntimeError::SpawnFailed(_)
             | ModelRuntimeError::HealthCheckFailed(_)
+            | ModelRuntimeError::ImageRuntimeNotInstalled
             | ModelRuntimeError::Internal(_) => error_type::SERVER_ERROR,
         };
         Self {
@@ -616,6 +669,9 @@ impl ModelRuntimePort for NoopModelRuntime {
         Ok(())
     }
 }
+
+#[path = "model_runtime_image_refusal.rs"]
+mod image_refusal;
 
 #[cfg(test)]
 #[path = "model_runtime_tests.rs"]

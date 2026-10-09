@@ -98,6 +98,9 @@ const CODES: &[ErrorCode] = &[
     row("not_an_embedding_model", INVALID, Some(400), "An embeddings request named a model not tagged embedding."),
     row("embedding_model_cannot_chat", INVALID, Some(400), "A chat request named an embedding model."),
     row("image_model_cannot_chat", INVALID, Some(400), "A chat request named an image model, which draws and cannot chat."),
+    row("image_model_incomplete", INVALID, Some(400), "An image model's family needs a file it has none linked for, such as its VAE; the message names every missing role and the gglib model update --component command that links it."),
+    row("image_runtime_not_installed", SERVER, Some(503), "An image model was asked for and stable-diffusion.cpp's sd-server is not installed; install it with gglib config sd install. Retrying will not help."),
+    row("image_model_does_not_fit", UNAVAILABLE, Some(503), "An image model needs more memory than is free, and the model it would displace is held by a run; refused at once, retry when that run ends."),
     row("model_cannot_read_images", INVALID, Some(400), "A message carries an image and the model has no projector linked; link one with gglib model update <model> --projector <path>."),
     row("request_too_large", INVALID, Some(413), "The request body is over the 32 MiB limit."),
     // An image a message carries by id (`AttachmentError`).
