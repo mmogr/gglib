@@ -110,7 +110,7 @@ This enables:
 - **`path.rs`** — Path validation and PATH environment variable utilities
 - **`combined.rs`** — Unified tool executor dispatching to MCP and builtin tools
 - **`tool_executor.rs`** — The MCP side of that executor: runs a qualified tool on its server
-- **`tool_images.rs`** — An MCP tool's content split into the text the model reads and the images stored through `AttachmentService`, each named in the text, never sent as bytes
+- **`tool_images.rs`** — An MCP tool's content split into the text the model reads and the images stored through `AttachmentService`, each named in the text, never sent as bytes ([ADR 0016](../../docs/adr/0016-a-tools-image-is-an-attachment-on-its-tool-row.md))
 - **`builtin/`** — In-process builtin tools (filesystem, time) with optional sandbox
 - **`resolver/`** — Cross-platform executable path resolution with 6-step search strategy
 

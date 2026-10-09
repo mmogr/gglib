@@ -15,6 +15,7 @@ answered its id, type, size and estimated tokens; a turn then names it by
 that id. `GET /v1/attachments/{id}` answers the bytes as they were sent, with
 `no-store`: a device keeps none of this machine's chats. An id that is not stored is `404
 attachment_not_found`. Both go through the same port, behind the same guard.
+An image a tool made is read there too, by the id its tool row lists.
 
 Pairing is the grant, and `gglib remote forget` takes it away with the
 key. Only a request the tunnel edge marked with a device's name reaches a

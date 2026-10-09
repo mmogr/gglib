@@ -97,6 +97,16 @@ Which models read images is in `/v1/models`: such a model's entry carries
 - **The body limit is 32 MiB** on `POST /v1/chat/completions` and
   `PUT /v1/runs/{id}`. A larger body is answered with HTTP 413 and the code
   `request_too_large`.
+- **A tool's image appears in the reply and is fetched by id.** When an MCP
+  tool returns an image in an agent run, gglib stores it as it stores an
+  uploaded one, and the tool result's text names it
+  (`[image 1024x1024 PNG stored]`): that sentence is all the model reads of
+  it. A client that reads the run's events, as a paired device does, finds it
+  in the `tool_call_complete` frame's `result.images` and in the saved tool
+  row's `images`, each as id, type, width and height, never its bytes, and
+  reads the bytes at `GET /v1/attachments/{id}`. Through the `/mcp` gateway
+  nothing is stored: a server's image item comes back as an MCP image item,
+  with its base64 `data` and `mimeType`.
 
 ## Thinking
 
