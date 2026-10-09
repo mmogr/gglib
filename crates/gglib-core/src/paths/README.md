@@ -7,7 +7,8 @@ Path utilities for gglib data directories and user-configurable locations.
 This module provides the canonical path resolution for all gglib components:
 - Database location
 - Models directory
-- Llama.cpp binaries
+- Llama.cpp binaries (`.llama/`)
+- stable-diffusion.cpp's `sd-server` (`.sd/`)
 - Application data and resource roots
 
 # The models directory

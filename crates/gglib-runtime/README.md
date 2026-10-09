@@ -81,6 +81,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`binary_install/`** — Installing a server binary from a pinned GitHub release, for any product
 - **`llama/`** — llama-server and llama-cli process management
 - **`proxy/`** — Proxy supervisor and routing logic
+- **`sd/`** — stable-diffusion.cpp's `sd-server`: install, status, uninstall
 - **`process/`** — Generic process lifecycle (start, stop, signal)
 - **`system/`** — System probes (GPU detection, memory info)
 - **`ports_impl/`** — Port trait implementations for runtime

@@ -14,9 +14,11 @@ pub(crate) use extract::extract_binaries;
 pub(crate) use install::install_prebuilt_from;
 pub(crate) use install::{PrebuiltTarget, completed, install_prebuilt, started};
 pub(crate) use record::PrebuiltRecord;
-pub(crate) use release::{ArchiveLayout, AssetChoice, AssetMatcher, ReleaseSpec};
+pub(crate) use release::{
+    ArchiveLayout, AssetChoice, AssetMatcher, ReleaseSelector, ReleaseSpec, resolve_selector,
+};
 #[cfg(test)]
-pub(crate) use release::{GITHUB_API, ReleaseSelector, selector_from_override};
+pub(crate) use release::{GITHUB_API, selector_from_override};
 
 #[cfg(test)]
 #[path = "install_tests.rs"]

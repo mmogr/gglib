@@ -22,13 +22,6 @@ pub(crate) enum ArchiveLayout {
     /// and anything deeper are skipped.
     OneDirDeep,
     /// At the archive's root; anything in a directory is skipped.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "stable-diffusion.cpp, the next product, ships flat archives"
-        )
-    )]
     Flat,
 }
 

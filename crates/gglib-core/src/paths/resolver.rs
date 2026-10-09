@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use super::{
     ModelsDirSource, PathError, data_root, database_path, llama_server_path, resolve_models_dir,
-    resource_root,
+    resource_root, sd_server_path,
 };
 
 /// All resolved paths captured in a single struct.
@@ -27,6 +27,8 @@ pub struct ResolvedPaths {
     pub database_path: PathBuf,
     /// Path to the llama-server binary
     pub llama_server_path: PathBuf,
+    /// Path to the sd-server binary, stable-diffusion.cpp's image server
+    pub sd_server_path: PathBuf,
     /// Path to the models directory
     pub models_dir: PathBuf,
     /// How the models directory was resolved
@@ -44,6 +46,7 @@ impl ResolvedPaths {
         let resource_root = resource_root()?;
         let database_path = database_path()?;
         let llama_server_path = llama_server_path()?;
+        let sd_server_path = sd_server_path()?;
         let models_resolution = resolve_models_dir(None)?;
 
         Ok(Self {
@@ -51,6 +54,7 @@ impl ResolvedPaths {
             resource_root,
             database_path,
             llama_server_path,
+            sd_server_path,
             models_dir: models_resolution.path,
             models_source: models_resolution.source,
         })
@@ -64,6 +68,7 @@ impl ResolvedPaths {
         let resource_root = resource_root()?;
         let database_path = database_path()?;
         let llama_server_path = llama_server_path()?;
+        let sd_server_path = sd_server_path()?;
         let models_resolution = resolve_models_dir(models_dir)?;
 
         Ok(Self {
@@ -71,6 +76,7 @@ impl ResolvedPaths {
             resource_root,
             database_path,
             llama_server_path,
+            sd_server_path,
             models_dir: models_resolution.path,
             models_source: models_resolution.source,
         })
@@ -87,6 +93,7 @@ impl std::fmt::Display for ResolvedPaths {
             "llama_server_path = {}",
             self.llama_server_path.display()
         )?;
+        writeln!(f, "sd_server_path = {}", self.sd_server_path.display())?;
         writeln!(f, "models_dir = {}", self.models_dir.display())?;
         write!(f, "models_source = {:?}", self.models_source)
     }
@@ -138,6 +145,7 @@ mod tests {
         assert!(output.contains("resource_root = "));
         assert!(output.contains("database_path = "));
         assert!(output.contains("llama_server_path = "));
+        assert!(output.contains("sd_server_path = "));
         assert!(output.contains("models_dir = "));
         assert!(output.contains("models_source = "));
     }

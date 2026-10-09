@@ -22,6 +22,7 @@ pub mod pidfile;
 pub mod ports_impl;
 pub mod process;
 pub mod proxy;
+pub mod sd;
 pub(crate) mod server_config;
 #[allow(
     clippy::redundant_closure_for_method_calls,

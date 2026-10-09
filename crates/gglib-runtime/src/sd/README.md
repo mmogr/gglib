@@ -1,0 +1,51 @@
+# Stable Diffusion
+
+<!-- module-docs:start -->
+
+Installing stable-diffusion.cpp's `sd-server`, the image runtime, and
+reporting what is installed.
+
+Everything lives under `.sd/` beside llama.cpp's `.llama/` (paths in
+`gglib_core::paths`): `bin/sd-server` and the shared library it loads from
+beside itself (`libstable-diffusion.dylib`, `.so`, or `stable-diffusion.dll`),
+`sd-config.json`, a source checkout, and `downloads/` while an archive is
+unpacked. Uninstalling removes `.sd/` whole.
+
+| File          | What it holds                                                            |
+|---------------|--------------------------------------------------------------------------|
+| `release.rs`  | the pin `master-948-228c707`, `GGLIB_SD_RELEASE`, the platform table     |
+| `install.rs`  | the pre-built install, and the source build of the `sd-server` target    |
+| `record.rs`   | `sd-config.json`: a source build's five keys or a download's four        |
+| `status.rs`   | `SdStatus`, from the record and the binary's own `--version`             |
+| `uninstall.rs`| removing `.sd/`                                                           |
+
+## The platform table
+
+Asset names carry the build runner's OS version
+(`sd-master-228c707-bin-Darwin-macOS-26.6.2-arm64.zip`), so each platform is
+a pattern, and exactly one asset must match it.
+
+| Platform        | Asset pattern                         | Must hold                                  |
+|-----------------|---------------------------------------|--------------------------------------------|
+| macOS, any arch | `-bin-Darwin-macOS-` … `-arm64.zip`   | `sd-server`, `libstable-diffusion.dylib`   |
+| Linux `x86_64`  | `-bin-Linux-` … `-x86_64-vulkan.zip`, or `-x86_64.zip` with no Vulkan runtime (a warning) | `sd-server`, `libstable-diffusion.so` |
+| Windows `x86_64`| `-bin-win-cuda12-`, `-bin-win-vulkan-` or `-bin-win-cpu-` … `-x64.zip` by GPU (the CPU build with a warning), plus the CUDA runtime package for CUDA | `sd-server.exe`, `stable-diffusion.dll` |
+
+The macOS asset is a universal binary named after its arm64 runner, and its
+`sd-server` finds the dylib through `@executable_path`. Any other platform
+has no asset and builds from source.
+
+## The source build
+
+`git clone --depth 1 --branch <tag> --recurse-submodules
+--shallow-submodules`, then `cmake -DCMAKE_BUILD_TYPE=Release
+-DSD_SERVER_BUILD_FRONTEND=OFF` with `-DSD_METAL=ON`, `-DSD_CUDA=ON` or
+`-DSD_VULKAN=ON`, and `cmake --build --target sd-server`. It links
+stable-diffusion.cpp statically, so the one binary is the install. The
+events are llama.cpp's `BuildEvent`s.
+
+macOS installs the release asset: measured on 2026-10-10 against a source
+build on the same Flux render, one run each, it sampled in 73.47 s against
+the source build's 82.06 s (log-0017).
+
+<!-- module-docs:end -->
