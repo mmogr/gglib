@@ -4,7 +4,7 @@
  */
 
 import type { ModelId } from './ids';
-import type { ServerConfig, SparseInferenceConfig } from '../../../types';
+import type { ComponentRole, ServerConfig, SparseInferenceConfig } from '../../../types';
 import type { UpdateModelRequest } from '../../../types/generated/UpdateModelRequest';
 
 /**
@@ -26,7 +26,16 @@ export interface UpdateModelParams {
   serverDefaults?: ServerConfig | null;
   /** A path links the model to that projector, `null` unlinks it, absent leaves the link alone. */
   projectorPath?: string | null;
+  /**
+   * An image model's components to change, by role: a path links the role to
+   * that file, `null` unlinks it, and a role left out keeps its link. Absent
+   * changes no component.
+   */
+  components?: ComponentChanges;
 }
+
+/** Component links to change, by role: a path links, `null` unlinks, a role left out is kept. */
+export type ComponentChanges = Partial<Record<ComponentRole, string | null>>;
 
 /**
  * `PUT /api/models/{id}` body: an absent key leaves that field alone.

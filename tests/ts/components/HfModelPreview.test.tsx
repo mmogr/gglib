@@ -2,6 +2,11 @@
  * The HuggingFace preview's projector note: under the quantization table,
  * the projector the selected quantization's download fetches — its file
  * name, its size, what it costs — and nothing for a repository without one.
+ *
+ * And its companion note: for a repository the daemon reads as an image
+ * model, the family, each companion's role, name, repository and size,
+ * "already here" for one already in the models directory, and the bytes the
+ * companions add to a download; nothing for any other repository.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -9,12 +14,15 @@ import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 
-import type { HfModelSummary, HfQuantization } from '../../../src/types';
+import type { HfImagePreview, HfModelSummary, HfQuantization } from '../../../src/types';
 
 const MIB = 1024 * 1024;
 
 const listing: { current: HfQuantization[] } = { current: [] };
+const imageListing: { current: HfImagePreview | null } = { current: null };
 const checkFit = vi.fn((_bytes: number) => 'fits' as const);
+/** A repository whose listing never answers, as one still loading. */
+const STILL_LOADING = 'owner/Still-Loading-GGUF';
 
 vi.mock('../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -23,7 +31,9 @@ vi.mock('../../../src/services/platform', () => ({
 vi.mock('../../../src/services/transport', () => ({
   getTransport: () => ({
     getHfQuantizations: (modelId: string) =>
-      Promise.resolve({ model_id: modelId, quantizations: listing.current }),
+      modelId === STILL_LOADING
+        ? new Promise(() => {})
+        : Promise.resolve({ model_id: modelId, quantizations: listing.current, image: imageListing.current }),
     getHfToolSupport: () =>
       Promise.resolve({ supports_tool_calls: false, confidence: 0, detected_format: null }),
   }),
@@ -64,12 +74,13 @@ function quant(name: string, sizeMib: number, projector: HfQuantization['project
 const F16 = { file_path: 'mmproj-F16.gguf', size_bytes: 880 * MIB };
 const Q8 = { file_path: 'sub/X.mmproj-Q8_0.gguf', size_bytes: 629 * MIB };
 
-async function preview(quantizations: HfQuantization[]) {
+async function preview(quantizations: HfQuantization[], image: HfImagePreview | null = null) {
   listing.current = quantizations;
+  imageListing.current = image;
   const onDownload = vi.fn();
-  render(<HfModelPreview model={MODEL} onDownload={onDownload} />);
+  const { rerender } = render(<HfModelPreview model={MODEL} onDownload={onDownload} />);
   await screen.findByText('Quant');
-  return { onDownload, user: userEvent.setup() };
+  return { onDownload, rerender, user: userEvent.setup() };
 }
 
 describe('HfModelPreview — the projector that comes with a download', () => {
@@ -140,5 +151,105 @@ describe('HfModelPreview — the projector that comes with a download', () => {
 
     expect(checkFit).toHaveBeenCalledWith((28000 + 629) * MIB);
     expect(checkFit).toHaveBeenCalledWith(30000 * MIB);
+  });
+});
+
+const GIB = 1024 * MIB;
+
+/** Flux.1's preview: the VAE already here, the two text encoders to fetch. */
+const FLUX: HfImagePreview = {
+  family: 'flux1',
+  companions: [
+    { role: 'vae', repo: 'unsloth/FLUX.1-schnell', file_path: 'ae.safetensors', size_bytes: 320 * MIB, present: true },
+    {
+      role: 'clip_l',
+      repo: 'comfyanonymous/flux_text_encoders',
+      file_path: 'clip_l.safetensors',
+      size_bytes: 235 * MIB,
+      present: false,
+    },
+    {
+      role: 't5xxl',
+      repo: 'comfyanonymous/flux_text_encoders',
+      file_path: 't5xxl_fp16.safetensors',
+      size_bytes: 9 * GIB,
+      present: false,
+    },
+  ],
+  fetch_bytes: 9 * GIB + 235 * MIB,
+};
+
+describe('HfModelPreview — the companions an image model\'s download fetches', () => {
+  it('names the family and each companion with its role, file, repository and size', async () => {
+    await preview([quant('Q8_0', 12000, null)], FLUX);
+
+    const note = screen.getByTestId('companion-note');
+    expect(note).toHaveTextContent('An image model of the Flux.1 family.');
+    const t5 = within(note).getByTestId('companion-t5xxl');
+    expect(t5).toHaveTextContent('T5-XXL');
+    expect(within(t5).getByText('t5xxl_fp16.safetensors')).toHaveAttribute(
+      'title',
+      'comfyanonymous/flux_text_encoders/t5xxl_fp16.safetensors',
+    );
+    expect(within(t5).getByText('comfyanonymous/flux_text_encoders')).toBeInTheDocument();
+    expect(within(t5).getByText('9 GiB')).toBeInTheDocument();
+    expect(within(note).getByTestId('companion-clip_l')).toHaveTextContent('235 MiB');
+  });
+
+  it('says "already here" for a companion in the models directory, and only for it', async () => {
+    await preview([quant('Q8_0', 12000, null)], FLUX);
+
+    expect(screen.getByTestId('companion-vae')).toHaveTextContent('already here');
+    expect(screen.getByTestId('companion-clip_l')).not.toHaveTextContent('already here');
+    expect(screen.getByTestId('companion-t5xxl')).not.toHaveTextContent('already here');
+  });
+
+  it('says what the companions add to a download, from the daemon\'s total', async () => {
+    await preview([quant('Q8_0', 12000, null)], FLUX);
+
+    expect(screen.getByTestId('companion-total')).toHaveTextContent(
+      'Beside the weights, the download fetches 9.23 GiB.',
+    );
+  });
+
+  it('says the weights are all a download fetches when every companion is here', async () => {
+    const here = { ...FLUX, companions: FLUX.companions.map((c) => ({ ...c, present: true })), fetch_bytes: 0 };
+    await preview([quant('Q8_0', 12000, null)], here);
+
+    expect(screen.getByTestId('companion-total')).toHaveTextContent(
+      'Every one is already here, so the download fetches the weights alone.',
+    );
+  });
+
+  it('stays the same whichever quantization is selected', async () => {
+    const { user } = await preview([quant('Q4_0', 7000, null), quant('Q8_0', 12000, null)], FLUX);
+
+    await user.click(screen.getByText('Q8_0'));
+
+    expect(screen.getByTestId('companion-total')).toHaveTextContent('9.23 GiB');
+  });
+
+  it('says the weights are all a family needs when its recipe names no companion', async () => {
+    await preview([quant('Q8_0', 7000, null)], { family: 'sdxl', companions: [], fetch_bytes: 0 });
+
+    const note = screen.getByTestId('companion-note');
+    expect(note).toHaveTextContent('An image model of the SDXL family.');
+    expect(note).toHaveTextContent('Its weights file is all it needs.');
+    expect(screen.queryByTestId('companion-total')).not.toBeInTheDocument();
+  });
+
+  it('drops the last repository\'s companions as soon as another is picked', async () => {
+    const { onDownload, rerender } = await preview([quant('Q8_0', 12000, null)], FLUX);
+    expect(screen.getByTestId('companion-note')).toBeInTheDocument();
+
+    rerender(<HfModelPreview model={{ ...MODEL, id: STILL_LOADING }} onDownload={onDownload} />);
+
+    expect(screen.queryByTestId('companion-note')).not.toBeInTheDocument();
+  });
+
+  it('shows nothing for a repository that is not an image model', async () => {
+    await preview([quant('Q4_K_M', 16000, F16)]);
+
+    expect(screen.queryByTestId('companion-note')).not.toBeInTheDocument();
   });
 });

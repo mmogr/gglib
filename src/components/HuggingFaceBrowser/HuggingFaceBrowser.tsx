@@ -1,10 +1,11 @@
 import { FC } from "react";
 import { ModelCardSkeleton } from './ModelCardSkeleton';
-import { AlertTriangle, ArrowDown, ArrowUp, Search } from "lucide-react";
-import { HfModelSummary, HfSortField } from "../../types";
+import { AlertTriangle, ArrowDown, ArrowUp, MessageSquare, Palette, Search } from "lucide-react";
+import { HfModelKind, HfModelSummary, HfSortField } from "../../types";
 import { ModelCard } from "./components/ModelCard";
 import { useHuggingFaceSearch, SORT_OPTIONS } from "./hooks/useHuggingFaceSearch";
 import { Button } from "../ui/Button";
+import { Chip } from "../ui/Chip";
 import { Icon } from "../ui/Icon";
 import { IconButton } from '../ui/IconButton';
 import { Input } from "../ui/Input";
@@ -19,10 +20,17 @@ interface HuggingFaceBrowserProps {
   selectedModelId?: string | null;
 }
 
+/** The two kinds a search looks for, as the toggle offers them. */
+const KINDS: { id: HfModelKind; label: string; icon: typeof MessageSquare }[] = [
+  { id: "chat", label: "Chat", icon: MessageSquare },
+  { id: "image", label: "Image", icon: Palette },
+];
+
 /**
  * HuggingFace model browser component.
  * 
- * Allows searching, filtering, and browsing GGUF models from HuggingFace.
+ * Allows searching, filtering, and browsing GGUF models from HuggingFace:
+ * models that chat, or with the Image toggle models that draw.
  * Supports direct download via `user/repo:quant` syntax.
  */
 const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
@@ -41,6 +49,8 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
     sortAscending,
     handleSortChange,
     setSortAscending,
+    kind,
+    setKind,
 
     // Results state
     models,
@@ -95,6 +105,21 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
         </Row>
 
         <Row gap="base" className="mt-3" align="end" wrap>
+          <Stack gap="xs">
+            <Label size="xs" muted id="hf-kind-label">Kind</Label>
+            <div role="group" aria-labelledby="hf-kind-label" className="flex items-center gap-xs h-8">
+              {KINDS.map((choice) => (
+                <Chip
+                  key={choice.id}
+                  selected={kind === choice.id}
+                  onClick={() => setKind(choice.id)}
+                  leftIcon={<Icon icon={choice.icon} size={12} />}
+                >
+                  {choice.label}
+                </Chip>
+              ))}
+            </div>
+          </Stack>
           <Stack gap="xs" className="flex-1 min-w-[120px] max-w-[180px]">
             <Label size="xs" muted>Min params (B)</Label>
             <Input

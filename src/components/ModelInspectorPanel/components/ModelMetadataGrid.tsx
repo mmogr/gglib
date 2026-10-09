@@ -36,6 +36,11 @@ interface ModelMetadataGridProps {
    * one: the link is a path on this machine's disk.
    */
   projector?: ReactNode;
+  /**
+   * The image model's components row, after the projector. Only a model of
+   * this machine's has one, for the projector's reason.
+   */
+  components?: ReactNode;
 }
 
 /**
@@ -68,6 +73,7 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({
   detail,
   sampling,
   projector,
+  components,
 }) => {
   const metadataEntries = detail ? Object.entries(detail.metadata) : [];
 
@@ -107,6 +113,8 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({
         )}
 
         {projector}
+
+        {components}
 
         {model.hfRepoId && (
           <InfoRow label="HuggingFace">

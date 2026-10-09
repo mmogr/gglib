@@ -6,10 +6,11 @@ import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
 import { Input } from '../../ui/Input';
 import { VisionChip } from '../../VisionChip';
+import { DrawsChip } from '../../DrawsChip';
 
 interface InspectorHeaderProps {
-  /** The model shown: its name, and whether it reads images. */
-  model: Pick<GgufModel, 'name' | 'imageInput'>;
+  /** The model shown: its name, whether it reads images, and the family of one that draws them. */
+  model: Pick<GgufModel, 'name' | 'imageInput' | 'imageFamily'> & Partial<Pick<GgufModel, 'missingComponents'>>;
   /** Whether the model has a HuggingFace repo to check for updates against. */
   hasHfRepo: boolean;
   isEditMode: boolean;
@@ -21,7 +22,8 @@ interface InspectorHeaderProps {
 
 /**
  * Inspector title bar: model name (or its edit field), the Vision chip on a
- * model that reads images, plus the two secondary maintenance actions.
+ * model that reads images, the Draws chip on one that draws them, plus the
+ * two secondary maintenance actions.
  */
 export const InspectorHeader: FC<InspectorHeaderProps> = ({
   model,
@@ -46,6 +48,7 @@ export const InspectorHeader: FC<InspectorHeaderProps> = ({
         <div className="flex items-center gap-sm min-w-0">
           <h2 className="m-0 text-lg font-semibold truncate">{model.name}</h2>
           {canSee(model) && <VisionChip />}
+          <DrawsChip model={model} />
         </div>
       )}
 

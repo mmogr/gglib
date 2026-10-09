@@ -4,8 +4,12 @@ import { GgufModel, SparseInferenceConfig, ServerConfig } from '../types';
 import { setSelectedModel, appLogger } from '../services/platform';
 import { getTransport } from '../services/transport';
 import { formatError } from '../utils/errors';
+import type { ComponentChanges } from '../services/transport/types/models';
 
-/** What an update may change. `projectorPath`: a path links, `null` unlinks, absent leaves the link alone. */
+/**
+ * What an update may change. `projectorPath`: a path links, `null` unlinks,
+ * absent leaves the link alone. `components`: the same, by role.
+ */
 export interface ModelUpdates {
   name?: string;
   quantization?: string;
@@ -13,6 +17,7 @@ export interface ModelUpdates {
   inferenceDefaults?: SparseInferenceConfig;
   serverDefaults?: ServerConfig | null;
   projectorPath?: string | null;
+  components?: ComponentChanges;
 }
 
 export function useModels() {
@@ -85,6 +90,7 @@ export function useModels() {
       inferenceDefaults: updates.inferenceDefaults,
       serverDefaults: updates.serverDefaults,
       projectorPath: updates.projectorPath,
+      components: updates.components,
     });
     await loadModels();
   }, [loadModels]);

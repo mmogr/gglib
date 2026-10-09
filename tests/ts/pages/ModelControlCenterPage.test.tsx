@@ -33,12 +33,14 @@ import { ReactNode, useState } from 'react';
 const library = vi.hoisted(() => ({ models: [] as unknown[] }));
 // The paired machine's models, and whether reading them hangs.
 const far = vi.hoisted(() => ({ hang: false }));
-// This machine's model as its detail route answers, the projector files its
-// picker is offered, and the update the page sends.
-const here = vi.hoisted(() => ({ detail: null as unknown, projectors: null as unknown }));
+// This machine's model as its detail route answers, the projector and
+// component files its pickers are offered, and the update the page sends.
+const here = vi.hoisted(() => ({ detail: null as unknown, projectors: null as unknown, components: null as unknown }));
 // The download queue the daemon answers with.
 const downloads = vi.hoisted(() => ({ queue: null as unknown }));
-const updateModel = vi.hoisted(() => vi.fn(async (_params: { id: number; projectorPath?: string | null }) => ({})));
+const updateModel = vi.hoisted(() =>
+  vi.fn(async (_params: { id: number; projectorPath?: string | null; components?: Record<string, string | null> }) => ({})),
+);
 const queueDownload = vi.hoisted(() => vi.fn(async (_params: { modelId: string; quantization?: string }) => ({ id: 'q-1' })));
 // The desktop shell's event channel: it records who listens and sends nothing.
 const shell = vi.hoisted(() => ({ listen: vi.fn(async (_event: string) => () => {}) }));
@@ -89,7 +91,9 @@ vi.mock('../../../src/services/transport/api/client', () => ({
   get: vi.fn(async (path: string) =>
     path.endsWith('/projectors')
       ? here.projectors
-      : path.startsWith('/api/models/') || path.endsWith('/recommend-model')
+      : path.endsWith('/components')
+        ? here.components
+        : path.startsWith('/api/models/') || path.endsWith('/recommend-model')
         ? null
         : [],
   ),
@@ -176,6 +180,7 @@ import {
   applyRemoteStatus,
   resetRemoteState,
 } from '../../../src/services/remoteRegistry';
+import { get } from '../../../src/services/transport/api/client';
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <ToastProvider>
@@ -223,6 +228,7 @@ describe('ModelControlCenterPage', () => {
     downloads.queue = queueSnapshot();
     here.detail = null;
     here.projectors = null;
+    here.components = null;
     updateModel.mockClear();
     queueDownload.mockClear();
     shell.listen.mockClear();
@@ -399,6 +405,41 @@ describe('ModelControlCenterPage', () => {
 
     const heading = await screen.findByRole('heading', { name: 'gemma-3-12b' });
     expect(within(heading.parentElement!).getByText('Vision')).toBeInTheDocument();
+  });
+
+  it("links this machine's image model's component picked in its inspector, by the library's update", async () => {
+    library.models = [guiModel({ id: 9, name: 'flux1-schnell', imageFamily: 'flux1', missingComponents: ['vae'] })];
+    here.detail = farDetail(9, 'flux1-schnell', {
+      filePath: '/models/f/flux1-schnell-q8_0.gguf',
+      imageFamily: 'flux1',
+      missingComponents: ['vae'],
+    });
+    here.components = [{ role: 'vae', files: [{ path: '/models/u/ae.safetensors', name: 'ae.safetensors' }] }];
+    renderPage();
+    const user = userEvent.setup();
+    const row = await screen.findByRole('option', { name: /flux1-schnell/i });
+    expect(within(row).getByText('Draws · Flux.1')).toBeInTheDocument();
+    await user.click(row);
+
+    const picker = await screen.findByRole('combobox', { name: 'VAE' });
+    await waitFor(() => expect(picker).toBeEnabled());
+    await user.selectOptions(picker, await within(picker).findByRole('option', { name: 'ae.safetensors' }));
+
+    await waitFor(() => expect(updateModel).toHaveBeenCalledTimes(1));
+    expect(updateModel.mock.calls[0][0]).toMatchObject({ id: 9, components: { vae: '/models/u/ae.safetensors' } });
+  });
+
+  it("shows no Components row for this machine's model that chats, and reads no component choices for it", async () => {
+    library.models = [guiModel({ id: 9, name: 'gemma-3-12b' })];
+    here.detail = farDetail(9, 'gemma-3-12b', { filePath: '/models/g/gemma.gguf' });
+    vi.mocked(get).mockClear();
+    renderPage();
+    await userEvent.setup().click(await screen.findByRole('option', { name: /gemma-3-12b/i }));
+
+    await screen.findByRole('combobox', { name: 'Projector' });
+    await waitFor(() => expect(vi.mocked(get).mock.calls.map(([path]) => path)).toContain('/api/models/9/projectors'));
+    expect(screen.queryByText('Components')).not.toBeInTheDocument();
+    expect(vi.mocked(get).mock.calls.map(([path]) => path)).not.toContain('/api/models/9/components');
   });
 
   it('leaves the model loaded when a local chat is closed', async () => {

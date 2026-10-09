@@ -248,6 +248,24 @@ describe('useModels', () => {
     expect(listModels).toHaveBeenCalledTimes(3);
   });
 
+  it('passes component links and unlinks through to the update by role, and reloads the list', async () => {
+    vi.mocked(updateModel).mockResolvedValue(mockModels[0]);
+    const { result } = renderHook(() => useModels());
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.updateModel(1, { components: { vae: '/models/ae.safetensors', t5xxl: null } });
+    });
+
+    expect(vi.mocked(updateModel).mock.calls[0][0].components).toStrictEqual({
+      vae: '/models/ae.safetensors',
+      t5xxl: null,
+    });
+    expect(listModels).toHaveBeenCalledTimes(2);
+  });
+
   it('can force remove a model', async () => {
     vi.mocked(removeModel).mockResolvedValue(undefined);
 

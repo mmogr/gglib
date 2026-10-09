@@ -11,6 +11,7 @@ import { canSee } from '../../utils/canSee';
 import { cn } from '../../utils/cn';
 import { Chip } from '../ui/Chip';
 import { VisionChip } from '../VisionChip';
+import { DrawsChip } from '../DrawsChip';
 
 interface ModelsListContentProps {
   models: GgufModel[];
@@ -102,6 +103,7 @@ const ModelsListContent: FC<ModelsListContentProps> = ({
                   <Chip size="sm" className="font-mono">{model.quantization}</Chip>
                 )}
                 {canSee(model) && <VisionChip />}
+                <DrawsChip model={model} />
                 {tps != null && (
                   <Chip size="sm" leftIcon={<Icon icon={Zap} size={11} />} className="font-mono tabular-nums">
                     {tps.toFixed(0)} t/s
