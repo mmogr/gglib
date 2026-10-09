@@ -13,8 +13,9 @@ use tokio::sync::RwLock;
 #[cfg(unix)]
 use super::tests::answer_health;
 use super::tests::healthy_port;
-use crate::process::admission::{PRIMARY_SLOT, Resident};
 #[cfg(unix)]
+use crate::process::RuntimeBinaries;
+use crate::process::admission::{PRIMARY_SLOT, Resident};
 use crate::process::core::GuiProcessCore;
 use crate::process::residency::ResidentSet;
 use crate::process::residency::hold_tests::{core, resident};
@@ -49,6 +50,8 @@ fn set_for(weights: &Path, projector: Option<&Path>) -> ResidentSet {
 fn healthy_resident(projector: Option<&Path>) -> Resident {
     Resident {
         projector: projector.map(Path::to_path_buf),
+        runtime: gglib_core::domain::RuntimeKind::Llama,
+        components: Vec::new(),
         ..resident(healthy_port())
     }
 }
@@ -174,7 +177,7 @@ async fn a_launched_resident_records_its_projector_and_serves_the_next_request()
     );
     let core = Arc::new(RwLock::new(GuiProcessCore::new(
         19_440,
-        idle_server(&dir).to_string_lossy(),
+        RuntimeBinaries::llama_only(idle_server(&dir).to_string_lossy()),
     )));
     answer_health_for_the_spawned_server(&core);
 

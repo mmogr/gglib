@@ -14,6 +14,8 @@ const PROJECTOR: &str = "/models/mmproj-F16.gguf";
 fn linked(port: u16) -> Resident {
     Resident {
         projector: Some(PROJECTOR.into()),
+        runtime: gglib_core::domain::RuntimeKind::Llama,
+        components: Vec::new(),
         ..resident(port)
     }
 }

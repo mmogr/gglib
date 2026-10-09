@@ -552,6 +552,7 @@ fn target_of(resident: Resident) -> RunningTarget {
     .with_slot_restore_supported(resident.slot_restore_supported)
     .with_model_sampling(resident.model_sampling)
     .with_cache_ram_health(resident.cache_ram_health)
+    .with_runtime(resident.runtime)
 }
 
 #[cfg(test)]

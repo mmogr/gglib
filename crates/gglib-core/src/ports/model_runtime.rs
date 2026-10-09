@@ -23,7 +23,9 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::cache_config::CacheRamSetting;
-use crate::domain::{AdmissionSnapshot, CacheRamHealth, LaunchNarration, ModelSamplingDefaults};
+use crate::domain::{
+    AdmissionSnapshot, CacheRamHealth, LaunchNarration, ModelSamplingDefaults, RuntimeKind,
+};
 use crate::ports::ProcessHandle;
 pub use crate::ports::pinned::PinnedSpec;
 use crate::server_config::ServerConfigOptions;
@@ -107,6 +109,10 @@ pub struct RunningTarget {
     /// `Some(default())` means the build's own table is showing through
     /// unmodified. See [`crate::domain::ModelSamplingDefaults`].
     pub model_sampling: Option<ModelSamplingDefaults>,
+    /// The program serving the model: llama.cpp's `llama-server` unless the
+    /// launch says otherwise. A reader that speaks llama-server's own API
+    /// (`/slots`, `/props`) skips a target served by `sd-server`.
+    pub runtime: RuntimeKind,
 }
 
 impl RunningTarget {
@@ -136,7 +142,15 @@ impl RunningTarget {
             cache_ram_health: CacheRamHealth::LlamaDefault,
             narration: None,
             model_sampling: None,
+            runtime: RuntimeKind::Llama,
         }
+    }
+
+    /// Say which program serves the model.
+    #[must_use]
+    pub const fn with_runtime(mut self, runtime: RuntimeKind) -> Self {
+        self.runtime = runtime;
+        self
     }
 
     /// Attach what the launched model's GGUF declares about sampling.

@@ -11,6 +11,7 @@ use gglib_core::server_config::ServerConfigOptions;
 use tokio::sync::RwLock;
 
 use super::ensure_present;
+use crate::process::RuntimeBinaries;
 use crate::process::core::GuiProcessCore;
 use crate::process::residency::ResidentSet;
 use crate::process::residency::residency_tests::{OneModel, launch_spec};
@@ -94,7 +95,7 @@ async fn an_admission_with_a_missing_projector_is_refused_before_any_spawn() {
     );
     let core = Arc::new(RwLock::new(GuiProcessCore::new(
         19_400,
-        "/nonexistent/llama-server",
+        RuntimeBinaries::llama_only("/nonexistent/llama-server"),
     )));
 
     let refused = set
@@ -128,7 +129,7 @@ async fn an_admission_of_an_image_model_is_refused_before_its_files_are_read() {
     );
     let core = Arc::new(RwLock::new(GuiProcessCore::new(
         19_420,
-        "/nonexistent/llama-server",
+        RuntimeBinaries::llama_only("/nonexistent/llama-server"),
     )));
 
     let refused = set
@@ -185,7 +186,7 @@ async fn a_launch_starts_the_server_with_the_models_projector() {
     );
     let core = Arc::new(RwLock::new(GuiProcessCore::new(
         19_410,
-        binary.to_string_lossy(),
+        RuntimeBinaries::llama_only(binary.to_string_lossy()),
     )));
 
     let failed = set

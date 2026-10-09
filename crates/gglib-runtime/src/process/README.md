@@ -9,7 +9,9 @@ with integrated log streaming and event broadcasting for GUI use cases.
 
 # Structure
 
-- `GuiProcessCore` - Low-level process spawning with log streaming (u32 model IDs)
+- `GuiProcessCore` - Low-level process spawning with log streaming (u32 model IDs),
+  for either runtime: a `SpawnConfig` names llama-server or `sd-server`, and
+  `RuntimeBinaries` holds the binary each is started from
 - `ProcessManager` - High-level orchestration; dispatch only
 - `ResidentSet` (`residency/`) - The VRAM slots and the launch driver that fills them
 - `AdmissionQueue` (`admission/`) - Decides who gets the GPU next, and for how long

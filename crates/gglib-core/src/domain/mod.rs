@@ -40,6 +40,7 @@ pub mod recommendation;
 pub(crate) mod residency;
 pub mod runs;
 pub(crate) mod runtime_capabilities;
+mod runtime_kind;
 pub(crate) mod sampling_discards;
 pub(crate) mod sampling_provenance;
 mod server_config;
@@ -144,6 +145,7 @@ pub use tensor_table::{TensorInfo, TensorTable, WeightsFormat};
 pub use image_family::{
     ComponentRole, ComponentSpec, ImageFamily, Placement, Recipe, SizeRule, UnknownName,
 };
+pub use runtime_kind::RuntimeKind;
 
 // Re-export dialect types at the domain level for convenience
 pub use dialect::{BodyCodec, DialectSpec, EmissionProfile};

@@ -114,6 +114,7 @@ fn test_config() -> ServerConfig {
     ServerConfig {
         base_port: Some(TEST_BASE_PORT),
         llama_server_path: "/nonexistent/llama-server".into(),
+        sd_server_path: "/nonexistent/sd-server".into(),
         max_concurrent_agent_loops: 1,
         db_path: Some(db_path),
         device_keys_path: Some(device_keys_path),

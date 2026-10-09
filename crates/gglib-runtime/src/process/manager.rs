@@ -10,6 +10,7 @@
 //! both the state and the launch sequence that mutates it.
 
 use super::core::GuiProcessCore;
+use super::spawn_config::RuntimeBinaries;
 use anyhow::Result;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::AdmissionSnapshot;
@@ -46,7 +47,8 @@ impl ProcessManager {
     ///
     /// * `base_port` — Base port for llama-server allocation. Ports are
     ///   assigned sequentially starting from this value.
-    /// * `llama_server_path` — Path to the llama-server binary to execute.
+    /// * `binaries` — The llama-server and `sd-server` binaries to execute,
+    ///   one per runtime.
     /// * `catalog` — Model catalog used to resolve model names into launch
     ///   specifications (file paths, context sizes, etc.).
     /// * `launch_overrides` — Standing launch options every spawn starts from
@@ -66,12 +68,12 @@ impl ProcessManager {
     /// model but one (`gglib serve`).
     pub fn new(
         base_port: u16,
-        llama_server_path: impl Into<String>,
+        binaries: RuntimeBinaries,
         catalog: Arc<dyn ModelCatalogPort>,
         launch_overrides: ServerConfigOptions,
         cache_ram: CacheRamSetting,
     ) -> Self {
-        let core = GuiProcessCore::new(base_port, llama_server_path);
+        let core = GuiProcessCore::new(base_port, binaries);
         Self {
             core: Arc::new(RwLock::new(core)),
             residency: ResidentSet::new(catalog, launch_overrides, cache_ram),
@@ -181,6 +183,7 @@ impl ProcessManager {
                     info.port,
                     info.started_at,
                 )
+                .with_runtime(info.runtime)
             })
             .collect()
     }

@@ -350,6 +350,7 @@ mod tests {
             file_path: "/models/q.gguf".into(),
             projector: None,
             image_family: None,
+            components: Vec::new(),
             tags: tags.iter().map(|t| (*t).to_string()).collect(),
             architecture: None,
             quantization: Some("Q4_K_M".to_string()),

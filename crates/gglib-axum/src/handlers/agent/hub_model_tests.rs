@@ -20,6 +20,7 @@ fn server(model_id: i64, model_name: &str, port: u16, started_at: u64) -> Server
         pid: None,
         port,
         started_at,
+        runtime: gglib_core::domain::RuntimeKind::Llama,
     }
 }
 

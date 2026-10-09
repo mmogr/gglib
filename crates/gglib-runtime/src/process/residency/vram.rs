@@ -302,6 +302,8 @@ mod tests {
             context_size: 4096,
             port: 8080,
             projector: None,
+            runtime: gglib_core::domain::RuntimeKind::Llama,
+            components: Vec::new(),
             slot_restore_supported: true,
             cache_ram_health,
             narration: None,

@@ -26,6 +26,7 @@ use tracing::{info, warn};
 use super::spawned_child::{LIVENESS_TICK, SpawnedChild};
 use super::vram;
 use crate::launch_narration::NarrationInputs;
+use crate::process::SpawnConfig;
 use crate::process::admission::{AdmissionQueue, PRIMARY_SLOT, Resident};
 use crate::process::core::GuiProcessCore;
 use crate::process::health::wait_for_http_health;
@@ -291,7 +292,7 @@ async fn launch(
     let (port, mut child) = {
         let mut core_w = core.write().await;
         let (port, pid) = core_w
-            .spawn(config)
+            .spawn(SpawnConfig::Llama(config))
             .await
             .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?;
         (port, SpawnedChild::arm(core, spec.id, pid))
@@ -384,6 +385,8 @@ async fn launch(
             context_size: *resolved_ctx,
             port,
             projector: spec.projector.clone(),
+            runtime: spec.runtime(),
+            components: spec.components.clone(),
             slot_restore_supported: slot_restore.enabled,
             model_sampling: spec.model_sampling,
             cache_ram_health,
@@ -418,6 +421,7 @@ async fn launch(
     .with_slot_restore_supported(slot_restore.enabled)
     .with_model_sampling(spec.model_sampling)
     .with_cache_ram_health(cache_ram_health)
+    .with_runtime(spec.runtime())
     .with_narration(narration);
 
     Ok((target, lease))

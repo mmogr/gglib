@@ -318,3 +318,35 @@ fn an_image_model_is_listed_as_drawing_and_launched_with_its_family() {
     );
     assert_eq!(model_to_launch_spec(base_model()).image_family, None);
 }
+
+/// An image model's launch specification carries its components, each in
+/// its role and in the order linked, and names stable-diffusion.cpp as its
+/// runtime; a chat model's names llama.cpp and carries none.
+#[test]
+fn an_image_models_launch_carries_its_components_and_its_runtime() {
+    use gglib_core::domain::{ComponentRole, ImageFamily, ModelComponent, RuntimeKind};
+
+    let components = vec![
+        ModelComponent {
+            role: ComponentRole::T5xxl,
+            path: PathBuf::from("/models/t5xxl_fp16.safetensors"),
+        },
+        ModelComponent {
+            role: ComponentRole::Vae,
+            path: PathBuf::from("/models/ae.safetensors"),
+        },
+    ];
+    let draws = Model {
+        image_family: Some(ImageFamily::Flux1),
+        components: components.clone(),
+        ..base_model()
+    };
+
+    let spec = model_to_launch_spec(draws);
+    assert_eq!(spec.components, components);
+    assert_eq!(spec.runtime(), RuntimeKind::StableDiffusion);
+
+    let chat = model_to_launch_spec(base_model());
+    assert!(chat.components.is_empty());
+    assert_eq!(chat.runtime(), RuntimeKind::Llama);
+}

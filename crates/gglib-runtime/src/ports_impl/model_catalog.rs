@@ -82,6 +82,7 @@ pub fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
         file_path: m.file_path,
         projector: m.projector_path,
         image_family: m.image_family,
+        components: m.components,
         tags: m.tags,
         architecture: m.architecture,
         quantization: m.quantization,

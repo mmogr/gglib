@@ -1,7 +1,9 @@
-//! Process verification to ensure PIDs belong to llama-server.
+//! Process verification: whether a pid is one of the servers gglib manages.
 
+use gglib_core::domain::RuntimeKind;
 #[cfg(any(target_os = "macos", target_os = "linux", windows))]
-use gglib_core::paths::llama_server_path;
+use gglib_core::paths::{llama_server_path, sd_server_path};
+use std::path::PathBuf;
 
 #[cfg(any(target_os = "macos", windows))]
 use sysinfo::System;
@@ -9,7 +11,8 @@ use sysinfo::System;
 #[cfg(target_os = "linux")]
 use std::fs;
 
-/// Check if a PID belongs to our llama-server binary.
+/// Check if a PID belongs to one of our managed server binaries:
+/// llama.cpp's `llama-server` or stable-diffusion.cpp's `sd-server`.
 ///
 /// # Platform behavior
 /// - **macOS** and **Windows**: Uses `sysinfo` to check executable path
@@ -17,66 +20,69 @@ use std::fs;
 /// - **Other**: Always returns `false` (conservative)
 ///
 /// # Safety
-/// Returns `false` if verification fails or PID doesn't match our binary.
+/// Returns `false` if verification fails or PID doesn't match our binaries.
 /// This prevents accidentally killing unrelated processes with reused PIDs.
-pub fn is_our_llama_server(pid: u32) -> bool {
-    #[cfg(any(target_os = "macos", windows))]
-    {
-        is_our_llama_server_sysinfo(pid)
-    }
+pub fn is_our_server(pid: u32) -> bool {
+    server_runtime(pid).is_some()
+}
 
-    #[cfg(target_os = "linux")]
+/// The runtime whose managed binary `pid` is running, verified as
+/// [`is_our_server`] verifies it; `None` for any other process.
+pub fn server_runtime(pid: u32) -> Option<RuntimeKind> {
+    runtime_running(pid, &managed_binaries())
+}
+
+/// The binaries gglib starts servers from, one per runtime; a path that
+/// cannot be resolved is left out.
+fn managed_binaries() -> Vec<(RuntimeKind, PathBuf)> {
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     {
-        is_our_llama_server_linux(pid)
+        [
+            (RuntimeKind::Llama, llama_server_path()),
+            (RuntimeKind::StableDiffusion, sd_server_path()),
+        ]
+        .into_iter()
+        .filter_map(|(runtime, path)| Some((runtime, path.ok()?)))
+        .collect()
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
     {
-        let _ = pid;
-        false
+        Vec::new()
     }
+}
+
+/// The runtime of the first of `binaries` that `pid` is running, comparing
+/// canonical paths. A binary that is not there matches nothing.
+fn runtime_running(pid: u32, binaries: &[(RuntimeKind, PathBuf)]) -> Option<RuntimeKind> {
+    let actual = executable_of(pid)?.canonicalize().ok()?;
+    binaries
+        .iter()
+        .find(|(_, binary)| {
+            binary
+                .canonicalize()
+                .is_ok_and(|expected| expected == actual)
+        })
+        .map(|(runtime, _)| *runtime)
 }
 
 #[cfg(any(target_os = "macos", windows))]
-fn is_our_llama_server_sysinfo(pid: u32) -> bool {
-    let Ok(expected_path) = llama_server_path() else {
-        return false;
-    };
-
+fn executable_of(pid: u32) -> Option<PathBuf> {
     // Use new_all() to ensure processes are loaded
     let sys = System::new_all();
-
-    let Some(process) = sys.process(sysinfo::Pid::from_u32(pid)) else {
-        return false;
-    };
-
-    let Some(exe_path) = process.exe() else {
-        return false;
-    };
-
-    // Compare canonical paths
-    match (exe_path.canonicalize(), expected_path.canonicalize()) {
-        (Ok(actual), Ok(expected)) => actual == expected,
-        _ => false,
-    }
+    sys.process(sysinfo::Pid::from_u32(pid))?
+        .exe()
+        .map(std::path::Path::to_path_buf)
 }
 
 #[cfg(target_os = "linux")]
-fn is_our_llama_server_linux(pid: u32) -> bool {
-    let Ok(expected_path) = llama_server_path() else {
-        return false;
-    };
+fn executable_of(pid: u32) -> Option<PathBuf> {
+    fs::read_link(format!("/proc/{pid}/exe")).ok()
+}
 
-    let proc_exe = format!("/proc/{pid}/exe");
-    let Ok(actual_path) = fs::read_link(&proc_exe) else {
-        return false;
-    };
-
-    // Compare canonical paths
-    match (actual_path.canonicalize(), expected_path.canonicalize()) {
-        (Ok(actual), Ok(expected)) => actual == expected,
-        _ => false,
-    }
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+fn executable_of(_pid: u32) -> Option<PathBuf> {
+    None
 }
 
 /// Check if a PID exists (without verifying it's our process).
@@ -140,9 +146,51 @@ mod tests {
     }
 
     #[test]
-    fn is_our_llama_server_false_for_self() {
-        // Current process is not llama-server
+    fn is_our_server_false_for_self() {
+        // The test binary is neither managed server
         let self_pid = std::process::id();
-        assert!(!is_our_llama_server(self_pid));
+        assert!(!is_our_server(self_pid));
+    }
+
+    /// The sweep stops an orphan of either runtime: an `sd-server` left
+    /// running holds the image model's whole footprint, ~23 GB for Flux.1.
+    #[test]
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+    fn both_managed_binaries_are_ours() {
+        // Before any path is resolved: another test's first call would move
+        // the root between the two sides of the comparison.
+        gglib_core::paths::isolate_data_root();
+        assert_eq!(
+            managed_binaries(),
+            [
+                (RuntimeKind::Llama, llama_server_path().unwrap()),
+                (RuntimeKind::StableDiffusion, sd_server_path().unwrap()),
+            ]
+        );
+    }
+
+    /// A pid matches the binary it is running, whichever runtime's it is and
+    /// wherever it sits in the list, and nothing when it runs none of them.
+    /// The test binary stands in for a server: it is a running process whose
+    /// path is known.
+    #[test]
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
+    fn a_pid_running_either_binary_matches_that_runtime() {
+        use RuntimeKind::{Llama, StableDiffusion};
+
+        let me = std::process::id();
+        let exe = std::env::current_exe().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let elsewhere = dir.path().join("llama-server");
+        std::fs::write(&elsewhere, b"not this process").unwrap();
+        let missing = dir.path().join("sd-server");
+
+        let sd_is_me = [(Llama, elsewhere.clone()), (StableDiffusion, exe.clone())];
+        assert_eq!(runtime_running(me, &sd_is_me), Some(StableDiffusion));
+        let llama_is_me = [(Llama, exe), (StableDiffusion, missing.clone())];
+        assert_eq!(runtime_running(me, &llama_is_me), Some(Llama));
+        let neither = [(Llama, elsewhere), (StableDiffusion, missing)];
+        assert_eq!(runtime_running(me, &neither), None);
+        assert_eq!(runtime_running(me, &[]), None);
     }
 }

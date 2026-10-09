@@ -27,6 +27,7 @@ function slot(overrides: Partial<ResidentSlotSnapshot> = {}): ResidentSlotSnapsh
     inflight: 0,
     is_primary: true,
     resident_for_secs: 12,
+    runtime: 'llama',
     ...overrides,
   };
 }

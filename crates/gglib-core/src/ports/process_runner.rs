@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use super::JinjaMode;
+use crate::domain::RuntimeKind;
 
 /// Configuration for starting a model server.
 ///
@@ -262,10 +263,15 @@ pub struct ProcessHandle {
     pub port: u16,
     /// Unix timestamp (seconds) when the server was started.
     pub started_at: u64,
+    /// The program serving the model. A handle serialised before the field
+    /// existed reads as llama.cpp's, which every server then was.
+    #[serde(default)]
+    pub runtime: RuntimeKind,
 }
 
 impl ProcessHandle {
-    /// Create a new process handle.
+    /// Create a new process handle for a llama-server; see
+    /// [`Self::with_runtime`] for an `sd-server`.
     #[must_use]
     pub const fn new(
         model_id: i64,
@@ -280,6 +286,38 @@ impl ProcessHandle {
             pid,
             port,
             started_at,
+            runtime: RuntimeKind::Llama,
         }
+    }
+
+    /// Say which program serves the model.
+    #[must_use]
+    pub const fn with_runtime(mut self, runtime: RuntimeKind) -> Self {
+        self.runtime = runtime;
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A handle stored or sent before the runtime field existed still reads,
+    /// as llama.cpp's; one built for an `sd-server` says so.
+    #[test]
+    fn a_handle_without_a_runtime_is_llama_and_one_can_name_its_runtime() {
+        let old = r#"{"model_id":1,"model_name":"m","pid":null,"port":9000,"started_at":0}"#;
+        let handle: ProcessHandle = serde_json::from_str(old).unwrap();
+        assert_eq!(handle.runtime, RuntimeKind::Llama);
+        assert_eq!(
+            ProcessHandle::new(1, "m".to_owned(), None, 9000, 0).runtime,
+            RuntimeKind::Llama
+        );
+
+        let sd = ProcessHandle::new(2, "flux".to_owned(), None, 9001, 0)
+            .with_runtime(RuntimeKind::StableDiffusion);
+        assert_eq!(sd.runtime, RuntimeKind::StableDiffusion);
+        let wire = serde_json::to_value(&sd).unwrap();
+        assert_eq!(wire["runtime"], "stable_diffusion");
     }
 }

@@ -16,7 +16,9 @@ use crate::domain::InferenceConfig;
 use crate::domain::KvElemsPerToken;
 use crate::domain::Model;
 use crate::domain::ModelCapabilities;
+use crate::domain::ModelComponent;
 use crate::domain::ModelSamplingDefaults;
+use crate::domain::RuntimeKind;
 use crate::domain::ServerConfig;
 use crate::domain::TemplateCaps;
 
@@ -116,6 +118,10 @@ pub struct ModelLaunchSpec {
     /// that chats. llama-server cannot load such a model, so a launch of one
     /// is refused before anything is stopped or spawned.
     pub image_family: Option<ImageFamily>,
+    /// The files an image model draws with beside its weights, each in its
+    /// role; empty for a model that chats. `sd-server` loads each with the
+    /// flag its role names.
+    pub components: Vec<ModelComponent>,
     /// Tags/labels associated with the model.
     pub tags: Vec<String>,
     /// Model architecture (for runtime configuration).
@@ -131,7 +137,8 @@ pub struct ModelLaunchSpec {
     /// Per-model server defaults (e.g., `context_length` for launch).
     pub server_defaults: Option<ServerConfig>,
     /// On-disk size in bytes of everything the launch loads: the weights,
-    /// summed across all shards for multi-part GGUFs, plus the projector.
+    /// summed across all shards for multi-part GGUFs, plus the projector,
+    /// plus an image model's components.
     ///
     /// Read at launch to budget host memory (see
     /// [`crate::domain::compute_auto_cache_ram_mb`]). `0` when the
@@ -169,6 +176,14 @@ pub struct ModelLaunchSpec {
     /// Derived from the metadata already on the catalog row, the same way
     /// `kv_elems_per_token` and `kv_memory_is_partial` are.
     pub model_sampling: ModelSamplingDefaults,
+}
+
+impl ModelLaunchSpec {
+    /// The program that serves this model; see [`Model::runtime`].
+    #[must_use]
+    pub const fn runtime(&self) -> RuntimeKind {
+        RuntimeKind::of(self.image_family)
+    }
 }
 
 impl ModelSummary {

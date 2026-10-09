@@ -15,8 +15,8 @@ use std::path::PathBuf;
 use tokio::time::Instant;
 
 use gglib_core::domain::{
-    CacheRamHealth, LaunchNarration, ModelSamplingDefaults, SecondarySlotDecision,
-    SecondarySlotStatus,
+    CacheRamHealth, LaunchNarration, ModelComponent, ModelSamplingDefaults, RuntimeKind,
+    SecondarySlotDecision, SecondarySlotStatus,
 };
 
 use super::timing::{ADMISSION_DEADLINE, DRAIN_QUANTUM};
@@ -54,6 +54,11 @@ pub struct Resident {
     pub port: u16,
     /// The projector this instance was launched with, if any.
     pub projector: Option<PathBuf>,
+    /// The program serving it.
+    pub runtime: RuntimeKind,
+    /// The components an image model was launched with, each in its role;
+    /// empty for a model that chats.
+    pub components: Vec<ModelComponent>,
     /// Whether disk slot restore can resume this model.
     pub slot_restore_supported: bool,
     /// What this model's GGUF declares about sampler defaults.

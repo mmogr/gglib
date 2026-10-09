@@ -2,8 +2,8 @@
 
 <!-- module-docs:start -->
 
-Installing stable-diffusion.cpp's `sd-server`, the image runtime, and
-reporting what is installed.
+Installing stable-diffusion.cpp's `sd-server`, the image runtime, reporting
+what is installed, and its command line.
 
 Everything lives under `.sd/` beside llama.cpp's `.llama/` (paths in
 `gglib_core::paths`): `bin/sd-server` and the shared library it loads from
@@ -18,6 +18,9 @@ unpacked. Uninstalling removes `.sd/` whole.
 | `record.rs`   | `sd-config.json`: a source build's five keys or a download's four        |
 | `status.rs`   | `SdStatus`, from the record and the binary's own `--version`             |
 | `uninstall.rs`| removing `.sd/`                                                           |
+| `config.rs`   | `SdServerConfig`: the model, its family, its components and the port     |
+| `args.rs`     | `sd-server`'s argv from the config and the family's recipe               |
+| `spawn.rs`    | starting it, with piped output, as llama-server is started               |
 
 ## The platform table
 
@@ -34,6 +37,17 @@ a pattern, and exactly one asset must match it.
 The macOS asset is a universal binary named after its arm64 runner, and its
 `sd-server` finds the dylib through `@executable_path`. Any other platform
 has no asset and builds from source.
+
+## The command line
+
+`--diffusion-model <file>` for a diffusion-only family (Flux.1, Qwen-Image
+2.1) or `-m <file>` for an all-in-one checkpoint (SDXL); each component in
+role order, `--vae`, `--clip_l`, `--t5xxl`, `--llm`, whatever order the
+model lists them in; `--listen-ip 127.0.0.1 --listen-port <port>`; then the
+recipe's `--steps`, `--cfg-scale` and `--sampling-method`, and `--fa` where
+the recipe turns flash attention on (Qwen-Image 2.1). Flags given at launch
+are the defaults for every request. `args_tests.rs` pins one whole argv per
+family.
 
 ## The source build
 

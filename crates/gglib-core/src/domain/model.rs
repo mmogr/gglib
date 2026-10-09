@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use super::capabilities::ModelCapabilities;
 use super::image_family::{ComponentRole, ImageFamily};
 use super::inference::{DefaultsOrigin, InferenceConfig};
+use super::runtime_kind::RuntimeKind;
 use super::server_config::ServerConfig;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -269,6 +270,13 @@ impl Model {
         self.image_family.is_some()
     }
 
+    /// The program that serves this model: stable-diffusion.cpp when it
+    /// draws images, llama.cpp otherwise.
+    #[must_use]
+    pub const fn runtime(&self) -> RuntimeKind {
+        RuntimeKind::of(self.image_family)
+    }
+
     /// The roles this model's family needs that it has no file linked for,
     /// in the recipe's order; empty for a model that chats.
     #[must_use]
@@ -364,6 +372,14 @@ mod tests {
             })
             .collect();
         Model::stored(1, &new)
+    }
+
+    #[test]
+    fn a_model_that_draws_is_served_by_stable_diffusion_and_one_that_chats_by_llama() {
+        assert_eq!(flux(&[]).runtime(), RuntimeKind::StableDiffusion);
+        let mut chat = flux(&[]);
+        chat.image_family = None;
+        assert_eq!(chat.runtime(), RuntimeKind::Llama);
     }
 
     #[test]

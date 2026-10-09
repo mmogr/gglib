@@ -1,14 +1,24 @@
 #![doc = include_str!("README.md")]
+mod args;
+mod config;
 mod install;
 mod record;
 mod release;
+mod spawn;
 mod status;
 mod uninstall;
 
+pub use config::SdServerConfig;
 pub use install::{install_sd_prebuilt, run_sd_source_build};
 pub use release::{PINNED_SD_RELEASE, SD_RELEASE_ENV, SdAsset, check_sd_prebuilt_availability};
 pub use status::{SdStatus, sd_status};
 pub use uninstall::{sd_files_present, uninstall_sd};
+
+pub(crate) use spawn::build_and_spawn_sd;
+
+#[cfg(test)]
+#[path = "args_tests.rs"]
+mod args_tests;
 
 #[cfg(test)]
 #[path = "release_tests.rs"]

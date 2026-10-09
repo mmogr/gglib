@@ -221,3 +221,32 @@ mod start_server_request_tests {
         );
     }
 }
+
+mod server_info_tests {
+    //! `ServerInfo`'s runtime: carried from the handle, and defaulted for a
+    //! body that predates it.
+
+    use gglib_core::domain::RuntimeKind;
+    use gglib_core::ports::ProcessHandle;
+
+    use crate::types::ServerInfo;
+
+    #[test]
+    fn the_runtime_comes_from_the_handle() {
+        let handle = ProcessHandle::new(3, "flux".to_owned(), Some(42), 9001, 7)
+            .with_runtime(RuntimeKind::StableDiffusion);
+        let info = ServerInfo::from_handle(&handle);
+        assert_eq!(info.runtime, RuntimeKind::StableDiffusion);
+        assert_eq!(
+            serde_json::to_value(&info).unwrap()["runtime"],
+            "stable_diffusion"
+        );
+    }
+
+    #[test]
+    fn a_body_without_a_runtime_is_llama() {
+        let body = r#"{"model_id":1,"model_name":"m","pid":null,"port":9000,"started_at":0}"#;
+        let info: ServerInfo = serde_json::from_str(body).unwrap();
+        assert_eq!(info.runtime, RuntimeKind::Llama);
+    }
+}

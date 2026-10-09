@@ -20,6 +20,7 @@
 
 use serde::Serialize;
 
+use crate::domain::RuntimeKind;
 use crate::domain::residency::SecondarySlotDecision;
 
 /// One model resident in VRAM.
@@ -45,6 +46,8 @@ pub struct ResidentSlotSnapshot {
     /// Seconds this model has been resident.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub resident_for_secs: u64,
+    /// The program serving it.
+    pub runtime: RuntimeKind,
 }
 
 /// Requests waiting for one model that is not currently resident.
@@ -231,6 +234,7 @@ mod tests {
             inflight,
             is_primary,
             resident_for_secs: 10,
+            runtime: RuntimeKind::Llama,
         }
     }
 

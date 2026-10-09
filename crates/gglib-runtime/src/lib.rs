@@ -39,8 +39,9 @@ pub use health_monitor::{ServerHealthChecker, ServerHealthMonitor};
 // Re-export GUI process management types
 pub use process::{
     AdmissionQueue, GuiProcessCore, PRIMARY_SLOT, ProcessManager, Resident, ResidentSet,
-    SLOT_COUNT, ServerEvent, ServerEventBroadcaster, ServerLogEntry, ServerLogManager,
-    ServerStateInfo, ServerStatus, get_event_broadcaster, get_log_manager,
+    RuntimeBinaries, SLOT_COUNT, ServerEvent, ServerEventBroadcaster, ServerLogEntry,
+    ServerLogManager, ServerStateInfo, ServerStatus, SpawnConfig, get_event_broadcaster,
+    get_log_manager,
 };
 
 // Re-export port implementations for runtime adapters

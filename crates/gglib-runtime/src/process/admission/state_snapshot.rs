@@ -40,6 +40,7 @@ impl QueueState {
                     inflight: r.inflight,
                     is_primary: slot == PRIMARY_SLOT,
                     resident_for_secs: now.duration_since(r.resident_since).as_secs(),
+                    runtime: r.runtime,
                 })
                 .collect(),
             queued,

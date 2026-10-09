@@ -81,7 +81,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`binary_install/`** — Installing a server binary from a pinned GitHub release, for any product
 - **`llama/`** — llama-server and llama-cli process management
 - **`proxy/`** — Proxy supervisor and routing logic
-- **`sd/`** — stable-diffusion.cpp's `sd-server`: install, status, uninstall
+- **`sd/`** — stable-diffusion.cpp's `sd-server`: install, status, uninstall, its command line and its launch
 - **`process/`** — Generic process lifecycle (start, stop, signal)
 - **`system/`** — System probes (GPU detection, memory info)
 - **`ports_impl/`** — Port trait implementations for runtime
@@ -207,17 +207,24 @@ user set 4096", which made levels 4 and 5 unreachable.
 ## Usage
 
 ```rust,ignore
-use gglib_runtime::GuiProcessCore;
+use gglib_runtime::{GuiProcessCore, RuntimeBinaries, SpawnConfig};
 use gglib_core::ports::ServerConfig;
 
-// Create a process core, given a base port to allocate from
-let mut core = GuiProcessCore::new(8080, "/path/to/llama-server");
+// Create a process core, given a base port to allocate from and the binary
+// each runtime is started with
+let mut core = GuiProcessCore::new(
+    8080,
+    RuntimeBinaries {
+        llama: "/path/to/llama-server".into(),
+        sd: "/path/to/sd-server".into(),
+    },
+);
 
-// Start a server for a model; the allocated port comes back
-let port = core.spawn(
+// Start a server for a model; the allocated port and the pid come back
+let (port, pid) = core.spawn(SpawnConfig::Llama(
     ServerConfig::new(1, "llama-3.2".to_string(), "/path/to/model.gguf".into(), 8080)
         .with_context_size(4096),
-).await?;
+)).await?;
 
 // Stop the server, by model id
 core.kill(1).await?;
