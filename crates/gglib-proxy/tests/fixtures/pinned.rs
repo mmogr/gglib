@@ -11,7 +11,7 @@ use std::time::UNIX_EPOCH;
 
 use async_trait::async_trait;
 
-use gglib_core::domain::Model;
+use gglib_core::domain::{ComponentRole, ImageFamily, Model, ModelComponent};
 use gglib_core::ports::{
     Admission, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
     ModelRuntimePort, ModelSummary, PinnedSpec, RunningTarget,
@@ -73,11 +73,19 @@ impl StaticCatalog {
 
     /// The stored row, for the detail read: a file under `/models/`, and the
     /// same constants [`Self::summary`] reports. A model whose name ends in
-    /// `-vision` is linked to a projector there too.
+    /// `-vision` is linked to a projector there too, and one whose name ends
+    /// in `-draws` is a Flux.1 model linked to a VAE there.
     fn row(id: u32, name: &str) -> Model {
+        let draws = name.ends_with("-draws");
         Model {
-            components: Vec::new(),
-            image_family: None,
+            components: draws
+                .then(|| ModelComponent {
+                    role: ComponentRole::Vae,
+                    path: PathBuf::from("/models/ae.safetensors"),
+                })
+                .into_iter()
+                .collect(),
+            image_family: draws.then_some(ImageFamily::Flux1),
             id: i64::from(id),
             name: name.to_owned(),
             model_key: format!("local:{id}"),

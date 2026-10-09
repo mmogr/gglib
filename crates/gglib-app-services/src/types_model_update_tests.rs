@@ -70,6 +70,7 @@ fn each_field_a_request_names_is_written() {
         inference_defaults: Some(sampling(0.9, None)),
         server_defaults: Some(None),
         projector_path: None,
+        components: None,
     }
     .apply_to(&mut model);
 
@@ -131,6 +132,47 @@ fn the_projector_link_is_not_written_by_the_merge() {
     .apply_to(&mut model);
 
     assert_eq!(model.projector_path, None);
+}
+
+/// An image model's component links are `ModelOps::link_components`'s to
+/// write, after it has read each file.
+#[test]
+fn the_component_links_are_not_written_by_the_merge() {
+    let mut model = row();
+
+    UpdateModelRequest {
+        components: Some(BTreeMap::from([(
+            ComponentRole::Vae,
+            Some("/models/ae.safetensors".to_owned()),
+        )])),
+        ..UpdateModelRequest::default()
+    }
+    .apply_to(&mut model);
+
+    assert!(model.components.is_empty());
+}
+
+/// The wire names a component by its role: a path, `null`, or the key left
+/// out; a role that is no role's name is refused by name.
+#[test]
+fn components_are_read_by_role_and_an_unknown_role_is_refused() {
+    let request: UpdateModelRequest =
+        serde_json::from_str(r#"{"components": {"vae": "/m/ae.safetensors", "clip_l": null}}"#)
+            .unwrap();
+    assert_eq!(
+        request.components,
+        Some(BTreeMap::from([
+            (ComponentRole::Vae, Some("/m/ae.safetensors".to_owned())),
+            (ComponentRole::ClipL, None),
+        ]))
+    );
+    let absent: UpdateModelRequest = serde_json::from_str(r#"{"name": "x"}"#).unwrap();
+    assert_eq!(absent.components, None);
+
+    let unknown = serde_json::from_str::<UpdateModelRequest>(r#"{"components": {"vea": null}}"#)
+        .unwrap_err()
+        .to_string();
+    assert!(unknown.contains("vea"), "{unknown}");
 }
 
 /// The inspector clears a model's defaults by sending `{}`. What is stored

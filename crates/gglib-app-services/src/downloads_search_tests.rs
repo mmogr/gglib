@@ -105,6 +105,8 @@ fn ops_over(hub: Arc<SearchedHub>) -> DownloadOps {
         downloads: Arc::new(MockDownloadManager::new()),
         hf: hub,
         tool_detector: Arc::new(MockToolSupportDetector),
+        gguf_parser: Arc::new(gglib_core::ports::NoopGgufParser),
+        models_directory: None,
     })
 }
 

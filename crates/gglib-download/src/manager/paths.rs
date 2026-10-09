@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{MutexGuard, PoisonError};
 
 use gglib_core::download::{DownloadError, DownloadId};
-use gglib_core::paths::resolve_models_dir;
+use gglib_core::paths::{repository_dir, resolve_models_dir};
 
 use super::DownloadManagerImpl;
 use crate::queue::QueuedItem;
@@ -86,9 +86,7 @@ impl DownloadDestination {
     ///   subdirectory name derives from
     /// * `files` - List of files to download
     pub(crate) fn plan(models_directory: &Path, repo_id: &str, files: Vec<String>) -> Self {
-        // Convert repo ID to a safe directory name (replace / with _)
-        let dir_name = repo_id.replace('/', "_");
-        let model_dir = models_directory.join(dir_name);
+        let model_dir = repository_dir(models_directory, repo_id);
 
         Self { model_dir, files }
     }

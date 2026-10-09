@@ -239,6 +239,7 @@ impl ModelOps {
     /// update` previews an edit with.
     pub async fn update(&self, id: i64, request: UpdateModelRequest) -> Result<GuiModel, GuiError> {
         self.link_projector(id, &request).await?;
+        self.link_components(id, &request).await?;
         let mut model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
         request.apply_to(&mut model);
         self.deps.core.models().update(&model).await?;

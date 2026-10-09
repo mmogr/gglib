@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 #[path = "types_hf.rs"]
 mod types_hf;
 pub use types_hf::{
-    HfModelKind, HfModelSummary, HfProjector, HfQuantization, HfQuantizationsResponse,
-    HfSearchRequest, HfSearchResponse, HfSortField, ToolSupportResponse,
+    HfCompanion, HfImagePreview, HfModelKind, HfModelSummary, HfProjector, HfQuantization,
+    HfQuantizationsResponse, HfSearchRequest, HfSearchResponse, HfSortField, ToolSupportResponse,
 };
 #[path = "types_model_update.rs"]
 mod types_model_update;
@@ -88,6 +88,15 @@ pub struct GuiModel {
     /// Whether the model reads images: it is linked to a projector.
     #[serde(default)]
     pub image_input: bool,
+    /// The family of image model this is, when it draws images. `None` for a
+    /// model that chats.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_family: Option<gglib_core::domain::ImageFamily>,
+    /// The roles its family needs that it has no file linked for, in the
+    /// recipe's order. Empty for a model that chats.
+    #[serde(default)]
+    pub missing_components: Vec<gglib_core::domain::ComponentRole>,
     /// Denormalised benchmark summary (speed badges).
     ///
     /// `None` if the model has never been benchmarked.
@@ -101,6 +110,8 @@ impl GuiModel {
     pub fn from_model(model: Model, is_serving: bool, port: Option<u16>) -> Self {
         Self {
             image_input: model.image_input(),
+            missing_components: model.missing_components(),
+            image_family: model.image_family,
             id: model.id,
             name: model.name,
             file_path: model.file_path.to_string_lossy().to_string(),
@@ -243,6 +254,18 @@ pub struct ProjectorChoice {
     pub path: String,
     /// The file's name, for the picker's label.
     pub name: String,
+}
+
+/// The files the inspector's picker offers for one role an image model's
+/// family needs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentChoices {
+    /// The role these files are offered for.
+    pub role: gglib_core::domain::ComponentRole,
+    /// Each file, as the projector picker names one.
+    pub files: Vec<ProjectorChoice>,
 }
 
 /// Request body for overriding a model's capability flags.

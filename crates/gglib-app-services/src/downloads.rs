@@ -1,13 +1,16 @@
 //! Download queue operations for GUI backend.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use gglib_core::download::{DownloadId, QueueSnapshot};
+use gglib_core::paths::resolve_models_dir;
 use gglib_core::ports::{
-    DownloadManagerPort, HfClientPort, HfSearchOptions, ToolSupportDetectorPort,
+    DownloadManagerPort, GgufParserPort, HfClientPort, HfSearchOptions, ToolSupportDetectorPort,
 };
 
 use crate::error::GuiError;
+use crate::hf_image_preview::image_preview;
 use crate::hf_quantizations::quantizations_response;
 use crate::types::{
     HfModelSummary, HfQuantizationsResponse, HfSearchRequest, HfSearchResponse,
@@ -19,6 +22,14 @@ pub struct DownloadDeps {
     pub downloads: Arc<dyn DownloadManagerPort>,
     pub hf: Arc<dyn HfClientPort>,
     pub tool_detector: Arc<dyn ToolSupportDetectorPort>,
+    /// Reads the head of a repository's weights, to know an image model
+    /// before it is downloaded.
+    pub gguf_parser: Arc<dyn GgufParserPort>,
+    /// The models directory a download goes under, asked whether an image
+    /// model's companion is already there. `None` resolves it as each
+    /// listing is read, as the download manager resolves it as each
+    /// download starts.
+    pub models_directory: Option<PathBuf>,
 }
 
 /// Download and `HuggingFace` operations handler.
@@ -26,6 +37,8 @@ pub struct DownloadOps {
     downloads: Arc<dyn DownloadManagerPort>,
     hf_client: Arc<dyn HfClientPort>,
     tool_detector: Arc<dyn ToolSupportDetectorPort>,
+    gguf_parser: Arc<dyn GgufParserPort>,
+    models_directory: Option<PathBuf>,
 }
 
 impl DownloadOps {
@@ -34,6 +47,8 @@ impl DownloadOps {
             downloads: deps.downloads,
             hf_client: deps.hf,
             tool_detector: deps.tool_detector,
+            gguf_parser: deps.gguf_parser,
+            models_directory: deps.models_directory,
         }
     }
 
@@ -144,7 +159,11 @@ impl DownloadOps {
     }
 
     /// Get available quantizations for a `HuggingFace` model, each with the
-    /// projector its download fetches.
+    /// projector its download fetches, and an image model's companions with
+    /// what a download would fetch of them.
+    ///
+    /// The head of one quantization's weights is read for that, so every
+    /// listing costs one ranged read of at most `SNIFF_HEAD_BYTES`.
     pub async fn get_model_quantizations(
         &self,
         model_id: &str,
@@ -161,7 +180,20 @@ impl DownloadOps {
             .await
             .map_err(failed)?;
 
-        Ok(quantizations_response(model_id, quants, &projectors))
+        let models_dir = self
+            .models_directory
+            .clone()
+            .or_else(|| resolve_models_dir(None).ok().map(|resolved| resolved.path));
+        let image = image_preview(
+            self.hf_client.as_ref(),
+            self.gguf_parser.as_ref(),
+            model_id,
+            &quants,
+            models_dir.as_deref(),
+        )
+        .await;
+
+        Ok(quantizations_response(model_id, quants, &projectors, image))
     }
 
     /// Check if a `HuggingFace` model supports tool/function calling.

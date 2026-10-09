@@ -92,11 +92,16 @@ pub(crate) async fn model_detail(
         .slots
         .iter()
         .any(|slot| i64::from(slot.model_id) == model.id);
-    let detail = ModelDetailDto {
+    let mut detail = ModelDetailDto {
         file_path: None,
         projector_path: None,
         ..ModelDetailDto::from_model(model, is_serving, None)
     };
+    // A component's role and whether its file is there travel; where it sits
+    // on this machine's disk does not, as for the projector.
+    for component in &mut detail.components {
+        component.path = None;
+    }
     Json(ModelLookup { profile, detail }).into_response()
 }
 

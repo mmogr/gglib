@@ -82,11 +82,12 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `GET` | `/api/models` | List all models |
 | `POST` | `/api/models` | Add a new model |
 | `DELETE` | `/api/models/:id` | Remove a model |
-| `PUT` | `/api/models/:id` | Update a model; `projectorPath` links it to a projector, `null` unlinks it |
+| `PUT` | `/api/models/:id` | Update a model; `projectorPath` links it to a projector, `null` unlinks it; `components` links an image model's files by role, `null` for a role unlinks it |
 | `GET` | `/api/models/:id/projectors` | The projector files the inspector's picker offers for a model |
+| `GET` | `/api/models/:id/components` | For each role an image model's family needs, the files the inspector's picker offers |
 | `POST` | `/api/servers/start` | Start llama-server (id in the body) |
 | `POST` | `/api/servers/stop` | Stop llama-server (id in the body) |
-| `POST` | `/api/models/hf/search` | Search `HuggingFace` |
+| `POST` | `/api/models/hf/search` | Search `HuggingFace`; `kind` is `chat` (the default) or `image` |
 | `POST` | `/api/models/downloads/queue` | Queue a download; answers `{ "id" }`, the download's ID |
 | `GET` | `/api/models/downloads/queue` | Download queue snapshot |
 | `POST` | `/api/models/downloads/:id/cancel` | Cancel a waiting or running download, every file of it |

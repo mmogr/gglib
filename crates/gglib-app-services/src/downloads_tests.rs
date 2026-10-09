@@ -11,6 +11,8 @@ fn make_ops(mgr: MockDownloadManager) -> DownloadOps {
         downloads: Arc::new(mgr),
         hf: Arc::new(MockHfClient),
         tool_detector: Arc::new(MockToolSupportDetector),
+        gguf_parser: Arc::new(gglib_core::ports::NoopGgufParser),
+        models_directory: None,
     })
 }
 

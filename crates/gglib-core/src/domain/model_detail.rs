@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::Model;
+use super::image_family::{ComponentRole, ImageFamily};
 // Named as the adapters name it: the doc comments below are copied verbatim
 // into the generated `ModelDetailDto.ts`, and their links say `gglib_core::`.
 use crate as gglib_core;
@@ -49,6 +50,19 @@ pub struct ModelDetailDto {
     /// Whether the model reads images: it is linked to a projector.
     #[serde(default)]
     pub image_input: bool,
+    /// The family of image model this is, when it draws images. `None` for a
+    /// model that chats.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_family: Option<ImageFamily>,
+    /// The files this image model draws with beside its weights, one for
+    /// each role linked, in role order. Empty for a model that chats.
+    #[serde(default)]
+    pub components: Vec<ComponentLinkDto>,
+    /// The roles its family needs that it has no file linked for, in the
+    /// recipe's order. Empty for a model that chats.
+    #[serde(default)]
+    pub missing_components: Vec<ComponentRole>,
     /// Parameter count in billions.
     pub param_count_b: f64,
     /// Model architecture (e.g. `"llama"`, `"mistral"`).
@@ -178,11 +192,15 @@ impl ModelDetailDto {
     /// contexts where serving state is not relevant (e.g. the CLI).
     pub fn from_model(model: Model, is_serving: bool, port: Option<u16>) -> Self {
         let image_input = model.image_input();
+        let missing_components = model.missing_components();
         Self {
             id: model.id,
             name: model.name,
             file_path: Some(model.file_path.to_string_lossy().to_string()),
             image_input,
+            image_family: model.image_family,
+            components: model.components.iter().map(ComponentLinkDto::of).collect(),
+            missing_components,
             projector_path: model
                 .projector_path
                 .map(|path| path.to_string_lossy().to_string()),
@@ -217,6 +235,35 @@ impl ModelDetailDto {
             is_serving,
             port,
             metadata: model.metadata,
+        }
+    }
+}
+
+/// One file an image model draws with beside its weights, as the inspector
+/// reads its link.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentLinkDto {
+    /// The role the file plays.
+    pub role: ComponentRole,
+    /// Absolute path to the file. `None` where the reader is on another
+    /// machine, as [`ModelDetailDto::projector_path`] is.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// Whether a file is at the linked path now, as the detail was read.
+    pub present: bool,
+}
+
+impl ComponentLinkDto {
+    /// The link as this machine reads it: its path, and whether a file is
+    /// there.
+    fn of(component: &super::ModelComponent) -> Self {
+        Self {
+            role: component.role,
+            path: Some(component.path.to_string_lossy().into_owned()),
+            present: component.path.exists(),
         }
     }
 }

@@ -6,7 +6,7 @@ crates/gglib-app-services/src/benchmark/agentic.rs 745
 crates/gglib-app-services/src/benchmark/compare.rs 364
 crates/gglib-app-services/src/benchmark/mapper.rs 529
 crates/gglib-app-services/src/benchmark/tune/mod.rs 1341
-crates/gglib-app-services/src/models.rs 413
+crates/gglib-app-services/src/models.rs 414
 crates/gglib-app-services/src/models_tests.rs 894
 crates/gglib-app-services/src/models_upgrade_tests.rs 370
 crates/gglib-app-services/src/proxy.rs 409
@@ -16,9 +16,10 @@ crates/gglib-app-services/src/servers.rs 751
 crates/gglib-app-services/src/settings_tests.rs 325
 crates/gglib-app-services/src/setup.rs 301
 crates/gglib-app-services/src/test_support.rs 349
-crates/gglib-app-services/src/types.rs 503
+crates/gglib-app-services/src/types.rs 526
+crates/gglib-app-services/src/types_model_dto_tests.rs 311
 crates/gglib-axum/src/error.rs 326
-crates/gglib-axum/src/routes.rs 435
+crates/gglib-axum/src/routes.rs 442
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 361
 crates/gglib-cli/src/handlers/agent_chat/config.rs 313
@@ -53,7 +54,7 @@ crates/gglib-core/src/domain/chat.rs 325
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 355
 crates/gglib-core/src/domain/hub_chats_tests.rs 418
-crates/gglib-core/src/domain/image_family.rs 449
+crates/gglib-core/src/domain/image_family.rs 450
 crates/gglib-core/src/domain/image_family_tests.rs 618
 crates/gglib-core/src/domain/inference.rs 1915
 crates/gglib-core/src/domain/inference_tests.rs 1409

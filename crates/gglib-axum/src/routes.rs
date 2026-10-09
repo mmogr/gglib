@@ -160,6 +160,13 @@ fn model_routes() -> Router<AppState> {
             "/{id}/projectors",
             get(handlers::model::models::projector_choices),
         )
+        // Component pickers: GET /api/models/{id}/components
+        // For each role an image model's family needs, the files a PUT's
+        // `components` may name for it.
+        .route(
+            "/{id}/components",
+            get(handlers::model::models::component_choices),
+        )
         // Past raw-vs-gglib A/B reports for this model
         .route(
             "/{id}/agentic-history",

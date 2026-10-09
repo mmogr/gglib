@@ -38,6 +38,7 @@ pub enum ImageFamily {
 ///
 /// On the wire `vae`, `clip_l`, `t5xxl` and `llm`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum ComponentRole {
     /// The VAE that decodes latents to pixels (`--vae`).

@@ -157,3 +157,13 @@ fn canonical_model_path_string_falls_back_to_the_literal_path() {
         absent.to_string_lossy()
     );
 }
+
+/// A repository's files go in one folder named for it, the `/` made `_`, so
+/// an owner's name never becomes a directory of its own.
+#[test]
+fn a_repository_dir_is_its_name_with_the_slash_made_an_underscore() {
+    assert_eq!(
+        repository_dir(Path::new("/models"), "unsloth/FLUX.1-schnell"),
+        Path::new("/models/unsloth_FLUX.1-schnell")
+    );
+}
