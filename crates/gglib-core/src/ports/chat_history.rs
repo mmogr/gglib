@@ -83,8 +83,15 @@ pub trait ChatHistoryRepository: Send + Sync {
     /// conversation; nothing is changed.
     async fn replace_from(&self, from: i64, msg: NewMessage) -> Result<i64, ChatHistoryError>;
 
-    /// Delete a message and all subsequent messages in the same conversation.
-    /// Returns the number of messages deleted.
+    /// The conversation message `id` is in, or `None` when no message has
+    /// that id.
+    async fn conversation_of_message(&self, id: i64) -> Result<Option<i64>, ChatHistoryError>;
+
+    /// Delete a message and all subsequent messages in the same conversation,
+    /// and update the conversation timestamp: one transaction, all of it or
+    /// none. Returns the number of messages deleted.
+    ///
+    /// `MessageNotFound` when no message has that id; nothing is changed.
     async fn delete_message_and_subsequent(&self, id: i64) -> Result<i64, ChatHistoryError>;
 
     /// Get message count for a conversation.

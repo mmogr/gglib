@@ -16,6 +16,7 @@ use crate::error::HttpError;
 use crate::handlers::chat_title;
 use crate::state::AppState;
 use gglib_core::domain::chat::{Conversation, ConversationSettings, Message, NewConversation};
+use gglib_core::ports::chat_history::ChatHistoryError;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Request/Response DTOs
@@ -161,12 +162,14 @@ pub(crate) async fn update_conversation(
     Ok(())
 }
 
-/// Delete a conversation and all its messages.
+/// Delete a conversation and all its messages; refused while a reply to it
+/// is still being written.
 /// DELETE /api/conversations/:id
 pub(crate) async fn delete_conversation(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<(), HttpError> {
+    state.runs.refuse_if_live(id)?;
     state.core.chat_history().delete_conversation(id).await?;
     Ok(())
 }
@@ -189,17 +192,20 @@ pub(crate) async fn get_messages(
     Ok(Json(messages))
 }
 
-/// Delete a message and all subsequent messages in the conversation.
+/// Delete a message and all subsequent messages in the conversation, all or
+/// none; refused while a reply to the conversation is still being written.
 /// DELETE /api/messages/:id
 pub(crate) async fn delete_message(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<Json<i64>, HttpError> {
-    let deleted_count = state
-        .core
-        .chat_history()
-        .delete_message_and_subsequent(id)
-        .await?;
+    let history = state.core.chat_history();
+    let conversation_id = history
+        .conversation_of_message(id)
+        .await?
+        .ok_or(ChatHistoryError::MessageNotFound(id))?;
+    state.runs.refuse_if_live(conversation_id)?;
+    let deleted_count = history.delete_message_and_subsequent(id).await?;
     Ok(Json(deleted_count))
 }
 

@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { ThreadRuntime } from '@assistant-ui/react';
 import { appLogger } from '../../../services/platform';
-import { getTransport } from '../../../services/transport';
+import { getTransport, TransportError } from '../../../services/transport';
 import type { ConversationSummary } from '../../../services/transport';
 import { extractDbId } from '../components/MessageActionsContext';
 import { buildThreadMessages } from '../../../hooks/useChatPersistence/buildThreadMessages';
@@ -106,7 +106,13 @@ export function useMessageDeletion({
       showToast('Message deleted', 'success');
     } catch (error) {
       appLogger.error('component.chat', 'Failed to delete message', { error, messageId: deleteTargetId });
-      showToast('Failed to delete message', 'error');
+      // The daemon refuses while a reply to the chat is still being written.
+      showToast(
+        TransportError.hasCode(error, 'CONFLICT')
+          ? 'A reply is still being written here. Stop it or wait, then delete.'
+          : 'Failed to delete message',
+        'error',
+      );
     } finally {
       setIsDeleting(false);
       setIsDeleteModalOpen(false);

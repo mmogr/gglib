@@ -262,33 +262,36 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         Ok(id)
     }
 
-    async fn delete_message_and_subsequent(&self, id: i64) -> Result<i64, ChatHistoryError> {
-        // First get the conversation_id for this message
-        let row = sqlx::query("SELECT conversation_id FROM chat_messages WHERE id = ?")
+    async fn conversation_of_message(&self, id: i64) -> Result<Option<i64>, ChatHistoryError> {
+        sqlx::query_scalar("SELECT conversation_id FROM chat_messages WHERE id = ?")
             .bind(id)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| ChatHistoryError::Database(e.to_string()))?
-            .ok_or(ChatHistoryError::MessageNotFound(id))?;
+            .map_err(|e| ChatHistoryError::Database(e.to_string()))
+    }
 
-        let conversation_id: i64 = row.get("conversation_id");
-
-        // Delete the target message and all messages with higher IDs in the same conversation
-        let result = sqlx::query("DELETE FROM chat_messages WHERE conversation_id = ? AND id >= ?")
-            .bind(conversation_id)
-            .bind(id)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
-
-        // Update the conversation timestamp
-        sqlx::query("UPDATE chat_conversations SET updated_at = datetime('now') WHERE id = ?")
-            .bind(conversation_id)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
-
-        Ok(result.rows_affected() as i64)
+    async fn delete_message_and_subsequent(&self, id: i64) -> Result<i64, ChatHistoryError> {
+        let db = |e: sqlx::Error| ChatHistoryError::Database(e.to_string());
+        // Dropped before `commit`, the transaction rolls back.
+        let mut tx = self.pool.begin().await.map_err(db)?;
+        // A write first, as in `replace_from`: the transaction holds the
+        // write lock from its first statement. No row deleted means no
+        // message has that id; nothing has changed.
+        let deleted: Vec<i64> = sqlx::query_scalar(
+            "DELETE FROM chat_messages WHERE id >= ?1 \
+             AND conversation_id = (SELECT conversation_id FROM chat_messages WHERE id = ?1) \
+             RETURNING conversation_id",
+        )
+        .bind(id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(db)?;
+        let Some(&conversation_id) = deleted.first() else {
+            return Err(ChatHistoryError::MessageNotFound(id));
+        };
+        message_rows::touch(&mut tx, conversation_id).await?;
+        tx.commit().await.map_err(db)?;
+        Ok(i64::try_from(deleted.len()).unwrap_or(i64::MAX))
     }
 
     async fn get_message_count(&self, conversation_id: i64) -> Result<i64, ChatHistoryError> {
