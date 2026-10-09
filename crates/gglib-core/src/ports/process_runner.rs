@@ -84,7 +84,7 @@ pub struct ServerConfig {
     /// V cache element type (`--cache-type-v`). Same semantics as
     /// [`Self::cache_type_k`].
     pub cache_type_v: Option<crate::cache_config::KvCacheType>,
-    /// Whether to lock the model in RAM (`--mlock`). Default: `false`.
+    /// Whether to lock the model in RAM (`--load-mode mmap+mlock`). Default: `false`.
     pub mlock: bool,
     /// Whether to serve this model in embedding mode (`--embeddings`).
     ///
@@ -238,7 +238,7 @@ impl ServerConfig {
         self
     }
 
-    /// Enable memory lock (`--mlock`).
+    /// Enable memory lock (`--load-mode mmap+mlock`).
     #[must_use]
     pub const fn with_mlock(mut self) -> Self {
         self.mlock = true;

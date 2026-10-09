@@ -126,7 +126,8 @@ fn a_pinned_launch_passes_the_cascades_options_and_no_sampling() {
             "-m /models/a-model.gguf --host 127.0.0.1 --port 5500 --metrics --parallel 1 \
              -c 8192 --no-jinja --slot-save-path /slots --cache-ram 4096 --cache-reuse 256 \
              --cache-type-k q8_0 --cache-type-v q8_0 \
-             --spec-type draft-mtp --spec-draft-n-max 4 --spec-draft-p-min 0.6 --mlock"
+             --spec-type draft-mtp --spec-draft-n-max 4 --spec-draft-p-min 0.6 \
+             --load-mode mmap+mlock"
         )
     );
 }

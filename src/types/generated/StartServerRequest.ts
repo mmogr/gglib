@@ -23,6 +23,6 @@ mtpDraftPMin: number | null,
  */
 inferenceParams: InferenceConfig | null, 
 /**
- * Memory-lock the model into RAM (`--mlock`).
+ * Memory-lock the model into RAM (`--load-mode mmap+mlock`).
  */
 mlock: boolean, };

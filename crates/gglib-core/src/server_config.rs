@@ -172,7 +172,7 @@ pub struct ServerConfigOptions {
     /// `gglib_runtime::llama::args::kv_cache_type` module docs.
     pub cache_type_v: Option<crate::cache_config::KvCacheType>,
 
-    /// Whether to memory-lock the model into RAM (`--mlock`).
+    /// Whether to memory-lock the model into RAM (`--load-mode mmap+mlock`).
     /// `None` defaults to `false` in `build_server_config()`.
     pub mlock: Option<bool>,
 }
