@@ -145,3 +145,28 @@ fn a_user_message_resumes_with_its_images_by_id_in_order() {
     };
     assert!(images.is_empty());
 }
+
+/// A tool row's images are the user's to see: the message it resumes as,
+/// which is what the model is sent, is the same with them as without.
+#[test]
+fn a_tool_message_resumes_without_its_images() {
+    let tool_row = |images| Message {
+        metadata: Some(serde_json::json!({ "tool_call_id": "c1" })),
+        ..message(MessageRole::Tool, images)
+    };
+    let with = tool_row(vec![image(b"a", 1)]).to_agent_message();
+    let without = tool_row(Vec::new()).to_agent_message();
+
+    assert_eq!(
+        serde_json::to_value(&with).unwrap(),
+        serde_json::to_value(&without).unwrap()
+    );
+    let AgentMessage::Tool {
+        tool_call_id,
+        content,
+    } = with
+    else {
+        panic!("expected AgentMessage::Tool");
+    };
+    assert_eq!((tool_call_id.as_str(), content.as_str()), ("c1", "look"));
+}

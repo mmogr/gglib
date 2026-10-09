@@ -291,3 +291,41 @@ async fn an_adapter_with_no_store_sends_no_message_that_names_an_image() {
     ));
     assert!(!upstream.was_dialled().await);
 }
+
+/// A saved tool row's images are the user's alone: resumed and sent, the row
+/// is on the wire exactly what it is without them, even with the bytes in
+/// the store.
+#[tokio::test]
+async fn a_saved_tool_rows_images_never_reach_the_model() {
+    use gglib_core::domain::{Message, MessageRole};
+
+    let mut kept = Kept::default();
+    let png = kept.keep("image/png", b"drawn".to_vec());
+    let store = kept.store();
+    let row = |images: Vec<AttachmentInfo>| {
+        Message {
+            id: 1,
+            conversation_id: 1,
+            role: MessageRole::Tool,
+            content: "[image 1x1 PNG stored]".to_owned(),
+            created_at: String::new(),
+            metadata: Some(json!({ "tool_call_id": "c1" })),
+            images,
+        }
+        .to_agent_message()
+    };
+    let info = AttachmentInfo {
+        id: png,
+        mime: "image/png".to_owned(),
+        width: 1,
+        height: 1,
+    };
+
+    let with = wire(&store, &[row(vec![info])]).await;
+
+    assert_eq!(with, wire(&store, &[row(Vec::new())]).await);
+    assert_eq!(
+        with,
+        json!([{ "role": "tool", "tool_call_id": "c1", "content": "[image 1x1 PNG stored]" }])
+    );
+}

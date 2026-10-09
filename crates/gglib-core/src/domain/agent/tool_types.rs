@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::AttachmentInfo;
+
 // =============================================================================
 // Tool schema
 // =============================================================================
@@ -103,7 +105,14 @@ pub struct ToolCall {
 /// surfaced separately via `anyhow::Error` from [`crate::ports::ToolExecutorPort::execute`]
 /// and then converted by the loop implementation into a `ToolResult` with
 /// `success: false` and an appropriate `content` describing the outage.
+///
+/// # Images go to the conversation, not the model
+///
+/// A tool that makes images stores them and lists them in [`Self::images`].
+/// They are saved on the result's tool row and shown to the user; the model
+/// reads only [`Self::content`], so the tool names each image there in words.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ToolResult {
     /// Echoes the [`ToolCall::id`] this result corresponds to.
     pub tool_call_id: String,
@@ -115,10 +124,20 @@ pub struct ToolResult {
     ///
     /// `false` here is **not** a loop error — see type-level docs above.
     pub success: bool,
+
+    /// The images the tool made, stored, in the order it returned them.
+    /// Left out of the JSON when there are none and read as none when
+    /// absent, so a frame logged without the field still parses.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "Option<Vec<AttachmentInfo>>", optional)
+    )]
+    pub images: Vec<AttachmentInfo>,
 }
 
 impl ToolResult {
-    /// A result whose whole output is `content`.
+    /// A result whose whole output is `content`, with no images.
     #[must_use]
     pub fn text(
         tool_call_id: impl Into<String>,
@@ -129,6 +148,7 @@ impl ToolResult {
             tool_call_id: tool_call_id.into(),
             content: content.into(),
             success,
+            images: Vec::new(),
         }
     }
 }
@@ -161,5 +181,36 @@ mod tests {
             json.get("execute_duration_ms").is_none(),
             "execute_duration_ms must not be on ToolResult"
         );
+    }
+
+    #[test]
+    fn a_result_without_images_is_the_frame_it_always_was() {
+        let result = ToolResult::text("c1", "fn main() {}", true);
+        assert_eq!(
+            serde_json::to_string(&result).unwrap(),
+            r#"{"tool_call_id":"c1","content":"fn main() {}","success":true}"#
+        );
+        let old: ToolResult =
+            serde_json::from_str(r#"{"tool_call_id":"c1","content":"x","success":false}"#).unwrap();
+        assert!(old.images.is_empty());
+    }
+
+    #[test]
+    fn a_result_with_images_carries_them_and_reads_back() {
+        let image = AttachmentInfo {
+            id: crate::domain::AttachmentId::of(b"png"),
+            mime: "image/png".to_owned(),
+            width: 2,
+            height: 3,
+        };
+        let mut result = ToolResult::text("c1", "[image 2x3 PNG stored]", true);
+        result.images = vec![image.clone()];
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(
+            json["images"],
+            json!([{ "id": image.id.as_str(), "mime": "image/png", "width": 2, "height": 3 }])
+        );
+        let back: ToolResult = serde_json::from_value(json).unwrap();
+        assert_eq!(back.images, vec![image]);
     }
 }

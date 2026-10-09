@@ -261,3 +261,53 @@ fn frames_with_no_times_record_no_duration() {
     assert_eq!(meta[THINKING_KEY], json!("a"));
     assert!(meta.get(THINKING_DURATION_KEY).is_none());
 }
+
+/// A result's images go on its tool row, by id and in order; the row's text
+/// is the result's text alone, and no other row gains an image.
+#[test]
+fn a_tool_row_carries_the_ids_of_the_images_its_result_made() {
+    let image = |bytes: &[u8]| crate::domain::AttachmentInfo {
+        id: crate::domain::AttachmentId::of(bytes),
+        mime: "image/png".to_owned(),
+        width: 1,
+        height: 1,
+    };
+    let mut drawn = ToolResult::text("c1", "[image 1x1 PNG stored]", true);
+    drawn.images = vec![image(b"one"), image(b"two")];
+    let events = [
+        started("c1"),
+        started("c2"),
+        AgentEvent::ToolCallComplete {
+            tool_name: "draw".to_owned(),
+            result: drawn,
+            wait_ms: 0,
+            execute_duration_ms: 1,
+            display_name: "Draw".to_owned(),
+            duration_display: "1ms".to_owned(),
+        },
+        completed("c2", "plain"),
+        AgentEvent::IterationComplete {
+            iteration: 1,
+            tool_calls: 2,
+        },
+        AgentEvent::FinalAnswer {
+            content: "done".to_owned(),
+        },
+    ];
+    let frames = frames(&events);
+
+    let got = rows_from_timed_frames(frames.iter().map(|f| (f.as_str(), Some(0))), true, 9);
+
+    assert_eq!(got.len(), 4, "an assistant row, two tool rows, the answer");
+    assert_eq!(got[1].role, MessageRole::Tool);
+    assert_eq!(got[1].content, "[image 1x1 PNG stored]");
+    assert_eq!(
+        got[1].images,
+        [
+            crate::domain::AttachmentId::of(b"one"),
+            crate::domain::AttachmentId::of(b"two")
+        ]
+    );
+    assert!(got[2].images.is_empty(), "a result without images");
+    assert!(got[0].images.is_empty() && got[3].images.is_empty());
+}

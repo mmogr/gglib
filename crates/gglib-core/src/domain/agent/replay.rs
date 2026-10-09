@@ -7,7 +7,8 @@
 //! a cancelled or failed loop returns none. So the rows are rebuilt from the
 //! frames: one assistant row per model turn (its text, its tool calls, its
 //! reasoning) followed by one tool row per result, each in the shape
-//! [`to_new_message`] gives a message.
+//! [`to_new_message`] gives a message, a tool row with the ids of the images
+//! its result made.
 //!
 //! Only the fields read here are parsed, so a frame this does not know is
 //! skipped rather than failing the whole transcript.
@@ -189,12 +190,16 @@ fn set_made(row: &mut NewMessage, usage: TurnUsage) {
     }
 }
 
+/// A result's row: its text as the model read it, and the images it made,
+/// by id, which the model never sees.
 fn tool_row(result: ToolResult, conversation_id: i64) -> NewMessage {
     let message = AgentMessage::Tool {
         tool_call_id: result.tool_call_id,
         content: result.content,
     };
-    to_new_message(&message, conversation_id)
+    let mut row = to_new_message(&message, conversation_id);
+    row.images = result.images.into_iter().map(|image| image.id).collect();
+    row
 }
 
 /// Set `key` in a row's metadata, making the metadata an object if it had
