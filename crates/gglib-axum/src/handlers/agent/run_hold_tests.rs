@@ -30,6 +30,8 @@ impl AdmissionRelease for Released {
     fn release(&self, _slot: usize) {
         self.0.fetch_add(1, Ordering::SeqCst);
     }
+
+    fn progress(&self, _slot: usize) {}
 }
 
 impl Released {

@@ -387,6 +387,8 @@ impl gglib_core::ports::AdmissionRelease for ResidentSimSlot {
         let mut state = self.0.lock().unwrap();
         state.inflight = state.inflight.saturating_sub(1);
     }
+
+    fn progress(&self, _slot: usize) {}
 }
 
 impl ResidentSimRuntime {

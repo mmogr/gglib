@@ -198,6 +198,15 @@ pub trait AdmissionRelease: Send + Sync + fmt::Debug {
     /// Called from [`AdmissionLease`]'s `Drop`, so it must never block, panic,
     /// or await.
     fn release(&self, slot: usize);
+
+    /// The request holding `slot` has made progress without finishing (an
+    /// image render's step), which proves the queue is moving: waiters behind
+    /// it start their stall clocks again.
+    ///
+    /// Required, so no implementation can forget that a long render is not a
+    /// wedge. The same rules as [`Self::release`]: never block, panic, or
+    /// await.
+    fn progress(&self, slot: usize);
 }
 
 /// Proof that a request is being served by a resident model, and that the
@@ -243,6 +252,24 @@ impl AdmissionLease {
     #[must_use]
     pub const fn slot(&self) -> usize {
         self.slot
+    }
+
+    /// Report that the request holding this lease has made progress (see
+    /// [`AdmissionRelease::progress`]).
+    pub fn progress(&self) {
+        if let Some(owner) = &self.owner {
+            owner.progress(self.slot);
+        }
+    }
+
+    /// Drop the lease without releasing it.
+    ///
+    /// Only for a teardown that has already settled this lease's count under
+    /// the queue's lock (an image render retired after its process was
+    /// killed). Releasing it as well would take one in-flight request away
+    /// from whatever model holds the slot by then.
+    pub fn disarm(mut self) {
+        self.owner = None;
     }
 }
 

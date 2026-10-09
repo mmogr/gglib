@@ -171,6 +171,8 @@ impl AdmissionRelease for Queue {
     fn release(&self, _slot: usize) {
         self.0.add_permits(1);
     }
+
+    fn progress(&self, _slot: usize) {}
 }
 
 impl StallRuntime {

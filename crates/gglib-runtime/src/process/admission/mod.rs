@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod gate;
 mod hold;
 mod lease;
 #[allow(

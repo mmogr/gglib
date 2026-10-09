@@ -74,8 +74,8 @@ crates/gglib-core/src/download/rate.rs 628
 crates/gglib-core/src/download/types.rs 649
 crates/gglib-core/src/normalize/parsers/delimited.rs 984
 crates/gglib-core/src/normalize/stream.rs 662
-crates/gglib-core/src/ports/model_runtime.rs 678
-crates/gglib-core/src/ports/model_runtime_tests.rs 348
+crates/gglib-core/src/ports/model_runtime.rs 705
+crates/gglib-core/src/ports/model_runtime_tests.rs 350
 crates/gglib-core/src/ports/process_runner.rs 323
 crates/gglib-core/src/request_pipeline/constrain.rs 325
 crates/gglib-core/src/request_pipeline/sampling.rs 679
@@ -150,7 +150,7 @@ crates/gglib-proxy/src/server.rs 995
 crates/gglib-proxy/src/slots.rs 1213
 crates/gglib-proxy/src/slots_poller.rs 806
 crates/gglib-proxy/src/sse_stream.rs 381
-crates/gglib-proxy/tests/fixtures/common.rs 973
+crates/gglib-proxy/tests/fixtures/common.rs 975
 crates/gglib-proxy/tests/integration_admission.rs 322
 crates/gglib-proxy/tests/integration_auth.rs 409
 crates/gglib-proxy/tests/integration_loop_guard.rs 376
@@ -170,8 +170,9 @@ crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 370
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 340
 crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 307
 crates/gglib-runtime/src/ports_impl/model_catalog_tests.rs 352
+crates/gglib-runtime/src/process/admission/gate_tests.rs 474
 crates/gglib-runtime/src/process/admission/queue_tests.rs 974
-crates/gglib-runtime/src/process/admission/state.rs 723
+crates/gglib-runtime/src/process/admission/state.rs 743
 crates/gglib-runtime/src/process/admission/state_placement_tests.rs 320
 crates/gglib-runtime/src/process/manager_tests.rs 344
 crates/gglib-runtime/src/process/residency/launch.rs 549

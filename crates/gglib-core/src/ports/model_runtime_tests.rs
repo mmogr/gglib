@@ -74,6 +74,8 @@ fn a_lease_releases_its_slot_exactly_once_on_drop() {
             assert_eq!(slot, 1, "the lease must release the slot it was given");
             self.0.fetch_add(1, Ordering::SeqCst);
         }
+
+        fn progress(&self, _slot: usize) {}
     }
 
     let counter = Arc::new(Counter::default());

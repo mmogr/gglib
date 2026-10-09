@@ -215,4 +215,11 @@ impl AdmissionRelease for AdmissionQueue {
         // reaching zero in-flight is the only thing that makes a swap legal.
         self.notify();
     }
+
+    fn progress(&self, _slot: usize) {
+        // A render step: nothing is freed, but everyone waiting behind it
+        // starts their stall clock again.
+        self.lock().record_progress();
+        self.notify();
+    }
 }

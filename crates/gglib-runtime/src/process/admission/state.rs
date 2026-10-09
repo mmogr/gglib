@@ -22,11 +22,14 @@ use gglib_core::domain::{
 use super::timing::{ADMISSION_DEADLINE, DRAIN_QUANTUM};
 use crate::command::SERVER_PARALLEL;
 
+#[path = "state_gate.rs"]
+mod gate;
 #[path = "state_placement.rs"]
 mod placement;
 #[path = "state_snapshot.rs"]
 mod snapshot;
 
+pub(super) use gate::{GateTicket, GateVerdict};
 pub use placement::{Candidate, Refusal};
 
 /// How many models may be resident in VRAM at once.
@@ -242,6 +245,8 @@ pub(super) struct QueueState {
     /// Holds on residents, by port and model id (`hold.rs`): a held resident
     /// is never evictable, whatever its in-flight count.
     holds: HashMap<(u16, u32), u32>,
+    /// The generation gate: whose turn it is to generate (`state_gate.rs`).
+    gate: gate::GateState,
 }
 
 impl Default for QueueState {
@@ -255,6 +260,7 @@ impl Default for QueueState {
             secondary_slot: SecondarySlotStatus::default(),
             progress_epoch: 0,
             holds: HashMap::new(),
+            gate: gate::GateState::default(),
         }
     }
 }
@@ -315,7 +321,7 @@ impl QueueState {
         // serves without displacing anything, so it answers to the capacity of
         // its own slot and not to the scheduler's fairness rules.
         if let Some(slot) = self.resident_slot(&ticket.model) {
-            if !self.may_serve(slot, now) {
+            if !self.may_serve(slot, now, ticket.seq) {
                 // Held back by the slot's capacity, or standing aside for a
                 // rival the turn rules have promised it to. Either way this
                 // request is now genuinely waiting, so the deadline has to be
@@ -350,6 +356,12 @@ impl QueueState {
         // Global FIFO: the oldest waiter across all models decides which model
         // is up next, so a busy model cannot keep jumping the line.
         if self.oldest_waiting_model() != Some(ticket.model.as_str()) {
+            return AdmissionDecision::Wait;
+        }
+
+        // A llama-server launch leads to generation, so it waits for the
+        // generation gate like a serve does.
+        if candidate.runtime == RuntimeKind::Llama && !self.gate_admits_llm(ticket.seq) {
             return AdmissionDecision::Wait;
         }
 
@@ -437,7 +449,7 @@ impl QueueState {
 
     /// Record an event that proves the queue is moving. Every waiter's next
     /// poll resets its stall clock against this.
-    fn record_progress(&mut self) {
+    pub(super) fn record_progress(&mut self) {
         self.progress_epoch = self.progress_epoch.wrapping_add(1);
     }
 
@@ -461,11 +473,19 @@ impl QueueState {
     /// for as long as it sits there. Or a rival may have become entitled to the
     /// slot, in which case granting now would re-pin a slot that is one release
     /// away from changing hands.
-    fn may_serve(&self, slot: usize, now: Instant) -> bool {
+    ///
+    /// A llama-server resident also answers to the generation gate: it serves
+    /// the request arriving as `seq` only while no render holds the GPU or
+    /// waits ahead of it. An `sd-server` resident does not, so a render never
+    /// waits on its own model.
+    fn may_serve(&self, slot: usize, now: Instant, seq: u64) -> bool {
         let Some(resident) = self.slots[slot].resident() else {
             return false;
         };
-        resident.inflight < SERVER_PARALLEL && !self.owes_slot_to_rival(slot, now)
+        let gated = resident.runtime == RuntimeKind::Llama;
+        resident.inflight < SERVER_PARALLEL
+            && !self.owes_slot_to_rival(slot, now)
+            && (!gated || self.gate_admits_llm(seq))
     }
 
     /// Whether `slot` is about to be handed to a waiting rival.

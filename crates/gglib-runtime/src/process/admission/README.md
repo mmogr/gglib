@@ -104,6 +104,33 @@ ceiling that keeps large chat models in the swap path. Otherwise it swaps into
 an evictable primary under the ordinary turn rules. The caller says which
 program serves a request in its [`Candidate`].
 
+# The generation gate
+
+Residency says which models are loaded; the gate says which of them may
+generate (`state_gate.rs` for the rules, `gate.rs` for the waiting). An image
+render on `sd-server` needs the GPU to itself, LLM generations may share it,
+and the queue hands out turns first come first served, in one order with the
+tickets above. A render starts once no LLM turn is in flight and nothing
+asked before it; LLM turns, and llama-server serves and launches, wait while a
+render holds the GPU or waits ahead of them, so a stream of chats cannot
+starve it.
+
+Only requests on llama-server residents count as LLM turns. A render takes its
+`sd-server` lease first and gives it to the turn, so its own lease never holds
+it back, and requests for an `sd-server` resident skip the gate on the fast
+path. Tickets waiting for a slot are not turns: an older chat waiting to evict
+the slot a waiting render pins would otherwise wait on the render while the
+render waited on it, the self-wait shape of
+[#721](https://github.com/mmogr/gglib/issues/721) in another form.
+
+A render step is progress, so nobody behind a long render reaches
+[`ADMISSION_DEADLINE`] while it keeps stepping, and a gate waiter expires
+under the same stall rule as a ticket. A render whose process had to be killed
+is retired by `AdmissionQueue::retire_render`: the kill first, then one locked
+release and eviction that touches the slot only while it still holds that
+model, then the turn ends. Requests through the proxy take leases and so count
+already; the callers that take explicit turns arrive with image drawing.
+
 # What this module is not responsible for
 
 It does not launch, stop, or health-check anything, and it never touches a
