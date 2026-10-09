@@ -16,6 +16,9 @@
 # and what the change is, is a reading of the evidence against gglib's code
 # and ADRs, and Claude writes it when ANTHROPIC_API_KEY is set; without the
 # key the issue carries the evidence and says the verdict was not taken.
+# scripts/llama_upstream_verdict.py asks for it through the Claude Agent SDK,
+# not the Claude Code GitHub Action: the API credits a Claude Max or Team plan
+# includes cover the Agent SDK run with an API key, and not the Action.
 #
 # One issue, edited in place: the title names the pin and the candidate, each
 # run replaces the body, and a comment marks a run whose candidate moved. The
@@ -59,10 +62,12 @@ defaults:
 env:
   # `secrets.*` cannot appear in an `if`; this can.
   HAS_ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
-  # The Claude model that reads the verdict, named here rather than left to
-  # whatever Claude Code defaults to, so a run says what read it. Any model
-  # id from https://platform.claude.com/docs/en/about-claude/models/overview.
+  # The Claude model that reads the verdict. Any model id from
+  # https://platform.claude.com/docs/en/about-claude/models/overview.
   VERDICT_MODEL: claude-opus-5-5
+  # Where a reading stops, in estimated US dollars. The estimate can pass it
+  # by a little; the organisation's monthly spend limit is the hard cap.
+  VERDICT_BUDGET_USD: 5
 
 jobs:
   report:
@@ -118,34 +123,24 @@ jobs:
         # A verdict that fails to arrive is reported as missing, not as a
         # failed run: the evidence is still worth an issue.
         continue-on-error: true
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ steps.app-token.outputs.token }}
-          claude_args: |
-            --model ${{ env.VERDICT_MODEL }}
-            --max-turns 40
-            --allowedTools "Read,Grep,Glob,Bash(git:*)"
-            --json-schema '{"type":"object","properties":{"verdict":{"type":"string","enum":["compatible","changes needed","unclear"]},"summary":{"type":"string"},"body":{"type":"string"}},"required":["verdict","summary","body"]}'
-          prompt: |
-            You are reading what a llama.cpp release changes for gglib, the repository checked out here. gglib launches and proxies `llama-server`, and pins the release it installs: `PINNED_LLAMA_RELEASE` in crates/gglib-runtime/src/llama/download/mod.rs. The evidence for a candidate release is in ${{ runner.temp }}/report: facts.json, report.md, and evidence/ (the commit list, both `--help` texts and their diff, the launch logs and /props, and the diff of each upstream file an ADR cites). A bare clone of llama.cpp is at ${{ runner.temp }}/llama.cpp.git; `git -C ${{ runner.temp }}/llama.cpp.git show <tag>:<path>` reads a file at either tag.
-
-            Decide whether gglib can move its pin to the candidate as it is, and if not, what must change. Read against gglib's own code and documents, not from memory of llama.cpp:
-            - crates/gglib-runtime/src/command.rs builds the launch command line. A flag it emits that the candidate's `--help` no longer lists is a change needed; say the replacement, from the candidate's `--help` or common/arg.cpp.
-            - crates/gglib-proxy reads llama-server's HTTP responses. tools/server/README.md's diff says what the API changed.
-            - docs/adr/ holds the decisions. Each ADR has criteria that reopen it; report.md's "Files the ADRs cite" names which upstream files each one reads from. For each such file that changed, read the diff for the specific behaviour the ADR relies on (ADR 0005: the chat endpoint overwriting grammar_lazy, grammar_triggers and preserved_tokens; ADR 0003/0004: the sampler defaults; ADR 0007: chat_template_caps and reasoning_effort; ADR 0015: /props modalities and cache behaviour with a projector) and say whether that behaviour changed or only the code around it.
-            - docs/tool-call-repair.md and crates/gglib-proxy/src/repair.rs compensate for tool-call parsing; an upstream parser fix for a dialect gglib repairs is worth naming.
-
-            Write `body` as GitHub-flavoured Markdown with these sections, each short and concrete, every claim with the file and line it comes from, in gglib or in the upstream diff: "Verdict" (one paragraph), "Changes needed" (a list, each with the gglib file and line and the change, or "None"), "ADR criteria" (one line per ADR whose cited file changed: touched or not touched, and if touched which reading the ADR says to take), "Worth knowing" (upstream changes gglib does not need but might want, at most five). Say what you could not determine rather than guessing. `summary` is one sentence. `verdict` is "compatible" when nothing in "Changes needed" and no ADR criterion is touched, "changes needed" when the list is not empty, and "unclear" otherwise.
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/sdk"
+          "$RUNNER_TEMP/sdk/bin/pip" install --quiet claude-agent-sdk==0.2.165
+          "$RUNNER_TEMP/sdk/bin/python" scripts/llama_upstream_verdict.py \
+            --report "$RUNNER_TEMP/report" \
+            --llama "$RUNNER_TEMP/llama.cpp.git" \
+            --out "$RUNNER_TEMP/verdict.json" \
+            --model "$VERDICT_MODEL" \
+            --max-budget-usd "$VERDICT_BUDGET_USD"
 
       - name: Write the issue body
         if: steps.collect.outputs.up_to_date == 'false'
         env:
-          VERDICT_JSON: ${{ steps.verdict.outputs.structured_output }}
+          # The script writes it either way: the verdict, or why there is none.
+          VERDICT_FILE: ${{ runner.temp }}/verdict.json
           VERDICT_RAN: ${{ steps.verdict.outcome }}
-          # The session log the action writes; it holds the reason a reading
-          # ended without a verdict, which the action does not print.
-          VERDICT_LOG: ${{ steps.verdict.outputs.execution_file }}
           HAS_KEY: ${{ env.HAS_ANTHROPIC_KEY }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           REPORT: ${{ runner.temp }}/report
@@ -153,34 +148,12 @@ jobs:
           python3 - > "$RUNNER_TEMP/body.md" <<'EOF'
           import json, os
 
-          def reading_error(path):
-              # The last thing the session said: the result's text, or the
-              # last assistant text when the result carries none. An API
-              # refusal (no credit, a bad key) ends the session this way.
-              try:
-                  log = json.load(open(path))
-              except (TypeError, OSError, ValueError):
-                  return None
-              said = None
-              for m in log if isinstance(log, list) else [log]:
-                  if not isinstance(m, dict):
-                      continue
-                  if m.get("type") == "result":
-                      said = m.get("result") or "; ".join(map(str, m.get("errors") or [])) or said
-                  elif m.get("type") == "assistant":
-                      parts = (m.get("message") or {}).get("content") or []
-                      text = " ".join(b.get("text", "") for b in parts if isinstance(b, dict))
-                      said = text or said
-              said = " ".join(str(said or "").split())
-              return said[:400] or None
-
           report = os.environ["REPORT"]
           facts = json.load(open(f"{report}/facts.json"))
           pin, cand = facts["pin"], facts["candidate"]
-          verdict = None
           try:
-              verdict = json.loads(os.environ.get("VERDICT_JSON") or "null")
-          except json.JSONDecodeError:
+              verdict = json.load(open(os.environ["VERDICT_FILE"]))
+          except (OSError, ValueError):
               verdict = None
 
           out = []
@@ -192,7 +165,7 @@ jobs:
               out.append("No verdict: `ANTHROPIC_API_KEY` is not set, so the evidence below was not read against gglib's code and ADRs.")
           else:
               out.append(f"No verdict: the reading step did not return one (outcome `{os.environ.get('VERDICT_RAN')}`); see the run.")
-              reason = reading_error(os.environ.get("VERDICT_LOG"))
+              reason = verdict.get("error") if isinstance(verdict, dict) else None
               if reason:
                   out.append("")
                   out.append(f"> {reason}")
