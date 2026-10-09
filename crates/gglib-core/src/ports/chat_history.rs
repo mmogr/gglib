@@ -60,8 +60,8 @@ pub trait ChatHistoryRepository: Send + Sync {
     /// Get conversation count.
     async fn get_conversation_count(&self) -> Result<i64, ChatHistoryError>;
 
-    /// Get all messages for a conversation, ordered chronologically, each
-    /// with the images it carries, in order, without their bytes.
+    /// Get all messages for a conversation, in the order they were saved,
+    /// each with the images it carries, in order, without their bytes.
     async fn get_messages(&self, conversation_id: i64) -> Result<Vec<Message>, ChatHistoryError>;
 
     /// Save a new message, with a link to each image it carries, and update

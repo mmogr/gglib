@@ -180,7 +180,7 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
             "SELECT id, conversation_id, role, content, metadata, created_at 
              FROM chat_messages 
              WHERE conversation_id = ? 
-             ORDER BY created_at ASC",
+             ORDER BY id ASC",
         )
         .bind(conversation_id)
         .fetch_all(&self.pool)

@@ -119,6 +119,31 @@ async fn save_and_get_messages_round_trip() {
     assert_eq!(repo.get_messages(cid).await.unwrap().len(), 2);
 }
 
+/// `created_at` has one-second resolution and follows the clock, which can
+/// go back; the order a chat is read in is the order its rows were saved.
+#[tokio::test]
+async fn messages_read_back_in_the_order_they_were_saved_whatever_the_clock_says() {
+    let repo = repo().await;
+    let cid = repo.create_conversation(make_conv("Order")).await.unwrap();
+    for (content, at) in [
+        ("first", "2026-10-09 10:00:00"),
+        ("second", "2026-10-09 09:59:59"),
+        ("third", "2026-10-09 09:59:59"),
+    ] {
+        let id = repo.save_message(make_msg(cid, content)).await.unwrap();
+        sqlx::query("UPDATE chat_messages SET created_at = ? WHERE id = ?")
+            .bind(at)
+            .bind(id)
+            .execute(&repo.pool)
+            .await
+            .unwrap();
+    }
+
+    let saved = repo.get_messages(cid).await.unwrap();
+    let contents: Vec<&str> = saved.iter().map(|m| m.content.as_str()).collect();
+    assert_eq!(contents, ["first", "second", "third"]);
+}
+
 #[tokio::test]
 async fn get_message_count() {
     let repo = repo().await;
