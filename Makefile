@@ -157,7 +157,11 @@ build-dev: ## Build Rust CLI in debug mode
 build-gui: ## Build web UI frontend
 	@echo "Building web UI frontend..."
 	@if ! command -v npm >/dev/null 2>&1; then echo "Error: npm not found"; exit 1; fi
-	UV_USE_IO_URING=0 npm install
+	@# `npm ci`, not `npm install`: a build installs what package-lock.json
+	@# says and leaves the file alone. `npm install` rewrites it (npm 10
+	@# drops its "libc" entries), and a modified lockfile stops a
+	@# `git pull` that changes it. tests/setup_scripts.rs pins both lines.
+	UV_USE_IO_URING=0 npm ci
 	UV_USE_IO_URING=0 npm run build
 	@echo "✓ Web UI built to web_ui/"
 
@@ -535,7 +539,7 @@ build-tauri: ## Build Tauri desktop app
 	@echo "Building Tauri desktop app..."
 	@if ! command -v npm >/dev/null 2>&1; then echo "Error: npm not found"; exit 1; fi
 	@rm -f target/release/bundle/dmg/*.dmg 2>/dev/null || true
-	UV_USE_IO_URING=0 npm install
+	UV_USE_IO_URING=0 npm ci
 	# Step A: Build frontend
 	UV_USE_IO_URING=0 npm run build:tauri
 	# Step B: Unified cargo build - both CLI and Tauri app share dependency compilation

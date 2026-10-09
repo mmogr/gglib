@@ -66,7 +66,7 @@ This architecture means:
 
 1. Install dependencies:
    ```bash
-   npm install
+   npm ci
    ```
 
 2. Run the development server:
