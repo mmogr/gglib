@@ -5,11 +5,26 @@
 
 use std::sync::Arc;
 
+use crate::domain::branching::{
+    self, ChatChange, ChatChanged, ChatThread, EDITED_KEY, Plan, Refused, Then,
+};
 use crate::domain::chat::{
-    Conversation, ConversationSettings, ConversationUpdate, Message, NewConversation, NewMessage,
+    Conversation, ConversationSettings, ConversationUpdate, Message, MessageRole, NewConversation,
+    NewMessage,
 };
 use crate::domain::{Machine, ModelRef, Thinking};
 use crate::ports::chat_history::{ChatHistoryError, ChatHistoryRepository};
+
+/// Why a change to a chat was not made. Nothing is written.
+#[derive(Debug, thiserror::Error)]
+pub enum ChangeError {
+    /// The branching rules refuse it.
+    #[error(transparent)]
+    Refused(#[from] Refused),
+    /// The chat history could not be read or written.
+    #[error(transparent)]
+    History(#[from] ChatHistoryError),
+}
 
 /// Service for managing chat history.
 ///
@@ -180,9 +195,100 @@ impl ChatHistoryService {
         self.repo.delete_message_and_subsequent(id).await
     }
 
+    /// Make `change` to conversation `id`, `busy` saying whether a reply to
+    /// it is being written (ADR 0017): in place, or on a new branch of it,
+    /// as [`branching::plan`](crate::domain::branching::plan()) decides.
+    ///
+    /// # Errors
+    ///
+    /// `ConversationNotFound` for no conversation `id`, the rules' refusal,
+    /// or a write that failed. Nothing is written.
+    pub async fn change(
+        &self,
+        id: i64,
+        change: &ChatChange,
+        busy: bool,
+    ) -> Result<ChatChanged, ChangeError> {
+        self.require(id).await?;
+        let path = self.repo.get_messages(id).await?;
+        match branching::plan(&path, change, busy)? {
+            Plan::Replace { question } => {
+                let edited = written(id, change, MessageRole::User);
+                self.repo.replace_from(question, edited).await?;
+                Ok(ChatChanged {
+                    conversation_id: id,
+                    forked: false,
+                    answer: true,
+                })
+            }
+            Plan::Fork {
+                through,
+                then,
+                answer,
+            } => {
+                let then = match then {
+                    Then::Nothing => None,
+                    Then::Question => Some(written(id, change, MessageRole::User)),
+                    Then::EditedReply => Some(written(id, change, MessageRole::Assistant)),
+                };
+                let branch = self.repo.fork(id, through, then).await?;
+                Ok(ChatChanged {
+                    conversation_id: branch,
+                    forked: true,
+                    answer,
+                })
+            }
+        }
+    }
+
+    /// Conversation `id` as a client reads it: its messages, the branch
+    /// points its family holds along them, and whether it ends in a
+    /// question nothing answers.
+    ///
+    /// # Errors
+    ///
+    /// `ConversationNotFound` for no conversation `id`, or a read that
+    /// failed.
+    pub async fn thread(&self, id: i64) -> Result<ChatThread, ChatHistoryError> {
+        self.require(id).await?;
+        let messages = self.repo.get_messages(id).await?;
+        let family = self.repo.lineage(id).await?;
+        Ok(ChatThread {
+            points: branching::points(id, &family),
+            answerable: branching::answerable(&messages).is_ok(),
+            messages,
+        })
+    }
+
+    async fn require(&self, id: i64) -> Result<(), ChatHistoryError> {
+        match self.repo.get_conversation(id).await? {
+            Some(_) => Ok(()),
+            None => Err(ChatHistoryError::ConversationNotFound(id)),
+        }
+    }
+
     /// Get message count for a conversation.
     pub async fn get_message_count(&self, conversation_id: i64) -> Result<i64, ChatHistoryError> {
         self.repo.get_message_count(conversation_id).await
+    }
+}
+
+/// The message an edit writes to `conversation_id`: its text and images, as
+/// `role`. An edited reply says it was edited, and carries nothing of how
+/// the model made the reply it replaces.
+fn written(conversation_id: i64, change: &ChatChange, role: MessageRole) -> NewMessage {
+    let (content, images) = match change {
+        ChatChange::Edit {
+            content, images, ..
+        } => (content.clone(), images.clone()),
+        ChatChange::Regenerate { .. } | ChatChange::Branch { .. } => (String::new(), Vec::new()),
+    };
+    NewMessage {
+        conversation_id,
+        role,
+        content,
+        metadata: (role == MessageRole::Assistant).then(|| serde_json::json!({ EDITED_KEY: true })),
+        images,
     }
 }
 

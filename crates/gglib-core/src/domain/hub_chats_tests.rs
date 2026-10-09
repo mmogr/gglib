@@ -70,6 +70,7 @@ fn tool_reply() -> Vec<Message> {
         created_at: created_at.to_owned(),
         metadata: None,
         images: Vec::new(),
+        origin_id: None,
     };
     vec![
         Message {
@@ -106,6 +107,27 @@ fn turn(content: &str) -> HubTurn {
     }
 }
 
+/// A row of the recorded chat, saved at `at` on its day, with `metadata`
+/// and no image.
+fn row(
+    id: i64,
+    role: MessageRole,
+    content: &str,
+    at: &str,
+    metadata: serde_json::Value,
+) -> Message {
+    Message {
+        id,
+        conversation_id: 12,
+        role,
+        content: content.to_owned(),
+        created_at: format!("2026-09-30 {at}"),
+        metadata: Some(metadata),
+        images: Vec::new(),
+        origin_id: None,
+    }
+}
+
 pub(super) fn recorded() -> Recorded {
     let list = HubChatList {
         chats: vec![
@@ -130,6 +152,8 @@ pub(super) fn recorded() -> Recorded {
     let conversation = Conversation {
         id: 12,
         title: "Why the build broke".to_owned(),
+        branch_of: None,
+        lineage_id: None,
         model_id: Some(3),
         system_prompt: Some("You are a helpful assistant.".to_owned()),
         settings: Some(ConversationSettings {
@@ -142,21 +166,21 @@ pub(super) fn recorded() -> Recorded {
     };
     let messages = vec![
         Message {
-            id: 40,
-            conversation_id: 12,
-            role: MessageRole::User,
-            content: "Why did the build break?".to_owned(),
-            created_at: "2026-09-30 09:12:31".to_owned(),
-            metadata: Some(json!({ "device": "phone-7c2e" })),
             images: vec![screenshot()],
+            ..row(
+                40,
+                MessageRole::User,
+                "Why did the build break?",
+                "09:12:31",
+                json!({ "device": "phone-7c2e" }),
+            )
         },
-        Message {
-            id: 41,
-            conversation_id: 12,
-            role: MessageRole::Assistant,
-            content: "A dependency moved.".to_owned(),
-            created_at: "2026-09-30 09:13:07".to_owned(),
-            metadata: Some(json!({
+        row(
+            41,
+            MessageRole::Assistant,
+            "A dependency moved.",
+            "09:13:07",
+            json!({
                 "modelName": "qwen3-8b",
                 "promptTokens": 812,
                 "completionTokens": 96,
@@ -164,28 +188,23 @@ pub(super) fn recorded() -> Recorded {
                 "device": "phone-7c2e",
                 "finishReason": "stop",
                 "contextSize": 8192,
-            })),
-            images: Vec::new(),
-        },
-        Message {
-            id: 42,
-            conversation_id: 12,
-            role: MessageRole::User,
-            content: "And how do I fix it?".to_owned(),
-            created_at: "2026-09-30 09:14:02".to_owned(),
-            metadata: Some(json!({ "device": "phone-7c2e" })),
-            images: Vec::new(),
-        },
+            }),
+        ),
+        row(
+            42,
+            MessageRole::User,
+            "And how do I fix it?",
+            "09:14:02",
+            json!({ "device": "phone-7c2e" }),
+        ),
         // Stopped before its stream ended: no counts, no reading.
-        Message {
-            id: 43,
-            conversation_id: 12,
-            role: MessageRole::Assistant,
-            content: "Pin the".to_owned(),
-            created_at: "2026-09-30 09:14:21".to_owned(),
-            metadata: Some(json!({ "incomplete": true })),
-            images: Vec::new(),
-        },
+        row(
+            43,
+            MessageRole::Assistant,
+            "Pin the",
+            "09:14:21",
+            json!({ "incomplete": true }),
+        ),
     ];
     Recorded {
         list,

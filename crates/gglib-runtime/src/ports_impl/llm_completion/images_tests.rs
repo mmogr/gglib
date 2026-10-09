@@ -318,6 +318,7 @@ async fn a_saved_tool_rows_images_never_reach_the_model() {
             created_at: String::new(),
             metadata: Some(json!({ "tool_call_id": "c1" })),
             images,
+            origin_id: None,
         }
         .to_agent_message()
     };

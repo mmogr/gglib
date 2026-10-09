@@ -77,6 +77,7 @@ fn messages(rows: &[PathRow]) -> Vec<Message> {
         .map(|row| Message {
             id: row.id,
             conversation_id: 7,
+            origin_id: None,
             role: row.role,
             content: row.content.clone(),
             created_at: String::new(),

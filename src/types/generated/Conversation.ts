@@ -8,4 +8,9 @@ export type Conversation = { id: number, title: string, model_id: number | null,
 /**
  * Session parameters captured at creation for resume.
  */
-settings?: ConversationSettings, created_at: string, updated_at: string, };
+settings?: ConversationSettings, created_at: string, updated_at: string, 
+/**
+ * The chat this one was branched from (ADR 0017). Absent for a chat
+ * that is no branch; it still names a chat that has since been deleted.
+ */
+branch_of?: number, };

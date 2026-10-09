@@ -16,6 +16,7 @@ fn stored_message(role: MessageRole, content: &str, images: &[(u32, u32)]) -> Me
     Message {
         id: 1,
         conversation_id: 1,
+        origin_id: None,
         role,
         content: content.to_owned(),
         created_at: String::new(),

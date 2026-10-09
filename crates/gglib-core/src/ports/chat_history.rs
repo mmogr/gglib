@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use super::attachment_store::AttachmentError;
+use crate::domain::branching::LineChat;
 use crate::domain::chat::{Conversation, ConversationUpdate, Message, NewConversation, NewMessage};
 
 /// Errors that can occur in chat history operations.
@@ -96,4 +97,26 @@ pub trait ChatHistoryRepository: Send + Sync {
 
     /// Get message count for a conversation.
     async fn get_message_count(&self, conversation_id: i64) -> Result<i64, ChatHistoryError>;
+
+    /// Branch `source` (ADR 0017): a new conversation of its family, with
+    /// its title and settings, holding a copy of each of its messages but
+    /// system ones as far as `through` (none for `None`), then `then`, in one
+    /// transaction. A copy keeps its text, metadata, images and time, and
+    /// remembers the message it copies as first written. `source` is not
+    /// changed. Returns the new conversation's id.
+    ///
+    /// `ConversationNotFound` for no `source`, `MessageNotFound` when
+    /// `through` is not one of its messages, and `Attachment(NotFound)` for
+    /// an image `then` names that is not stored: nothing is written.
+    async fn fork(
+        &self,
+        source: i64,
+        through: Option<i64>,
+        then: Option<NewMessage>,
+    ) -> Result<i64, ChatHistoryError>;
+
+    /// Every conversation of `conversation_id`'s family, each with its
+    /// messages but system ones, oldest first, as the branch points read
+    /// them. Empty when no conversation has that id.
+    async fn lineage(&self, conversation_id: i64) -> Result<Vec<LineChat>, ChatHistoryError>;
 }

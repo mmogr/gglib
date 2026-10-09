@@ -6,7 +6,7 @@ mod preview;
 mod units;
 mod wire;
 
-pub use plan::{Plan, Refused, Then, answerable, plan};
+pub use plan::{EDITED_KEY, Plan, Refused, Then, answerable, plan};
 pub use points::{LineChat, LineRow, points};
 pub use preview::{PREVIEW_CHARS, PreviewRow, preview};
 pub use units::{Unit, units};

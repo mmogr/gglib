@@ -16,6 +16,8 @@ pub use attachments::sweep_unlinked_attachments;
 
 #[path = "setup_attachments.rs"]
 mod attachments;
+#[path = "setup_branches.rs"]
+mod branches;
 #[path = "setup_model_files.rs"]
 mod model_files;
 #[path = "setup_models.rs"]
@@ -283,6 +285,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     add_column_if_missing(pool, "chat_conversations", "settings", "TEXT").await?;
 
     attachments::create_attachment_tables(pool).await?;
+    branches::add_branch_columns(pool).await?;
 
     // Create MCP servers table
     sqlx::query(

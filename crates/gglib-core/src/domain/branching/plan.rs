@@ -31,6 +31,11 @@ pub enum Plan {
     },
 }
 
+/// The metadata key an edited reply is saved with, `true`: the text is the
+/// person's, and nothing of how the model made the reply it replaces is
+/// kept with it.
+pub const EDITED_KEY: &str = "edited";
+
 /// What a new branch holds after the messages it copies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
