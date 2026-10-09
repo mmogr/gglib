@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use gglib_core::domain::TensorTable;
 use gglib_core::domain::gguf::{GgufValue, RawMetadata};
+use gglib_core::domain::{ImageFamily, TensorTable, WeightsFormat};
 use gglib_core::{GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, Quantization};
 
 use crate::capabilities;
@@ -43,9 +43,9 @@ impl GgufParser {
         reader.read_magic()?;
         let version = reader.read_version()?;
 
-        // Read tensor count (not used but must be read). Nothing is reserved
-        // or looped over by it, so it is not held to the size of the file.
-        let _tensor_count = if version >= 2 {
+        // Read tensor count. It is held to the size of the file only when
+        // the tensor-info table after the metadata is read.
+        let tensor_count = if version >= 2 {
             reader.read_u64()?
         } else {
             u64::from(reader.read_u32()?)
@@ -69,8 +69,32 @@ impl GgufParser {
             raw_metadata.insert(key, value);
         }
 
+        // Read on into the tensor-info table, the only place an image
+        // model's GGUF says what it is. A table that cannot be read leaves
+        // the family unknown and never fails a parse of the metadata.
+        let image_family = match tensor_table::read_tensor_infos(&mut reader, tensor_count) {
+            Ok(tensors) => ImageFamily::sniff(&TensorTable {
+                format: WeightsFormat::Gguf,
+                architecture: raw_metadata
+                    .get("general.architecture")
+                    .and_then(GgufValue::as_str)
+                    .map(str::to_owned),
+                tensors,
+            }),
+            Err(error) => {
+                tracing::debug!(
+                    path = %file_path.display(),
+                    %error,
+                    "the tensor table could not be read; no image family"
+                );
+                None
+            }
+        };
+
         // Extract structured metadata
-        Ok(extract_metadata(&raw_metadata, file_path))
+        let mut metadata = extract_metadata(&raw_metadata, file_path);
+        metadata.image_family = image_family;
+        Ok(metadata)
     }
 }
 
@@ -134,6 +158,7 @@ fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetadata {
         expert_shared_count,
         metadata: processed,
         role: crate::role::file_role(raw),
+        image_family: None,
     }
 }
 

@@ -283,6 +283,8 @@ pub struct RetagResponse {
     pub added: Vec<String>,
     pub removed: Vec<String>,
     pub spec_changed: bool,
+    /// The image family read from the file for a model that had none.
+    pub family_found: Option<gglib_core::domain::ImageFamily>,
 }
 
 /// Whether a newer `HuggingFace` revision exists for a model.

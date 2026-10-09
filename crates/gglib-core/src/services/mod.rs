@@ -4,6 +4,7 @@ mod app_core;
 mod app_core_fixture;
 mod attachments;
 mod chat_history;
+mod model_components;
 mod model_import;
 mod model_projector;
 mod model_registrar;

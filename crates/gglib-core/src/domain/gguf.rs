@@ -272,6 +272,10 @@ pub struct GgufMetadata {
     /// What the header says the file is: a model's weights, or a projector
     /// (`general.type` is `mmproj`, or `general.architecture` is `clip`).
     pub role: crate::download::GgufFileRole,
+    /// The image family the tensor table says this is, when it is a main
+    /// image-model file; `None` for a chat model, a component, or a table
+    /// that could not be read.
+    pub image_family: Option<crate::domain::ImageFamily>,
 }
 
 /// Raw metadata from GGUF parsing (before string conversion).

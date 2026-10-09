@@ -11,7 +11,8 @@ infrastructure concerns (database, filesystem, etc.).
 
 - `agent` - Agent loop types (`AgentConfig`, `AgentMessage`, `AgentEvent`, etc.)
 - `model` - Model types (`Model`, `NewModel`). A model reads images exactly when
-  it has a projector (`Model::image_input`)
+  it has a projector (`Model::image_input`), and draws them exactly when its
+  tensors named an image family (`Model::generates_images`)
 - `model_file` - The files a model is made of, as the library records them
   (`ModelFile`, `NewModelFile`)
 - `model_detail` - Every stored field of one model, as the inspector reads it
@@ -38,6 +39,12 @@ infrastructure concerns (database, filesystem, etc.).
 - `tensor_table` - The names and outermost-first shapes of the tensors a GGUF or
   safetensors file declares (`TensorTable`), which is all an image model's GGUF
   says about itself
+- `image_family` - An image model's family (`ImageFamily`: Flux.1, SDXL,
+  Qwen-Image 2.1), sniffed from its tensor names by stable-diffusion.cpp's
+  rules; the files a family draws with beside its main weights
+  (`ComponentRole`) and whether a file fits one; and each family's `Recipe`,
+  the one table of its components' default sources and its drawing defaults.
+  Its tests read the measured files' tables in `testdata/image_families/`
 - `capabilities` - Model capability detection and inference
 - `thinking` - A chat's Thinking choice (`Thinking`: `off` or `default`), which a
   turn says and `ConversationSettings.thinking` remembers, and the one rule

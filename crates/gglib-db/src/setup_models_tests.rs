@@ -33,7 +33,7 @@ pub(super) fn legacy_ddl(table: &str) -> String {
             hf_repo_id TEXT, hf_commit_sha TEXT, hf_filename TEXT, download_date TEXT,
             last_update_check TEXT, tags TEXT DEFAULT '[]', model_key TEXT NOT NULL,
             file_paths_json TEXT, capabilities INTEGER DEFAULT 0, dialect_spec TEXT,
-            template_caps TEXT
+            template_caps TEXT, image_family TEXT
         )"
     )
 }
@@ -187,6 +187,28 @@ async fn an_old_library_is_rebuilt_keeping_every_row_and_reference() {
         13,
         "above the removed 2, the default 7, the benchmark run's 9 and the orphan's 12"
     );
+}
+
+/// The rebuilt table's definition carries `image_family`, so a model's
+/// family survives the rebuild.
+#[tokio::test]
+async fn the_rebuild_keeps_a_models_image_family() {
+    let pool = pool_of_one().await;
+    legacy_library(&pool).await;
+    sqlx::query("UPDATE models SET image_family = 'flux1' WHERE name = 'Plain'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    create_schema(&pool).await.unwrap();
+
+    assert!(models_sql(&pool).await.contains("AUTOINCREMENT"));
+    let family: Option<String> =
+        sqlx::query_scalar("SELECT image_family FROM models WHERE name = 'Plain'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(family.as_deref(), Some("flux1"));
 }
 
 /// Each place a removed model's id can live on raises the sequence on its

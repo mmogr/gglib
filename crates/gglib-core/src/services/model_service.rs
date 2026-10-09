@@ -54,12 +54,18 @@ pub struct RetagDiff {
     pub removed: Vec<String>,
     /// Whether the persisted dialect spec was rewritten.
     pub spec_changed: bool,
+    /// The image family read from the file for a model that had none.
+    pub family_found: Option<crate::domain::ImageFamily>,
 }
 
 impl RetagDiff {
-    /// Returns `true` if any tag was added or removed, or the spec changed.
+    /// Returns `true` if any tag was added or removed, the spec changed, or
+    /// a family was found.
     pub const fn is_changed(&self) -> bool {
-        !self.added.is_empty() || !self.removed.is_empty() || self.spec_changed
+        !self.added.is_empty()
+            || !self.removed.is_empty()
+            || self.spec_changed
+            || self.family_found.is_some()
     }
 }
 
@@ -536,6 +542,10 @@ impl ModelService {
     /// tag) is dropped and the freshly-detected set is added in its place.
     /// User-curated tags outside that namespace are preserved.
     ///
+    /// A model with no image family has one read from its file's tensor
+    /// table, when the file is there and names one; a family already set is
+    /// never changed, in either mode.
+    ///
     /// Returns `None` when the tag set is unchanged (no write occurred) and
     /// `Some(diff)` when the model was updated, carrying the full added/removed
     /// delta.
@@ -575,6 +585,8 @@ impl ModelService {
             false
         };
 
+        let family_found = super::model_components::sniff_missing_family(&mut model, gguf_parser);
+
         let before: std::collections::BTreeSet<String> = model.tags.iter().cloned().collect();
 
         if full {
@@ -596,7 +608,7 @@ impl ModelService {
         model.tags.sort();
 
         let after: std::collections::BTreeSet<String> = model.tags.iter().cloned().collect();
-        if after == before && !spec_changed {
+        if after == before && !spec_changed && family_found.is_none() {
             return Ok(None);
         }
 
@@ -605,6 +617,7 @@ impl ModelService {
             added: after.difference(&before).cloned().collect(),
             removed: before.difference(&after).cloned().collect(),
             spec_changed,
+            family_found,
         }))
     }
 }

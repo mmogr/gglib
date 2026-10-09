@@ -8,7 +8,7 @@ use sqlx::Row;
 use std::path::Path;
 
 /// Shared SELECT column list for model queries (no table alias required).
-pub(crate) const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, projector_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key, dialect_spec, template_caps";
+pub(crate) const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, projector_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key, dialect_spec, template_caps, image_family";
 
 /// Additional columns to SELECT when the model query includes a LEFT JOIN
 /// with `model_benchmark_summaries s`. All columns are aliased with an `s_`
@@ -155,6 +155,13 @@ pub(crate) fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, Repos
         // Defensively attempt to read benchmark summary columns (only present
         // when the query includes a LEFT JOIN with model_benchmark_summaries).
         benchmark_summary: try_read_summary(row),
+        // A name this build does not know reads as no family, as unreadable
+        // JSON reads as no spec above.
+        image_family: row
+            .try_get::<Option<String>, _>("image_family")
+            .ok()
+            .flatten()
+            .and_then(|name| name.parse().ok()),
     })
 }
 

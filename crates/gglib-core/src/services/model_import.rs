@@ -229,6 +229,7 @@ pub fn build_new_model(
     model.expert_count = gguf.and_then(|g| g.expert_count);
     model.expert_used_count = gguf.and_then(|g| g.expert_used_count);
     model.expert_shared_count = gguf.and_then(|g| g.expert_shared_count);
+    model.image_family = gguf.and_then(|g| g.image_family);
     if let Some(g) = gguf {
         model.metadata.clone_from(&g.metadata);
     }
@@ -398,6 +399,32 @@ mod tests {
             model.dialect_spec,
             Some(crate::domain::DialectSpec::qwen_xml())
         );
+    }
+
+    /// The family the header's tensor table named is the model's, by
+    /// either door.
+    #[test]
+    fn the_sniffed_image_family_lands_on_the_model() {
+        let gguf = GgufMetadata {
+            image_family: Some(crate::domain::ImageFamily::Flux1),
+            ..Default::default()
+        };
+        let hf_tags: Vec<String> = vec![];
+        for origin in [
+            ModelOrigin::LocalFile {
+                param_count_override: None,
+            },
+            hf_origin("leejet/FLUX.1-schnell-gguf", &hf_tags),
+        ] {
+            let model = build_new_model(
+                Path::new("/models/flux1-schnell-q8_0.gguf"),
+                Some(&gguf),
+                &NoopGgufParser,
+                &origin,
+                Utc::now(),
+            );
+            assert_eq!(model.image_family, Some(crate::domain::ImageFamily::Flux1));
+        }
     }
 
     /// An HF model whose GGUF could not be parsed has no metadata and can

@@ -6,7 +6,7 @@ crates/gglib-app-services/src/benchmark/agentic.rs 745
 crates/gglib-app-services/src/benchmark/compare.rs 364
 crates/gglib-app-services/src/benchmark/mapper.rs 529
 crates/gglib-app-services/src/benchmark/tune/mod.rs 1341
-crates/gglib-app-services/src/models.rs 410
+crates/gglib-app-services/src/models.rs 413
 crates/gglib-app-services/src/models_tests.rs 894
 crates/gglib-app-services/src/models_upgrade_tests.rs 370
 crates/gglib-app-services/src/proxy.rs 409
@@ -16,7 +16,7 @@ crates/gglib-app-services/src/servers.rs 751
 crates/gglib-app-services/src/settings_tests.rs 325
 crates/gglib-app-services/src/setup.rs 301
 crates/gglib-app-services/src/test_support.rs 349
-crates/gglib-app-services/src/types.rs 501
+crates/gglib-app-services/src/types.rs 503
 crates/gglib-axum/src/error.rs 326
 crates/gglib-axum/src/routes.rs 435
 crates/gglib-axum/tests/integration_routes.rs 1027
@@ -51,13 +51,15 @@ crates/gglib-core/src/domain/cache_budget.rs 305
 crates/gglib-core/src/domain/capabilities.rs 1594
 crates/gglib-core/src/domain/chat.rs 325
 crates/gglib-core/src/domain/generation_config.rs 496
-crates/gglib-core/src/domain/gguf.rs 351
+crates/gglib-core/src/domain/gguf.rs 355
 crates/gglib-core/src/domain/hub_chats_tests.rs 418
+crates/gglib-core/src/domain/image_family.rs 449
+crates/gglib-core/src/domain/image_family_tests.rs 618
 crates/gglib-core/src/domain/inference.rs 1915
 crates/gglib-core/src/domain/inference_tests.rs 1409
 crates/gglib-core/src/domain/kv_estimate.rs 341
 crates/gglib-core/src/domain/mcp/types.rs 574
-crates/gglib-core/src/domain/model.rs 301
+crates/gglib-core/src/domain/model.rs 317
 crates/gglib-core/src/domain/model_sampling.rs 674
 crates/gglib-core/src/domain/query.rs 408
 crates/gglib-core/src/domain/recommendation.rs 381
@@ -78,9 +80,9 @@ crates/gglib-core/src/request_pipeline/truncation_tests.rs 443
 crates/gglib-core/src/request_pipeline/validate.rs 497
 crates/gglib-core/src/server_config.rs 715
 crates/gglib-core/src/services/app_core.rs 305
-crates/gglib-core/src/services/model_import.rs 707
+crates/gglib-core/src/services/model_import.rs 734
 crates/gglib-core/src/services/model_registrar.rs 340
-crates/gglib-core/src/services/model_service.rs 1464
+crates/gglib-core/src/services/model_service.rs 1477
 crates/gglib-core/src/services/model_verification.rs 583
 crates/gglib-core/src/services/model_verification_remote.rs 325
 crates/gglib-core/src/settings.rs 540
@@ -92,8 +94,9 @@ crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 321
 crates/gglib-db/src/repositories/sqlite_chat_history_repository_tests.rs 322
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 354
 crates/gglib-db/src/repositories/sqlite_mcp_repository_tests.rs 377
-crates/gglib-db/src/repositories/sqlite_model_repository.rs 1053
+crates/gglib-db/src/repositories/sqlite_model_repository.rs 1063
 crates/gglib-db/src/setup.rs 715
+crates/gglib-db/src/setup_models_tests.rs 317
 crates/gglib-download/src/cli_exec/exec/python_bridge.rs 331
 crates/gglib-download/src/cli_exec/exec/python_env.rs 1544
 crates/gglib-download/src/cli_exec/exec/python_protocol.rs 347
@@ -103,7 +106,7 @@ crates/gglib-download/src/manager/mod.rs 1174
 crates/gglib-download/src/quant_selector.rs 340
 crates/gglib-download/src/queue/mod.rs 1067
 crates/gglib-gguf/src/capabilities/template_probe.rs 501
-crates/gglib-gguf/src/parser.rs 331
+crates/gglib-gguf/src/parser.rs 356
 crates/gglib-gguf/src/reader_tests.rs 416
 crates/gglib-hf/src/http.rs 381
 crates/gglib-hf/src/parsing.rs 429
@@ -153,6 +156,7 @@ crates/gglib-runtime/src/ports_impl/llm_completion/layers_tests.rs 312
 crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 370
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 340
 crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 307
+crates/gglib-runtime/src/ports_impl/model_catalog_tests.rs 301
 crates/gglib-runtime/src/process/admission/queue_tests.rs 972
 crates/gglib-runtime/src/process/admission/state.rs 690
 crates/gglib-runtime/src/process/residency/launch.rs 538

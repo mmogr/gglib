@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use sqlx::SqlitePool;
 use std::path::Path;
 
+use gglib_core::domain::ImageFamily;
 use gglib_core::utils::shard_filename::base_shard_filename;
 use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
 
@@ -218,8 +219,8 @@ impl ModelRepository for SqliteModelRepository {
                 id, name, file_path, projector_path, param_count_b, architecture, quantization,
                 context_length, expert_count, expert_used_count, expert_shared_count,
                 metadata, added_at, hf_repo_id, hf_commit_sha,
-                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, dialect_spec
-            ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, dialect_spec, image_family
+            ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(model_key) DO UPDATE SET
                 file_path = excluded.file_path,
                 -- Coalesced, not assigned. A re-registration that carries no
@@ -230,6 +231,9 @@ impl ModelRepository for SqliteModelRepository {
                 -- wins when there is one.
                 file_paths_json = COALESCE(excluded.file_paths_json, models.file_paths_json),
                 projector_path = COALESCE(excluded.projector_path, models.projector_path),
+                -- Coalesced as the projector is: a re-registration whose
+                -- table read no family never erases the one stored.
+                image_family = COALESCE(excluded.image_family, models.image_family),
                 quantization = COALESCE(excluded.quantization, models.quantization),
                 context_length = COALESCE(excluded.context_length, models.context_length),
                 expert_count = COALESCE(excluded.expert_count, models.expert_count),
@@ -274,6 +278,7 @@ impl ModelRepository for SqliteModelRepository {
         .bind(&defaults_origin_str)
         .bind(&server_defaults_json)
         .bind(&dialect_spec_json)
+        .bind(model.image_family.map(ImageFamily::as_str))
         .execute(&self.pool)
         .await
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
@@ -324,7 +329,7 @@ impl ModelRepository for SqliteModelRepository {
             .and_then(|caps| serde_json::to_string(caps).ok());
 
         let result = sqlx::query(
-            "UPDATE models SET name = ?, file_path = ?, projector_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ?, template_caps = ? WHERE id = ?"
+            "UPDATE models SET name = ?, file_path = ?, projector_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ?, template_caps = ?, image_family = ? WHERE id = ?"
         )
             .bind(&model.name)
             // Normalised exactly as `insert` does. `find_by_path` is a plain
@@ -351,6 +356,7 @@ impl ModelRepository for SqliteModelRepository {
             .bind(&server_defaults_json)
             .bind(&dialect_spec_json)
             .bind(&template_caps_json)
+            .bind(model.image_family.map(ImageFamily::as_str))
             .bind(model.id)
             .execute(&self.pool)
             .await
@@ -1051,3 +1057,7 @@ mod tests {
 #[cfg(test)]
 #[path = "sqlite_model_repository_projector_tests.rs"]
 mod projector_tests;
+
+#[cfg(test)]
+#[path = "sqlite_model_repository_components_tests.rs"]
+mod components_tests;

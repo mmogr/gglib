@@ -13,6 +13,7 @@ use std::sync::Mutex;
 
 fn base_model() -> Model {
     Model {
+        image_family: None,
         dialect_spec: None,
         id: 7,
         name: "qwen3".to_string(),

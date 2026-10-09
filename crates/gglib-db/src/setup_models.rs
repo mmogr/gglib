@@ -45,7 +45,8 @@ fn models_ddl(table: &str) -> String {
             file_paths_json TEXT,
             capabilities INTEGER DEFAULT 0,
             dialect_spec TEXT,
-            template_caps TEXT
+            template_caps TEXT,
+            image_family TEXT
         )
         ",
     )
@@ -85,6 +86,13 @@ pub(super) async fn create_models_table(pool: &SqlitePool) -> Result<()> {
     // NULL here *is* the tri-state's "never observed" — manufacturing a
     // value would collapse it into an answer nobody measured.
     add_column_if_missing(pool, "models", "template_caps", "TEXT").await?;
+
+    // Migration: add image_family to models — the image family a model's
+    // tensor names say it draws as (`gglib_core::domain::ImageFamily`, by its
+    // wire name), read at import. No backfill: a library from before this
+    // column holds no image model gglib could draw with, and `gglib model
+    // retag` fills a NULL from the file wherever one does.
+    add_column_if_missing(pool, "models", "image_family", "TEXT").await?;
 
     Ok(())
 }

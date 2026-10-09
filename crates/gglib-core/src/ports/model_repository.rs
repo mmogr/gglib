@@ -158,6 +158,7 @@ mod tests {
             server_defaults: None,
             template_caps: None,
             benchmark_summary: None,
+            image_family: None,
         }
     }
 

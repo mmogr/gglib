@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use super::capabilities::ModelCapabilities;
+use super::image_family::ImageFamily;
 use super::inference::{DefaultsOrigin, InferenceConfig};
 use super::server_config::ServerConfig;
 
@@ -161,6 +162,10 @@ pub struct Model {
     /// model is fetched without the summary join (e.g. lightweight lookups).
     #[serde(default)]
     pub benchmark_summary: Option<crate::domain::benchmark::ModelBenchmarkSummary>,
+    /// The image family this model draws as, read from its tensor names at
+    /// import or retag; `None` for a model that chats.
+    #[serde(default)]
+    pub image_family: Option<ImageFamily>,
 }
 
 /// A model to be inserted into the system (no ID yet).
@@ -228,6 +233,9 @@ pub struct NewModel {
     /// See [`Model::dialect_spec`].
     #[serde(default)]
     pub dialect_spec: Option<crate::domain::dialect::DialectSpec>,
+    /// See [`Model::image_family`].
+    #[serde(default)]
+    pub image_family: Option<ImageFamily>,
 }
 
 impl Model {
@@ -236,6 +244,13 @@ impl Model {
     #[must_use]
     pub const fn image_input(&self) -> bool {
         self.projector_path.is_some()
+    }
+
+    /// Whether this model draws images: it does exactly when its tensors
+    /// named an image family.
+    #[must_use]
+    pub const fn generates_images(&self) -> bool {
+        self.image_family.is_some()
     }
 }
 
@@ -275,6 +290,7 @@ impl NewModel {
             defaults_origin: None,
             server_defaults: None,
             dialect_spec: None,
+            image_family: None,
         }
     }
 }

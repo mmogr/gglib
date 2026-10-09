@@ -2,6 +2,7 @@ use super::*;
 
 pub(super) fn model() -> Model {
     Model {
+        image_family: None,
         dialect_spec: None,
         id: 1,
         name: "test-model".to_string(),
