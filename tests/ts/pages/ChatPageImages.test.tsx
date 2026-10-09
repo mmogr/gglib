@@ -4,8 +4,9 @@
  * toast; offered only where the model reads images, in an edit's composer
  * too; a saved turn's images read
  * from the chat's store with the page's credential, enlarged on a click,
- * and let go when they leave; and the images of an unsent message carried
- * over a model switch without being uploaded again.
+ * and let go when they leave; a reply's tool images in its body, live and
+ * reopened, read from the store by id; and the images of an unsent message
+ * carried over a model switch without being uploaded again.
  *
  * jsdom draws no image and makes no `blob:` URL, so `URL.createObjectURL`
  * is stubbed; a paste and a drop are dispatched as events, not done by hand.
@@ -19,7 +20,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import type { ChatMessage } from '../../../src/services/transport';
-import { chatTransport, conversation, wrapper as pageWrapper, type ChatFixture } from './chatPageHarness';
+import { agentRun, chatTransport, conversation, wrapper as pageWrapper, type ChatFixture } from './chatPageHarness';
 import { pngFile } from '../fixtures/fakeImageStore';
 import { guiModel } from '../fixtures/model';
 import type { AttachmentUpload } from '../../../src/types/generated/AttachmentUpload';
@@ -283,6 +284,123 @@ describe('ChatPage, images in the thread', () => {
     await waitFor(() => expect(within(tiles()).getByText('~475 tokens · 6% of context')).toBeInTheDocument());
     expect(uploadAttachment).toHaveBeenCalledWith('this', shot);
     expect(within(tiles()).getByRole('img', { name: 'shot.png' })).toBeInTheDocument();
+  });
+});
+
+describe('ChatPage, a tool\'s images', () => {
+  const DRAWN = 'd'.repeat(64);
+  const DRAWN_TOO = 'e'.repeat(64);
+  const DRAWN_LATER = 'f'.repeat(64);
+  const drawn = [
+    { id: DRAWN, mime: 'image/png', width: 1024, height: 1024 },
+    { id: DRAWN_TOO, mime: 'image/jpeg', width: 640, height: 480 },
+  ];
+  const drawnLater = [{ id: DRAWN_LATER, mime: 'image/png', width: 512, height: 512 }];
+  const asked: ChatMessage = {
+    id: 11, conversation_id: 1, role: 'user', content: 'Draw a fox.', created_at: '2026-10-09T09:00:00Z',
+  };
+  /** A tool row, as a reply's tool result is saved. */
+  const toolRow = (id: number, callId: string, images?: typeof drawn): ChatMessage => ({
+    id, conversation_id: 1, role: 'tool', content: '[image stored]', created_at: '2026-10-09T09:00:09Z',
+    metadata: { tool_call_id: callId },
+    ...(images && { images }),
+  });
+  /** A saved reply with `text` that called `draw` once per id in `calls`. */
+  const savedReply = (text: string, calls: string[]): ChatMessage => ({
+    id: 12, conversation_id: 1, role: 'assistant', content: text, created_at: '2026-10-09T09:00:05Z',
+    metadata: { tool_calls: calls.map((id) => ({ id, name: 'draw', arguments: { prompt: 'a fox' } })) },
+  });
+  const strips = () => screen.queryAllByRole('group', { name: 'Images from tools' });
+  const strip = () => screen.getByRole('group', { name: 'Images from tools' });
+  const shownSizes = () => within(strip()).getAllByRole('img').map((img) => img.getAttribute('alt'));
+
+  it('shows the images of a live tool result in the reply\'s body, read from the store by id, not in the tool row', async () => {
+    fixture.rows = { 1: [asked] };
+    fixture.runs = [agentRun('r1', 1, 'in_progress')];
+    fixture.frames.r1 = [
+      { type: 'tool_call_start', tool_call: { id: 'draw_1', name: 'draw', arguments: { prompt: 'a fox' } }, display_name: 'Draw' },
+      {
+        type: 'tool_call_complete',
+        tool_name: 'draw',
+        result: { tool_call_id: 'draw_1', content: '[image 1024x1024 PNG stored]', success: true, images: drawn },
+        wait_ms: 0, execute_duration_ms: 900, display_name: 'Draw', duration_display: '900ms',
+      },
+    ];
+    page({ imageInput: false });
+    renderLocal();
+
+    // The thread can remount while the run is read, so the strip is awaited whole.
+    await waitFor(() => {
+      expect(shownSizes()).toEqual(['Image, 1024 × 1024', 'Image, 640 × 480']);
+      expect(within(strip()).getByRole('img', { name: 'Image, 1024 × 1024' })).toHaveAttribute('src', expect.stringMatching(/^blob:shown-/));
+    });
+    expect(strip()).toBeVisible();
+    expect(fetchAttachmentBlob).toHaveBeenCalledWith('this', DRAWN);
+    expect(fetchAttachmentBlob).toHaveBeenCalledWith('this', DRAWN_TOO);
+    // Only by id from this machine's store: nothing else is asked for.
+    expect(new Set(fetchAttachmentBlob.mock.calls.map(([source, id]) => `${source}:${id}`))).toEqual(new Set([`this:${DRAWN}`, `this:${DRAWN_TOO}`]));
+    const tools = screen.getByRole('list', { name: 'Tool execution status' });
+    expect(within(tools).queryByRole('img')).not.toBeInTheDocument();
+    expect(tools).not.toContainElement(strip());
+  });
+
+  it('shows a finished reply\'s tool images under its text while "How this was made" is closed, once, in the order made', async () => {
+    const user = userEvent.setup();
+    fixture.rows = {
+      1: [asked, savedReply('Here is your fox.', ['draw_1', 'draw_2']), toolRow(13, 'draw_1', drawn), toolRow(14, 'draw_2', drawnLater)],
+    };
+    page({ imageInput: false });
+    renderLocal();
+
+    const text = await screen.findByText('Here is your fox.');
+    await waitFor(() => expect(within(strip()).getAllByRole('img')).toHaveLength(3));
+    expect(strips()).toHaveLength(1);
+    expect(shownSizes()).toEqual(['Image, 1024 × 1024', 'Image, 640 × 480', 'Image, 512 × 512']);
+
+    const toggle = screen.getByRole('button', { name: 'How this was made' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const detail = document.getElementById(toggle.getAttribute('aria-controls')!)!;
+    expect(detail).not.toBeVisible();
+    expect(strip()).toBeVisible();
+    expect(detail).not.toContainElement(strip());
+    // Under the text, not above it.
+    expect(text.compareDocumentPosition(strip()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Opening the detail shows the tool's row, and the images are not drawn again.
+    await user.click(toggle);
+    expect(detail).toBeVisible();
+    expect(within(detail).queryByRole('img')).not.toBeInTheDocument();
+    expect(strips()).toHaveLength(1);
+  });
+
+  it('shows the same images when a reply without text is reopened, enlarged on a click', async () => {
+    const user = userEvent.setup();
+    fixture.rows = { 1: [asked, savedReply('', ['draw_1']), toolRow(13, 'draw_1', drawn)] };
+    page({ imageInput: false });
+    renderLocal();
+
+    await waitFor(() => expect(within(strip()).getAllByRole('img')).toHaveLength(2));
+    expect(strip()).toBeVisible();
+    expect(fetchAttachmentBlob).toHaveBeenCalledWith('this', DRAWN);
+    expect(fetchAttachmentBlob).toHaveBeenCalledWith('this', DRAWN_TOO);
+
+    await user.click(within(strip()).getByRole('button', { name: 'Enlarge image, 1024 × 1024' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('img', { name: 'Image, 1024 × 1024' })).toBeInTheDocument();
+  });
+
+  it('shows a tool call without images as before: its row, no strip, nothing read', async () => {
+    fixture.rows = { 1: [asked, savedReply('', ['draw_1']), toolRow(13, 'draw_1')] };
+    page({ imageInput: false });
+    renderLocal();
+
+    const rows = await screen.findByRole('list', { name: 'Tool execution status' });
+    const [item] = within(rows).getAllByRole('listitem');
+    expect(item).toHaveTextContent(/^Draw$/);
+    expect(item.children).toHaveLength(1);
+    expect(strips()).toHaveLength(0);
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(fetchAttachmentBlob).not.toHaveBeenCalled();
   });
 });
 

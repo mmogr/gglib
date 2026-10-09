@@ -23,8 +23,8 @@ Every child of the `ChatMessagesPanel` composition root: the panel chrome around
 
 | File | Role |
 |------|------|
-| `MessageBubbles.tsx` | User/assistant/system turns as notebook rows; the reply's reasoning and tool calls behind "How this was made"; action buttons; an edit's images, each removable, and a paste into an edit taking images only where the model reads them |
-| `MessageImages.tsx` | A user turn's images: read from the chat's store with the page's credential as `blob:` URLs, shown small and enlarged in a dialog on a click |
+| `MessageBubbles.tsx` | User/assistant/system turns as notebook rows; the reply's reasoning and tool calls behind "How this was made", and the images its tools made under its text, outside that fold and always shown; action buttons; an edit's images, each removable, and a paste into an edit taking images only where the model reads them |
+| `MessageImages.tsx` | A user turn's images, and the strip of the images a reply's tools made: each read from the chat's store by id with the page's credential as a `blob:` URL, shown small and enlarged in a dialog on a click |
 | `TurnRow.tsx` | One notebook row: margin (who, then how it was made) and body; the margin moves above the body in a narrow notebook |
 | `TurnMargin.tsx` | The margin's content: who and when, a reply's figures, a reply arriving and how far its prompt was read |
 | `turnFigures.ts` | Which figures a turn's margin shows: only those the page has for that turn (model, quantisation, thought, tool calls, tokens read and cached, time and a computed rate), never a zero or a dash for one it lacks |

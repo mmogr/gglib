@@ -7,6 +7,7 @@
 
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import type { TurnMade } from '../utils/messages/turnMade';
+import type { AttachmentInfo } from './generated/AttachmentInfo';
 
 /**
  * Gglib message type - directly uses ThreadMessageLike
@@ -52,10 +53,33 @@ export type ReasoningPart = Extract<MessagePart, { type: 'reasoning' }>;
  * These fields are stamped onto the part by {@link applyToolResult} once the
  * backend reports completion, allowing the UI to display timing information
  * without a separate side-channel.
+ *
+ * `artifact` holds the images the tool made, when it made any: put there by
+ * `applyToolResult` from a live result and by `foldToolMessages` from a
+ * saved tool row, so both show the same tiles.
  */
 export interface GglibToolCallPart extends ToolCallPart {
   waitMs?: number;
   durationMs?: number;
+  artifact?: ToolCallArtifact;
+}
+
+/**
+ * What a tool call carries besides its result: the images the tool made,
+ * by id and facts, never their bytes. Absent when it made none.
+ */
+export interface ToolCallArtifact {
+  images: AttachmentInfo[];
+}
+
+/**
+ * The images a tool-call part carries in its `artifact`; none for a part
+ * without them. assistant-ui's thread message types `artifact` as unknown,
+ * so it is read with care.
+ */
+export function toolCallImages(part: { artifact?: unknown }): readonly AttachmentInfo[] {
+  const images = (part.artifact as { images?: unknown } | null | undefined)?.images;
+  return Array.isArray(images) ? (images as AttachmentInfo[]) : [];
 }
 
 /**
