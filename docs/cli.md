@@ -138,12 +138,25 @@ on the paired machine — connected, away or not — without asking that machine
 anything; `list --remote` lists that machine's models by their ids there, and
 `inspect --remote` reads one of them.
 
+An image model (Flux.1, SDXL or Qwen-Image 2.1, known from its tensor names)
+draws with companion files beside its weights. `list` names its family in the
+`Draws` column, with the components it still needs; `inspect` names its family
+and each component, linked or missing. `add` and `update` link one with
+`--component <role>=<path>` (`vae`, `clip_l`, `t5xxl` or `llm`, repeatable)
+and unlink one with `--no-component <role>`; a file is linked only when its
+tensors are that role's for the model's family.
+
 `remove` drops a model's row and leaves its file. It refuses a model that is
 being served under the same data root, and says how to stop it; `--force`
 skips the confirmation and stops nothing. `inspect` says when a model is being
 served, and on which port.
 
 **HuggingFace** — `download`, `search`, `browse`, `check-updates`, `upgrade`.
+
+`search --images` and `browse --images` look for image models. An image
+model's `download` brings its family's companions too; before it queues, the
+command names them with their sizes, those already here and the bytes to
+fetch, and its last line says which were linked.
 
 `upgrade` replaces a model's file with its repository's latest revision,
 when that is newer than the one recorded. Like `remove`, it refuses a model

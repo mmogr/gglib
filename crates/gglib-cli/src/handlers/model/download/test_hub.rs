@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use gglib_core::ports::huggingface::HfPortResult;
 use gglib_core::ports::{
-    HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
+    HfClientPort, HfFileInfo, HfModelKind, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
     HfSearchResult, HfSortField,
 };
 
@@ -122,6 +122,14 @@ impl Hub {
                 (o.query.clone(), o.limit, o.sort_by, untouched)
             })
             .collect()
+    }
+}
+
+impl Hub {
+    /// The kind of model each search so far asked for, oldest first.
+    pub(super) fn kinds(&self) -> Vec<HfModelKind> {
+        let asked = self.asked.lock().unwrap();
+        asked.iter().map(|o| o.kind).collect()
     }
 }
 

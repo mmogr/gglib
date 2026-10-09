@@ -8,6 +8,7 @@
 pub(crate) mod benchmark_commands;
 pub(crate) mod bootstrap;
 pub(crate) mod commands;
+pub(crate) mod component_args;
 pub(crate) mod config_commands;
 pub(crate) mod console;
 pub(crate) mod conversation_settings;

@@ -5,6 +5,7 @@
 
 use clap::Subcommand;
 
+use crate::component_args::ComponentArgs;
 use crate::model_list_args::ListArgs;
 use crate::model_sort::{CliBrowseCategory, CliHubSort};
 use crate::presentation::capability_flags::capability_names;
@@ -42,6 +43,9 @@ pub enum ModelCommand {
         /// part of the upsert at all.
         #[arg(long = "reimport", alias = "force")]
         reimport: bool,
+        /// An image model's components, linked once the file is added.
+        #[command(flatten)]
+        components: ComponentArgs,
     },
 
     /// List GGUF models in the database
@@ -167,6 +171,8 @@ pub enum ModelCommand {
         force: bool,
         #[command(flatten)]
         projector: ProjectorArgs,
+        #[command(flatten)]
+        components: ComponentArgs,
     },
 
     /// Re-derive auto-tags for installed models from their persisted GGUF metadata.
@@ -228,6 +234,11 @@ pub enum ModelCommand {
     /// While a download is in flight the bar surfaces the lifecycle phase:
     /// `Downloading` → `Finalizing` (gathering HF metadata) → `Registering`
     /// (writing model row) → terminal `Completed` / `Failed` / `Cancelled`.
+    ///
+    /// An image model's download brings the companions its family draws
+    /// with. Before it is queued the command names them, with their sizes,
+    /// those already here and the bytes to fetch; at the end it says which
+    /// were linked and why any was not.
     Download {
         /// `HuggingFace` model repository (e.g., "bartowski/Qwen2.5-7B-Instruct-GGUF")
         model_id: String,
@@ -281,6 +292,10 @@ pub enum ModelCommand {
         /// What to sort the results by
         #[arg(short, long, value_enum, default_value_t)]
         sort: CliHubSort,
+        /// Search for image models (text-to-image GGUF repositories) in
+        /// place of models that chat
+        #[arg(long)]
+        images: bool,
     },
 
     /// Browse popular GGUF models on `HuggingFace` Hub
@@ -294,6 +309,10 @@ pub enum ModelCommand {
         /// Filter by model size (e.g., "7B", "13B", "70B")
         #[arg(long)]
         size: Option<String>,
+        /// Browse image models (text-to-image GGUF repositories) in place of
+        /// models that chat
+        #[arg(long)]
+        images: bool,
     },
 
     /// View or override a model's capability flags.
@@ -332,7 +351,9 @@ pub enum ModelCommand {
     ///
     /// Shows every piece of stored information: architecture, quantization,
     /// context length, `MoE` topology, `HuggingFace` provenance, capability flags,
-    /// inference defaults, and timestamps; with --remote, of the paired machine's.
+    /// inference defaults, and timestamps, and for an image model its family
+    /// and each component, linked or missing; with --remote, of the paired
+    /// machine's.
     ///
     /// # Examples
     ///

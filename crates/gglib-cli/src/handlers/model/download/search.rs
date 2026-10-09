@@ -3,29 +3,44 @@
 //! The search is [`search_hf_models`], the one the GUI's browser runs, over
 //! the Hub client this process was bootstrapped with, which holds its Hub
 //! token. This module prints the hits; `browse` prints them under its own
-//! headings.
+//! headings. Either asks for models that chat, or with `--images` for image
+//! models.
 
 use std::fmt::Write as _;
 
 use anyhow::{Result, anyhow};
 use gglib_app_services::types::{HfModelSummary, HfSearchRequest};
 use gglib_app_services::{GuiError, search_hf_models};
-use gglib_core::ports::{HfClientPort, HfSortField};
+use gglib_core::ports::{HfClientPort, HfModelKind, HfSortField};
 
 use crate::presentation::{format_number, truncate_with};
 
+/// The kind of model `--images` asks the Hub for.
+pub(crate) const fn hub_kind(images: bool) -> HfModelKind {
+    if images {
+        HfModelKind::Image
+    } else {
+        HfModelKind::Chat
+    }
+}
+
 /// Execute the search command.
 ///
-/// Searches `HuggingFace` Hub for models matching the query.
+/// Searches `HuggingFace` Hub for models of `kind` matching the query.
 /// No database access required.
 pub(crate) async fn execute(
     hf: &dyn HfClientPort,
     query: String,
     limit: u32,
     sort: HfSortField,
+    kind: HfModelKind,
 ) -> Result<()> {
-    println!("🔍 Searching HuggingFace Hub for: '{query}'...");
-    print!("{}", found_text(hf, &query, limit, sort).await?);
+    let what = match kind {
+        HfModelKind::Chat => "",
+        HfModelKind::Image => "image models matching ",
+    };
+    println!("🔍 Searching HuggingFace Hub for {what}'{query}'...");
+    print!("{}", found_text(hf, &query, limit, sort, kind).await?);
     Ok(())
 }
 
@@ -35,8 +50,9 @@ async fn found_text(
     query: &str,
     limit: u32,
     sort: HfSortField,
+    kind: HfModelKind,
 ) -> Result<String> {
-    let hits = find(hf, query.to_string(), limit, sort).await?;
+    let hits = find(hf, query.to_string(), limit, sort, kind).await?;
     if hits.is_empty() {
         return Ok(format!("No models found for query: '{query}'\n"));
     }
@@ -66,18 +82,20 @@ pub(super) struct Layout {
     pub quantizations_tip: &'static str,
 }
 
-/// The first `limit` GGUF repositories the Hub finds for `query`, most of
-/// `sort_by` first, each with its quantizations.
+/// The first `limit` GGUF repositories of `kind` the Hub finds for
+/// `query`, most of `sort_by` first, each with its quantizations.
 pub(super) async fn find(
     hf: &dyn HfClientPort,
     query: String,
     limit: u32,
     sort_by: HfSortField,
+    kind: HfModelKind,
 ) -> Result<Vec<Hit>> {
     let request = HfSearchRequest {
         query: Some(query),
         limit,
         sort_by,
+        kind,
         ..HfSearchRequest::default()
     };
     let found = search_hf_models(hf, request)

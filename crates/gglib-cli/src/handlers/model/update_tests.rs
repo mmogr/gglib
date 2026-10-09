@@ -116,6 +116,7 @@ pub(super) fn bare_args() -> UpdateArgs {
         unset: Vec::new(),
         clear_inference_defaults: false,
         projector: crate::projector_args::ProjectorArgs::default(),
+        components: crate::component_args::ComponentArgs::default(),
     }
 }
 

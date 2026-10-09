@@ -41,6 +41,71 @@ pub(super) async fn library(dir: &Path) -> (CliContext, Model) {
     (ctx, model)
 }
 
+/// The tensors of a Flux.1 diffusion model's GGUF that its family is read
+/// from, shapes outermost first.
+pub(super) const FLUX_TENSORS: &[(&str, &[u64])] = &[
+    ("double_blocks.0.img_attn.qkv.weight", &[9216, 3072]),
+    ("single_blocks.0.linear1.weight", &[21504, 3072]),
+    ("img_in.weight", &[3072, 64]),
+    ("txt_in.weight", &[3072, 4096]),
+];
+
+/// The tensors each of Flux.1's components is checked by: the VAE's, the
+/// CLIP-L's and the T5-XXL's.
+pub(super) const FLUX_VAE: &[(&str, &[u64])] = &[
+    ("decoder.conv_in.weight", &[512, 16, 3, 3]),
+    ("encoder.conv_in.weight", &[128, 3, 3, 3]),
+];
+pub(super) const FLUX_CLIP_L: &[(&str, &[u64])] = &[
+    (
+        "text_model.embeddings.token_embedding.weight",
+        &[49408, 768],
+    ),
+    ("text_model.encoder.layers.11.mlp.fc1.weight", &[3072, 768]),
+];
+pub(super) const FLUX_T5XXL: &[(&str, &[u64])] = &[
+    ("shared.weight", &[32128, 4096]),
+    (
+        "encoder.block.23.layer.0.SelfAttention.q.weight",
+        &[4096, 4096],
+    ),
+];
+
+/// A Flux.1 diffusion model's GGUF in `dir`, with no metadata as the real
+/// ones have none, under its canonical path.
+pub(super) fn write_flux(dir: &Path, name: &str) -> PathBuf {
+    let path = dir.join(name);
+    gglib_gguf::write_tensor_gguf(&path, &[], FLUX_TENSORS);
+    path.canonicalize().unwrap()
+}
+
+/// A safetensors file in `dir` holding `tensors`, under its canonical path.
+pub(super) fn write_component(dir: &Path, name: &str, tensors: &[(&str, &[u64])]) -> PathBuf {
+    let path = dir.join(name);
+    gglib_gguf::write_safetensors(&path, tensors);
+    path.canonicalize().unwrap()
+}
+
+/// A library in `dir` holding one Flux.1 model, imported from its file, and
+/// that model.
+pub(super) async fn image_library(dir: &Path) -> (CliContext, Model) {
+    gglib_core::paths::isolate_data_root();
+    let ctx = test_context(dir).await;
+    let weights = write_flux(dir, "flux1-schnell-q8_0.gguf");
+    let model = ctx
+        .app
+        .models()
+        .import_from_file(
+            &weights,
+            ctx.gguf_parser.as_ref(),
+            Some(12.0),
+            ImportMode::Fresh,
+        )
+        .await
+        .expect("the image model imports");
+    (ctx, model)
+}
+
 /// The row stored under `id`, or `None` once it is gone.
 pub(super) async fn row(ctx: &CliContext, id: i64) -> Option<Model> {
     ctx.app.models().get_by_id(id).await.expect("the row reads")

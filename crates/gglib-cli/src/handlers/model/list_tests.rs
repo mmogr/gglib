@@ -55,7 +55,7 @@ fn the_id_column_is_as_wide_as_the_widest_id() {
     let lines: Vec<&str> = table.lines().collect();
     assert_eq!(lines[0].find("Name"), lines[2].find("small"), "{table}");
     assert_eq!(lines[2].find("small"), lines[3].find("big"), "{table}");
-    assert_eq!(lines[1].len(), 120 + 4, "the rule spans the wider column");
+    assert_eq!(lines[1].len(), 126 + 4, "the rule spans the wider column");
     assert!(lines[2].starts_with("3    "), "{table}");
     assert!(lines[3].starts_with("1000 "), "{table}");
 }
@@ -66,7 +66,7 @@ fn short_ids_get_a_column_three_wide() {
     let table = render_table(&[model(3, "small")]);
 
     assert!(table.starts_with("ID  Name"), "{table}");
-    assert_eq!(table.lines().nth(1).map(str::len), Some(123));
+    assert_eq!(table.lines().nth(1).map(str::len), Some(129));
 }
 
 /// The paired machine's line follows the table.
@@ -106,6 +106,44 @@ fn the_images_column_marks_the_models_that_read_images() {
     let column = lines[0].find("Images").expect("an Images header");
     assert!(lines[2][column..].starts_with("yes "), "{table}");
     assert!(lines[3][column..].starts_with("-- "), "{table}");
+}
+
+/// An image model of `family` needing `missing`, as the listing reads it.
+fn drawing(id: i64, name: &str, family: &str, missing: &[&str]) -> GuiModel {
+    let mut row = model(id, name);
+    row.image_family = Some(family.parse().unwrap());
+    row.missing_components = missing.iter().map(|role| role.parse().unwrap()).collect();
+    row
+}
+
+/// The `Draws` column names an image model's family, and after it the
+/// roles it still needs, in the recipe's order; a model that chats is `--`.
+/// The column is as wide as its widest entry, so no role is cut and the
+/// columns after it stay in line.
+#[test]
+fn the_draws_column_names_the_family_and_what_it_needs() {
+    let table = render_table(&[
+        drawing(1, "flux", "flux1", &["vae", "t5xxl"]),
+        drawing(2, "qwen-image", "qwen-image-2.1", &[]),
+        model(3, "chat"),
+    ]);
+
+    let lines: Vec<&str> = table.lines().collect();
+    let column = lines[0].find("Draws").expect("a Draws header");
+    let added = lines[0].find("Added").expect("an Added header");
+    let cell = |line: &str| line[column..added].trim_end().to_owned();
+    assert_eq!(cell(lines[2]), "Flux.1, needs VAE, T5-XXL");
+    assert_eq!(cell(lines[3]), "Qwen-Image 2.1");
+    assert_eq!(cell(lines[4]), "--");
+    assert_eq!(
+        added,
+        column + "Flux.1, needs VAE, T5-XXL".len() + 1,
+        "{table}"
+    );
+    for row in &lines[2..] {
+        assert_eq!(row.find("2026-10-01"), Some(added), "{table}");
+    }
+    assert_eq!(lines[1].len(), 121 + 3 + "Flux.1, needs VAE, T5-XXL".len());
 }
 
 /// A library of three models, each added a day after the one before:
@@ -155,17 +193,17 @@ async fn the_library_is_listed_newest_first() {
     let dir = tempfile::tempdir().unwrap();
     let ctx = three_models(dir.path()).await;
 
-    let rule = "-".repeat(123);
+    let rule = "-".repeat(129);
     assert_eq!(
         printed(&one_shot_model_ops(&ctx), &[]).await,
         format!(
             "Found 3 model(s):
 
-ID  Name                      Params   Arch         Quant    Context    Images  Added                File Path
+ID  Name                      Params   Arch         Quant    Context    Images  Draws Added                File Path
 {rule}
-3   charlie                   27.0     --           --       131072     --      2026-10-03 12:00:00  /models/charlie.gguf
-2   bravo                     3.0      --           --       8192       --      2026-10-02 12:00:00  /models/bravo.gguf
-1   alpha                     7.5      --           --       32768      --      2026-10-01 12:00:00  /models/alpha.gguf
+3   charlie                   27.0     --           --       131072     --      --    2026-10-03 12:00:00  /models/charlie.gguf
+2   bravo                     3.0      --           --       8192       --      --    2026-10-02 12:00:00  /models/bravo.gguf
+1   alpha                     7.5      --           --       32768      --      --    2026-10-01 12:00:00  /models/alpha.gguf
 "
         )
     );
@@ -248,4 +286,29 @@ async fn the_rows_are_the_ones_modelops_lists() {
 
     let served: Vec<_> = models.iter().map(|m| (m.is_serving, m.port)).collect();
     assert_eq!(served, [(false, None), (true, Some(9001)), (false, None)]);
+}
+
+/// From the library to the line: an imported Flux.1 model with its VAE
+/// linked is listed as needing the other two.
+#[tokio::test]
+async fn an_imported_image_model_is_listed_with_what_it_still_needs() {
+    use crate::handlers::model::test_library::{FLUX_VAE, image_library, write_component};
+
+    let dir = tempfile::tempdir().unwrap();
+    let (ctx, model) = image_library(dir.path()).await;
+    let vae = write_component(dir.path(), "ae.safetensors", FLUX_VAE);
+    ctx.app
+        .models()
+        .set_component(
+            model.id,
+            gglib_core::domain::ComponentRole::Vae,
+            Some(&vae),
+            ctx.gguf_parser.as_ref(),
+        )
+        .await
+        .unwrap();
+
+    let text = printed(&one_shot_model_ops(&ctx), &[]).await;
+
+    assert!(text.contains(" Flux.1, needs CLIP-L, T5-XXL "), "{text}");
 }

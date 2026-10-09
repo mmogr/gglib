@@ -20,6 +20,7 @@ pub(crate) mod retag;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod update;
+mod update_components;
 mod update_projector;
 pub(crate) mod verification;
 
@@ -102,8 +103,9 @@ async fn dispatch_with(
         ModelCommand::Add {
             file_path,
             reimport,
+            components,
         } => {
-            add::execute(ctx, ops, &file_path, reimport).await?;
+            add::execute(ctx, ops, &file_path, reimport, &components).await?;
         }
         ModelCommand::List(args) => {
             list::execute(target, ctx, ops, args).await?;
@@ -143,6 +145,7 @@ async fn dispatch_with(
             dry_run,
             force,
             projector,
+            components,
         } => {
             let args = update::UpdateArgs {
                 identifier,
@@ -176,6 +179,7 @@ async fn dispatch_with(
                 dry_run,
                 force,
                 projector,
+                components,
             };
             update::execute(ctx, ops, args).await?;
         }
@@ -233,15 +237,23 @@ async fn dispatch_with(
         ModelCommand::Upgrade { identifier, force } => {
             download::update_model(ctx, &identifier, force).await?;
         }
-        ModelCommand::Search { query, limit, sort } => {
-            download::search(ctx.hf_client.as_ref(), query, limit, sort.into()).await?;
+        ModelCommand::Search {
+            query,
+            limit,
+            sort,
+            images,
+        } => {
+            let kind = download::hub_kind(images);
+            download::search(ctx.hf_client.as_ref(), query, limit, sort.into(), kind).await?;
         }
         ModelCommand::Browse {
             category,
             limit,
             size,
+            images,
         } => {
-            download::browse(ctx.hf_client.as_ref(), category, limit, size).await?;
+            let kind = download::hub_kind(images);
+            download::browse(ctx.hf_client.as_ref(), category, limit, size, kind).await?;
         }
         ModelCommand::Capabilities {
             identifier,

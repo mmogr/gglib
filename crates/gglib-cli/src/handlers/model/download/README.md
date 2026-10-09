@@ -16,6 +16,7 @@ This module handles all download-related commands that interact with `HuggingFac
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  model download → exec.rs ──► daemon queue ──► remote.rs         │
+│                   └ companions.rs: an image model's companions   │
 │  model repair ──► daemon repairs and queues ──► remote.rs        │
 │  gglib up ──► DownloadManagerPort ──► interactive.rs             │
 │                                          ↕  [a]/[q] hotkeys      │
@@ -42,7 +43,10 @@ This module handles all download-related commands that interact with `HuggingFac
    `remote.rs` follows the ID the daemon answers in the same way; when that
    download does not complete, the command's error goes on to name the files
    still missing from the model's folder and the command that fetches them.
-   `gglib up` queues on this
+   Before it queues, `companions.rs` reads the repository's listing as the
+   web page's preview does (`DownloadOps::get_model_quantizations`) and, for
+   an image model, prints its family, each companion with its size, those
+   already here and the bytes to fetch. `gglib up` queues on this
    process's own download manager and runs `interactive.rs`. None subscribes
    to events: each reads the queue snapshot four times a second.
 2. `board.rs` draws the snapshot, one line per download, from the row's own
@@ -130,6 +134,8 @@ is listed with its quantizations.
 - `--sort <FIELD>` - `downloads` (default), `likes`, `created` or `updated`
   (also spelled `modified`), the most of it first. Any other value is refused
   with the list of these.
+- `--images` - Search for image models (GGUF repositories tagged
+  text-to-image) in place of models that chat
 
 **Example:**
 ```bash
@@ -151,6 +157,7 @@ Any other category is refused with the list of these.
 **Options:**
 - `--limit <N>` - Maximum results (default: 20)
 - `--size <SIZE>` - Filter by model size (e.g., "7B", "13B")
+- `--images` - Browse image models in place of models that chat
 
 **Example:**
 ```bash
@@ -161,7 +168,8 @@ gglib model browse recent --size 7B
 ### `download` (exec + remote)
 Download a model from `HuggingFace` Hub, on the gglib daemon.
 
-**Module:** `exec.rs` (orchestrator), `remote.rs` (daemon queue monitor);
+**Module:** `exec.rs` (orchestrator), `companions.rs` (an image model's
+companions, before the queue), `remote.rs` (daemon queue monitor);
 `interactive.rs` is the in-process monitor `gglib up` uses
 
 **Options:**
@@ -183,6 +191,8 @@ Download a model from `HuggingFace` Hub, on the gglib daemon.
 4. On completion, model is registered automatically (via `ModelRegistrarPort`)
 
 A repository that has projectors gets one fetched with the model, and the model is linked to it: the projector of the download's own quantization, else the `F16` one, else the first by name. There is no flag to leave it out; `gglib model update <model> --no-projector` unlinks it afterwards. The queue monitor names its file `projector`.
+
+An image model's download brings the companions its family draws with (a VAE and text encoders), each into its own repository's folder of the models directory, so a second model of the family finds one already there and does not fetch it again. Before it queues, the command prints the family, each companion with its repository, path and size, `already here` for those it has, and the bytes left to fetch. The line printed at the end names the components linked and why any was not; `gglib model update <model> --component <role>=<path>` links another.
 
 **Example:**
 ```bash
