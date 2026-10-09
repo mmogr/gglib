@@ -46,11 +46,11 @@ impl ToolExecutorPort for StubExecutor {
                 anyhow::bail!("{msg}");
             }
         }
-        Ok(ToolResult {
-            tool_call_id: call.id.clone(),
-            content: format!("executed {}", call.name),
-            success: true,
-        })
+        Ok(ToolResult::text(
+            call.id.clone(),
+            format!("executed {}", call.name),
+            true,
+        ))
     }
 }
 

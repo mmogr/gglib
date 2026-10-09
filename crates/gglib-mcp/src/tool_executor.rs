@@ -150,11 +150,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             (text, false)
         };
 
-        Ok(ToolResult {
-            tool_call_id: call.id.clone(),
-            content,
-            success,
-        })
+        Ok(ToolResult::text(call.id.clone(), content, success))
     }
 }
 

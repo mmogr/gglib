@@ -203,11 +203,7 @@ mod tests {
     fn tool_call_complete_does_not_panic() {
         smoke(AgentEvent::ToolCallComplete {
             tool_name: "some_tool".into(),
-            result: ToolResult {
-                tool_call_id: "c1".into(),
-                content: "output".into(),
-                success: true,
-            },
+            result: ToolResult::text("c1", "output", true),
             wait_ms: 0,
             execute_duration_ms: 5,
             display_name: "Some Tool".into(),
@@ -220,11 +216,7 @@ mod tests {
         // Should not panic and format nicely
         smoke(AgentEvent::ToolCallComplete {
             tool_name: "builtin:read_file".into(),
-            result: ToolResult {
-                tool_call_id: "c2".into(),
-                content: "line 1\nline 2\nline 3\n".into(),
-                success: true,
-            },
+            result: ToolResult::text("c2", "line 1\nline 2\nline 3\n", true),
             wait_ms: 0,
             execute_duration_ms: 10,
             display_name: "Read File".into(),
@@ -236,11 +228,7 @@ mod tests {
     fn list_directory_render_shows_counts() {
         smoke(AgentEvent::ToolCallComplete {
             tool_name: "builtin:list_directory".into(),
-            result: ToolResult {
-                tool_call_id: "c3".into(),
-                content: "file.rs\ndir/\nother.txt\n".into(),
-                success: true,
-            },
+            result: ToolResult::text("c3", "file.rs\ndir/\nother.txt\n", true),
             wait_ms: 0,
             execute_duration_ms: 3,
             display_name: "List Directory".into(),
@@ -252,11 +240,11 @@ mod tests {
     fn grep_search_render_shows_match_count() {
         smoke(AgentEvent::ToolCallComplete {
             tool_name: "builtin:grep_search".into(),
-            result: ToolResult {
-                tool_call_id: "c4".into(),
-                content: "src/main.rs:1:fn main() {}\nsrc/lib.rs:5:fn helper() {}\n".into(),
-                success: true,
-            },
+            result: ToolResult::text(
+                "c4",
+                "src/main.rs:1:fn main() {}\nsrc/lib.rs:5:fn helper() {}\n",
+                true,
+            ),
             wait_ms: 0,
             execute_duration_ms: 20,
             display_name: "Grep Search".into(),
@@ -268,11 +256,7 @@ mod tests {
     fn grep_no_matches_render() {
         smoke(AgentEvent::ToolCallComplete {
             tool_name: "builtin:grep_search".into(),
-            result: ToolResult {
-                tool_call_id: "c5".into(),
-                content: "no matches found for 'xyz'".into(),
-                success: true,
-            },
+            result: ToolResult::text("c5", "no matches found for 'xyz'", true),
             wait_ms: 0,
             execute_duration_ms: 15,
             display_name: "Grep Search".into(),
@@ -284,11 +268,7 @@ mod tests {
     fn failed_tool_falls_back_to_truncation() {
         smoke(AgentEvent::ToolCallComplete {
             tool_name: "builtin:read_file".into(),
-            result: ToolResult {
-                tool_call_id: "c6".into(),
-                content: "file 'nope.txt' does not exist".into(),
-                success: false,
-            },
+            result: ToolResult::text("c6", "file 'nope.txt' does not exist", false),
             wait_ms: 0,
             execute_duration_ms: 1,
             display_name: "Read File".into(),

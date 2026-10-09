@@ -186,11 +186,7 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
         match bare {
             "get_current_time" => {
                 let content = time::get_current_time(&args);
-                Ok(ToolResult {
-                    tool_call_id: call.id.clone(),
-                    content: content.to_string(),
-                    success: true,
-                })
+                Ok(ToolResult::text(call.id.clone(), content.to_string(), true))
             }
             "read_file" | "list_directory" | "grep_search" => {
                 let root = self
@@ -204,16 +200,8 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
                     _ => unreachable!(),
                 };
                 match result {
-                    Ok(content) => Ok(ToolResult {
-                        tool_call_id: call.id.clone(),
-                        content,
-                        success: true,
-                    }),
-                    Err(msg) => Ok(ToolResult {
-                        tool_call_id: call.id.clone(),
-                        content: msg,
-                        success: false,
-                    }),
+                    Ok(content) => Ok(ToolResult::text(call.id.clone(), content, true)),
+                    Err(msg) => Ok(ToolResult::text(call.id.clone(), msg, false)),
                 }
             }
             _ => Err(anyhow!("unknown builtin tool '{bare}'")),

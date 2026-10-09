@@ -1,4 +1,4 @@
-crates/gglib-agent/src/agent_loop.rs 564
+crates/gglib-agent/src/agent_loop.rs 560
 crates/gglib-agent/src/stream_collector.rs 456
 crates/gglib-agent/tests/integration_guards.rs 729
 crates/gglib-agent/tests/integration_happy_path.rs 421
@@ -98,7 +98,7 @@ crates/gglib-gguf/src/parser.rs 321
 crates/gglib-gguf/src/reader_tests.rs 416
 crates/gglib-hf/src/http.rs 381
 crates/gglib-hf/src/parsing.rs 429
-crates/gglib-mcp/src/builtin/mod.rs 337
+crates/gglib-mcp/src/builtin/mod.rs 325
 crates/gglib-mcp/src/client.rs 526
 crates/gglib-mcp/src/manager.rs 315
 crates/gglib-mcp/src/service.rs 790

@@ -487,11 +487,7 @@ async fn recover_from_parallel_overflow(
     let synthetic_results: Vec<ToolResult> = response
         .tool_calls
         .iter()
-        .map(|tc| ToolResult {
-            tool_call_id: tc.id.clone(),
-            content: synthetic_error.clone(),
-            success: false,
-        })
+        .map(|tc| ToolResult::text(tc.id.clone(), synthetic_error.clone(), false))
         .collect();
 
     let suggested_action = format!(

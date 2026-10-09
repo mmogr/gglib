@@ -80,11 +80,7 @@ fn called() -> [AgentEvent; 3] {
         },
         AgentEvent::ToolCallComplete {
             tool_name: "read_file".to_owned(),
-            result: ToolResult {
-                tool_call_id: "c1".to_owned(),
-                content: "fn main() {}".to_owned(),
-                success: true,
-            },
+            result: ToolResult::text("c1".to_owned(), "fn main() {}".to_owned(), true),
             wait_ms: 0,
             execute_duration_ms: 1,
             display_name: "Read File".to_owned(),

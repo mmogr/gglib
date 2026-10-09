@@ -149,18 +149,12 @@ impl ToolExecutorPort for MockToolExecutorPort {
             })?;
 
         match behavior {
-            MockToolBehavior::Immediate { content } => Ok(ToolResult {
-                tool_call_id: call.id.clone(),
-                content,
-                success: true,
-            }),
+            MockToolBehavior::Immediate { content } => {
+                Ok(ToolResult::text(call.id.clone(), content, true))
+            }
             MockToolBehavior::Delayed { millis, content } => {
                 tokio::time::sleep(std::time::Duration::from_millis(millis)).await;
-                Ok(ToolResult {
-                    tool_call_id: call.id.clone(),
-                    content,
-                    success: true,
-                })
+                Ok(ToolResult::text(call.id.clone(), content, true))
             }
             MockToolBehavior::Counting { prefix } => {
                 let mut counters = self.counters.lock().await;
@@ -168,18 +162,12 @@ impl ToolExecutorPort for MockToolExecutorPort {
                 *n += 1;
                 let content = format!("{prefix} {n}");
                 drop(counters);
-                Ok(ToolResult {
-                    tool_call_id: call.id.clone(),
-                    content,
-                    success: true,
-                })
+                Ok(ToolResult::text(call.id.clone(), content, true))
             }
             MockToolBehavior::Error { message } => Err(anyhow::anyhow!(message)),
-            MockToolBehavior::Failure { content } => Ok(ToolResult {
-                tool_call_id: call.id.clone(),
-                content,
-                success: false,
-            }),
+            MockToolBehavior::Failure { content } => {
+                Ok(ToolResult::text(call.id.clone(), content, false))
+            }
         }
     }
 }

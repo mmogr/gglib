@@ -145,11 +145,7 @@ impl Turn {
         for call in &self.calls {
             let result = match self.results.iter().position(|r| r.tool_call_id == call.id) {
                 Some(i) => self.results.remove(i),
-                None => ToolResult {
-                    tool_call_id: call.id.clone(),
-                    content: UNFINISHED_TOOL_CALL.to_owned(),
-                    success: false,
-                },
+                None => ToolResult::text(call.id.clone(), UNFINISHED_TOOL_CALL.to_owned(), false),
             };
             rows.push(tool_row(result, conversation_id));
         }

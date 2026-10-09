@@ -44,11 +44,7 @@ fn started(id: &str) -> AgentEvent {
 fn completed(id: &str, content: &str) -> AgentEvent {
     AgentEvent::ToolCallComplete {
         tool_name: "read_file".to_owned(),
-        result: ToolResult {
-            tool_call_id: id.to_owned(),
-            content: content.to_owned(),
-            success: true,
-        },
+        result: ToolResult::text(id.to_owned(), content.to_owned(), true),
         wait_ms: 0,
         execute_duration_ms: 1,
         display_name: "Read File".to_owned(),

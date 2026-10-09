@@ -117,6 +117,22 @@ pub struct ToolResult {
     pub success: bool,
 }
 
+impl ToolResult {
+    /// A result whose whole output is `content`.
+    #[must_use]
+    pub fn text(
+        tool_call_id: impl Into<String>,
+        content: impl Into<String>,
+        success: bool,
+    ) -> Self {
+        Self {
+            tool_call_id: tool_call_id.into(),
+            content: content.into(),
+            success,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,11 +150,7 @@ mod tests {
 
     #[test]
     fn tool_result_success_false_is_serialisable() {
-        let result = ToolResult {
-            tool_call_id: "c1".into(),
-            content: "ERROR: file not found".into(),
-            success: false,
-        };
+        let result = ToolResult::text("c1", "ERROR: file not found", false);
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["success"], false);
         assert!(

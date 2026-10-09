@@ -50,10 +50,10 @@ impl ToolExecutorPort for ScoringToolExecutorPort {
 
     async fn execute(&self, call: &ToolCall) -> Result<ToolResult, anyhow::Error> {
         self.call_log.lock().await.push(call.clone());
-        Ok(ToolResult {
-            tool_call_id: call.id.clone(),
-            content: format!(r#"{{"status":"ok","tool":"{}"}}"#, call.name),
-            success: true,
-        })
+        Ok(ToolResult::text(
+            call.id.clone(),
+            format!(r#"{{"status":"ok","tool":"{}"}}"#, call.name),
+            true,
+        ))
     }
 }
