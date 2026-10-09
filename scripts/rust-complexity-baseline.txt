@@ -48,6 +48,7 @@ crates/gglib-core/src/domain/cache_budget.rs 305
 crates/gglib-core/src/domain/capabilities.rs 1594
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 351
+crates/gglib-core/src/domain/hub_chats_tests.rs 375
 crates/gglib-core/src/domain/inference.rs 1915
 crates/gglib-core/src/domain/inference_tests.rs 1409
 crates/gglib-core/src/domain/kv_estimate.rs 341
@@ -57,6 +58,7 @@ crates/gglib-core/src/domain/model_sampling.rs 674
 crates/gglib-core/src/domain/query.rs 408
 crates/gglib-core/src/domain/recommendation.rs 381
 crates/gglib-core/src/domain/residency.rs 419
+crates/gglib-core/src/domain/runs/wire_tests.rs 302
 crates/gglib-core/src/domain/runtime_capabilities.rs 408
 crates/gglib-core/src/download/completion.rs 432
 crates/gglib-core/src/download/rate.rs 628

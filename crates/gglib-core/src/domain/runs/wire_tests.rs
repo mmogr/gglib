@@ -1,5 +1,5 @@
 //! The wire shapes of a run, pinned against the recorded bodies both clients
-//! replay.
+//! replay, and the frames of a reply whose tool made an image.
 
 use std::path::PathBuf;
 
@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::{RunError, RunInfo, RunKind, RunList, RunStatus};
+use crate::domain::agent::{AgentEvent, ToolCall, ToolResult, rows_from_frames};
+use crate::domain::attachment::{AttachmentId, AttachmentInfo};
+use crate::domain::chat::MessageRole;
 
 /// The recorded bodies, by name. The field order is the file's order.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -17,6 +20,10 @@ struct Recorded {
     completed: RunInfo,
     failed: RunInfo,
     cancelled: RunInfo,
+    /// The frames of a reply whose tool made an image, as a run's events
+    /// carry them. `AgentEvent` is written, never read, so each is kept as
+    /// its JSON.
+    tool_reply: Vec<Value>,
     list: RunList,
 }
 
@@ -35,6 +42,54 @@ fn run(id: &str, kind: RunKind, status: RunStatus) -> RunInfo {
         last_seq: 0,
         error: None,
     }
+}
+
+/// The image the recorded tool made: a 1024x1024 PNG, the same image
+/// `contracts/chats/recorded.json`'s `tool_reply` rows carry. The id is the
+/// hash of this text, standing in for the image's bytes.
+fn drawing() -> AttachmentInfo {
+    AttachmentInfo {
+        id: AttachmentId::of(b"contracts: a red dot a tool drew"),
+        mime: "image/png".to_owned(),
+        width: 1024,
+        height: 1024,
+    }
+}
+
+/// A reply that calls a tool which makes one image, then answers.
+fn tool_reply() -> Vec<AgentEvent> {
+    let call = ToolCall {
+        id: "call-draw-1".to_owned(),
+        name: "draw".to_owned(),
+        arguments: json!({ "prompt": "a red dot" }),
+    };
+    let mut result = ToolResult::text("call-draw-1", "[image 1024x1024 PNG stored]", true);
+    result.images = vec![drawing()];
+    vec![
+        AgentEvent::ToolCallStart {
+            tool_call: call,
+            display_name: "Draw".to_owned(),
+            args_summary: None,
+        },
+        AgentEvent::ToolCallComplete {
+            tool_name: "draw".to_owned(),
+            result,
+            wait_ms: 0,
+            execute_duration_ms: 900,
+            display_name: "Draw".to_owned(),
+            duration_display: "900ms".to_owned(),
+        },
+        AgentEvent::IterationComplete {
+            iteration: 1,
+            tool_calls: 1,
+        },
+        AgentEvent::TextDelta {
+            content: "Here is a red dot.".to_owned(),
+        },
+        AgentEvent::FinalAnswer {
+            content: "Here is a red dot.".to_owned(),
+        },
+    ]
 }
 
 fn recorded() -> Recorded {
@@ -76,6 +131,10 @@ fn recorded() -> Recorded {
         completed,
         failed,
         cancelled,
+        tool_reply: tool_reply()
+            .iter()
+            .map(|event| serde_json::to_value(event).unwrap())
+            .collect(),
         list,
     }
 }
@@ -202,4 +261,42 @@ fn a_run_holds_its_conversation_until_it_is_reported_ended() {
         assert!(!on_seven.holds(8), "{status:?}");
         assert!(!run("r", RunKind::Agent, status).holds(7), "{status:?}");
     }
+}
+
+/// The recorded `tool_call_complete` frame lists the image its tool made,
+/// by id with its facts, and its text names the image; the reply's rows
+/// saved from these frames put the image's id on the tool row alone.
+#[test]
+fn a_tool_frame_carries_its_image_and_the_saved_tool_row_its_id() {
+    let frames = recorded().tool_reply;
+    let image = drawing();
+    assert_eq!(
+        frames[1]["result"],
+        json!({
+            "tool_call_id": "call-draw-1",
+            "content": "[image 1024x1024 PNG stored]",
+            "success": true,
+            "images": [{
+                "id": image.id.as_str(),
+                "mime": "image/png",
+                "width": 1024,
+                "height": 1024,
+            }],
+        })
+    );
+
+    let lines: Vec<String> = frames.iter().map(Value::to_string).collect();
+    let rows = rows_from_frames(lines.iter().map(String::as_str), true, 12);
+    let roles: Vec<MessageRole> = rows.iter().map(|row| row.role).collect();
+    assert_eq!(
+        roles,
+        [
+            MessageRole::Assistant,
+            MessageRole::Tool,
+            MessageRole::Assistant
+        ]
+    );
+    assert_eq!(rows[1].content, "[image 1024x1024 PNG stored]");
+    assert_eq!(rows[1].images, [image.id]);
+    assert!(rows[0].images.is_empty() && rows[2].images.is_empty());
 }

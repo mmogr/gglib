@@ -1,8 +1,9 @@
 //! The wire shapes of the hub's chats, pinned against the recorded bodies
 //! both clients replay: a listing, a chat opened (a finished reply with how
-//! it was made, then one that was stopped), a device's turn, a turn with an
-//! image, the answer to the upload that image was sent by, and a turn that
-//! turns thinking off (`hub_chats_thinking_tests` reads that one).
+//! it was made, then one that was stopped), the rows of a reply whose tool
+//! made an image, a device's turn, a turn with an image, the answer to the
+//! upload that image was sent by, and a turn that turns thinking off
+//! (`hub_chats_thinking_tests` reads that one).
 
 use std::path::PathBuf;
 
@@ -11,6 +12,7 @@ use serde_json::json;
 
 use super::{HubChat, HubChatList, HubChatOpen, HubTurn};
 use crate::domain::Thinking;
+use crate::domain::agent::ToolCall;
 use crate::domain::attachment::{AttachmentId, AttachmentInfo, AttachmentUpload};
 use crate::domain::chat::{Conversation, ConversationSettings, Message, MessageRole};
 
@@ -20,6 +22,7 @@ use crate::domain::chat::{Conversation, ConversationSettings, Message, MessageRo
 pub(super) struct Recorded {
     list: HubChatList,
     pub(super) open: HubChatOpen,
+    tool_reply: Vec<Message>,
     pub(super) turn: HubTurn,
     upload: AttachmentUpload,
     image_turn: HubTurn,
@@ -35,6 +38,61 @@ fn screenshot() -> AttachmentInfo {
         width: 1280,
         height: 720,
     }
+}
+
+/// The image the recorded tool made: a 1024x1024 PNG, the same image
+/// `contracts/runs/recorded.json`'s `tool_reply` frames carry. The id is the
+/// hash of this text, standing in for the image's bytes.
+fn drawing() -> AttachmentInfo {
+    AttachmentInfo {
+        id: AttachmentId::of(b"contracts: a red dot a tool drew"),
+        mime: "image/png".to_owned(),
+        width: 1024,
+        height: 1024,
+    }
+}
+
+/// The rows of a reply whose tool made an image, as an opened chat carries
+/// them: the assistant row that called the tool, the tool row with the
+/// image, and the answer. They sit beside `open` rather than in it, so the
+/// opened chat's four rows stay as both clients replay them.
+fn tool_reply() -> Vec<Message> {
+    let call = ToolCall {
+        id: "call-draw-1".to_owned(),
+        name: "draw".to_owned(),
+        arguments: json!({ "prompt": "a red dot" }),
+    };
+    let row = |id, role, content: &str, created_at: &str| Message {
+        id,
+        conversation_id: 12,
+        role,
+        content: content.to_owned(),
+        created_at: created_at.to_owned(),
+        metadata: None,
+        images: Vec::new(),
+    };
+    vec![
+        Message {
+            metadata: Some(json!({ "tool_calls": [call] })),
+            ..row(44, MessageRole::Assistant, "", "2026-09-30 09:15:02")
+        },
+        Message {
+            metadata: Some(json!({ "tool_call_id": "call-draw-1" })),
+            images: vec![drawing()],
+            ..row(
+                45,
+                MessageRole::Tool,
+                "[image 1024x1024 PNG stored]",
+                "2026-09-30 09:15:09",
+            )
+        },
+        row(
+            46,
+            MessageRole::Assistant,
+            "Here is a red dot.",
+            "2026-09-30 09:15:11",
+        ),
+    ]
 }
 
 /// A turn on the recorded chat that says `content`, with no image and no
@@ -135,6 +193,7 @@ pub(super) fn recorded() -> Recorded {
             conversation,
             messages,
         },
+        tool_reply: tool_reply(),
         turn: turn("And how do I fix it?"),
         upload: AttachmentUpload {
             info: screenshot(),
@@ -285,4 +344,32 @@ fn the_recorded_reply_carries_its_reading_and_the_stopped_one_none() {
     assert_eq!(reply[K.finish_reason], "stop");
     assert_eq!(rows[3].role, MessageRole::Assistant);
     assert_eq!(rows[3].metadata, Some(json!({ INCOMPLETE_KEY: true })));
+}
+
+/// A tool row carries the images its tool made as a user row does, by id
+/// with their facts and without their bytes, beside the id of the call it
+/// answers; its text names each image. The rows around it have none.
+#[test]
+fn a_tool_row_carries_the_images_its_tool_made() {
+    let rows = serde_json::to_value(recorded().tool_reply).unwrap();
+    let image = drawing();
+    assert_eq!(
+        rows[1],
+        json!({
+            "id": 45,
+            "conversation_id": 12,
+            "role": "tool",
+            "content": "[image 1024x1024 PNG stored]",
+            "created_at": "2026-09-30 09:15:09",
+            "metadata": { "tool_call_id": "call-draw-1" },
+            "images": [{
+                "id": image.id.as_str(),
+                "mime": "image/png",
+                "width": 1024,
+                "height": 1024,
+            }],
+        })
+    );
+    assert_eq!(rows[0]["metadata"]["tool_calls"][0]["id"], "call-draw-1");
+    assert!(rows[0].get("images").is_none() && rows[2].get("images").is_none());
 }
