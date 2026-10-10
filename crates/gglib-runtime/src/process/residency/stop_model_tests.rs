@@ -169,7 +169,7 @@ async fn stopping_an_image_model_mid_render_leaves_the_slots_next_model_its_requ
         .expect("nothing else generates");
 
     // The render's driver: it holds the turn, and retires its model once a
-    // Stop was asked, as `sd::job_poll` does at each read of its job.
+    // Stop was asked, as `sd::server::job_poll` does at each read of its job.
     let driver = {
         let (queue, core) = (Arc::clone(&queue), Arc::clone(&core));
         tokio::spawn(async move {

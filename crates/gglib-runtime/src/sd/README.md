@@ -11,20 +11,10 @@ beside itself (`libstable-diffusion.dylib`, `.so`, or `stable-diffusion.dll`),
 `sd-config.json`, a source checkout, and `downloads/` while an archive is
 unpacked. Uninstalling removes `.sd/` whole.
 
-| File          | What it holds                                                            |
-|---------------|--------------------------------------------------------------------------|
-| `release.rs`  | the pin `master-948-228c707`, `GGLIB_SD_RELEASE`, the platform table     |
-| `install.rs`  | the pre-built install, and the source build of the `sd-server` target    |
-| `record.rs`   | `sd-config.json`: a source build's five keys or a download's four        |
-| `status.rs`   | `SdStatus`, from the record and the binary's own `--version`             |
-| `uninstall.rs`| removing `.sd/`                                                           |
-| `config.rs`   | `SdServerConfig`: the model, its family, its components and the port     |
-| `args.rs`     | `sd-server`'s argv from the config and the family's recipe               |
-| `spawn.rs`    | starting it, with piped output, as llama-server is started               |
-| `job.rs`      | `SdImageDriver`, the image generation port: admit, turn, submit, follow  |
-| `job_plan.rs` | a request's model, size and count, refused before anything queues        |
-| `job_api.rs`  | sd-server's async job API: submit, read a job, cancel                     |
-| `job_poll.rs` | following one job: stages, steps, decode, cancel, stall and deadline     |
+| Folder     | What it holds                                                                 |
+|------------|-------------------------------------------------------------------------------|
+| `install/` | the pinned release and its platform table, the pre-built install and the source build (`pipeline.rs`), `sd-config.json`, `SdStatus`, and removing `.sd/` |
+| `server/`  | `SdServerConfig` and `sd-server`'s argv, starting it, and `SdImageDriver` with its job API, plan and poll loop; the test-only `fake_server.rs` |
 
 ## The platform table
 
@@ -50,7 +40,7 @@ role order, `--vae`, `--clip_l`, `--t5xxl`, `--llm`, whatever order the
 model lists them in; `--listen-ip 127.0.0.1 --listen-port <port>`; then the
 recipe's `--steps`, `--cfg-scale` and `--sampling-method`, and `--fa` where
 the recipe turns flash attention on (Qwen-Image 2.1). Flags given at launch
-are the defaults for every request. `args_tests.rs` pins one whole argv per
+are the defaults for every request. `server/args_tests.rs` pins one whole argv per
 family.
 
 ## Launching
@@ -59,7 +49,7 @@ The residency launch starts `sd-server` (`process::residency`): it checks
 the binary and every component before the queue, places the model by its
 files plus its family's compute margin (`Recipe::compute_margin_bytes`, the
 1024x1024 VAE decode buffer rounded up: Flux.1 7 GiB, SDXL 8 GiB,
-Qwen-Image 2.1 9 GiB), spawns with `spawn.rs`, and narrates the build from
+Qwen-Image 2.1 9 GiB), spawns with `server/spawn.rs`, and narrates the build from
 `sd-config.json` (`recorded_release`).
 
 ## Is it up?
@@ -67,8 +57,8 @@ Qwen-Image 2.1 9 GiB), spawns with `spawn.rs`, and narrates the build from
 `sd-server` has no `/health`. Readiness and the health monitor ask
 `/v1/models` instead (`RuntimeKind::health_path`), which answers without the
 lock a render holds, and the body must list `sd-cpp-local`: a 200 from any
-other server on the port is not sd-server. `health_tests.rs` holds a render
-open on `fake_server.rs`, a test-only stand-in, and probes three times
+other server on the port is not sd-server. `server/health_tests.rs` holds a render
+open on `server/fake_server.rs`, a test-only stand-in, and probes three times
 within the health client's two seconds.
 
 ## Drawing
@@ -100,9 +90,9 @@ own, so that holds for a request dropped while its job is being submitted. A ren
 slot emptied, then its turn ended. A person's Stop on the model while it
 draws is not a bare eviction either: the Stop asks, and the render, read or
 abandoned, retires itself the same way at its next read of the job and
-answers `image_generation_failed`, saying only that the model was stopped. `job_tests.rs` drives all of this against
+answers `image_generation_failed`, saying only that the model was stopped. `server/job_tests.rs` drives all of this against
 a scripted job and a real admission queue on a paused clock;
-`job_api_tests.rs` reads every answer the fake's job API scripts.
+`server/job_api_tests.rs` reads every answer the fake's job API scripts.
 
 ## The source build
 
