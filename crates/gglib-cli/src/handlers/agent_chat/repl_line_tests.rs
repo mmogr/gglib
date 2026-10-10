@@ -74,3 +74,36 @@ async fn a_command_sends_nothing_and_leaves_a_waiting_image_for_the_message() {
     let (_, carried) = sent("what is this?", &mut images).await;
     assert_eq!(carried, [AttachmentId::of(&bytes)]);
 }
+
+/// `/retry`, `/edit`, `/branch` and `/branches` ask for a change to the
+/// chat, or its branches, and send nothing; a word that only starts as one
+/// of them is a message.
+#[tokio::test]
+async fn a_change_to_the_chat_is_asked_for_and_not_sent() {
+    let (service, _) = service();
+    let (mut images, _) = attached(&service, &[], true).await.unwrap();
+
+    for (typed, ask) in [
+        ("/retry", Ask::Retry),
+        ("/branch", Ask::Branch),
+        (
+            "/edit Make it shorter",
+            Ask::Edit("Make it shorter".to_owned()),
+        ),
+        ("/edit\t  two  words ", Ask::Edit("two  words".to_owned())),
+        ("/edit", Ask::Edit(String::new())),
+    ] {
+        match read(typed, &mut images).await {
+            Line::Change(asked) => assert_eq!(asked, ask, "{typed}"),
+            other => panic!("{typed} read as {other:?}"),
+        }
+    }
+    assert!(matches!(
+        read("/branches", &mut images).await,
+        Line::Branches
+    ));
+    assert!(matches!(
+        read("/editor of mine", &mut images).await,
+        Line::Send(_)
+    ));
+}

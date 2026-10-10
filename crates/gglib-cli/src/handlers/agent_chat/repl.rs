@@ -39,6 +39,7 @@ use gglib_core::ports::AgentLoopPort;
 
 use crate::handlers::inference::chat::ChatArgs;
 
+use super::branches;
 use super::drain::drain_event_stream;
 use super::images::TurnImages;
 use super::persistence::Conversation;
@@ -51,6 +52,10 @@ use super::repl_line::{self, Line};
 const REPL_HELP: &str = "\
   /help     print this message
   /image <path>  attach a PNG or JPEG to your next message
+  /retry    answer the last question again; a saved reply is kept, on its own branch
+  /edit <text>   ask the last question again as <text>; a reply to it is kept, on its own branch
+  /branch   copy the chat into a new branch and go on there
+  /branches list the other branches along the chat
   /quit     exit the session
   /exit     exit the session
   Ctrl+C    cancel the current agent response (return to prompt)
@@ -126,7 +131,7 @@ pub(crate) async fn run_repl_with_history(
     mut messages: Vec<AgentMessage>,
     config: AgentConfig,
     verbose: bool,
-    persistence: Option<Conversation<'_>>,
+    mut persistence: Option<Conversation<'_>>,
     mut images: TurnImages<'_>,
 ) -> Result<()> {
     // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
@@ -170,7 +175,9 @@ pub(crate) async fn run_repl_with_history(
             Err(e) => return Err(anyhow::anyhow!("readline error: {e}")),
         };
 
-        match repl_line::read(input.trim(), &mut images).await {
+        // Whether the turn asks a question of its own, which it then saves;
+        // a turn that answers one already saved saves none.
+        let asks = match repl_line::read(input.trim(), &mut images).await {
             Line::Empty => continue,
             Line::Quit => break,
             Line::Help => {
@@ -181,8 +188,25 @@ pub(crate) async fn run_repl_with_history(
                 eprintln!("{reply}");
                 continue;
             }
-            Line::Send(message) => messages.push(message),
-        }
+            Line::Branches => {
+                branches::list(persistence.as_ref()).await;
+                continue;
+            }
+            Line::Change(ask) => {
+                let Some(next) = branches::go(&mut persistence, ask, &messages).await else {
+                    continue;
+                };
+                messages = next.history;
+                if !next.answer {
+                    continue;
+                }
+                false
+            }
+            Line::Send(message) => {
+                messages.push(message);
+                true
+            }
+        };
 
         // ── 2–4. Run turn and update history ─────────
         // Context pruning is handled by the agent loop itself (`prune_for_budget`
@@ -196,7 +220,15 @@ pub(crate) async fn run_repl_with_history(
         // of the previous two. The turn saves itself as it runs: what comes
         // back is the model's context, not a record of what was said.
         let saved_to = persistence.as_ref();
-        messages = run_single_turn(&agent_loop, messages, config.clone(), verbose, saved_to).await;
+        messages = run_single_turn(
+            &agent_loop,
+            messages,
+            config.clone(),
+            verbose,
+            saved_to,
+            asks,
+        )
+        .await;
     }
 
     if let Some(ref conv) = persistence {
@@ -220,8 +252,9 @@ pub(crate) async fn run_repl_with_history(
 /// and return the updated conversation history.
 ///
 /// With `saved_to`, the turn is saved there as the daemon saves an agent
-/// run's: its last message, the user's, before the loop starts, and the
-/// reply once the loop has ended, from the events it sent. A turn that
+/// run's: its last message, the user's, before the loop starts, when it
+/// `asks` it (a turn that answers a question already saved does not), and
+/// the reply once the loop has ended, from the events it sent. A turn that
 /// failed or was cancelled saves what arrived of its reply, marked
 /// incomplete. Best-effort: a turn that cannot be saved still runs.
 ///
@@ -240,6 +273,7 @@ async fn run_single_turn(
     config: AgentConfig,
     verbose: bool,
     saved_to: Option<&Conversation<'_>>,
+    asks: bool,
 ) -> Vec<AgentMessage> {
     // Single clone: keep a backup so a failed or cancelled turn restores the
     // exact conversation state (including the user message that triggered
@@ -247,7 +281,7 @@ async fn run_single_turn(
     let pre_turn = messages.clone();
 
     let mut reply = saved_to.map(Conversation::reply);
-    if let Some(conversation) = saved_to {
+    if let Some(conversation) = saved_to.filter(|_| asks) {
         conversation.save_user(messages.last()).await;
     }
 

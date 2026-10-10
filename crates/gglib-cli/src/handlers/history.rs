@@ -1,6 +1,7 @@
 //! History command handler.
 //!
-//! Lists past chat conversations with message counts and relative timestamps.
+//! Lists past chat conversations with message counts, the chat each branch
+//! was made from, and relative timestamps.
 
 use anyhow::Result;
 use gglib_app_services::far_credentials;
@@ -35,10 +36,10 @@ pub(crate) async fn execute(ctx: &CliContext, limit: usize) -> Result<()> {
     }
 
     println!(
-        "{:<5} {:<35} {:<6} {:<40} {:<15}",
-        "ID", "Title", "Msgs", "Model", "Updated"
+        "{:<5} {:<35} {:<6} {:<9} {:<40} {:<15}",
+        "ID", "Title", "Msgs", "Branched", "Model", "Updated"
     );
-    print_separator(105);
+    print_separator(115);
 
     for (conv, msg_count) in &rows {
         let model_label = conv.settings.as_ref().map_or_else(
@@ -47,10 +48,11 @@ pub(crate) async fn execute(ctx: &CliContext, limit: usize) -> Result<()> {
         );
 
         println!(
-            "{:<5} {:<35} {:<6} {:<40} {:<15}",
+            "{:<5} {:<35} {:<6} {:<9} {:<40} {:<15}",
             conv.id,
             truncate_string(&conv.title, 34),
             msg_count,
+            branched(conv.branch_of),
             model_label,
             format_relative_time(&conv.updated_at),
         );
@@ -59,6 +61,12 @@ pub(crate) async fn execute(ctx: &CliContext, limit: usize) -> Result<()> {
     println!("\nResume with: gglib chat --continue <ID>");
 
     Ok(())
+}
+
+/// The Branched cell: the chat a branch was made from (ADR 0017), and
+/// nothing for a chat that is no branch.
+fn branched(branch_of: Option<i64>) -> String {
+    branch_of.map_or_else(String::new, |id| format!("from #{id}"))
 }
 
 /// The most a Model cell shows, one short of its column.

@@ -107,6 +107,22 @@ impl<'a> Conversation<'a> {
         }
     }
 
+    /// The same session's turns, saved to chat `id` instead: the branch a
+    /// change made, which the session goes on in.
+    pub(crate) fn moved_to(&self, id: i64) -> Self {
+        Self {
+            service: self.service,
+            id,
+            made_by: self.made_by.clone(),
+        }
+    }
+
+    /// The chat history the conversation is kept in, which makes a change
+    /// to it as the branching rules say.
+    pub(crate) const fn history(&self) -> &'a ChatHistoryService {
+        self.service
+    }
+
     /// Replace the conversation's settings with `settings`, when there are
     /// new ones: the model a resumed session moved it to. Logged and
     /// swallowed, as a message that is not saved is.

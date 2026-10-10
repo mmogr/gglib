@@ -6,6 +6,7 @@
 
 use gglib_core::domain::agent::AgentMessage;
 
+use super::branches::Ask;
 use super::images::TurnImages;
 
 /// A line typed at the prompt, trimmed.
@@ -17,6 +18,11 @@ pub(super) enum Line {
     Quit,
     /// `/help`.
     Help,
+    /// `/retry`, `/edit <text>` or `/branch`: a change to the session's
+    /// chat ([`branches`](super::branches)).
+    Change(Ask),
+    /// `/branches`: the branch points along the session's chat.
+    Branches,
     /// `/image`: what to tell the user, be it the receipt of the image now
     /// attached to the next message, the usage, or why it was refused.
     Image(String),
@@ -32,7 +38,15 @@ pub(super) async fn read(input: &str, images: &mut TurnImages<'_>) -> Line {
         "" => return Line::Empty,
         "/quit" | "/exit" => return Line::Quit,
         "/help" => return Line::Help,
+        "/retry" => return Line::Change(Ask::Retry),
+        "/branch" => return Line::Change(Ask::Branch),
+        "/branches" => return Line::Branches,
         _ => {}
+    }
+    if let Some(text) = input.strip_prefix("/edit")
+        && (text.is_empty() || text.starts_with(char::is_whitespace))
+    {
+        return Line::Change(Ask::Edit(text.trim().to_owned()));
     }
     if let Some(reply) = images.command(input).await {
         return Line::Image(reply);
