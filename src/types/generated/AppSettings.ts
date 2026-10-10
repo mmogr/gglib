@@ -14,7 +14,12 @@ export type AppSettings = { defaultDownloadPath: string | null, defaultContextSi
 /**
  * Default model ID for quick commands (e.g., `gglib question`).
  */
-defaultModelId: number | null, inferenceDefaults: InferenceConfig | null, 
+defaultModelId: number | null, 
+/**
+ * The image model a drawing request uses when it names none (see
+ * `gglib_core::Settings::default_image_model_id`).
+ */
+defaultImageModelId: number | null, inferenceDefaults: InferenceConfig | null, 
 /**
  * Named sampling profiles, selectable per request as `{model}:{profile}`.
  */
@@ -24,6 +29,10 @@ inferenceProfiles: Array<InferenceProfile> | null, setupCompleted: boolean | nul
  * `tool_choice: "required"` or under gglib's grammar. Absent means on.
  */
 toolCallRepair: boolean | null, 
+/**
+ * Whether `/mcp` offers MCP clients the drawing tool. Absent means off.
+ */
+mcpDrawing: boolean | null, 
 /**
  * Whether structured-output turns get their temperature capped when no
  * human chose one. Absent means on (see `gglib_core::Settings`). Read

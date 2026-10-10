@@ -1,7 +1,7 @@
 /**
  * Global settings, as `GET /api/settings` actually sends them.
  *
- * All 23 fields are always present. The endpoint answers with
+ * All 25 fields are always present. The endpoint answers with
  * `gglib_app_services::types::AppSettings` — not `gglib_core::Settings`,
  * which is persisted and never serialized to a client — and no field of it
  * uses `skip_serializing_if`, so "nothing configured" crosses the wire as
@@ -23,6 +23,7 @@ const UNSET: AppSettings = {
   maxToolIterations: null,
   maxStagnationSteps: null,
   defaultModelId: null,
+  defaultImageModelId: null,
   inferenceDefaults: null,
   inferenceProfiles: null,
   setupCompleted: null,
@@ -33,6 +34,7 @@ const UNSET: AppSettings = {
   trustClientSampling: null,
   loopGuardMode: null,
   toolCallRepair: null,
+  mcpDrawing: null,
   agenticSampling: null,
   proxyAutostart: null,
   closeToTray: null,

@@ -28,6 +28,10 @@ pub struct AppSettings {
     /// Default model ID for quick commands (e.g., `gglib question`).
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub default_model_id: Option<i64>,
+    /// The image model a drawing request uses when it names none (see
+    /// `gglib_core::Settings::default_image_model_id`).
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub default_image_model_id: Option<i64>,
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
     /// Named sampling profiles, selectable per request as `{model}:{profile}`.
     pub inference_profiles: Option<Vec<gglib_core::domain::InferenceProfile>>,
@@ -47,6 +51,8 @@ pub struct AppSettings {
     /// Whether a tool call failing schema validation is re-issued, with
     /// `tool_choice: "required"` or under gglib's grammar. Absent means on.
     pub tool_call_repair: Option<bool>,
+    /// Whether `/mcp` offers MCP clients the drawing tool. Absent means off.
+    pub mcp_drawing: Option<bool>,
     /// Whether structured-output turns get their temperature capped when no
     /// human chose one. Absent means on (see `gglib_core::Settings`). Read
     /// back here for the GUI's toggle: a toggle that saves but cannot read
@@ -85,6 +91,7 @@ impl From<gglib_core::Settings> for AppSettings {
             max_tool_iterations: settings.max_tool_iterations,
             max_stagnation_steps: settings.max_stagnation_steps,
             default_model_id: settings.default_model_id,
+            default_image_model_id: settings.default_image_model_id,
             inference_defaults: settings.inference_defaults,
             inference_profiles: settings.inference_profiles,
             setup_completed: settings.setup_completed,
@@ -95,6 +102,7 @@ impl From<gglib_core::Settings> for AppSettings {
             trust_client_sampling: settings.trust_client_sampling,
             loop_guard_mode: settings.loop_guard_mode,
             tool_call_repair: settings.tool_call_repair,
+            mcp_drawing: settings.mcp_drawing,
             agentic_sampling: settings.agentic_sampling,
             proxy_autostart: settings.proxy_autostart,
             close_to_tray: settings.close_to_tray,
@@ -145,6 +153,10 @@ pub struct UpdateSettingsRequest {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub default_model_id: Option<Option<i64>>,
+    /// Refused unless the id names a model that draws.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null", optional))]
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub default_image_model_id: Option<Option<i64>>,
     // `as` rather than `type`, for the import — see `server_defaults` above.
     #[cfg_attr(
         feature = "ts-bindings",
@@ -199,6 +211,10 @@ pub struct UpdateSettingsRequest {
     #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub tool_call_repair: Option<Option<bool>>,
+    // The `/mcp` drawing switch; explicit `null` turns it back off
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub mcp_drawing: Option<Option<bool>>,
     // Agentic-turn sampling; explicit `null` re-enables (see `gglib_core::Settings`)
     #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(
@@ -231,6 +247,7 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             max_tool_iterations: request.max_tool_iterations,
             max_stagnation_steps: request.max_stagnation_steps,
             default_model_id: request.default_model_id,
+            default_image_model_id: request.default_image_model_id,
             inference_defaults: request.inference_defaults,
             inference_profiles: request.inference_profiles,
             setup_completed: request.setup_completed,
@@ -241,6 +258,7 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             trust_client_sampling: request.trust_client_sampling,
             loop_guard_mode: request.loop_guard_mode,
             tool_call_repair: request.tool_call_repair,
+            mcp_drawing: request.mcp_drawing,
             agentic_sampling: request.agentic_sampling,
             proxy_autostart: request.proxy_autostart,
             close_to_tray: request.close_to_tray,

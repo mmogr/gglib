@@ -24,6 +24,7 @@ Application settings modal: models directory path, base port configuration, per-
 | `useLoopGuardTrips.ts` | State for the loop guard's log panel: one read when the Advanced section opens, and a reload |
 | `useNetworkSettings.ts` | State for the network-binding settings (bind host, LAN sharing) |
 | `useAgentGuardSettings.ts` | State for the agent-guard settings (agentic sampling cap, stagnation limit) |
+| `useDrawingSettings.ts` | State for the drawing settings: the default image model and whether MCP clients may draw through `/mcp` (off when unset) |
 | `settingsRequest.ts` | What a Save sends: each group's request built from the values on screen and from those loaded, keeping only the fields that differ, so a Save cannot undo a write made while the dialog was open |
 | `fields/` | The reusable field primitives these panels are built from |
 

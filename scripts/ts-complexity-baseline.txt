@@ -7,7 +7,7 @@ src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 346
 src/components/ModelInspectorPanel/components/ServeModal.tsx 375
 src/components/ProxyControl.tsx 345
 src/components/ProxySamplingPanel.tsx 403
-src/components/SettingsModal.tsx 340
+src/components/SettingsModal.tsx 346
 src/components/SettingsModal/SystemSettings.tsx 304
 src/components/SetupWizard/SetupWizard.tsx 704
 src/components/VerificationModal.tsx 454
