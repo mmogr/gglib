@@ -21,7 +21,7 @@ use super::{CODES, Kind, PUBLISHED, render};
 /// `fn`, the code's spelling there, and where the code comes from. The last
 /// four hold a `code` of another kind, which the scan cannot tell apart.
 #[rustfmt::skip]
-const RELAYS: [(&str, &str, &str, &str); 31] = [
+const RELAYS: [(&str, &str, &str, &str); 32] = [
     ("gglib-proxy/src/models.rs", "with_code", "Some(code.into())", "`with_code`'s parameter"),
     ("gglib-proxy/src/image_refusal.rs", "refuse_images", "refusal.code()", "`CannotReadImages::code`"),
     ("gglib-proxy/src/models.rs", "image_model_cannot_chat", "refusal.code()", "`DrawsImages::code`"),
@@ -42,6 +42,7 @@ const RELAYS: [(&str, &str, &str, &str); 31] = [
     ("gglib-axum/src/handlers/agent/run.rs", "run_error", "code.to_owned()", "the `AgentError` arms above it"),
     ("gglib-axum/src/handlers/agent/transcript.rs", "coded", "code", "`coded`'s parameter"),
     ("gglib-axum/src/handlers/agent/hub_turn.rs", "refusal", "code.to_owned()", "a `Coded` refusal's"),
+    ("gglib-axum/src/handlers/agent/launch.rs", "refused", "code.to_owned()", "a `Coded` refusal's, as a run's error"),
     ("gglib-axum/src/error.rs", "from", "e.code()", "`RunsError::code`"),
     ("gglib-axum/src/error.rs", "from", "code", "`AttachmentError::code`"),
     ("gglib-axum/src/error.rs", "from", "code", "`ChangeError`'s, from its `coded` closure"),

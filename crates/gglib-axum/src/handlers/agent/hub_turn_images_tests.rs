@@ -10,7 +10,7 @@ use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::ports::RunsPort as _;
 use gglib_core::request_pipeline::MAX_IMAGE_BYTES;
 
-use super::hub_turn_tests::{chat, device, refused};
+use super::hub_turn_tests::{chat, device, failed_with, refused};
 use super::{plan, start};
 use crate::handlers::agent::image_gate::image_gate_tests::{model, uploaded};
 use crate::handlers::agent::run_fixture::{saved, state};
@@ -57,9 +57,13 @@ async fn a_hub_turn_with_an_image_goes_on_to_load_a_model_that_can_see() {
     let id = chat(&state, None).await;
 
     let turn = image_turn(id, "what is this?", &image);
-    let refusal = refused(start(&state, "phone", "d1", turn).await);
+    let created = start(&state, "phone", "d1", turn).await.unwrap();
 
-    assert_eq!(refusal, (503, "model_unavailable"));
+    assert!(created.created, "the turn passed the image's gate");
+    assert_eq!(
+        failed_with(&state, "phone", "d1").await,
+        "model_unavailable"
+    );
 }
 
 /// A text turn on a chat whose saved rows carry an image is refused too:
@@ -190,6 +194,9 @@ async fn a_hub_turn_whose_images_and_the_historys_are_over_16_mib_is_refused_bef
     assert!(state.runs.list(&device("phone")).runs.is_empty());
 
     let at = image_turn(id, "and this?", &big);
-    let refusal = refused(start(&state, "phone", "d1", at).await);
-    assert_eq!(refusal, (503, "model_unavailable"));
+    start(&state, "phone", "d1", at).await.unwrap();
+    assert_eq!(
+        failed_with(&state, "phone", "d1").await,
+        "model_unavailable"
+    );
 }

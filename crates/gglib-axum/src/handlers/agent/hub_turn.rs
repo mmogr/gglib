@@ -38,11 +38,10 @@ use gglib_core::services::ChangeError;
 use tokio::sync::OwnedSemaphorePermit;
 
 use super::AgentChatRequest;
-use super::compose::{Prepared, prepare, take_permit};
+use super::compose::{prepare, take_permit};
 use super::dto::AgentRequestConfig;
 use super::hub_model::{model_for, on_model};
-use super::launch::{Transcript, launch};
-use super::remote_upstream;
+use super::launch::{LatePrepare, Transcript, launch_turn};
 use super::run::{coded, with_code};
 use crate::bootstrap::AxumContext;
 use crate::error::HttpError;
@@ -110,9 +109,14 @@ fn refusal(error: HttpError) -> TurnRefused {
 /// `conflict` (409) while the chat has a live reply, or for a chat that ran
 /// on the machine this one is paired with; `no_model`
 /// (422) when nothing names the chat's model and nothing runs on the hub;
-/// `agent_busy` (429); `model_unavailable` (503) when it cannot be loaded;
-/// and whatever the daemon's own door refuses the same run with. A refusal
-/// writes nothing.
+/// `agent_busy` (429). A refusal writes nothing.
+///
+/// The run is reserved before its model is found or loaded, so the `PUT`
+/// answers at once and a cold load is the run's `waiting` event, not a
+/// hanging request. What is refused after that ends the run `failed` with
+/// the code this door answered before, having written nothing:
+/// `model_unavailable` when the model cannot be loaded, and whatever the
+/// daemon's own door refuses the same run with (`unavailable`, `conflict`).
 pub(super) async fn start(
     state: &AppState,
     device: &str,
@@ -134,26 +138,50 @@ pub(super) async fn start(
             "all agent loop slots are in use; try again later",
         )
     })?;
-    let chat = on_model(state, &plan.model, plan.chat).await?;
-    let prepared = prepare(state, chat).await.map_err(with_code)?;
-    begin(state, device, id, plan.transcript, prepared, permit).await
+    // The run exists before its model does: found on its port or loaded,
+    // and its loop composed, as the run's own work.
+    let Plan {
+        model,
+        chat,
+        transcript,
+    } = plan;
+    let shown = shown_model(state, &model).await;
+    let late: LatePrepare = {
+        let state = Arc::clone(state);
+        Box::new(move |loading| {
+            Box::pin(async move {
+                let chat = on_model(&state, &model, chat, &loading).await?;
+                prepare(&state, chat).await.map_err(with_code)
+            })
+        })
+    };
+    begin(state, device, id, shown, transcript, late, permit)
 }
 
-/// Start `device`'s run `id` with its prepared loop: held on its model,
-/// reserved in the device's scope, and saved as `transcript` says: its
-/// message and reply to the chat, which then remembers what the turn said
-/// of thinking.
-pub(super) async fn begin(
+/// The name a run on `model` is listed under: the catalogue's name for it,
+/// or the identifier when the catalogue has none.
+async fn shown_model(state: &AppState, model: &str) -> String {
+    let found = state.core.models().get(model).await.ok().flatten();
+    found.map_or_else(|| model.to_owned(), |m| m.name)
+}
+
+/// Start `device`'s run `id` on `model`, reserved in the device's scope
+/// before `late` finds or loads the model and composes the loop. The run
+/// then holds its model and is saved as `transcript` says: its message and
+/// reply to the chat, which then remembers what the turn said of thinking.
+/// What `late`, the hold or the first write refuses ends the run `failed`
+/// with that code, with nothing written.
+pub(super) fn begin(
     state: &AppState,
     device: &str,
     id: &str,
+    model: String,
     transcript: Transcript,
-    mut prepared: Prepared,
+    late: LatePrepare,
     permit: OwnedSemaphorePermit,
 ) -> Result<Created, HttpError> {
-    remote_upstream::hold_model(state.runtime.as_ref(), &mut prepared).await?;
     let scope = RunScope::Device(device.to_owned());
-    launch(state, id, scope, transcript, prepared, permit).await
+    launch_turn(state, id, scope, model, transcript, late, permit)
 }
 
 /// A turn read against the hub's record: the model it runs on, the chat
@@ -282,6 +310,9 @@ mod hub_turn_forget_tests;
 #[cfg(test)]
 #[path = "hub_turn_images_tests.rs"]
 mod hub_turn_images_tests;
+#[cfg(test)]
+#[path = "hub_turn_late_tests.rs"]
+mod hub_turn_late_tests;
 #[cfg(test)]
 #[path = "hub_turn_limits_tests.rs"]
 mod hub_turn_limits_tests;
