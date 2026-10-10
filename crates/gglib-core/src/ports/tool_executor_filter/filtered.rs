@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::domain::agent::{ToolCall, ToolDefinition, ToolResult};
+use crate::domain::agent::{ToolCall, ToolDefinition, ToolProgressSink, ToolResult};
 use crate::ports::ToolExecutorPort;
 
 use super::TOOL_NOT_AVAILABLE_MSG;
@@ -72,6 +72,14 @@ impl FilteredToolExecutor {
     pub fn new(inner: Arc<dyn ToolExecutorPort>, allowed: HashSet<String>) -> Self {
         Self { inner, allowed }
     }
+
+    /// Refuse a call whose tool is not in the allowlist.
+    fn check(&self, call: &ToolCall) -> anyhow::Result<()> {
+        if !is_allowed(&call.name, &self.allowed) {
+            anyhow::bail!("tool '{}' {}", call.name, TOOL_NOT_AVAILABLE_MSG);
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -93,9 +101,20 @@ impl ToolExecutorPort for FilteredToolExecutor {
     /// synthesise a call by name.  Rejecting here ensures no disallowed tool
     /// can ever execute regardless of how the request was constructed.
     async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
-        if !is_allowed(&call.name, &self.allowed) {
-            anyhow::bail!("tool '{}' {}", call.name, TOOL_NOT_AVAILABLE_MSG);
-        }
+        self.check(call)?;
         self.inner.execute(call).await
+    }
+
+    /// The same allowlist check as [`execute`](Self::execute), then the
+    /// inner executor's own `execute_with_progress`, so a long tool's
+    /// progress passes through the filter and a disallowed tool still never
+    /// runs.
+    async fn execute_with_progress(
+        &self,
+        call: &ToolCall,
+        sink: &dyn ToolProgressSink,
+    ) -> anyhow::Result<ToolResult> {
+        self.check(call)?;
+        self.inner.execute_with_progress(call, sink).await
     }
 }

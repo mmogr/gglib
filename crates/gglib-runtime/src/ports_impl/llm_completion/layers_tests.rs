@@ -53,6 +53,7 @@ fn sent(adapter: &LlmCompletionAdapter, tools: bool) -> f64 {
         description: None,
         input_schema: Some(json!({"type": "object"})),
         title: None,
+        deadline: None,
     };
     let tools = if tools { vec![tool] } else { Vec::new() };
     let body = adapter

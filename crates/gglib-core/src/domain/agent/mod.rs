@@ -9,6 +9,7 @@ mod messages_serde;
 mod replay;
 pub(crate) mod stagnation;
 pub mod tool_display;
+pub(crate) mod tool_progress;
 pub(crate) mod tool_types;
 mod transcript;
 mod turn_usage;
@@ -20,7 +21,7 @@ pub use config::{
     MAX_STAGNATION_STEPS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING, MIN_CONTEXT_BUDGET_CHARS,
     MIN_TOOL_TIMEOUT_MS,
 };
-pub use events::{AGENT_EVENT_CHANNEL_CAPACITY, AgentEvent, LlmStreamEvent};
+pub use events::{AGENT_EVENT_CHANNEL_CAPACITY, AgentEvent, LlmStreamEvent, WaitingFor};
 pub use limits::TurnLimits;
 pub use loop_detection::results::{batch_results_hash, hash_result_content, hash_result_text};
 pub use loop_detection::{
@@ -32,6 +33,9 @@ pub use replay::{
     rows_from_frames, rows_from_timed_frames,
 };
 pub use stagnation::StagnationDetector;
+pub use tool_progress::{
+    NoProgress, PreviewFrame, ToolProgressSink, ToolProgressUpdate, ToolStage,
+};
 pub use tool_types::{ToolCall, ToolDefinition, ToolResult};
 pub use transcript::{saved_history, to_new_message};
 pub use turn_usage::{ContextReading, TurnUsage};

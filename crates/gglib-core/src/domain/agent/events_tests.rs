@@ -91,3 +91,93 @@ fn turn_usage_carries_its_reading_flat() {
     let back: TurnUsage = serde_json::from_value(json).unwrap();
     assert_eq!(back, usage);
 }
+
+/// A tool's progress on the wire: its counts flat beside the tag, and one it
+/// did not report absent.
+#[test]
+fn tool_progress_serialises_flat_and_leaves_out_what_is_unknown() {
+    let evt = AgentEvent::ToolProgress {
+        tool_call_id: "c1".into(),
+        stage: ToolStage::Sampling,
+        pass: Some(1),
+        done: Some(2),
+        total: Some(4),
+        position: None,
+    };
+    assert_eq!(
+        serde_json::to_string(&evt).unwrap(),
+        r#"{"type":"tool_progress","tool_call_id":"c1","stage":"sampling","pass":1,"done":2,"total":4}"#
+    );
+    let queued = AgentEvent::ToolProgress {
+        tool_call_id: "c1".into(),
+        stage: ToolStage::Queued,
+        pass: None,
+        done: None,
+        total: None,
+        position: Some(2),
+    };
+    assert_eq!(
+        serde_json::to_string(&queued).unwrap(),
+        r#"{"type":"tool_progress","tool_call_id":"c1","stage":"queued","position":2}"#
+    );
+}
+
+/// Every stage's wire name.
+#[test]
+fn tool_stages_are_snake_case() {
+    let names: Vec<String> = [
+        ToolStage::Queued,
+        ToolStage::Loading,
+        ToolStage::Sampling,
+        ToolStage::Decoding,
+        ToolStage::Finishing,
+    ]
+    .iter()
+    .map(|s| serde_json::to_string(s).unwrap())
+    .collect();
+    assert_eq!(
+        names,
+        [
+            r#""queued""#,
+            r#""loading""#,
+            r#""sampling""#,
+            r#""decoding""#,
+            r#""finishing""#
+        ]
+    );
+}
+
+/// A preview frame on the wire.
+#[test]
+fn tool_preview_serialises_its_frame() {
+    let evt = AgentEvent::ToolPreview {
+        tool_call_id: "c1".into(),
+        frame: PreviewFrame::png(3, 20, "iVBO"),
+    };
+    assert_eq!(
+        serde_json::to_string(&evt).unwrap(),
+        r#"{"type":"tool_preview","tool_call_id":"c1","frame":{"mime":"image/png","step":3,"total":20,"b64":"iVBO"}}"#
+    );
+}
+
+/// A wait on the wire, for each thing waited for.
+#[test]
+fn waiting_serialises_its_reason() {
+    let evt = AgentEvent::Waiting {
+        reason: WaitingFor::ImageRender,
+        step: 3,
+        total: 20,
+        position: 1,
+    };
+    assert_eq!(
+        serde_json::to_string(&evt).unwrap(),
+        r#"{"type":"waiting","reason":"image_render","step":3,"total":20,"position":1}"#
+    );
+    let load = AgentEvent::Waiting {
+        reason: WaitingFor::ModelLoad,
+        step: 0,
+        total: 0,
+        position: 0,
+    };
+    assert_eq!(serde_json::to_value(&load).unwrap()["reason"], "model_load");
+}

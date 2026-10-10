@@ -15,6 +15,7 @@ no infrastructure concerns.
 | [`config`] | [`AgentConfig`] — loop control parameters |
 | `limits` | [`TurnLimits`] — a turn's iteration and stagnation limits: what it names (its own limit, or failing that its chat's saved one, which each caller puts there), then the stored settings, then the default; the one resolver the daemon and the CLI share |
 | [`tool_types`] | [`ToolDefinition`], [`ToolCall`], [`ToolResult`]: a result's text, which the model reads, and the images the tool stored, as `AttachmentInfo`, which it never sees |
+| `tool_progress` | [`ToolProgressUpdate`] — how far a running tool has got (a [`ToolStage`], steps, place in line), sent to a [`ToolProgressSink`] that never blocks; [`PreviewFrame`] — a small PNG of the image being made, shown and never logged |
 | [`messages`] | [`AgentMessage`] — closed conversation-turn enum; a user turn names its images by id, and each is charged [`IMAGE_CHARGE_CHARS`] against the context budget |
 | `messages_serde` | Custom `Serialize`/`Deserialize` impls for [`AssistantContent`] |
 | [`events`] | [`AgentEvent`] (SSE units), [`LlmStreamEvent`] (stream protocol) |
