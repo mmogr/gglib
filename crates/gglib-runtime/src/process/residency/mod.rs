@@ -13,8 +13,8 @@ use std::time::Duration;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::RuntimeKind;
 use gglib_core::ports::{
-    Admission, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
-    PinnedSpec, RunningTarget,
+    Admission, AdmitObserver, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec,
+    ModelRuntimeError, PinnedSpec, RunningTarget,
 };
 use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
 use tokio::sync::RwLock;
@@ -109,10 +109,9 @@ impl ResidentSet {
         &self.queue
     }
 
-    /// Admit a request to a running model, launching or swapping if needed.
-    ///
-    /// See the [module docs](self) for why everything model-static is resolved
-    /// before the request joins the queue.
+    /// Admit a request to a running model, launching or swapping if needed,
+    /// with nobody told its place in line: the tests' way in.
+    #[cfg(test)]
     pub(super) async fn admit(
         &self,
         core: &Arc<RwLock<GuiProcessCore>>,
@@ -120,6 +119,24 @@ impl ResidentSet {
         num_ctx: Option<u64>,
         default_ctx: Option<u64>,
         overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
+        self.admit_observed(core, model_name, num_ctx, default_ctx, overrides, None)
+            .await
+    }
+
+    /// Admit a request, launching or swapping if needed, telling `observer`
+    /// its place in line whenever it waits and that place has changed.
+    ///
+    /// See the [module docs](self) for why everything model-static is resolved
+    /// before the request joins the queue.
+    pub(super) async fn admit_observed(
+        &self,
+        core: &Arc<RwLock<GuiProcessCore>>,
+        model_name: &str,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: LaunchOverrides,
+        observer: Option<Arc<dyn AdmitObserver>>,
     ) -> Result<Admission, ModelRuntimeError> {
         // Resolve first, so a pin answers to its model's id as well as its
         // name; then refuse a foreign model before touching the queue, so it
@@ -168,6 +185,7 @@ impl ResidentSet {
                         cache_ram,
                         health_deadline_secs,
                     },
+                    observer,
                 )
                 .await;
         }
@@ -280,6 +298,7 @@ impl ResidentSet {
                 cache_ram,
                 health_deadline_secs,
             },
+            observer,
         )
         .await
     }
@@ -300,17 +319,20 @@ impl ResidentSet {
             .ok_or_else(|| ModelRuntimeError::ModelNotFound(model_name.to_owned()))
     }
 
-    /// Queue for a slot, then act on whatever the scheduler decides.
+    /// Queue for a slot, then act on whatever the scheduler decides, telling
+    /// `observer` the ticket's place each time it waits at a new one.
     async fn wait_for_slot(
         &self,
         core: &Arc<RwLock<GuiProcessCore>>,
         request: LaunchRequest,
+        observer: Option<Arc<dyn AdmitObserver>>,
     ) -> Result<Admission, ModelRuntimeError> {
         let model_name = request.spec.name.clone();
         let mut queued = QueuedTicket {
             queue: Arc::clone(&self.queue),
             ticket: self.queue.enqueue(&model_name),
         };
+        let mut told = None;
 
         loop {
             // Subscribed and enabled *before* the poll below, so a wakeup that
@@ -348,6 +370,14 @@ impl ResidentSet {
                     return self.launch(core, &request, slot, evict).await;
                 }
                 AdmissionDecision::Wait => {
+                    // Outside the queue's lock: the observer is caller code.
+                    if let Some(observer) = &observer {
+                        let position = self.queue.position(&queued.ticket);
+                        if told != Some(position) {
+                            told = Some(position);
+                            observer.queued(position);
+                        }
+                    }
                     tokio::select! {
                         () = changed => {}
                         () = tokio::time::sleep(POLL_TICK) => {}
@@ -646,6 +676,9 @@ mod hold_tests;
 #[cfg(test)]
 #[path = "launch_sd_tests.rs"]
 mod launch_sd_tests;
+#[cfg(test)]
+#[path = "observe_tests.rs"]
+mod observe_tests;
 #[cfg(test)]
 #[path = "residency_tests.rs"]
 pub(in crate::process) mod residency_tests;

@@ -15,8 +15,8 @@ use anyhow::Result;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{
-    Admission, AdmissionLease, GenerationGate, GenerationTurn, LaunchOverrides, ModelCatalogPort,
-    ModelRuntimeError, ProcessHandle, RunningTarget,
+    Admission, AdmissionLease, AdmitObserver, GenerationGate, GenerationTurn, LaunchOverrides,
+    ModelCatalogPort, ModelRuntimeError, ProcessHandle, RunningTarget,
 };
 use gglib_core::server_config::ServerConfigOptions;
 use std::sync::Arc;
@@ -126,8 +126,34 @@ impl ProcessManager {
         default_ctx: Option<u64>,
         overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
+        self.admit_observed(model_name, num_ctx, default_ctx, overrides, None)
+            .await
+    }
+
+    /// [`Self::admit`], telling `observer` the request's place in line each
+    /// time it waits at a new one. See
+    /// [`ModelRuntimePort::admit_observed`](gglib_core::ports::ModelRuntimePort::admit_observed).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::admit`].
+    pub async fn admit_observed(
+        &self,
+        model_name: &str,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: LaunchOverrides,
+        observer: Option<Arc<dyn AdmitObserver>>,
+    ) -> Result<Admission, ModelRuntimeError> {
         self.residency
-            .admit(&self.core, model_name, num_ctx, default_ctx, overrides)
+            .admit_observed(
+                &self.core,
+                model_name,
+                num_ctx,
+                default_ctx,
+                overrides,
+                observer,
+            )
             .await
     }
 

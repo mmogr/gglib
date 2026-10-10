@@ -31,6 +31,8 @@ reqwest = { workspace = true, features = ["json", "stream", "rustls", "system-pr
 
 # Serialization
 serde = { workspace = true }
+# sd-server's images and previews arrive as base64
+base64 = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 

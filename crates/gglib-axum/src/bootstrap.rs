@@ -16,7 +16,8 @@ use gglib_app_services::{
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
-    AppEventEmitter, GenerationGate, HfClientPort, ModelCatalogPort, ModelRuntimePort,
+    AppEventEmitter, GenerationGate, HfClientPort, ImageGenerationPort, ModelCatalogPort,
+    ModelRuntimePort,
 };
 use gglib_core::services::AppCore;
 use gglib_db::{
@@ -99,6 +100,9 @@ pub struct AxumContext {
     /// machine's model waits on it for its turn behind an image render, and
     /// `GET /api/generation/turn` holds a turn there for `gglib chat`.
     pub generation_gate: Arc<dyn GenerationGate>,
+    /// Drawing, for `/api/images/generations`: the service graph's one
+    /// `sd-server` job driver.
+    pub images: Arc<dyn ImageGenerationPort>,
     /// Cancellation token that stops the daemon when this context is hosted by
     /// [`run_daemon`](crate::daemon::run_daemon), and bounds `/api/events`.
     /// `None` in every other host (tests, embedded), where there is no graceful
@@ -192,6 +196,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         catalog,
         runtime,
         generation_gate,
+        images,
     } = build_service_graph(ServiceGraphParams {
         core: Arc::clone(&core),
         repos: repos.clone(),
@@ -238,6 +243,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         runtime,
         catalog,
         generation_gate,
+        images,
         daemon_shutdown: None,
     })
 }

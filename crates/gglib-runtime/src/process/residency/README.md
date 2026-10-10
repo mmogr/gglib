@@ -33,6 +33,11 @@ image rules, and a held primary it cannot go beside refuses it at once as
 What remains in the loop is purely scheduling. That split is what keeps the
 launch sequence a straight line rather than a state machine.
 
+An observed admission (`admit_observed`, which the image driver uses) is
+told its place in line, 1 being next, each time the queue says wait and the
+place has changed. The observer runs after the poll, outside the queue's
+lock.
+
 # One launch, either runtime
 
 The launch stops the model it displaces **first**, before anything can

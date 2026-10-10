@@ -299,6 +299,16 @@ impl QueueState {
         }
     }
 
+    /// `ticket`'s place in line: see [`AdmissionQueue::position`](super::AdmissionQueue::position).
+    pub(super) fn position(&self, ticket: &Ticket) -> usize {
+        1 + self
+            .waiting
+            .values()
+            .flatten()
+            .filter(|w| w.seq < ticket.seq)
+            .count()
+    }
+
     /// Decide what `ticket` should do now.
     ///
     /// On [`AdmissionDecision::Serve`] the slot's in-flight count is
