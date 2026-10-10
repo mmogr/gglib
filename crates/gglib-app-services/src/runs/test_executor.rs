@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures_util::StreamExt as _;
+use gglib_core::domain::agent::PreviewFrame;
 use gglib_core::domain::runs::{RunError, RunInfo};
 use gglib_core::ports::{RunEvent, RunEvents};
 use serde_json::{Value, json};
@@ -25,6 +26,10 @@ use super::registry::RunRegistry;
 pub(crate) enum Cmd {
     Start,
     Frame(String),
+    /// Keep a preview frame for a tool call, beside the log.
+    Preview(&'static str, PreviewFrame),
+    /// Log the frame that completes this tool call, forgetting its preview.
+    Completes(String, &'static str),
     Finish(Result<(), RunError>),
     Panic,
 }
@@ -68,6 +73,12 @@ impl RunExecutor for Scripted {
                 Cmd::Start => log.started(),
                 Cmd::Frame(frame) => {
                     if log.append(frame).is_err() {
+                        return std::future::pending().await;
+                    }
+                }
+                Cmd::Preview(id, frame) => log.preview(id, &frame),
+                Cmd::Completes(frame, id) => {
+                    if log.append_completing(frame, id).is_err() {
                         return std::future::pending().await;
                     }
                 }
@@ -118,6 +129,7 @@ pub(crate) async fn drain(mut events: RunEvents) -> (Vec<(u32, String)>, Option<
         while let Some(event) = events.next().await {
             match event {
                 RunEvent::Frame { seq, data } => frames.push((seq, data.to_string())),
+                RunEvent::Preview { .. } => {}
                 RunEvent::End(info) => return Some(info),
             }
         }

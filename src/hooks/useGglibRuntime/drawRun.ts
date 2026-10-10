@@ -98,6 +98,7 @@ export async function drawRun(options: DrawRunOptions): Promise<RunOutcome> {
       if (!settled) cleanup();
       return { info: item.info, error: error ?? endFailure(item.info) };
     }
+    if (item.type === 'preview') continue; // shown beside the reply, never part of it
     const event = settled ? null : parseEvent(item.data);
     if (!event) continue;
     try {

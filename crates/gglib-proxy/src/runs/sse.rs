@@ -2,7 +2,8 @@
 //!
 //! Each event is `id: <seq>` and `data: <frame>`; the run's end is one
 //! `event: run` whose data is the run's final `RunInfo`, and the stream
-//! closes after it. It also closes when the server's shutdown token fires,
+//! closes after it. A run's latest preview frame is `event: preview` with
+//! **no id**, so a client's reconnect cursor never counts it. It also closes when the server's shutdown token fires,
 //! since an open SSE response would otherwise hold the graceful shutdown
 //! open. Shared by both doors to the runs: the daemon's `/api/runs` and the
 //! proxy's `/v1/runs`, so the two cannot drift.
@@ -19,6 +20,7 @@ use tokio_util::sync::CancellationToken;
 fn encode(event: RunEvent) -> Event {
     match event {
         RunEvent::Frame { seq, data } => Event::default().id(seq.to_string()).data(&*data),
+        RunEvent::Preview { data, .. } => Event::default().event("preview").data(&*data),
         RunEvent::End(info) => Event::default()
             .event("run")
             .data(serde_json::to_string(&info).unwrap_or_default()),
