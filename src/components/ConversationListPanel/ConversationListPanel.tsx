@@ -132,6 +132,7 @@ const ConversationListPanel: FC<ConversationListPanelProps> = ({
                     <ConversationMarks
                       running={running.has(conversation.id)}
                       unread={unread.has(conversation.id)}
+                      branch={typeof conversation.branch_of === 'number'}
                     />
                   </span>
                 </Stack>

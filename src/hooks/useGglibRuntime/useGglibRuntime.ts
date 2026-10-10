@@ -50,8 +50,7 @@ import { useImageAttachments, type SentImage } from './imageAttachments';
 import type { Downscale } from './imagePrep';
 import { codeOf, sendRefusal } from './imageRefusals';
 import { giveDraftBack, imagesOf, unsentImage } from './turnImages';
-import { changeAndAnswer, editOf, regenerateOf } from './branchChanges';
-import type { SavedView } from './savedRows';
+import { changeAndAnswer, editOf, regenerateOf, useBranching, type Branching } from './branchChanges';
 import { useRunReader, type RunReaderInputs } from './useRunReader';
 
 export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpened'> {
@@ -101,8 +100,8 @@ export interface UseGglibRuntimeReturn {
   endedRun: RunInfo | null;
   timingTracker: ReasoningTimingTracker;
   currentStreamingAssistantMessageId: string | null;
-  /** What the open chat says of its branches, and Retry, which answers the question it ends in (ADR 0017). */
-  branching: Omit<SavedView, 'messages'> & { retry: () => Promise<void> };
+  /** What the open chat offers of its branches, and Retry; the same object until what the daemon says of the chat changes. */
+  branching: Branching;
 }
 
 export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibRuntimeReturn {
@@ -282,6 +281,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
   useEffect(() => {
     runtimeRef.current = runtime;
   }, [runtime]);
+  const branching = useBranching(reader, messagesRef, change, options.onConversationChanged);
 
   return {
     runtime,
@@ -292,7 +292,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     endedRun: reader.endedRun,
     timingTracker: reader.timingTracker,
     currentStreamingAssistantMessageId: reader.currentStreamingAssistantMessageId,
-    branching: { answerable: reader.answerable, points: reader.points, retry: () => change(null) },
+    branching,
   };
 }
 

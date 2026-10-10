@@ -46,7 +46,10 @@ is to be answered, a run answers it: `answer_saved` on the run's body, no
 messages, and the daemon runs from what is saved and saves only the reply.
 A chat that ends in a question nothing answers (`answerable`) offers Retry,
 which starts the same run. A refused change changes nothing, and the page
-never deletes.
+never deletes. Branch from here copies the chat as far as the end of a turn
+into a new branch, answered by nothing. The thread says the branch points
+the chat's family holds along it, and an option chosen at one opens its
+chat as a branch is opened (`onConversationChanged`).
 
 A far chat (`source: 'far'`) is the machine this one is joined to, read
 through this daemon's `/api/remote/*`: its rows from `/api/remote/chats/{id}`,
@@ -85,7 +88,7 @@ loop detection) lives in the Rust `gglib-agent` crate.
 | File | Role |
 |---|---|
 | `useGglibRuntime.ts` | The runtime: send, edit, regenerate, Retry and Stop, as runs and changes; each start says the chat's Thinking choice when the caller gives one, and tells the caller once that turn is accepted; hands the page what the open chat says of its branches (`branching`) |
-| `branchChanges.ts` | An edit or a regenerate as the change it asks the daemon for, and the change made: the chat it leaves shown, or the branch it made opened, and answered by a run when the daemon says so; with no change, Retry |
+| `branchChanges.ts` | An edit, a regenerate or Branch from here as the change it asks the daemon for, and the change made: the chat it leaves shown, or the branch it made opened, and answered by a run when the daemon says so; with no change, Retry. `useBranching` hands the thread what the chat offers of its branches as one object, new only when the chat's thread is read again |
 | `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end; keeps how the run it last read to its end ended (`endedRun`) until the conversation is left, which is how the page knows a reply finished in front of it; keeps what the daemon says beside the rows (`answerable`, `points`); hands up each reading of a far chat, unless it was left first |
 | `drawRun.ts` | Reads one run's events from the first and draws them |
 | `runRequest.ts` | The run's body (`AgentRunRequest`), as sent now with the Tools popover's limits and reasoning controls (`runBodyFor`), and the run id; a turn on the paired machine's model carries it as `far`, that machine and the model's id there, and no name; `thinking` is in the body only when the run changes the chat's choice; `answer_saved` only on a run that answers the question the chat ends in |

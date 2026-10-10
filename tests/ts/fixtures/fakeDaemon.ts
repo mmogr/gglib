@@ -5,11 +5,13 @@
  *
  * - `POST /api/conversations` and `DELETE /api/messages/{id}` answer with a
  *   bare number.
- * - `GET /api/conversations/{id}/thread` answers the chat's rows, and
- *   `answerable` when it ends in a question; it tells no branch point.
+ * - `GET /api/conversations/{id}/thread` answers the chat's rows, the branch
+ *   points its family holds along them, and `answerable` when it ends in a
+ *   question; `points` and `answerable` are left out when there are none.
  * - `POST /api/conversations/{id}/changes` makes a change as gglib's
- *   branching rules say (`fakeBranches.ts`): in place, or on a new chat
- *   holding a copy of the rows it keeps. A refusal changes nothing.
+ *   branching rules say (`fakeBranches.ts`): in place, or on a new chat of
+ *   the same family holding a copy of the rows it keeps, each copy keyed by
+ *   the row it copies as first written. A refusal changes nothing.
  * - `PUT /api/runs/{id}?kind=agent` answers `201` with the run `queued`, or
  *   `200` with the run that already has the id, saving nothing again. Once
  *   accepted it saves the request's last message when it is the user's; with
@@ -33,7 +35,7 @@ import type { ChatMessage } from '../../../src/services/transport';
 import type { AgentRunRequest } from '../../../src/types/generated/AgentRunRequest';
 import type { ChatChange } from '../../../src/types/generated/ChatChange';
 import type { RunInfo } from '../../../src/types/generated/RunInfo';
-import { answerable, plan, REFUSED_STATUS, type PathRow } from './fakeBranches';
+import { answerable, plan, points, REFUSED_STATUS, type LineChat, type PathRow } from './fakeBranches';
 import { FakeImageStore } from './fakeImageStore';
 
 export interface Recorded {
@@ -93,6 +95,13 @@ export class FakeDaemon {
   abortedReads = 0;
   private unsaved = new Set<string>();
   private nextRow = 1;
+  /** The row each copy copies as first written; a row absent here is its own. */
+  private origin = new Map<number, number>();
+  /** The first chat of each branch's family; a chat absent here is its own. */
+  private lineage = new Map<number, number>();
+  /** When each chat last changed, as a count of saves. */
+  private touched = new Map<number, number>();
+  private saves = 0;
   private nextConversation = 100;
   private created = 0;
 
@@ -105,6 +114,7 @@ export class FakeDaemon {
       ...row,
     };
     this.rows.push(saved);
+    this.touched.set(conversationId, ++this.saves);
     return saved;
   }
 
@@ -116,6 +126,22 @@ export class FakeDaemon {
   /** The rows of `conversationId` as the branching rules read them. */
   private path(conversationId: number): PathRow[] {
     return this.saved(conversationId).map((r) => ({ ...r, images: (r.images ?? []).map((image) => image.id) }));
+  }
+
+  /** `cid` and every other chat of its family, as the branch points read them. */
+  private family(cid: number): LineChat[] {
+    const root = (id: number) => this.lineage.get(id) ?? id;
+    return [...this.conversations].filter((id) => root(id) === root(cid)).map((id) => ({
+      conversation_id: id,
+      updated_at: String(this.touched.get(id) ?? 0).padStart(9, '0'),
+      rows: this.saved(id).map((r) => ({
+        id: r.id,
+        key: this.origin.get(r.id) ?? r.id,
+        role: r.role,
+        text: r.content,
+        images: r.images?.length ?? 0,
+      })),
+    }));
   }
 
   /** Make `change` to `cid`, as `POST /api/conversations/{id}/changes` does. */
@@ -138,9 +164,13 @@ export class FakeDaemon {
     const { through, then, answer } = made.fork;
     const branch = this.nextConversation++;
     this.conversations.add(branch);
+    this.lineage.set(branch, this.lineage.get(cid) ?? cid);
     const kept = this.saved(cid);
     const end = through === null ? 0 : kept.findIndex((r) => r.id === through) + 1;
-    kept.slice(0, end).forEach(({ id: _id, conversation_id: _cid, created_at: _at, ...row }) => this.save(branch, row));
+    kept.slice(0, end).forEach(({ id, conversation_id: _cid, created_at: _at, ...row }) => {
+      this.origin.set(this.save(branch, row).id, this.origin.get(id) ?? id);
+    });
+    this.touched.set(branch, ++this.saves);
     if (then === 'question') this.save(branch, question);
     if (then === 'edited_reply') this.save(branch, { role: 'assistant', content, metadata: { edited: true } });
     return json({ conversation_id: branch, forked: true, answer });
@@ -227,7 +257,12 @@ export class FakeDaemon {
     }
     if (method === 'GET' && (m = /^\/api\/conversations\/(\d+)\/thread$/.exec(path))) {
       const cid = Number(m[1]);
-      return json({ messages: this.saved(cid), ...(answerable(this.path(cid)) && { answerable: true }) });
+      const along = points(cid, this.family(cid));
+      return json({
+        messages: this.saved(cid),
+        ...(along.length > 0 && { points: along }),
+        ...(answerable(this.path(cid)) && { answerable: true }),
+      });
     }
     if (method === 'POST' && (m = /^\/api\/conversations\/(\d+)\/changes$/.exec(path))) {
       return this.change(Number(m[1]), body as ChatChange);

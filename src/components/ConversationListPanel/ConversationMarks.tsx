@@ -1,13 +1,25 @@
 import { FC } from 'react';
-import { Circle, Loader2 } from 'lucide-react';
+import { Circle, GitBranch, Loader2 } from 'lucide-react';
 import { Chip } from '../ui/Chip';
 import { Icon } from '../ui/Icon';
 
-/** A conversation's marks, in words: a reply running in it, one not yet seen. */
-export const ConversationMarks: FC<{ running: boolean; unread: boolean }> = ({ running, unread }) => {
-  if (!running && !unread) return null;
+/**
+ * A conversation's marks, in words: a reply running in it, one not yet
+ * seen, and that it is a branch of another chat (ADR 0017).
+ */
+export const ConversationMarks: FC<{ running: boolean; unread: boolean; branch?: boolean }> = ({
+  running,
+  unread,
+  branch = false,
+}) => {
+  if (!running && !unread && !branch) return null;
   return (
     <span className="flex gap-xs">
+      {branch && (
+        <Chip size="sm" leftIcon={<Icon icon={GitBranch} size={10} />}>
+          Branch
+        </Chip>
+      )}
       {running && (
         <Chip size="sm" variant="success" leftIcon={<Icon icon={Loader2} size={10} className="animate-spin-360" />}>
           Running

@@ -5,12 +5,15 @@ import {
   ActionBarPrimitive,
   useMessage,
 } from '@assistant-ui/react';
-import { Copy, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import { Copy, GitBranch, Pencil, RefreshCw, Trash2 } from 'lucide-react';
 import { Icon } from '../../ui/Icon';
 import { Button } from '../../ui/Button';
+import { IconButton } from '../../ui/IconButton';
 import ThinkingBlock from './ThinkingBlock';
 import MarkdownMessageContent from './MarkdownMessageContent';
 import { MessageActionsContext } from './MessageActionsContext';
+import { BranchingContext } from './BranchingContext';
+import { TurnBranches } from './BranchSwitcher';
 import { MessageImages, ToolImages } from './MessageImages';
 import { ComposerImages, ImageInputContext } from './ComposerImages';
 import { TurnRow } from './TurnRow';
@@ -31,6 +34,18 @@ const ACTION_BTN =
 /** The action bar: hidden until the turn is hovered or holds focus. */
 const ACTION_BAR =
   'flex gap-sm mt-sm opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100';
+
+/** Branch from here: the chat copied as far as the end of this turn, into a new branch that opens. */
+const BranchFromHere: React.FC = () => {
+  const branching = useContext(BranchingContext);
+  const message = useMessage();
+  if (!branching) return null;
+  return (
+    <IconButton label="Branch from here" size="sm" className={ACTION_BTN} onClick={() => void branching.branchFrom(message.id)}>
+      <Icon icon={GitBranch} size={14} />
+    </IconButton>
+  );
+};
 
 /** The text of a message's text parts, joined. */
 function textOf(content: unknown): string {
@@ -104,12 +119,15 @@ export const AssistantMessageBubble: React.FC = () => {
     <MessagePrimitive.Root className="group">
       <TurnRow
         who={
-          <TurnWho
-            name={replyName(facts)}
-            at={facts.savedAt}
-            quantization={facts.made?.modelQuantization}
-            device={facts.made?.device}
-          />
+          <>
+            <TurnWho
+              name={replyName(facts)}
+              at={facts.savedAt}
+              quantization={facts.made?.modelQuantization}
+              device={facts.made?.device}
+            />
+            <TurnBranches />
+          </>
         }
         made={made}
         body={
@@ -156,6 +174,7 @@ export const AssistantMessageBubble: React.FC = () => {
                   <Icon icon={RefreshCw} size={14} />
                 </ActionBarPrimitive.Reload>
               )}
+              {!isStreaming && <BranchFromHere />}
             </ActionBarPrimitive.Root>
           </>
         }
@@ -194,7 +213,7 @@ export const UserMessageBubble: React.FC = () => {
   return (
     <MessagePrimitive.Root className="group">
       <TurnRow
-        who={<TurnWho name={userName(message, far)} at={message.createdAt} />}
+        who={<><TurnWho name={userName(message, far)} at={message.createdAt} /><TurnBranches /></>}
         body={
           <>
             <MessageImages />
@@ -210,6 +229,7 @@ export const UserMessageBubble: React.FC = () => {
                   <Icon icon={Pencil} size={14} />
                 </ActionBarPrimitive.Edit>
               )}
+              <BranchFromHere />
               {!far && <Button
                 variant="dangerGhost"
                 size="sm"

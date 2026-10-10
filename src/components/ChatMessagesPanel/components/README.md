@@ -23,8 +23,10 @@ Every child of the `ChatMessagesPanel` composition root: the panel chrome around
 
 | File | Role |
 |------|------|
-| `MessageBubbles.tsx` | User/assistant/system turns as notebook rows; the reply's reasoning and tool calls behind "How this was made", and the images its tools made under its text, outside that fold and always shown; action buttons, Edit on a question and on a reply with text; the edit composer, Send for a question and Save for a reply, with a question's images, each removable, and a paste into it taking images only where the model reads them |
+| `MessageBubbles.tsx` | User/assistant/system turns as notebook rows; the reply's reasoning and tool calls behind "How this was made", and the images its tools made under its text, outside that fold and always shown; action buttons, Edit on a question and on a reply with text, and Branch from here on each; the edit composer, Send for a question and Save for a reply, with a question's images, each removable, and a paste into it taking images only where the model reads them |
 | `Unanswered.tsx` | The row under a chat that ends in a question nothing answers, with Retry, which answers it; not while a reply is being read |
+| `BranchingContext.tsx` | What the open chat offers of its branches (its branch points, whether it ends in a question, Retry, Branch from here, and opening another chat), for the turns and rows that show it; the same object until the chat's thread is read again, so no turn draws again for a render of the page; none on a far chat |
+| `BranchSwitcher.tsx` | A branch point's options: previous and next, and the count that lists each option by its line ("Nothing here yet" for a branch with nothing there), the open chat's marked; in the margin of the turn that starts the point (`TurnBranches`), and in a row after the last message where other branches go on (`BranchEnd`) |
 | `MessageImages.tsx` | A user turn's images, and the strip of the images a reply's tools made: each read from the chat's store by id with the page's credential as a `blob:` URL, shown small and enlarged in a dialog on a click |
 | `TurnRow.tsx` | One notebook row: margin (who, then how it was made) and body; the margin moves above the body in a narrow notebook |
 | `TurnMargin.tsx` | The margin's content: who and when, a reply's figures, a reply arriving and how far its prompt was read |
