@@ -107,7 +107,7 @@ pub(crate) async fn chat(
     });
 
     let sse_stream = AgentTaskGuard::new(ReceiverStream::new(rx), handle)
-        .map(|event| Ok::<Event, Infallible>(sse_event(&event)));
+        .filter_map(|event| std::future::ready(sse_event(&event).map(Ok::<Event, Infallible>)));
 
     Ok(Sse::new(sse_stream).keep_alive(
         KeepAlive::new()
@@ -116,9 +116,13 @@ pub(crate) async fn chat(
     ))
 }
 
-/// One event as this route's SSE frame.
-fn sse_event(event: &AgentEvent) -> Event {
-    Event::default().data(frame(event))
+/// One event as this route's SSE frame; none for a tool's preview frame,
+/// which this route does not carry (a run's readers get it beside the log).
+fn sse_event(event: &AgentEvent) -> Option<Event> {
+    if matches!(event, AgentEvent::ToolPreview { .. }) {
+        return None;
+    }
+    Some(Event::default().data(frame(event)))
 }
 
 #[cfg(test)]
@@ -144,6 +148,9 @@ mod run_made_tests;
 #[cfg(test)]
 #[path = "run_model_tests.rs"]
 mod run_model_tests;
+#[cfg(test)]
+#[path = "run_preview_tests.rs"]
+mod run_preview_tests;
 #[cfg(test)]
 #[path = "run_privacy_tests.rs"]
 mod run_privacy_tests;

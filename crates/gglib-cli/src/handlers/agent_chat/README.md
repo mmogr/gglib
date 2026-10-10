@@ -17,6 +17,9 @@ independently readable:
   here (`--port`) or one the daemon starts. Which *machine* answers is
   `crate::target`'s decision (ADR 0013), not this module's
 - [`renderer`] — maps [`gglib_core::AgentEvent`] variants to terminal output
+- `progress_line` — a long tool's progress ("drawing: sampling 2/4") and a
+  wait before a reply, as one stderr line each report rewrites; a preview
+  frame is not shown
 - [`drain`]    — async event-stream consumer (spinner, thinking accumulator)
 - [`repl`]     — async REPL loop with `rustyline` + `spawn_blocking` input
 - [`persistence`] — the saved conversation a session's turns are written to,

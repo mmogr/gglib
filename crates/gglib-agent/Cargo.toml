@@ -27,4 +27,5 @@ serde_json   = { workspace = true }
 workspace = true
 
 [dev-dependencies]
-tokio               = { workspace = true, features = ["rt-multi-thread", "macros"] }
+# `test-util` for the virtual clock the tool-deadline tests run on.
+tokio               = { workspace = true, features = ["rt-multi-thread", "macros", "test-util"] }

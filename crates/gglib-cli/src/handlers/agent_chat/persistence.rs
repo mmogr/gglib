@@ -54,8 +54,12 @@ impl Reply {
         }
     }
 
-    /// `event` arrived now.
+    /// `event` arrived now. A tool's preview frame is not kept: like an
+    /// agent run's log, the reply never holds one.
     pub(crate) fn heard(&mut self, event: &mut AgentEvent) {
+        if matches!(event, AgentEvent::ToolPreview { .. }) {
+            return;
+        }
         self.made_by.stamp(event);
         // One time per frame: an event that will not serialise logs neither.
         if let Ok(frame) = serde_json::to_string(event) {
@@ -174,5 +178,39 @@ impl<'a> Conversation<'a> {
         if let Err(e) = saved {
             tracing::warn!("failed to persist the agent's reply: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gglib_core::domain::agent::{PreviewFrame, ToolStage};
+
+    use super::*;
+
+    #[test]
+    fn a_reply_keeps_a_tools_progress_and_never_its_preview() {
+        let mut reply = Reply::new(MadeBy {
+            model: "m".to_owned(),
+            quantization: None,
+            device: None,
+            context_size: None,
+        });
+
+        reply.heard(&mut AgentEvent::ToolProgress {
+            tool_call_id: "c1".to_owned(),
+            stage: ToolStage::Loading,
+            pass: None,
+            done: None,
+            total: None,
+            position: None,
+        });
+        reply.heard(&mut AgentEvent::ToolPreview {
+            tool_call_id: "c1".to_owned(),
+            frame: PreviewFrame::png(1, 4, "PREVIEW-BYTES"),
+        });
+
+        assert_eq!(reply.frames.len(), 1);
+        assert!(reply.frames[0].contains("tool_progress"));
+        assert!(!reply.frames.concat().contains("PREVIEW-BYTES"));
     }
 }

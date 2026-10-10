@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
+use gglib_core::domain::agent::ToolProgressSink;
 use gglib_core::ports::ToolExecutorPort;
 use gglib_core::services::AttachmentService;
 use gglib_core::{ToolCall, ToolDefinition, ToolResult};
@@ -27,12 +28,12 @@ use crate::tool_executor::McpToolExecutorAdapter;
 
 /// Combines the built-in and MCP executors into a single [`ToolExecutorPort`].
 ///
-/// `list_tools()` merges both tool sets.  `execute()` dispatches to the
-/// appropriate executor by inspecting the `"builtin:"` prefix — no scan of
-/// the tool list is required.
+/// `list_tools()` merges both tool sets.  `execute()` and
+/// `execute_with_progress()` dispatch to the appropriate executor by
+/// inspecting the `"builtin:"` prefix — no scan of the tool list is required.
 pub struct CombinedToolExecutor {
-    builtin: BuiltinToolExecutorAdapter,
-    mcp: McpToolExecutorAdapter,
+    builtin: Arc<dyn ToolExecutorPort>,
+    mcp: Arc<dyn ToolExecutorPort>,
 }
 
 impl CombinedToolExecutor {
@@ -40,20 +41,35 @@ impl CombinedToolExecutor {
     /// return through `images`.
     pub fn new(mcp: Arc<McpService>, images: Arc<AttachmentService>) -> Self {
         Self {
-            builtin: BuiltinToolExecutorAdapter::default(),
-            mcp: McpToolExecutorAdapter::new(mcp, images),
+            builtin: Arc::new(BuiltinToolExecutorAdapter::default()),
+            mcp: Arc::new(McpToolExecutorAdapter::new(mcp, images)),
         }
     }
 
     /// As [`Self::new`], with filesystem tools sandboxed to `root`.
-    pub const fn with_sandbox(
+    pub fn with_sandbox(
         mcp: Arc<McpService>,
         images: Arc<AttachmentService>,
         root: std::path::PathBuf,
     ) -> Self {
         Self {
-            builtin: BuiltinToolExecutorAdapter::with_sandbox(root),
-            mcp: McpToolExecutorAdapter::new(mcp, images),
+            builtin: Arc::new(BuiltinToolExecutorAdapter::with_sandbox(root)),
+            mcp: Arc::new(McpToolExecutorAdapter::new(mcp, images)),
+        }
+    }
+
+    /// The executor a call goes to, by its name's prefix.
+    fn route(&self, call: &ToolCall) -> anyhow::Result<&dyn ToolExecutorPort> {
+        if call.name.starts_with(BUILTIN_PREFIX) {
+            Ok(self.builtin.as_ref())
+        } else if call.name.contains(':') {
+            Ok(self.mcp.as_ref())
+        } else {
+            Err(anyhow!(
+                "tool name '{}' has no recognised prefix; \
+                 expected 'builtin:<name>' or '<server_id>:<name>'",
+                call.name
+            ))
         }
     }
 }
@@ -66,23 +82,28 @@ impl ToolExecutorPort for CombinedToolExecutor {
     }
 
     async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
-        if call.name.starts_with(BUILTIN_PREFIX) {
-            self.builtin.execute(call).await
-        } else if call.name.contains(':') {
-            self.mcp.execute(call).await
-        } else {
-            Err(anyhow!(
-                "tool name '{}' has no recognised prefix; \
-                 expected 'builtin:<name>' or '<server_id>:<name>'",
-                call.name
-            ))
-        }
+        self.route(call)?.execute(call).await
+    }
+
+    /// Routed as [`execute`](Self::execute), keeping `sink`, so a builtin
+    /// that reports progress is heard through this executor and any filter
+    /// over it. MCP tools keep the default and report nothing.
+    async fn execute_with_progress(
+        &self,
+        call: &ToolCall,
+        sink: &dyn ToolProgressSink,
+    ) -> anyhow::Result<ToolResult> {
+        self.route(call)?.execute_with_progress(call, sink).await
     }
 }
 
 // =============================================================================
 // Tests
 // =============================================================================
+
+#[cfg(test)]
+#[path = "combined_progress_tests.rs"]
+mod progress_tests;
 
 #[cfg(test)]
 mod tests {

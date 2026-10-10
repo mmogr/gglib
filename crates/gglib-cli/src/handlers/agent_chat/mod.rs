@@ -6,6 +6,7 @@ pub(crate) mod images;
 mod markdown;
 mod memory_jogger;
 pub(crate) mod persistence;
+mod progress_line;
 #[allow(
     clippy::needless_pass_by_value,
     reason = "grandfathered at lint inheritance, #1157"

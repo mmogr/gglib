@@ -54,7 +54,8 @@ async fn the_chat_routes_frames_are_these_bytes() {
     ];
     let frames = events
         .iter()
-        .map(|e| Ok::<_, Infallible>(sse_event(e)))
+        .filter_map(sse_event)
+        .map(Ok::<_, Infallible>)
         .collect::<Vec<_>>();
 
     let chat = body(Sse::new(futures_util::stream::iter(frames)).into_response()).await;
@@ -85,7 +86,8 @@ async fn a_runs_frames_are_the_chat_routes_bytes_and_it_ends_completed() {
 
     let frames = finished_reply()
         .iter()
-        .map(|e| Ok::<_, Infallible>(sse_event(e)))
+        .filter_map(sse_event)
+        .map(Ok::<_, Infallible>)
         .collect::<Vec<_>>();
     let chat = body(Sse::new(futures_util::stream::iter(frames)).into_response()).await;
     assert_eq!(data_lines(&run), data_lines(&chat));

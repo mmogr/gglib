@@ -10,6 +10,7 @@ use std::path::PathBuf;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
+use gglib_core::domain::agent::ToolProgressSink;
 use gglib_core::ports::ToolExecutorPort;
 use gglib_core::{McpTool, ToolCall, ToolDefinition, ToolResult};
 use serde_json::{Value, json};
@@ -207,6 +208,19 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
             }
             _ => Err(anyhow!("unknown builtin tool '{bare}'")),
         }
+    }
+
+    /// Every builtin here finishes at once and reports nothing, so this is
+    /// `execute`; a builtin that takes long reports through `sink` from
+    /// here. Overridden rather than defaulted so this adapter is the one
+    /// place that routing lives.
+    async fn execute_with_progress(
+        &self,
+        call: &ToolCall,
+        sink: &dyn ToolProgressSink,
+    ) -> anyhow::Result<ToolResult> {
+        let _ = sink;
+        self.execute(call).await
     }
 }
 
