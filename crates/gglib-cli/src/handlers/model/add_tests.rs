@@ -96,3 +96,24 @@ async fn a_role_named_twice_is_refused_before_the_add() {
     let found = ctx.app.models().find_by_path(&weights).await.unwrap();
     assert!(found.is_none(), "nothing is added");
 }
+
+/// An image model is not asked for a parameter count: whatever is typed at
+/// the terminal, none is stored for it.
+#[tokio::test]
+async fn an_image_model_is_not_asked_for_a_parameter_count() {
+    let dir = tempfile::tempdir().unwrap();
+    let (ctx, _) = library(dir.path()).await;
+    let weights = write_flux(dir.path(), "flux1-schnell-q8_0.gguf");
+    let add = ["gglib", "model", "add", weights.to_str().unwrap()];
+
+    TYPED.scope("12", run(&ctx, &add)).await.unwrap();
+
+    let added = ctx.app.models().find_by_path(&weights).await.unwrap();
+    let added = added.expect("the file has a row");
+    assert_eq!(added.image_family, Some(ImageFamily::Flux1));
+    assert!(
+        added.param_count_b.abs() < f64::EPSILON,
+        "the typed 12 was never asked for: {}",
+        added.param_count_b
+    );
+}
