@@ -303,6 +303,15 @@ pub enum Commands {
     #[command(display_order = 14)]
     Run(crate::handlers::run::RunArgs),
 
+    /// Draw an image with this machine's image model, through the daemon
+    ///
+    /// Shows the render on one line (queued, loading, each step, decoding),
+    /// saves each image as a PNG and prints where. The daemon draws, so a
+    /// render queues behind its chats; Ctrl-C leaves, but the daemon finishes
+    /// a render already generating and discards it.
+    #[command(display_order = 15)]
+    Image(crate::image_commands::ImageCommandArgs),
+
     /// Save an image a chat stored, such as one a tool made, to a file
     #[command(display_order = 15)]
     Attachment {

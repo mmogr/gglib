@@ -112,6 +112,7 @@ pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
         Commands::Web { .. } => ("web", Reach::LocalBecause(THE_PAGE_SHOWS_BOTH)),
         Commands::Remote { .. } => ("remote", Reach::Local),
         Commands::Run(_) => ("run", Reach::Local),
+        Commands::Image(_) => ("image", Reach::Local),
         Commands::Attachment { .. } => ("attachment", Reach::Local),
         Commands::Completions { .. } => ("completions", Reach::Local),
     }

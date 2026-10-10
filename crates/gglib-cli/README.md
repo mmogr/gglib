@@ -96,6 +96,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `question <text>` | Ask a question; filesystem tools are on unless `--no-tools` |
 | `question --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |
 | `chat history` | List past conversations with message counts, and the chat each branch was made from |
+| `image "<prompt>" [--size WxH] [-n N] [--seed S] [-m MODEL] [-o PATH]` | Draw with this machine's image model through the daemon; one live line (queued, loading, sampling step/total, decoding), each PNG saved to `PATH` or `gglib-<unix>.png`, `-1`, `-2`, … for more than one, and `[image WxH] <path>` printed for each |
 | `attachment save <id> [path] [--force]` | Write a stored image, such as one a tool made, to a file; `<id>` is the whole id or at least the 8 characters a chat's marker shows; an existing file is replaced only with `--force` |
 | `/retry`, `/edit <text>`, `/branch`, `/branches` (in a chat) | Answer the last question again, ask it again as `<text>`, copy the chat into a new branch, or list the chat's branches; see [Branches](#branches) |
 | `proxy` | Start the OpenAI-compatible proxy (context comes from settings `default_context_size`, or is sized per launch when unset) |

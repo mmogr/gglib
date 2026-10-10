@@ -270,6 +270,8 @@ pub async fn dispatch(
         Commands::Remote { command } => handlers::remote::dispatch(ctx, command).await?,
         // ── Runs: replies the daemon owns ───────────────────────────────────
         Commands::Run(args) => handlers::run::dispatch(ctx, args).await?,
+        // ── Drawing, through the daemon ─────────────────────────────────────
+        Commands::Image(args) => handlers::image::execute(ctx, args).await?,
         // ── Stored images ───────────────────────────────────────────────────
         Commands::Attachment { command } => match command {
             crate::commands::AttachmentCommand::Save { id, path, force } => {

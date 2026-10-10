@@ -16,6 +16,7 @@ pub(crate) mod daemon_client;
 pub(crate) mod dispatch;
 pub(crate) mod handlers;
 pub(crate) mod image_args;
+pub(crate) mod image_commands;
 pub(crate) mod llama_commands;
 pub(crate) mod mcp_commands;
 pub(crate) mod model_commands;
