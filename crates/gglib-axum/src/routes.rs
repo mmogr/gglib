@@ -88,6 +88,8 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/proxy/loop-guard-trips", get(handlers::proxy::trips))
         // Daemon lifecycle
         .route("/daemon/shutdown", post(handlers::daemon::shutdown))
+        // A generation turn, held while the connection is open (`gglib chat`)
+        .route("/generation/turn", get(handlers::generation::turn))
         // Events (SSE), and the event a `gglib` command posts for a change
         // it made to the library in its own process.
         .route(

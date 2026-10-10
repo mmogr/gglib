@@ -281,6 +281,7 @@ fn spawn_daemon() -> Result<std::path::PathBuf> {
 
 pub(crate) mod auth;
 mod calls;
+pub(crate) mod generation;
 pub(crate) mod library_changes;
 mod remote;
 mod repair;
