@@ -86,6 +86,11 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
             post(chat_completions).layer(crate::body_limit::layer()),
         )
         .route("/v1/embeddings", post(crate::embeddings::embeddings))
+        // Drawing, local or paired: a turn's worth of use, like a chat.
+        .route(
+            "/v1/images/generations",
+            post(crate::images::generations_route),
+        )
         .route("/v1/proxy/status", get(handle_proxy_status))
         .route("/v1/proxy/status/stream", get(handle_proxy_status_stream))
         .route(
