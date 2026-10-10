@@ -28,6 +28,7 @@ pub(super) fn turn(conversation_id: i64, content: &str) -> HubTurn {
         content: content.to_owned(),
         images: Vec::new(),
         thinking: None,
+        answer_saved: false,
     }
 }
 

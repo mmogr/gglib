@@ -1,12 +1,12 @@
 //! `/v1/chats` on the real proxy: a paired device lists and opens the hub's
-//! chats, and nothing else reaches them.
+//! chats, and changes one (ADR 0017), and nothing else reaches them.
 //!
 //! The chats are a stand-in (`fixtures::chats`) that counts its calls,
 //! because what is under test is the door: who passes, the bodies and the
 //! error shape. What the list holds is the port's, tested where it lives.
 //!
 //! The door is one layer over one router group, which holds `/v1/attachments`
-//! too, so the three tests of who passes run over all four routes here and
+//! too, so the three tests of who passes run over all five routes here and
 //! nowhere else. What an upload or a fetch answers is in
 //! `integration_attachments.rs`.
 
@@ -17,17 +17,30 @@ use gglib_core::ports::HubChatsPort;
 use reqwest::{Client, RequestBuilder, StatusCode};
 
 mod fixtures;
-use fixtures::chats::{FakeChats, OPEN_ID, listed, opened, png, serve};
+use fixtures::chats::{BRANCH_ID, FakeChats, NO_MESSAGE, OPEN_ID, listed, opened, png, serve};
 use fixtures::remote::from_device;
 use fixtures::runs::{code, json};
 use fixtures::tunnel::{DEVICE, DEVICE_KEY, PROXY_KEY, get, spawn_proxy_holding, tunnel_to};
 
-/// Both chat routes, as a client reaches them.
+/// A change to chat `id`, as a device sends one.
+fn change(base: &str, id: &str, body: &serde_json::Value) -> RequestBuilder {
+    Client::new()
+        .post(format!("{base}/v1/chats/{id}/changes"))
+        .json(body)
+}
+
+/// A regenerate of the reply `message`.
+fn regenerate(message: i64) -> serde_json::Value {
+    serde_json::json!({ "kind": "regenerate", "message_id": message })
+}
+
+/// The chat routes, as a client reaches them.
 fn chat_routes(base: &str) -> Vec<RequestBuilder> {
     let client = Client::new();
     vec![
         client.get(format!("{base}/v1/chats")),
         client.get(format!("{base}/v1/chats/{OPEN_ID}")),
+        change(base, &OPEN_ID.to_string(), &regenerate(2)),
     ]
 }
 
@@ -85,6 +98,82 @@ async fn an_unknown_chat_is_404_not_found_and_echoes_nothing() {
         assert_eq!(code(&body), "not_found");
         assert!(!body.to_string().contains(id), "{body}");
     }
+    cancel.cancel();
+}
+
+/// A change is the hub's to make: the device is answered the chat to show,
+/// and the change reaches the hub as it was sent.
+#[tokio::test]
+async fn a_named_device_changes_a_chat_and_is_told_where_it_went() {
+    let chats = Arc::new(FakeChats::default());
+    let (base, cancel) = serve(None, Some(Arc::clone(&chats))).await;
+    let edit = serde_json::json!({ "kind": "edit", "message_id": 1, "content": "why not?" });
+
+    let request = from_device(change(&base, &OPEN_ID.to_string(), &edit));
+    let (status, body) = json(request.send().await.unwrap()).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let told = serde_json::json!({ "conversation_id": BRANCH_ID, "forked": true, "answer": true });
+    assert_eq!(body, told);
+    let made = chats.changes.lock().unwrap().clone();
+    assert_eq!(
+        serde_json::to_value(made).unwrap(),
+        serde_json::json!([edit])
+    );
+    cancel.cancel();
+}
+
+/// A change the rules refuse says why by its code, a chat that is not there
+/// is not found, and a body that is no change is refused before the hub is
+/// asked. None echoes what was sent.
+#[tokio::test]
+async fn a_change_that_cannot_be_made_says_why_and_echoes_nothing() {
+    let chats = Arc::new(FakeChats::default());
+    let (base, cancel) = serve(None, Some(Arc::clone(&chats))).await;
+    let open = OPEN_ID.to_string();
+    let secret = serde_json::json!({ "kind": "edit", "message_id": 1, "content": "zzq-private" });
+    let cases = [
+        (
+            change(&base, &open, &regenerate(NO_MESSAGE)),
+            StatusCode::NOT_FOUND,
+            "message_not_found",
+        ),
+        (
+            change(&base, "12345", &regenerate(2)),
+            StatusCode::NOT_FOUND,
+            "not_found",
+        ),
+        (
+            change(
+                &base,
+                &open,
+                &serde_json::json!({ "kind": "rewrite", "message_id": 2 }),
+            ),
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+        ),
+        (
+            change(
+                &base,
+                &open,
+                &serde_json::json!({ "replace_from": 2, "content": "zzq-private" }),
+            ),
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+        ),
+        (
+            change(&base, "zzq-private", &secret),
+            StatusCode::NOT_FOUND,
+            "not_found",
+        ),
+    ];
+    for (request, want, code_want) in cases {
+        let (status, body) = json(from_device(request).send().await.unwrap()).await;
+        assert_eq!((status, code(&body)), (want, code_want), "{body}");
+        assert_eq!(body["error"]["type"], "invalid_request_error", "{body}");
+        assert!(!body.to_string().contains("zzq-private"), "{body}");
+    }
+    assert!(chats.changes.lock().unwrap().is_empty());
     cancel.cancel();
 }
 

@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use gglib_core::domain::branching::{ChatChange, ChatChanged, Refused};
 use gglib_core::domain::chat::{Conversation, Message, MessageRole};
 use gglib_core::domain::hub_chats::{HubChat, HubChatList, HubChatOpen};
 use gglib_core::domain::{AttachmentBlob, AttachmentId, AttachmentInfo, AttachmentUpload};
@@ -19,11 +20,19 @@ use gglib_core::{CorsConfig, DevicePorts, ProxyAccessConfig};
 /// The one chat that opens.
 pub(crate) const OPEN_ID: i64 = 7;
 
+/// The branch a change to [`OPEN_ID`] makes.
+pub(crate) const BRANCH_ID: i64 = 8;
+
+/// A message no chat holds: a change naming it is refused.
+pub(crate) const NO_MESSAGE: i64 = 99;
+
 /// The stub.
 #[derive(Debug, Default)]
 pub(crate) struct FakeChats {
     pub(crate) calls: AtomicUsize,
     images: Arc<Images>,
+    /// Every change made, in order.
+    pub(crate) changes: Mutex<Vec<ChatChange>>,
 }
 
 /// The images the stub holds, by id.
@@ -112,6 +121,7 @@ pub(crate) fn listed() -> HubChatList {
                 model: Some("qwen3-8b".to_owned()),
                 updated_at: "2026-09-30 09:13:00".to_owned(),
                 live_run: Some("chat-1".to_owned()),
+                branch_of: None,
             },
             HubChat {
                 id: 2,
@@ -120,6 +130,7 @@ pub(crate) fn listed() -> HubChatList {
                 model: None,
                 updated_at: "2026-09-29 18:00:00".to_owned(),
                 live_run: None,
+                branch_of: None,
             },
         ],
     }
@@ -154,6 +165,8 @@ pub(crate) fn opened() -> HubChatOpen {
                 height: 480,
             }],
         }],
+        points: Vec::new(),
+        answerable: false,
     }
 }
 
@@ -171,6 +184,27 @@ impl HubChatsPort for FakeChats {
         } else {
             Err(HubChatsError::NotFound)
         }
+    }
+
+    /// A change to [`OPEN_ID`] makes [`BRANCH_ID`], unless it names
+    /// [`NO_MESSAGE`]; any other chat is not found.
+    async fn change(&self, id: i64, change: &ChatChange) -> Result<ChatChanged, HubChatsError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        if id != OPEN_ID {
+            return Err(HubChatsError::NotFound);
+        }
+        let (ChatChange::Edit { message_id, .. }
+        | ChatChange::Regenerate { message_id }
+        | ChatChange::Branch { message_id }) = change;
+        if *message_id == NO_MESSAGE {
+            return Err(Refused::MessageNotFound(NO_MESSAGE).into());
+        }
+        self.changes.lock().unwrap().push(change.clone());
+        Ok(ChatChanged {
+            conversation_id: BRANCH_ID,
+            forked: true,
+            answer: true,
+        })
     }
 
     async fn attach(&self, bytes: &[u8]) -> Result<AttachmentUpload, AttachmentError> {

@@ -52,7 +52,7 @@ crates/gglib-core/src/domain/capabilities.rs 1594
 crates/gglib-core/src/domain/chat.rs 325
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 351
-crates/gglib-core/src/domain/hub_chats_tests.rs 394
+crates/gglib-core/src/domain/hub_chats_tests.rs 418
 crates/gglib-core/src/domain/inference.rs 1915
 crates/gglib-core/src/domain/inference_tests.rs 1409
 crates/gglib-core/src/domain/kv_estimate.rs 341

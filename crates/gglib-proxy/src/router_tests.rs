@@ -18,7 +18,9 @@
 /// Every path the proxy serves, and therefore every path the tunnel
 /// carries. `/mcp`, `/v1/chats` and `/v1/attachments` are here with guards
 /// of their own. An image a device stores is part of a turn it adds to a
-/// chat, which is use: it changes no model and no setting.
+/// chat, which is use: it changes no model and no setting. So is a change
+/// to a chat (ADR 0017): it writes the chats a turn writes, adding a branch
+/// or replacing a question nothing answers yet, and never a saved reply.
 const TUNNEL_REACHABLE: &[&str] = &[
     "/health",
     "/v1/models",
@@ -36,6 +38,7 @@ const TUNNEL_REACHABLE: &[&str] = &[
     "/v1/runs/{id}/cancel",
     "/v1/chats",
     "/v1/chats/{id}",
+    "/v1/chats/{id}/changes",
     "/v1/attachments",
     "/v1/attachments/{id}",
     "/mcp",

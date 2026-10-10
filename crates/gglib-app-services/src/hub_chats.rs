@@ -1,18 +1,20 @@
 //! The hub's chats, read for a paired device: `HubChatsPort` over the chat
 //! history, with each chat's live run from the daemon's runs.
 //!
-//! Nothing here writes or copies a row, and nothing logs a title, a row or
-//! an image: only ids and counts. An image a device sends is stored by the
-//! one ingest every surface uses.
+//! Nothing here writes a row itself, and nothing logs a title, a row or an
+//! image: only ids and counts. A change a device asks for is the chat
+//! history service's to make, as the page's is (ADR 0017). An image a
+//! device sends is stored by the one ingest every surface uses.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
+use gglib_core::domain::branching::{ChatChange, ChatChanged};
 use gglib_core::domain::hub_chats::{HubChat, HubChatList, HubChatOpen};
 use gglib_core::domain::{AttachmentBlob, AttachmentId, AttachmentUpload};
-use gglib_core::ports::{AttachmentError, HubChatsError, HubChatsPort};
-use gglib_core::services::AppCore;
+use gglib_core::ports::{AttachmentError, ChatHistoryError, HubChatsError, HubChatsPort};
+use gglib_core::services::{AppCore, ChangeError};
 
 use crate::runs::RunRegistry;
 
@@ -75,6 +77,7 @@ impl HubChatsPort for HubChats {
                 title: c.title,
                 model_id: c.model_id,
                 updated_at: c.updated_at,
+                branch_of: c.branch_of,
             })
             .collect();
         Ok(HubChatList { chats })
@@ -87,13 +90,30 @@ impl HubChatsPort for HubChats {
             .await
             .map_err(|_| HubChatsError::Unreadable)?
             .ok_or(HubChatsError::NotFound)?;
-        let messages = history
-            .get_messages(id)
-            .await
-            .map_err(|_| HubChatsError::Unreadable)?;
+        let thread = history.thread(id).await.map_err(|e| match e {
+            ChatHistoryError::ConversationNotFound(_) => HubChatsError::NotFound,
+            _ => HubChatsError::Unreadable,
+        })?;
         Ok(HubChatOpen {
             conversation,
-            messages,
+            messages: thread.messages,
+            points: thread.points,
+            answerable: thread.answerable,
+        })
+    }
+
+    async fn change(&self, id: i64, change: &ChatChange) -> Result<ChatChanged, HubChatsError> {
+        let busy = self
+            .runs
+            .upgrade()
+            .is_some_and(|runs| runs.live_on(id).is_some());
+        let changed = self.core.chat_history().change(id, change, busy).await;
+        changed.map_err(|e| match e {
+            ChangeError::Refused(refused) => HubChatsError::Refused(refused),
+            ChangeError::History(ChatHistoryError::ConversationNotFound(_)) => {
+                HubChatsError::NotFound
+            }
+            ChangeError::History(_) => HubChatsError::Unreadable,
         })
     }
 

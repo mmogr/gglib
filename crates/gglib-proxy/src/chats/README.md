@@ -4,10 +4,22 @@
 
 `/v1/chats`: a paired device's view of the hub's chats. `GET /v1/chats`
 lists them newest first, each with the run whose reply to it is not yet
-saved; `GET /v1/chats/{id}` opens one with every row and the metadata the
-hub saved, and with the chat's settings, which say `"thinking": "off"` when a
-turn switched its thinking off. Served through the `HubChatsPort` the proxy
-was started with, and answered `503 chats_unavailable` without one.
+saved, and each branch with the chat it was made from (`branch_of`);
+`GET /v1/chats/{id}` opens one with every row and the metadata the hub
+saved, with the chat's settings, which say `"thinking": "off"` when a turn
+switched its thinking off, and with what the hub says of its branches (ADR
+0016): the points where its family parts (`points`) and whether it ends in a
+question nothing answers (`answerable`). Served through the `HubChatsPort`
+the proxy was started with, and answered `503 chats_unavailable` without one.
+
+`POST /v1/chats/{id}/changes` edits, regenerates or branches a chat, with
+the body the hub's page sends its own daemon, and the hub's branching rules
+decide: a change that would rewrite a saved reply copies the chat into a new
+branch. The answer is the chat to show, whether it is new, and whether it is
+now to be answered, which the device does with a turn that says
+`answer_saved`. A change the rules refuse is answered by its code
+(`unchanged`, `not_a_reply`, `nothing_to_answer`, `message_not_found`,
+`invalid_request`), a body that is no change `400 invalid_request`.
 
 `/v1/attachments` is the images those chats' turns carry. A device sends
 one as the raw body of `POST /v1/attachments`, at most 8 MiB, and is
@@ -31,8 +43,8 @@ chats/
   mod.rs       — the module
   attachments.rs — an image sent and one read back; no image is logged
   guard.rs     — only a named device passes
-  handlers.rs  — list and open, with errors in the proxy's shape; nothing a
-                 client sent is echoed
+  handlers.rs  — list, open and change, with errors in the proxy's shape;
+                 nothing a client sent is echoed
 ```
 
 <!-- module-docs:end -->

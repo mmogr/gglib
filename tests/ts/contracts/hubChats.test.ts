@@ -6,7 +6,10 @@
  * from the real serialisation of `GET /v1/chats`, `GET /v1/chats/{id}`, a
  * device's turn (`PUT /v1/runs/{id}?kind=agent`) with and without an image
  * and one that turns thinking off, and the answer to the upload that image
- * was sent by (`POST /v1/attachments`), and fails there when it goes stale. ggchat hand-copies the same file. Here each body must fit the
+ * was sent by (`POST /v1/attachments`); and of a branch opened, the change
+ * that made it (`POST /v1/chats/{id}/changes`) and its answer, and the turn
+ * that answers the branch's question (ADR 0017). It fails there when it
+ * goes stale. ggchat hand-copies the same file. Here each body must fit the
  * generated types, carry the keys and value types they promise, and leave
  * out what it has no value for (never a `null`, but for the two conversation
  * fields that are always written).
@@ -15,6 +18,8 @@
 import { describe, it, expect } from 'vitest';
 
 import type { AttachmentUpload } from '../../../src/types/generated/AttachmentUpload';
+import type { ChatChange } from '../../../src/types/generated/ChatChange';
+import type { ChatChanged } from '../../../src/types/generated/ChatChanged';
 import type { HubChatList } from '../../../src/types/generated/HubChatList';
 import type { HubChatOpen } from '../../../src/types/generated/HubChatOpen';
 import type { HubTurn } from '../../../src/types/generated/HubTurn';
@@ -30,6 +35,10 @@ const RECORDED = JSON.parse(rust('contracts/chats/recorded.json')) as {
   upload: AttachmentUpload;
   image_turn: HubTurn;
   thinking_turn: HubTurn;
+  branch_open: HubChatOpen;
+  change: ChatChange;
+  changed: ChatChanged;
+  answer_turn: HubTurn;
 };
 
 /** The two keys every turn carries. */
@@ -41,6 +50,7 @@ const TURN_KEYS = { conversation_id: 'number', content: 'string' };
 const TURN_OPTIONAL: Record<Exclude<keyof HubTurn, keyof typeof TURN_KEYS>, string> = {
   images: 'object',
   thinking: 'string',
+  answer_saved: 'boolean',
 };
 
 /** What a stored image is told as: its id and what its header says. */
@@ -73,11 +83,13 @@ describe('the recorded hub chats', () => {
       expectKeys(
         chat as unknown as Body,
         { id: 'number', title: 'string', updated_at: 'string' },
-        { model_id: 'number', model: 'string', live_run: 'string' },
+        { model_id: 'number', model: 'string', live_run: 'string', branch_of: 'number' },
       );
     }
     expect(RECORDED.list.chats.some((c) => c.live_run)).toBe(true);
     expect(RECORDED.list.chats.some((c) => !('live_run' in c))).toBe(true);
+    expect(RECORDED.list.chats.some((c) => c.branch_of === 12)).toBe(true);
+    expect(RECORDED.list.chats.some((c) => !('branch_of' in c))).toBe(true);
   });
 
   it('an open chat is the conversation and its rows, each with the metadata the hub saved', () => {
@@ -92,7 +104,7 @@ describe('the recorded hub chats', () => {
         created_at: 'string',
         updated_at: 'string',
       },
-      { settings: 'object' },
+      { settings: 'object', branch_of: 'number' },
     );
     expect(RECORDED.open.messages).toHaveLength(4);
     for (const message of RECORDED.open.messages) {
@@ -162,11 +174,33 @@ describe('the recorded hub chats', () => {
     });
   });
 
-  it('a turn carries no key but its two, its images and its thinking choice', () => {
-    expect(Object.keys(TURN_OPTIONAL).sort()).toEqual(['images', 'thinking']);
-    for (const turn of [RECORDED.turn, RECORDED.image_turn, RECORDED.thinking_turn]) {
+  it('a turn carries no key but its two, its images, its thinking choice and whether it answers a saved question', () => {
+    expect(Object.keys(TURN_OPTIONAL).sort()).toEqual(['answer_saved', 'images', 'thinking']);
+    for (const turn of [RECORDED.turn, RECORDED.image_turn, RECORDED.thinking_turn, RECORDED.answer_turn]) {
       expectKeys(turn as unknown as Body, TURN_KEYS, TURN_OPTIONAL);
     }
+  });
+
+  it('a branch opened says where its family parts, each option a chat, and that its last question is unanswered', () => {
+    expect(Object.keys(RECORDED.branch_open)).toEqual(['conversation', 'messages', 'points', 'answerable']);
+    expect(RECORDED.branch_open.conversation).toMatchObject({ id: 13, branch_of: 12 });
+    expect(RECORDED.branch_open.conversation).not.toHaveProperty('lineage_id');
+    expect(RECORDED.branch_open.answerable).toBe(true);
+    const [point] = RECORDED.branch_open.points ?? [];
+    expect(point.message_id).toBe(RECORDED.branch_open.messages.at(-1)?.id);
+    expect(point.options[point.index].conversation_id).toBe(13);
+    for (const option of point.options) {
+      expectKeys(option as unknown as Body, { conversation_id: 'number', message_id: 'nullable-number', role: 'nullable-string', preview: 'string' }, {});
+    }
+  });
+
+  it('a change is the body the page sends its own daemon, answered as the daemon answers it', () => {
+    expect(RECORDED.change).toEqual({ kind: 'edit', message_id: 42, content: 'And how do I pin it?' });
+    expect(RECORDED.changed).toEqual({ conversation_id: 13, forked: true, answer: true });
+  });
+
+  it('the turn that answers a saved question says so, with no message of its own', () => {
+    expect(RECORDED.answer_turn).toEqual({ conversation_id: 13, content: '', answer_saved: true });
   });
 
   it('the open chat remembers that thinking is off, beside its other settings', () => {

@@ -3,7 +3,9 @@
 //! composed here.
 //!
 //! The device sends only its message, with any image named by the id its
-//! upload answered. The hub rebuilds the history from its
+//! upload answered, or, after a change that leaves the chat ending in a
+//! question (ADR 0017), no message and `answer_saved`, and the reply
+//! answers that question. The hub rebuilds the history from its
 //! own record, as the chat page would send it: the conversation's system
 //! prompt, then every saved row but a system one, then the new message,
 //! with the limits the conversation's settings name (`prepare` takes an
@@ -25,12 +27,14 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse as _;
 
 use gglib_core::domain::agent::{AgentMessage, saved_history};
+use gglib_core::domain::branching;
 use gglib_core::domain::chat::ConversationSettings;
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::domain::thinking;
 use gglib_core::ports::{
     AgentRunStarter, Created, RemoteGatewayPort as _, RunScope, RunsError, TurnRefused,
 };
+use gglib_core::services::ChangeError;
 use tokio::sync::OwnedSemaphorePermit;
 
 use super::AgentChatRequest;
@@ -95,7 +99,9 @@ fn refusal(error: HttpError) -> TurnRefused {
 ///
 /// # Errors
 ///
-/// `invalid_request` (400) for a message with neither text nor an image;
+/// `invalid_request` (400) for a message with neither text nor an image, or
+/// a turn that answers the saved question and carries one; `nothing_to_answer`
+/// (409) for such a turn on a chat that ends in no question;
 /// `attachment_not_found` (400) for an image the turn or the chat's history
 /// names that is not stored; `request_images_too_large` (400) when they are
 /// over 16 MiB together;
@@ -161,12 +167,14 @@ pub(super) struct Plan {
 /// Read `turn` against the chat it names, with the tools the tunnel's owner
 /// lets a device's turn reach.
 pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpError> {
-    if turn.content.trim().is_empty() && turn.images.is_empty() {
-        return Err(coded(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            "a turn is the user's message, and it has neither text nor an image",
-        ));
+    let said = !turn.content.trim().is_empty() || !turn.images.is_empty();
+    if turn.answer_saved == said {
+        let why = if said {
+            "a turn that answers the question already saved carries no message of its own"
+        } else {
+            "a turn is the user's message, and it has neither text nor an image"
+        };
+        return Err(coded(StatusCode::BAD_REQUEST, "invalid_request", why));
     }
     let id = turn.conversation_id;
     let history = state.core.chat_history();
@@ -191,13 +199,19 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
     // Before a model is loaded for it: the reservation refuses the same.
     state.runs.refuse_if_live(id)?;
     let rows = history.get_messages(id).await.map_err(unreadable)?;
+    if turn.answer_saved {
+        branching::answerable(&rows).map_err(ChangeError::from)?;
+    }
     let model = model_for(state, &conversation, &rows).await?;
-    // The prompt comes from the conversation, as the page takes it.
+    // The prompt comes from the conversation, as the page takes it. A turn
+    // that answers the question already saved adds none (ADR 0017).
     let mut messages = saved_history(conversation.system_prompt.as_deref(), &rows);
-    messages.push(AgentMessage::User {
-        content: turn.content,
-        images: turn.images,
-    });
+    if !turn.answer_saved {
+        messages.push(AgentMessage::User {
+            content: turn.content,
+            images: turn.images,
+        });
+    }
     // Before the model is loaded, over this turn and the history: an image
     // not stored, images over the cap together, and a model that cannot
     // read them.
@@ -218,7 +232,7 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
     };
     let transcript = Transcript {
         conversation_id: Some(id),
-        answer_saved: false,
+        answer_saved: turn.answer_saved,
         remember: thinking.remember,
     };
     Ok(Plan {
@@ -254,6 +268,9 @@ pub(super) fn tools_of(settings: &ConversationSettings, mcp_allowed: bool) -> Ve
     settings.tools.clone()
 }
 
+#[cfg(test)]
+#[path = "hub_turn_answer_tests.rs"]
+mod hub_turn_answer_tests;
 #[cfg(test)]
 #[path = "hub_turn_forget_tests.rs"]
 mod hub_turn_forget_tests;

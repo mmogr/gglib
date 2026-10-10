@@ -27,4 +27,8 @@ updated_at: string,
 /**
  * The run whose reply to it is not yet saved, if one is.
  */
-live_run?: string | null, };
+live_run?: string | null, 
+/**
+ * The chat it was branched from (ADR 0017), when it is a branch.
+ */
+branch_of?: number, };
