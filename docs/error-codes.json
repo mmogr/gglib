@@ -63,6 +63,36 @@
       "meaning": "An image model needs more memory than is free, and the model it would displace is held by a run; refused at once, retry when that run ends."
     },
     {
+      "code": "not_an_image_model",
+      "type": "invalid_request_error",
+      "status": 400,
+      "meaning": "An image request named a model that is not an image model; name an image model, or leave the model out."
+    },
+    {
+      "code": "invalid_image_size",
+      "type": "invalid_request_error",
+      "status": 400,
+      "meaning": "The size cannot be read as WIDTHxHEIGHT, or is not one the image model's family draws, in which case the message gives the family's rule and a size to try."
+    },
+    {
+      "code": "drawing_unavailable",
+      "type": "invalid_request_error",
+      "status": 400,
+      "meaning": "Nothing here can draw the request, or draw for a run that says draw: the chat's model is on another machine, the proxy runs outside the daemon, there is no image runtime or no image model, there are several and none is named or set as the default, or the default or the only one is missing a file; the message says which."
+    },
+    {
+      "code": "image_generation_failed",
+      "type": "server_error",
+      "status": 502,
+      "meaning": "The image runtime took the render and failed it, or lost it; the message carries its words. Try another prompt or size, or retry."
+    },
+    {
+      "code": "image_render_stalled",
+      "type": "server_error",
+      "status": 504,
+      "meaning": "The render made no progress for three minutes, or ran past its thirty-minute limit, so the image model was stopped; retry."
+    },
+    {
       "code": "model_cannot_read_images",
       "type": "invalid_request_error",
       "status": 400,
