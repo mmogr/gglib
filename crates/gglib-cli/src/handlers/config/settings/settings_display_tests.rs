@@ -32,7 +32,7 @@ fn an_unset_context_size_says_what_unset_means() {
         default_context_size: None,
         ..Settings::default()
     };
-    let rows = settings_display_rows(&settings, None);
+    let rows = settings_display_rows(&settings, None, None);
     let (_, value) = rows
         .iter()
         .find(|(k, _)| k == "default-context-size")
@@ -47,7 +47,7 @@ fn a_chosen_context_size_is_shown_plainly() {
         default_context_size: Some(32_768),
         ..Settings::default()
     };
-    let rows = settings_display_rows(&settings, None);
+    let rows = settings_display_rows(&settings, None, None);
     let (_, value) = rows
         .iter()
         .find(|(k, _)| k == "default-context-size")
@@ -58,7 +58,7 @@ fn a_chosen_context_size_is_shown_plainly() {
 #[test]
 fn settings_display_rows_uses_kebab_case_keys() {
     let settings = Settings::default();
-    let rows = settings_display_rows(&settings, None);
+    let rows = settings_display_rows(&settings, None, None);
 
     assert!(!rows.is_empty(), "should produce at least one row");
 
@@ -84,7 +84,7 @@ fn settings_display_rows_uses_kebab_case_keys() {
 #[test]
 fn setup_completed_is_hidden() {
     let settings = Settings::default();
-    let rows = settings_display_rows(&settings, None);
+    let rows = settings_display_rows(&settings, None, None);
     assert!(
         rows.iter().all(|(k, _)| k != "setup-completed"),
         "setup-completed must not appear in display rows"
@@ -97,7 +97,7 @@ fn setup_completed_is_hidden() {
 #[test]
 fn always_on_proxy_settings_are_listed() {
     let settings = Settings::default();
-    let rows = settings_display_rows(&settings, None);
+    let rows = settings_display_rows(&settings, None, None);
 
     for expected in ["proxy-autostart", "close-to-tray", "start-at-login"] {
         assert!(
@@ -120,7 +120,7 @@ fn the_proxy_api_key_is_shown_rather_than_masked() {
         proxy_api_key: Some("secret123".to_owned()),
         ..Default::default()
     };
-    let rows = settings_display_rows(&settings, None);
+    let rows = settings_display_rows(&settings, None, None);
 
     assert_eq!(
         rows.iter()
@@ -154,7 +154,7 @@ fn the_received_remote_key_is_masked_inside_the_pairing_record() {
         }),
         ..Default::default()
     };
-    let rows = settings_display_rows(&settings, None);
+    let rows = settings_display_rows(&settings, None, None);
     let value = |key: &str| {
         rows.iter()
             .find(|(k, _)| k == key)
@@ -179,7 +179,7 @@ fn the_received_remote_key_is_masked_inside_the_pairing_record() {
 /// person runs this command to find out, and it is not the secret.
 #[test]
 fn an_absent_pairing_still_reads_as_none() {
-    let rows = settings_display_rows(&Settings::default(), None);
+    let rows = settings_display_rows(&Settings::default(), None, None);
 
     assert_eq!(
         rows.iter()
@@ -196,7 +196,7 @@ fn settings_display_rows_model_display_override() {
         default_model_id: Some(42),
         ..Default::default()
     };
-    let rows = settings_display_rows(&settings, Some("42 (TestModel)".to_owned()));
+    let rows = settings_display_rows(&settings, Some("42 (TestModel)".to_owned()), None);
     let model_row = rows
         .iter()
         .find(|(k, _)| k == "default-model-id")
@@ -210,7 +210,7 @@ fn settings_display_rows_null_displays_as_none() {
         default_download_path: None,
         ..Default::default()
     };
-    let rows = settings_display_rows(&settings, None);
+    let rows = settings_display_rows(&settings, None, None);
     let row = rows
         .iter()
         .find(|(k, _)| k == "default-download-path")
@@ -224,7 +224,7 @@ fn inference_defaults_null_emits_bare_none_row() {
         inference_defaults: None,
         ..Default::default()
     };
-    let rows = settings_display_rows(&settings, None);
+    let rows = settings_display_rows(&settings, None, None);
     let row = rows
         .iter()
         .find(|(k, _)| k == "inference-defaults")
@@ -242,7 +242,7 @@ fn inference_defaults_expanded_to_sub_rows() {
         }),
         ..Default::default()
     };
-    let rows = settings_display_rows(&settings, None);
+    let rows = settings_display_rows(&settings, None, None);
 
     // No bare "inference-defaults" row when the field is set.
     assert!(

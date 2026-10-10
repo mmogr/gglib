@@ -143,6 +143,16 @@ pub struct SettingsSetArgs {
     /// explicit action from the tray menu.
     #[arg(long)]
     pub close_to_tray: Option<bool>,
+    /// The image model a drawing request uses when it names none: an id or
+    /// a name from `gglib model list`. Refused unless that model draws
+    /// images; `gglib config settings unset default-image-model-id` clears it.
+    #[arg(long = "default-image-model", value_name = "ID|NAME")]
+    pub default_image_model_id: Option<String>,
+    /// Offer MCP clients gglib's drawing tool on the proxy's /mcp
+    /// (`builtin__generate_image`). Off by default: a drawing holds the GPU
+    /// for minutes, so a client is let draw only when you say so.
+    #[arg(long)]
+    pub mcp_drawing: Option<bool>,
     /// Register the desktop app to launch on login (macOS login item,
     /// Windows Run key, XDG autostart entry on Linux). Applied
     /// immediately, so the stored value and the OS state stay in step.

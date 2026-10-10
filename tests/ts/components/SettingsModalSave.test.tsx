@@ -9,7 +9,8 @@
  *
  * Each test asserts the whole request with `toEqual`, so an unchanged field
  * from any group of the form — the General tab's own inputs, the network
- * pair, the agent guards or the desktop toggles — fails it by being there.
+ * pair, the agent guards, the drawing pair or the desktop toggles — fails it
+ * by being there.
  * The table changes each field the dialog sends in turn, so a field that is
  * dropped from its group's request, or sent under another's name, fails too.
  */
@@ -49,6 +50,8 @@ const settings = {
   toolCallRepair: false,
   maxStagnationSteps: 7,
   defaultModelId: 3,
+  defaultImageModelId: 5,
+  mcpDrawing: true,
   defaultDownloadPath: '/downloads',
   inferenceDefaults: { temperature: 0.4, topP: 0.9, topK: 40 },
   inferenceProfiles: [],
@@ -91,6 +94,8 @@ vi.mock('../../../src/hooks/useModels', () => ({
     models: [
       { id: 3, name: 'three' },
       { id: 4, name: 'four' },
+      { id: 5, name: 'flux', imageFamily: 'flux1' },
+      { id: 6, name: 'sdxl', imageFamily: 'sdxl' },
     ],
     loading: false,
     error: null,
@@ -132,6 +137,9 @@ const advanced = (change: Change): Change => async (user) => {
 const changes: [string, Change, UpdateSettingsRequest][] = [
   ['context size', retype('context-size-input', '4096'), { defaultContextSize: 4096 }],
   ['default model', choose('default-model-select', '4'), { defaultModelId: 4 }],
+  ['default image model', choose('default-image-model-select', '6'), { defaultImageModelId: 6 }],
+  ['no default image model', choose('default-image-model-select', ''), { defaultImageModelId: null }],
+  ['MCP drawing switch', toggle('mcp-drawing-input'), { mcpDrawing: false }],
   ['proxy port', retype('proxy-port-input', '8082'), { proxyPort: 8082 }],
   ['base server port', retype('server-port-input', '9200'), { llamaBasePort: 9200 }],
   ['download queue size', retype('max-queue-size-input', '6'), { maxDownloadQueueSize: 6 }],

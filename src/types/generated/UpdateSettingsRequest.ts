@@ -15,10 +15,14 @@ export type UpdateSettingsRequest = { defaultDownloadPath?: string | null, defau
 /**
  * Default model ID for quick commands (e.g., `gglib question`).
  */
-defaultModelId?: number | null, inferenceDefaults?: InferenceConfig | null, 
+defaultModelId?: number | null, 
+/**
+ * Refused unless the id names a model that draws.
+ */
+defaultImageModelId?: number | null, inferenceDefaults?: InferenceConfig | null, 
 /**
  * Replaces the whole profile list. `null` clears it; an omitted key leaves
  * it untouched, so a client updating an unrelated setting cannot drop
  * profiles it never knew about.
  */
-inferenceProfiles?: Array<InferenceProfile> | null, setupCompleted?: boolean | null, titleGenerationPrompt?: string | null, bindHost?: string | null, shareLan?: boolean | null, proxyApiKey?: string | null, trustClientSampling?: boolean | null, loopGuardMode?: LoopGuardMode | null, toolCallRepair?: boolean | null, agenticSampling?: boolean | null, proxyAutostart?: boolean | null, closeToTray?: boolean | null, startAtLogin?: boolean | null, };
+inferenceProfiles?: Array<InferenceProfile> | null, setupCompleted?: boolean | null, titleGenerationPrompt?: string | null, bindHost?: string | null, shareLan?: boolean | null, proxyApiKey?: string | null, trustClientSampling?: boolean | null, loopGuardMode?: LoopGuardMode | null, toolCallRepair?: boolean | null, mcpDrawing?: boolean | null, agenticSampling?: boolean | null, proxyAutostart?: boolean | null, closeToTray?: boolean | null, startAtLogin?: boolean | null, };

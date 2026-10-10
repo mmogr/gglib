@@ -145,8 +145,9 @@ fn mask_or_show(key: &str, leaf: serde_json::Value) -> String {
 /// (e.g. `inference-defaults.temperature`). Rows for [`HIDDEN_KEYS`] are
 /// silently dropped.
 ///
-/// `default-model-id` is substituted with the pre-resolved `model_display`
-/// string (or `"None"`) to avoid a DB round-trip inside this pure function.
+/// `default-model-id` and `default-image-model-id` are substituted with the
+/// pre-resolved `model_display` and `image_display` strings (or `"None"`) to
+/// avoid a DB round-trip inside this pure function.
 #[allow(
     clippy::manual_let_else,
     clippy::needless_pass_by_value,
@@ -155,6 +156,7 @@ fn mask_or_show(key: &str, leaf: serde_json::Value) -> String {
 pub(super) fn settings_display_rows(
     settings: &Settings,
     model_display: Option<String>,
+    image_display: Option<String>,
 ) -> Vec<(String, String)> {
     let obj = match serde_json::to_value(settings) {
         Ok(serde_json::Value::Object(m)) => m,
@@ -178,6 +180,13 @@ pub(super) fn settings_display_rows(
         if kebab_key == "default-model-id" {
             let display = model_display.clone().unwrap_or_else(|| "None".to_owned());
             rows.push((kebab_key, display));
+        } else if kebab_key == "default-image-model-id" {
+            let display = image_display.clone().unwrap_or_else(|| "None".to_owned());
+            rows.push((kebab_key, display));
+        } else if kebab_key == "mcp-drawing" && val.is_null() {
+            // Absent is off, and the row says so rather than leave "None"
+            // to be read either way.
+            rows.push((kebab_key, "None (off)".to_owned()));
         } else if kebab_key == "default-context-size" && val.is_null() {
             // Unset is the ordinary — and preferred — state for this one
             // field: it is what lets the daemon size each launch. A bare

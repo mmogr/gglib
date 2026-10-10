@@ -84,6 +84,8 @@ fn bounds() -> Bounds {
             default_of("llama_base_port"),
             default_of("max_download_queue_size"),
             default_of("max_tool_iterations"),
+            default_of("default_image_model_id"),
+            default_of("mcp_drawing"),
         ]),
         inference: BTreeMap::from([
             ("temperature", within(&TEMPERATURE_RANGE)),
