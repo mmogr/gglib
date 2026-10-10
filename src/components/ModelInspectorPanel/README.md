@@ -17,7 +17,7 @@ ModelInspectorPanel
     ├── InspectorCapabilities  ← gglib's own editable shaping flags
     ├── ReasoningSupport       ← whether the template reads reasoning_effort
     ├── InspectorFooter        ← serve / edit / delete / benchmark
-    ├── ServeModal             ← context, port, jinja mode, MTP options
+    ├── ServeModal             ← context, port, jinja mode, MTP options; for an image model, ImageServeDetails instead
     └── DeleteModal            ← confirmation dialog
 ```
 
@@ -38,7 +38,7 @@ when there is nothing running to read.
 |-----------|----------|
 | `ModelInspectorPanel.tsx` | The panel itself: composes the sections below and owns the selected model |
 | `FarModelInspector.tsx` | The paired machine's model, read-only: its detail from that machine through `ModelMetadataGrid` (no path, no projector or components row, no sampling section), the Vision chip when that machine's listing says it reads images (as its library row does), "Serving on" that machine, Chat and Load only where that machine's actions list them and disabled while its rows are away or stale, the `gglib chat <id> --remote` that does the same from a terminal, and a re-read after Load |
-| `components/` | `ModelMetadataGrid`, `ProjectorRow`, `ComponentsRow`, `SamplingProvenanceSection`, `ModelEditForm`, `TagChips`, `TagAddInput`, `ServeModal`, `JinjaModeField`, `ReasoningSupport`, `DeleteModal`, `InspectorFooter` |
-| `hooks/` | `useEditMode`, `useModelDetail`, `useSamplingExplanation`, `useServeModal`, `useDeleteModal`, `useServerActions`, `useRetagModel` |
+| `components/` | `ModelMetadataGrid`, `ProjectorRow`, `ComponentsRow`, `SamplingProvenanceSection`, `ModelEditForm`, `TagChips`, `TagAddInput`, `ServeModal`, `ImageServeDetails`, `JinjaModeField`, `ReasoningSupport`, `DeleteModal`, `InspectorFooter` |
+| `hooks/` | `useEditMode`, `useModelDetail`, `useSamplingExplanation`, `useServeModal`, `useDeleteModal`, `useServerActions`, `useRetagModel`, `useSdStatus` |
 
 <!-- module-docs:end -->

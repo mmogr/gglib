@@ -14,6 +14,7 @@ import type {
   BuildEvent,
   Diagnostics,
   ModelRecommendation,
+  ImageRuntimeStatus,
 } from '../../../types/setup';
 
 /**
@@ -73,6 +74,41 @@ export async function checkLlamaUpdates(): Promise<LlamaUpdateCheck> {
 /** Remove llama.cpp: source checkout, binaries and build config. */
 export async function uninstallLlama(): Promise<LlamaUninstallOutcome> {
   return post<LlamaUninstallOutcome>('/api/config/system/uninstall-llama');
+}
+
+/**
+ * Install stable-diffusion.cpp's pre-built `sd-server`, streaming install
+ * progress: the same events, under the same SSE names, as
+ * `streamLlamaInstall`, so `InstallProgress` draws both.
+ *
+ * @returns A function that stops reading. The install continues on the daemon.
+ */
+export function streamSdInstall(
+  onEvent: (event: LlamaProgressEvent) => void,
+  onError: (error: string) => void,
+  onClose?: () => void,
+): () => void {
+  return streamSse('/api/config/system/install-sd', {
+    onFrame: (frame) => {
+      const event = parseFrame<LlamaProgressEvent>(frame);
+      if (event) onEvent(event);
+    },
+    onClose,
+    onError,
+  });
+}
+
+/**
+ * What image runtime is installed, what an install would download and what
+ * to say about it, and the image model running on it. Local; safe on mount.
+ */
+export async function getSdStatus(): Promise<ImageRuntimeStatus> {
+  return get<ImageRuntimeStatus>('/api/config/system/sd-status');
+}
+
+/** Remove the image runtime, `.sd/` whole. Refused (409) while an image model runs. */
+export async function uninstallSd(): Promise<LlamaUninstallOutcome> {
+  return post<LlamaUninstallOutcome>('/api/config/system/uninstall-sd');
 }
 
 /**

@@ -36,7 +36,7 @@ Axum backend (HTTP response) → typed result
 | `proxy.ts` | OpenAI-compatible proxy management |
 | `remote.ts` | The remote tunnel (ADR 0012): enable/disable/status here, join/disconnect/kill for another machine |
 | `models/` | Local and HuggingFace model APIs |
-| `setup.ts` | First-run setup and dependency probes |
+| `setup.ts` | First-run setup and dependency probes; the llama.cpp and image runtime installs, status and removal |
 | `sse.ts` | `streamSse`: a POST whose reply is an event stream (llama install and update), handed to callbacks frame by frame |
 | `runs.ts` | Runs (`/api/runs`): start an agent run under a minted id, list, cancel, and read its events from any point |
 | `farChats.ts` | The far machine's chats and runs (`/api/remote/chats`, `/api/remote/runs`), forwarded by this machine's daemon: list, open, add a turn of text and images (by the ids the far store answered) that says the chat's Thinking choice only when it changes it, and read, list and cancel its runs |

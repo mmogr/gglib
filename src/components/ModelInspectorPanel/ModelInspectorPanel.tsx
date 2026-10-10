@@ -58,6 +58,8 @@ interface ModelInspectorPanelProps {
   downloadQueue?: QueueSnapshot | null;
   onRegisterServeModalOpener?: (opener: () => void) => void;
   onBenchmark?: (modelId: number) => void;
+  /** Open Settings on its System tab, where the image runtime is installed. */
+  onOpenSystemSettings?: () => void;
 }
 
 const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
@@ -76,6 +78,7 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
   downloadQueue,
   onRegisterServeModalOpener,
   onBenchmark,
+  onOpenSystemSettings,
 }) => {
   const { settings } = useSettings();
   const { showToast } = useToastContext();
@@ -313,6 +316,15 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
           onInferenceParamsChange={serveModal.setInferenceParams}
           onClose={serveModal.closeServeModal}
           onStart={serverActions.handleStartServer}
+          components={detail.modelDetail?.components}
+          onOpenSystemSettings={
+            onOpenSystemSettings
+              ? () => {
+                  serveModal.closeServeModal();
+                  onOpenSystemSettings();
+                }
+              : undefined
+          }
         />
       )}
 

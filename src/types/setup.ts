@@ -82,6 +82,15 @@ export const INSTALL_PHASE_LABELS: Record<InstallPhase, string> = {
 };
 
 /**
+ * How a phase reads for an install of `product`: the download names it, as
+ * `InstallPhase::label_for` does in Rust; every other phase reads the same.
+ * For `llama.cpp` it is {@link INSTALL_PHASE_LABELS}.
+ */
+export function installPhaseLabel(phase: InstallPhase, product = 'llama.cpp'): string {
+  return phase === 'download' ? `Downloading ${product} binaries…` : INSTALL_PHASE_LABELS[phase];
+}
+
+/**
  * The image runtime (stable-diffusion.cpp's `sd-server`) as Settings shows
  * it: what is installed, the pre-built build an install would download and
  * what to say about it, and the image model running on it.

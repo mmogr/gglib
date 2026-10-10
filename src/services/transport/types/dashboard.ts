@@ -143,6 +143,7 @@ export type { PublishedOverrideState } from '../../../types/generated/PublishedO
 
 export type {
   AdmissionSnapshot,
+  GenerationSnapshot,
   QueuedModelSnapshot,
   ResidentSlotSnapshot,
   SecondarySlotState,

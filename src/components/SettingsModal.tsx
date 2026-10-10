@@ -19,7 +19,7 @@ import { Button } from "./ui/Button";
 import { Tabs, type TabItem } from "./ui/Tabs";
 import type { McpServerInfo } from '../services/transport';
 
-type SettingsTab = "general" | "profiles" | "mcp" | "system";
+export type SettingsTab = "general" | "profiles" | "mcp" | "system";
 
 const SETTINGS_TABS: TabItem<SettingsTab>[] = [
   { id: "general", label: "General" },
@@ -31,6 +31,8 @@ const SETTINGS_TABS: TabItem<SettingsTab>[] = [
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** The tab it opens on; General when absent. */
+  initialTab?: SettingsTab;
 }
 
 /** What the form compares against before any settings have loaded. */
@@ -42,7 +44,7 @@ const sourceLabels: Record<string, string> = {
   default: "Default (~/.local/share/llama_models)",
 };
 
-export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose, initialTab }) => {
   const { info, loading: loadingDir, saving: savingDir, error: dirError, refresh: refreshDir, save: saveDir } = useModelsDirectory();
   const { settings, loading: loadingSettings, saving: savingSettings, error: settingsError, refresh: refreshSettings, save: saveSettings } = useSettings();
   const { models, loading: loadingModels } = useModels();
@@ -69,7 +71,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [inferenceDefaultsInput, setInferenceDefaultsInput] = useState<SparseInferenceConfig | undefined>(undefined);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? "general");
   
   // MCP Server modal state
   const [showAddMcpModal, setShowAddMcpModal] = useState(false);

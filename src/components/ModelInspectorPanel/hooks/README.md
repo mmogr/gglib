@@ -13,6 +13,7 @@ Custom hooks encapsulating stateful logic for the model inspector panel.
 | `useServeModal.ts` | Serve modal open/close state and all serve option values |
 | `useDeleteModal.ts` | Delete confirmation modal state |
 | `useServerActions.ts` | Orchestrates `serveModel()` / `stopServer()` calls with error boundaries |
+| `useSdStatus.ts` | The image runtime's status, read once for an image model's serve modal |
 | `useInspectorModals.ts` | Modal state the panel opens reactively, chiefly the llama-server install prompt after a failed start |
 | `useSamplingExplanation.ts` | Fetches the resolved sampling explanation for the selected model |
 | `useHfDownload.ts` | Queues a HuggingFace preview's download; the button is off when the queue snapshot says `full` |
