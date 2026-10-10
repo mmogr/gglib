@@ -18,6 +18,9 @@
 //!
 //! `tools/call` results are returned as `text/event-stream` (SSE).
 //! All other methods return `application/json`. Both are valid per spec.
+//!
+//! One tool is the gateway's own and no server's: `builtin__generate_image`
+//! ([`super::drawing`]), in the index and invocable only behind its switch.
 
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -100,8 +103,8 @@ pub(crate) async fn post_mcp(
     match request.method.as_str() {
         "initialize" => handle_initialize(&state.sessions, id).await,
         "ping" => handle_ping(id),
-        "tools/list" => handle_meta_tools_list(&state.mcp, id).await,
-        "tools/call" => handle_meta_tools_call(&state.mcp, id, request.params).await,
+        "tools/list" => handle_meta_tools_list(&state, id).await,
+        "tools/call" => handle_meta_tools_call(&state, id, request.params).await,
         _ => json_rpc_error_response(
             StatusCode::OK,
             id,
@@ -181,8 +184,8 @@ fn handle_ping(id: Value) -> Response {
 /// External clients (VS Code Copilot, `OpenWebUI`, etc.) receive exactly three
 /// stable tool specs rather than the full registry. This keeps the baseline
 /// context cost constant regardless of how many MCP servers are running.
-async fn handle_meta_tools_list(mcp: &gglib_mcp::McpService, id: Value) -> Response {
-    let index = super::meta_tools::build_tool_index(mcp).await;
+async fn handle_meta_tools_list(state: &AppState, id: Value) -> Response {
+    let index = tool_index(state).await;
     let specs = super::meta_tools::meta_tools_list(&index);
     let result = ToolsListResult { tools: specs };
     Json(JsonRpcResponse::success(
@@ -192,17 +195,20 @@ async fn handle_meta_tools_list(mcp: &gglib_mcp::McpService, id: Value) -> Respo
     .into_response()
 }
 
+/// The index of this moment: every running server's tools, and the drawing
+/// tool while it is offered ([`super::drawing::offered`]).
+async fn tool_index(state: &AppState) -> gglib_core::ToolIndex {
+    let drawing = super::drawing::offered(state).await.is_ok();
+    super::meta_tools::build_tool_index(&state.mcp, drawing).await
+}
+
 /// Handle `tools/call` — dispatch to one of the three meta-tools.
 ///
 /// Routing is strict: only `search_tools`, `get_tool_schema`, and
 /// `invoke_tool` are accepted. Any other name — including direct calls to
 /// raw `"server__tool"` identifiers — returns `METHOD_NOT_FOUND`. There is
 /// no legacy passthrough.
-async fn handle_meta_tools_call(
-    mcp: &gglib_mcp::McpService,
-    id: Value,
-    params: Option<Value>,
-) -> Response {
+async fn handle_meta_tools_call(state: &AppState, id: Value, params: Option<Value>) -> Response {
     let params_val = match params {
         Some(v) => v,
         None => {
@@ -214,6 +220,7 @@ async fn handle_meta_tools_call(
         }
     };
 
+    let mcp = &state.mcp;
     let name = match params_val.get("name").and_then(|v| v.as_str()) {
         Some(n) => n.to_string(),
         None => {
@@ -238,7 +245,7 @@ async fn handle_meta_tools_call(
                 .get("query")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let index = super::meta_tools::build_tool_index(mcp).await;
+            let index = tool_index(state).await;
             let summaries = index.search(query);
             let text = serde_json::to_string(&summaries).unwrap_or_default();
             sse_tool_result(id, CallToolResult::text(text))
@@ -256,7 +263,7 @@ async fn handle_meta_tools_call(
                     );
                 }
             };
-            let index = super::meta_tools::build_tool_index(mcp).await;
+            let index = tool_index(state).await;
             match index.get_schema(&tool_id) {
                 Some(schema) => {
                     let text = serde_json::to_string(schema).unwrap_or_default();
@@ -287,6 +294,12 @@ async fn handle_meta_tools_call(
                     );
                 }
             };
+
+            // The gateway's own tool, behind its switch; never a server's.
+            if tool_id == super::drawing::TOOL_ID {
+                let token = super::drawing::progress_token(&params_val);
+                return super::drawing::call(state, id, meta_args.get("arguments"), token).await;
+            }
 
             let (server_id, bare_name) = match super::meta_tools::resolve_tool_name(mcp, &tool_id)
                 .await

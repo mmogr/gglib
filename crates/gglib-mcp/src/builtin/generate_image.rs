@@ -174,7 +174,18 @@ pub(crate) fn drew_sentence(batch: &ImageBatch, stored: usize, refusals: &[Strin
 
 /// The request `arguments` ask for, or what is wrong with them, in words the
 /// model can act on.
-pub(crate) fn request_of(arguments: &Value) -> Result<ImageRequest, String> {
+///
+/// A prompt, and optionally `size` (`WIDTHxHEIGHT`), `n` (1 to
+/// [`MAX_IMAGES_PER_REQUEST`]) and `seed`. These are the tool's one set of
+/// argument rules, for an agent run's call and for the `/mcp` gateway's
+/// (exported as `gglib_mcp::image_request_of`). Arguments that are not an
+/// object have no prompt.
+///
+/// # Errors
+///
+/// The sentence to hand the calling model: no prompt, a `size` that is not
+/// `WIDTHxHEIGHT`, or an `n` out of range.
+pub fn request_of(arguments: &Value) -> Result<ImageRequest, String> {
     let prompt = arguments
         .get("prompt")
         .and_then(Value::as_str)

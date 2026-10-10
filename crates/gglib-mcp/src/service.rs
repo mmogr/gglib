@@ -12,6 +12,11 @@ use gglib_core::{
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// The server name gglib keeps for itself: the proxy's tool gateway lists
+/// gglib's own tools as `builtin__<tool>`, beside every server's
+/// `<server>__<tool>`.
+const RESERVED_SERVER_NAME: &str = "builtin";
+
 /// Server info with runtime status and tools.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct McpServerInfo {
@@ -441,6 +446,18 @@ impl McpService {
     // Configuration CRUD
     // =========================================================================
 
+    /// Refuse the name gglib keeps for itself.
+    ///
+    /// The proxy's tool gateway names every tool `<server>__<tool>` and lists
+    /// gglib's own under [`RESERVED_SERVER_NAME`], so a server of that name
+    /// would have its tools split to the wrong owner.
+    fn refuse_reserved_name(name: &str) -> Result<(), McpServiceError> {
+        if name == RESERVED_SERVER_NAME {
+            return Err(McpServiceError::NameReserved(name.to_string()));
+        }
+        Ok(())
+    }
+
     /// Refuse `name` when a server already has it.
     ///
     /// The rule that names are unique lives here and not in the schema: a
@@ -457,10 +474,12 @@ impl McpService {
     /// Add a new MCP server configuration.
     ///
     /// Refused with [`McpServiceError::SseNotSupported`] when it is an SSE
-    /// server, and with [`McpServiceError::NameTaken`] when a server already
-    /// has the name.
+    /// server, with [`McpServiceError::NameReserved`] when it is named
+    /// `builtin`, and with [`McpServiceError::NameTaken`] when a server
+    /// already has the name.
     pub async fn add_server(&self, new_server: NewMcpServer) -> Result<McpServer, McpServiceError> {
         Self::refuse_unsupported(new_server.server_type)?;
+        Self::refuse_reserved_name(&new_server.name)?;
 
         let _naming = self.naming.lock().await;
         self.refuse_taken_name(&new_server.name).await?;
@@ -508,8 +527,10 @@ impl McpService {
     /// An SSE server is refused with [`McpServiceError::SseNotSupported`],
     /// one that is stored as SSE as much as one being changed to it. A rename
     /// to a name another server has is refused with
-    /// [`McpServiceError::NameTaken`]. Both refuse before anything is stopped
-    /// or written. A server keeps the name it has, even one it shares.
+    /// [`McpServiceError::NameTaken`], and one to `builtin` with
+    /// [`McpServiceError::NameReserved`]. All refuse before anything is
+    /// stopped or written. A server keeps the name it has, even one it
+    /// shares, and even `builtin` when it was stored before that was kept.
     pub async fn update_server(&self, mut server: McpServer) -> Result<(), McpServiceError> {
         Self::refuse_unsupported(server.server_type)?;
 
@@ -517,6 +538,7 @@ impl McpService {
 
         let _naming = self.naming.lock().await;
         if self.repository.get_by_id(id).await?.name != server.name {
+            Self::refuse_reserved_name(&server.name)?;
             self.refuse_taken_name(&server.name).await?;
         }
 
