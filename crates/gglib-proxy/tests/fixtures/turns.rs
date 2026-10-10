@@ -19,6 +19,8 @@ pub(crate) struct FakeTurns {
     pub(crate) started: Mutex<Vec<(String, String, HubTurn)>>,
     /// Refuse every turn with this, when set.
     pub(crate) fail: Mutex<Option<TurnRefused>>,
+    /// Every chat run with builtins, as `(device, id, body, draw)`.
+    pub(crate) chats: Mutex<Vec<(String, String, serde_json::Value, bool)>>,
 }
 
 #[async_trait]
@@ -36,6 +38,30 @@ impl AgentRunStarter for FakeTurns {
         info.kind = RunKind::Agent;
         info.device = Some(device.to_owned());
         info.conversation_id = Some(turn.conversation_id);
+        Ok(Created {
+            info,
+            created: true,
+        })
+    }
+
+    async fn start_chat(
+        &self,
+        device: &str,
+        id: &str,
+        body: serde_json::Value,
+        draw: bool,
+    ) -> Result<Created, TurnRefused> {
+        self.chats
+            .lock()
+            .unwrap()
+            .push((device.to_owned(), id.to_owned(), body, draw));
+        let fail = self.fail.lock().unwrap().clone();
+        if let Some(refusal) = fail {
+            return Err(refusal);
+        }
+        let mut info = info(id);
+        info.device = Some(device.to_owned());
+        info.frames = gglib_core::domain::runs::RunFrames::Agent;
         Ok(Created {
             info,
             created: true,

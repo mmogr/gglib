@@ -198,7 +198,9 @@ pub(super) fn ready(prepared: Prepared) -> LatePrepare {
     Box::new(move |_| Box::pin(async move { Ok(prepared) }))
 }
 
-/// Start a device's turn: reserve `id` in `scope` for a run on `model`, and
+/// Start a device's turn: reserve `id` in `scope` for a run of `kind` (an
+/// agent run for a turn on a hub chat, a chat run for a chat the device
+/// keeps itself; either logs the agent loop's events) on `model`, and
 /// only then, as the run's own work, prepare its loop (`late`), hold its
 /// model, write its rows ([`begin_writes`]) and run it. The caller's `PUT`
 /// is answered as soon as the run is reserved.
@@ -215,13 +217,13 @@ pub(super) fn launch_turn(
     state: &AppState,
     id: &str,
     scope: RunScope,
-    model: String,
+    (kind, model): (RunKind, String),
     transcript: Transcript,
     late: LatePrepare,
     permit: OwnedSemaphorePermit,
 ) -> Result<Created, HttpError> {
     let spec = RunSpec {
-        kind: RunKind::Agent,
+        kind,
         model: Some(model),
         conversation_id: transcript.conversation_id,
     };
@@ -233,7 +235,8 @@ pub(super) fn launch_turn(
                 created: false,
             });
         }
-        Reservation::New(reserved) => reserved,
+        // Whatever its kind, this run logs the agent loop's events.
+        Reservation::New(reserved) => reserved.agent_frames(),
     };
     let times = FrameTimes::new();
     // Set once the turn's writes have begun: only then is there a reply to save.

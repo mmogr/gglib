@@ -11,7 +11,7 @@ crates/gglib-app-services/src/models_tests.rs 894
 crates/gglib-app-services/src/models_upgrade_tests.rs 370
 crates/gglib-app-services/src/proxy.rs 421
 crates/gglib-app-services/src/remote/far_proxy.rs 309
-crates/gglib-app-services/src/runs/cell.rs 361
+crates/gglib-app-services/src/runs/cell.rs 373
 crates/gglib-app-services/src/sampling_explain.rs 444
 crates/gglib-app-services/src/sampling_explain_tests.rs 731
 crates/gglib-app-services/src/servers.rs 820
@@ -23,9 +23,9 @@ crates/gglib-app-services/src/test_support.rs 360
 crates/gglib-app-services/src/types.rs 531
 crates/gglib-app-services/src/types_model_dto_tests.rs 311
 crates/gglib-axum/src/error.rs 326
-crates/gglib-axum/src/handlers/agent/hub_turn.rs 352
+crates/gglib-axum/src/handlers/agent/hub_turn.rs 372
 crates/gglib-axum/src/handlers/agent/hub_turn_plan_tests.rs 311
-crates/gglib-axum/src/handlers/agent/launch.rs 347
+crates/gglib-axum/src/handlers/agent/launch.rs 350
 crates/gglib-axum/src/handlers/agent/run_fixture.rs 314
 crates/gglib-axum/src/routes.rs 461
 crates/gglib-axum/tests/integration_routes.rs 1027
@@ -58,6 +58,7 @@ crates/gglib-core/src/domain/admission.rs 367
 crates/gglib-core/src/domain/agent/config.rs 744
 crates/gglib-core/src/domain/agent/events.rs 383
 crates/gglib-core/src/domain/agent/loop_detection/tests.rs 414
+crates/gglib-core/src/domain/agent/openai_history.rs 301
 crates/gglib-core/src/domain/agent/replay_tests.rs 349
 crates/gglib-core/src/domain/benchmark/agentic.rs 1100
 crates/gglib-core/src/domain/benchmark/agentic_tests.rs 864
@@ -79,7 +80,7 @@ crates/gglib-core/src/domain/model_sampling.rs 674
 crates/gglib-core/src/domain/query.rs 408
 crates/gglib-core/src/domain/recommendation.rs 381
 crates/gglib-core/src/domain/residency.rs 484
-crates/gglib-core/src/domain/runs/wire_tests.rs 302
+crates/gglib-core/src/domain/runs/wire_tests.rs 306
 crates/gglib-core/src/domain/runtime_capabilities.rs 408
 crates/gglib-core/src/download/completion.rs 432
 crates/gglib-core/src/download/rate.rs 628
@@ -173,6 +174,7 @@ crates/gglib-proxy/tests/integration_loop_guard.rs 376
 crates/gglib-proxy/tests/integration_mcp_gateway.rs 469
 crates/gglib-proxy/tests/integration_proxy_pipeline.rs 644
 crates/gglib-proxy/tests/integration_slot_roundtrip.rs 593
+crates/gglib-proxy/tests/integration_turns.rs 304
 crates/gglib-runtime/src/binary_install/install_tests.rs 381
 crates/gglib-runtime/src/command.rs 692
 crates/gglib-runtime/src/launch_narration.rs 775

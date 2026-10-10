@@ -24,6 +24,7 @@ fn ended() -> RunInfo {
         conversation_id: None,
         last_seq: 2,
         error: None,
+        frames: gglib_core::domain::runs::RunFrames::Openai,
     }
 }
 

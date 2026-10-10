@@ -72,12 +72,30 @@ pub(crate) struct PutQuery {
     /// `agent` adds a turn to a hub chat; absent, a chat run.
     #[serde(default)]
     kind: Option<RunKind>,
+    /// `builtin` runs a chat run through the agent loop with gglib's
+    /// builtins, for a chat the device keeps itself; absent, a plain chat
+    /// run, recorded as it always was.
+    #[serde(default)]
+    tools: Option<Tools>,
+    /// With `tools=builtin`: the message was sent with Draw pressed, so
+    /// the image tool is offered. Absent or `false`, it is not. Refused
+    /// with `kind=agent`, whose turn says `draw` in its body.
+    #[serde(default)]
+    draw: bool,
+}
+
+/// What `?tools=` may say.
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum Tools {
+    Builtin,
 }
 
 /// `PUT /v1/runs/{id}`: start a chat run with the body as its request, or
 /// answer with the caller's run that already has the id. 201 new, 200
-/// existing. With `?kind=agent`, a device's turn on a hub chat: see
-/// [`super::turn`].
+/// existing. With `?kind=agent`, a device's turn on a hub chat, and with
+/// `?tools=builtin` a chat run through the agent loop with gglib's
+/// builtins: see [`super::turn`].
 pub(crate) async fn put_run(
     State(state): State<AppState>,
     Caller(scope): Caller,
@@ -86,7 +104,9 @@ pub(crate) async fn put_run(
     body: Result<Json<Value>, JsonRejection>,
 ) -> Answer {
     let Ok(Query(query)) = query else {
-        return Err(invalid("`kind` is `chat` or `agent`"));
+        return Err(invalid(
+            "`kind` is `chat` or `agent`, `tools` is `builtin`, and `draw` is `true` or `false`",
+        ));
     };
     let body = match body {
         Ok(Json(body)) => body,
@@ -99,7 +119,22 @@ pub(crate) async fn put_run(
         }
     };
     if query.kind == Some(RunKind::Agent) {
+        // Never dropped in silence: a turn that said Draw here would run
+        // and draw nothing.
+        if query.draw {
+            return Err(invalid(
+                "an agent run says `draw` in its body, `\"draw\": true`, not in the query",
+            ));
+        }
         return super::turn::put(&state, scope, &id, body).await;
+    }
+    if query.tools == Some(Tools::Builtin) {
+        return super::turn::put_chat(&state, scope, &id, body, query.draw).await;
+    }
+    if query.draw {
+        return Err(invalid(
+            "`draw` goes with `tools=builtin`: a plain chat run calls no tool",
+        ));
     }
     let runs = runs(&state).ok_or_else(unavailable)?;
     let created = runs.create(scope, &id, body).map_err(|e| refused(&e))?;

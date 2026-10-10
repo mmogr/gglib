@@ -6,6 +6,7 @@ mod limits;
 pub(crate) mod loop_detection;
 pub(crate) mod messages;
 mod messages_serde;
+mod openai_history;
 mod replay;
 pub(crate) mod stagnation;
 pub mod tool_display;
@@ -28,6 +29,10 @@ pub use loop_detection::{
     BatchRecord, LoopDetector, RepeatOutcome, batch_signature, is_observation_batch,
 };
 pub use messages::{AgentMessage, AssistantContent, IMAGE_CHARGE_CHARS};
+pub use openai_history::{
+    HistoryError, OpenAiImage, OpenAiTurn, inline_images, into_agent_messages,
+    parse_openai_messages,
+};
 pub use replay::{
     INCOMPLETE_KEY, MADE_KEYS, MadeKeys, THINKING_DURATION_KEY, THINKING_KEY, UNFINISHED_TOOL_CALL,
     rows_from_frames, rows_from_timed_frames,

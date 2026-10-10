@@ -178,6 +178,17 @@ The chat's `no_tools` does not stop it, since the button is the person's
 choice for that message, and a hub that cannot draw refuses the turn `400
 drawing_unavailable` before anything is written.
 
+`chat_turn` is the starter's other door, the proxy's
+`PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true]`: a chat a paired
+phone keeps itself, sent whole as an `OpenAI` request and run through the
+loop so that it can draw. Its history is read by core's
+`parse_openai_messages`, each inline image stored once as an attachment no
+chat links (swept at the first daemon start a day or more later), its model resolved and loaded as a turn's
+is, its only tool the image tool and that only with `draw`, the request's
+sampling not read except that `"reasoning_budget_tokens": 0`, a phone's
+Thinking off, runs it with a thinking budget of 0, and no row written anywhere. Its run is a chat run in
+the device's scope whose `frames` say `agent`.
+
 The run exists before its model does (`launch::launch_turn`). The `PUT`
 reads the turn, takes a slot, reserves the run and answers; finding or
 loading the model, composing the loop, holding the model and writing the

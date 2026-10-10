@@ -816,6 +816,25 @@ key is offered no image tool. A desktop that cannot draw refuses the turn,
 `GET /v1/images/drawing` first, and never sends the key to a desktop that
 answers 404 there, which would refuse a body with a key it does not know.
 
+A chat the device keeps itself can draw too. `PUT
+/v1/runs/{id}?kind=chat&tools=builtin&draw=true` takes the device's
+unchanged OpenAI chat request, whole history included, and runs it through
+the desktop's agent loop on the model it names, with the image tool offered
+for that message; without `draw=true` the loop runs with no tool. Images
+sent inline as data URLs are stored on the desktop for the run and removed
+at the first daemon start a day or more later, since no chat there links
+them. Nothing is saved to any
+chat on the desktop: the device keeps the conversation and reads the reply
+from the run. That run's listing says `"frames": "agent"`: its events are
+the agent loop's (`tool_progress`, `waiting`, `tool_call_complete` with its
+images), not OpenAI chunks, and a run without the key is read as OpenAI's.
+The request's sampling is not read, its `max_tokens` included; the desktop's
+settings for the model apply, as on a turn. Its Thinking choice is read: a
+body with `"reasoning_budget_tokens": 0`, which is how a device turns thinking
+off for a chat it keeps ([Thinking](clients.md#thinking)), runs with a thinking
+budget of `0`, and any other budget is sampling and is not read. Without `tools=builtin` a chat run is recorded exactly
+as before.
+
 Such a turn may also say the chat's Thinking choice, `"thinking": "off"` or
 `"thinking": "default"`, and says it only when the user changes it. `off`
 runs that turn with a thinking budget of `0`, and the desktop remembers it on
