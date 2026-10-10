@@ -25,6 +25,10 @@ independently readable:
   finished or not, rebuilt from the events the turn sent
 - [`repl_line`] — what one line typed at the prompt asks for: a command, or
   the next message with the images attached to it
+- [`branches`] — `/retry`, `/edit`, `/branch` and `/branches`: a change to the
+  session's saved chat, made by the chat history service as the branching
+  rules say (ADR 0017), in place or on a new branch the session goes on in;
+  a turn that answers a question already saved saves only its reply
 - [`images`]   — the images a turn carries: `--image` and the REPL's `/image`,
   each file through core's one ingest, with a receipt line on stderr; and,
   when a session starts, the daemon's check before a run

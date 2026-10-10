@@ -1,4 +1,4 @@
-//! Tests for [`super`]: the Model column of `gglib chat history`.
+//! Tests for [`super`]: the Model and Branched columns of `gglib chat history`.
 
 use gglib_core::domain::ModelRef;
 
@@ -80,4 +80,11 @@ fn a_long_name_is_shortened_and_its_id_and_machine_are_not() {
         "{label}"
     );
     assert!(label.starts_with("Qwen3"), "{label}");
+}
+
+/// A branch names the chat it was made from; a chat that is no branch, nothing.
+#[test]
+fn a_branch_names_the_chat_it_was_made_from() {
+    assert_eq!(branched(Some(12)), "from #12");
+    assert_eq!(branched(None), "");
 }

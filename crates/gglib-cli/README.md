@@ -94,8 +94,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `question <text>` | Ask a question (with optional piped context) |
 | `question <text>` | Ask a question; filesystem tools are on unless `--no-tools` |
 | `question --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |
-| `chat history` | List past conversations with message counts |
+| `chat history` | List past conversations with message counts, and the chat each branch was made from |
 | `attachment save <id> [path] [--force]` | Write a stored image, such as one a tool made, to a file; `<id>` is the whole id or at least the 8 characters a chat's marker shows; an existing file is replaced only with `--force` |
+| `/retry`, `/edit <text>`, `/branch`, `/branches` (in a chat) | Answer the last question again, ask it again as `<text>`, copy the chat into a new branch, or list the chat's branches; see [Branches](#branches) |
 | `proxy` | Start the OpenAI-compatible proxy (context comes from settings `default_context_size`, or is sized per launch when unset) |
 | `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, prompt-cache health and reuse, and request history |
 | `proxy trips [--since DAYS]` | The loop guard's log from this machine's database, daemon or not: requests scanned per UTC day, model, version and mode, and the ones it noted or refused |
@@ -253,6 +254,36 @@ You: what does the stack trace say?
   `./3f9a2c1e.png` (or `.jpg`); a path names the file or the directory. The
   start of an id that two images share is refused, as is one no image has, and
   an existing file is replaced only with `--force`.
+
+### Branches
+
+A saved reply is never rewritten (ADR 0017). Inside a chat, a change that
+would discard or alter one is made on a new branch of the chat: a copy as far
+as the change, which the session goes on in. The chat it was made on is kept
+as it was, and the web page and ggchat show both.
+
+- `/retry` answers the last question again. A reply already saved stays where
+  it is, and the new one is written on a branch; a question nothing answers
+  yet is answered where it is.
+- `/edit <text>` asks the last question again as `<text>`, with the images it
+  carried. While nothing answers it, it is changed in place; otherwise the
+  edit goes on a branch, and the reply with it.
+- `/branch` copies the whole chat into a new branch to go on in.
+- `/branches` lists the points where the chat's branches part, each branch by
+  its chat's id and its line, this chat's marked. `gglib chat --continue <ID>`
+  opens one, and `gglib chat history` names the chat each branch was made from.
+
+```text
+You: /retry
+Saved as a new branch, chat #14. Chat #12 is kept as it was.
+...
+You: /branches
+Branches along chat #14:
+  At the reply #31:
+    #12     Day 1: temples
+  * #14     Day 1: gardens and tea houses
+Open one with: gglib chat --continue <ID>
+```
 
 ### Rendering Modes
 

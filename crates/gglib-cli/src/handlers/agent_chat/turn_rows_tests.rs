@@ -156,7 +156,7 @@ async fn say(
     messages.push(user(said));
     let turn = std::mem::take(messages);
     let saved_to = Some(conversation);
-    *messages = run_single_turn(&agent, turn, AgentConfig::default(), false, saved_to).await;
+    *messages = run_single_turn(&agent, turn, AgentConfig::default(), false, saved_to, true).await;
 }
 
 async fn rows(ctx: &CliContext, id: i64) -> Vec<Message> {
@@ -286,10 +286,59 @@ async fn a_turn_with_no_conversation_saves_nothing() {
         AgentConfig::default(),
         false,
         None,
+        true,
     );
 
     assert_eq!(after.await.len(), 1);
     assert!(rows(&ctx, canary.id).await.is_empty());
     let chats = ctx.app.chat_history().list_conversations().await;
     assert_eq!(chats.expect("read").len(), 1);
+}
+
+/// A turn that answers a question already saved, as `/retry` and `/edit`
+/// start one, saves its reply after the question and no question of its own.
+#[tokio::test]
+async fn a_turn_that_answers_a_saved_question_saves_only_its_reply() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = test_context(dir.path()).await;
+    let conversation = session(&ctx).await;
+    let mut asked = Vec::new();
+    say(
+        Scripted {
+            events: Vec::new(),
+            hands_back: None,
+        },
+        &mut asked,
+        &conversation,
+        "hi",
+    )
+    .await;
+    let agent: Arc<dyn AgentLoopPort> = Arc::new(Scripted {
+        events: vec![AgentEvent::FinalAnswer {
+            content: "Hello.".to_owned(),
+        }],
+        hands_back: Some(|given| given),
+    });
+
+    let saved_to = Some(&conversation);
+    run_single_turn(
+        &agent,
+        vec![user("hi")],
+        AgentConfig::default(),
+        false,
+        saved_to,
+        false,
+    )
+    .await;
+
+    let saved = rows(&ctx, conversation.id).await;
+    let said: Vec<(MessageRole, &str)> = saved.iter().map(|r| (r.role, &*r.content)).collect();
+    assert_eq!(said[..1], [(MessageRole::User, "hi")]);
+    assert_eq!(
+        said.iter()
+            .filter(|(role, _)| *role == MessageRole::User)
+            .count(),
+        1
+    );
+    assert_eq!(said.last(), Some(&(MessageRole::Assistant, "Hello.")));
 }

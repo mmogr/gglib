@@ -69,7 +69,7 @@ async fn continued(ctx: &CliContext, id: i64, port: u16, said: &[&str]) -> Vec<A
             images: Vec::new(),
         });
         let (config, saved_to) = (AgentConfig::default(), persistence.as_ref());
-        messages = run_single_turn(&agent, messages, config, false, saved_to).await;
+        messages = run_single_turn(&agent, messages, config, false, saved_to, true).await;
     }
     messages
 }

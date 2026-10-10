@@ -23,7 +23,9 @@ crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 361
 crates/gglib-cli/src/handlers/agent_chat/config.rs 313
 crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 374
-crates/gglib-cli/src/handlers/agent_chat/mod.rs 305
+crates/gglib-cli/src/handlers/agent_chat/mod.rs 306
+crates/gglib-cli/src/handlers/agent_chat/repl.rs 330
+crates/gglib-cli/src/handlers/agent_chat/turn_rows_tests.rs 348
 crates/gglib-cli/src/handlers/benchmark.rs 1613
 crates/gglib-cli/src/handlers/config/settings/profiles.rs 418
 crates/gglib-cli/src/handlers/model/download/interactive.rs 396
