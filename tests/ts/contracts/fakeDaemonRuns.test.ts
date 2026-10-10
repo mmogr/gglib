@@ -26,7 +26,6 @@ const REQUIRED = Object.keys(RECORDED.queued).filter((k) => STATUSES.every((s) =
 
 const request = (content: string) => ({
   conversation_id: 1,
-  replace_from: null,
   port: 9000,
   far: null,
   messages: [{ role: 'user', content }],

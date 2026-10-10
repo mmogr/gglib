@@ -51,7 +51,7 @@ export function imageStoreOf(source: ChatSource): SourceImages {
   };
 }
 
-/** The text a far turn carries: its text parts, joined. */
+/** The text a turn carries, sent to a far chat or as an edit: its text parts, joined. */
 export function turnText(content: GglibContent): string {
   if (typeof content === 'string') return content;
   return content

@@ -45,12 +45,21 @@ export function send(hook: Awaited<ReturnType<typeof mount>>, text: string): voi
   });
 }
 
-/** Edit the message after `parentId` to `text`, without waiting for the reply. */
-export function edit(hook: Awaited<ReturnType<typeof mount>>, parentId: string | null, text: string): void {
+/**
+ * Edit the message after `parentId` to `text`, without waiting for the
+ * reply; a reply's message is named by `sourceId`, as its edit composer does.
+ */
+export function edit(
+  hook: Awaited<ReturnType<typeof mount>>,
+  parentId: string | null,
+  text: string,
+  reply?: { sourceId: string },
+): void {
   act(() => {
     void hook.result.current.runtime.thread.append({
       parentId,
-      role: 'user',
+      ...(reply && { sourceId: reply.sourceId }),
+      role: reply ? 'assistant' : 'user',
       content: [{ type: 'text', text }],
     });
   });

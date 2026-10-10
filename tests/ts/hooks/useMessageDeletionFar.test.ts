@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import type { ThreadRuntime } from '@assistant-ui/react';
 
-const transport = vi.hoisted(() => ({ getMessages: vi.fn(async () => []), deleteMessage: vi.fn(async () => 1) }));
+const transport = vi.hoisted(() => ({ getThread: vi.fn(async () => ({ messages: [] })), deleteMessage: vi.fn(async () => 1) }));
 vi.mock('../../../src/services/transport', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/services/transport')>()),
   getTransport: () => transport,
@@ -38,7 +38,7 @@ function mount(readOnly: boolean) {
 
 beforeEach(() => {
   transport.deleteMessage.mockClear();
-  transport.getMessages.mockClear();
+  transport.getThread.mockClear();
 });
 
 describe('useMessageDeletion on a far chat', () => {
@@ -50,7 +50,7 @@ describe('useMessageDeletion on a far chat', () => {
 
     expect(result.current.isDeleteModalOpen).toBe(false);
     expect(transport.deleteMessage).not.toHaveBeenCalled();
-    expect(transport.getMessages).not.toHaveBeenCalled();
+    expect(transport.getThread).not.toHaveBeenCalled();
   });
 
   it('on this machine’s chat, the same two steps delete the row', async () => {
@@ -72,6 +72,6 @@ describe('useMessageDeletion on a far chat', () => {
     await act(async () => result.current.confirmDelete());
 
     expect(transport.deleteMessage).not.toHaveBeenCalled();
-    expect(transport.getMessages).not.toHaveBeenCalled();
+    expect(transport.getThread).not.toHaveBeenCalled();
   });
 });

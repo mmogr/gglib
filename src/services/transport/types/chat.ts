@@ -3,6 +3,7 @@
  * Handles conversations and messages for the chat feature.
  */
 
+import type { ChatThread } from '../../../types/generated/ChatThread';
 import type { Conversation } from '../../../types/generated/Conversation';
 import type { ConversationSettings } from '../../../types/generated/ConversationSettings';
 import type { Message } from '../../../types/generated/Message';
@@ -57,6 +58,12 @@ export interface ChatMessage {
   /** The images the message carries, in order, without their bytes; absent when it has none. */
   images?: Message['images'];
 }
+
+/**
+ * A conversation as the page reads it (`GET /api/conversations/{id}/thread`):
+ * the generated `ChatThread`, its messages as the page types a saved row.
+ */
+export type SavedThread = Omit<ChatThread, 'messages'> & { messages: ChatMessage[] };
 
 /**
  * Parameters for creating a new conversation.

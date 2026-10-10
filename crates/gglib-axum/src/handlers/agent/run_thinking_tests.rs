@@ -2,6 +2,8 @@
 //! a device's turn is read by, over a request that may carry a budget of
 //! its own, and what a run writes of it once it starts.
 
+use gglib_core::domain::agent::AgentMessage;
+use gglib_core::domain::attachment::AttachmentId;
 use gglib_core::domain::chat::{Conversation, ConversationSettings, NewConversation};
 use gglib_core::domain::{Machine, ModelRef, Thinking};
 use serde_json::{Value, json};
@@ -240,20 +242,24 @@ async fn a_run_on_a_registered_model_writes_its_model_and_the_choice_and_keeps_b
     }
 }
 
-/// A run refused after its id is reserved, here for a row to replace that
-/// is not the conversation's, has written nothing of thinking either.
+/// A run refused after its id is reserved, here for an image its message
+/// names that is not stored, has written nothing of thinking either.
 #[tokio::test]
 async fn a_run_refused_at_its_launch_remembers_nothing() {
     let (_dir, state) = state().await;
     let id = conversation(&state).await;
     let transcript = Transcript {
-        replace_from: Some(4242),
         remember: Some(Some(Thinking::Off)),
         ..saving(id)
     };
-    let refused = start(&state, "r1", transcript).await;
+    let (mut p, _) = prepared(finished_reply(), End::Finish);
+    p.messages = vec![AgentMessage::User {
+        content: "Look.".to_owned(),
+        images: vec![AttachmentId::of(b"never stored")],
+    }];
+    let refused = start_on(&state, "r1", transcript, p).await;
     assert!(
-        matches!(&refused, Err(HttpError::Coded { code, .. }) if *code == "message_not_found"),
+        matches!(&refused, Err(HttpError::Coded { code, .. }) if *code == "attachment_not_found"),
         "{refused:?}"
     );
     assert_eq!(remembered(&state, id).await, None);

@@ -18,11 +18,15 @@
  * keeps that model. Either kind of send says the chat's Thinking choice only
  * when the caller's `thinking` gives one, and calls its `accepted` once taken.
  *
+ * An edit, a regenerate, Retry and Branch from here are changes the daemon
+ * makes (`branchChanges`): one that would rewrite a saved reply is made on a
+ * new branch of the chat, which the page opens, and the chat it leaves is
+ * answered by a run that asks nothing new (`answer_saved`).
+ *
  * @module useGglibRuntime
  */
 
 import { useRef, useEffect } from 'react';
-import { agentOverridesToWire, reasoningOverridesToWire } from '../../services/agentOverrides';
 import {
   useExternalStoreRuntime,
   useExternalMessageConverter,
@@ -31,6 +35,7 @@ import {
 import type { GglibMessage, GglibContent } from '../../types/messages';
 import { mkUserMessage } from '../../types/messages';
 import { getTransport, type ChatSource } from '../../services/transport';
+import type { ChatChange } from '../../types/generated/ChatChange';
 import type { ModelRef } from '../../types/generated/ModelRef';
 import type { RunInfo } from '../../types/generated/RunInfo';
 import { DEFAULT_SYSTEM_PROMPT } from '../../constants/prompts';
@@ -39,13 +44,14 @@ import {
   type ThreadConversation,
 } from '../useChatPersistence/buildThreadMessages';
 import type { ReasoningTimingTracker } from './reasoningTiming';
-import { buildRunRequest, mintRunId, type RunRequestOptions } from './runRequest';
+import { mintRunId, runBodyFor, type RunRequestOptions } from './runRequest';
 import { imageStoreOf, runsOf, turnText } from './chatSource';
 import { useImageAttachments, type SentImage } from './imageAttachments';
 import type { Downscale } from './imagePrep';
 import { codeOf, sendRefusal } from './imageRefusals';
 import { giveDraftBack, imagesOf, unsentImage } from './turnImages';
-import { savedRowId } from './savedRows';
+import { changeAndAnswer, editOf, regenerateOf } from './branchChanges';
+import type { SavedView } from './savedRows';
 import { useRunReader, type RunReaderInputs } from './useRunReader';
 
 export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpened'> {
@@ -74,6 +80,8 @@ export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpen
    * in it has saved its reply: the conversation list is the caller's.
    */
   onConversationChanged?: (conversationId: number) => void;
+  /** A change was made on a new branch, `conversationId`, which is opened; `unanswered` says why its answer did not start. */
+  onBranched?: (conversationId: number, unanswered?: Error) => void;
   /** Tell the person why an image was not added: shown at once, as a toast. */
   onImageRefused?: (sentence: string) => void;
   /** Makes an image too large to send smaller; the browser's canvas by default. */
@@ -93,6 +101,8 @@ export interface UseGglibRuntimeReturn {
   endedRun: RunInfo | null;
   timingTracker: ReasoningTimingTracker;
   currentStreamingAssistantMessageId: string | null;
+  /** What the open chat says of its branches, and Retry, which answers the question it ends in (ADR 0017). */
+  branching: Omit<SavedView, 'messages'> & { retry: () => Promise<void> };
 }
 
 export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibRuntimeReturn {
@@ -122,26 +132,42 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
   const giveBackDraft = (content: GglibContent, attached: readonly SentImage[]) =>
     giveDraftBack(runtimeRef.current?.thread.composer, content, attached, imageStoreOf(source).blob);
 
+  // Whether a run can start, saying why not: a far model's turn needs no server here.
+  const canRun = () => {
+    if (far || selectedServerPort || pairedModel) return true;
+    onError?.(new Error('No server selected. Please serve a model first.'));
+    return false;
+  };
+
+  const target = { selectedServerPort, supportsToolCalls, far: pairedModel };
+
+  /** Start a run answering the question `cid` ends in, as saved; its id. */
+  const answer = async (cid: number) => {
+    const thinking = options.thinking?.();
+    const runId = mintRunId();
+    const body = runBodyFor(target, { conversationId: cid, messages: [], answerSaved: true, thinking: thinking?.said });
+    await getTransport().startAgentRun(runId, body);
+    thinking?.accepted();
+    if (stopAskedRef.current) await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
+    return runId;
+  };
+
+  /** Make `change` to the open chat, or answer the question it ends in (Retry). */
+  const change = async (made: ChatChange | null) => {
+    if (!canRun()) return;
+    stopAskedRef.current = false;
+    const { onConversationChanged, onBranched } = options;
+    await changeAndAnswer(made, { conversationId, reader, answer, onConversationChanged, onBranched, onError });
+  };
+
   /**
    * Send `content` after `base`: create the conversation if there is none,
-   * start the run and read it. `replaceFrom` is the saved row an edit or a
-   * regenerate replaces, with every later one; the daemon deletes them only
-   * once it accepts the run, so a refusal changes nothing. Refused here
-   * while a run is live, or while opening has not learned whether one is.
+   * start the run and read it. Refused here while a run is live, or while
+   * opening has not learned whether one is.
    */
-  const start = async (
-    base: GglibMessage[],
-    content: GglibContent,
-    attached: readonly SentImage[],
-    { replaceFrom, giveBack = true }: { replaceFrom?: number; giveBack?: boolean } = {},
-  ) => {
-    const handBack = () => giveBack && giveBackDraft(content, attached);
-    // A far model's turn has no local server to select; the daemon takes the
-    // tunnel's port and the stored key. A far chat's model is chosen there.
-    if (!far && !selectedServerPort && !pairedModel) {
-      onError?.(new Error('No server selected. Please serve a model first.'));
-      return;
-    }
+  const start = async (base: GglibMessage[], content: GglibContent, attached: readonly SentImage[]) => {
+    const handBack = () => giveBackDraft(content, attached);
+    if (!canRun()) return;
     if (far && conversationId === undefined) {
       onError?.(new Error('A chat on the other machine is started there.'));
       handBack();
@@ -185,35 +211,20 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       const asked = mkUserMessage(content, { conversationId: cid, turnId: crypto.randomUUID() });
       const history = [...base, attached.length > 0 ? { ...asked, attachments: attached } : asked];
       const thinking = options.thinking?.();
-      const request = far ? null : buildRunRequest({
-        messages: history,
-        conversationId: cid,
-        replaceFrom,
-        selectedServerPort,
-        // The limits from the Tools popover, read fresh per send. No
-        // iteration limit: for a run that names none the daemon takes the
-        // conversation's saved one, then the stored setting.
-        config: agentOverridesToWire(),
-        reasoning: reasoningOverridesToWire(),
-        thinking: thinking?.said,
-        supportsToolCalls,
-        far: pairedModel,
-      });
+      const request = far ? null : runBodyFor(target, { conversationId: cid, messages: history, thinking: thinking?.said });
       messagesRef.current = history;
       setMessages(history);
       const runId = mintRunId();
       if (request) await getTransport().startAgentRun(runId, request);
       else await getTransport().addFarTurn(cid, runId, turnText(content), attached.map((image) => image.id), thinking?.said);
       thinking?.accepted();
-      if (stopAskedRef.current) {
-        await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
-      }
+      if (stopAskedRef.current) await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
       if (!signal.aborted) await reader.follow(cid, runId, signal);
     } catch (error) {
       if (signal.aborted) return;
       reader.endReading(signal);
       // Nothing was started and nothing changed: show what is saved, and
-      // hand the text and images of a send or an edit back to the composer.
+      // hand the text and images of the send back to the composer.
       if (cid !== undefined) await reader.showSaved(cid, signal).catch(() => {});
       const refused = sendRefusal(error, far, attached.length > 0);
       // A store that lost an image: added back, it is uploaded again.
@@ -239,30 +250,18 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       await start(messagesRef.current, msg.content as GglibContent, imagesOf(msg));
     },
 
-    // Edit and resend: the run replaces the edited row and everything after
-    // it with the new message. Not on a far chat.
+    // An edit of a question or a reply. One that would rewrite a saved reply
+    // is made on a new branch. Not on a far chat.
     onEdit: far ? undefined : async (msg: AppendMessage) => {
-      const current = messagesRef.current;
-      const parent = msg.parentId === null ? -1 : current.findIndex((m) => m.id === msg.parentId);
-      if (msg.parentId !== null && parent === -1) return;
-      const rowId = savedRowId(current[parent + 1]);
-      await start(current.slice(0, parent + 1), msg.content as GglibContent, imagesOf(msg), {
-        replaceFrom: rowId ?? undefined,
-      });
+      const made = editOf(msg, messagesRef.current);
+      if (made instanceof Error) onError?.(made);
+      else await change(made);
     },
 
-    // Regenerate: the run replaces the question and its reply with the
-    // question again, so it is held once. Not on a far chat.
+    // Regenerate: the reply is answered again on a new branch. Not on a far chat.
     onReload: far ? undefined : async (parentId: string | null) => {
-      const current = messagesRef.current;
-      let at = parentId === null ? -1 : current.findIndex((m) => m.id === parentId);
-      while (at >= 0 && current[at].role !== 'user') at--;
-      if (at < 0) return;
-      const rowId = savedRowId(current[at]);
-      await start(current.slice(0, at), current[at].content as GglibContent, imagesOf(current[at]), {
-        replaceFrom: rowId ?? undefined,
-        giveBack: false,
-      });
+      const made = regenerateOf(parentId, messagesRef.current);
+      if (made) await change(made);
     },
 
     // Stop: cancel the run. Its end, and what it saved, arrive as they would.
@@ -293,6 +292,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     endedRun: reader.endedRun,
     timingTracker: reader.timingTracker,
     currentStreamingAssistantMessageId: reader.currentStreamingAssistantMessageId,
+    branching: { answerable: reader.answerable, points: reader.points, retry: () => change(null) },
   };
 }
 

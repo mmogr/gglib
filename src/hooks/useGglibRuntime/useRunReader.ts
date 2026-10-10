@@ -34,13 +34,14 @@ import type { ThreadConversation } from '../useChatPersistence/buildThreadMessag
 import { ReasoningTimingTracker } from './reasoningTiming';
 import { performanceClock } from './clock';
 import { drawRun, type RunOutcome } from './drawRun';
-import { liveRunFor, loadSavedThread } from './savedRows';
+import { liveRunFor, loadSavedThread, type SavedView } from './savedRows';
 
 const NOT_LOADED =
   'This conversation could not be loaded, so nothing can be sent from it. Open it again to retry.';
 const UNKNOWN_LIVE =
   'Nothing was sent: whether a reply is still running in this conversation could not be checked.';
 const STILL_RUNNING = 'Nothing was sent: a reply is still running in this conversation.';
+const NOTHING_BESIDE = { answerable: false, points: [] };
 
 /** What the reader reads from the caller's latest render. */
 export interface RunReaderInputs {
@@ -70,6 +71,8 @@ export function useRunReader(
     latest.current = inputs;
   });
 
+  /** What the daemon says beside the open conversation's messages. */
+  const [beside, setBeside] = useState<Omit<SavedView, 'messages'>>(NOTHING_BESIDE);
   const [isRunning, setIsRunning] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const runningRef = useRef(false);
@@ -136,10 +139,11 @@ export function useRunReader(
     const { conversation, source, onFarOpened } = latest.current;
     // A reading that was left hands nothing up: it is not the chat on screen.
     const opened = (open: HubChatOpen) => !signal.aborted && onFarOpened?.(open);
-    const thread = await loadSavedThread(cid, conversation ?? null, source, opened);
+    const { messages: thread, ...said } = await loadSavedThread(cid, conversation ?? null, source, opened);
     if (signal.aborted) return;
     messagesRef.current = thread;
     setMessages(thread);
+    setBeside(said);
   }, []);
 
   /** Read run `runId` from its first event, then show what the daemon saved. */
@@ -203,6 +207,7 @@ export function useRunReader(
         unloadedRef.current = true;
         messagesRef.current = [];
         setMessages([]);
+        setBeside(NOTHING_BESIDE);
         const reason = (error as Error).message;
         latest.current.onError?.(new Error(`${NOT_LOADED} ${reason}`));
         return;
@@ -255,6 +260,7 @@ export function useRunReader(
     if (conversationId === undefined) {
       openingRef.current = false;
       setMessages([]);
+      setBeside(NOTHING_BESIDE);
       setIsLoading(false);
       return undefined;
     }
@@ -279,6 +285,7 @@ export function useRunReader(
     messages,
     setMessages,
     messagesRef,
+    ...beside,
     isRunning,
     isLoading,
     endedRun,

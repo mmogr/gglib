@@ -159,7 +159,6 @@ export class FakeFarDaemon {
       // As the hub takes a device's turn: the history is its own record.
       const request = {
         conversation_id: Number(m[1]),
-        replace_from: null,
         messages: [{ role: 'user', content, ...(images && { images }) }],
       } as unknown as AgentRunRequest;
       return this.hub.fetch(`/api/runs/${m[2]}?kind=agent`, { method: 'PUT', body: JSON.stringify(request) });

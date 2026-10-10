@@ -7,9 +7,10 @@
 //! the same semaphore (and, for a local model, a hold on it) is kept until
 //! the run ends. Each event is logged as the route's `data:` text. With a
 //! `conversation_id`, the user's message is saved when the run is created
-//! (in place of the rows from `replace_from` on, when the request names
-//! one) and the reply when it ends, whatever the end, rebuilt from the
-//! logged events: see `transcript`.
+//! and the reply when it ends, whatever the end, rebuilt from the logged
+//! events: see `transcript`. A run that answers the question the
+//! conversation ends in (`answer_saved`) saves no message of its own and
+//! runs from the conversation's saved history.
 //!
 //! Nothing here logs or returns a frame, a request body or a tool argument:
 //! only ids, statuses and counts.
@@ -19,8 +20,7 @@ use serde_json::Value;
 use tokio::sync::OwnedSemaphorePermit;
 
 use gglib_app_services::RunLog;
-use gglib_app_services::transcript::FrameTimes;
-use gglib_core::domain::agent::AgentMessage;
+use gglib_app_services::transcript::{FrameTimes, answer_history};
 use gglib_core::domain::runs::RunError;
 use gglib_core::domain::thinking;
 use gglib_core::ports::{AgentError, Created, RunScope};
@@ -69,8 +69,8 @@ pub(super) fn with_code(error: HttpError) -> HttpError {
 /// `attachment_not_found` (400) for an image a message names, history
 /// included, that is not stored, and `request_images_too_large` (400) when
 /// they are over 16 MiB together; `agent_busy` (429) when every agent slot
-/// is taken; `message_not_found`
-/// (404) for a `replace_from` not in the conversation; `conflict` (409)
+/// is taken; `nothing_to_answer` (409) for an answer run on a conversation
+/// that does not end in a question with no reply; `conflict` (409)
 /// while the conversation has a live reply, or when it ran on another
 /// machine than the request's; and the runs' own. A refusal writes nothing.
 pub(crate) async fn create_run(
@@ -125,9 +125,10 @@ pub(crate) async fn create_run(
 ///
 /// # Errors
 ///
-/// `invalid_request` (400) for a `replace_from` with no conversation or no
-/// user's message to put there; `conversation_not_found` (404);
-/// `internal_error` when the conversation cannot be read.
+/// `invalid_request` (400) for an answer run with no conversation, or one
+/// that sends messages of its own; `conversation_not_found` (404);
+/// `nothing_to_answer` (409); `internal_error` when the conversation cannot
+/// be read.
 pub(super) async fn plan(
     state: &AppState,
     req: AgentRunRequest,
@@ -135,17 +136,15 @@ pub(super) async fn plan(
     let AgentRunRequest {
         mut chat,
         conversation_id,
-        replace_from,
+        answer_saved,
         thinking: said,
     } = req;
-    if replace_from.is_some()
-        && (conversation_id.is_none()
-            || !matches!(chat.messages.last(), Some(AgentMessage::User { .. })))
-    {
+    if answer_saved && (conversation_id.is_none() || !chat.messages.is_empty()) {
         return Err(coded(
             StatusCode::BAD_REQUEST,
             "invalid_request",
-            "replace_from needs a conversation_id and a last message that is the user's",
+            "an answer run names its conversation and sends no messages: it answers the \
+             conversation's own",
         ));
     }
     let saved = if let Some(conversation_id) = conversation_id {
@@ -168,6 +167,10 @@ pub(super) async fn plan(
                 format!("no conversation has id {conversation_id}"),
             ));
         };
+        if answer_saved {
+            let history = state.core.chat_history();
+            chat.messages = answer_history(history, conversation_id).await?;
+        }
         conversation.settings
     } else {
         None
@@ -184,7 +187,7 @@ pub(super) async fn plan(
     }
     let transcript = Transcript {
         conversation_id,
-        replace_from,
+        answer_saved,
         remember: settled.remember,
     };
     Ok((chat, transcript))

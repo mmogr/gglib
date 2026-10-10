@@ -42,7 +42,7 @@ async fn a_user_message_is_saved_with_the_images_it_names() {
     let image = state.core.attachments().ingest(&png()).await.unwrap().info;
 
     let message = user_with(vec![image.id.clone()]);
-    save_user(&state.core, conversation, None, Some(&message), None)
+    save_user(&state.core, conversation, Some(&message), None)
         .await
         .unwrap();
 
@@ -65,7 +65,7 @@ async fn a_user_message_naming_an_unknown_image_is_refused_by_code_and_not_saved
     let missing = AttachmentId::of(b"never uploaded");
 
     let message = user_with(vec![missing.clone()]);
-    let refusal = save_user(&state.core, conversation, None, Some(&message), None)
+    let refusal = save_user(&state.core, conversation, Some(&message), None)
         .await
         .unwrap_err();
 

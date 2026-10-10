@@ -110,7 +110,7 @@ const titleButton = () => screen.getByRole('button', { name: 'Generate title wit
 /** Render the page and wait for the conversation it opens on: its rows asked for, and shown. */
 async function renderPage() {
   render(<ChatPage modelName="qwen3" modelId={7} serverPort={4321} onClose={async () => {}} />, { wrapper });
-  await waitFor(() => expect(stub().getMessages).toHaveBeenCalled());
+  await waitFor(() => expect(stub().getThread).toHaveBeenCalled());
   await waitFor(() => expect(screen.queryByText('Loading messages…')).not.toBeInTheDocument());
 }
 

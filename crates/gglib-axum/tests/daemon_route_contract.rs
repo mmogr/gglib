@@ -187,6 +187,7 @@ async fn every_daemon_path_the_cli_calls_is_routed() {
 /// Requests no client of the daemon sends and no document promises. A route
 /// for one reads as a feature that does not exist, so none is served.
 const WITHOUT_A_CLIENT: &[(&str, &str)] = &[
+    ("GET", "/api/conversations/1/messages"),
     ("POST", "/api/messages"),
     ("PUT", "/api/messages/1"),
     ("GET", "/api/benchmark/runs/1"),
@@ -198,6 +199,8 @@ const WITHOUT_A_CLIENT: &[(&str, &str)] = &[
 
 /// What the page does send on the paths beside those.
 const BESIDE_THEM: &[(&[&str], &str)] = &[
+    (&["GET"], "/api/conversations/1/thread"),
+    (&["POST"], "/api/conversations/1/changes"),
     (&["DELETE"], "/api/messages/1"),
     (&["GET"], "/api/benchmark/runs"),
     (&["GET"], "/api/models/1/agentic-history"),

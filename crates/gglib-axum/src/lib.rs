@@ -9,6 +9,7 @@ pub(crate) mod bootstrap;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod chat_api;
+pub(crate) mod chat_changes;
 pub(crate) mod config;
 pub(crate) mod daemon;
 pub(crate) mod dto;

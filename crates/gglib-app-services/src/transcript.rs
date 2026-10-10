@@ -1,11 +1,13 @@
 //! What a turn writes to its conversation, on every surface that runs one:
 //! the daemon's agent runs and the CLI's chat both save through here.
 //!
-//! The user's message is saved when the turn starts. When the request names
-//! a row to replace (an edit, or a regenerate), that row and every later row
-//! are deleted in the same transaction. The reply is saved when the turn
-//! ends, whatever the end, every row or none, with how long each model turn
-//! thought: from its first reasoning event to its last, as they were logged.
+//! The user's message is saved when the turn starts, after the rest; a turn
+//! that answers a question already saved saves none, and runs from the
+//! chat's own history ([`answer_history`]). A change to what is saved is
+//! never made by a turn: it is the chat history service's (ADR 0017). The
+//! reply is saved when the turn ends, whatever the end, every row or none,
+//! with how long each model turn thought: from its first reasoning event to
+//! its last, as they were logged.
 //! A Thinking choice the turn said is remembered on the conversation by
 //! [`remember_thinking`], whichever surface said it.
 //!
@@ -19,10 +21,11 @@ use std::time::Instant;
 
 use gglib_core::domain::Thinking;
 use gglib_core::domain::agent::{
-    AgentEvent, AgentMessage, MADE_KEYS, rows_from_timed_frames, to_new_message,
+    AgentEvent, AgentMessage, MADE_KEYS, rows_from_timed_frames, saved_history, to_new_message,
 };
+use gglib_core::domain::branching;
 use gglib_core::ports::ChatHistoryError;
-use gglib_core::services::ChatHistoryService;
+use gglib_core::services::{ChangeError, ChatHistoryService};
 use serde_json::{Map, Value};
 
 /// When each of a turn's frames was logged, in ms from the turn's start;
@@ -87,18 +90,16 @@ impl MadeBy {
 }
 
 /// Save the turn's last message, when it is the user's, to
-/// `conversation_id`; with `replace_from`, in place of that row and every
-/// later one, in one transaction. A paired `device`'s message says which.
+/// `conversation_id`, after the rest. A paired `device`'s message says
+/// which.
 ///
 /// # Errors
 ///
-/// [`ChatHistoryError::MessageNotFound`] for a `replace_from` not in the
-/// conversation, [`ChatHistoryError::Attachment`] for an image the message
-/// names that is not stored, and a write that failed. Nothing is saved.
+/// [`ChatHistoryError::Attachment`] for an image the message names that is
+/// not stored, and a write that failed. Nothing is saved.
 pub async fn save_user(
     history: &ChatHistoryService,
     conversation_id: i64,
-    replace_from: Option<i64>,
     last: Option<&AgentMessage>,
     device: Option<&str>,
 ) -> Result<(), ChatHistoryError> {
@@ -114,10 +115,28 @@ pub async fn save_user(
         fields.insert(MADE_KEYS.device.to_owned(), Value::from(device));
         row.metadata = Some(Value::Object(fields));
     }
-    match replace_from {
-        Some(from) => history.replace_from(from, row).await.map(|_| ()),
-        None => history.save_message(row).await.map(|_| ()),
-    }
+    history.save_message(row).await.map(|_| ())
+}
+
+/// The history a turn that answers `conversation_id`'s last question runs
+/// from: its prompt, then every saved message, as a resumed chat is sent
+/// ([`saved_history`]). The turn saves no message of its own.
+///
+/// # Errors
+///
+/// `ConversationNotFound` for no such conversation, `NothingToAnswer` when
+/// it does not end in a question with no reply, and a read that failed.
+pub async fn answer_history(
+    history: &ChatHistoryService,
+    conversation_id: i64,
+) -> Result<Vec<AgentMessage>, ChangeError> {
+    let conversation = history
+        .get_conversation(conversation_id)
+        .await?
+        .ok_or(ChatHistoryError::ConversationNotFound(conversation_id))?;
+    let rows = history.get_messages(conversation_id).await?;
+    branching::answerable(&rows)?;
+    Ok(saved_history(conversation.system_prompt.as_deref(), &rows))
 }
 
 /// Save the reply a turn logged as `frames` to `conversation_id`, once the

@@ -10,11 +10,13 @@ import { parseGeneratedTitle } from '../parseTitleResponse';
 import type { ConversationId, MessageId } from '../types/ids';
 import type {
   ConversationSummary,
-  ChatMessage,
   CreateConversationParams,
   GenerateTitleParams,
+  SavedThread,
 } from '../types/chat';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../types/chat';
+import type { ChatChange } from '../../../types/generated/ChatChange';
+import type { ChatChanged } from '../../../types/generated/ChatChanged';
 import type { ChatTitleRequest } from '../../../types/generated/ChatTitleRequest';
 import type { CreateConversationRequest } from '../../../types/generated/CreateConversationRequest';
 import type { UpdateConversationRequest } from '../../../types/generated/UpdateConversationRequest';
@@ -76,10 +78,24 @@ export async function deleteConversation(id: ConversationId): Promise<void> {
 }
 
 /**
- * Get all messages for a conversation.
+ * A conversation as the page reads it: every saved message, the branch
+ * points its family holds along them, and whether it ends in a question
+ * nothing answers (ADR 0017).
  */
-export async function getMessages(conversationId: ConversationId): Promise<ChatMessage[]> {
-  return get<ChatMessage[]>(`/api/conversations/${conversationId}/messages`);
+export async function getThread(conversationId: ConversationId): Promise<SavedThread> {
+  return get<SavedThread>(`/api/conversations/${conversationId}/thread`);
+}
+
+/**
+ * Edit, regenerate or branch a conversation. A change that would rewrite a
+ * saved reply is made on a new branch of it, which the answer names; the
+ * answer also says whether that chat is now to be answered.
+ */
+export async function changeConversation(
+  conversationId: ConversationId,
+  change: ChatChange,
+): Promise<ChatChanged> {
+  return post<ChatChanged>(`/api/conversations/${conversationId}/changes`, change);
 }
 
 /**

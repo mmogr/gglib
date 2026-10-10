@@ -181,12 +181,11 @@ describe('useGglibRuntime images', () => {
     daemon.save(1, { role: 'user', content: 'what is this?', images: daemon.images.infos([id]) });
     daemon.save(1, { role: 'assistant', content: 'a cat' });
     const hook = await mount(open);
+    const imagesIn = (cid: number) => daemon.saved(cid).map((r) => [r.content, (r.images ?? []).map((i) => i.id)]);
 
-    regenerate(hook, 'db-2');
+    regenerate(hook, 'db-1');
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
-    expect(daemon.only().request!.messages.at(-1)).toEqual({ role: 'user', content: 'what is this?', images: [id] });
-    const first = daemon.only().info.id;
-    void daemon.finish(first, 'completed', [{ role: 'assistant', content: 'a cat again' }]);
+    expect(imagesIn(100)).toEqual([['what is this?', [id]]]);
     await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
 
     const asked = hook.result.current.messages.find((m) => m.role === 'user')!;
@@ -199,8 +198,9 @@ describe('useGglibRuntime images', () => {
       });
     });
     await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(2));
-    const edit = [...daemon.runs.values()].find((r) => r.info.id !== first)!;
-    expect(edit.request!.messages.at(-1)).toEqual({ role: 'user', content: 'and the breed?', images: [id] });
+    const change = daemon.requests.filter((r) => r.url.endsWith('/changes')).at(-1)!;
+    expect(change.body).toEqual({ kind: 'edit', message_id: 1, content: 'and the breed?', images: [id] });
+    expect(imagesIn(101)).toEqual([['and the breed?', [id]]]);
   });
 
   it('reopening a chat shows its saved images, by id with their facts', async () => {

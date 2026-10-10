@@ -17,6 +17,7 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
     │           │     ├── TurnMargin (who; figures or arrival, from turnFigures)
     │           │     ├── MarkdownMessageContent
     │           │     └── ThinkingBlock / ToolUsageBadge / ToolExecutionProgress
+    │           ├── Unanswered          ← Retry, under a chat that ends in a question
     │           └── ComposerFooter      ← model, tools, context ring and Thinking switch; input, send / stop
     └── ConfirmDeleteModal        ← cascade-delete confirmation
 ```
@@ -24,6 +25,8 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
 In the page's Console view the panel draws only its head (`headOnly`), and the page puts the server beneath it; the thread and composer stay mounted, hidden.
 
 A far chat (`source="far"`, the machine this one is joined to) is read and carried on but not changed here: the head shows its title alone, and no turn is edited, regenerated or deleted. The margin names the paired device behind a turn when its row does, and says "You" only for this machine's own user turns.
+
+On this machine's chats a question and a reply can each be edited, and a reply regenerated. An edit or regenerate that would rewrite a saved reply is made on a new branch of the chat, which the page opens, saying the original is kept (ADR 0017); the panel holds no rule of when that happens.
 
 ## Key Files
 
@@ -35,7 +38,7 @@ A far chat (`source="far"`, the machine this one is joined to) is read and carri
 
 | Directory | Contents |
 |-----------|----------|
-| `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptSection`, `ChatStatusBanners`, `ComposerFooter`, `ConfirmDeleteModal`) and message rendering (`MessageBubbles`, `MarkdownMessageContent`, `ThinkingBlock`, `MessageActionsContext`) |
+| `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptSection`, `ChatStatusBanners`, `ComposerFooter`, `ConfirmDeleteModal`) and message rendering (`MessageBubbles`, `Unanswered`, `MarkdownMessageContent`, `ThinkingBlock`, `MessageActionsContext`) |
 | `context/` | `ThinkingTimingContext` — decoupled timer updates to avoid full list re-renders |
 | `hooks/` | `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration`, `useImageUrl`, `useContextReading` |
 

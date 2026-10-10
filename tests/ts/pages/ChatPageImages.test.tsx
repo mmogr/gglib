@@ -83,8 +83,8 @@ const attachButton = () => screen.getByRole('button', { name: 'Attach an image' 
 async function composerBox(): Promise<HTMLElement> {
   await waitFor(() => expect(screen.getByRole('option', { name: /Screenshots/ })).toHaveAttribute('aria-selected', 'true'));
   await screen.findByRole('heading', { name: 'Screenshots' });
-  const { getMessages } = transport.current as { getMessages: (id: number) => Promise<ChatMessage[]> };
-  await waitFor(() => expect(getMessages).toHaveBeenCalledWith(1));
+  const { getThread } = transport.current as { getThread: (id: number) => Promise<{ messages: ChatMessage[] }> };
+  await waitFor(() => expect(getThread).toHaveBeenCalledWith(1));
   await act(async () => {
     await new Promise((r) => setTimeout(r, 0));
   });

@@ -92,7 +92,7 @@ export function chatTransport(fixture: ChatFixture) {
     deleteConversation: vi.fn(async (id: number) => {
       fixture.conversations = fixture.conversations.filter((c) => c.id !== id);
     }),
-    getMessages: vi.fn(async (id: number) => fixture.rows[id] ?? []),
+    getThread: vi.fn(async (id: number) => ({ messages: fixture.rows[id] ?? [] })),
     listRuns: vi.fn(async () => fixture.runs),
     readRunEvents: (id: string, _after: number, signal: AbortSignal) =>
       framesThenWait(fixture.frames[id] ?? [], signal),

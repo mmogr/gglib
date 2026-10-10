@@ -5,11 +5,16 @@
  *
  * - `POST /api/conversations` and `DELETE /api/messages/{id}` answer with a
  *   bare number.
+ * - `GET /api/conversations/{id}/thread` answers the chat's rows, and
+ *   `answerable` when it ends in a question; it tells no branch point.
+ * - `POST /api/conversations/{id}/changes` makes a change as gglib's
+ *   branching rules say (`fakeBranches.ts`): in place, or on a new chat
+ *   holding a copy of the rows it keeps. A refusal changes nothing.
  * - `PUT /api/runs/{id}?kind=agent` answers `201` with the run `queued`, or
  *   `200` with the run that already has the id, saving nothing again. Once
  *   accepted it saves the request's last message when it is the user's; with
- *   `replace_from`, in place of that row and every later one. A refusal
- *   changes nothing.
+ *   `answer_saved`, none, and it is refused unless the chat ends in a
+ *   question. A refusal changes nothing.
  * - A run is `in_progress` from its first event. Its end (a `finish`, or a
  *   cancel) saves the reply after the call that asked for it returns, and
  *   only then does its status read as ended and its readers get the one
@@ -26,7 +31,9 @@
 
 import type { ChatMessage } from '../../../src/services/transport';
 import type { AgentRunRequest } from '../../../src/types/generated/AgentRunRequest';
+import type { ChatChange } from '../../../src/types/generated/ChatChange';
 import type { RunInfo } from '../../../src/types/generated/RunInfo';
+import { answerable, plan, REFUSED_STATUS, type PathRow } from './fakeBranches';
 import { FakeImageStore } from './fakeImageStore';
 
 export interface Recorded {
@@ -104,6 +111,39 @@ export class FakeDaemon {
   /** The rows of `conversationId`, as the thread would list them. */
   saved(conversationId: number): ChatMessage[] {
     return this.rows.filter((r) => r.conversation_id === conversationId);
+  }
+
+  /** The rows of `conversationId` as the branching rules read them. */
+  private path(conversationId: number): PathRow[] {
+    return this.saved(conversationId).map((r) => ({ ...r, images: (r.images ?? []).map((image) => image.id) }));
+  }
+
+  /** Make `change` to `cid`, as `POST /api/conversations/{id}/changes` does. */
+  private change(cid: number, change: ChatChange): Response {
+    if (!this.conversations.has(cid)) return refusal(404, 'conversation_not_found', `no conversation has id ${cid}`);
+    const busy = [...this.runs.values()].some(
+      (r) => r.info.conversation_id === cid && (r.info.status === 'queued' || r.info.status === 'in_progress'),
+    );
+    const planned = plan(this.path(cid), change, busy);
+    if ('refused' in planned) return refusal(REFUSED_STATUS[planned.refused], planned.refused, planned.refused);
+    const images = change.kind === 'edit' ? this.images.infos(change.images ?? []) : [];
+    const content = change.kind === 'edit' ? change.content : '';
+    const question = { role: 'user' as const, content, ...(images.length > 0 && { images }) };
+    const made = planned.plan;
+    if ('replace' in made) {
+      this.rows = this.rows.filter((r) => r.id !== made.replace.question);
+      this.save(cid, question);
+      return json({ conversation_id: cid, forked: false, answer: true });
+    }
+    const { through, then, answer } = made.fork;
+    const branch = this.nextConversation++;
+    this.conversations.add(branch);
+    const kept = this.saved(cid);
+    const end = through === null ? 0 : kept.findIndex((r) => r.id === through) + 1;
+    kept.slice(0, end).forEach(({ id: _id, conversation_id: _cid, created_at: _at, ...row }) => this.save(branch, row));
+    if (then === 'question') this.save(branch, question);
+    if (then === 'edited_reply') this.save(branch, { role: 'assistant', content, metadata: { edited: true } });
+    return json({ conversation_id: branch, forked: true, answer });
   }
 
   /** A run already going, started elsewhere (another tab, before a reload). */
@@ -185,8 +225,12 @@ export class FakeDaemon {
       this.conversations.add(id);
       return json(id);
     }
-    if (method === 'GET' && (m = /^\/api\/conversations\/(\d+)\/messages$/.exec(path))) {
-      return json(this.saved(Number(m[1])));
+    if (method === 'GET' && (m = /^\/api\/conversations\/(\d+)\/thread$/.exec(path))) {
+      const cid = Number(m[1]);
+      return json({ messages: this.saved(cid), ...(answerable(this.path(cid)) && { answerable: true }) });
+    }
+    if (method === 'POST' && (m = /^\/api\/conversations\/(\d+)\/changes$/.exec(path))) {
+      return this.change(Number(m[1]), body as ChatChange);
     }
     if (method === 'DELETE' && (m = /^\/api\/messages\/(\d+)$/.exec(path))) {
       const target = this.rows.find((r) => r.id === Number(m![1]));
@@ -266,13 +310,8 @@ export class FakeDaemon {
       return refusal(404, 'conversation_not_found', `no conversation has id ${cid}`);
     }
     const last = request.messages[request.messages.length - 1];
-    const from = request.replace_from;
-    if (from !== null) {
-      const target = this.rows.find((r) => r.id === from && r.conversation_id === cid);
-      if (!target) {
-        return refusal(404, 'message_not_found', `conversation ${cid} has no message ${from} to replace`);
-      }
-      this.rows = this.rows.filter((r) => r.conversation_id !== cid || r.id < from);
+    if (request.answer_saved && (cid === null || !answerable(this.path(cid)))) {
+      return refusal(409, 'nothing_to_answer', 'the conversation ends in no question to answer');
     }
     const run = this.accept(id, cid);
     run.request = request;

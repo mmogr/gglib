@@ -1,4 +1,5 @@
 src/components/Benchmark/Tune/TuneTab.tsx 306
+src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 301
 src/components/FilterPopover/FilterPopover.tsx 340
 src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 339
 src/components/McpServersPanel.tsx 459
@@ -9,7 +10,8 @@ src/components/ProxySamplingPanel.tsx 403
 src/components/SettingsModal.tsx 338
 src/components/SetupWizard/SetupWizard.tsx 704
 src/components/VerificationModal.tsx 454
-src/pages/ChatPage.tsx 389
+src/hooks/useGglibRuntime/useRunReader.ts 306
+src/pages/ChatPage.tsx 393
 src/pages/ModelControlCenterPage.tsx 315
 src/services/tools/registry.ts 358
 src/services/transport/api/client.ts 334

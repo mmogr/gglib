@@ -100,7 +100,7 @@ export function useConversationActions({
   const handleExportConversation = async () => {
     if (far || !activeConversation) return;
     try {
-      const messages = await getTransport().getMessages(activeConversation.id);
+      const { messages } = await getTransport().getThread(activeConversation.id);
       const data = { conversation: activeConversation, messages };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);

@@ -23,7 +23,8 @@ Every child of the `ChatMessagesPanel` composition root: the panel chrome around
 
 | File | Role |
 |------|------|
-| `MessageBubbles.tsx` | User/assistant/system turns as notebook rows; the reply's reasoning and tool calls behind "How this was made", and the images its tools made under its text, outside that fold and always shown; action buttons; an edit's images, each removable, and a paste into an edit taking images only where the model reads them |
+| `MessageBubbles.tsx` | User/assistant/system turns as notebook rows; the reply's reasoning and tool calls behind "How this was made", and the images its tools made under its text, outside that fold and always shown; action buttons, Edit on a question and on a reply with text; the edit composer, Send for a question and Save for a reply, with a question's images, each removable, and a paste into it taking images only where the model reads them |
+| `Unanswered.tsx` | The row under a chat that ends in a question nothing answers, with Retry, which answers it; not while a reply is being read |
 | `MessageImages.tsx` | A user turn's images, and the strip of the images a reply's tools made: each read from the chat's store by id with the page's credential as a `blob:` URL, shown small and enlarged in a dialog on a click |
 | `TurnRow.tsx` | One notebook row: margin (who, then how it was made) and body; the margin moves above the body in a narrow notebook |
 | `TurnMargin.tsx` | The margin's content: who and when, a reply's figures, a reply arriving and how far its prompt was read |

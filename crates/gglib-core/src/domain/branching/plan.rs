@@ -81,6 +81,16 @@ impl Refused {
             Self::ImagesOnReply => "invalid_request",
         }
     }
+
+    /// The HTTP status it is answered with.
+    #[must_use]
+    pub const fn http_status(&self) -> u16 {
+        match self {
+            Self::MessageNotFound(_) => 404,
+            Self::Unchanged | Self::NotAReply(_) | Self::ImagesOnReply => 400,
+            Self::NothingToAnswer => 409,
+        }
+    }
 }
 
 fn roles(path: &[Message]) -> Vec<MessageRole> {

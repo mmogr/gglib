@@ -262,14 +262,14 @@ pub(crate) struct AgentRunRequest {
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub conversation_id: Option<i64>,
 
-    /// A saved message of that conversation the user's message replaces:
-    /// once the run is accepted, it and every later message are deleted and
-    /// the user's message saved, in one transaction. An edit names the
-    /// edited message; a regenerate, the question. Absent, the user's
-    /// message is added after the rest.
-    #[serde(default)]
-    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
-    pub replace_from: Option<i64>,
+    /// Whether the run answers the conversation's last question, already
+    /// saved, rather than a message of its own: it then sends no messages,
+    /// runs from the conversation's saved history, and saves only the
+    /// reply. An edit or a regenerate leaves the chat to be answered this
+    /// way (`POST /api/conversations/{id}/changes`), and so does Retry.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
+    pub answer_saved: bool,
 
     /// The conversation's Thinking choice, said only on the run that changes
     /// it: `off` runs this turn and the conversation's later ones with a

@@ -140,7 +140,7 @@ impl<'a> Conversation<'a> {
     /// Errors are logged as warnings and swallowed: persistence must never
     /// break the interactive session.
     pub(crate) async fn save_user(&self, message: Option<&AgentMessage>) {
-        let saved = transcript::save_user(self.service, self.id, None, message, None).await;
+        let saved = transcript::save_user(self.service, self.id, message, None).await;
         if let Err(e) = saved {
             tracing::warn!("failed to persist the user's message: {e}");
         }

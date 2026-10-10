@@ -218,7 +218,7 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
     };
     let transcript = Transcript {
         conversation_id: Some(id),
-        replace_from: None,
+        answer_saved: false,
         remember: thinking.remember,
     };
     Ok(Plan {

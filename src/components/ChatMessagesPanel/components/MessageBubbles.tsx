@@ -146,6 +146,11 @@ export const AssistantMessageBubble: React.FC = () => {
               <ActionBarPrimitive.Copy className={ACTION_BTN} title="Copy message" aria-label="Copy message">
                 <Icon icon={Copy} size={14} />
               </ActionBarPrimitive.Copy>
+              {!far && contentText && !isStreaming && (
+                <ActionBarPrimitive.Edit className={ACTION_BTN} title="Edit reply" aria-label="Edit reply">
+                  <Icon icon={Pencil} size={14} />
+                </ActionBarPrimitive.Edit>
+              )}
               {!far && (
                 <ActionBarPrimitive.Reload className={ACTION_BTN} title="Regenerate reply" aria-label="Regenerate reply">
                   <Icon icon={RefreshCw} size={14} />
@@ -230,25 +235,28 @@ export const UserMessageBubble: React.FC = () => {
 export const SystemMessageBubble: React.FC = () => null;
 
 /**
- * Edit composer shown when user clicks Edit on their message, with the
- * turn's images, each of which can be removed; a paste adds one only where
- * the model takes images. assistant-ui sends an edit only when its text
+ * An edit of a turn: a question's text and images, each of which can be
+ * removed (a paste adds one only where the model takes images), asked
+ * again; or a reply's text, kept as written. An edit that would rewrite a
+ * saved reply is made on a new branch of the chat, and the chat it was made
+ * on is kept (ADR 0017). assistant-ui sends an edit only when its text
  * changed.
  */
 export const EditComposer: React.FC = () => {
   const message = useMessage();
   const imageInput = useContext(ImageInputContext);
+  const reply = message.role === 'assistant';
 
   return (
     <MessagePrimitive.Root className="group">
       <TurnRow
-        who={<TurnWho name="You" at={message.createdAt} />}
+        who={<TurnWho name={reply ? replyName(replyFacts(message)) : 'You'} at={message.createdAt} />}
         body={
           <ComposerPrimitive.Root className="flex flex-col gap-sm w-full">
-            <ComposerImages />
+            {!reply && <ComposerImages />}
             <ComposerPrimitive.Input
-              aria-label="Edit message"
-              addAttachmentOnPaste={imageInput.offered}
+              aria-label={reply ? 'Edit reply' : 'Edit message'}
+              addAttachmentOnPaste={!reply && imageInput.offered}
               className="w-full min-h-[60px] p-sm bg-background-input border border-border rounded-md text-text font-[inherit] text-base resize-y focus:outline-none focus:border-primary"
             />
             <div className="flex justify-end gap-sm">
@@ -256,7 +264,7 @@ export const EditComposer: React.FC = () => {
                 Cancel
               </ComposerPrimitive.Cancel>
               <ComposerPrimitive.Send className="py-xs px-md rounded-base text-sm cursor-pointer transition-all duration-150 bg-primary border-none text-text-inverse font-medium hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed">
-                Save & Regenerate
+                {reply ? 'Save' : 'Send'}
               </ComposerPrimitive.Send>
             </div>
           </ComposerPrimitive.Root>

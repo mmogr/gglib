@@ -63,7 +63,7 @@ When a model is served, the view transitions to a Chat layout with tab switching
   - **`ThinkingBlock.tsx`**: Collapsible "Thinking" section for reasoning models, shows live duration during streaming and final "Thought for X seconds" on completion
   - **`ConfirmDeleteModal.tsx`**: Modal dialog for confirming message deletion with cascade warning
   - AI-generated title button (✨) for auto-naming conversations via LLM
-  - **Message Editing**: Inline edit mode for user messages with Save & Regenerate
+  - **Message Editing**: Inline edit of a question (Send, asked again) or a reply (Save, kept as written); an edit that would rewrite a saved reply is made on a new branch of the chat, and Retry answers a chat that ends in a question (ADR 0017)
   - **Message Deletion**: Delete button with cascade deletion of subsequent messages
 - **`ConversationListPanel/`**: Conversation list with search and management controls
 

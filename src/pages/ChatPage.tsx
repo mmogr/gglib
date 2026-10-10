@@ -152,11 +152,14 @@ export default function ChatPage(props: ChatPageProps) {
 
   // Runtime: sends start runs the daemon owns and saves; opening a
   // conversation shows what is saved, then the run still going in it.
-  const { runtime, isLoading: messageLoading, endedRun, timingTracker, currentStreamingAssistantMessageId } = useGglibRuntime({
+  const { runtime, isLoading: messageLoading, endedRun, timingTracker, currentStreamingAssistantMessageId, branching } = useGglibRuntime({
     conversationId: activeConversationId ?? undefined,
     conversation: activeConversation,
     source,
     onConversationChanged: (id) => void syncConversations({ preferredId: id, silent: true }),
+    onBranched: (_id, unanswered) => unanswered
+      ? showToast(`Saved as a new branch, but it was not answered: ${unanswered.message}`, 'warning')
+      : showToast('Saved as a new branch. The original is kept.', 'success'),
     selectedServerPort: serverPort,
     pairedModel: paired?.far,
     onError: (error) => setChatError(error.message),
@@ -339,6 +342,7 @@ export default function ChatPage(props: ChatPageProps) {
               quantization={far ? null : quantization}
               imageInput={imageInput}
               thinking={thinking}
+              branching={far ? undefined : branching}
               headMargin={
                 <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={pairedChat || far} onClose={onClose} />
               }

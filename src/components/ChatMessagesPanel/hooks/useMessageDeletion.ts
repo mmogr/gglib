@@ -99,7 +99,7 @@ export function useMessageDeletion({
         appLogger.debug('component.chat', 'Could not find DB ID for message', { messageId: deleteTargetId });
       }
 
-      const dbMessages = await getTransport().getMessages(activeConversationId);
+      const dbMessages = (await getTransport().getThread(activeConversationId)).messages;
       threadRuntime.reset(buildThreadMessages(dbMessages, activeConversation, activeConversationId));
 
       await syncConversations({ silent: true });

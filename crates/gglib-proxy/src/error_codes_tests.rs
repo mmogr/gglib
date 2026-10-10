@@ -21,7 +21,7 @@ use super::{CODES, Kind, PUBLISHED, render};
 /// `fn`, the code's spelling there, and where the code comes from. The last
 /// four hold a `code` of another kind, which the scan cannot tell apart.
 #[rustfmt::skip]
-const RELAYS: [(&str, &str, &str, &str); 26] = [
+const RELAYS: [(&str, &str, &str, &str); 28] = [
     ("gglib-proxy/src/models.rs", "with_code", "Some(code.into())", "`with_code`'s parameter"),
     ("gglib-proxy/src/image_refusal.rs", "refuse_images", "refusal.code()", "`CannotReadImages::code`"),
     ("gglib-proxy/src/chats/attachments.rs", "refused", "code", "`AttachmentError::code`"),
@@ -42,6 +42,8 @@ const RELAYS: [(&str, &str, &str, &str); 26] = [
     ("gglib-axum/src/handlers/agent/hub_turn.rs", "refusal", "code.to_owned()", "a `Coded` refusal's"),
     ("gglib-axum/src/error.rs", "from", "e.code()", "`RunsError::code`"),
     ("gglib-axum/src/error.rs", "from", "code", "`AttachmentError::code`"),
+    ("gglib-axum/src/error.rs", "from", "code", "`ChangeError`'s, from its `coded` closure"),
+    ("gglib-axum/src/error.rs", "from", "refused.code()", "`Refused::code`"),
     ("gglib-axum/src/handlers/attachments.rs", "unfetched", "code", "an `AttachmentError`'s, from the `From` above"),
     ("gglib-axum/src/handlers/agent/image_gate.rs", "readable_by", "refusal.code()", "`CannotReadImages::code`"),
     ("gglib-cli/src/handlers/remote/pairing_tui.rs", "qr", "QrCode::new(pairing.to_uppercase()).ok()?", "a QR code, not an error's"),
