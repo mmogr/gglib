@@ -204,6 +204,14 @@ impl LlmCompletionAdapter {
     /// omits `first_turn_tool_choice`. That is the contract — one adapter
     /// serves one run, and the demand belongs to its opening turn.
     ///
+    /// With `must_call` the body demands a call of one of `tools`
+    /// (`tool_choice: "required"`) where it would leave the choice to the
+    /// model: what the loop asks of a run's first reply when its caller
+    /// demanded a tool ([`LlmCompletionPort::chat_stream_requiring_call`]).
+    /// It is written before the pipeline runs, which reads it as it reads a
+    /// client's: a dialect model gets a grammar for the call, and any other
+    /// the server's own.
+    ///
     /// # Errors
     ///
     /// When the conversation cannot be made to fit the model's context budget.
@@ -215,9 +223,13 @@ impl LlmCompletionAdapter {
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
         images: &images::ImageUrls,
+        must_call: bool,
     ) -> Result<serde_json::Value> {
         let sampling = self.sampling.as_ref();
         let mut body = body::build_chat_body(&self.model, messages, tools, sampling, images);
+        if must_call && !tools.is_empty() {
+            body["tool_choice"] = serde_json::Value::String("required".to_owned());
+        }
 
         // Written before the pipeline runs so the shaping stages read it
         // exactly as they would an external client's tool_choice — and only on
@@ -333,13 +345,34 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
     ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
+        self.send(messages, tools, false).await
+    }
+
+    async fn chat_stream_requiring_call(
+        &self,
+        messages: &[AgentMessage],
+        tools: &[ToolDefinition],
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
+        self.send(messages, tools, true).await
+    }
+}
+
+impl LlmCompletionAdapter {
+    /// One request to the model and its reply as events; with `must_call`
+    /// the request demands a tool call ([`Self::shaped_body`]).
+    async fn send(
+        &self,
+        messages: &[AgentMessage],
+        tools: &[ToolDefinition],
+        must_call: bool,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
         // Shaped once, outside the retry loop: the pipeline runs truncation and
         // logs what it trimmed, and neither should repeat per attempt. The body
         // is deterministic, so every attempt sends identical bytes.
         // Before it, each image the messages name is read from the store: a
         // refusal here (an id not stored, too many bytes) sends nothing.
         let images = images::resolve(self.attachments.as_ref(), messages).await?;
-        let body = self.shaped_body(messages, tools, &images)?;
+        let body = self.shaped_body(messages, tools, &images, must_call)?;
 
         // A send to this machine's llama-server waits for its generation
         // turn first, outside the send timer and the policy's deadline: an
@@ -385,6 +418,9 @@ impl LlmCompletionPort for LlmCompletionAdapter {
     }
 }
 
+#[cfg(test)]
+#[path = "first_call_tests.rs"]
+mod first_call_tests;
 #[cfg(test)]
 #[path = "shaping_tests.rs"]
 mod shaping_tests;

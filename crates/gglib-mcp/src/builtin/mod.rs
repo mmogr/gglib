@@ -17,7 +17,9 @@ use gglib_core::ports::{IMAGE_JOB_DEADLINE, ToolExecutorPort};
 use gglib_core::{McpTool, ToolCall, ToolDefinition, ToolResult};
 use serde_json::{Value, json};
 
-pub use generate_image::{DrawArm, DrawingTool, request_of as image_request_of};
+pub use generate_image::{
+    DrawArm, DrawingTool, NOT_ASKED as DRAW_NOT_ASKED, request_of as image_request_of,
+};
 
 /// Prefix applied to all tool names produced by this executor.
 pub(crate) const BUILTIN_PREFIX: &str = "builtin:";

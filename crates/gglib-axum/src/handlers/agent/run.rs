@@ -266,7 +266,12 @@ pub(super) async fn work(
 /// The error a failed loop ends its run with: fixed text, since the loop's
 /// own message can quote the model or a tool. The reason in full is the
 /// run's last `error` event.
-fn run_error(error: &AgentError) -> RunError {
+///
+/// A first reply that had to call a tool and called none is the one error
+/// that carries its words: they are the composer's, fixed, and only a run
+/// sent with Draw is held to a first call, so its code is the one a picture
+/// that was not drawn has.
+pub(super) fn run_error(error: &AgentError) -> RunError {
     let (code, message) = match error {
         AgentError::MaxIterationsReached(_) => (
             "max_iterations",
@@ -284,6 +289,7 @@ fn run_error(error: &AgentError) -> RunError {
             "stagnation_detected",
             "The agent kept giving the same reply, so it was stopped.",
         ),
+        AgentError::FirstCallMissing { message } => ("image_generation_failed", message.as_str()),
         AgentError::Internal(_) => (
             "agent_error",
             "The agent loop failed; the reply's last event says why.",

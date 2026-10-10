@@ -42,7 +42,7 @@ interface ComposerFooterProps {
 
 const THINKING_ON = 'Thinking is on for this chat. Click to switch it off from the next message.';
 const THINKING_OFF = 'Thinking is off for this chat. Click to switch it back on from the next message.';
-const DRAW_ARMED = 'The next message may draw an image. Click to send it without drawing.';
+const DRAW_ARMED = 'The next message draws an image. Click to send it without drawing.';
 
 /** What pressing Draw would do, naming the image model when its machine did. */
 function drawOffer(model: string | undefined): string {

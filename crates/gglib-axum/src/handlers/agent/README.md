@@ -21,7 +21,13 @@ Axum [`Sse`] response, each event framed by `compose::frame`.
 A request sent with `draw: true` (the page's Draw button) is the only one
 whose model is offered `builtin:generate_image`: `compose::prepare_over`
 composes the drawing tool for it, armed, and adds exactly that qualified name
-to a tool filter that lists names. Without `draw` the tool is in no list and
+to a tool filter that lists names. Such a run must draw: its first request
+to the model offers that tool alone and demands a call (`tool_choice:
+"required"`), every later one offers the run's whole list and leaves the
+choice to the model, and a first reply that calls nothing ends the run
+`failed`, `image_generation_failed`, saying the model did not ask for the
+picture. That holds for every run composed here with `draw`: the page's, a
+device's turn, and a chat run with builtins. Without `draw` the tool is in no list and
 cannot be called, `tool_filter: null` included. Both doors first ask
 `compose::refuse_unavailable_drawing`, before a slot is taken or a row
 written: a model on another machine, or a machine that cannot draw, is

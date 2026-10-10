@@ -190,14 +190,14 @@ async fn a_draw_turn_never_reaches_an_mcp_tool_named_generate_image() {
 }
 
 /// A turn sent with Draw pressed is planned with the image tool and nothing
-/// else, and its model is offered exactly that; one sent without is offered
-/// none.
+/// else, and its model is offered exactly that, and must call it in its
+/// first reply; one sent without is offered none.
 #[tokio::test]
 async fn a_draw_turn_offers_its_model_the_image_tool_and_no_other() {
     use gglib_core::domain::hub_chats::HubTurn;
 
     use crate::handlers::agent::run_fixture::drawing_state;
-    use crate::handlers::agent::turn_fixture::{model, sent};
+    use crate::handlers::agent::turn_fixture::{drawn, model, sent};
 
     let (_dir, state) = drawing_state().await;
     let served = model(&state, |_| {}).await;
@@ -221,8 +221,12 @@ async fn a_draw_turn_offers_its_model_the_image_tool_and_no_other() {
             .map(|tool| tool["function"]["name"].as_str().unwrap().to_owned())
             .collect()
     };
-    let body = sent(&state, served, planned.chat).await;
-    assert_eq!(offered(&body), ["builtin:generate_image"]);
+    // Held to the call for the picture at first, and left to choose after.
+    let [first, later] = drawn(&state, served, planned.chat).await;
+    assert_eq!(offered(&first), ["builtin:generate_image"]);
+    assert_eq!(first["tool_choice"], "required");
+    assert_eq!(offered(&later), ["builtin:generate_image"]);
+    assert_eq!(later["tool_choice"], "auto");
 
     let plain = plan(&state, turn(id, "hello")).await.unwrap();
     assert!(!plain.chat.draw);

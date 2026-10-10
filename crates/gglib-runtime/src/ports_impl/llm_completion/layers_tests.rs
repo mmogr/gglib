@@ -57,7 +57,7 @@ fn sent(adapter: &LlmCompletionAdapter, tools: bool) -> f64 {
     };
     let tools = if tools { vec![tool] } else { Vec::new() };
     let body = adapter
-        .shaped_body(&[user("hi")], &tools, &ImageUrls::default())
+        .shaped_body(&[user("hi")], &tools, &ImageUrls::default(), false)
         .unwrap();
     let sent = body["temperature"].as_f64().expect("a temperature");
     (sent * 100.0).round() / 100.0

@@ -131,6 +131,7 @@ pub(super) async fn prepare_over(
     // loop is composed: the two reasoning controls are the only sampling this
     // endpoint accepts, and they occupy the ladder's top rung.
     let sampling = req.sampling_layer();
+    let draw = req.draw;
     let tool_filter = with_drawing(req.tool_filter.map(|f| f.into_iter().collect()), req.draw);
     // The image tool exists for this loop only when the message was sent
     // with Draw pressed; without it no filter, `null` included, reaches one.
@@ -185,7 +186,14 @@ pub(super) async fn prepare_over(
         },
     );
 
-    let config = config_for(state, req.config).await;
+    let mut config = config_for(state, req.config).await;
+    // Pressing Draw is the person's explicit ask: the run's first reply
+    // must be the call for the picture, offered that tool alone, and is
+    // never left to the model to decide. Every door that composes a run
+    // with `draw` comes through here: the page's runs, a device's turn and
+    // a chat run with builtins. A run on another machine's model was
+    // refused `draw` before this.
+    config.first_call = draw.then(DrawingTool::first_call);
 
     Prepared {
         agent_loop,

@@ -88,8 +88,9 @@ async fn seeing_server(state: &crate::state::AppState) -> i64 {
 }
 
 /// The history becomes the loop's messages, the inline image stored and
-/// named by its id; the model is offered the image tool only with Draw, and
-/// what the request says of sampling is not sent on.
+/// named by its id; the model is offered the image tool only with Draw,
+/// when its first reply must call it, and what the request says of sampling
+/// is not sent on.
 #[tokio::test]
 async fn an_openai_request_is_read_as_the_loops_with_the_image_tool_only_for_draw() {
     let (_dir, state) = drawing_state().await;
@@ -110,8 +111,11 @@ async fn an_openai_request_is_read_as_the_loops_with_the_image_tool_only_for_dra
         matches!(&drawn.messages[3], AgentMessage::Tool { tool_call_id, .. } if tool_call_id == "c1")
     );
     assert!(state.core.attachments().info(&picture).await.is_ok());
-    let body = sent(&state, served, drawn).await;
+    let [body, later] = turn_fixture::drawn(&state, served, drawn).await;
     assert_eq!(offered(&body), ["builtin:generate_image"]);
+    assert_eq!(body["tool_choice"], "required", "Draw must draw");
+    assert_eq!(offered(&later), ["builtin:generate_image"]);
+    assert_eq!(later["tool_choice"], "auto");
     assert_ne!(
         body["temperature"],
         json!(1.9),
