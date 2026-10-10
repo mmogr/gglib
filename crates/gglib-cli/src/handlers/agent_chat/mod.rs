@@ -2,6 +2,7 @@
 mod branches;
 pub(crate) mod config;
 pub(crate) mod drain;
+pub(crate) mod draw;
 pub(crate) mod images;
 mod markdown;
 mod memory_jogger;
@@ -56,7 +57,7 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     let mut images = TurnImages::attach(attachments, &args.images, false, &mut receipts).await?;
     let Session {
         args,
-        params,
+        mut params,
         limits,
         persistence,
         prior_messages,
@@ -84,11 +85,15 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
             None
         },
     };
+    // The session's Draw switch, and the image tool it arms (`/draw`).
+    let draw = draw::DrawSwitch::for_session(ctx, params.target, params.port).await;
+    params.drawing = draw.tool(ctx);
     let agent = config::compose(ctx, &params, None, sampling, &banner).await?;
 
     // The llama-server belongs to the daemon and stays warm for the next
     // session; nothing to stop here.
-    repl::run_repl_with_prior(agent, &args, limits, persistence, prior_messages, images).await
+    let history = prior_messages;
+    repl::run_repl_with_prior(agent, &args, limits, persistence, history, images, draw).await
 }
 
 /// Refuse to continue chat `id` while the daemon is replying to it for the

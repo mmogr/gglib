@@ -63,6 +63,9 @@ pub(crate) struct AgentSessionParams {
     /// ([`Target::resolve_turn`]): what the banner names and the conversation
     /// stores.
     pub turn: Option<TurnModel>,
+    /// The drawing tool and the switch that arms it (`/draw`), for a session
+    /// that can draw; `None` offers no image tool.
+    pub drawing: Option<(gglib_mcp::DrawingTool, gglib_mcp::DrawArm)>,
 }
 
 /// Display metadata for the server-startup info banner.
@@ -100,6 +103,7 @@ impl From<&ChatArgs> for AgentSessionParams {
             retry_policy: args.retry_policy,
             profile: None,
             turn: None,
+            drawing: None,
         }
     }
 }
@@ -174,11 +178,11 @@ pub(crate) async fn compose(
 
     // 4. Compose the agent loop.  When tools are specified the loop is
     //    restricted to the named allowlist; otherwise all MCP tools are visible.
-    let tool_filter = if params.tools.is_empty() {
-        None
-    } else {
-        Some(params.tools.iter().cloned().collect())
-    };
+    //    A session that can draw names the image tool beside them, by its
+    //    qualified name: `/draw` is the person's choice for one message,
+    //    `--tools` and `--no-tools` notwithstanding, and until it is typed
+    //    the executor lists no image tool for the filter to pass.
+    let tool_filter = tool_filter(&params.tools, params.drawing.is_some());
     let model_context = params
         .target
         .model_context(ctx, &params.model_identifier)
@@ -205,11 +209,26 @@ pub(crate) async fn compose(
         ctx.app.attachments().store(),
         LoopGeneration {
             gate: generation_gate(ctx, params, banner.quiet).await,
-            drawing: None,
+            drawing: params.drawing.clone(),
         },
     );
 
     Ok(agent)
+}
+
+/// A session's tool allowlist: none for every tool, else the names typed,
+/// and with them, for a session that `can_draw`, exactly the image tool's
+/// qualified name. The bare name would also pass an MCP server's tool
+/// called `generate_image`.
+fn tool_filter(tools: &[String], can_draw: bool) -> Option<std::collections::HashSet<String>> {
+    if tools.is_empty() {
+        return None;
+    }
+    let mut named: std::collections::HashSet<String> = tools.iter().cloned().collect();
+    if can_draw {
+        named.insert("builtin:generate_image".to_owned());
+    }
+    Some(named)
 }
 
 /// The daemon's generation gate, for a session whose replies come from this

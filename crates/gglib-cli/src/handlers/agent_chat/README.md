@@ -36,6 +36,9 @@ independently readable:
   each file through core's one ingest, with a receipt line on stderr; and,
   when a session starts, the daemon's check before a run
   (`AttachmentService::check_request`) over its history and first message
+- [`draw`]     — `/draw`, the session's Draw switch: it asks the daemon
+  whether it can draw, arms the image tool for the next message, and is off
+  again once that message is sent; the tool draws through the daemon
 - [`sight`]    — whether the session's model can read an image, asked before
   the loop is composed: the catalogue row, or `/props` of a `--port` server
 - [`tool_format`] — tool-result summary formatters

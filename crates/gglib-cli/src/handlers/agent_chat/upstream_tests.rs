@@ -137,6 +137,7 @@ async fn a_session_on_an_image_model_is_refused_before_the_daemon_is_asked() {
         retry_policy: gglib_core::retry::RetryPolicy::default(),
         profile: None,
         turn: None,
+        drawing: None,
     };
     let banner = BannerInfo {
         quiet: true,

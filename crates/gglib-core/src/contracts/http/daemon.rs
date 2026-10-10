@@ -310,6 +310,7 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["GET"], SETUP_STATUS_PATH),
     (&["GET"], RUNS_PATH),
     (&["POST"], IMAGES_GENERATIONS_PATH),
+    (&["GET"], IMAGES_DRAWING_PATH),
 ];
 
 /// The `type` of the daemon's 401 when it wanted its token, so a client can

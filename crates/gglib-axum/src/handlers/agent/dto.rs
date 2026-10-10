@@ -187,6 +187,16 @@ pub(crate) struct AgentChatRequest {
     /// which is why the two are separate fields and not one knob.
     #[serde(default)]
     pub reasoning_budget_tokens: Option<i32>,
+
+    /// The message was sent with Draw pressed: the model is offered
+    /// `builtin:generate_image` for this request, whatever `tool_filter`
+    /// says. Absent or `false`, the image tool is in no tool list and cannot
+    /// be called, `tool_filter: null` included. Refused `400
+    /// drawing_unavailable` when this machine cannot draw for it
+    /// (`GET /api/images/drawing` says why beforehand).
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
+    pub draw: bool,
 }
 
 impl AgentChatRequest {

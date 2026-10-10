@@ -118,4 +118,13 @@ reasoning_effort: ReasoningEffort | null,
  * template, so it holds on models where the effort level does nothing —
  * which is why the two are separate fields and not one knob.
  */
-reasoning_budget_tokens: number | null, };
+reasoning_budget_tokens: number | null, 
+/**
+ * The message was sent with Draw pressed: the model is offered
+ * `builtin:generate_image` for this request, whatever `tool_filter`
+ * says. Absent or `false`, the image tool is in no tool list and cannot
+ * be called, `tool_filter: null` included. Refused `400
+ * drawing_unavailable` when this machine cannot draw for it
+ * (`GET /api/images/drawing` says why beforehand).
+ */
+draw?: boolean, };

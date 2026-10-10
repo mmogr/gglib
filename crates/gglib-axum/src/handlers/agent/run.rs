@@ -27,7 +27,7 @@ use gglib_core::domain::thinking;
 use gglib_core::ports::{AgentError, Created, RunScope};
 
 use super::AgentChatRequest;
-use super::compose::{Prepared, frame, prepare, take_permit};
+use super::compose::{Prepared, frame, prepare, refuse_unavailable_drawing, take_permit};
 use super::dto::AgentRunRequest;
 use super::launch::{Transcript, launch};
 use super::remote_upstream;
@@ -69,7 +69,8 @@ pub(super) fn with_code(error: HttpError) -> HttpError {
 /// whatever the chat route refuses, coded; `conversation_not_found` (404);
 /// `attachment_not_found` (400) for an image a message names, history
 /// included, that is not stored, and `request_images_too_large` (400) when
-/// they are over 16 MiB together; `agent_busy` (429) when every agent slot
+/// they are over 16 MiB together; `drawing_unavailable` (400) for `draw` on
+/// a machine that cannot draw for it; `agent_busy` (429) when every agent slot
 /// is taken; `nothing_to_answer` (409) for an answer run on a conversation
 /// that does not end in a question with no reply; `conflict` (409)
 /// while the conversation has a live reply, or when it ran on another
@@ -105,6 +106,9 @@ pub(crate) async fn create_run(
         .attachments()
         .check_request(&chat.messages)
         .await?;
+    // Likewise before a slot is taken, and before anything is written: a
+    // message sent with Draw pressed that cannot draw here.
+    refuse_unavailable_drawing(state, &chat).await?;
     let permit = take_permit(state).ok_or_else(|| {
         coded(
             StatusCode::TOO_MANY_REQUESTS,
