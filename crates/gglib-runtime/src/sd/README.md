@@ -49,6 +49,15 @@ the recipe turns flash attention on (Qwen-Image 2.1). Flags given at launch
 are the defaults for every request. `args_tests.rs` pins one whole argv per
 family.
 
+## Launching
+
+The residency launch starts `sd-server` (`process::residency`): it checks
+the binary and every component before the queue, places the model by its
+files plus its family's compute margin (`Recipe::compute_margin_bytes`, the
+1024x1024 VAE decode buffer rounded up: Flux.1 7 GiB, SDXL 8 GiB,
+Qwen-Image 2.1 9 GiB), spawns with `spawn.rs`, and narrates the build from
+`sd-config.json` (`recorded_release`).
+
 ## Is it up?
 
 `sd-server` has no `/health`. Readiness and the health monitor ask

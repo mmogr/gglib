@@ -34,6 +34,23 @@ impl SdInstallRecord {
         let json = fs::read_to_string(path).context("Failed to read config file")?;
         serde_json::from_str(&json).context("Failed to parse config file")
     }
+
+    /// The release it names: a tag, or a short commit.
+    pub(crate) fn release(&self) -> &str {
+        match self {
+            Self::Built(build) => &build.version,
+            Self::Prebuilt(record) => &record.version,
+        }
+    }
+}
+
+/// The release the installed `sd-server`'s record names, when there is a
+/// readable record: what a launch narrates as its runtime.
+pub(crate) fn recorded_release() -> Option<String> {
+    let path = gglib_core::paths::sd_config_path().ok()?;
+    SdInstallRecord::load(&path)
+        .ok()
+        .map(|record| record.release().to_owned())
 }
 
 /// What a source build records about itself.

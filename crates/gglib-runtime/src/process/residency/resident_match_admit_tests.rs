@@ -16,6 +16,7 @@ use super::tests::healthy_port;
 #[cfg(unix)]
 use crate::process::RuntimeBinaries;
 use crate::process::admission::{PRIMARY_SLOT, Resident};
+#[cfg(unix)]
 use crate::process::core::GuiProcessCore;
 use crate::process::residency::ResidentSet;
 use crate::process::residency::hold_tests::{core, resident};

@@ -173,4 +173,5 @@ pub use generation_config::generation_config_candidates;
 pub use generation_config::parse_generation_config;
 pub use model::RangeValues;
 pub use model::is_system_tag;
+pub(crate) use model::missing_roles;
 pub use model_naming::declared_name;

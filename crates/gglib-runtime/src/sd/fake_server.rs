@@ -36,7 +36,21 @@ impl FakeSdServer {
     /// A server that answers `/v1/models` with `body` and is otherwise the
     /// same; given another body it stands for a foreign server on the port.
     pub(crate) async fn serve_models_body(body: &'static str) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        Self::listen(TcpListener::bind("127.0.0.1:0").await.expect("bind"), body)
+    }
+
+    /// An sd-server on `port`: for a launch test whose stand-in binary only
+    /// records the port it was given, so the fake answers there in its place.
+    /// Unix only, as that launch test is.
+    #[cfg(unix)]
+    pub(crate) async fn serve_on(port: u16) -> Self {
+        let listener = TcpListener::bind(("127.0.0.1", port))
+            .await
+            .expect("bind the launched port");
+        Self::listen(listener, SD_MODELS_BODY)
+    }
+
+    fn listen(listener: TcpListener, body: &'static str) -> Self {
         let port = listener.local_addr().expect("an address").port();
         let held = Arc::new(AtomicUsize::new(0));
         let renders = Arc::clone(&held);

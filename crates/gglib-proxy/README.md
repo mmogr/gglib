@@ -371,9 +371,9 @@ Two consequences follow, both deliberate:
   called.  Forwarding either would spend a VRAM slot starting a server that
   could only reply 501. A chat completion naming an image model is refused
   the same way, with 400 (`image_model_cannot_chat`), before the image check
-  and before `admit`; and should anything else ask the runtime to launch
-  one, the launch refuses it with the same code before it stops a resident
-  or reads a file.
+  and before `admit`. Admitting an image model launches it on `sd-server`,
+  so every other door that admits for chat refuses it first by the same
+  code (core's `refuse_unless_chats`).
 
 If a genuine embedding model is missing the tag, `gglib model retag <id>`
 re-derives it from the persisted GGUF metadata without re-reading the file.

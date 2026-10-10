@@ -281,17 +281,28 @@ impl Model {
     /// in the recipe's order; empty for a model that chats.
     #[must_use]
     pub fn missing_components(&self) -> Vec<ComponentRole> {
-        let Some(family) = self.image_family else {
-            return Vec::new();
-        };
-        family
-            .recipe()
-            .components
-            .iter()
-            .map(|spec| spec.role)
-            .filter(|role| !self.components.iter().any(|c| c.role == *role))
-            .collect()
+        missing_roles(self.image_family, &self.components)
     }
+}
+
+/// The roles `family`'s recipe needs that `components` has no file for, in
+/// the recipe's order; empty for no family. Shared by [`Model`] and the
+/// launch spec, so the catalogue and the launch cannot disagree.
+#[must_use]
+pub(crate) fn missing_roles(
+    family: Option<ImageFamily>,
+    components: &[ModelComponent],
+) -> Vec<ComponentRole> {
+    let Some(family) = family else {
+        return Vec::new();
+    };
+    family
+        .recipe()
+        .components
+        .iter()
+        .map(|spec| spec.role)
+        .filter(|role| !components.iter().any(|c| c.role == *role))
+        .collect()
 }
 
 impl NewModel {

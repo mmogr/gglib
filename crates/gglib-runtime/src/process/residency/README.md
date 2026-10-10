@@ -2,7 +2,8 @@
 
 <!-- module-docs:start -->
 
-Turning admission decisions into running llama-server processes.
+Turning admission decisions into running servers: llama-server for a model
+that chats, stable-diffusion.cpp's `sd-server` for one that draws.
 
 [`ResidentSet`] is the acting half of admission control. The
 [`admission`](crate::process::admission) queue decides *what should happen* —
@@ -20,11 +21,29 @@ once before the request ever joins the queue:
 |---|---|
 | Catalog lookup | An unknown model 404s immediately rather than after a swap |
 | Pin check | A foreign model is refused without queueing behind, or displacing, the pinned one; it compares the resolved model's id, so the pin answers to its id and its name |
+| Preflight | The weights and projector on disk; for an image model `sd-server` installed (`image_runtime_not_installed`), a file for every role its family needs (`image_model_incomplete`, naming them all), and each linked file on disk. Here because once `poll` grants a launch it has already forgotten the model being displaced |
 | Context resolution | The resident-match test needs the context this request would launch with |
 | Footprint estimate | The second-slot decision needs it, and it cannot change while queued |
 
+An image model skips the context: it has none. It is placed by its files
+and its family's compute margin (`vram::image_footprint`) under the queue's
+image rules, and a held primary it cannot go beside refuses it at once as
+`image_model_does_not_fit`.
+
 What remains in the loop is purely scheduling. That split is what keeps the
 launch sequence a straight line rather than a state machine.
+
+# One launch, either runtime
+
+The launch stops the model it displaces **first**, before anything can
+fail, then checks the files again (one removed while the request waited
+fails here, the same for both runtimes), then branches only where the
+runtimes differ: llama-server's KV types, prompt cache, disk slots and
+command line, or `sd-server`'s recipe and its narration (runtime build,
+family, each component, slot, memory). The spawn under the write lock, the
+guard, the health race (`/health` or `/v1/models` by runtime) and the
+install into the queue are shared. An `sd-server` resident is recycled when
+a component is relinked, never for a context.
 
 # The launch options template
 

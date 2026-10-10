@@ -9,6 +9,7 @@ use std::fmt;
 use std::path::PathBuf;
 use thiserror::Error;
 
+use crate::domain::ComponentRole;
 use crate::domain::DefaultsOrigin;
 use crate::domain::DialectSpec;
 use crate::domain::ImageFamily;
@@ -183,6 +184,13 @@ impl ModelLaunchSpec {
     #[must_use]
     pub const fn runtime(&self) -> RuntimeKind {
         RuntimeKind::of(self.image_family)
+    }
+
+    /// The roles this model's family needs that it has no file linked for;
+    /// see [`Model::missing_components`].
+    #[must_use]
+    pub fn missing_components(&self) -> Vec<ComponentRole> {
+        crate::domain::missing_roles(self.image_family, &self.components)
     }
 }
 

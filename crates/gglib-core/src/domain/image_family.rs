@@ -105,7 +105,16 @@ pub struct Recipe {
     pub flash_attention: bool,
     /// The sizes it draws.
     pub size: SizeRule,
+    /// The memory a render needs beyond the files, for placing the model:
+    /// the largest compute buffer of a 1024x1024 render, which is the VAE
+    /// decode, rounded up to a whole GiB. Measured on Metal on 2026-10-09
+    /// (`runs/*.log` in the image-gen handoff): Flux.1 6,657 MB, SDXL
+    /// 7,680 MB, Qwen-Image 2.1 8,650 MB.
+    pub compute_margin_bytes: u64,
 }
+
+/// One GiB, for the compute margins.
+const GIB: u64 = 1024 * 1024 * 1024;
 
 /// The one size rule's bounds; the step differs by family.
 const fn sizes(step: u32) -> SizeRule {
@@ -146,6 +155,7 @@ const FLUX1: Recipe = Recipe {
     sampler: "euler",
     flash_attention: false,
     size: sizes(64),
+    compute_margin_bytes: 7 * GIB,
 };
 
 /// SDXL: the checkpoint holds everything; `euler_a` is what the measured run
@@ -158,6 +168,7 @@ const SDXL: Recipe = Recipe {
     sampler: "euler_a",
     flash_attention: false,
     size: sizes(64),
+    compute_margin_bytes: 8 * GIB,
 };
 
 /// Qwen-Image 2.1: sizes step by 32, per stable-diffusion.cpp's guide.
@@ -182,6 +193,7 @@ const QWEN_IMAGE_21: Recipe = Recipe {
     sampler: "euler",
     flash_attention: true,
     size: sizes(32),
+    compute_margin_bytes: 9 * GIB,
 };
 
 impl ImageFamily {

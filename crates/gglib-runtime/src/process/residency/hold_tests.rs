@@ -4,7 +4,7 @@
 use super::*;
 use crate::process::RuntimeBinaries;
 use async_trait::async_trait;
-use gglib_core::domain::{CacheRamHealth, ModelSamplingDefaults};
+use gglib_core::domain::{CacheRamHealth, ModelSamplingDefaults, SecondarySlotDecision};
 use gglib_core::ports::ModelSummary;
 use tokio::time::Instant;
 

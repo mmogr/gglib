@@ -16,7 +16,9 @@ use crate::command::{build_and_spawn, spawn_log_readers};
 use crate::pidfile::{delete_pidfile, write_pidfile};
 use crate::sd::build_and_spawn_sd;
 use anyhow::{Result, anyhow};
+use gglib_core::domain::RuntimeKind;
 use std::collections::HashMap;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, warn};
 
@@ -128,6 +130,12 @@ impl GuiProcessCore {
                 allocate_port(self.base_port, &used)
             }
         }
+    }
+
+    /// The binary that serves `runtime`, whether or not it is installed.
+    #[must_use]
+    pub fn binary(&self, runtime: RuntimeKind) -> &Path {
+        self.binaries.for_runtime(runtime)
     }
 
     /// Kill a running process with graceful shutdown

@@ -7,27 +7,28 @@ mod resident_match;
 mod spawned_child;
 mod vram;
 
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use gglib_core::cache_config::CacheRamSetting;
-use gglib_core::domain::SecondarySlotDecision;
+use gglib_core::domain::RuntimeKind;
 use gglib_core::ports::{
     Admission, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
     PinnedSpec, RunningTarget,
 };
-use gglib_core::server_config::ServerConfigOptions;
+use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
 use crate::process::admission::{
-    AdmissionDecision, AdmissionQueue, PRIMARY_SLOT, Resident, Ticket, launch_timeout,
+    AdmissionDecision, AdmissionQueue, Candidate, PRIMARY_SLOT, Refusal, Resident, Ticket,
+    launch_timeout,
 };
 use crate::process::core::GuiProcessCore;
 use crate::process::health::check_http_health;
 use context::{fit_or_undivided, resolve_launch_opts};
 use launch::{LaunchRequest, run as run_launch};
+use resident_match::LaunchedAs;
 
 pub use vram::ram_available_for;
 
@@ -128,6 +129,18 @@ impl ResidentSet {
         self.check_pinned(&spec)?;
         let spec_weights_bytes = spec.file_size_bytes;
 
+        // Everything a launch would lack, before the queue: once `poll`
+        // grants a launch it has already forgotten the model it displaces,
+        // so this is the last point at which a refusal costs nobody their
+        // slot. The launch checks the files again after its stop.
+        let sd_server = core
+            .read()
+            .await
+            .binary(RuntimeKind::StableDiffusion)
+            .to_path_buf();
+        launch::launch_files::preflight(&spec, &sd_server).await?;
+        let health_deadline_secs = crate::process::health::launch_deadline_secs(spec_weights_bytes);
+
         // A pin's launch overrides layer onto the standing template, winning
         // field-wise: they are the *output* of the caller's full cascade
         // (`UnifiedServerConfig::resolved_options`), so letting the run-wide
@@ -137,6 +150,27 @@ impl ResidentSet {
             None => self.launch_overrides.clone(),
         };
         let cache_ram = overrides.cache_ram.unwrap_or(self.cache_ram);
+
+        // An image model has no context to fit or resolve, and sd-server
+        // reads none of llama-server's options: it is placed by its files
+        // and its family's margin (`secondary_verdict`), and launched with
+        // the recipe.
+        if spec.runtime() == RuntimeKind::StableDiffusion {
+            return self
+                .wait_for_slot(
+                    core,
+                    LaunchRequest {
+                        spec,
+                        opts: ServerConfigOptions::default(),
+                        context: (0, ContextSizeSource::BuiltInDefault),
+                        slot: PRIMARY_SLOT, // replaced by the queue's decision
+                        evict: None,
+                        cache_ram,
+                        health_deadline_secs,
+                    },
+                )
+                .await;
+        }
 
         // What this machine could serve for this model, if nobody has said
         // otherwise. Ranks below an explicit request, a per-model default and
@@ -244,9 +278,7 @@ impl ResidentSet {
                 slot: PRIMARY_SLOT, // replaced by the queue's decision
                 evict: None,
                 cache_ram,
-                health_deadline_secs: crate::process::health::launch_deadline_secs(
-                    spec_weights_bytes,
-                ),
+                health_deadline_secs,
             },
         )
         .await
@@ -293,7 +325,11 @@ impl ResidentSet {
                 .poll(&queued.ticket, self.secondary_verdict(&request))
             {
                 AdmissionDecision::Serve { slot } => {
-                    let launched_as = (request.context.0, request.spec.projector.as_deref());
+                    let launched_as = LaunchedAs {
+                        context: request.context.0,
+                        projector: request.spec.projector.as_deref(),
+                        components: &request.spec.components,
+                    };
                     if let Some(admission) = self.serve(slot, launched_as, core).await? {
                         return Ok(admission);
                     }
@@ -317,10 +353,20 @@ impl ResidentSet {
                         () = tokio::time::sleep(POLL_TICK) => {}
                     }
                 }
-                AdmissionDecision::Refuse(refusal) => {
-                    return Err(ModelRuntimeError::AdmissionTimeout(
-                        refusal.describe(&model_name),
-                    ));
+                // Only an image model is refused outright: every slot it
+                // could take is held by a run, which may last as long as the
+                // run does, so waiting would only time out.
+                AdmissionDecision::Refuse(Refusal::HeldSlot {
+                    held_model,
+                    needed_bytes,
+                    free_bytes,
+                }) => {
+                    return Err(ModelRuntimeError::ImageModelDoesNotFit {
+                        model: model_name,
+                        held_model,
+                        needed_bytes,
+                        free_bytes,
+                    });
                 }
                 AdmissionDecision::Expired => {
                     warn!(
@@ -350,20 +396,35 @@ impl ResidentSet {
     /// caller code may run inside the queue's critical section — a callback
     /// that re-enters the queue from under its own lock deadlocks the daemon
     /// ([#721](https://github.com/mmogr/gglib/issues/721)).
-    fn secondary_verdict(&self, request: &LaunchRequest) -> SecondarySlotDecision {
-        let kv_types = crate::llama::args::resolve_kv_cache_types(
-            request.opts.cache_type_k,
-            request.opts.cache_type_v,
-        );
-        let decision = vram::secondary_slot_decision(&request.spec, kv_types, request.context.0);
-        if !decision.is_grant() {
+    ///
+    /// An image model is judged by its files and its family's margin against
+    /// the free reading alone, with no ceiling, and placed by the queue's
+    /// image rules ([`Candidate::image`]).
+    fn secondary_verdict(&self, request: &LaunchRequest) -> Candidate {
+        let candidate = match request.spec.runtime() {
+            RuntimeKind::StableDiffusion => {
+                Candidate::image(vram::image_slot_decision(&request.spec))
+            }
+            RuntimeKind::Llama => {
+                let kv_types = crate::llama::args::resolve_kv_cache_types(
+                    request.opts.cache_type_k,
+                    request.opts.cache_type_v,
+                );
+                Candidate::llama(vram::secondary_slot_decision(
+                    &request.spec,
+                    kv_types,
+                    request.context.0,
+                ))
+            }
+        };
+        if !candidate.secondary.is_grant() {
             debug!(
                 model = %request.spec.name,
-                verdict = decision.label(),
+                verdict = candidate.secondary.label(),
                 "second resident slot refused"
             );
         }
-        decision
+        candidate
     }
 
     /// Serve from a model already resident in `slot`.
@@ -373,10 +434,10 @@ impl ResidentSet {
     /// stopped answering its health check. Each of these evicts it, so the
     /// caller's next pass launches a fresh instance — unless a run holds it:
     /// then it is kept, and this request refused.
-    async fn serve(
+    async fn serve<'a>(
         &self,
         slot: usize,
-        request: (u64, Option<&Path>),
+        request: impl Into<LaunchedAs<'a>>,
         core: &Arc<RwLock<GuiProcessCore>>,
     ) -> Result<Option<Admission>, ModelRuntimeError> {
         // `poll` has already counted this request against the slot, so the
@@ -422,7 +483,8 @@ impl ResidentSet {
         )
         .with_slot_restore_supported(resident.slot_restore_supported)
         .with_model_sampling(resident.model_sampling)
-        .with_cache_ram_health(resident.cache_ram_health);
+        .with_cache_ram_health(resident.cache_ram_health)
+        .with_runtime(resident.runtime);
 
         // Reused verbatim rather than re-narrated: this instance was launched
         // with whatever the stored narration says, and re-resolving now against
@@ -563,6 +625,9 @@ fn target_of(resident: Resident) -> RunningTarget {
 #[cfg(test)]
 #[path = "hold_tests.rs"]
 mod hold_tests;
+#[cfg(test)]
+#[path = "launch_sd_tests.rs"]
+mod launch_sd_tests;
 #[cfg(test)]
 #[path = "residency_tests.rs"]
 pub(in crate::process) mod residency_tests;
