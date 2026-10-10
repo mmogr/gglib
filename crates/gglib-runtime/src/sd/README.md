@@ -115,6 +115,6 @@ events are llama.cpp's `BuildEvent`s.
 
 macOS installs the release asset: measured on 2026-10-10 against a source
 build on the same Flux render, one run each, it sampled in 73.47 s against
-the source build's 82.06 s (log-0017).
+the source build's 82.06 s (log-0018).
 
 <!-- module-docs:end -->
