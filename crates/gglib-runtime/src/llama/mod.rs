@@ -7,7 +7,7 @@ pub mod args;
     clippy::too_many_lines,
     reason = "grandfathered at lint inheritance, #1157"
 )]
-mod build;
+pub(crate) mod build;
 pub mod build_events;
 mod config;
 mod deps;
@@ -21,7 +21,7 @@ pub(crate) mod detect;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 mod download;
-mod install;
+pub(crate) mod install;
 pub mod install_events;
 pub mod runtime_probe;
 mod server_availability;

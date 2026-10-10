@@ -24,11 +24,11 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 use tokio::time::Instant;
 
-use gglib_core::domain::{AdmissionSnapshot, SecondarySlotDecision};
+use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{AdmissionLease, AdmissionRelease};
 use tokio::sync::Notify;
 
-use super::state::{AdmissionDecision, QueueState, Resident, Ticket};
+use super::state::{AdmissionDecision, Candidate, QueueState, Resident, Ticket};
 
 /// The admission queue: who is resident, who is waiting, and whose turn it is.
 ///
@@ -88,9 +88,11 @@ impl AdmissionQueue {
 
     /// Ask what this request should do now.
     ///
-    /// `secondary` is the caller's verdict on whether this request's model may
-    /// co-reside in the second slot, computed against a free-VRAM reading taken
-    /// just before this call. A value rather than a callback, deliberately: a
+    /// `candidate` is the program that serves this request's model and the
+    /// caller's verdict on whether it may co-reside in the second slot,
+    /// computed against a free-VRAM reading taken just before this call; a
+    /// bare [`SecondarySlotDecision`](gglib_core::domain::SecondarySlotDecision)
+    /// is a model that chats. A value rather than a callback, deliberately: a
     /// callback would run caller code inside the critical section, which the
     /// module docs rule out. The price is a verdict up to one poll tick stale,
     /// which is well inside the staleness the probe's own cache already
@@ -98,8 +100,8 @@ impl AdmissionQueue {
     /// and a co-load is the alternative to a swap; callers re-poll on every
     /// tick, so the reading never outlives the wait the way an enqueue-time
     /// reading would.
-    pub fn poll(&self, ticket: &Ticket, secondary: SecondarySlotDecision) -> AdmissionDecision {
-        self.lock().poll(ticket, Instant::now(), secondary)
+    pub fn poll(&self, ticket: &Ticket, candidate: impl Into<Candidate>) -> AdmissionDecision {
+        self.lock().poll(ticket, Instant::now(), candidate.into())
     }
 
     /// A future that resolves the next time the state changes.
@@ -172,6 +174,21 @@ impl AdmissionQueue {
         previous
     }
 
+    /// Empty whichever slot holds model `model_id`, returning the slot and
+    /// what was there. Unconditional, as [`Self::evict`] is; found and
+    /// emptied under one lock, so the slot cannot change hands in between.
+    pub fn evict_model(&self, model_id: u32) -> Option<(usize, Resident)> {
+        let mut state = self.lock();
+        let slot = state
+            .residents()
+            .find(|(_, r)| r.model_id == model_id)
+            .map(|(slot, _)| slot)?;
+        let previous = state.evict(slot).map(|r| (slot, r));
+        drop(state);
+        self.notify();
+        previous
+    }
+
     /// The primary slot's resident.
     pub fn primary(&self) -> Option<Resident> {
         self.lock().primary().cloned()
@@ -211,6 +228,13 @@ impl AdmissionRelease for AdmissionQueue {
         self.lock().release(slot);
         // The release is the event the scheduler has been waiting for: a slot
         // reaching zero in-flight is the only thing that makes a swap legal.
+        self.notify();
+    }
+
+    fn progress(&self, _slot: usize) {
+        // A render step: nothing is freed, but everyone waiting behind it
+        // starts their stall clock again.
+        self.lock().record_progress();
         self.notify();
     }
 }

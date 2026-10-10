@@ -29,6 +29,8 @@ daemon.lock
 
 # llama.cpp local installation
 /.llama
+# stable-diffusion.cpp local installation
+/.sd
 /downloads
 
 # Web UI build output

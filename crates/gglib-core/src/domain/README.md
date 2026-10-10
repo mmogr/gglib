@@ -45,6 +45,9 @@ infrastructure concerns (database, filesystem, etc.).
   (`ComponentRole`) and whether a file fits one; and each family's `Recipe`,
   the one table of its components' default sources and its drawing defaults.
   Its tests read the measured files' tables in `testdata/image_families/`
+- `runtime_kind` - Which program serves a model (`RuntimeKind`: llama.cpp's
+  `llama-server` or stable-diffusion.cpp's `sd-server`), derived from its image
+  family and never stored
 - `capabilities` - Model capability detection and inference
 - `thinking` - A chat's Thinking choice (`Thinking`: `off` or `default`), which a
   turn says and `ConversationSettings.thinking` remembers, and the one rule

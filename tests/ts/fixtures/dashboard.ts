@@ -182,6 +182,7 @@ const SNAPSHOT: DashboardSnapshot = {
     total_queued: 0,
     total_swaps: 0,
     secondary_slot: { state: 'available', detail: 'No second model has been requested yet.' },
+    generation: { render: null, llm_inflight: 0, waiting: 0 },
   },
   sampling_audit: AUDIT,
 };

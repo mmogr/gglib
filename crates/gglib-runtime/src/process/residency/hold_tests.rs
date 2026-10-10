@@ -2,8 +2,9 @@
 //! recycled it is refused, retryably, and the model stays.
 
 use super::*;
+use crate::process::RuntimeBinaries;
 use async_trait::async_trait;
-use gglib_core::domain::{CacheRamHealth, ModelSamplingDefaults};
+use gglib_core::domain::{CacheRamHealth, ModelSamplingDefaults, SecondarySlotDecision};
 use gglib_core::ports::ModelSummary;
 use tokio::time::Instant;
 
@@ -57,6 +58,8 @@ pub(super) fn resident(port: u16) -> Resident {
         context_size: 4096,
         port,
         projector: None,
+        runtime: gglib_core::domain::RuntimeKind::Llama,
+        components: Vec::new(),
         slot_restore_supported: true,
         cache_ram_health: CacheRamHealth::LlamaDefault,
         narration: None,
@@ -69,7 +72,7 @@ pub(super) fn resident(port: u16) -> Resident {
 pub(super) fn core() -> Arc<RwLock<GuiProcessCore>> {
     Arc::new(RwLock::new(GuiProcessCore::new(
         19_300,
-        "/nonexistent/llama-server",
+        RuntimeBinaries::llama_only("/nonexistent/llama-server"),
     )))
 }
 

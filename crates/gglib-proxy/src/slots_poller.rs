@@ -32,8 +32,8 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
-use gglib_core::domain::ModelSamplingDefaults;
-use gglib_core::ports::ModelRuntimePort;
+use gglib_core::domain::{ModelSamplingDefaults, RuntimeKind};
+use gglib_core::ports::{ModelRuntimePort, RunningTarget};
 
 use crate::connections::ActiveConnectionsRegistry;
 use crate::props::{BaselineReport, BaselineState, PropsResult, fetch_props};
@@ -321,6 +321,14 @@ impl BaselineLatch {
     }
 }
 
+/// Whether `target` is a llama-server, the one runtime with `/slots` and
+/// `/props`. An `sd-server` in the primary slot has neither, so it is not
+/// polled: the poll would only fail and back off, and a `/props` read would
+/// record a baseline for a model that has no sampler.
+fn has_slots(target: &RunningTarget) -> bool {
+    target.runtime == RuntimeKind::Llama
+}
+
 /// Spawn the background `/slots` poller as its own Tokio task.
 ///
 /// Polls at [`BASE_POLL_INTERVAL`] while llama-server is reachable, with
@@ -361,7 +369,7 @@ pub(crate) fn spawn_slots_poller(
         let mut baseline = BaselineLatch::default();
 
         loop {
-            let sleep_for = match runtime_port.current_model().await {
+            let sleep_for = match runtime_port.current_model().await.filter(has_slots) {
                 None => BASE_POLL_INTERVAL,
                 Some(target) => {
                     if baseline.due(&target.model_name)
@@ -411,6 +419,10 @@ pub(crate) fn spawn_slots_poller(
         }
     })
 }
+
+#[cfg(test)]
+#[path = "slots_poller_sd_tests.rs"]
+mod sd_tests;
 
 // =============================================================================
 // Tests
@@ -776,6 +788,10 @@ mod tests {
         }
         async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
             Ok(())
+        }
+
+        async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+            Ok(false)
         }
     }
 

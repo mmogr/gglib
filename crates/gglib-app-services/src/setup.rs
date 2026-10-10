@@ -1,7 +1,8 @@
 //! Setup wizard operations for GUI backend.
 //!
-//! Handles first-run system status checks, llama.cpp installation,
-//! and provisioning of the optional `hf_xet` download accelerator.
+//! Handles first-run system status checks, llama.cpp installation, the
+//! image runtime's (`setup_image_runtime.rs`), and provisioning of the
+//! optional `hf_xet` download accelerator.
 
 use std::sync::Arc;
 
@@ -295,6 +296,10 @@ pub struct Diagnostics {
     pub acceleration: AccelerationInfo,
     pub fast_downloads: FastDownloadsInfo,
 }
+
+#[path = "setup_image_runtime.rs"]
+mod image_runtime;
+pub use image_runtime::ImageRuntimeStatus;
 
 #[cfg(test)]
 #[path = "setup_tests.rs"]

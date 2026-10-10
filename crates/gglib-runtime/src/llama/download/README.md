@@ -13,6 +13,10 @@ Platform support:
 - Windows x64: CUDA or Vulkan pre-built binaries (selected at runtime via GPU detection)
 - Linux x64: CPU pre-built binaries (CUDA requires building from source)
 
+This module holds what is llama.cpp's own: the pin and its override
+(`GGLIB_LLAMA_RELEASE`), the platform table, the CUDA runtime package, and
+the `ReleaseSpec` the shared installer in `binary_install` runs.
+
 `download_prebuilt_binaries` emits [`LlamaProgressEvent`](super::install_events::LlamaProgressEvent)
 on a `tokio::sync::mpsc::Sender` and is consumed by:
 

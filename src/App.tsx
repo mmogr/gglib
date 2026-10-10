@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import ModelControlCenterPage from "./pages/ModelControlCenterPage";
 import Header from "./components/Header";
-import SettingsModal from "./components/SettingsModal";
+import SettingsModal, { type SettingsTab } from "./components/SettingsModal";
 import LlamaInstallModal from "./components/LlamaInstallModal";
 import SetupWizard from "./components/SetupWizard";
 import { ToastContainer } from "./components/Toast";
@@ -25,6 +25,9 @@ import { syncBuiltinTools } from "./services/tools";
  */
 function AppContent() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // The tab Settings opens on: General from the header, System from a
+  // prompt about the image runtime.
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(undefined);
   const [showLlamaModal, setShowLlamaModal] = useState(false);
   const { servers, stopServer } = useServers();
   const { toasts, showToast, dismissToast } = useToastContext();
@@ -157,7 +160,10 @@ function AppContent() {
     <SettingsProvider showToast={showToast}>
       <div className="flex flex-col h-screen overflow-hidden">
         <Header
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSettings={() => {
+            setSettingsTab(undefined);
+            setIsSettingsOpen(true);
+          }}
           servers={servers}
           onStopServer={stopServer}
           onSelectModel={handleSelectModelFromHeader}
@@ -167,10 +173,18 @@ function AppContent() {
             servers={servers}
             stopServer={stopServer}
             onRegisterMenuActions={registerMenuActions}
+            onOpenSystemSettings={() => {
+              setSettingsTab('system');
+              setIsSettingsOpen(true);
+            }}
           />
         </div>
         {isSettingsOpen && (
-          <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+          <SettingsModal
+            isOpen={isSettingsOpen}
+            initialTab={settingsTab}
+            onClose={() => setIsSettingsOpen(false)}
+          />
         )}
         {showLlamaModal && (
           <LlamaInstallModal

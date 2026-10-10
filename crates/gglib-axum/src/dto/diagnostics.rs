@@ -60,6 +60,7 @@ pub(crate) struct ResolvedPathsDto {
     pub resource_root: String,
     pub database_path: String,
     pub llama_server_path: String,
+    pub sd_server_path: String,
     pub models_dir: String,
     /// How the models directory was chosen: `"explicit" | "envVar" | "default"`.
     pub models_source: String,
@@ -72,6 +73,7 @@ impl From<ResolvedPaths> for ResolvedPathsDto {
             resource_root: paths.resource_root.display().to_string(),
             database_path: paths.database_path.display().to_string(),
             llama_server_path: paths.llama_server_path.display().to_string(),
+            sd_server_path: paths.sd_server_path.display().to_string(),
             models_dir: paths.models_dir.display().to_string(),
             models_source: match paths.models_source {
                 ModelsDirSource::Explicit => "explicit",

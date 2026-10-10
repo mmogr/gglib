@@ -179,7 +179,7 @@ fn configure_cmake(
 
 /// Run the configure `command`: a [`BuildEvent::Log`] for each line it prints
 /// that is not blank, then [`BuildEvent::PhaseCompleted`] once it has exited.
-fn run_configure(command: Command, tx: &mpsc::Sender<BuildEvent>) -> Result<()> {
+pub(crate) fn run_configure(command: Command, tx: &mpsc::Sender<BuildEvent>) -> Result<()> {
     let (mut child, lines) = spawn_lines(command).context("Failed to run CMake")?;
 
     for line in lines {
@@ -238,7 +238,7 @@ fn build_project(
 /// Run the compile `command`: [`BuildEvent::Progress`] as its output reports
 /// it, a [`BuildEvent::Log`] for each line worth showing, then
 /// [`BuildEvent::PhaseCompleted`] once it has exited.
-fn run_compile(command: Command, tx: &mpsc::Sender<BuildEvent>) -> Result<()> {
+pub(crate) fn run_compile(command: Command, tx: &mpsc::Sender<BuildEvent>) -> Result<()> {
     let (mut child, lines) = spawn_lines(command).context("Failed to run build")?;
 
     let mut last_progress = 0;
@@ -321,7 +321,7 @@ fn forward_lines(stream: Option<impl Read + Send + 'static>, line_tx: std_mpsc::
 /// may be limited. We cap CUDA builds at 4 parallel jobs by default.
 ///
 /// Respects `CMAKE_BUILD_PARALLEL_LEVEL` environment variable as an override.
-fn build_parallelism(acceleration: Acceleration) -> usize {
+pub(crate) fn build_parallelism(acceleration: Acceleration) -> usize {
     // Allow explicit override via environment variable
     if let Ok(val) = std::env::var("CMAKE_BUILD_PARALLEL_LEVEL")
         && let Ok(n) = val.parse::<usize>()

@@ -226,8 +226,13 @@ async fn the_child_checks_health_with_a_proxy_set() {
         }
     });
 
-    let monitor_side = crate::health_monitor::ServerHealthChecker::check_http(port).await;
-    let fast_path = crate::process::check_http_health(port).await;
+    let monitor_side = crate::health_monitor::ServerHealthChecker::check_http(
+        port,
+        gglib_core::domain::RuntimeKind::Llama,
+    )
+    .await;
+    let fast_path =
+        crate::process::check_http_health(port, gglib_core::domain::RuntimeKind::Llama).await;
 
     assert_eq!(
         monitor_side,

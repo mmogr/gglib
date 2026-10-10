@@ -9,6 +9,7 @@ pub(crate) mod download_manager;
 #[cfg(any(test, feature = "test-utils"))]
 mod download_manager_fixture;
 pub(crate) mod event_emitter;
+pub(crate) mod generation_gate;
 pub(crate) mod gguf_parser;
 pub(crate) mod hub_chats;
 pub mod huggingface;
@@ -62,6 +63,10 @@ pub use download_manager::{DownloadManagerConfig, DownloadManagerPort};
 #[cfg(any(test, feature = "test-utils"))]
 pub use download_manager_fixture::AskedDownloads;
 pub use event_emitter::{AppEventEmitter, NoopEmitter};
+pub use generation_gate::{
+    GateError, GateRelease, GateWait, GateWaitObserver, GenerationGate, GenerationTurn, TurnKind,
+    WaitReason,
+};
 pub use gguf_parser::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopGgufParser, TensorTable,
 };

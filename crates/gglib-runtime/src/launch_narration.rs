@@ -14,8 +14,8 @@
 
 use gglib_core::cache_config::KvCacheType;
 use gglib_core::domain::{
-    LaunchDecision, LaunchNarration, RuntimeFlags, estimate_kv_bytes_for_context, format_gib,
-    format_mib_as_gib, kv_bytes_per_token,
+    LaunchDecision, LaunchNarration, RuntimeFlags, RuntimeKind, SlotFootprint,
+    estimate_kv_bytes_for_context, format_gib, format_mib_as_gib, kv_bytes_per_token,
 };
 use gglib_core::normalize::tags::FORMAT_QWEN_XML;
 use gglib_core::ports::{JinjaMode, ModelLaunchSpec};
@@ -26,6 +26,7 @@ use crate::llama::args::{
     KvCacheTypeResolution, KvCacheTypeSource, MtpResolutionSource, ReasoningFormatSource,
     SlotRestoreResolution,
 };
+use crate::process::admission::PRIMARY_SLOT;
 use crate::server_config::ResolvedCapabilities;
 
 /// Everything one launch decided, gathered at the spawn site.
@@ -335,6 +336,84 @@ fn sampling_decision() -> LaunchDecision {
     )
 }
 
+/// Build the narration for one image model's launch on `sd-server`.
+///
+/// Every value was decided before the spawn: which build of
+/// stable-diffusion.cpp is installed (its record), the family the weights
+/// were sniffed as, each component file it draws with, which slot the queue
+/// placed it in, and the memory that placement was judged by.
+#[must_use]
+pub(crate) fn narrate_sd(
+    spec: &ModelLaunchSpec,
+    slot: usize,
+    footprint: SlotFootprint,
+) -> LaunchNarration {
+    narrate_sd_with(
+        spec,
+        crate::sd::recorded_release().as_deref(),
+        slot,
+        footprint,
+    )
+}
+
+/// [`narrate_sd`] with the recorded release given, so it can be pinned
+/// without an install.
+pub(crate) fn narrate_sd_with(
+    spec: &ModelLaunchSpec,
+    release: Option<&str>,
+    slot: usize,
+    footprint: SlotFootprint,
+) -> LaunchNarration {
+    let mut n = LaunchNarration::new(
+        spec.name.clone(),
+        spec.quantization.clone(),
+        spec.file_size_bytes,
+    );
+    let project = RuntimeKind::StableDiffusion.label();
+    n.push(release.map_or_else(
+        || LaunchDecision::new("runtime", project, "no install record"),
+        |release| LaunchDecision::new("runtime", format!("{project} {release}"), "install record"),
+    ));
+    if let Some(family) = spec.image_family {
+        n.push(LaunchDecision::new(
+            "family",
+            family.label(),
+            "tensor names",
+        ));
+    }
+    let mut components = spec.components.clone();
+    components.sort_by_key(|c| c.role);
+    for component in &components {
+        let file = component.path.file_name().map_or_else(
+            || component.path.display().to_string(),
+            |f| f.to_string_lossy().into_owned(),
+        );
+        n.push(LaunchDecision::new(component.role.as_str(), file, "linked"));
+    }
+    let placed = if slot == PRIMARY_SLOT {
+        "primary"
+    } else {
+        "secondary"
+    };
+    n.push(LaunchDecision::new("slot", placed, "admission queue"));
+    let margin = footprint.weights_bytes.saturating_sub(spec.file_size_bytes);
+    n.push(LaunchDecision::new(
+        "memory",
+        format!(
+            "{} = files {} + margin {}",
+            format_gib(footprint.total()),
+            format_gib(spec.file_size_bytes),
+            format_gib(margin)
+        ),
+        "files + the family's 1024x1024 decode buffer",
+    ));
+    n
+}
+
+#[cfg(test)]
+#[path = "launch_narration_sd_tests.rs"]
+mod sd_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -350,6 +429,7 @@ mod tests {
             file_path: "/models/q.gguf".into(),
             projector: None,
             image_family: None,
+            components: Vec::new(),
             tags: tags.iter().map(|t| (*t).to_string()).collect(),
             architecture: None,
             quantization: Some("Q4_K_M".to_string()),

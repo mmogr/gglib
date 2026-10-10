@@ -45,6 +45,7 @@ const PATH_LABELS: [keyof ResolvedPaths, string][] = [
   ['dataRoot', 'Data'],
   ['databasePath', 'Database'],
   ['llamaServerPath', 'llama-server'],
+  ['sdServerPath', 'sd-server'],
   ['resourceRoot', 'Resources'],
 ];
 

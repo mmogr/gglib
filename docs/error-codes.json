@@ -45,6 +45,24 @@
       "meaning": "A chat request named an image model, which draws and cannot chat."
     },
     {
+      "code": "image_model_incomplete",
+      "type": "invalid_request_error",
+      "status": 400,
+      "meaning": "An image model's family needs a file it has none linked for, such as its VAE; the message names every missing role and the gglib model update --component command that links it."
+    },
+    {
+      "code": "image_runtime_not_installed",
+      "type": "server_error",
+      "status": 503,
+      "meaning": "An image model was asked for and stable-diffusion.cpp's sd-server is not installed; install it with gglib config sd install. Retrying will not help."
+    },
+    {
+      "code": "image_model_does_not_fit",
+      "type": "service_unavailable",
+      "status": 503,
+      "meaning": "An image model needs more memory than is free, and the model it would displace is held by a run; refused at once, retry when that run ends."
+    },
+    {
       "code": "model_cannot_read_images",
       "type": "invalid_request_error",
       "status": 400,

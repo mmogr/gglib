@@ -115,12 +115,30 @@ fn clone_llama_cpp(llama_dir: &Path, tx: &mpsc::Sender<BuildEvent>) -> Result<(S
         .spawn()
         .context("Failed to run git clone")?;
 
-    let stderr = child.stderr.take().unwrap();
+    forward_git_progress(child.stderr.take().unwrap(), tx);
 
-    // Git writes all progress to stderr. Read on an OS thread (blocking I/O).
-    // Carriage-return progress lines (e.g. "Receiving objects: 45%\r") are
-    // filtered: BufRead::lines() keeps \r as trailing content; any line
-    // containing \r is dropped to avoid corrupting SSE streams.
+    let status = child.wait().context("Failed to wait for git clone")?;
+    if !status.success() {
+        bail!("Failed to clone llama.cpp repository");
+    }
+
+    let _ = tx.blocking_send(BuildEvent::PhaseCompleted {
+        phase: BuildPhase::CloneOrUpdateRepo,
+    });
+
+    get_repo_info(llama_dir)
+}
+
+/// Forward a git command's `stderr` to `tx` as [`BuildEvent::Log`] lines.
+///
+/// Git writes all progress to stderr. Read on an OS thread (blocking I/O).
+/// Carriage-return progress lines (e.g. "Receiving objects: 45%\r") are
+/// filtered: `BufRead::lines()` keeps \r as trailing content; any line
+/// containing \r is dropped to avoid corrupting SSE streams.
+pub(crate) fn forward_git_progress(
+    stderr: std::process::ChildStderr,
+    tx: &mpsc::Sender<BuildEvent>,
+) {
     let tx_reader = tx.clone();
     thread::spawn(move || {
         let reader = BufReader::new(stderr);
@@ -136,21 +154,10 @@ fn clone_llama_cpp(llama_dir: &Path, tx: &mpsc::Sender<BuildEvent>) -> Result<(S
             }
         }
     });
-
-    let status = child.wait().context("Failed to wait for git clone")?;
-    if !status.success() {
-        bail!("Failed to clone llama.cpp repository");
-    }
-
-    let _ = tx.blocking_send(BuildEvent::PhaseCompleted {
-        phase: BuildPhase::CloneOrUpdateRepo,
-    });
-
-    get_repo_info(llama_dir)
 }
 
 /// Get version and commit info from repository
-fn get_repo_info(llama_dir: &std::path::Path) -> Result<(String, String)> {
+pub(crate) fn get_repo_info(llama_dir: &std::path::Path) -> Result<(String, String)> {
     // Get commit SHA
     let output = cmd("git")
         .args(["-C", llama_dir.to_str().unwrap(), "rev-parse", "HEAD"])
@@ -176,8 +183,9 @@ fn get_repo_info(llama_dir: &std::path::Path) -> Result<(String, String)> {
     Ok((version, commit_sha))
 }
 
-/// Install the requested llama.cpp binary from the build directory into gglib's bin folder.
-pub(super) fn install_binary(
+/// Install the binary `binary_name` from the checkout's `build/` directory
+/// to `destination`.
+pub(crate) fn install_binary(
     llama_dir: &std::path::Path,
     binary_name: &str,
     destination: &std::path::Path,

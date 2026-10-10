@@ -1,6 +1,6 @@
 //! A launch whose weights or projector are not on disk is refused by the
-//! missing file's name, before anything is spawned; and a launch of a model
-//! that draws images is refused before that.
+//! missing file's name, before anything is spawned. An image model's own
+//! checks are in `launch_sd_tests.rs`.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -11,6 +11,7 @@ use gglib_core::server_config::ServerConfigOptions;
 use tokio::sync::RwLock;
 
 use super::ensure_present;
+use crate::process::RuntimeBinaries;
 use crate::process::core::GuiProcessCore;
 use crate::process::residency::ResidentSet;
 use crate::process::residency::residency_tests::{OneModel, launch_spec};
@@ -94,7 +95,7 @@ async fn an_admission_with_a_missing_projector_is_refused_before_any_spawn() {
     );
     let core = Arc::new(RwLock::new(GuiProcessCore::new(
         19_400,
-        "/nonexistent/llama-server",
+        RuntimeBinaries::llama_only("/nonexistent/llama-server"),
     )));
 
     let refused = set
@@ -104,43 +105,6 @@ async fn an_admission_with_a_missing_projector_is_refused_before_any_spawn() {
         .unwrap_err();
 
     assert_eq!(missing_file(refused), projector.display().to_string());
-    assert_eq!(core.read().await.count(), 0, "nothing was spawned");
-    assert!(set.current_model().is_none());
-}
-
-/// Through the whole admission: an image model is refused by name before
-/// its files are looked for (its weights here are not on disk, so a check
-/// that came after the file check would name the file) and before anything
-/// is spawned.
-#[tokio::test]
-async fn an_admission_of_an_image_model_is_refused_before_its_files_are_read() {
-    let dir = tempfile::tempdir().unwrap();
-    let weights = dir.path().join("flux1-schnell-q8_0.gguf");
-    let draws = ModelLaunchSpec {
-        name: "flux".to_owned(),
-        image_family: Some(gglib_core::domain::ImageFamily::Flux1),
-        ..spec(&weights, None)
-    };
-    let set = ResidentSet::new(
-        Arc::new(OneModel(draws)),
-        ServerConfigOptions::default(),
-        CacheRamSetting::Auto,
-    );
-    let core = Arc::new(RwLock::new(GuiProcessCore::new(
-        19_420,
-        "/nonexistent/llama-server",
-    )));
-
-    let refused = set
-        .admit(&core, "flux", None, Some(4096), LaunchOverrides::default())
-        .await
-        .map(|_| ())
-        .unwrap_err();
-
-    match refused {
-        ModelRuntimeError::ImageModelCannotChat(name) => assert_eq!(name, "flux"),
-        other => panic!("expected ImageModelCannotChat, got {other:?}"),
-    }
     assert_eq!(core.read().await.count(), 0, "nothing was spawned");
     assert!(set.current_model().is_none());
 }
@@ -185,7 +149,7 @@ async fn a_launch_starts_the_server_with_the_models_projector() {
     );
     let core = Arc::new(RwLock::new(GuiProcessCore::new(
         19_410,
-        binary.to_string_lossy(),
+        RuntimeBinaries::llama_only(binary.to_string_lossy()),
     )));
 
     let failed = set

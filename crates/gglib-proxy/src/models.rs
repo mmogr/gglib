@@ -416,14 +416,16 @@ impl ErrorResponse {
     /// Refused for the reason [`Self::embedding_model_cannot_chat`] is: the
     /// model draws images and llama-server cannot load it, so admitting it
     /// would unload whatever is serving chat to collect a failure.
+    ///
+    /// The code and the words are core's
+    /// ([`gglib_core::request_pipeline::refuse_unless_chats`]), shared with
+    /// every other door that refuses a chat for an image model.
     pub fn image_model_cannot_chat(model: &str) -> Self {
+        let refusal = gglib_core::request_pipeline::DrawsImages;
         Self::with_code(
-            format!(
-                "Model '{model}' is an image model: it draws images and cannot serve chat \
-                 completions. Name a chat model here."
-            ),
+            refusal.message(model),
             "invalid_request_error",
-            "image_model_cannot_chat",
+            refusal.code(),
         )
     }
 
@@ -528,6 +530,23 @@ impl From<ModelRuntimeError> for ErrorResponse {
                 "pinned_model_mismatch",
             ),
             ModelRuntimeError::ImageModelCannotChat(name) => Self::image_model_cannot_chat(&name),
+            // The runtime's words, which already name the command, every
+            // missing role, or the held model and the bytes.
+            ModelRuntimeError::ImageRuntimeNotInstalled => Self::with_code(
+                err.to_string(),
+                "server_error",
+                "image_runtime_not_installed",
+            ),
+            ModelRuntimeError::ImageModelIncomplete { .. } => Self::with_code(
+                err.to_string(),
+                "invalid_request_error",
+                "image_model_incomplete",
+            ),
+            ModelRuntimeError::ImageModelDoesNotFit { .. } => Self::with_code(
+                err.to_string(),
+                "service_unavailable",
+                "image_model_does_not_fit",
+            ),
             ModelRuntimeError::Internal(msg) => Self::internal_error(&msg),
         }
     }

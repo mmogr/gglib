@@ -30,6 +30,12 @@ export type { SecondarySlotStatus };
 /** One model in VRAM. */
 export type { ResidentSlotSnapshot } from '../../../types/generated/ResidentSlotSnapshot';
 
+/**
+ * Whose turn it is to generate: the render holding the GPU (its image model,
+ * step and total), the LLM turns in flight, and how many wait for a turn.
+ */
+export type { GenerationSnapshot } from '../../../types/generated/GenerationSnapshot';
+
 /** Requests waiting for one model. */
 export type { QueuedModelSnapshot } from '../../../types/generated/QueuedModelSnapshot';
 

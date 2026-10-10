@@ -53,6 +53,7 @@ async fn teardown_writes_what_the_loop_guard_recorded() {
         crate::bootstrap::bootstrap(crate::ServerConfig {
             base_port: Some(19_000),
             llama_server_path: "/nonexistent/llama-server".into(),
+            sd_server_path: "/nonexistent/sd-server".into(),
             max_concurrent_agent_loops: 1,
             db_path: Some(db.clone()),
             device_keys_path: Some(dir.path().join("remote_devices")),
@@ -142,6 +143,7 @@ async fn teardown_drops_every_run() {
         crate::bootstrap::bootstrap(crate::ServerConfig {
             base_port: Some(19_100),
             llama_server_path: "/nonexistent/llama-server".into(),
+            sd_server_path: "/nonexistent/sd-server".into(),
             max_concurrent_agent_loops: 1,
             db_path: Some(dir.path().join("gglib.db")),
             device_keys_path: Some(dir.path().join("remote_devices")),
@@ -192,6 +194,7 @@ async fn teardown_waits_for_the_runs_ends_but_never_past_its_bound() {
         crate::bootstrap::bootstrap(crate::ServerConfig {
             base_port: Some(19_300),
             llama_server_path: "/nonexistent/llama-server".into(),
+            sd_server_path: "/nonexistent/sd-server".into(),
             max_concurrent_agent_loops: 1,
             db_path: Some(dir.path().join("gglib.db")),
             device_keys_path: Some(dir.path().join("remote_devices")),

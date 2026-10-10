@@ -32,6 +32,7 @@ mod ports;
 )]
 pub mod residency;
 pub mod shutdown;
+mod spawn_config;
 mod stream;
 mod types;
 
@@ -45,5 +46,6 @@ pub use logs::{ServerLogEntry, ServerLogManager, get_log_manager};
 pub use manager::ProcessManager;
 pub use residency::ResidentSet;
 pub use shutdown::{kill_pid, shutdown_child};
+pub use spawn_config::{RuntimeBinaries, SpawnConfig};
 pub(crate) use stream::spawn_stream_reader;
 pub use types::{RunningProcess, ServerInfo};

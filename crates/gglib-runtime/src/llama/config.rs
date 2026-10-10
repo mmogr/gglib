@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+/// A download's record is every product's; it lives with the installer.
+pub(super) use crate::binary_install::PrebuiltRecord;
+
 /// What `llama-config.json` holds.
 ///
 /// Two shapes have been written to that file, by the two ways of installing,
@@ -97,31 +100,6 @@ impl BuildConfig {
                 .iter()
                 .map(std::string::ToString::to_string)
                 .collect(),
-        }
-    }
-}
-
-/// What a pre-built download records about itself.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct PrebuiltRecord {
-    /// The llama.cpp release tag that was installed (e.g. `b10327`).
-    pub(super) version: String,
-    /// The platform build that was chosen (e.g. `macOS ARM64 (Metal)`).
-    pub(super) platform: String,
-    /// Always `prebuilt`.
-    pub(super) install_type: String,
-    /// When it was installed, as RFC 3339.
-    pub(super) installed_at: String,
-}
-
-impl PrebuiltRecord {
-    /// The record of a download made now.
-    pub(super) fn new(version: &str, platform: &str) -> Self {
-        Self {
-            version: version.to_string(),
-            platform: platform.to_string(),
-            install_type: "prebuilt".to_string(),
-            installed_at: Utc::now().to_rfc3339(),
         }
     }
 }

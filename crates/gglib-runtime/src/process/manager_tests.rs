@@ -6,12 +6,13 @@ use super::*;
 // Pinned mode
 // ---------------------------------------------------------------
 
+use crate::process::RuntimeBinaries;
 use crate::process::residency::residency_tests::{StubCatalog, pin};
 
 fn manager() -> ProcessManager {
     ProcessManager::new(
         9000,
-        "llama-server",
+        RuntimeBinaries::llama_only("llama-server"),
         Arc::new(StubCatalog),
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,
@@ -172,6 +173,8 @@ fn manager_with_resident() -> Arc<ProcessManager> {
         context_size: 4096,
         port: 8001,
         projector: None,
+        runtime: gglib_core::domain::RuntimeKind::Llama,
+        components: Vec::new(),
         slot_restore_supported: true,
         cache_ram_health: gglib_core::domain::CacheRamHealth::LlamaDefault,
         narration: None,
@@ -248,4 +251,94 @@ async fn a_stop_takes_the_primary_even_while_a_run_holds_it() {
     // slot is emptied before it.
     let _ = port.stop_current().await;
     assert!(manager.current_model().is_none());
+}
+
+// ---------------------------------------------------------------
+// The runtime, carried from the resident and the process outward
+// ---------------------------------------------------------------
+
+/// An `sd-server` resident is reported as one everywhere the manager
+/// projects its slots: the routing target and the dashboard snapshot.
+#[test]
+fn a_stable_diffusion_resident_is_reported_with_its_runtime() {
+    use crate::process::admission::{PRIMARY_SLOT, Resident};
+    use gglib_core::domain::RuntimeKind;
+
+    let manager = manager_with_resident();
+    let llama = manager.current_model().expect("a primary");
+    assert_eq!(llama.runtime, RuntimeKind::Llama);
+
+    let previous = manager.residency.queue().evict(PRIMARY_SLOT).expect("qwen");
+    let sd = Resident {
+        model_name: "flux".to_owned(),
+        runtime: RuntimeKind::StableDiffusion,
+        ..previous
+    };
+    drop(manager.residency.queue().install(PRIMARY_SLOT, sd));
+
+    assert_eq!(
+        manager.current_model().expect("a primary").runtime,
+        RuntimeKind::StableDiffusion
+    );
+    assert_eq!(
+        manager.admission_snapshot().slots[0].runtime,
+        RuntimeKind::StableDiffusion
+    );
+}
+
+/// A running `sd-server` is listed with its runtime.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_running_sd_server_is_listed_with_its_runtime() {
+    use crate::sd::SdServerConfig;
+    use gglib_core::domain::{ImageFamily, RuntimeKind};
+    use std::os::unix::fs::PermissionsExt;
+
+    // Unused by any other test in this binary, for the reason
+    // `residency::launch_tests` gives.
+    const SD_ID: u32 = 999_022;
+
+    gglib_core::paths::isolate_data_root();
+    let dir = tempfile::tempdir().expect("temp dir");
+    let script = dir.path().join("sd-server");
+    std::fs::write(&script, "#!/bin/sh\nexec sleep 30\n").expect("write script");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    let model = dir.path().join("sdxl.safetensors");
+    std::fs::write(&model, b"not really a checkpoint").expect("write model file");
+    let manager = ProcessManager::new(
+        19_540,
+        RuntimeBinaries {
+            llama: "/nonexistent/llama-server".into(),
+            sd: script,
+        },
+        Arc::new(StubCatalog),
+        ServerConfigOptions::default(),
+        CacheRamSetting::Auto,
+    );
+
+    let sd = SdServerConfig {
+        model_id: i64::from(SD_ID),
+        model_name: "sdxl".to_owned(),
+        model_path: model,
+        family: ImageFamily::Sdxl,
+        components: Vec::new(),
+        port: None,
+    };
+    manager
+        .core
+        .write()
+        .await
+        .spawn(crate::process::SpawnConfig::Sd(sd))
+        .await
+        .expect("spawn");
+    let listed: Vec<RuntimeKind> = manager
+        .list_running()
+        .await
+        .into_iter()
+        .map(|handle| handle.runtime)
+        .collect();
+    manager.core.write().await.kill(SD_ID).await.ok();
+    crate::pidfile::delete_pidfile(i64::from(SD_ID)).ok();
+
+    assert_eq!(listed, [RuntimeKind::StableDiffusion]);
 }

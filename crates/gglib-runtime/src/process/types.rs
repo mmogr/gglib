@@ -1,5 +1,6 @@
 //! Shared types for process management.
 
+use gglib_core::domain::RuntimeKind;
 use serde::Serialize;
 use tokio::process::Child;
 
@@ -16,17 +17,27 @@ pub struct ServerInfo {
     pub port: u16,
     /// Unix timestamp when server was started
     pub started_at: u64,
+    /// The program serving the model
+    pub runtime: RuntimeKind,
 }
 
 impl ServerInfo {
     /// Create a new `ServerInfo`
-    pub fn new(model_id: u32, model_name: String, pid: u32, port: u16, started_at: u64) -> Self {
+    pub fn new(
+        model_id: u32,
+        model_name: String,
+        pid: u32,
+        port: u16,
+        started_at: u64,
+        runtime: RuntimeKind,
+    ) -> Self {
         Self {
             model_id,
             model_name,
             pid,
             port,
             started_at,
+            runtime,
         }
     }
 }

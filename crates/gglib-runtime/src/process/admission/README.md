@@ -79,8 +79,11 @@ A run that talks to llama-server's port directly (an agent run) takes a
 *hold* instead (`hold.rs`): while held, the resident is neither swapped out
 nor recycled, yet none of its `SERVER_PARALLEL` capacity is taken. An
 explicit stop, or the proxy's restart of a dead server, still takes it. A rival
-waiting behind a held primary gets the ordinary stall 503 after
-[`ADMISSION_DEADLINE`], which does not mention the hold. A request for the
+that only a held slot could take is passed over at the front of the line, so
+it never blocks a request for another model that could go; it waits until its
+own [`ADMISSION_DEADLINE`] and then gets the ordinary stall 503, which does not
+mention the hold. An image model in that position is refused at once instead
+([`Refusal::HeldSlot`]), naming the held model. A request for the
 held model at another context gets a 503 at once; since VS Code's gateway
 treats a 503 as final, waiting up to the deadline would serve it better.
 
@@ -91,6 +94,47 @@ a title generator — can stay loaded instead of fighting the chat model for the
 only slot. Whether a candidate may take it is decided by
 [`decide_secondary_slot`](gglib_core::domain::decide_secondary_slot) against a
 live free-VRAM reading; this module only asks.
+
+An image model, served by `sd-server`, is placed differently
+(`state_placement.rs`). It never takes an empty primary, where the next large
+chat model would evict it. It takes the second slot when the memory check
+grants it, or whenever the primary is empty, since then there is nothing to
+share memory with; its verdict is judged by free memory alone, without the
+ceiling that keeps large chat models in the swap path. Otherwise it swaps into
+an evictable primary under the ordinary turn rules. The caller says which
+program serves a request in its [`Candidate`].
+
+# The generation gate
+
+Residency says which models are loaded; the gate says which of them may
+generate (`state_gate.rs` for the rules, `gate.rs` for the waiting). An image
+render on `sd-server` needs the GPU to itself, LLM generations may share it,
+and the queue hands out turns first come first served, in one order with the
+tickets above. A render starts once no LLM turn is in flight and nothing
+asked before it; LLM turns, and llama-server serves and launches, wait while a
+render holds the GPU or waits ahead of them, so a stream of chats cannot
+starve it.
+
+Only requests on llama-server residents count as LLM turns. A render takes its
+`sd-server` lease first and gives it to the turn, so its own lease never holds
+it back, and requests for an `sd-server` resident skip the gate on the fast
+path. Tickets waiting for a slot are not turns: an older chat waiting to evict
+the slot a waiting render pins would otherwise wait on the render while the
+render waited on it, the self-wait shape of
+[#721](https://github.com/mmogr/gglib/issues/721) in another form.
+
+A render step is progress, so nobody behind a long render reaches
+[`ADMISSION_DEADLINE`] while it keeps stepping, and a gate waiter expires
+under the same stall rule as a ticket. A render whose process had to be killed
+is retired by `AdmissionQueue::retire_render`: the kill first, then one locked
+release and eviction that touches the slot only while it still holds that
+model, then the turn ends. Requests through the proxy take leases and so count
+already; the callers that take explicit turns arrive with image drawing.
+
+The dashboard reads the gate as `AdmissionSnapshot::generation`: the render
+holding it (its image model, step and total), the LLM turns in flight, and how
+many callers wait for a turn, so a chat held behind a render is seen waiting
+for its turn rather than for a slot.
 
 # What this module is not responsible for
 

@@ -2,7 +2,8 @@
 
 <!-- module-docs:start -->
 
-PID file management for tracking llama-server processes.
+PID file management for tracking the server processes gglib starts:
+llama.cpp's `llama-server` and stable-diffusion.cpp's `sd-server`.
 
 Provides atomic I/O, process verification, and startup orphan cleanup.
 
@@ -11,8 +12,8 @@ The sweep is one reader. The other is a `gglib` command in a terminal, a
 process apart from the one that owns the servers: `list_pidfiles` is how it
 learns what is being served under its data root (`RecordedServers` in
 `gglib-cli`). To either reader a pid file is a claim to check: one can
-outlive its server, so it counts only while `is_our_llama_server` says its
-pid is still one.
+outlive its server, so it counts only while `is_our_server` says its pid
+is still running one of the two managed binaries.
 
 # Safety guarantees
 - Atomic writes via temp file + rename

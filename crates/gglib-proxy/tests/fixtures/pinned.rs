@@ -192,6 +192,10 @@ impl ModelRuntimePort for PinnedRuntime {
         Ok(())
     }
 
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
+
     fn pinned(&self) -> Option<PinnedSpec> {
         Some(pin(1, self.0))
     }
@@ -261,6 +265,10 @@ impl ModelRuntimePort for EnforcingPinnedRuntime {
 
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         Ok(())
+    }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
     }
 
     fn pinned(&self) -> Option<PinnedSpec> {

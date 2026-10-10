@@ -133,6 +133,24 @@ fn what_an_install_writes_now_is_what_is_read_back() {
     assert_eq!(recorded_acceleration(&path), None);
 }
 
+/// A download's record is written byte for byte as the file above, so the
+/// file a new install leaves is the file every older gglib reads.
+#[test]
+fn a_downloads_record_is_written_as_the_file_on_disk() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("llama-config.json");
+    let record = PrebuiltRecord {
+        version: "b10327".into(),
+        platform: "macOS ARM64 (Metal)".into(),
+        install_type: "prebuilt".into(),
+        installed_at: "2026-10-01T09:08:07.654321+00:00".into(),
+    };
+
+    InstallRecord::Prebuilt(record).save(&path).unwrap();
+
+    assert_eq!(fs::read_to_string(&path).unwrap(), PREBUILT);
+}
+
 /// Reading is all a start does with the file: every reader leaves both
 /// shapes as it found them, the same bytes and never written again.
 #[test]

@@ -4,6 +4,7 @@
 //! asserted is what is left: the lines written to `out`.
 
 use super::*;
+use gglib_core::domain::RuntimeKind;
 
 /// Feed `events` to the build renderer as a finished build would have, and
 /// return the lines it wrote.
@@ -31,7 +32,7 @@ async fn download_lines(events: Vec<LlamaProgressEvent>, ending: DownloadEnding)
     drop(tx);
 
     let mut out = Vec::new();
-    render_install_events(rx, ending, &mut out).await;
+    render_install_events(rx, RuntimeKind::Llama.label(), ending, &mut out).await;
     lines_of(&out)
 }
 
@@ -231,5 +232,26 @@ async fn a_download_run_in_passing_ends_in_one_line() {
     assert_eq!(
         download_lines(a_download(), downloaded_in_passing).await,
         ["✓ llama.cpp installed (b10327)"]
+    );
+}
+
+/// The download's bar names the product being downloaded, and every other
+/// phase reads the same for both: llama.cpp's words unchanged, and
+/// stable-diffusion.cpp's own name on its download.
+#[test]
+fn a_download_is_labelled_with_its_product() {
+    let sd = RuntimeKind::StableDiffusion.label();
+    let llama = RuntimeKind::Llama.label();
+    assert_eq!(
+        install_indicator(InstallPhase::Download, sd).message(),
+        "Downloading stable-diffusion.cpp binaries..."
+    );
+    assert_eq!(
+        install_indicator(InstallPhase::Download, llama).message(),
+        "Downloading llama.cpp binaries..."
+    );
+    assert_eq!(
+        install_indicator(InstallPhase::Extract, sd).message(),
+        "Extracting binaries and libraries..."
     );
 }

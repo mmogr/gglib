@@ -10,18 +10,19 @@
 //! both the state and the launch sequence that mutates it.
 
 use super::core::GuiProcessCore;
+use super::spawn_config::RuntimeBinaries;
 use anyhow::Result;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{
-    Admission, AdmissionLease, LaunchOverrides, ModelCatalogPort, ModelRuntimeError, ProcessHandle,
-    RunningTarget,
+    Admission, AdmissionLease, GenerationGate, GenerationTurn, LaunchOverrides, ModelCatalogPort,
+    ModelRuntimeError, ProcessHandle, RunningTarget,
 };
 use gglib_core::server_config::ServerConfigOptions;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::process::admission::PRIMARY_SLOT;
+use crate::process::admission::{PRIMARY_SLOT, Resident};
 use crate::process::residency::ResidentSet;
 
 /// Unified process manager for llama-server instances.
@@ -46,7 +47,8 @@ impl ProcessManager {
     ///
     /// * `base_port` — Base port for llama-server allocation. Ports are
     ///   assigned sequentially starting from this value.
-    /// * `llama_server_path` — Path to the llama-server binary to execute.
+    /// * `binaries` — The llama-server and `sd-server` binaries to execute,
+    ///   one per runtime.
     /// * `catalog` — Model catalog used to resolve model names into launch
     ///   specifications (file paths, context sizes, etc.).
     /// * `launch_overrides` — Standing launch options every spawn starts from
@@ -66,12 +68,12 @@ impl ProcessManager {
     /// model but one (`gglib serve`).
     pub fn new(
         base_port: u16,
-        llama_server_path: impl Into<String>,
+        binaries: RuntimeBinaries,
         catalog: Arc<dyn ModelCatalogPort>,
         launch_overrides: ServerConfigOptions,
         cache_ram: CacheRamSetting,
     ) -> Self {
-        let core = GuiProcessCore::new(base_port, llama_server_path);
+        let core = GuiProcessCore::new(base_port, binaries);
         Self {
             core: Arc::new(RwLock::new(core)),
             residency: ResidentSet::new(catalog, launch_overrides, cache_ram),
@@ -154,6 +156,17 @@ impl ProcessManager {
         self.residency.stop_primary(&self.core).await
     }
 
+    /// Stop model `model_id` in whichever slot holds it, even one a run
+    /// holds. See
+    /// [`ModelRuntimePort::stop_model`](gglib_core::ports::ModelRuntimePort::stop_model).
+    ///
+    /// # Errors
+    ///
+    /// Returns `ModelRuntimeError` if the process could not be stopped.
+    pub async fn stop_model(&self, model_id: u32) -> Result<bool, ModelRuntimeError> {
+        self.residency.stop_model(model_id, &self.core).await
+    }
+
     /// Stop the model in the primary slot unless a run holds it. See
     /// [`ModelRuntimePort::recycle_current`](gglib_core::ports::ModelRuntimePort::recycle_current).
     ///
@@ -181,6 +194,7 @@ impl ProcessManager {
                     info.port,
                     info.started_at,
                 )
+                .with_runtime(info.runtime)
             })
             .collect()
     }
@@ -203,6 +217,33 @@ impl ProcessManager {
         self.residency.queue().hold(port, model_id)
     }
 
+    /// The generation gate: whose turn it is to generate, a render's or the
+    /// chats'. See [`GenerationGate`] and the admission README.
+    #[must_use]
+    pub fn generation_gate(&self) -> Arc<dyn GenerationGate> {
+        self.residency.queue().generation_gate()
+    }
+
+    /// End a render and the image model that drew it: kill `model_id`'s
+    /// server first, then, in one locked step, release the render's lease
+    /// and empty its slot only if the slot still holds `model_id`, then end
+    /// the turn. One task, that order, so no newcomer can take the slot in
+    /// between or lose its own request to the eviction.
+    ///
+    /// Returns the resident that was retired, if the slot still held it.
+    pub async fn retire_render(&self, turn: GenerationTurn, model_id: u32) -> Option<Resident> {
+        let core = Arc::clone(&self.core);
+        let kill = async move {
+            if let Err(e) = core.write().await.kill(model_id).await {
+                tracing::warn!(model_id, error = %e, "could not stop the image model cleanly");
+            }
+        };
+        self.residency
+            .queue()
+            .retire_render(turn, model_id, kill)
+            .await
+    }
+
     /// Check if any slot is mid-launch.
     #[must_use]
     pub fn is_loading(&self) -> bool {
@@ -217,3 +258,7 @@ impl ProcessManager {
 #[cfg(test)]
 #[path = "manager_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "manager_gate_tests.rs"]
+mod gate_tests;

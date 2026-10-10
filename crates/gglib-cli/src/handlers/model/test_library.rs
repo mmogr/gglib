@@ -222,6 +222,11 @@ impl ModelRuntimePort for Runtime {
         self.stopped.store(true, Ordering::SeqCst);
         Ok(())
     }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        self.stopped.store(true, Ordering::SeqCst);
+        Ok(true)
+    }
 }
 
 /// `ModelOps` over `ctx`'s library that tells `heard` what it changes and

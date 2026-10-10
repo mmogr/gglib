@@ -23,7 +23,10 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::cache_config::CacheRamSetting;
-use crate::domain::{AdmissionSnapshot, CacheRamHealth, LaunchNarration, ModelSamplingDefaults};
+use crate::domain::{
+    AdmissionSnapshot, CacheRamHealth, ComponentRole, LaunchNarration, ModelSamplingDefaults,
+    RuntimeKind,
+};
 use crate::ports::ProcessHandle;
 pub use crate::ports::pinned::PinnedSpec;
 use crate::server_config::ServerConfigOptions;
@@ -107,6 +110,10 @@ pub struct RunningTarget {
     /// `Some(default())` means the build's own table is showing through
     /// unmodified. See [`crate::domain::ModelSamplingDefaults`].
     pub model_sampling: Option<ModelSamplingDefaults>,
+    /// The program serving the model: llama.cpp's `llama-server` unless the
+    /// launch says otherwise. A reader that speaks llama-server's own API
+    /// (`/slots`, `/props`) skips a target served by `sd-server`.
+    pub runtime: RuntimeKind,
 }
 
 impl RunningTarget {
@@ -136,7 +143,15 @@ impl RunningTarget {
             cache_ram_health: CacheRamHealth::LlamaDefault,
             narration: None,
             model_sampling: None,
+            runtime: RuntimeKind::Llama,
         }
+    }
+
+    /// Say which program serves the model.
+    #[must_use]
+    pub const fn with_runtime(mut self, runtime: RuntimeKind) -> Self {
+        self.runtime = runtime;
+        self
     }
 
     /// Attach what the launched model's GGUF declares about sampling.
@@ -183,6 +198,15 @@ pub trait AdmissionRelease: Send + Sync + fmt::Debug {
     /// Called from [`AdmissionLease`]'s `Drop`, so it must never block, panic,
     /// or await.
     fn release(&self, slot: usize);
+
+    /// The request holding `slot` has made progress without finishing (an
+    /// image render's step), which proves the queue is moving: waiters behind
+    /// it start their stall clocks again.
+    ///
+    /// Required, so no implementation can forget that a long render is not a
+    /// wedge. The same rules as [`Self::release`]: never block, panic, or
+    /// await.
+    fn progress(&self, slot: usize);
 }
 
 /// Proof that a request is being served by a resident model, and that the
@@ -228,6 +252,24 @@ impl AdmissionLease {
     #[must_use]
     pub const fn slot(&self) -> usize {
         self.slot
+    }
+
+    /// Report that the request holding this lease has made progress (see
+    /// [`AdmissionRelease::progress`]).
+    pub fn progress(&self) {
+        if let Some(owner) = &self.owner {
+            owner.progress(self.slot);
+        }
+    }
+
+    /// Drop the lease without releasing it.
+    ///
+    /// Only for a teardown that has already settled this lease's count under
+    /// the queue's lock (an image render retired after its process was
+    /// killed). Releasing it as well would take one in-flight request away
+    /// from whatever model holds the slot by then.
+    pub fn disarm(mut self) {
+        self.owner = None;
     }
 }
 
@@ -329,6 +371,47 @@ pub enum ModelRuntimeError {
     #[error("Model '{0}' is an image model: it draws images and cannot be served for chat")]
     ImageModelCannotChat(String),
 
+    /// An image model was asked for and stable-diffusion.cpp's `sd-server`,
+    /// which draws, is not installed. Not retryable: installing it is the
+    /// fix, and the message names the command.
+    #[error(
+        "The image runtime, stable-diffusion.cpp's sd-server, is not installed. Install it \
+         with `{cmd}`, or from Settings → Image runtime.",
+        cmd = crate::paths::SD_INSTALL_COMMAND
+    )]
+    ImageRuntimeNotInstalled,
+
+    /// An image model's family needs files it has none linked for, so
+    /// `sd-server` could not load it.
+    #[error("{}", image_refusal::incomplete(model, missing))]
+    ImageModelIncomplete {
+        /// The model's name.
+        model: String,
+        /// Every role its family needs and it has no file for, in the
+        /// recipe's order.
+        missing: Vec<ComponentRole>,
+    },
+
+    /// Retryable: an image model needs more memory than is free, and the
+    /// model it would displace is held by a run, so it cannot be swapped out
+    /// now. Refused at once rather than queued: the hold can last as long as
+    /// the run does.
+    #[error(
+        "{}",
+        image_refusal::does_not_fit(model, held_model, *needed_bytes, *free_bytes)
+    )]
+    ImageModelDoesNotFit {
+        /// The image model's name.
+        model: String,
+        /// The resident model that is held and would have to go.
+        held_model: String,
+        /// What the image model needs, its files and its family's margin,
+        /// when the verdict knew it.
+        needed_bytes: Option<u64>,
+        /// What is free beside the held model, when it can be read.
+        free_bytes: Option<u64>,
+    },
+
     /// Internal error during runtime operations.
     #[error("Internal error: {0}")]
     Internal(String),
@@ -339,21 +422,28 @@ impl ModelRuntimeError {
     /// where retrying may succeed.
     #[must_use]
     pub const fn is_retryable(&self) -> bool {
-        matches!(self, Self::ModelLoading | Self::AdmissionTimeout(_))
+        matches!(
+            self,
+            Self::ModelLoading | Self::AdmissionTimeout(_) | Self::ImageModelDoesNotFit { .. }
+        )
     }
 
     /// Returns a suggested HTTP status code for this error.
     #[must_use]
     pub const fn suggested_status_code(&self) -> u16 {
         match self {
-            Self::ModelLoading | Self::AdmissionTimeout(_) => 503,
+            Self::ModelLoading
+            | Self::AdmissionTimeout(_)
+            | Self::ImageModelDoesNotFit { .. }
+            | Self::ImageRuntimeNotInstalled => 503,
             // A pinned mismatch is 404, not 403: from the client's point of
             // view the model it asked for does not exist on this endpoint.
             Self::ModelNotFound(_)
             | Self::ModelFileNotFound(_)
             | Self::PinnedModelMismatch { .. } => 404,
-            // The model exists; the request named the wrong kind of model.
-            Self::ImageModelCannotChat(_) => 400,
+            // The model exists; the request named the wrong kind of model,
+            // or one that is missing a file it needs.
+            Self::ImageModelCannotChat(_) | Self::ImageModelIncomplete { .. } => 400,
             Self::SpawnFailed(_) | Self::HealthCheckFailed(_) | Self::Internal(_) => 500,
         }
     }
@@ -405,15 +495,19 @@ pub struct RuntimeErrorEnvelope {
 impl From<&ModelRuntimeError> for RuntimeErrorEnvelope {
     fn from(err: &ModelRuntimeError) -> Self {
         let discriminant = match err {
-            ModelRuntimeError::ModelLoading | ModelRuntimeError::AdmissionTimeout(_) => {
-                error_type::SERVICE_UNAVAILABLE
-            }
+            ModelRuntimeError::ModelLoading
+            | ModelRuntimeError::AdmissionTimeout(_)
+            | ModelRuntimeError::ImageModelDoesNotFit { .. } => error_type::SERVICE_UNAVAILABLE,
             ModelRuntimeError::ModelNotFound(_)
             | ModelRuntimeError::ModelFileNotFound(_)
             | ModelRuntimeError::PinnedModelMismatch { .. }
-            | ModelRuntimeError::ImageModelCannotChat(_) => error_type::INVALID_REQUEST,
+            | ModelRuntimeError::ImageModelCannotChat(_)
+            | ModelRuntimeError::ImageModelIncomplete { .. } => error_type::INVALID_REQUEST,
+            // A 503 that retrying cannot fix: nothing changes until someone
+            // installs the runtime.
             ModelRuntimeError::SpawnFailed(_)
             | ModelRuntimeError::HealthCheckFailed(_)
+            | ModelRuntimeError::ImageRuntimeNotInstalled
             | ModelRuntimeError::Internal(_) => error_type::SERVER_ERROR,
         };
         Self {
@@ -519,6 +613,16 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
     /// person's, a benchmark's), or the proxy's restart of a dead server.
     async fn stop_current(&self) -> Result<(), ModelRuntimeError>;
 
+    /// Stop model `model_id` wherever it is resident, the primary slot or the
+    /// second, even one a run holds: a person's Stop on a model they chose,
+    /// which is often an image model beside a chat model.
+    ///
+    /// Required of every runtime, unlike [`Self::list_running`]'s default:
+    /// a runtime that listed a model and could not stop it would show a Stop
+    /// that does nothing. `Ok(false)` when that model is not running here,
+    /// which a caller reports as "not found"; `Ok(true)` once it is stopped.
+    async fn stop_model(&self, model_id: u32) -> Result<bool, ModelRuntimeError>;
+
     /// Stop it for automatic recovery, which waits for a run: refused with
     /// [`ModelRuntimeError::AdmissionTimeout`] while one holds it (see
     /// [`Self::hold`]). Defaults to [`Self::stop_current`], for runtimes
@@ -601,7 +705,14 @@ impl ModelRuntimePort for NoopModelRuntime {
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         Ok(())
     }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
 }
+
+#[path = "model_runtime_image_refusal.rs"]
+mod image_refusal;
 
 #[cfg(test)]
 #[path = "model_runtime_tests.rs"]

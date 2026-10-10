@@ -171,6 +171,8 @@ impl AdmissionRelease for Queue {
     fn release(&self, _slot: usize) {
         self.0.add_permits(1);
     }
+
+    fn progress(&self, _slot: usize) {}
 }
 
 impl StallRuntime {
@@ -224,6 +226,10 @@ impl ModelRuntimePort for StallRuntime {
         }
         self.upstream.recycled.store(true, Ordering::SeqCst);
         Ok(())
+    }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
     }
 
     async fn recycle_current(&self) -> Result<(), ModelRuntimeError> {

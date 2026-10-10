@@ -78,7 +78,14 @@ describe('initServerEvents', () => {
    */
   it('hydrates from the server list so a page load sees what is already running', async () => {
     listServers.mockResolvedValue([
-      { model_id: 1, model_name: 'Loaded', pid: 4242, port: 8080, started_at: 1_700_000_000 },
+      {
+        model_id: 1,
+        model_name: 'Loaded',
+        pid: 4242,
+        port: 8080,
+        started_at: 1_700_000_000,
+        runtime: 'llama',
+      },
     ]);
 
     const { initServerEvents, cleanupServerEvents } = await loadFresh();
@@ -131,7 +138,14 @@ describe('initServerEvents', () => {
     // `modelName` only.
     deliver?.({ type: 'server_stopped', modelId: 1, modelName: 'Loaded' });
     resolveList([
-      { model_id: 1, model_name: 'Loaded', pid: null, port: 8080, started_at: 1_700_000_000 },
+      {
+        model_id: 1,
+        model_name: 'Loaded',
+        pid: null,
+        port: 8080,
+        started_at: 1_700_000_000,
+        runtime: 'llama',
+      },
     ]);
     await vi.waitFor(() => expect(ingestServerEvent).toHaveBeenCalled());
 
@@ -188,7 +202,14 @@ describe('initServerEvents', () => {
     cleanupServerEvents();
 
     resolveList([
-      { model_id: 1, model_name: 'Loaded', pid: 4242, port: 8080, started_at: 1_700_000_000 },
+      {
+        model_id: 1,
+        model_name: 'Loaded',
+        pid: 4242,
+        port: 8080,
+        started_at: 1_700_000_000,
+        runtime: 'llama',
+      },
     ]);
     await new Promise((resolve) => setTimeout(resolve, 0));
 

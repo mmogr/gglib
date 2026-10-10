@@ -82,6 +82,7 @@ pub(in crate::handlers) async fn state() -> (tempfile::TempDir, AppState) {
     let state = crate::bootstrap::bootstrap(crate::ServerConfig {
         base_port: Some(19_200),
         llama_server_path: "/nonexistent/llama-server".into(),
+        sd_server_path: "/nonexistent/sd-server".into(),
         max_concurrent_agent_loops: 1,
         db_path: Some(dir.path().join("gglib.db")),
         device_keys_path: Some(dir.path().join("remote_devices")),

@@ -211,6 +211,10 @@ pub struct ServerInfo {
     pub port: u16,
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub started_at: u64,
+    /// The program serving the model; llama.cpp's when a sender leaves it
+    /// out.
+    #[serde(default)]
+    pub runtime: gglib_core::domain::RuntimeKind,
 }
 
 impl ServerInfo {
@@ -222,6 +226,7 @@ impl ServerInfo {
             pid: handle.pid,
             port: handle.port,
             started_at: handle.started_at,
+            runtime: handle.runtime,
         }
     }
 }

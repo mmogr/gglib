@@ -55,6 +55,7 @@ impl ModelRuntimePort for Resident {
                     inflight: 0,
                     is_primary: slot == 0,
                     resident_for_secs: 1,
+                    runtime: gglib_core::domain::RuntimeKind::Llama,
                 })
                 .collect(),
             ..AdmissionSnapshot::default()
@@ -67,6 +68,10 @@ impl ModelRuntimePort for Resident {
 
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         Ok(())
+    }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
     }
 
     fn pinned(&self) -> Option<PinnedSpec> {

@@ -957,11 +957,15 @@ pub(crate) fn handle_runtime_error(err: ModelRuntimeError) -> Response {
     let status = StatusCode::from_u16(err.suggested_status_code())
         .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let queued_out = matches!(err, ModelRuntimeError::AdmissionTimeout(_));
+    let retryable = err.is_retryable();
     let error_response = ErrorResponse::from(err);
 
     let mut response = (status, Json(error_response)).into_response();
 
-    if status == StatusCode::SERVICE_UNAVAILABLE {
+    // Only a 503 that retrying can fix says when to retry. A missing image
+    // runtime is a 503 too, and stays one until somebody installs it, so a
+    // Retry-After there would send honest clients back for nothing.
+    if status == StatusCode::SERVICE_UNAVAILABLE && retryable {
         // Derived from the shared policy rather than hardcoded, so the hint we
         // advertise cannot drift from the backoff our own clients apply.
         //

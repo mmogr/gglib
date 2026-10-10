@@ -27,6 +27,7 @@ function slot(overrides: Partial<ResidentSlotSnapshot> = {}): ResidentSlotSnapsh
     inflight: 0,
     is_primary: true,
     resident_for_secs: 12,
+    runtime: 'llama',
     ...overrides,
   };
 }
@@ -38,6 +39,7 @@ function admission(overrides: Partial<AdmissionSnapshot> = {}): AdmissionSnapsho
     total_queued: 0,
     total_swaps: 0,
     secondary_slot: { state: 'available', detail: 'No second model has been requested yet.' },
+    generation: { render: null, llm_inflight: 0, waiting: 0 },
     ...overrides,
   };
 }
@@ -145,5 +147,59 @@ describe('ProxyAdmissionPanel', () => {
     expect(screen.getByText('1,234')).toBeInTheDocument();
     expect(screen.getByText('Model swaps')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
+  });
+
+  it('says which program serves each slot', () => {
+    render(
+      <ProxyAdmissionPanel
+        admission={admission({
+          slots: [
+            slot(),
+            slot({ slot: 1, model_name: 'flux-schnell', is_primary: false, runtime: 'stable_diffusion' }),
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText('llama.cpp')).toBeInTheDocument();
+    expect(screen.getByText('stable-diffusion.cpp')).toBeInTheDocument();
+  });
+
+  /// A chat held behind a render waits for its turn, not for a slot: the
+  /// panel has to say so, or the wait reads as a fault.
+  it('shows the render holding the GPU, its step, and who waits for a turn', () => {
+    render(
+      <ProxyAdmissionPanel
+        admission={admission({
+          generation: {
+            render: { model_name: 'flux-schnell', step: 2, total: 4 },
+            llm_inflight: 0,
+            waiting: 3,
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Drawing with flux-schnell')).toBeInTheDocument();
+    expect(screen.getByText('step 2 of 4 · 3 waiting for a turn')).toBeInTheDocument();
+  });
+
+  it('reads a render before its first step as loading', () => {
+    render(
+      <ProxyAdmissionPanel
+        admission={admission({
+          generation: { render: { model_name: null, step: 0, total: 0 }, llm_inflight: 0, waiting: 0 },
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Drawing')).toBeInTheDocument();
+    expect(screen.getByText('loading')).toBeInTheDocument();
+  });
+
+  it('draws no gate line when nothing renders and nobody waits', () => {
+    render(<ProxyAdmissionPanel admission={admission()} />);
+
+    expect(screen.queryByText(/Drawing|waiting for a turn/)).not.toBeInTheDocument();
   });
 });

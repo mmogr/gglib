@@ -20,6 +20,7 @@ fn server(model_id: i64, model_name: &str, port: u16, started_at: u64) -> Server
         pid: None,
         port,
         started_at,
+        runtime: gglib_core::domain::RuntimeKind::Llama,
     }
 }
 
@@ -223,4 +224,23 @@ async fn a_chat_that_ran_on_the_paired_machine_is_refused() {
         }
         other => panic!("not refused as a conflict: {other:?}"),
     }
+}
+
+/// A chat naming no model runs on the chat server started last, never on an
+/// sd-server started after it: a model that draws cannot chat.
+#[tokio::test]
+async fn a_chat_naming_no_model_passes_over_an_image_server() {
+    let (_dir, state) = state().await;
+    let (conversation, rows) = bare(&state).await;
+    let mut draws = server(9, "flux", 9001, 20);
+    draws.runtime = gglib_core::domain::RuntimeKind::StableDiffusion;
+    let running = [server(7, "running-7b", 9000, 10), draws];
+
+    let model = choose(&state, &conversation, &rows, &running).await;
+
+    assert_eq!(
+        model.unwrap(),
+        "7",
+        "the chat server, not the later sd-server"
+    );
 }

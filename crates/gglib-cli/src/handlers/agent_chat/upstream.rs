@@ -7,8 +7,9 @@
 //! [`Target`](crate::target::Target)'s, and lives with the other decisions
 //! that depend on which machine a turn runs on.
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
 use gglib_app_services::types::StartServerRequest;
+use gglib_core::request_pipeline::refuse_unless_chats;
 use gglib_core::server_config::parse_ctx_size_flag;
 
 use super::config::{AgentSessionParams, BannerInfo};
@@ -23,7 +24,8 @@ use gglib_core::domain::{InferenceConfig, Model, ModelAction};
 /// A caller-supplied `--port` is used as-is (externally managed server).
 /// Otherwise the daemon — the one process that owns llama-server — is asked
 /// to start (or reuse) the model, and the daemon keeps owning it after this
-/// session ends.
+/// session ends. A model that draws images is refused first, with the
+/// proxy's `image_model_cannot_chat` words, and the daemon is not asked.
 pub(crate) async fn resolve_port(
     ctx: &CliContext,
     params: &AgentSessionParams,
@@ -36,6 +38,11 @@ pub(crate) async fn resolve_port(
 
     // Look up the model so the context flag can resolve against its metadata.
     let model = resolver::resolve_for(ctx, &params.model_identifier, ModelAction::Chat).await?;
+    // Before the daemon is asked for anything: a model that draws is served
+    // by sd-server, which cannot chat, and starting it would displace a
+    // model that can. The words are the proxy's.
+    refuse_unless_chats(model.runtime())
+        .map_err(|refusal| anyhow!(refusal.message(&model.name)))?;
     let body = start_body(&model, params.ctx_size.as_deref())?;
 
     if !banner.quiet {
