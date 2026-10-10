@@ -83,7 +83,8 @@ crates/gglib-core/src/settings_tests.rs 474
 crates/gglib-core/src/sse/parser.rs 781
 crates/gglib-core/src/utils/system/packages.rs 586
 crates/gglib-db/src/repositories/sqlite_benchmark_repository.rs 655
-crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 312
+crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 315
+crates/gglib-db/src/repositories/sqlite_chat_history_repository_tests.rs 322
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 354
 crates/gglib-db/src/repositories/sqlite_mcp_repository_tests.rs 377
 crates/gglib-db/src/repositories/sqlite_model_repository.rs 1053

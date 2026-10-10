@@ -170,7 +170,12 @@ impl ChatHistoryService {
         self.repo.replace_from(from, msg).await
     }
 
-    /// Delete a message and all subsequent messages.
+    /// The conversation message `id` is in, if any.
+    pub async fn conversation_of_message(&self, id: i64) -> Result<Option<i64>, ChatHistoryError> {
+        self.repo.conversation_of_message(id).await
+    }
+
+    /// Delete a message and all subsequent messages: all or none.
     pub async fn delete_message_and_subsequent(&self, id: i64) -> Result<i64, ChatHistoryError> {
         self.repo.delete_message_and_subsequent(id).await
     }

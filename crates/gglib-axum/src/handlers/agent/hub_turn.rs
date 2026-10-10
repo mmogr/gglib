@@ -189,13 +189,7 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
             )
         })?;
     // Before a model is loaded for it: the reservation refuses the same.
-    if let Some(run) = state.runs.live_on(id) {
-        return Err(RunsError::ConversationBusy {
-            conversation_id: id,
-            run,
-        }
-        .into());
-    }
+    state.runs.refuse_if_live(id)?;
     let rows = history.get_messages(id).await.map_err(unreadable)?;
     let model = model_for(state, &conversation, &rows).await?;
     // The prompt comes from the conversation, as the page takes it.

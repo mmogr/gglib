@@ -169,6 +169,48 @@ async fn delete_message_and_subsequent_removes_tail() {
 }
 
 #[tokio::test]
+async fn a_message_is_found_in_its_conversation() {
+    let repo = repo().await;
+    let cid = repo.create_conversation(make_conv("Find")).await.unwrap();
+    let mid = repo.save_message(make_msg(cid, "A")).await.unwrap();
+    assert_eq!(repo.conversation_of_message(mid).await.unwrap(), Some(cid));
+    assert_eq!(repo.conversation_of_message(mid + 1).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn deleting_a_message_no_conversation_has_changes_nothing() {
+    let repo = repo().await;
+    let cid = repo.create_conversation(make_conv("None")).await.unwrap();
+    let mid = repo.save_message(make_msg(cid, "A")).await.unwrap();
+    let refused = repo.delete_message_and_subsequent(mid + 1).await;
+    assert!(matches!(refused, Err(ChatHistoryError::MessageNotFound(id)) if id == mid + 1));
+    assert_eq!(repo.get_messages(cid).await.unwrap().len(), 1);
+}
+
+/// The rows go with the conversation's timestamp, or not at all.
+#[tokio::test]
+async fn a_delete_that_cannot_finish_deletes_nothing() {
+    let repo = repo().await;
+    let cid = repo
+        .create_conversation(make_conv("Rollback"))
+        .await
+        .unwrap();
+    let a = repo.save_message(make_msg(cid, "A")).await.unwrap();
+    repo.save_message(make_msg(cid, "B")).await.unwrap();
+    sqlx::query(
+        "CREATE TRIGGER refuse BEFORE UPDATE ON chat_conversations \
+         BEGIN SELECT RAISE(ABORT, 'no'); END",
+    )
+    .execute(&repo.pool)
+    .await
+    .unwrap();
+
+    assert!(repo.delete_message_and_subsequent(a).await.is_err());
+
+    assert_eq!(repo.get_messages(cid).await.unwrap().len(), 2);
+}
+
+#[tokio::test]
 async fn save_messages_writes_every_row_in_order() {
     let repo = repo().await;
     let id = repo.create_conversation(make_conv("t")).await.unwrap();

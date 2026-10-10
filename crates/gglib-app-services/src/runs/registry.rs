@@ -159,6 +159,21 @@ impl RunRegistry {
             .map(|cell| cell.id.clone())
     }
 
+    /// Refuse to change `conversation_id` while a run's reply to it is not
+    /// yet saved: the rows that reply follows are not to move under it.
+    ///
+    /// # Errors
+    ///
+    /// [`RunsError::ConversationBusy`], naming the run.
+    pub fn refuse_if_live(&self, conversation_id: i64) -> Result<(), RunsError> {
+        self.live_on(conversation_id).map_or(Ok(()), |run| {
+            Err(RunsError::ConversationBusy {
+                conversation_id,
+                run,
+            })
+        })
+    }
+
     /// Cancel and drop every run, ending every reader. For the daemon's
     /// shutdown.
     pub fn shutdown(&self) {

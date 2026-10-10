@@ -28,6 +28,7 @@ vi.mock('../../../src/services/platform', () => ({
 }));
 
 import { useMessageDeletion } from '../../../src/components/ChatMessagesPanel/hooks/useMessageDeletion';
+import { TransportError } from '../../../src/services/transport';
 import type { ChatMessage, ConversationSummary } from '../../../src/services/transport';
 
 const CONVERSATION_ID = 7;
@@ -183,5 +184,20 @@ describe('useMessageDeletion', () => {
     expect(showToast).toHaveBeenCalledWith('Failed to delete message', 'error');
     expect(hook.result.current.isDeleteModalOpen).toBe(false);
     expect(hook.result.current.isDeleting).toBe(false);
+  });
+
+  it('says a chat whose reply is still being written is not deleted from', async () => {
+    const { hook, showToast } = setup(messagesWithToolCall, [{ id: 'db-9', role: 'user' }]);
+    transport.deleteMessage.mockRejectedValueOnce(
+      new TransportError('CONFLICT', 'conversation 7 already has a live reply, run e1; stop it or wait'),
+    );
+
+    act(() => hook.result.current.initiateDelete('db-9'));
+    await act(async () => { await hook.result.current.confirmDelete(); });
+
+    expect(showToast).toHaveBeenCalledWith(
+      'A reply is still being written here. Stop it or wait, then delete.',
+      'error',
+    );
   });
 });
