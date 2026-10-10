@@ -274,9 +274,17 @@ async fn a_hub_chats_turn_saves_its_models_launched_context() {
     p.local_model = Some((19_555, 1));
     let free = super::compose::take_permit(&state);
 
-    super::hub_turn::begin(&state, "phone", "d1", saving(id), p, free.expect("a slot"))
-        .await
-        .unwrap();
+    let late = super::launch::ready(p);
+    super::hub_turn::begin(
+        &state,
+        "phone",
+        "d1",
+        "qwen".to_owned(),
+        saving(id),
+        late,
+        free.expect("a slot"),
+    )
+    .unwrap();
     settled(&state).await;
 
     let rows = saved(&state, id).await;

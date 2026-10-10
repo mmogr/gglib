@@ -14,7 +14,7 @@ use gglib_core::domain::hub_chats::HubTurn;
 use super::hub_turn_tests::{chat, device, refused, turn};
 use super::{begin, plan, start};
 use crate::handlers::agent::compose::take_permit;
-use crate::handlers::agent::launch::{Transcript, launch};
+use crate::handlers::agent::launch::{Transcript, launch, ready};
 use crate::handlers::agent::run_fixture::{
     End, finished_reply, paced, prepared, saving, settled, state,
 };
@@ -37,9 +37,17 @@ async fn run(state: &AppState, id: &str, turn: HubTurn) -> Option<i32> {
     let (mut p, _) = prepared(finished_reply(), End::Finish);
     p.messages = plan.chat.messages;
     let free = take_permit(state);
-    begin(state, "phone", id, plan.transcript, p, free.unwrap())
-        .await
-        .unwrap();
+    let model = "qwen".to_owned();
+    begin(
+        state,
+        "phone",
+        id,
+        model,
+        plan.transcript,
+        ready(p),
+        free.unwrap(),
+    )
+    .unwrap();
     settled(state).await;
     budget
 }

@@ -798,6 +798,13 @@ tools the chat names. A saved reply's row says how it was made in its
 when it is known, so a device that opens the chat reads them with no route
 of their own ([Context reading](clients.md#context-reading)).
 
+The `PUT` answers as soon as the run is made, before the chat's model is
+loaded. A model that has to load, or wait behind an image render, shows as a
+`waiting` event in the run, and a model that cannot be loaded ends the run
+`failed` with `model_unavailable` rather than refusing the `PUT`; a client
+shows a run's error code as it would the `PUT`'s. Such a run has written
+nothing to the chat.
+
 Such a turn may also say the chat's Thinking choice, `"thinking": "off"` or
 `"thinking": "default"`, and says it only when the user changes it. `off`
 runs that turn with a thinking budget of `0`, and the desktop remembers it on

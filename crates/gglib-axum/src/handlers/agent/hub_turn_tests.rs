@@ -12,7 +12,7 @@ use serde_json::json;
 use super::{plan, start};
 use crate::error::HttpError;
 use crate::handlers::agent::compose::take_permit;
-use crate::handlers::agent::launch::launch;
+use crate::handlers::agent::launch::{launch, ready};
 use crate::handlers::agent::run_fixture::{
     End, finished_reply, meta, paced, prepared, saved, saving, settled, state,
 };
@@ -65,6 +65,16 @@ pub(super) async fn chat(state: &AppState, settings: Option<ConversationSettings
             .unwrap();
     }
     id
+}
+
+/// The code `device`'s run `id` ended `failed` with, once every run has
+/// ended: what its `PUT` answered before the run came first.
+pub(super) async fn failed_with(state: &AppState, device_name: &str, id: &str) -> String {
+    settled(state).await;
+    let run = state.runs.existing(&device(device_name), id).unwrap();
+    let run = run.expect("the run exists");
+    assert_eq!(run.status, gglib_core::domain::runs::RunStatus::Failed);
+    run.error.expect("a failed run says why").code
 }
 
 /// The refusal's status and code.
@@ -125,11 +135,11 @@ async fn a_device_turn_saves_its_message_and_the_reply() {
         &state,
         "phone",
         "d1",
+        "qwen".to_owned(),
         plan.transcript,
-        p,
+        ready(p),
         take_permit(&state).unwrap(),
     )
-    .await
     .unwrap();
     assert!(created.created);
     assert_eq!(created.info.device.as_deref(), Some("phone"));
