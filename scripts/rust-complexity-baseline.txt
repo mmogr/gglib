@@ -61,8 +61,8 @@ crates/gglib-core/src/domain/chat.rs 325
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 355
 crates/gglib-core/src/domain/hub_chats_tests.rs 418
-crates/gglib-core/src/domain/image_family.rs 462
-crates/gglib-core/src/domain/image_family_tests.rs 631
+crates/gglib-core/src/domain/image_family.rs 489
+crates/gglib-core/src/domain/image_family_tests.rs 657
 crates/gglib-core/src/domain/inference.rs 1915
 crates/gglib-core/src/domain/inference_tests.rs 1409
 crates/gglib-core/src/domain/kv_estimate.rs 341
@@ -79,9 +79,10 @@ crates/gglib-core/src/download/rate.rs 628
 crates/gglib-core/src/download/types.rs 649
 crates/gglib-core/src/normalize/parsers/delimited.rs 984
 crates/gglib-core/src/normalize/stream.rs 662
+crates/gglib-core/src/ports/image_generation.rs 318
 crates/gglib-core/src/ports/model_catalog.rs 304
-crates/gglib-core/src/ports/model_runtime.rs 719
-crates/gglib-core/src/ports/model_runtime_tests.rs 354
+crates/gglib-core/src/ports/model_runtime.rs 753
+crates/gglib-core/src/ports/model_runtime_tests.rs 383
 crates/gglib-core/src/ports/process_runner.rs 323
 crates/gglib-core/src/request_pipeline/constrain.rs 325
 crates/gglib-core/src/request_pipeline/sampling.rs 679
