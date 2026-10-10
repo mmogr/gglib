@@ -233,16 +233,19 @@ You: /image shots/error.png
 You: what does the stack trace say?
 ```
 
-`/draw` is the chat's Draw button: the model may draw a picture for the next
+`/draw` is the chat's Draw button: the model draws a picture for the next
 message typed, and only that one. It writes the detailed prompt itself, draws
 through the daemon's image model, and says what it drew; the line shows the
-render's progress. `/draw` says why when nothing can draw (no daemon, no
+render's progress. The reply to that message must start with the call for
+the picture: a model that answers in words instead ends the turn with "the
+model did not ask for the picture; try again or pick a model that calls
+tools". `/draw` says why when nothing can draw (no daemon, no
 image runtime or model, or a `--remote` session, whose model is on the other
 machine).
 
 ```bash
 You: /draw
-the next message may draw, with flux1-schnell
+the next message draws, with flux1-schnell
 You: a red fox in the snow at dawn
 ```
 

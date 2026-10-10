@@ -111,6 +111,16 @@ pub enum AgentError {
         max_steps: usize,
     },
 
+    /// The run's first reply had to call a tool
+    /// ([`AgentConfig::first_call`]) and did not call it: an upstream that does
+    /// not honour the demand. Carries the composer's own words for the
+    /// person, which the loop also emitted as its last `error` event.
+    #[error("{message}")]
+    FirstCallMissing {
+        /// [`FirstCall::if_missing`](crate::domain::agent::FirstCall::if_missing).
+        message: String,
+    },
+
     /// An unrecoverable internal error inside the loop implementation.
     #[error("internal agent error: {0}")]
     Internal(String),

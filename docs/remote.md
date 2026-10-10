@@ -808,7 +808,11 @@ nothing to the chat.
 A turn sent with the device's Draw button pressed says `"draw": true`, and
 only then is the desktop's chat model offered its image tool, for that one
 message: it writes the prompt, draws with the desktop's image model, and the
-picture is saved on the reply's tool row. This needs no `--allow-mcp`, which
+picture is saved on the reply's tool row. Whether to draw is not left to the
+model: the reply's first step must be the call for the picture, and a model
+that answers in words instead ends the run `failed`,
+`image_generation_failed`, "the model did not ask for the picture; try again
+or pick a model that calls tools". This needs no `--allow-mcp`, which
 still gates every MCP tool, and it holds for a chat with its tools turned
 off: the button is the person's choice for that message. A turn without the
 key is offered no image tool. A desktop that cannot draw refuses the turn,
@@ -820,7 +824,8 @@ A chat the device keeps itself can draw too. `PUT
 /v1/runs/{id}?kind=chat&tools=builtin&draw=true` takes the device's
 unchanged OpenAI chat request, whole history included, and runs it through
 the desktop's agent loop on the model it names, with the image tool offered
-for that message; without `draw=true` the loop runs with no tool. Images
+for that message, whose first step must be the call for the picture as on a
+desktop chat; without `draw=true` the loop runs with no tool. Images
 sent inline as data URLs are stored on the desktop for the run and removed
 at the first daemon start a day or more later, since no chat there links
 them. Nothing is saved to any

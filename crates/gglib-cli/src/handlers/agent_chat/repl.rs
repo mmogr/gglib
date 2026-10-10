@@ -272,6 +272,10 @@ async fn send(
     asks: bool,
     draw: &DrawSwitch,
 ) -> Vec<AgentMessage> {
+    // Sent while `/draw` is armed, the turn's first reply must be the call
+    // for the picture.
+    let mut config = config;
+    config.first_call = draw.first_call();
     let after = run_single_turn(agent_loop, messages, config, verbose, saved_to, asks).await;
     draw.sent();
     after

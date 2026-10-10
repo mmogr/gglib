@@ -183,7 +183,7 @@ describe('ChatPage, the Draw button', () => {
     await user.click(drawButton());
     expect(drawButton()).toHaveAttribute('aria-pressed', 'true');
     expect(drawButton()).toHaveTextContent('Draw on');
-    expect(drawButton()).toHaveAttribute('title', 'The next message may draw an image. Click to send it without drawing.');
+    expect(drawButton()).toHaveAttribute('title', 'The next message draws an image. Click to send it without drawing.');
 
     await user.click(drawButton());
     expect(drawButton()).toHaveAttribute('aria-pressed', 'false');

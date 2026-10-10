@@ -66,4 +66,22 @@ pub trait LlmCompletionPort: Send + Sync {
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
     ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>>;
+
+    /// As [`chat_stream`](Self::chat_stream), for a reply that must call one
+    /// of `tools`: the request demands a call instead of leaving it to the
+    /// model (`OpenAI`'s `tool_choice: "required"`).
+    ///
+    /// The loop asks this of a run's first reply only, with the one tool
+    /// its caller demanded
+    /// ([`FirstCall`](crate::domain::agent::FirstCall)). The default sends
+    /// the request as `chat_stream` does, for an implementation with no way
+    /// to demand; the loop fails the run when no call comes back, so the
+    /// demand holds either way.
+    async fn chat_stream_requiring_call(
+        &self,
+        messages: &[AgentMessage],
+        tools: &[ToolDefinition],
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
+        self.chat_stream(messages, tools).await
+    }
 }

@@ -389,3 +389,73 @@ async fn a_send_switches_draw_off_again() {
 
     assert!(!draw.is_armed());
 }
+
+/// A message sent after `/draw` is held to the call for the picture: its
+/// run's config names the image tool as its first call. The message after
+/// it, sent with the switch off again, is held to nothing.
+#[tokio::test]
+async fn a_send_after_draw_holds_its_run_to_the_image_tool_and_the_next_to_nothing() {
+    use gglib_core::domain::agent::FirstCall;
+    use gglib_core::ports::{ImageBatch, ImageError, ImageProgress, ImageRequest};
+
+    #[derive(Debug)]
+    struct CanDraw;
+
+    #[async_trait::async_trait]
+    impl gglib_core::ports::ImageGenerationPort for CanDraw {
+        async fn generate(
+            &self,
+            _request: ImageRequest,
+            _progress: tokio::sync::mpsc::Sender<ImageProgress>,
+        ) -> Result<ImageBatch, ImageError> {
+            unreachable!("the recording loop draws nothing")
+        }
+
+        async fn drawing_model(&self) -> Result<String, ImageError> {
+            Ok("sdxl".to_owned())
+        }
+    }
+
+    /// Keeps what each run was held to, and answers nothing.
+    #[derive(Default)]
+    struct Held(std::sync::Mutex<Vec<Option<FirstCall>>>);
+
+    #[async_trait::async_trait]
+    impl AgentLoopPort for Held {
+        async fn run(
+            &self,
+            _messages: Vec<AgentMessage>,
+            config: AgentConfig,
+            _tx: mpsc::Sender<AgentEvent>,
+        ) -> Result<AgentRunOutput, AgentError> {
+            self.0.lock().unwrap().push(config.first_call);
+            Err(AgentError::MaxIterationsReached(1))
+        }
+    }
+
+    let held = Arc::new(Held::default());
+    let agent: Arc<dyn AgentLoopPort> = Arc::clone(&held) as _;
+    let draw = super::DrawSwitch::through(Arc::new(CanDraw));
+    draw.arm().await;
+
+    for message in ["draw a fox", "and now just talk"] {
+        let config = AgentConfig::default();
+        super::send(
+            &agent,
+            vec![user(message)],
+            config,
+            false,
+            None,
+            true,
+            &draw,
+        )
+        .await;
+    }
+
+    let held = held.0.lock().unwrap().clone();
+    assert_eq!(held.len(), 2);
+    let first = held[0].as_ref().expect("the armed send is held to a call");
+    assert_eq!(first.tool, "builtin:generate_image");
+    assert_eq!(first.if_missing, gglib_mcp::DRAW_NOT_ASKED);
+    assert_eq!(held[1], None, "the message after is held to nothing");
+}

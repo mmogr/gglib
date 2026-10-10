@@ -59,7 +59,7 @@ async fn draw_arms_one_message_and_is_off_after_it_is_sent() {
 
     let said = switch.arm().await;
 
-    assert_eq!(said, "the next message may draw, with flux1-schnell");
+    assert_eq!(said, "the next message draws, with flux1-schnell");
     assert!(switch.is_armed());
     assert!(listed(&tools).await, "offered for the next message");
 
@@ -117,7 +117,7 @@ async fn a_local_session_asks_its_daemon_whether_it_can_draw() {
         })
         .await;
 
-    assert_eq!(said, "the next message may draw, with sdxl");
+    assert_eq!(said, "the next message draws, with sdxl");
     let asked = asked.lock().unwrap().clone();
     assert!(
         asked

@@ -4,7 +4,9 @@
 //! `/draw`, as the page offers it only for a message sent with its Draw
 //! button pressed. [`DrawSwitch`] is that switch: `/draw` asks the daemon
 //! whether it can draw and arms it, and it is cleared after each send, so a
-//! model never starts a render on its own.
+//! model never starts a render on its own. The message sent while it is
+//! armed does draw: its run's first reply must be the call for the picture
+//! ([`DrawSwitch::first_call`]).
 //!
 //! The CLI never drives `sd-server` itself. The tool draws through the
 //! daemon ([`DaemonImageGenerator`]), so a render queues with the daemon's
@@ -14,6 +16,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use gglib_core::domain::agent::FirstCall;
 use gglib_core::ports::ImageGenerationPort;
 use gglib_core::services::{AttachmentService, drawing_availability};
 use gglib_mcp::{DrawArm, DrawingTool};
@@ -105,7 +108,16 @@ impl DrawSwitch {
         }
         self.armed.store(true, Ordering::SeqCst);
         let model = answer.model.unwrap_or_default();
-        format!("the next message may draw, with {model}")
+        format!("the next message draws, with {model}")
+    }
+
+    /// What the next message's run is held to while the switch is armed:
+    /// its first reply calls the image tool, as a run sent with the page's
+    /// Draw button does. Nothing while it is off.
+    pub(crate) fn first_call(&self) -> Option<FirstCall> {
+        self.armed
+            .load(Ordering::SeqCst)
+            .then(DrawingTool::first_call)
     }
 
     /// A message was sent and its turn is over: the switch is off again.

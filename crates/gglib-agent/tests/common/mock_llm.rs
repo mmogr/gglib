@@ -133,6 +133,9 @@ pub(crate) struct MockLlmPort {
     /// Snapshots of the `messages` slice passed to each `chat_stream` call,
     /// in call order.
     messages_received: Mutex<Vec<Vec<AgentMessage>>>,
+    /// Each call in order: the names of the tools it offered, and whether
+    /// it demanded a call (`chat_stream_requiring_call`).
+    asked: Mutex<Vec<(Vec<String>, bool)>>,
 }
 
 impl MockLlmPort {
@@ -141,7 +144,14 @@ impl MockLlmPort {
         Self {
             responses: Mutex::new(VecDeque::new()),
             messages_received: Mutex::new(Vec::new()),
+            asked: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Each call in order: the tools it offered, and whether it demanded a
+    /// call.
+    pub(crate) async fn asked(&self) -> Vec<(Vec<String>, bool)> {
+        self.asked.lock().await.clone()
     }
 
     /// Return a snapshot of all `messages` arguments passed to `chat_stream`,
@@ -197,10 +207,32 @@ impl LlmCompletionPort for MockLlmPort {
     async fn chat_stream(
         &self,
         messages: &[AgentMessage],
-        _tools: &[ToolDefinition],
+        tools: &[ToolDefinition],
+    ) -> Result<Pin<Box<dyn futures_core::Stream<Item = Result<LlmStreamEvent>> + Send>>> {
+        self.reply(messages, tools, false).await
+    }
+
+    async fn chat_stream_requiring_call(
+        &self,
+        messages: &[AgentMessage],
+        tools: &[ToolDefinition],
+    ) -> Result<Pin<Box<dyn futures_core::Stream<Item = Result<LlmStreamEvent>> + Send>>> {
+        self.reply(messages, tools, true).await
+    }
+}
+
+impl MockLlmPort {
+    /// Record the call and answer the next scripted response.
+    async fn reply(
+        &self,
+        messages: &[AgentMessage],
+        tools: &[ToolDefinition],
+        demanded: bool,
     ) -> Result<Pin<Box<dyn futures_core::Stream<Item = Result<LlmStreamEvent>> + Send>>> {
         // Record a snapshot of the messages for test inspection.
         self.messages_received.lock().await.push(messages.to_vec());
+        let offered = tools.iter().map(|tool| tool.name.clone()).collect();
+        self.asked.lock().await.push((offered, demanded));
 
         let events = self
             .responses

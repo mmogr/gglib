@@ -12,12 +12,14 @@
 //!
 //! Whether the tool is offered at all is [`DrawArm`]'s: armed for a run sent
 //! with `draw: true`, or for the next message after `/draw` in `gglib chat`.
+//! Such a run does not leave drawing to the model: its first reply must
+//! call this tool ([`DrawingTool::first_call`]).
 
 use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use gglib_core::domain::agent::{ToolProgressSink, ToolProgressUpdate, ToolStage};
+use gglib_core::domain::agent::{FirstCall, ToolProgressSink, ToolProgressUpdate, ToolStage};
 use gglib_core::ports::{
     ImageBatch, ImageError, ImageGenerationPort, ImageProgress, ImageRequest, ImageSize,
     ImageStage, MAX_IMAGES_PER_REQUEST,
@@ -27,8 +29,15 @@ use gglib_core::{McpTool, ToolCall, ToolResult};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
+use super::BUILTIN_PREFIX;
+
 /// The tool's name, unprefixed.
 pub(crate) const NAME: &str = "generate_image";
+
+/// What a run's failure says when a message sent with Draw got a first
+/// reply that called no tool.
+pub const NOT_ASKED: &str =
+    "the model did not ask for the picture; try again or pick a model that calls tools";
 
 /// Whether the drawing tool is offered right now.
 #[derive(Debug, Clone)]
@@ -80,6 +89,19 @@ impl DrawingTool {
         Self {
             images,
             attachments,
+        }
+    }
+
+    /// What a run sent with Draw pressed is held to: its first reply calls
+    /// this tool, by its qualified name, and is offered no other. Pressing
+    /// Draw is the person's explicit ask, so whether to draw is not left to
+    /// the model; a first reply with no call fails the run with
+    /// [`NOT_ASKED`].
+    #[must_use]
+    pub fn first_call() -> FirstCall {
+        FirstCall {
+            tool: format!("{BUILTIN_PREFIX}{NAME}"),
+            if_missing: NOT_ASKED.to_owned(),
         }
     }
 

@@ -84,7 +84,7 @@
       "code": "image_generation_failed",
       "type": "server_error",
       "status": 502,
-      "meaning": "The image runtime took the render and failed it, or lost it; the message carries its words. Try another prompt or size, or retry."
+      "meaning": "No picture was drawn: the image runtime took the render and failed it, or lost it (the message carries its words; try another prompt or size, or retry); the image model was stopped while it drew; or a run sent with Draw ended because its model's first reply did not call the image tool (try again, or pick a model that calls tools)."
     },
     {
       "code": "image_render_stalled",
