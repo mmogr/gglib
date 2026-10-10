@@ -113,6 +113,7 @@ pub(super) fn answer_turn() -> HubTurn {
         images: Vec::new(),
         thinking: None,
         answer_saved: true,
+        draw: false,
     }
 }
 

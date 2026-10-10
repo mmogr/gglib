@@ -215,6 +215,35 @@ async fn list_tools_bare_name_matches_builtin_prefix() {
     assert_eq!(tools[0].name, "builtin:get_current_time");
 }
 
+/// An allowlist entry that starts with `builtin:` is the builtin's whole
+/// name and matches nothing else: an MCP server's tool whose own name is
+/// `builtin:generate_image` is neither listed nor run under it, by its
+/// qualified name or any other.
+#[tokio::test]
+async fn a_builtin_entry_matches_only_the_builtin_never_a_servers_tool_named_like_it() {
+    let allowed: HashSet<String> = ["builtin:generate_image".to_owned()].into();
+    let f = FilteredToolExecutor::new(
+        Arc::new(StubExecutor::new(&[
+            "builtin:generate_image",
+            "3:builtin:generate_image",
+            "3:generate_image",
+        ])) as Arc<dyn ToolExecutorPort>,
+        allowed,
+    );
+    let listed: Vec<String> = f.list_tools().await.into_iter().map(|t| t.name).collect();
+    assert_eq!(listed, ["builtin:generate_image"]);
+    for theirs in ["3:builtin:generate_image", "3:generate_image"] {
+        let err = f.execute(&make_call(theirs)).await.unwrap_err();
+        assert!(err.to_string().contains(TOOL_NOT_AVAILABLE_MSG), "{theirs}");
+    }
+    assert!(
+        f.execute(&make_call("builtin:generate_image"))
+            .await
+            .unwrap()
+            .success
+    );
+}
+
 // ------------------------------------------------------------------
 // EmptyToolExecutor
 // ------------------------------------------------------------------

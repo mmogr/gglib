@@ -51,6 +51,7 @@ const TURN_OPTIONAL: Record<Exclude<keyof HubTurn, keyof typeof TURN_KEYS>, stri
   images: 'object',
   thinking: 'string',
   answer_saved: 'boolean',
+  draw: 'boolean',
 };
 
 /** What a stored image is told as: its id and what its header says. */
@@ -174,8 +175,8 @@ describe('the recorded hub chats', () => {
     });
   });
 
-  it('a turn carries no key but its two, its images, its thinking choice and whether it answers a saved question', () => {
-    expect(Object.keys(TURN_OPTIONAL).sort()).toEqual(['answer_saved', 'images', 'thinking']);
+  it('a turn carries no key but its two, its images, its thinking choice, whether it answers a saved question and draw', () => {
+    expect(Object.keys(TURN_OPTIONAL).sort()).toEqual(['answer_saved', 'draw', 'images', 'thinking']);
     for (const turn of [RECORDED.turn, RECORDED.image_turn, RECORDED.thinking_turn, RECORDED.answer_turn]) {
       expectKeys(turn as unknown as Body, TURN_KEYS, TURN_OPTIONAL);
     }

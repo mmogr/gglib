@@ -170,6 +170,14 @@ tunnel to them (then only those the settings name), and the reply runs on the ch
 the hub (the one started last, of several), or the hub's default), loaded first when it is not running, as an agent run in the
 device's scope saved to the chat.
 
+A turn that says `draw: true` (the device's Draw button) is planned with
+the image tool beside whatever MCP tools it may call: `tools_of` adds
+exactly `builtin:generate_image`, never the bare name, which would let an
+MCP server's tool of that name through to a device without `--allow-mcp`.
+The chat's `no_tools` does not stop it, since the button is the person's
+choice for that message, and a hub that cannot draw refuses the turn `400
+drawing_unavailable` before anything is written.
+
 The run exists before its model does (`launch::launch_turn`). The `PUT`
 reads the turn, takes a slot, reserves the run and answers; finding or
 loading the model, composing the loop, holding the model and writing the

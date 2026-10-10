@@ -51,6 +51,7 @@ async fn a_turn_is_the_chat_and_the_message_only_and_its_201_comes_back() {
         content: "And how do I fix it?".to_owned(),
         images: Vec::new(),
         thinking: None,
+        draw: false,
     };
 
     let (status, answer) = read(add_turn_via(&far, 12, "chat-1", body).await.unwrap()).await;
@@ -66,6 +67,24 @@ async fn a_turn_is_the_chat_and_the_message_only_and_its_201_comes_back() {
         json(&seen.body),
         serde_json::json!({ "conversation_id": 12, "content": "And how do I fix it?" })
     );
+}
+
+/// A turn sent with Draw pressed says so to the far machine; one sent
+/// without carries no such key, which an older far machine would refuse.
+#[tokio::test]
+async fn a_turn_sent_with_draw_says_so_and_one_without_carries_no_key() {
+    let (fake, hub) = far(201, "{}").await;
+    let pressed: RemoteTurnBody =
+        serde_json::from_str(r#"{"content":"a fox","draw":true}"#).unwrap();
+
+    read(add_turn_via(&hub, 12, "chat-1", pressed).await.unwrap()).await;
+
+    assert_eq!(
+        json(&only(&fake).body),
+        serde_json::json!({ "conversation_id": 12, "content": "a fox", "draw": true })
+    );
+    let unsaid: RemoteTurnBody = serde_json::from_str(r#"{"content":"hi"}"#).unwrap();
+    assert!(!unsaid.draw);
 }
 
 /// A turn's images go on as their ids, in order, and a turn may be its

@@ -113,6 +113,7 @@ fn turn(content: &str) -> HubTurn {
         images: Vec::new(),
         thinking: None,
         answer_saved: false,
+        draw: false,
     }
 }
 
@@ -415,4 +416,22 @@ fn a_tool_row_carries_the_images_its_tool_made() {
     );
     assert_eq!(rows[0]["metadata"]["tool_calls"][0]["id"], "call-draw-1");
     assert!(rows[0].get("images").is_none() && rows[2].get("images").is_none());
+}
+
+/// Draw travels only when pressed: `true` is said, `false` is left out of
+/// the body, and a body without the key reads as not pressed.
+#[test]
+fn a_turn_says_draw_only_when_it_was_pressed() {
+    let pressed = HubTurn {
+        draw: true,
+        ..turn("a fox")
+    };
+    assert_eq!(
+        serde_json::to_value(&pressed).unwrap(),
+        serde_json::json!({ "conversation_id": 12, "content": "a fox", "draw": true })
+    );
+    let plain = serde_json::to_value(turn("hi")).unwrap();
+    assert!(plain.get("draw").is_none(), "{plain}");
+    let read: HubTurn = serde_json::from_str(r#"{"conversation_id":12,"content":"hi"}"#).unwrap();
+    assert!(!read.draw);
 }

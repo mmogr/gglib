@@ -779,7 +779,7 @@ a device asks it before offering a Draw button, and a desktop too old to
 have the route answers 404, which means it cannot.
 
 A paired device may read the desktop's chats at `/v1/chats` and carry one on
-with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content, images?, thinking?}`: the
+with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content, images?, thinking?, draw?}`: the
 desktop runs the reply from its own record and saves both rows, marked with
 the device's name, and its own page and every paired device can follow that
 run. A chat that stored its model runs on that model by its id, the one its
@@ -804,6 +804,17 @@ loaded. A model that has to load, or wait behind an image render, shows as a
 `failed` with `model_unavailable` rather than refusing the `PUT`; a client
 shows a run's error code as it would the `PUT`'s. Such a run has written
 nothing to the chat.
+
+A turn sent with the device's Draw button pressed says `"draw": true`, and
+only then is the desktop's chat model offered its image tool, for that one
+message: it writes the prompt, draws with the desktop's image model, and the
+picture is saved on the reply's tool row. This needs no `--allow-mcp`, which
+still gates every MCP tool, and it holds for a chat with its tools turned
+off: the button is the person's choice for that message. A turn without the
+key is offered no image tool. A desktop that cannot draw refuses the turn,
+`400 drawing_unavailable`, with the reason; a device asks
+`GET /v1/images/drawing` first, and never sends the key to a desktop that
+answers 404 there, which would refuse a body with a key it does not know.
 
 Such a turn may also say the chat's Thinking choice, `"thinking": "off"` or
 `"thinking": "default"`, and says it only when the user changes it. `off`

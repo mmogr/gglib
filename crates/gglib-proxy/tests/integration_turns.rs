@@ -44,6 +44,7 @@ async fn a_named_devices_turn_reaches_the_starter_in_its_name() {
         images: Vec::new(),
         thinking: None,
         answer_saved: false,
+        draw: false,
     };
     assert_eq!(started, vec![(DEVICE.to_owned(), "d1".to_owned(), turn)]);
     assert!(runs.scopes().is_empty(), "no chat run was made");
@@ -71,6 +72,7 @@ async fn a_turns_images_reach_the_starter_by_id() {
         images,
         thinking: None,
         answer_saved: false,
+        draw: false,
     };
     let started = turns.started.lock().unwrap().clone();
     assert_eq!(started, vec![(DEVICE.to_owned(), "d1".to_owned(), turn)]);

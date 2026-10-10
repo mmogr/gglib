@@ -23,7 +23,8 @@ crates/gglib-app-services/src/test_support.rs 360
 crates/gglib-app-services/src/types.rs 531
 crates/gglib-app-services/src/types_model_dto_tests.rs 311
 crates/gglib-axum/src/error.rs 326
-crates/gglib-axum/src/handlers/agent/hub_turn.rs 327
+crates/gglib-axum/src/handlers/agent/hub_turn.rs 352
+crates/gglib-axum/src/handlers/agent/hub_turn_plan_tests.rs 311
 crates/gglib-axum/src/handlers/agent/launch.rs 347
 crates/gglib-axum/src/handlers/agent/run_fixture.rs 314
 crates/gglib-axum/src/routes.rs 461
@@ -66,7 +67,7 @@ crates/gglib-core/src/domain/capabilities.rs 1594
 crates/gglib-core/src/domain/chat.rs 325
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 355
-crates/gglib-core/src/domain/hub_chats_tests.rs 418
+crates/gglib-core/src/domain/hub_chats_tests.rs 437
 crates/gglib-core/src/domain/image_family.rs 489
 crates/gglib-core/src/domain/image_family_tests.rs 657
 crates/gglib-core/src/domain/inference.rs 1915
