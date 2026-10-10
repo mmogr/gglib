@@ -50,7 +50,7 @@ pub use ports_impl::{
 };
 
 // Re-export composition root factory
-pub use compose::{compose_agent_loop, compose_agent_loop_with_sampling};
+pub use compose::{LoopGeneration, compose_agent_loop, compose_agent_loop_with_sampling};
 
 // Re-export system probe implementation
 pub use system::DefaultSystemProbe;

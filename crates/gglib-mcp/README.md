@@ -106,7 +106,7 @@ This enables:
 **Module Descriptions:**
 - **`client.rs`** — Low-level JSON-RPC 2.0 client for the MCP protocol
 - **`manager.rs`** — Server process lifecycle management (start/stop/status)
-- **`service.rs`** — High-level facade for MCP operations (CRUD + lifecycle)
+- **`service.rs`** — High-level facade for MCP operations (CRUD + lifecycle); server names are unique, and `builtin` is refused on add and on rename, because the proxy's `/mcp` gateway lists gglib's own tools as `builtin__<tool>`
 - **`path.rs`** — Path validation and PATH environment variable utilities
 - **`combined.rs`** — Unified tool executor dispatching to MCP and builtin tools
 - **`tool_executor.rs`** — The MCP side of that executor: runs a qualified tool on its server

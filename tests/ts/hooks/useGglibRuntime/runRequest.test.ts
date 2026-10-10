@@ -7,7 +7,8 @@
  * there could share; a local turn names no model and lets llama-server serve
  * the one it loaded. The conversation's Thinking choice is a key of its own,
  * there only when the run changes it, beside the two reasoning controls and
- * never in place of them.
+ * never in place of them. `draw` is a key only on a run sent with Draw
+ * pressed: the daemon offers its drawing tool by that key and nothing else.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -88,6 +89,22 @@ describe('buildRunRequest', () => {
 
     expect(buildRunRequest(options({ reasoning, thinking: 'off' }))).toEqual({ ...unsaid, thinking: 'off' });
     expect(buildRunRequest(options({ reasoning, thinking: 'default' }))).toEqual({ ...unsaid, thinking: 'default' });
+  });
+
+  it('says draw only for a send made with Draw pressed, and has no such key otherwise', () => {
+    const unsaid = buildRunRequest(options());
+    expect(Object.keys(unsaid)).not.toContain('draw');
+    expect(Object.keys(buildRunRequest(options({ draw: false })))).not.toContain('draw');
+    expect(Object.keys(buildRunRequest(options({ draw: undefined })))).not.toContain('draw');
+
+    // Nothing else changes by it: the tool filter is the daemon's to add to.
+    expect(buildRunRequest(options({ draw: true }))).toEqual({ ...unsaid, draw: true });
+  });
+
+  it('never says draw by the tool filter: a model that calls no tools still names none', () => {
+    expect(buildRunRequest(options({ supportsToolCalls: false }))).toMatchObject({ tool_filter: [] });
+    expect(Object.keys(buildRunRequest(options({ supportsToolCalls: false })))).not.toContain('draw');
+    expect(buildRunRequest(options()).tool_filter).toBeNull();
   });
 
   it('says the Thinking choice of a turn on a far model as well', () => {

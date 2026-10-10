@@ -109,6 +109,14 @@ pub struct HubTurn {
     #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub answer_saved: bool,
+    /// The message was sent with Draw pressed: the hub offers its model the
+    /// image tool for this turn, and only then. Left out of the body when
+    /// `false`, so a hub too old to know the key is never sent it by a
+    /// client that did not press Draw; a client asks
+    /// `GET /v1/images/drawing` before it offers the button.
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub draw: bool,
 }
 
 #[cfg(test)]

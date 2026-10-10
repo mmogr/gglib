@@ -35,6 +35,9 @@ import type { RunInfo } from '../../types/generated/RunInfo';
 import type { ImageInput } from '../../hooks/useImageInput';
 import type { ThinkingSwitch } from '../../hooks/useThinkingSwitch';
 import type { UseGglibRuntimeReturn } from '../../hooks/useGglibRuntime';
+import type { DrawSwitch } from '../../hooks/useDrawSwitch';
+import { NO_PREVIEWS, type RunPreviews } from '../../hooks/useGglibRuntime/runPreviews';
+import { RunPreviewsProvider } from './context/RunPreviewsContext';
 
 interface ChatMessagesPanelProps {
   activeConversation: ConversationSummary | null;
@@ -94,6 +97,10 @@ interface ChatMessagesPanelProps {
   thinking?: ThinkingSwitch;
   /** What the chat offers of its branches, and Retry; absent for a far chat. */
   branching?: UseGglibRuntimeReturn['branching'];
+  /** The Draw button, for the composer's margin. */
+  draw?: DrawSwitch;
+  /** The frames the run's tools are making, by call, for the reply that shows them. */
+  previews?: RunPreviews;
 }
 
 /** The notebook's column: the width its rows are laid out in. */
@@ -133,6 +140,8 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   imageInput,
   thinking,
   branching,
+  draw,
+  previews = NO_PREVIEWS,
 }) => {
   const threadRuntime = useThreadRuntime({ optional: true });
   const threadState = useThread({ optional: true });
@@ -260,7 +269,9 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                     <ThreadPrimitive.Viewport className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col scroll-smooth" autoScroll>
                       <NotebookColumn>
                         {head}
-                        <ThreadPrimitive.Messages components={messageComponents} />
+                        <RunPreviewsProvider value={previews}>
+                          <ThreadPrimitive.Messages components={messageComponents} />
+                        </RunPreviewsProvider>
                         <BranchEnd />
                         {isServerConnected && <Unanswered />}
                       </NotebookColumn>
@@ -282,6 +293,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       supportsToolCalls={supportsToolCalls}
                       toolFormat={toolFormat}
                       thinking={thinking}
+                      draw={draw}
                     />
                   </ThreadPrimitive.Root>
                 </ThinkingTimingProvider>

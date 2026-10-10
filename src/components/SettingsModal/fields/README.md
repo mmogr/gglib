@@ -22,6 +22,7 @@ A field that supplies its own control (the models directory, the title prompt) o
 | `PortSettings.tsx` | Proxy port, base server port, download queue size |
 | `DisplaySettings.tsx` | Display-only toggles (currently: memory-fit indicators) |
 | `DesktopSettings.tsx` | Always-on proxy group: autostart, close-to-tray, start-at-login |
+| `DrawingSettings.tsx` | Default image model picker (image models only) and the "allow MCP clients to draw" switch |
 | `AdvancedSettings.tsx` | Collapsible section: tool-iteration cap, title prompt, inference defaults |
 | `SetupWizardRow.tsx` | Re-run the first-run setup wizard |
 | `SecuritySettings.tsx` | API-key field for the proxy, over the shared `SettingField` |

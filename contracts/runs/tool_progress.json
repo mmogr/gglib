@@ -1,0 +1,79 @@
+[
+  {
+    "position": 1,
+    "reason": "image_render",
+    "step": 12,
+    "total": 20,
+    "type": "waiting"
+  },
+  {
+    "args_summary": null,
+    "display_name": "Generate Image",
+    "tool_call": {
+      "arguments": {
+        "prompt": "a red fox in fresh snow, morning light"
+      },
+      "id": "call_1",
+      "name": "builtin:generate_image"
+    },
+    "type": "tool_call_start"
+  },
+  {
+    "position": 1,
+    "stage": "queued",
+    "tool_call_id": "call_1",
+    "type": "tool_progress"
+  },
+  {
+    "stage": "loading",
+    "tool_call_id": "call_1",
+    "type": "tool_progress"
+  },
+  {
+    "done": 1,
+    "pass": 1,
+    "stage": "sampling",
+    "tool_call_id": "call_1",
+    "total": 20,
+    "type": "tool_progress"
+  },
+  {
+    "done": 20,
+    "pass": 1,
+    "stage": "sampling",
+    "tool_call_id": "call_1",
+    "total": 20,
+    "type": "tool_progress"
+  },
+  {
+    "stage": "decoding",
+    "tool_call_id": "call_1",
+    "type": "tool_progress"
+  },
+  {
+    "stage": "finishing",
+    "tool_call_id": "call_1",
+    "type": "tool_progress"
+  },
+  {
+    "display_name": "Generate Image",
+    "duration_display": "76.0s",
+    "execute_duration_ms": 76000,
+    "result": {
+      "content": "Drew 1 image, 1024x1024 PNG, with flux-dev in 76 s; the user can see it, you cannot.",
+      "images": [
+        {
+          "height": 1024,
+          "id": "8b6df8c11847ada8266bad5b8737f94c208c411a3ebe18e27aad31bfb7eb8767",
+          "mime": "image/png",
+          "width": 1024
+        }
+      ],
+      "success": true,
+      "tool_call_id": "call_1"
+    },
+    "tool_name": "builtin:generate_image",
+    "type": "tool_call_complete",
+    "wait_ms": 0
+  }
+]

@@ -45,6 +45,10 @@ pub(crate) fn api_routes() -> Router<AppState> {
             post(handlers::attachments::upload).layer(handlers::attachments::body_limit()),
         )
         .route("/attachments/{id}", get(handlers::attachments::fetch))
+        // Drawing: the proxy's `/v1/images/generations`, at the daemon's door.
+        .route("/images/generations", post(handlers::images::generations))
+        // Whether a message sent with Draw pressed can draw, and why not.
+        .route("/images/drawing", get(handlers::images::drawing))
         .route("/version", get(handlers::version::get_version))
         // Servers API
         .route("/servers", get(handlers::servers::list))
@@ -88,6 +92,8 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/proxy/loop-guard-trips", get(handlers::proxy::trips))
         // Daemon lifecycle
         .route("/daemon/shutdown", post(handlers::daemon::shutdown))
+        // A generation turn, held while the connection is open (`gglib chat`)
+        .route("/generation/turn", get(handlers::generation::turn))
         // Events (SSE), and the event a `gglib` command posts for a change
         // it made to the library in its own process.
         .route(

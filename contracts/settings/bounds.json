@@ -17,9 +17,11 @@
   },
   "settings_defaults": {
     "default_context_size": null,
+    "default_image_model_id": null,
     "llama_base_port": 9000,
     "max_download_queue_size": 10,
     "max_tool_iterations": 25,
+    "mcp_drawing": null,
     "proxy_port": 8080
   },
   "inference": {

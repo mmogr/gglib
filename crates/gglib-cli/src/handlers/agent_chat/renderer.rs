@@ -31,6 +31,7 @@ use gglib_core::domain::agent::AgentEvent;
 
 use crate::presentation::style::{BOLD, DANGER, DIM, RESET, SUCCESS, WARNING};
 
+use super::progress_line::{progress_line, show};
 use super::tool_format::format_tool_result;
 
 // =============================================================================
@@ -139,8 +140,17 @@ pub(crate) fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_t
             }
         }
 
-        AgentEvent::PromptProgress { .. } | AgentEvent::TurnUsage(_) => {
-            // Pre-fill progress and a turn's usage: not shown in the CLI.
+        AgentEvent::ToolProgress { .. } | AgentEvent::Waiting { .. } => {
+            if !quiet && let Some(line) = progress_line(event) {
+                show(&line);
+            }
+        }
+
+        AgentEvent::PromptProgress { .. }
+        | AgentEvent::TurnUsage(_)
+        | AgentEvent::ToolPreview { .. } => {
+            // Pre-fill progress, a turn's usage and a tool's preview frame:
+            // not shown in the CLI.
         }
     }
 }

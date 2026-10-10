@@ -93,6 +93,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
                     description: t.description,
                     input_schema: t.input_schema,
                     title: t.title,
+                    deadline: None,
                 })
             })
             .collect()

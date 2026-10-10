@@ -12,7 +12,9 @@ use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::ModelRef;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_core::ports::{AdmissionLease, AgentGuardReporter, AgentLoopPort, RetryObserver};
-use gglib_runtime::compose_agent_loop;
+use gglib_core::services::{AttachmentService, drawing_availability};
+use gglib_mcp::{DrawArm, DrawingTool};
+use gglib_runtime::{LoopGeneration, compose_agent_loop};
 
 use super::AgentChatRequest;
 use super::dto::AgentRequestConfig;
@@ -52,6 +54,53 @@ pub(crate) fn take_permit(state: &AppState) -> Option<OwnedSemaphorePermit> {
     state.agent_semaphore.clone().try_acquire_owned().ok()
 }
 
+/// The image tool, as a tool filter names it: qualified, so it can only ever
+/// match the builtin. The bare name would also match an MCP server's tool of
+/// that name (`FilteredToolExecutor` matches after the first `:`).
+pub(crate) const DRAW_TOOL: &str = "builtin:generate_image";
+
+/// Refuse a request sent with Draw pressed that this machine cannot draw
+/// for: its model on another machine, no image runtime, no usable image
+/// model. Called before a slot is taken or anything is written. A request
+/// without `draw` passes: it is offered no image tool at all.
+///
+/// # Errors
+///
+/// `drawing_unavailable` (400) with the reason.
+pub(crate) async fn refuse_unavailable_drawing(
+    state: &AppState,
+    req: &AgentChatRequest,
+) -> Result<(), HttpError> {
+    if !req.draw {
+        return Ok(());
+    }
+    let answer = drawing_availability(Some(state.images.as_ref()), req.far.is_some(), None).await;
+    if answer.available {
+        return Ok(());
+    }
+    Err(HttpError::Coded {
+        status: axum::http::StatusCode::BAD_REQUEST,
+        code: "drawing_unavailable",
+        message: answer
+            .reason
+            .unwrap_or_else(|| "this machine cannot draw".to_owned()),
+    })
+}
+
+/// A request's tool filter once Draw is counted: every tool stays every
+/// tool, and a list gains exactly [`DRAW_TOOL`] when the message was sent
+/// with Draw pressed. Without `draw` the filter is as it was; the image tool
+/// is then kept out by the executor, which lists it only when armed.
+pub(crate) fn with_drawing(
+    mut filter: Option<HashSet<String>>,
+    draw: bool,
+) -> Option<HashSet<String>> {
+    if let (Some(named), true) = (filter.as_mut(), draw) {
+        named.insert(DRAW_TOOL.to_owned());
+    }
+    filter
+}
+
 /// Resolve the upstream, validate the request, apply the configured limits
 /// and compose the loop.
 ///
@@ -82,7 +131,17 @@ pub(super) async fn prepare_over(
     // loop is composed: the two reasoning controls are the only sampling this
     // endpoint accepts, and they occupy the ladder's top rung.
     let sampling = req.sampling_layer();
-    let tool_filter: Option<HashSet<String>> = req.tool_filter.map(|f| f.into_iter().collect());
+    let draw = req.draw;
+    let tool_filter = with_drawing(req.tool_filter.map(|f| f.into_iter().collect()), req.draw);
+    // The image tool exists for this loop only when the message was sent
+    // with Draw pressed; without it no filter, `null` included, reaches one.
+    let drawing = req.draw.then(|| {
+        let store = AttachmentService::new(state.core.attachments().store());
+        (
+            DrawingTool::new(Arc::clone(&state.images), Arc::new(store)),
+            DrawArm::Fixed(true),
+        )
+    });
 
     // Created before the loop is composed so the completion adapter can report
     // its retries onto the same stream the loop emits through — otherwise a
@@ -119,9 +178,22 @@ pub(super) async fn prepare_over(
         upstream.layers,
         upstream.far_machine,
         state.core.attachments().store(),
+        // A reply on this machine's model waits for an image render, and
+        // says so through the retry notice; a far one takes no turn here.
+        LoopGeneration {
+            gate: Some(Arc::clone(&state.generation_gate)),
+            drawing,
+        },
     );
 
-    let config = config_for(state, req.config).await;
+    let mut config = config_for(state, req.config).await;
+    // Pressing Draw is the person's explicit ask: the run's first reply
+    // must be the call for the picture, offered that tool alone, and is
+    // never left to the model to decide. Every door that composes a run
+    // with `draw` comes through here: the page's runs, a device's turn and
+    // a chat run with builtins. A run on another machine's model was
+    // refused `draw` before this.
+    config.first_call = draw.then(DrawingTool::first_call);
 
     Prepared {
         agent_loop,
@@ -179,6 +251,12 @@ pub(crate) fn frame(event: &AgentEvent) -> String {
 #[cfg(test)]
 #[path = "compose_context_tests.rs"]
 mod context_tests;
+#[cfg(test)]
+#[path = "compose_draw_tests.rs"]
+mod draw_tests;
+#[cfg(test)]
+#[path = "compose_gate_tests.rs"]
+mod gate_tests;
 #[cfg(test)]
 #[path = "compose_sampling_tests.rs"]
 mod sampling_tests;

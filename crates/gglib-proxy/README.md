@@ -126,6 +126,8 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`forward_unary.rs`** — The non-streaming half of `/v1/chat/completions`: one request up, one body back, normalised, judged by `repair` and answered with the draw that validates
 - **`unary_body.rs`** — A non-streaming request sent and its body read whole within the total bound, then run through the dialect parser once; shared by the chat and embeddings routes
 - **`embeddings.rs`** — `POST /v1/embeddings`; the chat path minus truncation, sampling, sessions and SSE, plus the pre-swap guard that keeps a non-embedding model from being loaded to serve it
+- **`images.rs`** — `POST /v1/images/generations`, `OpenAI`'s Images API over the daemon's image driver; its handler body is public because the daemon mounts it at `POST /api/images/generations` too. `GET /v1/images/drawing` answers whether a turn sent with Draw pressed can draw here, by core's `drawing_availability`
+- **`images_stream.rs`** — The streamed form: `image_generation.progress` at every stage and step, `image_generation.partial_image` at most `partial_images` times, evenly spread, and one `image_generation.completed` per image, last; a failure partway is an `error` event
 - **`image_refusal.rs`** — The pre-swap refusal of a chat completion that carries an image for a model with no projector (`model_cannot_read_images`); the rule and the words are `gglib_core::request_pipeline`'s — see [Images](#images)
 - **`body_limit.rs`** — The 32 MiB body limit of `POST /v1/chat/completions` and `PUT /v1/runs/{id}`, and the coded 413 (`request_too_large`) a larger body gets
 - **`token_calibration.rs`** — Per-model chars-per-token estimator (EWMA over real `usage.prompt_tokens`) that sizes the truncation budget; a request that carried an image teaches it nothing
@@ -146,12 +148,13 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`slots_poller.rs`** — Background task that polls `slots.rs` on an interval with exponential backoff, caching the latest `SlotsPollResult`
 - **`dashboard.rs`** — `DashboardSnapshot`, the unified data contract aggregating `connections.rs` + `slots_poller.rs` + `metrics.rs`; `spawn_dashboard_publisher` recomputes and broadcasts it once per second for `/v1/proxy/status/stream` subscribers
 - **`chats/`** — `/v1/chats` and `/v1/chats/{id}`: a paired device lists and opens the hub's chats, each with what the hub says of its branches, and changes one at `/v1/chats/{id}/changes` as the hub's page does (ADR 0017); `POST /v1/attachments` and `GET /v1/attachments/{id}`: it stores an image a turn will name by id, and reads one back; any request not tunnelled from a named device is refused `device_not_named`
-- **`runs/`** — `/v1/runs/*`: a paired device starts, reads and cancels its own runs through the tunnel, and adds a turn to a hub chat with `?kind=agent`; the SSE framing is shared with the daemon's `/api/runs`
+- **`runs/`** — `/v1/runs/*`: a paired device starts, reads and cancels its own runs through the tunnel, adds a turn to a hub chat with `?kind=agent`, and runs a chat it keeps itself through the agent loop with `?kind=chat&tools=builtin` (and `&draw=true` to draw); the SSE framing is shared with the daemon's `/api/runs`
 - **`mcp/`** — MCP Streamable HTTP gateway (see [below](#mcp-streamable-http-gateway))
   - **`mcp/handlers.rs`** — `POST /mcp` JSON-RPC dispatch, `GET /mcp` (405), `DELETE /mcp` (terminate session)
   - **`mcp/types.rs`** — JSON-RPC 2.0 and MCP protocol wire types
   - **`mcp/call_result.rs`** — an MCP server's tool result passed on as MCP content items: text as text, images inline with their `mimeType`
   - **`mcp/session.rs`** — `Mcp-Session-Id` tracking and validation
+  - **`mcp/drawing.rs`** — `builtin__generate_image`, gglib's own drawing tool: offered only with the `mcp_drawing` setting on and something to draw with; answers the image inline, with `notifications/progress` for a caller that sent a token
 - **`lib.rs`** — Public API and module re-exports
 
 ## KV Cache Session Persistence
@@ -224,6 +227,8 @@ page on another site, and one from a browser extension (`chrome-extension://`,
 | `/v1/models/{name}/detail` | GET | bearer | One model in full, by id, name or `name:profile` — see [The model list](#the-model-list) |
 | `/v1/chat/completions` | POST | bearer | Chat completion (streaming/non-streaming) |
 | `/v1/embeddings` | POST | bearer | Embeddings — see [Embeddings](#embeddings) |
+| `/v1/images/generations` | POST | bearer | Draw with the daemon's image driver, `OpenAI`'s Images API; `stream: true` for progress, partial images and one completed event per image |
+| `/v1/images/drawing` | GET | bearer | Whether a turn sent with Draw pressed can draw here: `{available, code?, reason?, model?}` |
 | `/mcp` | POST | bearer | MCP Streamable HTTP — JSON-RPC dispatch |
 | `/mcp` | GET | bearer | Returns 405 (server-push not yet supported) |
 | `/mcp` | DELETE | bearer | Terminate MCP session by `Mcp-Session-Id` |
@@ -662,6 +667,12 @@ The proxy includes a built-in [MCP Streamable HTTP](https://modelcontextprotocol
 6. Client sends `DELETE /mcp` when done
 
 Tool names are qualified as `{server_name}__{tool_name}` so tools from different MCP servers never collide.
+
+### Drawing
+
+`builtin` is not a server: it is where the gateway lists gglib's own tools, and no MCP server can be given that name. There is one, `builtin__generate_image`, and it is off unless switched on: Settings, or `gglib config settings set --mcp-drawing true`. While the switch is off, or nothing here can draw (a proxy outside the daemon, no image runtime, no image model to choose), `search_tools` and `get_tool_schema` do not know the tool, and an `invoke_tool` that names it anyway is refused with the reason before anything is drawn.
+
+Its arguments are `prompt` (required), `size` as `WIDTHxHEIGHT`, `n` from 1 to 4 and `seed`; the image model is this machine's own choice. The result is one `image` item per image, base64 PNG, then one text item saying what was drawn. gglib stores none of it. A render takes minutes, so a `tools/call` that carries `_meta.progressToken` gets `notifications/progress` messages on the same SSE response before the result: `progress` rises with each wait the render reports before its first step, then with each new step and stage (a wait once steps have begun, and a step reported twice, send nothing), `total` appears once the first step has said how many there are, and `message` says where it has got to ("sampling step 3 of 20, image 1 of 1"). A call with no token gets only the result. A client that disconnects abandons the render.
 
 ### Configuring `OpenWebUI`
 

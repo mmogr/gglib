@@ -5,6 +5,10 @@
 //! new, waits on the cell's `watch`. The version is marked seen *before* the
 //! log is read, so a frame logged between the read and the wait still wakes
 //! the reader.
+//!
+//! A run's preview frame goes out only when the reader has caught up with
+//! the log, so it never comes before a frame logged ahead of it, and only
+//! when it is not the one this reader last sent. It never moves the cursor.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -24,6 +28,9 @@ struct Reader {
     done: bool,
     /// Whether the reader is the run's own scope.
     owner: bool,
+    /// The version of the last preview this reader sent; 0 for none, so a
+    /// new reader sends the current one on its first wait.
+    sent_preview: u64,
 }
 
 impl Reader {
@@ -56,7 +63,14 @@ impl Reader {
                 Step::Dropped => {
                     self.done = true;
                 }
-                Step::Wait => {
+                Step::Wait(Some(preview)) if preview.version != self.sent_preview => {
+                    self.sent_preview = preview.version;
+                    self.pending.push_back(RunEvent::Preview {
+                        tool_call_id: preview.tool_call_id,
+                        data: preview.data,
+                    });
+                }
+                Step::Wait(_) => {
                     if self.changed.changed().await.is_err() {
                         self.done = true;
                     }
@@ -76,6 +90,7 @@ pub(super) fn events(cell: Arc<RunCell>, after: u32, owner: bool) -> RunEvents {
         cursor: after as usize,
         pending: VecDeque::new(),
         done: false,
+        sent_preview: 0,
     };
     Box::pin(stream::unfold(reader, |mut reader| async move {
         reader.next().await.map(|event| (event, reader))

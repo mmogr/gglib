@@ -152,6 +152,35 @@ async fn adding_a_server_under_a_taken_name_is_a_conflict_that_names_it() {
 }
 
 #[tokio::test]
+async fn a_server_named_builtin_is_a_validation_failure_on_add_and_on_rename() {
+    const KEPT: &str = "'builtin' is a name gglib keeps for its own tools; choose another name";
+    let ops = make_ops().await;
+
+    let added = ops.add(stdio_req("builtin")).await;
+    assert!(
+        matches!(&added, Err(GuiError::ValidationFailed(why)) if why == KEPT),
+        "expected ValidationFailed, got {added:?}"
+    );
+    assert!(ops.list().await.unwrap().is_empty());
+
+    let files = ops.add(stdio_req("files")).await.unwrap();
+    let renamed = ops
+        .update(
+            files.server.id,
+            UpdateMcpServerRequest {
+                name: Some("builtin".to_string()),
+                ..UpdateMcpServerRequest::default()
+            },
+        )
+        .await;
+    assert!(
+        matches!(&renamed, Err(GuiError::ValidationFailed(why)) if why == KEPT),
+        "expected ValidationFailed, got {renamed:?}"
+    );
+    assert_eq!(ops.list().await.unwrap()[0].server.name, "files");
+}
+
+#[tokio::test]
 async fn renaming_a_server_to_a_taken_name_is_a_conflict_and_changes_nothing() {
     let ops = make_ops().await;
     ops.add(stdio_req("files")).await.unwrap();

@@ -13,8 +13,8 @@ use std::time::Duration;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::RuntimeKind;
 use gglib_core::ports::{
-    Admission, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
-    PinnedSpec, RunningTarget,
+    Admission, AdmitObserver, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec,
+    ModelRuntimeError, PinnedSpec, RunningTarget,
 };
 use gglib_core::server_config::{ContextSizeSource, ServerConfigOptions};
 use tokio::sync::RwLock;
@@ -39,6 +39,11 @@ pub use vram::ram_available_for;
 /// observable. Short enough to be imperceptible next to a model swap, long
 /// enough that a hundred queued requests are not a busy loop.
 const POLL_TICK: Duration = Duration::from_millis(250);
+
+/// How long a Stop waits for a render to let go of its image model: the
+/// driver's next look at the job (a second away at most) and the kill of
+/// `sd-server` that follows.
+const RENDER_STOP_WAIT: Duration = Duration::from_secs(20);
 
 /// The models resident in VRAM, and the machinery that puts them there.
 ///
@@ -109,10 +114,9 @@ impl ResidentSet {
         &self.queue
     }
 
-    /// Admit a request to a running model, launching or swapping if needed.
-    ///
-    /// See the [module docs](self) for why everything model-static is resolved
-    /// before the request joins the queue.
+    /// Admit a request to a running model, launching or swapping if needed,
+    /// with nobody told its place in line: the tests' way in.
+    #[cfg(test)]
     pub(super) async fn admit(
         &self,
         core: &Arc<RwLock<GuiProcessCore>>,
@@ -120,6 +124,24 @@ impl ResidentSet {
         num_ctx: Option<u64>,
         default_ctx: Option<u64>,
         overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
+        self.admit_observed(core, model_name, num_ctx, default_ctx, overrides, None)
+            .await
+    }
+
+    /// Admit a request, launching or swapping if needed, telling `observer`
+    /// its place in line whenever it waits and that place has changed.
+    ///
+    /// See the [module docs](self) for why everything model-static is resolved
+    /// before the request joins the queue.
+    pub(super) async fn admit_observed(
+        &self,
+        core: &Arc<RwLock<GuiProcessCore>>,
+        model_name: &str,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: LaunchOverrides,
+        observer: Option<Arc<dyn AdmitObserver>>,
     ) -> Result<Admission, ModelRuntimeError> {
         // Resolve first, so a pin answers to its model's id as well as its
         // name; then refuse a foreign model before touching the queue, so it
@@ -168,6 +190,7 @@ impl ResidentSet {
                         cache_ram,
                         health_deadline_secs,
                     },
+                    observer,
                 )
                 .await;
         }
@@ -280,6 +303,7 @@ impl ResidentSet {
                 cache_ram,
                 health_deadline_secs,
             },
+            observer,
         )
         .await
     }
@@ -300,17 +324,20 @@ impl ResidentSet {
             .ok_or_else(|| ModelRuntimeError::ModelNotFound(model_name.to_owned()))
     }
 
-    /// Queue for a slot, then act on whatever the scheduler decides.
+    /// Queue for a slot, then act on whatever the scheduler decides, telling
+    /// `observer` the ticket's place each time it waits at a new one.
     async fn wait_for_slot(
         &self,
         core: &Arc<RwLock<GuiProcessCore>>,
         request: LaunchRequest,
+        observer: Option<Arc<dyn AdmitObserver>>,
     ) -> Result<Admission, ModelRuntimeError> {
         let model_name = request.spec.name.clone();
         let mut queued = QueuedTicket {
             queue: Arc::clone(&self.queue),
             ticket: self.queue.enqueue(&model_name),
         };
+        let mut told = None;
 
         loop {
             // Subscribed and enabled *before* the poll below, so a wakeup that
@@ -348,6 +375,14 @@ impl ResidentSet {
                     return self.launch(core, &request, slot, evict).await;
                 }
                 AdmissionDecision::Wait => {
+                    // Outside the queue's lock: the observer is caller code.
+                    if let Some(observer) = &observer {
+                        let position = self.queue.position(&queued.ticket);
+                        if told != Some(position) {
+                            told = Some(position);
+                            observer.queued(position);
+                        }
+                    }
                     tokio::select! {
                         () = changed => {}
                         () = tokio::time::sleep(POLL_TICK) => {}
@@ -593,13 +628,26 @@ impl ResidentSet {
 
     /// Stop model `model_id` in whichever slot holds it, even one a run
     /// holds; `false` when no slot does.
+    ///
+    /// An image model a render holds is never emptied under the render: the
+    /// render is asked to stop, and this waits, up to
+    /// [`RENDER_STOP_WAIT`], until it has let go, by retiring its model
+    /// itself when it was drawing (`ProcessManager::retire_render`).
+    ///
+    /// # Errors
+    ///
+    /// `Internal` when the process could not be stopped, or when a render
+    /// still held the model after [`RENDER_STOP_WAIT`]; the render stays
+    /// asked, and stops when its driver next reads its job.
     pub(super) async fn stop_model(
         &self,
         model_id: u32,
         core: &Arc<RwLock<GuiProcessCore>>,
     ) -> Result<bool, ModelRuntimeError> {
+        let asked = self.stop_its_render(model_id).await?;
         let Some((_slot, previous)) = self.queue.evict_model(model_id) else {
-            return Ok(false);
+            // A render that was drawing retired the model itself.
+            return Ok(asked);
         };
         let mut core_w = core.write().await;
         core_w
@@ -609,17 +657,52 @@ impl ResidentSet {
         Ok(true)
     }
 
+    /// Ask any render on model `model_id` to stop, and wait until none
+    /// holds it; whether one did.
+    async fn stop_its_render(&self, model_id: u32) -> Result<bool, ModelRuntimeError> {
+        let deadline = tokio::time::Instant::now() + RENDER_STOP_WAIT;
+        let mut asked = false;
+        loop {
+            // Subscribed before asking, so the render letting go is not missed.
+            let changed = self.queue.subscribe();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            if !self.queue.ask_render_stop(model_id) {
+                return Ok(asked);
+            }
+            asked = true;
+            if tokio::time::Instant::now() >= deadline {
+                return Err(ModelRuntimeError::Internal(
+                    "the image model is drawing and has not stopped yet; it stops when its \
+                     render next reports"
+                        .to_owned(),
+                ));
+            }
+            tokio::select! {
+                () = changed => {}
+                () = tokio::time::sleep(POLL_TICK) => {}
+            }
+        }
+    }
+
     /// Stop the primary resident, if there is one, even one a run holds.
+    ///
+    /// By its id, through [`Self::stop_model`]: an image model that swapped
+    /// into the primary slot and is drawing is asked to stop and waited for,
+    /// as a Stop that names it is, and its slot is never emptied under its
+    /// render. Every caller waits that out (a benchmark's stop, the proxy's
+    /// cache clear and its restart of a dead server).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::stop_model`]: the process could not be stopped, or a
+    /// render still held the model after [`RENDER_STOP_WAIT`].
     pub(super) async fn stop_primary(
         &self,
         core: &Arc<RwLock<GuiProcessCore>>,
     ) -> Result<(), ModelRuntimeError> {
-        if let Some(previous) = self.queue.evict(PRIMARY_SLOT) {
-            let mut core_w = core.write().await;
-            core_w
-                .kill(previous.model_id)
-                .await
-                .map_err(|e| ModelRuntimeError::Internal(e.to_string()))?;
+        if let Some(primary) = self.queue.primary() {
+            self.stop_model(primary.model_id, core).await?;
         }
         Ok(())
     }
@@ -646,6 +729,9 @@ mod hold_tests;
 #[cfg(test)]
 #[path = "launch_sd_tests.rs"]
 mod launch_sd_tests;
+#[cfg(test)]
+#[path = "observe_tests.rs"]
+mod observe_tests;
 #[cfg(test)]
 #[path = "residency_tests.rs"]
 pub(in crate::process) mod residency_tests;

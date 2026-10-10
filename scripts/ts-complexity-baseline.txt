@@ -1,5 +1,6 @@
 src/components/Benchmark/Tune/TuneTab.tsx 306
-src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 306
+src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 318
+src/components/ChatMessagesPanel/components/MessageBubbles.tsx 301
 src/components/FilterPopover/FilterPopover.tsx 340
 src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 347
 src/components/McpServersPanel.tsx 459
@@ -7,12 +8,14 @@ src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 346
 src/components/ModelInspectorPanel/components/ServeModal.tsx 375
 src/components/ProxyControl.tsx 345
 src/components/ProxySamplingPanel.tsx 403
-src/components/SettingsModal.tsx 340
+src/components/SettingsModal.tsx 346
 src/components/SettingsModal/SystemSettings.tsx 304
 src/components/SetupWizard/SetupWizard.tsx 704
 src/components/VerificationModal.tsx 454
-src/hooks/useGglibRuntime/useRunReader.ts 306
-src/pages/ChatPage.tsx 393
+src/hooks/useGglibRuntime/agentMessageState.ts 333
+src/hooks/useGglibRuntime/useGglibRuntime.ts 311
+src/hooks/useGglibRuntime/useRunReader.ts 317
+src/pages/ChatPage.tsx 401
 src/pages/ModelControlCenterPage.tsx 319
 src/services/tools/registry.ts 358
 src/services/transport/api/client.ts 334

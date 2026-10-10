@@ -49,6 +49,8 @@ pub(crate) fn remote_routes() -> Router<AppState> {
         .route("/runs", get(handlers::remote::list_runs))
         .route("/runs/{run_id}/events", get(handlers::remote::run_events))
         .route("/runs/{run_id}/cancel", post(handlers::remote::cancel_run))
+        // Whether the far machine can draw, for a far chat's Draw button.
+        .route("/images/drawing", get(handlers::remote::drawing))
         // The far machine's models: read through the tunnel with the stored
         // key, and loaded, never changed.
         .route("/models", get(handlers::remote::list_models))

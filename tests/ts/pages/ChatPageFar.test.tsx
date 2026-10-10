@@ -305,8 +305,8 @@ describe('ChatPage, the far machine’s chats', () => {
     const sent = rowOf(await screen.findByText('And how do I fix it?'));
     expect(within(sent).getByText('You')).toBeInTheDocument();
     const far = transport.current as { addFarTurn: ReturnType<typeof vi.fn> };
-    // Its text and no image, and nothing said of thinking: the switch was not touched.
-    expect(far.addFarTurn).toHaveBeenCalledWith(1, expect.stringMatching(/^chat-/), 'And how do I fix it?', [], undefined);
+    // Its text and no image, nothing said of thinking, and no drawing: neither button was touched.
+    expect(far.addFarTurn).toHaveBeenCalledWith(1, expect.stringMatching(/^chat-/), 'And how do I fix it?', [], undefined, false);
   });
 
   it('a far chat branched from another is marked a branch in the list, as one of this machine is', async () => {

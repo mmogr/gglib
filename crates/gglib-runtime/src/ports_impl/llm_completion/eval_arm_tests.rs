@@ -33,18 +33,19 @@ fn tool_choice_applies_to_the_first_turn_only() {
         description: None,
         input_schema: Some(json!({"type": "object"})),
         title: None,
+        deadline: None,
     }];
     let adapter = LlmCompletionAdapter::new("http://127.0.0.1:0", Some("m".to_owned()))
         .with_raw_passthrough(true)
         .with_first_turn_tool_choice(Some("required".to_owned()));
 
     let first = adapter
-        .shaped_body(&[user("hi")], &tools, &ImageUrls::default())
+        .shaped_body(&[user("hi")], &tools, &ImageUrls::default(), false)
         .unwrap();
     assert_eq!(first["tool_choice"], "required", "opening turn carries it");
 
     let second = adapter
-        .shaped_body(&[user("hi")], &tools, &ImageUrls::default())
+        .shaped_body(&[user("hi")], &tools, &ImageUrls::default(), false)
         .unwrap();
     assert_eq!(
         second["tool_choice"], "auto",
@@ -61,12 +62,12 @@ fn a_spent_tool_choice_leaves_no_key_behind() {
         .with_first_turn_tool_choice(Some("required".to_owned()));
 
     let first = adapter
-        .shaped_body(&[user("hi")], &[], &ImageUrls::default())
+        .shaped_body(&[user("hi")], &[], &ImageUrls::default(), false)
         .unwrap();
     assert_eq!(first["tool_choice"], "required");
 
     let second = adapter
-        .shaped_body(&[user("hi")], &[], &ImageUrls::default())
+        .shaped_body(&[user("hi")], &[], &ImageUrls::default(), false)
         .unwrap();
     assert!(second.get("tool_choice").is_none());
 }

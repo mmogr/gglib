@@ -21,12 +21,13 @@ use tokio::sync::OwnedSemaphorePermit;
 
 use gglib_app_services::RunLog;
 use gglib_app_services::transcript::{FrameTimes, answer_history};
+use gglib_core::domain::agent::AgentEvent;
 use gglib_core::domain::runs::RunError;
 use gglib_core::domain::thinking;
 use gglib_core::ports::{AgentError, Created, RunScope};
 
 use super::AgentChatRequest;
-use super::compose::{Prepared, frame, prepare, take_permit};
+use super::compose::{Prepared, frame, prepare, refuse_unavailable_drawing, take_permit};
 use super::dto::AgentRunRequest;
 use super::launch::{Transcript, launch};
 use super::remote_upstream;
@@ -68,7 +69,8 @@ pub(super) fn with_code(error: HttpError) -> HttpError {
 /// whatever the chat route refuses, coded; `conversation_not_found` (404);
 /// `attachment_not_found` (400) for an image a message names, history
 /// included, that is not stored, and `request_images_too_large` (400) when
-/// they are over 16 MiB together; `agent_busy` (429) when every agent slot
+/// they are over 16 MiB together; `drawing_unavailable` (400) for `draw` on
+/// a machine that cannot draw for it; `agent_busy` (429) when every agent slot
 /// is taken; `nothing_to_answer` (409) for an answer run on a conversation
 /// that does not end in a question with no reply; `conflict` (409)
 /// while the conversation has a live reply, or when it ran on another
@@ -104,6 +106,9 @@ pub(crate) async fn create_run(
         .attachments()
         .check_request(&chat.messages)
         .await?;
+    // Likewise before a slot is taken, and before anything is written: a
+    // message sent with Draw pressed that cannot draw here.
+    refuse_unavailable_drawing(state, &chat).await?;
     let permit = take_permit(state).ok_or_else(|| {
         coded(
             StatusCode::TOO_MANY_REQUESTS,
@@ -196,6 +201,11 @@ pub(super) async fn plan(
 /// Run the loop, logging each event as the chat route frames it. Dropped
 /// when the run is cancelled, which aborts the loop and any tool call in
 /// flight and releases the permit and the model's hold.
+///
+/// A tool's preview frame is never logged: it is kept beside the log as the
+/// run's latest (`RunLog::preview`) and forgotten in the step that logs that
+/// call's own completion (`RunLog::append_completing`); another call
+/// finishing leaves it in place.
 pub(super) async fn work(
     prepared: Prepared,
     permit: OwnedSemaphorePermit,
@@ -226,8 +236,24 @@ pub(super) async fn work(
             if std::mem::take(&mut first) {
                 log.started();
             }
+            if let AgentEvent::ToolPreview {
+                tool_call_id,
+                frame: preview,
+            } = &event
+            {
+                log.preview(tool_call_id, preview);
+                continue;
+            }
             made_by.stamp(&mut event);
-            if log.append(frame(&event)).is_err() {
+            // A call's completion and the end of its preview are one step,
+            // so no reader gets the frame after reading the completion.
+            let logged = match &event {
+                AgentEvent::ToolCallComplete { result, .. } => {
+                    log.append_completing(frame(&event), &result.tool_call_id)
+                }
+                _ => log.append(frame(&event)),
+            };
+            if logged.is_err() {
                 break;
             }
             times.logged();
@@ -240,7 +266,12 @@ pub(super) async fn work(
 /// The error a failed loop ends its run with: fixed text, since the loop's
 /// own message can quote the model or a tool. The reason in full is the
 /// run's last `error` event.
-fn run_error(error: &AgentError) -> RunError {
+///
+/// A first reply that had to call a tool and called none is the one error
+/// that carries its words: they are the composer's, fixed, and only a run
+/// sent with Draw is held to a first call, so its code is the one a picture
+/// that was not drawn has.
+pub(super) fn run_error(error: &AgentError) -> RunError {
     let (code, message) = match error {
         AgentError::MaxIterationsReached(_) => (
             "max_iterations",
@@ -258,6 +289,7 @@ fn run_error(error: &AgentError) -> RunError {
             "stagnation_detected",
             "The agent kept giving the same reply, so it was stopped.",
         ),
+        AgentError::FirstCallMissing { message } => ("image_generation_failed", message.as_str()),
         AgentError::Internal(_) => (
             "agent_error",
             "The agent loop failed; the reply's last event says why.",

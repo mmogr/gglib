@@ -13,6 +13,7 @@ import { SystemSettings } from "./SettingsModal/SystemSettings";
 import { useDesktopSettings } from "./SettingsModal/useDesktopSettings";
 import { useNetworkSettings } from './SettingsModal/useNetworkSettings';
 import { useAgentGuardSettings } from './SettingsModal/useAgentGuardSettings';
+import { useDrawingSettings } from './SettingsModal/useDrawingSettings';
 import { changedFields, generalInputs, generalRequest } from './SettingsModal/settingsRequest';
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
@@ -66,6 +67,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose, initial
   } = useDesktopSettings(settings);
   const network = useNetworkSettings(settings);
   const agentGuards = useAgentGuardSettings(settings);
+  const drawing = useDrawingSettings(settings);
   const [downloadPathInput, setDownloadPathInput] = useState('');
   const [defaultModelInput, setDefaultModelInput] = useState("");
   const [inferenceDefaultsInput, setInferenceDefaultsInput] = useState<SparseInferenceConfig | undefined>(undefined);
@@ -137,6 +139,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose, initial
           ...changedFields(onScreen, generalRequest(generalInputs(settings ?? NO_SETTINGS))),
           ...network.updates,
           ...agentGuards.updates,
+          ...drawing.updates,
           ...desktopUpdates,
         };
 
@@ -166,6 +169,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose, initial
       downloadPathInput,
       network.updates,
       agentGuards.updates,
+      drawing.updates,
       info,
       settings,
       saveDir,
@@ -281,6 +285,8 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose, initial
             setAgentGuardSetting={agentGuards.setValue}
             desktopSettings={desktopValues}
             setDesktopSetting={setDesktopSetting}
+            drawingSettings={drawing.values}
+            setDrawingSetting={drawing.setValue}
             trustClientSampling={trustClientSampling}
             setTrustClientSampling={setTrustClientSampling}
             onSubmit={handleSubmit}

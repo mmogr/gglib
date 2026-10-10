@@ -29,7 +29,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 
 use crate::domain::agent::{
-    AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition, ToolResult,
+    AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition, ToolProgressSink, ToolResult,
 };
 
 // =============================================================================
@@ -109,6 +109,16 @@ pub enum AgentError {
         count: usize,
         /// The configured stagnation limit at the time of detection.
         max_steps: usize,
+    },
+
+    /// The run's first reply had to call a tool
+    /// ([`AgentConfig::first_call`]) and did not call it: an upstream that does
+    /// not honour the demand. Carries the composer's own words for the
+    /// person, which the loop also emitted as its last `error` event.
+    #[error("{message}")]
+    FirstCallMissing {
+        /// [`FirstCall::if_missing`](crate::domain::agent::FirstCall::if_missing).
+        message: String,
     },
 
     /// An unrecoverable internal error inside the loop implementation.
@@ -193,6 +203,22 @@ pub trait ToolExecutorPort: Send + Sync {
     ///
     /// Returns `Err` only for infrastructure failures (see error contract above).
     async fn execute(&self, call: &ToolCall) -> Result<ToolResult, anyhow::Error>;
+
+    /// Execute a single tool call, telling `sink` how it is going.
+    ///
+    /// The default ignores `sink` and calls [`execute`](Self::execute), which
+    /// is right for a tool that finishes quickly. A decorator **must**
+    /// override this as well as `execute` and apply the same checks: the
+    /// agent loop calls this method, so a decorator that only overrides
+    /// `execute` is bypassed.
+    async fn execute_with_progress(
+        &self,
+        call: &ToolCall,
+        sink: &dyn ToolProgressSink,
+    ) -> Result<ToolResult, anyhow::Error> {
+        let _ = sink;
+        self.execute(call).await
+    }
 }
 
 // =============================================================================

@@ -63,6 +63,9 @@ mod error_codes;
 pub(crate) mod forward;
 pub(crate) mod forward_unary;
 pub(crate) mod image_refusal;
+// Public: the daemon mounts the same handler at `/api/images/generations`.
+pub mod images;
+pub(crate) mod images_stream;
 pub(crate) mod load_endpoint;
 #[allow(
     clippy::option_if_let_else,

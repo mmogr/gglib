@@ -20,7 +20,7 @@ ChatMessagesPanel                 ← composition root; owns the thread runtime
     │           │     └── ThinkingBlock / ToolUsageBadge / ToolExecutionProgress
     │           ├── BranchEnd           ← where other branches go on past the last message
     │           ├── Unanswered          ← Retry, under a chat that ends in a question
-    │           └── ComposerFooter      ← model, tools, context ring and Thinking switch; input, send / stop
+    │           └── ComposerFooter      ← model, tools, context ring, Thinking switch and Draw button; input, send / stop
     └── ConfirmDeleteModal        ← cascade-delete confirmation
 ```
 

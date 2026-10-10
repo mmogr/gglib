@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::{RunError, RunInfo, RunKind, RunList, RunStatus};
+use super::{RunError, RunFrames, RunInfo, RunKind, RunList, RunStatus};
 use crate::domain::agent::{AgentEvent, ToolCall, ToolResult, rows_from_frames};
 use crate::domain::attachment::{AttachmentId, AttachmentInfo};
 use crate::domain::chat::MessageRole;
@@ -41,6 +41,10 @@ fn run(id: &str, kind: RunKind, status: RunStatus) -> RunInfo {
         conversation_id: None,
         last_seq: 0,
         error: None,
+        frames: match kind {
+            RunKind::Agent => RunFrames::Agent,
+            RunKind::Chat => RunFrames::Openai,
+        },
     }
 }
 

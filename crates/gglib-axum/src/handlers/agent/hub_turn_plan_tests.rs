@@ -82,13 +82,182 @@ fn with_the_tunnel_open_a_device_turn_may_call_only_the_tools_the_chat_names() {
         ..named.clone()
     };
     let read_file = vec!["fs:read_file".to_owned()];
-    assert_eq!(tools_of(&named, true), read_file);
-    assert_eq!(tools_of(&named, false), Vec::<String>::new());
+    assert_eq!(tools_of(&named, true, false), read_file);
+    assert_eq!(tools_of(&named, false, false), Vec::<String>::new());
     assert_eq!(
-        tools_of(&ConversationSettings::default(), true),
+        tools_of(&ConversationSettings::default(), true, false),
         Vec::<String>::new()
     );
-    assert_eq!(tools_of(&off, true), Vec::<String>::new());
+    assert_eq!(tools_of(&off, true, false), Vec::<String>::new());
+}
+
+/// Draw adds exactly the image tool's qualified name, whatever the tunnel's
+/// switch and the chat's `no_tools` say, and nothing without it: every cell
+/// of tunnel open or closed, tools on or off, drawn or not.
+#[test]
+fn draw_adds_exactly_the_qualified_image_tool_in_every_case() {
+    let named = ConversationSettings {
+        tools: vec!["fs:read_file".to_owned()],
+        ..ConversationSettings::default()
+    };
+    let off = ConversationSettings {
+        no_tools: Some(true),
+        ..named.clone()
+    };
+    let draw = "builtin:generate_image".to_owned();
+    let read_file = "fs:read_file".to_owned();
+    for (settings, mcp_allowed, mcp) in [
+        (&named, true, vec![read_file]),
+        (&named, false, Vec::new()),
+        (&off, true, Vec::new()),
+        (&off, false, Vec::new()),
+    ] {
+        assert_eq!(tools_of(settings, mcp_allowed, false), mcp);
+        let mut drawn = mcp.clone();
+        drawn.push(draw.clone());
+        assert_eq!(tools_of(settings, mcp_allowed, true), drawn);
+    }
+}
+
+/// An MCP server's tool that happens to be called `generate_image` is not
+/// reachable by a device's draw turn while the tunnel is closed to MCP
+/// tools: the filter such a turn runs under lists the builtin and refuses
+/// the other, listed or called.
+#[tokio::test]
+async fn a_draw_turn_never_reaches_an_mcp_tool_named_generate_image() {
+    use std::sync::Arc;
+
+    use gglib_core::domain::agent::{ToolCall, ToolDefinition, ToolResult};
+    use gglib_core::ports::{FilteredToolExecutor, ToolExecutorPort};
+
+    /// Lists and runs the builtin and an MCP server's namesake.
+    struct Both;
+
+    #[async_trait::async_trait]
+    impl ToolExecutorPort for Both {
+        async fn list_tools(&self) -> Vec<ToolDefinition> {
+            vec![
+                ToolDefinition::new("builtin:generate_image"),
+                ToolDefinition::new("3:generate_image"),
+                ToolDefinition::new("3:builtin:generate_image"),
+                ToolDefinition::new("3:read_file"),
+            ]
+        }
+
+        async fn execute(&self, call: &ToolCall) -> anyhow::Result<ToolResult> {
+            Ok(ToolResult::text(
+                call.id.clone(),
+                format!("ran {}", call.name),
+                true,
+            ))
+        }
+    }
+
+    let named = ConversationSettings {
+        tools: vec!["read_file".to_owned()],
+        ..ConversationSettings::default()
+    };
+    let filter = tools_of(&named, false, true).into_iter().collect();
+    let tools = FilteredToolExecutor::new(Arc::new(Both), filter);
+
+    let listed: Vec<String> = tools
+        .list_tools()
+        .await
+        .into_iter()
+        .map(|t| t.name)
+        .collect();
+    assert_eq!(listed, ["builtin:generate_image"]);
+    let call = |name: &str| ToolCall {
+        id: "c1".to_owned(),
+        name: name.to_owned(),
+        arguments: serde_json::json!({}),
+    };
+    // Nor is a tool whose own name is the builtin's qualified one, colon
+    // included: the filter's entry names the builtin and nothing else.
+    for theirs in ["3:generate_image", "3:builtin:generate_image"] {
+        let theirs = tools.execute(&call(theirs)).await;
+        assert!(
+            theirs.map_or(true, |result| !result.success
+                && !result.content.contains("ran ")),
+            "the MCP server's tool ran for a device without --allow-mcp"
+        );
+    }
+    let ours = tools
+        .execute(&call("builtin:generate_image"))
+        .await
+        .unwrap();
+    assert_eq!(ours.content, "ran builtin:generate_image");
+}
+
+/// A turn sent with Draw pressed is planned with the image tool and nothing
+/// else, and its model is offered exactly that, and must call it in its
+/// first reply; one sent without is offered none.
+#[tokio::test]
+async fn a_draw_turn_offers_its_model_the_image_tool_and_no_other() {
+    use gglib_core::domain::hub_chats::HubTurn;
+
+    use crate::handlers::agent::run_fixture::drawing_state;
+    use crate::handlers::agent::turn_fixture::{drawn, model, sent};
+
+    let (_dir, state) = drawing_state().await;
+    let served = model(&state, |_| {}).await;
+    let id = chat(&state, None).await;
+    let pressed = HubTurn {
+        draw: true,
+        ..turn(id, "a fox in the snow")
+    };
+
+    let planned = plan(&state, pressed).await.unwrap();
+
+    assert!(planned.chat.draw);
+    assert_eq!(
+        planned.chat.tool_filter,
+        Some(vec!["builtin:generate_image".to_owned()])
+    );
+    let offered = |body: &serde_json::Value| -> Vec<String> {
+        let tools = body["tools"].as_array().cloned().unwrap_or_default();
+        tools
+            .iter()
+            .map(|tool| tool["function"]["name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    // Held to the call for the picture at first, and left to choose after.
+    let [first, later] = drawn(&state, served, planned.chat).await;
+    assert_eq!(offered(&first), ["builtin:generate_image"]);
+    assert_eq!(first["tool_choice"], "required");
+    assert_eq!(offered(&later), ["builtin:generate_image"]);
+    assert_eq!(later["tool_choice"], "auto");
+
+    let plain = plan(&state, turn(id, "hello")).await.unwrap();
+    assert!(!plain.chat.draw);
+    assert_eq!(plain.chat.tool_filter, Some(Vec::new()));
+    let body = sent(&state, served, plain.chat).await;
+    assert_eq!(offered(&body), Vec::<String>::new());
+}
+
+/// A turn sent with Draw pressed on a hub that cannot draw is refused,
+/// `drawing_unavailable`, with nothing written and no run made.
+#[tokio::test]
+async fn a_draw_turn_the_hub_cannot_draw_for_is_refused_and_writes_nothing() {
+    use gglib_core::domain::hub_chats::HubTurn;
+    use gglib_core::ports::RunsPort as _;
+
+    use super::hub_turn_tests::{device, refused};
+    use crate::handlers::agent::run_fixture::saved;
+
+    let (_dir, state) = state().await;
+    let id = chat(&state, None).await;
+    let pressed = HubTurn {
+        draw: true,
+        ..turn(id, "a fox in the snow")
+    };
+
+    let refusal = refused(super::start(&state, "phone", "d1", pressed).await);
+
+    assert_eq!(refusal, (400, "drawing_unavailable"));
+    assert_eq!(saved(&state, id).await.len(), 2);
+    assert!(state.runs.list(&device("phone")).runs.is_empty());
+    assert_eq!(state.agent_semaphore.available_permits(), 1);
 }
 
 /// The prompt is the conversation's; a saved system row is not sent again.

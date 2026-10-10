@@ -220,3 +220,37 @@ async fn the_port_cannot_create_an_agent_run() {
     assert_eq!(created.info.kind, RunKind::Chat);
     assert_eq!(created.info.conversation_id, None);
 }
+
+/// A run says how its events are decoded: an agent run the loop's, a chat
+/// run `OpenAI`'s by leaving the key out, and a chat run started with
+/// builtins the loop's once its reservation says so.
+#[tokio::test]
+async fn a_run_says_which_frames_it_logs() {
+    use gglib_core::domain::runs::RunFrames;
+
+    let (runs, _executor, _) = registry();
+    let reserve = |id: &'static str, kind| {
+        let spec = RunSpec {
+            kind,
+            model: None,
+            conversation_id: None,
+        };
+        match runs.reserve(RunScope::Local, id, spec).unwrap() {
+            Reservation::New(reserved) => reserved,
+            Reservation::Existing(_) => panic!("{id} is new"),
+        }
+    };
+
+    let agent = reserve("a1", RunKind::Agent);
+    assert_eq!(agent.info().frames, RunFrames::Agent);
+
+    let chat = reserve("c1", RunKind::Chat);
+    assert_eq!(chat.info().frames, RunFrames::Openai);
+    let wire = serde_json::to_value(chat.info()).unwrap();
+    assert!(wire.get("frames").is_none(), "{wire}");
+
+    let with_builtins = reserve("c2", RunKind::Chat).agent_frames();
+    let info = with_builtins.info();
+    assert_eq!((info.kind, info.frames), (RunKind::Chat, RunFrames::Agent));
+    assert_eq!(serde_json::to_value(info).unwrap()["frames"], "agent");
+}

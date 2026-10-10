@@ -372,3 +372,86 @@ async fn a_server_this_catalogue_does_not_know_is_sent_the_flags_and_nothing_sto
     let asked = q_sends(&ctx, question(&dir, "stranger", true)).await;
     assert_eq!(asked["temperature"], json!(0.3_f32), "and `gglib q` alike");
 }
+
+/// The tools `gglib chat served --no-tools` offers its model for a message,
+/// its session composed with a Draw switch that `/draw` has armed or not.
+async fn offered_with_draw(armed: bool) -> Vec<String> {
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+
+    use gglib_core::ports::{ImageBatch, ImageError, ImageProgress, ImageRequest};
+
+    #[derive(Debug)]
+    struct Draws;
+
+    #[async_trait::async_trait]
+    impl gglib_core::ports::ImageGenerationPort for Draws {
+        async fn generate(
+            &self,
+            _request: ImageRequest,
+            _progress: mpsc::Sender<ImageProgress>,
+        ) -> Result<ImageBatch, ImageError> {
+            unreachable!("the model server calls no tool")
+        }
+    }
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = test_context(dir.path()).await;
+    model(&ctx, &[], None).await;
+    let server = props_server("{}");
+    let args = ChatArgs {
+        port: Some(server.port),
+        ..chat(MODEL, true, SamplingArgs::default())
+    };
+    let Session { mut params, .. } = prepare(&ctx, &args).await.expect("prepared");
+    let store = gglib_core::services::AttachmentService::new(ctx.app.attachments().store());
+    params.drawing = Some((
+        gglib_mcp::DrawingTool::new(Arc::new(Draws), Arc::new(store)),
+        gglib_mcp::DrawArm::Shared(Arc::new(AtomicBool::new(armed))),
+    ));
+    let banner = BannerInfo {
+        quiet: true,
+        ..BannerInfo::default()
+    };
+    let agent = compose(&ctx, &params, None, None, &banner)
+        .await
+        .expect("composed");
+    let (tx, _rx) = mpsc::channel(AGENT_EVENT_CHANNEL_CAPACITY);
+    agent
+        .run(vec![AgentMessage::user("hi")], AgentConfig::default(), tx)
+        .await
+        .expect("the turn ends");
+    let body: Value =
+        serde_json::from_str(&server.body_of("POST /v1/chat/completions")).expect("a JSON body");
+    body["tools"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|tool| tool["function"]["name"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+/// A session's loop is composed with its Draw switch: the image tool is
+/// offered to the message after `/draw`, `--no-tools` notwithstanding, and
+/// to no other.
+#[tokio::test]
+async fn a_session_offers_the_image_tool_only_while_its_draw_switch_is_armed() {
+    assert_eq!(offered_with_draw(true).await, ["builtin:generate_image"]);
+    assert_eq!(offered_with_draw(false).await, Vec::<String>::new());
+}
+
+/// The allowlist of a session that can draw gains exactly the qualified
+/// name; one that cannot, nothing; every tool stays every tool.
+#[test]
+fn a_drawing_sessions_allowlist_gains_exactly_the_qualified_image_tool() {
+    let set = |names: &[&str]| -> std::collections::HashSet<String> {
+        names.iter().map(|n| (*n).to_owned()).collect()
+    };
+    let typed = ["3:search".to_owned()];
+    assert_eq!(
+        tool_filter(&typed, true),
+        Some(set(&["3:search", "builtin:generate_image"]))
+    );
+    assert_eq!(tool_filter(&typed, false), Some(set(&["3:search"])));
+    assert_eq!(tool_filter(&[], true), None);
+}

@@ -38,11 +38,17 @@ fn every_flag_clap_accepts_is_a_write_reported_under_the_flags_own_name() {
             .find_map(|value| parsed(&[&long, value]))
             .unwrap_or_else(|| panic!("{long} takes none of the sample values"));
 
-        let changed = changed_keys(&update_from(given)).expect("keys");
+        // `--default-image-model` names a model; `handle_set` resolves it to
+        // the id the update writes, under the field's own name.
+        let (image_model, key) = match given.default_image_model_id {
+            Some(_) => (Some(1), "default-image-model-id".to_owned()),
+            None => (None, flag),
+        };
+        let changed = changed_keys(&update_from(given, image_model)).expect("keys");
 
-        assert_eq!(changed, BTreeSet::from([flag]), "{long}");
+        assert_eq!(changed, BTreeSet::from([key]), "{long}");
     }
-    let nothing = changed_keys(&update_from(args(&[]))).expect("keys");
+    let nothing = changed_keys(&update_from(args(&[]), None)).expect("keys");
     assert!(nothing.is_empty(), "no flag, no write: {nothing:?}");
 }
 
@@ -85,7 +91,7 @@ async fn a_valid_value_stores_what_the_services_merge_produces() {
     let flags = ["--loop-guard-mode", "refuse", "--proxy-port", "9191"];
     let mut expected = ctx.app.settings().get().await.expect("settings");
     assert_eq!(expected.loop_guard_mode, Some(LoopGuardMode::Off));
-    expected.merge(&update_from(args(&flags)));
+    expected.merge(&update_from(args(&flags), None));
 
     handle_set(&ctx, args(&flags)).await.expect("stored");
 

@@ -12,6 +12,7 @@ import { ToastProvider } from '../../../src/contexts/ToastContext';
 import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
 import { SettingsProvider } from '../../../src/contexts/SettingsContext';
 import type { ChatMessage, ConversationSummary } from '../../../src/services/transport';
+import type { DrawingAvailability } from '../../../src/types/generated/DrawingAvailability';
 import type { RunInfo } from '../../../src/types/generated/RunInfo';
 
 // jsdom has no ResizeObserver and assistant-ui's composer measures itself
@@ -66,6 +67,13 @@ export async function* framesThenWait(frames: object[], signal: AbortSignal) {
   await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve()));
 }
 
+/** A machine's answer when it has nothing to draw with: the Draw button is greyed. */
+export const NO_DRAWING: DrawingAvailability = {
+  available: false,
+  code: 'drawing_unavailable',
+  reason: 'no image model is installed; download one first',
+};
+
 export interface ChatFixture {
   conversations: ConversationSummary[];
   rows: Record<number, ChatMessage[]>;
@@ -97,6 +105,8 @@ export function chatTransport(fixture: ChatFixture) {
     readRunEvents: (id: string, _after: number, signal: AbortSignal) =>
       framesThenWait(fixture.frames[id] ?? [], signal),
     getSettings: vi.fn(async () => ({})),
+    // Asked for the composer's Draw button; nothing to draw with unless a test says so.
+    drawingAvailability: vi.fn(async () => NO_DRAWING),
     subscribe: vi.fn(() => () => {}),
   };
 }

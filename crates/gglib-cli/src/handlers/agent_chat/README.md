@@ -17,6 +17,9 @@ independently readable:
   here (`--port`) or one the daemon starts. Which *machine* answers is
   `crate::target`'s decision (ADR 0013), not this module's
 - [`renderer`] — maps [`gglib_core::AgentEvent`] variants to terminal output
+- `progress_line` — a long tool's progress ("drawing: sampling 2/4") and a
+  wait before a reply, as one stderr line each report rewrites; a preview
+  frame is not shown
 - [`drain`]    — async event-stream consumer (spinner, thinking accumulator)
 - [`repl`]     — async REPL loop with `rustyline` + `spawn_blocking` input
 - [`persistence`] — the saved conversation a session's turns are written to,
@@ -33,6 +36,10 @@ independently readable:
   each file through core's one ingest, with a receipt line on stderr; and,
   when a session starts, the daemon's check before a run
   (`AttachmentService::check_request`) over its history and first message
+- [`draw`]     — `/draw`, the session's Draw switch: it asks the daemon
+  whether it can draw, arms the image tool for the next message, whose
+  reply must start with the call for the picture, and is off
+  again once that message is sent; the tool draws through the daemon
 - [`sight`]    — whether the session's model can read an image, asked before
   the loop is composed: the catalogue row, or `/props` of a `--port` server
 - [`tool_format`] — tool-result summary formatters

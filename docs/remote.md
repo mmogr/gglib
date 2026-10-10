@@ -748,7 +748,7 @@ readability.
 
 Everything the desktop's proxy serves — `/v1/models`, a model's detail at
 `/v1/models/{name}/detail`, `POST /v1/models/{name}/load`,
-`/v1/chat/completions`, `/v1/runs`, `/v1/chats`, `/v1/attachments`, the dashboard, `POST /v1/proxy/shutdown` —
+`/v1/chat/completions`, `POST /v1/images/generations`, `GET /v1/images/drawing`, `/v1/runs`, `/v1/chats`, `/v1/attachments`, the dashboard, `POST /v1/proxy/shutdown` —
 with one exception. `/mcp`, the tool gateway, is refused over the tunnel unless the
 desktop ran `enable --allow-mcp`, because a leaked key with a shell MCP
 server configured on the desktop is remote code execution. The refusal is
@@ -760,8 +760,26 @@ it lets a client that reaches the desktop's proxy directly act as that device:
 this machine not reading a device's reply is a courtesy of the API, not a
 boundary.
 
+A paired device may draw with the desktop's image model at
+`POST /v1/images/generations`, OpenAI's Images API: `{prompt, model?, n?,
+size?, seed?}` answered with `{created, data: [{b64_json}], output_format}`.
+That synchronous form carries no progress, and a render takes minutes; with
+`"stream": true` the answer is server-sent events, gglib's
+`image_generation.progress` at every stage and step, OpenAI's
+`image_generation.partial_image` up to `partial_images` times (0 to 3; a
+small preview frame, whose `size` is the size asked for, not its own), and
+one `image_generation.completed` per image, which also names the image
+model that drew it in gglib's own `model` key. Drawing uses the desktop and
+changes nothing on it, like a chat. `GET /v1/images/drawing` answers whether
+the desktop can draw, `{available, code?, reason?, model?}`, with the reason
+when it cannot (no image runtime, no image model, several and no default).
+That answer is always a 200: its `code`, `drawing_unavailable`, is the code
+a request to draw would be refused with, not an error of the question;
+a device asks it before offering a Draw button, and a desktop too old to
+have the route answers 404, which means it cannot.
+
 A paired device may read the desktop's chats at `/v1/chats` and carry one on
-with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content, images?, thinking?}`: the
+with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content, images?, thinking?, draw?}`: the
 desktop runs the reply from its own record and saves both rows, marked with
 the device's name, and its own page and every paired device can follow that
 run. A chat that stored its model runs on that model by its id, the one its
@@ -779,6 +797,48 @@ tools the chat names. A saved reply's row says how it was made in its
 (`trimmedMessages`) and why the model stopped (`finishReason`), each only
 when it is known, so a device that opens the chat reads them with no route
 of their own ([Context reading](clients.md#context-reading)).
+
+The `PUT` answers as soon as the run is made, before the chat's model is
+loaded. A model that has to load, or wait behind an image render, shows as a
+`waiting` event in the run, and a model that cannot be loaded ends the run
+`failed` with `model_unavailable` rather than refusing the `PUT`; a client
+shows a run's error code as it would the `PUT`'s. Such a run has written
+nothing to the chat.
+
+A turn sent with the device's Draw button pressed says `"draw": true`, and
+only then is the desktop's chat model offered its image tool, for that one
+message: it writes the prompt, draws with the desktop's image model, and the
+picture is saved on the reply's tool row. Whether to draw is not left to the
+model: the reply's first step must be the call for the picture, and a model
+that answers in words instead ends the run `failed`,
+`image_generation_failed`, "the model did not ask for the picture; try again
+or pick a model that calls tools". This needs no `--allow-mcp`, which
+still gates every MCP tool, and it holds for a chat with its tools turned
+off: the button is the person's choice for that message. A turn without the
+key is offered no image tool. A desktop that cannot draw refuses the turn,
+`400 drawing_unavailable`, with the reason; a device asks
+`GET /v1/images/drawing` first, and never sends the key to a desktop that
+answers 404 there, which would refuse a body with a key it does not know.
+
+A chat the device keeps itself can draw too. `PUT
+/v1/runs/{id}?kind=chat&tools=builtin&draw=true` takes the device's
+unchanged OpenAI chat request, whole history included, and runs it through
+the desktop's agent loop on the model it names, with the image tool offered
+for that message, whose first step must be the call for the picture as on a
+desktop chat; without `draw=true` the loop runs with no tool. Images
+sent inline as data URLs are stored on the desktop for the run and removed
+at the first daemon start a day or more later, since no chat there links
+them. Nothing is saved to any
+chat on the desktop: the device keeps the conversation and reads the reply
+from the run. That run's listing says `"frames": "agent"`: its events are
+the agent loop's (`tool_progress`, `waiting`, `tool_call_complete` with its
+images), not OpenAI chunks, and a run without the key is read as OpenAI's.
+The request's sampling is not read, its `max_tokens` included; the desktop's
+settings for the model apply, as on a turn. Its Thinking choice is read: a
+body with `"reasoning_budget_tokens": 0`, which is how a device turns thinking
+off for a chat it keeps ([Thinking](clients.md#thinking)), runs with a thinking
+budget of `0`, and any other budget is sampling and is not read. Without `tools=builtin` a chat run is recorded exactly
+as before.
 
 Such a turn may also say the chat's Thinking choice, `"thinking": "off"` or
 `"thinking": "default"`, and says it only when the user changes it. `off`

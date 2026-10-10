@@ -37,7 +37,7 @@ mod stream;
 mod types;
 
 // Re-export commonly used types
-pub use admission::{AdmissionQueue, PRIMARY_SLOT, Resident, SLOT_COUNT};
+pub use admission::{AdmissionQueue, PRIMARY_SLOT, RENDER_STOPPED, Resident, SLOT_COUNT};
 pub use broadcaster::{ServerEventBroadcaster, get_event_broadcaster};
 pub use core::GuiProcessCore;
 pub use events::{ServerEvent, ServerStateInfo, ServerStatus};

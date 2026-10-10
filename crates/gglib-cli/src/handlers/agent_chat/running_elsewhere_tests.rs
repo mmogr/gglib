@@ -76,6 +76,7 @@ fn listed(id: &str, status: RunStatus, conversation_id: Option<i64>) -> RunInfo 
         conversation_id,
         last_seq: 0,
         error: None,
+        frames: gglib_core::domain::runs::RunFrames::Agent,
     }
 }
 

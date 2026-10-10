@@ -15,8 +15,8 @@ use anyhow::Result;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{
-    Admission, AdmissionLease, GenerationGate, GenerationTurn, LaunchOverrides, ModelCatalogPort,
-    ModelRuntimeError, ProcessHandle, RunningTarget,
+    Admission, AdmissionLease, AdmitObserver, GenerationGate, GenerationTurn, LaunchOverrides,
+    ModelCatalogPort, ModelRuntimeError, ProcessHandle, RunningTarget,
 };
 use gglib_core::server_config::ServerConfigOptions;
 use std::sync::Arc;
@@ -126,8 +126,34 @@ impl ProcessManager {
         default_ctx: Option<u64>,
         overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError> {
+        self.admit_observed(model_name, num_ctx, default_ctx, overrides, None)
+            .await
+    }
+
+    /// [`Self::admit`], telling `observer` the request's place in line each
+    /// time it waits at a new one. See
+    /// [`ModelRuntimePort::admit_observed`](gglib_core::ports::ModelRuntimePort::admit_observed).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::admit`].
+    pub async fn admit_observed(
+        &self,
+        model_name: &str,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: LaunchOverrides,
+        observer: Option<Arc<dyn AdmitObserver>>,
+    ) -> Result<Admission, ModelRuntimeError> {
         self.residency
-            .admit(&self.core, model_name, num_ctx, default_ctx, overrides)
+            .admit_observed(
+                &self.core,
+                model_name,
+                num_ctx,
+                default_ctx,
+                overrides,
+                observer,
+            )
             .await
     }
 
@@ -224,6 +250,16 @@ impl ProcessManager {
         self.residency.queue().generation_gate()
     }
 
+    /// Whether `sd-server` is where this manager launches it from: what a
+    /// render's launch checks first, asked without launching anything.
+    pub async fn image_runtime_installed(&self) -> bool {
+        self.core
+            .read()
+            .await
+            .binary(gglib_core::domain::RuntimeKind::StableDiffusion)
+            .is_file()
+    }
+
     /// End a render and the image model that drew it: kill `model_id`'s
     /// server first, then, in one locked step, release the render's lease
     /// and empty its slot only if the slot still holds `model_id`, then end
@@ -242,6 +278,15 @@ impl ProcessManager {
             .queue()
             .retire_render(turn, model_id, kill)
             .await
+    }
+
+    /// Whether a person's Stop was asked of model `model_id` while a render
+    /// draws with it. The Stop does not empty the slot under the render: the
+    /// render's driver reads this and ends it through
+    /// [`Self::retire_render`].
+    #[must_use]
+    pub fn render_stop_asked(&self, model_id: u32) -> bool {
+        self.residency.queue().render_stop_asked(model_id)
     }
 
     /// Check if any slot is mid-launch.

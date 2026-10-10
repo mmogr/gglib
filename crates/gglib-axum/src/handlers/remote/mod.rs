@@ -9,7 +9,9 @@ mod join;
 mod models;
 
 pub(crate) use attachments::{fetch_attachment, upload_attachment};
-pub(crate) use chats::{add_turn, cancel_run, list_chats, list_runs, open_chat, run_events};
+pub(crate) use chats::{
+    add_turn, cancel_run, drawing, list_chats, list_runs, open_chat, run_events,
+};
 pub(crate) use devices::{forget, invite, list};
 pub(crate) use join::{disconnect, join, kill};
 pub(crate) use models::{far_error, list_models, load_model, model_detail};

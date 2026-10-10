@@ -1,5 +1,7 @@
 /**
- * A turn's margin figures: only what the page has for that turn.
+ * A turn's margin figures: only what the page has for that turn. A reply
+ * that cannot start says what it waits for, and for a render the step it is
+ * on.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -8,6 +10,7 @@ import {
   madeLines,
   replyFacts,
   replyName,
+  waitingLines,
   writingRate,
 } from '../../../src/components/ChatMessagesPanel/components/turnFigures';
 
@@ -93,6 +96,39 @@ describe('arrivingPhase', () => {
     expect(arrivingPhase({ ...none, hasReasoning: true })).toBe('Thinking');
     expect(arrivingPhase({ ...none, hasReasoning: true, hasText: true })).toBe('Writing');
     expect(arrivingPhase({ ...none, hasText: true, toolCallsRunning: true })).toBe('Calling tools');
+  });
+});
+
+describe('a reply that waits', () => {
+  const none = { hasReasoning: false, hasText: false, toolCallsRunning: false };
+  const render = { reason: 'image_render' as const, step: 3, total: 20, position: 1 };
+  const load = { reason: 'model_load' as const, step: 0, total: 0, position: 0 };
+
+  it('says what it waits for, until the model writes, thinks or calls a tool', () => {
+    expect(arrivingPhase({ ...none, waiting: render })).toBe('Queued behind an image render');
+    expect(arrivingPhase({ ...none, waiting: load })).toBe('Waiting for the model to load');
+    // A wait still on the turn is newer than its prompt reading, which takes an older one off.
+    expect(arrivingPhase({ ...none, waiting: render, prompt: { processed: 2, total: 2, cached: 0 } })).toBe(
+      'Queued behind an image render',
+    );
+    expect(arrivingPhase({ ...none, waiting: render, hasReasoning: true })).toBe('Thinking');
+    expect(arrivingPhase({ ...none, waiting: render, hasText: true })).toBe('Writing');
+    expect(arrivingPhase({ ...none, waiting: render, toolCallsRunning: true })).toBe('Calling tools');
+  });
+
+  it('says the step the render is on, and its place in line only when it is not next', () => {
+    expect(waitingLines(render)).toEqual(['step 3 of 20']);
+    expect(waitingLines({ ...render, position: 2 })).toEqual(['step 3 of 20', '2 in line']);
+    // A render that has reported no step yet has no count to say.
+    expect(waitingLines({ ...render, step: 0, total: 0 })).toEqual([]);
+    expect(waitingLines({ ...render, step: 0, total: 20 })).toEqual(['step 0 of 20']);
+    expect(waitingLines({ ...load, total: 20, position: 3 })).toEqual([]);
+  });
+
+  it('is read from the turn drawn from a run', () => {
+    const message = { id: 'live', content: [], metadata: { custom: { waiting: render } } };
+    expect(replyFacts(message).waiting).toEqual(render);
+    expect(replyFacts({ id: 'live', content: [] }).waiting).toBeUndefined();
   });
 });
 

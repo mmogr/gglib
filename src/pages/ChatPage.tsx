@@ -22,6 +22,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useChatModelFacts } from '../hooks/useChatModelFacts';
 import { useImageInput } from '../hooks/useImageInput';
 import { useThinkingSwitch } from '../hooks/useThinkingSwitch';
+import { useDrawSwitch } from '../hooks/useDrawSwitch';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
 import { cn } from '../utils/cn';
@@ -150,9 +151,13 @@ export default function ChatPage(props: ChatPageProps) {
   const [farOpen, setFarOpen] = useState<HubChatOpen | null>(null);
   const thinking = useThinkingSwitch({ conversationId: activeConversationId, conversations, far, farOpen, paired: paired?.far, thinks });
 
+  // The Draw button: greyed, with the reason, where a message cannot draw;
+  // pressed, the next send says so, and that send alone.
+  const draw = useDrawSwitch({ conversationId: activeConversationId, far, paired: paired?.far, supportsToolCalls, refresh: settings?.defaultImageModelId });
+
   // Runtime: sends start runs the daemon owns and saves; opening a
   // conversation shows what is saved, then the run still going in it.
-  const { runtime, isLoading: messageLoading, endedRun, timingTracker, currentStreamingAssistantMessageId, branching } = useGglibRuntime({
+  const { runtime, isLoading: messageLoading, endedRun, previews, timingTracker, currentStreamingAssistantMessageId, branching } = useGglibRuntime({
     conversationId: activeConversationId ?? undefined,
     conversation: activeConversation,
     source,
@@ -171,6 +176,7 @@ export default function ChatPage(props: ChatPageProps) {
     // assistant-ui only logs a paste or a drop that fails; this is the person told.
     onImageRefused: (sentence) => showToast(sentence, 'error'),
     thinking: thinking.forSend,
+    draw: draw.forSend,
     onFarOpened: setFarOpen,
   });
 
@@ -343,6 +349,8 @@ export default function ChatPage(props: ChatPageProps) {
               imageInput={imageInput}
               thinking={thinking}
               branching={far ? undefined : branching}
+              draw={draw}
+              previews={previews}
               headMargin={
                 <ChatPageControls activeTab={activeTab} onTabChange={setActiveTab} remote={pairedChat || far} onClose={onClose} />
               }

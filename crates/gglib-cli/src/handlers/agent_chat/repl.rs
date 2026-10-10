@@ -41,6 +41,7 @@ use crate::handlers::inference::chat::ChatArgs;
 
 use super::branches;
 use super::drain::drain_event_stream;
+use super::draw::DrawSwitch;
 use super::images::TurnImages;
 use super::persistence::Conversation;
 use super::repl_line::{self, Line};
@@ -56,6 +57,7 @@ const REPL_HELP: &str = "\
   /edit <text>   ask the last question again as <text>; a reply to it is kept, on its own branch
   /branch   copy the chat into a new branch and go on there
   /branches list the other branches along the chat
+  /draw     let the model draw a picture for your next message
   /quit     exit the session
   /exit     exit the session
   Ctrl+C    cancel the current agent response (return to prompt)
@@ -75,7 +77,8 @@ const REPL_HELP: &str = "\
 /// When `prior_messages` is non-empty, the REPL begins with those messages
 /// already in the history (no system prompt is prepended — it is already
 /// in the prior messages). Pass an empty vector to start fresh. `limits`
-/// are the session's, resolved by its caller.
+/// are the session's, resolved by its caller. `draw` is the session's Draw
+/// switch, armed by `/draw` for one message.
 pub(crate) async fn run_repl_with_prior(
     agent_loop: Arc<dyn AgentLoopPort>,
     args: &ChatArgs,
@@ -83,6 +86,7 @@ pub(crate) async fn run_repl_with_prior(
     persistence: Option<Conversation<'_>>,
     prior_messages: Vec<AgentMessage>,
     images: TurnImages<'_>,
+    draw: DrawSwitch,
 ) -> Result<()> {
     let config = AgentConfig::from_user_params(
         Some(limits.max_iterations),
@@ -115,6 +119,7 @@ pub(crate) async fn run_repl_with_prior(
         args.verbose,
         persistence,
         images,
+        draw,
     )
     .await
 }
@@ -133,6 +138,7 @@ pub(crate) async fn run_repl_with_history(
     verbose: bool,
     mut persistence: Option<Conversation<'_>>,
     mut images: TurnImages<'_>,
+    draw: DrawSwitch,
 ) -> Result<()> {
     // Wrap the editor in Arc<Mutex> so it can be moved into spawn_blocking
     // on each turn while retaining readline history across turns.
@@ -202,6 +208,10 @@ pub(crate) async fn run_repl_with_history(
                 }
                 false
             }
+            Line::Draw => {
+                eprintln!("{}", draw.arm().await);
+                continue;
+            }
             Line::Send(message) => {
                 messages.push(message);
                 true
@@ -220,13 +230,15 @@ pub(crate) async fn run_repl_with_history(
         // of the previous two. The turn saves itself as it runs: what comes
         // back is the model's context, not a record of what was said.
         let saved_to = persistence.as_ref();
-        messages = run_single_turn(
+        let config = config.clone();
+        messages = send(
             &agent_loop,
             messages,
-            config.clone(),
+            config,
             verbose,
             saved_to,
             asks,
+            &draw,
         )
         .await;
     }
@@ -247,6 +259,27 @@ pub(crate) async fn run_repl_with_history(
 // =============================================================================
 // Private helpers
 // =============================================================================
+
+/// One send: the turn ([`run_single_turn`]), then the Draw switch off again.
+/// Draw is for one message, so whatever the turn did, finished, failed or
+/// cancelled, the message after it is offered no image tool.
+async fn send(
+    agent_loop: &Arc<dyn AgentLoopPort>,
+    messages: Vec<AgentMessage>,
+    config: AgentConfig,
+    verbose: bool,
+    saved_to: Option<&Conversation<'_>>,
+    asks: bool,
+    draw: &DrawSwitch,
+) -> Vec<AgentMessage> {
+    // Sent while `/draw` is armed, the turn's first reply must be the call
+    // for the picture.
+    let mut config = config;
+    config.first_call = draw.first_call();
+    let after = run_single_turn(agent_loop, messages, config, verbose, saved_to, asks).await;
+    draw.sent();
+    after
+}
 
 /// Run one agent turn: spawn the loop task, consume events, handle Ctrl+C,
 /// and return the updated conversation history.

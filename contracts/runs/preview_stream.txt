@@ -1,0 +1,12 @@
+id: 1
+data: {"type":"tool_call_start","tool_call":{"id":"call_1","name":"builtin:generate_image","arguments":{"prompt":"a red fox in snow"}},"display_name":"Generate Image","args_summary":null}
+
+event: preview
+data: {"tool_call_id":"call_1","frame":{"mime":"image/png","step":3,"total":20,"b64":"iVBORw0KGgo="}}
+
+id: 2
+data: {"type":"tool_call_complete","tool_name":"builtin:generate_image","result":{"tool_call_id":"call_1","content":"Drew 1 image.","success":true},"wait_ms":0,"execute_duration_ms":76000,"display_name":"Generate Image","duration_display":"76.0s"}
+
+event: run
+data: {"id":"r1","kind":"agent","status":"completed","created_at_ms":1,"finished_at_ms":2,"last_seq":2}
+

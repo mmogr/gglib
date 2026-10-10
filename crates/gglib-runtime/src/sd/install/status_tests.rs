@@ -128,7 +128,7 @@ fn the_commit_is_read_from_the_version_line() {
         commit_of("stable-diffusion.cpp version master-948-228c707, commit 228c707").as_deref(),
         Some("228c707")
     );
-    // The line the pinned macOS asset prints (log-0017).
+    // The line the pinned macOS asset prints (log-0018).
     assert_eq!(
         commit_of("stable-diffusion.cpp version unknown, commit 228c707").as_deref(),
         Some("228c707")

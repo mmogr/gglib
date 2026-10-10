@@ -34,6 +34,8 @@ pub struct SettingsUpdate {
     pub max_tool_iterations: Option<Option<u32>>,
     pub max_stagnation_steps: Option<Option<u32>>,
     pub default_model_id: Option<Option<i64>>,
+    /// See [`Settings::default_image_model_id`](super::Settings::default_image_model_id).
+    pub default_image_model_id: Option<Option<i64>>,
     pub inference_defaults: Option<Option<InferenceConfig>>,
     pub inference_profiles: Option<Option<Vec<InferenceProfile>>>,
     pub setup_completed: Option<Option<bool>>,
@@ -45,6 +47,8 @@ pub struct SettingsUpdate {
     /// See [`Settings::loop_guard_mode`](super::Settings::loop_guard_mode).
     pub loop_guard_mode: Option<Option<LoopGuardMode>>,
     pub tool_call_repair: Option<Option<bool>>,
+    /// See [`Settings::mcp_drawing`](super::Settings::mcp_drawing).
+    pub mcp_drawing: Option<Option<bool>>,
     /// See [`Settings::agentic_sampling`](super::Settings::agentic_sampling).
     pub agentic_sampling: Option<Option<bool>>,
     pub proxy_autostart: Option<Option<bool>>,
@@ -105,6 +109,19 @@ pub enum SettingsError {
 
     #[error("Remote ticket cannot be blank — clear the pairing instead to forget it")]
     BlankRemoteTicket,
+
+    /// The default image model names no model in the library.
+    #[error("No model has id {0}, so it cannot be the default image model")]
+    UnknownImageModel(i64),
+
+    /// The default image model names a model that does not draw.
+    #[error("Model {id} ({name}) does not draw images, so it cannot be the default image model")]
+    NotAnImageModel {
+        /// The id written.
+        id: i64,
+        /// The model's name, for the sentence.
+        name: String,
+    },
 
     /// An id the tunnel edge would refuse to hold a token under.
     #[error(

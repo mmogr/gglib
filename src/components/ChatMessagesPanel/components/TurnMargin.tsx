@@ -2,9 +2,9 @@ import { FC } from 'react';
 import { Readout } from '../../primitives';
 import { Button } from '../../ui/Button';
 import { PromptProgressBar } from '../../PromptProgressBar';
-import type { PromptReading } from '../../../types/messages';
+import type { PromptReading, TurnWaiting } from '../../../types/messages';
 import { formatCount } from '../../../utils/format';
-import { madeLines, turnTime, type ArrivingPhase, type ReplyFacts } from './turnFigures';
+import { madeLines, turnTime, waitingLines, type ArrivingPhase, type ReplyFacts } from './turnFigures';
 
 /**
  * The margin's head: who wrote the turn, then when and, for a reply, the
@@ -69,13 +69,25 @@ export const ReplyMade: FC<ReplyMadeProps> = ({ facts, detailId, detailOpen, onT
   );
 };
 
-/** The margin's foot for a reply still arriving: what it is doing, and how far. */
-export const ReplyArriving: FC<{ phase: ArrivingPhase; prompt?: PromptReading }> = ({ phase, prompt }) => (
+/**
+ * The margin's foot for a reply still arriving: what it is doing, and how
+ * far. One queued behind an image render says the step that render is on.
+ */
+export const ReplyArriving: FC<{ phase: ArrivingPhase; prompt?: PromptReading; waiting?: TurnWaiting }> = ({
+  phase,
+  prompt,
+  waiting,
+}) => (
   <>
     <span role="status" className="flex items-center gap-sm text-sm text-text-secondary">
       <span aria-hidden className="w-[6px] h-[6px] rounded-full bg-success animate-research-pulse" />
       {phase}
     </span>
+    {waiting &&
+      phase === 'Queued behind an image render' &&
+      waitingLines(waiting).map((line) => (
+        <span key={line} className="font-mono tabular-nums">{line}</span>
+      ))}
     {prompt && phase === 'Reading the prompt' && (
       <Readout
         label="Prompt read"

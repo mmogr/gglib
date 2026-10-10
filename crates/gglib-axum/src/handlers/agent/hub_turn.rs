@@ -12,7 +12,7 @@
 //! iteration limit they do not name from this machine's settings, as it
 //! does for the page), and with thinking off
 //! when the turn says so or the chat remembers it (`thinking`). It calls no
-//! tool unless
+//! tool but the image tool of a turn that says `draw`, unless
 //! this machine lets the tunnel reach its MCP tools, and then only those the
 //! settings name. The reply runs on the chat's
 //! model, loaded as `/v1/models/{name}/load` loads it when it is not
@@ -30,6 +30,7 @@ use gglib_core::domain::agent::{AgentMessage, saved_history};
 use gglib_core::domain::branching;
 use gglib_core::domain::chat::ConversationSettings;
 use gglib_core::domain::hub_chats::HubTurn;
+use gglib_core::domain::runs::RunKind;
 use gglib_core::domain::thinking;
 use gglib_core::ports::{
     AgentRunStarter, Created, RemoteGatewayPort as _, RunScope, RunsError, TurnRefused,
@@ -38,11 +39,10 @@ use gglib_core::services::ChangeError;
 use tokio::sync::OwnedSemaphorePermit;
 
 use super::AgentChatRequest;
-use super::compose::{Prepared, prepare, take_permit};
+use super::compose::{DRAW_TOOL, prepare, refuse_unavailable_drawing, take_permit};
 use super::dto::AgentRequestConfig;
 use super::hub_model::{model_for, on_model};
-use super::launch::{Transcript, launch};
-use super::remote_upstream;
+use super::launch::{LatePrepare, Transcript, launch_turn};
 use super::run::{coded, with_code};
 use crate::bootstrap::AxumContext;
 use crate::error::HttpError;
@@ -72,6 +72,21 @@ impl AgentRunStarter for HubTurns {
             return Err(refusal(RunsError::ShuttingDown.into()));
         };
         start(&state, device, id, turn).await.map_err(refusal)
+    }
+
+    async fn start_chat(
+        &self,
+        device: &str,
+        id: &str,
+        body: serde_json::Value,
+        draw: bool,
+    ) -> Result<Created, TurnRefused> {
+        let Some(state) = self.0.upgrade() else {
+            return Err(refusal(RunsError::ShuttingDown.into()));
+        };
+        super::chat_turn::start(&state, device, id, body, draw)
+            .await
+            .map_err(refusal)
     }
 }
 
@@ -110,9 +125,16 @@ fn refusal(error: HttpError) -> TurnRefused {
 /// `conflict` (409) while the chat has a live reply, or for a chat that ran
 /// on the machine this one is paired with; `no_model`
 /// (422) when nothing names the chat's model and nothing runs on the hub;
-/// `agent_busy` (429); `model_unavailable` (503) when it cannot be loaded;
-/// and whatever the daemon's own door refuses the same run with. A refusal
-/// writes nothing.
+/// `drawing_unavailable` (400) for a turn sent with Draw pressed that the
+/// hub cannot draw for;
+/// `agent_busy` (429). A refusal writes nothing.
+///
+/// The run is reserved before its model is found or loaded, so the `PUT`
+/// answers at once and a cold load is the run's `waiting` event, not a
+/// hanging request. What is refused after that ends the run `failed` with
+/// the code this door answered before, having written nothing:
+/// `model_unavailable` when the model cannot be loaded, and whatever the
+/// daemon's own door refuses the same run with (`unavailable`, `conflict`).
 pub(super) async fn start(
     state: &AppState,
     device: &str,
@@ -134,26 +156,54 @@ pub(super) async fn start(
             "all agent loop slots are in use; try again later",
         )
     })?;
-    let chat = on_model(state, &plan.model, plan.chat).await?;
-    let prepared = prepare(state, chat).await.map_err(with_code)?;
-    begin(state, device, id, plan.transcript, prepared, permit).await
+    // The run exists before its model does: found on its port or loaded,
+    // and its loop composed, as the run's own work.
+    let Plan {
+        model,
+        chat,
+        transcript,
+    } = plan;
+    let shown = shown_model(state, &model).await;
+    let late = late_on(Arc::clone(state), model, chat);
+    begin(state, device, id, shown, transcript, late, permit)
 }
 
-/// Start `device`'s run `id` with its prepared loop: held on its model,
-/// reserved in the device's scope, and saved as `transcript` says: its
-/// message and reply to the chat, which then remembers what the turn said
-/// of thinking.
-pub(super) async fn begin(
+/// What a run on `model` does once it exists: find the model on its port
+/// or load it, then compose `chat`'s loop.
+pub(super) fn late_on(state: AppState, model: String, chat: AgentChatRequest) -> LatePrepare {
+    Box::new(move |loading| {
+        Box::pin(async move {
+            let chat = on_model(&state, &model, chat, &loading).await?;
+            prepare(&state, chat).await.map_err(with_code)
+        })
+    })
+}
+
+/// The name a run on `model` is listed under: the catalogue's name for it,
+/// or the identifier when the catalogue has none.
+pub(super) async fn shown_model(state: &AppState, model: &str) -> String {
+    let found = state.core.models().get(model).await.ok().flatten();
+    found.map_or_else(|| model.to_owned(), |m| m.name)
+}
+
+/// Start `device`'s run `id` on `model`, reserved in the device's scope
+/// before `late` finds or loads the model and composes the loop. The run
+/// then holds its model and is saved as `transcript` says: its message and
+/// reply to the chat, which then remembers what the turn said of thinking.
+/// What `late`, the hold or the first write refuses ends the run `failed`
+/// with that code, with nothing written.
+pub(super) fn begin(
     state: &AppState,
     device: &str,
     id: &str,
+    model: String,
     transcript: Transcript,
-    mut prepared: Prepared,
+    late: LatePrepare,
     permit: OwnedSemaphorePermit,
 ) -> Result<Created, HttpError> {
-    remote_upstream::hold_model(state.runtime.as_ref(), &mut prepared).await?;
     let scope = RunScope::Device(device.to_owned());
-    launch(state, id, scope, transcript, prepared, permit).await
+    let run = (RunKind::Agent, model);
+    launch_turn(state, id, scope, run, transcript, late, permit)
 }
 
 /// A turn read against the hub's record: the model it runs on, the chat
@@ -204,8 +254,8 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         branching::answerable(&rows).map_err(ChangeError::from)?;
     }
     let model = model_for(state, &conversation, &rows).await?;
-    // Before anything else is read for it, and before `on_model` would load
-    // it: a model that draws is served by sd-server, which cannot chat.
+    // Once the chat's model is known, before `on_model` would load it: a
+    // model that draws is served by sd-server, which cannot chat.
     super::image_gate::chats_named(state, &model).await?;
     // The prompt comes from the conversation, as the page takes it. A turn
     // that answers the question already saved adds none (ADR 0017).
@@ -229,11 +279,19 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         far: None,
         messages,
         config: config_of(&settings),
-        tool_filter: Some(tools_of(&settings, state.remote.gateway().mcp_allowed())),
+        tool_filter: Some(tools_of(
+            &settings,
+            state.remote.gateway().mcp_allowed(),
+            turn.draw,
+        )),
         model: None,
         reasoning_effort: None,
         reasoning_budget_tokens: thinking.budget,
+        draw: turn.draw,
     };
+    // A turn sent with Draw pressed that the hub cannot draw for is refused
+    // here, before a slot is taken, a run made or a row written.
+    refuse_unavailable_drawing(state, &chat).await?;
     let transcript = Transcript {
         conversation_id: Some(id),
         answer_saved: turn.answer_saved,
@@ -260,16 +318,32 @@ fn config_of(settings: &ConversationSettings) -> Option<AgentRequestConfig> {
     named.then_some(config)
 }
 
-/// The tools a device's turn may call. None unless this machine lets the
-/// tunnel reach its MCP tools (`gglib remote enable --allow-mcp`), as `/mcp`
-/// itself does: a leaked key must not run a shell server. Then only those
-/// the conversation's settings name, and none when it names none or turned
-/// them off. Never every tool, which the page's own turns may call.
-pub(super) fn tools_of(settings: &ConversationSettings, mcp_allowed: bool) -> Vec<String> {
-    if !mcp_allowed || settings.no_tools == Some(true) {
-        return Vec::new();
+/// The tools a device's turn may call. No MCP tool unless this machine lets
+/// the tunnel reach its MCP tools (`gglib remote enable --allow-mcp`), as
+/// `/mcp` itself does: a leaked key must not run a shell server. Then only
+/// those the conversation's settings name, and none when it names none or
+/// turned them off. Never every tool, which the page's own turns may call.
+///
+/// With `draw`, the image tool beside them, whatever the tunnel's switch
+/// and the chat's `no_tools` say: the Draw button is the person's choice
+/// for this one message, and drawing starts no MCP server. It is named
+/// [`DRAW_TOOL`], qualified, and never by its bare name, which the filter
+/// would also match against an MCP server's tool called `generate_image`
+/// and so hand a device a tool the tunnel's owner did not open.
+pub(super) fn tools_of(
+    settings: &ConversationSettings,
+    mcp_allowed: bool,
+    draw: bool,
+) -> Vec<String> {
+    let mut tools = if !mcp_allowed || settings.no_tools == Some(true) {
+        Vec::new()
+    } else {
+        settings.tools.clone()
+    };
+    if draw {
+        tools.push(DRAW_TOOL.to_owned());
     }
-    settings.tools.clone()
+    tools
 }
 
 #[cfg(test)]
@@ -281,6 +355,9 @@ mod hub_turn_forget_tests;
 #[cfg(test)]
 #[path = "hub_turn_images_tests.rs"]
 mod hub_turn_images_tests;
+#[cfg(test)]
+#[path = "hub_turn_late_tests.rs"]
+mod hub_turn_late_tests;
 #[cfg(test)]
 #[path = "hub_turn_limits_tests.rs"]
 mod hub_turn_limits_tests;

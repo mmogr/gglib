@@ -107,3 +107,15 @@ async fn a_change_to_the_chat_is_asked_for_and_not_sent() {
         Line::Send(_)
     ));
 }
+
+/// `/draw` is the Draw switch, never a message.
+#[tokio::test]
+async fn a_draw_line_is_the_switch_and_sends_nothing() {
+    let (service, _) = service();
+    let (mut images, _) = attached(&service, &[], true).await.unwrap();
+    assert!(matches!(read("/draw", &mut images).await, Line::Draw));
+    assert!(matches!(
+        read("/draw a fox", &mut images).await,
+        Line::Send(_)
+    ));
+}

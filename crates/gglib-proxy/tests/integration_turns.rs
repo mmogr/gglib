@@ -44,6 +44,7 @@ async fn a_named_devices_turn_reaches_the_starter_in_its_name() {
         images: Vec::new(),
         thinking: None,
         answer_saved: false,
+        draw: false,
     };
     assert_eq!(started, vec![(DEVICE.to_owned(), "d1".to_owned(), turn)]);
     assert!(runs.scopes().is_empty(), "no chat run was made");
@@ -71,6 +72,7 @@ async fn a_turns_images_reach_the_starter_by_id() {
         images,
         thinking: None,
         answer_saved: false,
+        draw: false,
     };
     let started = turns.started.lock().unwrap().clone();
     assert_eq!(started, vec![(DEVICE.to_owned(), "d1".to_owned(), turn)]);
@@ -183,5 +185,120 @@ async fn an_unknown_kind_is_400() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
     assert_eq!(code(&answer), "invalid_request");
     assert!(!answer.to_string().contains("zzq"), "{answer}");
+    cancel.cancel();
+}
+
+fn put_chat(base: &str, query: &str, body: &serde_json::Value) -> RequestBuilder {
+    Client::new()
+        .put(format!("{base}/v1/runs/p1{query}"))
+        .json(body)
+}
+
+fn chat_request() -> serde_json::Value {
+    json!({ "model": "qwen", "messages": [{ "role": "user", "content": "a red fox" }] })
+}
+
+/// `?kind=chat&tools=builtin` hands the device's unchanged `OpenAI` request
+/// to the daemon's starter, with `draw` as the query said it, and the run
+/// it answers says its events are the agent loop's. No chat run is made.
+#[tokio::test]
+async fn a_chat_run_with_builtins_reaches_the_starter_with_its_body_and_draw() {
+    let turns = Arc::new(FakeTurns::default());
+    let runs = Arc::new(FakeRuns::default());
+    let (base, cancel) = serve(Some(Arc::clone(&turns)), Arc::clone(&runs)).await;
+
+    for (query, draw) in [
+        ("?kind=chat&tools=builtin&draw=true", true),
+        ("?kind=chat&tools=builtin", false),
+        ("?tools=builtin&draw=false", false),
+    ] {
+        let sent = from_device(put_chat(&base, query, &chat_request()));
+        let (status, run) = json(sent.send().await.unwrap()).await;
+        assert_eq!(status, StatusCode::CREATED, "{run}");
+        assert_eq!(
+            (&run["kind"], &run["frames"]),
+            (&json!("chat"), &json!("agent"))
+        );
+        assert_eq!(run["device"], DEVICE);
+        let started = turns.chats.lock().unwrap().last().cloned().unwrap();
+        assert_eq!(
+            started,
+            (DEVICE.to_owned(), "p1".to_owned(), chat_request(), draw)
+        );
+    }
+    assert!(turns.started.lock().unwrap().is_empty(), "no hub turn");
+    assert!(runs.scopes().is_empty(), "no chat run was made");
+    cancel.cancel();
+}
+
+/// Without `tools` a chat run is what it always was: made by the runs, its
+/// body untouched, the starter never asked, and its answer carries no
+/// `frames` key.
+#[tokio::test]
+async fn a_chat_run_without_tools_is_a_plain_chat_run() {
+    let turns = Arc::new(FakeTurns::default());
+    let runs = Arc::new(FakeRuns::default());
+    let (base, cancel) = serve(Some(Arc::clone(&turns)), Arc::clone(&runs)).await;
+
+    for query in ["", "?kind=chat"] {
+        let sent = from_device(put_chat(&base, query, &chat_request()));
+        let (status, run) = json(sent.send().await.unwrap()).await;
+        assert_eq!(status, StatusCode::CREATED, "{run}");
+        assert_eq!(run["kind"], "chat");
+        assert!(run.get("frames").is_none(), "{run}");
+    }
+    assert_eq!(runs.scopes().len(), 2);
+    assert!(turns.chats.lock().unwrap().is_empty());
+    cancel.cancel();
+}
+
+/// Only a named device may, `draw` means nothing without `tools=builtin`
+/// and is refused beside `kind=agent`, `tools` says only `builtin`, and the
+/// starter's refusal comes back as it was given.
+#[tokio::test]
+async fn a_chat_run_with_builtins_is_refused_as_a_turn_is() {
+    let turns = Arc::new(FakeTurns::default());
+    let runs = Arc::new(FakeRuns::default());
+    let (base, cancel) = serve(Some(Arc::clone(&turns)), Arc::clone(&runs)).await;
+
+    let local = put_chat(&base, "?tools=builtin", &chat_request());
+    let (status, answer) = json(local.send().await.unwrap()).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{answer}");
+    assert_eq!(code(&answer), "device_not_named");
+
+    for query in [
+        "?draw=true",
+        "?kind=chat&draw=true",
+        "?tools=mcp",
+        "?tools=builtin&draw=yes",
+    ] {
+        let sent = from_device(put_chat(&base, query, &chat_request()));
+        let (status, answer) = json(sent.send().await.unwrap()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{query}: {answer}");
+        assert_eq!(code(&answer), "invalid_request");
+    }
+    assert!(turns.chats.lock().unwrap().is_empty());
+    assert!(runs.scopes().is_empty());
+
+    // A turn on a hub chat says `draw` in its body: the query flag is
+    // refused there, not ignored, and no turn starts.
+    let turn = json!({ "conversation_id": 7, "content": "a fox" });
+    let sent = from_device(put_chat(&base, "?kind=agent&draw=true", &turn));
+    let (status, answer) = json(sent.send().await.unwrap()).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
+    assert_eq!(code(&answer), "invalid_request");
+    let message = answer["error"]["message"].as_str().unwrap();
+    assert!(message.contains("in its body"), "{message}");
+    assert!(turns.started.lock().unwrap().is_empty());
+
+    *turns.fail.lock().unwrap() = Some(TurnRefused {
+        status: 400,
+        code: "drawing_unavailable".to_owned(),
+        message: "there is no image model on this machine".to_owned(),
+    });
+    let sent = from_device(put_chat(&base, "?tools=builtin&draw=true", &chat_request()));
+    let (status, answer) = json(sent.send().await.unwrap()).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
+    assert_eq!(code(&answer), "drawing_unavailable");
     cancel.cancel();
 }

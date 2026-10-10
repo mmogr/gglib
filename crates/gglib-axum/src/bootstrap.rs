@@ -15,7 +15,10 @@ use gglib_app_services::{
     ServiceGraphParams, SettingsOps, SetupOps, build_service_graph,
 };
 use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
-use gglib_core::ports::{AppEventEmitter, HfClientPort, ModelCatalogPort, ModelRuntimePort};
+use gglib_core::ports::{
+    AppEventEmitter, GenerationGate, HfClientPort, ImageGenerationPort, ModelCatalogPort,
+    ModelRuntimePort,
+};
 use gglib_core::services::AppCore;
 use gglib_db::{
     LoopGuardTripWriter, SqliteBenchmarkRepository, SqliteLoopGuardTripLog, repair_at_daemon_start,
@@ -93,6 +96,13 @@ pub struct AxumContext {
     /// capabilities, tags and inference defaults; resolving them through this
     /// port is what keeps those surfaces in step with the proxy.
     pub catalog: Arc<dyn ModelCatalogPort>,
+    /// The generation gate of the one `ProcessManager`: a reply on this
+    /// machine's model waits on it for its turn behind an image render, and
+    /// `GET /api/generation/turn` holds a turn there for `gglib chat`.
+    pub generation_gate: Arc<dyn GenerationGate>,
+    /// Drawing, for `/api/images/generations`: the service graph's one
+    /// `sd-server` job driver.
+    pub images: Arc<dyn ImageGenerationPort>,
     /// Cancellation token that stops the daemon when this context is hosted by
     /// [`run_daemon`](crate::daemon::run_daemon), and bounds `/api/events`.
     /// `None` in every other host (tests, embedded), where there is no graceful
@@ -185,6 +195,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         model_repo: _,
         catalog,
         runtime,
+        generation_gate,
+        images,
     } = build_service_graph(ServiceGraphParams {
         core: Arc::clone(&core),
         repos: repos.clone(),
@@ -230,6 +242,8 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         benchmark,
         runtime,
         catalog,
+        generation_gate,
+        images,
         daemon_shutdown: None,
     })
 }

@@ -13,9 +13,15 @@ import type { RunList } from '../../../types/generated/RunList';
 import { readSse } from '../../../utils/sse';
 import { apiFetch, get, post, put } from './client';
 
-/** One item of a run's stream: a logged frame, or the run's final state. */
+/**
+ * One item of a run's stream: a logged frame, the run's latest preview frame
+ * (sent beside the log with no seq: show it, never store it, keep only the
+ * newest, drop it on its call's `tool_call_complete`), or the run's final
+ * state.
+ */
 export type RunStreamItem =
   | { type: 'frame'; seq: number; data: string }
+  | { type: 'preview'; toolCallId: string; data: string }
   | { type: 'end'; info: RunInfo };
 
 function runPath(id: string): string {
@@ -66,6 +72,22 @@ export async function* readRunStream(
       yield { type: 'end', info: JSON.parse(event.data) as RunInfo };
       return;
     }
+    if (event.event === 'preview') {
+      const preview = previewOf(event.data);
+      if (preview) yield preview;
+      continue;
+    }
     yield { type: 'frame', seq: Number(event.id ?? 0), data: event.data };
+  }
+}
+
+/** A preview event's item, or `null` when its data is not one. */
+function previewOf(data: string): RunStreamItem | null {
+  try {
+    const parsed = JSON.parse(data) as { tool_call_id?: unknown };
+    if (typeof parsed.tool_call_id !== 'string') return null;
+    return { type: 'preview', toolCallId: parsed.tool_call_id, data };
+  } catch {
+    return null;
   }
 }

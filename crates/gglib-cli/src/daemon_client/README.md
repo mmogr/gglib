@@ -33,8 +33,18 @@ library left it there, and a key says nothing of which library a daemon
 serves. A daemon that is not there, or does not take the event, fails
 nothing.
 
+`generation.rs` is the daemon's generation gate as `gglib chat` sees it: a
+turn is a connection to `GET /api/generation/turn`, held open until the turn
+ends, so a reply sent to a llama-server port waits for an image render. The
+gate's URL is fixed when it is made. No daemon, or one that does not answer,
+gives a turn that holds nothing, said once; no render turn is granted here.
+
 `repair.rs` holds the call that has the daemon repair a model.
-`runs.rs` holds the run calls and reads a run's event stream, whose events
+`images.rs` is `DaemonImageGenerator`, core's image generation port over
+the daemon's `POST /api/images/generations` with `stream: true`: progress
+events become reports, completed events images, and an error event or a
+refused request the daemon's code and words; whether it can draw is the
+daemon's `GET /api/images/drawing`, asked by `/draw`. `runs.rs` holds the run calls and reads a run's event stream, whose events
 `drain_items` turns into numbered frames and the run's final state. `sse.rs`
 reads a stream of JSON events, such as a benchmark's. Neither cuts its stream
 into events itself: `gglib_core::sse::DataFrames` does, for these two and for

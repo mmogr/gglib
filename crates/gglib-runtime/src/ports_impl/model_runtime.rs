@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::AdmissionSnapshot;
 use gglib_core::ports::{
-    Admission, AdmissionLease, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, ProcessHandle,
-    RunningTarget,
+    Admission, AdmissionLease, AdmitObserver, LaunchOverrides, ModelRuntimeError, ModelRuntimePort,
+    ProcessHandle, RunningTarget,
 };
 use std::fmt;
 use std::sync::Arc;
@@ -84,6 +84,20 @@ impl ModelRuntimePort for RuntimePortImpl {
 
         self.mgr
             .admit(model_name, num_ctx, default_ctx, overrides)
+            .await
+    }
+
+    async fn admit_observed(
+        &self,
+        model_name: &str,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        mut overrides: LaunchOverrides,
+        observer: Option<Arc<dyn AdmitObserver>>,
+    ) -> Result<Admission, ModelRuntimeError> {
+        overrides.cache_ram = overrides.cache_ram.or(self.cache_ram_override);
+        self.mgr
+            .admit_observed(model_name, num_ctx, default_ctx, overrides, observer)
             .await
     }
 

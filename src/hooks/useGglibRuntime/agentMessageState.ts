@@ -32,7 +32,9 @@ import type {
 import type {
   AgentPromptProgressEvent,
   AgentToolCallCompleteEvent,
+  AgentToolProgressEvent,
   AgentTurnUsageEvent,
+  AgentWaitingEvent,
 } from '../../types/events/agentEvent';
 import { turnMadeFromUsage } from '../../utils/messages/turnMade';
 
@@ -208,6 +210,7 @@ export function applyToolResult(
                 isError: !event.result.success,
                 waitMs: event.wait_ms,
                 durationMs: event.execute_duration_ms,
+                progress: undefined,
                 ...(images.length > 0 && { artifact: { images } }),
               }
             : p,
@@ -217,11 +220,58 @@ export function applyToolResult(
   );
 }
 
+/**
+ * Keep how far a running tool has got, from its `tool_progress` event, on
+ * its tool-call part. A call that has its result keeps none: progress that
+ * arrives late says nothing of a call that is over.
+ */
+export function applyToolProgress(
+  setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
+  messageId: string,
+  event: AgentToolProgressEvent,
+): void {
+  const toolCallId = event.tool_call_id;
+  const progress = { stage: event.stage, pass: event.pass, done: event.done, total: event.total, position: event.position };
+  setMessages(prev =>
+    prev.map(m => {
+      if (m.id !== messageId) return m;
+      const parts = Array.isArray(m.content) ? ([...m.content] as GglibMessagePart[]) : [];
+      return {
+        ...m,
+        content: parts.map(p =>
+          p.type === 'tool-call' && p.toolCallId === toolCallId && !('result' in p)
+            ? { ...p, progress }
+            : p,
+        ) as GglibContent,
+      };
+    }),
+  );
+}
+
 // ---------------------------------------------------------------------------
-// Prompt reading
+// Waiting, and prompt reading
 // ---------------------------------------------------------------------------
 
-/** Keep a turn's latest `prompt_progress` on its message. */
+/** Keep what a turn is waiting for, from its latest `waiting` event, on its message. */
+export function applyWaiting(
+  setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
+  messageId: string,
+  event: AgentWaitingEvent,
+): void {
+  const waiting = { reason: event.reason, step: event.step, total: event.total, position: event.position };
+  setMessages(prev =>
+    prev.map(m => {
+      if (m.id !== messageId) return m;
+      const meta = m.metadata as { custom?: GglibMessageCustom } | undefined;
+      return { ...m, metadata: { ...m.metadata, custom: { ...meta?.custom, waiting } } };
+    }),
+  );
+}
+
+/**
+ * Keep a turn's latest `prompt_progress` on its message. The model is
+ * reading, so whatever the turn waited for is over.
+ */
 export function applyPromptProgress(
   setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
   messageId: string,
@@ -232,7 +282,7 @@ export function applyPromptProgress(
     prev.map(m => {
       if (m.id !== messageId) return m;
       const meta = m.metadata as { custom?: GglibMessageCustom } | undefined;
-      return { ...m, metadata: { ...m.metadata, custom: { ...meta?.custom, prompt } } };
+      return { ...m, metadata: { ...m.metadata, custom: { ...meta?.custom, prompt, waiting: undefined } } };
     }),
   );
 }

@@ -1,5 +1,9 @@
 #![doc = include_str!("README.md")]
 #[cfg(test)]
+#[path = "deadline_tests.rs"]
+mod deadline_tests;
+mod progress;
+#[cfg(test)]
 mod tests;
 
 use std::sync::Arc;
@@ -17,25 +21,31 @@ use tracing::warn;
 
 use gglib_core::elapsed_ms;
 
+use progress::RateLimitedSink;
+
 // =============================================================================
 // Private helpers
 // =============================================================================
 
 /// Execute a single tool call, respecting the shared concurrency semaphore and
-/// a per-call timeout.
+/// a per-call timeout: the tool's own [`ToolDefinition::deadline`] when its
+/// definition `def` has one, else the session's `tool_timeout_ms`.
 ///
-/// Emits [`AgentEvent::ToolCallStart`] after acquiring the semaphore permit and
-/// [`AgentEvent::ToolCallComplete`] when the call finishes (whether it succeeded,
-/// errored, or timed out).  Send failures on `tx` are silently ignored — the
-/// SSE client may have disconnected.
+/// Emits [`AgentEvent::ToolCallStart`] after acquiring the semaphore permit,
+/// the tool's progress while it runs (see [`RateLimitedSink`]), and
+/// [`AgentEvent::ToolCallComplete`] when the call finishes (whether it
+/// succeeded, errored, or timed out).  Send failures on `tx` are silently
+/// ignored — the SSE client may have disconnected.
 async fn execute_single_tool(
     tc: ToolCall,
     executor: Arc<dyn ToolExecutorPort>,
     sem: Arc<Semaphore>,
     tx: mpsc::Sender<AgentEvent>,
-    timeout_ms: u64,
-    title: Option<String>,
+    tool_timeout_ms: u64,
+    def: Option<ToolDefinition>,
 ) -> ToolResult {
+    let (title, deadline) = def.map_or((None, None), |d| (d.title, d.deadline));
+    let timeout = deadline.unwrap_or_else(|| Duration::from_millis(tool_timeout_ms));
     // Shared failure constructor — avoids repeating the same `tool_call_id`
     // and `success: false` across every error branch.
     let error_result = |content: String| ToolResult::text(tc.id.clone(), content, false);
@@ -71,16 +81,17 @@ async fn execute_single_tool(
         })
         .await;
 
-    let result =
-        tokio::time::timeout(Duration::from_millis(timeout_ms), executor.execute(&tc)).await;
+    let sink = RateLimitedSink::new(tc.id.clone(), tx.clone(), Arc::new(Instant::now));
+    let result = tokio::time::timeout(timeout, executor.execute_with_progress(&tc, &sink)).await;
     let duration_ms = elapsed_ms(exec_start);
 
     let tool_result = match result {
         Ok(Ok(r)) => r,
         Ok(Err(e)) => error_result(format!("Tool execution error: {e}")),
         Err(_) => error_result(format!(
-            "Tool '{}' timed out after {timeout_ms} ms",
-            tc.name
+            "Tool '{}' timed out after {} ms",
+            tc.name,
+            timeout.as_millis()
         )),
     };
 
@@ -129,12 +140,9 @@ pub(crate) async fn execute_tools_parallel(
         let permit = Arc::clone(&semaphore);
         let executor = Arc::clone(executor);
         let tx = tx.clone();
-        let title = tools
-            .iter()
-            .find(|d| d.name == tc.name)
-            .and_then(|d| d.title.clone());
+        let def = tools.iter().find(|d| d.name == tc.name).cloned();
         set.spawn(async move {
-            let result = execute_single_tool(tc, executor, permit, tx, timeout_ms, title).await;
+            let result = execute_single_tool(tc, executor, permit, tx, timeout_ms, def).await;
             (i, result)
         });
     }

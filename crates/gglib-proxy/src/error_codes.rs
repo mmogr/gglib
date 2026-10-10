@@ -32,7 +32,9 @@ upper-case types of their own, such as HOST_NOT_ALLOWED, which are not listed he
 code. type is the type the proxy writes beside the code: null where it writes more than one, \
 or none. status is the HTTP status of every response that carries the code: null where those \
 responses' writers do not all fix the same one, or where no response carries it, only a stream \
-frame or a run's error.";
+frame or a run's error. An availability answer is not such a response: GET /v1/images/drawing \
+and the daemon's GET /api/images/drawing always answer 200, and the code in that body is the \
+one a request to draw would be refused with.";
 
 /// One code: what a client matches on, the `type` written beside it, the
 /// status of the response that carries it, and a line on what it means.
@@ -101,6 +103,12 @@ const CODES: &[ErrorCode] = &[
     row("image_model_incomplete", INVALID, Some(400), "An image model's family needs a file it has none linked for, such as its VAE; the message names every missing role and the gglib model update --component command that links it."),
     row("image_runtime_not_installed", SERVER, Some(503), "An image model was asked for and stable-diffusion.cpp's sd-server is not installed; install it with gglib config sd install. Retrying will not help."),
     row("image_model_does_not_fit", UNAVAILABLE, Some(503), "An image model needs more memory than is free, and the model it would displace is held by a run; refused at once, retry when that run ends."),
+    // Drawing: `ImageError::code`, on `/v1/images/generations` and the daemon's twin.
+    row("not_an_image_model", INVALID, Some(400), "An image request named a model that is not an image model; name an image model, or leave the model out."),
+    row("invalid_image_size", INVALID, Some(400), "The size cannot be read as WIDTHxHEIGHT, or is not one the image model's family draws, in which case the message gives the family's rule and a size to try."),
+    row("drawing_unavailable", INVALID, Some(400), "Nothing here can draw the request, or draw for a run that says draw: the chat's model is on another machine, the chat's model calls no tools, the proxy runs outside the daemon, there is no image runtime or no image model, there are several and none is named or set as the default, or the default or the only one is missing a file; the message says which. The availability routes answer 200 and give this code, with the reason, as what a request to draw would be refused with."),
+    row("image_generation_failed", SERVER, Some(502), "No picture was drawn: the image runtime took the render and failed it, or lost it (the message carries its words; try another prompt or size, or retry); the image model was stopped while it drew; or a run sent with Draw ended because its model's first reply did not call the image tool (try again, or pick a model that calls tools)."),
+    row("image_render_stalled", SERVER, Some(504), "The render made no progress for three minutes, or ran past its thirty-minute limit, so the image model was stopped; retry."),
     row("model_cannot_read_images", INVALID, Some(400), "A message carries an image and the model has no projector linked; link one with gglib model update <model> --projector <path>."),
     row("request_too_large", INVALID, Some(413), "The request body is over the 32 MiB limit."),
     // An image a message carries by id (`AttachmentError`).

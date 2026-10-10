@@ -21,6 +21,9 @@
  *   cancel) saves the reply after the call that asked for it returns, and
  *   only then does its status read as ended and its readers get the one
  *   `event: run`.
+ * - A run's preview frame (`preview`) goes to its readers beside the log, as
+ *   `event: preview` with no id: it is never logged, so a reader that comes
+ *   later does not get it, and `last_seq` does not move.
  * - `GET /api/runs` is newest first; absent optional fields are left out.
  * - `/api/attachments` is the image store (`fakeImageStore.ts`): a run
  *   whose messages name an image not stored, or over 16 MiB of images
@@ -199,6 +202,12 @@ export class FakeDaemon {
     run.info.last_seq = run.frames.length;
     const text = `id: ${run.frames.length}\ndata: ${JSON.stringify(event)}\n\n`;
     run.streams.forEach((s) => s.enqueue(sse(text)));
+  }
+
+  /** Send run `id`'s readers a preview frame for `toolCallId`, beside the log and never in it. */
+  preview(id: string, toolCallId: string, frame: { mime: string; step: number; total: number; b64: string }): void {
+    const data = JSON.stringify({ tool_call_id: toolCallId, frame });
+    this.runs.get(id)!.streams.forEach((s) => s.enqueue(sse(`event: preview\ndata: ${data}\n\n`)));
   }
 
   /**

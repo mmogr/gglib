@@ -42,6 +42,11 @@ pub(crate) struct RemoteTurnBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub thinking: Option<Thinking>,
+    /// The message was sent with Draw pressed, as [`HubTurn::draw`] carries
+    /// it: the far machine offers its model the image tool for this turn.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
+    pub draw: bool,
 }
 
 /// `?after=N` on a run's events.
@@ -76,6 +81,12 @@ pub(crate) async fn add_turn(
 /// `GET /api/remote/runs`.
 pub(crate) async fn list_runs(State(state): State<AppState>) -> Result<Response, HttpError> {
     list_runs_via(&state.remote.far().await?).await
+}
+
+/// `GET /api/remote/images/drawing`: whether the far machine can draw for a
+/// turn on one of its chats, passed through as it answers.
+pub(crate) async fn drawing(State(state): State<AppState>) -> Result<Response, HttpError> {
+    drawing_via(&state.remote.far().await?).await
 }
 
 /// `POST /api/remote/runs/{run_id}/cancel`.
@@ -115,12 +126,17 @@ pub(super) async fn add_turn_via(
         images: body.images,
         thinking: body.thinking,
         answer_saved: false,
+        draw: body.draw,
     };
     Ok(relay(far.add_turn(run_id, &turn).await?).await)
 }
 
 pub(super) async fn list_runs_via(far: &FarProxy) -> Result<Response, HttpError> {
     Ok(relay(far.list_runs().await?).await)
+}
+
+pub(super) async fn drawing_via(far: &FarProxy) -> Result<Response, HttpError> {
+    Ok(relay(far.drawing().await?).await)
 }
 
 pub(super) async fn cancel_run_via(far: &FarProxy, run_id: &str) -> Result<Response, HttpError> {

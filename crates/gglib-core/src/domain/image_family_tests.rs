@@ -592,7 +592,8 @@ fn the_recipes_are_the_measured_ones() {
         SizeRule {
             step: 64,
             min: 256,
-            max: 1536
+            max: 1536,
+            default_side: 1024,
         }
     );
     let sdxl = ImageFamily::Sdxl.recipe();
@@ -627,5 +628,30 @@ fn each_family_reserves_its_decode_buffer_rounded_up() {
     assert_eq!(
         ImageFamily::QwenImage21.recipe().compute_margin_bytes,
         9 * GIB
+    );
+}
+
+/// Every family draws 1024x1024 by default, and refuses a size off its step
+/// or outside its bounds; Qwen-Image 2.1 steps by 32 where the others step
+/// by 64.
+#[test]
+fn a_size_is_checked_against_its_familys_rule() {
+    for family in ImageFamily::ALL {
+        let rule = family.recipe().size;
+        assert_eq!(rule.default_side, 1024, "{family}");
+        assert!(rule.check(1024, 1024), "{family} draws its default");
+        assert!(rule.check(256, 1536), "{family}: both bounds are inside");
+        assert!(!rule.check(7, 7), "{family}: 7x7 is refused");
+        assert!(!rule.check(192, 1024), "{family}: under the shortest side");
+        assert!(!rule.check(1024, 1600), "{family}: over the longest side");
+        assert!(!rule.check(1000, 1024), "{family}: 1000 is off every step");
+    }
+    let qwen = ImageFamily::QwenImage21.recipe().size;
+    let flux = ImageFamily::Flux1.recipe().size;
+    assert!(qwen.check(1056, 1024), "Qwen-Image 2.1 steps by 32");
+    assert!(!flux.check(1056, 1024), "Flux.1 steps by 64");
+    assert_eq!(
+        flux.to_string(),
+        "each side a multiple of 64 from 256 to 1536"
     );
 }

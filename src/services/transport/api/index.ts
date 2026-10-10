@@ -20,6 +20,7 @@ import * as runs from './runs';
 import * as farChats from './farChats';
 import * as farModels from './farModels';
 import * as attachments from './attachments';
+import * as images from './images';
 
 /**
  * Create unified API transport.
@@ -44,5 +45,6 @@ export function createApiTransport() {
     ...farChats,
     ...farModels,
     ...attachments,
+    ...images,
   };
 }

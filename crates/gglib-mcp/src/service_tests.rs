@@ -617,3 +617,51 @@ async fn a_servers_extra_path_is_split_on_the_platforms_separator() {
 
     assert_eq!(McpService::extract_user_search_paths(&server), expected);
 }
+
+const BUILTIN_IS_KEPT: &str =
+    "'builtin' is a name gglib keeps for its own tools; choose another name";
+
+#[tokio::test]
+async fn adding_a_server_named_builtin_is_refused_and_stores_nothing() {
+    let (service, _) = service();
+
+    let refused = service
+        .add_server(stdio("builtin", "one"))
+        .await
+        .unwrap_err();
+
+    assert!(matches!(&refused, McpServiceError::NameReserved(name) if name == "builtin"));
+    assert_eq!(refused.to_string(), BUILTIN_IS_KEPT);
+    assert!(service.list_servers().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn renaming_a_server_to_builtin_is_refused_and_changes_nothing() {
+    let (service, _) = service();
+    let mut server = service.add_server(stdio("files", "one")).await.unwrap();
+
+    server.name = "builtin".to_string();
+    server.enabled = false;
+    let refused = service.update_server(server.clone()).await.unwrap_err();
+
+    assert!(matches!(&refused, McpServiceError::NameReserved(name) if name == "builtin"));
+    assert_eq!(refused.to_string(), BUILTIN_IS_KEPT);
+    let stored = service.get_server(server.id).await.unwrap();
+    assert_eq!(stored.name, "files");
+    assert!(stored.enabled, "a refused rename writes none of the update");
+}
+
+/// A database written before the name was kept can hold such a server, and
+/// it must stay editable: only taking the name is refused.
+#[tokio::test]
+async fn a_server_already_named_builtin_can_still_be_changed() {
+    let (service, repo) = service();
+    let mut server = repo.insert(stdio("builtin", "one")).await.unwrap();
+
+    server.enabled = false;
+    service.update_server(server.clone()).await.unwrap();
+
+    let stored = service.get_server(server.id).await.unwrap();
+    assert_eq!(stored.name, "builtin");
+    assert!(!stored.enabled);
+}

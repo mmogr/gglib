@@ -17,6 +17,7 @@ pub(crate) mod config;
 pub(crate) mod daemon;
 pub(crate) mod gui;
 pub(crate) mod history;
+pub(crate) mod image;
 pub(crate) mod inference;
 pub(crate) mod mcp_cli;
 pub(crate) mod model;

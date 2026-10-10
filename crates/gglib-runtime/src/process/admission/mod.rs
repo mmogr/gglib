@@ -13,6 +13,7 @@ mod lease;
 mod state;
 mod timing;
 
+pub use gate::RENDER_STOPPED;
 pub use lease::AdmissionQueue;
 pub use state::{
     AdmissionDecision, Candidate, PRIMARY_SLOT, Refusal, Resident, SLOT_COUNT, SlotState, Ticket,
