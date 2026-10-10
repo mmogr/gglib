@@ -748,7 +748,7 @@ readability.
 
 Everything the desktop's proxy serves — `/v1/models`, a model's detail at
 `/v1/models/{name}/detail`, `POST /v1/models/{name}/load`,
-`/v1/chat/completions`, `POST /v1/images/generations`, `/v1/runs`, `/v1/chats`, `/v1/attachments`, the dashboard, `POST /v1/proxy/shutdown` —
+`/v1/chat/completions`, `POST /v1/images/generations`, `GET /v1/images/drawing`, `/v1/runs`, `/v1/chats`, `/v1/attachments`, the dashboard, `POST /v1/proxy/shutdown` —
 with one exception. `/mcp`, the tool gateway, is refused over the tunnel unless the
 desktop ran `enable --allow-mcp`, because a leaked key with a shell MCP
 server configured on the desktop is remote code execution. The refusal is
@@ -770,7 +770,13 @@ That synchronous form carries no progress, and a render takes minutes; with
 small preview frame, whose `size` is the size asked for, not its own), and
 one `image_generation.completed` per image, which also names the image
 model that drew it in gglib's own `model` key. Drawing uses the desktop and
-changes nothing on it, like a chat.
+changes nothing on it, like a chat. `GET /v1/images/drawing` answers whether
+the desktop can draw, `{available, code?, reason?, model?}`, with the reason
+when it cannot (no image runtime, no image model, several and no default).
+That answer is always a 200: its `code`, `drawing_unavailable`, is the code
+a request to draw would be refused with, not an error of the question;
+a device asks it before offering a Draw button, and a desktop too old to
+have the route answers 404, which means it cannot.
 
 A paired device may read the desktop's chats at `/v1/chats` and carry one on
 with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content, images?, thinking?}`: the

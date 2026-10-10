@@ -1,6 +1,7 @@
 //! `POST /v1/images/generations` on the real proxy: inside the bearer guard
 //! like every route a credential reaches, answered by the image driver the
 //! daemon hands the proxy, and refused as unavailable on a proxy with none.
+//! `GET /v1/images/drawing` beside it: whether that driver can draw.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -37,6 +38,10 @@ impl ImageGenerationPort for OneImage {
             }],
             elapsed: Duration::from_secs(1),
         })
+    }
+
+    async fn drawing_model(&self) -> Result<String, ImageError> {
+        Ok("sdxl".to_owned())
     }
 }
 
@@ -96,5 +101,56 @@ async fn a_proxy_with_no_driver_cannot_draw() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["error"]["code"], "drawing_unavailable");
+    cancel.cancel();
+}
+
+/// Whether a turn sent with Draw pressed can draw: behind the token, the
+/// driver's model when it can, the reason when it cannot.
+#[tokio::test]
+async fn the_drawing_route_says_whether_the_daemons_driver_can_draw() {
+    let (base, cancel) = serve(Some(Arc::new(OneImage))).await;
+    let client = reqwest::Client::new();
+    let get = |query: &'static str| {
+        client
+            .get(format!("{base}/v1/images/drawing{query}"))
+            .bearer_auth("secret123")
+            .send()
+    };
+    let refused = client
+        .get(format!("{base}/v1/images/drawing"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), StatusCode::UNAUTHORIZED);
+
+    let can: Value = get("").await.unwrap().json().await.unwrap();
+    assert_eq!(can, json!({"available": true, "model": "sdxl"}));
+    let no_tools: Value = get("?calls_tools=false")
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(no_tools["available"], false);
+    assert_eq!(no_tools["code"], "drawing_unavailable");
+    assert!(
+        no_tools["reason"]
+            .as_str()
+            .unwrap()
+            .contains("calls no tools")
+    );
+    cancel.cancel();
+
+    let (base, cancel) = serve(None).await;
+    let none: Value = reqwest::Client::new()
+        .get(format!("{base}/v1/images/drawing"))
+        .bearer_auth("secret123")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(none["available"], false);
     cancel.cancel();
 }

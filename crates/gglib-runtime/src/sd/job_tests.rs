@@ -104,6 +104,7 @@ struct Host {
     admits: AtomicUsize,
     queued_first: Option<usize>,
     log: Arc<Mutex<Vec<String>>>,
+    installed: bool,
 }
 
 impl Host {
@@ -113,6 +114,15 @@ impl Host {
             admits: AtomicUsize::new(0),
             queued_first: None,
             log: Arc::default(),
+            installed: true,
+        })
+    }
+
+    /// A host with no `sd-server`.
+    fn without_runtime() -> Arc<Self> {
+        Arc::new(Self {
+            installed: false,
+            ..Arc::into_inner(Self::new()).unwrap()
         })
     }
 
@@ -166,6 +176,10 @@ impl RenderHost for Host {
 
     fn gate(&self) -> Arc<dyn GenerationGate> {
         self.queue.generation_gate()
+    }
+
+    async fn runtime_installed(&self) -> bool {
+        self.installed
     }
 
     async fn retire(&self, turn: GenerationTurn, model_id: u32) {
@@ -490,6 +504,51 @@ async fn with_no_model_named_the_default_image_model_draws_first() {
         }
         other => panic!("expected Unavailable, got {other:?}"),
     }
+}
+
+/// The model a Draw button would draw with, asked without queueing: no
+/// runtime is refused before any model is looked at; then the same rule a
+/// request that names none is planned by, the default first.
+#[tokio::test(start_paused = true)]
+async fn the_drawing_model_is_asked_runtime_first_then_by_the_planning_rule() {
+    let jobs = Arc::new(Timeline::new(flux_like()));
+    let ask = |catalog, default, host: Arc<Host>| {
+        let jobs = Arc::clone(&jobs);
+        async move {
+            driver_with_default(catalog, default, &jobs, &host)
+                .drawing_model()
+                .await
+        }
+    };
+    let unavailable = |answer: Result<String, ImageError>| match answer {
+        Err(ImageError::Unavailable { reason }) => reason,
+        other => panic!("expected Unavailable, got {other:?}"),
+    };
+
+    let model = ask(models(), None, Host::new()).await;
+    assert_eq!(model.expect("sdxl is the only complete one"), "sdxl");
+
+    let no_runtime = unavailable(ask(models(), None, Host::without_runtime()).await);
+    assert_eq!(
+        no_runtime,
+        ModelRuntimeError::ImageRuntimeNotInstalled.to_string()
+    );
+
+    let two = vec![
+        spec(SDXL_ID, "sdxl", Some(ImageFamily::Sdxl)),
+        spec(4, "sdxl-turbo", Some(ImageFamily::Sdxl)),
+    ];
+    let defaulted = ask(two.clone(), Some(4), Host::new()).await;
+    assert_eq!(defaulted.expect("the default"), "sdxl-turbo");
+    let several = unavailable(ask(two, None, Host::new()).await);
+    assert!(several.contains("sdxl, sdxl-turbo"), "{several}");
+    let lacking = unavailable(ask(models(), Some(2), Host::new()).await);
+    assert!(lacking.contains("flux"), "{lacking}");
+    assert_eq!(
+        jobs.bodies.lock().unwrap().len(),
+        0,
+        "nothing was submitted"
+    );
 }
 
 // ── a render ─────────────────────────────────────────────────────────────

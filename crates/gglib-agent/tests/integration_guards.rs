@@ -18,6 +18,7 @@
 //! | [`test_observation_tool_uses_higher_threshold`]  | Observation-only batch stays safe up to `max_observation_steps` |
 //! | [`test_observation_tool_fires_at_higher_threshold`] | Observation batch fires after `max_observation_steps` |
 //! | [`test_mixed_batch_uses_standard_threshold`]     | Mixed batch (obs + action) uses `max_repeated_batch_steps` |
+//! | [`identical_drawing_turns_do_not_trip_stagnation`] | The drawing tool's identical sentence, turn after turn, is work, not stagnation |
 
 mod common;
 
@@ -726,4 +727,51 @@ async fn test_navigate_tool_uses_elevated_threshold_by_default() {
         !has_final_answer(&events),
         "no FinalAnswer expected — loop hit max_iterations"
     );
+}
+
+/// **Drawing is work** (ADR 0010, 0011): a run that draws three pictures,
+/// saying the same words before each and reading the drawing tool's same
+/// one-sentence answer each time, is not stagnating, with the guards on and
+/// stagnation at its tightest; it ends with its answer.
+#[tokio::test]
+async fn identical_drawing_turns_do_not_trip_stagnation() {
+    let drawing_turn = |i: u32| MockLlmResponse {
+        content: Some("Drawing it now.".into()),
+        ..MockLlmResponse::tool_call(
+            format!("tc{i}"),
+            "builtin:generate_image",
+            json!({ "prompt": format!("a red fox, take {i}") }),
+        )
+    };
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push_many((0..3).map(drawing_turn))
+            .push(MockLlmResponse::text("I drew three foxes.")),
+    );
+    let executor = MockToolExecutorPort::new().with_tool(
+        ToolDefinition::new("builtin:generate_image"),
+        MockToolBehavior::Immediate {
+            content: "Drew 1 image, 1024x1024 PNG, with flux1-schnell in 76 s; the user can see \
+                      it, you cannot."
+                .into(),
+        },
+    );
+
+    let agent = AgentLoop::build(llm, Arc::new(executor), None);
+    let (tx, rx) = mpsc::channel(256);
+    let result = agent
+        .run(
+            vec![AgentMessage::user("draw a fox three ways")],
+            common::for_test(|c| c.max_stagnation_steps = Some(1)),
+            tx,
+        )
+        .await;
+    let events = collect_events(rx).await;
+
+    assert!(
+        result.is_ok(),
+        "drawing is work, not stagnation: {result:?}"
+    );
+    assert!(!has_error_event(&events));
+    assert!(has_final_answer(&events));
 }

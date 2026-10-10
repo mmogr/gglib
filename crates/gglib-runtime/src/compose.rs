@@ -37,7 +37,9 @@ use gglib_core::ports::{
 use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use gglib_core::retry::RetryPolicy;
 use gglib_core::services::AttachmentService;
-use gglib_mcp::{CombinedToolExecutor, McpService};
+use gglib_mcp::{
+    BuiltinToolExecutorAdapter, CombinedToolExecutor, DrawArm, DrawingTool, McpService,
+};
 use reqwest::Client;
 
 use crate::{FarMachine, LlmCompletionAdapter, SamplingObserver};
@@ -50,6 +52,10 @@ pub struct LoopGeneration {
     /// ([`LlmCompletionAdapter::with_generation_gate`]). `None` waits on
     /// nothing: a session with no daemon to share the GPU with.
     pub gate: Option<Arc<dyn GenerationGate>>,
+    /// The drawing tool and when it is offered: armed for a run sent with
+    /// `draw: true`, or a session's switch that `/draw` sets. `None` never
+    /// offers `generate_image`, whatever the tool filter says.
+    pub drawing: Option<(DrawingTool, DrawArm)>,
 }
 
 /// Compose a ready-to-run [`AgentLoopPort`] from infrastructure primitives.
@@ -104,7 +110,8 @@ pub struct LoopGeneration {
 ///   returns are stored.
 /// * `generation` — the daemon's generation gate, so a reply on this
 ///   machine's model waits for an image render rather than sharing the GPU
-///   with it. A send to `far_machine` takes no turn.
+///   with it. A send to `far_machine` takes no turn. With it, the drawing
+///   tool, offered only while its arm says so.
 #[allow(clippy::too_many_arguments)]
 #[allow(
     clippy::implicit_hasher,
@@ -251,9 +258,13 @@ fn compose_agent_loop_inner(
             .with_retry_policy(retry_policy.unwrap_or_else(RetryPolicy::from_env))
             .with_generation_gate(generation.gate),
     );
-    let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
-        Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, images, root)),
-        None => Arc::new(CombinedToolExecutor::new(mcp, images)),
-    };
+    let builtin = sandbox_root
+        .map_or_else(
+            BuiltinToolExecutorAdapter::default,
+            BuiltinToolExecutorAdapter::with_sandbox,
+        )
+        .with_drawing(generation.drawing);
+    let tool_executor: Arc<dyn ToolExecutorPort> =
+        Arc::new(CombinedToolExecutor::with_builtin(mcp, images, builtin));
     AgentLoop::build_observed(llm, tool_executor, tool_filter, guard)
 }

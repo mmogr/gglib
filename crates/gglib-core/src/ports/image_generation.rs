@@ -26,6 +26,10 @@ use crate::ports::{GateError, ModelRuntimeError};
 /// The most images one request may ask for.
 pub const MAX_IMAGES_PER_REQUEST: u8 = 4;
 
+/// How long a render may take from submission, however it steps: the
+/// driver's limit, and the drawing tool's deadline.
+pub const IMAGE_JOB_DEADLINE: Duration = Duration::from_mins(30);
+
 /// An image's size in pixels; written `WIDTHxHEIGHT` on the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ImageSize {
@@ -311,6 +315,25 @@ pub trait ImageGenerationPort: Send + Sync + fmt::Debug {
         request: ImageRequest,
         progress: mpsc::Sender<ImageProgress>,
     ) -> Result<ImageBatch, ImageError>;
+
+    /// The image model a request that names none would draw with, or why
+    /// nothing here can draw: no image runtime, no image model, the default
+    /// lacking a file, several and no default, the only one lacking a file.
+    /// Asks without queueing or loading anything; what the Draw button's
+    /// availability reads.
+    ///
+    /// The default answers that this service cannot say, so only a service
+    /// that knows offers drawing.
+    ///
+    /// # Errors
+    ///
+    /// [`ImageError::Unavailable`] with the reason, or what the service could
+    /// not read.
+    async fn drawing_model(&self) -> Result<String, ImageError> {
+        Err(ImageError::Unavailable {
+            reason: "this image service cannot say whether it can draw".to_owned(),
+        })
+    }
 }
 
 #[cfg(test)]

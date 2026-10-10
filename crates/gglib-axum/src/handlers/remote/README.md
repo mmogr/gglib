@@ -10,7 +10,8 @@ maps one `RemoteOps` call onto the wire.
 `chats.rs` is the connect side too: the far machine's chats and runs for this
 machine's chat page (`/api/remote/chats`, `/chats/{id}`,
 `/chats/{id}/turns/{run_id}`, `/runs`, `/runs/{run_id}/events`,
-`/runs/{run_id}/cancel`), each forwarded through the tunnel with the stored
+`/runs/{run_id}/cancel`, and `/images/drawing` for a far chat's Draw
+button), each forwarded through the tunnel with the stored
 key by the `gglib_app_services::FarProxy` that `RemoteOps::far` builds. A
 turn sends only `{content, images?, thinking?}`, the last being the far
 chat's Thinking choice on the turn that changes it, forwarded as it was said;
