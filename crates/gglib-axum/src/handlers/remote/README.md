@@ -13,7 +13,9 @@ machine's chat page (`/api/remote/chats`, `/chats/{id}`,
 `/runs/{run_id}/cancel`, and `/images/drawing` for a far chat's Draw
 button), each forwarded through the tunnel with the stored
 key by the `gglib_app_services::FarProxy` that `RemoteOps::far` builds. A
-turn sends only `{content, images?, thinking?}`, the last being the far
+turn sends only `{content, images?, thinking?, draw?}`, `draw` being the
+page's Draw button for that message, passed on only when pressed, and
+`thinking` the far
 chat's Thinking choice on the turn that changes it, forwarded as it was said;
 the far machine adds the chat's history itself.
 Bodies pass through and events stream through as they come; nothing is kept.

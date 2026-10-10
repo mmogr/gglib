@@ -42,6 +42,11 @@ pub(crate) struct RemoteTurnBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub thinking: Option<Thinking>,
+    /// The message was sent with Draw pressed, as [`HubTurn::draw`] carries
+    /// it: the far machine offers its model the image tool for this turn.
+    #[serde(default)]
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
+    pub draw: bool,
 }
 
 /// `?after=N` on a run's events.
@@ -121,6 +126,7 @@ pub(super) async fn add_turn_via(
         images: body.images,
         thinking: body.thinking,
         answer_saved: false,
+        draw: body.draw,
     };
     Ok(relay(far.add_turn(run_id, &turn).await?).await)
 }

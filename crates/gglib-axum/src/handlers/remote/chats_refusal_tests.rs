@@ -45,6 +45,7 @@ async fn a_busy_far_machine_says_when_to_come_back() {
             content: "x".into(),
             images: Vec::new(),
             thinking: None,
+            draw: false,
         },
     )
     .await

@@ -12,7 +12,7 @@
 //! iteration limit they do not name from this machine's settings, as it
 //! does for the page), and with thinking off
 //! when the turn says so or the chat remembers it (`thinking`). It calls no
-//! tool unless
+//! tool but the image tool of a turn that says `draw`, unless
 //! this machine lets the tunnel reach its MCP tools, and then only those the
 //! settings name. The reply runs on the chat's
 //! model, loaded as `/v1/models/{name}/load` loads it when it is not
@@ -38,7 +38,7 @@ use gglib_core::services::ChangeError;
 use tokio::sync::OwnedSemaphorePermit;
 
 use super::AgentChatRequest;
-use super::compose::{prepare, take_permit};
+use super::compose::{DRAW_TOOL, prepare, refuse_unavailable_drawing, take_permit};
 use super::dto::AgentRequestConfig;
 use super::hub_model::{model_for, on_model};
 use super::launch::{LatePrepare, Transcript, launch_turn};
@@ -109,6 +109,8 @@ fn refusal(error: HttpError) -> TurnRefused {
 /// `conflict` (409) while the chat has a live reply, or for a chat that ran
 /// on the machine this one is paired with; `no_model`
 /// (422) when nothing names the chat's model and nothing runs on the hub;
+/// `drawing_unavailable` (400) for a turn sent with Draw pressed that the
+/// hub cannot draw for;
 /// `agent_busy` (429). A refusal writes nothing.
 ///
 /// The run is reserved before its model is found or loaded, so the `PUT`
@@ -232,8 +234,8 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         branching::answerable(&rows).map_err(ChangeError::from)?;
     }
     let model = model_for(state, &conversation, &rows).await?;
-    // Before anything else is read for it, and before `on_model` would load
-    // it: a model that draws is served by sd-server, which cannot chat.
+    // Once the chat's model is known, before `on_model` would load it: a
+    // model that draws is served by sd-server, which cannot chat.
     super::image_gate::chats_named(state, &model).await?;
     // The prompt comes from the conversation, as the page takes it. A turn
     // that answers the question already saved adds none (ADR 0017).
@@ -257,12 +259,19 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         far: None,
         messages,
         config: config_of(&settings),
-        tool_filter: Some(tools_of(&settings, state.remote.gateway().mcp_allowed())),
+        tool_filter: Some(tools_of(
+            &settings,
+            state.remote.gateway().mcp_allowed(),
+            turn.draw,
+        )),
         model: None,
         reasoning_effort: None,
         reasoning_budget_tokens: thinking.budget,
-        draw: false,
+        draw: turn.draw,
     };
+    // A turn sent with Draw pressed that the hub cannot draw for is refused
+    // here, before a slot is taken, a run made or a row written.
+    refuse_unavailable_drawing(state, &chat).await?;
     let transcript = Transcript {
         conversation_id: Some(id),
         answer_saved: turn.answer_saved,
@@ -289,16 +298,32 @@ fn config_of(settings: &ConversationSettings) -> Option<AgentRequestConfig> {
     named.then_some(config)
 }
 
-/// The tools a device's turn may call. None unless this machine lets the
-/// tunnel reach its MCP tools (`gglib remote enable --allow-mcp`), as `/mcp`
-/// itself does: a leaked key must not run a shell server. Then only those
-/// the conversation's settings name, and none when it names none or turned
-/// them off. Never every tool, which the page's own turns may call.
-pub(super) fn tools_of(settings: &ConversationSettings, mcp_allowed: bool) -> Vec<String> {
-    if !mcp_allowed || settings.no_tools == Some(true) {
-        return Vec::new();
+/// The tools a device's turn may call. No MCP tool unless this machine lets
+/// the tunnel reach its MCP tools (`gglib remote enable --allow-mcp`), as
+/// `/mcp` itself does: a leaked key must not run a shell server. Then only
+/// those the conversation's settings name, and none when it names none or
+/// turned them off. Never every tool, which the page's own turns may call.
+///
+/// With `draw`, the image tool beside them, whatever the tunnel's switch
+/// and the chat's `no_tools` say: the Draw button is the person's choice
+/// for this one message, and drawing starts no MCP server. It is named
+/// [`DRAW_TOOL`], qualified, and never by its bare name, which the filter
+/// would also match against an MCP server's tool called `generate_image`
+/// and so hand a device a tool the tunnel's owner did not open.
+pub(super) fn tools_of(
+    settings: &ConversationSettings,
+    mcp_allowed: bool,
+    draw: bool,
+) -> Vec<String> {
+    let mut tools = if !mcp_allowed || settings.no_tools == Some(true) {
+        Vec::new()
+    } else {
+        settings.tools.clone()
+    };
+    if draw {
+        tools.push(DRAW_TOOL.to_owned());
     }
-    settings.tools.clone()
+    tools
 }
 
 #[cfg(test)]

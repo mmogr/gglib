@@ -22,4 +22,9 @@ images?: Array<string>,
  * The far chat's Thinking choice, as [`HubTurn::thinking`] carries it:
  * said only on the turn that changes it, and remembered there.
  */
-thinking?: Thinking, };
+thinking?: Thinking, 
+/**
+ * The message was sent with Draw pressed, as [`HubTurn::draw`] carries
+ * it: the far machine offers its model the image tool for this turn.
+ */
+draw?: boolean, };
