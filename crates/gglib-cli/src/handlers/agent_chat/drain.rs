@@ -16,6 +16,7 @@ use tokio::sync::mpsc;
 
 use super::markdown::render_markdown;
 use super::persistence::Reply;
+use super::progress_line;
 use super::renderer::render_event;
 use super::thinking_dispatch::{
     RenderContext, close_thinking, emit_content, emit_reasoning, suspend_or_run,
@@ -56,11 +57,23 @@ pub(crate) async fn drain_event_stream(
     let stderr_tty = io::stderr().is_terminal();
     let mut ctx = RenderContext::new(rich, stderr_tty, quiet);
     let mut had_text = false;
+    // A progress line is on stderr, unfinished, until the next other event
+    // wipes it.
+    let mut progress_showing = false;
 
     while let Some(mut event) = rx.recv().await {
         if let Some(reply) = reply.as_deref_mut() {
             reply.heard(&mut event);
         }
+        let is_progress = matches!(
+            event,
+            AgentEvent::ToolProgress { .. } | AgentEvent::Waiting { .. }
+        );
+        if progress_showing && !is_progress && !matches!(event, AgentEvent::ToolPreview { .. }) {
+            progress_line::wipe();
+            progress_showing = false;
+        }
+        progress_showing |= is_progress && !quiet;
         match &event {
             // ── Content tokens ───────────────────────────────────────
             AgentEvent::TextDelta { content } => {

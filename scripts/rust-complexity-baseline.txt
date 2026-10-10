@@ -26,7 +26,7 @@ crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 361
 crates/gglib-cli/src/handlers/agent_chat/config.rs 313
 crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 374
-crates/gglib-cli/src/handlers/agent_chat/mod.rs 306
+crates/gglib-cli/src/handlers/agent_chat/mod.rs 307
 crates/gglib-cli/src/handlers/agent_chat/repl.rs 330
 crates/gglib-cli/src/handlers/agent_chat/turn_rows_tests.rs 348
 crates/gglib-cli/src/handlers/benchmark.rs 1613
@@ -127,7 +127,7 @@ crates/gglib-gguf/src/reader_tests.rs 416
 crates/gglib-hf/src/http.rs 514
 crates/gglib-hf/src/parsing.rs 429
 crates/gglib-hf/src/url.rs 403
-crates/gglib-mcp/src/builtin/mod.rs 326
+crates/gglib-mcp/src/builtin/mod.rs 340
 crates/gglib-mcp/src/client.rs 509
 crates/gglib-mcp/src/manager.rs 315
 crates/gglib-mcp/src/service.rs 790

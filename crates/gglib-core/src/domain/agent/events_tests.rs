@@ -181,3 +181,83 @@ fn waiting_serialises_its_reason() {
     };
     assert_eq!(serde_json::to_value(&load).unwrap()["reason"], "model_load");
 }
+
+/// An agent run's frames while it draws: a wait, the call, its progress
+/// through every stage, and its completion with the image it made. No
+/// `tool_preview`: a preview is never a logged frame.
+fn drawing_frames() -> Vec<AgentEvent> {
+    let progress = |stage, pass, done, position| AgentEvent::ToolProgress {
+        tool_call_id: "call_1".into(),
+        stage,
+        pass,
+        done,
+        total: done.map(|_| 20),
+        position,
+    };
+    let mut result = ToolResult::text(
+        "call_1",
+        "Drew 1 image, 1024x1024 PNG, with flux-dev in 76 s; the user can see it, you cannot.",
+        true,
+    );
+    result.images = vec![crate::domain::AttachmentInfo {
+        id: crate::domain::AttachmentId::of(b"drawn"),
+        mime: "image/png".into(),
+        width: 1024,
+        height: 1024,
+    }];
+    vec![
+        AgentEvent::Waiting {
+            reason: WaitingFor::ImageRender,
+            step: 12,
+            total: 20,
+            position: 1,
+        },
+        AgentEvent::ToolCallStart {
+            tool_call: ToolCall {
+                id: "call_1".into(),
+                name: "builtin:generate_image".into(),
+                arguments: serde_json::json!({ "prompt": "a red fox in fresh snow, morning light" }),
+            },
+            display_name: "Generate Image".into(),
+            args_summary: None,
+        },
+        progress(ToolStage::Queued, None, None, Some(1)),
+        progress(ToolStage::Loading, None, None, None),
+        progress(ToolStage::Sampling, Some(1), Some(1), None),
+        progress(ToolStage::Sampling, Some(1), Some(20), None),
+        progress(ToolStage::Decoding, None, None, None),
+        progress(ToolStage::Finishing, None, None, None),
+        AgentEvent::ToolCallComplete {
+            tool_name: "builtin:generate_image".into(),
+            result,
+            wait_ms: 0,
+            execute_duration_ms: 76_000,
+            display_name: "Generate Image".into(),
+            duration_display: "76.0s".into(),
+        },
+    ]
+}
+
+/// The checked-in `contracts/runs/tool_progress.json` is exactly these
+/// frames, for every client that reads an agent run. Run with
+/// `GGLIB_RECORD_CONTRACTS=1` to rewrite it after a deliberate change.
+#[test]
+fn drawing_frames_match_the_checked_in_contract() {
+    let frames: Vec<serde_json::Value> = drawing_frames()
+        .iter()
+        .map(|e| serde_json::to_value(e).unwrap())
+        .collect();
+    let mut want = serde_json::to_string_pretty(&frames).expect("serialise");
+    want.push('\n');
+    assert!(!want.contains("tool_preview"));
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../contracts/runs/tool_progress.json");
+    if std::env::var_os("GGLIB_RECORD_CONTRACTS").is_some() {
+        std::fs::write(&path, &want).expect("write tool_progress.json");
+    }
+    let have = std::fs::read_to_string(&path).expect("read contracts/runs/tool_progress.json");
+    assert!(
+        have == want,
+        "contracts/runs/tool_progress.json is stale; rerun with GGLIB_RECORD_CONTRACTS=1\n{want}"
+    );
+}

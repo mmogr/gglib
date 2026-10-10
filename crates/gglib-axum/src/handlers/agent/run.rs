@@ -21,6 +21,7 @@ use tokio::sync::OwnedSemaphorePermit;
 
 use gglib_app_services::RunLog;
 use gglib_app_services::transcript::{FrameTimes, answer_history};
+use gglib_core::domain::agent::AgentEvent;
 use gglib_core::domain::runs::RunError;
 use gglib_core::domain::thinking;
 use gglib_core::ports::{AgentError, Created, RunScope};
@@ -196,6 +197,11 @@ pub(super) async fn plan(
 /// Run the loop, logging each event as the chat route frames it. Dropped
 /// when the run is cancelled, which aborts the loop and any tool call in
 /// flight and releases the permit and the model's hold.
+///
+/// A tool's preview frame is never logged: it is kept beside the log as the
+/// run's latest (`RunLog::preview`) and forgotten in the step that logs that
+/// call's own completion (`RunLog::append_completing`); another call
+/// finishing leaves it in place.
 pub(super) async fn work(
     prepared: Prepared,
     permit: OwnedSemaphorePermit,
@@ -226,8 +232,24 @@ pub(super) async fn work(
             if std::mem::take(&mut first) {
                 log.started();
             }
+            if let AgentEvent::ToolPreview {
+                tool_call_id,
+                frame: preview,
+            } = &event
+            {
+                log.preview(tool_call_id, preview);
+                continue;
+            }
             made_by.stamp(&mut event);
-            if log.append(frame(&event)).is_err() {
+            // A call's completion and the end of its preview are one step,
+            // so no reader gets the frame after reading the completion.
+            let logged = match &event {
+                AgentEvent::ToolCallComplete { result, .. } => {
+                    log.append_completing(frame(&event), &result.tool_call_id)
+                }
+                _ => log.append(frame(&event)),
+            };
+            if logged.is_err() {
                 break;
             }
             times.logged();
