@@ -50,6 +50,7 @@ handlers were grouped.
 | `remote/` | `gglib remote enable / disable / status / invite / list / forget / join / disconnect / key` — the tunnel that puts one machine's proxy on another (ADR 0012) |
 | `benchmark.rs`, `benchmark_verdicts.rs` | `gglib benchmark …`, including `tune`; the second holds the agentic report's three verdict blocks |
 | `mcp_cli.rs` | `gglib mcp …` |
+| `image.rs` | `gglib image` — draws through the daemon with one live line, saves each PNG |
 | `attachment.rs` | `gglib attachment save` — a stored image written to a file, found by the start of its id |
 | `history.rs`, `web.rs`, `gui.rs`, `completions.rs`, `proxy_cache_clear.rs`, `proxy_trips.rs` | One command each |
 

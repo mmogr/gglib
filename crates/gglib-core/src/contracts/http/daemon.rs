@@ -228,6 +228,11 @@ pub fn benchmark_tune_apply_path(run_id: i64) -> String {
     format!("{BENCHMARK_TUNE_PATH}/{run_id}/apply")
 }
 
+/// Draw: the proxy's `/v1/images/generations` handler at the daemon's door,
+/// which `gglib image` calls with `stream: true` (see
+/// [`super::images`] for the body and the events).
+pub const IMAGES_GENERATIONS_PATH: &str = "/api/images/generations";
+
 /// Runs, a reply the daemon owns until it ends: `GET` lists them.
 pub const RUNS_PATH: &str = "/api/runs";
 
@@ -292,6 +297,7 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["POST"], BENCHMARK_AGENTIC_PATH),
     (&["GET"], SETUP_STATUS_PATH),
     (&["GET"], RUNS_PATH),
+    (&["POST"], IMAGES_GENERATIONS_PATH),
 ];
 
 /// The `type` of the daemon's 401 when it wanted its token, so a client can

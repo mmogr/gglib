@@ -56,6 +56,7 @@ reported as an error.
 | [`model`](#models) | Add, list, download, verify, retag, inspect, explain |
 | [`chat`](#chat-and-ask) | Interactive tool-calling session |
 | [`q`](#chat-and-ask) | One-shot question, pipe-friendly (alias of `question`) |
+| [`image`](#image) | Draw an image with this machine's image model |
 | [`attachment save`](#attachment-save) | Write a stored image, such as one a tool made, to a file |
 | [`benchmark`](#benchmark) | Compare outputs, measure throughput, tune sampling |
 | [`mcp`](#mcp-tool-servers) | Manage MCP tool servers |
@@ -251,6 +252,27 @@ input. `-Q` / `--quiet` strips tool progress and reasoning tokens for scripting.
 gglib q "What is Rust?"
 cat file.rs | gglib q "Explain this code"
 gglib q --file README.md "Summarize this project"
+```
+
+### `image`
+
+`gglib image "<prompt>"` draws with this machine's image model, through the
+daemon (it starts one if none runs), shows the render on one line (queued
+with its place, loading, sampling step of total, and image of images for
+more than one, decoding), saves each PNG and prints `[image WxH] <path>`.
+The model is the settings' default image model, else the only one with
+every file its family needs, unless `-m` names one; the size is 1024x1024
+unless `--size` gives another the family draws; `-n` draws up to four;
+`--seed` repeats a drawing. Images go to
+`-o PATH`, or `gglib-<unix time>.png` here, with `-1`, `-2`, … for more
+than one; an existing file is never replaced. The first step of a Flux.1
+render comes about 40 seconds in. Ctrl-C leaves at once, but a render
+already generating cannot be interrupted: the daemon finishes it and
+discards it.
+
+```bash
+gglib image "a lighthouse at dusk, oil painting"
+gglib image "a red fox in snow" --size 1024x768 -n 2 -o fox.png
 ```
 
 ### `attachment save`
