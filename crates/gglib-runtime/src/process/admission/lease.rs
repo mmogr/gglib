@@ -174,6 +174,21 @@ impl AdmissionQueue {
         previous
     }
 
+    /// Empty whichever slot holds model `model_id`, returning the slot and
+    /// what was there. Unconditional, as [`Self::evict`] is; found and
+    /// emptied under one lock, so the slot cannot change hands in between.
+    pub fn evict_model(&self, model_id: u32) -> Option<(usize, Resident)> {
+        let mut state = self.lock();
+        let slot = state
+            .residents()
+            .find(|(_, r)| r.model_id == model_id)
+            .map(|(slot, _)| slot)?;
+        let previous = state.evict(slot).map(|r| (slot, r));
+        drop(state);
+        self.notify();
+        previous
+    }
+
     /// The primary slot's resident.
     pub fn primary(&self) -> Option<Resident> {
         self.lock().primary().cloned()

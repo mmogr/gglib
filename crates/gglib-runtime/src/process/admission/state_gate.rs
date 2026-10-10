@@ -27,7 +27,7 @@
 use std::collections::{HashSet, VecDeque};
 use std::time::Duration;
 
-use gglib_core::domain::RuntimeKind;
+use gglib_core::domain::{GenerationSnapshot, RenderSnapshot, RuntimeKind};
 use gglib_core::ports::{GateWait, TurnKind, WaitReason};
 use tokio::time::Instant;
 
@@ -50,6 +50,8 @@ pub(super) struct GateState {
 #[derive(Debug)]
 struct HeldRender {
     id: u64,
+    /// The slot its lease pins, which holds the image model drawing it.
+    slot: Option<usize>,
     step: u32,
     total: u32,
 }
@@ -70,6 +72,8 @@ struct GateWaiter {
 pub(in crate::process::admission) struct GateTicket {
     seq: u64,
     kind: TurnKind,
+    /// A render's lease's slot; `None` for an LLM turn.
+    slot: Option<usize>,
     created_at: Instant,
 }
 
@@ -90,10 +94,12 @@ pub(in crate::process::admission) enum GateVerdict {
 }
 
 impl QueueState {
-    /// Take a place in the gate's line for a turn of `kind`.
+    /// Take a place in the gate's line for a turn of `kind`; a render names
+    /// the slot its lease pins.
     pub(in crate::process::admission) fn gate_enqueue(
         &mut self,
         kind: TurnKind,
+        slot: Option<usize>,
         now: Instant,
     ) -> GateTicket {
         let seq = self.next_seq;
@@ -107,6 +113,7 @@ impl QueueState {
         GateTicket {
             seq,
             kind,
+            slot,
             created_at: now,
         }
     }
@@ -137,6 +144,7 @@ impl QueueState {
                 TurnKind::Render => {
                     self.gate.render = Some(HeldRender {
                         id,
+                        slot: ticket.slot,
                         step: 0,
                         total: 0,
                     });
@@ -222,6 +230,22 @@ impl QueueState {
             .map(|(_, r)| r.inflight)
             .sum();
         leases.saturating_add(u32::try_from(self.gate.llm.len()).unwrap_or(u32::MAX))
+    }
+
+    /// The gate projected for the dashboard.
+    pub(super) fn generation_snapshot(&self) -> GenerationSnapshot {
+        GenerationSnapshot {
+            render: self.gate.render.as_ref().map(|r| RenderSnapshot {
+                model_name: r
+                    .slot
+                    .and_then(|slot| self.slot(slot))
+                    .map(|resident| resident.model_name.clone()),
+                step: r.step,
+                total: r.total,
+            }),
+            llm_inflight: self.llm_inflight(),
+            waiting: self.gate.waiters.len(),
+        }
     }
 
     /// The render turn `id` has reached `step` of `total`.

@@ -84,6 +84,10 @@ impl ModelRuntimePort for Holding {
         Ok(())
     }
 
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
+
     fn hold(&self, port: u16, model_id: u32) -> Option<AdmissionLease> {
         self.asked.lock().unwrap().push((port, model_id));
         let released: Arc<dyn AdmissionRelease> = Arc::clone(&self.released) as _;

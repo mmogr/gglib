@@ -8,6 +8,10 @@
 //! | CLI         | `gglib-cli`   | `indicatif` progress bar via `render_install_events`                 |
 //! | Axum        | `gglib-axum`  | SSE stream at `POST /api/config/system/install-llama`               |
 //!
+//! stable-diffusion.cpp's install (`install_sd_prebuilt`) emits the same
+//! events, streamed at `POST /api/config/system/install-sd` under the same
+//! SSE event names; [`InstallPhase::label_for`] names the product.
+//!
 //! The desktop app has no consumer of its own: its `WebView` reads the Axum
 //! stream, as a browser tab does.
 //!

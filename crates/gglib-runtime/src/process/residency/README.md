@@ -72,6 +72,17 @@ was started with. A projector missing on disk fails the launch by name,
 before the launch stops anything it displaces; a resident recycled for its
 link was stopped before that, when the request found it.
 
+# A Stop names a model, not a slot
+
+`ResidentSet::stop_model` stops a model in whichever slot holds it, found and
+emptied under one lock, then its process killed: a person's Stop on an image
+model beside a chat model reaches the image model and leaves the chat model
+running. The proxy's own restart of a dead server still stops the primary.
+A render's stop must go through `ProcessManager::retire_render` instead,
+as the drawing that comes next does: a render's lease released by slot
+after `stop_model` emptied that slot would take a request from whatever
+model was launched there in between.
+
 # Two residents, three budgets
 
 A co-loaded secondary must not be sized as though it had the machine to itself.

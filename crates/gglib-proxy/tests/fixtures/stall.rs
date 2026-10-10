@@ -228,6 +228,10 @@ impl ModelRuntimePort for StallRuntime {
         Ok(())
     }
 
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
+
     async fn recycle_current(&self) -> Result<(), ModelRuntimeError> {
         if self.held.load(Ordering::SeqCst) {
             let held = "held by an agent run".to_owned();

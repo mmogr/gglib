@@ -11,17 +11,24 @@
 //! the posture [`Admission::into_target`] exists for: the model is resident,
 //! and evictable from this moment on. Nothing about what is *on* the machine
 //! changes, which is the line the use side does not cross.
+//!
+//! An image model loads here too (`gglib serve <image model>`): it is
+//! placed and launched through `sd-server` like any other admission, and
+//! answered with context 0, since an image model has no context window.
 
 use std::time::SystemTime;
 
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use axum::{Json, http::StatusCode};
-use gglib_core::ports::{Admission, LaunchOverrides};
+use gglib_core::domain::RuntimeKind;
+use gglib_core::ports::{Admission, LaunchOverrides, RunningTarget};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
+use crate::dashboard::LaunchNarrationCache;
 use crate::server::{AppState, handle_runtime_error};
+use crate::slot_cache_state::SlotCacheState;
 
 /// What `POST /v1/models/{name}/load` accepts. Every field optional; an
 /// empty body loads the model at the context it would be served with.
@@ -41,7 +48,8 @@ pub struct LoadResponse {
     pub model: String,
     /// Whether this call started it, as opposed to finding it running.
     pub started: bool,
-    /// The context it is serving with.
+    /// The context it is serving with; 0 for an image model on
+    /// `sd-server`, which has none.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub context: u64,
 }
@@ -75,22 +83,46 @@ pub(crate) async fn load_model(
     {
         Ok(admission) => {
             let target = Admission::into_target(admission);
-            // A load that started the server is a restart to the slot cache,
-            // as a chat request's admission is: the next chat request finds
-            // the model running and would never report it.
-            if target.just_started {
-                state.slot_cache.on_restart(SystemTime::now());
-            }
-            (
-                StatusCode::OK,
-                Json(LoadResponse {
-                    model: target.model_name,
-                    started: target.just_started,
-                    context: target.effective_ctx,
-                }),
-            )
-                .into_response()
+            let answer = loaded(
+                target,
+                &state.slot_cache,
+                &state.dashboard.launch,
+                SystemTime::now(),
+            );
+            (StatusCode::OK, Json(answer)).into_response()
         }
         Err(e) => handle_runtime_error(e),
     }
 }
+
+/// What a load that admitted `target` records, and what it answers.
+///
+/// The launch's narration goes to the dashboard, as a chat request's does,
+/// so `/v1/proxy/status` says what the load decided. A llama-server that
+/// this load started is a restart to the slot cache, as a chat request's
+/// admission is: the next chat request finds the model running and would
+/// never report it. An `sd-server` is not: it has no KV slots, and its
+/// start says nothing about the llama-server whose slot files those are.
+pub(crate) fn loaded(
+    target: RunningTarget,
+    slot_cache: &SlotCacheState,
+    launch: &LaunchNarrationCache,
+    now: SystemTime,
+) -> LoadResponse {
+    if let Some(narration) = target.narration.clone() {
+        launch.set(narration);
+    }
+    let draws = target.runtime == RuntimeKind::StableDiffusion;
+    if target.just_started && !draws {
+        slot_cache.on_restart(now);
+    }
+    LoadResponse {
+        model: target.model_name,
+        started: target.just_started,
+        context: if draws { 0 } else { target.effective_ctx },
+    }
+}
+
+#[cfg(test)]
+#[path = "load_endpoint_tests.rs"]
+mod tests;

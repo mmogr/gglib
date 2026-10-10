@@ -9,7 +9,9 @@ use std::pin::{Pin, pin};
 use std::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
-use gglib_core::domain::{CacheRamHealth, RuntimeKind, SecondarySlotDecision};
+use gglib_core::domain::{
+    CacheRamHealth, GenerationSnapshot, RenderSnapshot, RuntimeKind, SecondarySlotDecision,
+};
 use gglib_core::ports::{GateWait, WaitReason};
 
 use super::super::{ADMISSION_DEADLINE, AdmissionDecision, Candidate, PRIMARY_SLOT, Ticket};
@@ -471,4 +473,56 @@ async fn the_observer_sees_the_render_step() {
     assert_eq!(*seen.0.lock().unwrap(), [wait(0, 0), wait(3, 20)]);
     drop(turn);
     drop(granted(llm.as_mut()));
+}
+
+/// The dashboard's view of the gate: the render holding it names its image
+/// model and step, the chats in flight are counted, and so are the waiters.
+#[tokio::test]
+async fn the_snapshot_shows_the_render_the_chats_and_the_line() {
+    let (q, lease) = chat_and_image();
+    let gate = q.generation_gate();
+    assert_eq!(q.snapshot().generation, GenerationSnapshot::default());
+
+    let in_flight = q.lease(PRIMARY_SLOT).expect("qwen is resident");
+    assert_eq!(
+        q.snapshot().generation.llm_inflight,
+        1,
+        "a chat lease counts"
+    );
+    let mut render = pin!(gate.render_turn(lease, None));
+    assert!(poll(render.as_mut()).is_pending());
+    let generation = q.snapshot().generation;
+    assert_eq!((generation.render, generation.waiting), (None, 1));
+
+    drop(in_flight);
+    let turn = granted(render.as_mut());
+    turn.progress(2, 4);
+    let mut llm = pin!(gate.llm_turn(None));
+    assert!(poll(llm.as_mut()).is_pending());
+    assert_eq!(
+        q.snapshot().generation,
+        GenerationSnapshot {
+            render: Some(RenderSnapshot {
+                model_name: Some("flux".to_owned()),
+                step: 2,
+                total: 4,
+            }),
+            llm_inflight: 0,
+            waiting: 1,
+        }
+    );
+
+    drop(turn);
+    let chat_turn = granted(llm.as_mut());
+    let generation = q.snapshot().generation;
+    assert_eq!(
+        (
+            generation.render,
+            generation.llm_inflight,
+            generation.waiting
+        ),
+        (None, 1, 0),
+        "an explicit LLM turn counts"
+    );
+    drop(chat_turn);
 }

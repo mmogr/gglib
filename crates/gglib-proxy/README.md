@@ -176,7 +176,8 @@ resume from prior context without re-computation.
   server instance), restore is skipped. The start is recorded wherever an
   admission reports a freshly started server: a chat completion's first
   attempt, its retry after it found the upstream dead, and
-  `POST /v1/models/{name}/load`.
+  `POST /v1/models/{name}/load` (not for an image model on `sd-server`,
+  which has no slots; its load answers context 0).
 - **Partial-KV models bypass the layer entirely:** sliding-window, hybrid, and
   recurrent/SSM architectures keep only part of the token history in KV memory.
   llama-server's slot files omit the context checkpoints those models need to

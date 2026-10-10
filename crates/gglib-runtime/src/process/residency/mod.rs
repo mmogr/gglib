@@ -591,6 +591,24 @@ impl ResidentSet {
         self.queue.primary().map(target_of)
     }
 
+    /// Stop model `model_id` in whichever slot holds it, even one a run
+    /// holds; `false` when no slot does.
+    pub(super) async fn stop_model(
+        &self,
+        model_id: u32,
+        core: &Arc<RwLock<GuiProcessCore>>,
+    ) -> Result<bool, ModelRuntimeError> {
+        let Some((_slot, previous)) = self.queue.evict_model(model_id) else {
+            return Ok(false);
+        };
+        let mut core_w = core.write().await;
+        core_w
+            .kill(previous.model_id)
+            .await
+            .map_err(|e| ModelRuntimeError::Internal(e.to_string()))?;
+        Ok(true)
+    }
+
     /// Stop the primary resident, if there is one, even one a run holds.
     pub(super) async fn stop_primary(
         &self,
@@ -631,3 +649,6 @@ mod launch_sd_tests;
 #[cfg(test)]
 #[path = "residency_tests.rs"]
 pub(in crate::process) mod residency_tests;
+#[cfg(test)]
+#[path = "stop_model_tests.rs"]
+mod stop_model_tests;

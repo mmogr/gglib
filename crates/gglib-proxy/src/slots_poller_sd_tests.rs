@@ -41,6 +41,10 @@ impl ModelRuntimePort for Primary {
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         Ok(())
     }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
 }
 
 /// A server that reads each request head, answers 404, and counts.

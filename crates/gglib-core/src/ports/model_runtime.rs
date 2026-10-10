@@ -613,6 +613,16 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
     /// person's, a benchmark's), or the proxy's restart of a dead server.
     async fn stop_current(&self) -> Result<(), ModelRuntimeError>;
 
+    /// Stop model `model_id` wherever it is resident, the primary slot or the
+    /// second, even one a run holds: a person's Stop on a model they chose,
+    /// which is often an image model beside a chat model.
+    ///
+    /// Required of every runtime, unlike [`Self::list_running`]'s default:
+    /// a runtime that listed a model and could not stop it would show a Stop
+    /// that does nothing. `Ok(false)` when that model is not running here,
+    /// which a caller reports as "not found"; `Ok(true)` once it is stopped.
+    async fn stop_model(&self, model_id: u32) -> Result<bool, ModelRuntimeError>;
+
     /// Stop it for automatic recovery, which waits for a run: refused with
     /// [`ModelRuntimeError::AdmissionTimeout`] while one holds it (see
     /// [`Self::hold`]). Defaults to [`Self::stop_current`], for runtimes
@@ -694,6 +704,10 @@ impl ModelRuntimePort for NoopModelRuntime {
 
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         Ok(())
+    }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
     }
 }
 

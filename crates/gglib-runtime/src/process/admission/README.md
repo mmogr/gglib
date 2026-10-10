@@ -131,6 +131,11 @@ release and eviction that touches the slot only while it still holds that
 model, then the turn ends. Requests through the proxy take leases and so count
 already; the callers that take explicit turns arrive with image drawing.
 
+The dashboard reads the gate as `AdmissionSnapshot::generation`: the render
+holding it (its image model, step and total), the LLM turns in flight, and how
+many callers wait for a turn, so a chat held behind a render is seen waiting
+for its turn rather than for a slot.
+
 # What this module is not responsible for
 
 It does not launch, stop, or health-check anything, and it never touches a

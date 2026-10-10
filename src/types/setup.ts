@@ -81,6 +81,14 @@ export const INSTALL_PHASE_LABELS: Record<InstallPhase, string> = {
   verify: 'Verifying installation…',
 };
 
+/**
+ * The image runtime (stable-diffusion.cpp's `sd-server`) as Settings shows
+ * it: what is installed, the pre-built build an install would download and
+ * what to say about it, and the image model running on it.
+ */
+export type { ImageRuntimeStatus } from './generated/ImageRuntimeStatus';
+export type { SdStatus } from './generated/SdStatus';
+
 
 /** What gglib recorded when it built the binary. Absent for a prebuilt install. */
 export interface LlamaBuildInfo {

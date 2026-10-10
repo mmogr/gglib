@@ -289,6 +289,19 @@ fn config_routes() -> Router<AppState> {
             "/system/uninstall-llama",
             post(handlers::config::setup::uninstall_llama_handler),
         )
+        // The image runtime: `gglib config sd install|status|uninstall`.
+        .route(
+            "/system/install-sd",
+            post(handlers::config::image_runtime::install_sd),
+        )
+        .route(
+            "/system/sd-status",
+            get(handlers::config::image_runtime::sd_status),
+        )
+        .route(
+            "/system/uninstall-sd",
+            post(handlers::config::image_runtime::uninstall_sd),
+        )
         .route(
             "/system/setup-python",
             post(handlers::config::setup::setup_python),

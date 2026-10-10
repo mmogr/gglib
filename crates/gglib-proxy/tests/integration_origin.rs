@@ -54,6 +54,10 @@ impl ModelRuntimePort for Watched {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
 }
 
 async fn proxy() -> (String, Arc<Watched>, tokio_util::sync::CancellationToken) {

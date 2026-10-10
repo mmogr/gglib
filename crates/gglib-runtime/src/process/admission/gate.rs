@@ -77,7 +77,11 @@ impl AdmissionQueue {
     ) -> Result<GenerationTurn, GateError> {
         let queued = QueuedTurn {
             queue: self,
-            ticket: self.lock().gate_enqueue(kind, Instant::now()),
+            ticket: self.lock().gate_enqueue(
+                kind,
+                lease.as_ref().map(AdmissionLease::slot),
+                Instant::now(),
+            ),
         };
         let mut told = None;
         loop {

@@ -202,7 +202,10 @@ impl ServerOps {
             .emitter
             .emit(AppEvent::server_started(id, &model.name, target.port));
 
-        let handle = ProcessHandle::new(id, model.name.clone(), None, target.port, now_secs());
+        // The monitor asks the server the way its runtime answers: an
+        // `sd-server` has no `/health`, and is asked `/v1/models` instead.
+        let handle = ProcessHandle::new(id, model.name.clone(), None, target.port, now_secs())
+            .with_runtime(target.runtime);
         self.spawn_health_monitor(handle, id).await;
 
         // The llama-server port, not the proxy's: existing GUI flows talk to
@@ -273,16 +276,19 @@ impl ServerOps {
         registry.add(server_id, join_handle, cancel_token, port, model_id);
     }
 
-    /// Stop serving a model.
+    /// Stop serving a model, in whichever slot it sits: the primary, or the
+    /// second, where an image model beside a chat model usually is.
     pub async fn stop(&self, id: i64) -> Result<String, GuiError> {
         debug!(model_id = %id, "Stopping server");
 
-        let running = self.deps.proxy.runtime().current_model().await;
-        if running.is_none_or(|t| i64::from(t.model_id) != id) {
-            return Err(GuiError::NotFound {
-                entity: "server",
-                id: id.to_string(),
-            });
+        let not_running = || GuiError::NotFound {
+            entity: "server",
+            id: id.to_string(),
+        };
+        let model_id = u32::try_from(id).map_err(|_| not_running())?;
+        let running = self.deps.proxy.runtime().list_running().await;
+        if !running.iter().any(|h| h.model_id == id) {
+            return Err(not_running());
         }
 
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
@@ -298,10 +304,11 @@ impl ServerOps {
             registry.cancel(server_id).await?;
         }
 
-        self.deps
+        let stopped = self
+            .deps
             .proxy
             .runtime()
-            .stop_current()
+            .stop_model(model_id)
             .await
             .map_err(|e| {
                 self.deps
@@ -309,6 +316,11 @@ impl ServerOps {
                     .emit(AppEvent::server_error(Some(id), &model.name, (&e).into()));
                 GuiError::Internal(format!("Failed to stop server: {e}"))
             })?;
+        // Listed a moment ago, gone now: it stopped on its own, or another
+        // caller stopped it first. Either way it is not running.
+        if !stopped {
+            return Err(not_running());
+        }
 
         self.deps
             .emitter

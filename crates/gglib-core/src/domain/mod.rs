@@ -102,7 +102,8 @@ pub use recommendation::{BudgetSource, Recommendation, recommend};
 
 // Re-export admission-control telemetry at the domain level for convenience
 pub use admission::{
-    AdmissionSnapshot, QueuedModelSnapshot, ResidentSlotSnapshot, SecondarySlotStatus,
+    AdmissionSnapshot, GenerationSnapshot, QueuedModelSnapshot, RenderSnapshot,
+    ResidentSlotSnapshot, SecondarySlotStatus,
 };
 
 // Re-export the second-VRAM-slot decision at the domain level for convenience

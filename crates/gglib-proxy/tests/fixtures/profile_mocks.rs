@@ -56,6 +56,10 @@ impl ModelRuntimePort for RecordingRuntime {
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         Ok(())
     }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
 }
 
 /// Catalog over an explicit set of names, numbered from 1 in order, found by

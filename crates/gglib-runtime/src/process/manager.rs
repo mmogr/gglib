@@ -156,6 +156,17 @@ impl ProcessManager {
         self.residency.stop_primary(&self.core).await
     }
 
+    /// Stop model `model_id` in whichever slot holds it, even one a run
+    /// holds. See
+    /// [`ModelRuntimePort::stop_model`](gglib_core::ports::ModelRuntimePort::stop_model).
+    ///
+    /// # Errors
+    ///
+    /// Returns `ModelRuntimeError` if the process could not be stopped.
+    pub async fn stop_model(&self, model_id: u32) -> Result<bool, ModelRuntimeError> {
+        self.residency.stop_model(model_id, &self.core).await
+    }
+
     /// Stop the model in the primary slot unless a run holds it. See
     /// [`ModelRuntimePort::recycle_current`](gglib_core::ports::ModelRuntimePort::recycle_current).
     ///

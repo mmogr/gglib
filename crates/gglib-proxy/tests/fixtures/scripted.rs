@@ -78,6 +78,10 @@ impl ModelRuntimePort for ScriptedRuntime {
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         Ok(())
     }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
 }
 
 /// A port bound and dropped at once: nothing is listening on it, which is

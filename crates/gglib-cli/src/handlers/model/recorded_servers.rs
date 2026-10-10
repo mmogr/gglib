@@ -85,6 +85,12 @@ impl ModelRuntimePort for RecordedServers {
             "a one-shot command does not stop a server another process started".to_string(),
         ))
     }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Err(ModelRuntimeError::Internal(
+            "a one-shot command does not stop a server another process started".to_string(),
+        ))
+    }
 }
 
 #[cfg(test)]

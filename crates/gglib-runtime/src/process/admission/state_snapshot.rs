@@ -50,6 +50,7 @@ impl QueueState {
                 || self.secondary_slot.clone(),
                 |r| SecondarySlotStatus::resident(&r.model_name),
             ),
+            generation: self.generation_snapshot(),
         }
     }
 }

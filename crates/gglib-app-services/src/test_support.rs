@@ -276,6 +276,14 @@ impl ModelRuntimePort for RunningRuntime {
         self.stopped.store(true, Ordering::SeqCst);
         Ok(())
     }
+
+    async fn stop_model(&self, model_id: u32) -> Result<bool, ModelRuntimeError> {
+        if i64::from(model_id) != self.model_id {
+            return Ok(false);
+        }
+        self.stopped.store(true, Ordering::SeqCst);
+        Ok(true)
+    }
 }
 
 // ---------------------------------------------------------------------------

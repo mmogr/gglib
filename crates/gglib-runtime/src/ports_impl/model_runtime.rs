@@ -107,6 +107,10 @@ impl ModelRuntimePort for RuntimePortImpl {
         self.mgr.stop_current().await
     }
 
+    async fn stop_model(&self, model_id: u32) -> Result<bool, ModelRuntimeError> {
+        self.mgr.stop_model(model_id).await
+    }
+
     async fn recycle_current(&self) -> Result<(), ModelRuntimeError> {
         self.mgr.recycle_current().await
     }

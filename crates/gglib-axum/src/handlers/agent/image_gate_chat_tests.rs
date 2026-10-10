@@ -65,6 +65,10 @@ impl ModelRuntimePort for Counting {
         Ok(())
     }
 
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
+
     fn hold(&self, _port: u16, _model_id: u32) -> Option<AdmissionLease> {
         self.held.fetch_add(1, Ordering::SeqCst);
         None
