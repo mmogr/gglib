@@ -3,7 +3,8 @@
 <!-- module-docs:start -->
 
 Installing stable-diffusion.cpp's `sd-server`, the image runtime, reporting
-what is installed, and its command line.
+what is installed, its command line, and drawing with it. The decisions are
+[ADR 0018](../../../../docs/adr/0018-gglib-draws-with-stable-diffusion-cpp.md).
 
 Everything lives under `.sd/` beside llama.cpp's `.llama/` (paths in
 `gglib_core::paths`): `bin/sd-server` and the shared library it loads from
