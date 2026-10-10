@@ -125,6 +125,63 @@ export interface AgentTurnUsageEvent extends TurnUsageWire {
   type: 'turn_usage';
 }
 
+/** Where a long-running tool has got to: the Rust `ToolStage`. */
+export type ToolStage = 'queued' | 'loading' | 'sampling' | 'decoding' | 'finishing';
+
+/**
+ * How far a running tool has got, for a tool that takes minutes (an image
+ * render). Logged with the run's other events, about once a second per
+ * call; a count the tool did not report is absent.
+ */
+export interface AgentToolProgressEvent {
+  type: 'tool_progress';
+  tool_call_id: string;
+  stage: ToolStage;
+  /** Which pass is running, 1-based, when the work has several (one per image). */
+  pass?: number;
+  /** Steps done in this pass. */
+  done?: number;
+  /** Steps this pass takes. */
+  total?: number;
+  /** Place in line while queued, 1 being next. */
+  position?: number;
+}
+
+/**
+ * Nothing can happen until something else finishes: an image render holds
+ * the GPU, or the model is loading. Sent again whenever what it reports
+ * changes.
+ */
+export interface AgentWaitingEvent {
+  type: 'waiting';
+  reason: 'image_render' | 'model_load';
+  /** The step the work in the way last reported; 0 before its first. */
+  step: number;
+  /** How many steps that work takes; 0 when unknown. */
+  total: number;
+  /** This wait's place in line, 1 being next; 0 when not in a line. */
+  position: number;
+}
+
+/**
+ * The latest preview of what a running tool is making: the payload of a
+ * run's `preview` side event, which is sent beside the log and is not an
+ * {@link AgentEvent}. Shown while its call runs, and never kept.
+ */
+export interface RunPreview {
+  tool_call_id: string;
+  frame: {
+    /** The frame's media type; `image/png`. */
+    mime: string;
+    /** The step this frame shows. */
+    step: number;
+    /** How many steps the pass takes. */
+    total: number;
+    /** The frame's bytes, base64. */
+    b64: string;
+  };
+}
+
 /**
  * Union of all events emitted by the backend agentic loop over SSE.
  *
@@ -136,6 +193,8 @@ export type AgentEvent =
   | AgentReasoningDeltaEvent
   | AgentToolCallStartEvent
   | AgentToolCallCompleteEvent
+  | AgentToolProgressEvent
+  | AgentWaitingEvent
   | AgentIterationCompleteEvent
   | AgentFinalAnswerEvent
   | AgentErrorEvent

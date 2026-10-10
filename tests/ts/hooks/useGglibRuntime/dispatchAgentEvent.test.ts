@@ -418,6 +418,107 @@ describe('dispatchAgentEvent — prompt_progress', () => {
 });
 
 // ---------------------------------------------------------------------------
+// tool_progress and waiting
+// ---------------------------------------------------------------------------
+
+describe('dispatchAgentEvent — tool_progress', () => {
+  const start = (id: string): AgentEvent => ({
+    type: 'tool_call_start',
+    tool_call: { id, name: 'builtin:generate_image', arguments: {} },
+    display_name: 'Generate Image',
+  });
+  const done = (id: string): AgentEvent => ({
+    type: 'tool_call_complete',
+    tool_name: 'builtin:generate_image',
+    result: { tool_call_id: id, content: 'Drew 1 image.', success: true },
+    wait_ms: 0,
+    execute_duration_ms: 76000,
+    display_name: 'Generate Image',
+    duration_display: '76s',
+  });
+  const progressOf = (store: ReturnType<typeof makeMessageStore>, id: string) =>
+    (partsOf(store.messages()[0]).find((p) => p.type === 'tool-call' && p.toolCallId === id) as { progress?: unknown })
+      .progress;
+
+  it('keeps the latest progress on its own call, continues, and touches no other call', () => {
+    const store = makeMessageStore([emptyAssistant()]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const deps = makeDeps(store.setMessages);
+    dispatchAgentEvent(start('c1'), state, deps);
+    dispatchAgentEvent(start('c2'), state, deps);
+
+    expect(dispatchAgentEvent({ type: 'tool_progress', tool_call_id: 'c1', stage: 'queued', position: 2 }, state, deps)).toBe(false);
+    expect(progressOf(store, 'c1')).toMatchObject({ stage: 'queued', position: 2 });
+    dispatchAgentEvent({ type: 'tool_progress', tool_call_id: 'c1', stage: 'sampling', pass: 1, done: 3, total: 20 }, state, deps);
+
+    expect(progressOf(store, 'c1')).toMatchObject({ stage: 'sampling', pass: 1, done: 3, total: 20 });
+    // The newer report replaces the older whole: no place in line is left over.
+    expect((progressOf(store, 'c1') as { position?: number }).position).toBeUndefined();
+    expect(progressOf(store, 'c2')).toBeUndefined();
+    expect(partsOf(store.messages()[0])).toHaveLength(2);
+  });
+
+  it('a call that has its result keeps no progress, and takes none that arrives late', () => {
+    const store = makeMessageStore([emptyAssistant()]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const deps = makeDeps(store.setMessages);
+    dispatchAgentEvent(start('c1'), state, deps);
+    dispatchAgentEvent({ type: 'tool_progress', tool_call_id: 'c1', stage: 'decoding' }, state, deps);
+    dispatchAgentEvent(done('c1'), state, deps);
+    expect(progressOf(store, 'c1')).toBeUndefined();
+
+    dispatchAgentEvent({ type: 'tool_progress', tool_call_id: 'c1', stage: 'finishing' }, state, deps);
+    expect(progressOf(store, 'c1')).toBeUndefined();
+  });
+
+  it('skips a frame that names no call or no stage', () => {
+    const store = makeMessageStore([emptyAssistant()]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const deps = makeDeps(store.setMessages);
+    dispatchAgentEvent(start('c1'), state, deps);
+
+    expect(dispatchAgentEvent({ type: 'tool_progress', stage: 'loading' } as unknown as AgentEvent, state, deps)).toBe(false);
+    expect(dispatchAgentEvent({ type: 'tool_progress', tool_call_id: 'c1' } as unknown as AgentEvent, state, deps)).toBe(false);
+    expect(progressOf(store, 'c1')).toBeUndefined();
+  });
+});
+
+describe('dispatchAgentEvent — waiting', () => {
+  const custom = (m: GglibMessage) => (m.metadata as { custom?: Record<string, unknown> } | undefined)?.custom;
+
+  it('keeps the latest wait on the current message, continues, and draws nothing into the reply', () => {
+    const store = makeMessageStore([emptyAssistant(), emptyAssistant(MSG_ID_2)]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const cleanup = vi.fn();
+    const deps = makeDeps(store.setMessages, { cleanup });
+
+    expect(dispatchAgentEvent({ type: 'waiting', reason: 'image_render', step: 3, total: 20, position: 1 }, state, deps)).toBe(false);
+    dispatchAgentEvent({ type: 'waiting', reason: 'image_render', step: 4, total: 20, position: 1 }, state, deps);
+
+    expect(custom(store.messages()[0])?.waiting).toEqual({ reason: 'image_render', step: 4, total: 20, position: 1 });
+    expect(custom(store.messages()[1])?.waiting).toBeUndefined();
+    expect(partsOf(store.messages()[0])).toHaveLength(0);
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
+  it('is over once the prompt is read, and a wait after that is kept beside the reading', () => {
+    const store = makeMessageStore([emptyAssistant()]);
+    const state: DispatchState = { currentId: MSG_ID };
+    const deps = makeDeps(store.setMessages);
+    const waiting: AgentEvent = { type: 'waiting', reason: 'model_load', step: 0, total: 0, position: 0 };
+
+    dispatchAgentEvent(waiting, state, deps);
+    dispatchAgentEvent({ type: 'prompt_progress', processed: 10, total: 40, cached: 0, time_ms: 5 }, state, deps);
+    expect(custom(store.messages()[0])?.waiting).toBeUndefined();
+    expect(custom(store.messages()[0])?.prompt).toEqual({ processed: 10, total: 40, cached: 0 });
+
+    dispatchAgentEvent(waiting, state, deps);
+    expect(custom(store.messages()[0])?.waiting).toEqual({ reason: 'model_load', step: 0, total: 0, position: 0 });
+    expect(custom(store.messages()[0])?.prompt).toEqual({ processed: 10, total: 40, cached: 0 });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // turn_usage
 // ---------------------------------------------------------------------------
 

@@ -4,6 +4,8 @@
  * Renders one row per tool-call content part, deriving each tool's status
  * (running / complete / error) reactively from `useMessage()`. Stays mounted
  * as a collapsible accordion after all tools settle, preventing layout shifts.
+ * Under a running tool's row, how far it has got when it says (`progress` on
+ * its part) and the picture it is making (`previews`, by its call).
  *
  * @module ToolExecutionProgress
  */
@@ -17,6 +19,9 @@ import { cn } from '../../utils/cn';
 import { Icon } from '../ui/Icon';
 import { getToolRegistry } from '../../services/tools/registry';
 import { formatToolDisplayName } from '../../services/tools/nameUtils';
+import type { RunPreviews } from '../../hooks/useGglibRuntime/runPreviews';
+import { toolCallProgress, type ToolProgress } from '../../types/messages';
+import { ToolRunProgress } from './ToolRunProgress';
 
 // =============================================================================
 // Types
@@ -48,6 +53,8 @@ interface ToolRowData {
   durationMs?: number;
   /** First 80 chars of the error message, for inline display. */
   errorSummary?: string;
+  /** How far a running tool has got, when it says. */
+  progress?: ToolProgress;
 }
 
 // =============================================================================
@@ -83,7 +90,13 @@ function classifyPart(part: ToolCallPart): ToolRowData {
   const displayLabel = augmented.displayName ?? formatToolName(part.toolName);
 
   if (!('result' in part)) {
-    return { toolCallId: part.toolCallId, toolName: part.toolName, displayLabel, state: 'running' };
+    return {
+      toolCallId: part.toolCallId,
+      toolName: part.toolName,
+      displayLabel,
+      state: 'running',
+      progress: toolCallProgress(part as { progress?: unknown }),
+    };
   }
 
   if (augmented.isError === true) {
@@ -160,8 +173,12 @@ const ToolRow: React.FC<{ row: ToolRowData }> = ({ row }) => (
  *
  * The accordion defaults to expanded and **never auto-collapses** — only the
  * user can toggle it. This prevents CLS when the last tool finishes.
+ *
+ * `previews` are the frames the run's tools are making, by call. Whoever
+ * holds them drops a call's frame with its result, so only a row still
+ * running has one.
  */
-const ToolExecutionProgress: React.FC = () => {
+const ToolExecutionProgress: React.FC<{ previews?: RunPreviews }> = ({ previews }) => {
   const message = useMessage();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -243,6 +260,7 @@ const ToolExecutionProgress: React.FC = () => {
           {rows.map(row => (
             <div key={row.toolCallId} role="listitem">
               <ToolRow row={row} />
+              <ToolRunProgress progress={row.progress} preview={previews?.get(row.toolCallId)} />
             </div>
           ))}
         </div>

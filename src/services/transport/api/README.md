@@ -39,7 +39,8 @@ Axum backend (HTTP response) → typed result
 | `setup.ts` | First-run setup and dependency probes; the llama.cpp and image runtime installs, status and removal |
 | `sse.ts` | `streamSse`: a POST whose reply is an event stream (llama install and update), handed to callbacks frame by frame |
 | `runs.ts` | Runs (`/api/runs`): start an agent run under a minted id, list, cancel, and read its events from any point |
-| `farChats.ts` | The far machine's chats and runs (`/api/remote/chats`, `/api/remote/runs`), forwarded by this machine's daemon: list, open, add a turn of text and images (by the ids the far store answered) that says the chat's Thinking choice only when it changes it, and read, list and cancel its runs |
+| `farChats.ts` | The far machine's chats and runs (`/api/remote/chats`, `/api/remote/runs`), forwarded by this machine's daemon: list, open, add a turn of text and images (by the ids the far store answered) that says the chat's Thinking choice only when it changes it and `draw` only when sent with Draw pressed, and read, list and cancel its runs |
+| `images.ts` | Whether a message sent with Draw pressed can draw, and why not (`/api/images/drawing`, told whether the chat's model is the paired machine's and whether it calls tools; the far machine's answer at `/api/remote/images/drawing` for a far chat) |
 | `attachments.ts` | The image stores (`/api/attachments`, and the far machine's at `/api/remote/attachments` for a far chat): upload an image as its raw bytes, and read one's bytes back with the page's credential |
 | `farModels.ts` | The paired machine's models (`/api/remote/models`), read by this machine's daemon: the list with that machine and what may be done there, one model by its id there, and a load |
 | `version.ts` | Which build of gglib the daemon is running |
