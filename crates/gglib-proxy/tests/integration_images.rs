@@ -20,7 +20,7 @@ use tokio_util::sync::CancellationToken;
 
 use fixtures::common::{CountingRuntime, spawn_proxy_with_catalog};
 use fixtures::images::{
-    BLIND, SEES, Sight, Upstream, png_url, request, spawn_upstream, user_with_image,
+    BLIND, DRAWS, SEES, Sight, Upstream, png_url, request, spawn_upstream, user_with_image,
 };
 
 /// A proxy over [`Sight`], its upstream, and the count of admissions.
@@ -102,6 +102,65 @@ async fn an_image_for_a_model_with_no_projector_is_refused_by_name_before_admiss
         "the refusal must run before the model swap, not after"
     );
     assert!(harness.upstream.seen.lock().unwrap().is_empty());
+    harness.stop();
+}
+
+/// A model that draws is refused for chat by name before admission, with or
+/// without an image in the request: its own refusal comes before the
+/// projector's.
+#[tokio::test]
+async fn a_chat_for_an_image_model_is_refused_by_name_before_admission() {
+    let harness = Harness::spawn().await;
+    let text_only = request(DRAWS, &[json!({"role": "user", "content": "hi"})]);
+    let with_image = request(DRAWS, &[user_with_image("draw this", &png_url(400))]);
+
+    for body in [text_only, with_image] {
+        let (status, text) = harness.post(&body).await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{text}");
+        let error = error_of(&text);
+        assert_eq!(error["code"], "image_model_cannot_chat", "{text}");
+        assert_eq!(error["type"], "invalid_request_error");
+        let message = error["message"].as_str().unwrap();
+        assert!(message.contains("'draws' is an image model"), "{message}");
+    }
+    assert_eq!(
+        harness.admits(),
+        0,
+        "the refusal must run before the model swap, not after"
+    );
+    assert!(harness.upstream.seen.lock().unwrap().is_empty());
+    harness.stop();
+}
+
+/// `/v1/models` lists the image model as one that draws, with no context
+/// window although its row records one.
+#[tokio::test]
+async fn the_list_names_an_image_model_and_gives_it_no_context_window() {
+    let harness = Harness::spawn().await;
+
+    let listed: Value = Client::new()
+        .get(format!("{}/v1/models", harness.base))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+
+    let entry = listed["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["id"] == DRAWS)
+        .unwrap_or_else(|| panic!("{DRAWS} is listed: {listed}"))
+        .clone();
+    assert_eq!(
+        entry["capabilities"],
+        json!(["image_generation"]),
+        "{entry}"
+    );
+    assert!(entry.get("context_window").is_none(), "{entry}");
     harness.stop();
 }
 

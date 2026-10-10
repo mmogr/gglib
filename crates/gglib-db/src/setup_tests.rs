@@ -263,3 +263,34 @@ async fn template_caps_migration_is_idempotent_on_an_existing_database() {
 
     assert_eq!(column_count(&pool, "models", "template_caps").await, 1);
 }
+
+/// A library from before `image_family` gains the column, its rows reading
+/// NULL (no family until a retag reads one), and a second open adds nothing.
+#[tokio::test]
+async fn image_family_migration_adds_the_column_once() {
+    let pool = setup_test_database().await.unwrap();
+    sqlx::query("ALTER TABLE models DROP COLUMN image_family")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO models (name, file_path, param_count_b, added_at, model_key) \
+             VALUES ('Old', '/m/old.gguf', 7.0, ?, 'k')",
+    )
+    .bind(chrono::Utc::now().to_string())
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(column_count(&pool, "models", "image_family").await, 0);
+
+    create_schema(&pool).await.unwrap();
+    create_schema(&pool).await.unwrap();
+
+    assert_eq!(column_count(&pool, "models", "image_family").await, 1);
+    let family: Option<String> =
+        sqlx::query_scalar("SELECT image_family FROM models WHERE name = 'Old'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(family, None);
+}

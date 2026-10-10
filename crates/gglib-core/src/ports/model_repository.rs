@@ -131,6 +131,7 @@ mod tests {
     /// The single model these tests resolve: id 7, name "qwen3".
     fn model() -> Model {
         Model {
+            components: Vec::new(),
             dialect_spec: None,
             id: 7,
             name: "qwen3".to_string(),
@@ -158,6 +159,7 @@ mod tests {
             server_defaults: None,
             template_caps: None,
             benchmark_summary: None,
+            image_family: None,
         }
     }
 

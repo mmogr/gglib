@@ -3,6 +3,7 @@ mod branch_rows;
 #[cfg(test)]
 mod chat_fixture;
 mod message_rows;
+mod model_component_rows;
 mod model_files_repository;
 #[allow(
     clippy::cast_sign_loss,

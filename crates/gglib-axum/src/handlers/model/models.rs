@@ -7,8 +7,8 @@ use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::SamplingExplanationDto;
 use gglib_app_services::types::{
-    AddModelRequest, GuiModel, ProjectorChoice, RemoveModelRequest, SetCapabilitiesRequest,
-    UpdateModelRequest,
+    AddModelRequest, ComponentChoices, GuiModel, ProjectorChoice, RemoveModelRequest,
+    SetCapabilitiesRequest, UpdateModelRequest,
 };
 use gglib_core::ModelFilterOptions;
 use gglib_core::domain::{ModelDetailDto, ModelListQuery, ModelSortBy, SortOrder};
@@ -254,6 +254,17 @@ pub(crate) async fn projector_choices(
     Path(id): Path<i64>,
 ) -> Result<Json<Vec<ProjectorChoice>>, HttpError> {
     Ok(Json(state.models.projector_choices(id).await?))
+}
+
+/// The files the inspector's pickers offer for an image model, one list for
+/// each role its family needs: the files models of that family link in
+/// that role, this model's own link included. Empty for a model that chats.
+/// "None" is each picker's own entry.
+pub(crate) async fn component_choices(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<ComponentChoices>>, HttpError> {
+    Ok(Json(state.models.component_choices(id).await?))
 }
 
 /// Query parameters for `GET /api/models/{id}/explain`.

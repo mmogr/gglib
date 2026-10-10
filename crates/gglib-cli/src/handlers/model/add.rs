@@ -8,11 +8,12 @@ use anyhow::{Context as _, Result};
 use std::path::PathBuf;
 
 use crate::bootstrap::CliContext;
+use crate::component_args::{ComponentArgs, request_components};
 use crate::presentation::{ModelSummaryOpts, display_model_summary};
 use crate::utils::input;
 
 use gglib_app_services::ModelOps;
-use gglib_app_services::types::AddModelRequest;
+use gglib_app_services::types::{AddModelRequest, UpdateModelRequest};
 use gglib_core::domain::{NameSource, resolve_model_name};
 use gglib_core::services::ImportMode;
 use gglib_core::utils::validation;
@@ -28,6 +29,7 @@ use gglib_core::utils::validation;
 /// * `ops` - The model operations the file is added through
 /// * `file_path` - Path to the GGUF file to add
 /// * `reimport` - Re-import a file already in the library, overwriting its row
+/// * `components` - An image model's components, linked once it is added
 ///
 /// # Returns
 ///
@@ -40,13 +42,17 @@ use gglib_core::utils::validation;
 /// - GGUF metadata extraction fails
 /// - The file is already in the library and `reimport` was not passed
 /// - Database operations fail
+/// - A component is refused, after the model is added; the error says so
 pub(crate) async fn execute(
     ctx: &CliContext,
     ops: &ModelOps,
     file_path: &str,
     reimport: bool,
+    components: &ComponentArgs,
 ) -> Result<()> {
     let path = PathBuf::from(file_path);
+    // A role named twice is refused before anything is asked or written.
+    let components = request_components(&components.changes()?);
 
     // Validate the GGUF file and extract metadata for CLI preview
     let gguf_metadata = validation::validate_and_parse_gguf(ctx.gguf_parser.as_ref(), file_path)?;
@@ -83,6 +89,9 @@ pub(crate) async fn execute(
     }
     if let Some(context) = gguf_metadata.context_length {
         println!("  Context Length: {context}");
+    }
+    if let Some(family) = gguf_metadata.image_family {
+        println!("  Draws: {} images", family.label());
     }
 
     // Prompt for parameter count override (CLI-specific interactive UX).
@@ -121,6 +130,22 @@ pub(crate) async fn execute(
     };
     let added = ops.add(request, param_count_override, mode).await?;
 
+    // The components are linked as `gglib model update --component` links
+    // them, through the rule that checks each file. The model is in the
+    // library whatever that rule says, and a refusal says so.
+    if components.is_some() {
+        let request = UpdateModelRequest {
+            components,
+            ..UpdateModelRequest::default()
+        };
+        ops.update(added.id, request).await.with_context(|| {
+            format!(
+                "the model was added as id {}, but its components were not all linked",
+                added.id
+            )
+        })?;
+    }
+
     // `ops.add` answers with the row as a client lists it. The summary is of
     // the row as stored.
     let saved_model = ctx
@@ -153,13 +178,5 @@ pub(crate) async fn execute(
 }
 
 #[cfg(test)]
-mod tests {
-    // Note: These tests would typically require mocking external dependencies
-    // like database operations and file system interactions.
-    // For now, we'll test the helper functions and logic that can be isolated.
-
-    #[test]
-    fn test_add_handler_exists() {
-        // Placeholder test to ensure module compiles
-    }
-}
+#[path = "add_tests.rs"]
+mod tests;

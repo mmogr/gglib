@@ -8,6 +8,7 @@ import { TransportError } from '../../errors';
 import type { ModelId } from '../../types/ids';
 import type { AddModelParams, UpdateModelBody, UpdateModelParams } from '../../types/models';
 import type {
+  ComponentChoices,
   GgufModel,
   ModelDetail,
   ModelFilterOptions,
@@ -126,6 +127,7 @@ export async function updateModel(params: UpdateModelParams): Promise<GgufModel>
     inferenceDefaults: params.inferenceDefaults,
     serverDefaults: params.serverDefaults,
     projectorPath: params.projectorPath,
+    components: params.components,
   };
   return put<GgufModel>(`/api/models/${params.id}`, body);
 }
@@ -137,6 +139,17 @@ export async function updateModel(params: UpdateModelParams): Promise<GgufModel>
  */
 export async function listProjectorChoices(id: ModelId): Promise<ProjectorChoice[]> {
   return get<ProjectorChoice[]>(`/api/models/${id}/projectors`);
+}
+
+/**
+ * The component files an image model's pickers offer, one list for each role
+ * its family needs, in the recipe's order: the files models of the family
+ * link in that role, this model's own link included. Empty for a model that
+ * chats. "None" is each picker's own entry; a pick is sent back in
+ * `updateModel`'s `components`.
+ */
+export async function listComponentChoices(id: ModelId): Promise<ComponentChoices[]> {
+  return get<ComponentChoices[]>(`/api/models/${id}/components`);
 }
 
 /**

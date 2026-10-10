@@ -2,14 +2,16 @@
 
 use super::file_role::GgufFileRole;
 use super::row::FilePlace;
+use crate::domain::ComponentRole;
 
 /// Information about one file within a model's download group.
 ///
 /// A group is the model's weights, one file or several shards, followed by
-/// the projector fetched with them when the repository has one. Shards are
-/// numbered among the weights alone: [`total_shards`](Self::total_shards)
-/// never counts a projector, while
-/// [`group_total_bytes`](Self::group_total_bytes) covers every file.
+/// the projector fetched with them when the repository has one, and by an
+/// image model's companions. Shards are numbered among the weights alone:
+/// [`total_shards`](Self::total_shards) never counts a projector or a
+/// companion, while [`group_total_bytes`](Self::group_total_bytes) covers
+/// every file.
 ///
 /// This is the queue's own record. What a client is shown of it is the
 /// [`FilePlace`] in a row's text.
@@ -25,12 +27,16 @@ pub struct ShardInfo {
     pub filename: String,
     /// What this file is: a shard of the weights, or the projector.
     pub role: GgufFileRole,
+    /// The role this file plays for an image model, when it is one of its
+    /// companions rather than its weights.
+    pub component: Option<ComponentRole>,
     /// Size of this file in bytes (if known).
     pub file_size: Option<u64>,
     /// Summed size of every file in the group (if all sizes are known).
     pub group_total_bytes: Option<u64>,
-    /// Whether the group has a projector after its weights.
-    pub has_projector: bool,
+    /// Whether the group has files after its weights: a projector, or an
+    /// image model's companions.
+    pub has_others: bool,
 }
 
 impl ShardInfo {
@@ -42,9 +48,10 @@ impl ShardInfo {
             total_shards,
             filename: filename.into(),
             role: GgufFileRole::Weights,
+            component: None,
             file_size: None,
             group_total_bytes: None,
-            has_projector: false,
+            has_others: false,
         }
     }
 
@@ -69,34 +76,45 @@ impl ShardInfo {
         self
     }
 
-    /// Record what is known of the whole group: the size of every file
-    /// together, when every one is known, and whether a projector is among
-    /// them.
+    /// Mark this file as an image model's companion in `component`.
     #[must_use]
-    pub const fn in_group(mut self, group_total: Option<u64>, has_projector: bool) -> Self {
+    pub const fn with_component(mut self, component: Option<ComponentRole>) -> Self {
+        self.component = component;
+        self
+    }
+
+    /// Record what is known of the whole group: the size of every file
+    /// together, when every one is known, and whether a file other than the
+    /// weights, a projector or a companion, is among them.
+    #[must_use]
+    pub const fn in_group(mut self, group_total: Option<u64>, has_others: bool) -> Self {
         self.group_total_bytes = group_total;
-        self.has_projector = has_projector;
+        self.has_others = has_others;
         self
     }
 
     /// Whether this is the only file of its group.
     #[must_use]
     pub const fn is_alone(&self) -> bool {
-        self.total_shards <= 1 && !self.has_projector
+        self.total_shards <= 1 && !self.has_others
     }
 
     /// How this file is named on the row of a running download: its number
-    /// among the shards, `weights` when one weights file is fetched with a
-    /// projector, `projector`, and nothing for a download of one file.
+    /// among the shards, `weights` when one weights file is fetched with
+    /// other files, `projector`, a companion's role, and nothing for a
+    /// download of one file.
     #[must_use]
     pub const fn place(&self) -> Option<FilePlace> {
+        if let Some(role) = self.component {
+            return Some(FilePlace::Component(role));
+        }
         match self.role {
             GgufFileRole::Projector => Some(FilePlace::Projector),
             GgufFileRole::Weights if self.total_shards > 1 => Some(FilePlace::Part {
                 number: self.shard_index + 1,
                 of: self.total_shards,
             }),
-            GgufFileRole::Weights if self.has_projector => Some(FilePlace::Weights),
+            GgufFileRole::Weights if self.has_others => Some(FilePlace::Weights),
             GgufFileRole::Weights => None,
         }
     }
@@ -148,6 +166,18 @@ mod tests {
         assert_eq!(beside.place(), Some(FilePlace::Weights));
         assert!(!beside.is_alone());
         assert_eq!(beside.waiting_place(), None);
+    }
+
+    /// A companion follows the shards and is named by its role, never as a
+    /// part of the weights.
+    #[test]
+    fn a_companion_is_placed_by_its_role() {
+        let vae = ShardInfo::new(2, 2, "ae.safetensors")
+            .with_component(Some(ComponentRole::Vae))
+            .in_group(None, true);
+
+        assert_eq!(vae.place(), Some(FilePlace::Component(ComponentRole::Vae)));
+        assert!(!vae.is_alone());
     }
 
     #[test]

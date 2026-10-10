@@ -1,9 +1,9 @@
 src/components/Benchmark/Tune/TuneTab.tsx 306
 src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 306
 src/components/FilterPopover/FilterPopover.tsx 340
-src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 339
+src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 347
 src/components/McpServersPanel.tsx 459
-src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 323
+src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 334
 src/components/ModelInspectorPanel/components/ServeModal.tsx 337
 src/components/ProxyControl.tsx 345
 src/components/ProxySamplingPanel.tsx 403
@@ -17,4 +17,4 @@ src/services/tools/registry.ts 358
 src/services/transport/api/client.ts 334
 src/services/transport/events/sse.ts 312
 src/styles/tailwind.css 402
-src/types/index.ts 533
+src/types/index.ts 570

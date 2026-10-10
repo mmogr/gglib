@@ -21,9 +21,15 @@ const TIPS: [&str; 2] = [
 async fn a_search_prints_what_it_printed_for_the_recorded_page() {
     let hub = Hub::recorded();
 
-    let printed = found_text(&hub, "phi-4 mini", 10, HfSortField::Downloads)
-        .await
-        .expect("a listing");
+    let printed = found_text(
+        &hub,
+        "phi-4 mini",
+        10,
+        HfSortField::Downloads,
+        HfModelKind::Chat,
+    )
+    .await
+    .expect("a listing");
 
     assert_eq!(
         printed,
@@ -57,9 +63,15 @@ async fn a_search_prints_what_it_printed_for_the_recorded_page() {
 /// and an empty one takes no line.
 #[tokio::test]
 async fn a_search_lists_every_hit_the_hub_gives() {
-    let printed = found_text(&Hub::described(), "phi", 10, HfSortField::Downloads)
-        .await
-        .expect("a listing");
+    let printed = found_text(
+        &Hub::described(),
+        "phi",
+        10,
+        HfSortField::Downloads,
+        HfModelKind::Chat,
+    )
+    .await
+    .expect("a listing");
 
     assert_eq!(
         printed,
@@ -91,9 +103,15 @@ async fn a_search_lists_every_hit_the_hub_gives() {
 /// A hit's number is led by one space, however many digits it has.
 #[tokio::test]
 async fn a_tenth_hit_is_numbered_as_the_first_is() {
-    let printed = found_text(&Hub::numbered(10), "phi", 10, HfSortField::Downloads)
-        .await
-        .expect("a listing");
+    let printed = found_text(
+        &Hub::numbered(10),
+        "phi",
+        10,
+        HfSortField::Downloads,
+        HfModelKind::Chat,
+    )
+    .await
+    .expect("a listing");
 
     let numbered: Vec<&str> = printed.lines().filter(|l| l.contains("o/n")).collect();
     assert_eq!(numbered[8], " 9. o/n9 (↓9 ❤9)");
@@ -102,7 +120,14 @@ async fn a_tenth_hit_is_numbered_as_the_first_is() {
 
 #[tokio::test]
 async fn a_search_that_finds_nothing_says_so() {
-    let printed = found_text(&Hub::default(), "zzz", 10, HfSortField::Downloads).await;
+    let printed = found_text(
+        &Hub::default(),
+        "zzz",
+        10,
+        HfSortField::Downloads,
+        HfModelKind::Chat,
+    )
+    .await;
 
     assert_eq!(printed.unwrap(), "No models found for query: 'zzz'\n");
 }
@@ -110,7 +135,14 @@ async fn a_search_that_finds_nothing_says_so() {
 /// The Hub's reason is the whole error: not an internal one of gglib's.
 #[tokio::test]
 async fn a_search_the_hub_refuses_fails_with_the_hubs_reason() {
-    let refused = found_text(&Hub::limited(), "phi", 10, HfSortField::Downloads).await;
+    let refused = found_text(
+        &Hub::limited(),
+        "phi",
+        10,
+        HfSortField::Downloads,
+        HfModelKind::Chat,
+    )
+    .await;
 
     assert_eq!(
         refused.unwrap_err().to_string(),
@@ -207,4 +239,24 @@ async fn the_gguf_only_flag_is_gone() {
     let said = refused.to_string();
     assert!(said.contains("unexpected argument '--gguf-only'"), "{said}");
     assert_eq!(hub.asked(), []);
+}
+
+/// `--images` asks the Hub for image models, and a search without it for
+/// models that chat, from the command line to the Hub.
+#[tokio::test]
+async fn images_asks_the_hub_for_image_models() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = Arc::new(Hub::recorded());
+    let ctx = context(dir.path(), &hub).await;
+
+    run(&ctx, &["gglib", "model", "search", "flux", "--images"])
+        .await
+        .expect("an image search");
+    run(&ctx, &["gglib", "model", "search", "flux"])
+        .await
+        .expect("a search");
+
+    assert_eq!(hub.kinds(), [HfModelKind::Image, HfModelKind::Chat]);
+    let flux = || (Some("flux".to_string()), 10, HfSortField::Downloads, true);
+    assert_eq!(hub.asked(), [flux(), flux()]);
 }

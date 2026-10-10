@@ -54,6 +54,17 @@ impl HfClientPort for Hub {
     async fn get_model_info(&self, _model_id: &str) -> HfPortResult<HfRepoInfo> {
         unimplemented!("not reached by check_update_with")
     }
+    async fn read_head(
+        &self,
+        _model_id: &str,
+        _path: &str,
+        _max_bytes: u64,
+    ) -> HfPortResult<Vec<u8>> {
+        unimplemented!("not reached by check_update_with")
+    }
+    async fn file_at(&self, _model_id: &str, _path: &str) -> HfPortResult<Option<HfFileInfo>> {
+        unimplemented!("not reached by check_update_with")
+    }
 }
 
 #[tokio::test]

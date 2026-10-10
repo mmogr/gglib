@@ -9,7 +9,7 @@ use super::*;
 use async_trait::async_trait;
 use gglib_core::RepositoryError;
 use gglib_core::ports::huggingface::{
-    HfClientPort, HfFileInfo, HfPortResult, HfQuantInfo, HfRepoInfo, HfSearchOptions,
+    HfClientPort, HfFileInfo, HfPortError, HfPortResult, HfQuantInfo, HfRepoInfo, HfSearchOptions,
     HfSearchResult,
 };
 use gglib_core::ports::{CompletedDownload, ModelRegistrarPort, NoopEmitter, RegisteredDownload};
@@ -59,6 +59,21 @@ impl HfClientPort for OneQuantHf {
     async fn get_model_info(&self, _model_id: &str) -> HfPortResult<HfRepoInfo> {
         unimplemented!("not reached by queue_download_smart")
     }
+    /// No head is held: the weights are downloaded as a chat model's.
+    async fn read_head(
+        &self,
+        model_id: &str,
+        path: &str,
+        _max_bytes: u64,
+    ) -> HfPortResult<Vec<u8>> {
+        Err(HfPortError::FileNotFound {
+            model_id: model_id.to_string(),
+            path: path.to_string(),
+        })
+    }
+    async fn file_at(&self, _model_id: &str, _path: &str) -> HfPortResult<Option<HfFileInfo>> {
+        unimplemented!("not reached by queue_download_smart")
+    }
 }
 
 pub(super) struct NoRegistrar;
@@ -79,6 +94,7 @@ fn test_manager() -> DownloadManagerImpl {
         Arc::new(OneQuantHf),
         Arc::new(NoopEmitter::new()),
         DownloadManagerConfig::default(),
+        Arc::new(gglib_core::ports::NoopGgufParser),
     )
 }
 

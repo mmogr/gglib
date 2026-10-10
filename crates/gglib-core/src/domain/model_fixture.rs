@@ -36,6 +36,8 @@ impl Model {
             dialect_spec: new.dialect_spec.clone(),
             template_caps: None,
             benchmark_summary: None,
+            image_family: new.image_family,
+            components: new.components.clone(),
         }
     }
 }

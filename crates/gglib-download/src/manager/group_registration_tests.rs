@@ -7,7 +7,7 @@ use std::sync::Mutex as StdMutex;
 
 use async_trait::async_trait;
 use gglib_core::RepositoryError;
-use gglib_core::domain::{Model, NewModel};
+use gglib_core::domain::{Model, ModelComponent, NewModel};
 use gglib_core::ports::{CompletedDownload, ModelRegistrarPort, RegisteredDownload};
 
 use super::test_support::{End, run_next};
@@ -17,13 +17,17 @@ use crate::test_hub::RepoHub;
 const REPO: &str = "owner/zeta-GGUF";
 
 /// Keeps each download it is asked to register, and answers
-/// `metadata_refusal` as the reader's reason for refusing the weights and
-/// `refusal` as the reason the projector was not linked.
+/// `metadata_refusal` as the reader's reason for refusing the weights,
+/// `refusal` as the reason the projector was not linked, and
+/// `component_refusals` as the companions not linked. Every companion the
+/// download brought is linked to the model it answers, under its canonical
+/// path as the library stores a link.
 #[derive(Default)]
 pub(super) struct RecordingRegistrar {
     pub(super) registered: StdMutex<Vec<CompletedDownload>>,
     pub(super) metadata_refusal: Option<String>,
     pub(super) refusal: Option<String>,
+    pub(super) component_refusals: Vec<String>,
 }
 
 #[async_trait]
@@ -33,16 +37,26 @@ impl ModelRegistrarPort for RecordingRegistrar {
         download: &CompletedDownload,
     ) -> Result<RegisteredDownload, RepositoryError> {
         self.registered.lock().unwrap().push(download.clone());
-        let new = NewModel::new(
+        let mut new = NewModel::new(
             "zeta".to_string(),
             download.primary_path.clone(),
             7.0,
             chrono::Utc::now(),
         );
+        new.components = download
+            .components
+            .iter()
+            .map(|(role, path)| ModelComponent {
+                role: *role,
+                path: gglib_core::paths::canonical_model_path(path)
+                    .unwrap_or_else(|_| path.clone()),
+            })
+            .collect();
         Ok(RegisteredDownload {
             model: Model::stored(1, &new),
             metadata_refusal: self.metadata_refusal.clone(),
             projector_refusal: self.refusal.clone(),
+            component_refusals: self.component_refusals.clone(),
         })
     }
 }
@@ -80,6 +94,7 @@ async fn queued(files: &[(&str, u64)], refusal: Option<&str>) -> Fixture {
         Arc::new(RepoHub::new(files)),
         announced.clone(),
         DownloadManagerConfig::default(),
+        Arc::new(gglib_core::ports::NoopGgufParser),
     );
     manager
         .queue_download_smart(REPO, Some("Q8_0".to_string()))

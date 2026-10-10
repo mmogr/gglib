@@ -9,10 +9,12 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
 
+use super::model_components::link_downloaded_components;
 use super::model_import::fetch_published_sampling;
+use super::model_links::resolved_or_literal;
 use super::model_projector::link_downloaded_projector;
 use super::{HfOrigin, ModelOrigin, build_new_model};
-use crate::domain::NewModelFile;
+use crate::domain::{Model, NewModelFile};
 use crate::ports::huggingface::HfClientPort;
 use crate::ports::{
     CompletedDownload, GgufParserPort, ModelFilesRepositoryPort, ModelRegistrarPort,
@@ -135,16 +137,30 @@ impl ModelRegistrarPort for ModelRegistrar {
         )
         .await;
 
+        // The companions an image model's download brought pass the check a
+        // hand-made link passes; one refused, or one the model already holds
+        // another file for, leaves the model registered without it.
+        let component_refusals = link_downloaded_components(
+            self.model_repo.as_ref(),
+            &mut model,
+            &download.components,
+            self.gguf_parser.as_ref(),
+        )
+        .await;
+
         let registered = self.model_repo.insert(&model).await?;
 
         // One model_files record, with its OID, per file of the group (if repo is available)
         if let Some(ref repo) = self.model_files_repo {
             for (file_index, file_entry) in download.hf_file_entries.iter().enumerate() {
+                let Some(file_path) = model_file_path(download, &registered, file_entry) else {
+                    continue;
+                };
                 if let Some(size) = file_entry.size {
                     #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
                     let model_file = NewModelFile::new(
                         registered.id,
-                        file_entry.path.clone(),
+                        file_path,
                         file_index as i32,
                         size as i64,
                         file_entry.oid.clone(),
@@ -167,8 +183,38 @@ impl ModelRegistrarPort for ModelRegistrar {
             model: registered,
             metadata_refusal,
             projector_refusal,
+            component_refusals,
         })
     }
+}
+
+/// The path `entry`'s `model_files` record holds, or `None` when it gets
+/// none.
+///
+/// The model's own files are recorded by their path in the repository, as
+/// verification joins it to the model's folder. A companion lives in its own
+/// repository's folder, so it is recorded by its absolute canonical path,
+/// which that join keeps as it is, and only when the model is linked to the
+/// very file the download brought: a companion the model was not linked to
+/// is not one of its files.
+fn model_file_path(
+    download: &CompletedDownload,
+    registered: &Model,
+    entry: &crate::ports::ResolvedFile,
+) -> Option<String> {
+    let Some(role) = entry.component else {
+        return Some(entry.path.clone());
+    };
+    let (_, downloaded) = download
+        .components
+        .iter()
+        .find(|(downloaded_role, _)| *downloaded_role == role)?;
+    let linked = registered
+        .components
+        .iter()
+        .find(|link| link.role == role)?;
+    (resolved_or_literal(downloaded) == linked.path)
+        .then(|| linked.path.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]
@@ -178,6 +224,10 @@ mod metadata_tests;
 #[cfg(test)]
 #[path = "model_registrar_projector_tests.rs"]
 mod projector_tests;
+
+#[cfg(test)]
+#[path = "model_registrar_components_tests.rs"]
+mod components_tests;
 
 #[cfg(test)]
 mod tests {
@@ -287,6 +337,7 @@ mod tests {
             primary_path: PathBuf::from("/models/test-model-q4_k_m.gguf"),
             all_paths: vec![PathBuf::from("/models/test-model-q4_k_m.gguf")],
             projector_path: None,
+            components: vec![],
             quantization: Quantization::Q4KM,
             repo_id: "test/model".to_string(),
             commit_sha: "abc123".to_string(),
@@ -321,6 +372,7 @@ mod tests {
                 PathBuf::from("/models/llama-00004-of-00004.gguf"),
             ],
             projector_path: None,
+            components: vec![],
             quantization: Quantization::Q8_0,
             repo_id: "test/llama".to_string(),
             commit_sha: "def456".to_string(),

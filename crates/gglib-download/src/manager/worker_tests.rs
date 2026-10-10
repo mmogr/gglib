@@ -29,6 +29,45 @@ fn a_notice_clears_on_the_next_advance() {
     assert_eq!(update.notice, None, "and so are bytes on disk");
 }
 
+/// A companion's file is fetched from its own repository, into its job's
+/// destination, though its download is another repository's.
+#[test]
+fn a_jobs_file_is_fetched_from_the_repository_it_comes_from() {
+    let (progress_tx, _) = watch::channel(ProgressUpdate::default());
+    let job = DownloadJob {
+        id: DownloadId::new("leejet/FLUX.1-schnell-gguf", Some("Q8_0")),
+        repo: "unsloth/FLUX.1-schnell".to_string(),
+        destination: DownloadDestination::plan(
+            std::path::Path::new("/models"),
+            "unsloth/FLUX.1-schnell",
+            vec!["ae.safetensors".to_string()],
+        ),
+        revision: None,
+        cancel: CancellationToken::new(),
+        progress_tx,
+        expected_size: Some(10),
+    };
+    let deps = WorkerDeps {
+        config: DownloadManagerConfig::default(),
+    };
+
+    let plan = plan_for(
+        &job,
+        "ae.safetensors",
+        &deps,
+        Arc::new(|_| {}),
+        Arc::new(|_| {}),
+    );
+
+    assert_eq!(plan.repo_id, "unsloth/FLUX.1-schnell");
+    assert_eq!(
+        plan.destination,
+        std::path::Path::new("/models/unsloth_FLUX.1-schnell")
+    );
+    assert_eq!(plan.file, "ae.safetensors");
+    assert_eq!(plan.revision, "main");
+}
+
 #[test]
 fn test_percent_encode_revision() {
     // Normal alphanumeric revisions pass through

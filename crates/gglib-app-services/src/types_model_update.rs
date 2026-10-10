@@ -5,10 +5,10 @@
 //! builds it from its flags; both hand it to `ModelOps::update`, so the same
 //! edit leaves the same row whichever surface made it.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
-use gglib_core::domain::{DefaultsOrigin, InferenceConfig, Model, ServerConfig};
+use gglib_core::domain::{ComponentRole, DefaultsOrigin, InferenceConfig, Model, ServerConfig};
 use serde::{Deserialize, Serialize};
 
 /// Request body for updating a model. A field that is absent leaves its part
@@ -56,14 +56,19 @@ pub struct UpdateModelRequest {
     #[cfg_attr(feature = "ts-bindings", ts(as = "Option<String>", optional = nullable))]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub projector_path: Option<Option<String>>,
+    /// The image model's components to change, by role: a path links the
+    /// role to that file, `null` unlinks it, and a role left out keeps its
+    /// link. `None` (key omitted) changes no component.
+    pub components: Option<BTreeMap<ComponentRole, Option<String>>>,
 }
 
 impl UpdateModelRequest {
     /// Write this request onto `model`: each field it carries, and no other.
     ///
-    /// `projector_path` is not written here. What may be linked is decided
-    /// against the file itself, by `ModelOps::link_projector`, before the
-    /// row is read.
+    /// `projector_path` and `components` are not written here. What may be
+    /// linked is decided against the file itself, by
+    /// `ModelOps::link_projector` and `ModelOps::link_components`, before
+    /// the row is read.
     pub fn apply_to(&self, model: &mut Model) {
         if let Some(name) = &self.name {
             model.name.clone_from(name);

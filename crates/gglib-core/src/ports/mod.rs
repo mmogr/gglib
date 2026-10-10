@@ -63,12 +63,12 @@ pub use download_manager::{DownloadManagerConfig, DownloadManagerPort};
 pub use download_manager_fixture::AskedDownloads;
 pub use event_emitter::{AppEventEmitter, NoopEmitter};
 pub use gguf_parser::{
-    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopGgufParser,
+    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopGgufParser, TensorTable,
 };
 pub use hub_chats::{AgentRunStarter, HubChatsError, HubChatsPort, TurnRefused};
 pub use huggingface::{
-    HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
-    HfSearchResult, HfSortField,
+    HfClientPort, HfFileInfo, HfModelKind, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
+    HfSearchResult, HfSortField, SNIFF_HEAD_BYTES,
 };
 pub use jinja_mode::JinjaMode;
 pub use mcp_dto::{ResolutionAttempt, ResolutionStatus};

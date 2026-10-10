@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 
+mod one_file;
 mod projectors;
 mod repo_files;
 mod search;

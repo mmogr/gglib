@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{MutexGuard, PoisonError};
 
 use gglib_core::download::{DownloadError, DownloadId};
-use gglib_core::paths::resolve_models_dir;
+use gglib_core::paths::{repository_dir, resolve_models_dir};
 
 use super::DownloadManagerImpl;
 use crate::queue::QueuedItem;
@@ -35,8 +35,11 @@ impl DownloadManagerImpl {
         Ok(resolved.path)
     }
 
-    /// Where `item`'s file goes: in its model's folder, under the models
-    /// directory its download started with.
+    /// Where `item`'s file goes: in the folder of the repository it is
+    /// fetched from, under the models directory its download started with.
+    /// That is its model's folder, except for an image model's companion,
+    /// which goes in its own repository's folder: one place for the file,
+    /// whichever model's download fetches it, so the next finds it there.
     ///
     /// A download's first file takes the directory current as it starts,
     /// and the files after it take the same one, until the download ends
@@ -58,7 +61,7 @@ impl DownloadManagerImpl {
         let files = Self::extract_files(item);
         Ok(DownloadDestination::plan(
             &models_directory,
-            &item.id,
+            item.repo(),
             files,
         ))
     }
@@ -79,12 +82,11 @@ impl DownloadDestination {
     /// # Arguments
     ///
     /// * `models_directory` - Base directory for all models
-    /// * `id` - Download ID the subdirectory name derives from
+    /// * `repo_id` - The repository the files come from, which the
+    ///   subdirectory name derives from
     /// * `files` - List of files to download
-    pub(crate) fn plan(models_directory: &Path, id: &DownloadId, files: Vec<String>) -> Self {
-        // Convert repo ID to a safe directory name (replace / with _)
-        let dir_name = id.model_id().replace('/', "_");
-        let model_dir = models_directory.join(dir_name);
+    pub(crate) fn plan(models_directory: &Path, repo_id: &str, files: Vec<String>) -> Self {
+        let model_dir = repository_dir(models_directory, repo_id);
 
         Self { model_dir, files }
     }
@@ -120,10 +122,9 @@ mod tests {
     #[test]
     fn plan_creates_correct_model_dir() {
         let base = PathBuf::from("/models");
-        let id = DownloadId::new("unsloth/Llama-3-GGUF", Some("Q4_K_M"));
         let files = vec!["model.gguf".to_string()];
 
-        let dest = DownloadDestination::plan(&base, &id, files);
+        let dest = DownloadDestination::plan(&base, "unsloth/Llama-3-GGUF", files);
 
         assert_eq!(
             dest.model_dir,
@@ -135,10 +136,9 @@ mod tests {
     #[test]
     fn primary_path_returns_first_file() {
         let base = PathBuf::from("/models");
-        let id = DownloadId::new("test/model", Some("Q4"));
         let files = vec!["file1.gguf".to_string(), "file2.gguf".to_string()];
 
-        let dest = DownloadDestination::plan(&base, &id, files);
+        let dest = DownloadDestination::plan(&base, "test/model", files);
 
         assert_eq!(
             dest.primary_path(),
@@ -149,10 +149,9 @@ mod tests {
     #[test]
     fn all_paths_returns_full_paths() {
         let base = PathBuf::from("/models");
-        let id = DownloadId::new("test/model", Some("Q4"));
         let files = vec!["file1.gguf".to_string(), "file2.gguf".to_string()];
 
-        let dest = DownloadDestination::plan(&base, &id, files);
+        let dest = DownloadDestination::plan(&base, "test/model", files);
         let paths = dest.all_paths();
 
         assert_eq!(paths.len(), 2);

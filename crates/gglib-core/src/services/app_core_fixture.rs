@@ -56,4 +56,15 @@ impl HfClientPort for NoHub {
     async fn get_model_info(&self, _model_id: &str) -> HfPortResult<HfRepoInfo> {
         unimplemented!("a bare core has no Hub")
     }
+    async fn read_head(
+        &self,
+        _model_id: &str,
+        _path: &str,
+        _max_bytes: u64,
+    ) -> HfPortResult<Vec<u8>> {
+        unimplemented!("a bare core has no Hub")
+    }
+    async fn file_at(&self, _model_id: &str, _path: &str) -> HfPortResult<Option<HfFileInfo>> {
+        unimplemented!("a bare core has no Hub")
+    }
 }

@@ -4,10 +4,11 @@
 //! A `#[path]` child of `types.rs`, and everything here is re-exported from
 //! `types`.
 
+use gglib_core::domain::{ComponentRole, ImageFamily};
 use gglib_core::ports::HfRepoInfo;
 use serde::{Deserialize, Serialize};
 
-pub use gglib_core::ports::HfSortField;
+pub use gglib_core::ports::{HfModelKind, HfSortField};
 
 /// Summary of a `HuggingFace` model from the search API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,6 +68,9 @@ pub struct HfSearchRequest {
     pub sort_by: HfSortField,
     #[serde(default)]
     pub sort_ascending: bool,
+    /// Models that chat (the default) or models that draw.
+    #[serde(default)]
+    pub kind: HfModelKind,
 }
 
 impl Default for HfSearchRequest {
@@ -79,6 +83,7 @@ impl Default for HfSearchRequest {
             limit: 30,
             sort_by: HfSortField::default(),
             sort_ascending: false,
+            kind: HfModelKind::default(),
         }
     }
 }
@@ -125,6 +130,39 @@ pub struct HfProjector {
 pub struct HfQuantizationsResponse {
     pub model_id: String,
     pub quantizations: Vec<HfQuantization>,
+    /// What a download of this repository fetches beside its weights when
+    /// they are an image model's; `None` for any other repository.
+    pub image: Option<HfImagePreview>,
+}
+
+/// An image model's family, read from the head of its weights before
+/// anything is downloaded, and the companions a download fetches with them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct HfImagePreview {
+    pub family: ImageFamily,
+    /// Each companion of the family's recipe, in the recipe's order.
+    pub companions: Vec<HfCompanion>,
+    /// The bytes of the companions not already here: what a download
+    /// fetches beside the weights, whichever quantization it is.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub fetch_bytes: u64,
+}
+
+/// A file an image model draws with beside its weights, as the Hub lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct HfCompanion {
+    pub role: ComponentRole,
+    /// The repository it is fetched from, which need not be the model's.
+    pub repo: String,
+    pub file_path: String,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub size_bytes: u64,
+    /// Whether the file is already where a download puts it, in its own
+    /// repository's folder of the models directory; a download does not
+    /// fetch it again.
+    pub present: bool,
 }
 
 /// Response for tool/function calling support detection.

@@ -138,6 +138,29 @@ async fn a_download_added_without_its_details_prints_one_ticked_line_and_succeed
     assert_eq!(term.written(), [format!("✓ {MINE_ID}: {note}")]);
 }
 
+/// An image model's download ends saying which companions were linked and
+/// why one was not, in the daemon's words, over the queue's own ending; the
+/// command prints them on the one ticked line and succeeds.
+#[tokio::test]
+async fn an_image_models_companions_are_reported_on_its_line() {
+    let note = "Downloaded model to models/flux1-schnell-q8_0.gguf. Linked its components: \
+                vae, t5xxl. A component was not linked: clip_l.safetensors is not a clip_l \
+                for this model: expected a CLIP-L text encoder";
+    let linked = DownloadOutcome::Completed {
+        message: Some(note.to_string()),
+    };
+    let done = snapshot(None, vec![], vec![ended(MINE, linked)]);
+    let (console, term) = CliConsole::on_unseen_term();
+
+    let result = watch_download(Arc::new(console), &mine(), Duration::ZERO, || async {
+        Ok(done.clone())
+    })
+    .await;
+
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(term.written(), [format!("✓ {MINE_ID}: {note}")]);
+}
+
 /// Another download's failure is not this command's, and its own is: the
 /// command fails with the reason.
 #[tokio::test]

@@ -51,6 +51,18 @@ impl GgufReader<BufReader<File>> {
     }
 }
 
+impl<'a> GgufReader<&'a [u8]> {
+    /// A reader over `head`, the first bytes of a file, as over a file that
+    /// holds exactly them: a size the file declares is held to what is left
+    /// of `head`, and a read past its end is an error, never a panic.
+    pub(crate) const fn over(head: &'a [u8]) -> Self {
+        Self {
+            reader: head,
+            remaining: head.len() as u64,
+        }
+    }
+}
+
 impl<R: Read> GgufReader<R> {
     /// Fill `buf` from the source, and count its bytes off what the file
     /// has left.
@@ -92,12 +104,18 @@ impl<R: Read> GgufReader<R> {
 
     /// Read and validate the GGUF magic number.
     pub(crate) fn read_magic(&mut self) -> GgufResult<()> {
-        let mut magic = [0u8; 4];
-        self.fill(&mut magic)?;
-        if magic != GGUF_MAGIC {
+        if self.read_tag()? != GGUF_MAGIC {
             return Err(GgufInternalError::InvalidMagic);
         }
         Ok(())
+    }
+
+    /// Read the first four bytes of a file, whatever they are: the GGUF
+    /// magic, or the low half of a safetensors header length.
+    pub(crate) fn read_tag(&mut self) -> GgufResult<[u8; 4]> {
+        let mut tag = [0u8; 4];
+        self.fill(&mut tag)?;
+        Ok(tag)
     }
 
     /// Read and validate the GGUF version.
@@ -183,8 +201,15 @@ impl<R: Read> GgufReader<R> {
     /// Read a string (u64 length prefix followed by UTF-8 bytes).
     pub(crate) fn read_string(&mut self) -> GgufResult<String> {
         let declared = self.read_u64()?;
-        let len = self.declared_size("string length", declared, 1)?;
-        let mut buf = reserve("string length", len)?;
+        let buf = self.read_bytes("string length", declared)?;
+        String::from_utf8(buf).map_err(|_| GgufInternalError::Utf8Error)
+    }
+
+    /// Read `declared` bytes, a length the file gave under the name `what`,
+    /// once it is held to the bytes the file has left.
+    pub(crate) fn read_bytes(&mut self, what: &'static str, declared: u64) -> GgufResult<Vec<u8>> {
+        let len = self.declared_size(what, declared, 1)?;
+        let mut buf = reserve(what, len)?;
         // Memory is written to only as bytes arrive, so a length the source
         // does not make good costs none.
         let read = self.reader.by_ref().take(declared).read_to_end(&mut buf)?;
@@ -192,7 +217,7 @@ impl<R: Read> GgufReader<R> {
         if read < len {
             return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
         }
-        String::from_utf8(buf).map_err(|_| GgufInternalError::Utf8Error)
+        Ok(buf)
     }
 
     /// Read a GGUF value based on its type code.
@@ -256,7 +281,7 @@ const fn min_width(value_type: u32) -> u64 {
 ///
 /// A size the file can hold may still be more than there is memory for, and
 /// reserving that on the file's word would abort the process.
-fn reserve<T>(what: &'static str, count: usize) -> GgufResult<Vec<T>> {
+pub(crate) fn reserve<T>(what: &'static str, count: usize) -> GgufResult<Vec<T>> {
     let mut items = Vec::new();
     items.try_reserve_exact(count).map_err(|_| {
         io::Error::new(

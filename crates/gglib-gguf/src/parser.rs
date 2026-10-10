@@ -7,16 +7,18 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use gglib_core::domain::gguf::{GgufValue, RawMetadata};
+use gglib_core::domain::{ImageFamily, TensorTable, WeightsFormat};
 use gglib_core::{GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, Quantization};
 
 use crate::capabilities;
 use crate::error::GgufResult;
 use crate::format::{CONTEXT_LENGTH_KEYS, quantization};
 use crate::reader::GgufReader;
+use crate::tensor_table;
 
 /// The fewest bytes a metadata pair takes in a file: the length of an empty
 /// key, the value type, and a one-byte value.
-const MIN_PAIR_BYTES: u64 = 8 + 4 + 1;
+pub(crate) const MIN_PAIR_BYTES: u64 = 8 + 4 + 1;
 
 /// GGUF file parser.
 ///
@@ -41,9 +43,9 @@ impl GgufParser {
         reader.read_magic()?;
         let version = reader.read_version()?;
 
-        // Read tensor count (not used but must be read). Nothing is reserved
-        // or looped over by it, so it is not held to the size of the file.
-        let _tensor_count = if version >= 2 {
+        // Read tensor count. It is held to the size of the file only when
+        // the tensor-info table after the metadata is read.
+        let tensor_count = if version >= 2 {
             reader.read_u64()?
         } else {
             u64::from(reader.read_u32()?)
@@ -67,8 +69,32 @@ impl GgufParser {
             raw_metadata.insert(key, value);
         }
 
+        // Read on into the tensor-info table, the only place an image
+        // model's GGUF says what it is. A table that cannot be read leaves
+        // the family unknown and never fails a parse of the metadata.
+        let image_family = match tensor_table::read_tensor_infos(&mut reader, tensor_count) {
+            Ok(tensors) => ImageFamily::sniff(&TensorTable {
+                format: WeightsFormat::Gguf,
+                architecture: raw_metadata
+                    .get("general.architecture")
+                    .and_then(GgufValue::as_str)
+                    .map(str::to_owned),
+                tensors,
+            }),
+            Err(error) => {
+                tracing::debug!(
+                    path = %file_path.display(),
+                    %error,
+                    "the tensor table could not be read; no image family"
+                );
+                None
+            }
+        };
+
         // Extract structured metadata
-        Ok(extract_metadata(&raw_metadata, file_path))
+        let mut metadata = extract_metadata(&raw_metadata, file_path);
+        metadata.image_family = image_family;
+        Ok(metadata)
     }
 }
 
@@ -79,6 +105,14 @@ impl GgufParserPort for GgufParser {
 
     fn detect_capabilities(&self, metadata: &GgufMetadata) -> GgufCapabilities {
         capabilities::detect_all(&metadata.metadata)
+    }
+
+    fn tensor_table(&self, path: &Path) -> Result<TensorTable, GgufParseError> {
+        tensor_table::read_file(path).map_err(Into::into)
+    }
+
+    fn tensor_table_of_head(&self, head: &[u8]) -> Result<TensorTable, GgufParseError> {
+        tensor_table::read_head(head).map_err(Into::into)
     }
 }
 
@@ -124,6 +158,7 @@ fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetadata {
         expert_shared_count,
         metadata: processed,
         role: crate::role::file_role(raw),
+        image_family: None,
     }
 }
 

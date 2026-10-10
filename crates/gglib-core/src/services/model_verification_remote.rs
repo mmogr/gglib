@@ -5,7 +5,10 @@
 //! A model's files are its weights and, when it was downloaded with one, a
 //! projector. Both operations cover both: the update check compares the
 //! projector's OID with the repository's, and a repair deletes an unhealthy
-//! projector only when the download it queues brings that file back.
+//! projector only when the download it queues brings that file back. An
+//! image model's components are its files too, and a repair never deletes
+//! one: the file lives in its own repository's folder, and other models may
+//! draw with it.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -13,11 +16,12 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
+use super::model_links::resolved_or_literal;
 use super::model_verification::{
     ModelVerificationService, OperationType, ShardHealth, ShardUpdate, UpdateCheckResult,
     UpdateDetails,
 };
-use crate::domain::ModelFile;
+use crate::domain::{Model, ModelFile};
 use crate::download::{DownloadId, GgufFileRole, Quantization};
 use crate::ports::RepositoryError;
 use crate::ports::huggingface::download_group;
@@ -25,6 +29,61 @@ use crate::ports::huggingface::download_group;
 /// Whether a model's file row is its projector's.
 fn is_projector(file: &ModelFile) -> bool {
     GgufFileRole::classify(Path::new(&file.file_path)).is_projector()
+}
+
+/// The component `model` links to the file of `row`, read in `base_dir`, when
+/// it links one there.
+fn component_at(model: &Model, base_dir: &Path, row: &ModelFile) -> Option<String> {
+    let path = resolved_or_literal(&base_dir.join(&row.file_path));
+    model
+        .components
+        .iter()
+        .find(|link| link.path == path)
+        .map(|link| link.role.to_string())
+}
+
+/// The rows of `to_repair` that are not one of `model`'s component links,
+/// read in `base_dir`.
+///
+/// A component is never deleted by a repair: it is in its own repository's
+/// folder, and another model may draw with the same file.
+///
+/// # Errors
+///
+/// When every row is a component: the message names the files and their
+/// roles, says they were left in place, and gives the command that links
+/// another.
+fn without_components<'a>(
+    model: &Model,
+    base_dir: &Path,
+    to_repair: Vec<&'a ModelFile>,
+) -> Result<Vec<&'a ModelFile>, String> {
+    let (components, rest): (Vec<&ModelFile>, Vec<&ModelFile>) = to_repair
+        .into_iter()
+        .partition(|file| component_at(model, base_dir, file).is_some());
+    if !rest.is_empty() || components.is_empty() {
+        return Ok(rest);
+    }
+    let names: Vec<&str> = components
+        .iter()
+        .map(|file| file.file_path.as_str())
+        .collect();
+    let roles: Vec<String> = components
+        .iter()
+        .filter_map(|file| component_at(model, base_dir, file))
+        .collect();
+    let role = match roles.as_slice() {
+        [one] => one.as_str(),
+        _ => "<role>",
+    };
+    Err(format!(
+        "{} is unhealthy, and it is the model's {} component, which a repair never deletes, \
+         so it was left in place. Link another with `gglib model update {} --component \
+         {role}=<path>`",
+        names.join(", "),
+        roles.join(", "),
+        model.id
+    ))
 }
 
 /// A repair under way: its unhealthy files are off the disk, and the
@@ -157,11 +216,12 @@ impl ModelVerificationService {
     /// # Errors
     ///
     /// A message when the model has no repository or quantization, when
-    /// nothing is unhealthy, when every unhealthy file is a projector the
-    /// download would not bring back, when the repository cannot be read, and
-    /// when no unhealthy file could be deleted: in each of those nothing was
-    /// deleted. A download that cannot be queued after the files are gone is
-    /// a message that names them, with [`missing_after_repair`]'s words.
+    /// nothing is unhealthy, when every unhealthy file is a component the
+    /// model links (never deleted) or a projector the download would not
+    /// bring back, when the repository cannot be read, and when no unhealthy
+    /// file could be deleted: in each of those nothing was deleted. A
+    /// download that cannot be queued after the files are gone is a message
+    /// that names them, with [`missing_after_repair`]'s words.
     pub async fn repair_model(
         &self,
         model_id: i64,
@@ -202,7 +262,7 @@ impl ModelVerificationService {
             .to_path_buf();
 
         // Determine which files to repair
-        let mut to_repair: Vec<&ModelFile> = if let Some(indices) = shard_indices {
+        let to_repair: Vec<&ModelFile> = if let Some(indices) = shard_indices {
             #[allow(clippy::cast_sign_loss)]
             let filter_fn = |f: &&ModelFile| indices.contains(&(f.file_index as usize));
             model_files.iter().filter(filter_fn).collect()
@@ -226,6 +286,10 @@ impl ModelVerificationService {
         if to_repair.is_empty() {
             return Err("No unhealthy shards found to repair".to_string());
         }
+
+        // A component the model links is never deleted, whatever else is
+        // repaired.
+        let mut to_repair = without_components(&model, &base_dir, to_repair)?;
 
         // What the download queued below fetches, asked while every file is
         // still in place.
@@ -323,3 +387,7 @@ mod two_projector_tests;
 #[cfg(test)]
 #[path = "model_verification_store_tests.rs"]
 mod store_tests;
+
+#[cfg(test)]
+#[path = "model_verification_component_tests.rs"]
+mod component_tests;

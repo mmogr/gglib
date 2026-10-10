@@ -26,6 +26,9 @@ sqlx = { workspace = true, features = ["runtime-tokio", "tls-rustls", "sqlite", 
 libsqlite3-sys = { version = "0.30", features = ["bundled", "unlock_notify"] }
 
 [dev-dependencies]
+# The hub and download doubles a repair runs against, in the tests that drive
+# core's verification over the real repositories.
+gglib-core = { workspace = true, features = ["test-utils"] }
 tempfile = { workspace = true }
 # #[tokio::test] on the inline unit tests; additive with the [dependencies] set.
 tokio = { workspace = true, features = ["macros", "rt"] }

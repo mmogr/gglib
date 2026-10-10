@@ -10,9 +10,13 @@ use super::types::QueuedItem;
 use super::usize_to_u32_saturating;
 
 /// One queue item per file of a download group, in the order given: the
-/// weights, then the projector fetched with them.
+/// weights, then the projector fetched with them, then an image model's
+/// companions.
 ///
-/// Each item carries its place in the group, as [`group_files`] gives it.
+/// Each item carries its place in the group, as [`group_files`] gives it,
+/// and a companion the repository it is fetched from. Every item is the
+/// download's, under its id and completion key, whichever repository its
+/// file comes from.
 pub(super) fn group_items(
     id: &DownloadId,
     completion_key: &CompletionKey,
@@ -21,13 +25,15 @@ pub(super) fn group_items(
     let group_id = ShardGroupId::generate(id);
     group_files(files)
         .into_iter()
-        .map(|shard_info| {
+        .zip(files)
+        .map(|(shard_info, file)| {
             QueuedItem::new_shard(
                 id.clone(),
                 group_id.clone(),
                 shard_info,
                 completion_key.clone(),
             )
+            .fetched_from(file.repo.clone())
         })
         .collect()
 }
@@ -36,17 +42,17 @@ pub(super) fn group_items(
 ///
 /// This is the one place a group's files are numbered and sized, for the
 /// queue and for a download fetched without it. Shards are numbered among
-/// the weights alone, so a projector never raises the shard total; the
-/// group's size covers every file, so progress runs over the whole group.
+/// the weights alone, so a projector or a companion never raises the shard
+/// total; the group's size covers every file, so progress runs over the
+/// whole group.
 pub(crate) fn group_files(files: &[ResolvedFile]) -> Vec<ShardInfo> {
-    let total_shards =
-        usize_to_u32_saturating(files.iter().filter(|f| !f.role.is_projector()).count());
+    let total_shards = usize_to_u32_saturating(files.iter().filter(|f| f.is_weights()).count());
 
     // The size of the whole group, but only when HuggingFace gave a size
     // for every file: a sum that leaves one out would be a total the bytes
     // run past. A size of 0 is one it did not give.
     let group_total: Option<u64> = files.iter().map(|f| known_size(f.size)).sum();
-    let has_projector = files.iter().any(|f| f.role.is_projector());
+    let has_others = files.iter().any(|f| !f.is_weights());
 
     files
         .iter()
@@ -59,7 +65,8 @@ pub(crate) fn group_files(files: &[ResolvedFile]) -> Vec<ShardInfo> {
                     |size| ShardInfo::with_size(index, total_shards, &file.path, size),
                 )
                 .with_role(file.role)
-                .in_group(group_total, has_projector)
+                .with_component(file.component)
+                .in_group(group_total, has_others)
         })
         .collect()
 }
@@ -67,6 +74,7 @@ pub(crate) fn group_files(files: &[ResolvedFile]) -> Vec<ShardInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gglib_core::domain::ComponentRole;
     use gglib_core::download::{FilePlace, GgufFileRole};
 
     fn items(files: &[ResolvedFile]) -> Vec<ShardInfo> {
@@ -100,7 +108,7 @@ mod tests {
         assert_eq!(group[1].total_shards, 1, "the projector is not a shard");
         assert_eq!(group[0].place(), Some(FilePlace::Weights));
         assert_eq!(group[1].place(), Some(FilePlace::Projector));
-        assert!(group.iter().all(|file| file.has_projector));
+        assert!(group.iter().all(|file| file.has_others));
     }
 
     #[test]
@@ -145,7 +153,69 @@ mod tests {
         assert!(group.iter().all(|f| f.role == GgufFileRole::Weights));
         assert_eq!((group[1].shard_index, group[1].total_shards), (1, 2));
         assert_eq!(group[1].group_total_bytes, Some(1_500));
-        assert!(group.iter().all(|f| !f.has_projector));
+        assert!(group.iter().all(|f| !f.has_others));
+    }
+
+    /// An image model's companions follow the weights, are no shards of
+    /// them, are named by their roles, and count in the group's total; each
+    /// item is fetched from its companion's repository.
+    #[test]
+    fn a_companion_is_an_item_of_the_group_and_not_a_shard() {
+        let files = [
+            ResolvedFile::with_size("flux1-schnell-q8_0.gguf", 1_000),
+            ResolvedFile::companion(
+                ComponentRole::Vae,
+                "unsloth/FLUX.1-schnell",
+                "ae.safetensors",
+                300,
+                None,
+            ),
+            ResolvedFile::companion(
+                ComponentRole::T5xxl,
+                "comfyanonymous/flux_text_encoders",
+                "t5xxl_fp16.safetensors",
+                900,
+                None,
+            ),
+        ];
+        let id = DownloadId::new("leejet/FLUX.1-schnell-gguf", Some("Q8_0"));
+        let key = CompletionKey::HfFile {
+            repo_id: id.model_id().to_string(),
+            revision: "main".to_string(),
+            filename_canon: "flux1-schnell-q8_0.gguf".to_string(),
+            quantization: Some("Q8_0".to_string()),
+        };
+
+        let queued = group_items(&id, &key, &files);
+
+        let places: Vec<_> = queued
+            .iter()
+            .map(|item| item.shard_info.as_ref().unwrap().place())
+            .collect();
+        assert_eq!(
+            places,
+            [
+                Some(FilePlace::Weights),
+                Some(FilePlace::Component(ComponentRole::Vae)),
+                Some(FilePlace::Component(ComponentRole::T5xxl)),
+            ]
+        );
+        let repos: Vec<_> = queued.iter().map(QueuedItem::repo).collect();
+        assert_eq!(
+            repos,
+            [
+                "leejet/FLUX.1-schnell-gguf",
+                "unsloth/FLUX.1-schnell",
+                "comfyanonymous/flux_text_encoders",
+            ]
+        );
+        for item in &queued {
+            let place = item.shard_info.as_ref().unwrap();
+            assert_eq!(place.total_shards, 1, "a companion is not a shard");
+            assert_eq!(place.group_total_bytes, Some(2_200));
+            assert_eq!(item.id, id, "one download");
+            assert_eq!(item.completion_key, key, "one completion key");
+        }
     }
 
     /// One unknown size and the group has no total.

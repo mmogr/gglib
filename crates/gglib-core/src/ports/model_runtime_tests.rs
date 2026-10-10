@@ -237,3 +237,16 @@ fn retryable_discriminant_lines_up_with_status_503() {
     assert!(!is_retryable_error_type(error_type::SERVER_ERROR));
     assert!(!is_retryable_error_type(error_type::INVALID_REQUEST));
 }
+
+/// An image model asked to chat is the caller's mistake, a 400 with the
+/// invalid-request type, and retrying it can never succeed.
+#[test]
+fn an_image_model_cannot_chat_is_an_invalid_request() {
+    let refused = ModelRuntimeError::ImageModelCannotChat("flux".to_owned());
+
+    assert_eq!(refused.suggested_status_code(), 400);
+    assert!(!refused.is_retryable());
+    let envelope = RuntimeErrorEnvelope::from(&refused);
+    assert_eq!(envelope.r#type, error_type::INVALID_REQUEST);
+    assert!(envelope.message.contains("'flux'"), "{}", envelope.message);
+}

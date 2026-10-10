@@ -252,7 +252,9 @@ pub struct Usage {
 
 #[path = "models_list.rs"]
 mod models_list;
-pub use models_list::{ModelInfo, ModelsResponse, VISION_CAPABILITY, this_machine_name};
+pub use models_list::{
+    IMAGE_GENERATION_CAPABILITY, ModelInfo, ModelsResponse, VISION_CAPABILITY, this_machine_name,
+};
 
 // =============================================================================
 // Error Response Types
@@ -409,6 +411,22 @@ impl ErrorResponse {
         )
     }
 
+    /// Create an error response for a chat request naming an image model.
+    ///
+    /// Refused for the reason [`Self::embedding_model_cannot_chat`] is: the
+    /// model draws images and llama-server cannot load it, so admitting it
+    /// would unload whatever is serving chat to collect a failure.
+    pub fn image_model_cannot_chat(model: &str) -> Self {
+        Self::with_code(
+            format!(
+                "Model '{model}' is an image model: it draws images and cannot serve chat \
+                 completions. Name a chat model here."
+            ),
+            "invalid_request_error",
+            "image_model_cannot_chat",
+        )
+    }
+
     /// Create an error response for upstream connection failure.
     pub fn upstream_error(reason: &str) -> Self {
         Self::with_code(
@@ -509,6 +527,7 @@ impl From<ModelRuntimeError> for ErrorResponse {
                 "invalid_request_error",
                 "pinned_model_mismatch",
             ),
+            ModelRuntimeError::ImageModelCannotChat(name) => Self::image_model_cannot_chat(&name),
             ModelRuntimeError::Internal(msg) => Self::internal_error(&msg),
         }
     }

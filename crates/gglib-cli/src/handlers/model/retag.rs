@@ -6,7 +6,8 @@
 //!
 //! Default behaviour is additive: missing tags are appended, nothing is
 //! removed. `--full` drops and re-derives the entire auto-generated
-//! namespace while still preserving user-curated tags.
+//! namespace while still preserving user-curated tags. A model with no
+//! image family has one read from its file's tensor names when it names one.
 //!
 //! Each model is retagged through `ModelOps::retag`, the operation the
 //! app's retag runs.
@@ -65,6 +66,9 @@ pub(crate) async fn execute(
                 }
                 if pass.spec_changed {
                     println!("  [{id}] {name} — dialect spec re-derived");
+                }
+                if let Some(family) = pass.family_found {
+                    println!("  [{id}] {name} — draws as {}", family.label());
                 }
             }
             Err(e) => {

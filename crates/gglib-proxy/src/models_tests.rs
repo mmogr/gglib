@@ -173,6 +173,23 @@ fn from_internal_error() {
     assert_eq!(err.error.code.as_deref(), Some("internal_error"));
 }
 
+/// A launch refused for an image model reaches the client with the code a
+/// chat request for it gets.
+#[test]
+fn from_image_model_cannot_chat_error() {
+    let refused = ModelRuntimeError::ImageModelCannotChat("flux".into());
+    assert_eq!(refused.suggested_status_code(), 400);
+
+    let err: ErrorResponse = refused.into();
+    assert!(
+        err.error.message.contains("'flux'"),
+        "{}",
+        err.error.message
+    );
+    assert_eq!(err.error.r#type, "invalid_request_error");
+    assert_eq!(err.error.code.as_deref(), Some("image_model_cannot_chat"));
+}
+
 /// Wire-format contract: `AdmissionTimeout` and `ModelLoading` must share the same
 /// `service_unavailable` type so clients treat both as retryable with identical
 /// backoff behavior.

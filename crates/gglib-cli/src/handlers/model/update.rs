@@ -13,8 +13,9 @@ use gglib_core::{
     domain::{InferenceConfig, ReasoningEffort},
 };
 
-use super::{resolver, update_projector};
+use super::{resolver, update_components, update_projector};
 use crate::bootstrap::CliContext;
+use crate::component_args::request_components;
 use crate::sampling_params::clear_param;
 use crate::utils::input;
 
@@ -53,6 +54,7 @@ pub(crate) struct UpdateArgs {
     pub dry_run: bool,
     pub force: bool,
     pub projector: crate::projector_args::ProjectorArgs,
+    pub components: crate::component_args::ComponentArgs,
 }
 
 /// Execute the update command.
@@ -94,6 +96,9 @@ pub(crate) async fn execute(ctx: &CliContext, ops: &ModelOps, args: UpdateArgs) 
     // Show preview of changes
     show_changes_preview(&existing_model, &updated_model);
     if let Some(line) = update_projector::preview(&existing_model, args.projector.change()) {
+        println!("{line}");
+    }
+    for line in update_components::preview(&existing_model, &args.components.changes()?) {
         println!("{line}");
     }
 
@@ -162,6 +167,7 @@ pub(crate) fn build_request(existing: &Model, args: &UpdateArgs) -> Result<Updat
                 .path()
                 .map(|path| path.to_string_lossy().into_owned())
         }),
+        components: request_components(&args.components.changes()?),
         ..UpdateModelRequest::default()
     })
 }

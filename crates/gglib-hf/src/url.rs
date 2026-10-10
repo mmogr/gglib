@@ -4,7 +4,7 @@
 //! ensuring consistent URL construction across all API calls.
 
 use crate::models::{HfConfig, HfRepoRef};
-use gglib_core::ports::huggingface::{HfSearchOptions, HfSortField};
+use gglib_core::ports::huggingface::{HfModelKind, HfSearchOptions, HfSortField};
 use url::Url;
 
 /// Fields to explicitly expand in API requests.
@@ -30,6 +30,20 @@ const fn sort_param(field: HfSortField) -> &'static str {
     }
 }
 
+/// The filter that keeps a search to GGUF repositories of one kind of model.
+///
+/// A chat search asks for the GGUF library and the text-generation pipeline.
+/// An image search asks for the `gguf` and `text-to-image` tags instead: the
+/// GGUF library with the text-to-image pipeline answered diffusers
+/// repositories holding no GGUF file (probed 2026-10-09), and the two tags
+/// answered GGUF image repositories only.
+const fn kind_filter(kind: HfModelKind) -> &'static str {
+    match kind {
+        HfModelKind::Chat => "library=gguf&pipeline_tag=text-generation",
+        HfModelKind::Image => "filter=gguf&filter=text-to-image",
+    }
+}
+
 /// Build a search URL with all required parameters.
 pub(crate) fn build_search_url(config: &HfConfig, query: &HfSearchOptions) -> Url {
     let direction = if query.sort_ascending { "1" } else { "-1" };
@@ -37,7 +51,8 @@ pub(crate) fn build_search_url(config: &HfConfig, query: &HfSearchOptions) -> Ur
     let mut url = config.base_url.clone();
 
     let query_string = format!(
-        "library=gguf&pipeline_tag=text-generation&{}&sort={}&direction={}&limit={}&p={}",
+        "{}&{}&sort={}&direction={}&limit={}&p={}",
+        kind_filter(query.kind),
         build_expand_params(),
         sort_param(query.sort_by),
         direction,
@@ -93,6 +108,34 @@ pub(crate) fn build_model_info_url(config: &HfConfig, repo: &HfRepoRef) -> Url {
     url
 }
 
+/// Build the URL of the endpoint that looks files up by path, on `main`.
+pub(crate) fn build_paths_info_url(config: &HfConfig, repo: &HfRepoRef) -> Url {
+    let mut url = config.base_url.clone();
+
+    let base_path = url.path().trim_end_matches('/');
+    url.set_path(&format!("{base_path}/{}/paths-info/main", repo.id()));
+
+    url
+}
+
+/// Build the URL that serves the bytes of `file_path` on `main`, on the Hub
+/// the client is configured for.
+///
+/// The address [`build_file_url`] gives the native downloader, with the
+/// Hub's root taken from the configured API base (its path less the
+/// `/api/models` the API lives under), so the default configuration gives
+/// exactly the downloader's URL.
+pub(crate) fn build_resolve_url(config: &HfConfig, repo: &HfRepoRef, file_path: &str) -> Url {
+    let mut url = config.base_url.clone();
+
+    let base_path = url.path().trim_end_matches('/');
+    let root = base_path.strip_suffix("/api/models").unwrap_or(base_path);
+    url.set_path(&format!("{root}/{}/resolve/main/{file_path}", repo.id()));
+    url.set_query(None);
+
+    url
+}
+
 /// Build the URL that serves a file's bytes, from a bare `owner/name` repo ID.
 ///
 /// This is the resolve endpoint: `HuggingFace` answers it with a redirect to the
@@ -143,6 +186,42 @@ mod tests {
         assert!(url_str.contains("p=0"));
         assert!(url_str.contains("search=GGUF"));
         assert!(url_str.contains("expand[]=likes"));
+    }
+
+    /// An image search asks for the `gguf` and `text-to-image` tags, and
+    /// neither the GGUF library nor the text-generation pipeline.
+    #[test]
+    fn an_image_search_asks_for_the_gguf_and_text_to_image_tags() {
+        let query = HfSearchOptions::new().with_kind(HfModelKind::Image);
+
+        let url = build_search_url(&default_config(), &query);
+
+        let filters: Vec<String> = url
+            .query_pairs()
+            .filter(|(key, _)| key == "filter")
+            .map(|(_, value)| value.into_owned())
+            .collect();
+        assert_eq!(filters, ["gguf", "text-to-image"]);
+        assert!(
+            url.query_pairs()
+                .all(|(key, _)| key != "library" && key != "pipeline_tag"),
+            "{url}"
+        );
+        assert!(url.as_str().contains("search=GGUF"), "{url}");
+    }
+
+    /// A chat search, the default, asks as it always has and names no tag.
+    #[test]
+    fn a_chat_search_asks_for_the_gguf_library_and_text_generation() {
+        let url = build_search_url(&default_config(), &HfSearchOptions::new());
+
+        let pair = |name: &str| {
+            url.query_pairs()
+                .find_map(|(key, value)| (key == name).then(|| value.into_owned()))
+        };
+        assert_eq!(pair("library").as_deref(), Some("gguf"));
+        assert_eq!(pair("pipeline_tag").as_deref(), Some("text-generation"));
+        assert_eq!(pair("filter"), None);
     }
 
     #[test]
@@ -259,6 +338,51 @@ mod tests {
         assert_eq!(
             url.as_str(),
             "https://huggingface.co/api/models/TheBloke/Llama-2-7B-GGUF"
+        );
+    }
+
+    /// A file is looked up by path at the repository's `paths-info` on main.
+    #[test]
+    fn the_paths_info_url_is_the_repositorys_on_main() {
+        let repo = HfRepoRef::new("Comfy-Org", "Qwen-Image-2.1");
+
+        let url = build_paths_info_url(&default_config(), &repo);
+
+        assert_eq!(
+            url.as_str(),
+            "https://huggingface.co/api/models/Comfy-Org/Qwen-Image-2.1/paths-info/main"
+        );
+    }
+
+    /// A head is read from the very address the native downloader fetches
+    /// the whole file from, a file in a folder included.
+    #[test]
+    fn a_head_is_read_where_the_downloader_reads_the_file() {
+        let repo = HfRepoRef::new("Comfy-Org", "Qwen-Image-2.1");
+        let path = "vae/qwen_image_2.1_vae_bf16.safetensors";
+
+        let url = build_resolve_url(&default_config(), &repo, path);
+
+        assert_eq!(
+            url.as_str(),
+            build_file_url("Comfy-Org/Qwen-Image-2.1", path, None)
+        );
+    }
+
+    /// A Hub at another address is asked at its own root.
+    #[test]
+    fn a_configured_hub_serves_files_from_its_own_root() {
+        let config = HfConfig {
+            base_url: Url::parse("http://127.0.0.1:9/api/models").unwrap(),
+            ..HfConfig::default()
+        };
+        let repo = HfRepoRef::new("leejet", "FLUX.1-schnell-gguf");
+
+        let url = build_resolve_url(&config, &repo, "flux1-schnell-q8_0.gguf");
+
+        assert_eq!(
+            url.as_str(),
+            "http://127.0.0.1:9/leejet/FLUX.1-schnell-gguf/resolve/main/flux1-schnell-q8_0.gguf"
         );
     }
 

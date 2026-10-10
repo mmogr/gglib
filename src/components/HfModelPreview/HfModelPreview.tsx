@@ -8,7 +8,7 @@ import {
   Info,
   Wrench,
 } from 'lucide-react';
-import { HfModelSummary, HfQuantization, HfQuantizationsResponse, ToolSupportResponse } from '../../types';
+import { HfImagePreview, HfModelSummary, HfQuantization, HfQuantizationsResponse, ToolSupportResponse } from '../../types';
 import { openUrl } from '../../services/platform';
 import { formatNumber, getHuggingFaceModelUrl } from '../../utils/format';
 import { Icon } from '../ui/Icon';
@@ -16,6 +16,7 @@ import { IconButton } from '../ui/IconButton';
 import { getTransport } from '../../services/transport';
 import { QuantizationTable } from './QuantizationTable';
 import { ProjectorNote } from './ProjectorNote';
+import { CompanionNote } from './CompanionNote';
 
 interface HfModelPreviewProps {
   /** The selected HuggingFace model to preview */
@@ -31,8 +32,9 @@ interface HfModelPreviewProps {
 /**
  * HuggingFace model preview component.
  * Displays model info, stats, quantization options with memory fit indicators,
- * download buttons, and the projector that comes with the selected
- * quantization. Replaces the iframe-based preview.
+ * download buttons, the projector that comes with the selected
+ * quantization, and an image model's companions. Replaces the iframe-based
+ * preview.
  */
 const HfModelPreview: FC<HfModelPreviewProps> = ({
   model,
@@ -43,6 +45,8 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
   const [quantizations, setQuantizations] = useState<HfQuantization[]>([]);
   const [loadingQuants, setLoadingQuants] = useState(true);
   const [quantError, setQuantError] = useState<string | null>(null);
+  // The repository read as an image model, from the same listing; null for any other
+  const [image, setImage] = useState<HfImagePreview | null>(null);
   
   // Tool support detection state
   const [toolSupport, setToolSupport] = useState<ToolSupportResponse | null>(null);
@@ -79,6 +83,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
     const loadQuantizations = async () => {
       setLoadingQuants(true);
       setQuantError(null);
+      setImage(null);
       
       try {
         const response: HfQuantizationsResponse = await getTransport().getHfQuantizations(model.id);
@@ -86,6 +91,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
           // Sort by size ascending (smallest first)
           const sorted = [...response.quantizations].sort((a, b) => a.size_bytes - b.size_bytes);
           setQuantizations(sorted);
+          setImage(response.image ?? null);
         }
       } catch (err) {
         if (!cancelled) {
@@ -244,6 +250,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
               disabledReason={disabledReason}
             />
             {selected && <ProjectorNote quantization={selected} />}
+            {image && <CompanionNote image={image} />}
           </>
         )}
       </div>

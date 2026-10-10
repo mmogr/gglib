@@ -2,6 +2,8 @@
 //!
 //! Queues the download on the gglib daemon (`POST /api/models/downloads/queue`,
 //! the same route the GUI uses) and watches the daemon's queue for progress.
+//! Before it queues an image model it says what companions the download
+//! brings, with `companions`.
 //! The daemon owns the download and registers the model when it completes, so
 //! detaching this command does not interrupt anything.
 
@@ -13,7 +15,7 @@ use gglib_download::cli_exec::list_quantizations;
 use crate::bootstrap::CliContext;
 use crate::daemon_client;
 
-use super::remote;
+use super::{companions, remote};
 
 /// Download command arguments passed from CLI.
 pub(crate) struct DownloadArgs<'a> {
@@ -41,6 +43,10 @@ pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<
     }
 
     let handle = daemon_client::ensure_daemon(ctx).await?;
+    let listing = companions::listing_ops(ctx, None);
+    if let Some(preview) = companions::preview(&listing, args.model_id).await {
+        ctx.console.println(preview.trim_end());
+    }
     let body = daemon_client::QueueDownloadBody {
         model_id: args.model_id.to_string(),
         quant: args.quantization.map(String::from),

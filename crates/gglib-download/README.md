@@ -130,6 +130,15 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
   to it when the file's header says it is a projector; a model the library
   already holds with a link keeps that link. A projector is never counted as
   a shard.
+- **Image Companions** — An image model's download reads the first 1 MiB of
+  its weights before anything is fetched; when the tensor names there are a
+  family's, the family's companions (a VAE, text encoders) join the group
+  after the weights and the projector, each fetched from its own repository
+  into that repository's folder, so the download's total covers them and a
+  second model of the family finds them on disk. At completion they are
+  handed to the registrar apart and linked by the check a hand-made link
+  passes. A companion is never counted as a shard, and a repair never deletes
+  one.
 - **Native Downloads** — The default path is Rust `reqwest`: a resumable ranged
   GET verified against the object's SHA-256, written to `<dest>.part` and
   renamed into place only once it checks out. Needs nothing installed.

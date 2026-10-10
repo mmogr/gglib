@@ -109,7 +109,7 @@ mod through_a_symlink {
     use std::sync::Arc;
 
     use gglib_core::download::Quantization;
-    use gglib_core::ports::{CompletedDownload, GgufParserPort, ModelRegistrarPort};
+    use gglib_core::ports::{CompletedDownload, GgufParserPort, ModelRegistrarPort, TensorTable};
     use gglib_core::{GgufCapabilities, GgufFileRole, GgufMetadata, GgufParseError};
 
     use super::super::*;
@@ -128,6 +128,12 @@ mod through_a_symlink {
         }
         fn detect_capabilities(&self, _metadata: &GgufMetadata) -> GgufCapabilities {
             GgufCapabilities::empty()
+        }
+        fn tensor_table(&self, _path: &Path) -> Result<TensorTable, GgufParseError> {
+            Err(GgufParseError::InvalidFormat("no tensor table".to_owned()))
+        }
+        fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
+            Err(GgufParseError::InvalidFormat("no tensor table".to_owned()))
         }
     }
 
@@ -149,6 +155,7 @@ mod through_a_symlink {
             primary_path: weights.clone(),
             all_paths: vec![weights, projector.clone()],
             projector_path: Some(projector),
+            components: vec![],
             quantization: Quantization::Q8_0,
             repo_id: "owner/zeta-GGUF".to_owned(),
             commit_sha: "abc123".to_owned(),

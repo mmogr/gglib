@@ -23,6 +23,8 @@ mod fixture {
 
     pub(super) fn model() -> Model {
         Model {
+            components: Vec::new(),
+            image_family: None,
             dialect_spec: None,
             id: 1,
             name: "test-model".to_owned(),
@@ -238,5 +240,72 @@ mod gui_model_moe_tests {
                 "{key} differs between the two views"
             );
         }
+    }
+}
+
+mod image_model_tests {
+    //! What the list row and the detail say about a model that draws: its
+    //! family, its component links and the roles it still needs.
+
+    use gglib_core::domain::{ComponentRole, ImageFamily, Model, ModelComponent, ModelDetailDto};
+    use serde_json::json;
+
+    use super::fixture::model;
+    use crate::types::GuiModel;
+
+    /// A Flux.1 model linked to a VAE that is on disk and a CLIP-L that is
+    /// not.
+    fn flux(vae: &std::path::Path) -> Model {
+        Model {
+            image_family: Some(ImageFamily::Flux1),
+            components: vec![
+                ModelComponent {
+                    role: ComponentRole::Vae,
+                    path: vae.to_path_buf(),
+                },
+                ModelComponent {
+                    role: ComponentRole::ClipL,
+                    path: "/gone/clip_l.safetensors".into(),
+                },
+            ],
+            ..model()
+        }
+    }
+
+    #[test]
+    fn a_model_that_draws_names_its_family_links_and_missing_roles() {
+        let dir = tempfile::tempdir().unwrap();
+        let vae = dir.path().join("ae.safetensors");
+        std::fs::write(&vae, b"vae").unwrap();
+
+        let list = serde_json::to_value(GuiModel::from_model(flux(&vae), false, None)).unwrap();
+        let detail =
+            serde_json::to_value(ModelDetailDto::from_model(flux(&vae), false, None)).unwrap();
+
+        assert_eq!(list["imageFamily"], "flux1");
+        assert_eq!(list["missingComponents"], json!(["t5xxl"]));
+        assert_eq!(detail["imageFamily"], "flux1");
+        assert_eq!(detail["missingComponents"], json!(["t5xxl"]));
+        assert_eq!(
+            detail["components"],
+            json!([
+                { "role": "vae", "path": vae.to_string_lossy(), "present": true },
+                { "role": "clip_l", "path": "/gone/clip_l.safetensors", "present": false },
+            ])
+        );
+    }
+
+    /// A model that chats sends no family and empty lists, never nulls.
+    #[test]
+    fn a_model_that_chats_sends_no_family_and_empty_lists() {
+        let list = serde_json::to_value(GuiModel::from_model(model(), false, None)).unwrap();
+        let detail =
+            serde_json::to_value(ModelDetailDto::from_model(model(), false, None)).unwrap();
+
+        assert!(list.get("imageFamily").is_none(), "{list}");
+        assert_eq!(list["missingComponents"], json!([]));
+        assert!(detail.get("imageFamily").is_none(), "{detail}");
+        assert_eq!(detail["components"], json!([]));
+        assert_eq!(detail["missingComponents"], json!([]));
     }
 }

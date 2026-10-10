@@ -273,6 +273,24 @@ export type GgufModel = GuiModel;
 import type { ModelDetailDto } from './generated/ModelDetailDto';
 export type ModelDetail = ModelDetailDto;
 
+/**
+ * A family of image models gglib can draw with: `GuiModel.imageFamily`,
+ * `ModelDetail.imageFamily`, `HfImagePreview.family`.
+ */
+export type { ImageFamily } from './generated/ImageFamily';
+
+/**
+ * A file an image model draws with beside its weights, named by the
+ * stable-diffusion.cpp flag that loads it: `vae`, `clip_l`, `t5xxl`, `llm`.
+ */
+export type { ComponentRole } from './generated/ComponentRole';
+
+/** One linked component in a model's detail: its role, its path, whether a file is there. */
+export type { ComponentLinkDto } from './generated/ComponentLinkDto';
+
+/** The files a component picker offers for one role: `GET /api/models/:id/components`. */
+export type { ComponentChoices } from './generated/ComponentChoices';
+
 
 /**
  * One serve session's launch options — the body of `POST /api/servers/start`.
@@ -478,10 +496,16 @@ export type { HfSortField };
  * Request for searching HuggingFace models.
  *
  * Every field is required here, which the one construction site already
- * satisfies — it names all seven. `sort_by` and `sort_ascending` had defaults
- * in the mirror that the caller never relied on.
+ * satisfies — it names all eight. `sort_by` and `sort_ascending` had defaults
+ * in the mirror that the caller never relied on, and `kind` (chat or image)
+ * defaults to chat on the server for a client that names none.
  */
 export type { HfSearchRequest } from './generated/HfSearchRequest';
+
+/**
+ * What a HuggingFace search looks for: models that chat, or models that draw.
+ */
+export type { HfModelKind } from './generated/HfModelKind';
 
 /**
  * Response from HuggingFace model search.
@@ -497,6 +521,19 @@ export type { HfQuantization } from './generated/HfQuantization';
  * Response containing available quantizations for a model.
  */
 export type { HfQuantizationsResponse } from './generated/HfQuantizationsResponse';
+
+/**
+ * An image model's family, read by the daemon from the head of its weights
+ * before anything is downloaded, and the companions a download fetches with
+ * them: `HfQuantizationsResponse.image`.
+ */
+export type { HfImagePreview } from './generated/HfImagePreview';
+
+/**
+ * One companion of an image model's download: its role, repository, path,
+ * size, and whether it is already in the models directory.
+ */
+export type { HfCompanion } from './generated/HfCompanion';
 
 /**
  * Response for tool/function calling support detection.

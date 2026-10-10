@@ -151,6 +151,80 @@ fn a_far_linked_model_says_linked_without_a_path() {
     assert_eq!(projector_line(&far), "  Projector      : linked");
 }
 
+// ── Image model ───────────────────────────────────────────────────────────────
+
+/// A Flux.1 model whose VAE is linked to `vae`, whose CLIP-L is linked to a
+/// file that is not there, and whose T5-XXL is not linked.
+fn flux_detail(vae: &std::path::Path) -> ModelDetailDto {
+    use gglib_core::domain::{ComponentRole, ImageFamily, ModelComponent};
+
+    let mut new = gglib_core::NewModel::new(
+        "flux".to_owned(),
+        std::path::PathBuf::from("/models/flux.gguf"),
+        12.0,
+        chrono::Utc::now(),
+    );
+    new.image_family = Some(ImageFamily::Flux1);
+    new.components = vec![
+        ModelComponent {
+            role: ComponentRole::Vae,
+            path: vae.to_path_buf(),
+        },
+        ModelComponent {
+            role: ComponentRole::ClipL,
+            path: std::path::PathBuf::from("/nowhere/clip_l.safetensors"),
+        },
+    ];
+    ModelDetailDto::from_model(gglib_core::Model::stored(1, &new), false, None)
+}
+
+/// The family, then each role of its recipe in order: the file linked, a
+/// file that has gone said so, and a role with no link named `missing`.
+/// The colons line up with the overview's.
+#[test]
+fn an_image_model_names_its_family_and_each_component() {
+    let dir = tempfile::tempdir().unwrap();
+    let vae = dir.path().join("ae.safetensors");
+    std::fs::write(&vae, b"here").unwrap();
+
+    assert_eq!(
+        image_model_lines(&flux_detail(&vae)),
+        [
+            "  Family         : Flux.1".to_owned(),
+            format!("    VAE          : {}", vae.display()),
+            "    CLIP-L       : /nowhere/clip_l.safetensors (no file there)".to_owned(),
+            "    T5-XXL       : missing".to_owned(),
+        ]
+    );
+    assert_eq!(
+        image_model_lines(&flux_detail(&vae))[0].find(':'),
+        projector_line(&detail(None)).find(':')
+    );
+}
+
+/// The paired machine's answer has no paths; a link reads `linked`.
+#[test]
+fn a_far_image_model_says_linked_without_a_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let vae = dir.path().join("ae.safetensors");
+    std::fs::write(&vae, b"here").unwrap();
+    let mut far = flux_detail(&vae);
+    for link in &mut far.components {
+        link.path = None;
+    }
+
+    let lines = image_model_lines(&far);
+
+    assert_eq!(lines[1], "    VAE          : linked");
+    assert_eq!(lines[2], "    CLIP-L       : linked (no file there)");
+}
+
+/// A model that chats gets no lines at all.
+#[test]
+fn a_chat_model_gets_no_image_lines() {
+    assert!(image_model_lines(&detail(None)).is_empty());
+}
+
 // ── Inference defaults ────────────────────────────────────────────────────────
 
 /// A model that stores only `frequency_penalty` and a reasoning budget has

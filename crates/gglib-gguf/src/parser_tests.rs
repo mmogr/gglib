@@ -1,5 +1,7 @@
 //! Tests for the metadata extraction in [`super`].
 
+use std::path::Path;
+
 use super::*;
 
 #[test]
@@ -105,4 +107,83 @@ fn test_extract_quantization_from_filename() {
         extract_quantization_from_filename("model-IQ4_XS.gguf"),
         "IQ4_XS"
     );
+}
+
+// ── The image family, read on from the tensor table ─────────────────────────
+
+/// The measured Flux schnell file's tensor table, from core's golden.
+const FLUX_GOLDEN: &str =
+    include_str!("../../gglib-core/src/domain/testdata/image_families/flux1-schnell-q8_0.gguf.tsv");
+
+/// A golden's `(name, shape)` rows; core's README says how they were cut.
+fn golden_rows(text: &str) -> Vec<(String, Vec<u64>)> {
+    text.lines()
+        .filter(|line| !line.starts_with("architecture: "))
+        .map(|line| {
+            let (name, shape) = line.split_once('\t').unwrap();
+            let shape = if shape == "-" {
+                Vec::new()
+            } else {
+                shape.split('x').map(|d| d.parse().unwrap()).collect()
+            };
+            (name.to_owned(), shape)
+        })
+        .collect()
+}
+
+fn write_golden_gguf(path: &Path, pairs: &[(&str, &str)], text: &str) {
+    let rows = golden_rows(text);
+    let tensors: Vec<(&str, &[u64])> = rows
+        .iter()
+        .map(|(name, shape)| (name.as_str(), shape.as_slice()))
+        .collect();
+    crate::write_tensor_gguf(path, pairs, &tensors);
+}
+
+/// The Flux file has no metadata at all; its family comes from the table.
+#[test]
+fn a_parse_of_the_flux_tensor_table_names_its_family() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("flux1-schnell-q8_0.gguf");
+    write_golden_gguf(&path, &[], FLUX_GOLDEN);
+
+    let parsed = GgufParser::new().parse(&path).unwrap();
+
+    assert_eq!(
+        parsed.image_family,
+        Some(gglib_core::domain::ImageFamily::Flux1)
+    );
+    assert!(parsed.metadata.is_empty());
+    let table = GgufParser::new().tensor_table(&path).unwrap();
+    assert_eq!(table.tensors.len(), 776);
+}
+
+#[test]
+fn a_chat_model_parses_with_no_family() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("qwen3.gguf");
+    crate::write_tensor_gguf(
+        &path,
+        &[("general.architecture", "qwen3")],
+        &[("token_embd.weight", &[151_936, 4096])],
+    );
+    let parsed = GgufParser::new().parse(&path).unwrap();
+    assert_eq!(parsed.image_family, None);
+    assert_eq!(parsed.architecture.as_deref(), Some("qwen3"));
+}
+
+/// A file cut inside its tensor table still parses as it did before the
+/// table was read, with no family.
+#[test]
+fn a_tensor_table_that_cannot_be_read_never_fails_the_parse() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("flux1-schnell-q8_0.gguf");
+    write_golden_gguf(&path, &[("general.architecture", "flux")], FLUX_GOLDEN);
+    let bytes = std::fs::read(&path).unwrap();
+    std::fs::write(&path, &bytes[..bytes.len() - 100]).unwrap();
+
+    let parsed = GgufParser::new().parse(&path).unwrap();
+
+    assert_eq!(parsed.image_family, None);
+    assert_eq!(parsed.architecture.as_deref(), Some("flux"));
 }

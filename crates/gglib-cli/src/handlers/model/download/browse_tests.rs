@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use clap::ValueEnum as _;
-use gglib_core::ports::HfSortField;
+use gglib_core::ports::{HfModelKind, HfSortField};
 
 use super::super::super::test_library::run;
 use super::super::test_hub::{Hub, RULE, context, text};
@@ -21,9 +21,15 @@ const TIPS: [&str; 2] = [
 async fn a_browse_prints_what_it_printed_for_the_recorded_page() {
     let hub = Hub::recorded();
 
-    let printed = found_text(&hub, CliBrowseCategory::Popular, 20, None)
-        .await
-        .expect("a listing");
+    let printed = found_text(
+        &hub,
+        CliBrowseCategory::Popular,
+        20,
+        None,
+        HfModelKind::Chat,
+    )
+    .await
+    .expect("a listing");
 
     assert_eq!(
         printed,
@@ -52,9 +58,15 @@ async fn a_browse_prints_what_it_printed_for_the_recorded_page() {
 async fn a_browse_of_a_size_searches_for_it_and_cuts_descriptions_to_100() {
     let hub = Hub::described();
 
-    let printed = found_text(&hub, CliBrowseCategory::Recent, 5, Some("7B".to_string()))
-        .await
-        .expect("a listing");
+    let printed = found_text(
+        &hub,
+        CliBrowseCategory::Recent,
+        5,
+        Some("7B".to_string()),
+        HfModelKind::Chat,
+    )
+    .await
+    .expect("a listing");
 
     assert_eq!(
         printed,
@@ -88,9 +100,15 @@ async fn a_browse_of_a_size_searches_for_it_and_cuts_descriptions_to_100() {
 /// A hit's number fills two columns.
 #[tokio::test]
 async fn a_tenth_hit_is_numbered_in_the_columns_of_the_first() {
-    let printed = found_text(&Hub::numbered(10), CliBrowseCategory::Popular, 20, None)
-        .await
-        .expect("a listing");
+    let printed = found_text(
+        &Hub::numbered(10),
+        CliBrowseCategory::Popular,
+        20,
+        None,
+        HfModelKind::Chat,
+    )
+    .await
+    .expect("a listing");
 
     let numbered: Vec<&str> = printed.lines().filter(|l| l.contains("o/n")).collect();
     assert_eq!(numbered[8], " 9. o/n9 (↓9 ❤9)");
@@ -99,7 +117,14 @@ async fn a_tenth_hit_is_numbered_in_the_columns_of_the_first() {
 
 #[tokio::test]
 async fn a_browse_that_finds_nothing_says_so() {
-    let printed = found_text(&Hub::default(), CliBrowseCategory::Recent, 20, None).await;
+    let printed = found_text(
+        &Hub::default(),
+        CliBrowseCategory::Recent,
+        20,
+        None,
+        HfModelKind::Chat,
+    )
+    .await;
 
     assert_eq!(printed.unwrap(), "No recent models found.\n");
 }
@@ -168,4 +193,45 @@ async fn a_category_browse_does_not_offer_is_refused_before_the_hub_is_asked() {
         );
     }
     assert_eq!(hub.asked(), []);
+}
+
+/// `--images` browses image models, says so in its heading, and asks the
+/// Hub for them; a browse without it asks for models that chat.
+#[tokio::test]
+async fn images_browses_image_models() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = Arc::new(Hub::recorded());
+    let ctx = context(dir.path(), &hub).await;
+
+    run(&ctx, &["gglib", "model", "browse", "recent", "--images"])
+        .await
+        .expect("an image browse");
+    run(&ctx, &["gglib", "model", "browse"])
+        .await
+        .expect("a browse");
+
+    assert_eq!(hub.kinds(), [HfModelKind::Image, HfModelKind::Chat]);
+
+    let printed = found_text(
+        hub.as_ref(),
+        CliBrowseCategory::Popular,
+        20,
+        None,
+        HfModelKind::Image,
+    )
+    .await
+    .expect("a listing");
+    assert!(
+        printed.starts_with("\n🏆 POPULAR GGUF Image Models:\n"),
+        "{printed}"
+    );
+    let empty = Hub::default();
+    let none = found_text(
+        &empty,
+        CliBrowseCategory::Recent,
+        20,
+        None,
+        HfModelKind::Image,
+    );
+    assert_eq!(none.await.unwrap(), "No recent image models found.\n");
 }

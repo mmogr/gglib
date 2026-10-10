@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use gglib_core::ports::{
-    HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchResult, HfSortField,
+    HfFileInfo, HfModelKind, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchResult, HfSortField,
 };
 
 use super::*;
@@ -66,6 +66,21 @@ impl HfClientPort for SearchedHub {
     async fn get_commit_sha(&self, _: &str) -> Result<String, HfPortError> {
         unimplemented!("a search and a lookup are all this hub answers")
     }
+    async fn read_head(
+        &self,
+        _model_id: &str,
+        _path: &str,
+        _max_bytes: u64,
+    ) -> Result<Vec<u8>, HfPortError> {
+        unimplemented!("a search and a lookup are all this hub answers")
+    }
+    async fn file_at(
+        &self,
+        _model_id: &str,
+        _path: &str,
+    ) -> Result<Option<HfFileInfo>, HfPortError> {
+        unimplemented!("a search and a lookup are all this hub answers")
+    }
 }
 
 /// The second hit of the search recorded in `gglib-hf`'s `search_fixture.json`,
@@ -90,6 +105,8 @@ fn ops_over(hub: Arc<SearchedHub>) -> DownloadOps {
         downloads: Arc::new(MockDownloadManager::new()),
         hf: hub,
         tool_detector: Arc::new(MockToolSupportDetector),
+        gguf_parser: Arc::new(gglib_core::ports::NoopGgufParser),
+        models_directory: None,
     })
 }
 
@@ -113,6 +130,7 @@ async fn a_search_asks_the_hub_for_exactly_what_the_request_names() {
             limit: 7,
             sort_by,
             sort_ascending: true,
+            kind: HfModelKind::Image,
         };
 
         let found = search_hf_models(&hub, request).await.expect("a page");
@@ -133,7 +151,26 @@ async fn a_search_asks_the_hub_for_exactly_what_the_request_names() {
         assert_eq!((options.page, options.limit), (2, 7));
         assert_eq!(options.sort_by, sort_by);
         assert!(options.sort_ascending);
+        assert_eq!(options.kind, HfModelKind::Image);
     }
+}
+
+/// A request that names no kind, as every client sent before image search,
+/// is read as a chat search and asks the Hub for one.
+#[tokio::test]
+async fn a_request_that_names_no_kind_asks_for_chat_models() {
+    let request: HfSearchRequest = serde_json::from_str(
+        r#"{"query": null, "min_params_b": null, "max_params_b": null, "page": 0, "limit": 5}"#,
+    )
+    .expect("a request without a kind");
+    assert_eq!(request.kind, HfModelKind::Chat);
+    let hub = SearchedHub::default();
+
+    search_hf_models(&hub, request).await.expect("a page");
+
+    let asked = hub.asked();
+    assert_eq!(asked.len(), 1);
+    assert_eq!(asked[0].kind, HfModelKind::Chat);
 }
 
 /// The summary the browser is sent: the hit's fields under the wire's names,

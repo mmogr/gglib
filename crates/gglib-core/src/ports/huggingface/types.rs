@@ -86,6 +86,18 @@ pub enum HfSortField {
     Alphabetical,
 }
 
+/// What a search looks for: models that chat, or models that draw.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+#[serde(rename_all = "lowercase")]
+pub enum HfModelKind {
+    /// GGUF repositories of text-generation models (the default).
+    #[default]
+    Chat,
+    /// GGUF repositories of text-to-image models.
+    Image,
+}
+
 /// Options for searching `HuggingFace` models.
 #[derive(Debug, Clone, Default)]
 pub struct HfSearchOptions {
@@ -103,6 +115,8 @@ pub struct HfSearchOptions {
     pub sort_by: HfSortField,
     /// Sort ascending (false = descending)
     pub sort_ascending: bool,
+    /// Whether to look for models that chat or models that draw.
+    pub kind: HfModelKind,
 }
 
 impl HfSearchOptions {
@@ -151,6 +165,13 @@ impl HfSearchOptions {
         self.sort_ascending = ascending;
         self
     }
+
+    /// Set what kind of model to look for.
+    #[must_use]
+    pub const fn with_kind(mut self, kind: HfModelKind) -> Self {
+        self.kind = kind;
+        self
+    }
 }
 
 /// Result of a `HuggingFace` model search.
@@ -175,7 +196,8 @@ mod tests {
             .with_limit(50)
             .with_page(2)
             .with_params_filter(Some(7.0), Some(70.0))
-            .with_sort(HfSortField::Likes, true);
+            .with_sort(HfSortField::Likes, true)
+            .with_kind(HfModelKind::Image);
 
         assert_eq!(opts.query, Some("llama".to_string()));
         assert_eq!(opts.limit, 50);
@@ -184,6 +206,8 @@ mod tests {
         assert_eq!(opts.max_params_b, Some(70.0));
         assert_eq!(opts.sort_by, HfSortField::Likes);
         assert!(opts.sort_ascending);
+        assert_eq!(opts.kind, HfModelKind::Image);
+        assert_eq!(HfSearchOptions::new().kind, HfModelKind::Chat);
     }
 
     #[test]

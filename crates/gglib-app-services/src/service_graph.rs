@@ -227,7 +227,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         // models through it, so it is the only registry that knows what is
         // actually running.
         runtime: Arc::clone(&runtime),
-        gguf_parser,
+        gguf_parser: Arc::clone(&gguf_parser),
         emitter: Arc::clone(&emitter),
     }));
 
@@ -242,6 +242,10 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         downloads: Arc::clone(&downloads),
         hf: Arc::clone(&hf_client),
         tool_detector,
+        gguf_parser,
+        // The daemon's download manager is handed none either: both resolve
+        // the directory as they are asked.
+        models_directory: None,
     }));
 
     let settings = Arc::new(SettingsOps::new(SettingsDeps {

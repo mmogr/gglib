@@ -192,6 +192,21 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
             message: format!("the model info for {model_id} names no id"),
         })
     }
+
+    async fn read_head(&self, model_id: &str, path: &str, max_bytes: u64) -> HfPortResult<Vec<u8>> {
+        let repo = parse_repo(model_id)?;
+
+        self.read_head(&repo, path, max_bytes)
+            .await
+            .map_err(map_error)
+    }
+
+    async fn file_at(&self, model_id: &str, path: &str) -> HfPortResult<Option<HfFileInfo>> {
+        let repo = parse_repo(model_id)?;
+
+        let file = self.file_at(&repo, path).await.map_err(map_error)?;
+        Ok(file.map(to_file_info))
+    }
 }
 
 #[cfg(test)]

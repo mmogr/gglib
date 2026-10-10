@@ -82,9 +82,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 
 | Command | Description |
 |---------|-------------|
-| `add <path>` | Add a GGUF model to the library |
-| `list` | List all models with metadata; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
-| `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata), and the port it is being served on when it is; `--remote` reads the paired machine's |
+| `add <path>` | Add a GGUF model to the library; `--component <role>=<path>` links an image model's component as it is added |
+| `list` | List all models with metadata, an image model's family and the components it still needs in the `Draws` column; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
+| `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata, an image model's family and components), and the port it is being served on when it is; `--remote` reads the paired machine's |
 | `explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
 | `remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--force` skips the confirmation only) |
 | `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`) |
@@ -100,8 +100,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `proxy` | Start the OpenAI-compatible proxy (context comes from settings `default_context_size`, or is sized per launch when unset) |
 | `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, prompt-cache health and reuse, and request history |
 | `proxy trips [--since DAYS]` | The loop guard's log from this machine's database, daemon or not: requests scanned per UTC day, model, version and mode, and the ones it noted or refused |
-| `download <repo>` | Download a model from `HuggingFace` |
-| `search <query>` | Search `HuggingFace` Hub for models |
+| `download <repo>` | Download a model from `HuggingFace`; an image model's companions come too, named with their sizes before it is queued |
+| `search <query>` | Search `HuggingFace` Hub for models; `--images` for image models |
 | `config settings show` | Show current configuration |
 | `config default <id\|name>` | Set/show/clear the default model |
 | `config profile list` | List named sampling profiles |
@@ -370,6 +370,11 @@ gglib model list
 gglib model update 1 --projector ~/models/mmproj-F16.gguf
 gglib model update 1 --no-projector
 
+# Link an image model's components (vae, clip_l, t5xxl, llm), and unlink one.
+# A download of an image model fetches and links them itself.
+gglib model update 2 --component vae="$HOME/models/ae.safetensors" --component t5xxl="$HOME/models/t5xxl_fp16.safetensors"
+gglib model update 2 --no-component t5xxl
+
 # Pin one model to an OpenAI-compatible endpoint (proxy stack, dashboard included)
 gglib serve 1 --port 8123
 
@@ -381,6 +386,9 @@ gglib serve qwen3.6 --profile chat
 
 # Search HuggingFace
 gglib model search "llama 3 GGUF"
+
+# Search for image models
+gglib model search flux --images
 
 # Download from HuggingFace
 gglib model download TheBloke/Llama-2-7B-GGUF --quantization Q4_K_M

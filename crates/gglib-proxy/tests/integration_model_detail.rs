@@ -74,15 +74,16 @@ impl ModelRuntimePort for Resident {
     }
 }
 
-/// A proxy over `qwen` (1), a second `qwen` (2), `org/qwen` (3) and
-/// `qwen-vision` (4), which has a projector, with the `coding` profile
-/// configured.
+/// A proxy over `qwen` (1), a second `qwen` (2), `org/qwen` (3),
+/// `qwen-vision` (4), which has a projector, and `flux-draws` (5), a Flux.1
+/// model linked to a VAE, with the `coding` profile configured.
 async fn proxy(runtime: Resident) -> (String, tokio_util::sync::CancellationToken) {
     let catalog = StaticCatalog::numbered(&[
         (1, "qwen"),
         (2, "qwen"),
         (3, "org/qwen"),
         (4, "qwen-vision"),
+        (5, "flux-draws"),
     ]);
     spawn_proxy_with_settings(
         Arc::new(runtime),
@@ -189,6 +190,29 @@ async fn image_input_is_sent_and_the_projector_path_is_not() {
     assert_eq!(linked["detail"]["imageInput"], true, "{linked}");
     assert!(linked["detail"].get("projectorPath").is_none(), "{linked}");
     assert_eq!(unlinked["detail"]["imageInput"], false, "{unlinked}");
+}
+
+/// An image model's family, its links' roles and the roles it still needs
+/// reach the reader; where a linked file sits on this machine's disk does
+/// not.
+#[tokio::test]
+async fn an_image_models_family_and_links_are_sent_and_their_paths_are_not() {
+    let (base, cancel) = proxy(Resident::default()).await;
+    let (status, draws) = detail(&base, "5").await;
+    let (_, chats) = detail(&base, "1").await;
+    cancel.cancel();
+
+    assert_eq!(status, StatusCode::OK, "{draws}");
+    let read = &draws["detail"];
+    assert_eq!(read["imageFamily"], "flux1", "{draws}");
+    assert_eq!(read["components"][0]["role"], "vae", "{draws}");
+    assert!(read["components"][0].get("path").is_none(), "{draws}");
+    assert_eq!(read["components"][0]["present"], false, "{draws}");
+    assert_eq!(
+        read["missingComponents"],
+        serde_json::json!(["clip_l", "t5xxl"])
+    );
+    assert!(chats["detail"].get("imageFamily").is_none(), "{chats}");
 }
 
 /// Unknown is the code a chat request for it gets.

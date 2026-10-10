@@ -3,6 +3,7 @@
 mod board;
 mod browse;
 mod check_updates;
+mod companions;
 mod exec;
 #[allow(
     clippy::manual_let_else,
@@ -26,5 +27,5 @@ pub(crate) use interactive::run_interactive_monitor;
 // For `gglib model repair`, whose download is the daemon's as a queued one's
 // is, and is watched to its end the same way.
 pub(in crate::handlers::model) use remote::monitor_repair;
-pub(crate) use search::execute as search;
+pub(crate) use search::{execute as search, hub_kind};
 pub(crate) use update_model::execute as update_model;

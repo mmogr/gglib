@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use gglib_core::ports::huggingface::HfPortResult;
 use gglib_core::ports::{
-    HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
+    HfClientPort, HfFileInfo, HfModelKind, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
     HfSearchResult, HfSortField,
 };
 
@@ -125,6 +125,14 @@ impl Hub {
     }
 }
 
+impl Hub {
+    /// The kind of model each search so far asked for, oldest first.
+    pub(super) fn kinds(&self) -> Vec<HfModelKind> {
+        let asked = self.asked.lock().unwrap();
+        asked.iter().map(|o| o.kind).collect()
+    }
+}
+
 #[async_trait]
 impl HfClientPort for Hub {
     async fn search(&self, options: &HfSearchOptions) -> HfPortResult<HfSearchResult> {
@@ -172,6 +180,17 @@ impl HfClientPort for Hub {
         unimplemented!("a search and its quantizations are all this hub answers")
     }
     async fn get_model_info(&self, _: &str) -> HfPortResult<HfRepoInfo> {
+        unimplemented!("a search and its quantizations are all this hub answers")
+    }
+    async fn read_head(
+        &self,
+        _model_id: &str,
+        _path: &str,
+        _max_bytes: u64,
+    ) -> HfPortResult<Vec<u8>> {
+        unimplemented!("a search and its quantizations are all this hub answers")
+    }
+    async fn file_at(&self, _model_id: &str, _path: &str) -> HfPortResult<Option<HfFileInfo>> {
         unimplemented!("a search and its quantizations are all this hub answers")
     }
 }

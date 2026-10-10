@@ -4,16 +4,19 @@ use gglib_core::download::Quantization;
 use gglib_core::ports::huggingface::projector_fetched_with;
 use gglib_core::ports::{HfFileInfo, HfQuantInfo};
 
-use crate::types::{HfProjector, HfQuantization, HfQuantizationsResponse};
+use crate::types::{HfImagePreview, HfProjector, HfQuantization, HfQuantizationsResponse};
 
 /// The listing of `model_id`: each of `quants` with its weights' size and
-/// shard count, and the one of `projectors` its download fetches.
+/// shard count, and the one of `projectors` its download fetches; and
+/// `image`, what it fetches beside them when it is an image model.
 pub(crate) fn quantizations_response(
     model_id: &str,
     quants: Vec<HfQuantInfo>,
     projectors: &[HfFileInfo],
+    image: Option<HfImagePreview>,
 ) -> HfQuantizationsResponse {
     HfQuantizationsResponse {
+        image,
         model_id: model_id.to_string(),
         quantizations: quants
             .into_iter()
@@ -69,6 +72,7 @@ mod tests {
                 projector("X.mmproj-Q8_0.gguf", 600),
                 projector("mmproj-F16.gguf", 900),
             ],
+            None,
         );
 
         assert_eq!(response.model_id, "o/r");
@@ -102,7 +106,7 @@ mod tests {
 
     #[test]
     fn a_repository_without_projectors_names_none() {
-        let response = quantizations_response("o/r", vec![quant("Q8_0", 1, 8_000)], &[]);
+        let response = quantizations_response("o/r", vec![quant("Q8_0", 1, 8_000)], &[], None);
 
         assert_eq!(response.quantizations[0].projector, None);
     }
@@ -119,6 +123,8 @@ mod tests {
             downloads: Arc::new(MockDownloadManager::new()),
             hf: Arc::new(MockHfClient),
             tool_detector: Arc::new(MockToolSupportDetector),
+            gguf_parser: Arc::new(gglib_core::ports::NoopGgufParser),
+            models_directory: None,
         });
 
         let listed = ops.get_model_quantizations("o/r").await.unwrap();

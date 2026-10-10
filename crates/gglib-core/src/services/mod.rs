@@ -4,7 +4,10 @@ mod app_core;
 mod app_core_fixture;
 mod attachments;
 mod chat_history;
+mod component_choices;
+mod model_components;
 mod model_import;
+mod model_links;
 mod model_projector;
 mod model_registrar;
 mod model_service;
@@ -17,10 +20,11 @@ mod settings_service;
 pub use app_core::AppCore;
 pub use attachments::AttachmentService;
 pub use chat_history::{ChangeError, ChatHistoryService};
+pub use component_choices::component_choices;
 pub use model_import::{
     HfOrigin, MAX_GENERATION_CONFIG_LOOKUPS, ModelOrigin, build_new_model, fetch_published_sampling,
 };
-pub use model_projector::ProjectorError;
+pub use model_links::{LinkError, LinkRole};
 pub use model_registrar::ModelRegistrar;
 pub use model_service::{ImportMode, ModelService, RetagDiff};
 pub use model_verification::{

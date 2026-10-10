@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
+  HfModelKind,
   HfModelSummary,
   HfSearchRequest,
   HfSearchResponse,
@@ -46,6 +47,9 @@ export interface UseHuggingFaceSearchReturn {
   sortAscending: boolean;
   handleSortChange: (newSortBy: HfSortField) => void;
   setSortAscending: (ascending: boolean) => void;
+  /** Models that chat or models that draw; a change searches again. */
+  kind: HfModelKind;
+  setKind: (kind: HfModelKind) => void;
 
   // Results state
   models: HfModelSummary[];
@@ -85,6 +89,7 @@ export function useHuggingFaceSearch(
   const [maxParams, setMaxParams] = useState("");
   const [sortBy, setSortBy] = useState<HfSortField>("downloads");
   const [sortAscending, setSortAscending] = useState(false);
+  const [kind, setKind] = useState<HfModelKind>("chat");
 
   // Results state
   const [models, setModels] = useState<HfModelSummary[]>([]);
@@ -141,8 +146,9 @@ export function useHuggingFaceSearch(
       limit: 30,
       sort_by: sortBy,
       sort_ascending: sortAscending,
+      kind,
     }),
-    [searchQuery, minParams, maxParams, sortBy, sortAscending]
+    [searchQuery, minParams, maxParams, sortBy, sortAscending, kind]
   );
 
   // Perform search
@@ -295,12 +301,12 @@ export function useHuggingFaceSearch(
     // They can manually click Search to get all results
   }, [debouncedQuery, performSearch]);
 
-  // Auto-search when sort changes
+  // Auto-search when the sort or the kind changes
   useEffect(() => {
     if (!isInitialMount.current) {
       performSearch(0, false);
     }
-  }, [sortBy, sortAscending, performSearch]);
+  }, [sortBy, sortAscending, kind, performSearch]);
 
   return {
     // Search input state
@@ -314,6 +320,8 @@ export function useHuggingFaceSearch(
     sortAscending,
     handleSortChange,
     setSortAscending,
+    kind,
+    setKind,
 
     // Results state
     models,

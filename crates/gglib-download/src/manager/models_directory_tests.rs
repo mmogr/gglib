@@ -103,6 +103,7 @@ fn manager(files: &[(&str, u64)]) -> (Arc<DownloadManagerImpl>, Arc<RecordingReg
         Arc::new(RepoHub::new(files)),
         Arc::new(NoopEmitter::new()),
         DownloadManagerConfig::default(),
+        Arc::new(gglib_core::ports::NoopGgufParser),
     );
     (Arc::new(manager), registrar)
 }

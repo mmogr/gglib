@@ -239,6 +239,7 @@ impl ModelOps {
     /// update` previews an edit with.
     pub async fn update(&self, id: i64, request: UpdateModelRequest) -> Result<GuiModel, GuiError> {
         self.link_projector(id, &request).await?;
+        self.link_components(id, &request).await?;
         let mut model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
         request.apply_to(&mut model);
         self.deps.core.models().update(&model).await?;
@@ -369,7 +370,8 @@ impl ModelOps {
     ///
     /// `full = false` only adds missing tags; `full = true` rebuilds the
     /// system-tag namespace and re-derives the dialect spec. User-curated
-    /// tags outside that namespace survive either way. Returns `changed:
+    /// tags outside that namespace survive either way. A model with no image
+    /// family has one read from its file when it names one. Returns `changed:
     /// false` when the pass was a no-op.
     pub async fn retag(&self, id: i64, full: bool) -> Result<RetagResponse, GuiError> {
         // Resolve first so a stale id surfaces as NotFound, not Internal.
@@ -393,6 +395,7 @@ impl ModelOps {
                     added: diff.added,
                     removed: diff.removed,
                     spec_changed: diff.spec_changed,
+                    family_found: diff.family_found,
                 }
             }
             None => RetagResponse {
@@ -400,6 +403,7 @@ impl ModelOps {
                 added: Vec::new(),
                 removed: Vec::new(),
                 spec_changed: false,
+                family_found: None,
             },
         })
     }

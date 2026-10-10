@@ -67,4 +67,24 @@ impl HfClientPort for MockHfClient {
             tags: vec![],
         })
     }
+    /// No head is held: a listing that reads one to know an image model
+    /// finds none, and lists a chat model's quantizations.
+    async fn read_head(
+        &self,
+        model_id: &str,
+        path: &str,
+        _max_bytes: u64,
+    ) -> Result<Vec<u8>, HfPortError> {
+        Err(HfPortError::FileNotFound {
+            model_id: model_id.to_owned(),
+            path: path.to_owned(),
+        })
+    }
+    async fn file_at(
+        &self,
+        _model_id: &str,
+        _path: &str,
+    ) -> Result<Option<HfFileInfo>, HfPortError> {
+        Ok(None)
+    }
 }

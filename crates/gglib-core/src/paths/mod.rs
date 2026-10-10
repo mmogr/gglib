@@ -43,7 +43,7 @@ pub use llama::{
 pub use models::DEFAULT_MODELS_DIR_RELATIVE;
 pub use models::{
     ModelsDirResolution, ModelsDirSource, canonical_model_path, canonical_model_path_string,
-    default_models_dir, resolve_models_dir, set_models_dir,
+    default_models_dir, repository_dir, resolve_models_dir, set_models_dir,
 };
 
 // PID tracking

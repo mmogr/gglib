@@ -463,6 +463,9 @@ fn map_runtime_error(err: &ModelRuntimeError) -> GuiError {
             || GuiError::Internal(format!("Failed to start server: {err}")),
             GuiError::llama_server_not_installed,
         ),
+        // Serving an image model is the caller's mistake, said as the runtime
+        // says it, and not a failure of the server.
+        ModelRuntimeError::ImageModelCannotChat(_) => GuiError::ValidationFailed(err.to_string()),
         _ => GuiError::Internal(format!("Failed to start server: {err}")),
     }
 }
@@ -742,6 +745,21 @@ mod tests {
                 assert_eq!(id, "qwen2.5");
             }
             other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+
+    /// Serving an image model is refused as the caller's mistake, in the
+    /// runtime's words, which the HTTP layer answers with a 400.
+    #[test]
+    fn an_image_model_maps_to_a_validation_failure() {
+        let err = map_runtime_error(&ModelRuntimeError::ImageModelCannotChat("flux".to_owned()));
+
+        match err {
+            GuiError::ValidationFailed(message) => {
+                assert!(message.contains("'flux'"), "{message}");
+                assert!(message.contains("image model"), "{message}");
+            }
+            other => panic!("expected ValidationFailed, got {other:?}"),
         }
     }
 }

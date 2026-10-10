@@ -152,6 +152,16 @@ pub fn canonical_model_path_string(path: &Path) -> String {
     )
 }
 
+/// The folder under `models_dir` that a download from Hugging Face repository
+/// `repo_id` puts its files in: the repository's name with each `/` made `_`.
+///
+/// The one rule, for the download that writes a file there and for a surface
+/// that asks whether a repository's file is already here.
+#[must_use]
+pub fn repository_dir(models_dir: &Path, repo_id: &str) -> PathBuf {
+    models_dir.join(repo_id.replace('/', "_"))
+}
+
 #[cfg(test)]
 #[path = "models_tests.rs"]
 mod tests;

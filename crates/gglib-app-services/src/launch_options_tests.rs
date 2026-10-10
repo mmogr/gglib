@@ -2,6 +2,8 @@ use super::*;
 
 pub(super) fn model() -> Model {
     Model {
+        components: Vec::new(),
+        image_family: None,
         dialect_spec: None,
         id: 1,
         name: "test-model".to_string(),

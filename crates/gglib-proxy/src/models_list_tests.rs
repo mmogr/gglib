@@ -196,6 +196,36 @@ fn a_model_that_sees_and_thinks_lists_both() {
     );
 }
 
+/// A model that draws says so, after vision and before reasoning, and has no
+/// context window whatever its row holds, under either cap source.
+#[test]
+fn a_model_that_draws_advertises_image_generation_and_no_context_window() {
+    let draws = ModelSummary {
+        image_output: true,
+        image_input: true,
+        context_length: Some(8192),
+        ..summary_with_tags("flux", &["reasoning"])
+    };
+    assert_eq!(IMAGE_GENERATION_CAPABILITY, "image_generation");
+    for (global, fit) in [(None, true), (Some(4096), true), (None, false)] {
+        let resp = ModelsResponse::from_summaries(vec![draws.clone()], global, fit);
+        let json = serde_json::to_value(&resp.data[0]).unwrap();
+        assert_eq!(
+            json["capabilities"],
+            serde_json::json!(["vision", "image_generation", "reasoning"])
+        );
+        assert!(json.get("context_window").is_none(), "{json}");
+    }
+
+    let chats = ModelSummary {
+        context_length: Some(8192),
+        ..summary_with_tags("qwen3", &[])
+    };
+    let resp = ModelsResponse::from_summaries(vec![chats], None, true);
+    assert_eq!(resp.data[0].context_window, Some(8192));
+    assert!(resp.data[0].capabilities.is_none());
+}
+
 // =========================================================================
 // Catalogue ids and the reading side
 // =========================================================================

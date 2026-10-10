@@ -11,6 +11,8 @@ fn create_test_model() -> Model {
     metadata.insert("test.key".to_string(), "test.value".to_string());
 
     Model {
+        components: Vec::new(),
+        image_family: None,
         dialect_spec: None,
         id: 1,
         name: "Original Name".to_string(),
@@ -114,6 +116,7 @@ pub(super) fn bare_args() -> UpdateArgs {
         unset: Vec::new(),
         clear_inference_defaults: false,
         projector: crate::projector_args::ProjectorArgs::default(),
+        components: crate::component_args::ComponentArgs::default(),
     }
 }
 

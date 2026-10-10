@@ -44,6 +44,20 @@ pub enum GgufInternalError {
     /// The file nests arrays deeper than this many levels, which is as far
     /// as the reader follows them.
     ArraysTooDeep(usize),
+
+    /// A tensor declares more dimensions than ggml has.
+    TooManyDims {
+        /// The tensor's name.
+        name: String,
+        /// The dimensions it declares.
+        n_dims: u32,
+        /// The most ggml has (`GGML_MAX_DIMS`).
+        limit: u32,
+    },
+
+    /// A safetensors header that is not what the format says, as a message
+    /// names it.
+    Safetensors(String),
 }
 
 impl std::fmt::Display for GgufInternalError {
@@ -66,6 +80,15 @@ impl std::fmt::Display for GgufInternalError {
             Self::ArraysTooDeep(limit) => {
                 write!(f, "Invalid GGUF file: arrays nested more than {limit} deep")
             }
+            Self::TooManyDims {
+                name,
+                n_dims,
+                limit,
+            } => write!(
+                f,
+                "Invalid GGUF file: tensor {name} has {n_dims} dimensions, more than {limit}"
+            ),
+            Self::Safetensors(message) => write!(f, "Invalid safetensors file: {message}"),
         }
     }
 }
@@ -114,6 +137,16 @@ impl From<GgufInternalError> for GgufParseError {
             )),
             GgufInternalError::ArraysTooDeep(limit) => {
                 Self::InvalidFormat(format!("arrays nested more than {limit} deep"))
+            }
+            GgufInternalError::TooManyDims {
+                name,
+                n_dims,
+                limit,
+            } => Self::InvalidFormat(format!(
+                "tensor {name} has {n_dims} dimensions, more than {limit}"
+            )),
+            GgufInternalError::Safetensors(message) => {
+                Self::InvalidFormat(format!("safetensors: {message}"))
             }
         }
     }

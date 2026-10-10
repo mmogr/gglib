@@ -10,6 +10,8 @@ mod shard_group_tracker;
 mod worker;
 
 #[cfg(test)]
+mod companion_group_tests;
+#[cfg(test)]
 mod duplicate_guard_tests;
 #[cfg(test)]
 mod group_registration_tests;
@@ -33,13 +35,13 @@ use tokio::sync::{Mutex, Notify, RwLock, watch};
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::download::{
-    DownloadError, DownloadEvent, DownloadId, DownloadOutcome, DownloadPhase, QueueSnapshot,
-    ShardInfo, download_title,
+    DownloadError, DownloadEvent, DownloadId, DownloadOutcome, DownloadPhase, Quantization,
+    QueueSnapshot, ShardInfo, download_title,
 };
 use gglib_core::events::AppEvent;
 use gglib_core::ports::{
-    AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, HfClientPort, ModelRegistrarPort,
-    QuantizationResolver, ResolvedFile,
+    AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, GgufParserPort, HfClientPort,
+    ModelRegistrarPort, QuantizationResolver, ResolvedFile,
 };
 
 use crate::executor::known_size;
@@ -225,6 +227,9 @@ pub struct DownloadManagerDeps {
     pub event_emitter: Arc<dyn AppEventEmitter>,
     /// Configuration for the download manager.
     pub config: DownloadManagerConfig,
+    /// Reads the head of a model's weights before they are fetched, so an
+    /// image model's download brings its family's companions.
+    pub gguf_parser: Arc<dyn GgufParserPort>,
 }
 
 /// Build a download manager from its dependencies.
@@ -237,6 +242,7 @@ pub fn build_download_manager(deps: DownloadManagerDeps) -> DownloadManagerImpl 
         deps.hf_client,
         deps.event_emitter,
         deps.config,
+        deps.gguf_parser,
     )
 }
 
@@ -301,8 +307,12 @@ impl DownloadManagerImpl {
         hf_client: Arc<dyn HfClientPort>,
         event_emitter: Arc<dyn AppEventEmitter>,
         config: DownloadManagerConfig,
+        gguf_parser: Arc<dyn GgufParserPort>,
     ) -> Self {
-        let resolver = Arc::new(HfQuantizationResolver::new(Arc::clone(&hf_client)));
+        let resolver = Arc::new(HfQuantizationResolver::new(
+            Arc::clone(&hf_client),
+            gguf_parser,
+        ));
         let selector =
             QuantizationSelector::new(Arc::clone(&resolver) as Arc<dyn QuantizationResolver>);
 
@@ -437,18 +447,30 @@ impl DownloadManagerImpl {
         // Remove corrupt cached files before hf_hub_download sees them.
         Self::remove_corrupt_cached_file(item, destination.primary_path().as_ref());
 
-        let job = DownloadJob {
+        let job = Self::job_for(item, destination, cancel, progress_tx);
+        let deps = WorkerDeps {
+            config: self.config.clone(),
+        };
+        worker::run_job(job, &deps).await
+    }
+
+    /// The worker's job for `item`'s file, going to `destination`: under the
+    /// download's id, fetched from the repository the file comes from.
+    fn job_for(
+        item: &QueuedItem,
+        destination: paths::DownloadDestination,
+        cancel: CancellationToken,
+        progress_tx: watch::Sender<ProgressUpdate>,
+    ) -> DownloadJob {
+        DownloadJob {
             id: item.id.clone(),
+            repo: item.repo().to_string(),
             destination,
             revision: item.revision.clone(),
             cancel,
             progress_tx,
             expected_size: known_size(item.shard_info.as_ref().and_then(|s| s.file_size)),
-        };
-        let deps = WorkerDeps {
-            config: self.config.clone(),
-        };
-        worker::run_job(job, &deps).await
+        }
     }
 
     /// Emit one download event through the application-wide emitter.
@@ -480,7 +502,7 @@ impl DownloadManagerImpl {
                  size validation will be skipped"
             );
         }
-        if let Err(reason) = validate_cached_gguf(path, expected_size) {
+        if let Err(reason) = validate_cached_file(path, expected_size) {
             tracing::warn!(
                 id = %item.id,
                 path = %path.display(),
@@ -783,14 +805,27 @@ impl DownloadManagerImpl {
                         "Projector not linked"
                     );
                 }
+                for reason in &registered.component_refusals {
+                    tracing::warn!(
+                        model_id = registered.model.id,
+                        reason,
+                        "Component not linked"
+                    );
+                }
+                let linked = group_completion::linked_components(&completed, &registered.model);
 
                 // The outcome says so when the reader refused the weights,
-                // and when the projector was not linked
+                // and when the projector or a companion was not linked
+                let message = group_completion::completion_message(
+                    &completed,
+                    registered.metadata_refusal.as_deref(),
+                    refusal,
+                );
                 DownloadOutcome::Completed {
-                    message: Some(group_completion::completion_message(
-                        &completed,
-                        registered.metadata_refusal.as_deref(),
-                        refusal,
+                    message: Some(group_completion::with_companions(
+                        message,
+                        &linked,
+                        &registered.component_refusals,
                     )),
                 }
             }
@@ -968,15 +1003,17 @@ impl DownloadManagerImpl {
 /// GGUF magic number: "GGUF" in little-endian.
 const GGUF_MAGIC: [u8; 4] = [0x47, 0x47, 0x55, 0x46];
 
-/// Validate a cached GGUF file before allowing `hf_hub_download` to skip it.
+/// Validate a cached file before allowing `hf_hub_download` to skip it.
 ///
 /// Returns `Ok(())` if the file looks valid, or `Err(reason)` if it should
 /// be deleted and re-downloaded.
 ///
 /// Checks:
 /// 1. File size matches the expected size from HF metadata (if known)
-/// 2. File starts with the 4-byte GGUF magic number
-fn validate_cached_gguf(path: &std::path::Path, expected_size: Option<u64>) -> Result<(), String> {
+/// 2. A file named `.gguf` starts with the 4-byte GGUF magic number. An
+///    image model's companion may be a safetensors file, which has no magic,
+///    and is held to its size alone.
+fn validate_cached_file(path: &std::path::Path, expected_size: Option<u64>) -> Result<(), String> {
     use std::io::Read;
 
     let metadata = std::fs::metadata(path).map_err(|e| format!("cannot stat file: {e}"))?;
@@ -989,6 +1026,13 @@ fn validate_cached_gguf(path: &std::path::Path, expected_size: Option<u64>) -> R
                 "size mismatch: expected {expected} bytes, got {actual_size}"
             ));
         }
+    }
+
+    let named_gguf = path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"));
+    if !named_gguf {
+        return Ok(());
     }
 
     // Check GGUF magic (read only 4 bytes)
@@ -1122,7 +1166,23 @@ impl DownloadManagerImpl {
             .select(&repo_id, quantization.as_deref())
             .await?;
 
-        let quant_str = selection.quantization.to_string();
+        let mut resolution = self
+            .resolver
+            .resolve(&repo_id, selection.quantization)
+            .await?;
+
+        // An image model drawn at Q8_0 is what was measured: with none asked,
+        // a repository whose weights' head names a family is fetched at Q8_0
+        // when it has it, chosen once the head has been read.
+        if selection.auto_selected
+            && resolution.image_family.is_some()
+            && resolution.quantization != Quantization::Q8_0
+            && selection.available.contains(&Quantization::Q8_0)
+        {
+            resolution = self.resolver.resolve(&repo_id, Quantization::Q8_0).await?;
+        }
+
+        let quant_str = resolution.quantization.to_string();
         let id = DownloadId::new(&repo_id, Some(&quant_str));
 
         if selection.auto_selected {
@@ -1133,11 +1193,6 @@ impl DownloadManagerImpl {
                 "Auto-selected quantization"
             );
         }
-
-        let resolution = self
-            .resolver
-            .resolve(&repo_id, selection.quantization)
-            .await?;
 
         // `None` is a repeat request, attached to the download already in
         // flight: the same answer, and nothing new to announce.

@@ -2,6 +2,7 @@
 export { ModelMetadataGrid } from './ModelMetadataGrid';
 export { InfoRow } from './InfoRow';
 export { ProjectorRow } from './ProjectorRow';
+export { ComponentsRow } from './ComponentsRow';
 export { MetadataSection } from './MetadataSection';
 export { SamplingProvenanceSection } from './SamplingProvenanceSection';
 export { ModelEditForm } from './ModelEditForm';

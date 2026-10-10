@@ -30,6 +30,7 @@ const BASE: GgufModel = {
   isServing: false,
   capabilities: 0,
   imageInput: false,
+  missingComponents: [],
 };
 
 /** A model row with `overrides` applied over a plausible dense default. */

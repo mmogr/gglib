@@ -9,7 +9,11 @@ use chrono::Utc;
 use super::*;
 use crate::domain::NewModel;
 use crate::download::GgufFileRole;
-use crate::ports::{GgufCapabilities, GgufMetadata, GgufParseError, ModelRepository};
+use crate::ports::{
+    CoreError, GgufCapabilities, GgufMetadata, GgufParseError, ModelRepository, RepositoryError,
+    TensorTable,
+};
+use crate::services::LinkError;
 
 /// Holds model 1 and nothing else.
 pub(crate) struct OneModelRepo(pub(crate) Mutex<Model>);
@@ -67,6 +71,12 @@ impl GgufParserPort for FirstBytesParser {
     fn detect_capabilities(&self, _metadata: &GgufMetadata) -> GgufCapabilities {
         GgufCapabilities::empty()
     }
+    fn tensor_table(&self, _path: &Path) -> Result<TensorTable, GgufParseError> {
+        Err(GgufParseError::InvalidFormat("no tensor table".to_owned()))
+    }
+    fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
+        Err(GgufParseError::InvalidFormat("no tensor table".to_owned()))
+    }
 }
 
 /// Fails the test if a header is read at all.
@@ -78,6 +88,12 @@ impl GgufParserPort for NeverReadParser {
     }
     fn detect_capabilities(&self, _metadata: &GgufMetadata) -> GgufCapabilities {
         GgufCapabilities::empty()
+    }
+    fn tensor_table(&self, path: &Path) -> Result<TensorTable, GgufParseError> {
+        panic!("no header should be read, and {} was", path.display());
+    }
+    fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
+        panic!("no header should be read, and a head was");
     }
 }
 
@@ -138,7 +154,7 @@ async fn a_weights_file_is_refused_by_name_and_nothing_is_stored() {
 
     let canonical = std::fs::canonicalize(&path).unwrap();
     assert!(
-        matches!(&refused, ProjectorError::Weights(named) if *named == canonical),
+        matches!(&refused, LinkError::Weights(named) if *named == canonical),
         "{refused:?}"
     );
     assert!(refused.to_string().contains("mmproj-F16.gguf"), "{refused}");
@@ -193,7 +209,7 @@ async fn a_path_with_no_file_is_refused_before_any_header_is_read() {
         .unwrap_err();
 
     assert!(
-        matches!(&refused, ProjectorError::Missing { path, .. } if path == missing),
+        matches!(&refused, LinkError::Missing { path, .. } if path == missing),
         "{refused:?}"
     );
     assert_eq!(stored(&repo), None);
@@ -211,7 +227,7 @@ async fn a_file_that_is_not_a_gguf_is_refused() {
         .unwrap_err();
 
     assert!(
-        matches!(refused, ProjectorError::Unreadable { .. }),
+        matches!(refused, LinkError::Unreadable { .. }),
         "{refused:?}"
     );
     assert_eq!(stored(&repo), None);
@@ -227,10 +243,7 @@ async fn an_unknown_model_is_a_repository_error() {
         .unwrap_err();
 
     assert!(
-        matches!(
-            refused,
-            ProjectorError::Repository(RepositoryError::NotFound(_))
-        ),
+        matches!(refused, LinkError::Repository(RepositoryError::NotFound(_))),
         "{refused:?}"
     );
 }
@@ -239,16 +252,49 @@ async fn an_unknown_model_is_a_repository_error() {
 /// is the caller's input, a repository failure is not.
 #[test]
 fn a_refusal_becomes_a_validation_error_and_a_repository_error_stays_one() {
-    let refused: CoreError = ProjectorError::Weights(PathBuf::from("/m/x.Q8_0.gguf")).into();
+    let refused: CoreError = LinkError::Weights(PathBuf::from("/m/x.Q8_0.gguf")).into();
     assert!(
         matches!(&refused, CoreError::Validation(text) if text.contains("/m/x.Q8_0.gguf")),
         "{refused:?}"
     );
 
     let lost: CoreError =
-        ProjectorError::Repository(RepositoryError::NotFound("id=9".to_owned())).into();
+        LinkError::Repository(RepositoryError::NotFound("id=9".to_owned())).into();
     assert!(
         matches!(lost, CoreError::Repository(RepositoryError::NotFound(_))),
         "{lost:?}"
+    );
+}
+
+/// The projector's refusals read as they did before components shared the
+/// rule: the file is a projector, and the one format is GGUF.
+#[tokio::test]
+async fn the_projector_refusals_keep_their_words() {
+    let (service, _repo) = service(None);
+    let missing = Path::new("/nonexistent/mmproj-F16.gguf");
+    let refused = service
+        .set_projector(1, Some(missing), &NeverReadParser)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        refused.starts_with("no projector file at /nonexistent/mmproj-F16.gguf: "),
+        "{refused}"
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = file(&dir, "mmproj-F16.gguf", "<html>");
+    let canonical = std::fs::canonicalize(&path).unwrap();
+    let refused = service
+        .set_projector(1, Some(&path), &FirstBytesParser)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert_eq!(
+        refused,
+        format!(
+            "{} is not a readable GGUF file: Invalid GGUF format: no GGUF magic",
+            canonical.display()
+        )
     );
 }

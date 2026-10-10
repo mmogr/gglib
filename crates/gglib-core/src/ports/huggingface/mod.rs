@@ -4,11 +4,13 @@ mod download_group;
 mod error;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod fake_hub;
+mod image_companions;
 mod types;
 
-pub use client::HfClientPort;
+pub use client::{HfClientPort, SNIFF_HEAD_BYTES};
 pub use download_group::{DownloadGroup, download_group, projector_fetched_with};
 pub use error::{HfPortError, HfPortResult};
+pub use image_companions::{Companion, image_companions};
 pub use types::{
-    HfFileInfo, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult, HfSortField,
+    HfFileInfo, HfModelKind, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult, HfSortField,
 };

@@ -324,6 +324,11 @@ pub enum ModelRuntimeError {
         requested: String,
     },
 
+    /// The model draws images, and llama-server, which serves chat, cannot
+    /// load it.
+    #[error("Model '{0}' is an image model: it draws images and cannot be served for chat")]
+    ImageModelCannotChat(String),
+
     /// Internal error during runtime operations.
     #[error("Internal error: {0}")]
     Internal(String),
@@ -347,6 +352,8 @@ impl ModelRuntimeError {
             Self::ModelNotFound(_)
             | Self::ModelFileNotFound(_)
             | Self::PinnedModelMismatch { .. } => 404,
+            // The model exists; the request named the wrong kind of model.
+            Self::ImageModelCannotChat(_) => 400,
             Self::SpawnFailed(_) | Self::HealthCheckFailed(_) | Self::Internal(_) => 500,
         }
     }
@@ -403,7 +410,8 @@ impl From<&ModelRuntimeError> for RuntimeErrorEnvelope {
             }
             ModelRuntimeError::ModelNotFound(_)
             | ModelRuntimeError::ModelFileNotFound(_)
-            | ModelRuntimeError::PinnedModelMismatch { .. } => error_type::INVALID_REQUEST,
+            | ModelRuntimeError::PinnedModelMismatch { .. }
+            | ModelRuntimeError::ImageModelCannotChat(_) => error_type::INVALID_REQUEST,
             ModelRuntimeError::SpawnFailed(_)
             | ModelRuntimeError::HealthCheckFailed(_)
             | ModelRuntimeError::Internal(_) => error_type::SERVER_ERROR,

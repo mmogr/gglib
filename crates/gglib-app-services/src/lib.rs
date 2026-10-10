@@ -9,6 +9,7 @@ mod test_support_remote;
 
 mod error;
 mod helpers;
+mod hf_image_preview;
 mod hf_quantizations;
 mod hub_chats;
 
@@ -21,6 +22,7 @@ mod downloads;
 pub mod launch_options;
 mod mcp;
 mod models;
+mod models_components;
 mod models_projector;
 mod models_upgrade;
 mod proxy;

@@ -21,8 +21,9 @@ system. No I/O, networking, or runtime dependencies allowed.
   (`choose_projector`): the one of the download's own quantization, else the `F16` one,
   else the first by name.
 - `shard_info` - One file's place in its download group (`ShardInfo`), as the queue
-  records it. A group is the model's weights followed by the projector fetched with them;
-  shards are numbered among the weights alone, and the group's size covers every file.
+  records it. A group is the model's weights followed by the projector fetched with them
+  and an image model's companions; shards are numbered among the weights alone, and the
+  group's size covers every file.
   It is not served: a client reads the `FilePlace` in a row's text.
 - `events` - `DownloadEvent`, five variants. `QueueSnapshot` carries the whole
   queue, the same value the REST route serves. `DownloadCompleted`,
@@ -56,6 +57,7 @@ system. No I/O, networking, or runtime dependencies allowed.
   `DownloadRowText`). `row(&RowFacts)` builds it from the facts of a download
   and `DownloadRowText::of` words it, so every surface prints the same text.
   `download_title` is the one name a download goes by, and `FilePlace` the file
-  a row is about: `part 2/3`, `weights`, `projector`, or `3 parts`.
+  a row is about: `part 2/3`, `weights`, `projector`, a companion's role such as `vae`,
+  or `3 parts`.
 
 <!-- module-docs:end -->

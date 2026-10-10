@@ -20,6 +20,7 @@ import {
 import {
   ModelMetadataGrid,
   ProjectorRow,
+  ComponentsRow,
   SamplingProvenanceSection,
   ModelEditForm,
   InspectorTags,
@@ -215,6 +216,16 @@ const ModelInspectorPanel: FC<ModelInspectorPanelProps> = ({
                   onUpdateModel={onUpdateModel}
                   onChanged={() => void detail.reload()}
                 />
+              }
+              components={
+                model.imageFamily && (
+                  <ComponentsRow
+                    modelId={model.id}
+                    detail={detail.modelDetail ?? undefined}
+                    onUpdateModel={onUpdateModel}
+                    onChanged={() => void detail.reload()}
+                  />
+                )
               }
               // Resolved sampling, not the stored defaults: a stored value
               // that wins shows as `per-model defaults (user-set)`, and one

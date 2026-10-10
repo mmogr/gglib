@@ -4,9 +4,11 @@ use async_trait::async_trait;
 use sqlx::SqlitePool;
 use std::path::Path;
 
+use gglib_core::domain::ImageFamily;
 use gglib_core::utils::shard_filename::base_shard_filename;
 use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
 
+use super::model_component_rows;
 use super::row_mappers::{
     BENCHMARK_SUMMARY_COLUMNS, MODEL_SELECT_COLUMNS, normalized_file_path_string, path_list_json,
     row_to_model,
@@ -84,6 +86,12 @@ impl SqliteModelRepository {
         Self { pool }
     }
 
+    /// `model` with the components its rows link.
+    async fn with_components(&self, mut model: Model) -> Result<Model, RepositoryError> {
+        model.components = model_component_rows::of_model(&self.pool, model.id).await?;
+        Ok(model)
+    }
+
     /// Get a reference to the underlying pool (for testing/migration only).
     #[cfg(test)]
     pub fn pool(&self) -> &SqlitePool {
@@ -107,7 +115,14 @@ impl ModelRepository for SqliteModelRepository {
             .await
             .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
-        rows.iter().map(row_to_model).collect()
+        let mut components = model_component_rows::by_model(&self.pool).await?;
+        rows.iter()
+            .map(|row| {
+                let mut model = row_to_model(row)?;
+                model.components = components.remove(&model.id).unwrap_or_default();
+                Ok(model)
+            })
+            .collect()
     }
 
     async fn get_by_id(&self, id: i64) -> Result<Model, RepositoryError> {
@@ -120,7 +135,7 @@ impl ModelRepository for SqliteModelRepository {
             .map_err(|e| RepositoryError::Storage(e.to_string()))?
             .ok_or_else(|| RepositoryError::NotFound(format!("Model with ID {id}")))?;
 
-        row_to_model(&row)
+        self.with_components(row_to_model(&row)?).await
     }
 
     async fn get_by_name(&self, name: &str) -> Result<Model, RepositoryError> {
@@ -138,7 +153,7 @@ impl ModelRepository for SqliteModelRepository {
             .map_err(|e| RepositoryError::Storage(e.to_string()))?
             .ok_or_else(|| RepositoryError::NotFound(format!("Model with name '{name}'")))?;
 
-        row_to_model(&row)
+        self.with_components(row_to_model(&row)?).await
     }
 
     async fn find_by_path(&self, path: &Path) -> Result<Option<Model>, RepositoryError> {
@@ -169,7 +184,10 @@ impl ModelRepository for SqliteModelRepository {
             .await
             .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
-        row.as_ref().map(row_to_model).transpose()
+        match row {
+            Some(row) => Ok(Some(self.with_components(row_to_model(&row)?).await?)),
+            None => Ok(None),
+        }
     }
 
     async fn insert(&self, model: &NewModel) -> Result<Model, RepositoryError> {
@@ -218,8 +236,8 @@ impl ModelRepository for SqliteModelRepository {
                 id, name, file_path, projector_path, param_count_b, architecture, quantization,
                 context_length, expert_count, expert_used_count, expert_shared_count,
                 metadata, added_at, hf_repo_id, hf_commit_sha,
-                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, dialect_spec
-            ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                hf_filename, download_date, last_update_check, tags, model_key, file_paths_json, capabilities, inference_defaults, defaults_origin, server_defaults, dialect_spec, image_family
+            ) VALUES ((SELECT id FROM models WHERE model_key = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(model_key) DO UPDATE SET
                 file_path = excluded.file_path,
                 -- Coalesced, not assigned. A re-registration that carries no
@@ -230,6 +248,9 @@ impl ModelRepository for SqliteModelRepository {
                 -- wins when there is one.
                 file_paths_json = COALESCE(excluded.file_paths_json, models.file_paths_json),
                 projector_path = COALESCE(excluded.projector_path, models.projector_path),
+                -- Coalesced as the projector is: a re-registration whose
+                -- table read no family never erases the one stored.
+                image_family = COALESCE(excluded.image_family, models.image_family),
                 quantization = COALESCE(excluded.quantization, models.quantization),
                 context_length = COALESCE(excluded.context_length, models.context_length),
                 expert_count = COALESCE(excluded.expert_count, models.expert_count),
@@ -274,6 +295,7 @@ impl ModelRepository for SqliteModelRepository {
         .bind(&defaults_origin_str)
         .bind(&server_defaults_json)
         .bind(&dialect_spec_json)
+        .bind(model.image_family.map(ImageFamily::as_str))
         .execute(&self.pool)
         .await
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
@@ -287,7 +309,9 @@ impl ModelRepository for SqliteModelRepository {
         .await
         .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
-        row_to_model(&row)
+        let stored = row_to_model(&row)?;
+        model_component_rows::insert_keeping(&self.pool, stored.id, &model.components).await?;
+        self.with_components(stored).await
     }
 
     async fn update(&self, model: &Model) -> Result<(), RepositoryError> {
@@ -323,8 +347,14 @@ impl ModelRepository for SqliteModelRepository {
             .as_ref()
             .and_then(|caps| serde_json::to_string(caps).ok());
 
+        // The row and its components change together or not at all.
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?;
         let result = sqlx::query(
-            "UPDATE models SET name = ?, file_path = ?, projector_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ?, template_caps = ? WHERE id = ?"
+            "UPDATE models SET name = ?, file_path = ?, projector_path = ?, param_count_b = ?, architecture = ?, quantization = ?, context_length = ?, metadata = ?, hf_repo_id = ?, hf_commit_sha = ?, hf_filename = ?, download_date = ?, last_update_check = ?, tags = ?, capabilities = ?, inference_defaults = ?, defaults_origin = ?, server_defaults = ?, dialect_spec = ?, template_caps = ?, image_family = ? WHERE id = ?"
         )
             .bind(&model.name)
             // Normalised exactly as `insert` does. `find_by_path` is a plain
@@ -351,8 +381,9 @@ impl ModelRepository for SqliteModelRepository {
             .bind(&server_defaults_json)
             .bind(&dialect_spec_json)
             .bind(&template_caps_json)
+            .bind(model.image_family.map(ImageFamily::as_str))
             .bind(model.id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(|e| RepositoryError::Storage(e.to_string()))?;
 
@@ -363,7 +394,10 @@ impl ModelRepository for SqliteModelRepository {
             )));
         }
 
-        Ok(())
+        model_component_rows::replace(&mut tx, model.id, &model.components).await?;
+        tx.commit()
+            .await
+            .map_err(|e| RepositoryError::Storage(e.to_string()))
     }
 
     async fn delete(&self, id: i64) -> Result<(), RepositoryError> {
@@ -1051,3 +1085,11 @@ mod tests {
 #[cfg(test)]
 #[path = "sqlite_model_repository_projector_tests.rs"]
 mod projector_tests;
+
+#[cfg(test)]
+#[path = "sqlite_model_repository_components_tests.rs"]
+mod components_tests;
+
+#[cfg(test)]
+#[path = "sqlite_model_repository_component_files_tests.rs"]
+mod component_files_tests;

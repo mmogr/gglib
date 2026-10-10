@@ -25,6 +25,9 @@ pub(crate) fn print_model_detail(dto: &ModelDetailDto, show_metadata: bool) {
     println!("  ID             : {}", dto.id);
     print_opt("  File          ", dto.file_path.as_deref());
     println!("{}", projector_line(dto));
+    for line in image_model_lines(dto) {
+        println!("{line}");
+    }
     println!("  Parameters     : {:.1}B", dto.param_count_b);
     if let Some(arch) = &dto.architecture {
         println!("  Architecture   : {arch}");
@@ -264,6 +267,37 @@ fn projector_line(dto: &ModelDetailDto) -> String {
         (None, false) => "none (text only)",
     };
     format!("  Projector      : {link}")
+}
+
+// ── Image model ───────────────────────────────────────────────────────────────
+
+/// The lines that say what an image model draws with: its family, and one
+/// line for each component its family's recipe names, in the recipe's
+/// order, with the file linked or `missing`. None for a model that chats.
+///
+/// A link the paired machine reports has no path, a place on its disk, and
+/// reads `linked`. A link whose file is not there says so.
+fn image_model_lines(dto: &ModelDetailDto) -> Vec<String> {
+    let Some(family) = dto.image_family else {
+        return Vec::new();
+    };
+    let mut lines = vec![format!("  Family         : {}", family.label())];
+    lines.extend(family.recipe().components.iter().map(|spec| {
+        let linked = dto.components.iter().find(|link| link.role == spec.role);
+        let state = match linked {
+            None => "missing".to_owned(),
+            Some(link) => {
+                let file = link.path.as_deref().unwrap_or("linked");
+                if link.present {
+                    file.to_owned()
+                } else {
+                    format!("{file} (no file there)")
+                }
+            }
+        };
+        format!("    {:<13}: {state}", spec.role.label())
+    }));
+    lines
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

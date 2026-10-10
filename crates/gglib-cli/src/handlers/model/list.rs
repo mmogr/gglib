@@ -5,9 +5,11 @@
 //! answers with, so a flag here and a filter on the library page narrow by
 //! one rule; a single table function renders them. A speed column (`⚡ t/s`)
 //! is shown only when at least one returned model has benchmark data, and an
-//! `Images` column says which models are linked to a projector. While this
-//! machine is paired, the list ends with one line on how the paired machine
-//! stands, which asks that machine nothing.
+//! `Images` column says which models are linked to a projector. The `Draws`
+//! column names an image model's family, and the components it still needs
+//! linked before it can draw. While this machine is paired, the list ends
+//! with one line on how the paired machine stands, which asks that machine
+//! nothing.
 
 use std::fmt::Write as _;
 
@@ -102,8 +104,28 @@ fn build_query(args: &ListArgs) -> ModelListQuery {
 // Table rendering
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// What the `Draws` column says of `model`: `--` for a model that chats,
+/// its family's name for an image model with every component linked, and
+/// the roles it still needs after the name for one without.
+fn draws(model: &GuiModel) -> String {
+    let Some(family) = model.image_family else {
+        return "--".to_owned();
+    };
+    if model.missing_components.is_empty() {
+        return family.label().to_owned();
+    }
+    let missing: Vec<&str> = model
+        .missing_components
+        .iter()
+        .map(|role| role.label())
+        .collect();
+    format!("{}, needs {}", family.label(), missing.join(", "))
+}
+
 /// The table, as text. The ID column is as wide as the widest id, so a
-/// four-digit id does not push its row out of line with the rest.
+/// four-digit id does not push its row out of line with the rest, and the
+/// `Draws` column is as wide as its widest entry, so the roles an image
+/// model needs are never cut.
 fn render_table(models: &[GuiModel]) -> String {
     let show_speed = models.iter().any(|m| m.benchmark_summary.is_some());
     let id_width = models
@@ -112,25 +134,41 @@ fn render_table(models: &[GuiModel]) -> String {
         .max()
         .unwrap_or(0)
         .max(3);
+    let drawn: Vec<String> = models.iter().map(draws).collect();
+    let draws_width = drawn
+        .iter()
+        .map(|cell| cell.chars().count())
+        .max()
+        .unwrap_or(0)
+        .max("Draws".len());
     let mut out = String::new();
 
     if show_speed {
         let _ = writeln!(
             out,
-            "{:<id_width$} {:<25} {:<8} {:<10} {:<12} {:<8} {:<10} {:<7} {:<20} File Path",
-            "ID", "Name", "Params", "⚡ t/s", "Arch", "Quant", "Context", "Images", "Added"
+            "{:<id_width$} {:<25} {:<8} {:<10} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} File Path",
+            "ID",
+            "Name",
+            "Params",
+            "⚡ t/s",
+            "Arch",
+            "Quant",
+            "Context",
+            "Images",
+            "Draws",
+            "Added"
         );
-        let _ = writeln!(out, "{}", "-".repeat(133 + id_width));
+        let _ = writeln!(out, "{}", "-".repeat(134 + id_width + draws_width));
     } else {
         let _ = writeln!(
             out,
-            "{:<id_width$} {:<25} {:<8} {:<12} {:<8} {:<10} {:<7} {:<20} File Path",
-            "ID", "Name", "Params", "Arch", "Quant", "Context", "Images", "Added"
+            "{:<id_width$} {:<25} {:<8} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} File Path",
+            "ID", "Name", "Params", "Arch", "Quant", "Context", "Images", "Draws", "Added"
         );
-        let _ = writeln!(out, "{}", "-".repeat(120 + id_width));
+        let _ = writeln!(out, "{}", "-".repeat(121 + id_width + draws_width));
     }
 
-    for model in models {
+    for (model, draws) in models.iter().zip(&drawn) {
         let arch = model.architecture.as_deref().unwrap_or("--");
         let quant = model.quantization.as_deref().unwrap_or("--");
         let context = model
@@ -147,7 +185,7 @@ fn render_table(models: &[GuiModel]) -> String {
                 .map_or_else(|| "--".to_string(), |t| format!("{t:.1}"));
             let _ = writeln!(
                 out,
-                "{:<id_width$} {:<25} {:<8.1} {:<10} {:<12} {:<8} {:<10} {:<7} {:<20} {}",
+                "{:<id_width$} {:<25} {:<8.1} {:<10} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} {}",
                 model.id,
                 truncate_string(&model.name, 24),
                 model.param_count_b,
@@ -156,13 +194,14 @@ fn render_table(models: &[GuiModel]) -> String {
                 truncate_string(quant, 7),
                 truncate_string(&context, 9),
                 images,
+                draws,
                 model.added_at,
                 model.file_path,
             );
         } else {
             let _ = writeln!(
                 out,
-                "{:<id_width$} {:<25} {:<8.1} {:<12} {:<8} {:<10} {:<7} {:<20} {}",
+                "{:<id_width$} {:<25} {:<8.1} {:<12} {:<8} {:<10} {:<7} {:<draws_width$} {:<20} {}",
                 model.id,
                 truncate_string(&model.name, 24),
                 model.param_count_b,
@@ -170,6 +209,7 @@ fn render_table(models: &[GuiModel]) -> String {
                 truncate_string(quant, 7),
                 truncate_string(&context, 9),
                 images,
+                draws,
                 model.added_at,
                 model.file_path,
             );

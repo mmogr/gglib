@@ -16,6 +16,9 @@ pub mod dialect;
 pub(crate) mod generation_config;
 pub mod gguf;
 pub mod hub_chats;
+pub mod image_family;
+#[cfg(test)]
+pub(crate) mod image_family_goldens;
 pub(crate) mod inference;
 pub mod inference_profile;
 pub(crate) mod kv_estimate;
@@ -42,12 +45,13 @@ pub(crate) mod sampling_provenance;
 mod server_config;
 pub mod slot_eviction;
 pub(crate) mod template_caps;
+pub mod tensor_table;
 pub mod thinking;
 
 // Re-export model types at the domain level for convenience
 pub use machine::{Machine, ModelAction, ModelRef, UNNAMED_PAIRED, machine_name};
-pub use model::{Model, ModelFilterOptions, NewModel};
-pub use model_detail::{ModelDetailDto, ModelLookup};
+pub use model::{Model, ModelComponent, ModelFilterOptions, NewModel};
+pub use model_detail::{ComponentLinkDto, ModelDetailDto, ModelLookup};
 pub use model_file::{ModelFile, NewModelFile};
 
 // Re-export query types at the domain level for convenience
@@ -134,6 +138,12 @@ pub use thinking::Thinking;
 
 // Re-export GGUF types at the domain level for convenience
 pub use gguf::{CapabilityFlags, GgufCapabilities, GgufMetadata, GgufValue, RawMetadata};
+pub use tensor_table::{TensorInfo, TensorTable, WeightsFormat};
+
+// Re-export image-model types at the domain level for convenience
+pub use image_family::{
+    ComponentRole, ComponentSpec, ImageFamily, Placement, Recipe, SizeRule, UnknownName,
+};
 
 // Re-export dialect types at the domain level for convenience
 pub use dialect::{BodyCodec, DialectSpec, EmissionProfile};

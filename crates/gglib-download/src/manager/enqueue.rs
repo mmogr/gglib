@@ -101,6 +101,7 @@ mod tests {
             quantization: Quantization::Q8_0,
             files,
             is_sharded: false,
+            image_family: None,
         }
     }
 
