@@ -25,7 +25,7 @@ use tokio::time::Instant;
 use super::{JobTiming, RenderHost, SdImageDriver};
 use crate::process::admission::{ADMISSION_DEADLINE, AdmissionDecision, Candidate};
 use crate::process::{AdmissionQueue, RENDER_STOPPED, Resident};
-use crate::sd::job_api::{CancelOutcome, ImgGenBody, JobPreview, JobState, SdJobs};
+use crate::sd::server::job_api::{CancelOutcome, ImgGenBody, JobPreview, JobState, SdJobs};
 
 /// The image model's slot: an image model never takes an empty primary.
 const SLOT: usize = 1;
