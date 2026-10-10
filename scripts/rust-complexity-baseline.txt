@@ -28,7 +28,9 @@ crates/gglib-cli/src/handlers/agent_chat/mod.rs 306
 crates/gglib-cli/src/handlers/agent_chat/repl.rs 330
 crates/gglib-cli/src/handlers/agent_chat/turn_rows_tests.rs 348
 crates/gglib-cli/src/handlers/benchmark.rs 1613
+crates/gglib-cli/src/handlers/config/sd.rs 325
 crates/gglib-cli/src/handlers/config/settings/profiles.rs 418
+crates/gglib-cli/src/handlers/inference/serve_image_tests.rs 348
 crates/gglib-cli/src/handlers/model/download/interactive.rs 396
 crates/gglib-cli/src/handlers/model/list_tests.rs 314
 crates/gglib-cli/src/handlers/model/update.rs 618
@@ -41,7 +43,7 @@ crates/gglib-cli/src/presentation/explain_display_tests.rs 700
 crates/gglib-cli/src/presentation/inspect_display.rs 313
 crates/gglib-cli/tests/mcp_servers.rs 338
 crates/gglib-cli/tests/setup_scripts.rs 313
-crates/gglib-core/src/contracts/http/daemon.rs 334
+crates/gglib-core/src/contracts/http/daemon.rs 338
 crates/gglib-core/src/domain/admission.rs 329
 crates/gglib-core/src/domain/agent/config.rs 744
 crates/gglib-core/src/domain/agent/events.rs 322

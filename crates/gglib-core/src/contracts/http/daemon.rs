@@ -40,6 +40,9 @@ pub const PROXY_STATUS_PATH: &str = "/api/proxy/status";
 /// GUI's settings panel.
 pub const PROXY_LOOP_GUARD_TRIPS_PATH: &str = "/api/proxy/loop-guard-trips";
 
+/// The model servers the daemon is running, each with its runtime.
+pub const SERVERS_LIST_PATH: &str = "/api/servers";
+
 /// Start (or reuse) a llama-server for a model.
 pub const SERVERS_START_PATH: &str = "/api/servers/start";
 
@@ -239,6 +242,7 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["POST"], PROXY_START_PATH),
     (&["POST"], PROXY_STOP_PATH),
     (&["GET"], PROXY_STATUS_PATH),
+    (&["GET"], SERVERS_LIST_PATH),
     (&["POST"], SERVERS_START_PATH),
     (&["POST"], DAEMON_SHUTDOWN_PATH),
     (&["POST"], EVENTS_PATH),

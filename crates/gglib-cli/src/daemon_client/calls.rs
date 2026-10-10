@@ -9,7 +9,7 @@
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
-use gglib_app_services::types::QueueDownloadResponse;
+use gglib_app_services::types::{QueueDownloadResponse, ServerInfo};
 use gglib_core::download::{DownloadId, QueueSnapshot};
 
 use super::wire::{
@@ -105,6 +105,16 @@ impl DaemonHandle {
     pub(crate) async fn proxy_status(&self) -> Result<ProxyStatusDto> {
         let response = self
             .get(paths::PROXY_STATUS_PATH)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// The model servers the daemon is running, each with its runtime.
+    pub(crate) async fn list_servers(&self) -> Result<Vec<ServerInfo>> {
+        let response = self
+            .get(paths::SERVERS_LIST_PATH)
             .timeout(Duration::from_secs(5))
             .send()
             .await?;

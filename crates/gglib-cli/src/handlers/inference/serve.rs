@@ -8,6 +8,9 @@
 //! Pinning exists for clients that cannot switch models via `/v1/models` —
 //! VS Code Copilot's BYOK endpoint being the motivating case. Requests naming
 //! any other model are refused rather than silently swapped.
+//!
+//! An image model takes its own path, `serve_image`: stable-diffusion.cpp
+//! rather than llama.cpp, none of a chat model's flags, and one load.
 
 use anyhow::Result;
 
@@ -20,6 +23,8 @@ use crate::target::Target;
 
 #[path = "serve_far.rs"]
 mod serve_far;
+#[path = "serve_image.rs"]
+mod serve_image;
 use gglib_app_services::launch_options::{ProxyGlobals, plan_pinned_launch};
 use gglib_app_services::types::StartServerRequest;
 use gglib_core::domain::ModelAction;
@@ -90,9 +95,6 @@ async fn serve_here(
     access: AccessArgs,
     verbose: bool,
 ) -> Result<()> {
-    // Ensure llama.cpp is installed before the daemon needs it.
-    crate::handlers::config::llama_ensure::ensure_installed(false).await?;
-
     let settings = ctx.app.settings().get().await?;
 
     // Resolve `--profile` or a `{model}:{profile}` suffix before model lookup:
@@ -107,8 +109,26 @@ async fn serve_here(
 
     // Absence and failure read differently: a missing model is the user's
     // typo, or the paired machine's id typed without --remote; a repository
-    // error is neither.
-    let model = resolver::resolve_for(ctx, &selection.model, ModelAction::Load).await?;
+    // error is neither. Which runtime to ensure is the model's to say, so it
+    // is looked up first, and a miss is reported only after llama.cpp's
+    // offer, as before there was a second runtime to choose.
+    let found = resolver::resolve_for(ctx, &selection.model, ModelAction::Load).await;
+    if let Ok(model) = &found
+        && model.generates_images()
+    {
+        let flags = serve_image::ChatFlags {
+            context: &context,
+            options: &options,
+            sampling: &sampling,
+            mtp: &mtp,
+            profile: selection.profile.is_some(),
+        };
+        return serve_image::serve_image(ctx, model, &flags, &cache, access).await;
+    }
+
+    // Ensure llama.cpp is installed before the daemon needs it.
+    crate::handlers::config::llama_ensure::ensure_installed(false).await?;
+    let model = found?;
 
     // The raw `--ctx-size` flag is shape-validated at parse time, before the
     // model is known; resolving it here against the model's GGUF context

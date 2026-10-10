@@ -15,6 +15,8 @@ pub(crate) mod llama_install;
 mod llama_method;
 mod llama_update;
 pub(crate) mod paths;
+pub(crate) mod sd;
+pub(crate) mod sd_ensure;
 pub(crate) mod settings;
 
 use anyhow::Result;
@@ -32,6 +34,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: ConfigCommand) -> Result
         ConfigCommand::Settings { command } => settings::handle_settings(ctx, command).await,
         ConfigCommand::Profile { command } => settings::handle_profile(ctx, command).await,
         ConfigCommand::Llama { command } => llama::dispatch(command).await,
+        ConfigCommand::Sd { command } => sd::dispatch(ctx, command).await,
         ConfigCommand::CheckDeps {
             setup_fast_downloads,
         } => {

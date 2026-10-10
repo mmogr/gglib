@@ -16,6 +16,7 @@ use super::llama_events::{
 };
 use super::llama_method::{AccelerationFlags, choose_install_method, install_by};
 use crate::utils::input;
+use gglib_core::domain::RuntimeKind;
 use gglib_core::paths::{gglib_data_dir, is_prebuilt_binary, llama_cpp_dir, llama_server_path};
 use gglib_runtime::llama::{
     Acceleration, BuildEvent, BuildTool, LlamaProgressEvent, MissingPackage, VulkanStatus,
@@ -77,7 +78,13 @@ pub(crate) async fn handle_install(
 pub(super) async fn install_prebuilt(ending: DownloadEnding) -> Result<()> {
     let (tx, rx) = mpsc::channel::<LlamaProgressEvent>(64);
     let install = tokio::spawn(download_prebuilt_binaries(tx));
-    render_install_events(rx, ending, &mut std::io::stdout()).await;
+    render_install_events(
+        rx,
+        RuntimeKind::Llama.label(),
+        ending,
+        &mut std::io::stdout(),
+    )
+    .await;
     install.await?
 }
 
