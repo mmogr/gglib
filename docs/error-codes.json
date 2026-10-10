@@ -234,7 +234,25 @@
       "code": "message_not_found",
       "type": null,
       "status": 404,
-      "meaning": "The message a run was to replace is not in its conversation."
+      "meaning": "The message a run was to replace, or a change to a chat names, is not in its conversation."
+    },
+    {
+      "code": "unchanged",
+      "type": null,
+      "status": 400,
+      "meaning": "The edit leaves the message as it was."
+    },
+    {
+      "code": "not_a_reply",
+      "type": null,
+      "status": 400,
+      "meaning": "The message a regenerate names is a question; only a reply is answered again."
+    },
+    {
+      "code": "nothing_to_answer",
+      "type": null,
+      "status": 409,
+      "meaning": "The conversation does not end in a question with no reply, so there is nothing to answer."
     },
     {
       "code": "upstream_timeout",
