@@ -28,6 +28,7 @@ use gglib_core::{McpTool, ToolIndex};
 use gglib_mcp::McpService;
 use serde_json::json;
 
+use super::drawing;
 use super::types::McpToolSpec;
 
 // ─── Index construction ───────────────────────────────────────────────────
@@ -42,7 +43,12 @@ use super::types::McpToolSpec;
 /// This function re-queries `McpService` on every call — no stale cache.
 /// `list_all_tools()` reads from an in-memory map inside `McpManager` and is
 /// microseconds in practice.
-pub(super) async fn build_tool_index(mcp: &McpService) -> ToolIndex {
+///
+/// With `drawing`, the gateway's own `builtin__generate_image` is in the
+/// index too. A server's tool never takes that id, with or without it: a
+/// server stored as `builtin` before the name was reserved keeps its other
+/// tools, and this one is the gateway's alone to answer.
+pub(super) async fn build_tool_index(mcp: &McpService, drawing: bool) -> ToolIndex {
     let (flat, server_names) = build_flat_tool_list(mcp).await;
     let entries = flat.into_iter().map(|(server_id, tool)| {
         let server_name = server_names
@@ -51,7 +57,17 @@ pub(super) async fn build_tool_index(mcp: &McpService) -> ToolIndex {
         let qualified_id = format!("{server_name}__{}", tool.name);
         (qualified_id, tool)
     });
-    ToolIndex::from_tools(entries)
+    index_of(entries, drawing)
+}
+
+/// The index over the servers' `entries`, less any that claims the gateway's
+/// own id, plus the gateway's drawing tool when `drawing`.
+pub(super) fn index_of(
+    entries: impl Iterator<Item = (String, McpTool)>,
+    drawing: bool,
+) -> ToolIndex {
+    let own = drawing.then(|| (drawing::TOOL_ID.to_owned(), drawing::definition()));
+    ToolIndex::from_tools(entries.filter(|(id, _)| id != drawing::TOOL_ID).chain(own))
 }
 
 /// Resolve a `"server_name__tool_name"` qualified ID to the numeric

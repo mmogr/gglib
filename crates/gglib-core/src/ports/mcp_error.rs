@@ -40,6 +40,11 @@ pub enum McpServiceError {
     #[error("An MCP server named '{0}' already exists; choose another name")]
     NameTaken(String),
 
+    /// A server was to be given a name gglib keeps for itself: `builtin` is
+    /// where the tool gateway lists gglib's own tools (`builtin__<tool>`).
+    #[error("'{0}' is a name gglib keeps for its own tools; choose another name")]
+    NameReserved(String),
+
     /// An SSE server was to be added, changed or run. gglib has no SSE client.
     #[error("SSE servers are not supported yet; only stdio servers can be run")]
     SseNotSupported,

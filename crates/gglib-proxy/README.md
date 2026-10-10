@@ -154,6 +154,7 @@ This crate provides an OpenAI-compatible HTTP server that:
   - **`mcp/types.rs`** — JSON-RPC 2.0 and MCP protocol wire types
   - **`mcp/call_result.rs`** — an MCP server's tool result passed on as MCP content items: text as text, images inline with their `mimeType`
   - **`mcp/session.rs`** — `Mcp-Session-Id` tracking and validation
+  - **`mcp/drawing.rs`** — `builtin__generate_image`, gglib's own drawing tool: offered only with the `mcp_drawing` setting on and something to draw with; answers the image inline, with `notifications/progress` for a caller that sent a token
 - **`lib.rs`** — Public API and module re-exports
 
 ## KV Cache Session Persistence
@@ -666,6 +667,12 @@ The proxy includes a built-in [MCP Streamable HTTP](https://modelcontextprotocol
 6. Client sends `DELETE /mcp` when done
 
 Tool names are qualified as `{server_name}__{tool_name}` so tools from different MCP servers never collide.
+
+### Drawing
+
+`builtin` is not a server: it is where the gateway lists gglib's own tools, and no MCP server can be given that name. There is one, `builtin__generate_image`, and it is off unless switched on: Settings, or `gglib config settings set --mcp-drawing true`. While the switch is off, or nothing here can draw (a proxy outside the daemon, no image runtime, no image model to choose), `search_tools` and `get_tool_schema` do not know the tool, and an `invoke_tool` that names it anyway is refused with the reason before anything is drawn.
+
+Its arguments are `prompt` (required), `size` as `WIDTHxHEIGHT`, `n` from 1 to 4 and `seed`; the image model is this machine's own choice. The result is one `image` item per image, base64 PNG, then one text item saying what was drawn. gglib stores none of it. A render takes minutes, so a `tools/call` that carries `_meta.progressToken` gets `notifications/progress` messages on the same SSE response before the result: `progress` rises with each wait the render reports before its first step, then with each new step and stage (a wait once steps have begun, and a step reported twice, send nothing), `total` appears once the first step has said how many there are, and `message` says where it has got to ("sampling step 3 of 20, image 1 of 1"). A call with no token gets only the result. A client that disconnects abandons the render.
 
 ### Configuring `OpenWebUI`
 
