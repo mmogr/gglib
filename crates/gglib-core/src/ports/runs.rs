@@ -56,6 +56,14 @@ pub enum RunEvent {
         /// The event, as the executor logged it.
         data: Arc<str>,
     },
+    /// The run's latest preview frame, sent beside the log and never in it:
+    /// it has no seq, and a reader that reconnects gets the current one once.
+    Preview {
+        /// The tool call it belongs to.
+        tool_call_id: Arc<str>,
+        /// `{"tool_call_id": .., "frame": {"mime", "step", "total", "b64"}}`.
+        data: Arc<str>,
+    },
     /// The run has ended; nothing follows this.
     End(RunInfo),
 }

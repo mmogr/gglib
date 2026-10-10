@@ -272,6 +272,7 @@ pub(super) async fn drain(mut events: gglib_core::ports::RunEvents) -> (usize, O
         while let Some(event) = events.next().await {
             match event {
                 gglib_core::ports::RunEvent::Frame { .. } => frames += 1,
+                gglib_core::ports::RunEvent::Preview { .. } => {}
                 gglib_core::ports::RunEvent::End(info) => return Some(info),
             }
         }

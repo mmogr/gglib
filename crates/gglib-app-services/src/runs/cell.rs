@@ -4,6 +4,13 @@
 //! whose value is only a version. A reader that falls behind reads the
 //! vector from where it was, so no reader ever misses an event, which a
 //! broadcast channel would not promise.
+//!
+//! Beside the log the cell keeps a run's latest preview frame, which is never
+//! logged: it is tens of kilobytes, only the newest matters, and a saved
+//! reply must never hold one. Setting it wakes readers through the same
+//! `watch` as a frame, so a reader waits on one signal and the
+//! mark-then-read order that keeps it from missing a frame keeps it from
+//! missing a preview too; a second channel would need its own.
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
@@ -46,8 +53,19 @@ pub(super) enum Step {
     End(RunInfo),
     /// The run is gone; end without an `End`.
     Dropped,
-    /// Nothing new yet.
-    Wait,
+    /// Nothing new yet. Carries the run's preview, when it has one, for
+    /// a reader that has caught up.
+    Wait(Option<Preview>),
+}
+
+/// A run's latest preview frame: which set it was, the tool call it belongs
+/// to, and its JSON.
+#[derive(Clone)]
+pub(super) struct Preview {
+    /// Counts sets from 1, so a reader can tell a new frame from one it sent.
+    pub(super) version: u64,
+    pub(super) tool_call_id: Arc<str>,
+    pub(super) data: Arc<str>,
 }
 
 struct State {
@@ -63,6 +81,10 @@ struct State {
     /// Whether an end handler follows the end; without one, a run is
     /// settled the moment it ends.
     awaits_end: bool,
+    /// The latest preview frame, never in `frames`.
+    preview: Option<Preview>,
+    /// How many previews have been set.
+    previews: u64,
 }
 
 pub(super) struct RunCell {
@@ -111,6 +133,8 @@ impl RunCell {
                 read_to_end_at_ms: None,
                 settled: false,
                 awaits_end,
+                preview: None,
+                previews: 0,
             }),
             changed: watch::Sender::new(0),
             clock,
@@ -197,6 +221,24 @@ impl RunCell {
     /// Log one frame. A frame that would take the log past [`LOG_LIMIT`]
     /// fails the run with `log_full` and cancels its upstream instead.
     pub(crate) fn append(&self, frame: String) -> Result<(), Stopped> {
+        self.log(frame, None)
+    }
+
+    /// Log the frame that says `tool_call_id`'s call has finished, and
+    /// forget the preview when it belongs to that call, under one lock: a
+    /// reader is never handed the call's frame after reading its
+    /// completion. A frame of another call stays, so one tool finishing
+    /// never blanks a render still running beside it. Ending the run
+    /// (`finish`, `cancel`, `drop_now`, a full log) forgets any preview.
+    pub(crate) fn append_completing(
+        &self,
+        frame: String,
+        tool_call_id: &str,
+    ) -> Result<(), Stopped> {
+        self.log(frame, Some(tool_call_id))
+    }
+
+    fn log(&self, frame: String, completes: Option<&str>) -> Result<(), Stopped> {
         let mut state = self.lock();
         if state.info.status.is_terminal() {
             return Err(Stopped);
@@ -215,12 +257,38 @@ impl RunCell {
         state.bytes += frame.len();
         state.frames.push(Arc::from(frame));
         state.info.last_seq = u32::try_from(state.frames.len()).unwrap_or(u32::MAX);
+        if let Some(finished) = completes
+            && state
+                .preview
+                .as_ref()
+                .is_some_and(|preview| &*preview.tool_call_id == finished)
+        {
+            state.preview = None;
+        }
         drop(state);
         self.wake();
         Ok(())
     }
 
+    /// Keep `data` as the run's latest preview, for `tool_call_id`, and wake
+    /// the readers. Not logged; ignored once the run has ended.
+    pub(crate) fn preview(&self, tool_call_id: &str, data: String) {
+        let mut state = self.lock();
+        if state.info.status.is_terminal() {
+            return;
+        }
+        state.previews += 1;
+        state.preview = Some(Preview {
+            version: state.previews,
+            tool_call_id: Arc::from(tool_call_id),
+            data: Arc::from(data),
+        });
+        drop(state);
+        self.wake();
+    }
+
     fn end(state: &mut State, status: RunStatus, error: Option<RunError>, now: u64) {
+        state.preview = None;
         state.info.status = status;
         state.info.error = error;
         state.info.finished_at_ms = Some(now);
@@ -288,6 +356,6 @@ impl RunCell {
         if state.settled && state.info.status.is_terminal() {
             return Step::End(state.info.clone());
         }
-        Step::Wait
+        Step::Wait(state.preview.clone())
     }
 }

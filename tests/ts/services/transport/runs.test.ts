@@ -4,6 +4,8 @@
  * final `run` event.
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../../../src/services/platform', () => ({
@@ -120,6 +122,32 @@ describe('runs transport', () => {
     expect(url).toBe('/api/runs/r%201/events?after=3');
     expect(init.headers).toEqual({ Accept: 'text/event-stream' });
     expect(init.signal).toBe(signal);
+  });
+
+  it('reads a preview as its own item, with no seq, between the frames (contracts/runs/preview_stream.txt)', async () => {
+    const bytes = readFileSync(resolve(import.meta.dirname, '../../../../contracts/runs/preview_stream.txt'), 'utf8');
+    fetchMock.mockResolvedValueOnce(new Response(bytes, { status: 200 }));
+    const items: RunStreamItem[] = [];
+    for await (const item of readRunEvents('r1', 0, new AbortController().signal)) items.push(item);
+
+    expect(items.map((item) => item.type)).toEqual(['frame', 'preview', 'frame', 'end']);
+    expect(items[0]).toMatchObject({ type: 'frame', seq: 1 });
+    expect(items[1]).toEqual({
+      type: 'preview',
+      toolCallId: 'call_1',
+      data: '{"tool_call_id":"call_1","frame":{"mime":"image/png","step":3,"total":20,"b64":"iVBORw0KGgo="}}',
+    });
+    expect(items[2]).toMatchObject({ type: 'frame', seq: 2 });
+  });
+
+  it('a preview whose data names no tool call is dropped, not read as a frame', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('event: preview\ndata: {"frame":{}}\n\n' + 'event: preview\ndata: nope\n\n', { status: 200 }),
+    );
+    const items: RunStreamItem[] = [];
+    for await (const item of readRunEvents('r1', 0, new AbortController().signal)) items.push(item);
+
+    expect(items).toEqual([]);
   });
 
   it('a keepalive sent as a ping payload is not a frame', async () => {
