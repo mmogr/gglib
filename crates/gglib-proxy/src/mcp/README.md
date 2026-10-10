@@ -11,11 +11,12 @@ chat completions.
 
 # Module layout
 
-| Module       | Responsibility                                      |
-|--------------|-----------------------------------------------------|
-| `types`      | JSON-RPC 2.0 and MCP wire types (serde structs)     |
-| `session`    | `Mcp-Session-Id` tracking and validation            |
-| `meta_tools` | Progressive-disclosure index + 3 meta-tool specs    |
-| `handlers`   | Axum route handlers for POST/GET/DELETE `/mcp`      |
+| Module        | Responsibility                                     |
+|---------------|----------------------------------------------------|
+| `types`       | JSON-RPC 2.0 and MCP wire types (serde structs)    |
+| `session`     | `Mcp-Session-Id` tracking and validation           |
+| `meta_tools`  | Progressive-disclosure index + 3 meta-tool specs   |
+| `handlers`    | Axum route handlers for POST/GET/DELETE `/mcp`     |
+| `call_result` | A server's tool result as MCP items, images inline |
 
 <!-- module-docs:end -->

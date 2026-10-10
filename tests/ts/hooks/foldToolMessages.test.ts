@@ -167,6 +167,39 @@ describe('foldToolMessages', () => {
     expect(parts.map((p) => p.toolCallId)).toEqual(['earlier', 'c']);
   });
 
+  it('puts a tool row\'s images on its call\'s artifact, and none on a call whose row has none', () => {
+    const images = [
+      { id: 'a'.repeat(64), mime: 'image/png', width: 1024, height: 1024 },
+      { id: 'b'.repeat(64), mime: 'image/jpeg', width: 640, height: 480 },
+    ];
+    const msgs: ChatMessage[] = [
+      makeMsg({
+        id: 1,
+        role: 'assistant',
+        content: '',
+        metadata: {
+          tool_calls: [
+            { id: 'draw_1', name: 'draw', arguments: { prompt: 'a fox' } },
+            { id: 'time_1', name: 'get_time', arguments: {} },
+          ],
+        },
+      }),
+      makeMsg({
+        id: 2,
+        role: 'tool',
+        content: '[image 1024x1024 PNG stored] [image 640x480 JPEG stored]',
+        metadata: { tool_call_id: 'draw_1' },
+        images,
+      }),
+      makeMsg({ id: 3, role: 'tool', content: '12:00', metadata: { tool_call_id: 'time_1' } }),
+    ];
+
+    const parts = foldToolMessages(msgs)[0].metadata?.contentParts as any[];
+    expect(parts[0]).toMatchObject({ toolCallId: 'draw_1', artifact: { images } });
+    expect(parts[1]).toMatchObject({ toolCallId: 'time_1', result: '12:00' });
+    expect(parts[1]).not.toHaveProperty('artifact');
+  });
+
   it('passes through GUI-created messages unchanged', () => {
     const msgs: ChatMessage[] = [
       makeMsg({ id: 1, role: 'user', content: 'hi' }),

@@ -43,6 +43,7 @@ This crate provides MCP server lifecycle management, including:
 │                                                             │
 │  CombinedToolExecutor (tool dispatch)                       │
 │    ├── MCP tools  → McpService                              │
+│    │     └── images → AttachmentService (stored, named)     │
 │    └── Builtin tools → BuiltinToolExecutorAdapter           │
 │                                                             │
 │  builtin/ (in-process tools)                                │
@@ -108,6 +109,8 @@ This enables:
 - **`service.rs`** — High-level facade for MCP operations (CRUD + lifecycle)
 - **`path.rs`** — Path validation and PATH environment variable utilities
 - **`combined.rs`** — Unified tool executor dispatching to MCP and builtin tools
+- **`tool_executor.rs`** — The MCP side of that executor: runs a qualified tool on its server
+- **`tool_images.rs`** — An MCP tool's content split into the text the model reads and the images stored through `AttachmentService`, each named in the text, never sent as bytes ([ADR 0016](../../docs/adr/0016-a-tools-image-is-an-attachment-on-its-tool-row.md))
 - **`builtin/`** — In-process builtin tools (filesystem, time) with optional sandbox
 - **`resolver/`** — Cross-platform executable path resolution with 6-step search strategy
 
@@ -118,6 +121,7 @@ Low-level JSON-RPC 2.0 client for the MCP protocol:
 - Connects to MCP servers via stdio
 - Handles protocol initialization and capability negotiation
 - Provides `list_tools()` and `call_tool()` methods
+- Reads the server's stdout asynchronously, one request at a time, taking the reply whose `id` is the request's and skipping notifications and other lines before it; a request waits 30 s for its reply
 
 ### `McpManager`
 
@@ -194,4 +198,4 @@ async fn example(repo: impl McpServerRepository + 'static) {
 
 ## Testing
 
-The crate uses trait-based testing: `McpService` is tested over a repository held in memory (`service_tests.rs`). The order the resolver tries candidates in, and the attempts it records, are pinned case by case over a mock environment and filesystem (`resolver/resolve_order_tests.rs`). See `gglib-db` for `SqliteMcpRepository`'s own tests, which run on the schema production creates.
+The crate uses trait-based testing: `McpService` is tested over a repository held in memory (`service_tests.rs`). The client's wait for its reply (matched by id, timed out, ended by EOF) is pinned over an in-process pipe standing in for the server (`client_tests.rs`), and what a tool's content items become over an attachment store held in memory (`tool_images_tests.rs`). The order the resolver tries candidates in, and the attempts it records, are pinned case by case over a mock environment and filesystem (`resolver/resolve_order_tests.rs`). See `gglib-db` for `SqliteMcpRepository`'s own tests, which run on the schema production creates.

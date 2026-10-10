@@ -28,11 +28,7 @@ impl ToolExecutorPort for OkExecutor {
         vec![]
     }
     async fn execute(&self, tc: &ToolCall) -> Result<ToolResult> {
-        Ok(ToolResult {
-            tool_call_id: tc.id.clone(),
-            content: "ok".into(),
-            success: true,
-        })
+        Ok(ToolResult::text(tc.id.clone(), "ok", true))
     }
 }
 
@@ -47,11 +43,7 @@ impl ToolExecutorPort for SlowExecutor {
     }
     async fn execute(&self, tc: &ToolCall) -> Result<ToolResult> {
         tokio::time::sleep(std::time::Duration::from_millis(self.millis)).await;
-        Ok(ToolResult {
-            tool_call_id: tc.id.clone(),
-            content: "slow ok".into(),
-            success: true,
-        })
+        Ok(ToolResult::text(tc.id.clone(), "slow ok", true))
     }
 }
 
@@ -122,11 +114,7 @@ async fn concurrency_limited_by_semaphore() {
             }
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
             self.current.fetch_sub(1, Ordering::SeqCst);
-            Ok(ToolResult {
-                tool_call_id: tc.id.clone(),
-                content: "ok".into(),
-                success: true,
-            })
+            Ok(ToolResult::text(tc.id.clone(), "ok", true))
         }
     }
 

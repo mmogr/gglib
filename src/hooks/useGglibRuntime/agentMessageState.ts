@@ -181,12 +181,17 @@ export function addToolCallPart(
   );
 }
 
-/** Stamp a tool result onto the matching tool-call part. */
+/**
+ * Stamp a tool result onto the matching tool-call part. The images the tool
+ * made go on the part's `artifact`, by id and facts; a result without
+ * images leaves the part as it always was.
+ */
 export function applyToolResult(
   setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
   messageId: string,
   event: AgentToolCallCompleteEvent,
 ): void {
+  const images = event.result.images ?? [];
   setMessages(prev =>
     prev.map(m => {
       if (m.id !== messageId) return m;
@@ -203,6 +208,7 @@ export function applyToolResult(
                 isError: !event.result.success,
                 waitMs: event.wait_ms,
                 durationMs: event.execute_duration_ms,
+                ...(images.length > 0 && { artifact: { images } }),
               }
             : p,
         ) as GglibContent,

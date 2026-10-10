@@ -5,12 +5,14 @@
  * Reasoning is stored in `metadata.thinking`.
  * Tool calls are stored in `metadata.contentParts` and rebuilt here, so they
  * survive the DB round-trip. An image is not a content part: a message names
- * it by id, in the row's `images`.
+ * it by id, in the row's `images`. A tool's images ride on its tool call's
+ * `artifact`, folded there from its tool row's `images`.
  *
  * @module contentParts
  */
 
 import type { ThreadMessageLike } from '@assistant-ui/react';
+import { toolCallImages, type ToolCallArtifact } from '../../types/messages';
 
 // ============================================================================
 // Serializable Part Type
@@ -25,6 +27,8 @@ export interface SerializableToolCallPart {
   argsText?: string;
   result?: unknown;
   isError?: boolean;
+  /** The images the tool made, when it made any. */
+  artifact?: ToolCallArtifact;
 }
 
 // ============================================================================
@@ -64,8 +68,8 @@ export function extractReasoningText(contentParts: ReadonlyArray<unknown>): stri
  * Reconstruct ThreadMessageLike content from stored text and tool calls.
  *
  * When `contentParts` are available from metadata, builds a content array:
- * the markdown text (as a text part) and then each stored tool call. A stored
- * part of any other type is left out.
+ * the markdown text (as a text part) and then each stored tool call, with
+ * the images it made. A stored part of any other type is left out.
  *
  * When no contentParts are stored (backward compat), returns the text string.
  *
@@ -91,6 +95,7 @@ export function reconstructContent(
   for (const cp of contentParts) {
     // The column is free JSON: only what is known to be a tool call is rebuilt.
     if (cp.type !== 'tool-call') continue;
+    const images = toolCallImages(cp);
     parts.push({
       type: 'tool-call' as const,
       toolCallId: cp.toolCallId,
@@ -99,6 +104,7 @@ export function reconstructContent(
       ...(cp.argsText !== undefined && { argsText: cp.argsText }),
       ...(cp.result !== undefined && { result: cp.result }),
       ...(cp.isError !== undefined && { isError: cp.isError }),
+      ...(images.length > 0 && { artifact: { images } }),
     });
   }
 

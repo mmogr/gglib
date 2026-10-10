@@ -95,6 +95,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `question <text>` | Ask a question; filesystem tools are on unless `--no-tools` |
 | `question --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |
 | `chat history` | List past conversations with message counts |
+| `attachment save <id> [path] [--force]` | Write a stored image, such as one a tool made, to a file; `<id>` is the whole id or at least the 8 characters a chat's marker shows; an existing file is replaced only with `--force` |
 | `proxy` | Start the OpenAI-compatible proxy (context comes from settings `default_context_size`, or is sized per launch when unset) |
 | `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, prompt-cache health and reuse, and request history |
 | `proxy trips [--since DAYS]` | The loop guard's log from this machine's database, daemon or not: requests scanned per UTC day, model, version and mode, and the ones it noted or refused |
@@ -245,7 +246,13 @@ You: what does the stack trace say?
   one that does not answer, or does not say, is sent the image. With
   `--remote`, the paired machine's proxy answers.
 - **On resume**, `gglib chat --continue <N>` shows an image of the last turn as
-  a marker, `[image 2560x1440]`, after its text.
+  a marker, `[image 2560x1440 3f9a2c1e]`, after its text: its size and the
+  start of its id. The images the last turn's tools made are on a line of their
+  own, and a tool's line in a live turn ends with the same markers.
+- **Saving one.** `gglib attachment save 3f9a2c1e` writes that image to
+  `./3f9a2c1e.png` (or `.jpg`); a path names the file or the directory. The
+  start of an id that two images share is refused, as is one no image has, and
+  an existing file is replaced only with `--force`.
 
 ### Rendering Modes
 

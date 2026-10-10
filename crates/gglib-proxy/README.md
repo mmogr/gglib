@@ -150,6 +150,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`mcp/`** — MCP Streamable HTTP gateway (see [below](#mcp-streamable-http-gateway))
   - **`mcp/handlers.rs`** — `POST /mcp` JSON-RPC dispatch, `GET /mcp` (405), `DELETE /mcp` (terminate session)
   - **`mcp/types.rs`** — JSON-RPC 2.0 and MCP protocol wire types
+  - **`mcp/call_result.rs`** — an MCP server's tool result passed on as MCP content items: text as text, images inline with their `mimeType`
   - **`mcp/session.rs`** — `Mcp-Session-Id` tracking and validation
 - **`lib.rs`** — Public API and module re-exports
 
@@ -650,7 +651,7 @@ The proxy includes a built-in [MCP Streamable HTTP](https://modelcontextprotocol
 2. Server returns capabilities and an `Mcp-Session-Id` header
 3. Client sends `notifications/initialized` to confirm
 4. Client calls `tools/list` to discover available tools
-5. Client calls `tools/call` to invoke a tool (response is SSE)
+5. Client calls `tools/call` to invoke a tool (response is SSE). The server's content items come back as items: text as text, an image with its base64 `data` and `mimeType`, any other kind as a text item naming it
 6. Client sends `DELETE /mcp` when done
 
 Tool names are qualified as `{server_name}__{tool_name}` so tools from different MCP servers never collide.

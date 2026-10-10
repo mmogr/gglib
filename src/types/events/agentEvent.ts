@@ -9,6 +9,7 @@
 
 import type { TurnUsageWire } from '../../utils/messages/turnMade';
 import type { ToolCall } from '../generated/ToolCall';
+import type { ToolResult } from '../generated/ToolResult';
 
 // ---------------------------------------------------------------------------
 // Embedded wire types (Rust ToolCall / ToolResult)
@@ -17,15 +18,8 @@ import type { ToolCall } from '../generated/ToolCall';
 /** A tool invocation requested by the LLM: the Rust `ToolCall`, as generated from it. */
 export type AgentToolCall = ToolCall;
 
-/** The outcome of a tool execution (mirrors `gglib_core::ToolResult`). */
-export interface AgentToolResult {
-  /** Echoes the `AgentToolCall.id` this result belongs to. */
-  tool_call_id: string;
-  /** Human-readable output or error description from the tool. */
-  content: string;
-  /** `false` here is **not** an error — it is context fed to the LLM. */
-  success: boolean;
-}
+/** The outcome of a tool execution: the Rust `ToolResult`, as generated from it. */
+export type AgentToolResult = ToolResult;
 
 // ---------------------------------------------------------------------------
 // Discriminated union

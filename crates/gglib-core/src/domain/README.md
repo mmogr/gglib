@@ -24,9 +24,10 @@ infrastructure concerns (database, filesystem, etc.).
 - `mcp` - MCP server types (`McpServer`, `NewMcpServer`, etc.)
 - `chat` - Chat conversation and message types. A message carries its images
   by reference: `NewMessage.images` are ids, `Message.images` are facts
-- `attachment` - An image a user message carries: its id, the SHA-256 of its
-  bytes (`AttachmentId`), what a client is told of it without the bytes
-  (`AttachmentInfo`), and the answer to an upload (`AttachmentUpload`)
+- `attachment` - An image a message carries, a user's or a tool's: its id,
+  the SHA-256 of its bytes (`AttachmentId`), what a client is told of it
+  without the bytes (`AttachmentInfo`), and the answer to an upload
+  (`AttachmentUpload`)
 - `hub_chats` - The hub's chats as a paired device reads them (`HubChat`, `HubChatOpen`),
   and the turn it adds (`HubTurn`)
 - `runs` - Wire shapes of a run, a reply the daemon owns (`RunInfo`, `RunStatus`)

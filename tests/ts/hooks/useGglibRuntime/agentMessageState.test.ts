@@ -220,6 +220,63 @@ describe('applyToolResult', () => {
     expect(part.isError).toBe(false);
     expect(part.waitMs).toBe(10);
     expect(part.durationMs).toBe(50);
+    // A result without images stamps the part as it always did: no artifact.
+    expect(part).toEqual({
+      type: 'tool-call', toolCallId: 'tc-1', toolName: 'search', args: {},
+      result: 'found it', isError: false, waitMs: 10, durationMs: 50,
+    });
+  });
+
+  it('puts the images a tool made on the part\'s artifact, by id and facts', () => {
+    const initial: GglibMessage = {
+      id: MSG_ID,
+      role: 'assistant',
+      content: [
+        { type: 'tool-call', toolCallId: 'tc-img', toolName: 'draw', args: {} },
+      ] as GglibContent,
+    };
+    const images = [
+      { id: 'a'.repeat(64), mime: 'image/png', width: 1024, height: 1024 },
+      { id: 'b'.repeat(64), mime: 'image/jpeg', width: 640, height: 480 },
+    ];
+    const event: AgentToolCallCompleteEvent = {
+      type: 'tool_call_complete',
+      tool_name: 'draw',
+      result: { tool_call_id: 'tc-img', content: '[image 1024x1024 PNG stored]', success: true, images },
+      wait_ms: 0,
+      execute_duration_ms: 900,
+      display_name: 'Draw',
+      duration_display: '900ms',
+    };
+    const msgs = applyUpdate([initial], (set) =>
+      applyToolResult(set, MSG_ID, event),
+    );
+    const part = partsOf(msgs[0])[0] as Record<string, unknown>;
+    expect(part.result).toBe('[image 1024x1024 PNG stored]');
+    expect(part.artifact).toEqual({ images });
+  });
+
+  it('puts no artifact on the part for a result whose images are empty', () => {
+    const initial: GglibMessage = {
+      id: MSG_ID,
+      role: 'assistant',
+      content: [
+        { type: 'tool-call', toolCallId: 'tc-none', toolName: 'draw', args: {} },
+      ] as GglibContent,
+    };
+    const event: AgentToolCallCompleteEvent = {
+      type: 'tool_call_complete',
+      tool_name: 'draw',
+      result: { tool_call_id: 'tc-none', content: 'nothing drawn', success: true, images: [] },
+      wait_ms: 0,
+      execute_duration_ms: 5,
+      display_name: 'Draw',
+      duration_display: '5ms',
+    };
+    const msgs = applyUpdate([initial], (set) =>
+      applyToolResult(set, MSG_ID, event),
+    );
+    expect(partsOf(msgs[0])[0]).not.toHaveProperty('artifact');
   });
 
   it('stamps a failure result with isError: true', () => {

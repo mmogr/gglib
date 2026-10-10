@@ -11,7 +11,7 @@ import { Button } from '../../ui/Button';
 import ThinkingBlock from './ThinkingBlock';
 import MarkdownMessageContent from './MarkdownMessageContent';
 import { MessageActionsContext } from './MessageActionsContext';
-import { MessageImages } from './MessageImages';
+import { MessageImages, ToolImages } from './MessageImages';
 import { ComposerImages, ImageInputContext } from './ComposerImages';
 import { TurnRow } from './TurnRow';
 import { ReplyArriving, ReplyMade, TurnWho } from './TurnMargin';
@@ -20,7 +20,7 @@ import { useThinkingTiming } from '../context/ThinkingTimingContext';
 import { ToolUsageBadge } from '../../ToolUsageBadge';
 import { ToolExecutionProgress } from '../../ToolExecutionProgress';
 import { extractReasoningText } from '../../../utils/messages';
-import type { GglibMessageCustom } from '../../../types/messages';
+import { toolCallImages, type GglibMessageCustom } from '../../../types/messages';
 
 import { cn } from '../../../utils/cn';
 
@@ -54,7 +54,8 @@ function textOf(content: unknown): string {
  * has for this turn, how it was made; while it arrives, what it is doing.
  * Its reasoning and tool calls are the detail "How this was made" opens,
  * shown while it arrives. A turn with no text of its own always shows them,
- * so no row is a margin beside an empty body.
+ * so no row is a margin beside an empty body. The images its tools made are
+ * not in the detail: they are under its text, always shown.
  */
 export const AssistantMessageBubble: React.FC = () => {
   const message = useMessage();
@@ -70,6 +71,9 @@ export const AssistantMessageBubble: React.FC = () => {
 
   const isStreaming = timing?.currentStreamingAssistantMessageId === message.id;
   const isCurrentlyThinking = isStreaming && !!thinkingText && !contentText;
+  const toolImages = contentArray
+    .filter((part) => (part as { type?: unknown }).type === 'tool-call')
+    .flatMap((part) => toolCallImages(part as { artifact?: unknown }));
   const toolCallsRunning = contentArray.some(
     (part) => (part as { type?: unknown }).type === 'tool-call' && !('result' in (part as object)),
   );
@@ -137,6 +141,7 @@ export const AssistantMessageBubble: React.FC = () => {
                 </p>
               )}
             </div>
+            <ToolImages images={toolImages} />
             <ActionBarPrimitive.Root className={ACTION_BAR}>
               <ActionBarPrimitive.Copy className={ACTION_BTN} title="Copy message" aria-label="Copy message">
                 <Icon icon={Copy} size={14} />

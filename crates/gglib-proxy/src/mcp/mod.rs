@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+pub(crate) mod call_result;
 #[allow(
     clippy::manual_let_else,
     clippy::or_fun_call,

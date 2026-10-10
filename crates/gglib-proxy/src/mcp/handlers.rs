@@ -241,7 +241,7 @@ async fn handle_meta_tools_call(
             let index = super::meta_tools::build_tool_index(mcp).await;
             let summaries = index.search(query);
             let text = serde_json::to_string(&summaries).unwrap_or_default();
-            sse_tool_result(id, text, false)
+            sse_tool_result(id, CallToolResult::text(text))
         }
 
         // ── get_tool_schema ───────────────────────────────────────────────
@@ -260,7 +260,7 @@ async fn handle_meta_tools_call(
             match index.get_schema(&tool_id) {
                 Some(schema) => {
                     let text = serde_json::to_string(schema).unwrap_or_default();
-                    sse_tool_result(id, text, false)
+                    sse_tool_result(id, CallToolResult::text(text))
                 }
                 None => json_rpc_error_response(
                     StatusCode::OK,
@@ -320,15 +320,11 @@ async fn handle_meta_tools_call(
 
             match mcp.call_tool(server_id, &bare_name, tool_args).await {
                 Ok(tool_result) => {
-                    let text = tool_result
-                        .data
-                        .map(|d| serde_json::to_string_pretty(&d).unwrap_or_default())
-                        .unwrap_or_default();
-                    sse_tool_result(id, text, !tool_result.success)
+                    sse_tool_result(id, super::call_result::from_upstream(tool_result))
                 }
                 Err(e) => {
                     error!("MCP invoke_tool error for '{tool_id}': {e}");
-                    sse_tool_result(id, e.to_string(), true)
+                    sse_tool_result(id, CallToolResult::error(e.to_string()))
                 }
             }
         }
@@ -412,20 +408,12 @@ async fn require_session(
     }
 }
 
-/// Wrap `text` in a standard MCP `CallToolResult` and return it as a
-/// single-event SSE stream.
+/// Return `call_result` as a single-event SSE stream.
 ///
-/// `is_error` maps to `CallToolResult::is_error`; pass `true` when the
-/// upstream tool reported a failure so that the MCP client can distinguish
-/// application-level errors from successful (but empty) results.
-fn sse_tool_result(id: Value, text: String, is_error: bool) -> Response {
-    let call_result = CallToolResult {
-        content: vec![ToolContent {
-            content_type: "text".to_string(),
-            text,
-        }],
-        is_error: if is_error { Some(true) } else { None },
-    };
+/// A failed call carries `isError: true` ([`CallToolResult::error`]) so that
+/// the MCP client can tell an application-level error from a successful (but
+/// empty) result.
+fn sse_tool_result(id: Value, call_result: CallToolResult) -> Response {
     let rpc_response = JsonRpcResponse::success(id, serde_json::to_value(call_result).unwrap());
     let payload = serde_json::to_string(&rpc_response).unwrap();
     let event_stream = stream::once(async move {

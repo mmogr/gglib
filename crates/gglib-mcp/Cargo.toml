@@ -11,16 +11,19 @@ publish = false
 gglib-build-info.workspace = true
 gglib-core = { workspace = true }
 
-# Async runtime. `macros` is for `tokio::join!` in `combined.rs`; without it
-# this crate only compiles when something else in the build graph turns the
-# feature on, so `cargo check -p gglib-mcp` alone fails.
-tokio = { workspace = true, features = ["io-util", "macros", "sync", "time"] }
+# Async runtime. `macros` is for `tokio::join!` in `combined.rs` and `process`
+# for the server child in `client.rs`; without them this crate only compiles
+# when something else in the build graph turns the features on, so
+# `cargo check -p gglib-mcp` alone fails.
+tokio = { workspace = true, features = ["io-util", "macros", "process", "sync", "time"] }
 
 # Async trait
 async-trait = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
+# A tool's image items carry their bytes as base64
+base64 = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }

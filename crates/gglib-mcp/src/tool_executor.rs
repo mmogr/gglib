@@ -21,20 +21,25 @@
 //!
 //! ```rust,ignore
 //! let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
-//!     Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, root)),
-//!     None => Arc::new(CombinedToolExecutor::new(mcp)),
+//!     Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, images, root)),
+//!     None => Arc::new(CombinedToolExecutor::new(mcp, images)),
 //! };
 //! ```
+//!
+//! `images` is the [`AttachmentService`] a tool's images are stored
+//! through ([`crate::tool_images`]).
 
 use std::sync::Arc;
 
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use gglib_core::ports::ToolExecutorPort;
-use gglib_core::{ToolCall, ToolDefinition, ToolResult};
+use gglib_core::services::AttachmentService;
+use gglib_core::{McpToolResult, ToolCall, ToolDefinition, ToolResult};
 
 use crate::builtin::parse_args;
 use crate::service::McpService;
+use crate::tool_images::split_content;
 
 // =============================================================================
 // Adapter
@@ -44,8 +49,8 @@ use crate::service::McpService;
 ///
 /// # Thread safety
 ///
-/// The adapter is `Send + Sync` because it only holds `Arc<McpService>`, which
-/// is already `Send + Sync`.
+/// The adapter is `Send + Sync` because it only holds an `Arc<McpService>`
+/// and an `Arc<AttachmentService>`, both already `Send + Sync`.
 ///
 /// # Tool-name → server-id resolution
 ///
@@ -55,12 +60,14 @@ use crate::service::McpService;
 #[derive(Clone)]
 pub(crate) struct McpToolExecutorAdapter {
     mcp: Arc<McpService>,
+    images: Arc<AttachmentService>,
 }
 
 impl McpToolExecutorAdapter {
-    /// Wrap an existing `McpService` handle.
-    pub(crate) const fn new(mcp: Arc<McpService>) -> Self {
-        Self { mcp }
+    /// Wrap an existing `McpService` handle, storing the images its tools
+    /// return through `images`.
+    pub(crate) const fn new(mcp: Arc<McpService>, images: Arc<AttachmentService>) -> Self {
+        Self { mcp, images }
     }
 }
 
@@ -136,25 +143,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             .await
             .map_err(|e| anyhow!("MCP call_tool failed: {e}"))?;
 
-        // ---- Convert McpToolResult → ToolResult ------------------------------
-        let (content, success) = if result.success {
-            let text = result
-                .data
-                .as_ref()
-                .map_or_else(|| "null".to_owned(), extract_mcp_content_text);
-            (text, true)
-        } else {
-            let text = result
-                .error
-                .unwrap_or_else(|| "tool returned an error without a message".to_owned());
-            (text, false)
-        };
-
-        Ok(ToolResult {
-            tool_call_id: call.id.clone(),
-            content,
-            success,
-        })
+        Ok(tool_result(call.id.clone(), result, &self.images).await)
     }
 }
 
@@ -162,34 +151,29 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
 // Helpers
 // =============================================================================
 
-/// Extract human-readable text from an MCP `content` array.
-///
-/// MCP `tools/call` responses return a `content` field that is a JSON array
-/// of items like `[{"type":"text","text":"..."}]`.  This function concatenates
-/// the `text` fields from all text-typed items, joining multiple items with
-/// `\n`.  Non-text items (e.g. images) are skipped.
-///
-/// Falls back to `v.to_string()` when `v` is neither an array nor a string.
-fn extract_mcp_content_text(v: &serde_json::Value) -> String {
-    // Fast path: already a plain string (some servers return un-wrapped text).
-    if let Some(s) = v.as_str() {
-        return s.to_owned();
+/// An MCP result as the agent's [`ToolResult`]: a success's content split
+/// into text and stored images, an error's message as it came.
+async fn tool_result(
+    tool_call_id: String,
+    result: McpToolResult,
+    images: &AttachmentService,
+) -> ToolResult {
+    if !result.success {
+        let text = result
+            .error
+            .unwrap_or_else(|| "tool returned an error without a message".to_owned());
+        return ToolResult::text(tool_call_id, text, false);
     }
-
-    // Standard MCP path: array of content items.
-    if let Some(arr) = v.as_array() {
-        let texts: Vec<&str> = arr
-            .iter()
-            .filter_map(|item| item.get("text").and_then(|t| t.as_str()))
-            .collect();
-        if !texts.is_empty() {
-            return texts.join("\n");
-        }
-        // Array with no text items — fall through to to_string().
+    let Some(data) = result.data else {
+        return ToolResult::text(tool_call_id, "null", true);
+    };
+    let content = split_content(&data, images).await;
+    ToolResult {
+        tool_call_id,
+        content: content.text,
+        success: true,
+        images: content.images,
     }
-
-    // Safety net for unexpected shapes.
-    v.to_string()
 }
 
 // =============================================================================
@@ -237,47 +221,66 @@ mod tests {
         );
     }
 
-    // ---- extract_mcp_content_text -------------------------------------------
+    // ---- tool_result --------------------------------------------------------
 
-    #[test]
-    fn extract_single_text_item() {
-        let v = serde_json::json!([{"type": "text", "text": "hello world"}]);
-        assert_eq!(extract_mcp_content_text(&v), "hello world");
+    use crate::tool_images::tool_images_tests::{ONE_PIXEL_PNG, images};
+    use serde_json::json;
+
+    async fn converted(result: McpToolResult) -> ToolResult {
+        let (images, _) = images();
+        tool_result("c1".to_owned(), result, &images).await
     }
 
-    #[test]
-    fn extract_multiple_text_items() {
-        let v = serde_json::json!([
-            {"type": "text", "text": "line 1"},
-            {"type": "text", "text": "line 2"},
-        ]);
-        assert_eq!(extract_mcp_content_text(&v), "line 1\nline 2");
+    /// A tool error is its message, unsplit, as it always was.
+    #[tokio::test]
+    async fn an_error_is_its_message_with_no_images() {
+        let got = converted(McpToolResult::error("boom")).await;
+        assert_eq!(
+            serde_json::to_string(&got).unwrap(),
+            r#"{"tool_call_id":"c1","content":"boom","success":false}"#
+        );
+        let silent = converted(McpToolResult {
+            success: false,
+            data: Some(json!([{ "type": "image", "data": ONE_PIXEL_PNG }])),
+            error: None,
+        })
+        .await;
+        assert_eq!(silent.content, "tool returned an error without a message");
+        assert!(silent.images.is_empty());
     }
 
-    #[test]
-    fn extract_skips_non_text_items() {
-        let v = serde_json::json!([
-            {"type": "image", "data": "base64..."},
-            {"type": "text", "text": "caption"},
-        ]);
-        assert_eq!(extract_mcp_content_text(&v), "caption");
+    /// Text alone is the frame it always was: no `images` key.
+    #[tokio::test]
+    async fn text_alone_is_the_result_it_always_was() {
+        let got = converted(McpToolResult::success(json!([
+            { "type": "text", "text": "line 1" },
+            { "type": "text", "text": "line 2" },
+        ])))
+        .await;
+        assert_eq!(
+            serde_json::to_string(&got).unwrap(),
+            r#"{"tool_call_id":"c1","content":"line 1\nline 2","success":true}"#
+        );
+        let nothing = converted(McpToolResult {
+            success: true,
+            data: None,
+            error: None,
+        })
+        .await;
+        assert_eq!(nothing.content, "null");
     }
 
-    #[test]
-    fn extract_plain_string_value() {
-        let v = serde_json::json!("already a string");
-        assert_eq!(extract_mcp_content_text(&v), "already a string");
-    }
-
-    #[test]
-    fn extract_empty_array_falls_back() {
-        let v = serde_json::json!([]);
-        assert_eq!(extract_mcp_content_text(&v), "[]");
-    }
-
-    #[test]
-    fn extract_object_falls_back_to_json() {
-        let v = serde_json::json!({"unexpected": "shape"});
-        assert_eq!(extract_mcp_content_text(&v), r#"{"unexpected":"shape"}"#);
+    /// A stored image is on the result, for the conversation; its text names it.
+    #[tokio::test]
+    async fn a_stored_image_is_on_the_result() {
+        let got = converted(McpToolResult::success(json!([
+            { "type": "text", "text": "A dot." },
+            { "type": "image", "data": ONE_PIXEL_PNG, "mimeType": "image/png" },
+        ])))
+        .await;
+        assert!(got.success);
+        assert_eq!(got.content, "A dot.\n[image 1x1 PNG stored]");
+        assert_eq!(got.images.len(), 1);
+        assert_eq!((got.images[0].width, got.images[0].height), (1, 1));
     }
 }

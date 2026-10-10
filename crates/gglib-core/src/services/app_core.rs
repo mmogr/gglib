@@ -256,6 +256,12 @@ mod tests {
         ) -> Result<Option<AttachmentBlob>, AttachmentError> {
             Ok(None)
         }
+        async fn ids_starting_with(
+            &self,
+            _prefix: &str,
+        ) -> Result<Vec<AttachmentId>, AttachmentError> {
+            Ok(Vec::new())
+        }
     }
 
     #[tokio::test]

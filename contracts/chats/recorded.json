@@ -86,6 +86,51 @@
       }
     ]
   },
+  "tool_reply": [
+    {
+      "id": 44,
+      "conversation_id": 12,
+      "role": "assistant",
+      "content": "",
+      "created_at": "2026-09-30 09:15:02",
+      "metadata": {
+        "tool_calls": [
+          {
+            "arguments": {
+              "prompt": "a red dot"
+            },
+            "id": "call-draw-1",
+            "name": "draw"
+          }
+        ]
+      }
+    },
+    {
+      "id": 45,
+      "conversation_id": 12,
+      "role": "tool",
+      "content": "[image 1024x1024 PNG stored]",
+      "created_at": "2026-09-30 09:15:09",
+      "metadata": {
+        "tool_call_id": "call-draw-1"
+      },
+      "images": [
+        {
+          "id": "ece5c33be7ce69ce71231b9d81671f4de1c35ee51fc684b014da4eb244e9a8ae",
+          "mime": "image/png",
+          "width": 1024,
+          "height": 1024
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "conversation_id": 12,
+      "role": "assistant",
+      "content": "Here is a red dot.",
+      "created_at": "2026-09-30 09:15:11"
+    }
+  ],
   "turn": {
     "conversation_id": 12,
     "content": "And how do I fix it?"

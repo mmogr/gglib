@@ -19,6 +19,7 @@ useGglibRuntime                      send / edit / regenerate / Stop
         └── drawRun: GET /api/runs/{id}/events?after=0 → one frame per AgentEvent
               ├── text_delta / reasoning_delta → current assistant message
               ├── tool_call_start / _complete  → tool-call part, then its result
+              │                                  and its images, on its artifact
               ├── iteration_complete           → finalize, open the next message
               ├── final_answer / error         → settled
               └── event: run (the end)         → show the rows the daemon saved
@@ -82,7 +83,7 @@ loop detection) lives in the Rust `gglib-agent` crate.
 | `imageRefusals.ts` | The sentence for a refused image, at its upload or with its send, by the store's code; that a far gglib from before images cannot take one; and that an image was uploaded for another store than its chat's |
 | `turnImages.ts` | A turn's images: read off a message, checked before a send (an image the chat's store does not hold, its upload failed or made for another store, sends nothing), and handed back to the composer with the text |
 | `agentEventDispatch.ts` | One `AgentEvent` → message state; the switch `drawRun` runs per event |
-| `agentMessageState.ts` | Pure state-mutation helpers for in-flight assistant messages |
+| `agentMessageState.ts` | Pure state-mutation helpers for in-flight assistant messages; a tool result's images go on its tool-call part's `artifact`, by id and facts |
 | `wireMessages.ts` | `GglibMessage[]` → backend wire-format conversion; every user message names its images by id |
 | `reasoningTiming.ts` | Tracks per-message reasoning segment durations |
 | `clock.ts` | Monotonic clock abstraction for timing |

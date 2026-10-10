@@ -36,13 +36,9 @@ async fn execute_single_tool(
     timeout_ms: u64,
     title: Option<String>,
 ) -> ToolResult {
-    // Shared failure constructor — avoids repeating the struct literal with the
-    // same `tool_call_id` and `success: false` across every error branch.
-    let error_result = |content: String| ToolResult {
-        tool_call_id: tc.id.clone(),
-        content,
-        success: false,
-    };
+    // Shared failure constructor — avoids repeating the same `tool_call_id`
+    // and `success: false` across every error branch.
+    let error_result = |content: String| ToolResult::text(tc.id.clone(), content, false);
 
     // Record the enqueue time so we can measure semaphore wait.
     // This covers any time spent blocked on the concurrency cap.
@@ -157,10 +153,8 @@ pub(crate) async fn execute_tools_parallel(
         .into_iter()
         .enumerate()
         .map(|(i, opt)| {
-            opt.unwrap_or_else(|| ToolResult {
-                tool_call_id: calls[i].id.clone(),
-                content: "Tool task panicked".into(),
-                success: false,
+            opt.unwrap_or_else(|| {
+                ToolResult::text(calls[i].id.clone(), "Tool task panicked", false)
             })
         })
         .collect()

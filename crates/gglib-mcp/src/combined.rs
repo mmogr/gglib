@@ -14,6 +14,7 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use gglib_core::ports::ToolExecutorPort;
+use gglib_core::services::AttachmentService;
 use gglib_core::{ToolCall, ToolDefinition, ToolResult};
 
 use crate::builtin::{BUILTIN_PREFIX, BuiltinToolExecutorAdapter};
@@ -35,19 +36,24 @@ pub struct CombinedToolExecutor {
 }
 
 impl CombinedToolExecutor {
-    /// Wrap an existing `McpService` handle.
-    pub fn new(mcp: Arc<McpService>) -> Self {
+    /// Wrap an existing `McpService` handle, storing the images its tools
+    /// return through `images`.
+    pub fn new(mcp: Arc<McpService>, images: Arc<AttachmentService>) -> Self {
         Self {
             builtin: BuiltinToolExecutorAdapter::default(),
-            mcp: McpToolExecutorAdapter::new(mcp),
+            mcp: McpToolExecutorAdapter::new(mcp, images),
         }
     }
 
-    /// Wrap with filesystem tools sandboxed to `root`.
-    pub const fn with_sandbox(mcp: Arc<McpService>, root: std::path::PathBuf) -> Self {
+    /// As [`Self::new`], with filesystem tools sandboxed to `root`.
+    pub const fn with_sandbox(
+        mcp: Arc<McpService>,
+        images: Arc<AttachmentService>,
+        root: std::path::PathBuf,
+    ) -> Self {
         Self {
             builtin: BuiltinToolExecutorAdapter::with_sandbox(root),
-            mcp: McpToolExecutorAdapter::new(mcp),
+            mcp: McpToolExecutorAdapter::new(mcp, images),
         }
     }
 }

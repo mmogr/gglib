@@ -46,6 +46,54 @@
     "finished_at_ms": 1790000000600,
     "last_seq": 7
   },
+  "tool_reply": [
+    {
+      "args_summary": null,
+      "display_name": "Draw",
+      "tool_call": {
+        "arguments": {
+          "prompt": "a red dot"
+        },
+        "id": "call-draw-1",
+        "name": "draw"
+      },
+      "type": "tool_call_start"
+    },
+    {
+      "display_name": "Draw",
+      "duration_display": "900ms",
+      "execute_duration_ms": 900,
+      "result": {
+        "content": "[image 1024x1024 PNG stored]",
+        "images": [
+          {
+            "height": 1024,
+            "id": "ece5c33be7ce69ce71231b9d81671f4de1c35ee51fc684b014da4eb244e9a8ae",
+            "mime": "image/png",
+            "width": 1024
+          }
+        ],
+        "success": true,
+        "tool_call_id": "call-draw-1"
+      },
+      "tool_name": "draw",
+      "type": "tool_call_complete",
+      "wait_ms": 0
+    },
+    {
+      "iteration": 1,
+      "tool_calls": 1,
+      "type": "iteration_complete"
+    },
+    {
+      "content": "Here is a red dot.",
+      "type": "text_delta"
+    },
+    {
+      "content": "Here is a red dot.",
+      "type": "final_answer"
+    }
+  ],
   "list": {
     "runs": [
       {

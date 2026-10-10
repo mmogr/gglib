@@ -1,4 +1,4 @@
-crates/gglib-agent/src/agent_loop.rs 564
+crates/gglib-agent/src/agent_loop.rs 560
 crates/gglib-agent/src/stream_collector.rs 456
 crates/gglib-agent/tests/integration_guards.rs 729
 crates/gglib-agent/tests/integration_happy_path.rs 421
@@ -19,7 +19,7 @@ crates/gglib-app-services/src/test_support.rs 349
 crates/gglib-app-services/src/types.rs 501
 crates/gglib-axum/src/routes.rs 435
 crates/gglib-axum/tests/integration_routes.rs 1027
-crates/gglib-cli/src/commands.rs 352
+crates/gglib-cli/src/commands.rs 361
 crates/gglib-cli/src/handlers/agent_chat/config.rs 313
 crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 374
 crates/gglib-cli/src/handlers/agent_chat/mod.rs 305
@@ -40,6 +40,7 @@ crates/gglib-core/src/domain/admission.rs 325
 crates/gglib-core/src/domain/agent/config.rs 744
 crates/gglib-core/src/domain/agent/events.rs 322
 crates/gglib-core/src/domain/agent/loop_detection/tests.rs 414
+crates/gglib-core/src/domain/agent/replay_tests.rs 313
 crates/gglib-core/src/domain/benchmark/agentic.rs 1100
 crates/gglib-core/src/domain/benchmark/agentic_tests.rs 864
 crates/gglib-core/src/domain/benchmark/tune/apply.rs 449
@@ -47,6 +48,7 @@ crates/gglib-core/src/domain/cache_budget.rs 305
 crates/gglib-core/src/domain/capabilities.rs 1594
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 351
+crates/gglib-core/src/domain/hub_chats_tests.rs 375
 crates/gglib-core/src/domain/inference.rs 1915
 crates/gglib-core/src/domain/inference_tests.rs 1409
 crates/gglib-core/src/domain/kv_estimate.rs 341
@@ -56,6 +58,7 @@ crates/gglib-core/src/domain/model_sampling.rs 674
 crates/gglib-core/src/domain/query.rs 408
 crates/gglib-core/src/domain/recommendation.rs 381
 crates/gglib-core/src/domain/residency.rs 419
+crates/gglib-core/src/domain/runs/wire_tests.rs 302
 crates/gglib-core/src/domain/runtime_capabilities.rs 408
 crates/gglib-core/src/download/completion.rs 432
 crates/gglib-core/src/download/rate.rs 628
@@ -98,11 +101,11 @@ crates/gglib-gguf/src/parser.rs 321
 crates/gglib-gguf/src/reader_tests.rs 416
 crates/gglib-hf/src/http.rs 381
 crates/gglib-hf/src/parsing.rs 429
-crates/gglib-mcp/src/builtin/mod.rs 337
-crates/gglib-mcp/src/client.rs 526
+crates/gglib-mcp/src/builtin/mod.rs 325
+crates/gglib-mcp/src/client.rs 509
 crates/gglib-mcp/src/manager.rs 315
 crates/gglib-mcp/src/service.rs 790
-crates/gglib-mcp/src/service_tests.rs 618
+crates/gglib-mcp/src/service_tests.rs 619
 crates/gglib-proxy/src/audit_records.rs 309
 crates/gglib-proxy/src/cache_lifecycle.rs 480
 crates/gglib-proxy/src/canonicalization.rs 601
@@ -113,7 +116,7 @@ crates/gglib-proxy/src/forward.rs 1499
 crates/gglib-proxy/src/forward_tests.rs 561
 crates/gglib-proxy/src/loop_guard.rs 443
 crates/gglib-proxy/src/loop_guard_tests.rs 1182
-crates/gglib-proxy/src/mcp/handlers.rs 530
+crates/gglib-proxy/src/mcp/handlers.rs 518
 crates/gglib-proxy/src/metrics.rs 391
 crates/gglib-proxy/src/models.rs 519
 crates/gglib-proxy/src/models_tests.rs 544
@@ -130,7 +133,7 @@ crates/gglib-proxy/tests/fixtures/common.rs 973
 crates/gglib-proxy/tests/integration_admission.rs 322
 crates/gglib-proxy/tests/integration_auth.rs 409
 crates/gglib-proxy/tests/integration_loop_guard.rs 376
-crates/gglib-proxy/tests/integration_mcp_gateway.rs 433
+crates/gglib-proxy/tests/integration_mcp_gateway.rs 469
 crates/gglib-proxy/tests/integration_proxy_pipeline.rs 644
 crates/gglib-proxy/tests/integration_slot_roundtrip.rs 593
 crates/gglib-runtime/src/command.rs 692
@@ -139,6 +142,7 @@ crates/gglib-runtime/src/llama/args/cache_ram.rs 328
 crates/gglib-runtime/src/llama/build/mod.rs 415
 crates/gglib-runtime/src/llama/download/mod.rs 982
 crates/gglib-runtime/src/llama/update.rs 348
+crates/gglib-runtime/src/ports_impl/llm_completion/images_tests.rs 338
 crates/gglib-runtime/src/ports_impl/llm_completion/layers_tests.rs 312
 crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 370
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 340

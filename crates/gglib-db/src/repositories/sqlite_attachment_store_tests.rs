@@ -114,3 +114,29 @@ async fn a_store_failure_is_the_storage_error_with_no_code() {
     // The failure names the statement, never the image.
     assert!(!failure.to_string().contains("SECRETPIXELS"));
 }
+
+#[tokio::test]
+async fn ids_are_found_by_their_start() {
+    let store = store().await;
+    let infos: Vec<AttachmentInfo> = [b"one".as_slice(), b"two", b"three"]
+        .iter()
+        .map(|bytes| info_for(bytes, "image/png", 1, 1))
+        .collect();
+    for (info, bytes) in infos.iter().zip([b"one".as_slice(), b"two", b"three"]) {
+        store.put(info, bytes).await.unwrap();
+    }
+    let id = &infos[0].id;
+
+    assert_eq!(
+        store.ids_starting_with(&id.as_str()[..8]).await.unwrap(),
+        vec![id.clone()]
+    );
+    assert_eq!(
+        store.ids_starting_with(id.as_str()).await.unwrap(),
+        vec![id.clone()]
+    );
+    let mut all: Vec<AttachmentId> = infos.iter().map(|info| info.id.clone()).collect();
+    all.sort();
+    assert_eq!(store.ids_starting_with("").await.unwrap(), all);
+    assert!(store.ids_starting_with("zz").await.unwrap().is_empty());
+}

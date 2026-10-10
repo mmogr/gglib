@@ -15,6 +15,7 @@ pub(crate) mod path;
 pub(crate) mod resolver;
 pub(crate) mod service;
 pub(crate) mod tool_executor;
+pub(crate) mod tool_images;
 
 // Re-export domain types from core for convenience
 pub use gglib_core::{
@@ -25,3 +26,4 @@ pub use gglib_core::{
 pub use builtin::BuiltinToolExecutorAdapter;
 pub use combined::CombinedToolExecutor;
 pub use service::{McpServerInfo, McpService};
+pub use tool_images::describe_item;

@@ -85,6 +85,29 @@ describe('reconstructContent', () => {
     expect(contentArray[0].isError).toBe(true);
   });
 
+  it('keeps the images a tool call carries on its artifact', () => {
+    const images = [{ id: 'a'.repeat(64), mime: 'image/png', width: 1024, height: 1024 }];
+    const parts: SerializableToolCallPart[] = [
+      { type: 'tool-call', toolCallId: 'tc-img', toolName: 'draw', result: 'drawn', artifact: { images } },
+      { type: 'tool-call', toolCallId: 'tc-txt', toolName: 'echo', result: 'hi' },
+    ];
+    const result = reconstructContent('', parts) as any[];
+    expect(result[0].artifact).toEqual({ images });
+    expect(result[1]).not.toHaveProperty('artifact');
+  });
+
+  it('leaves out an artifact that holds no images', () => {
+    // The column is free JSON: an artifact without an images list is not one.
+    const parts = [
+      { type: 'tool-call', toolCallId: 'tc-1', toolName: 'draw', artifact: { images: 'nope' } },
+      { type: 'tool-call', toolCallId: 'tc-2', toolName: 'draw', artifact: { images: [] } },
+    ] as unknown as SerializableToolCallPart[];
+    expect(reconstructContent('', parts)).toEqual([
+      { type: 'tool-call', toolCallId: 'tc-1', toolName: 'draw' },
+      { type: 'tool-call', toolCallId: 'tc-2', toolName: 'draw' },
+    ]);
+  });
+
   it('keeps the tool calls in their stored order, after the text', () => {
     const parts = [
       { type: 'tool-call' as const, toolCallId: 'tc-1', toolName: 'search', args: { q: 'cats' } },

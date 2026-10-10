@@ -9,7 +9,8 @@ use super::images;
 use crate::presentation::style;
 
 /// The last user/assistant exchange, as a memory jogger for a resumed
-/// chat. A user message's images are shown as markers after its text.
+/// chat. A user message's images are shown as markers after its text, and
+/// the images the exchange's tools made on a line of their own.
 pub(crate) fn memory_jogger(db_messages: &[Message], title: &str) -> String {
     let last = |role: MessageRole| db_messages.iter().rev().find(|m| m.role == role);
     let clipped = |content: &str| match content.char_indices().nth(200) {
@@ -23,6 +24,23 @@ pub(crate) fn memory_jogger(db_messages: &[Message], title: &str) -> String {
         let _ = writeln!(
             jogger,
             "{}  You: {content}{images}{}",
+            style::DIM,
+            style::RESET
+        );
+    }
+    let since_user = db_messages
+        .iter()
+        .rposition(|m| m.role == MessageRole::User)
+        .map_or(0, |at| at + 1);
+    let tool_images: String = db_messages[since_user..]
+        .iter()
+        .filter(|m| m.role == MessageRole::Tool)
+        .map(|m| images::markers(&m.images))
+        .collect();
+    if !tool_images.is_empty() {
+        let _ = writeln!(
+            jogger,
+            "{}  Tool images:{tool_images}{}",
             style::DIM,
             style::RESET
         );

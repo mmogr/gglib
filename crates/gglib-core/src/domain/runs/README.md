@@ -10,6 +10,7 @@ held conversation, and `gglib chat --continue` asks the daemon's listing once,
 before it starts.
 
 The TypeScript in `src/types/generated` is generated from these types, and
-`contracts/runs/recorded.json` holds sample bodies both clients replay.
+`contracts/runs/recorded.json` holds sample bodies both clients replay, and
+the frames of a reply whose tool made an image (`tool_reply`).
 
 <!-- module-docs:end -->

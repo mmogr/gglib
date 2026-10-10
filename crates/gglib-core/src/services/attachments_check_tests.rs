@@ -46,6 +46,13 @@ impl AttachmentStore for Sizes {
     async fn blob(&self, _id: &AttachmentId) -> Result<Option<AttachmentBlob>, AttachmentError> {
         unreachable!("the check never reads an image's bytes")
     }
+
+    async fn ids_starting_with(&self, prefix: &str) -> Result<Vec<AttachmentId>, AttachmentError> {
+        Ok(crate::ports::attachment_store::ids_starting_with(
+            self.kept.keys(),
+            prefix,
+        ))
+    }
 }
 
 fn user(images: &[&AttachmentId]) -> AgentMessage {

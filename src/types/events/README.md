@@ -19,7 +19,7 @@ Download progress types live in `src/services/transport/types/`, not here.
 | `text_delta` | Streamed text token from LLM |
 | `reasoning_delta` | Chain-of-thought token (reasoning models) |
 | `tool_call_start` | LLM emitted a tool call |
-| `tool_call_complete` | Tool executor returned a result |
+| `tool_call_complete` | Tool executor returned a result, with the images the tool stored, by id and facts |
 | `iteration_complete` | One agentic loop iteration finished |
 | `final_answer` | Agent produced final response |
 | `error` | Unrecoverable error in the agent loop |

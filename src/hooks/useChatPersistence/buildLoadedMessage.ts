@@ -25,16 +25,17 @@ interface CliToolCallMeta {
  * row.  The assistant row carries `metadata.tool_calls` (request info), and
  * each tool row carries `metadata.tool_call_id` (result info).  This function
  * merges the two into `SerializableToolCallPart` entries on the assistant's
- * `contentParts`, then strips the raw tool rows from the list.
+ * `contentParts`, then strips the raw tool rows from the list. A tool row's
+ * images go on its call's `artifact`, as a live result puts them.
  */
 export function foldToolMessages(messages: ChatMessage[]): ChatMessage[] {
   // Index tool results by their tool_call_id for O(1) lookup.
-  const toolResultByCallId = new Map<string, { content: string }>();
+  const toolResultByCallId = new Map<string, { content: string; images: AttachmentInfo[] }>();
   for (const msg of messages) {
     if (msg.role === 'tool' && msg.metadata?.tool_call_id) {
       toolResultByCallId.set(
         msg.metadata.tool_call_id as string,
-        { content: msg.content },
+        { content: msg.content, images: msg.images ?? [] },
       );
     }
   }
@@ -77,6 +78,8 @@ export function foldToolMessages(messages: ChatMessage[]): ChatMessage[] {
                 ? JSON.stringify(tc.arguments)
                 : undefined,
             ...(toolResult !== undefined && { result: toolResult.content }),
+            ...(toolResult !== undefined &&
+              toolResult.images.length > 0 && { artifact: { images: toolResult.images } }),
           };
         }),
       ];
