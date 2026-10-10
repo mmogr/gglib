@@ -11,7 +11,7 @@ use reqwest::Client;
 use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
-    ports::{AttachmentStore, LlmCompletionPort, RetryObserver, UsageSink},
+    ports::{AttachmentStore, GenerationGate, LlmCompletionPort, RetryObserver, UsageSink},
     request_pipeline::{self, ModelContext, SamplingDecision, SamplingLayers},
     retry::RetryPolicy,
 };
@@ -21,6 +21,7 @@ mod far_machine;
 mod images;
 mod retry;
 mod stream;
+mod turn;
 mod writing_time;
 
 pub use far_machine::FarMachine;
@@ -140,6 +141,11 @@ pub struct LlmCompletionAdapter {
     /// the case for CLI `gglib chat`/`q`, which render the loop's events
     /// directly.
     retry_observer: Option<Arc<dyn RetryObserver>>,
+    /// The daemon's generation gate, on which a send to this machine's
+    /// llama-server waits for its turn behind an image render (`turn.rs`).
+    /// `None` (the default) for a caller with no gate to wait on, such as a
+    /// benchmark arm, which runs when someone chose to run it.
+    generation_gate: Option<Arc<dyn GenerationGate>>,
     /// Skip the request-shaping pipeline entirely and send the bare body.
     ///
     /// The control arm of an A/B evaluation: no sampling resolution (the
@@ -335,6 +341,17 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         let images = images::resolve(self.attachments.as_ref(), messages).await?;
         let body = self.shaped_body(messages, tools, &images)?;
 
+        // A send to this machine's llama-server waits for its generation
+        // turn first, outside the send timer and the policy's deadline: an
+        // image render can hold the GPU for longer than either. A send to
+        // another machine takes none here; that machine's proxy counts it.
+        // A failed send below drops the turn at once.
+        let gate = self
+            .generation_gate
+            .as_ref()
+            .filter(|_| self.far_machine.is_none());
+        let turn = turn::take(gate, self.retry_observer.as_ref()).await?;
+
         // Each attempt's connect + first-byte phase is bounded by the send
         // timeout, and the whole sequence by the policy's own deadline, so a
         // stalled llama-server can neither hang the agent task nor multiply the
@@ -356,12 +373,15 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         .await?;
 
         // Decode, normalize, and (when a sink is set) tap prompt-cache usage.
-        Ok(stream::normalized_event_stream(
+        // The turn rides in the stream: the generation lasts as long as the
+        // reply does, not until its headers.
+        let events = stream::normalized_event_stream(
             response,
             self.model_context.dialect.as_ref(),
             self.usage_sink.clone(),
             self.stream_idle_timeout,
-        ))
+        );
+        Ok(Box::pin(turn::held(events, turn)))
     }
 }
 

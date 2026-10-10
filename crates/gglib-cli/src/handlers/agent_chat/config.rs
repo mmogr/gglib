@@ -18,7 +18,7 @@ use anyhow::Result;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::AgentLoopPort;
 use gglib_core::request_pipeline::SamplingLayers;
-use gglib_runtime::compose_agent_loop_with_sampling;
+use gglib_runtime::{LoopGeneration, compose_agent_loop_with_sampling};
 
 use crate::bootstrap::CliContext;
 use crate::handlers::inference::chat::ChatArgs;
@@ -202,6 +202,7 @@ pub(crate) async fn compose(
         Some(params.retry_policy),
         upstream.far_machine,
         ctx.app.attachments().store(),
+        LoopGeneration::default(),
     );
 
     Ok(agent)

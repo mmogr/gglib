@@ -6,14 +6,16 @@
 //!
 //! [`AgentEvent::SystemWarning`] is the right carrier — it is documented as
 //! non-fatal and does not terminate the loop, so the notice arrives mid-stream
-//! and generation continues afterwards.
+//! and generation continues afterwards. A wait for a generation turn behind
+//! an image render is an [`AgentEvent::Waiting`] instead, which says how far
+//! the render has got.
 
 use std::time::Duration;
 
 use tokio::sync::mpsc;
 
-use gglib_core::domain::agent::AgentEvent;
-use gglib_core::ports::RetryObserver;
+use gglib_core::domain::agent::{AgentEvent, WaitingFor};
+use gglib_core::ports::{GateWait, RetryObserver, WaitReason};
 
 /// Turns retry callbacks into `SystemWarning` frames on the agent's channel.
 pub(super) struct RetryNotice {
@@ -33,10 +35,14 @@ impl RetryNotice {
     /// announced. A dropped notice costs the user a status line; a stalled
     /// retry costs them the request.
     fn emit(&self, message: String) {
-        if let Err(e) = self.events.try_send(AgentEvent::SystemWarning {
+        self.send(AgentEvent::SystemWarning {
             message,
             suggested_action: None,
-        }) {
+        });
+    }
+
+    fn send(&self, event: AgentEvent) {
+        if let Err(e) = self.events.try_send(event) {
             tracing::debug!(error = %e, "agent: dropped a retry notice; consumer is behind");
         }
     }
@@ -62,5 +68,42 @@ impl RetryObserver for RetryNotice {
             "Model still unavailable after {attempts} attempts over {:.0}s — giving up",
             elapsed.as_secs_f64()
         ));
+    }
+
+    fn on_gate_wait(&self, wait: GateWait) {
+        let reason = match wait.reason {
+            WaitReason::ImageRender => WaitingFor::ImageRender,
+        };
+        self.send(AgentEvent::Waiting {
+            reason,
+            step: wait.step,
+            total: wait.total,
+            position: u32::try_from(wait.position).unwrap_or(u32::MAX),
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A wait behind a render reaches the stream as a `waiting` frame
+    /// carrying the render's step and this wait's place in line.
+    #[test]
+    fn a_gate_wait_is_sent_as_a_waiting_frame() {
+        let (tx, mut rx) = mpsc::channel(4);
+        RetryNotice::new(tx).on_gate_wait(GateWait {
+            reason: WaitReason::ImageRender,
+            step: 3,
+            total: 20,
+            position: 2,
+        });
+        let frame = serde_json::to_value(rx.try_recv().expect("a frame")).unwrap();
+        assert_eq!(
+            frame,
+            serde_json::json!({
+                "type": "waiting", "reason": "image_render", "step": 3, "total": 20, "position": 2,
+            })
+        );
     }
 }
