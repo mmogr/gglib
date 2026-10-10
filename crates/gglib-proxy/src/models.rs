@@ -416,14 +416,16 @@ impl ErrorResponse {
     /// Refused for the reason [`Self::embedding_model_cannot_chat`] is: the
     /// model draws images and llama-server cannot load it, so admitting it
     /// would unload whatever is serving chat to collect a failure.
+    ///
+    /// The code and the words are core's
+    /// ([`gglib_core::request_pipeline::refuse_unless_chats`]), shared with
+    /// every other door that refuses a chat for an image model.
     pub fn image_model_cannot_chat(model: &str) -> Self {
+        let refusal = gglib_core::request_pipeline::DrawsImages;
         Self::with_code(
-            format!(
-                "Model '{model}' is an image model: it draws images and cannot serve chat \
-                 completions. Name a chat model here."
-            ),
+            refusal.message(model),
             "invalid_request_error",
-            "image_model_cannot_chat",
+            refusal.code(),
         )
     }
 
