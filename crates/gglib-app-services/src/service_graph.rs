@@ -27,9 +27,9 @@ use std::sync::Arc;
 
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::ports::{
-    AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GgufParserPort, HfClientPort,
-    LoopGuardTripSink, ModelCatalogPort, ModelRepository, ModelRuntimePort, RemoteGatewayPort,
-    Repos, RunsPort, SystemProbePort, ToolSupportDetectorPort,
+    AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GenerationGate, GgufParserPort,
+    HfClientPort, LoopGuardTripSink, ModelCatalogPort, ModelRepository, ModelRuntimePort,
+    RemoteGatewayPort, Repos, RunsPort, SystemProbePort, ToolSupportDetectorPort,
 };
 use gglib_core::server_config::ServerConfigOptions;
 use gglib_core::services::AppCore;
@@ -124,6 +124,8 @@ pub struct AppServices {
     pub catalog: Arc<dyn ModelCatalogPort>,
     /// The shared runtime — one llama-server at a time, system-wide.
     pub runtime: Arc<dyn ModelRuntimePort>,
+    /// The shared manager's generation gate: whose turn it is on the GPU.
+    pub generation_gate: Arc<dyn GenerationGate>,
 }
 
 /// Build the shared domain-ops graph.
@@ -186,6 +188,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
     ));
     let runtime: Arc<dyn ModelRuntimePort> =
         Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));
+    let generation_gate = process_manager.generation_gate();
     // Same manager, no prompt cache — one would perturb prefill timings and
     // RAM footprint, and benchmarks exist to measure exactly those.
     let benchmark_runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::with_cache_ram(
@@ -293,5 +296,6 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         model_repo,
         catalog,
         runtime,
+        generation_gate,
     })
 }

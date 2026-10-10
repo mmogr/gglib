@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use gglib_core::domain::InferenceConfig;
-use gglib_core::ports::{AttachmentStore, RetryObserver, UsageSink};
+use gglib_core::ports::{AttachmentStore, GenerationGate, RetryObserver, UsageSink};
 use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use gglib_core::retry::RetryPolicy;
 use reqwest::Client;
@@ -73,6 +73,7 @@ impl LlmCompletionAdapter {
             usage_sink: None,
             retry_policy: RetryPolicy::from_env(),
             retry_observer: None,
+            generation_gate: None,
             raw_passthrough: false,
             first_turn_tool_choice: None,
             first_turn_pending: AtomicBool::new(true),
@@ -218,6 +219,20 @@ impl LlmCompletionAdapter {
     #[must_use]
     pub fn with_retry_observer(mut self, observer: Option<Arc<dyn RetryObserver>>) -> Self {
         self.retry_observer = observer;
+        self
+    }
+
+    /// Wait on `gate` for a generation turn before each send to this
+    /// machine's llama-server, and hold it until the reply's stream ends.
+    ///
+    /// Every chat on this machine's models passes the daemon's gate, so a
+    /// reply waits for an image render rather than sharing the GPU with it.
+    /// A send to another machine ([`with_far_machine`](Self::with_far_machine))
+    /// takes no turn whatever is set here. `None` (the default) waits on
+    /// nothing.
+    #[must_use]
+    pub fn with_generation_gate(mut self, gate: Option<Arc<dyn GenerationGate>>) -> Self {
+        self.generation_gate = gate;
         self
     }
 

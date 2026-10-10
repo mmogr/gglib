@@ -12,7 +12,7 @@ use gglib_core::AGENT_EVENT_CHANNEL_CAPACITY;
 use gglib_core::domain::ModelRef;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_core::ports::{AdmissionLease, AgentGuardReporter, AgentLoopPort, RetryObserver};
-use gglib_runtime::compose_agent_loop;
+use gglib_runtime::{LoopGeneration, compose_agent_loop};
 
 use super::AgentChatRequest;
 use super::dto::AgentRequestConfig;
@@ -119,6 +119,11 @@ pub(super) async fn prepare_over(
         upstream.layers,
         upstream.far_machine,
         state.core.attachments().store(),
+        // A reply on this machine's model waits for an image render, and
+        // says so through the retry notice; a far one takes no turn here.
+        LoopGeneration {
+            gate: Some(Arc::clone(&state.generation_gate)),
+        },
     );
 
     let config = config_for(state, req.config).await;
@@ -179,6 +184,9 @@ pub(crate) fn frame(event: &AgentEvent) -> String {
 #[cfg(test)]
 #[path = "compose_context_tests.rs"]
 mod context_tests;
+#[cfg(test)]
+#[path = "compose_gate_tests.rs"]
+mod gate_tests;
 #[cfg(test)]
 #[path = "compose_sampling_tests.rs"]
 mod sampling_tests;

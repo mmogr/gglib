@@ -35,6 +35,12 @@ in the second slot, stamps none, and the figure is left out: never a default.
 The loop itself counts the messages it left out of each request and reports
 why the model stopped.
 
+Every loop composed here waits on the daemon's generation gate before each
+send to this machine's model, so a reply waits for an image render rather
+than sharing the GPU with it. `retry_notice` reports that wait as a
+`waiting` event with the render's step, beside its retry notices; a run on
+the paired machine's model takes no turn here.
+
 # Which upstream
 
 `remote_upstream` decides, before anything else, whether the loop drives a
