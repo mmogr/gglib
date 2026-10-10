@@ -19,6 +19,11 @@ keep-alives until the client goes, or `refused` and the end. `gglib chat`
 opens it around each send, since its replies come from a llama-server port
 past the proxy.
 
+`images.rs` is `POST /api/images/generations`: the proxy's
+`/v1/images/generations` handler body, mounted at the daemon's door over the
+same image driver, so `gglib image` draws when the proxy is stopped or
+keyed.
+
 `chat_title.rs` is `POST /api/chat`: a chat's title, asked of the
 llama-server the chat runs on. The body names the port, the messages, a
 temperature and a token cap, and any other key is refused. The request runs

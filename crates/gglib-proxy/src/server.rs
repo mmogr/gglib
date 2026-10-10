@@ -24,7 +24,9 @@ use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::domain::defects::LoopGuardTrip;
 use gglib_core::ports::{Admission, ModelCatalogPort, ModelRuntimeError, ModelRuntimePort};
-use gglib_core::ports::{AgentRunStarter, HubChatsPort, RemoteGatewayPort, RunsPort};
+use gglib_core::ports::{
+    AgentRunStarter, HubChatsPort, ImageGenerationPort, RemoteGatewayPort, RunsPort,
+};
 use gglib_core::request_pipeline::{ModelContext, ModelRoute, SamplingLayers, resolve_route};
 use gglib_core::retry::RetryPolicy;
 use gglib_mcp::McpService;
@@ -101,6 +103,9 @@ pub(crate) struct AppState {
     pub(crate) chats: Option<Arc<dyn HubChatsPort>>,
     /// Starts a device's turn on a hub chat; `None` answers it 503.
     pub(crate) turns: Option<Arc<dyn AgentRunStarter>>,
+    /// The daemon's image driver, at `/v1/images/generations`; `None`
+    /// answers it `drawing_unavailable`.
+    pub(crate) images: Option<Arc<dyn ImageGenerationPort>>,
     /// Consecutive-failure watchdog: trips a proactive model recycle when the
     /// upstream degrades to empty responses / first-byte timeouts while still
     /// passing its `/health` check.
@@ -291,6 +296,7 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
         runs: access.devices.runs.clone(),
         chats: access.devices.chats.clone(),
         turns: access.devices.turns.clone(),
+        images: access.devices.images.clone(),
         upstream_health,
         stream_bounds: StreamBounds::for_serve(),
         calibration: Arc::new(TokenCalibration::new()),

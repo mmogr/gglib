@@ -45,6 +45,8 @@ pub(crate) fn api_routes() -> Router<AppState> {
             post(handlers::attachments::upload).layer(handlers::attachments::body_limit()),
         )
         .route("/attachments/{id}", get(handlers::attachments::fetch))
+        // Drawing: the proxy's `/v1/images/generations`, at the daemon's door.
+        .route("/images/generations", post(handlers::images::generations))
         .route("/version", get(handlers::version::get_version))
         // Servers API
         .route("/servers", get(handlers::servers::list))

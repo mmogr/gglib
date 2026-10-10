@@ -14,8 +14,8 @@ use std::sync::Arc;
 
 use gglib_core::ApiKeySource;
 use gglib_core::ports::{
-    AgentRunStarter, HubChatsPort, ModelCatalogPort, ModelRepository, ModelRuntimePort,
-    RemoteGatewayPort, RunsPort, UsageSink,
+    AgentRunStarter, HubChatsPort, ImageGenerationPort, ModelCatalogPort, ModelRepository,
+    ModelRuntimePort, RemoteGatewayPort, RunsPort, UsageSink,
 };
 use gglib_core::services::AppCore;
 use gglib_mcp::McpService;
@@ -70,6 +70,9 @@ pub struct ProxyOps {
     /// What starts a device's turn on a hub chat. Handed over by the daemon
     /// once its routes are built, since the agent loop is composed there.
     turns: std::sync::OnceLock<Arc<dyn AgentRunStarter>>,
+    /// The daemon's image driver, handed over at assembly, so every proxy
+    /// this starts draws at `/v1/images/generations`.
+    images: std::sync::OnceLock<Arc<dyn ImageGenerationPort>>,
     /// The bearer token the running proxy actually demands, and where it came
     /// from. `None` while stopped.
     ///
@@ -94,6 +97,7 @@ impl ProxyOps {
             runs: std::sync::OnceLock::new(),
             chats: std::sync::OnceLock::new(),
             turns: std::sync::OnceLock::new(),
+            images: std::sync::OnceLock::new(),
             effective_key: std::sync::RwLock::new(None),
         }
     }
@@ -127,6 +131,11 @@ impl ProxyOps {
     /// daemon, before it starts a proxy.
     pub fn bind_turns(&self, turns: Arc<dyn AgentRunStarter>) {
         let _ = self.turns.set(turns);
+    }
+
+    /// Hand over the image driver. Once, at assembly, like the runs.
+    pub fn bind_images(&self, images: Arc<dyn ImageGenerationPort>) {
+        let _ = self.images.set(images);
     }
 
     /// The daemon's runs, once bound.
@@ -220,6 +229,9 @@ impl ProxyOps {
         }
         if config.devices.turns.is_none() {
             config.devices.turns = self.turns.get().cloned();
+        }
+        if config.devices.images.is_none() {
+            config.devices.images = self.images.get().cloned();
         }
         // Create catalog port from model repository (cheap wrapper; safe to
         // recreate per call — the underlying model repository is shared).

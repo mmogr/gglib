@@ -748,7 +748,7 @@ readability.
 
 Everything the desktop's proxy serves — `/v1/models`, a model's detail at
 `/v1/models/{name}/detail`, `POST /v1/models/{name}/load`,
-`/v1/chat/completions`, `/v1/runs`, `/v1/chats`, `/v1/attachments`, the dashboard, `POST /v1/proxy/shutdown` —
+`/v1/chat/completions`, `POST /v1/images/generations`, `/v1/runs`, `/v1/chats`, `/v1/attachments`, the dashboard, `POST /v1/proxy/shutdown` —
 with one exception. `/mcp`, the tool gateway, is refused over the tunnel unless the
 desktop ran `enable --allow-mcp`, because a leaked key with a shell MCP
 server configured on the desktop is remote code execution. The refusal is
@@ -759,6 +759,18 @@ sees the runs it started and every run on the desktop's chats, and `/v1/chats`,
 it lets a client that reaches the desktop's proxy directly act as that device:
 this machine not reading a device's reply is a courtesy of the API, not a
 boundary.
+
+A paired device may draw with the desktop's image model at
+`POST /v1/images/generations`, OpenAI's Images API: `{prompt, model?, n?,
+size?, seed?}` answered with `{created, data: [{b64_json}], output_format}`.
+That synchronous form carries no progress, and a render takes minutes; with
+`"stream": true` the answer is server-sent events, gglib's
+`image_generation.progress` at every stage and step, OpenAI's
+`image_generation.partial_image` up to `partial_images` times (0 to 3; a
+small preview frame, whose `size` is the size asked for, not its own), and
+one `image_generation.completed` per image, which also names the image
+model that drew it in gglib's own `model` key. Drawing uses the desktop and
+changes nothing on it, like a chat.
 
 A paired device may read the desktop's chats at `/v1/chats` and carry one on
 with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content, images?, thinking?}`: the
