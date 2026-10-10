@@ -30,6 +30,7 @@ use gglib_core::domain::agent::{AgentMessage, saved_history};
 use gglib_core::domain::branching;
 use gglib_core::domain::chat::ConversationSettings;
 use gglib_core::domain::hub_chats::HubTurn;
+use gglib_core::domain::runs::RunKind;
 use gglib_core::domain::thinking;
 use gglib_core::ports::{
     AgentRunStarter, Created, RemoteGatewayPort as _, RunScope, RunsError, TurnRefused,
@@ -71,6 +72,21 @@ impl AgentRunStarter for HubTurns {
             return Err(refusal(RunsError::ShuttingDown.into()));
         };
         start(&state, device, id, turn).await.map_err(refusal)
+    }
+
+    async fn start_chat(
+        &self,
+        device: &str,
+        id: &str,
+        body: serde_json::Value,
+        draw: bool,
+    ) -> Result<Created, TurnRefused> {
+        let Some(state) = self.0.upgrade() else {
+            return Err(refusal(RunsError::ShuttingDown.into()));
+        };
+        super::chat_turn::start(&state, device, id, body, draw)
+            .await
+            .map_err(refusal)
     }
 }
 
@@ -148,21 +164,24 @@ pub(super) async fn start(
         transcript,
     } = plan;
     let shown = shown_model(state, &model).await;
-    let late: LatePrepare = {
-        let state = Arc::clone(state);
-        Box::new(move |loading| {
-            Box::pin(async move {
-                let chat = on_model(&state, &model, chat, &loading).await?;
-                prepare(&state, chat).await.map_err(with_code)
-            })
-        })
-    };
+    let late = late_on(Arc::clone(state), model, chat);
     begin(state, device, id, shown, transcript, late, permit)
+}
+
+/// What a run on `model` does once it exists: find the model on its port
+/// or load it, then compose `chat`'s loop.
+pub(super) fn late_on(state: AppState, model: String, chat: AgentChatRequest) -> LatePrepare {
+    Box::new(move |loading| {
+        Box::pin(async move {
+            let chat = on_model(&state, &model, chat, &loading).await?;
+            prepare(&state, chat).await.map_err(with_code)
+        })
+    })
 }
 
 /// The name a run on `model` is listed under: the catalogue's name for it,
 /// or the identifier when the catalogue has none.
-async fn shown_model(state: &AppState, model: &str) -> String {
+pub(super) async fn shown_model(state: &AppState, model: &str) -> String {
     let found = state.core.models().get(model).await.ok().flatten();
     found.map_or_else(|| model.to_owned(), |m| m.name)
 }
@@ -183,7 +202,8 @@ pub(super) fn begin(
     permit: OwnedSemaphorePermit,
 ) -> Result<Created, HttpError> {
     let scope = RunScope::Device(device.to_owned());
-    launch_turn(state, id, scope, model, transcript, late, permit)
+    let run = (RunKind::Agent, model);
+    launch_turn(state, id, scope, run, transcript, late, permit)
 }
 
 /// A turn read against the hub's record: the model it runs on, the chat

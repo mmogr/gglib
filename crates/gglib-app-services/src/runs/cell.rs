@@ -14,7 +14,7 @@
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use gglib_core::domain::runs::{RunError, RunInfo, RunKind, RunStatus};
+use gglib_core::domain::runs::{RunError, RunFrames, RunInfo, RunKind, RunStatus};
 use gglib_core::ports::RunScope;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
@@ -119,6 +119,12 @@ impl RunCell {
             conversation_id: spec.conversation_id,
             last_seq: 0,
             error: None,
+            // An agent run logs the loop's events; a chat run logs `OpenAI`
+            // chunks unless it is started with builtins (`agent_frames`).
+            frames: match spec.kind {
+                RunKind::Agent => RunFrames::Agent,
+                RunKind::Chat => RunFrames::Openai,
+            },
         };
         Self {
             id: id.to_owned(),
@@ -268,6 +274,12 @@ impl RunCell {
         drop(state);
         self.wake();
         Ok(())
+    }
+
+    /// Say the run logs the agent loop's events, whatever its kind: a chat
+    /// run started with builtins.
+    pub(super) fn agent_frames(&self) {
+        self.lock().info.frames = RunFrames::Agent;
     }
 
     /// Keep `data` as the run's latest preview, for `tool_call_id`, and wake

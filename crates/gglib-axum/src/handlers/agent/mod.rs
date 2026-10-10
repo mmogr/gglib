@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod chat_turn;
 mod compose;
 mod dto;
 mod guard;

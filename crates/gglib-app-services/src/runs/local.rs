@@ -51,6 +51,15 @@ impl Reserved<'_> {
         self.cell.info()
     }
 
+    /// Say the run logs the agent loop's events rather than `OpenAI` chunks,
+    /// for a chat run that runs the loop with builtins. Said before the run
+    /// starts, so no reader is ever told otherwise.
+    #[must_use]
+    pub fn agent_frames(self) -> Self {
+        self.cell.agent_frames();
+        self
+    }
+
     /// Start the run: `work` is handed the run's log, and `ended` is called
     /// once it ends. Returns the run as it stood when started.
     pub fn start(mut self, work: impl FnOnce(RunLog) -> RunWork, ended: RunEnded) -> RunInfo {

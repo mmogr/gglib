@@ -22,6 +22,7 @@ no infrastructure concerns.
 | [`loop_detection`] | [`LoopDetector`] — repeated tool-call-batch guard (FNV-1a batch signatures) |
 | [`stagnation`] | [`StagnationDetector`] — repeated assistant-text guard |
 | `transcript` | [`to_new_message`] — an agent message as a saved chat row; [`saved_history`] — a saved chat's prompt and rows as the messages its next turn starts from |
+| `openai_history` | [`parse_openai_messages`] and [`into_agent_messages`] — an `OpenAI` request's `messages` (system, user text and image parts, assistant with `tool_calls`, tool rows) as the loop's history, for a phone-kept chat that runs with builtins; an inline image is named by the id it was stored under, and a refusal names a message by its index, never its text |
 | `replay` | [`rows_from_frames`] — a reply's saved rows, rebuilt from its logged events, each turn's [`TurnUsage`] saved under [`MADE_KEYS`], its context's size, the messages trimmed and why it stopped among them; a tool row carries the ids of the images its result lists |
 | `turn_usage` | [`TurnUsage`] — how one model turn was made: model, token counts, times, why it stopped; never text. [`ContextReading`] — how large the answering server's context was and how many earlier messages did not fit, under one spelling for the proxy's usage frame and the `turn_usage` event |
 | [`fnv1a`] | [`fnv1a::fnv1a_64`] — the hash backing both detectors |
