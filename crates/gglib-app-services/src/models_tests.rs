@@ -620,7 +620,9 @@ async fn remove_blocks_when_the_shared_runtime_reports_the_model_running() {
 }
 
 /// `force=true` must stop the server through the same shared runtime
-/// `ServerOps` uses, not a disconnected registry that never saw it start.
+/// `ServerOps` uses, not a disconnected registry that never saw it start:
+/// the model being removed, by its id, and never whatever the primary slot
+/// holds (the stand-in panics when told to stop its current model).
 #[tokio::test]
 async fn remove_with_force_stops_the_server_through_the_shared_runtime() {
     let core = test_core().await;

@@ -226,6 +226,10 @@ pub enum ImageError {
         message: String,
     },
 
+    /// A person stopped the image model while it drew this.
+    #[error("the image model was stopped before the picture was finished")]
+    Stopped,
+
     /// The render stopped stepping, and the image model was stopped.
     #[error(
         "the render made no progress for {}s, so the image model was stopped; retry",
@@ -270,7 +274,7 @@ impl ImageError {
             Self::InvalidSize { .. } => Some("invalid_image_size"),
             Self::Invalid { .. } => Some("invalid_request"),
             Self::Gate(GateError::Stalled(_)) => Some("admission_timeout"),
-            Self::Failed { .. } => Some("image_generation_failed"),
+            Self::Failed { .. } | Self::Stopped => Some("image_generation_failed"),
             Self::Stalled { .. } | Self::DeadlineExceeded => Some("image_render_stalled"),
             Self::Refused { code, .. } => code.as_deref(),
             Self::Runtime(_) => None,
@@ -287,7 +291,7 @@ impl ImageError {
             | Self::Invalid { .. }
             | Self::Gate(GateError::Unavailable(_)) => 400,
             Self::Gate(GateError::Stalled(_)) => 503,
-            Self::Failed { .. } => 502,
+            Self::Failed { .. } | Self::Stopped => 502,
             Self::Stalled { .. } | Self::DeadlineExceeded => 504,
             Self::Runtime(e) => e.suggested_status_code(),
             Self::Refused { status, .. } => *status,

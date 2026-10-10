@@ -15,6 +15,11 @@
 //! holds from the moment the job is submitted: the submission runs in its
 //! own task, so a request dropped during it still ends in a render that is
 //! cancelled and followed.
+//!
+//! A person's Stop on the image model never empties its slot under a render.
+//! It asks, and the render, dropped or not, retires its model at its next
+//! read of the job: the server stopped, the lease settled with the slot it
+//! was counted in, the turn ended.
 
 use std::fmt;
 use std::sync::{Arc, Mutex};
@@ -84,6 +89,10 @@ pub(crate) trait RenderHost: Send + Sync {
     /// Stop `model_id`'s server, then release the render's lease and empty
     /// its slot, then end `turn`: [`ProcessManager::retire_render`].
     async fn retire(&self, turn: GenerationTurn, model_id: u32);
+
+    /// Whether a person asked to stop `model_id` while this render draws
+    /// with it: [`ProcessManager::render_stop_asked`].
+    fn stop_asked(&self, model_id: u32) -> bool;
 }
 
 #[async_trait]
@@ -113,6 +122,10 @@ impl RenderHost for ProcessManager {
 
     async fn retire(&self, turn: GenerationTurn, model_id: u32) {
         self.retire_render(turn, model_id).await;
+    }
+
+    fn stop_asked(&self, model_id: u32) -> bool {
+        self.render_stop_asked(model_id)
     }
 }
 

@@ -7,6 +7,8 @@
 //! [`IMAGE_STALL`](super::IMAGE_STALL) without a step, or runs past
 //! [`IMAGE_JOB_DEADLINE`](super::IMAGE_JOB_DEADLINE), is retired: its server
 //! stopped, then its lease released and slot emptied, then its turn ended.
+//! So is one whose image model a person asked to stop: the Stop leaves the
+//! slot to the render, which lets go of it in that same order.
 //!
 //! Dropped before its job ends, a render asks `sd-server` to cancel it. A
 //! queued job stops; a generating one cannot (409), so a task keeps the turn
@@ -157,7 +159,7 @@ impl Render {
                 // Transient until the clocks say otherwise.
                 Err(e) => debug!(job = %self.job.id, error = %e, "could not read the job"),
             }
-            if let Some(error) = self.watch.overdue() {
+            if let Some(error) = ending(&self.watch, self.host.as_ref(), self.model_id) {
                 warn!(job = %self.job.id, %error, "retiring the render");
                 if let Some(turn) = self.turn.take() {
                     self.host.retire(turn, self.model_id).await;
@@ -232,12 +234,21 @@ async fn abandon(
                 Seen::Loading | Seen::Same => {}
             }
         }
-        if let Some(error) = watch.overdue() {
+        if let Some(error) = ending(&watch, host.as_ref(), model_id) {
             warn!(job = %job.id, %error, "retiring the abandoned render");
             host.retire(turn, model_id).await;
             return;
         }
     }
+}
+
+/// Why the render on `model_id` must be retired now, if it must: a person
+/// asked to stop its model, or one of its clocks ran out.
+fn ending(watch: &Watch, host: &dyn RenderHost, model_id: u32) -> Option<ImageError> {
+    if host.stop_asked(model_id) {
+        return Some(ImageError::Stopped);
+    }
+    watch.overdue()
 }
 
 /// Each image's bytes and size, read from the image itself.

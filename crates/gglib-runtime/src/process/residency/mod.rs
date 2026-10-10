@@ -40,6 +40,11 @@ pub use vram::ram_available_for;
 /// enough that a hundred queued requests are not a busy loop.
 const POLL_TICK: Duration = Duration::from_millis(250);
 
+/// How long a Stop waits for a render to let go of its image model: the
+/// driver's next look at the job (a second away at most) and the kill of
+/// `sd-server` that follows.
+const RENDER_STOP_WAIT: Duration = Duration::from_secs(20);
+
 /// The models resident in VRAM, and the machinery that puts them there.
 ///
 /// Holds the standing launch configuration, the pin, and the
@@ -623,13 +628,26 @@ impl ResidentSet {
 
     /// Stop model `model_id` in whichever slot holds it, even one a run
     /// holds; `false` when no slot does.
+    ///
+    /// An image model a render holds is never emptied under the render: the
+    /// render is asked to stop, and this waits, up to
+    /// [`RENDER_STOP_WAIT`], until it has let go, by retiring its model
+    /// itself when it was drawing (`ProcessManager::retire_render`).
+    ///
+    /// # Errors
+    ///
+    /// `Internal` when the process could not be stopped, or when a render
+    /// still held the model after [`RENDER_STOP_WAIT`]; the render stays
+    /// asked, and stops when its driver next reads its job.
     pub(super) async fn stop_model(
         &self,
         model_id: u32,
         core: &Arc<RwLock<GuiProcessCore>>,
     ) -> Result<bool, ModelRuntimeError> {
+        let asked = self.stop_its_render(model_id).await?;
         let Some((_slot, previous)) = self.queue.evict_model(model_id) else {
-            return Ok(false);
+            // A render that was drawing retired the model itself.
+            return Ok(asked);
         };
         let mut core_w = core.write().await;
         core_w
@@ -639,17 +657,52 @@ impl ResidentSet {
         Ok(true)
     }
 
+    /// Ask any render on model `model_id` to stop, and wait until none
+    /// holds it; whether one did.
+    async fn stop_its_render(&self, model_id: u32) -> Result<bool, ModelRuntimeError> {
+        let deadline = tokio::time::Instant::now() + RENDER_STOP_WAIT;
+        let mut asked = false;
+        loop {
+            // Subscribed before asking, so the render letting go is not missed.
+            let changed = self.queue.subscribe();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            if !self.queue.ask_render_stop(model_id) {
+                return Ok(asked);
+            }
+            asked = true;
+            if tokio::time::Instant::now() >= deadline {
+                return Err(ModelRuntimeError::Internal(
+                    "the image model is drawing and has not stopped yet; it stops when its \
+                     render next reports"
+                        .to_owned(),
+                ));
+            }
+            tokio::select! {
+                () = changed => {}
+                () = tokio::time::sleep(POLL_TICK) => {}
+            }
+        }
+    }
+
     /// Stop the primary resident, if there is one, even one a run holds.
+    ///
+    /// By its id, through [`Self::stop_model`]: an image model that swapped
+    /// into the primary slot and is drawing is asked to stop and waited for,
+    /// as a Stop that names it is, and its slot is never emptied under its
+    /// render. Every caller waits that out (a benchmark's stop, the proxy's
+    /// cache clear and its restart of a dead server).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::stop_model`]: the process could not be stopped, or a
+    /// render still held the model after [`RENDER_STOP_WAIT`].
     pub(super) async fn stop_primary(
         &self,
         core: &Arc<RwLock<GuiProcessCore>>,
     ) -> Result<(), ModelRuntimeError> {
-        if let Some(previous) = self.queue.evict(PRIMARY_SLOT) {
-            let mut core_w = core.write().await;
-            core_w
-                .kill(previous.model_id)
-                .await
-                .map_err(|e| ModelRuntimeError::Internal(e.to_string()))?;
+        if let Some(primary) = self.queue.primary() {
+            self.stop_model(primary.model_id, core).await?;
         }
         Ok(())
     }

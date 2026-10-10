@@ -128,7 +128,11 @@ A render step is progress, so nobody behind a long render reaches
 under the same stall rule as a ticket. A render whose process had to be killed
 is retired by `AdmissionQueue::retire_render`: the kill first, then one locked
 release and eviction that touches the slot only while it still holds that
-model, then the turn ends. Requests through the proxy take leases and so count
+model, then the turn ends. A person's Stop on an image model a render holds
+goes the same way: `ask_render_stop` notes it and empties nothing; a render
+still waiting for its turn leaves the line with its lease, and the driver of
+one that is drawing reads `render_stop_asked` at its next look at the job and
+retires it. Requests through the proxy take leases and so count
 already; the callers that take explicit turns arrive with image drawing.
 
 The dashboard reads the gate as `AdmissionSnapshot::generation`: the render

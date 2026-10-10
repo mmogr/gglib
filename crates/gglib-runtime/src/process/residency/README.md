@@ -82,11 +82,20 @@ link was stopped before that, when the request found it.
 `ResidentSet::stop_model` stops a model in whichever slot holds it, found and
 emptied under one lock, then its process killed: a person's Stop on an image
 model beside a chat model reaches the image model and leaves the chat model
-running. The proxy's own restart of a dead server still stops the primary.
-A render's stop must go through `ProcessManager::retire_render` instead,
-as the drawing that comes next does: a render's lease released by slot
-after `stop_model` emptied that slot would take a request from whatever
-model was launched there in between.
+running. A stop of the current model (`ResidentSet::stop_primary`: a
+benchmark's, the proxy's cache clear and its restart of a dead server) stops
+whatever the primary slot holds by that model's id, through the same path,
+so neither empties a slot under a render.
+A render's stop goes through `ProcessManager::retire_render` instead: a
+render's lease released by slot after `stop_model` emptied that slot would
+take a request from whatever model was launched there in between. So for an
+image model a render holds, `stop_model` asks the render to stop
+(`AdmissionQueue::ask_render_stop`) and waits, up to `RENDER_STOP_WAIT` (20
+seconds), until no render holds it: a render waiting for its turn leaves the
+line and drops its lease, after which the Stop empties the slot as usual,
+and one that is drawing is retired by its driver within a second, which
+empties the slot itself. A Stop that outwaits that answers an error and has
+emptied nothing; the render stays asked.
 
 # Two residents, three budgets
 
