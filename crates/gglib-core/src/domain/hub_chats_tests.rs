@@ -2,31 +2,39 @@
 //! both clients replay: a listing, a chat opened (a finished reply with how
 //! it was made, then one that was stopped), the rows of a reply whose tool
 //! made an image, a device's turn, a turn with an image, the answer to the
-//! upload that image was sent by, and a turn that turns thinking off
-//! (`hub_chats_thinking_tests` reads that one).
+//! upload that image was sent by, a turn that turns thinking off
+//! (`hub_chats_thinking_tests` reads that one), and a branch with the change
+//! that made it and the turn that answers it (`hub_chats_branch_tests`, which
+//! also builds them).
 
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use super::hub_chats_branch_tests as branch;
 use super::{HubChat, HubChatList, HubChatOpen, HubTurn};
 use crate::domain::Thinking;
 use crate::domain::agent::ToolCall;
 use crate::domain::attachment::{AttachmentId, AttachmentInfo, AttachmentUpload};
+use crate::domain::branching::{ChatChange, ChatChanged};
 use crate::domain::chat::{Conversation, ConversationSettings, Message, MessageRole};
 
 /// The recorded bodies, by name. The field order is the file's order.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Recorded {
-    list: HubChatList,
+    pub(super) list: HubChatList,
     pub(super) open: HubChatOpen,
     tool_reply: Vec<Message>,
     pub(super) turn: HubTurn,
     upload: AttachmentUpload,
     image_turn: HubTurn,
     pub(super) thinking_turn: HubTurn,
+    pub(super) branch_open: HubChatOpen,
+    pub(super) change: ChatChange,
+    pub(super) changed: ChatChanged,
+    pub(super) answer_turn: HubTurn,
 }
 
 /// The image the recorded chat carries: a 1280x720 PNG, as an upload answers
@@ -104,6 +112,7 @@ fn turn(content: &str) -> HubTurn {
         content: content.to_owned(),
         images: Vec::new(),
         thinking: None,
+        answer_saved: false,
     }
 }
 
@@ -128,8 +137,10 @@ fn row(
     }
 }
 
-pub(super) fn recorded() -> Recorded {
-    let list = HubChatList {
+/// The listing: a chat with a live run, one with nothing to say of its
+/// model, and a branch of the first.
+fn listed() -> HubChatList {
+    HubChatList {
         chats: vec![
             HubChat {
                 id: 12,
@@ -138,6 +149,7 @@ pub(super) fn recorded() -> Recorded {
                 model: Some("qwen3-8b".to_owned()),
                 updated_at: "2026-09-30 09:14:21".to_owned(),
                 live_run: Some("chat-5b1e".to_owned()),
+                branch_of: None,
             },
             HubChat {
                 id: 9,
@@ -146,9 +158,15 @@ pub(super) fn recorded() -> Recorded {
                 model: None,
                 updated_at: "2026-09-29 18:02:41".to_owned(),
                 live_run: None,
+                branch_of: None,
             },
+            branch::listed(),
         ],
-    };
+    }
+}
+
+pub(super) fn recorded() -> Recorded {
+    let list = listed();
     let conversation = Conversation {
         id: 12,
         title: "Why the build broke".to_owned(),
@@ -211,6 +229,8 @@ pub(super) fn recorded() -> Recorded {
         open: HubChatOpen {
             conversation,
             messages,
+            points: Vec::new(),
+            answerable: false,
         },
         tool_reply: tool_reply(),
         turn: turn("And how do I fix it?"),
@@ -226,6 +246,10 @@ pub(super) fn recorded() -> Recorded {
             thinking: Some(Thinking::Off),
             ..turn("Answer in one line.")
         },
+        branch_open: branch::opened(),
+        change: branch::change(),
+        changed: branch::changed(),
+        answer_turn: branch::answer_turn(),
     }
 }
 

@@ -134,11 +134,12 @@ const CODES: &[ErrorCode] = &[
     row("model_unavailable", SERVER, Some(503), "The chat's model could not be loaded on the hub."),
     row("unavailable", SERVER, Some(503), "Something the run needs is unavailable, such as a model stopped while the run was prepared; retry."),
     // A change to a chat (ADR 0017), and a run that answers one, refused by the
-    // branching rules: the code is the refusal's type.
-    row("message_not_found", UNTYPED, Some(404), "The message a change to a chat names is not in its conversation."),
-    row("unchanged", UNTYPED, Some(400), "The edit leaves the message as it was."),
-    row("not_a_reply", UNTYPED, Some(400), "The message a regenerate names is a question; only a reply is answered again."),
-    row("nothing_to_answer", UNTYPED, Some(409), "The conversation does not end in a question with no reply, so a regenerate or a run that answers it has nothing to answer."),
+    // branching rules: on /api the code is the refusal's type, and the proxy
+    // answers a device's change or turn with it beside this type.
+    row("message_not_found", INVALID, Some(404), "The message a change to a chat names is not in its conversation."),
+    row("unchanged", INVALID, Some(400), "The edit leaves the message as it was."),
+    row("not_a_reply", INVALID, Some(400), "The message a regenerate names is a question; only a reply is answered again."),
+    row("nothing_to_answer", INVALID, Some(409), "The conversation does not end in a question with no reply, so a regenerate or a run that answers it has nothing to answer."),
     // Inside a stream already under way.
     row("upstream_timeout", SERVER, Some(504), "The model server sent nothing, or did not finish, within its time limit; retry."),
     // A run's error, which no response carries on its own.

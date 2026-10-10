@@ -114,6 +114,7 @@ pub(super) async fn add_turn_via(
         content: body.content,
         images: body.images,
         thinking: body.thinking,
+        answer_saved: false,
     };
     Ok(relay(far.add_turn(run_id, &turn).await?).await)
 }

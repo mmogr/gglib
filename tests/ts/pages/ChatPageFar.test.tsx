@@ -309,6 +309,19 @@ describe('ChatPage, the far machine’s chats', () => {
     expect(far.addFarTurn).toHaveBeenCalledWith(1, expect.stringMatching(/^chat-/), 'And how do I fix it?', [], undefined);
   });
 
+  it('a far chat branched from another is marked a branch in the list, as one of this machine is', async () => {
+    const user = userEvent.setup();
+    const far = transport.current as Record<string, unknown>;
+    far.listFarChats = vi.fn(async () => [{ ...FAR_CHATS[0], id: 2, title: 'A branch', branch_of: 1 }, FAR_CHATS[1]]);
+    joined();
+    renderPage();
+    await user.click(await screen.findByRole('button', FAR_SWITCH));
+
+    const row = (title: string) => screen.getAllByRole('option').find((o) => within(o).queryByText(title))!;
+    await waitFor(() => expect(within(row('A branch')).getByText('Branch')).toBeInTheDocument());
+    expect(within(row('Hub notes')).queryByText('Branch')).not.toBeInTheDocument();
+  });
+
   it('a far chat still called New Chat is not titled here when a reply finishes in it', async () => {
     const user = userEvent.setup();
     const far = transport.current as Record<string, unknown>;

@@ -2,11 +2,13 @@
 //! hub's chats, and the hub runs the reply as an agent run in the device's
 //! scope, saved to the chat.
 //!
-//! The body is `{conversation_id, content, images, thinking}` and nothing
-//! more, with `images` (stored image ids) left out of a text-only turn and
-//! `thinking` (`"off"` or `"default"`) left out of one that does not change
-//! the chat's Thinking choice: the hub rebuilds the history from its own
-//! record. Only a named device may: a local client writes to its chats at
+//! The body is `{conversation_id, content, images, thinking, answer_saved}`
+//! and nothing more, with `images` (stored image ids) left out of a
+//! text-only turn, `thinking` (`"off"` or `"default"`) left out of one that
+//! does not change the chat's Thinking choice, and `answer_saved` left out
+//! of one that adds a message: the hub rebuilds the history from its own
+//! record. A turn that says `answer_saved: true` has empty `content` and no
+//! image, and answers the question the chat already ends in (ADR 0017). Only a named device may: a local client writes to its chats at
 //! `/api`. Every error message is fixed text or the starter's, which is
 //! fixed text too.
 
@@ -51,7 +53,7 @@ pub(super) async fn put(state: &AppState, scope: RunScope, id: &str, body: Value
     let turns = state.turns.clone().ok_or_else(unavailable)?;
     let Ok(turn) = serde_json::from_value::<HubTurn>(body) else {
         return Err(invalid(
-            "a turn's body is {\"conversation_id\": <number>, \"content\": <text>, \"images\": [<id>], \"thinking\": \"off\" or \"default\"}",
+            "a turn's body is {\"conversation_id\": <number>, \"content\": <text>, \"images\": [<id>], \"thinking\": \"off\" or \"default\", \"answer_saved\": true or false}",
         ));
     };
     let created = turns.start(device, id, turn).await.map_err(refused)?;

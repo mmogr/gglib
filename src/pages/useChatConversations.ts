@@ -27,7 +27,8 @@ const DEFAULT_CONVERSATION_TITLE = 'New Chat';
 /**
  * A far chat as the list shows one. Its prompt is read when it is opened.
  * Its `model_id` is the far machine's, which names another model here, so
- * the summary, a conversation of this machine's shape, carries none.
+ * the summary, a conversation of this machine's shape, carries none. A far
+ * branch keeps the chat it was made from, for the list to mark it.
  */
 function summaryOf(chat: HubChat): ConversationSummary {
   return {
@@ -37,6 +38,7 @@ function summaryOf(chat: HubChat): ConversationSummary {
     system_prompt: null,
     created_at: chat.updated_at,
     updated_at: chat.updated_at,
+    ...(chat.branch_of !== undefined && { branch_of: chat.branch_of }),
   };
 }
 

@@ -4,6 +4,8 @@
 //! chats and open one, and `gglib remote forget` takes that away with the
 //! key. Nothing is copied; each call reads the hub's own rows. An image a
 //! turn carries is sent once, ahead of the turn, and read back by its id.
+//! A device changes a chat as the hub's own page does, by the branching
+//! rules (ADR 0017): a saved reply is never rewritten.
 //!
 //! # Design Rules
 //!
@@ -14,17 +16,22 @@ use async_trait::async_trait;
 use super::attachment_store::AttachmentError;
 use super::runs::Created;
 use crate::domain::attachment::{AttachmentBlob, AttachmentId, AttachmentUpload};
+use crate::domain::branching::{ChatChange, ChatChanged, Refused};
 use crate::domain::hub_chats::{HubChatList, HubChatOpen, HubTurn};
 
-/// Why a chat could not be read. Fixed text only.
+/// Why a chat could not be read or changed. Fixed text only: a refusal
+/// names a message by its id at most.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum HubChatsError {
     /// No chat has that id.
     #[error("no chat has that id")]
     NotFound,
-    /// The hub's chat history could not be read.
+    /// The hub's chat history could not be read or written.
     #[error("the hub's chats could not be read")]
     Unreadable,
+    /// The branching rules refuse the change; nothing was written.
+    #[error(transparent)]
+    Refused(#[from] Refused),
 }
 
 impl HubChatsError {
@@ -34,6 +41,7 @@ impl HubChatsError {
         match self {
             Self::NotFound => "not_found",
             Self::Unreadable => "internal_error",
+            Self::Refused(refused) => refused.code(),
         }
     }
 
@@ -43,6 +51,7 @@ impl HubChatsError {
         match self {
             Self::NotFound => 404,
             Self::Unreadable => 500,
+            Self::Refused(refused) => refused.http_status(),
         }
     }
 }
@@ -64,6 +73,17 @@ pub trait HubChatsPort: Send + Sync + std::fmt::Debug {
     ///
     /// [`HubChatsError::NotFound`] and [`HubChatsError::Unreadable`].
     async fn open(&self, id: i64) -> Result<HubChatOpen, HubChatsError>;
+
+    /// Make `change` to chat `id` as the branching rules say: in place, or
+    /// on a new branch of it, which the answer names (ADR 0017). While a
+    /// reply to it is being written, an edit of the question it answers is
+    /// made on a branch rather than refused.
+    ///
+    /// # Errors
+    ///
+    /// [`HubChatsError::NotFound`], [`HubChatsError::Refused`] and
+    /// [`HubChatsError::Unreadable`]. Nothing is written.
+    async fn change(&self, id: i64, change: &ChatChange) -> Result<ChatChanged, HubChatsError>;
 
     /// Store an image a device sends, for a turn to name by its id.
     ///

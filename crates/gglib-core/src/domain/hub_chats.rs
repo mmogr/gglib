@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::attachment::AttachmentId;
+use super::branching::BranchPoint;
 use super::chat::{Conversation, Message};
 use super::thinking::Thinking;
 
@@ -33,6 +34,10 @@ pub struct HubChat {
     #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub live_run: Option<String>,
+    /// The chat it was branched from (ADR 0017), when it is a branch.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch_of: Option<i64>,
 }
 
 /// The hub's chats, newest first.
@@ -43,7 +48,8 @@ pub struct HubChatList {
     pub chats: Vec<HubChat>,
 }
 
-/// One chat opened: the conversation and every row of it, in order.
+/// One chat opened: the conversation, every row of it, in order, and what
+/// the hub says of its branches (ADR 0017).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct HubChatOpen {
@@ -53,6 +59,17 @@ pub struct HubChatOpen {
     /// images it carries, without their bytes: a device reads an image by
     /// its id, at `GET /v1/attachments/{id}`.
     pub messages: Vec<Message>,
+    /// The points along `messages` where the chat's family holds other
+    /// options, each opened as a chat of its own. Left out when there are
+    /// none.
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<Vec<BranchPoint>>", optional))]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub points: Vec<BranchPoint>,
+    /// Whether the last row is a question with no reply, which a turn that
+    /// says `answer_saved` answers. Left out when it is not.
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub answerable: bool,
 }
 
 /// A turn a paired device adds to one of the hub's chats.
@@ -60,9 +77,10 @@ pub struct HubChatOpen {
 /// The body of `PUT /v1/runs/{id}?kind=agent` on the proxy's door. No
 /// history travels: the hub rebuilds it from its own record. No image
 /// travels either: the device uploads each one first, at
-/// `POST /v1/attachments`, and names it here by its id. Any other key is
-/// refused, so a client sending `model`, `messages` or `replace_from` learns
-/// none is honoured.
+/// `POST /v1/attachments`, and names it here by its id. A turn that says
+/// `answer_saved` adds no message: it answers the question the chat already
+/// ends in, as an edit or a regenerate leaves it. Any other key is refused,
+/// so a client sending `model` or `messages` learns none is honoured.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -70,7 +88,8 @@ pub struct HubTurn {
     /// The hub's chat the turn is added to.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub conversation_id: i64,
-    /// The user's message. Empty when the turn is its images alone.
+    /// The user's message. Empty when the turn is its images alone, and
+    /// when it answers the question already saved.
     pub content: String,
     /// The images the message carries, by id, in order. Left out of the
     /// body when there are none.
@@ -84,8 +103,17 @@ pub struct HubTurn {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thinking: Option<Thinking>,
+    /// Whether the turn answers the question the chat ends in, already
+    /// saved, rather than adding a message: it then carries no text and no
+    /// image, and only its reply is saved. Left out of the body when false.
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub answer_saved: bool,
 }
 
+#[cfg(test)]
+#[path = "hub_chats_branch_tests.rs"]
+mod hub_chats_branch_tests;
 #[cfg(test)]
 #[path = "hub_chats_tests.rs"]
 mod hub_chats_tests;

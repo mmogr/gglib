@@ -7,9 +7,10 @@ import type { Thinking } from "./Thinking";
  * The body of `PUT /v1/runs/{id}?kind=agent` on the proxy's door. No
  * history travels: the hub rebuilds it from its own record. No image
  * travels either: the device uploads each one first, at
- * `POST /v1/attachments`, and names it here by its id. Any other key is
- * refused, so a client sending `model`, `messages` or `replace_from` learns
- * none is honoured.
+ * `POST /v1/attachments`, and names it here by its id. A turn that says
+ * `answer_saved` adds no message: it answers the question the chat already
+ * ends in, as an edit or a regenerate leaves it. Any other key is refused,
+ * so a client sending `model` or `messages` learns none is honoured.
  */
 export type HubTurn = { 
 /**
@@ -17,7 +18,8 @@ export type HubTurn = {
  */
 conversation_id: number, 
 /**
- * The user's message. Empty when the turn is its images alone.
+ * The user's message. Empty when the turn is its images alone, and
+ * when it answers the question already saved.
  */
 content: string, 
 /**
@@ -31,4 +33,10 @@ images?: Array<string>,
  * budget of `0`, `default` forgets that. Left out of the body when
  * unsaid, and the turn then runs as the chat remembers.
  */
-thinking?: Thinking, };
+thinking?: Thinking, 
+/**
+ * Whether the turn answers the question the chat ends in, already
+ * saved, rather than adding a message: it then carries no text and no
+ * image, and only its reply is saved. Left out of the body when false.
+ */
+answer_saved?: boolean, };

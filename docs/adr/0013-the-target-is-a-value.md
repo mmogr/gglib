@@ -135,6 +135,26 @@ route is added, and the list of routes the tunnel reaches, which the proxy's
 test pins, is unchanged. A device still has no way to write a chat's
 settings at large: a turn's body with any other key is refused.
 
+### Amendment, 2026-10-09: a device changes a chat as the page does
+
+A device may also edit, regenerate or branch one of this machine's chats,
+with `POST /v1/chats/{id}/changes` and the body the page sends its own
+daemon, and answer the question a chat then ends in with a turn that says
+`answer_saved: true` and carries no message. Opening a chat says the branch
+points its family holds and whether it ends in a question nothing answers;
+the list says which chat a branch was made from. ADR 0017's rules decide
+every change, here as on the page and the CLI: a change that would discard
+or alter a saved reply copies the chat, as far as the change, into a new
+branch, which the answer names; the one change made in place is an edit of
+the last question while nothing answers it or is being written.
+
+This is still using the machine. A change writes the chats a turn already
+writes, and less: it adds a chat, or replaces a question no reply hangs on,
+and no saved reply is ever rewritten or deleted. Models, settings, pairings
+and tools stay out of reach. The route joins the list of what the tunnel
+reaches, which the proxy's test pins, behind the same guard as the other
+chat routes: only a request tunnelled from a named device reaches it.
+
 ### 4. A turn remembers the model it asked that machine for
 
 `RemotePairing` gains `default_model`: the model this machine last asked

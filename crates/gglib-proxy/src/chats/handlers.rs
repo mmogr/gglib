@@ -1,4 +1,4 @@
-//! `GET /v1/chats` and `GET /v1/chats/{id}`.
+//! `GET /v1/chats`, `GET /v1/chats/{id}` and `POST /v1/chats/{id}/changes`.
 //!
 //! Every error message here is fixed text or a [`HubChatsError`]'s, which is
 //! fixed text too: nothing echoes a path, a title or a row.
@@ -6,10 +6,13 @@
 use std::sync::Arc;
 
 use axum::Json;
+use axum::extract::rejection::JsonRejection;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use gglib_core::domain::branching::ChatChange;
 use gglib_core::ports::{HubChatsError, HubChatsPort};
+use serde_json::Value;
 
 use crate::models::ErrorResponse;
 use crate::server::AppState;
@@ -19,7 +22,7 @@ pub(super) type Answer = Result<Response, Response>;
 fn refused(err: &HubChatsError) -> Response {
     let status =
         StatusCode::from_u16(err.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-    let error_type = if status == StatusCode::NOT_FOUND {
+    let error_type = if status.is_client_error() {
         "invalid_request_error"
     } else {
         "server_error"
@@ -72,4 +75,41 @@ pub(crate) async fn open_chat(State(state): State<AppState>, Path(id): Path<Stri
         .map_err(|_| refused(&HubChatsError::NotFound))?;
     let open = chats.open(id).await.map_err(|e| refused(&e))?;
     Ok(Json(open).into_response())
+}
+
+/// `POST /v1/chats/{id}/changes`: an edit, a regenerate or a branch of one
+/// chat, made as the hub's branching rules say (ADR 0017). The answer names
+/// the chat to show, whether it is a new branch, and whether its last
+/// question is now to be answered, which a turn that says `answer_saved`
+/// does. A body that is no change is refused `invalid_request`.
+pub(crate) async fn change_chat(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    body: Result<Json<Value>, JsonRejection>,
+) -> Answer {
+    let chats = chats(&state).ok_or_else(unavailable)?;
+    let id = id
+        .parse::<i64>()
+        .map_err(|_| refused(&HubChatsError::NotFound))?;
+    let Some(change) = body
+        .ok()
+        .and_then(|Json(body)| serde_json::from_value::<ChatChange>(body).ok())
+    else {
+        return Err(not_a_change());
+    };
+    let changed = chats.change(id, &change).await.map_err(|e| refused(&e))?;
+    Ok(Json(changed).into_response())
+}
+
+/// The answer to a body that is no change.
+fn not_a_change() -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ErrorResponse::with_code(
+            "a change's body is {\"kind\": \"edit\", \"message_id\": <number>, \"content\": <text>, \"images\": [<id>]}, or {\"kind\": \"regenerate\" or \"branch\", \"message_id\": <number>}",
+            "invalid_request_error",
+            "invalid_request",
+        )),
+    )
+        .into_response()
 }

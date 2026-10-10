@@ -13,6 +13,14 @@
         "id": 9,
         "title": "New Chat",
         "updated_at": "2026-09-29 18:02:41"
+      },
+      {
+        "id": 13,
+        "title": "Why the build broke",
+        "model_id": 3,
+        "model": "qwen3-8b",
+        "updated_at": "2026-09-30 09:20:05",
+        "branch_of": 12
       }
     ]
   },
@@ -153,5 +161,75 @@
     "conversation_id": 12,
     "content": "Answer in one line.",
     "thinking": "off"
+  },
+  "branch_open": {
+    "conversation": {
+      "id": 13,
+      "title": "Why the build broke",
+      "model_id": 3,
+      "system_prompt": "You are a helpful assistant.",
+      "created_at": "2026-09-30 09:20:05",
+      "updated_at": "2026-09-30 09:20:05",
+      "branch_of": 12
+    },
+    "messages": [
+      {
+        "id": 50,
+        "conversation_id": 13,
+        "role": "user",
+        "content": "Why did the build break?",
+        "created_at": "2026-09-30 09:12:31"
+      },
+      {
+        "id": 51,
+        "conversation_id": 13,
+        "role": "assistant",
+        "content": "A dependency moved.",
+        "created_at": "2026-09-30 09:13:07"
+      },
+      {
+        "id": 52,
+        "conversation_id": 13,
+        "role": "user",
+        "content": "And how do I pin it?",
+        "created_at": "2026-09-30 09:20:05"
+      }
+    ],
+    "points": [
+      {
+        "message_id": 52,
+        "index": 1,
+        "options": [
+          {
+            "conversation_id": 12,
+            "message_id": 42,
+            "role": "user",
+            "preview": "And how do I fix it?"
+          },
+          {
+            "conversation_id": 13,
+            "message_id": 52,
+            "role": "user",
+            "preview": "And how do I pin it?"
+          }
+        ]
+      }
+    ],
+    "answerable": true
+  },
+  "change": {
+    "kind": "edit",
+    "message_id": 42,
+    "content": "And how do I pin it?"
+  },
+  "changed": {
+    "conversation_id": 13,
+    "forked": true,
+    "answer": true
+  },
+  "answer_turn": {
+    "conversation_id": 13,
+    "content": "",
+    "answer_saved": true
   }
 }
