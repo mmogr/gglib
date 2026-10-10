@@ -78,7 +78,7 @@
       "code": "drawing_unavailable",
       "type": "invalid_request_error",
       "status": 400,
-      "meaning": "Nothing here can draw the request, or draw for a run that says draw: the chat's model is on another machine, the proxy runs outside the daemon, there is no image runtime or no image model, there are several and none is named or set as the default, or the default or the only one is missing a file; the message says which. The availability routes answer 200 and give this code, with the reason, as what a request to draw would be refused with."
+      "meaning": "Nothing here can draw the request, or draw for a run that says draw: the chat's model is on another machine, the chat's model calls no tools, the proxy runs outside the daemon, there is no image runtime or no image model, there are several and none is named or set as the default, or the default or the only one is missing a file; the message says which. The availability routes answer 200 and give this code, with the reason, as what a request to draw would be refused with."
     },
     {
       "code": "image_generation_failed",
