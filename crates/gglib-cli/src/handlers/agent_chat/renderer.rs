@@ -139,8 +139,13 @@ pub(crate) fn render_event(event: &AgentEvent, verbose: bool, quiet: bool, had_t
             }
         }
 
-        AgentEvent::PromptProgress { .. } | AgentEvent::TurnUsage(_) => {
-            // Pre-fill progress and a turn's usage: not shown in the CLI.
+        AgentEvent::PromptProgress { .. }
+        | AgentEvent::TurnUsage(_)
+        | AgentEvent::ToolProgress { .. }
+        | AgentEvent::ToolPreview { .. }
+        | AgentEvent::Waiting { .. } => {
+            // Pre-fill progress, a turn's usage, a long tool's progress and
+            // a wait: not shown in the CLI.
         }
     }
 }

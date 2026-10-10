@@ -15,10 +15,11 @@ dependency on `gglib-agent`.
 
 # Security model
 
-The allowlist is enforced on **both** `list_tools` (so the LLM only sees
-permitted tools) and `execute` (so an adversarially-prompted model that
-synthesises a call for a tool it was never told about cannot bypass the
-filter).
+The allowlist is enforced on `list_tools` (so the LLM only sees permitted
+tools) and on **both** `execute` and `execute_with_progress` (so an
+adversarially-prompted model that synthesises a call for a tool it was never
+told about cannot bypass the filter; the agent loop calls the progress form,
+so a filter that checked only `execute` would check nothing).
 
 [`ToolExecutorPort`]: crate::ports::ToolExecutorPort
 

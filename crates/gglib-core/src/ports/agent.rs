@@ -29,7 +29,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 
 use crate::domain::agent::{
-    AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition, ToolResult,
+    AgentConfig, AgentEvent, AgentMessage, ToolCall, ToolDefinition, ToolProgressSink, ToolResult,
 };
 
 // =============================================================================
@@ -193,6 +193,22 @@ pub trait ToolExecutorPort: Send + Sync {
     ///
     /// Returns `Err` only for infrastructure failures (see error contract above).
     async fn execute(&self, call: &ToolCall) -> Result<ToolResult, anyhow::Error>;
+
+    /// Execute a single tool call, telling `sink` how it is going.
+    ///
+    /// The default ignores `sink` and calls [`execute`](Self::execute), which
+    /// is right for a tool that finishes quickly. A decorator **must**
+    /// override this as well as `execute` and apply the same checks: the
+    /// agent loop calls this method, so a decorator that only overrides
+    /// `execute` is bypassed.
+    async fn execute_with_progress(
+        &self,
+        call: &ToolCall,
+        sink: &dyn ToolProgressSink,
+    ) -> Result<ToolResult, anyhow::Error> {
+        let _ = sink;
+        self.execute(call).await
+    }
 }
 
 // =============================================================================

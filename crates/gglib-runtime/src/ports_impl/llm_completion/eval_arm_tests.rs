@@ -33,6 +33,7 @@ fn tool_choice_applies_to_the_first_turn_only() {
         description: None,
         input_schema: Some(json!({"type": "object"})),
         title: None,
+        deadline: None,
     }];
     let adapter = LlmCompletionAdapter::new("http://127.0.0.1:0", Some("m".to_owned()))
         .with_raw_passthrough(true)

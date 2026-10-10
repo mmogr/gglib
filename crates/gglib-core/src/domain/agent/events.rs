@@ -2,6 +2,7 @@
 
 use serde::Serialize;
 
+use super::tool_progress::{PreviewFrame, ToolStage};
 use super::tool_types::{ToolCall, ToolResult};
 use super::turn_usage::TurnUsage;
 use crate::normalize::NormalizationErrorKind;
@@ -67,6 +68,56 @@ pub enum AgentEvent {
         duration_display: String,
     },
 
+    /// How far a running tool has got, from its
+    /// [`ToolProgressUpdate`](super::ToolProgressUpdate). Logged like any
+    /// other event: a stage change, a new pass or a pass's last step at once,
+    /// else at most once a second. A count the tool did not report is absent.
+    ToolProgress {
+        /// The call this reports on.
+        tool_call_id: String,
+        /// Where the tool has got to.
+        stage: ToolStage,
+        /// Which pass is running, 1-based.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pass: Option<u32>,
+        /// Steps done in this pass.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        done: Option<u32>,
+        /// Steps this pass takes.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        total: Option<u32>,
+        /// Place in line while queued, 1 being next.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        position: Option<u32>,
+    },
+
+    /// The latest preview of what a running tool is making.
+    ///
+    /// **Never logged.** A frame is tens of kilobytes and only the newest one
+    /// matters, so a run keeps it beside its log, not in it, and a saved
+    /// chat never holds one. Consumers show it and drop it when that call's
+    /// [`ToolCallComplete`](AgentEvent::ToolCallComplete) arrives.
+    ToolPreview {
+        /// The call this frame belongs to.
+        tool_call_id: String,
+        /// The frame.
+        frame: PreviewFrame,
+    },
+
+    /// Nothing can happen until something else finishes: an image render
+    /// holds the GPU, or the model is loading. Sent again whenever what it
+    /// reports changes, so a person sees why the reply has not started.
+    Waiting {
+        /// What is being waited for.
+        reason: WaitingFor,
+        /// The step the work in the way last reported; 0 before its first.
+        step: u32,
+        /// How many steps that work takes; 0 when unknown.
+        total: u32,
+        /// This wait's place in line, 1 being next; 0 when not in a line.
+        position: u32,
+    },
+
     /// One full LLM→tool-execution cycle has completed.
     IterationComplete {
         /// The 1-based iteration index that just finished.
@@ -125,6 +176,16 @@ pub enum AgentEvent {
         /// Human-readable description of the failure.
         message: String,
     },
+}
+
+/// What an [`AgentEvent::Waiting`] is waiting for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WaitingFor {
+    /// An image render has the GPU, or is queued ahead.
+    ImageRender,
+    /// The chat's model is being loaded.
+    ModelLoad,
 }
 
 // =============================================================================

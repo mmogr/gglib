@@ -169,6 +169,7 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
                 description: t.description,
                 input_schema: t.input_schema,
                 title: None,
+                deadline: None,
             })
             .collect()
     }

@@ -311,3 +311,39 @@ fn a_tool_row_carries_the_ids_of_the_images_its_result_made() {
     assert!(got[2].images.is_empty(), "a result without images");
     assert!(got[0].images.is_empty() && got[3].images.is_empty());
 }
+
+/// A long tool's progress and a wait are logged, and are no part of any
+/// saved row: the rows are the same with them as without.
+#[test]
+fn progress_and_waiting_frames_change_no_row() {
+    let plain = [
+        started("c1"),
+        completed("c1", "drew it"),
+        text("Here it is."),
+    ];
+    let with_progress = [
+        AgentEvent::Waiting {
+            reason: crate::domain::agent::WaitingFor::ImageRender,
+            step: 3,
+            total: 20,
+            position: 1,
+        },
+        started("c1"),
+        AgentEvent::ToolProgress {
+            tool_call_id: "c1".to_owned(),
+            stage: crate::domain::agent::ToolStage::Sampling,
+            pass: Some(1),
+            done: Some(2),
+            total: Some(4),
+            position: None,
+        },
+        completed("c1", "drew it"),
+        text("Here it is."),
+    ];
+
+    let want = rows(&plain, true);
+    let got = rows(&with_progress, true);
+
+    assert_eq!(want.len(), 2, "the assistant row and the tool row");
+    assert_eq!(format!("{got:?}"), format!("{want:?}"));
+}
