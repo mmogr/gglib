@@ -972,3 +972,16 @@ async fn a_wakeup_between_subscribing_and_waiting_is_not_lost() {
         .await
         .expect("the wakeup must survive the gap between subscribing and awaiting");
 }
+
+/// A waiter's place counts every request waiting ahead of it, for any model,
+/// and moves up as one ahead leaves.
+#[tokio::test]
+async fn a_waiters_place_counts_the_waiters_ahead_of_it() {
+    let q = queue();
+    let first = q.enqueue("a");
+    let second = q.enqueue("b");
+    let third = q.enqueue("a");
+    assert_eq!([&first, &second, &third].map(|t| q.position(t)), [1, 2, 3]);
+    q.abandon(&first);
+    assert_eq!([&second, &third].map(|t| q.position(t)), [1, 2]);
+}

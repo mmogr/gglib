@@ -2584,6 +2584,7 @@ dependencies = [
  "anyhow",
  "async-stream",
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "flate2",
  "futures-core",

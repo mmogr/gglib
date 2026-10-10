@@ -21,6 +21,10 @@ unpacked. Uninstalling removes `.sd/` whole.
 | `config.rs`   | `SdServerConfig`: the model, its family, its components and the port     |
 | `args.rs`     | `sd-server`'s argv from the config and the family's recipe               |
 | `spawn.rs`    | starting it, with piped output, as llama-server is started               |
+| `job.rs`      | `SdImageDriver`, the image generation port: admit, turn, submit, follow  |
+| `job_plan.rs` | a request's model, size and count, refused before anything queues        |
+| `job_api.rs`  | sd-server's async job API: submit, read a job, cancel                     |
+| `job_poll.rs` | following one job: stages, steps, decode, cancel, stall and deadline     |
 
 ## The platform table
 
@@ -66,6 +70,36 @@ lock a render holds, and the body must list `sd-cpp-local`: a 200 from any
 other server on the port is not sd-server. `health_tests.rs` holds a render
 open on `fake_server.rs`, a test-only stand-in, and probes three times
 within the health client's two seconds.
+
+## Drawing
+
+`SdImageDriver` implements core's `ImageGenerationPort`; the service graph
+builds one over the daemon's manager. A request names its model, or draws
+with the default image model the settings name (refused when it lacks a
+file), or else with the only image model that has every file its family
+needs; the
+family's recipe judges its size (1024x1024 by default) and one to four
+images, all before anything queues. Then the image model is admitted
+(launching sd-server if it is not resident, its place in line reported as
+Queued), the render takes its turn on the generation gate with that lease,
+and the job goes to `POST /sdcpp/v1/img_gen` with `output_format: png` and
+`preview: proj`, since sd-server reports steps only while a preview mode is
+on. The job is read every second: Loading until the first step finishes
+(about 40 s into a Flux render, measured), then each step as Sampling with
+its frame and as progress on the turn, which keeps requests queued behind
+the render from expiring, then Decoding after the last step of the last
+pass, then the PNGs, their sizes read from the images.
+
+sd-server cannot interrupt a generating job (cancel answers 409). A render
+dropped part way cancels its job and, when the job runs on, a task keeps the
+turn and its lease until the job ends; the submission runs in a task of its
+own, so that holds for a request dropped while its job is being submitted. A render with no new step for
+`IMAGE_STALL` (3 minutes, from submission) or running past
+`IMAGE_JOB_DEADLINE` (30 minutes) is retired through
+`ProcessManager::retire_render`: its server stopped, its lease released and
+slot emptied, then its turn ended. `job_tests.rs` drives all of this against
+a scripted job and a real admission queue on a paused clock;
+`job_api_tests.rs` reads every answer the fake's job API scripts.
 
 ## The source build
 

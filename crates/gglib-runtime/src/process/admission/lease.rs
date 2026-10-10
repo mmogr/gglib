@@ -104,6 +104,14 @@ impl AdmissionQueue {
         self.lock().poll(ticket, Instant::now(), candidate.into())
     }
 
+    /// `ticket`'s place in line, 1 being next: one more than the requests
+    /// still waiting that arrived before it, for any model. A place to show
+    /// a person, not a promise: the queue batches requests for a resident
+    /// model ahead of their arrival order.
+    pub fn position(&self, ticket: &Ticket) -> usize {
+        self.lock().position(ticket)
+    }
+
     /// A future that resolves the next time the state changes.
     ///
     /// **Must be created and `enable()`d before the `poll` whose result it
