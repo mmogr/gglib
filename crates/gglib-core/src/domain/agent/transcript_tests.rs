@@ -8,6 +8,7 @@ fn row(role: MessageRole, content: &str) -> Message {
     Message {
         id: 1,
         conversation_id: 42,
+        origin_id: None,
         role,
         content: content.to_owned(),
         created_at: String::new(),

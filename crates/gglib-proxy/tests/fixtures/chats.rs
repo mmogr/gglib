@@ -136,10 +136,13 @@ pub(crate) fn opened() -> HubChatOpen {
             settings: None,
             created_at: "2026-09-30 09:12:00".to_owned(),
             updated_at: "2026-09-30 09:13:00".to_owned(),
+            branch_of: None,
+            lineage_id: None,
         },
         messages: vec![Message {
             id: 1,
             conversation_id: OPEN_ID,
+            origin_id: None,
             role: MessageRole::User,
             content: "why".to_owned(),
             created_at: "2026-09-30 09:12:00".to_owned(),

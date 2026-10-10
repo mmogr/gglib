@@ -31,9 +31,26 @@ pub struct Conversation {
     pub settings: Option<ConversationSettings>,
     pub created_at: String,
     pub updated_at: String,
+    /// The chat this one was branched from (ADR 0017). Absent for a chat
+    /// that is no branch; it still names a chat that has since been deleted.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number", optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch_of: Option<i64>,
+    /// The first chat of its family, the chats branched from one another;
+    /// `None` for that chat itself. Kept on this machine.
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[serde(skip)]
+    pub lineage_id: Option<i64>,
 }
 
 impl Conversation {
+    /// The id of its family: the first chat's, of the chats branched from
+    /// one another.
+    #[must_use]
+    pub fn family(&self) -> i64 {
+        self.lineage_id.unwrap_or(self.id)
+    }
+
     /// The machine the conversation ran on: its stored model's, or this one
     /// for a row that stores only a `model_id`, which is this catalogue's.
     /// `None` for a conversation that stores neither.
@@ -72,9 +89,23 @@ pub struct Message {
     )]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<AttachmentInfo>,
+    /// The message this one is a copy of, as it was first written, when a
+    /// branch copied it (ADR 0017); `None` for a message written here. Kept
+    /// on this machine.
+    #[cfg_attr(feature = "ts-bindings", ts(skip))]
+    #[serde(skip)]
+    pub origin_id: Option<i64>,
 }
 
 impl Message {
+    /// The id of the message as first written: two messages of a family
+    /// with the same key are the same message, and the chats that hold them
+    /// are the same chat up to there.
+    #[must_use]
+    pub fn key(&self) -> i64 {
+        self.origin_id.unwrap_or(self.id)
+    }
+
     /// Convert a persisted message back into an [`AgentMessage`] for resume.
     ///
     /// Tool call metadata is faithfully restored from the JSON `"tool_calls"` key

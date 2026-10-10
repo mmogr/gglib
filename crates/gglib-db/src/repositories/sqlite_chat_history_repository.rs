@@ -1,16 +1,39 @@
 //! `SQLite` implementation of the `ChatHistoryRepository` trait.
 
 use async_trait::async_trait;
+use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, SqlitePool};
 
 use gglib_core::{
+    domain::branching::LineChat,
     domain::chat::{
         Conversation, ConversationUpdate, Message, MessageRole, NewConversation, NewMessage,
     },
     ports::chat_history::{ChatHistoryError, ChatHistoryRepository},
 };
 
-use super::message_rows;
+use super::{branch_rows, message_rows};
+
+/// The columns [`conversation`] reads.
+const CONVERSATION_COLUMNS: &str = "id, title, model_id, system_prompt, settings, \
+     created_at, updated_at, branch_of, lineage_id";
+
+/// A conversation's row as the domain type. Settings that do not parse read
+/// as none.
+fn conversation(row: &SqliteRow) -> Conversation {
+    let settings_str: Option<String> = row.get("settings");
+    Conversation {
+        id: row.get("id"),
+        title: row.get("title"),
+        model_id: row.get("model_id"),
+        system_prompt: row.get("system_prompt"),
+        settings: settings_str.and_then(|s| serde_json::from_str(&s).ok()),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+        branch_of: row.get("branch_of"),
+        lineage_id: row.get("lineage_id"),
+    }
+}
 
 /// `SQLite` implementation of the `ChatHistoryRepository` trait.
 ///
@@ -50,59 +73,24 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
     }
 
     async fn list_conversations(&self) -> Result<Vec<Conversation>, ChatHistoryError> {
-        let rows = sqlx::query(
-            "SELECT id, title, model_id, system_prompt, settings, created_at, updated_at 
-             FROM chat_conversations 
-             ORDER BY updated_at DESC",
-        )
+        let rows = sqlx::query(&format!(
+            "SELECT {CONVERSATION_COLUMNS} FROM chat_conversations ORDER BY updated_at DESC"
+        ))
         .fetch_all(&self.pool)
         .await
         .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
-
-        let conversations = rows
-            .iter()
-            .map(|row| {
-                let settings_str: Option<String> = row.get("settings");
-                let settings = settings_str.and_then(|s| serde_json::from_str(&s).ok());
-                Conversation {
-                    id: row.get("id"),
-                    title: row.get("title"),
-                    model_id: row.get("model_id"),
-                    system_prompt: row.get("system_prompt"),
-                    settings,
-                    created_at: row.get("created_at"),
-                    updated_at: row.get("updated_at"),
-                }
-            })
-            .collect();
-
-        Ok(conversations)
+        Ok(rows.iter().map(conversation).collect())
     }
 
     async fn get_conversation(&self, id: i64) -> Result<Option<Conversation>, ChatHistoryError> {
-        let row = sqlx::query(
-            "SELECT id, title, model_id, system_prompt, settings, created_at, updated_at 
-             FROM chat_conversations 
-             WHERE id = ?",
-        )
+        let row = sqlx::query(&format!(
+            "SELECT {CONVERSATION_COLUMNS} FROM chat_conversations WHERE id = ?"
+        ))
         .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
-
-        Ok(row.map(|r| {
-            let settings_str: Option<String> = r.get("settings");
-            let settings = settings_str.and_then(|s| serde_json::from_str(&s).ok());
-            Conversation {
-                id: r.get("id"),
-                title: r.get("title"),
-                model_id: r.get("model_id"),
-                system_prompt: r.get("system_prompt"),
-                settings,
-                created_at: r.get("created_at"),
-                updated_at: r.get("updated_at"),
-            }
-        }))
+        Ok(row.as_ref().map(conversation))
     }
 
     async fn update_conversation(
@@ -177,7 +165,7 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
 
     async fn get_messages(&self, conversation_id: i64) -> Result<Vec<Message>, ChatHistoryError> {
         let rows = sqlx::query(
-            "SELECT id, conversation_id, role, content, metadata, created_at 
+            "SELECT id, conversation_id, role, content, metadata, created_at, origin_id 
              FROM chat_messages 
              WHERE conversation_id = ? 
              ORDER BY id ASC",
@@ -204,6 +192,7 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
                     created_at: row.get("created_at"),
                     metadata,
                     images: images.remove(&id).unwrap_or_default(),
+                    origin_id: row.get("origin_id"),
                 }
             })
             .collect();
@@ -294,6 +283,19 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
         Ok(i64::try_from(deleted.len()).unwrap_or(i64::MAX))
     }
 
+    async fn fork(
+        &self,
+        source: i64,
+        through: Option<i64>,
+        then: Option<NewMessage>,
+    ) -> Result<i64, ChatHistoryError> {
+        branch_rows::fork(&self.pool, source, through, then).await
+    }
+
+    async fn lineage(&self, conversation_id: i64) -> Result<Vec<LineChat>, ChatHistoryError> {
+        branch_rows::lineage(&self.pool, conversation_id).await
+    }
+
     async fn get_message_count(&self, conversation_id: i64) -> Result<i64, ChatHistoryError> {
         let row =
             sqlx::query("SELECT COUNT(*) as count FROM chat_messages WHERE conversation_id = ?")
@@ -313,3 +315,7 @@ mod sqlite_chat_history_repository_tests;
 #[cfg(test)]
 #[path = "sqlite_chat_history_images_tests.rs"]
 mod sqlite_chat_history_images_tests;
+
+#[cfg(test)]
+#[path = "sqlite_chat_branches_tests.rs"]
+mod sqlite_chat_branches_tests;

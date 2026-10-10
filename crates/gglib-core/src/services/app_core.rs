@@ -235,6 +235,20 @@ mod tests {
         async fn get_message_count(&self, _conversation_id: i64) -> Result<i64, ChatHistoryError> {
             Ok(0)
         }
+        async fn fork(
+            &self,
+            _source: i64,
+            _through: Option<i64>,
+            _then: Option<NewMessage>,
+        ) -> Result<i64, ChatHistoryError> {
+            Ok(1)
+        }
+        async fn lineage(
+            &self,
+            _conversation_id: i64,
+        ) -> Result<Vec<crate::domain::branching::LineChat>, ChatHistoryError> {
+            Ok(vec![])
+        }
     }
 
     struct MockAttachmentStore;

@@ -9,6 +9,7 @@ pub(super) fn message(id: i64, role: MessageRole, content: &str) -> Message {
     Message {
         id,
         conversation_id: 7,
+        origin_id: None,
         role,
         content: content.to_owned(),
         created_at: format!("2026-10-09 08:00:{id:02}"),

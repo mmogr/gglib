@@ -46,9 +46,10 @@ crates/gglib-core/src/domain/benchmark/agentic_tests.rs 864
 crates/gglib-core/src/domain/benchmark/tune/apply.rs 449
 crates/gglib-core/src/domain/cache_budget.rs 305
 crates/gglib-core/src/domain/capabilities.rs 1594
+crates/gglib-core/src/domain/chat.rs 325
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 351
-crates/gglib-core/src/domain/hub_chats_tests.rs 375
+crates/gglib-core/src/domain/hub_chats_tests.rs 394
 crates/gglib-core/src/domain/inference.rs 1915
 crates/gglib-core/src/domain/inference_tests.rs 1409
 crates/gglib-core/src/domain/kv_estimate.rs 341
@@ -73,6 +74,7 @@ crates/gglib-core/src/request_pipeline/truncation.rs 313
 crates/gglib-core/src/request_pipeline/truncation_tests.rs 443
 crates/gglib-core/src/request_pipeline/validate.rs 497
 crates/gglib-core/src/server_config.rs 715
+crates/gglib-core/src/services/app_core.rs 305
 crates/gglib-core/src/services/model_import.rs 689
 crates/gglib-core/src/services/model_registrar.rs 340
 crates/gglib-core/src/services/model_service.rs 1446
@@ -83,12 +85,12 @@ crates/gglib-core/src/settings_tests.rs 474
 crates/gglib-core/src/sse/parser.rs 781
 crates/gglib-core/src/utils/system/packages.rs 586
 crates/gglib-db/src/repositories/sqlite_benchmark_repository.rs 655
-crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 315
+crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 321
 crates/gglib-db/src/repositories/sqlite_chat_history_repository_tests.rs 322
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 354
 crates/gglib-db/src/repositories/sqlite_mcp_repository_tests.rs 377
 crates/gglib-db/src/repositories/sqlite_model_repository.rs 1053
-crates/gglib-db/src/setup.rs 712
+crates/gglib-db/src/setup.rs 715
 crates/gglib-download/src/cli_exec/exec/python_bridge.rs 331
 crates/gglib-download/src/cli_exec/exec/python_env.rs 1544
 crates/gglib-download/src/cli_exec/exec/python_protocol.rs 347
@@ -143,7 +145,7 @@ crates/gglib-runtime/src/llama/args/cache_ram.rs 328
 crates/gglib-runtime/src/llama/build/mod.rs 415
 crates/gglib-runtime/src/llama/download/mod.rs 982
 crates/gglib-runtime/src/llama/update.rs 348
-crates/gglib-runtime/src/ports_impl/llm_completion/images_tests.rs 338
+crates/gglib-runtime/src/ports_impl/llm_completion/images_tests.rs 339
 crates/gglib-runtime/src/ports_impl/llm_completion/layers_tests.rs 312
 crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 370
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 340

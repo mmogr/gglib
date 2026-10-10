@@ -9,6 +9,8 @@ fn conversation(model_id: Option<i64>, model: Option<ModelRef>) -> Conversation 
     Conversation {
         id: 12,
         title: "t".to_owned(),
+        branch_of: None,
+        lineage_id: None,
         model_id,
         system_prompt: None,
         settings: model.map(|model| ConversationSettings {
@@ -78,6 +80,7 @@ fn message(role: MessageRole, images: Vec<AttachmentInfo>) -> Message {
     Message {
         id: 40,
         conversation_id: 12,
+        origin_id: None,
         role,
         content: "look".to_owned(),
         created_at: "2026-09-30 09:12:31".to_owned(),

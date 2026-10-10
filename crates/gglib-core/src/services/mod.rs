@@ -16,7 +16,7 @@ mod settings_service;
 
 pub use app_core::AppCore;
 pub use attachments::AttachmentService;
-pub use chat_history::ChatHistoryService;
+pub use chat_history::{ChangeError, ChatHistoryService};
 pub use model_import::{
     HfOrigin, MAX_GENERATION_CONFIG_LOOKUPS, ModelOrigin, build_new_model, fetch_published_sampling,
 };

@@ -16,6 +16,8 @@ fn row(settings: Option<ConversationSettings>) -> Conversation {
     Conversation {
         id: 1,
         title: "t".to_owned(),
+        branch_of: None,
+        lineage_id: None,
         model_id: None,
         system_prompt: None,
         settings,

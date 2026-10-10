@@ -110,6 +110,7 @@ async fn what_the_chat_names_wins_over_what_is_running() {
     let reply = Message {
         id: 1,
         conversation_id: conversation.id,
+        origin_id: None,
         role: MessageRole::Assistant,
         content: "answer".to_owned(),
         created_at: String::new(),
