@@ -31,7 +31,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::time::Instant;
 
 use super::job_api::{HttpSdJobs, SdJobs};
-use super::job_plan::{Plan, plan};
+use super::job_plan::{Plan, drawing_model, plan};
 use super::job_poll::{Job, Render};
 use crate::process::ProcessManager;
 
@@ -42,8 +42,9 @@ pub const POLL: Duration = Duration::from_secs(1);
 /// (the load before the first step included), before its model is stopped.
 pub const IMAGE_STALL: Duration = Duration::from_mins(3);
 
-/// How long a render may take from submission, however it steps.
-pub const IMAGE_JOB_DEADLINE: Duration = Duration::from_mins(30);
+/// How long a render may take from submission, however it steps; core's,
+/// so the drawing tool's deadline is the same number.
+pub use gglib_core::ports::IMAGE_JOB_DEADLINE;
 
 /// The three clocks a render runs under; the constants above, or a test's.
 #[derive(Debug, Clone, Copy)]
@@ -77,6 +78,9 @@ pub(crate) trait RenderHost: Send + Sync {
     /// The generation gate.
     fn gate(&self) -> Arc<dyn GenerationGate>;
 
+    /// Whether `sd-server` is installed where a launch looks for it.
+    async fn runtime_installed(&self) -> bool;
+
     /// Stop `model_id`'s server, then release the render's lease and empty
     /// its slot, then end `turn`: [`ProcessManager::retire_render`].
     async fn retire(&self, turn: GenerationTurn, model_id: u32);
@@ -101,6 +105,10 @@ impl RenderHost for ProcessManager {
 
     fn gate(&self) -> Arc<dyn GenerationGate> {
         self.generation_gate()
+    }
+
+    async fn runtime_installed(&self) -> bool {
+        self.image_runtime_installed().await
     }
 
     async fn retire(&self, turn: GenerationTurn, model_id: u32) {
@@ -252,6 +260,20 @@ impl ImageGenerationPort for SdImageDriver {
             images,
             elapsed: started.elapsed(),
         })
+    }
+
+    /// No runtime first, as a launch would find it, then the model rule a
+    /// request that names none is planned by.
+    async fn drawing_model(&self) -> Result<String, ImageError> {
+        if !self.host.runtime_installed().await {
+            return Err(ImageError::Unavailable {
+                reason: ModelRuntimeError::ImageRuntimeNotInstalled.to_string(),
+            });
+        }
+        let default_model = self.default_model(&ImageRequest::new("")).await;
+        drawing_model(self.catalog.as_ref(), default_model)
+            .await
+            .map(|spec| spec.name)
     }
 }
 

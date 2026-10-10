@@ -148,6 +148,10 @@ pub fn remote_run_cancel_path(id: &str) -> String {
     format!("{REMOTE_RUNS_PATH}/{id}/cancel")
 }
 
+/// Whether the paired machine can draw, read through the tunnel for a far
+/// chat's Draw button: `GET` answers its `/v1/images/drawing`.
+pub const REMOTE_IMAGES_DRAWING_PATH: &str = "/api/remote/images/drawing";
+
 /// The paired machine's models, read through the tunnel: `GET` lists every
 /// entry its `/v1/models` publishes, profile variants included.
 pub const REMOTE_MODELS_PATH: &str = "/api/remote/models";
@@ -181,6 +185,7 @@ pub fn remote_route_contract() -> Vec<(&'static [&'static str], String)> {
         (&["GET"], REMOTE_MODELS_PATH.to_owned()),
         (&["GET"], remote_model_path("org/qwen3:coding")),
         (&["POST"], remote_model_load_path("org/qwen3:coding")),
+        (&["GET"], REMOTE_IMAGES_DRAWING_PATH.to_owned()),
     ];
     routes.extend(super::attachments::remote_route_contract());
     routes
@@ -232,6 +237,13 @@ pub fn benchmark_tune_apply_path(run_id: i64) -> String {
 /// which `gglib image` calls with `stream: true` (see
 /// [`super::images`] for the body and the events).
 pub const IMAGES_GENERATIONS_PATH: &str = "/api/images/generations";
+
+/// Whether this machine can draw for a message, and why not.
+///
+/// `GET`, with query `far` (the chat's model is on another machine) and
+/// `calls_tools` (`false` for a model that calls no tools); answers
+/// [`super::images::DrawingAvailability`].
+pub const IMAGES_DRAWING_PATH: &str = "/api/images/drawing";
 
 /// Runs, a reply the daemon owns until it ends: `GET` lists them.
 pub const RUNS_PATH: &str = "/api/runs";

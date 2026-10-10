@@ -123,6 +123,7 @@ pub(super) async fn prepare_over(
         // says so through the retry notice; a far one takes no turn here.
         LoopGeneration {
             gate: Some(Arc::clone(&state.generation_gate)),
+            drawing: None,
         },
     );
 

@@ -47,6 +47,8 @@ pub(crate) fn api_routes() -> Router<AppState> {
         .route("/attachments/{id}", get(handlers::attachments::fetch))
         // Drawing: the proxy's `/v1/images/generations`, at the daemon's door.
         .route("/images/generations", post(handlers::images::generations))
+        // Whether a message sent with Draw pressed can draw, and why not.
+        .route("/images/drawing", get(handlers::images::drawing))
         .route("/version", get(handlers::version::get_version))
         // Servers API
         .route("/servers", get(handlers::servers::list))

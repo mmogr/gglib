@@ -126,7 +126,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`forward_unary.rs`** — The non-streaming half of `/v1/chat/completions`: one request up, one body back, normalised, judged by `repair` and answered with the draw that validates
 - **`unary_body.rs`** — A non-streaming request sent and its body read whole within the total bound, then run through the dialect parser once; shared by the chat and embeddings routes
 - **`embeddings.rs`** — `POST /v1/embeddings`; the chat path minus truncation, sampling, sessions and SSE, plus the pre-swap guard that keeps a non-embedding model from being loaded to serve it
-- **`images.rs`** — `POST /v1/images/generations`, `OpenAI`'s Images API over the daemon's image driver; its handler body is public because the daemon mounts it at `POST /api/images/generations` too
+- **`images.rs`** — `POST /v1/images/generations`, `OpenAI`'s Images API over the daemon's image driver; its handler body is public because the daemon mounts it at `POST /api/images/generations` too. `GET /v1/images/drawing` answers whether a turn sent with Draw pressed can draw here, by core's `drawing_availability`
 - **`images_stream.rs`** — The streamed form: `image_generation.progress` at every stage and step, `image_generation.partial_image` at most `partial_images` times, evenly spread, and one `image_generation.completed` per image, last; a failure partway is an `error` event
 - **`image_refusal.rs`** — The pre-swap refusal of a chat completion that carries an image for a model with no projector (`model_cannot_read_images`); the rule and the words are `gglib_core::request_pipeline`'s — see [Images](#images)
 - **`body_limit.rs`** — The 32 MiB body limit of `POST /v1/chat/completions` and `PUT /v1/runs/{id}`, and the coded 413 (`request_too_large`) a larger body gets
@@ -227,6 +227,7 @@ page on another site, and one from a browser extension (`chrome-extension://`,
 | `/v1/chat/completions` | POST | bearer | Chat completion (streaming/non-streaming) |
 | `/v1/embeddings` | POST | bearer | Embeddings — see [Embeddings](#embeddings) |
 | `/v1/images/generations` | POST | bearer | Draw with the daemon's image driver, `OpenAI`'s Images API; `stream: true` for progress, partial images and one completed event per image |
+| `/v1/images/drawing` | GET | bearer | Whether a turn sent with Draw pressed can draw here: `{available, code?, reason?, model?}` |
 | `/mcp` | POST | bearer | MCP Streamable HTTP — JSON-RPC dispatch |
 | `/mcp` | GET | bearer | Returns 405 (server-push not yet supported) |
 | `/mcp` | DELETE | bearer | Terminate MCP session by `Mcp-Session-Id` |

@@ -21,6 +21,10 @@ use serde::{Deserialize, Serialize};
 /// The proxy's route.
 pub const IMAGES_GENERATIONS_PATH: &str = "/v1/images/generations";
 
+/// The proxy's answer to whether this machine can draw:
+/// [`DrawingAvailability`].
+pub const IMAGES_DRAWING_PATH: &str = "/v1/images/drawing";
+
 /// The streamed event that reports a stage, a step or a place in line.
 pub const PROGRESS_EVENT: &str = "image_generation.progress";
 
@@ -143,6 +147,63 @@ pub enum ImageStreamEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         model: Option<String>,
     },
+}
+
+/// Whether a message sent with Draw pressed can draw here, and if not why:
+/// what greys the Draw button, with its reason as the button's title.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct DrawingAvailability {
+    /// Whether it can.
+    pub available: bool,
+    /// Why not, as a code (`drawing_unavailable`); absent when it can.
+    #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    /// Why not, in words that say what would fix it; absent when it can.
+    #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// The image model that would draw, when it can.
+    #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
+impl DrawingAvailability {
+    /// It can, with `model`.
+    #[must_use]
+    pub fn with(model: impl Into<String>) -> Self {
+        Self {
+            available: true,
+            code: None,
+            reason: None,
+            model: Some(model.into()),
+        }
+    }
+
+    /// It cannot, for `reason`, coded `code`.
+    #[must_use]
+    pub fn refused(code: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self {
+            available: false,
+            code: Some(code.into()),
+            reason: Some(reason.into()),
+            model: None,
+        }
+    }
+}
+
+/// The query of a drawing availability route: `far` when the chat's model is
+/// on another machine, `calls_tools=false` for a model that calls no tools.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+pub struct DrawingQuery {
+    /// The chat's model is on another machine.
+    #[serde(default)]
+    pub far: bool,
+    /// Whether the chat's model calls tools; absent when unknown.
+    #[serde(default)]
+    pub calls_tools: Option<bool>,
 }
 
 /// The steps, counted across every pass (`1..=total`), at which a render

@@ -58,6 +58,19 @@ impl CombinedToolExecutor {
         }
     }
 
+    /// As [`Self::new`], with the builtins `builtin` offers: a sandbox, a
+    /// drawing tool, or both.
+    pub fn with_builtin(
+        mcp: Arc<McpService>,
+        images: Arc<AttachmentService>,
+        builtin: BuiltinToolExecutorAdapter,
+    ) -> Self {
+        Self {
+            builtin: Arc::new(builtin),
+            mcp: Arc::new(McpToolExecutorAdapter::new(mcp, images)),
+        }
+    }
+
     /// The executor a call goes to, by its name's prefix.
     fn route(&self, call: &ToolCall) -> anyhow::Result<&dyn ToolExecutorPort> {
         if call.name.starts_with(BUILTIN_PREFIX) {

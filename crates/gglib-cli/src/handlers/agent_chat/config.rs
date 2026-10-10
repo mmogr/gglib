@@ -205,6 +205,7 @@ pub(crate) async fn compose(
         ctx.app.attachments().store(),
         LoopGeneration {
             gate: generation_gate(ctx, params, banner.quiet).await,
+            drawing: None,
         },
     );
 

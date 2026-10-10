@@ -23,7 +23,7 @@ pub use gglib_core::{
     McpToolResult, NewMcpServer,
 };
 // Re-export this crate's public types
-pub use builtin::BuiltinToolExecutorAdapter;
+pub use builtin::{BuiltinToolExecutorAdapter, DrawArm, DrawingTool};
 pub use combined::CombinedToolExecutor;
 pub use service::{McpServerInfo, McpService};
 pub use tool_images::describe_item;

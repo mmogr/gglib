@@ -22,7 +22,10 @@ past the proxy.
 `images.rs` is `POST /api/images/generations`: the proxy's
 `/v1/images/generations` handler body, mounted at the daemon's door over the
 same image driver, so `gglib image` draws when the proxy is stopped or
-keyed.
+keyed. `GET /api/images/drawing` (query `far`, `calls_tools`) says whether a
+message sent with Draw pressed can draw here, and why not; `generate_image`
+is never in `/api/builtin/tools`, whose list the page lets a person switch
+tools on from.
 
 `chat_title.rs` is `POST /api/chat`: a chat's title, asked of the
 llama-server the chat runs on. The body names the port, the messages, a

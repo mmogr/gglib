@@ -78,6 +78,12 @@ pub(crate) async fn list_runs(State(state): State<AppState>) -> Result<Response,
     list_runs_via(&state.remote.far().await?).await
 }
 
+/// `GET /api/remote/images/drawing`: whether the far machine can draw for a
+/// turn on one of its chats, passed through as it answers.
+pub(crate) async fn drawing(State(state): State<AppState>) -> Result<Response, HttpError> {
+    drawing_via(&state.remote.far().await?).await
+}
+
 /// `POST /api/remote/runs/{run_id}/cancel`.
 pub(crate) async fn cancel_run(
     State(state): State<AppState>,
@@ -121,6 +127,10 @@ pub(super) async fn add_turn_via(
 
 pub(super) async fn list_runs_via(far: &FarProxy) -> Result<Response, HttpError> {
     Ok(relay(far.list_runs().await?).await)
+}
+
+pub(super) async fn drawing_via(far: &FarProxy) -> Result<Response, HttpError> {
+    Ok(relay(far.drawing().await?).await)
 }
 
 pub(super) async fn cancel_run_via(far: &FarProxy, run_id: &str) -> Result<Response, HttpError> {

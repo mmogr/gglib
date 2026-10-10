@@ -250,6 +250,16 @@ impl ProcessManager {
         self.residency.queue().generation_gate()
     }
 
+    /// Whether `sd-server` is where this manager launches it from: what a
+    /// render's launch checks first, asked without launching anything.
+    pub async fn image_runtime_installed(&self) -> bool {
+        self.core
+            .read()
+            .await
+            .binary(gglib_core::domain::RuntimeKind::StableDiffusion)
+            .is_file()
+    }
+
     /// End a render and the image model that drew it: kill `model_id`'s
     /// server first, then, in one locked step, release the render's lease
     /// and empty its slot only if the slot still holds `model_id`, then end

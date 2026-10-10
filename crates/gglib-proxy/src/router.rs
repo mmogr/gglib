@@ -91,6 +91,7 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
             "/v1/images/generations",
             post(crate::images::generations_route),
         )
+        .route("/v1/images/drawing", get(crate::images::drawing_route))
         .route("/v1/proxy/status", get(handle_proxy_status))
         .route("/v1/proxy/status/stream", get(handle_proxy_status_stream))
         .route(
