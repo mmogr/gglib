@@ -233,6 +233,7 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         model: None,
         reasoning_effort: None,
         reasoning_budget_tokens: thinking.budget,
+        draw: false,
     };
     let transcript = Transcript {
         conversation_id: Some(id),

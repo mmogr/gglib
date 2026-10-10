@@ -342,3 +342,50 @@ async fn a_turn_that_answers_a_saved_question_saves_only_its_reply() {
     );
     assert_eq!(said.last(), Some(&(MessageRole::Assistant, "Hello.")));
 }
+
+/// A send switches Draw off again: the message after the one that drew is
+/// offered no image tool.
+#[tokio::test]
+async fn a_send_switches_draw_off_again() {
+    use gglib_core::ports::{ImageBatch, ImageError, ImageProgress, ImageRequest};
+
+    #[derive(Debug)]
+    struct CanDraw;
+
+    #[async_trait::async_trait]
+    impl gglib_core::ports::ImageGenerationPort for CanDraw {
+        async fn generate(
+            &self,
+            _request: ImageRequest,
+            _progress: tokio::sync::mpsc::Sender<ImageProgress>,
+        ) -> Result<ImageBatch, ImageError> {
+            unreachable!("the scripted loop draws nothing")
+        }
+
+        async fn drawing_model(&self) -> Result<String, ImageError> {
+            Ok("sdxl".to_owned())
+        }
+    }
+
+    let agent: Arc<dyn AgentLoopPort> = Arc::new(Scripted {
+        events: turn(),
+        hands_back: Some(|given| given),
+    });
+    let draw = super::DrawSwitch::through(Arc::new(CanDraw));
+    draw.arm().await;
+    assert!(draw.is_armed());
+
+    let config = AgentConfig::default();
+    super::send(
+        &agent,
+        vec![user("draw a fox")],
+        config,
+        false,
+        None,
+        true,
+        &draw,
+    )
+    .await;
+
+    assert!(!draw.is_armed());
+}

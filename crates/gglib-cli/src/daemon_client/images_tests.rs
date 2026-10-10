@@ -313,3 +313,28 @@ async fn a_refused_render_is_the_daemons_refusal() {
         (Some("drawing_unavailable"), 400)
     );
 }
+
+/// Whether the daemon can draw is the daemon's answer: its model, its
+/// reason, and "cannot" from a daemon too old to have the route.
+#[tokio::test]
+async fn the_drawing_model_is_the_daemons_answer() {
+    let ask = |status, body: &str| {
+        let (port, seen) = stand_in(status, "application/json", body.to_owned());
+        async move {
+            let answer = STAND_IN_PORT.scope(port, generator().drawing_model()).await;
+            let line = seen.lock().unwrap()[0].clone();
+            assert_eq!(line, "GET /api/images/drawing HTTP/1.1");
+            answer
+        }
+    };
+    let can = ask(200, r#"{"available":true,"model":"sdxl"}"#).await;
+    assert_eq!(can.unwrap(), "sdxl");
+
+    let cannot = r#"{"available":false,"code":"drawing_unavailable","reason":"no image model"}"#;
+    let cannot = ask(200, cannot).await.unwrap_err();
+    assert_eq!(cannot.code(), Some("drawing_unavailable"));
+    assert_eq!(cannot.to_string(), "no image model");
+
+    let old = ask(404, "{}").await.unwrap_err();
+    assert!(old.to_string().contains("answered 404"), "{old}");
+}

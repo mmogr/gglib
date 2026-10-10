@@ -15,7 +15,9 @@ use async_trait::async_trait;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use futures_util::StreamExt as _;
-use gglib_core::contracts::http::images::{ImageGenerationsRequest, ImageStreamEvent};
+use gglib_core::contracts::http::images::{
+    DrawingAvailability, ImageGenerationsRequest, ImageStreamEvent,
+};
 use gglib_core::domain::agent::PreviewFrame;
 use gglib_core::ports::{
     GeneratedImage, ImageBatch, ImageError, ImageGenerationPort, ImageProgress, ImageRequest,
@@ -96,6 +98,38 @@ impl ImageGenerationPort for DaemonImageGenerator {
             images: rendered.images,
             elapsed: started.elapsed(),
         })
+    }
+
+    /// The daemon's own answer (`GET /api/images/drawing`): its image model
+    /// when it can draw, its reason when it cannot. A daemon that cannot be
+    /// reached, or is too old to have the route, cannot draw.
+    async fn drawing_model(&self) -> Result<String, ImageError> {
+        let unavailable = |reason: String| ImageError::Unavailable { reason };
+        let response = self
+            .daemon
+            .get(paths::IMAGES_DRAWING_PATH)
+            .send()
+            .await
+            .map_err(|e| unavailable(format!("could not reach the gglib daemon: {e}")))?;
+        if !response.status().is_success() {
+            return Err(unavailable(format!(
+                "the gglib daemon answered {} when asked whether it can draw; restart it so \
+                 it runs this version",
+                response.status().as_u16()
+            )));
+        }
+        let answer: DrawingAvailability = response.json().await.map_err(|e| {
+            unavailable(format!("the gglib daemon's answer could not be read: {e}"))
+        })?;
+        if answer.available {
+            Ok(answer
+                .model
+                .unwrap_or_else(|| "the daemon's image model".to_owned()))
+        } else {
+            Err(unavailable(answer.reason.unwrap_or_else(|| {
+                "the gglib daemon cannot draw".to_owned()
+            })))
+        }
     }
 }
 

@@ -28,7 +28,7 @@ use crate::state::AppState;
 use gglib_core::domain::agent::AgentEvent;
 use gglib_core::ports::AgentError;
 
-use compose::{Prepared, frame, prepare, take_permit};
+use compose::{Prepared, frame, prepare, refuse_unavailable_drawing, take_permit};
 use guard::AgentTaskGuard;
 
 /// `POST /api/agent/chat` — start an agentic conversation with SSE streaming.
@@ -70,6 +70,9 @@ pub(crate) async fn chat(
     State(state): State<AppState>,
     Json(req): Json<AgentChatRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {
+    // Before a slot is taken: a message sent with Draw pressed that this
+    // machine cannot draw for is refused, saying why.
+    refuse_unavailable_drawing(&state, &req).await?;
     // Acquire a concurrency permit — reject immediately with 429 if all
     // slots are occupied rather than queuing (each active agent loop
     // consumes LLM inference time and tool I/O).

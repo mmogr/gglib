@@ -18,6 +18,15 @@ its chat's saved one, or the stored one. The handler spawns the loop as
 a background task and bridges the resulting `mpsc::Receiver<AgentEvent>` to an
 Axum [`Sse`] response, each event framed by `compose::frame`.
 
+A request sent with `draw: true` (the page's Draw button) is the only one
+whose model is offered `builtin:generate_image`: `compose::prepare_over`
+composes the drawing tool for it, armed, and adds exactly that qualified name
+to a tool filter that lists names. Without `draw` the tool is in no list and
+cannot be called, `tool_filter: null` included. Both doors first ask
+`compose::refuse_unavailable_drawing`, before a slot is taken or a row
+written: a model on another machine, or a machine that cannot draw, is
+`400 drawing_unavailable` with the reason `GET /api/images/drawing` gives.
+
 Inline `<think>` reclassification is handled upstream by
 [`gglib_core::normalize::NormalizingStream`] in the LLM adapter, so this
 handler only forwards already-typed [`AgentEvent`](gglib_core::domain::agent::AgentEvent)s.

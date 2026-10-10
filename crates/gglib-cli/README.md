@@ -233,6 +233,19 @@ You: /image shots/error.png
 You: what does the stack trace say?
 ```
 
+`/draw` is the chat's Draw button: the model may draw a picture for the next
+message typed, and only that one. It writes the detailed prompt itself, draws
+through the daemon's image model, and says what it drew; the line shows the
+render's progress. `/draw` says why when nothing can draw (no daemon, no
+image runtime or model, or a `--remote` session, whose model is on the other
+machine).
+
+```bash
+You: /draw
+the next message may draw, with flux1-schnell
+You: a red fox in the snow at dawn
+```
+
 - **Stored once, sent by id.** Each file is stored in this machine's database
   exactly as it is on disk, under the SHA-256 of its bytes, and the message
   names it by that id. The bytes become an `image_url` only in the request to

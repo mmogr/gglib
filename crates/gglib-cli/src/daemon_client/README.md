@@ -43,7 +43,8 @@ gives a turn that holds nothing, said once; no render turn is granted here.
 `images.rs` is `DaemonImageGenerator`, core's image generation port over
 the daemon's `POST /api/images/generations` with `stream: true`: progress
 events become reports, completed events images, and an error event or a
-refused request the daemon's code and words. `runs.rs` holds the run calls and reads a run's event stream, whose events
+refused request the daemon's code and words; whether it can draw is the
+daemon's `GET /api/images/drawing`, asked by `/draw`. `runs.rs` holds the run calls and reads a run's event stream, whose events
 `drain_items` turns into numbered frames and the run's final state. `sse.rs`
 reads a stream of JSON events, such as a benchmark's. Neither cuts its stream
 into events itself: `gglib_core::sse::DataFrames` does, for these two and for
