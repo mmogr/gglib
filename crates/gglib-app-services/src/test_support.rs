@@ -273,8 +273,7 @@ impl ModelRuntimePort for RunningRuntime {
     }
 
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
-        self.stopped.store(true, Ordering::SeqCst);
-        Ok(())
+        unimplemented!("a removal stops the model it removes, by its id")
     }
 
     async fn stop_model(&self, model_id: u32) -> Result<bool, ModelRuntimeError> {

@@ -264,8 +264,8 @@ impl ModelOps {
     ///
     /// A model that is being served is refused
     /// ([`refuse_if_served`](Self::refuse_if_served)), unless `request.force`
-    /// is set: then the runtime is told to stop its current model, and the
-    /// row is removed.
+    /// is set: then the runtime is told to stop that model, wherever it is
+    /// resident, and the row is removed.
     pub async fn remove(&self, id: i64, request: RemoveModelRequest) -> Result<String, GuiError> {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
 
@@ -273,9 +273,14 @@ impl ModelOps {
             if !request.force {
                 return Err(served);
             }
+            // By its id, in whichever slot it sits: the model being
+            // removed and no other, and an image model that is drawing is
+            // asked to stop, never emptied under its render.
+            let served = u32::try_from(model.id)
+                .map_err(|_| GuiError::Internal("the model's id is out of range".to_owned()))?;
             self.deps
                 .runtime
-                .stop_current()
+                .stop_model(served)
                 .await
                 .map_err(|e| GuiError::Internal(format!("Failed to stop server: {e}")))?;
         }

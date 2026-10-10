@@ -280,6 +280,15 @@ impl ProcessManager {
             .await
     }
 
+    /// Whether a person's Stop was asked of model `model_id` while a render
+    /// draws with it. The Stop does not empty the slot under the render: the
+    /// render's driver reads this and ends it through
+    /// [`Self::retire_render`].
+    #[must_use]
+    pub fn render_stop_asked(&self, model_id: u32) -> bool {
+        self.residency.queue().render_stop_asked(model_id)
+    }
+
     /// Check if any slot is mid-launch.
     #[must_use]
     pub fn is_loading(&self) -> bool {

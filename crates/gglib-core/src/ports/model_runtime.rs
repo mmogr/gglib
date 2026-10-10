@@ -645,6 +645,8 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
 
     /// Stop the current model, even one a run holds: an explicit stop (a
     /// person's, a benchmark's), or the proxy's restart of a dead server.
+    /// An image model that is drawing is asked and waited for, as
+    /// [`Self::stop_model`] does.
     async fn stop_current(&self) -> Result<(), ModelRuntimeError>;
 
     /// Stop model `model_id` wherever it is resident, the primary slot or the

@@ -97,7 +97,10 @@ own, so that holds for a request dropped while its job is being submitted. A ren
 `IMAGE_STALL` (3 minutes, from submission) or running past
 `IMAGE_JOB_DEADLINE` (30 minutes) is retired through
 `ProcessManager::retire_render`: its server stopped, its lease released and
-slot emptied, then its turn ended. `job_tests.rs` drives all of this against
+slot emptied, then its turn ended. A person's Stop on the model while it
+draws is not a bare eviction either: the Stop asks, and the render, read or
+abandoned, retires itself the same way at its next read of the job and
+answers `image_generation_failed`, saying only that the model was stopped. `job_tests.rs` drives all of this against
 a scripted job and a real admission queue on a paused clock;
 `job_api_tests.rs` reads every answer the fake's job API scripts.
 

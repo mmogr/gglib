@@ -268,7 +268,9 @@ unless `--size` gives another the family draws; `-n` draws up to four;
 than one; an existing file is never replaced. The first step of a Flux.1
 render comes about 40 seconds in. Ctrl-C leaves at once, but a render
 already generating cannot be interrupted: the daemon finishes it and
-discards it.
+discards it. Stopping the image model, or removing it with force, while it
+draws waits up to 20 seconds for the render to stop, and answers an error
+if it has not, leaving the model loaded.
 
 ```bash
 gglib image "a lighthouse at dusk, oil painting"

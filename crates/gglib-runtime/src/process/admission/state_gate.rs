@@ -20,6 +20,11 @@
 //!   render: an older chat waiting to evict the very slot a waiting render's
 //!   lease pins would otherwise wait on the render while the render waited
 //!   on it.
+//! - **A Stop asks.** A person's Stop on the image model a render holds, or
+//!   waits in line with, never empties the slot under the render's lease: it
+//!   is noted here ([`QueueState::gate_ask_render_stop`]). A waiting render
+//!   leaves the line with its lease; one that is drawing is retired by its
+//!   driver, which reads the note at its next look at the job.
 //! - **Progress.** A render step counts as queue progress (through its
 //!   lease), and a gate waiter expires under the same stall rule as a ticket,
 //!   [`ADMISSION_DEADLINE`] with nothing moving.
@@ -54,6 +59,8 @@ struct HeldRender {
     slot: Option<usize>,
     step: u32,
     total: u32,
+    /// A Stop was asked of the model in `slot` while this render held it.
+    stop_asked: bool,
 }
 
 /// One caller waiting for a turn.
@@ -65,6 +72,10 @@ struct GateWaiter {
     stalled_since: Instant,
     /// The progress epoch this waiter has accounted for.
     seen_epoch: u64,
+    /// A render's lease's slot; `None` for an LLM turn.
+    slot: Option<usize>,
+    /// A Stop was asked of the model in `slot` while this render waited.
+    stop_asked: bool,
 }
 
 /// A place in the gate's line, held by the caller for the whole wait.
@@ -91,6 +102,9 @@ pub(in crate::process::admission) enum GateVerdict {
     /// Nothing moved for the whole deadline; the waiter is gone from the
     /// line.
     Stalled(Duration),
+    /// The model this render's lease pins was asked to stop; the waiter is
+    /// gone from the line.
+    Stopped,
 }
 
 impl QueueState {
@@ -109,6 +123,8 @@ impl QueueState {
             kind,
             stalled_since: now,
             seen_epoch: self.progress_epoch,
+            slot,
+            stop_asked: false,
         });
         GateTicket {
             seq,
@@ -129,6 +145,11 @@ impl QueueState {
         ticket: &GateTicket,
         now: Instant,
     ) -> GateVerdict {
+        let stopped = |w: &GateWaiter| w.seq == ticket.seq && w.stop_asked;
+        if self.gate.waiters.iter().any(stopped) {
+            self.gate_forget(ticket);
+            return GateVerdict::Stopped;
+        }
         let may_go = match ticket.kind {
             TurnKind::Llm => self.gate_admits_llm(ticket.seq),
             TurnKind::Render => self.render_may_start(ticket.seq),
@@ -147,6 +168,7 @@ impl QueueState {
                         slot: ticket.slot,
                         step: 0,
                         total: 0,
+                        stop_asked: false,
                     });
                 }
             }
@@ -265,6 +287,54 @@ impl QueueState {
         }
         // A turn ending is what everyone behind it was waiting for.
         self.record_progress();
+    }
+
+    /// Note a Stop of model `model_id` on every render whose lease pins the
+    /// slot holding it, the one drawing and any waiting in line. Answers
+    /// whether there was one, and whether any of them had not been asked
+    /// before. The slot is left as it is: emptying it is the render's to do
+    /// ([`Self::retire`]), or the Stop's once no render holds the model.
+    pub(in crate::process::admission) fn gate_ask_render_stop(
+        &mut self,
+        model_id: u32,
+    ) -> (bool, bool) {
+        let Some(slot) = self.slot_holding(model_id) else {
+            return (false, false);
+        };
+        let held = self.gate.render.as_mut().filter(|r| r.slot == Some(slot));
+        let waiting = self
+            .gate
+            .waiters
+            .iter_mut()
+            .filter(|w| w.kind == TurnKind::Render && w.slot == Some(slot));
+        let (mut asked, mut news) = (false, false);
+        for stop_asked in held
+            .map(|r| &mut r.stop_asked)
+            .into_iter()
+            .chain(waiting.map(|w| &mut w.stop_asked))
+        {
+            asked = true;
+            news |= !*stop_asked;
+            *stop_asked = true;
+        }
+        (asked, news)
+    }
+
+    /// Whether a Stop was asked of model `model_id` while the render that
+    /// holds the GPU draws with it.
+    pub(in crate::process::admission) fn gate_render_stop_asked(&self, model_id: u32) -> bool {
+        let Some(slot) = self.slot_holding(model_id) else {
+            return false;
+        };
+        let held = |r: &HeldRender| r.slot == Some(slot) && r.stop_asked;
+        self.gate.render.as_ref().is_some_and(held)
+    }
+
+    /// The slot whose resident is model `model_id`.
+    fn slot_holding(&self, model_id: u32) -> Option<usize> {
+        self.residents()
+            .find(|(_, r)| r.model_id == model_id)
+            .map(|(slot, _)| slot)
     }
 
     /// Retire a render's resident after its process was killed: empty

@@ -24,7 +24,7 @@ use tokio::time::Instant;
 
 use super::{JobTiming, RenderHost, SdImageDriver};
 use crate::process::admission::{ADMISSION_DEADLINE, AdmissionDecision, Candidate};
-use crate::process::{AdmissionQueue, Resident};
+use crate::process::{AdmissionQueue, RENDER_STOPPED, Resident};
 use crate::sd::job_api::{CancelOutcome, ImgGenBody, JobPreview, JobState, SdJobs};
 
 /// The image model's slot: an image model never takes an empty primary.
@@ -195,6 +195,10 @@ impl RenderHost for Host {
             .lock()
             .unwrap()
             .push(format!("retired, slot {after:?}"));
+    }
+
+    fn stop_asked(&self, model_id: u32) -> bool {
+        self.queue.render_stop_asked(model_id)
     }
 }
 
@@ -881,6 +885,76 @@ async fn an_abandoned_render_that_stalls_is_retired() {
         "36 s + 170 s: under three minutes quiet"
     );
     tokio::time::sleep(Duration::from_secs(20)).await;
+    assert_eq!(host.inflight(), None, "retired: the slot is empty");
+    assert_eq!(host.log.lock().unwrap().len(), 2);
+}
+
+// ── a person's Stop ──────────────────────────────────────────────────────
+
+/// A Stop on the image model while it draws does not empty the slot under
+/// the render. The render retires its model at its next read of the job,
+/// long before any clock: killed while it still holds the slot and its
+/// lease, then the slot emptied and the lease settled with it. A model
+/// launched into the slot afterwards keeps its own request: nothing of the
+/// old render is left to release there.
+#[tokio::test(start_paused = true)]
+async fn a_stop_mid_render_retires_it_and_spares_the_slots_next_model() {
+    let jobs = Arc::new(Timeline::new(flux_like()));
+    let host = Host::new();
+    let driver = Arc::new(driver(models(), &jobs, &host));
+    let (tx, _rx) = mpsc::channel(64);
+    let task_driver = Arc::clone(&driver);
+    let render = tokio::spawn(async move { task_driver.generate(sdxl_request(), tx).await });
+    tokio::time::sleep(Duration::from_secs(40)).await;
+
+    assert!(host.queue.ask_render_stop(SDXL_ID), "a render holds it");
+    assert_eq!(host.inflight(), Some(1), "the Stop emptied nothing");
+    let asked_at = Instant::now();
+    let refused = render.await.unwrap().unwrap_err();
+
+    assert!(
+        asked_at.elapsed() <= Duration::from_secs(1),
+        "at the next read"
+    );
+    // Its own sentence, with no advice to retry what a person stopped, and
+    // the code a failed render has.
+    assert!(matches!(refused, ImageError::Stopped), "{refused:?}");
+    assert_eq!(refused.to_string(), RENDER_STOPPED);
+    assert_eq!(refused.code(), Some("image_generation_failed"));
+    assert_eq!(
+        *host.log.lock().unwrap(),
+        [
+            "kill, slot Some((1, 1))".to_owned(),
+            "retired, slot None".to_owned()
+        ]
+    );
+    assert!(!host.queue.ask_render_stop(SDXL_ID), "no render is left");
+
+    let newcomer = host.queue.install(SLOT, resident(7, "embedder"));
+    drop(driver);
+    tokio::time::sleep(Duration::from_mins(31)).await;
+    assert_eq!(host.inflight(), Some(1), "the newcomer keeps its request");
+    drop(newcomer);
+}
+
+/// A render nobody reads any more is retired by a Stop in the same way.
+#[tokio::test(start_paused = true)]
+async fn a_stop_retires_an_abandoned_render_too() {
+    let jobs = Arc::new(Timeline::new(flux_like()).cancelled_with(CancelOutcome::Running));
+    let host = Host::new();
+    let driver = Arc::new(driver(models(), &jobs, &host));
+    let (tx, _rx) = mpsc::channel(64);
+    let task_driver = Arc::clone(&driver);
+    let render = tokio::spawn(async move { task_driver.generate(sdxl_request(), tx).await });
+    tokio::time::sleep(Duration::from_secs(40)).await;
+    render.abort();
+    let _ = render.await;
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_eq!(host.inflight(), Some(1), "held to the job's end");
+
+    assert!(host.queue.ask_render_stop(SDXL_ID));
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
     assert_eq!(host.inflight(), None, "retired: the slot is empty");
     assert_eq!(host.log.lock().unwrap().len(), 2);
 }
