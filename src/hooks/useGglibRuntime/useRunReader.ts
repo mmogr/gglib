@@ -21,6 +21,9 @@
  * way from the far machine, and nothing of it is kept; each reading of it is
  * handed up (`onFarOpened`), for what the far list does not say of a chat.
  *
+ * The preview frames of the run being read (`previews`) are held here beside
+ * the messages, never in them, and only while that run is read.
+ *
  * @module useRunReader
  */
 
@@ -35,6 +38,7 @@ import { ReasoningTimingTracker } from './reasoningTiming';
 import { performanceClock } from './clock';
 import { drawRun, type RunOutcome } from './drawRun';
 import { liveRunFor, loadSavedThread, type SavedView } from './savedRows';
+import { NO_PREVIEWS, type RunPreviews } from './runPreviews';
 
 const NOT_LOADED =
   'This conversation could not be loaded, so nothing can be sent from it. Open it again to retry.';
@@ -93,6 +97,9 @@ export function useRunReader(
   const [currentStreamingAssistantMessageId, setCurrentStreamingAssistantMessageId] =
     useState<string | null>(null);
 
+  /** The frames a tool of the run being read is making; none between readings. */
+  const [previews, setPreviews] = useState<RunPreviews>(NO_PREVIEWS);
+
   const timingTrackerRef = useRef(new ReasoningTimingTracker(performanceClock));
   const timingTracker = timingTrackerRef.current;
   useEffect(() => {
@@ -123,6 +130,8 @@ export function useRunReader(
     unaskedRef.current = false;
     readerRef.current?.abort();
     readerRef.current = null;
+    // A reading that is left clears nothing itself: what it held goes here.
+    setPreviews(NO_PREVIEWS);
     setRunning(false);
     setEndedRun(null);
   }, [setRunning]);
@@ -167,6 +176,7 @@ export function useRunReader(
         timingTracker,
         setCurrentStreamingAssistantMessageId: unlessLeft(setCurrentStreamingAssistantMessageId),
         onSystemWarning: (message, action) => latest.current.onSystemWarning?.(message, action),
+        setPreviews: unlessLeft(setPreviews),
       });
     } catch (error) {
       if (signal.aborted) return;
@@ -289,6 +299,7 @@ export function useRunReader(
     isRunning,
     isLoading,
     endedRun,
+    previews,
     timingTracker,
     currentStreamingAssistantMessageId,
     /** The run being read here, if the daemon has accepted it. */

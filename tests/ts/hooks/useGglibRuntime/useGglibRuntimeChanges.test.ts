@@ -186,6 +186,28 @@ describe('useGglibRuntime changes', () => {
     await waitFor(() => expect(accepted).toHaveBeenCalledTimes(1));
   });
 
+  it('an answer run says draw when Draw is armed, as a send does, and tells the caller once it is taken', async () => {
+    daemon.save(1, { role: 'user', content: 'q3' });
+    const accepted = vi.fn();
+    const hook = await mount({ ...open, draw: () => ({ accepted }) });
+    edit(hook, 'db-2', 'q4');
+
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    expect(daemon.only().request).toMatchObject({ answer_saved: true, draw: true });
+    await waitFor(() => expect(accepted).toHaveBeenCalledTimes(1));
+  });
+
+  it('an answer run has no draw key while Draw is not armed', async () => {
+    daemon.save(1, { role: 'user', content: 'q3' });
+    const draw = vi.fn(() => undefined);
+    const hook = await mount({ ...open, draw });
+    act(() => void hook.result.current.branching.retry());
+
+    await waitFor(() => expect(daemon.count('PUT', '/api/runs/')).toBe(1));
+    expect(draw).toHaveBeenCalledTimes(1);
+    expect(Object.keys(daemon.only().request as object)).not.toContain('draw');
+  });
+
   it('a branch whose answer is refused is still opened, and says why it was not answered', async () => {
     const onBranched = vi.fn();
     const onError = vi.fn();

@@ -6,6 +6,10 @@
  * `iteration_complete` opens the next. What is drawn is provisional: once the
  * run ends the page shows the rows the daemon saved instead.
  *
+ * A `preview` item is no event of the reply: its frame goes to the caller's
+ * `setPreviews`, beside the messages, until its tool call's result is drawn.
+ * None is shown for a call whose result came, and none outlives the reading.
+ *
  * @module drawRun
  */
 
@@ -19,6 +23,7 @@ import type { ReasoningTimingTracker } from './reasoningTiming';
 import { finalizeMessageTiming } from './agentMessageState';
 import { dispatchAgentEvent, type DispatchDeps, type DispatchState } from './agentEventDispatch';
 import { runsOf } from './chatSource';
+import { NO_PREVIEWS, parsePreview, withPreview, withoutPreview, type SetRunPreviews } from './runPreviews';
 
 export interface DrawRunOptions {
   runId: string;
@@ -33,6 +38,8 @@ export interface DrawRunOptions {
   timingTracker?: ReasoningTimingTracker;
   setCurrentStreamingAssistantMessageId?: (id: string | null) => void;
   onSystemWarning?: (message: string, suggestedAction?: string | null) => void;
+  /** Changes the preview frames held beside the messages; none are shown without it. */
+  setPreviews?: SetRunPreviews;
 }
 
 /** How a drawn run ended, when its end was read. */
@@ -75,6 +82,7 @@ export async function drawRun(options: DrawRunOptions): Promise<RunOutcome> {
     timingTracker,
     setCurrentStreamingAssistantMessageId,
     onSystemWarning,
+    setPreviews,
   } = options;
 
   const makeNextMessage = (iteration: number): string => {
@@ -93,21 +101,38 @@ export async function drawRun(options: DrawRunOptions): Promise<RunOutcome> {
   let error: Error | null = null;
   // After `final_answer` or `error` the reply is settled; nothing after is drawn.
   let settled = false;
-  for await (const item of runsOf(source).readRunEvents(runId, 0, signal)) {
-    if (item.type === 'end') {
-      if (!settled) cleanup();
-      return { info: item.info, error: error ?? endFailure(item.info) };
+  /** The tool calls whose result was drawn: a frame of one is late, and dropped. */
+  const over = new Set<string>();
+  try {
+    for await (const item of runsOf(source).readRunEvents(runId, 0, signal)) {
+      if (item.type === 'end') {
+        if (!settled) cleanup();
+        return { info: item.info, error: error ?? endFailure(item.info) };
+      }
+      if (item.type === 'preview') {
+        // Shown beside the reply, never part of it.
+        const preview = settled || over.has(item.toolCallId) ? null : parsePreview(item.data);
+        if (preview) setPreviews?.((held) => withPreview(held, preview));
+        continue;
+      }
+      const event = settled ? null : parseEvent(item.data);
+      if (!event) continue;
+      try {
+        settled = dispatchAgentEvent(event, state, deps);
+      } catch (e) {
+        error = e instanceof Error ? e : new Error(String(e));
+        settled = true;
+      }
+      const ended = event.type === 'tool_call_complete' ? event.result?.tool_call_id : undefined;
+      if (typeof ended === 'string') {
+        over.add(ended);
+        setPreviews?.((held) => withoutPreview(held, ended));
+      }
     }
-    if (item.type === 'preview') continue; // shown beside the reply, never part of it
-    const event = settled ? null : parseEvent(item.data);
-    if (!event) continue;
-    try {
-      settled = dispatchAgentEvent(event, state, deps);
-    } catch (e) {
-      error = e instanceof Error ? e : new Error(String(e));
-      settled = true;
-    }
+    if (!settled) cleanup();
+    return { info: null, error };
+  } finally {
+    // However the reading ends, no frame outlives it.
+    setPreviews?.(() => NO_PREVIEWS);
   }
-  if (!settled) cleanup();
-  return { info: null, error };
 }

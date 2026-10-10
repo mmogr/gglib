@@ -16,7 +16,8 @@
  * model (`pairedModel`) is this machine's, run here on that machine's model:
  * its runs name the model by its machine, and a conversation made for it
  * keeps that model. Either kind of send says the chat's Thinking choice only
- * when the caller's `thinking` gives one, and calls its `accepted` once taken.
+ * when the caller's `thinking` gives one, and calls its `accepted` once taken;
+ * and says `draw` only when the caller's `draw` gives one, likewise.
  *
  * An edit, a regenerate, Retry and Branch from here are changes the daemon
  * makes (`branchChanges`): one that would rewrite a saved reply is made on a
@@ -52,6 +53,7 @@ import { codeOf, sendRefusal } from './imageRefusals';
 import { giveDraftBack, imagesOf, unsentImage } from './turnImages';
 import { changeAndAnswer, editOf, regenerateOf, useBranching, type Branching } from './branchChanges';
 import { useRunReader, type RunReaderInputs } from './useRunReader';
+import type { RunPreviews } from './runPreviews';
 
 export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpened'> {
   conversationId?: number;
@@ -87,6 +89,8 @@ export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpen
   downscaleImage?: Downscale;
   /** What a send says of the chat's Thinking choice, asked at each send: nothing unless it changed, and `accepted` is called once its turn is. */
   thinking?: () => { said: RunRequestOptions['thinking']; accepted: () => void } | undefined;
+  /** Whether a send says `draw`, asked at each send: something only while the Draw button is armed, and `accepted` is called once its turn is. */
+  draw?: () => { accepted: () => void } | undefined;
 }
 
 export interface UseGglibRuntimeReturn {
@@ -98,6 +102,8 @@ export interface UseGglibRuntimeReturn {
   isLoading: boolean;
   /** The run last read to its end in the open conversation, as it ended; null once it is left. */
   endedRun: RunInfo | null;
+  /** The frames a tool of the run being read is making, by its call: beside the messages, never in them. */
+  previews: RunPreviews;
   timingTracker: ReasoningTimingTracker;
   currentStreamingAssistantMessageId: string | null;
   /** What the open chat offers of its branches, and Retry; the same object until what the daemon says of the chat changes. */
@@ -144,9 +150,11 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
   const answer = async (cid: number) => {
     const thinking = options.thinking?.();
     const runId = mintRunId();
-    const body = runBodyFor(target, { conversationId: cid, messages: [], answerSaved: true, thinking: thinking?.said });
+    const draw = options.draw?.();
+    const body = runBodyFor(target, { conversationId: cid, messages: [], answerSaved: true, thinking: thinking?.said, draw: draw !== undefined });
     await getTransport().startAgentRun(runId, body);
     thinking?.accepted();
+    draw?.accepted();
     if (stopAskedRef.current) await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
     return runId;
   };
@@ -210,13 +218,15 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       const asked = mkUserMessage(content, { conversationId: cid, turnId: crypto.randomUUID() });
       const history = [...base, attached.length > 0 ? { ...asked, attachments: attached } : asked];
       const thinking = options.thinking?.();
-      const request = far ? null : runBodyFor(target, { conversationId: cid, messages: history, thinking: thinking?.said });
+      const draw = options.draw?.();
+      const request = far ? null : runBodyFor(target, { conversationId: cid, messages: history, thinking: thinking?.said, draw: draw !== undefined });
       messagesRef.current = history;
       setMessages(history);
       const runId = mintRunId();
       if (request) await getTransport().startAgentRun(runId, request);
-      else await getTransport().addFarTurn(cid, runId, turnText(content), attached.map((image) => image.id), thinking?.said);
+      else await getTransport().addFarTurn(cid, runId, turnText(content), attached.map((image) => image.id), thinking?.said, draw !== undefined);
       thinking?.accepted();
+      draw?.accepted();
       if (stopAskedRef.current) await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
       if (!signal.aborted) await reader.follow(cid, runId, signal);
     } catch (error) {
@@ -290,6 +300,7 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     isRunning,
     isLoading: reader.isLoading,
     endedRun: reader.endedRun,
+    previews: reader.previews,
     timingTracker: reader.timingTracker,
     currentStreamingAssistantMessageId: reader.currentStreamingAssistantMessageId,
     branching,

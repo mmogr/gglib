@@ -20,6 +20,7 @@ import { TurnRow } from './TurnRow';
 import { ReplyArriving, ReplyMade, TurnWho } from './TurnMargin';
 import { arrivingPhase, replyFacts, replyName } from './turnFigures';
 import { useThinkingTiming } from '../context/ThinkingTimingContext';
+import { useRunPreviews } from '../context/RunPreviewsContext';
 import { ToolUsageBadge } from '../../ToolUsageBadge';
 import { ToolExecutionProgress } from '../../ToolExecutionProgress';
 import { extractReasoningText } from '../../../utils/messages';
@@ -70,11 +71,14 @@ function textOf(content: unknown): string {
  * Its reasoning and tool calls are the detail "How this was made" opens,
  * shown while it arrives. A turn with no text of its own always shows them,
  * so no row is a margin beside an empty body. The images its tools made are
- * not in the detail: they are under its text, always shown.
+ * not in the detail: they are under its text, always shown. A tool still
+ * running shows, in the detail, how far it has got and the picture it is
+ * making, which is the run's and never the message's.
  */
 export const AssistantMessageBubble: React.FC = () => {
   const message = useMessage();
   const timing = useThinkingTiming();
+  const previews = useRunPreviews();
   const detailId = useId();
   const [detailChoice, setDetailChoice] = useState<boolean | null>(null);
 
@@ -100,11 +104,13 @@ export const AssistantMessageBubble: React.FC = () => {
     <ReplyArriving
       phase={arrivingPhase({
         prompt: facts.prompt,
+        waiting: facts.waiting,
         hasReasoning: !!thinkingText,
         hasText: !!contentText,
         toolCallsRunning,
       })}
       prompt={facts.prompt}
+      waiting={facts.waiting}
     />
   ) : (
     <ReplyMade
@@ -145,7 +151,7 @@ export const AssistantMessageBubble: React.FC = () => {
                   />
                 )}
                 <ToolUsageBadge />
-                <ToolExecutionProgress />
+                <ToolExecutionProgress previews={previews} />
               </div>
             )}
             <div className="text-base leading-relaxed text-text">

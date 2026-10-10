@@ -10,7 +10,7 @@ Download progress types live in `src/services/transport/types/`, not here.
 
 | File | Role |
 |------|------|
-| `agentEvent.ts` | `AgentEvent` union: text/reasoning deltas, tool lifecycle, loop control, cost monitoring |
+| `agentEvent.ts` | `AgentEvent` union: text/reasoning deltas, tool lifecycle and progress, waiting, loop control, cost monitoring; and the payload of a run's `preview` side event, which is not one of them |
 
 ## AgentEvent Union Members
 
