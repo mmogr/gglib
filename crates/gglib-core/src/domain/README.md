@@ -24,6 +24,9 @@ infrastructure concerns (database, filesystem, etc.).
 - `mcp` - MCP server types (`McpServer`, `NewMcpServer`, etc.)
 - `chat` - Chat conversation and message types. A message carries its images
   by reference: `NewMessage.images` are ids, `Message.images` are facts
+- `branching` - When a change to a saved chat branches it into a new chat
+  (`plan`), and the options its family holds at each turn (`points`): a
+  saved reply is never discarded or altered (ADR 0017)
 - `attachment` - An image a message carries, a user's or a tool's: its id,
   the SHA-256 of its bytes (`AttachmentId`), what a client is told of it
   without the bytes (`AttachmentInfo`), and the answer to an upload

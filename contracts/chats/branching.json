@@ -1,0 +1,1333 @@
+{
+  "about": "gglib's branching rules (crates/gglib-core/src/domain/branching), as cases. Recorded by contract_tests.rs; change the rules there, never this file.",
+  "plans": [
+    {
+      "name": "an edit of an answered question branches before it",
+      "path": [
+        {
+          "id": 1,
+          "role": "user",
+          "content": "Plan a trip to Kyoto"
+        },
+        {
+          "id": 2,
+          "role": "assistant",
+          "content": "Day 1: temples\nDay 2: markets"
+        },
+        {
+          "id": 3,
+          "role": "user",
+          "content": "Make it shorter"
+        },
+        {
+          "id": 4,
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "id": 5,
+          "role": "tool",
+          "content": "{\"weather\":\"rain\"}"
+        },
+        {
+          "id": 6,
+          "role": "assistant",
+          "content": "One day: Fushimi Inari, then Arashiyama."
+        }
+      ],
+      "busy": false,
+      "change": {
+        "kind": "edit",
+        "message_id": 3,
+        "content": "Make it longer"
+      },
+      "answer": {
+        "plan": {
+          "fork": {
+            "through": 2,
+            "then": "question",
+            "answer": true
+          }
+        }
+      },
+      "answerable": false
+    },
+    {
+      "name": "an edit of the first question branches with nothing copied",
+      "path": [
+        {
+          "id": 1,
+          "role": "user",
+          "content": "Plan a trip to Kyoto"
+        },
+        {
+          "id": 2,
+          "role": "assistant",
+          "content": "Day 1: temples\nDay 2: markets"
+        },
+        {
+          "id": 3,
+          "role": "user",
+          "content": "Make it shorter"
+        },
+        {
+          "id": 4,
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "id": 5,
+          "role": "tool",
+          "content": "{\"weather\":\"rain\"}"
+        },
+        {
+          "id": 6,
+          "role": "assistant",
+          "content": "One day: Fushimi Inari, then Arashiyama."
+        }
+      ],
+      "busy": false,
+      "change": {
+        "kind": "edit",
+        "message_id": 1,
+        "content": "Plan a trip to Osaka"
+      },
+      "answer": {
+        "plan": {
+          "fork": {
+            "through": null,
+            "then": "question",
+            "answer": true
+          }
+        }
+      },
+      "answerable": false
+    },
+    {
+      "name": "an edit of the last question nothing answers replaces it",
+      "path": [
+        {
+          "id": 1,
+          "role": "user",
+          "content": "Plan a trip to Kyoto"
+        },
+        {
+          "id": 2,
+          "role": "assistant",
+          "content": "Day 1: temples\nDay 2: markets"
+        },
+        {
+          "id": 3,
+          "role": "user",
+          "content": "Make it shorter"
+        },
+        {
+          "id": 4,
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "id": 5,
+          "role": "tool",
+          "content": "{\"weather\":\"rain\"}"
+        },
+        {
+          "id": 6,
+          "role": "assistant",
+          "content": "One day: Fushimi Inari, then Arashiyama."
+        },
+        {
+          "id": 7,
+          "role": "user",
+          "content": "And with kids?",
+          "images": [
+            "cc88f6acf10ba9e488201201e9067fd63fc23aeb64fcf686578e6d900fceeef6"
+          ]
+        }
+      ],
+      "busy": false,
+      "change": {
+        "kind": "edit",
+        "message_id": 7,
+        "content": "And with kids?"
+      },
+      "answer": {
+        "plan": {
+          "replace": {
+            "question": 7
+          }
+        }
+      },
+      "answerable": true
+    },
+    {
+      "name": "an edit of the last question while a reply is written branches",
+      "path": [
+        {
+          "id": 1,
+          "role": "user",
+          "content": "Plan a trip to Kyoto"
+        },
+        {
+          "id": 2,
+          "role": "assistant",
+          "content": "Day 1: temples\nDay 2: markets"
+        },
+        {
+          "id": 3,
+          "role": "user",
+          "content": "Make it shorter"
+        },
+        {
+          "id": 4,
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "id": 5,
+          "role": "tool",
+          "content": "{\"weather\":\"rain\"}"
+        },
+        {
+          "id": 6,
+          "role": "assistant",
+          "content": "One day: Fushimi Inari, then Arashiyama."
+        },
+        {
+          "id": 7,
+          "role": "user",
+          "content": "And with kids?",
+          "images": [
+            "cc88f6acf10ba9e488201201e9067fd63fc23aeb64fcf686578e6d900fceeef6"
+          ]
+        }
+      ],
+      "busy": true,
+      "change": {
+        "kind": "edit",
+        "message_id": 7,
+        "content": "And with a dog?",
+        "images": [
+          "cc88f6acf10ba9e488201201e9067fd63fc23aeb64fcf686578e6d900fceeef6"
+        ]
+      },
+      "answer": {
+        "plan": {
+          "fork": {
+            "through": 6,
+            "then": "question",
+            "answer": true
+          }
+        }
+      },
+      "answerable": true
+    },
+    {
+      "name": "an edit that changes nothing is refused",
+      "path": [
+        {
+          "id": 1,
+          "role": "user",
+          "content": "Plan a trip to Kyoto"
+        },
+        {
+          "id": 2,
+          "role": "assistant",
+          "content": "Day 1: temples\nDay 2: markets"
+        },
+        {
+          "id": 3,
+          "role": "user",
+          "content": "Make it shorter"
+        },
+        {
+          "id": 4,
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "id": 5,
+          "role": "tool",
+          "content": "{\"weather\":\"rain\"}"
+        },
+        {
+          "id": 6,
+          "role": "assistant",
+          "content": "One day: Fushimi Inari, then Arashiyama."
+        },
+        {
+          "id": 7,
+          "role": "user",
+          "content": "And with kids?",
+          "images": [
+            "cc88f6acf10ba9e488201201e9067fd63fc23aeb64fcf686578e6d900fceeef6"
+          ]
+        }
+      ],
+      "busy": false,
+      "change": {
+        "kind": "edit",
+        "message_id": 7,
+        "content": "And with kids?",
+        "images": [
+          "cc88f6acf10ba9e488201201e9067fd63fc23aeb64fcf686578e6d900fceeef6"
+        ]
+      },
+      "answer": {
+        "refused": "unchanged"
+      },
+      "answerable": true
+    },
+    {
+      "name": "an edit of a reply's tool result edits the reply",
+      "path": [
+        {
+          "id": 1,
+          "role": "user",
+          "content": "Plan a trip to Kyoto"
+        },
+        {
+          "id": 2,
+          "role": "assistant",
+          "content": "Day 1: temples\nDay 2: markets"
+        },
+        {
+          "id": 3,
+          "role": "user",
+          "content": "Make it shorter"
+        },
+        {
+          "id": 4,
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "id": 5,
+          "role": "tool",
+          "content": "{\"weather\":\"rain\"}"
+        },
+        {
+          "id": 6,
+          "role": "assistant",
+          "content": "One day: Fushimi Inari, then Arashiyama."
+        }
+      ],
+      "busy": false,
+      "change": {
+        "kind": "edit",
+        "message_id": 5,
+        "content": "One day: Kinkaku-ji."
+      },
+      "answer": {
+        "plan": {
+          "fork": {
+            "through": 3,
+            "then": "edited_reply",
+            "answer": false
+          }
+        }
+      },
+      "answerable": false
+    },
+    {
+      "name": "an edited reply carries no image",
+      "path": [
+        {
+          "id": 1,
+          "role": "user",
+          "content": "Plan a trip to Kyoto"
+        },
+        {
+          "id": 2,
+          "role": "assistant",
+          "content": "Day 1: temples\nDay 2: markets"
+        },
+        {
+          "id": 3,
+          "role": "user",
+          "content": "Make it shorter"
+        },
+        {
+          "id": 4,
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "id": 5,
+          "role": "tool",
+          "content": "{\"weather\":\"rain\"}"
+        },
+        {
+          "id": 6,
+          "role": "assistant",
+          "content": "One day: Fushimi Inari, then Arashiyama."
+        }
+      ],
+      "busy": false,
+      "change": {
+        "kind": "edit",
+        "message_id": 2,
+        "content": "Day 1: gardens",
+        "images": [
+          "cc88f6acf10ba9e488201201e9067fd63fc23aeb64fcf686578e6d900fceeef6"
+        ]
+      },
+      "answer": {
+        "refused": "invalid_request"
+      },
+      "answerable": false
+    },
+    {
+      "name": "a regenerate branches after the question",
+      "path": [
+        {
+          "id": 1,
+          "role": "user",
+          "content": "Plan a trip to Kyoto"
+        },
+        {
+          "id": 2,
+          "role": "assistant",
+          "content": "Day 1: temples\nDay 2: markets"
+        },
+        {
+          "id": 3,
+          "role": "user",
+          "content": "Make it shorter"
+        },
+        {
+          "id": 4,
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "id": 5,
+          "role": "tool",
+          "content": "{\"weather\":\"rain\"}"
+        },
+        {
+          "id": 6,
+          "role": "assistant",
+          "content": "One day: Fushimi Inari, then Arashiyama."
+        }
+      ],
+      "busy": false,
+      "change": {
+        "kind": "regenerate",
+        "message_id": 6
+      },
+      "answer": {
+        "plan": {
+          "fork": {
+            "through": 3,
+            "then": "nothing",
+            "answer": true
+          }
+        }
+      },
+      "answerable": false
+    },
+    {
+      "name": "a question is not regenerated",
+      "path": [
+        {
+          "id": 1,
+          "role": "user",
+          "content": "Plan a trip to Kyoto"
+        },
+        {
+          "id": 2,
+          "role": "assistant",
+          "content": "Day 1: temples\nDay 2: markets"
+        },
+        {
+          "id": 3,
+          "role": "user",
+          "content": "Make it shorter"
+        },
+        {
+          "id": 4,
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "id": 5,
+          "role": "tool",
+          "content": "{\"weather\":\"rain\"}"
+        },
+        {
+          "id": 6,
+          "role": "assistant",
+          "content": "One day: Fushimi Inari, then Arashiyama."
+        }
+      ],
+      "busy": false,
+      "change": {
+        "kind": "regenerate",
+        "message_id": 3
+      },
+      "answer": {
+        "refused": "not_a_reply"
+      },
+      "answerable": false
+    },
+    {
+      "name": "a greeting answers no question",
+      "path": [
+        {
+          "id": 1,
+          "role": "assistant",
+          "content": "Hello! Where to?"
+        },
+        {
+          "id": 2,
+          "role": "user",
+          "content": "Kyoto"
+        },
+        {
+          "id": 3,
+          "role": "assistant",
+          "content": "Lovely."
+        }
+      ],
+      "busy": false,
+      "change": {
+        "kind": "regenerate",
+        "message_id": 1
+      },
+      "answer": {
+        "refused": "nothing_to_answer"
+      },
+      "answerable": false
+    },
+    {
+      "name": "a branch copies to the end of the turn",
+      "path": [
+        {
+          "id": 1,
+          "role": "user",
+          "content": "Plan a trip to Kyoto"
+        },
+        {
+          "id": 2,
+          "role": "assistant",
+          "content": "Day 1: temples\nDay 2: markets"
+        },
+        {
+          "id": 3,
+          "role": "user",
+          "content": "Make it shorter"
+        },
+        {
+          "id": 4,
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "id": 5,
+          "role": "tool",
+          "content": "{\"weather\":\"rain\"}"
+        },
+        {
+          "id": 6,
+          "role": "assistant",
+          "content": "One day: Fushimi Inari, then Arashiyama."
+        }
+      ],
+      "busy": false,
+      "change": {
+        "kind": "branch",
+        "message_id": 4
+      },
+      "answer": {
+        "plan": {
+          "fork": {
+            "through": 6,
+            "then": "nothing",
+            "answer": false
+          }
+        }
+      },
+      "answerable": false
+    },
+    {
+      "name": "a branch at a question copies to it",
+      "path": [
+        {
+          "id": 1,
+          "role": "user",
+          "content": "Plan a trip to Kyoto"
+        },
+        {
+          "id": 2,
+          "role": "assistant",
+          "content": "Day 1: temples\nDay 2: markets"
+        },
+        {
+          "id": 3,
+          "role": "user",
+          "content": "Make it shorter"
+        },
+        {
+          "id": 4,
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "id": 5,
+          "role": "tool",
+          "content": "{\"weather\":\"rain\"}"
+        },
+        {
+          "id": 6,
+          "role": "assistant",
+          "content": "One day: Fushimi Inari, then Arashiyama."
+        },
+        {
+          "id": 7,
+          "role": "user",
+          "content": "And with kids?",
+          "images": [
+            "cc88f6acf10ba9e488201201e9067fd63fc23aeb64fcf686578e6d900fceeef6"
+          ]
+        }
+      ],
+      "busy": false,
+      "change": {
+        "kind": "branch",
+        "message_id": 7
+      },
+      "answer": {
+        "plan": {
+          "fork": {
+            "through": 7,
+            "then": "nothing",
+            "answer": false
+          }
+        }
+      },
+      "answerable": true
+    },
+    {
+      "name": "a message of another chat is not found",
+      "path": [
+        {
+          "id": 1,
+          "role": "user",
+          "content": "Plan a trip to Kyoto"
+        },
+        {
+          "id": 2,
+          "role": "assistant",
+          "content": "Day 1: temples\nDay 2: markets"
+        },
+        {
+          "id": 3,
+          "role": "user",
+          "content": "Make it shorter"
+        },
+        {
+          "id": 4,
+          "role": "assistant",
+          "content": ""
+        },
+        {
+          "id": 5,
+          "role": "tool",
+          "content": "{\"weather\":\"rain\"}"
+        },
+        {
+          "id": 6,
+          "role": "assistant",
+          "content": "One day: Fushimi Inari, then Arashiyama."
+        }
+      ],
+      "busy": false,
+      "change": {
+        "kind": "branch",
+        "message_id": 99
+      },
+      "answer": {
+        "refused": "message_not_found"
+      },
+      "answerable": false
+    }
+  ],
+  "points": [
+    {
+      "name": "the first chat sees an edited question and a regenerated reply",
+      "me": 10,
+      "family": [
+        {
+          "conversation_id": 10,
+          "updated_at": "2026-10-09 09:00:04",
+          "rows": [
+            {
+              "id": 1,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 2,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            },
+            {
+              "id": 3,
+              "key": 3,
+              "role": "user",
+              "text": "Make it cheaper",
+              "images": 0
+            },
+            {
+              "id": 4,
+              "key": 4,
+              "role": "assistant",
+              "text": "Hostels and buses.",
+              "images": 0
+            }
+          ]
+        },
+        {
+          "conversation_id": 20,
+          "updated_at": "2026-10-09 09:00:06",
+          "rows": [
+            {
+              "id": 11,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 12,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            },
+            {
+              "id": 13,
+              "key": 13,
+              "role": "user",
+              "text": "Make it shorter",
+              "images": 0
+            },
+            {
+              "id": 14,
+              "key": 14,
+              "role": "assistant",
+              "text": "One day.",
+              "images": 0
+            }
+          ]
+        },
+        {
+          "conversation_id": 30,
+          "updated_at": "2026-10-09 09:00:07",
+          "rows": [
+            {
+              "id": 21,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 22,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            },
+            {
+              "id": 23,
+              "key": 3,
+              "role": "user",
+              "text": "Make it cheaper",
+              "images": 0
+            },
+            {
+              "id": 24,
+              "key": 24,
+              "role": "assistant",
+              "text": "Hostels, buses, bentos.",
+              "images": 0
+            }
+          ]
+        },
+        {
+          "conversation_id": 40,
+          "updated_at": "2026-10-09 09:00:08",
+          "rows": [
+            {
+              "id": 31,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 32,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            }
+          ]
+        }
+      ],
+      "points": [
+        {
+          "message_id": 3,
+          "index": 0,
+          "options": [
+            {
+              "conversation_id": 10,
+              "message_id": 3,
+              "role": "user",
+              "preview": "Make it cheaper"
+            },
+            {
+              "conversation_id": 20,
+              "message_id": 13,
+              "role": "user",
+              "preview": "Make it shorter"
+            }
+          ]
+        },
+        {
+          "message_id": 4,
+          "index": 0,
+          "options": [
+            {
+              "conversation_id": 10,
+              "message_id": 4,
+              "role": "assistant",
+              "preview": "Hostels and buses."
+            },
+            {
+              "conversation_id": 30,
+              "message_id": 24,
+              "role": "assistant",
+              "preview": "Hostels, buses, bentos."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "the edited chat sees the question it edited, shown by the chat changed last",
+      "me": 20,
+      "family": [
+        {
+          "conversation_id": 10,
+          "updated_at": "2026-10-09 09:00:04",
+          "rows": [
+            {
+              "id": 1,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 2,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            },
+            {
+              "id": 3,
+              "key": 3,
+              "role": "user",
+              "text": "Make it cheaper",
+              "images": 0
+            },
+            {
+              "id": 4,
+              "key": 4,
+              "role": "assistant",
+              "text": "Hostels and buses.",
+              "images": 0
+            }
+          ]
+        },
+        {
+          "conversation_id": 20,
+          "updated_at": "2026-10-09 09:00:06",
+          "rows": [
+            {
+              "id": 11,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 12,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            },
+            {
+              "id": 13,
+              "key": 13,
+              "role": "user",
+              "text": "Make it shorter",
+              "images": 0
+            },
+            {
+              "id": 14,
+              "key": 14,
+              "role": "assistant",
+              "text": "One day.",
+              "images": 0
+            }
+          ]
+        },
+        {
+          "conversation_id": 30,
+          "updated_at": "2026-10-09 09:00:07",
+          "rows": [
+            {
+              "id": 21,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 22,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            },
+            {
+              "id": 23,
+              "key": 3,
+              "role": "user",
+              "text": "Make it cheaper",
+              "images": 0
+            },
+            {
+              "id": 24,
+              "key": 24,
+              "role": "assistant",
+              "text": "Hostels, buses, bentos.",
+              "images": 0
+            }
+          ]
+        },
+        {
+          "conversation_id": 40,
+          "updated_at": "2026-10-09 09:00:08",
+          "rows": [
+            {
+              "id": 31,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 32,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            }
+          ]
+        }
+      ],
+      "points": [
+        {
+          "message_id": 13,
+          "index": 1,
+          "options": [
+            {
+              "conversation_id": 30,
+              "message_id": 23,
+              "role": "user",
+              "preview": "Make it cheaper"
+            },
+            {
+              "conversation_id": 20,
+              "message_id": 13,
+              "role": "user",
+              "preview": "Make it shorter"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "the regenerated chat sees both its points",
+      "me": 30,
+      "family": [
+        {
+          "conversation_id": 10,
+          "updated_at": "2026-10-09 09:00:04",
+          "rows": [
+            {
+              "id": 1,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 2,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            },
+            {
+              "id": 3,
+              "key": 3,
+              "role": "user",
+              "text": "Make it cheaper",
+              "images": 0
+            },
+            {
+              "id": 4,
+              "key": 4,
+              "role": "assistant",
+              "text": "Hostels and buses.",
+              "images": 0
+            }
+          ]
+        },
+        {
+          "conversation_id": 20,
+          "updated_at": "2026-10-09 09:00:06",
+          "rows": [
+            {
+              "id": 11,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 12,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            },
+            {
+              "id": 13,
+              "key": 13,
+              "role": "user",
+              "text": "Make it shorter",
+              "images": 0
+            },
+            {
+              "id": 14,
+              "key": 14,
+              "role": "assistant",
+              "text": "One day.",
+              "images": 0
+            }
+          ]
+        },
+        {
+          "conversation_id": 30,
+          "updated_at": "2026-10-09 09:00:07",
+          "rows": [
+            {
+              "id": 21,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 22,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            },
+            {
+              "id": 23,
+              "key": 3,
+              "role": "user",
+              "text": "Make it cheaper",
+              "images": 0
+            },
+            {
+              "id": 24,
+              "key": 24,
+              "role": "assistant",
+              "text": "Hostels, buses, bentos.",
+              "images": 0
+            }
+          ]
+        },
+        {
+          "conversation_id": 40,
+          "updated_at": "2026-10-09 09:00:08",
+          "rows": [
+            {
+              "id": 31,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 32,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            }
+          ]
+        }
+      ],
+      "points": [
+        {
+          "message_id": 23,
+          "index": 0,
+          "options": [
+            {
+              "conversation_id": 30,
+              "message_id": 23,
+              "role": "user",
+              "preview": "Make it cheaper"
+            },
+            {
+              "conversation_id": 20,
+              "message_id": 13,
+              "role": "user",
+              "preview": "Make it shorter"
+            }
+          ]
+        },
+        {
+          "message_id": 24,
+          "index": 1,
+          "options": [
+            {
+              "conversation_id": 10,
+              "message_id": 4,
+              "role": "assistant",
+              "preview": "Hostels and buses."
+            },
+            {
+              "conversation_id": 30,
+              "message_id": 24,
+              "role": "assistant",
+              "preview": "Hostels, buses, bentos."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a branch with nothing yet is an empty option",
+      "me": 40,
+      "family": [
+        {
+          "conversation_id": 10,
+          "updated_at": "2026-10-09 09:00:04",
+          "rows": [
+            {
+              "id": 1,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 2,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            },
+            {
+              "id": 3,
+              "key": 3,
+              "role": "user",
+              "text": "Make it cheaper",
+              "images": 0
+            },
+            {
+              "id": 4,
+              "key": 4,
+              "role": "assistant",
+              "text": "Hostels and buses.",
+              "images": 0
+            }
+          ]
+        },
+        {
+          "conversation_id": 20,
+          "updated_at": "2026-10-09 09:00:06",
+          "rows": [
+            {
+              "id": 11,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 12,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            },
+            {
+              "id": 13,
+              "key": 13,
+              "role": "user",
+              "text": "Make it shorter",
+              "images": 0
+            },
+            {
+              "id": 14,
+              "key": 14,
+              "role": "assistant",
+              "text": "One day.",
+              "images": 0
+            }
+          ]
+        },
+        {
+          "conversation_id": 30,
+          "updated_at": "2026-10-09 09:00:07",
+          "rows": [
+            {
+              "id": 21,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 22,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            },
+            {
+              "id": 23,
+              "key": 3,
+              "role": "user",
+              "text": "Make it cheaper",
+              "images": 0
+            },
+            {
+              "id": 24,
+              "key": 24,
+              "role": "assistant",
+              "text": "Hostels, buses, bentos.",
+              "images": 0
+            }
+          ]
+        },
+        {
+          "conversation_id": 40,
+          "updated_at": "2026-10-09 09:00:08",
+          "rows": [
+            {
+              "id": 31,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 32,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            }
+          ]
+        }
+      ],
+      "points": [
+        {
+          "message_id": null,
+          "index": 2,
+          "options": [
+            {
+              "conversation_id": 30,
+              "message_id": 23,
+              "role": "user",
+              "preview": "Make it cheaper"
+            },
+            {
+              "conversation_id": 20,
+              "message_id": 13,
+              "role": "user",
+              "preview": "Make it shorter"
+            },
+            {
+              "conversation_id": 40,
+              "message_id": null,
+              "role": null,
+              "preview": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a chat alone has no branch point",
+      "me": 10,
+      "family": [
+        {
+          "conversation_id": 10,
+          "updated_at": "2026-10-09 09:00:04",
+          "rows": [
+            {
+              "id": 1,
+              "key": 1,
+              "role": "user",
+              "text": "Plan a trip to Kyoto",
+              "images": 0
+            },
+            {
+              "id": 2,
+              "key": 2,
+              "role": "assistant",
+              "text": "Day 1: temples",
+              "images": 0
+            },
+            {
+              "id": 3,
+              "key": 3,
+              "role": "user",
+              "text": "Make it cheaper",
+              "images": 0
+            },
+            {
+              "id": 4,
+              "key": 4,
+              "role": "assistant",
+              "text": "Hostels and buses.",
+              "images": 0
+            }
+          ]
+        }
+      ],
+      "points": []
+    }
+  ]
+}

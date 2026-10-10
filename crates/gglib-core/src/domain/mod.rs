@@ -3,6 +3,7 @@ pub(crate) mod admission;
 pub mod agent;
 pub mod attachment;
 pub mod benchmark;
+pub mod branching;
 pub(crate) mod cache_budget;
 pub mod capabilities;
 pub mod capability_tags;
