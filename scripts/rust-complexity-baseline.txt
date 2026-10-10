@@ -22,10 +22,10 @@ crates/gglib-app-services/src/test_support.rs 360
 crates/gglib-app-services/src/types.rs 531
 crates/gglib-app-services/src/types_model_dto_tests.rs 311
 crates/gglib-axum/src/error.rs 326
-crates/gglib-axum/src/routes.rs 455
+crates/gglib-axum/src/routes.rs 457
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 361
-crates/gglib-cli/src/handlers/agent_chat/config.rs 314
+crates/gglib-cli/src/handlers/agent_chat/config.rs 382
 crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 374
 crates/gglib-cli/src/handlers/agent_chat/mod.rs 307
 crates/gglib-cli/src/handlers/agent_chat/repl.rs 330
@@ -46,7 +46,7 @@ crates/gglib-cli/src/presentation/explain_display_tests.rs 700
 crates/gglib-cli/src/presentation/inspect_display.rs 313
 crates/gglib-cli/tests/mcp_servers.rs 338
 crates/gglib-cli/tests/setup_scripts.rs 313
-crates/gglib-core/src/contracts/http/daemon.rs 338
+crates/gglib-core/src/contracts/http/daemon.rs 367
 crates/gglib-core/src/domain/admission.rs 367
 crates/gglib-core/src/domain/agent/config.rs 744
 crates/gglib-core/src/domain/agent/events.rs 383

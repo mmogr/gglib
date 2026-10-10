@@ -16,11 +16,12 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_core::domain::InferenceConfig;
-use gglib_core::ports::AgentLoopPort;
+use gglib_core::ports::{AgentLoopPort, GenerationGate};
 use gglib_core::request_pipeline::SamplingLayers;
 use gglib_runtime::{LoopGeneration, compose_agent_loop_with_sampling};
 
 use crate::bootstrap::CliContext;
+use crate::daemon_client::{self, DaemonHandle, generation::DaemonGenerationGate};
 use crate::handlers::inference::chat::ChatArgs;
 use crate::target::{Target, TurnModel};
 
@@ -202,10 +203,41 @@ pub(crate) async fn compose(
         Some(params.retry_policy),
         upstream.far_machine,
         ctx.app.attachments().store(),
-        LoopGeneration::default(),
+        LoopGeneration {
+            gate: generation_gate(ctx, params, banner.quiet).await,
+        },
     );
 
     Ok(agent)
+}
+
+/// The daemon's generation gate, for a session whose replies come from this
+/// machine's GPU, so they take turns with an image render.
+///
+/// A session the daemon started a model for has a daemon. One on `--port`
+/// takes turns only with a daemon already running, and never starts one for
+/// it: with none there is nothing to take turns with. A `--remote` session's
+/// replies come from the other machine, whose proxy counts them.
+async fn generation_gate(
+    ctx: &CliContext,
+    params: &AgentSessionParams,
+    quiet: bool,
+) -> Option<Arc<dyn GenerationGate>> {
+    if params.target == Target::Remote {
+        return None;
+    }
+    // A test that names no stand-in daemon never reaches this machine's.
+    #[cfg(test)]
+    if daemon_client::STAND_IN_PORT.try_with(|_| ()).is_err() {
+        return None;
+    }
+    let daemon = if params.port.is_some() {
+        daemon_client::running(ctx).await.ok()?
+    } else {
+        // The daemon started this session's model a moment ago.
+        DaemonHandle::new(ctx, gglib_proxy::loopback::client()).await
+    };
+    Some(Arc::new(DaemonGenerationGate::new(&daemon, quiet)))
 }
 
 // =============================================================================
@@ -270,6 +302,42 @@ mod tests {
             observation_tools: Vec::new(),
             max_observation_steps: None,
         }
+    }
+
+    /// A `--port` session takes the daemon's gate when a daemon is running,
+    /// and none when nothing is; a `--remote` session asks for none at all.
+    #[tokio::test]
+    async fn a_session_takes_the_daemons_gate_only_from_a_running_local_daemon() {
+        use crate::daemon_client::STAND_IN_PORT;
+        use crate::daemon_client::handle_tests::{answering, daemon_health, nobody};
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = test_context(dir.path()).await;
+        let on_port = |target| AgentSessionParams {
+            target,
+            ..AgentSessionParams::from(&ChatArgs {
+                identifier: "qwen3".into(),
+                port: Some(9),
+                ..chat_args()
+            })
+        };
+        let (daemon, asked) = answering(daemon_health(), "{}".to_owned());
+
+        let (local, remote) = (on_port(Target::Local), on_port(Target::Remote));
+
+        let running = generation_gate(&ctx, &local, true);
+        assert!(STAND_IN_PORT.scope(daemon, running).await.is_some());
+        let absent = generation_gate(&ctx, &local, true);
+        assert!(STAND_IN_PORT.scope(nobody(), absent).await.is_none());
+
+        let before = asked.lock().unwrap().len();
+        let far = generation_gate(&ctx, &remote, true);
+        assert!(STAND_IN_PORT.scope(daemon, far).await.is_none());
+        assert_eq!(
+            asked.lock().unwrap().len(),
+            before,
+            "a remote session asked"
+        );
     }
 
     #[test]

@@ -96,8 +96,8 @@ pub struct AxumContext {
     /// port is what keeps those surfaces in step with the proxy.
     pub catalog: Arc<dyn ModelCatalogPort>,
     /// The generation gate of the one `ProcessManager`: a reply on this
-    /// machine's model waits on it for its turn behind an image render,
-    /// before it sends.
+    /// machine's model waits on it for its turn behind an image render, and
+    /// `GET /api/generation/turn` holds a turn there for `gglib chat`.
     pub generation_gate: Arc<dyn GenerationGate>,
     /// Cancellation token that stops the daemon when this context is hosted by
     /// [`run_daemon`](crate::daemon::run_daemon), and bounds `/api/events`.
