@@ -1,7 +1,7 @@
 //! End-to-end daemon lifecycle tests against the real `gglib` binary.
 //!
 //! Ignored by default: the daemon binds the fixed loopback port (9887 by
-//! design — see `gglib_core::DAEMON_PORT`), so these tests contend with any
+//! design — see `gglib_core::daemon_port`), so these tests contend with any
 //! daemon already running on the machine. Run them explicitly with
 //! `cargo test -p gglib-cli --test daemon_lifecycle -- --ignored` on a
 //! machine with no daemon up. Data is isolated via `GGLIB_DATA_DIR`; the
@@ -40,7 +40,7 @@ fn wait_for_health(budget: Duration) -> bool {
 /// Plain-std HTTP GET of /health — no client crate needed for one probe.
 fn ureq_get_health() -> std::io::Result<String> {
     use std::io::{Read, Write};
-    let mut stream = std::net::TcpStream::connect(("127.0.0.1", gglib_core::DAEMON_PORT))?;
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", gglib_core::daemon_port()))?;
     stream.set_read_timeout(Some(Duration::from_millis(500)))?;
     stream.write_all(b"GET /health HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n")?;
     let mut response = String::new();

@@ -36,8 +36,8 @@ fn stored() -> std::future::Ready<Option<String>> {
 
 /// The CLI's own credentials are this machine's: its environment and the
 /// token file beside the device keys. Named in this binary's own data root,
-/// because naming it makes or tightens `<data root>/data`, in a debug build
-/// the checkout's (#955).
+/// because naming it makes or tightens `<data root>/data`, otherwise the
+/// user's real one (#955).
 #[test]
 fn here_is_the_daemons_token_file() {
     gglib_core::paths::isolate_data_root();
@@ -132,9 +132,29 @@ fn a_token_refusal_is_shown_in_the_daemons_words() {
         "type": DAEMON_TOKEN_REQUIRED_TYPE,
     })
     .to_string();
-    assert_eq!(unauthorized(&body), DAEMON_TOKEN_REQUIRED_MESSAGE);
+    assert_eq!(
+        unauthorized_under(&body, false),
+        DAEMON_TOKEN_REQUIRED_MESSAGE
+    );
 
     let key = r#"{"error":"Missing or invalid API key.","type":"INVALID_API_KEY"}"#;
-    assert_eq!(unauthorized(key), unauthorized_hint());
-    assert_eq!(unauthorized("not json"), unauthorized_hint());
+    assert_eq!(unauthorized_under(key, false), unauthorized_hint());
+    assert_eq!(unauthorized_under("not json", false), unauthorized_hint());
+}
+
+/// Under `GGLIB_DATA_DIR` a token refusal most likely means the daemon on
+/// the port is another data root's, and the message says what to set.
+#[test]
+fn a_token_refusal_under_its_own_data_root_names_the_daemon_port() {
+    let body = serde_json::json!({
+        "error": DAEMON_TOKEN_REQUIRED_MESSAGE,
+        "type": DAEMON_TOKEN_REQUIRED_TYPE,
+    })
+    .to_string();
+    let said = unauthorized_under(&body, true);
+    assert!(said.starts_with(DAEMON_TOKEN_REQUIRED_MESSAGE), "{said}");
+    assert!(said.contains("GGLIB_DAEMON_PORT"), "{said}");
+
+    let key = r#"{"error":"Missing or invalid API key.","type":"INVALID_API_KEY"}"#;
+    assert_eq!(unauthorized_under(key, true), unauthorized_hint());
 }

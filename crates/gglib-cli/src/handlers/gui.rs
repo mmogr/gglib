@@ -54,11 +54,8 @@ pub(crate) fn execute(dev: bool) -> Result<()> {
         return Ok(());
     }
 
-    if gglib_core::paths::is_prebuilt_binary() {
-        return launch_prebuilt();
-    }
-
-    launch_from_repo(Path::new(env!("GGLIB_REPO_ROOT")))
+    gglib_core::paths::source_checkout()
+        .map_or_else(launch_prebuilt, |repo_root| launch_from_repo(&repo_root))
 }
 
 /// The app beside the running binary of a prebuilt install, when it is there:

@@ -25,8 +25,8 @@ const ABA_ID: u32 = 999_005;
 /// A core wired to a harmless binary, plus a model file that exists so
 /// `spawn`'s own existence check passes.
 ///
-/// Sets this binary's own data root first: in a debug build `pids_dir()` is
-/// otherwise the checkout's, which an installed daemon may share (#955).
+/// Sets this binary's own data root first: `pids_dir()` is otherwise the
+/// user's real one, which an installed daemon shares (#955).
 fn spawnable(model_id: i64) -> (Arc<RwLock<GuiProcessCore>>, SpawnConfig, tempfile::TempDir) {
     gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().expect("temp dir");

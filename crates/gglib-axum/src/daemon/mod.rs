@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use gglib_core::ports::SettingsRepository;
-use gglib_core::{ApiKeySource, CorsConfig, DAEMON_PORT, paths::data_root};
+use gglib_core::{ApiKeySource, CorsConfig, daemon_port, paths::data_root};
 use gglib_runtime::proxy::resolve_api_key;
 
 use crate::bootstrap::bootstrap;
@@ -73,7 +73,7 @@ impl Default for DaemonOptions {
 /// 4. Resolve the access policy — Host allowlist always, bearer token for
 ///    non-loopback binds, a new daemon token on every `/api` route — then
 ///    bind
-///    `{host}:{DAEMON_PORT}` and serve the management API (and the dashboard,
+///    `{host}:{daemon_port()}` and serve the management API (and the dashboard,
 ///    when this binary carries one).
 /// 5. Honour `proxy_autostart` so the `OpenAI` endpoint comes up with the
 ///    daemon rather than with the desktop app, then `remote_enabled` so a
@@ -91,7 +91,7 @@ impl Default for DaemonOptions {
 pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
     // 1. Singleton lock, before any side effect.
     let lock_dir = data_root().context("resolving data root for the daemon lock")?;
-    let _lock = DaemonLock::acquire(&lock_dir, DAEMON_PORT).map_err(|e| anyhow!("{e}"))?;
+    let _lock = DaemonLock::acquire(&lock_dir, daemon_port()).map_err(|e| anyhow!("{e}"))?;
 
     // 2. Orphan sweep. Only the daemon does this — it holds the lock, so any
     //    recorded llama-server pid is from a dead process, never a live
@@ -136,7 +136,7 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
         crate::routes::create_router(Arc::clone(&state), &opts.cors, access)
     };
 
-    let addr = format!("{}:{}", opts.host, DAEMON_PORT);
+    let addr = format!("{}:{}", opts.host, daemon_port());
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .with_context(|| {

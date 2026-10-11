@@ -41,7 +41,6 @@ anyhow = { workspace = true }
 # `ModelRuntimePort` is an async trait, and the view of what is being served
 # under this data root implements it (`handlers/model/recorded_servers.rs`).
 async-trait = { workspace = true }
-dotenvy = { workspace = true }
 rustyline = "14"
 serde = { workspace = true }
 tracing = { workspace = true }

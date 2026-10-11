@@ -13,7 +13,7 @@
 `main.rs`'s setup hook, in order:
 
 1. **Connect to the daemon** — `daemon::Daemon::connect_or_launch` probes
-   `127.0.0.1:{DAEMON_PORT}` for `{"service": "gglib-daemon"}`. If nothing
+   `127.0.0.1:{daemon_port()}` for `{"service": "gglib-daemon"}`. If nothing
    answers it launches `gglib daemon run` detached, preferring a binary
    beside the app bundle and falling back to `$PATH`; with no binary at all it
    hosts the daemon composition in-process, behind the daemon's own file lock.

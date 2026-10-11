@@ -65,6 +65,11 @@ gglib up
 faster downloads, and the image runtime that draws pictures with an image
 model.
 
+A build from source keeps its library in the same per-user folder as an
+installed gglib, so the two share models, settings and llama.cpp;
+[CONTRIBUTING](CONTRIBUTING.md#your-data-while-developing) says how to keep a
+development build apart.
+
 `gglib up` reads your hardware, installs llama.cpp if missing, recommends a
 model that fits your VRAM, starts the proxy, sends a test request to prove it
 works, and prints the settings to paste into your client. You have a working

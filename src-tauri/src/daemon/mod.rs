@@ -13,7 +13,7 @@ pub(crate) use watch::{Refresh, spawn as watch};
 use std::time::Duration;
 
 use gglib_app_services::types::AppSettings;
-use gglib_core::DAEMON_PORT;
+use gglib_core::daemon_port;
 use tracing::{error, info, warn};
 
 /// One identity probe's budget.
@@ -64,9 +64,10 @@ pub(crate) struct Daemon {
     pub ownership: Ownership,
 }
 
-/// The daemon's base URL — fixed loopback port by design.
+/// The daemon's base URL, on the loopback port `gglib_core::daemon_port`
+/// names.
 pub(crate) fn base_url() -> String {
-    format!("http://127.0.0.1:{DAEMON_PORT}")
+    format!("http://127.0.0.1:{}", daemon_port())
 }
 
 /// What answered on the daemon port.
@@ -126,7 +127,8 @@ impl Daemon {
             }
             Probe::Foreign => {
                 return Err(format!(
-                    "port {DAEMON_PORT} is held by another program (not a gglib daemon)"
+                    "port {} is held by another program (not a gglib daemon)",
+                    daemon_port()
                 ));
             }
             Probe::NotRunning => {}
@@ -179,7 +181,8 @@ impl Daemon {
             Probe::Running => return Err("the gglib daemon is already running".to_owned()),
             Probe::Foreign => {
                 return Err(format!(
-                    "port {DAEMON_PORT} is held by another program (not a gglib daemon)"
+                    "port {} is held by another program (not a gglib daemon)",
+                    daemon_port()
                 ));
             }
             Probe::NotRunning => {}
@@ -270,7 +273,8 @@ async fn wait_until_healthy(client: &reqwest::Client) -> Result<(), String> {
             Probe::Running => return Ok(()),
             Probe::Foreign => {
                 return Err(format!(
-                    "port {DAEMON_PORT} was taken by another program during startup"
+                    "port {} was taken by another program during startup",
+                    daemon_port()
                 ));
             }
             Probe::NotRunning => {}

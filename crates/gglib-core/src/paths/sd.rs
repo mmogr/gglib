@@ -16,7 +16,7 @@ pub const SD_INSTALL_COMMAND: &str = "gglib config sd install";
 
 /// The `.sd/` directory: everything the image runtime install owns.
 ///
-/// In dev, this is in the repo. In release, this is in the user data dir.
+/// Under the resource root, which is the data root unless `GGLIB_RESOURCE_DIR` names another.
 pub fn sd_data_dir() -> Result<PathBuf, PathError> {
     Ok(resource_root()?.join(".sd"))
 }
@@ -46,9 +46,17 @@ pub fn sd_cpp_dir() -> Result<PathBuf, PathError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::paths::test_utils::{ENV_LOCK, EnvVarGuard};
 
     #[test]
     fn everything_the_image_runtime_installs_is_under_its_own_directory() {
+        // Under the lock every test that sets GGLIB_DATA_DIR takes: the
+        // resource root falls back to the data root, so a neighbour moving
+        // that variable between two calls here would split them.
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = tempfile::tempdir().expect("tempdir");
+        let _data = EnvVarGuard::set("GGLIB_DATA_DIR", root.path().to_string_lossy().as_ref());
+        let _resources = EnvVarGuard::unset("GGLIB_RESOURCE_DIR");
         let dir = sd_data_dir().unwrap();
         assert_eq!(dir.file_name().and_then(|n| n.to_str()), Some(".sd"));
 

@@ -15,7 +15,6 @@ use std::sync::Arc;
 
 use app::AppState;
 use daemon::Daemon;
-use dotenvy::dotenv;
 use tauri::Manager;
 #[cfg(not(target_os = "macos"))]
 use tauri::Wry;
@@ -24,8 +23,6 @@ use tauri::menu::Menu;
 use tracing::{debug, error, info};
 
 fn main() {
-    let _ = dotenv();
-
     // Initialize shared tracing (idempotent; safe to call from multiple entry points)
     let _ = gglib_core::telemetry::init_tracing(false);
 

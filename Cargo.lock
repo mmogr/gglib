@@ -2262,7 +2262,6 @@ dependencies = [
 name = "gglib-app"
 version = "0.25.0"
 dependencies = [
- "dotenvy",
  "gglib-app-services",
  "gglib-axum",
  "gglib-build-info",
@@ -2390,7 +2389,6 @@ dependencies = [
  "clap_complete",
  "console",
  "crossterm",
- "dotenvy",
  "futures-util",
  "gglib-app-services",
  "gglib-axum",

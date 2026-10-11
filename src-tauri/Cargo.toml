@@ -29,7 +29,6 @@ gglib-proxy.workspace = true
 reqwest = { workspace = true, features = ["json", "stream", "rustls", "system-proxy"] }
 tokio = { workspace = true, features = ["rt", "sync", "time"] }
 # Note: axum and tower-http are used via gglib-axum re-exports, no direct dependency needed
-dotenvy.workspace = true
 tracing.workspace = true
 open.workspace = true
 

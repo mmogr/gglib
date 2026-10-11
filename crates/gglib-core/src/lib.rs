@@ -55,9 +55,9 @@ pub use ports::{
 };
 pub use services::{ChatHistoryService, ModelRegistrar};
 pub use settings::{
-    DAEMON_PORT, DEFAULT_CONTEXT_SIZE, DEFAULT_LLAMA_BASE_PORT, DEFAULT_PROXY_PORT,
+    DEFAULT_CONTEXT_SIZE, DEFAULT_DAEMON_PORT, DEFAULT_LLAMA_BASE_PORT, DEFAULT_PROXY_PORT,
     DEFAULT_REMOTE_PORT, Device, LoopGuardMode, RemotePairing, RemoteServe, Settings,
-    SettingsUpdate, validate_settings,
+    SettingsUpdate, daemon_port, validate_settings,
 };
 
 // Re-export origin validation utility
@@ -68,6 +68,6 @@ pub use utils::timing::{elapsed_ms, format_duration_human};
 
 pub use paths::{
     DirectoryCreationStrategy, ModelsDirSource, PathError, data_root, database_path,
-    default_models_dir, ensure_directory, is_prebuilt_binary, llama_config_path, llama_cpp_dir,
-    llama_server_path, resolve_models_dir, resource_root, set_models_dir,
+    default_models_dir, ensure_directory, llama_config_path, llama_cpp_dir, llama_server_path,
+    resolve_models_dir, resource_root, set_models_dir,
 };

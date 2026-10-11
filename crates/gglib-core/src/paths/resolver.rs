@@ -110,7 +110,7 @@ mod tests {
         // Lock ensures this test doesn't run concurrently with config.rs tests
         // that modify GGLIB_DATA_DIR, preventing non-deterministic results.
         // Its own root, because `database_path` makes or tightens
-        // `<data root>/data`, which in a debug build is the checkout's (#955).
+        // `<data root>/data`, which is otherwise the user's real one (#955).
         let _guard = ENV_LOCK.lock().unwrap();
         let temp = tempdir().unwrap();
         let _env_guard = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());
@@ -127,8 +127,8 @@ mod tests {
         // it this test resolves whatever root a neighbour has pointed the
         // variable at, which can be removed under it (#1082). Its own
         // temporary data root keeps it off the real data directory as well,
-        // since resolve() creates what it names. (The resource root is still
-        // the checkout's in a debug build.)
+        // since resolve() creates what it names, and the resource root
+        // follows it.
         let _guard = ENV_LOCK.lock().unwrap();
         let temp = tempdir().unwrap();
         let _env_guard = EnvVarGuard::set("GGLIB_DATA_DIR", temp.path().to_string_lossy().as_ref());

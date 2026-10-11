@@ -22,17 +22,6 @@ fn main() {
         repo_root.to_string_lossy()
     );
 
-    // Create the marker file so release builds can detect they're running from repo
-    let data_dir = repo_root.join("data");
-    if let Err(e) = fs::create_dir_all(&data_dir) {
-        eprintln!("Warning: Failed to create data directory: {e}");
-    } else {
-        let marker_file = data_dir.join(".gglib_repo_path");
-        if let Err(e) = fs::write(&marker_file, repo_root.to_string_lossy().as_bytes()) {
-            eprintln!("Warning: Failed to write repo marker file: {e}");
-        }
-    }
-
     // Process README for rustdoc (uses shared build_common.rs)
     process_readme_for_rustdoc(&manifest_dir);
 

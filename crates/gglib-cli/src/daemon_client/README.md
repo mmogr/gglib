@@ -3,7 +3,7 @@
 <!-- module-docs:start -->
 
 The CLI's side of the daemon contract: probe, auto-launch, and typed calls
-against the management API on `127.0.0.1:{DAEMON_PORT}`.
+against the management API on `127.0.0.1:{daemon_port()}`.
 
 [`ensure_daemon`] is the entry point every runtime-owning command goes
 through: probe `/health` for the `gglib-daemon` identity marker; if nothing

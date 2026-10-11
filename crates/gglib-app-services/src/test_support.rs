@@ -314,8 +314,8 @@ pub(crate) async fn test_core_and_proxy() -> (Arc<AppCore>, Arc<crate::ProxyOps>
 /// put a repository of its own in place of one of them.
 ///
 /// Sets this binary's own data root first, so whatever the core resolves
-/// from it, such as the endpoint key an arm writes, stays out of the
-/// checkout, where in a debug build an installed daemon keeps its own (#955).
+/// from it, such as the endpoint key an arm writes, stays out of the user's
+/// real gglib folder, where an installed daemon keeps its own (#955).
 pub(crate) fn test_core_and_proxy_over(
     repos: &gglib_core::ports::Repos,
 ) -> (Arc<AppCore>, Arc<crate::ProxyOps>) {

@@ -63,11 +63,8 @@ pub fn default_models_dir() -> Result<PathBuf, PathError> {
 /// 3. The directory [`set_models_dir`] stored in the data root's `.env`
 /// 4. Default models directory (`~/.local/share/llama_models`)
 ///
-/// Step 3 reads the file itself. A process loads a `.env` into its
-/// environment only from the directory it was started in or one above it,
-/// which holds the data root for a run from the checkout and seldom for an
-/// installed one, so a stored directory would otherwise be lost wherever the
-/// two differ.
+/// Step 3 reads the file itself: no `gglib` loads a `.env` into its
+/// environment, so the stored directory is read from the data root's alone.
 pub fn resolve_models_dir(explicit: Option<&str>) -> Result<ModelsDirResolution, PathError> {
     if let Some(path_str) = explicit {
         return Ok(ModelsDirResolution {

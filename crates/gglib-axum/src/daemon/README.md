@@ -8,15 +8,16 @@ The gglib daemon: the one process per machine that owns llama-server.
 [`bootstrap`](crate::bootstrap::bootstrap) (which builds the single
 `ProcessManager`), the management router, and the proxy supervisor reachable
 through `ProxyOps` — into a long-lived background process bound to
-`127.0.0.1:{DAEMON_PORT}`. Every other surface is a client: the CLI talks to
+`127.0.0.1:{daemon_port()}`. Every other surface is a client: the CLI talks to
 the daemon's HTTP API, the desktop app is a dashboard over the same API, and
 OpenAI-compatible clients hit the proxy the daemon supervises.
 
 Single ownership is enforced by [`DaemonLock`]: an exclusive OS file lock on
 `<data_root>/daemon.lock`, taken before anything else runs and released by
-the OS on any process death, so no stale-lock recovery is needed. The fixed
-port is the second line of defence — a foreign process on the port is
-reported, not fought.
+the OS on any process death, so no stale-lock recovery is needed. Every gglib
+build on a machine shares one data root, so the lock holds a packaged daemon
+and one built from a checkout to one between them. The port is the second
+line of defence — a foreign process on the port is reported, not fought.
 
 This module is responsible for:
 

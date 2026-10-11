@@ -11,7 +11,7 @@ use crate::daemon_client::{self, Absent, DaemonProbe};
 use crate::presentation::style;
 use crate::target::Target;
 use gglib_axum::{DaemonLock, DaemonOptions, run_daemon};
-use gglib_core::{CorsConfig, DAEMON_PORT};
+use gglib_core::{CorsConfig, daemon_port};
 
 /// Execute `gglib daemon run`: host the daemon in the foreground.
 pub(crate) async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<()> {
@@ -36,7 +36,7 @@ pub(crate) async fn run(share_lan: bool, allowed_hosts: Vec<String>) -> Result<(
     // Registered just before the daemon binds; every mDNS failure is
     // non-fatal (the server is reachable by IP either way).
     let advertiser = share_lan
-        .then(|| mdns::MdnsAdvertiser::start(&opts.host, DAEMON_PORT))
+        .then(|| mdns::MdnsAdvertiser::start(&opts.host, daemon_port()))
         .flatten();
 
     let outcome = run_daemon(opts).await;
@@ -81,7 +81,8 @@ pub(crate) async fn status(ctx: &CliContext) -> Result<()> {
         }
         Err(Absent::ForeignServer) => {
             eprintln!(
-                "  Status:  port {DAEMON_PORT} is held by another program (not a gglib daemon)"
+                "  Status:  port {} is held by another program (not a gglib daemon)",
+                daemon_port()
             );
         }
     }
@@ -109,13 +110,15 @@ async fn stop_here(ctx: &CliContext) -> Result<()> {
             return Ok(());
         }
         Err(Absent::ForeignServer) => anyhow::bail!(
-            "port {DAEMON_PORT} is held by another program (not a gglib daemon) — nothing to stop"
+            "port {} is held by another program (not a gglib daemon) — nothing to stop",
+            daemon_port()
         ),
     };
     if !handle.shutdown_daemon().await? {
         anyhow::bail!(
-            "the server on port {DAEMON_PORT} refused the shutdown request \
-             (not running as a daemon)"
+            "the server on port {} refused the shutdown request \
+             (not running as a daemon)",
+            daemon_port()
         );
     }
 

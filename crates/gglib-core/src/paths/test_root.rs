@@ -1,10 +1,9 @@
 //! A data root of a test binary's own.
 //!
-//! A debug build resolves its data root into the checkout it was built from
-//! (`platform::detect_local_repo`), and an installed `gglib` built from that
-//! checkout keeps its database, pidfiles, daemon lock and logs in the same
-//! place. A test that resolves a path through [`super::data_root`] would
-//! share all of them with a running daemon (#955).
+//! Every build resolves its data root to the user's own gglib folder, where
+//! the installed `gglib` keeps its database, pidfiles, daemon lock and logs.
+//! A test that resolves a path through [`super::data_root`] would share all
+//! of them with a running daemon (#955).
 //!
 //! [`isolate_data_root`] gives the calling process a temporary directory
 //! instead, which [`super::data_root`] and [`super::resource_root`] answer
@@ -32,7 +31,7 @@ pub(super) fn root() -> Option<&'static Path> {
 /// directory; every later call returns that one. Call it at the start of any
 /// test that reaches the data or resource root, directly or through
 /// `pids_dir`, `database_path`, `llama_server_path` or the log directory,
-/// because a path resolved before the first call is the checkout's.
+/// because a path resolved before the first call is the user's real one.
 ///
 /// The directory is not removed when the process exits: a value held in a
 /// `static` is never dropped. It holds only what the tests wrote there.

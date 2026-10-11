@@ -24,7 +24,7 @@ pub(crate) struct ApiInfo {
 #[tauri::command]
 pub(crate) fn get_embedded_api_info() -> ApiInfo {
     ApiInfo {
-        port: gglib_core::DAEMON_PORT,
+        port: gglib_core::daemon_port(),
         token: crate::daemon::daemon_token(),
     }
 }

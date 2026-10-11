@@ -24,7 +24,7 @@ pub(crate) mod test_utils;
 pub use error::PathError;
 
 // Platform detection and roots
-pub use platform::{data_root, is_prebuilt_binary, resource_root};
+pub use platform::{data_root, data_root_source, resource_root, source_checkout};
 
 // A test binary's own data root, which only the `test-utils` feature compiles
 #[cfg(feature = "test-utils")]

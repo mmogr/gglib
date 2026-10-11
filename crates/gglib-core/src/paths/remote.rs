@@ -20,11 +20,10 @@ use super::private::create_private_dir;
 
 /// Path to the stored iroh endpoint key for the remote tunnel.
 ///
-/// Under `data/` rather than beside `pids/`, and that is load-bearing rather
-/// than tidy: a debug build resolves the data root to the repository checkout,
-/// and `.gitignore` ignores `/data` — so a private key written here cannot be
-/// committed by accident, where one written a level up would sit untracked in
-/// the working tree waiting for a `git add -A`.
+/// Under `data/`, the private directory beside the database, rather than
+/// beside `pids/`. Should `GGLIB_DATA_DIR` ever name a checkout, `.gitignore`
+/// ignores `/data` there, so a private key written here cannot be committed
+/// by accident.
 ///
 /// The directory is created if it is not there; the file is not. modelpipe
 /// mints it `0600` on first use and refuses to read one that others can read.
@@ -73,7 +72,7 @@ mod tests {
     #[test]
     fn remote_identity_is_under_the_ignored_data_directory() {
         // A root of its own: `remote_identity_path` makes or tightens
-        // `<data root>/data`, which in a debug build is the checkout's (#955).
+        // `<data root>/data`, which is otherwise the user's real one (#955).
         let _guard = ENV_LOCK.lock().unwrap();
         let root = tempfile::tempdir().expect("tempdir");
         let _env = EnvVarGuard::set("GGLIB_DATA_DIR", root.path().to_string_lossy().as_ref());

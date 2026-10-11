@@ -27,7 +27,7 @@ const PIDFILE_ID: i64 = 999_008;
 /// kill sent to that pid stops the sleep rather than orphaning it.
 ///
 /// Sets this binary's own data root first, so the pidfiles `spawn` writes stay
-/// out of the checkout (#955).
+/// out of the user's real gglib folder (#955).
 fn core_of_sleepers(dir: &Path) -> GuiProcessCore {
     gglib_core::paths::isolate_data_root();
     let script = dir.join("llama-server");
