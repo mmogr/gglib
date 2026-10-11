@@ -36,4 +36,9 @@ offered, and that reply ends the run: its text is the answer, a call in it
 is not run, and a reply with no text is answered with `DRAW_NO_WORDS`, "The
 model said nothing after the drawing tool ran."
 
+An empty `size` (`""`, or only spaces) is no size: the picture is drawn at
+the image model's default, as when the argument is left out. A size that
+says something is refused as before: here when it is not `WIDTHxHEIGHT`,
+and by the image driver when it is one the model does not draw (`7x7`).
+
 <!-- module-docs:end -->

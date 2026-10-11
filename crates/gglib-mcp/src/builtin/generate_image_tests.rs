@@ -333,6 +333,51 @@ fn arguments_are_read_or_refused_in_words_the_model_can_act_on() {
     );
 }
 
+/// An empty `size`, or one of only whitespace, is no size: the call draws at
+/// the image model's default, as it does with the argument left out. A size
+/// that says something is not taken for the default: `7x7` reaches the
+/// driver as written, whose refusal it is, and one that is not
+/// `WIDTHxHEIGHT` is still refused here with nothing drawn.
+#[tokio::test]
+async fn an_empty_size_draws_at_the_default_size_and_a_wrong_one_does_not() {
+    for empty in ["", "  ", "\n"] {
+        let asked = json!({"n": 1, "prompt": "a red fox", "seed": 0, "size": empty});
+        let read = request_of(&asked).unwrap();
+        assert_eq!(read.size, None, "{empty:?}");
+        assert_eq!(
+            read,
+            request_of(&json!({"prompt": "a red fox", "seed": 0})).unwrap()
+        );
+    }
+
+    let driver = one_image();
+    let tools = adapter(&driver, DrawArm::Fixed(true));
+    let sized = |size: &str| call(json!({"prompt": "a red fox", "size": size}));
+    let drew = tools
+        .execute_with_progress(&sized(""), &Heard::default())
+        .await
+        .unwrap();
+    assert!(drew.success, "{}", drew.content);
+    assert_eq!(driver.asked.lock().unwrap()[0].size, None);
+
+    let tiny = request_of(&json!({"prompt": "a", "size": "7x7"})).unwrap();
+    assert_eq!(
+        tiny.size.map(|size| size.to_string()),
+        Some("7x7".to_owned())
+    );
+    let refused = tools
+        .execute_with_progress(&sized("big"), &Heard::default())
+        .await
+        .unwrap();
+    assert!(!refused.success, "{}", refused.content);
+    assert!(
+        refused.content.contains("WIDTHxHEIGHT"),
+        "{}",
+        refused.content
+    );
+    assert_eq!(driver.asked(), 1, "nothing was drawn for the wrong size");
+}
+
 /// Each stage of the render reaches the sink as the tool's progress, in
 /// order, a step with its pass and frame, a place in line with its position.
 #[tokio::test]

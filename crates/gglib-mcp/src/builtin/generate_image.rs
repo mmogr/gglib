@@ -206,15 +206,17 @@ pub(crate) fn drew_sentence(batch: &ImageBatch, stored: usize, refusals: &[Strin
 /// model can act on.
 ///
 /// A prompt, and optionally `size` (`WIDTHxHEIGHT`), `n` (1 to
-/// [`MAX_IMAGES_PER_REQUEST`]) and `seed`. These are the tool's one set of
+/// [`MAX_IMAGES_PER_REQUEST`]) and `seed`. A `size` that is empty, or only
+/// whitespace, is read as no size, the image model's default; it is the
+/// tool's one optional argument that is a string. These are the tool's one set of
 /// argument rules, for an agent run's call and for the `/mcp` gateway's
 /// (exported as `gglib_mcp::image_request_of`). Arguments that are not an
 /// object have no prompt.
 ///
 /// # Errors
 ///
-/// The sentence to hand the calling model: no prompt, a `size` that is not
-/// `WIDTHxHEIGHT`, or an `n` out of range.
+/// The sentence to hand the calling model: no prompt, a `size` that says
+/// something and is not `WIDTHxHEIGHT`, or an `n` out of range.
 pub fn request_of(arguments: &Value) -> Result<ImageRequest, String> {
     let prompt = arguments
         .get("prompt")
@@ -224,7 +226,10 @@ pub fn request_of(arguments: &Value) -> Result<ImageRequest, String> {
         .ok_or_else(|| {
             "generate_image needs a prompt: describe the picture in detail".to_owned()
         })?;
-    let size = match arguments.get("size").and_then(Value::as_str) {
+    // An empty size is an absent one: a model fills an optional argument
+    // it has nothing to say for with "".
+    let named = arguments.get("size").and_then(Value::as_str);
+    let size = match named.filter(|text| !text.trim().is_empty()) {
         Some(text) => Some(text.parse::<ImageSize>().map_err(|e| e.to_string())?),
         None => None,
     };

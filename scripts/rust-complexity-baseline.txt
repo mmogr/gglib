@@ -139,8 +139,8 @@ crates/gglib-gguf/src/reader_tests.rs 416
 crates/gglib-hf/src/http.rs 514
 crates/gglib-hf/src/parsing.rs 429
 crates/gglib-hf/src/url.rs 403
-crates/gglib-mcp/src/builtin/generate_image.rs 306
-crates/gglib-mcp/src/builtin/generate_image_tests.rs 386
+crates/gglib-mcp/src/builtin/generate_image.rs 311
+crates/gglib-mcp/src/builtin/generate_image_tests.rs 431
 crates/gglib-mcp/src/builtin/mod.rs 446
 crates/gglib-mcp/src/client.rs 509
 crates/gglib-mcp/src/manager.rs 315
