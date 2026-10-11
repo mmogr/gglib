@@ -163,9 +163,11 @@ one named, else the settings' `default_image_model_id`, else the only image
 model with every file), refuses what the recipe refuses, admits the model,
 takes the render turn, submits an `sd-server` job with `preview: proj` and
 `preview_interval: 1`, and reads it once a second: Loading until the first
-step, each step with its frame, Decoding, then the PNGs. `sd-server` cannot
+step, each step with its frame, Decoding, then the PNGs. ~~`sd-server` cannot
 interrupt a generating job, so a render whose reader left cancels the job
-and, when it runs on, keeps the turn and the lease until it ends. A render
+and, when it runs on, keeps the turn and the lease until it ends.~~
+Retracted on 2026-10-11: such a render is stopped, as decision 15 says
+([log-0018](log-0018.md#2026-10-11-a-render-nobody-waits-for-is-stopped-not-followed)). A render
 with no new step for three minutes, or past thirty minutes, is retired.
 
 Four doors stand in front of it and nothing else draws:
@@ -305,6 +307,54 @@ tool, nothing written to any chat, and its run marked `frames: "agent"`.
 The request's sampling is not read; its Thinking choice,
 `"reasoning_budget_tokens": 0`, is.
 
+### 15. A render nobody waits for is stopped, not followed
+
+Decision 8 kept a render whose reader had left until its job ended, with
+the turn and the lease: a minute for Flux.1 and about nine for Qwen-Image
+2.1, during which every chat waited. A person who pressed Stop on a phone
+found the desktop still drawing
+([log-0018, 2026-10-11](log-0018.md#2026-10-11-a-render-nobody-waits-for-is-stopped-not-followed)).
+That sentence of decision 8 is retracted, and this replaces it.
+
+A render's reader is whoever awaits the driver's `generate`: a run, which
+leaves when it is cancelled, as a Stop on the page or on a device cancels
+it; `gglib image`, which leaves on Ctrl-C; a client of
+`POST /v1/images/generations` or of the `/mcp` gateway, which leaves when
+its connection does. A render has one reader. When it leaves before the job
+has ended:
+
+1. The driver asks `sd-server` to cancel the job, as before. A job still
+   queued there, one already finished and one `sd-server` no longer knows
+   are over: the turn and the lease go, nothing is killed, and the image
+   model stays loaded.
+2. A job that is generating cannot be cancelled (409). The render is
+   retired at once, in one task and once, as decision 7's rule 6 says: the
+   kill, then the slot emptied and the lease settled only while the slot
+   still holds that model, then the turn ended. What waited for the GPU
+   goes. A cancel that fails, or is not answered within five seconds, is
+   read as a job that is generating.
+3. The next request for a picture finds no image model loaded and loads it
+   through the ordinary admission. That reload is the cost, and it was
+   accepted.
+
+A reader that leaves while its job is still being submitted comes to the
+same end once `sd-server` has answered the submission. One that leaves
+while it only waits, for the image model or for its turn, leaves the line
+and stops nothing. One that leaves after the job completed changes nothing.
+
+The person who pressed Stop sees what they saw before, a cancelled run and
+no error. Decision 7's rule 7 stands: a Stop of the image model asks, and a
+render that is being read retires itself at its next read of the job.
+
+What this leaves. The kill is the one every server gets: a signal to end,
+then up to five seconds (two on Linux) before the process is killed
+outright, so the GPU is free when `sd-server` has exited, not at the moment
+of the Stop. From reading the code and not from a run: a request for the
+same image model that arrives while `sd-server` is being stopped, and
+finds it still answering, is admitted to it, and its job then fails; so
+does a second picture that already waited in line for that model. A
+picture that was one step from done is lost like any other.
+
 ## Consequences
 
 - A person presses Draw, sends a message, and sees a picture arrive in the
@@ -317,9 +367,11 @@ The request's sampling is not read; its Thinking choice,
   with the render's step; a plain request through the proxy waits without
   a sign. A Qwen-Image 2.1 picture holds the chats for about nine minutes
   at 1024².
-- A render cannot be interrupted. Leaving it, or Ctrl-C in `gglib image`,
+- ~~A render cannot be interrupted. Leaving it, or Ctrl-C in `gglib image`,
   discards the picture; the machine still finishes it. Stopping the image
-  model ends it, at the cost of loading the model again.
+  model ends it, at the cost of loading the model again.~~
+  Retracted on 2026-10-11: leaving a render stops it, at that same cost
+  (decision 15, [log-0018](log-0018.md#2026-10-11-a-render-nobody-waits-for-is-stopped-not-followed)).
 - A device's turn exists before its model loads, so its `PUT` answers at
   once, and what used to be refused by the `PUT` (`model_unavailable`,
   `image_model_cannot_chat`, `unavailable`) may instead end the run.
