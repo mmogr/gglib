@@ -11,6 +11,12 @@
 //! grants it or when the primary is empty, and otherwise it swaps into an
 //! evictable primary. When every slot it may use is held by a run it is
 //! refused at once, because waiting would not help until that run ends.
+//!
+//! One image model is loaded at a time. While another image model is in a
+//! slot, loaded or still loading, that slot is the only one an image model
+//! may use ([`QueueState::image_slot`]): it swaps in there once that model
+//! is idle and waits while it renders or loads. It never loads beside it,
+//! and never takes the chat model's slot to do so.
 
 use gglib_core::domain::{RuntimeKind, SecondarySlotDecision};
 use tokio::time::Instant;
@@ -103,6 +109,13 @@ impl QueueState {
     /// Whether `candidate` may ever use `slot`, leaving aside whether the slot
     /// can be had right now.
     fn may_use(&self, slot: usize, candidate: Candidate) -> bool {
+        // One image model at a time: the slot another one is in, and no
+        // other, whatever the memory check says.
+        if candidate.runtime == RuntimeKind::StableDiffusion
+            && let Some(place) = self.image_slot()
+        {
+            return slot == place;
+        }
         let primary_empty = matches!(self.slots[PRIMARY_SLOT], SlotState::Empty);
         match (candidate.runtime, slot == PRIMARY_SLOT) {
             (RuntimeKind::Llama, true) => true,
@@ -117,6 +130,17 @@ impl QueueState {
                 candidate.secondary.is_grant() || primary_empty
             }
         }
+    }
+
+    /// The slot an image model is in, loaded or still loading.
+    ///
+    /// `poll` places a request only when its own model is in no slot: it
+    /// serves from a resident, and waits on a launch of the same model,
+    /// first. So for an image model being placed this is another image
+    /// model's slot.
+    fn image_slot(&self) -> Option<usize> {
+        (0..SLOT_COUNT)
+            .find(|&slot| self.slots[slot].runtime() == Some(RuntimeKind::StableDiffusion))
     }
 
     /// The held resident in `candidate`'s way, when every slot it may use is
@@ -170,6 +194,11 @@ impl QueueState {
     /// 2. Otherwise something has to go, which the fairness rules govern: an
     ///    evictable secondary on the same terms, then an evictable primary
     ///    that holds a model. An empty primary is never taken.
+    ///
+    /// While another image model is in a slot ([`Self::image_slot`]), that
+    /// slot is the only one on offer. Step 1 then finds nothing and step 2
+    /// takes that slot once it is evictable: a render in it, or its launch,
+    /// is waited for, and the other slot's model is left alone.
     pub(super) fn choose_image_slot(
         &self,
         model: &str,

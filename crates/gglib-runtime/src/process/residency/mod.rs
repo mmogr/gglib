@@ -434,7 +434,10 @@ impl ResidentSet {
     ///
     /// An image model is judged by its files and its family's margin against
     /// the free reading alone, with no ceiling, and placed by the queue's
-    /// image rules ([`Candidate::image`]).
+    /// image rules ([`Candidate::image`]). The reading is taken with any
+    /// other image model still loaded, so it does not count what that one
+    /// gives back; the queue does not ask it then, and gives the request
+    /// that model's slot.
     fn secondary_verdict(&self, request: &LaunchRequest) -> Candidate {
         let candidate = match request.spec.runtime() {
             RuntimeKind::StableDiffusion => {
