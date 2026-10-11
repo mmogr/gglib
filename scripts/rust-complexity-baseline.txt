@@ -76,7 +76,7 @@ crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 355
 crates/gglib-core/src/domain/hub_chats_tests.rs 474
 crates/gglib-core/src/domain/image_family.rs 585
-crates/gglib-core/src/domain/image_family_tests.rs 919
+crates/gglib-core/src/domain/image_family_tests.rs 920
 crates/gglib-core/src/domain/inference.rs 1915
 crates/gglib-core/src/domain/inference_tests.rs 1409
 crates/gglib-core/src/domain/kv_estimate.rs 341

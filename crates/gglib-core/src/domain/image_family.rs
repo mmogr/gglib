@@ -163,8 +163,8 @@ pub struct Recipe {
     /// the largest compute buffer of a 1024x1024 render, which is the VAE
     /// decode, rounded up to a whole GiB. Measured on Metal on 2026-10-09
     /// (`runs/*.log` in the image-gen handoff): Flux.1 6,657 MB, SDXL
-    /// 7,680 MB, Qwen-Image 2.1 8,650 MB. Z-Image's is not measured: see
-    /// [`Z_IMAGE_MARGIN_ESTIMATE`].
+    /// 7,680 MB, Qwen-Image 2.1 8,650 MB; and on 2026-10-11 Z-Image Turbo
+    /// 6,657 MB, the same VAE's decode as Flux.1's.
     pub compute_margin_bytes: u64,
 }
 
@@ -255,15 +255,6 @@ const QWEN_IMAGE_21: Recipe = Recipe {
     compute_margin_bytes: 9 * GIB,
 };
 
-/// Z-Image's compute margin, an ESTIMATE: no Z-Image render has been
-/// measured. It decodes with the Flux.1 VAE, whose decode of a 1024x1024
-/// image was the largest buffer of the Flux.1 runs at 6,657 MB (7 GiB
-/// rounded up); one GiB is added because the buffer of Z-Image's own
-/// diffusion model (3840 wide against Flux.1's 3072, whose buffer was
-/// 2,361 MB) is unread. To be replaced by the largest `compute buffer size`
-/// line of a real 1024x1024 render.
-const Z_IMAGE_MARGIN_ESTIMATE: u64 = 8 * GIB;
-
 /// Z-Image, with Z-Image Turbo's settings: 8 steps at guidance 1.0, as
 /// stable-diffusion.cpp's guide (`docs/z_image.md`) runs Turbo. A base
 /// Z-Image file is the same family and is drawn with these, though the guide
@@ -291,7 +282,7 @@ const Z_IMAGE: Recipe = Recipe {
     sampler: "euler",
     flash_attention: FlashAttention::DiffusionOnly,
     size: sizes(16),
-    compute_margin_bytes: Z_IMAGE_MARGIN_ESTIMATE,
+    compute_margin_bytes: 7 * GIB,
 };
 
 impl ImageFamily {

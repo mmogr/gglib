@@ -877,15 +877,16 @@ fn each_family_reserves_its_decode_buffer_rounded_up() {
     );
 }
 
-/// Z-Image's margin is an estimate, not a reading: the Flux.1 VAE's decode
-/// buffer rounded up, and one GiB for a diffusion buffer nobody has read.
+/// Z-Image's margin is the reading of 2026-10-11: its largest buffer was the
+/// Flux.1 VAE's decode, 6,657 MB, as Flux.1's was; its own diffusion buffer
+/// was 690 MB with flash attention in the diffusion model.
 #[test]
-fn z_image_reserves_an_estimate_one_gib_over_flux() {
+fn z_image_reserves_what_its_vae_decode_was_read_to_take() {
     const GIB: u64 = 1024 * 1024 * 1024;
-    assert_eq!(ImageFamily::ZImage.recipe().compute_margin_bytes, 8 * GIB);
+    assert_eq!(ImageFamily::ZImage.recipe().compute_margin_bytes, 7 * GIB);
     assert_eq!(
         ImageFamily::ZImage.recipe().compute_margin_bytes,
-        ImageFamily::Flux1.recipe().compute_margin_bytes + GIB
+        ImageFamily::Flux1.recipe().compute_margin_bytes
     );
 }
 

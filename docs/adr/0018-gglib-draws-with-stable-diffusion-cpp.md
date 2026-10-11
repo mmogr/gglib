@@ -124,8 +124,8 @@ primary, and where the primary is held and nothing is granted it is refused
 Amended on 2026-10-11: this places an image model only while no other image
 model is loaded or loading. While one is, decision 17 places it.
 
-Amended on 2026-10-11: Z-Image is budgeted at 8 GiB, an estimate and not a
-reading (decision 18).
+Amended on 2026-10-11: Z-Image is budgeted at 7 GiB, read that day
+(decision 18).
 
 ### 7. The GPU is given in turns: one render, or the chats
 
@@ -580,12 +580,11 @@ and source. **No Z-Image picture has been drawn**, through gglib or by
    base header was read. It is then drawn with Turbo's settings, where
    sd.cpp's guide runs it at guidance 5.0. Settings per model are still out
    of scope.
-4. *Its compute margin is an estimate*, 8 GiB: the 7 GiB read for Flux.1,
-   whose largest buffer was the decode of this same VAE, and one more for a
-   diffusion buffer nobody has read. A reading replaces it.
+4. *Its compute margin is 7 GiB*, read on 2026-10-11: the largest buffer of
+   a 1024x1024 Turbo render was the decode of this same VAE, 6,657 MB, as
+   Flux.1's was. The log has the reading.
 
-What this leaves. Whether sd.cpp at the pin draws a correct picture from
-these files on Metal, and how long it takes. Whether a Z-Image file written with
+What this leaves. Whether a Z-Image file written with
 diffusers' tensor names, which sd.cpp renames as it loads, is known: its
 patch embedder has another name, and gglib would answer no family.
 
