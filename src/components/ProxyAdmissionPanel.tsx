@@ -11,6 +11,11 @@
  * queue depth with nothing beside it would be alarming; a queue depth next to a
  * swap count that is barely moving is the system working.
  *
+ * Each slot says which program serves it, llama.cpp or stable-diffusion.cpp,
+ * and a render holding the GPU is a line of its own with its step: a chat that
+ * seems stuck while an image model draws is waiting for its turn there, not for
+ * a slot.
+ *
  * The second-slot line is deliberately always present, even when nothing is
  * co-loaded. An empty slot on a card with 12 GB free is exactly the case a user
  * would otherwise assume is a bug, so the backend sends the reason with the
@@ -25,6 +30,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Icon } from './ui/Icon';
 import type {
   AdmissionSnapshot,
+  GenerationSnapshot,
   QueuedModelSnapshot,
   ResidentSlotSnapshot,
   SecondarySlotState,
@@ -84,6 +90,9 @@ const ResidentSlot: FC<{ slot: ResidentSlotSnapshot }> = ({ slot }) => (
       <span className="text-xs text-text-muted shrink-0">
         {slot.is_primary ? 'primary' : 'secondary'}
       </span>
+      <span className="text-xs text-text-muted shrink-0">
+        {slot.runtime === 'stable_diffusion' ? 'stable-diffusion.cpp' : 'llama.cpp'}
+      </span>
     </div>
     <span className="text-xs text-text-muted font-mono tabular-nums shrink-0">
       {slot.inflight > 0 ? `${formatCount(slot.inflight)} in flight · ` : 'idle · '}
@@ -91,6 +100,33 @@ const ResidentSlot: FC<{ slot: ResidentSlotSnapshot }> = ({ slot }) => (
     </span>
   </div>
 );
+
+/**
+ * The generation gate, when it has anything to say: the render holding the
+ * GPU and its step ("loading" before its first, while the model loads and the
+ * prompt is encoded), and how many wait for a turn behind it.
+ */
+const GenerationLine: FC<{ generation: GenerationSnapshot }> = ({ generation }) => {
+  const { render, waiting } = generation;
+  if (!render && waiting === 0) return null;
+  const step = render
+    ? render.total > 0
+      ? `step ${formatCount(render.step)} of ${formatCount(render.total)}`
+      : 'loading'
+    : null;
+  return (
+    <div className="flex items-baseline justify-between gap-md p-md rounded-base bg-surface-elevated">
+      <span className="text-sm text-text truncate">
+        {render ? `Drawing${render.model_name ? ` with ${render.model_name}` : ''}` : 'Waiting for a turn'}
+      </span>
+      <span className="text-xs text-text-muted font-mono tabular-nums shrink-0">
+        {step}
+        {step && waiting > 0 ? ' · ' : ''}
+        {waiting > 0 ? `${formatCount(waiting)} waiting for a turn` : ''}
+      </span>
+    </div>
+  );
+};
 
 /** One model with requests waiting for it. */
 const QueuedModel: FC<{ queued: QueuedModelSnapshot }> = ({ queued }) => (
@@ -121,6 +157,8 @@ export const ProxyAdmissionPanel: FC<ProxyAdmissionPanelProps> = ({ admission })
       ) : (
         <p className="text-sm text-text-muted">No model is loaded yet.</p>
       )}
+
+      {admission.generation && <GenerationLine generation={admission.generation} />}
 
       <div className="flex items-start gap-sm p-md rounded-base bg-surface-elevated">
         <Icon

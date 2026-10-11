@@ -176,7 +176,8 @@ resume from prior context without re-computation.
   server instance), restore is skipped. The start is recorded wherever an
   admission reports a freshly started server: a chat completion's first
   attempt, its retry after it found the upstream dead, and
-  `POST /v1/models/{name}/load`.
+  `POST /v1/models/{name}/load` (not for an image model on `sd-server`,
+  which has no slots; its load answers context 0).
 - **Partial-KV models bypass the layer entirely:** sliding-window, hybrid, and
   recurrent/SSM architectures keep only part of the token history in KV memory.
   llama-server's slot files omit the context checkpoints those models need to
@@ -371,9 +372,9 @@ Two consequences follow, both deliberate:
   called.  Forwarding either would spend a VRAM slot starting a server that
   could only reply 501. A chat completion naming an image model is refused
   the same way, with 400 (`image_model_cannot_chat`), before the image check
-  and before `admit`; and should anything else ask the runtime to launch
-  one, the launch refuses it with the same code before it stops a resident
-  or reads a file.
+  and before `admit`. Admitting an image model launches it on `sd-server`,
+  so every other door that admits for chat refuses it first by the same
+  code (core's `refuse_unless_chats`).
 
 If a genuine embedding model is missing the tag, `gglib model retag <id>`
 re-derives it from the persisted GGUF metadata without re-reading the file.

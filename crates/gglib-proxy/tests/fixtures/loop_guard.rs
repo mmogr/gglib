@@ -194,6 +194,10 @@ impl ModelRuntimePort for DeadThenLive {
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         Ok(())
     }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
 }
 
 /// Read the dashboard off a running proxy.

@@ -125,6 +125,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
         models_dir = %models_resolution.path.display(),
         models_source = ?models_resolution.source,
         llama_server_path = %config.llama_server_path.display(),
+        sd_server_path = %config.sd_server_path.display(),
         "Axum bootstrap resolved paths"
     );
 
@@ -198,6 +199,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
             as Arc<dyn gglib_core::ports::LoopGuardTripSink>,
         base_port: config.base_port,
         llama_server_path: config.llama_server_path.clone(),
+        sd_server_path: config.sd_server_path.clone(),
         device_keys_path: config.device_keys_path.clone(),
     })
     .await?;

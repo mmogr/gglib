@@ -1,6 +1,9 @@
-//! Health check utilities for llama-server processes.
+//! Health checks for the servers gglib starts, asked the way each runtime
+//! answers: llama-server at `/health`, `sd-server` at `/v1/models` (see
+//! [`RuntimeKind::health_path`]).
 
 use anyhow::Result;
+use gglib_core::domain::RuntimeKind;
 use tokio::time::{Duration, sleep};
 use tracing::{debug, info};
 
@@ -21,7 +24,7 @@ const LAUNCH_DEADLINE_CEILING_SECS: u64 = 600;
 /// Seconds of grace per GiB of weights.
 const LAUNCH_DEADLINE_SECS_PER_GIB: u64 = 60;
 
-/// How long to wait for a freshly spawned llama-server to answer `/health`,
+/// How long to wait for a freshly spawned server to answer its health probe,
 /// scaled to how much it has to load.
 ///
 /// A flat timeout is wrong in both directions. Too short and a large model on
@@ -60,13 +63,21 @@ pub(crate) const fn launch_deadline_secs(weights_bytes: u64) -> u64 {
     }
 }
 
-/// Wait for HTTP health check to succeed
+/// Wait for a freshly spawned server to answer its health probe.
 ///
-/// Polls the llama-server's /health endpoint until it returns 200 OK
-/// or the timeout is reached.
-pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
-    let health_url = format!("http://127.0.0.1:{port}/health");
-    info!("Waiting for llama-server to be ready at {}", health_url);
+/// Polls `runtime`'s [`health_path`](RuntimeKind::health_path) until it
+/// answers 200 with a body [`is_ready_body`](RuntimeKind::is_ready_body)
+/// accepts, or the timeout is reached. A 200 that is not this runtime's
+/// server fails after a few tries rather than at the deadline: something
+/// else holds the port.
+pub async fn wait_for_http_health(
+    port: u16,
+    timeout_secs: u64,
+    runtime: RuntimeKind,
+) -> Result<()> {
+    let server = runtime.server_name();
+    let health_url = format!("http://127.0.0.1:{port}{}", runtime.health_path());
+    info!("Waiting for {server} to be ready at {health_url}");
 
     // A wall-clock deadline, not an attempt count. Each pass costs a second of
     // sleep plus a request that can itself take two, so counting attempts
@@ -87,23 +98,17 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
 
                 // Only accept 200 OK - anything else is wrong
                 if status.is_success() {
-                    // Got 200 OK - verify it's actually llama-server
+                    // Got 200 OK - verify it is this runtime's server
                     match response.text().await {
                         Ok(body) => {
-                            // llama-server health endpoint returns JSON with status info
-                            // Check for llama-server specific content
-                            if body.contains("status")
-                                || body.contains("slots")
-                                || body.contains("error")
-                                || body.is_empty()
-                            {
-                                info!("llama-server is ready on port {}", port);
+                            if runtime.is_ready_body(&body) {
+                                info!("{server} is ready on port {port}");
                                 return Ok(());
                             }
                             debug!("Health check returned unexpected response: {}", body);
                             if attempt > 5 {
                                 return Err(anyhow::anyhow!(
-                                    "Port {port} is responding but doesn't appear to be llama-server"
+                                    "Port {port} is responding but doesn't appear to be {server}"
                                 ));
                             }
                         }
@@ -132,13 +137,14 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
 
         if tokio::time::Instant::now() >= deadline {
             return Err(anyhow::anyhow!(
-                "llama-server failed to start within {timeout_secs}s on port {port} (after {attempt} probes). Check if the port is available."
+                "{server} failed to start within {timeout_secs}s on port {port} (after {attempt} probes). Check if the port is available."
             ));
         }
     }
 }
 
-/// Single-shot HTTP health probe of a llama-server `/health` endpoint.
+/// Single-shot HTTP health probe of a running server, asked the way
+/// `runtime` answers.
 ///
 /// Unlike [`wait_for_http_health`] this does **not** retry: it makes one
 /// request with a short timeout and reports whether the server responded
@@ -148,10 +154,15 @@ pub async fn wait_for_http_health(port: u16, timeout_secs: u64) -> Result<()> {
 /// [`ServerHealthChecker`](crate::health_monitor::ServerHealthChecker) polls
 /// with it.
 ///
+/// llama-server is judged by status alone, as it always was. `sd-server` is
+/// asked at `/v1/models` and its body must name `sd-cpp-local`: that route
+/// answers while a render holds the server's lock, so a drawing server reads
+/// as healthy, and a different server that took the port does not.
+///
 /// Never returns an error — any failure (connection refused, timeout,
-/// non-2xx) is reported as `false` so callers can treat "not healthy" and
-/// "unreachable" identically.
-pub async fn check_http_health(port: u16) -> bool {
+/// non-2xx, the wrong server) is reported as `false` so callers can treat
+/// "not healthy" and "unreachable" identically.
+pub async fn check_http_health(port: u16, runtime: RuntimeKind) -> bool {
     /// Shared client, built once: this runs on the already-running fast path
     /// of every proxied request and whenever the health monitor polls a live
     /// process, and a client per call would initialize a TLS backend and
@@ -159,7 +170,7 @@ pub async fn check_http_health(port: u16) -> bool {
     /// `crate::health::loopback_client` says why it never consults a proxy.
     static CLIENT: std::sync::OnceLock<Option<reqwest::Client>> = std::sync::OnceLock::new();
 
-    let health_url = format!("http://127.0.0.1:{port}/health");
+    let health_url = format!("http://127.0.0.1:{port}{}", runtime.health_path());
     let Some(client) = CLIENT
         .get_or_init(|| crate::health::loopback_client().ok())
         .as_ref()
@@ -170,10 +181,19 @@ pub async fn check_http_health(port: u16) -> bool {
         return false;
     };
 
-    matches!(
-        client.get(&health_url).send().await,
-        Ok(response) if response.status().is_success()
-    )
+    let Ok(response) = client.get(&health_url).send().await else {
+        return false;
+    };
+    if !response.status().is_success() {
+        return false;
+    }
+    match runtime {
+        RuntimeKind::Llama => true,
+        RuntimeKind::StableDiffusion => response
+            .text()
+            .await
+            .is_ok_and(|body| runtime.is_ready_body(&body)),
+    }
 }
 
 #[cfg(test)]

@@ -65,8 +65,14 @@ futures-util = { workspace = true }
 # Forwards to `gglib-core`: the DTOs here embed domain types (`InferenceConfig`,
 # `DefaultsOrigin`, …), and ts-rs needs `TS` on the whole reachable graph, not
 # just the outermost struct. Forwards to `gglib-proxy` for the same reason:
-# `PairedModels` embeds the proxy's `ModelInfo`.
-ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings", "gglib-proxy/ts-bindings"]
+# `PairedModels` embeds the proxy's `ModelInfo`; and to `gglib-runtime`:
+# `ImageRuntimeStatus` embeds its `SdStatus`.
+ts-bindings = [
+    "dep:ts-rs",
+    "gglib-core/ts-bindings",
+    "gglib-proxy/ts-bindings",
+    "gglib-runtime/ts-bindings",
+]
 
 [dev-dependencies]
 # The same tokio as above, plus the virtual clock. Declared rather than left

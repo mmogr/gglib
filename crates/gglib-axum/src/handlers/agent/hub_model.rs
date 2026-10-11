@@ -14,9 +14,9 @@ use std::cmp::Reverse;
 use axum::http::StatusCode;
 
 use gglib_app_services::types::ServerInfo;
-use gglib_core::domain::Machine;
 use gglib_core::domain::agent::MADE_KEYS;
 use gglib_core::domain::chat::{Conversation, Message};
+use gglib_core::domain::{Machine, RuntimeKind};
 use gglib_core::ports::{Admission, LaunchOverrides};
 
 use super::AgentChatRequest;
@@ -105,11 +105,13 @@ fn ran_elsewhere() -> HttpError {
     )
 }
 
-/// The model id of the server started last, the lowest port among those
-/// started together; none when nothing runs.
+/// The model id of the chat server started last, the lowest port among
+/// those started together; none when no chat server runs. An `sd-server`
+/// is passed over: a chat cannot run on a model that draws.
 fn latest(running: &[ServerInfo]) -> Option<String> {
     let last = running
         .iter()
+        .filter(|s| s.runtime == RuntimeKind::Llama)
         .max_by_key(|s| (s.started_at, Reverse(s.port)))?;
     Some(last.model_id.to_string())
 }

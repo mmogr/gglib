@@ -10,11 +10,13 @@
 
 use super::ports::{allocate_port, is_port_available};
 use super::shutdown::shutdown_child;
+use super::spawn_config::{RuntimeBinaries, SpawnConfig};
 use super::types::{RunningProcess, ServerInfo};
 use crate::command::{build_and_spawn, spawn_log_readers};
 use crate::pidfile::{delete_pidfile, write_pidfile};
+use crate::sd::build_and_spawn_sd;
 use anyhow::{Result, anyhow};
-use gglib_core::ports::ServerConfig;
+use gglib_core::domain::RuntimeKind;
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -22,9 +24,9 @@ use tracing::{debug, warn};
 
 /// GUI-oriented process lifecycle manager.
 ///
-/// Handles spawning, tracking, and killing llama-server processes with
-/// integrated log streaming for GUI applications. Uses `u32` model IDs
-/// for frontend compatibility.
+/// Handles spawning, tracking, and killing model servers, llama-server and
+/// `sd-server` alike, with integrated log streaming for GUI applications.
+/// Uses `u32` model IDs for frontend compatibility.
 ///
 /// The only process core. See the module docs above for why the name still
 /// carries a `Gui` prefix.
@@ -33,21 +35,22 @@ pub struct GuiProcessCore {
     processes: HashMap<u32, RunningProcess>,
     /// Base port for allocation
     base_port: u16,
-    /// Path to llama-server binary
-    llama_server_path: String,
+    /// The program each runtime is started with.
+    binaries: RuntimeBinaries,
 }
 
 impl GuiProcessCore {
     /// Create a new `GuiProcessCore`
-    pub fn new(base_port: u16, llama_server_path: impl Into<String>) -> Self {
+    pub fn new(base_port: u16, binaries: RuntimeBinaries) -> Self {
         Self {
             processes: HashMap::new(),
             base_port,
-            llama_server_path: llama_server_path.into(),
+            binaries,
         }
     }
 
-    /// Spawn a new llama-server process.
+    /// Spawn a server: a llama-server or an `sd-server`, as `config` says,
+    /// from the binary this core holds for that runtime.
     ///
     /// Returns the port it was allocated **and** its process id. The pid comes
     /// back with the port because a caller that owns a freshly spawned child
@@ -56,21 +59,22 @@ impl GuiProcessCore {
     /// at which the child exists and nothing owns it. Handing both out of the
     /// same critical section removes the window rather than arguing it is
     /// small.
-    pub async fn spawn(&mut self, config: ServerConfig) -> Result<(u16, u32)> {
-        let model_id = config.model_id as u32;
+    pub async fn spawn(&mut self, config: SpawnConfig) -> Result<(u16, u32)> {
+        let model_id = config.model_id() as u32;
+        let runtime = config.runtime();
 
         if self.processes.contains_key(&model_id) {
             return Err(anyhow!("Model {model_id} is already running"));
         }
 
-        if !config.model_path.exists() {
+        if !config.model_path().exists() {
             return Err(anyhow!(
                 "Model file not found: {}",
-                config.model_path.display()
+                config.model_path().display()
             ));
         }
 
-        let port = self.resolve_port(config.port)?;
+        let port = self.resolve_port(config.port())?;
         // A diagnostic, added with the proxy dashboard (#568), for a
         // port-mismatch report: logs the configured base port alongside the
         // port actually allocated for this spawn, so a repro can confirm
@@ -79,18 +83,22 @@ impl GuiProcessCore {
         tracing::info!(
             model_id = %model_id,
             base_port = %self.base_port,
-            requested_port = ?config.port,
+            requested_port = ?config.port(),
             allocated_port = %port,
+            runtime = runtime.label(),
             "GuiProcessCore::spawn allocated port"
         );
-        let llama_path = Path::new(&self.llama_server_path);
-        let mut child = build_and_spawn(Some(llama_path), &config, port)?;
+        let binary = self.binaries.for_runtime(runtime);
+        let mut child = match &config {
+            SpawnConfig::Llama(llama) => build_and_spawn(Some(binary), llama, port)?,
+            SpawnConfig::Sd(sd) => build_and_spawn_sd(binary, sd, port)?,
+        };
         let pid = child
             .id()
             .ok_or_else(|| anyhow!("Failed to get child PID"))?;
 
         // Write PID file
-        if let Err(e) = write_pidfile(config.model_id, pid, port) {
+        if let Err(e) = write_pidfile(config.model_id(), pid, port) {
             debug!("Failed to write PID file: {}", e);
         }
 
@@ -101,7 +109,7 @@ impl GuiProcessCore {
             .unwrap()
             .as_secs();
 
-        let info = ServerInfo::new(model_id, config.model_name, pid, port, now);
+        let info = ServerInfo::new(model_id, config.into_model_name(), pid, port, now, runtime);
         let running = RunningProcess::new(info, child);
         self.processes.insert(model_id, running);
 
@@ -122,6 +130,12 @@ impl GuiProcessCore {
                 allocate_port(self.base_port, &used)
             }
         }
+    }
+
+    /// The binary that serves `runtime`, whether or not it is installed.
+    #[must_use]
+    pub fn binary(&self, runtime: RuntimeKind) -> &Path {
+        self.binaries.for_runtime(runtime)
     }
 
     /// Kill a running process with graceful shutdown
@@ -262,25 +276,29 @@ impl Drop for GuiProcessCore {
 #[path = "core_drop_tests.rs"]
 mod drop_tests;
 
+#[cfg(all(test, unix))]
+#[path = "core_spawn_tests.rs"]
+mod spawn_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_core_creation() {
-        let core = GuiProcessCore::new(8080, "llama-server");
+        let core = GuiProcessCore::new(8080, RuntimeBinaries::llama_only("llama-server"));
         assert_eq!(core.count(), 0);
     }
 
     #[test]
     fn test_is_running() {
-        let core = GuiProcessCore::new(8080, "llama-server");
+        let core = GuiProcessCore::new(8080, RuntimeBinaries::llama_only("llama-server"));
         assert!(!core.is_running(1));
     }
 
     #[test]
     fn test_list_all_empty() {
-        let core = GuiProcessCore::new(8080, "llama-server");
+        let core = GuiProcessCore::new(8080, RuntimeBinaries::llama_only("llama-server"));
         assert_eq!(core.list_all().len(), 0);
     }
 }

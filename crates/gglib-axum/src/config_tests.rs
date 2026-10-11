@@ -34,6 +34,7 @@ async fn resolved_base_port(saved: Option<u16>, base_port: Option<u16>) -> Strin
     let config = ServerConfig {
         base_port,
         llama_server_path: "/nonexistent/llama-server".into(),
+        sd_server_path: "/nonexistent/sd-server".into(),
         db_path: Some(dir.path().join("gglib.db")),
         device_keys_path: Some(dir.path().join("remote_devices")),
         ..ServerConfig::with_defaults().unwrap()

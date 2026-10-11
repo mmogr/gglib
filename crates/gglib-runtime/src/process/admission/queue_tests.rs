@@ -27,6 +27,8 @@ fn resident(model_id: u32, name: &str) -> Resident {
         context_size: 4096,
         port: 8000 + u16::try_from(model_id).unwrap_or(0),
         projector: None,
+        runtime: gglib_core::domain::RuntimeKind::Llama,
+        components: Vec::new(),
         slot_restore_supported: true,
         cache_ram_health: CacheRamHealth::LlamaDefault,
         narration: None,
@@ -402,7 +404,7 @@ async fn alternating_traffic_does_not_swap_per_request() {
                     progressed = true;
                 }
                 AdmissionDecision::Wait => remaining.push(ticket),
-                AdmissionDecision::Expired => panic!("nothing should expire here"),
+                other => panic!("nothing should expire or be refused here, got {other:?}"),
             }
         }
         tickets = remaining;

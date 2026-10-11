@@ -3,7 +3,9 @@
 //! One renderer for a source build's [`BuildEvent`]s and one for a download's
 //! [`LlamaProgressEvent`]s. Every command that builds or downloads llama.cpp
 //! hands its channel to one of them: `config llama install`, `rebuild` and
-//! `update`, and the install a first `gglib serve` or `gglib up` offers. A
+//! `update`, and the install a first `gglib serve` or `gglib up` offers; so
+//! does `config sd install`, whose stable-diffusion.cpp reports the same
+//! events, with its product's name on the download's bar. A
 //! command differs from the next in what it says once the work is done, which
 //! is the ending it passes, and in what is drawn while git fetches the
 //! checkout: a clone and a pull are one phase, and only the command knows
@@ -12,6 +14,7 @@
 //! A phase that is drawn is a spinner or a bar, which `indicatif` draws on
 //! stderr and takes away again. What is left behind is written to `out`.
 
+use std::borrow::Cow;
 use std::io::Write;
 use std::time::Duration;
 
@@ -103,7 +106,7 @@ fn bar_style(counted: &str) -> ProgressStyle {
         .progress_chars("#>-")
 }
 
-fn spinner(message: &'static str) -> ProgressBar {
+fn spinner(message: impl Into<Cow<'static, str>>) -> ProgressBar {
     let pb = ProgressBar::new_spinner();
     pb.set_style(spinner_style());
     pb.set_message(message);
@@ -112,7 +115,7 @@ fn spinner(message: &'static str) -> ProgressBar {
 }
 
 /// A bar whose length is not known until the first progress event.
-fn bar(counted: &str, message: &'static str) -> ProgressBar {
+fn bar(counted: &str, message: impl Into<Cow<'static, str>>) -> ProgressBar {
     let pb = ProgressBar::new(0);
     pb.set_style(bar_style(counted));
     pb.set_message(message);
@@ -195,15 +198,28 @@ pub(super) async fn render_build_events(
     }
 }
 
-/// Render a download's events until its channel closes.
+/// The indicator a phase of `product`'s download is drawn with: a byte bar
+/// while the archive downloads and a spinner for every other phase, each
+/// labelled as [`InstallPhase::label_for`] words it for `product`.
+fn install_indicator(phase: InstallPhase, product: &str) -> ProgressBar {
+    let label = phase.label_for(product);
+    if phase == InstallPhase::Download {
+        bar("{bytes}/{total_bytes}", label)
+    } else {
+        spinner(label)
+    }
+}
+
+/// Render a download of `product` (`RuntimeKind::label`) until its channel
+/// closes.
 ///
-/// One indicator at a time, as for a build: a byte bar while the archive
-/// downloads and a spinner for every other phase.
+/// One indicator at a time, as for a build ([`install_indicator`]).
 ///
 /// Speed and time remaining are printed exactly as they arrive. Deriving them
 /// here from successive byte counts is what the event type exists to stop.
 pub(super) async fn render_install_events(
     mut rx: mpsc::Receiver<LlamaProgressEvent>,
+    product: &str,
     ending: DownloadEnding,
     out: &mut impl Write,
 ) {
@@ -213,11 +229,7 @@ pub(super) async fn render_install_events(
         match event {
             LlamaProgressEvent::PhaseStarted { phase } => {
                 clear(&mut active);
-                active = Some(if phase == InstallPhase::Download {
-                    bar("{bytes}/{total_bytes}", phase.label())
-                } else {
-                    spinner(phase.label())
-                });
+                active = Some(install_indicator(phase, product));
             }
             LlamaProgressEvent::Progress {
                 downloaded,

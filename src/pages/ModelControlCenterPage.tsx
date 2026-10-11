@@ -29,6 +29,8 @@ import { getTransport } from '../services/transport';
 interface ModelControlCenterPageProps {
   servers: ServerViewModel[];
   stopServer: (modelId: number) => Promise<void>;
+  /** Open Settings on its System tab, where the image runtime is installed. */
+  onOpenSystemSettings?: () => void;
   onRegisterMenuActions?: (actions: {
     refreshModels: () => void;
     addModelFromFile: () => void;
@@ -44,6 +46,7 @@ interface ModelControlCenterPageProps {
 export default function ModelControlCenterPage({
   servers,
   stopServer,
+  onOpenSystemSettings,
   onRegisterMenuActions,
 }: ModelControlCenterPageProps) {
   const { models, selectedModel, selectedModelId, loading, error, loadModels, selectModel, addModel, removeModel, updateModel } = useModels();
@@ -305,6 +308,7 @@ export default function ModelControlCenterPage({
                 downloadQueue={downloadQueue}
                 onRegisterServeModalOpener={(opener) => { openServeModalRef.current = opener; }}
                 onBenchmark={(modelId) => setBenchmarkModelId(modelId)}
+                onOpenSystemSettings={onOpenSystemSettings}
               />
             )}
           </>

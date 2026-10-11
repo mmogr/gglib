@@ -6,11 +6,18 @@ description = "Process runtime and OS-level concerns for gglib"
 license.workspace = true
 publish = false
 
+[features]
+default = []
+# Emit TypeScript for the image runtime's status the GUI reads. Optional
+# dependency, so the default graph is unchanged with the feature off.
+ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings"]
+
 [dependencies]
 gglib-agent = { workspace = true }
 gglib-core = { workspace = true }
 gglib-mcp = { workspace = true }
 gglib-proxy = { workspace = true }
+ts-rs = { workspace = true, optional = true }
 
 # Runtime dependencies
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }

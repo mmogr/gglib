@@ -10,6 +10,7 @@ mod platform;
 mod private;
 mod remote;
 mod resolver;
+mod sd;
 mod slots;
 #[cfg(feature = "test-utils")]
 mod test_root;
@@ -37,6 +38,9 @@ pub use llama::{
     LLAMA_INSTALL_COMMAND, gglib_data_dir, llama_bench_path, llama_config_path, llama_cpp_dir,
     llama_server_path,
 };
+
+// stable-diffusion.cpp binaries
+pub use sd::{SD_INSTALL_COMMAND, sd_config_path, sd_cpp_dir, sd_data_dir, sd_server_path};
 
 // Models directory
 #[cfg(not(target_os = "windows"))]

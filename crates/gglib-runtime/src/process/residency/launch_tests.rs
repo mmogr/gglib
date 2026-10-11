@@ -6,6 +6,7 @@
 
 use super::{LIVENESS_TICK, SpawnedChild};
 use crate::process::core::GuiProcessCore;
+use crate::process::{RuntimeBinaries, SpawnConfig};
 use gglib_core::ports::ServerConfig;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -26,16 +27,19 @@ const ABA_ID: u32 = 999_005;
 ///
 /// Sets this binary's own data root first: in a debug build `pids_dir()` is
 /// otherwise the checkout's, which an installed daemon may share (#955).
-fn spawnable(model_id: i64) -> (Arc<RwLock<GuiProcessCore>>, ServerConfig, tempfile::TempDir) {
+fn spawnable(model_id: i64) -> (Arc<RwLock<GuiProcessCore>>, SpawnConfig, tempfile::TempDir) {
     gglib_core::paths::isolate_data_root();
     let dir = tempfile::tempdir().expect("temp dir");
     let model = dir.path().join("model.gguf");
     std::fs::write(&model, b"not really a gguf").expect("write model file");
-    let core = Arc::new(RwLock::new(GuiProcessCore::new(19080, "/usr/bin/true")));
+    let core = Arc::new(RwLock::new(GuiProcessCore::new(
+        19080,
+        RuntimeBinaries::llama_only("/usr/bin/true"),
+    )));
     // 19080 is the *base* port to allocate from, not the port itself:
     // `ServerConfig::new` leaves `port: None`.
     let config = ServerConfig::new(model_id, "test-model".to_owned(), model, 19080);
-    (core, config, dir)
+    (core, SpawnConfig::Llama(config), dir)
 }
 
 /// Cancellation is the case an error arm cannot reach: `run_launch` is
@@ -87,7 +91,10 @@ async fn a_disarmed_guard_leaves_the_child_alone() {
 #[test]
 fn dropping_outside_a_runtime_does_not_panic() {
     let rt = tokio::runtime::Runtime::new().expect("runtime");
-    let core = Arc::new(RwLock::new(GuiProcessCore::new(19090, "/usr/bin/true")));
+    let core = Arc::new(RwLock::new(GuiProcessCore::new(
+        19090,
+        RuntimeBinaries::llama_only("/usr/bin/true"),
+    )));
     // Armed *inside* the runtime, dropped after it is gone — the real
     // shutdown scenario, not merely a guard built on a bare thread.
     let guard = rt.block_on(async { SpawnedChild::arm(&core, NO_RUNTIME_ID, u32::MAX) });

@@ -1,5 +1,6 @@
 /**
- * System settings panel — the GUI face of `gglib config llama`.
+ * System settings panel — the GUI face of `gglib config llama`, and of
+ * `gglib config sd` in its image runtime section (`ImageRuntimeSettings`).
  *
  * Answers three questions in the order a user asks them: what is installed,
  * has upstream moved, and what can I do about it. Self-contained like
@@ -15,6 +16,7 @@ import { getTransport } from '../../services/transport';
 import { useSystemSettings } from './useSystemSettings';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { BuildInfo } from './BuildInfo';
+import { ImageRuntimeSettings } from './ImageRuntimeSettings';
 import type { LlamaStatus } from '../../types/setup';
 import { LabelledValue } from './LabelledValue';
 
@@ -267,6 +269,8 @@ export const SystemSettings: FC = () => {
           Uninstall llama.cpp
         </Button>
       </section>
+
+      <ImageRuntimeSettings />
 
       <DiagnosticsPanel />
 

@@ -7,6 +7,7 @@ mod settings_args;
 pub(crate) use settings_args::SettingsSetArgs;
 
 use crate::llama_commands::LlamaCommand;
+use crate::sd_commands::SdCommand;
 
 /// Configuration and system management commands.
 #[derive(Subcommand)]
@@ -38,6 +39,11 @@ pub enum ConfigCommand {
     Llama {
         #[command(subcommand)]
         command: LlamaCommand,
+    },
+    /// Manage stable-diffusion.cpp, the runtime that serves image models
+    Sd {
+        #[command(subcommand)]
+        command: SdCommand,
     },
     /// Check system dependencies required for gglib
     CheckDeps {

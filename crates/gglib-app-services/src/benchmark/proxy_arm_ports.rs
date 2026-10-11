@@ -51,6 +51,12 @@ impl ModelRuntimePort for PinnedTarget {
         ))
     }
 
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Err(ModelRuntimeError::Internal(
+            "the agentic eval owns this model's lifecycle".to_owned(),
+        ))
+    }
+
     fn pinned(&self) -> Option<PinnedSpec> {
         Some(PinnedSpec {
             id: i64::from(self.target.model_id),

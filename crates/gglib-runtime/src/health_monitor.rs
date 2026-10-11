@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use async_stream::stream;
 use futures_util::Stream;
+use gglib_core::domain::RuntimeKind;
 use gglib_core::ports::{ProcessHandle, ServerHealthStatus};
 use tokio::time::{MissedTickBehavior, interval};
 use tokio_util::sync::CancellationToken;
@@ -23,13 +24,15 @@ use crate::process::check_http_health;
 pub struct ServerHealthChecker;
 
 impl ServerHealthChecker {
-    /// Check HTTP health endpoint.
+    /// Check a server's HTTP health, asked the way `runtime` answers.
     ///
-    /// `Healthy` on a 2xx from `/health`. Anything else — another status, a
-    /// refused connection, a timeout — is `Unreachable` with one message,
-    /// because [`check_http_health`] reports them all the same way.
-    pub async fn check_http(port: u16) -> ServerHealthStatus {
-        if check_http_health(port).await {
+    /// `Healthy` on a 2xx from llama-server's `/health`, or on `sd-server`'s
+    /// own model list from `/v1/models`. Anything else — another status, a
+    /// refused connection, a timeout, another server's body — is
+    /// `Unreachable` with one message, because [`check_http_health`] reports
+    /// them all the same way.
+    pub async fn check_http(port: u16, runtime: RuntimeKind) -> ServerHealthStatus {
+        if check_http_health(port, runtime).await {
             ServerHealthStatus::Healthy
         } else {
             ServerHealthStatus::Unreachable {
@@ -87,8 +90,8 @@ impl ServerHealthChecker {
             return process_status;
         }
 
-        // Process is alive, check HTTP health
-        Self::check_http(handle.port).await
+        // Process is alive, check HTTP health the way its runtime answers
+        Self::check_http(handle.port, handle.runtime).await
     }
 }
 

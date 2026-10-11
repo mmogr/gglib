@@ -36,8 +36,8 @@ pub(super) const HOME: [&str; 2] = [
 /// Files whose clients talk to the internet, not to this machine, and so are
 /// built the ordinary way on purpose. Each names what it fetches.
 pub(super) const INTERNET: [(&str, &str); 1] = [(
-    "crates/gglib-runtime/src/llama/download/mod.rs",
-    "llama-server release assets from api.github.com and its download host",
+    "crates/gglib-runtime/src/binary_install/install.rs",
+    "llama-server and sd-server release assets from api.github.com and its download host",
 )];
 
 /// A file that must be scanned and must use the builder, so that a scan that

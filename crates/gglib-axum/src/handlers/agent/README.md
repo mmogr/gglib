@@ -46,8 +46,9 @@ the model's id there: the port the tunnel bound, the key from the pairing as
 the bearer, and no shaping, because the far proxy runs its own pipeline). A
 local run whose messages, history included, carry an image is refused `400
 model_cannot_read_images` when the model its server serves has no projector
-(`image_gate`); a far run is not judged here, since the far proxy refuses it
-by the same code. A
+(`image_gate`), and any local run on a port an `sd-server` serves is refused
+`400 image_model_cannot_chat`, before its hold is taken; a far run is not
+judged here, since the far proxy refuses it by the same code. A
 `far` naming this machine is a `400`. Not connected, connected without a key,
 or connected to another machine than the ref's is a `409`
 (`RemoteOps::far_for`), the last because that machine's same id is another
@@ -143,7 +144,8 @@ a turn may be its images alone. An image the turn or the
 history names that is not stored is `400 attachment_not_found`, images over
 16 MiB together `400 request_images_too_large`, and an image for a model
 with no projector `400 model_cannot_read_images`, all before the model is
-loaded. The history is rebuilt from the hub's
+loaded; a chat whose model draws images is `400 image_model_cannot_chat`
+before anything else is read for it, and nothing is admitted. The history is rebuilt from the hub's
 record as a resumed CLI chat reads it (core's `saved_history`: the system
 prompt, then every row but a system one; then the message), the limits from the
 conversation's settings (an iteration limit they do not name is this

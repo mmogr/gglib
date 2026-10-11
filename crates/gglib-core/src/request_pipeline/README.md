@@ -53,6 +53,9 @@ does either.
   [`MAX_IMAGE_BYTES`] (8 MiB) is the most one stored image may be, and
   [`MAX_REQUEST_IMAGE_BYTES`] (16 MiB) the most raw image bytes one request
   to a model may carry.
+- [`chat_runtime`] — [`refuse_unless_chats()`]: a model that draws is served
+  by `sd-server`, which cannot chat, so every door that admits a model for
+  chat refuses it first, with the code and words [`DrawsImages`] holds.
 - [`mod@image_size`] — [`image_size()`] and [`data_url_image_size()`]: a PNG's or
   a JPEG's width and height from its header alone, decoding only a bounded
   prefix of a base64 payload. Input cut short or not an image is `None`.

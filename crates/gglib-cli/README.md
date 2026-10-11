@@ -73,6 +73,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`commands.rs`** — Command dispatch and routing
 - **`config_commands.rs`** — Configuration management commands
 - **`llama_commands.rs`** — Llama server/chat command definitions
+- **`sd_commands.rs`** — stable-diffusion.cpp (the image runtime) command definitions
 - **`parser.rs`** — Clap-based CLI argument parsing
 - **`handlers/`** — Individual command handler implementations
 - **`presentation/`** — Table formatting and output helpers
@@ -87,7 +88,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata, an image model's family and components), and the port it is being served on when it is; `--remote` reads the paired machine's |
 | `explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
 | `remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--force` skips the confirmation only) |
-| `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`) |
+| `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`); for an image model, pin the proxy to it and load it once through stable-diffusion.cpp's `sd-server`, refusing the chat-only flags (`--ctx-size`, `--mlock`, `--jinja`, MTP, sampling, a profile) by name |
 | `chat <id\|name>` | Start interactive llama-cli chat |
 | `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on; refused while the daemon is still replying to it, for the web page or a paired device |
 | `chat … --thinking on\|off` | Switch the chat's Thinking on or off, as the chat page's switch does: the choice runs the session and the chat remembers it, on a new chat or with `--continue` |
@@ -109,6 +110,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `config profile set <name> [flags]` | Create or update a profile (only the flags passed are set; `--unset <param>` clears one) |
 | `config profile rm <name>` | Delete a profile |
 | `config profile install-templates` | Install the starter profiles: three sampling (coding, chat, creative) and six reasoning rungs (minimal…max) |
+| `config sd install [--build] [--force]` | Install stable-diffusion.cpp's `sd-server`, which serves image models: the pinned pre-built release for this platform (a CPU-only build is warned about before it starts), or a source build with `--build` or where no release fits |
+| `config sd status` | Show whether `sd-server` is installed, as a download or a source build, with its release, platform, commit and path |
+| `config sd uninstall [--force]` | Remove `.sd/`, the image runtime's whole install, and say what was removed; refused while the daemon runs an image model |
 | `verify <id\|name>` | Verify model integrity via SHA256 hash comparison |
 | `repair <id\|name>` | Re-download corrupt shards for a model |
 | `completions <shell>` | Print a shell completion script to stdout |

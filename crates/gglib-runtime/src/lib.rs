@@ -4,6 +4,7 @@
 // it; here it is an error wherever clippy runs.
 #![deny(clippy::await_holding_lock, clippy::await_holding_refcell_ref)]
 
+pub(crate) mod binary_install;
 mod command;
 // Crate-internal: no consumer names these four by path — `compose`,
 // `health_monitor` and `server_config` are reached through the re-exports
@@ -21,6 +22,7 @@ pub mod pidfile;
 pub mod ports_impl;
 pub mod process;
 pub mod proxy;
+pub mod sd;
 pub(crate) mod server_config;
 #[allow(
     clippy::redundant_closure_for_method_calls,
@@ -37,8 +39,9 @@ pub use health_monitor::{ServerHealthChecker, ServerHealthMonitor};
 // Re-export GUI process management types
 pub use process::{
     AdmissionQueue, GuiProcessCore, PRIMARY_SLOT, ProcessManager, Resident, ResidentSet,
-    SLOT_COUNT, ServerEvent, ServerEventBroadcaster, ServerLogEntry, ServerLogManager,
-    ServerStateInfo, ServerStatus, get_event_broadcaster, get_log_manager,
+    RuntimeBinaries, SLOT_COUNT, ServerEvent, ServerEventBroadcaster, ServerLogEntry,
+    ServerLogManager, ServerStateInfo, ServerStatus, SpawnConfig, get_event_broadcaster,
+    get_log_manager,
 };
 
 // Re-export port implementations for runtime adapters

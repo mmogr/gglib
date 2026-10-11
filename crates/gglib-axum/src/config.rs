@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use gglib_core::paths::llama_server_path;
+use gglib_core::paths::{llama_server_path, sd_server_path};
 
 /// What [`bootstrap`](crate::bootstrap::bootstrap) builds the adapter's
 /// context from. Where the daemon binds and the CORS policy of its router are
@@ -25,6 +25,8 @@ pub struct ServerConfig {
     pub base_port: Option<u16>,
     /// Path to the llama-server binary.
     pub llama_server_path: PathBuf,
+    /// Path to the `sd-server` binary, the image runtime.
+    pub sd_server_path: PathBuf,
     /// Maximum concurrent agent loop sessions.
     ///
     /// Each `POST /api/agent/chat` request holds one permit for the lifetime
@@ -53,6 +55,7 @@ impl ServerConfig {
         Ok(Self {
             base_port: None,
             llama_server_path: llama_server_path()?,
+            sd_server_path: sd_server_path()?,
             max_concurrent_agent_loops: 4,
             db_path: None,
             device_keys_path: None,

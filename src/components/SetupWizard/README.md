@@ -9,7 +9,7 @@ Multi-step first-run setup wizard: welcome, models directory configuration, llam
 | File | Role |
 |------|------|
 | `SetupWizard.tsx` | Step state machine; streams llama install output; calls settings/setup APIs |
-| `InstallProgress.tsx` | Renders one llama install event — a bar for the download phase, a labelled spinner for every other. `LlamaInstallModal` draws its install with it too |
+| `InstallProgress.tsx` | Renders one pre-built install event — a bar for the download phase, a labelled spinner for every other, the download named for its `product`. `LlamaInstallModal` and the image runtime section of Settings draw their installs with it too |
 
 ## Step Flow
 

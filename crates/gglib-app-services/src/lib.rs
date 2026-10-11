@@ -78,4 +78,4 @@ pub use sampling_explain::{
 pub use servers::ServerOps;
 pub use service_graph::{AppServices, ServiceGraphParams, build_service_graph};
 pub use settings::SettingsOps;
-pub use setup::{GpuInfoDto, SetupDeps, SetupOps, SetupStatus};
+pub use setup::{GpuInfoDto, ImageRuntimeStatus, SetupDeps, SetupOps, SetupStatus};

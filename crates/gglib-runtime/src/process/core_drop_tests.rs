@@ -6,6 +6,7 @@
 
 use super::GuiProcessCore;
 use crate::pidfile::{PidFileData, delete_pidfile, read_pidfile};
+use crate::process::{RuntimeBinaries, SpawnConfig};
 use gglib_core::ports::ServerConfig;
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
@@ -33,16 +34,16 @@ fn core_of_sleepers(dir: &Path) -> GuiProcessCore {
     std::fs::write(&script, "#!/bin/sh\nexec sleep 30\n").expect("write script");
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");
     std::fs::write(dir.join("model.gguf"), b"not really a gguf").expect("write model file");
-    GuiProcessCore::new(19100, script.to_string_lossy())
+    GuiProcessCore::new(19100, RuntimeBinaries::llama_only(script.to_string_lossy()))
 }
 
-fn config(dir: &Path, model_id: i64) -> ServerConfig {
-    ServerConfig::new(
+fn config(dir: &Path, model_id: i64) -> SpawnConfig {
+    SpawnConfig::Llama(ServerConfig::new(
         model_id,
         "test-model".to_owned(),
         dir.join("model.gguf"),
         19100,
-    )
+    ))
 }
 
 /// Whether `pid` is running, as `ps` reports it.

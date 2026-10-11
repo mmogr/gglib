@@ -99,7 +99,8 @@ fn counted_as(req: &AgentChatRequest, server: &ServerInfo) -> String {
 ///
 /// # Errors
 ///
-/// Locally, whatever `validate_port` says, and `model_cannot_read_images`
+/// Locally, whatever `validate_port` says, `image_model_cannot_chat` (400)
+/// when the port serves a model that draws, and `model_cannot_read_images`
 /// (400) when a message carries an image the served model cannot read. On
 /// the far path, where that is the far proxy's to refuse, `400` for a ref
 /// to this machine; `409` when this machine is not connected, holds no key
@@ -132,13 +133,16 @@ pub(super) async fn resolve(
 ///
 /// # Errors
 ///
-/// `model_cannot_read_images` (400) when a message, history included,
-/// carries an image and the model `server` serves has no projector.
+/// `image_model_cannot_chat` (400) when `server` is an `sd-server`, which
+/// draws and cannot chat; `model_cannot_read_images` (400) when a message,
+/// history included, carries an image and the model `server` serves has no
+/// projector.
 pub(super) async fn local(
     state: &AppState,
     req: &AgentChatRequest,
     server: ServerInfo,
 ) -> Result<Upstream, HttpError> {
+    super::image_gate::chats(server.runtime, &server.model_name)?;
     super::image_gate::served(state, server.model_id, &req.messages).await?;
     // By its id: the catalog row the server was started from. Never by the
     // request's `model`, which the page and a paired device leave empty and

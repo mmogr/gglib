@@ -12,7 +12,7 @@ use std::time::Duration;
 #[tokio::test]
 async fn test_health_checker_http_unreachable() {
     // Check a port that's definitely not in use
-    let status = ServerHealthChecker::check_http(65432).await;
+    let status = ServerHealthChecker::check_http(65432, RuntimeKind::Llama).await;
     assert!(matches!(status, ServerHealthStatus::Unreachable { .. }));
 }
 
@@ -184,9 +184,9 @@ fn refusing() -> u16 {
 async fn a_200_from_health_is_healthy() {
     let port = answering("200 OK");
 
-    assert!(crate::process::check_http_health(port).await);
+    assert!(crate::process::check_http_health(port, RuntimeKind::Llama).await);
     assert_eq!(
-        ServerHealthChecker::check_http(port).await,
+        ServerHealthChecker::check_http(port, RuntimeKind::Llama).await,
         ServerHealthStatus::Healthy
     );
 }
@@ -195,16 +195,22 @@ async fn a_200_from_health_is_healthy() {
 async fn a_503_from_health_is_unreachable() {
     let port = answering("503 Service Unavailable");
 
-    assert!(!crate::process::check_http_health(port).await);
-    assert_eq!(ServerHealthChecker::check_http(port).await, unreachable());
+    assert!(!crate::process::check_http_health(port, RuntimeKind::Llama).await);
+    assert_eq!(
+        ServerHealthChecker::check_http(port, RuntimeKind::Llama).await,
+        unreachable()
+    );
 }
 
 #[tokio::test]
 async fn a_refused_connection_is_unreachable() {
     let port = refusing();
 
-    assert!(!crate::process::check_http_health(port).await);
-    assert_eq!(ServerHealthChecker::check_http(port).await, unreachable());
+    assert!(!crate::process::check_http_health(port, RuntimeKind::Llama).await);
+    assert_eq!(
+        ServerHealthChecker::check_http(port, RuntimeKind::Llama).await,
+        unreachable()
+    );
 }
 
 #[tokio::test]
@@ -212,8 +218,8 @@ async fn a_server_that_never_answers_is_unreachable_once_the_check_times_out() {
     let port = silent();
 
     let (fast_path, monitor_side) = tokio::join!(
-        crate::process::check_http_health(port),
-        ServerHealthChecker::check_http(port)
+        crate::process::check_http_health(port, RuntimeKind::Llama),
+        ServerHealthChecker::check_http(port, RuntimeKind::Llama)
     );
 
     assert!(!fast_path);

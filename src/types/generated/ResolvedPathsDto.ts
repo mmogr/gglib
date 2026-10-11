@@ -4,7 +4,7 @@
  * Where everything resolves to — `gglib config paths`, the golden-truth tool
  * for "which directory is it actually using?".
  */
-export type ResolvedPathsDto = { dataRoot: string, resourceRoot: string, databasePath: string, llamaServerPath: string, modelsDir: string, 
+export type ResolvedPathsDto = { dataRoot: string, resourceRoot: string, databasePath: string, llamaServerPath: string, sdServerPath: string, modelsDir: string, 
 /**
  * How the models directory was chosen: `"explicit" | "envVar" | "default"`.
  */

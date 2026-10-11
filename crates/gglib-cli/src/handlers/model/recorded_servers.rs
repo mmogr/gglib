@@ -1,6 +1,6 @@
 //! What is being served under this data root, as a one-shot command sees it.
 //!
-//! Whatever starts a llama-server keeps a pid file for it under the data
+//! Whatever starts a model server keeps a pid file for it under the data
 //! root, named for the model it serves (`gglib_runtime::pidfile`). A command
 //! in a terminal is a process apart from that one, with no `ProcessManager`
 //! to ask, so it reads the records.
@@ -9,9 +9,9 @@ use async_trait::async_trait;
 use gglib_core::ports::{
     Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, ProcessHandle, RunningTarget,
 };
-use gglib_runtime::pidfile::{is_our_llama_server, list_pidfiles};
+use gglib_runtime::pidfile::{list_pidfiles, server_runtime};
 
-/// The llama-servers recorded under this data root that are still running.
+/// The model servers recorded under this data root that are still running.
 ///
 /// A [`ModelRuntimePort`] that answers [`list_running`] and nothing else:
 /// what it lists belongs to another process, so it starts nothing, routes
@@ -22,9 +22,10 @@ use gglib_runtime::pidfile::{is_our_llama_server, list_pidfiles};
 /// ids in the two mean the same models. A daemon running from another data
 /// root is not seen here, and nothing here is seen from there.
 ///
-/// A record counts only while its pid is a running process of the
-/// llama-server this installation manages ([`is_our_llama_server`]). A pid
-/// file outlives a server that was killed, and its pid may since belong to
+/// A record counts only while its pid is a running process of a server
+/// binary this installation manages, llama-server or `sd-server`
+/// ([`server_runtime`]), and its handle names that runtime. A pid file
+/// outlives a server that was killed, and its pid may since belong to
 /// anything.
 ///
 /// [`list_running`]: ModelRuntimePort::list_running
@@ -62,11 +63,14 @@ impl ModelRuntimePort for RecordedServers {
         };
         records
             .into_iter()
-            .filter(|(_, record)| is_our_llama_server(record.pid))
-            // A pid file holds neither the model's name nor when its server
-            // started.
-            .map(|(model_id, record)| {
-                ProcessHandle::new(model_id, String::new(), Some(record.pid), record.port, 0)
+            .filter_map(|(model_id, record)| {
+                let runtime = server_runtime(record.pid)?;
+                // A pid file holds neither the model's name nor when its
+                // server started.
+                Some(
+                    ProcessHandle::new(model_id, String::new(), Some(record.pid), record.port, 0)
+                        .with_runtime(runtime),
+                )
             })
             .collect()
     }
@@ -77,6 +81,12 @@ impl ModelRuntimePort for RecordedServers {
     ///
     /// [`NoopModelRuntime`]: gglib_core::ports::NoopModelRuntime
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+        Err(ModelRuntimeError::Internal(
+            "a one-shot command does not stop a server another process started".to_string(),
+        ))
+    }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
         Err(ModelRuntimeError::Internal(
             "a one-shot command does not stop a server another process started".to_string(),
         ))

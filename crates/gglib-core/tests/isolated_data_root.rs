@@ -12,7 +12,7 @@ use std::process::Command;
 
 use gglib_core::paths::{
     data_root, database_path, isolate_data_root, llama_server_path, pids_dir, remote_identity_path,
-    resource_root,
+    resource_root, sd_config_path, sd_cpp_dir, sd_server_path,
 };
 
 /// The child's name in this binary. A rename leaves it unrun, and the parent
@@ -44,6 +44,15 @@ fn every_resolver_answers_under_the_test_root() {
         llama.parent(),
         Some(root.join(".llama").join("bin").as_path())
     );
+    // stable-diffusion.cpp's install, through the same root, under a
+    // directory of its own that an uninstall removes whole.
+    let sd = root.join(".sd");
+    assert_eq!(
+        sd_server_path().unwrap().parent(),
+        Some(sd.join("bin").as_path())
+    );
+    assert_eq!(sd_config_path().unwrap(), sd.join("sd-config.json"));
+    assert_eq!(sd_cpp_dir().unwrap(), sd.join("stable-diffusion.cpp"));
     // The daemon lock is `<data root>/daemon.lock`: `run_daemon` and
     // `gglib daemon status` both name the directory with `data_root()`.
 }

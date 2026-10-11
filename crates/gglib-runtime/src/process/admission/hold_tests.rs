@@ -9,7 +9,9 @@ use gglib_core::domain::{CacheRamHealth, SecondarySlotDecision};
 use gglib_core::ports::ModelRuntimeError;
 use tokio::time::Instant;
 
-use crate::process::admission::{AdmissionDecision, AdmissionQueue, PRIMARY_SLOT, Resident};
+use crate::process::admission::{
+    ADMISSION_DEADLINE, AdmissionDecision, AdmissionQueue, PRIMARY_SLOT, Resident,
+};
 
 const NEVER_FITS: SecondarySlotDecision = SecondarySlotDecision::RefuseTooLarge {
     footprint_bytes: 9 * 1024 * 1024 * 1024,
@@ -24,6 +26,8 @@ fn resident(model_id: u32, name: &str) -> Resident {
         context_size: 4096,
         port: 8000 + u16::try_from(model_id).unwrap_or(0),
         projector: None,
+        runtime: gglib_core::domain::RuntimeKind::Llama,
+        components: Vec::new(),
         slot_restore_supported: true,
         cache_ram_health: CacheRamHealth::LlamaDefault,
         narration: None,
@@ -139,4 +143,25 @@ async fn a_hold_on_a_stopped_model_does_not_hold_the_next_on_its_port() {
     drop(q.install(PRIMARY_SLOT, next()));
     assert!(q.evict_unheld(PRIMARY_SLOT).is_ok(), "and recycled");
     drop(stale);
+}
+
+/// A held run's progress is queue progress: a request waiting on the held
+/// slot outlives the deadline while the run reports it, and gives up once
+/// the reports stop.
+#[tokio::test]
+async fn a_hold_reporting_progress_keeps_a_waiter_alive() {
+    tokio::time::pause();
+    let q = with_resident();
+    let hold = q.hold(8001, 1).expect("a resident listens there");
+    let rival = q.enqueue("nomic-embed");
+    assert_eq!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Wait);
+
+    for _ in 0..3 {
+        tokio::time::advance(ADMISSION_DEADLINE * 2 / 3).await;
+        hold.progress();
+        assert_eq!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Wait);
+    }
+
+    tokio::time::advance(ADMISSION_DEADLINE).await;
+    assert_eq!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Expired);
 }

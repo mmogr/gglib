@@ -25,3 +25,5 @@ export type { UseInspectorModalsResult } from './useInspectorModals';
 
 export { useHfDownload } from './useHfDownload';
 export type { HfDownloadState } from './useHfDownload';
+export { useSdStatus } from './useSdStatus';
+export type { SdStatusState } from './useSdStatus';

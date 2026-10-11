@@ -1,19 +1,20 @@
-//! Startup orphan cleanup for llama-server processes from previous crashes.
+//! Startup orphan cleanup for server processes, llama-server and `sd-server`,
+//! from previous crashes.
 
 use std::io;
 
 use tracing::{debug, info, warn};
 
 use super::io::{delete_pidfile, list_pidfiles};
-use super::verify::is_our_llama_server;
+use super::verify::is_our_server;
 use crate::process::shutdown::kill_pid;
 
-/// Clean up orphaned llama-server processes at startup.
+/// Clean up orphaned llama-server and `sd-server` processes at startup.
 ///
 /// # Strategy
 /// 1. Read all PID files from `~/.gglib/pids/`
 /// 2. For each PID:
-///    - Verify it's actually our llama-server binary (not a reused PID)
+///    - Verify it's actually one of our server binaries (not a reused PID)
 ///    - If verified, kill it with `kill_pid`: SIGTERM → SIGKILL on Unix,
 ///      `taskkill /F` on Windows
 ///    - If not verified or already gone, just delete the PID file
@@ -21,7 +22,7 @@ use crate::process::shutdown::kill_pid;
 ///
 /// # Safety
 ///
-/// **The caller must hold the daemon lock.** `is_our_llama_server()` stops this
+/// **The caller must hold the daemon lock.** `is_our_server()` stops this
 /// killing *unrelated* processes; it does nothing about killing a *live* one
 /// that belongs to somebody else, because verification succeeding is exactly
 /// what a running sibling looks like. The lock is what makes "recorded pid" and
@@ -53,10 +54,10 @@ pub async fn cleanup_orphaned_servers() -> io::Result<()> {
     let mut cleaned = 0;
 
     for (model_id, data) in pidfiles {
-        if is_our_llama_server(data.pid) {
+        if is_our_server(data.pid) {
             // Verified orphaned server - kill it
             debug!(
-                "Killing orphaned llama-server (model {}, PID {}, port {})",
+                "Killing orphaned server (model {}, PID {}, port {})",
                 model_id, data.pid, data.port
             );
 
@@ -77,7 +78,7 @@ pub async fn cleanup_orphaned_servers() -> io::Result<()> {
         } else {
             // PID doesn't match our binary (reused or gone) - just clean up file
             debug!(
-                "PID {} (model {}) is not our llama-server, removing stale PID file",
+                "PID {} (model {}) is not one of our servers, removing stale PID file",
                 data.pid, model_id
             );
             delete_pidfile(model_id)?;

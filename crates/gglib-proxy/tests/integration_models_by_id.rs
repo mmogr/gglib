@@ -61,6 +61,10 @@ impl ModelRuntimePort for Running {
         Ok(())
     }
 
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
+
     fn pinned(&self) -> Option<PinnedSpec> {
         self.pinned.then(|| pin(self.id, "qwen"))
     }

@@ -92,3 +92,87 @@ async fn non_retryable_errors_carry_neither_header() {
     );
     assert!(!response.headers().contains_key(RETRY_REASON_HEADER));
 }
+
+/// One image refusal as the client receives it: status, the body's type and
+/// code and message, and whether it says when to retry.
+async fn image_refusal(err: ModelRuntimeError) -> (StatusCode, serde_json::Value, bool) {
+    let response = handle_runtime_error(err);
+    let status = response.status();
+    let retry_after = response
+        .headers()
+        .contains_key(axum::http::header::RETRY_AFTER);
+    let body = http_body_util::BodyExt::collect(response.into_body())
+        .await
+        .unwrap()
+        .to_bytes();
+    (status, serde_json::from_slice(&body).unwrap(), retry_after)
+}
+
+/// A missing image runtime is a 503 that names the install command and
+/// never says when to retry: retrying cannot install it.
+#[tokio::test]
+async fn image_runtime_not_installed_is_a_503_without_retry_after() {
+    let (status, body, retry_after) =
+        image_refusal(ModelRuntimeError::ImageRuntimeNotInstalled).await;
+
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert!(
+        !retry_after,
+        "a missing runtime does not come back by waiting"
+    );
+    assert_eq!(body["error"]["type"], "server_error");
+    assert_eq!(body["error"]["code"], "image_runtime_not_installed");
+    let message = body["error"]["message"].as_str().unwrap();
+    assert!(message.contains("gglib config sd install"), "{message}");
+}
+
+/// An image model missing a file is a 400 naming every missing role.
+#[tokio::test]
+async fn image_model_incomplete_is_a_400_naming_every_missing_role() {
+    let (status, body, retry_after) = image_refusal(ModelRuntimeError::ImageModelIncomplete {
+        model: "flux1-schnell".to_owned(),
+        missing: vec![
+            gglib_core::domain::ComponentRole::Vae,
+            gglib_core::domain::ComponentRole::T5xxl,
+        ],
+    })
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(!retry_after);
+    assert_eq!(body["error"]["type"], "invalid_request_error");
+    assert_eq!(body["error"]["code"], "image_model_incomplete");
+    let message = body["error"]["message"].as_str().unwrap();
+    for named in [
+        "'flux1-schnell'",
+        "VAE",
+        "T5-XXL",
+        "vae=<path>",
+        "t5xxl=<path>",
+    ] {
+        assert!(message.contains(named), "{named} missing from {message}");
+    }
+}
+
+/// No room beside a held model is the one image refusal worth retrying: a
+/// 503 with Retry-After, naming the held model and the bytes.
+#[tokio::test]
+async fn image_model_does_not_fit_is_a_retryable_503_naming_the_held_model() {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let (status, body, retry_after) = image_refusal(ModelRuntimeError::ImageModelDoesNotFit {
+        model: "flux1-schnell".to_owned(),
+        held_model: "qwen3-27b".to_owned(),
+        needed_bytes: Some(28 * GIB),
+        free_bytes: Some(9 * GIB),
+    })
+    .await;
+
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert!(retry_after, "a hold ends; the client may come back");
+    assert_eq!(body["error"]["type"], "service_unavailable");
+    assert_eq!(body["error"]["code"], "image_model_does_not_fit");
+    let message = body["error"]["message"].as_str().unwrap();
+    for named in ["'flux1-schnell'", "'qwen3-27b'", "28.00 GiB", "9.00 GiB"] {
+        assert!(message.contains(named), "{named} missing from {message}");
+    }
+}

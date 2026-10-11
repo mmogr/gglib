@@ -76,9 +76,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`models_projector.rs`** — The projector link on `ModelOps`: an update's `projector_path` applied through `ModelService::set_projector`, and the choices the inspector's picker offers
 - **`models_upgrade.rs`** — `gglib model upgrade` on `ModelOps`: the commit check, and the download and row rewrite, whose progress is the download row handed to the caller's `RowCallback`; a model that is being served is refused first
 - **`proxy.rs`** — `ProxyOps` OpenAI-compatible proxy lifecycle management
-- **`servers.rs`** — `ServerOps` llama.cpp server lifecycle management
+- **`servers.rs`** — `ServerOps` model server lifecycle management (a stop names the model, in whichever slot it sits)
 - **`settings.rs`** — `SettingsOps` application settings persistence
-- **`setup.rs`** — `SetupOps` first-run setup and dependency checking
+- **`setup.rs`** — `SetupOps` first-run setup and dependency checking; `setup_image_runtime.rs` adds the image runtime's install, status and removal
 - **`transcript.rs`** — What a turn writes to its conversation, for the daemon's agent runs and the CLI's chat alike: `save_user`, the user's message when the turn starts, and `save_reply`, the reply when it ends, whatever the end, rebuilt from the events the turn logged (`FrameTimes` holds when), each named for the model that made it (`MadeBy`); and `remember_thinking`, the Thinking choice a turn said, remembered on the conversation
 - **`types.rs`** — Shared DTOs and type definitions for the service layer. Includes `UpdateModelRequest` (in `types_model_update.rs`), the request the inspector sends and `gglib model update` builds; its `apply_to` is what `ModelOps::update` writes it onto a model's row with. An omitted field is a no-op, and an empty `inference_defaults` returns the model to inheriting. It has triple-Option semantics for `server_defaults`: `Some(Some(cfg))` sets per-model server config, `Some(None)` clears it, and `None` (field omitted) is a no-op. `projector_path` has the same three states: a path links the model to that projector, `null` unlinks it, and an omitted key leaves the link alone.
 
@@ -150,4 +150,5 @@ handwritten mock structs in `src/test_support.rs` (no external mocking framework
 | `settings.rs` | 16 — get defaults, profiles and nulls through the API, memory threshold (Some/None), and the models directory: saved and read back, its default, a refused path |
 | `mcp.rs` | 11 — list empty, add+list, an SSE server refused on add, a stored SSE server listed as unsupported and refused a run and an edit, invalid type, remove, a taken name on add and on rename, servers already sharing a name, a failed test, a test of a missing server |
 | `setup.rs` | 3 — smoke test (get_status returns Ok), and the memory floor and the directory and memory shapes the status shares with the settings routes |
-| `servers.rs` | 9 — 6 registry unit tests + list empty + stop not-found + stop-all no-op |
+| `servers.rs` | 9 — 6 registry unit tests + list empty + stop not-found + stop-all no-op; the events, the image model's stop by id, a stop that finds the model gone, and the health monitor in `servers_events_tests.rs` |
+| `setup_image_runtime.rs` | 7 — the status from its parts (CPU warning, no pre-built build, wire shape), the running image model, removal refused while one runs and not for a chat model, and the removal itself refused with nothing removed |

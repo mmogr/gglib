@@ -616,3 +616,16 @@ fn the_recipes_are_the_measured_ones() {
     );
     assert_eq!(roles(qwen), [ComponentRole::Vae, ComponentRole::Llm]);
 }
+
+/// Each family's compute margin is its measured 1024x1024 VAE decode
+/// buffer rounded up to a whole GiB.
+#[test]
+fn each_family_reserves_its_decode_buffer_rounded_up() {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    assert_eq!(ImageFamily::Flux1.recipe().compute_margin_bytes, 7 * GIB);
+    assert_eq!(ImageFamily::Sdxl.recipe().compute_margin_bytes, 8 * GIB);
+    assert_eq!(
+        ImageFamily::QwenImage21.recipe().compute_margin_bytes,
+        9 * GIB
+    );
+}

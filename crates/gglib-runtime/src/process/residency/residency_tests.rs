@@ -65,6 +65,7 @@ pub(in crate::process) fn launch_spec(id: u32, name: &str) -> ModelLaunchSpec {
         file_path: format!("/nonexistent/{name}.gguf").into(),
         projector: None,
         image_family: None,
+        components: Vec::new(),
         tags: Vec::new(),
         architecture: None,
         quantization: None,

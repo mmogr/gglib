@@ -30,6 +30,8 @@ impl AdmissionRelease for Released {
     fn release(&self, _slot: usize) {
         self.0.fetch_add(1, Ordering::SeqCst);
     }
+
+    fn progress(&self, _slot: usize) {}
 }
 
 impl Released {
@@ -82,6 +84,10 @@ impl ModelRuntimePort for Holding {
         Ok(())
     }
 
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
+
     fn hold(&self, port: u16, model_id: u32) -> Option<AdmissionLease> {
         self.asked.lock().unwrap().push((port, model_id));
         let released: Arc<dyn AdmissionRelease> = Arc::clone(&self.released) as _;
@@ -126,6 +132,7 @@ async fn a_local_upstream_names_the_model_it_holds() {
         pid: None,
         port: 19_555,
         started_at: 0,
+        runtime: gglib_core::domain::RuntimeKind::Llama,
     };
     assert_eq!(
         local(&state, &req, server).await.unwrap().local_model,

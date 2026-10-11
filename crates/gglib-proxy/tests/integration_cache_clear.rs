@@ -47,6 +47,10 @@ impl ModelRuntimePort for RecordingRuntime {
         self.stops.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
 }
 
 // ─── Proxy harness ─────────────────────────────────────────────────────────

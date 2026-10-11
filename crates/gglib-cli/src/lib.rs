@@ -28,6 +28,7 @@ pub(crate) mod projector_args;
 pub(crate) mod proxy_bind_args;
 pub(crate) mod reasoning_args;
 pub(crate) mod sampling_params;
+pub(crate) mod sd_commands;
 pub(crate) mod shared_args;
 pub(crate) mod subcommands;
 pub(crate) mod target;

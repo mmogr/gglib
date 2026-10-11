@@ -14,7 +14,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use gglib_core::cache_config::CacheRamSetting;
-use gglib_core::domain::{TemplateCapsState, classify_cache_ram};
+use gglib_core::domain::{
+    CacheRamHealth, LaunchNarration, RuntimeKind, TemplateCapsState, classify_cache_ram,
+};
 use gglib_core::paths::slot_model_prefix;
 use gglib_core::ports::{
     AdmissionLease, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError, RunningTarget,
@@ -26,13 +28,15 @@ use tracing::{info, warn};
 use super::spawned_child::{LIVENESS_TICK, SpawnedChild};
 use super::vram;
 use crate::launch_narration::NarrationInputs;
+use crate::process::SpawnConfig;
 use crate::process::admission::{AdmissionQueue, PRIMARY_SLOT, Resident};
 use crate::process::core::GuiProcessCore;
 use crate::process::health::wait_for_http_health;
+use crate::sd::SdServerConfig;
 use crate::server_config::build_server_config_narrated;
 
 #[path = "launch_files.rs"]
-mod launch_files;
+pub(super) mod launch_files;
 
 /// Everything one launch needs, resolved before it is spawned.
 ///
@@ -42,9 +46,11 @@ mod launch_files;
 pub(super) struct LaunchRequest {
     /// The model to launch, already resolved from the catalog.
     pub spec: ModelLaunchSpec,
-    /// Options for this launch: template ⊕ per-call ⊕ context chain.
+    /// Options for this launch: template ⊕ per-call ⊕ context chain. Unread
+    /// for an image model.
     pub opts: ServerConfigOptions,
-    /// The context size `opts` resolves to, and where it came from.
+    /// The context size `opts` resolves to, and where it came from. `0` for
+    /// an image model, which has none.
     pub context: (u64, ContextSizeSource),
     /// Which resident slot this launch is claiming.
     pub slot: usize,
@@ -81,12 +87,15 @@ pub(super) async fn run(
             // The one moment ADR 0007's observation can be taken: a fresh
             // spawn is health-ready, so its /props describes exactly this
             // binary–model pair. Detached, so a slow read can neither delay
-            // the admission this launch owes nor fail it.
-            tokio::spawn(observe_template_caps(
-                catalog,
-                request.spec.id,
-                outcome.0.base_url.clone(),
-            ));
+            // the admission this launch owes nor fail it. sd-server has no
+            // /props and no chat template to report.
+            if request.spec.runtime() == RuntimeKind::Llama {
+                tokio::spawn(observe_template_caps(
+                    catalog,
+                    request.spec.id,
+                    outcome.0.base_url.clone(),
+                ));
+            }
             Ok(outcome)
         }
         Err(e) => {
@@ -133,6 +142,15 @@ async fn observe_template_caps(
     }
 }
 
+/// What the runtime-specific half of a launch hands the shared half: the
+/// spawn, its narration, and what the resident records about it.
+struct Planned {
+    config: SpawnConfig,
+    narration: LaunchNarration,
+    slot_restore_supported: bool,
+    cache_ram_health: CacheRamHealth,
+}
+
 #[allow(clippy::too_many_lines)]
 async fn launch(
     core: &Arc<RwLock<GuiProcessCore>>,
@@ -141,40 +159,41 @@ async fn launch(
 ) -> Result<(RunningTarget, AdmissionLease), ModelRuntimeError> {
     let LaunchRequest {
         spec,
-        opts,
         context: (resolved_ctx, ctx_source),
         slot,
         evict,
-        cache_ram: cache_ram_setting,
         health_deadline_secs,
+        ..
     } = request;
-    let mut opts = opts.clone();
+    let runtime = spec.runtime();
 
-    // First, before any file is read or any resident stopped: llama-server
-    // serves chat and cannot load a model that draws images, so a launch of
-    // one could only displace a working model to fail.
-    if spec.image_family.is_some() {
-        return Err(ModelRuntimeError::ImageModelCannotChat(spec.name.clone()));
-    }
-
-    launch_files::ensure_present(spec).await?;
-
-    // --- Stop whatever this launch is displacing ---
+    // --- Stop whatever this launch is displacing, first ---
     //
     // The queue has already decided this is safe: a slot is only offered for
-    // eviction once it has no requests in flight.
+    // eviction once it has no requests in flight. And it has already
+    // forgotten the resident: `poll` captured this id and replaced the slot
+    // with `Loading` in the same critical section. So nothing may return
+    // before this kill. A launch that gave up earlier, on a file gone
+    // missing say, freed the slot with the displaced server still running
+    // and unknown to the queue, and `spawn`'s "already running" guard then
+    // refused its relaunch until the daemon restarted.
     if let Some(model_id) = evict {
-        // No `queue.evict` here. `poll` captured this id from the resident and
-        // replaced the slot with `Loading` in the same critical section, so the
-        // record is already gone and the call could only ever return `None` —
-        // its `info!` never fired. The id is what the kill needs, and `poll`
-        // handing it over is what makes the displacement safe.
         info!(model_id = %model_id, slot = %slot, "Stopping resident model for swap");
         let mut core_w = core.write().await;
         if let Err(e) = core_w.kill(*model_id).await {
             warn!(error = %e, "Failed to stop displaced model cleanly, continuing");
         }
     }
+
+    // The files again, after the stop: `admit` checked them before the
+    // queue, and one removed while this request waited fails here, the same
+    // way whichever runtime serves it.
+    let sd_server = core
+        .read()
+        .await
+        .binary(RuntimeKind::StableDiffusion)
+        .to_path_buf();
+    launch_files::preflight(spec, &sd_server).await?;
 
     {
         let mut core_w = core.write().await;
@@ -184,10 +203,181 @@ async fn launch(
     info!(
         model_id = %spec.id,
         model_name = %spec.name,
+        runtime = %runtime.label(),
         context = %resolved_ctx,
         slot = %slot,
         "Starting model"
     );
+
+    let planned = match runtime {
+        RuntimeKind::Llama => plan_llama(queue, request),
+        RuntimeKind::StableDiffusion => plan_sd(request)?,
+    };
+    let Planned {
+        config,
+        narration,
+        slot_restore_supported,
+        cache_ram_health,
+    } = planned;
+    crate::proxy::banner::print_launch_narration(&narration);
+
+    // The guard is armed inside the same critical section that created the
+    // child, from the pid `spawn` hands back. Reading the pid afterwards would
+    // mean a second lock acquisition with an `await` between it and the spawn
+    // — a suspension point at which the child exists and nothing owns it,
+    // which is the leak this whole commit is about.
+    let (port, mut child) = {
+        let mut core_w = core.write().await;
+        let (port, pid) = core_w
+            .spawn(config)
+            .await
+            .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?;
+        (port, SpawnedChild::arm(core, spec.id, pid))
+    };
+
+    // From here until `queue.install` the child exists and nothing else owns
+    // it. `spawn` registered it in `GuiProcessCore::processes`, but the queue
+    // has no resident for it yet — and every kill path is gated on
+    // `queue.evict` returning one, while `cleanup_dead` reaps only processes
+    // that have already exited. A failure in this window therefore left a live
+    // server holding VRAM with nobody able to route to it or stop it, and
+    // `spawn`'s "already running" guard refused every retry until the daemon
+    // was restarted.
+    //
+    // The guard, not an error arm, because the dominant failure here is
+    // *cancellation*: `run_launch` runs inside a `tokio::time::timeout`, which
+    // drops the future rather than returning, so an `if let Err(..)` cleanup
+    // is skipped entirely on exactly the slow launches this is about.
+
+    let deadline_secs = *health_deadline_secs;
+    let started = tokio::time::Instant::now();
+
+    // A launch that fails because gglib chose the context has to say so.
+    // Everything else about a startup failure is the model server's business;
+    // this one is ours, the remedy is not guessable from the symptom, and the
+    // failure repeats identically forever — the budget is a per-machine
+    // constant, so a fit too large to load produces the same number on every
+    // retry. An image model has no context, so this never speaks for one.
+    let blame_the_fit = || {
+        if runtime == RuntimeKind::Llama && *ctx_source == ContextSizeSource::FittedToHardware {
+            format!(
+                " — context {resolved_ctx} was fitted to this machine; set a \
+                 global default to override it, or GGLIB_DISABLE_CONTEXT_FIT=1 \
+                 to fall back to {}",
+                gglib_core::settings::DEFAULT_CONTEXT_SIZE
+            )
+        } else {
+            String::new()
+        }
+    };
+
+    // Raced against the child's own exit, not just run to the deadline. A
+    // server that dies on startup — bad arguments, OOM, a missing GPU library
+    // — never answers its health probe, and polling a dead port until a
+    // budget sized for a large model runs out would make a failed launch take
+    // minutes to report.
+    let health = wait_for_http_health(port, deadline_secs, runtime);
+    tokio::pin!(health);
+    loop {
+        tokio::select! {
+            result = &mut health => {
+                result.map_err(|e| {
+                    ModelRuntimeError::HealthCheckFailed(format!("{e}{}", blame_the_fit()))
+                })?;
+                break;
+            }
+            () = tokio::time::sleep(LIVENESS_TICK) => {
+                // `try_write`, not `write`: this is a best-effort check, and
+                // blocking on the lock would stop polling the health future it
+                // is supervising while that future's deadline keeps running.
+                // A missed tick simply defers to the next one.
+                if core.try_write().is_ok_and(|mut c| c.has_exited(spec.id)) {
+                    return Err(ModelRuntimeError::HealthCheckFailed(format!(
+                        "{} for {} exited during startup{}",
+                        runtime.server_name(),
+                        spec.name,
+                        blame_the_fit()
+                    )));
+                }
+            }
+        }
+    }
+
+    // Diagnostic, not an instrument: `process::residency` is Tier B, which
+    // owes no deletion criterion (ADR 0001). Recorded next to the deadline
+    // that allowed it so a person debugging a slow launch can see both.
+    info!(
+        model_id = %spec.id,
+        model_name = %spec.name,
+        weights_bytes = %spec.file_size_bytes,
+        deadline_secs = %deadline_secs,
+        load_secs = %started.elapsed().as_secs(),
+        "model became healthy"
+    );
+
+    let lease = queue.install(
+        *slot,
+        Resident {
+            model_id: spec.id,
+            model_name: spec.name.clone(),
+            context_size: *resolved_ctx,
+            port,
+            projector: spec.projector.clone(),
+            runtime,
+            components: spec.components.clone(),
+            slot_restore_supported,
+            model_sampling: spec.model_sampling,
+            cache_ram_health,
+            narration: Some(narration.clone()),
+            inflight: 0,
+            resident_since: tokio::time::Instant::now(),
+            weights_bytes: spec.file_size_bytes,
+        },
+    );
+
+    // The queue owns the process now: eviction, recycling and shutdown can all
+    // reach it, so the guard must not.
+    child.disarm();
+
+    info!(
+        model_id = %spec.id,
+        model_name = %spec.name,
+        port = %port,
+        context = %resolved_ctx,
+        slot = %slot,
+        primary = %(*slot == PRIMARY_SLOT),
+        "Model started successfully"
+    );
+
+    let target = RunningTarget::local(
+        port,
+        spec.id,
+        spec.name.clone(),
+        *resolved_ctx,
+        true, // fresh spawn — cache slots are stale
+    )
+    .with_slot_restore_supported(slot_restore_supported)
+    .with_model_sampling(spec.model_sampling)
+    .with_cache_ram_health(cache_ram_health)
+    .with_runtime(runtime)
+    .with_narration(narration);
+
+    Ok((target, lease))
+}
+
+/// llama-server's half of a launch: the KV cache types, the host-RAM prompt
+/// cache, the disk slot layer, the command line, and the narration of all
+/// of it.
+fn plan_llama(queue: &AdmissionQueue, request: &LaunchRequest) -> Planned {
+    let LaunchRequest {
+        spec,
+        opts,
+        context: (resolved_ctx, ctx_source),
+        slot,
+        cache_ram: cache_ram_setting,
+        ..
+    } = request;
+    let mut opts = opts.clone();
 
     // Resolve K/V cache types up front (rather than leaving it to
     // `build_server_config`) so the RAM budget below reflects the *actual*
@@ -271,7 +461,6 @@ async fn launch(
         slot_restore,
         capabilities: &capabilities,
     });
-    crate::proxy::banner::print_launch_narration(&narration);
 
     // Purge stale slot .bin files before spawning a fresh instance: old slot
     // files are incompatible with the new server process. Namespaced by model
@@ -283,144 +472,41 @@ async fn launch(
         purge_stale_slot_bin_files(slot_dir, spec.id);
     }
 
-    // The guard is armed inside the same critical section that created the
-    // child, from the pid `spawn` hands back. Reading the pid afterwards would
-    // mean a second lock acquisition with an `await` between it and the spawn
-    // — a suspension point at which the child exists and nothing owns it,
-    // which is the leak this whole commit is about.
-    let (port, mut child) = {
-        let mut core_w = core.write().await;
-        let (port, pid) = core_w
-            .spawn(config)
-            .await
-            .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?;
-        (port, SpawnedChild::arm(core, spec.id, pid))
-    };
-
-    // From here until `queue.install` the child exists and nothing else owns
-    // it. `spawn` registered it in `GuiProcessCore::processes`, but the queue
-    // has no resident for it yet — and every kill path is gated on
-    // `queue.evict` returning one, while `cleanup_dead` reaps only processes
-    // that have already exited. A failure in this window therefore left a live
-    // llama-server holding VRAM with nobody able to route to it or stop it,
-    // and `spawn`'s "already running" guard refused every retry until the
-    // daemon was restarted.
-    //
-    // The guard, not an error arm, because the dominant failure here is
-    // *cancellation*: `run_launch` runs inside a `tokio::time::timeout`, which
-    // drops the future rather than returning, so an `if let Err(..)` cleanup
-    // is skipped entirely on exactly the slow launches this is about.
-
-    let deadline_secs = *health_deadline_secs;
-    let started = tokio::time::Instant::now();
-
-    // A launch that fails because gglib chose the context has to say so.
-    // Everything else about a startup failure is the model server's business;
-    // this one is ours, the remedy is not guessable from the symptom, and the
-    // failure repeats identically forever — the budget is a per-machine
-    // constant, so a fit too large to load produces the same number on every
-    // retry.
-    let blame_the_fit = || {
-        if *ctx_source == ContextSizeSource::FittedToHardware {
-            format!(
-                " — context {resolved_ctx} was fitted to this machine; set a \
-                 global default to override it, or GGLIB_DISABLE_CONTEXT_FIT=1 \
-                 to fall back to {}",
-                gglib_core::settings::DEFAULT_CONTEXT_SIZE
-            )
-        } else {
-            String::new()
-        }
-    };
-
-    // Raced against the child's own exit, not just run to the deadline. A
-    // server that dies on startup — bad arguments, OOM, a missing GPU library
-    // — never answers `/health`, and polling a dead port until a budget sized
-    // for a large model runs out would make a failed launch take minutes to
-    // report.
-    let health = wait_for_http_health(port, deadline_secs);
-    tokio::pin!(health);
-    loop {
-        tokio::select! {
-            result = &mut health => {
-                result.map_err(|e| {
-                    ModelRuntimeError::HealthCheckFailed(format!("{e}{}", blame_the_fit()))
-                })?;
-                break;
-            }
-            () = tokio::time::sleep(LIVENESS_TICK) => {
-                // `try_write`, not `write`: this is a best-effort check, and
-                // blocking on the lock would stop polling the health future it
-                // is supervising while that future's deadline keeps running.
-                // A missed tick simply defers to the next one.
-                if core.try_write().is_ok_and(|mut c| c.has_exited(spec.id)) {
-                    return Err(ModelRuntimeError::HealthCheckFailed(format!(
-                        "llama-server for {} exited during startup{}",
-                        spec.name,
-                        blame_the_fit()
-                    )));
-                }
-            }
-        }
+    Planned {
+        config: SpawnConfig::Llama(config),
+        narration,
+        slot_restore_supported: slot_restore.enabled,
+        cache_ram_health,
     }
+}
 
-    // Diagnostic, not an instrument: `process::residency` is Tier B, which
-    // owes no deletion criterion (ADR 0001). Recorded next to the deadline
-    // that allowed it so a person debugging a slow launch can see both.
-    info!(
-        model_id = %spec.id,
-        model_name = %spec.name,
-        weights_bytes = %spec.file_size_bytes,
-        deadline_secs = %deadline_secs,
-        load_secs = %started.elapsed().as_secs(),
-        "model became healthy"
-    );
-
-    let lease = queue.install(
-        *slot,
-        Resident {
-            model_id: spec.id,
+/// `sd-server`'s half of a launch: the model's files, its family and the
+/// port, and the narration of where it was placed and what it was judged to
+/// need. No context, no prompt cache, no disk slots: sd-server has none.
+fn plan_sd(request: &LaunchRequest) -> Result<Planned, ModelRuntimeError> {
+    let LaunchRequest { spec, slot, .. } = request;
+    // A model's runtime is its family, so an sd launch always has one; the
+    // footprint is the one the queue placed it by.
+    let (Some(family), Some(footprint)) = (spec.image_family, vram::image_footprint(spec)) else {
+        return Err(ModelRuntimeError::Internal(format!(
+            "'{}' was launched on sd-server without an image family",
+            spec.name
+        )));
+    };
+    let narration = crate::launch_narration::narrate_sd(spec, *slot, footprint);
+    Ok(Planned {
+        config: SpawnConfig::Sd(SdServerConfig {
+            model_id: i64::from(spec.id),
             model_name: spec.name.clone(),
-            context_size: *resolved_ctx,
-            port,
-            projector: spec.projector.clone(),
-            slot_restore_supported: slot_restore.enabled,
-            model_sampling: spec.model_sampling,
-            cache_ram_health,
-            narration: Some(narration.clone()),
-            inflight: 0,
-            resident_since: tokio::time::Instant::now(),
-            weights_bytes: spec.file_size_bytes,
-        },
-    );
-
-    // The queue owns the process now: eviction, recycling and shutdown can all
-    // reach it, so the guard must not.
-    child.disarm();
-
-    info!(
-        model_id = %spec.id,
-        model_name = %spec.name,
-        port = %port,
-        context = %resolved_ctx,
-        slot = %slot,
-        primary = %(*slot == PRIMARY_SLOT),
-        "Model started successfully"
-    );
-
-    let target = RunningTarget::local(
-        port,
-        spec.id,
-        spec.name.clone(),
-        *resolved_ctx,
-        true, // fresh spawn — cache slots are stale
-    )
-    .with_slot_restore_supported(slot_restore.enabled)
-    .with_model_sampling(spec.model_sampling)
-    .with_cache_ram_health(cache_ram_health)
-    .with_narration(narration);
-
-    Ok((target, lease))
+            model_path: spec.file_path.clone(),
+            family,
+            components: spec.components.clone(),
+            port: None,
+        }),
+        narration,
+        slot_restore_supported: false,
+        cache_ram_health: CacheRamHealth::LlamaDefault,
+    })
 }
 
 /// Remove stale slot files for the given model from `slot_dir`.

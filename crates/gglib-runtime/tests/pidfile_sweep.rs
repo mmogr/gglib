@@ -9,10 +9,10 @@
 //! `launch_tests` and `core_drop_tests` spawn while they still read them.
 //!
 //! Nothing it finds can be killed. The resource root is the test root too,
-//! where no llama-server is installed, so `is_our_llama_server` verifies no
-//! process and the sweep only removes files.
+//! where neither llama-server nor `sd-server` is installed, so `is_our_server`
+//! verifies no process and the sweep only removes files.
 
-use gglib_core::paths::{isolate_data_root, llama_server_path, pids_dir};
+use gglib_core::paths::{isolate_data_root, llama_server_path, pids_dir, sd_server_path};
 use gglib_runtime::pidfile::{cleanup_orphaned_servers, list_pidfiles, write_pidfile};
 
 #[tokio::test]
@@ -22,6 +22,7 @@ async fn cleanup_removes_stale_pidfiles() {
     let root = isolate_data_root();
     assert!(pids_dir().unwrap().starts_with(root));
     assert!(llama_server_path().unwrap().starts_with(root));
+    assert!(sd_server_path().unwrap().starts_with(root));
 
     write_pidfile(1, 999_999, 9999).expect("write failed");
 

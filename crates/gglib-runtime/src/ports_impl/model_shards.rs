@@ -53,18 +53,20 @@ pub fn total_model_bytes(file_path: &std::path::Path) -> u64 {
 }
 
 /// On-disk size in bytes of everything a launch of `model` loads into
-/// memory: its weights, every shard, plus its projector when it has one.
+/// memory: its weights, every shard, plus its projector when it has one,
+/// plus each component an image model draws with.
 ///
 /// The one figure a launch budgets with and `gglib model explain` reports, so
-/// the two cannot disagree about a model that has a projector. A projector
-/// that cannot be read adds `0`, as an unreadable shard does.
+/// the two cannot disagree about a model that has a projector or components.
+/// A projector or component that cannot be read adds `0`, as an unreadable
+/// shard does.
 pub fn resident_bytes(model: &gglib_core::domain::Model) -> u64 {
-    let projector = model
-        .projector_path
-        .as_deref()
-        .and_then(|path| path.metadata().ok())
-        .map_or(0, |md| md.len());
-    total_model_bytes(&model.file_path).saturating_add(projector)
+    let size_of = |path: &std::path::Path| path.metadata().map_or(0, |md| md.len());
+    let projector = model.projector_path.as_deref().map_or(0, size_of);
+    let components: u64 = model.components.iter().map(|c| size_of(&c.path)).sum();
+    total_model_bytes(&model.file_path)
+        .saturating_add(projector)
+        .saturating_add(components)
 }
 
 #[cfg(test)]
@@ -207,5 +209,35 @@ mod tests {
         let missing = dir.path().join("mmproj-F16.gguf");
 
         assert_eq!(resident_bytes(&model(&weights, Some(&missing))), 2048);
+    }
+
+    // ── Plus an image model's components ─────────────────────────────────
+
+    /// Each component counts once, at its own size: an image model's VAE and
+    /// text encoders are loaded with its weights, and the T5-XXL encoder
+    /// alone is most of Flux.1's memory. A component that is not there adds
+    /// nothing, as a missing projector does.
+    #[test]
+    fn resident_bytes_adds_each_component() {
+        use gglib_core::domain::{ComponentRole, ImageFamily, ModelComponent};
+
+        let dir = tempfile::tempdir().unwrap();
+        let weights = dir.path().join("flux.gguf");
+        std::fs::write(&weights, vec![0u8; 2048]).unwrap();
+        let mut flux = model(&weights, None);
+        flux.image_family = Some(ImageFamily::Flux1);
+        for (role, len) in [
+            (ComponentRole::Vae, 100),
+            (ComponentRole::ClipL, 30),
+            (ComponentRole::T5xxl, 7),
+        ] {
+            let path = dir.path().join(format!("{role}.safetensors"));
+            std::fs::write(&path, vec![0u8; len]).unwrap();
+            flux.components.push(ModelComponent { role, path });
+        }
+        assert_eq!(resident_bytes(&flux), 2048 + 100 + 30 + 7);
+
+        std::fs::remove_file(dir.path().join("t5xxl.safetensors")).unwrap();
+        assert_eq!(resident_bytes(&flux), 2048 + 100 + 30);
     }
 }

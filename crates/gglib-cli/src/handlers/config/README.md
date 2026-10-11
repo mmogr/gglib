@@ -18,6 +18,13 @@ runs an update that `gglib_runtime::llama::update_preflight` has allowed.
 `llama_events` draws the progress of all three, and is the only place a
 build or a download is rendered for a terminal.
 
+`sd` is the image runtime's twin, stable-diffusion.cpp's `sd-server`:
+`install` (a download, or a source build on `--build` or where no release
+fits), `status` and `uninstall` (refused while the daemon that serves this
+data root runs an image model); `sd_ensure` is the install `gglib serve`
+offers when it is asked for an image model and finds no `sd-server`. Both
+draw with `llama_events` too, under stable-diffusion.cpp's name.
+
 `check_deps` reports and installs nothing. `fast_downloads` is the one
 handler here that provisions anything, and only on an explicit
 `enable`, or when the user accepts the offer its `prompt` subcommand

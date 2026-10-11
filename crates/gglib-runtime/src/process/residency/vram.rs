@@ -14,8 +14,8 @@
 
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::domain::{
-    BUDGET_UTILISATION, RESIDENCY_UTILISATION, SecondarySlotDecision, SlotFootprint,
-    decide_secondary_slot,
+    BUDGET_UTILISATION, RESIDENCY_UTILISATION, RuntimeKind, SecondarySlotDecision, SlotFootprint,
+    decide_secondary_slot, decide_secondary_slot_for,
 };
 use gglib_core::ports::ModelLaunchSpec;
 
@@ -56,6 +56,34 @@ pub(super) fn secondary_slot_decision(
 ) -> SecondarySlotDecision {
     decide_secondary_slot(
         footprint_of(spec, kv_types, context_size),
+        crate::system::free_gpu_memory_bytes(),
+    )
+}
+
+/// What an image model occupies while it draws: its files (the weights and
+/// every component, `spec.file_size_bytes`) and its family's compute margin,
+/// the 1024x1024 VAE decode buffer. No KV cache.
+///
+/// `None` for a model that chats, which [`footprint_of`] sizes instead.
+#[must_use]
+pub(super) fn image_footprint(spec: &ModelLaunchSpec) -> Option<SlotFootprint> {
+    let family = spec.image_family?;
+    Some(SlotFootprint {
+        weights_bytes: spec
+            .file_size_bytes
+            .saturating_add(family.recipe().compute_margin_bytes),
+        kv_bytes: 0,
+    })
+}
+
+/// Whether image model `spec` may take the second slot right now: judged by
+/// the live free reading alone, with no ceiling (see
+/// [`decide_secondary_slot_for`]).
+#[must_use]
+pub(super) fn image_slot_decision(spec: &ModelLaunchSpec) -> SecondarySlotDecision {
+    decide_secondary_slot_for(
+        RuntimeKind::StableDiffusion,
+        image_footprint(spec),
         crate::system::free_gpu_memory_bytes(),
     )
 }
@@ -302,6 +330,8 @@ mod tests {
             context_size: 4096,
             port: 8080,
             projector: None,
+            runtime: gglib_core::domain::RuntimeKind::Llama,
+            components: Vec::new(),
             slot_restore_supported: true,
             cache_ram_health,
             narration: None,

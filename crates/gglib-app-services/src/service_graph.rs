@@ -35,7 +35,7 @@ use gglib_core::server_config::ServerConfigOptions;
 use gglib_core::services::AppCore;
 use gglib_mcp::McpService;
 use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
-use gglib_runtime::process::ProcessManager;
+use gglib_runtime::process::{ProcessManager, RuntimeBinaries};
 use gglib_runtime::proxy::ProxySupervisor;
 
 use crate::benchmark::{BenchmarkDeps, BenchmarkOps};
@@ -86,6 +86,8 @@ pub struct ServiceGraphParams {
     pub base_port: Option<u16>,
     /// Path to the llama-server binary.
     pub llama_server_path: PathBuf,
+    /// Path to the `sd-server` binary, the image runtime.
+    pub sd_server_path: PathBuf,
     /// The file the remote tunnel keeps device keys in; `None` for the one
     /// beside the endpoint identity. See [`RemoteOps::new`].
     pub device_keys_path: Option<PathBuf>,
@@ -150,6 +152,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         loop_guard_trips,
         base_port,
         llama_server_path,
+        sd_server_path,
         device_keys_path,
     } = params;
 
@@ -172,7 +175,10 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
     // makes "one llama-server at a time" an invariant rather than a hope.
     let process_manager = Arc::new(ProcessManager::new(
         base_port,
-        llama_server_path.to_string_lossy().into_owned(),
+        RuntimeBinaries {
+            llama: llama_server_path,
+            sd: sd_server_path,
+        },
         Arc::clone(&catalog),
         ServerConfigOptions::default(),
         // Parity with the CLI proxy: auto-size the host-RAM prompt cache.

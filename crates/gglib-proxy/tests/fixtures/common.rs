@@ -58,6 +58,10 @@ impl ModelRuntimePort for NoopRuntime {
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         Ok(())
     }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
 }
 
 // ─── ModelCatalogPort mock ────────────────────────────────────────────────
@@ -189,6 +193,10 @@ impl ModelRuntimePort for FixedUpstream {
         Ok(())
     }
 
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
+
     fn pinned(&self) -> Option<gglib_core::ports::PinnedSpec> {
         self.pinned.then(|| super::pinned::pin(1, &self.model_name))
     }
@@ -244,6 +252,10 @@ impl ModelRuntimePort for CountingRuntime {
 
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         Ok(())
+    }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
     }
 }
 
@@ -387,6 +399,8 @@ impl gglib_core::ports::AdmissionRelease for ResidentSimSlot {
         let mut state = self.0.lock().unwrap();
         state.inflight = state.inflight.saturating_sub(1);
     }
+
+    fn progress(&self, _slot: usize) {}
 }
 
 impl ResidentSimRuntime {
@@ -476,6 +490,10 @@ impl ModelRuntimePort for ResidentSimRuntime {
 
     async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
         Ok(())
+    }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
     }
 }
 

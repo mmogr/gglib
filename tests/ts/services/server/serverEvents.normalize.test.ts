@@ -121,6 +121,7 @@ describe('serverEvents.normalize', () => {
         pid: 4242,
         port: MOCK_BASE_PORT,
         started_at: 1_700_000_000,
+        runtime: 'llama',
       },
     ]);
 
@@ -146,7 +147,14 @@ describe('serverEvents.normalize', () => {
   it('drops a malformed REST entry without losing the snapshot', () => {
     const evt = normalizeServerSnapshotFromList([
       null as unknown as ServerInfo,
-      { model_id: 9, model_name: 'Good', pid: null, port: 2, started_at: 1_700_000_000 },
+      {
+        model_id: 9,
+        model_name: 'Good',
+        pid: null,
+        port: 2,
+        started_at: 1_700_000_000,
+        runtime: 'llama',
+      },
     ]);
 
     expect(evt.servers).toHaveLength(1);
@@ -155,8 +163,22 @@ describe('serverEvents.normalize', () => {
 
   it('drops REST entries whose id will not coerce, keeping the rest', () => {
     const evt = normalizeServerSnapshotFromList([
-      { model_id: NaN, model_name: 'Bad', pid: null, port: 1, started_at: 1_700_000_000 },
-      { model_id: 9, model_name: 'Good', pid: null, port: 2, started_at: 1_700_000_000 },
+      {
+        model_id: NaN,
+        model_name: 'Bad',
+        pid: null,
+        port: 1,
+        started_at: 1_700_000_000,
+        runtime: 'llama',
+      },
+      {
+        model_id: 9,
+        model_name: 'Good',
+        pid: null,
+        port: 2,
+        started_at: 1_700_000_000,
+        runtime: 'llama',
+      },
     ]);
 
     expect(evt.servers).toHaveLength(1);

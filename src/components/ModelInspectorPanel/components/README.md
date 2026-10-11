@@ -14,7 +14,8 @@ Presentational sub-components for the model inspector panel, each scoped to a si
 | `ComponentsRow.tsx` | The files an image model draws with beside its weights: one picker per role its family needs, over `GET /api/models/{id}/components` plus "None", each saved on pick as that role alone in `PUT /api/models/{id}`'s `components`, with the server's refusal under its role in its own words, a note when no file is at a linked path, and nothing for a family that needs no separate file |
 | `TagChips.tsx` | Tag pill list with individual remove buttons |
 | `TagAddInput.tsx` | Controlled text input for adding new tags (submit on Enter) |
-| `ServeModal.tsx` | Options form: context override, custom port, Jinja mode, MTP settings, inference params |
+| `ServeModal.tsx` | Options form: context override, custom port, Jinja mode, MTP settings, inference params; for an image model those give way to `ImageServeDetails`, and Start waits for its components and the image runtime |
+| `ImageServeDetails.tsx` | What loading an image model means: its family, each linked component (a missing one named), and whether `sd-server` is installed, with the way to Settings when it is not |
 | `contextPlaceholder.ts` | What an empty context box will actually get you, in the order the daemon's ladder resolves |
 | `JinjaModeField.tsx` | Off / On / Defer as three options, because a launch has three states and a checkbox held two |
 | `ReasoningSupport.tsx` | Whether this model's template reads `reasoning_effort`, and a re-measurement when the answer is stale |

@@ -8,14 +8,22 @@
 //! device's turn on a hub chat, by the model the chat runs on. The whole
 //! history counts, since it is all sent again each turn.
 //!
+//! The refusal of any run for a model that draws images is here too, by the
+//! same doors and before the same things: `sd-server` serves such a model
+//! and cannot chat, so a device's turn on a hub chat whose model draws, and
+//! a page's run on a port that serves one, are refused with
+//! `image_model_cannot_chat` before anything is loaded, held or written.
+//! The rule, the code and the words are core's
+//! ([`gglib_core::request_pipeline::refuse_unless_chats`]).
+//!
 //! A model of the paired machine is not asked about here. This machine's
 //! catalogue does not hold it; its own proxy refuses the request by the
 //! same code.
 
 use axum::http::StatusCode;
-use gglib_core::domain::Model;
 use gglib_core::domain::agent::AgentMessage;
-use gglib_core::request_pipeline::refuse_unless_can_see;
+use gglib_core::domain::{Model, RuntimeKind};
+use gglib_core::request_pipeline::{refuse_unless_can_see, refuse_unless_chats};
 
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -65,6 +73,35 @@ pub(super) async fn named(
     readable_by(model.as_ref(), messages)
 }
 
+/// Refuse a run for model `name`, served by `runtime`, when it draws.
+///
+/// # Errors
+///
+/// `image_model_cannot_chat` (400).
+pub(super) fn chats(runtime: RuntimeKind, name: &str) -> Result<(), HttpError> {
+    refuse_unless_chats(runtime).map_err(|refusal| HttpError::Coded {
+        status: StatusCode::BAD_REQUEST,
+        code: refusal.code(),
+        message: refusal.message(name),
+    })
+}
+
+/// [`chats`] for the model `identifier` names in the catalogue: the one a
+/// hub chat runs on. A model the catalogue does not hold is not judged.
+///
+/// # Errors
+///
+/// `image_model_cannot_chat` (400).
+pub(super) async fn chats_named(state: &AppState, identifier: &str) -> Result<(), HttpError> {
+    match state.core.models().get(identifier).await.ok().flatten() {
+        Some(model) => chats(model.runtime(), &model.name),
+        None => Ok(()),
+    }
+}
+
+#[cfg(test)]
+#[path = "image_gate_chat_tests.rs"]
+mod image_gate_chat_tests;
 #[cfg(test)]
 #[path = "image_gate_tests.rs"]
 pub(super) mod image_gate_tests;

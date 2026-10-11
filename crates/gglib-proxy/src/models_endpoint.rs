@@ -99,7 +99,10 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
                 model.context_window = model.context_window.map(advertised_context_window);
             }
 
+            // An image model on sd-server has no context window to report,
+            // running or not.
             if let Some(target) = running
+                && target.runtime == gglib_core::domain::RuntimeKind::Llama
                 && let Some(model) = running_at.and_then(|i| response.data.get_mut(i))
             {
                 model.context_window = Some(advertised_context_window(target.effective_ctx));

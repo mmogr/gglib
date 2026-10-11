@@ -28,6 +28,11 @@ impl AdmissionRelease for Hold {
         self.queue.lock().unhold(self.port, self.model_id);
         self.queue.notify();
     }
+
+    fn progress(&self, _slot: usize) {
+        self.queue.lock().record_progress();
+        self.queue.notify();
+    }
 }
 
 impl AdmissionQueue {

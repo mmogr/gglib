@@ -1,18 +1,16 @@
 #![doc = include_str!("README.md")]
 use anyhow::{Context, Result, bail};
-use reqwest::Client;
-use serde::Deserialize;
-use std::fs::{self, File};
-use std::io::{self, Write};
-use std::path::Path;
-use std::time::Instant;
+use std::path::PathBuf;
 use tokio::sync::mpsc;
 
-use gglib_core::download::{ProgressThrottle, RateEstimator};
 use gglib_core::paths::{data_root, llama_config_path, llama_server_path};
 
-use super::config::{InstallRecord, PrebuiltRecord};
+use super::config::InstallRecord;
 use super::install_events::{InstallPhase, LlamaProgressEvent};
+use crate::binary_install::{
+    ArchiveLayout, AssetChoice, AssetMatcher, PrebuiltTarget, ReleaseSpec, completed,
+    install_prebuilt, started,
+};
 
 /// Check if llama.cpp binaries are installed.
 /// Returns true if llama-server exists.
@@ -54,69 +52,44 @@ pub(super) const PINNED_LLAMA_RELEASE: &str = "b10327";
 /// tested before the constant moves.
 pub(super) const LLAMA_RELEASE_ENV: &str = "GGLIB_LLAMA_RELEASE";
 
-/// Which llama.cpp release an install should fetch.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum ReleaseSelector {
-    /// A specific tag — the pin, or an override naming one.
-    Tag(String),
-    /// Whatever upstream currently calls `latest`.
-    Latest,
+/// Where llama.cpp's archive is downloaded to. The installer removes the
+/// whole directory once the archive is unpacked.
+fn llama_download_dir() -> Result<PathBuf> {
+    Ok(data_root()?.join("downloads"))
 }
 
-impl ReleaseSelector {
-    /// The GitHub API URL this selector resolves through.
-    fn api_url(&self) -> String {
-        match self {
-            Self::Tag(tag) => {
-                format!("https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/{tag}")
-            }
-            Self::Latest => {
-                "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest".to_owned()
-            }
-        }
-    }
-}
-
-/// Interpret a raw [`LLAMA_RELEASE_ENV`] value.
+/// Whether an archive member named `file_name` is extracted.
 ///
-/// An override of `latest` (any casing) floats; anything else is taken as a
-/// tag verbatim. A blank or whitespace-only value is treated as unset rather
-/// than as an empty tag, so `GGLIB_LLAMA_RELEASE=` does not produce a URL that
-/// cannot resolve.
-///
-/// Split from [`resolve_release_selector`] so the policy is testable without
-/// mutating process environment, which no test can do safely in parallel.
-fn selector_from_override(raw: &str) -> ReleaseSelector {
-    let trimmed = raw.trim();
-
-    if trimmed.is_empty() {
-        return ReleaseSelector::Tag(PINNED_LLAMA_RELEASE.to_owned());
-    }
-    if trimmed.eq_ignore_ascii_case("latest") {
-        return ReleaseSelector::Latest;
-    }
-    ReleaseSelector::Tag(trimmed.to_owned())
+/// Licences, C headers and Metal shader sources are left in the archive.
+fn wanted(file_name: &str) -> bool {
+    !(file_name.starts_with("LICENSE")
+        || file_name.ends_with(".h")
+        || file_name.ends_with(".metal"))
 }
 
-/// Resolve which release to install from [`LLAMA_RELEASE_ENV`], falling back
-/// to [`PINNED_LLAMA_RELEASE`].
-fn resolve_release_selector() -> ReleaseSelector {
-    selector_from_override(&std::env::var(LLAMA_RELEASE_ENV).unwrap_or_default())
-}
+/// llama.cpp as a GitHub release: `ggml-org/llama.cpp`, tar.gz archives one
+/// directory deep on macOS and Linux and flat zips on Windows, the first
+/// asset whose name holds the platform's pattern.
+static LLAMA_RELEASE: ReleaseSpec = ReleaseSpec {
+    product: "llama.cpp",
+    repo: "ggml-org/llama.cpp",
+    pinned: PINNED_LLAMA_RELEASE,
+    env: LLAMA_RELEASE_ENV,
+    download_dir: llama_download_dir,
+    archive: ArchiveLayout::OneDirDeep,
+    choice: AssetChoice::First,
+    wanted,
+};
 
-/// GitHub API response for a release
-#[derive(Debug, Deserialize)]
-struct GitHubRelease {
-    tag_name: String,
-    assets: Vec<GitHubAsset>,
-}
+/// The archive members a llama.cpp install must find.
+#[cfg(target_os = "windows")]
+const LLAMA_REQUIRED: &[&str] = &["llama-server.exe"];
+/// The archive members a llama.cpp install must find.
+#[cfg(not(target_os = "windows"))]
+const LLAMA_REQUIRED: &[&str] = &["llama-server"];
 
-/// GitHub API response for a release asset
-#[derive(Debug, Deserialize)]
-struct GitHubAsset {
-    name: String,
-    browser_download_url: String,
-}
+/// The name the release's CUDA runtime package holds.
+const CUDART_PATTERN: &str = "cudart-llama-bin-win-cuda";
 
 /// Result of checking pre-built binary availability
 #[derive(Debug)]
@@ -233,380 +206,6 @@ pub fn check_prebuilt_availability() -> PrebuiltAvailability {
         }
     }
 }
-
-/// Fetch llama.cpp release information from GitHub for `selector`.
-///
-/// A 404 on a tag selector is reported as a missing release rather than a
-/// bare HTTP error, because the actionable cause — a pin naming a tag that
-/// upstream no longer publishes — is not obvious from the status code, and
-/// the way out is an environment variable the user has no reason to know
-/// about.
-async fn fetch_release(client: &Client, selector: &ReleaseSelector) -> Result<GitHubRelease> {
-    let response = client
-        .get(selector.api_url())
-        .header("User-Agent", "gglib")
-        .header("Accept", "application/vnd.github.v3+json")
-        .send()
-        .await
-        .context("Failed to fetch llama.cpp releases from GitHub")?;
-
-    if response.status() == reqwest::StatusCode::NOT_FOUND
-        && let ReleaseSelector::Tag(tag) = selector
-    {
-        bail!(
-            "llama.cpp release '{tag}' not found upstream. \
-             Set {LLAMA_RELEASE_ENV}=latest to install the current release, \
-             or {LLAMA_RELEASE_ENV}=<tag> to name a different one."
-        );
-    }
-
-    if !response.status().is_success() {
-        bail!(
-            "GitHub API returned error: {} {}",
-            response.status(),
-            response.text().await.unwrap_or_default()
-        );
-    }
-
-    let release: GitHubRelease = response
-        .json()
-        .await
-        .context("Failed to parse GitHub release response")?;
-
-    Ok(release)
-}
-
-/// Find the matching asset for our platform in a release.
-fn find_platform_asset<'a>(
-    release: &'a GitHubRelease,
-    asset_pattern: &str,
-) -> Option<&'a GitHubAsset> {
-    release
-        .assets
-        .iter()
-        .find(|asset| asset.name.contains(asset_pattern))
-}
-
-/// Emit `PhaseStarted` for `phase`, ignoring a receiver that has gone away.
-///
-/// A dropped receiver means the surface stopped watching — a cancelled CLI, a
-/// closed SSE connection. That is not a reason to abandon an install that is
-/// already writing to disk.
-async fn started(tx: &mpsc::Sender<LlamaProgressEvent>, phase: InstallPhase) {
-    let _ = tx.send(LlamaProgressEvent::PhaseStarted { phase }).await;
-}
-
-/// Emit `PhaseCompleted` for `phase`. See [`started`].
-async fn completed(tx: &mpsc::Sender<LlamaProgressEvent>, phase: InstallPhase) {
-    let _ = tx.send(LlamaProgressEvent::PhaseCompleted { phase }).await;
-}
-
-/// Stream `url` to `dest`, reporting bytes, rate and ETA on `tx`.
-///
-/// Throughput is measured here and only here, by the same [`RateEstimator`]
-/// the model-download path uses. The estimator sees every chunk — ticks where
-/// nothing moved are how a stall pulls the reported rate down — while its
-/// sibling [`ProgressThrottle`] rate-limits the *emission*, so a fast link
-/// cannot flood a 64-slot channel.
-async fn download_archive(
-    client: &Client,
-    url: &str,
-    dest: &Path,
-    tx: &mpsc::Sender<LlamaProgressEvent>,
-) -> Result<()> {
-    let response = client
-        .get(url)
-        .header("User-Agent", "gglib")
-        .send()
-        .await
-        .context("Failed to start download")?;
-
-    if !response.status().is_success() {
-        bail!("Download failed: HTTP {}", response.status());
-    }
-
-    let total = response.content_length().unwrap_or(0);
-
-    // Ensure parent directory exists
-    if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent).context("Failed to create download directory")?;
-    }
-
-    let mut file = File::create(dest).context("Failed to create download file")?;
-
-    let mut estimator = RateEstimator::new(Instant::now());
-    let mut throttle = ProgressThrottle::default();
-    let mut downloaded: u64 = 0;
-    let mut stream = response.bytes_stream();
-
-    use futures_util::StreamExt;
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.context("Error reading download stream")?;
-        file.write_all(&chunk)
-            .context("Error writing to download file")?;
-        downloaded += chunk.len() as u64;
-
-        estimator.record(downloaded, total, Instant::now());
-
-        if throttle.should_emit() {
-            let _ = tx.try_send(LlamaProgressEvent::Progress {
-                downloaded,
-                total,
-                rate_bps: estimator.rate_bps(),
-                eta_seconds: estimator.eta_seconds(),
-            });
-        }
-    }
-
-    // The throttle will usually have swallowed the last chunk, and the final
-    // byte count is the one a progress bar has to land on.
-    let _ = tx
-        .send(LlamaProgressEvent::Progress {
-            downloaded,
-            total,
-            rate_bps: estimator.rate_bps(),
-            eta_seconds: estimator.eta_seconds(),
-        })
-        .await;
-
-    Ok(())
-}
-
-/// Extract all files from the archive (zip or tar.gz).
-///
-/// For macOS/Linux: tar.gz archives with binaries in a versioned top-level directory
-/// (e.g. `llama-b<tag>/<file>`). For Windows: zip archives with binaries at root level.
-///
-/// This includes the main binary (llama-server) and all required
-/// shared libraries (.dylib on macOS, .dll on Windows, .so on Linux).
-fn extract_binaries(archive_path: &Path, bin_dir: &Path) -> Result<()> {
-    let name = archive_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("");
-    if name.ends_with(".tar.gz") || name.ends_with(".tgz") {
-        extract_binaries_tar_gz(archive_path, bin_dir)
-    } else {
-        extract_binaries_zip(archive_path, bin_dir)
-    }
-}
-
-/// Whether an archive member named `file_name` is extracted.
-///
-/// Licences, C headers and Metal shader sources are left in the archive.
-fn wanted(file_name: &str) -> bool {
-    !(file_name.starts_with("LICENSE")
-        || file_name.ends_with(".h")
-        || file_name.ends_with(".metal"))
-}
-
-/// Make the extracted `dest_path` executable.
-///
-/// Reads `symlink_metadata` (lstat) so a symlink is not followed to a target
-/// that may not be extracted yet, which would fail with ENOENT. A symlink is
-/// left as it is, because `set_permissions` would follow it too.
-#[cfg(unix)]
-fn make_executable(dest_path: &Path, file_name: &str) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let meta = fs::symlink_metadata(dest_path)
-        .with_context(|| format!("Failed to read metadata: {file_name}"))?;
-    if !meta.file_type().is_symlink() {
-        let mut perms = meta.permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(dest_path, perms)
-            .with_context(|| format!("Failed to set permissions: {file_name}"))?;
-    }
-    Ok(())
-}
-
-/// Fail unless `found`, the count of extracted members named in `required`,
-/// is the count of names in it.
-fn ensure_required(found: usize, required: &[&str]) -> Result<()> {
-    if found != required.len() {
-        bail!(
-            "Failed to extract all required binaries. Found {} of {}",
-            found,
-            required.len()
-        );
-    }
-    Ok(())
-}
-
-/// Extract binaries from a tar.gz archive (macOS and Linux).
-fn extract_binaries_tar_gz(archive_path: &Path, bin_dir: &Path) -> Result<()> {
-    use flate2::read::GzDecoder;
-    use tar::Archive;
-
-    let file = File::open(archive_path).context("Failed to open downloaded archive")?;
-    let gz = GzDecoder::new(file);
-    let mut archive = Archive::new(gz);
-
-    fs::create_dir_all(bin_dir).context("Failed to create bin directory")?;
-
-    let required_binaries = ["llama-server"];
-    let mut extracted_binaries = 0;
-
-    for entry in archive.entries().context("Failed to read tar archive")? {
-        let mut entry = entry.context("Failed to read archive entry")?;
-        let path = entry
-            .path()
-            .context("Failed to get entry path")?
-            .into_owned();
-        // Modern llama.cpp release archives have the structure:
-        //   llama-b<tag>/<filename>
-        // Keep only files that are exactly one level deep (skip the top-level
-        // directory entry itself and any files nested deeper).
-        let components: Vec<_> = path.components().collect();
-        if components.len() != 2 {
-            continue;
-        }
-
-        let file_name = match path.file_name().and_then(|n| n.to_str()) {
-            Some(name) if !name.is_empty() => name.to_string(),
-            _ => continue,
-        };
-
-        if !wanted(&file_name) {
-            continue;
-        }
-
-        let dest_path = bin_dir.join(&file_name);
-        entry
-            .unpack(&dest_path)
-            .with_context(|| format!("Failed to extract: {file_name}"))?;
-
-        #[cfg(unix)]
-        make_executable(&dest_path, &file_name)?;
-
-        if required_binaries.contains(&file_name.as_str()) {
-            extracted_binaries += 1;
-        }
-    }
-
-    ensure_required(extracted_binaries, &required_binaries)
-}
-
-/// Extract binaries from a zip archive (Windows).
-fn extract_binaries_zip(zip_path: &Path, bin_dir: &Path) -> Result<()> {
-    let file = File::open(zip_path).context("Failed to open downloaded archive")?;
-    let mut archive = zip::ZipArchive::new(file).context("Failed to read zip archive")?;
-
-    fs::create_dir_all(bin_dir).context("Failed to create bin directory")?;
-
-    #[cfg(target_os = "windows")]
-    let required_binaries = ["llama-server.exe"];
-    #[cfg(not(target_os = "windows"))]
-    let required_binaries = ["llama-server"];
-
-    let mut extracted_binaries = 0;
-
-    for i in 0..archive.len() {
-        let mut entry = archive
-            .by_index(i)
-            .context("Failed to read archive entry")?;
-        let entry_name = entry.name().to_string();
-
-        if entry.is_dir() {
-            continue;
-        }
-
-        // Windows packages have binaries at root level
-        // Get the filename (last component of path)
-        let file_name = match entry_name.rsplit('/').next() {
-            Some(name) if !name.is_empty() => name,
-            _ => continue,
-        };
-
-        if !wanted(file_name) {
-            continue;
-        }
-
-        let dest_path = bin_dir.join(file_name);
-        let mut dest_file = File::create(&dest_path)
-            .with_context(|| format!("Failed to create file: {}", dest_path.display()))?;
-
-        io::copy(&mut entry, &mut dest_file)
-            .with_context(|| format!("Failed to extract: {file_name}"))?;
-
-        #[cfg(unix)]
-        make_executable(&dest_path, file_name)?;
-
-        if required_binaries.contains(&file_name) {
-            extracted_binaries += 1;
-        }
-    }
-
-    ensure_required(extracted_binaries, &required_binaries)
-}
-
-/// Windows-only: Download and extract CUDA runtime DLLs.
-/// These are required for llama.cpp CUDA builds to work on systems without CUDA installed.
-#[cfg(target_os = "windows")]
-async fn download_cuda_runtime(
-    client: &Client,
-    release: &GitHubRelease,
-    bin_dir: &Path,
-    download_dir: &Path,
-) -> Result<()> {
-    const CUDART_PATTERN: &str = "cudart-llama-bin-win-cuda";
-
-    // Find the CUDA runtime asset
-    let cudart_asset = release
-        .assets
-        .iter()
-        .find(|asset| asset.name.contains(CUDART_PATTERN));
-
-    // A missing package is not fatal — the user may have CUDA installed.
-    let Some(cudart_asset) = cudart_asset else {
-        return Ok(());
-    };
-
-    let cudart_zip_path = download_dir.join(&cudart_asset.name);
-
-    // Download silently (no progress bar for this smaller download)
-    let response = client
-        .get(&cudart_asset.browser_download_url)
-        .header("User-Agent", "gglib")
-        .send()
-        .await
-        .context("Failed to download CUDA runtime")?;
-
-    // Same reasoning as a missing package: optional when CUDA is installed.
-    if !response.status().is_success() {
-        return Ok(());
-    }
-
-    let bytes = response.bytes().await?;
-    fs::write(&cudart_zip_path, &bytes)?;
-
-    // Extract CUDA DLLs
-    let file = File::open(&cudart_zip_path)?;
-    let mut archive = zip::ZipArchive::new(file)?;
-
-    for i in 0..archive.len() {
-        let mut entry = archive.by_index(i)?;
-        let entry_name = entry.name().to_string();
-
-        if entry.is_dir() {
-            continue;
-        }
-
-        // Extract DLL files
-        if entry_name.ends_with(".dll") {
-            let file_name = entry_name.rsplit('/').next().unwrap_or(&entry_name);
-            let dest_path = bin_dir.join(file_name);
-            let mut dest_file = File::create(&dest_path)?;
-            io::copy(&mut entry, &mut dest_file)?;
-        }
-    }
-
-    // Clean up
-    let _ = fs::remove_file(&cudart_zip_path);
-
-    Ok(())
-}
-
 /// Download and install pre-built llama.cpp binaries, streaming progress.
 ///
 /// Resolves the pinned llama.cpp release, downloads this platform's archive,
@@ -622,7 +221,8 @@ async fn download_cuda_runtime(
 /// pipeline leaves it.
 ///
 /// This function knows nothing about terminals, HTTP responses or `WebViews`.
-/// The three copies it replaced each knew about one.
+/// The three copies it replaced each knew about one; the pipeline itself is
+/// [`install_prebuilt`], shared with every other product gglib installs.
 pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) -> Result<()> {
     started(&tx, InstallPhase::CheckAvailability).await;
     let (asset_pattern, description) = match check_prebuilt_availability() {
@@ -636,76 +236,32 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
     };
     completed(&tx, InstallPhase::CheckAvailability).await;
 
-    let client = Client::new();
-
-    started(&tx, InstallPhase::FetchRelease).await;
-    let release = fetch_release(&client, &resolve_release_selector()).await?;
-    let asset = find_platform_asset(&release, &asset_pattern).ok_or_else(|| {
-        anyhow::anyhow!(
-            "No matching asset found for pattern '{}' in release {}",
-            asset_pattern,
-            release.tag_name
-        )
-    })?;
-    completed(&tx, InstallPhase::FetchRelease).await;
-
-    // The binaries go where the launcher runs them from, and the record
-    // where every reader looks for it. Only the archive is this install's
-    // own, to delete once it is unpacked.
     let server_path = llama_server_path()?;
     let bin_dir = server_path
         .parent()
         .context("llama-server's path has no directory")?;
-    let download_dir = data_root()?.join("downloads");
-    let archive_path = download_dir.join(&asset.name);
+    // Windows + CUDA only: also download the CUDA runtime DLLs.
+    let cuda_runtime =
+        (cfg!(target_os = "windows") && asset_pattern.contains("cuda")).then_some(CUDART_PATTERN);
+    let target = PrebuiltTarget {
+        matcher: AssetMatcher {
+            contains: &[asset_pattern.as_str()],
+            ends_with: None,
+        },
+        description: &description,
+        required: LLAMA_REQUIRED,
+        bin_dir,
+        server_path: &server_path,
+        cuda_runtime,
+    };
 
-    started(&tx, InstallPhase::Download).await;
-    download_archive(&client, &asset.browser_download_url, &archive_path, &tx).await?;
-    completed(&tx, InstallPhase::Download).await;
-
-    // Capture the result so the downloads dir is cleaned up on both the
-    // success and the failure path.
-    let post_download_result = async {
-        started(&tx, InstallPhase::Extract).await;
-        extract_binaries(&archive_path, bin_dir)?;
-        completed(&tx, InstallPhase::Extract).await;
-
-        // Windows + CUDA only: also download the CUDA runtime DLLs.
-        // Vulkan builds bundle everything they need inside the main zip.
-        #[cfg(target_os = "windows")]
-        if asset_pattern.contains("cuda") {
-            started(&tx, InstallPhase::CudaRuntime).await;
-            download_cuda_runtime(&client, &release, bin_dir, &download_dir).await?;
-            completed(&tx, InstallPhase::CudaRuntime).await;
-        }
-
-        Ok::<_, anyhow::Error>(())
-    }
-    .await;
-
-    // Always remove the entire downloads directory regardless of outcome.
-    // Using remove_dir_all so a partially-downloaded or leftover CUDA archive
-    // doesn't prevent the directory from being deleted.
-    let _ = fs::remove_dir_all(&download_dir);
-
-    post_download_result?;
-
-    InstallRecord::Prebuilt(PrebuiltRecord::new(&release.tag_name, &description))
-        .save(&llama_config_path()?)?;
-
-    started(&tx, InstallPhase::Verify).await;
-    if !server_path.exists() {
-        bail!("Installation verification failed: binaries not found after extraction");
-    }
-    completed(&tx, InstallPhase::Verify).await;
-
-    let _ = tx
-        .send(LlamaProgressEvent::Completed {
-            version: release.tag_name,
-        })
-        .await;
-
-    Ok(())
+    install_prebuilt(
+        &LLAMA_RELEASE,
+        target,
+        |record| InstallRecord::Prebuilt(record).save(&llama_config_path()?),
+        &tx,
+    )
+    .await
 }
 
 #[cfg(all(test, unix))]
@@ -715,13 +271,22 @@ mod extract_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::binary_install::{ReleaseSelector, selector_from_override};
+
+    /// llama.cpp's archive extraction, as the installer runs it.
+    pub(super) fn extract_binaries(
+        archive: &std::path::Path,
+        bin_dir: &std::path::Path,
+    ) -> Result<()> {
+        crate::binary_install::extract_binaries(&LLAMA_RELEASE, LLAMA_REQUIRED, archive, bin_dir)
+    }
 
     /// The case the pin exists for: no override installs the pin, not
     /// whatever upstream cut this morning.
     #[test]
     fn unset_override_resolves_to_the_pin() {
         assert_eq!(
-            selector_from_override(""),
+            selector_from_override(&LLAMA_RELEASE, ""),
             ReleaseSelector::Tag(PINNED_LLAMA_RELEASE.to_owned())
         );
     }
@@ -731,21 +296,27 @@ mod tests {
     #[test]
     fn blank_override_resolves_to_the_pin() {
         assert_eq!(
-            selector_from_override("   \t "),
+            selector_from_override(&LLAMA_RELEASE, "   \t "),
             ReleaseSelector::Tag(PINNED_LLAMA_RELEASE.to_owned())
         );
     }
 
     #[test]
     fn latest_override_floats_with_upstream() {
-        assert_eq!(selector_from_override("latest"), ReleaseSelector::Latest);
-        assert_eq!(selector_from_override("  LATEST "), ReleaseSelector::Latest);
+        assert_eq!(
+            selector_from_override(&LLAMA_RELEASE, "latest"),
+            ReleaseSelector::Latest
+        );
+        assert_eq!(
+            selector_from_override(&LLAMA_RELEASE, "  LATEST "),
+            ReleaseSelector::Latest
+        );
     }
 
     #[test]
     fn a_tag_override_is_taken_verbatim() {
         assert_eq!(
-            selector_from_override(" b10500 "),
+            selector_from_override(&LLAMA_RELEASE, " b10500 "),
             ReleaseSelector::Tag("b10500".to_owned())
         );
     }
@@ -754,13 +325,57 @@ mod tests {
     /// through the `latest` URL would silently install the wrong release.
     #[test]
     fn selectors_resolve_to_distinct_endpoints() {
+        let api = crate::binary_install::GITHUB_API;
         let tag = ReleaseSelector::Tag("b10327".to_owned());
-        assert!(tag.api_url().ends_with("/releases/tags/b10327"));
-        assert!(
-            ReleaseSelector::Latest
-                .api_url()
-                .ends_with("/releases/latest")
+        assert_eq!(
+            tag.api_url(api, LLAMA_RELEASE.repo),
+            "https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/b10327"
         );
+        assert_eq!(
+            ReleaseSelector::Latest.api_url(api, LLAMA_RELEASE.repo),
+            "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
+        );
+    }
+
+    /// A pin upstream no longer publishes is reported as a missing release
+    /// that names the way out, word for word as it always has been.
+    #[tokio::test]
+    async fn a_pin_upstream_no_longer_publishes_names_the_override() {
+        use crate::binary_install::fake_github::FakeGitHub;
+        let fake = FakeGitHub::serve().await;
+        let tmp = tempfile::tempdir().expect("a temp dir");
+        let server = tmp.path().join("llama-server");
+        let target = PrebuiltTarget {
+            matcher: AssetMatcher {
+                contains: &["bin-macos-arm64.tar.gz"],
+                ends_with: None,
+            },
+            description: "macOS ARM64 (Metal)",
+            required: LLAMA_REQUIRED,
+            bin_dir: tmp.path(),
+            server_path: &server,
+            cuda_runtime: None,
+        };
+        let (tx, _rx) = mpsc::channel(64);
+
+        let err = crate::binary_install::install_prebuilt_from(
+            &fake.base,
+            &ReleaseSelector::Tag("b1".to_owned()),
+            &LLAMA_RELEASE,
+            target,
+            |_| panic!("nothing is recorded"),
+            &tx,
+        )
+        .await
+        .expect_err("the tag is not there");
+
+        assert_eq!(
+            err.to_string(),
+            "llama.cpp release 'b1' not found upstream. \
+             Set GGLIB_LLAMA_RELEASE=latest to install the current release, \
+             or GGLIB_LLAMA_RELEASE=<tag> to name a different one."
+        );
+        assert_eq!(fake.asked(), ["/repos/ggml-org/llama.cpp/releases/tags/b1"]);
     }
 
     /// The pin has to be a real tag shape; a stray `v` prefix or a bare
@@ -911,6 +526,7 @@ mod tests {
     fn test_extract_binaries_tar_gz_modern_layout() {
         use flate2::Compression;
         use flate2::write::GzEncoder;
+        use std::fs::File;
         use tar::Builder;
 
         let tmp = tempfile::tempdir().expect("failed to create temp dir");
@@ -962,7 +578,7 @@ mod tests {
         }
 
         // Must not fail — the dangling symlink must be handled gracefully.
-        extract_binaries_tar_gz(&archive_path, &bin_dir)
+        extract_binaries(&archive_path, &bin_dir)
             .expect("extract_binaries_tar_gz should succeed even with dangling symlink entries");
 
         assert!(

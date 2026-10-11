@@ -12,7 +12,9 @@ Application settings modal: models directory path, base port configuration, per-
 | `InferenceProfiles.tsx` | Profiles tab: lists named sampling profiles with add/edit/delete, and asks the daemon to install the starter profiles. Self-contained — loads and saves settings itself rather than threading state through `SettingsModal`, matching `McpServersPanel` |
 | `useDesktopSettings.ts` | State for the three always-on proxy toggles, kept out of `SettingsModal` so the group owns its own state and update payload |
 | `InferenceProfileEditor.tsx` | Form for one profile. A blank parameter field is omitted from the payload rather than sent as `0`, so it falls through to the model's own default |
-| `SystemSettings.tsx` | System tab — the GUI face of `gglib config llama` |
+| `SystemSettings.tsx` | System tab — the GUI face of `gglib config llama`, with the image runtime section below it |
+| `ImageRuntimeSettings.tsx` | The image runtime section — the GUI face of `gglib config sd install\|status\|uninstall`: status, the pre-built install with the wizard's `InstallProgress`, the CPU build's warning, the command where no pre-built build fits, and a removal that waits for a running image model |
+| `useImageRuntime.ts` | State for the image runtime section: its status, the install stream and the removal |
 | `DiagnosticsPanel.tsx` | `gglib config check-deps`, `paths` and `fast-downloads status` as one panel in the System tab |
 | `LoopGuardTripsPanel.tsx` | `gglib proxy trips` under the loop guard's setting: per day and model, what the guard scanned and what it acted on |
 | `LabelledValue.tsx` | A label and its value, for the read-only rows those two panels are mostly made of |

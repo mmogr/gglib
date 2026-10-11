@@ -40,6 +40,7 @@ pub mod recommendation;
 pub(crate) mod residency;
 pub mod runs;
 pub(crate) mod runtime_capabilities;
+mod runtime_kind;
 pub(crate) mod sampling_discards;
 pub(crate) mod sampling_provenance;
 mod server_config;
@@ -101,12 +102,14 @@ pub use recommendation::{BudgetSource, Recommendation, recommend};
 
 // Re-export admission-control telemetry at the domain level for convenience
 pub use admission::{
-    AdmissionSnapshot, QueuedModelSnapshot, ResidentSlotSnapshot, SecondarySlotStatus,
+    AdmissionSnapshot, GenerationSnapshot, QueuedModelSnapshot, RenderSnapshot,
+    ResidentSlotSnapshot, SecondarySlotStatus,
 };
 
 // Re-export the second-VRAM-slot decision at the domain level for convenience
 pub use residency::{
     RESIDENCY_UTILISATION, SecondarySlotDecision, SlotFootprint, decide_secondary_slot,
+    decide_secondary_slot_for,
 };
 pub use server_config::ServerConfig;
 
@@ -144,6 +147,7 @@ pub use tensor_table::{TensorInfo, TensorTable, WeightsFormat};
 pub use image_family::{
     ComponentRole, ComponentSpec, ImageFamily, Placement, Recipe, SizeRule, UnknownName,
 };
+pub use runtime_kind::RuntimeKind;
 
 // Re-export dialect types at the domain level for convenience
 pub use dialect::{BodyCodec, DialectSpec, EmissionProfile};
@@ -170,4 +174,5 @@ pub use generation_config::generation_config_candidates;
 pub use generation_config::parse_generation_config;
 pub use model::RangeValues;
 pub use model::is_system_tag;
+pub(crate) use model::missing_roles;
 pub use model_naming::declared_name;

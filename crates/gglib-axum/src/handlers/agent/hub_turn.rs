@@ -105,7 +105,8 @@ fn refusal(error: HttpError) -> TurnRefused {
 /// `attachment_not_found` (400) for an image the turn or the chat's history
 /// names that is not stored; `request_images_too_large` (400) when they are
 /// over 16 MiB together;
-/// `model_cannot_read_images` (400); `conversation_not_found` (404);
+/// `model_cannot_read_images` (400); `image_model_cannot_chat` (400) when
+/// the chat's model draws images; `conversation_not_found` (404);
 /// `conflict` (409) while the chat has a live reply, or for a chat that ran
 /// on the machine this one is paired with; `no_model`
 /// (422) when nothing names the chat's model and nothing runs on the hub;
@@ -203,6 +204,9 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         branching::answerable(&rows).map_err(ChangeError::from)?;
     }
     let model = model_for(state, &conversation, &rows).await?;
+    // Before anything else is read for it, and before `on_model` would load
+    // it: a model that draws is served by sd-server, which cannot chat.
+    super::image_gate::chats_named(state, &model).await?;
     // The prompt comes from the conversation, as the page takes it. A turn
     // that answers the question already saved adds none (ADR 0017).
     let mut messages = saved_history(conversation.system_prompt.as_deref(), &rows);

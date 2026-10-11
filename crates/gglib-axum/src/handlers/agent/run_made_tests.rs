@@ -53,6 +53,7 @@ async fn the_logged_usage_names_the_model_and_the_saved_row_says_the_same() {
         pid: None,
         port: 9000,
         started_at: 0,
+        runtime: gglib_core::domain::RuntimeKind::Llama,
     };
     let req = serde_json::from_str(r#"{"port":9000,"messages":[]}"#).unwrap();
     let (mut p, _) = prepared(turn(), End::Finish);

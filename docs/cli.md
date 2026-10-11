@@ -59,7 +59,7 @@ reported as an error.
 | [`attachment save`](#attachment-save) | Write a stored image, such as one a tool made, to a file |
 | [`benchmark`](#benchmark) | Compare outputs, measure throughput, tune sampling |
 | [`mcp`](#mcp-tool-servers) | Manage MCP tool servers |
-| [`config`](#configuration) | Settings, profiles, llama.cpp, dependencies, paths |
+| [`config`](#configuration) | Settings, profiles, llama.cpp, stable-diffusion.cpp, dependencies, paths |
 | [`gui`](#interfaces) / [`web`](#interfaces) | Desktop app / web dashboard |
 | `completions <shell>` | Print a completion script for bash, zsh, fish, elvish, or powershell |
 
@@ -108,6 +108,15 @@ rather than swapped. That is what clients which cannot switch models via
 `/v1/models` need, VS Code Copilot's BYOK endpoint among them. `--port` is the
 endpoint; the daemon allocates the upstream llama-server port behind it, from
 `config settings set --llama-base-port`.
+
+An image model is served by stable-diffusion.cpp's `sd-server` instead.
+`serve` offers to install it if it is missing (`config sd install`), prints
+the model's family and each component linked or missing, starts the same
+pinned proxy, and loads the model once (`POST /v1/models/{name}/load`), so a
+refusal, the runtime not installed, a component missing or no room beside a
+held model, is printed in words before the dashboard attaches. The chat-only
+flags (`--ctx-size`, `--mlock`, `--jinja`, MTP, sampling, a profile) are
+refused by name.
 
 ### `daemon`
 
@@ -299,6 +308,15 @@ its own: `add` refuses a name another server already has.
   in the daemon's own environment outranks the stored directory.
 - **`llama`** — install, status, check-updates, update, rebuild, uninstall.
   gglib manages llama.cpp itself; see [Llama Management](../crates/gglib-runtime/src/llama/README.md).
+- **`sd`** — install, status, uninstall for stable-diffusion.cpp's
+  `sd-server`, the runtime that serves image models. `install` takes the
+  pinned pre-built release for this platform, warning first when that is a
+  CPU-only build, or builds from source with `--build` or where no release
+  fits; `--force` reinstalls. `uninstall` removes `.sd/` whole, and refuses
+  while the daemon that serves this data root runs an image model, as
+  Settings does; with no such daemon running nothing serves one, since only
+  a daemon launches them, so it is not refused. See
+  [Stable Diffusion](../crates/gglib-runtime/src/sd/README.md).
 - **`check-deps`** — report what is missing and print your platform's exact
   install commands. Reporting only; it installs nothing.
 - **`fast-downloads`** — `status`, `enable`, `disable`, `prompt` for the

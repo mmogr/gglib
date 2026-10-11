@@ -14,6 +14,7 @@ model: string,
  */
 started: boolean, 
 /**
- * The context it is serving with.
+ * The context it is serving with; 0 for an image model on
+ * `sd-server`, which has none.
  */
 context: number, };

@@ -56,6 +56,7 @@ const base: Diagnostics = {
     resourceRoot: '/home/u/.local/share/gglib',
     databasePath: '/home/u/.local/share/gglib/gglib.db',
     llamaServerPath: '/home/u/.local/share/gglib/bin/llama-server',
+    sdServerPath: '/home/u/.local/share/gglib/.sd/bin/sd-server',
     modelsDir: '/models',
     modelsSource: 'envVar',
   },
@@ -141,6 +142,13 @@ describe('DiagnosticsPanel', () => {
     expect(
       await screen.findByText(/Models directory from the environment/),
     ).toBeInTheDocument();
+  });
+
+  it('shows where each managed server binary is', async () => {
+    render(<DiagnosticsPanel />);
+    expect(await screen.findByText('sd-server')).toBeInTheDocument();
+    expect(screen.getByText('/home/u/.local/share/gglib/.sd/bin/sd-server')).toBeInTheDocument();
+    expect(screen.getByText('/home/u/.local/share/gglib/bin/llama-server')).toBeInTheDocument();
   });
 
   it('surfaces a detection failure instead of implying CPU will be used', async () => {

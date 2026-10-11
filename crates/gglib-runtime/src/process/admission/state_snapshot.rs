@@ -40,6 +40,7 @@ impl QueueState {
                     inflight: r.inflight,
                     is_primary: slot == PRIMARY_SLOT,
                     resident_for_secs: now.duration_since(r.resident_since).as_secs(),
+                    runtime: r.runtime,
                 })
                 .collect(),
             queued,
@@ -49,6 +50,7 @@ impl QueueState {
                 || self.secondary_slot.clone(),
                 |r| SecondarySlotStatus::resident(&r.model_name),
             ),
+            generation: self.generation_snapshot(),
         }
     }
 }

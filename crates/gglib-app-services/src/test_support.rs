@@ -276,6 +276,14 @@ impl ModelRuntimePort for RunningRuntime {
         self.stopped.store(true, Ordering::SeqCst);
         Ok(())
     }
+
+    async fn stop_model(&self, model_id: u32) -> Result<bool, ModelRuntimeError> {
+        if i64::from(model_id) != self.model_id {
+            return Ok(false);
+        }
+        self.stopped.store(true, Ordering::SeqCst);
+        Ok(true)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -316,13 +324,16 @@ pub(crate) fn test_core_and_proxy_over(
     use gglib_core::ports::ModelCatalogPort;
     use gglib_core::server_config::ServerConfigOptions;
     use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
-    use gglib_runtime::process::ProcessManager;
+    use gglib_runtime::process::{ProcessManager, RuntimeBinaries};
 
     gglib_core::paths::isolate_data_root();
     let catalog: Arc<dyn ModelCatalogPort> = Arc::new(CatalogPortImpl::new(repos.models.clone()));
     let runtime = Arc::new(RuntimePortImpl::new(Arc::new(ProcessManager::new(
         9000,
-        "llama-server",
+        RuntimeBinaries {
+            llama: "llama-server".into(),
+            sd: "sd-server".into(),
+        },
         catalog,
         ServerConfigOptions::default(),
         CacheRamSetting::Auto,

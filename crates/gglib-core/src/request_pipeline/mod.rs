@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 pub mod apply;
+pub(crate) mod chat_runtime;
 pub(crate) mod constrain;
 pub(crate) mod content;
 pub(crate) mod effort_gate;
@@ -20,6 +21,7 @@ pub(crate) mod truncation_parts;
 pub mod validate;
 
 pub use apply::{PipelineReport, apply};
+pub use chat_runtime::{DrawsImages, refuse_unless_chats};
 pub use constrain::{DISABLE_GRAMMAR_ENV, constrain_tool_calls};
 pub use content::{append_text, for_each_text_mut, image_urls, text_len, text_parts};
 pub use effort_gate::{SuppressedEffort, suppress_stored_effort, suppress_unsupported_effort};

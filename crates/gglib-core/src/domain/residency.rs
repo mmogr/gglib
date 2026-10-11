@@ -28,6 +28,7 @@
 //! figure depends on what the *primary* already took.
 
 use crate::cache_config::KvCacheType;
+use crate::domain::RuntimeKind;
 use crate::domain::kv_estimate::{
     KvElemsPerToken, estimate_kv_bytes_for_context, kv_bytes_per_token,
 };
@@ -172,6 +173,39 @@ impl SecondarySlotDecision {
             Self::RefuseUnknownBudget => "unknown_budget",
         }
     }
+
+    /// What the candidate is expected to occupy, where the verdict knows it.
+    #[must_use]
+    pub const fn footprint_bytes(&self) -> Option<u64> {
+        match self {
+            Self::Grant {
+                footprint_bytes, ..
+            }
+            | Self::RefuseTooLarge {
+                footprint_bytes, ..
+            }
+            | Self::RefuseNoHeadroom {
+                footprint_bytes, ..
+            } => Some(*footprint_bytes),
+            Self::RefuseUnknownFootprint | Self::RefuseUnknownBudget => None,
+        }
+    }
+
+    /// The free memory the verdict was judged against, where it records it.
+    /// A grant records it as footprint plus headroom.
+    #[must_use]
+    pub const fn free_bytes(&self) -> Option<u64> {
+        match self {
+            Self::Grant {
+                footprint_bytes,
+                headroom_bytes,
+            } => Some(footprint_bytes.saturating_add(*headroom_bytes)),
+            Self::RefuseNoHeadroom { free_bytes, .. } => Some(*free_bytes),
+            Self::RefuseTooLarge { .. }
+            | Self::RefuseUnknownFootprint
+            | Self::RefuseUnknownBudget => None,
+        }
+    }
 }
 
 /// Decide whether `candidate` may stay resident alongside what is already
@@ -186,8 +220,28 @@ impl SecondarySlotDecision {
 /// ([`SECONDARY_MAX_BYTES`]) and the live budget scaled by
 /// [`RESIDENCY_UTILISATION`]. The ceiling is checked first so a large model on
 /// a large card reports the reason that will still be true tomorrow.
+///
+/// This is the rule for a model that chats; [`decide_secondary_slot_for`]
+/// says how an image model is judged.
 #[must_use]
 pub fn decide_secondary_slot(
+    candidate: Option<SlotFootprint>,
+    free_vram_bytes: Option<u64>,
+) -> SecondarySlotDecision {
+    decide_secondary_slot_for(RuntimeKind::Llama, candidate, free_vram_bytes)
+}
+
+/// [`decide_secondary_slot`] for a candidate served by `runtime`.
+///
+/// An image model (`sd-server`) skips the [`SECONDARY_MAX_BYTES`] ceiling and
+/// is judged by the live budget alone. The ceiling keeps large chat models in
+/// the swap path; an image model belongs in the second slot whatever its
+/// size, so that the next chat model to arrive does not evict it (the admission
+/// queue places it there). Unknown footprint and unknown budget refuse as they
+/// do for a model that chats.
+#[must_use]
+pub fn decide_secondary_slot_for(
+    runtime: RuntimeKind,
     candidate: Option<SlotFootprint>,
     free_vram_bytes: Option<u64>,
 ) -> SecondarySlotDecision {
@@ -196,10 +250,16 @@ pub fn decide_secondary_slot(
     };
     let footprint_bytes = candidate.total();
 
-    if footprint_bytes > SECONDARY_MAX_BYTES {
+    let ceiling = match runtime {
+        RuntimeKind::Llama => Some(SECONDARY_MAX_BYTES),
+        RuntimeKind::StableDiffusion => None,
+    };
+    if let Some(ceiling_bytes) = ceiling
+        && footprint_bytes > ceiling_bytes
+    {
         return SecondarySlotDecision::RefuseTooLarge {
             footprint_bytes,
-            ceiling_bytes: SECONDARY_MAX_BYTES,
+            ceiling_bytes,
         };
     }
 
@@ -228,6 +288,11 @@ pub fn decide_secondary_slot(
 #[cfg(test)]
 #[path = "residency_fit_tests.rs"]
 mod fit_tests;
+
+/// How an image model is judged for the second slot.
+#[cfg(test)]
+#[path = "residency_image_tests.rs"]
+mod image_tests;
 
 #[cfg(test)]
 mod tests {

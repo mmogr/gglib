@@ -56,7 +56,7 @@ pub(crate) async fn install_llama(
     )
 }
 
-fn install_event_to_sse(event: LlamaProgressEvent) -> Result<Event, Infallible> {
+pub(super) fn install_event_to_sse(event: LlamaProgressEvent) -> Result<Event, Infallible> {
     let event_type = match &event {
         LlamaProgressEvent::PhaseStarted { .. } => "phase_started",
         LlamaProgressEvent::Progress { .. } => "progress",

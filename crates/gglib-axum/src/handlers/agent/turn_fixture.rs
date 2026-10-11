@@ -59,6 +59,7 @@ pub(super) async fn turn(
         pid: None,
         port,
         started_at: 0,
+        runtime: gglib_core::domain::RuntimeKind::Llama,
     };
     let upstream = local(state, &chat, server).await.unwrap();
     let Prepared {

@@ -2604,6 +2604,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "ts-rs",
  "zip",
 ]
 

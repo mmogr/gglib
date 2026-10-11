@@ -32,6 +32,7 @@ async fn bootstrap_deletes_an_old_unlinked_image_and_keeps_a_fresh_one() {
     let config = || ServerConfig {
         base_port: Some(19_300),
         llama_server_path: "/nonexistent/llama-server".into(),
+        sd_server_path: "/nonexistent/sd-server".into(),
         db_path: Some(db_path.clone()),
         device_keys_path: Some(dir.path().join("remote_devices")),
         ..ServerConfig::with_defaults().unwrap()

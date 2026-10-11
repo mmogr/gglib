@@ -64,7 +64,8 @@ async fn every_change_the_cli_can_make_is_refused_to_another_site() {
 }
 
 /// The routes #1118 lists that the CLI's contract does not, the llama.cpp
-/// install, update and uninstall and the Python setup among them. Walked
+/// install, update and uninstall and the Python setup among them, and the
+/// image runtime's install and uninstall, which came after it. Walked
 /// with `PATCH`, which none of them registers. The guard wraps each
 /// registered path's method router, so a method the path does not register
 /// meets the guard before the router's 405, and a path that is not registered
@@ -73,10 +74,12 @@ async fn every_change_the_cli_can_make_is_refused_to_another_site() {
 /// on the machine running the test.
 #[tokio::test]
 async fn the_routes_that_act_on_this_machine_are_refused_to_another_site() {
-    const ISSUE_1118: [&str; 14] = [
+    const ISSUE_1118: [&str; 16] = [
         "/api/config/system/install-llama",
         "/api/config/system/update-llama",
         "/api/config/system/uninstall-llama",
+        "/api/config/system/install-sd",
+        "/api/config/system/uninstall-sd",
         "/api/config/system/setup-python",
         "/api/config/system/disable-fast-downloads",
         "/api/config/system/llama-check-updates",

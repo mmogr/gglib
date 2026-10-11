@@ -20,6 +20,7 @@
 
 use serde::Serialize;
 
+use crate::domain::RuntimeKind;
 use crate::domain::residency::SecondarySlotDecision;
 
 /// One model resident in VRAM.
@@ -45,6 +46,8 @@ pub struct ResidentSlotSnapshot {
     /// Seconds this model has been resident.
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub resident_for_secs: u64,
+    /// The program serving it.
+    pub runtime: RuntimeKind,
 }
 
 /// Requests waiting for one model that is not currently resident.
@@ -185,6 +188,39 @@ pub struct AdmissionSnapshot {
     pub total_swaps: u64,
     /// Why the second slot is or is not in use.
     pub secondary_slot: SecondarySlotStatus,
+    /// Whose turn it is to generate: a render's, or the chats'.
+    pub generation: GenerationSnapshot,
+}
+
+/// The generation gate right now: the render holding the GPU, the LLM turns
+/// in flight, and how many callers wait for a turn.
+///
+/// A render and the chats take turns on one GPU (the runtime's generation
+/// gate), so a chat that seems stuck while an image model draws is waiting
+/// here, not in [`AdmissionSnapshot::queued`], which is waiting for a slot.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct GenerationSnapshot {
+    /// The render holding the GPU, if one does.
+    pub render: Option<RenderSnapshot>,
+    /// LLM turns in flight: requests on llama-server residents plus explicit
+    /// LLM turns. A render is granted only when this is 0.
+    pub llm_inflight: u32,
+    /// Callers waiting for a turn, renders and LLM turns together.
+    pub waiting: usize,
+}
+
+/// The render holding the GPU, and how far it has got.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct RenderSnapshot {
+    /// The image model drawing it; `None` once its slot no longer holds it.
+    pub model_name: Option<String>,
+    /// The last step it reported; 0 before its first, while the model loads
+    /// and the prompt is encoded.
+    pub step: u32,
+    /// How many steps it takes; 0 before its first report.
+    pub total: u32,
 }
 
 impl AdmissionSnapshot {
@@ -231,6 +267,7 @@ mod tests {
             inflight,
             is_primary,
             resident_for_secs: 10,
+            runtime: RuntimeKind::Llama,
         }
     }
 
@@ -254,6 +291,7 @@ mod tests {
             total_queued: 12,
             total_swaps: 2,
             secondary_slot: SecondarySlotStatus::resident("nomic-embed"),
+            generation: GenerationSnapshot::default(),
         };
 
         assert_eq!(snapshot.inflight(), 3);
@@ -312,6 +350,10 @@ mod tests {
             .expect("AdmissionSnapshot must always serialize");
         assert!(json.contains("secondary_slot"));
         assert!(json.contains("total_swaps"));
+        assert!(
+            json.contains(r#""generation":{"render":null,"llm_inflight":0,"waiting":0}"#),
+            "{json}"
+        );
     }
 
     // ── format_bytes ─────────────────────────────────────────────────────

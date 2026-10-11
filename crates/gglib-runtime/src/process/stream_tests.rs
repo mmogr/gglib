@@ -67,7 +67,7 @@ async fn a_spawned_servers_stdout_and_stderr_reach_the_log_manager_under_its_por
     use std::os::unix::fs::PermissionsExt;
 
     use crate::pidfile::delete_pidfile;
-    use crate::process::GuiProcessCore;
+    use crate::process::{GuiProcessCore, RuntimeBinaries, SpawnConfig};
     use gglib_core::ports::ServerConfig;
 
     // Ids and a base port no other test in this binary uses.
@@ -82,12 +82,15 @@ async fn a_spawned_servers_stdout_and_stderr_reach_the_log_manager_under_its_por
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("chmod");
     let model = dir.path().join("model.gguf");
     std::fs::write(&model, b"not really a gguf").expect("write model file");
-    let mut core = GuiProcessCore::new(BASE_PORT, script.to_string_lossy());
+    let mut core = GuiProcessCore::new(
+        BASE_PORT,
+        RuntimeBinaries::llama_only(script.to_string_lossy()),
+    );
 
     let mut ports = Vec::new();
     for id in IDS {
         let config = ServerConfig::new(id, "test-model".to_owned(), model.clone(), BASE_PORT);
-        let (port, _pid) = core.spawn(config).await.expect("spawn");
+        let (port, _pid) = core.spawn(SpawnConfig::Llama(config)).await.expect("spawn");
         ports.push(port);
     }
     let held = [lines(ports[0], 2).await, lines(ports[1], 2).await];
