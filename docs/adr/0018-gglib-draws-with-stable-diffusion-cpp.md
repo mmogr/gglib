@@ -202,18 +202,31 @@ model and the images as attachments on its tool row
 the model is never sent.
 
 Pressing Draw is the person's explicit ask, so whether to draw is not left
-to the model: the first reply of a run sent with Draw must be the call. The
-run's first request to the model offers `generate_image` alone and demands a
-call (`tool_choice: "required"`, from `AgentConfig::first_call`); every
-later request offers the run's whole tool list and leaves the choice to the
-model. A first reply that still calls nothing ends the run `failed`,
-`image_generation_failed`, saying the model did not ask for the picture,
-and is never the run's answer. So does a first reply that calls only some
-other tool; of one that calls `generate_image`, only its first call of it
-is kept and every other call in that reply is dropped before anything runs,
-so that reply starts one render. Under `auto` a small model wrote the call as
-text in every run of one reading
+to the model, and it is asked for once: a run sent with Draw is the call
+for the picture, then the model's words. The run's first request to the
+model offers `generate_image` alone and demands a call (`tool_choice:
+"required"`, from `AgentConfig::first_call`). A first reply that does not
+call it, whether it calls nothing or only some other tool, ends the run
+`failed`, `image_generation_failed`, saying the model did not ask for the
+picture, and is never the run's answer. Of a reply that does call it, only
+its first call of it is kept and every other call in that reply is dropped
+before anything runs, so that reply starts one render. Under `auto` a small
+model wrote the call as text in every run of one reading
 ([log-0018, 2026-10-11](log-0018.md#2026-10-11-a-gglib-binary-draws-and-a-message-sent-with-draw-must-call-the-image-tool-first)).
+
+Once that call's tool has run, whether it drew or answered with an error,
+the run's second request offers no tools at all: no `tools`, no
+`tool_choice`, no grammar, and none of the other tools the run was composed
+with. Its reply ends the run. Its text is the answer; a tool call in it is
+not run; and a reply with no text is answered with fixed words, "The model
+said nothing after the drawing tool ran." So a run sent with Draw asks the
+model at most twice and starts at most one render. With the tools still offered
+after the picture, one model asked for the same picture on every later
+reply, five identical renders from one message, and another ended each run
+with a tool call written out as text
+([log-0018, 2026-10-11](log-0018.md#2026-10-11-draw-from-a-chat-draws-on-two-models-and-a-message-sent-with-draw-draws-once)).
+The rule that answers that has not itself been run against a real model.
+An empty `size` argument is read as none, the image model's default.
 A run ended for want of that call has still left rows on a door that saves
 the chat: the
 person's message, saved before the run, and what arrived of the reply,
@@ -339,12 +352,18 @@ The request's sampling is not read; its Thinking choice,
 
 ## Out of scope
 
-- A picture drawn from a chat, seen end to end. A gglib binary has drawn
-  through `gglib image`, the streamed route and `/mcp`
-  ([log-0018, 2026-10-11](log-0018.md#2026-10-11-a-gglib-binary-draws-and-a-message-sent-with-draw-must-call-the-image-tool-first));
-  Draw from a chat drew nothing in that run, which is what decision 9's
-  first-call rule answers, and it has not been run again since. Every test
-  runs a scripted job or a stand-in server.
+- Decision 9's second request, seen with a real model. A gglib binary has
+  drawn through `gglib image`, the streamed route and `/mcp`
+  ([log-0018, 2026-10-11](log-0018.md#2026-10-11-a-gglib-binary-draws-and-a-message-sent-with-draw-must-call-the-image-tool-first)),
+  and from a chat: the demanded first call was made in 8 of 8 runs on two
+  models, through the page's door, a chat run with builtins and `gglib
+  chat`
+  ([log-0018, 2026-10-11](log-0018.md#2026-10-11-draw-from-a-chat-draws-on-two-models-and-a-message-sent-with-draw-draws-once)).
+  What follows the picture went wrong in that run, and the rule that
+  answers it, a second request with no tools, has only been run against a
+  scripted model. A device's hub turn, a real tunnel and a reasoning model
+  have not drawn at all. Every test runs a scripted job or a stand-in
+  server.
 - MLX, ComfyUI, img2img, edits, LoRA, ControlNet, upscaling and video.
 - A tool's image sent back to the model as context
   ([ADR 0016](0016-a-tools-image-is-an-attachment-on-its-tool-row.md)).
