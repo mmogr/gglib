@@ -311,6 +311,80 @@ tool, nothing written to any chat, and its run marked `frames: "agent"`.
 The request's sampling is not read; its Thinking choice,
 `"reasoning_budget_tokens": 0`, is.
 
+### 14. A chat that holds a drawn picture tells the model so on every later message
+
+The message after a draw is sent without the image tool (decision 9), so
+the model reads a history in which it called a tool it is not offered, and
+says it cannot make images. Seven of nine such replies from one model did
+([log-0018, 2026-10-11](log-0018.md#2026-10-11-a-chat-that-holds-a-drawn-picture-tells-the-model-so-on-later-messages)).
+
+So a request whose history holds a drawn picture carries one note for the
+model: that the person pressed Draw and a drawing tool made a picture from a
+prompt the model wrote, that the picture exists and the person can see it,
+that a new or changed picture needs Draw pressed again, and that it is not
+to deny the picture or write a tool call. The note is written into the
+request on its way to the model. It is in no row, no event and no history a
+run returns, and the person never sees it.
+
+One stage of the request pipeline adds it (`request_pipeline::drawn_note`,
+stage 1b), so every door has it from one place: the agent adapter, which
+serves the page's run, a device's turn, a chat run with builtins and `gglib
+chat`, and the proxy's plain chat path. It reads only the request's body.
+The note is added when all of these hold:
+
+1. `messages` holds an assistant call of `builtin:generate_image`, by that
+   exact name, and a later `tool` message with that call's id whose text
+   says a picture was drawn that the person can see. A tool message carries
+   no success flag, so the text is the only evidence; a test in `gglib-mcp`
+   holds the tool's sentences to the two marks the stage reads.
+2. The request's last message is not one of the two closing instructions of
+   decision 9. One that ends with either is the closing request of a run
+   sent with Draw and is already told what to say. The stage knows it by
+   those words, which live beside the note in `gglib-core`, because the
+   roles alone do not tell the two apart: the message after a draw whose
+   closing reply never arrived also ends with a tool's answer and a `user`
+   message.
+3. `tools` does not offer `builtin:generate_image`. A request that offers it
+   is the first of a message sent with Draw and must call the tool.
+4. No message already holds the note. A turn for a model on another machine
+   is shaped here and again by that machine's proxy, and carries it once.
+
+A chat whose draws all failed gets no note, since it would say a picture
+exists. Another client's own `generate_image`, an MCP server's and the
+`/mcp` gateway's `builtin__generate_image` are not a press of Draw and bring
+none. A history from which the loop's pruning dropped the call or its answer
+brings none.
+
+The note goes at the front, as the system prompt: after a blank line at the
+end of a first message that is a `system` one, or as a `system` message of
+its own before everything else. It is added before capability coalescing,
+so a model with no system role reads it as it reads any system message, and
+before truncation, which measures its 488 characters with the rest. The
+loop's own pruning runs earlier and does not count them. The stage can also
+put the note at the start of the first `user` message after the picture;
+one constant chooses, and the front was the better of the two when both
+were sent to a model.
+
+The front of the prompt therefore changes on the first message after a
+chat's first picture, and that request reads the whole chat again. It
+changes again for the two requests of each later message sent with Draw,
+which carry no note, and back on the message after.
+
+Two other ways were set aside. Folding the past call and its answer into
+assistant text ("I asked the drawing tool for ...") renders in every
+template, but shows the model drawing by writing a sentence, which it is
+then apt to do when asked for a change (not measured); it also rewrites
+turns the model produced.
+Offering the tool on every message so the template describes it would have
+the tool's definition say Draw was pressed when it was not, would switch on
+the agentic sampling ceiling for the whole chat, would hand a device's turn
+a tool its tunnel did not open, and on a dialect model `tool_choice:
+"none"` comes back as tool markup in the text.
+
+What this leaves. A chat a phone keeps itself sends no call and no tool message, so its
+requests get none until ggchat sends them. No model is sent the picture
+itself (ADR 0016).
+
 ### 15. A render nobody waits for is stopped, not followed
 
 Decision 8 kept a render whose reader had left until its job ended, with
