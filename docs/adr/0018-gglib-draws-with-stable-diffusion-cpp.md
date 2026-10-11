@@ -63,6 +63,8 @@ from that one fact: the files it needs, its recipe, the program that serves
 it, what it may be asked to do. A model's runtime is derived from it
 (`Model::runtime`), never stored, so there is no second field to disagree.
 
+Amended on 2026-10-11: there are four families. Decision 18 adds `z-image`.
+
 ### 2. The files beside the weights are linked by role, through the one link rule
 
 A family's recipe (`ImageFamily::recipe`) names the roles it draws with:
@@ -86,6 +88,9 @@ a count of one to four, and a seed. The recipe's `SizeRule` judges the size
 before anything queues (a multiple of 64 for Flux.1 and SDXL, of 32 for
 Qwen-Image 2.1, from 256 to 1536 a side, 1024x1024 when unsaid), because
 `sd-server` would round a wrong one instead of refusing it.
+
+Amended on 2026-10-11: Z-Image's recipe is decision 18's: 8 steps, 1.0,
+`euler`, flash attention in the diffusion model alone, and a multiple of 16.
 
 ### 4. `sd-server` is installed pinned, pre-built where there is a build
 
@@ -118,6 +123,9 @@ primary, and where the primary is held and nothing is granted it is refused
 
 Amended on 2026-10-11: this places an image model only while no other image
 model is loaded or loading. While one is, decision 17 places it.
+
+Amended on 2026-10-11: Z-Image is budgeted at 8 GiB, an estimate and not a
+reading (decision 18).
 
 ### 7. The GPU is given in turns: one render, or the chats
 
@@ -542,6 +550,45 @@ retired (decision 15) its slot is empty, so decision 6 places the next image
 model, against a free reading that may still count the server being
 stopped. None of it has been run with a real model.
 
+### 18. Z-Image is a fourth family
+
+Decision 1 knew three families and "Out of scope" left the rest out. Z-Image
+is added, for Z-Image Turbo, from a header and stable-diffusion.cpp's guide
+and source. **No Z-Image picture has been drawn**, through gglib or by
+`sd-server`
+([log-0018, 2026-10-11](log-0018.md#2026-10-11-z-image-is-a-fourth-family-recognised-from-a-header-and-never-drawn)).
+
+1. *How it is known.* `z-image` is a file with `cap_embedder.0.weight` that
+   has neither `local_decoder.out_conv.weight` nor
+   `text_encoders.llm.connector.layers.0.self_attn.q_proj.weight`: with the
+   first sd.cpp loads Z-Image L2P, which has no VAE, and with the second
+   Ming Image. gglib also asks that `x_embedder.weight` takes 64 input
+   features and `cap_embedder.1.weight` 2560, the two widths the recipe's
+   VAE and text encoder feed; sd.cpp does not ask this, it sizes the model
+   from them. A file that fails either is no family.
+2. *Its companions.* The Flux.1 VAE, the same file from the same repository
+   as Flux.1's, so a library that holds one fetches nothing; and Qwen3 4B as
+   `llm`, by default `unsloth/Qwen3-4B-Instruct-2507-GGUF`
+   `Qwen3-4B-Instruct-2507-Q8_0.gguf`. The `llm` role takes a GGUF of
+   architecture `qwen3` whose `token_embd.weight` is 2560 wide and nothing
+   else: Qwen-Image 2.1's Qwen3-VL 8B is refused, and so is a safetensors
+   encoder, which sd.cpp can load and gglib has not read.
+3. *Turbo's settings, for the whole family.* 8 steps, guidance 1.0, `euler`,
+   flash attention in the diffusion model alone (`--diffusion-fa`, where
+   Qwen-Image 2.1 is given `--fa`), sizes a multiple of 16. A base Z-Image file is
+   expected to be the same family, since sd.cpp loads both as one model; no
+   base header was read. It is then drawn with Turbo's settings, where
+   sd.cpp's guide runs it at guidance 5.0. Settings per model are still out
+   of scope.
+4. *Its compute margin is an estimate*, 8 GiB: the 7 GiB read for Flux.1,
+   whose largest buffer was the decode of this same VAE, and one more for a
+   diffusion buffer nobody has read. A reading replaces it.
+
+What this leaves. Whether sd.cpp at the pin draws a correct picture from
+these files on Metal, and how long it takes. Whether a Z-Image file written with
+diffusers' tensor names, which sd.cpp renames as it loads, is known: its
+patch embedder has another name, and gglib would answer no family.
+
 ## Consequences
 
 - A person presses Draw, sends a message, and sees a picture arrive in the
@@ -619,9 +666,13 @@ stopped. None of it has been run with a real model.
 - MLX, ComfyUI, img2img, edits, LoRA, ControlNet, upscaling and video.
 - A tool's image sent back to the model as context
   ([ADR 0016](0016-a-tools-image-is-an-attachment-on-its-tool-row.md)).
-- Families beyond Flux.1, SDXL and Qwen-Image 2.1, and the variants of those
-  sd.cpp loads differently. Flux dev reads as Flux.1 and takes schnell's
+- ~~Families beyond Flux.1, SDXL and Qwen-Image 2.1, and the variants of those
+  sd.cpp loads differently.~~ Flux dev reads as Flux.1 and takes schnell's
   steps; none was measured.
+  Amended on 2026-10-11: decision 18 adds Z-Image
+  ([log-0018](log-0018.md#2026-10-11-z-image-is-a-fourth-family-recognised-from-a-header-and-never-drawn)).
+  Families beyond those four are out, with the variants of the four sd.cpp
+  loads differently, Z-Image L2P among them.
 - Steps, guidance or a sampler per request or per model.
 - CUDA, Vulkan and ROCm: their assets are matched by name only.
 - Sizes above 1024²: the compute margins were read there.
