@@ -28,12 +28,17 @@ impl ImageGenerationPort for Says {
         unreachable!("the switch draws nothing")
     }
 
-    async fn drawing_model(&self) -> Result<String, ImageError> {
-        self.0
-            .map(str::to_owned)
-            .map_err(|reason| ImageError::Unavailable {
-                reason: reason.to_owned(),
-            })
+    async fn drawing(
+        &self,
+        _chosen: Option<u32>,
+    ) -> gglib_core::contracts::http::images::DrawingAvailability {
+        match self.0 {
+            Ok(model) => gglib_core::contracts::http::images::DrawingAvailability::with(model),
+            Err(reason) => gglib_core::contracts::http::images::DrawingAvailability::refused(
+                "drawing_unavailable",
+                reason,
+            ),
+        }
     }
 }
 

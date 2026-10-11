@@ -429,3 +429,30 @@ async fn a_runtime_refusal_is_answered_as_the_proxy_answers_one() {
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     assert!(response.headers().contains_key("retry-after"));
 }
+
+/// The code core's availability answer gives a chosen model's refusal is the
+/// code this route refuses a request naming that model with.
+#[test]
+fn an_availability_refusal_carries_this_routes_code() {
+    use gglib_core::domain::ComponentRole;
+    use gglib_core::services::drawing_refusal;
+
+    for error in [
+        ImageError::Runtime(ModelRuntimeError::ModelNotFound("12".to_owned())),
+        ImageError::Runtime(ModelRuntimeError::ImageModelIncomplete {
+            model: "flux".to_owned(),
+            missing: vec![ComponentRole::Vae],
+        }),
+        ImageError::NotAnImageModel {
+            model: "qwen".to_owned(),
+        },
+        ImageError::Unavailable {
+            reason: "no image model".to_owned(),
+        },
+    ] {
+        let route = super::refusal_body(&error).error;
+        let answer = drawing_refusal(&error);
+        assert!(route.code.is_some(), "{error:?}");
+        assert_eq!(answer.code, route.code, "{error:?}");
+    }
+}

@@ -22,7 +22,7 @@ pub use app_core::AppCore;
 pub use attachments::AttachmentService;
 pub use chat_history::{ChangeError, ChatHistoryService};
 pub use component_choices::component_choices;
-pub use drawing::{drawing_availability, resolve_image_model};
+pub use drawing::{drawing_availability, drawing_refusal, image_model_answer, resolve_image_model};
 pub use model_import::{
     HfOrigin, MAX_GENERATION_CONFIG_LOOKUPS, ModelOrigin, build_new_model, fetch_published_sampling,
 };

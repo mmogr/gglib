@@ -28,7 +28,7 @@ const TOOL: &str = "builtin__generate_image";
 /// counting every render it is asked for.
 #[derive(Debug)]
 struct Draws {
-    /// What `drawing_model` answers: whether there is a model to draw with.
+    /// What `drawing` answers: whether there is a model to draw with.
     can_draw: bool,
     result: Result<ImageBatch, ImageError>,
     renders: AtomicUsize,
@@ -100,13 +100,17 @@ impl ImageGenerationPort for Draws {
         self.result.clone()
     }
 
-    async fn drawing_model(&self) -> Result<String, ImageError> {
+    async fn drawing(
+        &self,
+        _chosen: Option<u32>,
+    ) -> gglib_core::contracts::http::images::DrawingAvailability {
         if self.can_draw {
-            Ok("sdxl".to_owned())
+            gglib_core::contracts::http::images::DrawingAvailability::with("sdxl")
         } else {
-            Err(ImageError::Unavailable {
-                reason: "no image model is installed; add one".to_owned(),
-            })
+            gglib_core::contracts::http::images::DrawingAvailability::refused(
+                "drawing_unavailable",
+                "no image model is installed; add one",
+            )
         }
     }
 }

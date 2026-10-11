@@ -111,10 +111,10 @@ pub(super) fn one_complete() -> Catalog {
 }
 
 async fn pick(catalog: &Catalog, default: Option<u32>, named: Option<&str>) -> String {
-    resolve_image_model(catalog, default.map(i64::from), named)
-        .await
-        .map(|spec| spec.name)
-        .unwrap_or_else(|e| panic!("expected a model, got {e:?}"))
+    match resolve_image_model(catalog, default.map(i64::from), named).await {
+        Ok(spec) => spec.name,
+        Err(e) => panic!("expected a model, got {e:?}"),
+    }
 }
 
 async fn refusal(catalog: &Catalog, default: Option<u32>, named: Option<&str>) -> ImageError {

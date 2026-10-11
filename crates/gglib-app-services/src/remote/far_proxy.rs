@@ -215,14 +215,20 @@ impl FarProxy {
     }
 
     /// `GET /v1/images/drawing`: whether that machine can draw for a turn
-    /// sent with Draw pressed, and why not. An older hub answers 404.
+    /// sent with Draw pressed, why not, and its image models; with
+    /// `image_model`, one of its ids, as `?image_model=<id>`, so it judges
+    /// that choice. An older hub answers 404.
     ///
     /// # Errors
     ///
     /// `Unavailable` when the request did not get through.
-    pub async fn drawing(&self) -> Result<reqwest::Response, GuiError> {
-        self.send(self.bounded.get(self.url("/images/drawing")))
-            .await
+    pub async fn drawing(&self, image_model: Option<u32>) -> Result<reqwest::Response, GuiError> {
+        let asked = image_model.map_or_else(String::new, |id| format!("?image_model={id}"));
+        self.send(
+            self.bounded
+                .get(self.url(&format!("/images/drawing{asked}"))),
+        )
+        .await
     }
 
     /// `GET /v1/runs`: the runs this device may see there.

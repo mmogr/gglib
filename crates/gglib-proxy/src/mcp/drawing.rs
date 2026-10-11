@@ -55,7 +55,7 @@ pub(super) async fn offered(state: &AppState) -> Result<Arc<dyn ImageGenerationP
     }
     // The client's model is calling tools and is not this machine's to place,
     // so neither of the chat-side reasons is asked.
-    let availability = drawing_availability(state.images.as_deref(), false, None).await;
+    let availability = drawing_availability(state.images.as_deref(), false, None, None).await;
     match &state.images {
         Some(images) if availability.available => Ok(Arc::clone(images)),
         _ => Err(availability

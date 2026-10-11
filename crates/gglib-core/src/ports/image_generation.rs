@@ -19,6 +19,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::mpsc;
 
+use crate::contracts::http::images::DrawingAvailability;
 use crate::domain::SizeRule;
 use crate::domain::agent::PreviewFrame;
 use crate::ports::{GateError, ModelRuntimeError};
@@ -320,23 +321,19 @@ pub trait ImageGenerationPort: Send + Sync + fmt::Debug {
         progress: mpsc::Sender<ImageProgress>,
     ) -> Result<ImageBatch, ImageError>;
 
-    /// The image model a request that names none would draw with, or why
-    /// nothing here can draw: no image runtime, no image model, the default
-    /// lacking a file, several and no default, the only one lacking a file.
-    /// Asks without queueing or loading anything; what the Draw button's
-    /// availability reads.
+    /// Whether this service can draw, with which image model, and every
+    /// image model it has: the answer the Draw button reads. `chosen` is the
+    /// id of the model a person picked, judged as a request naming it would
+    /// be; `None` asks what a request that names none draws with. Asks
+    /// without queueing or loading anything.
     ///
     /// The default answers that this service cannot say, so only a service
     /// that knows offers drawing.
-    ///
-    /// # Errors
-    ///
-    /// [`ImageError::Unavailable`] with the reason, or what the service could
-    /// not read.
-    async fn drawing_model(&self) -> Result<String, ImageError> {
-        Err(ImageError::Unavailable {
-            reason: "this image service cannot say whether it can draw".to_owned(),
-        })
+    async fn drawing(&self, _chosen: Option<u32>) -> DrawingAvailability {
+        DrawingAvailability::refused(
+            "drawing_unavailable",
+            "this image service cannot say whether it can draw",
+        )
     }
 }
 

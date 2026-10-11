@@ -22,8 +22,10 @@ past the proxy.
 `images.rs` is `POST /api/images/generations`: the proxy's
 `/v1/images/generations` handler body, mounted at the daemon's door over the
 same image driver, so `gglib image` draws when the proxy is stopped or
-keyed. `GET /api/images/drawing` (query `far`, `calls_tools`) says whether a
-message sent with Draw pressed can draw here, and why not; `generate_image`
+keyed. `GET /api/images/drawing` (query `far`, `calls_tools`, `image_model`)
+says whether a message sent with Draw pressed can draw here, and why not,
+lists this machine's image models, and with `image_model=<id>` judges that
+one as a request naming it would be; `generate_image`
 is never in `/api/builtin/tools`, whose list the page lets a person switch
 tools on from.
 

@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use futures_util::stream;
-use gglib_core::contracts::http::images::ImageStreamEvent;
+use gglib_core::contracts::http::images::{DrawingAvailability, ImageStreamEvent};
 use gglib_core::ports::{
     ImageError, ImageGenerationPort, ImageProgress, ImageRequest, ImageSize, ImageStage,
 };
@@ -314,27 +314,49 @@ async fn a_refused_render_is_the_daemons_refusal() {
     );
 }
 
-/// Whether the daemon can draw is the daemon's answer: its model, its
-/// reason, and "cannot" from a daemon too old to have the route.
+/// Whether the daemon can draw is the daemon's answer as it gave it: its
+/// model and its list, its code and reason, and "cannot" from a daemon too
+/// old to have the route. A chosen model goes with the question.
 #[tokio::test]
-async fn the_drawing_model_is_the_daemons_answer() {
-    let ask = |status, body: &str| {
+async fn the_drawing_answer_is_the_daemons_own() {
+    const PLAIN: &str = "GET /api/images/drawing HTTP/1.1";
+    let ask = |status, body: &str, chosen: Option<u32>, line: &'static str| {
         let (port, seen) = stand_in(status, "application/json", body.to_owned());
         async move {
-            let answer = STAND_IN_PORT.scope(port, generator().drawing_model()).await;
-            let line = seen.lock().unwrap()[0].clone();
-            assert_eq!(line, "GET /api/images/drawing HTTP/1.1");
+            let answer = STAND_IN_PORT.scope(port, generator().drawing(chosen)).await;
+            assert_eq!(seen.lock().unwrap()[0], line);
             answer
         }
     };
-    let can = ask(200, r#"{"available":true,"model":"sdxl"}"#).await;
-    assert_eq!(can.unwrap(), "sdxl");
+    let row = r#"{"id":1,"name":"sdxl","family":"sdxl","complete":true,"missing":[],"default":true,"resident":false}"#;
+    let can = format!(r#"{{"available":true,"model":"sdxl","model_id":1,"models":[{row}]}}"#);
+    let can = ask(200, &can, None, PLAIN).await;
+    assert!(can.available);
+    assert_eq!(
+        (can.model.as_deref(), can.model_id),
+        (Some("sdxl"), Some(1))
+    );
+    assert_eq!(can.models.len(), 1);
+    assert!(can.models[0].default && !can.models[0].resident);
 
-    let cannot = r#"{"available":false,"code":"drawing_unavailable","reason":"no image model"}"#;
-    let cannot = ask(200, cannot).await.unwrap_err();
-    assert_eq!(cannot.code(), Some("drawing_unavailable"));
-    assert_eq!(cannot.to_string(), "no image model");
+    let lacking = r#"{"available":false,"code":"image_model_incomplete","reason":"flux lacks vae","models":[]}"#;
+    let lacking = ask(
+        200,
+        lacking,
+        Some(2),
+        "GET /api/images/drawing?image_model=2 HTTP/1.1",
+    )
+    .await;
+    assert_eq!(
+        lacking,
+        DrawingAvailability::refused("image_model_incomplete", "flux lacks vae")
+    );
 
-    let old = ask(404, "{}").await.unwrap_err();
-    assert!(old.to_string().contains("answered 404"), "{old}");
+    // A daemon from before the list still reads, with no rows.
+    let earlier = ask(200, r#"{"available":true,"model":"sdxl"}"#, None, PLAIN).await;
+    assert_eq!(earlier, DrawingAvailability::with("sdxl"));
+
+    let old = ask(404, "{}", None, PLAIN).await;
+    assert_eq!(old.code.as_deref(), Some("drawing_unavailable"));
+    assert!(old.reason.unwrap().contains("answered 404"));
 }

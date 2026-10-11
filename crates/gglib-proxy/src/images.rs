@@ -53,7 +53,15 @@ pub(crate) async fn drawing_route(
     State(state): State<AppState>,
     Query(query): Query<DrawingQuery>,
 ) -> Json<DrawingAvailability> {
-    Json(drawing_availability(state.images.as_deref(), query.far, query.calls_tools).await)
+    Json(
+        drawing_availability(
+            state.images.as_deref(),
+            query.far,
+            query.calls_tools,
+            query.image_model,
+        )
+        .await,
+    )
 }
 
 /// The proxy's door: the driver the daemon handed this proxy, if any.

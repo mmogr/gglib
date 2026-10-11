@@ -102,7 +102,7 @@ impl DrawSwitch {
             Ok(images) => images,
             Err(reason) => return format!("cannot draw: {reason}"),
         };
-        let answer = drawing_availability(Some(images.as_ref()), false, None).await;
+        let answer = drawing_availability(Some(images.as_ref()), false, None, None).await;
         if !answer.available {
             let reason = answer.reason.unwrap_or_default();
             return format!("cannot draw: {reason}");
