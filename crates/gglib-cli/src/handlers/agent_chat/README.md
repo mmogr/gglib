@@ -41,7 +41,10 @@ independently readable:
   reply must start with the call for the picture and is offered no tools
   after it, only an instruction for its closing words that no row or later
   message holds, and is off
-  again once that message is sent; the tool draws through the daemon
+  again once that message is sent; the tool draws through the daemon;
+  `/draw <model>`, `/draw default` and `/draw list` choose, forget and
+  list the image model the session draws with, held by the switch for the
+  session and placed on each request the tool hands the daemon
 - [`sight`]    — whether the session's model can read an image, asked before
   the loop is composed: the catalogue row, or `/props` of a `--port` server
 - [`tool_format`] — tool-result summary formatters

@@ -108,14 +108,27 @@ async fn a_change_to_the_chat_is_asked_for_and_not_sent() {
     ));
 }
 
-/// `/draw` is the Draw switch, never a message.
+/// `/draw` is the Draw switch, never a message: alone, or with the word
+/// after it (`list`, `default`, an image model's name or id), trimmed. A
+/// word that only starts with it is a message.
 #[tokio::test]
 async fn a_draw_line_is_the_switch_and_sends_nothing() {
     let (service, _) = service();
     let (mut images, _) = attached(&service, &[], true).await.unwrap();
-    assert!(matches!(read("/draw", &mut images).await, Line::Draw));
+    assert!(matches!(read("/draw", &mut images).await, Line::Draw(None)));
+    for (line, word) in [
+        ("/draw list", "list"),
+        ("/draw default", "default"),
+        ("/draw   qwen image  ", "qwen image"),
+        ("/draw\t7", "7"),
+    ] {
+        match read(line.trim(), &mut images).await {
+            Line::Draw(Some(what)) => assert_eq!(what, word, "{line}"),
+            other => panic!("{line}: {other:?}"),
+        }
+    }
     assert!(matches!(
-        read("/draw a fox", &mut images).await,
+        read("/drawing a fox", &mut images).await,
         Line::Send(_)
     ));
 }

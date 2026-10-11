@@ -38,8 +38,9 @@ crates/gglib-cli/src/commands.rs 370
 crates/gglib-cli/src/daemon_client/images_tests.rs 362
 crates/gglib-cli/src/handlers/agent_chat/config.rs 402
 crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 457
+crates/gglib-cli/src/handlers/agent_chat/draw.rs 318
 crates/gglib-cli/src/handlers/agent_chat/mod.rs 312
-crates/gglib-cli/src/handlers/agent_chat/repl.rs 366
+crates/gglib-cli/src/handlers/agent_chat/repl.rs 369
 crates/gglib-cli/src/handlers/agent_chat/turn_rows_tests.rs 470
 crates/gglib-cli/src/handlers/benchmark.rs 1613
 crates/gglib-cli/src/handlers/config/sd.rs 326

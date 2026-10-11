@@ -26,8 +26,10 @@ pub(super) enum Line {
     /// `/image`: what to tell the user, be it the receipt of the image now
     /// attached to the next message, the usage, or why it was refused.
     Image(String),
-    /// `/draw`: let the model draw for the next message.
-    Draw,
+    /// `/draw`: let the model draw for the next message. With a word
+    /// after it, that word: `list`, `default`, or an image model's name or
+    /// id.
+    Draw(Option<String>),
     /// Anything else is the user's next message. It carries every image
     /// attached since the last one, and none waits after it.
     Send(AgentMessage),
@@ -43,8 +45,13 @@ pub(super) async fn read(input: &str, images: &mut TurnImages<'_>) -> Line {
         "/retry" => return Line::Change(Ask::Retry),
         "/branch" => return Line::Change(Ask::Branch),
         "/branches" => return Line::Branches,
-        "/draw" => return Line::Draw,
         _ => {}
+    }
+    if let Some(what) = input.strip_prefix("/draw")
+        && (what.is_empty() || what.starts_with(char::is_whitespace))
+    {
+        let what = what.trim();
+        return Line::Draw((!what.is_empty()).then(|| what.to_owned()));
     }
     if let Some(text) = input.strip_prefix("/edit")
         && (text.is_empty() || text.starts_with(char::is_whitespace))

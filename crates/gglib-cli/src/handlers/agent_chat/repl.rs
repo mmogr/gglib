@@ -58,6 +58,9 @@ const REPL_HELP: &str = "\
   /branch   copy the chat into a new branch and go on there
   /branches list the other branches along the chat
   /draw     let the model draw a picture for your next message
+  /draw <model>  the same, with that image model (a name or id) from now on
+  /draw default  the same, with the daemon's default image model again
+  /draw list     list the daemon's image models
   /quit     exit the session
   /exit     exit the session
   Ctrl+C    cancel the current agent response (return to prompt)
@@ -208,8 +211,8 @@ pub(crate) async fn run_repl_with_history(
                 }
                 false
             }
-            Line::Draw => {
-                eprintln!("{}", draw.arm().await);
+            Line::Draw(what) => {
+                eprintln!("{}", draw.say(what.as_deref()).await);
                 continue;
             }
             Line::Send(message) => {
