@@ -3,6 +3,7 @@ pub mod apply;
 pub(crate) mod chat_runtime;
 pub(crate) mod constrain;
 pub(crate) mod content;
+pub(crate) mod drawn_note;
 pub(crate) mod effort_gate;
 pub mod explain;
 pub(crate) mod image_size;
@@ -24,6 +25,10 @@ pub use apply::{PipelineReport, apply};
 pub use chat_runtime::{DrawsImages, refuse_unless_chats};
 pub use constrain::{DISABLE_GRAMMAR_ENV, constrain_tool_calls};
 pub use content::{append_text, for_each_text_mut, image_urls, text_len, text_parts};
+pub use drawn_note::{
+    DRAW_THEN_SAY, DRAW_THEN_SAY_FAILED, DRAW_TOOL_NAME, DRAWN_NOTE, DREW_HEAD, DREW_SEEN,
+    PLACEMENT as DRAWN_NOTE_PLACEMENT, Placement as DrawnNotePlacement,
+};
 pub use effort_gate::{SuppressedEffort, suppress_stored_effort, suppress_unsupported_effort};
 pub use explain::explain_stored;
 pub use image_size::{

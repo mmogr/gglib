@@ -226,7 +226,7 @@ fn tool_filter(tools: &[String], can_draw: bool) -> Option<std::collections::Has
     }
     let mut named: std::collections::HashSet<String> = tools.iter().cloned().collect();
     if can_draw {
-        named.insert("builtin:generate_image".to_owned());
+        named.insert(gglib_core::request_pipeline::DRAW_TOOL_NAME.to_owned());
     }
     Some(named)
 }

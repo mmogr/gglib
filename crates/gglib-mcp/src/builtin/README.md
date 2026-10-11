@@ -48,6 +48,13 @@ not call a tool." When the tool answered with an error it is
 above says why. Tell the person in one or two sentences what went wrong. Do
 not call a tool."
 
+The messages after that one are sent without the tool. So that the model
+does not deny the picture then, `gglib-core`'s request pipeline adds a note
+to a request whose history holds a drawn picture
+(`request_pipeline::drawn_note`). It knows one by this tool's qualified name
+and by an answer that starts "Drew " and contains "the user can see ", so
+those words of `drew_sentence` are held to its constants by a test here.
+
 An empty `size` (`""`, or only spaces) is no size: the picture is drawn at
 the image model's default, as when the argument is left out. A size that
 says something is refused as before: here when it is not `WIDTHxHEIGHT`,

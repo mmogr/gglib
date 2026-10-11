@@ -127,6 +127,59 @@ async fn a_draw_runs_closing_instruction_reaches_the_model_and_no_saved_row() {
     }
 }
 
+/// The message after a drawn picture, sent without Draw, here with the call
+/// and the model's words in one assistant message, so that nothing but the
+/// person's message follows the tool's answer: the model is told once, at
+/// the front, that the picture exists, and is offered no image tool. Saved as a run's rows are, the turn has no row that holds the note,
+/// and no event of its loop does.
+#[tokio::test]
+async fn the_message_after_a_drawn_picture_tells_the_model_and_no_saved_row() {
+    use crate::handlers::agent::run_fixture::{End, prepared, settled, start};
+    use crate::handlers::agent::turn_fixture::{REPLY, turn};
+    use gglib_core::request_pipeline::DRAWN_NOTE;
+
+    let (_dir, state) = drawing_state().await;
+    let id = model(&state, |_| {}).await;
+    let drew = "Drew 1 image, 1024x1024 PNG, with flux in 76 s; the user can see it, you cannot.";
+    let history = json!([
+        { "role": "user", "content": "draw a fox" },
+        { "role": "assistant", "content": "I asked for a red fox.", "tool_calls": [
+            { "id": "c1", "name": DRAW_TOOL, "arguments": { "prompt": "a fox" } },
+        ]},
+        { "role": "tool", "tool_call_id": "c1", "content": drew },
+        { "role": "user", "content": "thanks" },
+    ]);
+    let asked = page(&state, json!({ "tool_filter": [], "messages": history })).await;
+
+    let turn = turn(&state, id, asked, REPLY).await;
+
+    assert!(turn.ended_well, "{:?}", turn.events);
+    assert_eq!(turn.requests.len(), 1);
+    let request = &turn.requests[0];
+    assert!(offers_nothing(request), "{request}");
+    let note = json!({ "role": "system", "content": DRAWN_NOTE });
+    assert_eq!(request["messages"][0], note);
+    assert_eq!(request["messages"].as_array().unwrap().len(), 5);
+    assert_eq!(request.to_string().matches(DRAWN_NOTE).count(), 1);
+    let events = format!("{:?}", turn.events);
+    assert!(!events.contains(DRAWN_NOTE), "{events}");
+
+    let chat = conversation(&state).await;
+    let (run, _) = prepared(turn.events, End::Finish);
+    start(&state, "r1", Some(chat), run).await;
+    settled(&state).await;
+    let rows = saved(&state, chat).await;
+    assert!(!rows.is_empty());
+    for row in &rows {
+        let metadata = row.metadata.as_ref().map(Value::to_string);
+        assert!(!row.content.contains(DRAWN_NOTE), "{}", row.content);
+        assert!(
+            !metadata.unwrap_or_default().contains(DRAWN_NOTE),
+            "{row:?}"
+        );
+    }
+}
+
 /// A model that answers a message sent with Draw in words, as one that
 /// writes its call as text does, ends the run failed with a sentence that
 /// says so: one request, no answer, and the run's code is a picture's.

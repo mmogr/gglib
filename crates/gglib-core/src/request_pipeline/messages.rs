@@ -1,14 +1,15 @@
 //! Stage 1–2: shaping the conversation itself.
 //!
-//! Both transforms rewrite the `messages` array and nothing else. They are
-//! paired in [`shape_messages`] because they are the contiguous run of
+//! Every transform here rewrites the `messages` array and nothing else. They
+//! are grouped in [`shape_messages`] because they are the contiguous run of
 //! message-level work in the pipeline — see [`mod@super::apply`] for why the order
-//! within that run is fixed.
+//! within that run is fixed. Stage 1b, the note for a chat that holds a drawn
+//! picture, is [`super::drawn_note`]'s.
 
 use serde_json::Value;
 use tracing::{Level, debug, enabled, warn};
 
-use super::ModelContext;
+use super::{ModelContext, drawn_note};
 use crate::domain::{ChatMessage, ModelCapabilities, transform_messages_for_capabilities};
 use crate::normalize::strip_thinking_debt;
 
@@ -23,8 +24,9 @@ pub fn shape_messages(body: &mut Value, ctx: &ModelContext) -> bool {
     // Evaluated eagerly, not short-circuited: coalescing must run even when
     // the reasoning strip found nothing to do.
     let stripped = strip_prior_reasoning(body);
+    let noted = drawn_note::note_drawn_picture(body);
     let coalesced = coalesce_for_capabilities(body, ctx.capabilities);
-    stripped || coalesced
+    stripped || noted || coalesced
 }
 
 /// Stage 1 — scrub reasoning artefacts from prior assistant turns.

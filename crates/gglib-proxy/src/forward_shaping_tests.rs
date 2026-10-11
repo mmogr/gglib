@@ -180,3 +180,50 @@ fn shaping_says_whether_the_request_carries_an_image() {
     ));
     assert!(!shape("not json"));
 }
+
+/// A plain chat request whose history holds a drawn picture and whose tools
+/// do not offer the image tool, as a device that keeps its own chats sends
+/// the message after one: the forwarded body tells the model once, at the
+/// front. The same request with no drawn picture gains no message.
+#[test]
+fn a_request_after_a_drawn_picture_is_forwarded_with_the_note() {
+    use gglib_core::request_pipeline::{DRAW_TOOL_NAME, DRAWN_NOTE};
+    let history = |tool: &str| {
+        serde_json::json!({"model": "m", "messages": [
+            {"role": "user", "content": "draw a fox"},
+            {"role": "assistant", "content": null, "tool_calls": [{
+                "id": "c1", "type": "function",
+                "function": {"name": tool, "arguments": "{\"prompt\":\"a fox\"}"},
+            }]},
+            {"role": "tool", "tool_call_id": "c1", "content":
+                "Drew 1 image, 1024x1024 PNG, with flux in 76 s; the user can see it, you cannot."},
+            {"role": "assistant", "content": "I asked for a red fox."},
+            {"role": "user", "content": "thanks"},
+        ]})
+    };
+    let forwarded = |sent: &serde_json::Value| -> serde_json::Value {
+        let shaped = shape_request_body(
+            Bytes::from(serde_json::to_vec(sent).unwrap()),
+            &ModelContext::passthrough(),
+            &SamplingLayers::default(),
+            Some(chars(100_000)),
+        )
+        .expect("it fits");
+        serde_json::from_slice(&shaped.body).expect("valid json")
+    };
+
+    let sent = history(DRAW_TOOL_NAME);
+    let told = forwarded(&sent);
+    let mut expected = vec![serde_json::json!({"role": "system", "content": DRAWN_NOTE})];
+    expected.extend(sent["messages"].as_array().unwrap().iter().cloned());
+    assert_eq!(told["messages"], serde_json::Value::Array(expected));
+    assert_eq!(told.to_string().matches(DRAWN_NOTE).count(), 1);
+    assert_eq!(
+        forwarded(&told)["messages"],
+        told["messages"],
+        "shaped twice"
+    );
+
+    let theirs = history("generate_image");
+    assert_eq!(forwarded(&theirs)["messages"], theirs["messages"]);
+}

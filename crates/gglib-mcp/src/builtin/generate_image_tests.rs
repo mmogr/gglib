@@ -295,6 +295,36 @@ async fn an_image_the_store_refuses_is_said_to_be_unseen() {
     );
 }
 
+/// The request pipeline knows a drawn picture in a chat's history by this
+/// tool's name and by how its answer reads (`gglib_core`'s `drawn_note`):
+/// the name is the one a run is held to, an answer that leaves the person a
+/// picture to see reads as drawn, and one that leaves none does not.
+#[test]
+fn the_pipelines_marks_of_a_drawn_picture_are_this_tools() {
+    use gglib_core::request_pipeline::{DRAW_TOOL_NAME, DREW_HEAD, DREW_SEEN};
+    let reads_as_drawn = |text: &str| text.starts_with(DREW_HEAD) && text.contains(DREW_SEEN);
+    let two = || batch(vec![image(Vec::new()), image(Vec::new())]);
+
+    assert_eq!(DrawingTool::first_call().tool, DRAW_TOOL_NAME);
+    assert!(reads_as_drawn(&drew_sentence(
+        &batch(vec![image(Vec::new())]),
+        1,
+        &[]
+    )));
+    assert!(reads_as_drawn(&drew_sentence(&two(), 2, &[])));
+    assert!(reads_as_drawn(&drew_sentence(
+        &two(),
+        1,
+        &["too large".to_owned()]
+    )));
+    let none = ["too large".to_owned(), "too large".to_owned()];
+    assert!(!reads_as_drawn(&drew_sentence(&two(), 0, &none)));
+    let refused = ImageError::Unavailable {
+        reason: "there is no image model on this machine".to_owned(),
+    };
+    assert!(!reads_as_drawn(&refused.to_string()));
+}
+
 /// A refusal or a failed render is a result in the driver's words, not a
 /// fault of the loop.
 #[tokio::test]

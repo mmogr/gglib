@@ -5,6 +5,7 @@
 //! | # | Stage | Lives in | Reads |
 //! |---|---|---|---|
 //! | 1 | Strip prior reasoning | [`super::messages`] | `messages` |
+//! | 1b | Note a drawn picture | [`super::drawn_note`] | `messages`, `tools` |
 //! | 2 | Coalesce for capabilities | [`super::messages`] | `messages` |
 //! | 2b | Strip unsupported tools | [`super::tools`] | `tools`, capabilities |
 //! | 3 | Truncate stale history | [`super::truncation`] | `messages`, payload size |
@@ -19,6 +20,14 @@
 //! **1 before 2.** Coalescing merges message *content*. Stripping afterwards
 //! would have to find and excise `<think>` blocks inside text that has already
 //! been concatenated with `"\n\n"` separators from other turns.
+//!
+//! **1b before 2.** The note may be a `system` message, and stage 2 is what
+//! turns one into a user message for a model with no system role and merges
+//! same-role neighbours for a strict-turns model. Added afterwards, the note
+//! would reach those models in a shape their templates refuse.
+//!
+//! **1b before 3.** The note is text gglib adds to the conversation the model
+//! reads, so stage 3 measures it with the rest.
 //!
 //! **2 before 3.** Both stages 1 and 2 only ever shrink the body, and stage 3
 //! measures it. Truncating first would size its budget against bytes that were
