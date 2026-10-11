@@ -67,6 +67,11 @@ does either.
   place the stage order and its rationale are written down. **Read this first.**
 - [`messages`] — [`shape_messages()`], stages 1–2: reasoning strip and
   capability coalescing. Everything that rewrites the `messages` array.
+- [`drawn_note`] — stage 1b, called by [`shape_messages()`]: a request whose
+  history holds a picture the drawing tool drew, and which does not offer
+  that tool, gains [`DRAWN_NOTE`] at the front of its prompt, so a model
+  offered no tool does not deny the picture. Its module docs hold the exact
+  rule. [`DRAW_TOOL_NAME`] is the tool's name for every crate that spells it.
 - [`truncation`] — [`truncate_history()`], stage 3: trimming stale tool results
   and oversized assistant turns to fit the model's context budget, and
   rejecting the request when it cannot be made to fit.

@@ -44,16 +44,16 @@ pub const NOT_ASKED: &str =
 /// answered with an error: the tool's own row says which.
 pub const NO_WORDS: &str = "The model said nothing after the drawing tool ran.";
 
-/// What the model is told, on the request after the tool drew, before it
-/// replies: a model offered no tools is otherwise apt to say it cannot
-/// draw. Sent to the model for that request and shown to no one.
-pub const THEN_SAY: &str = "The picture has been made by the drawing tool and the person is \
-    looking at it now. Reply in one or two sentences saying what you asked the tool to draw. \
-    Do not apologise, do not say you cannot draw, and do not call a tool.";
+/// What the model is told on the request after the tool drew.
+///
+/// A model offered no tools is otherwise apt to say it cannot draw. Sent to
+/// the model for that request and shown to no one. The words are
+/// `gglib-core`'s, where the request pipeline knows a closing request by
+/// them.
+pub const THEN_SAY: &str = gglib_core::request_pipeline::DRAW_THEN_SAY;
 
 /// What the model is told instead when the tool answered with an error.
-pub const THEN_SAY_FAILED: &str = "The drawing tool did not make a picture; its answer above \
-    says why. Tell the person in one or two sentences what went wrong. Do not call a tool.";
+pub const THEN_SAY_FAILED: &str = gglib_core::request_pipeline::DRAW_THEN_SAY_FAILED;
 
 /// Whether the drawing tool is offered right now.
 #[derive(Debug, Clone)]

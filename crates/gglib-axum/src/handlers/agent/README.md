@@ -35,7 +35,10 @@ message the run's rows and events never hold, telling the model what to say:
 `gglib_mcp::DRAW_THEN_SAY` when the tool drew (say in one or two sentences
 what it asked the tool to draw, without apology or saying it cannot draw)
 and `gglib_mcp::DRAW_THEN_SAY_FAILED` when the tool answered with an error
-(say what went wrong). The tools a filter names are not offered to
+(say what went wrong). A later message of that chat, sent without `draw`,
+is offered no image tool, and its request carries a note at the front that
+the picture exists (`gglib_core::request_pipeline::DRAWN_NOTE`, added by
+the request pipeline and held by no row or event). The tools a filter names are not offered to
 such a run at any point. That holds for every run composed here with
 `draw`: the page's, a device's turn, and a chat run with builtins. Without
 `draw` the tool is in no list and

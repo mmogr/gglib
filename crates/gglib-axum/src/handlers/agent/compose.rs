@@ -57,7 +57,7 @@ pub(crate) fn take_permit(state: &AppState) -> Option<OwnedSemaphorePermit> {
 /// The image tool, as a tool filter names it: qualified, so it can only ever
 /// match the builtin. The bare name would also match an MCP server's tool of
 /// that name (`FilteredToolExecutor` matches after the first `:`).
-pub(crate) const DRAW_TOOL: &str = "builtin:generate_image";
+pub(crate) const DRAW_TOOL: &str = gglib_core::request_pipeline::DRAW_TOOL_NAME;
 
 /// Refuse a request sent with Draw pressed that this machine cannot draw
 /// for: its model on another machine, no image runtime, no usable image
