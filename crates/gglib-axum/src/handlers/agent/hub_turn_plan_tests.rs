@@ -205,6 +205,7 @@ async fn a_draw_turn_offers_its_model_the_image_tool_and_no_other() {
     let id = chat(&state, None).await;
     let pressed = HubTurn {
         draw: true,
+        image_model: None,
         ..turn(id, "a fox in the snow")
     };
 
@@ -249,6 +250,7 @@ async fn a_draw_turn_the_hub_cannot_draw_for_is_refused_and_writes_nothing() {
     let id = chat(&state, None).await;
     let pressed = HubTurn {
         draw: true,
+        image_model: None,
         ..turn(id, "a fox in the snow")
     };
 

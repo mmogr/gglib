@@ -2,8 +2,11 @@
 //! image driver, only for a message the person sent with Draw pressed.
 //!
 //! The tool takes the prompt the model writes from the message, and a size,
-//! a count and a seed when it wants them; never a model, which is the
-//! driver's to choose (the default image model, or the only complete one).
+//! a count and a seed when it wants them; never a model. Which image model
+//! draws is the person's choice ([`DrawWith`], set by the door that composed
+//! the tool) or, with none, the driver's (the default image model, or the
+//! only complete one). The chat model is offered no such argument, and one
+//! it sends anyway is not read.
 //! While the render runs, each stage and step goes to the progress sink,
 //! with its preview frame. Each image is stored as an attachment on the
 //! tool's row, so the person sees it; the model reads one sentence saying
@@ -16,8 +19,8 @@
 //! call this tool, and it calls it once ([`DrawingTool::first_call`]).
 
 use std::fmt;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use gglib_core::domain::agent::{FirstCall, ToolProgressSink, ToolProgressUpdate, ToolStage};
 use gglib_core::ports::{
@@ -82,11 +85,42 @@ impl Default for DrawArm {
     }
 }
 
+/// The image model a person chose to draw with, by its catalogue id; none
+/// for the one a request that names no model draws with.
+///
+/// A cell, shared with whoever composed the tool: a run's door sets it once
+/// ([`DrawWith::model`]), and `gglib chat` changes it between messages
+/// (`/draw <model>`) without composing its loop again. The chat model never
+/// reads or fills it.
+#[derive(Debug, Clone, Default)]
+pub struct DrawWith(Arc<Mutex<Option<u32>>>);
+
+impl DrawWith {
+    /// A choice already made: `chosen`, or none.
+    #[must_use]
+    pub fn model(chosen: Option<u32>) -> Self {
+        Self(Arc::new(Mutex::new(chosen)))
+    }
+
+    /// Choose `chosen` from now on, or with `None` go back to the default
+    /// rule.
+    pub fn set(&self, chosen: Option<u32>) {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = chosen;
+    }
+
+    /// The model chosen now, if one is.
+    #[must_use]
+    pub fn get(&self) -> Option<u32> {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
 /// Draws through `images`, storing what it draws through `attachments`.
 #[derive(Clone)]
 pub struct DrawingTool {
     images: Arc<dyn ImageGenerationPort>,
     attachments: Arc<AttachmentService>,
+    with: DrawWith,
 }
 
 impl fmt::Debug for DrawingTool {
@@ -105,7 +139,17 @@ impl DrawingTool {
         Self {
             images,
             attachments,
+            with: DrawWith::default(),
         }
+    }
+
+    /// The same tool, drawing with the image model `with` holds whenever it
+    /// is called: the person's choice, placed on the request the driver
+    /// reads ([`ImageRequest::model`]) and nowhere the chat model sees.
+    #[must_use]
+    pub fn drawing_with(mut self, with: DrawWith) -> Self {
+        self.with = with;
+        self
     }
 
     /// What a run sent with Draw pressed is held to: its first reply calls
@@ -130,10 +174,13 @@ impl DrawingTool {
 
     /// Draw what `call` asks for, telling `sink` how far it has got.
     pub(crate) async fn draw(&self, call: &ToolCall, sink: &dyn ToolProgressSink) -> ToolResult {
-        let request = match request_of(&call.arguments) {
+        let mut request = match request_of(&call.arguments) {
             Ok(request) => request,
             Err(why) => return ToolResult::text(call.id.clone(), why, false),
         };
+        // The person's choice, never the arguments': `request_of` names no
+        // model whatever they say.
+        request.model = self.with.get().map(|id| id.to_string());
         match self.render(request, sink).await {
             Ok(batch) => self.store(call, &batch).await,
             Err(e) => ToolResult::text(call.id.clone(), e.to_string(), false),
@@ -219,6 +266,9 @@ pub(crate) fn drew_sentence(batch: &ImageBatch, stored: usize, refusals: &[Strin
 
 /// The request `arguments` ask for, or what is wrong with them, in words the
 /// model can act on.
+///
+/// It names no image model, whatever `arguments` say: a `model` key is not
+/// read, since which model draws is never the calling model's to choose.
 ///
 /// A prompt, and optionally `size` (`WIDTHxHEIGHT`), `n` (1 to
 /// [`MAX_IMAGES_PER_REQUEST`]) and `seed`. A `size` that is empty, or only

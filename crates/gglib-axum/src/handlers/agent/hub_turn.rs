@@ -80,11 +80,13 @@ impl AgentRunStarter for HubTurns {
         id: &str,
         body: serde_json::Value,
         draw: bool,
+        image_model: Option<u32>,
     ) -> Result<Created, TurnRefused> {
         let Some(state) = self.0.upgrade() else {
             return Err(refusal(RunsError::ShuttingDown.into()));
         };
-        super::chat_turn::start(&state, device, id, body, draw)
+        let drawing = super::chat_turn::Drawing { draw, image_model };
+        super::chat_turn::start(&state, device, id, body, drawing)
             .await
             .map_err(refusal)
     }
@@ -126,7 +128,9 @@ fn refusal(error: HttpError) -> TurnRefused {
 /// on the machine this one is paired with; `no_model`
 /// (422) when nothing names the chat's model and nothing runs on the hub;
 /// `drawing_unavailable` (400) for a turn sent with Draw pressed that the
-/// hub cannot draw for;
+/// hub cannot draw for, `invalid_request` (400) for an `image_model`
+/// without `draw`, and `model_not_found`, `not_an_image_model` or
+/// `image_model_incomplete` (400) for one that cannot draw;
 /// `agent_busy` (429). A refusal writes nothing.
 ///
 /// The run is reserved before its model is found or loaded, so the `PUT`
@@ -288,8 +292,10 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         reasoning_effort: None,
         reasoning_budget_tokens: thinking.budget,
         draw: turn.draw,
+        image_model: turn.image_model,
     };
-    // A turn sent with Draw pressed that the hub cannot draw for is refused
+    // A turn sent with Draw pressed that the hub cannot draw for, or with
+    // the image model it chose, is refused
     // here, before a slot is taken, a run made or a row written.
     refuse_unavailable_drawing(state, &chat).await?;
     let transcript = Transcript {

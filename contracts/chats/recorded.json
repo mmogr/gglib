@@ -231,5 +231,11 @@
     "conversation_id": 13,
     "content": "",
     "answer_saved": true
+  },
+  "image_model_turn": {
+    "conversation_id": 12,
+    "content": "Draw a red dot.",
+    "draw": true,
+    "image_model": 7
   }
 }

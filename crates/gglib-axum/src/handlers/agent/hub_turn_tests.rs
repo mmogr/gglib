@@ -30,6 +30,7 @@ pub(super) fn turn(conversation_id: i64, content: &str) -> HubTurn {
         thinking: None,
         answer_saved: false,
         draw: false,
+        image_model: None,
     }
 }
 

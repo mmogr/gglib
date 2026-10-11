@@ -27,6 +27,7 @@ fn image_turn(conversation_id: i64, content: &str, image: &AttachmentId) -> HubT
         thinking: None,
         answer_saved: false,
         draw: false,
+        image_model: None,
     }
 }
 
@@ -91,6 +92,7 @@ async fn a_hub_turn_counts_the_images_of_the_saved_rows() {
         thinking: None,
         answer_saved: false,
         draw: false,
+        image_model: None,
     };
     let refusal = refused(plan(&state, turn).await);
 
@@ -125,6 +127,7 @@ async fn a_hub_turn_is_text_or_an_image() {
         thinking: None,
         answer_saved: false,
         draw: false,
+        image_model: None,
     };
     assert_eq!(
         refused(plan(&state, neither).await),

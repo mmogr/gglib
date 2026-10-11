@@ -21,7 +21,7 @@ use super::{CODES, Kind, PUBLISHED, render};
 /// `fn`, the code's spelling there, and where the code comes from. The last
 /// four hold a `code` of another kind, which the scan cannot tell apart.
 #[rustfmt::skip]
-const RELAYS: [(&str, &str, &str, &str); 33] = [
+const RELAYS: [(&str, &str, &str, &str); 34] = [
     ("gglib-proxy/src/models.rs", "with_code", "Some(code.into())", "`with_code`'s parameter"),
     ("gglib-proxy/src/image_refusal.rs", "refuse_images", "refusal.code()", "`CannotReadImages::code`"),
     ("gglib-proxy/src/models.rs", "image_model_cannot_chat", "refusal.code()", "`DrawsImages::code`"),
@@ -51,6 +51,7 @@ const RELAYS: [(&str, &str, &str, &str); 33] = [
     ("gglib-axum/src/handlers/attachments.rs", "unfetched", "code", "an `AttachmentError`'s, from the `From` above"),
     ("gglib-axum/src/handlers/agent/image_gate.rs", "readable_by", "refusal.code()", "`CannotReadImages::code`"),
     ("gglib-axum/src/handlers/agent/image_gate.rs", "chats", "refusal.code()", "`DrawsImages::code`"),
+    ("gglib-axum/src/handlers/agent/compose.rs", "refuse_unavailable_drawing", "code", "the `refused` closure's parameter: `invalid_request`, or `drawing_code`'s, one of an availability answer's four"),
     ("gglib-cli/src/handlers/remote/pairing_tui.rs", "qr", "QrCode::new(pairing.to_uppercase()).ok()?", "a QR code, not an error's"),
     ("gglib-cli/src/handlers/remote/pairing_layout.rs", "layout", r#"Line::plain(format!("  code    {}",clean(offer.code.as_deref().unwrap_or_default())))"#, "a pairing code, not an error's"),
     ("gglib-runtime/src/ports_impl/llm_completion/retry/classify.rs", "classify", "err.error.code", "an upstream body's, kept to retry by, not written"),

@@ -1,5 +1,5 @@
 //! A chat run with builtins: the proxy's
-//! `PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true]`, for a chat a
+//! `PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`, for a chat a
 //! paired phone keeps itself, run here because the agent loop, its slot and
 //! the image tool are the daemon's.
 //!
@@ -15,7 +15,8 @@
 //! thinking off as a phone-kept chat does on the chat route,
 //! `"reasoning_budget_tokens": 0`, runs with a thinking budget of `0`; any
 //! other budget is sampling, and is not read. Its only tool is the
-//! image tool, and only with `draw`. Nothing is written to any chat: the
+//! image tool, and only with `draw`, drawing with the `image_model` the
+//! query names when it names one. Nothing is written to any chat: the
 //! phone keeps the conversation, and reads the reply from the run, whose
 //! events are the agent loop's (`frames: agent`).
 //!
@@ -44,6 +45,26 @@ fn invalid(message: impl Into<String>) -> HttpError {
     coded(StatusCode::BAD_REQUEST, "invalid_request", message)
 }
 
+/// What the run's query says of drawing.
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct Drawing {
+    /// `&draw=true`: the message was sent with Draw pressed.
+    pub(super) draw: bool,
+    /// `&image_model=<id>`: the image model the person chose for it.
+    pub(super) image_model: Option<u32>,
+}
+
+#[cfg(test)]
+impl From<bool> for Drawing {
+    /// `draw` alone, with no image model chosen.
+    fn from(draw: bool) -> Self {
+        Self {
+            draw,
+            image_model: None,
+        }
+    }
+}
+
 /// Start `device`'s chat run `id` with builtins, or answer with its run
 /// that has the id.
 ///
@@ -57,7 +78,7 @@ pub(super) async fn start(
     device: &str,
     id: &str,
     body: Value,
-    draw: bool,
+    drawing: Drawing,
 ) -> Result<Created, HttpError> {
     let scope = RunScope::Device(device.to_owned());
     if let Some(info) = state.runs.existing(&scope, id)? {
@@ -66,7 +87,7 @@ pub(super) async fn start(
             created: false,
         });
     }
-    let (model, chat) = read(state, &body, draw).await?;
+    let (model, chat) = read(state, &body, drawing).await?;
     let permit = take_permit(state).ok_or_else(|| {
         coded(
             StatusCode::TOO_MANY_REQUESTS,
@@ -94,7 +115,10 @@ pub(super) async fn start(
 ///
 /// `invalid_request` (400) for a body that names no model or whose history
 /// cannot be read; `image_model_cannot_chat` (400); `drawing_unavailable`
-/// (400) for `draw` where nothing can draw; the attachment store's refusal
+/// (400) for `draw` where nothing can draw, `invalid_request` (400) for an
+/// `image_model` without `draw`, and `model_not_found`,
+/// `not_an_image_model` or `image_model_incomplete` (400) for one that
+/// cannot draw; the attachment store's refusal
 /// of an inline image; `attachment_not_found`, `request_images_too_large`
 /// and `model_cannot_read_images` (400) as a hub turn has them. Only an
 /// inline image is ever written, and only once every check that needs no
@@ -102,7 +126,7 @@ pub(super) async fn start(
 pub(super) async fn read(
     state: &AppState,
     body: &Value,
-    draw: bool,
+    Drawing { draw, image_model }: Drawing,
 ) -> Result<(String, AgentChatRequest), HttpError> {
     let model = body
         .get("model")
@@ -128,6 +152,7 @@ pub(super) async fn read(
         reasoning_effort: None,
         reasoning_budget_tokens: thinking_off(body).then_some(0),
         draw,
+        image_model,
     };
     refuse_unavailable_drawing(state, &chat).await?;
 

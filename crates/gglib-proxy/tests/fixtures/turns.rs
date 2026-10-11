@@ -21,6 +21,8 @@ pub(crate) struct FakeTurns {
     pub(crate) fail: Mutex<Option<TurnRefused>>,
     /// Every chat run with builtins, as `(device, id, body, draw)`.
     pub(crate) chats: Mutex<Vec<(String, String, serde_json::Value, bool)>>,
+    /// The image model each of those chose, in the same order.
+    pub(crate) chose: Mutex<Vec<Option<u32>>>,
 }
 
 #[async_trait]
@@ -50,7 +52,9 @@ impl AgentRunStarter for FakeTurns {
         id: &str,
         body: serde_json::Value,
         draw: bool,
+        image_model: Option<u32>,
     ) -> Result<Created, TurnRefused> {
+        self.chose.lock().unwrap().push(image_model);
         self.chats
             .lock()
             .unwrap()

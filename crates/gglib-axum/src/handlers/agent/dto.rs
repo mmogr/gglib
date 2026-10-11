@@ -197,6 +197,20 @@ pub(crate) struct AgentChatRequest {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
     pub draw: bool,
+
+    /// The image model the person chose for this message's picture: the
+    /// `id` of its row in `GET /api/images/drawing`'s `models`. Only with
+    /// `draw` (`400 invalid_request` without). Absent, the default rule
+    /// draws: the settings' default image model, else the only complete
+    /// one. A model that is gone, is not an image model or lacks a file
+    /// refuses the request (`400 model_not_found`, `not_an_image_model`,
+    /// `image_model_incomplete`) and is never replaced by the default. The
+    /// chat model is not told of it and cannot fill it. Nothing is
+    /// remembered here: a page that keeps the choice says it on every run
+    /// that draws.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub image_model: Option<u32>,
 }
 
 impl AgentChatRequest {

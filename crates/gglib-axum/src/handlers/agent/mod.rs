@@ -130,6 +130,8 @@ fn sse_event(event: &AgentEvent) -> Option<Event> {
 }
 
 #[cfg(test)]
+mod image_model_tests;
+#[cfg(test)]
 #[path = "run_answer_tests.rs"]
 mod run_answer_tests;
 #[cfg(test)]

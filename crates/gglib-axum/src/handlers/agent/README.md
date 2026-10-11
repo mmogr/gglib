@@ -47,6 +47,18 @@ cannot be called, `tool_filter: null` included. Both doors first ask
 written: a model on another machine, or a machine that cannot draw, is
 `400 drawing_unavailable` with the reason `GET /api/images/drawing` gives.
 
+A request that draws may say which image model draws it, `image_model`, the
+id of a row in that answer's `models`. `refuse_unavailable_drawing` is where
+it is judged, for every door: without `draw` it is `400 invalid_request`,
+and a model that is gone, is not an image model or lacks a file is `400`
+with the answer's own code (`model_not_found`, `not_an_image_model`,
+`image_model_incomplete`) and reason, never replaced by the default.
+`prepare_over` places the id on the drawing tool (`DrawWith`), which sets it
+as the model of the request it hands the image driver; the tool the chat
+model is offered has no such argument, and nothing sent to the chat model
+holds the id. Nothing is remembered here: the surface that keeps the choice
+says it on each run that draws.
+
 Inline `<think>` reclassification is handled upstream by
 [`gglib_core::normalize::NormalizingStream`] in the LLM adapter, so this
 handler only forwards already-typed [`AgentEvent`](gglib_core::domain::agent::AgentEvent)s.
@@ -196,15 +208,16 @@ exactly `builtin:generate_image`, never the bare name, which would let an
 MCP server's tool of that name through to a device without `--allow-mcp`.
 The chat's `no_tools` does not stop it, since the button is the person's
 choice for that message, and a hub that cannot draw refuses the turn `400
-drawing_unavailable` before anything is written.
+drawing_unavailable` before anything is written. Its `image_model`, when it
+says one, is the page's: copied onto the chat request and judged there.
 
 `chat_turn` is the starter's other door, the proxy's
-`PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true]`: a chat a paired
+`PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`: a chat a paired
 phone keeps itself, sent whole as an `OpenAI` request and run through the
 loop so that it can draw. Its history is read by core's
 `parse_openai_messages`, each inline image stored once as an attachment no
 chat links (swept at the first daemon start a day or more later), its model resolved and loaded as a turn's
-is, its only tool the image tool and that only with `draw`, the request's
+is, its only tool the image tool and that only with `draw` (drawn with the query's `image_model` when it names one), the request's
 sampling not read except that `"reasoning_budget_tokens": 0`, a phone's
 Thinking off, runs it with a thinking budget of 0, and no row written anywhere. Its run is a chat run in
 the device's scope whose `frames` say `agent`.

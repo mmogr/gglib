@@ -98,7 +98,9 @@ async fn an_openai_request_is_read_as_the_loops_with_the_image_tool_only_for_dra
     let served = seeing_server(&state).await;
     let picture = AttachmentId::of(&png());
 
-    let (on, drawn) = read(&state, &request("qwen-vision"), true).await.unwrap();
+    let (on, drawn) = read(&state, &request("qwen-vision"), true.into())
+        .await
+        .unwrap();
 
     assert_eq!(on, "qwen-vision");
     assert!(drawn.draw);
@@ -121,7 +123,9 @@ async fn an_openai_request_is_read_as_the_loops_with_the_image_tool_only_for_dra
         "the request's sampling is not read"
     );
 
-    let (_, plain) = read(&state, &request("qwen-vision"), false).await.unwrap();
+    let (_, plain) = read(&state, &request("qwen-vision"), false.into())
+        .await
+        .unwrap();
     assert!(!plain.draw);
     let body = sent(&state, served, plain).await;
     assert_eq!(offered(&body), Vec::<String>::new(), "no tool without Draw");
@@ -137,7 +141,7 @@ async fn a_request_that_turns_thinking_off_runs_with_no_thinking_budget() {
     let mut off = request("qwen-vision");
     off["reasoning_budget_tokens"] = json!(0);
 
-    let (_, chat) = read(&state, &off, false).await.unwrap();
+    let (_, chat) = read(&state, &off, false.into()).await.unwrap();
 
     assert_eq!(chat.reasoning_budget_tokens, Some(0));
     assert_eq!(chat.reasoning_effort, None);
@@ -158,7 +162,7 @@ async fn a_thinking_budget_above_zero_is_sampling_and_is_not_read() {
     sampled["reasoning_effort"] = json!("high");
     sampled["max_tokens"] = json!(5);
 
-    let (_, chat) = read(&state, &sampled, false).await.unwrap();
+    let (_, chat) = read(&state, &sampled, false.into()).await.unwrap();
 
     assert_eq!(chat.reasoning_budget_tokens, None);
     assert_eq!(chat.reasoning_effort, None);
@@ -168,7 +172,9 @@ async fn a_thinking_budget_above_zero_is_sampling_and_is_not_read() {
     assert_ne!(body["reasoning_effort"], json!("high"));
     assert_ne!(body["max_tokens"], json!(5));
 
-    let (_, unsaid) = read(&state, &request("qwen-vision"), false).await.unwrap();
+    let (_, unsaid) = read(&state, &request("qwen-vision"), false.into())
+        .await
+        .unwrap();
     assert_eq!(unsaid.reasoning_budget_tokens, None);
 }
 
@@ -178,7 +184,9 @@ async fn an_inline_image_sent_again_is_stored_once() {
     let (_dir, state) = state().await;
     model(&state, "qwen-vision", true).await;
     for _ in 0..2 {
-        read(&state, &request("qwen-vision"), false).await.unwrap();
+        read(&state, &request("qwen-vision"), false.into())
+            .await
+            .unwrap();
     }
     let picture = AttachmentId::of(&png());
     let stored = state
@@ -198,7 +206,7 @@ async fn the_run_is_the_devices_says_agent_frames_and_writes_no_rows() {
     let (_dir, state) = state().await;
     model(&state, "qwen-vision", true).await;
 
-    let created = start(&state, "phone", "p1", request("qwen-vision"), false)
+    let created = start(&state, "phone", "p1", request("qwen-vision"), false.into())
         .await
         .unwrap();
 
@@ -218,7 +226,7 @@ async fn the_run_is_the_devices_says_agent_frames_and_writes_no_rows() {
         state.runs.existing(&device("laptop"), "p1"),
         Err(RunsError::IdTaken)
     ));
-    let again = start(&state, "phone", "p1", request("qwen-vision"), false)
+    let again = start(&state, "phone", "p1", request("qwen-vision"), false.into())
         .await
         .unwrap();
     assert!(!again.created);
@@ -252,7 +260,7 @@ async fn what_cannot_run_is_refused_before_a_run_is_made() {
     model(&state, "qwen-blind", false).await;
     let refusal = |body: Value, draw: bool| {
         let state = state.clone();
-        async move { refused(start(&state, "phone", "p1", body, draw).await) }
+        async move { refused(start(&state, "phone", "p1", body, draw.into()).await) }
     };
 
     let mut unnamed = request("qwen-vision");
@@ -261,7 +269,7 @@ async fn what_cannot_run_is_refused_before_a_run_is_made() {
 
     let odd = json!({ "model": "qwen-vision", "messages": [
         { "role": "user", "content": "hi" }, { "role": "narrator", "content": "SECRET" } ] });
-    match start(&state, "phone", "p1", odd, false).await {
+    match start(&state, "phone", "p1", odd, false.into()).await {
         Err(HttpError::Coded { code, message, .. }) => {
             assert_eq!(code, "invalid_request");
             assert!(

@@ -52,6 +52,7 @@ async fn a_turn_is_the_chat_and_the_message_only_and_its_201_comes_back() {
         images: Vec::new(),
         thinking: None,
         draw: false,
+        image_model: None,
     };
 
     let (status, answer) = read(add_turn_via(&far, 12, "chat-1", body).await.unwrap()).await;
@@ -85,6 +86,42 @@ async fn a_turn_sent_with_draw_says_so_and_one_without_carries_no_key() {
     );
     let unsaid: RemoteTurnBody = serde_json::from_str(r#"{"content":"hi"}"#).unwrap();
     assert!(!unsaid.draw);
+}
+
+/// The image model chosen for a far chat's picture goes to the far machine
+/// as it came, for that machine to judge among its own: with `draw` and
+/// without, an id this machine has never heard of included. A turn that
+/// chose none carries no such key, which an older far machine would refuse.
+#[tokio::test]
+async fn a_far_turns_image_model_is_handed_on_untouched() {
+    let (fake, hub) = far(201, "{}").await;
+    let chosen: RemoteTurnBody =
+        serde_json::from_str(r#"{"content":"a fox","draw":true,"image_model":4242}"#).unwrap();
+    read(add_turn_via(&hub, 12, "chat-1", chosen).await.unwrap()).await;
+    let alone: RemoteTurnBody =
+        serde_json::from_str(r#"{"content":"a fox","image_model":4242}"#).unwrap();
+    read(add_turn_via(&hub, 12, "chat-2", alone).await.unwrap()).await;
+    let unsaid: RemoteTurnBody =
+        serde_json::from_str(r#"{"content":"a fox","draw":true}"#).unwrap();
+    read(add_turn_via(&hub, 12, "chat-3", unsaid).await.unwrap()).await;
+
+    let sent: Vec<serde_json::Value> = fake
+        .seen
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|request| json(&request.body))
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            serde_json::json!(
+                { "conversation_id": 12, "content": "a fox", "draw": true, "image_model": 4242 }
+            ),
+            serde_json::json!({ "conversation_id": 12, "content": "a fox", "image_model": 4242 }),
+            serde_json::json!({ "conversation_id": 12, "content": "a fox", "draw": true }),
+        ]
+    );
 }
 
 /// A turn's images go on as their ids, in order, and a turn may be its

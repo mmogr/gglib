@@ -853,12 +853,30 @@ Cancelling the run while the picture is drawn (`POST
 picture loads the image model again. The run ends `cancelled`, as any
 cancelled run does.
 
+A turn that draws may also say which of the desktop's image models draws
+it: `"image_model": <id>`, the `id` of a row in `GET /v1/images/drawing`'s
+`models`. It goes with `"draw": true`; a turn that says it without is
+`400 invalid_request`. Left out, the desktop's default rule draws (its
+default image model, else the only complete one). A chosen model that is no
+longer there, is not an image model or lacks a file refuses the turn, `400`
+with `model_not_found`, `not_an_image_model` or `image_model_incomplete` and
+the sentence that says why, before anything is written or loaded; it is
+never swapped for the default. The desktop remembers nothing of the choice:
+a device that keeps one says it on every turn that draws, and asks
+`GET /v1/images/drawing?image_model=<id>` to show whether it still holds.
+The chat model is not told of it and cannot fill it. A device sends the key
+only to a desktop whose availability answer carried `models`: an older one
+refuses a body with a key it does not know.
+
 A chat the device keeps itself can draw too. `PUT
 /v1/runs/{id}?kind=chat&tools=builtin&draw=true` takes the device's
 unchanged OpenAI chat request, whole history included, and runs it through
 the desktop's agent loop on the model it names, with the image tool offered
 for that message, whose first step must be the call for the picture as on a
-desktop chat; without `draw=true` the loop runs with no tool. Images
+desktop chat; without `draw=true` the loop runs with no tool. The chosen
+image model goes in the query beside it, `&image_model=<id>`, with the same
+rules and refusals as a turn's; `image_model` without `tools=builtin`, or
+beside `kind=agent`, is `400 invalid_request`. Images
 sent inline as data URLs are stored on the desktop for the run and removed
 at the first daemon start a day or more later, since no chat there links
 them. Nothing is saved to any

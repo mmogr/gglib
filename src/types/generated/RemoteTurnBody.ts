@@ -27,4 +27,10 @@ thinking?: Thinking,
  * The message was sent with Draw pressed, as [`HubTurn::draw`] carries
  * it: the far machine offers its model the image tool for this turn.
  */
-draw?: boolean, };
+draw?: boolean, 
+/**
+ * The image model chosen for this turn's picture, as
+ * [`HubTurn::image_model`] carries it: an id in the far machine's own
+ * list, handed on as it came for that machine to judge.
+ */
+image_model?: number, };

@@ -17,8 +17,8 @@
     {
       "code": "model_not_found",
       "type": "invalid_request_error",
-      "status": 404,
-      "meaning": "No model with that id or name is in the catalog."
+      "status": null,
+      "meaning": "No model with that id or name is in the catalog: a 404. A run or turn that says draw and names an image_model no longer in the catalog is refused with this code as a 400."
     },
     {
       "code": "profile_not_found",
@@ -66,7 +66,7 @@
       "code": "not_an_image_model",
       "type": "invalid_request_error",
       "status": 400,
-      "meaning": "An image request named a model that is not an image model; name an image model, or leave the model out."
+      "meaning": "An image request named a model that is not an image model; name an image model, or leave the model out. Also what a run or turn is refused with when its image_model is not an image model."
     },
     {
       "code": "invalid_image_size",

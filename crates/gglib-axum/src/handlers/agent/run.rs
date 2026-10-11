@@ -70,7 +70,10 @@ pub(super) fn with_code(error: HttpError) -> HttpError {
 /// `attachment_not_found` (400) for an image a message names, history
 /// included, that is not stored, and `request_images_too_large` (400) when
 /// they are over 16 MiB together; `drawing_unavailable` (400) for `draw` on
-/// a machine that cannot draw for it; `agent_busy` (429) when every agent slot
+/// a machine that cannot draw for it, `invalid_request` (400) for an
+/// `image_model` without `draw`, and `model_not_found`,
+/// `not_an_image_model` or `image_model_incomplete` (400) for one that
+/// cannot draw; `agent_busy` (429) when every agent slot
 /// is taken; `nothing_to_answer` (409) for an answer run on a conversation
 /// that does not end in a question with no reply; `conflict` (409)
 /// while the conversation has a live reply, or when it ran on another
