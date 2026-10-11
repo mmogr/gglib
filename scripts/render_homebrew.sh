@@ -5,7 +5,7 @@
 #   scripts/render_homebrew.sh <version> <SHA256SUMS> <out-dir>
 #
 # Writes <out-dir>/Formula/gglib.rb and <out-dir>/Casks/gglib-gui.rb from the
-# templates under packaging/homebrew, laid out as the mmogr/homebrew-gglib tap
+# templates under packaging/homebrew, laid out as the mmogr/homebrew-tap tap
 # expects, with every checksum taken from the release's own SHA256SUMS.
 set -euo pipefail
 

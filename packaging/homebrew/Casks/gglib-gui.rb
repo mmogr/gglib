@@ -1,4 +1,4 @@
-# Rendered by scripts/render_homebrew.sh into mmogr/homebrew-gglib on each
+# Rendered by scripts/render_homebrew.sh into mmogr/homebrew-tap on each
 # stable release. Edit this template in the gglib repository, not the tap.
 cask "gglib-gui" do
   version "@VERSION@"
@@ -22,5 +22,5 @@ cask "gglib-gui" do
                    args: ["-dr", "com.apple.quarantine", "#{appdir}/GGLib GUI.app"]
   end
 
-  caveats "The gglib command-line tool is a separate formula: brew install mmogr/gglib/gglib"
+  caveats "The gglib command-line tool is a separate formula: brew install mmogr/tap/gglib"
 end

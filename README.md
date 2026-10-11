@@ -53,8 +53,8 @@ The repository carries stable releases only. Release candidates are on the
 ### Homebrew (macOS on Apple silicon, Linux)
 
 ```bash
-brew install mmogr/gglib/gglib
-brew install --cask mmogr/gglib/gglib-gui   # the desktop app, macOS only
+brew install mmogr/tap/gglib
+brew install --cask mmogr/tap/gglib-gui   # the desktop app, macOS only
 ```
 
 ### Arch Linux (AUR)

@@ -1,4 +1,4 @@
-# Rendered by scripts/render_homebrew.sh into mmogr/homebrew-gglib on each
+# Rendered by scripts/render_homebrew.sh into mmogr/homebrew-tap on each
 # stable release. Edit this template in the gglib repository, not the tap.
 class Gglib < Formula
   desc "Local model runtime and OpenAI-compatible proxy for llama.cpp"
