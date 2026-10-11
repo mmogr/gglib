@@ -50,6 +50,12 @@ sudo apt update && sudo apt install gglib   # the desktop app is gg-lib-gui
 The repository carries stable releases only. Release candidates are on the
 [Releases page](https://github.com/mmogr/gglib/releases) as prereleases.
 
+### Arch Linux (AUR)
+
+```bash
+yay -S gglib-bin        # the desktop app is gglib-gui-bin
+```
+
 ### Build from source
 
 Requires Rust, Node.js 20.19+, and a C++ toolchain with CMake.
