@@ -36,11 +36,12 @@ has no asset and builds from source.
 ## The command line
 
 `--diffusion-model <file>` for a diffusion-only family (Flux.1, Qwen-Image
-2.1) or `-m <file>` for an all-in-one checkpoint (SDXL); each component in
+2.1, Z-Image) or `-m <file>` for an all-in-one checkpoint (SDXL); each component in
 role order, `--vae`, `--clip_l`, `--t5xxl`, `--llm`, whatever order the
 model lists them in; `--listen-ip 127.0.0.1 --listen-port <port>`; then the
-recipe's `--steps`, `--cfg-scale` and `--sampling-method`, and `--fa` where
-the recipe turns flash attention on (Qwen-Image 2.1). Flags given at launch
+recipe's `--steps`, `--cfg-scale` and `--sampling-method`, and the recipe's
+flash attention flag where it has one (`--fa` for Qwen-Image 2.1,
+`--diffusion-fa` for Z-Image). Flags given at launch
 are the defaults for every request. `server/args_tests.rs` pins one whole argv per
 family.
 
@@ -50,7 +51,8 @@ The residency launch starts `sd-server` (`process::residency`): it checks
 the binary and every component before the queue, places the model by its
 files plus its family's compute margin (`Recipe::compute_margin_bytes`, the
 1024x1024 VAE decode buffer rounded up: Flux.1 7 GiB, SDXL 8 GiB,
-Qwen-Image 2.1 9 GiB), spawns with `server/spawn.rs`, and narrates the build from
+Qwen-Image 2.1 9 GiB; Z-Image's 8 GiB is an estimate, not a reading), spawns
+with `server/spawn.rs`, and narrates the build from
 `sd-config.json` (`recorded_release`).
 
 ## Is it up?
