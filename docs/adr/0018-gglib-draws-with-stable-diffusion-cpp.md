@@ -116,6 +116,9 @@ its model while a picture is drawn; otherwise it swaps into an evictable
 primary, and where the primary is held and nothing is granted it is refused
 `image_model_does_not_fit` at once.
 
+Amended on 2026-10-11: this places an image model only while no other image
+model is loaded or loading. While one is, decision 17 places it.
+
 ### 7. The GPU is given in turns: one render, or the chats
 
 The generation gate (`crates/gglib-runtime/src/process/admission/`,
@@ -494,9 +497,50 @@ tool is a model, and the image model is a person's choice or the machine's
 default. An `/mcp` client draws with the default rule.
 
 Two image models are not meant to be loaded together: picking the one that
-is not loaded swaps it in. This decision changes nothing in how a model is
+is not loaded swaps it in. ~~This decision changes nothing in how a model is
 placed (decision 6), and decision 6 alone does not always swap the right
-one out; that is recorded in the log and left to its own change.
+one out; that is recorded in the log and left to its own change.~~
+Retracted on 2026-10-11: decision 17 is that change
+([log-0018](log-0018.md#2026-10-11-one-image-model-is-loaded-at-a-time-and-a-picked-one-replaces-the-idle-one)).
+
+### 17. One image model is loaded at a time
+
+Decision 6 placed an image model without asking whether another image model
+was loaded, and its memory check read free memory with that one still
+counted as used. From reading the code, never from a run
+([log-0018, 2026-10-11](log-0018.md#2026-10-11-one-image-model-is-loaded-at-a-time-and-a-picked-one-replaces-the-idle-one)):
+with a chat model and Flux.1 both idle, a Qwen-Image 2.1 with no room beside
+both evicted the chat model and kept Flux.1; under a chat model a run held
+it was refused `image_model_does_not_fit`; and two image models could end
+up loaded.
+
+While another image model is in a slot, loaded or still loading, that slot
+is the only one an image model may take, whatever the memory check says of
+it (`QueueState::image_slot` in
+`crates/gglib-runtime/src/process/admission/state_placement.rs`):
+
+1. *Idle.* The newcomer swaps in there, under the ordinary turn rules. The
+   chat model is not evicted, and a chat model a run holds does not refuse
+   the request.
+2. *Rendering.* A render holds its model's lease from its admission until
+   it ends, while it waits for its turn and while it draws. The newcomer
+   waits for that lease; the model is not evicted under its render. A
+   render step is queue progress (decision 7), so the wait does not expire
+   while the render steps.
+3. *Loading.* The newcomer waits until the launch lands or fails. A slot
+   that is loading names its runtime for this.
+
+With no other image model in a slot, decision 6 places it as before.
+
+What this leaves. The memory check does not decide the swap. An image model
+that needs the chat model's memory as well as the other image model's is
+still loaded in the other's place, beside the chat model, as decision 6's
+swap into the primary is made with no check that the model fits there; a
+person who wants that picture stops the chat model first. A newcomer whose
+launch fails has already stopped the model it replaced. After a render is
+retired (decision 15) its slot is empty, so decision 6 places the next image
+model, against a free reading that may still count the server being
+stopped. None of it has been run with a real model.
 
 ## Consequences
 
