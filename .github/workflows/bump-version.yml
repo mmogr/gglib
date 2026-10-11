@@ -3,9 +3,26 @@ name: Bump Version
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'New version (semver format: X.Y.Z or X.Y.Z-alpha.N)'
+      # The release flow, which scripts/next_version.py spells out:
+      #   0.25.0 -rc-minor-> 0.26.0-rc.1 -next-rc-> 0.26.0-rc.2 -promote-> 0.26.0
+      # A release candidate becomes a GitHub prerelease and nothing more; only
+      # a promotion reaches apt and the docs, after the `publish` approval, and
+      # only when its code is the last candidate's (check_rc_promotion.sh).
+      bump:
+        description: 'What to bump'
         required: true
+        default: next-rc
+        type: choice
+        options:
+          - next-rc
+          - promote
+          - rc-patch
+          - rc-minor
+          - rc-major
+          - custom
+      version:
+        description: "Version, for 'custom' only (X.Y.Z or X.Y.Z-rc.N)"
+        required: false
         type: string
       auto_merge:
         description: 'Enable auto-merge on the PR (requires branch protection)'
@@ -44,10 +61,29 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
+      - name: Get current version
+        id: current
+        run: |
+          CURRENT=$(grep '^version = ' Cargo.toml | head -n1 | sed -E 's/version = "(.*)"/\1/')
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT"
+
       - name: Validate semver format
         id: validate
+        env:
+          BUMP: ${{ inputs.bump }}
+          INPUT_VERSION: ${{ inputs.version }}
+          CURRENT: ${{ steps.current.outputs.version }}
         run: |
-          VERSION="${{ inputs.version }}"
+          if [ "$BUMP" = "custom" ]; then
+            VERSION="$INPUT_VERSION"
+          elif [ -n "$INPUT_VERSION" ]; then
+            echo "::error::'version' is read only with bump 'custom'; '$BUMP' computes it"
+            exit 1
+          else
+            # shellcheck disable=SC2046 # one argument per tag
+            VERSION=$(python3 scripts/next_version.py "$BUMP" "$CURRENT" $(git tag -l))
+          fi
           
           # Semver regex (supports prerelease like alpha.1, beta.2)
           if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+(\.[0-9]+)?)?$'; then
@@ -58,13 +94,6 @@ jobs:
           
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "✓ Valid semver format: $VERSION"
-
-      - name: Get current version
-        id: current
-        run: |
-          CURRENT=$(grep '^version = ' Cargo.toml | head -n1 | sed -E 's/version = "(.*)"/\1/')
-          echo "version=$CURRENT" >> $GITHUB_OUTPUT
-          echo "Current version: $CURRENT"
 
       - name: Check if version already exists
         run: |
@@ -191,6 +220,12 @@ jobs:
           fi
           echo "✓ Verified src-tauri/tauri.conf.json inherits its version"
 
+      # release.yml makes the same check and is the guard. Making it here too
+      # means a promotion the release would refuse is never opened as a PR.
+      - name: Require a stable version to match its last RC
+        # After the lockfiles, which a promotion also changes.
+        run: scripts/check_rc_promotion.sh
+
       - name: Create Pull Request
         id: create-pr
         uses: peter-evans/create-pull-request@v8
@@ -218,10 +253,10 @@ jobs:
             - ✓ `src-tauri/tauri.conf.json` (via Tauri's Cargo.toml fallback)
             
             ### Next Steps
-            Once this PR is merged, the [Release workflow](.github/workflows/release.yml) will automatically:
+            Once this PR is merged, the [Release workflow](.github/workflows/release.yml) will:
             1. Create git tag `v${{ steps.validate.outputs.version }}`
-            2. Generate GitHub release
-            3. Deploy documentation
+            2. Generate a GitHub release (a prerelease for an `-rc`)
+            3. For a stable version only, wait for approval in the `publish` environment, then publish the apt repository and the documentation
             
             ---
             *Triggered by @${{ github.actor }}*
