@@ -113,15 +113,23 @@ pub(super) async fn sent(state: &AppState, model_id: i64, chat: AgentChatRequest
     turn.requests.remove(0)
 }
 
-/// The first two requests of a turn sent with Draw, to a model that answers
-/// every request with a call for the picture: the one held to that call,
-/// and the one made once the tool has run. (The loop's guard ends such a
-/// turn after a few; only these two are read.)
+/// The two requests of a turn sent with Draw, to a model that answers every
+/// request with a call for the picture: the one held to that call, and the
+/// one made once the tool has run. There are only two: the second reply's
+/// call is not run, and the turn ends there.
 pub(super) async fn drawn(state: &AppState, model_id: i64, chat: AgentChatRequest) -> [Value; 2] {
     let mut turn = turn(state, model_id, chat, DRAWS).await;
-    assert!(turn.requests.len() >= 2, "{:?}", turn.events);
+    assert_eq!(turn.requests.len(), 2, "{:?}", turn.events);
     let later = turn.requests.remove(1);
     [turn.requests.remove(0), later]
+}
+
+/// Whether a request to the model offers it nothing to call: no `tools`,
+/// no `tool_choice` and no grammar.
+pub(super) fn offers_nothing(body: &Value) -> bool {
+    ["tools", "tool_choice", "grammar"]
+        .iter()
+        .all(|key| body.get(key).is_none())
 }
 
 /// Add a model that can call tools to the catalogue, as `edit` leaves it.

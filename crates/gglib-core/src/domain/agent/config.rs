@@ -293,7 +293,8 @@ pub struct AgentConfig {
     pub max_observation_steps: Option<usize>,
 
     /// The one tool this run's first reply must call, when its caller
-    /// demands one; `None` (the default) leaves every reply to the model.
+    /// demands one, after which the model is offered no tool again
+    /// ([`FirstCall`]); `None` (the default) leaves every reply to the model.
     ///
     /// Not serialised and in no request DTO: only the code that composes a
     /// run sets it, for a message whose sender asked for that tool by name.
@@ -301,16 +302,19 @@ pub struct AgentConfig {
     pub first_call: Option<FirstCall>,
 }
 
-/// A tool a run's first reply must call: the person asked for it, so the
-/// model is not left to decide whether.
+/// A tool a run's first reply must call, once: the person asked for it, so
+/// the model is not left to decide whether, and it is not asked twice.
 ///
-/// On the run's first call to the model the loop offers this tool alone and
-/// demands a call
-/// ([`LlmCompletionPort::chat_stream_requiring_call`](crate::ports::LlmCompletionPort::chat_stream_requiring_call));
-/// every later call offers the run's whole tool list and demands nothing. A
-/// first reply that does not call it ends the run with
+/// Such a run is that call, then words. On the run's first call to the
+/// model the loop offers this tool alone and demands a call
+/// ([`LlmCompletionPort::chat_stream_requiring_call`](crate::ports::LlmCompletionPort::chat_stream_requiring_call)).
+/// A first reply that does not call it ends the run with
 /// [`AgentError::FirstCallMissing`](crate::ports::AgentError::FirstCallMissing),
-/// never with that reply as its answer.
+/// never with that reply as its answer. Once the tool has run, whether it
+/// succeeded or answered with an error, the loop asks the model once more,
+/// offering no tools at all, and that reply's text is the run's answer: a
+/// tool call in it is not run, and a reply with no text is answered with
+/// [`if_wordless`](Self::if_wordless).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FirstCall {
     /// The tool, by the name the run's tool list gives it.
@@ -318,6 +322,9 @@ pub struct FirstCall {
     /// What the person is told when the first reply does not call it: fixed
     /// words of the composer's, never the model's.
     pub if_missing: String,
+    /// The run's answer when the reply after the tool ran has no text: fixed
+    /// words of the composer's, true whether the tool succeeded or not.
+    pub if_wordless: String,
 }
 
 impl Default for AgentConfig {

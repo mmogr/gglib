@@ -1,10 +1,12 @@
 //! A run whose first reply must call one tool (`AgentConfig::first_call`).
 //!
-//! The loop offers that tool alone on its first call to the model and
-//! demands a call; every later call offers the run's whole list and demands
-//! nothing. A first reply that does not call that tool ends the run with the
-//! composer's words, only the reply's first call of it is kept, and a run
-//! with no first call asks as it always did.
+//! Such a run is that call, then words. The loop offers that tool alone on
+//! its first call to the model and demands a call. A first reply that does
+//! not call that tool ends the run with the composer's words, and only the
+//! reply's first call of it is kept. Once the tool has run, well or not, the
+//! second call offers no tools and its reply ends the run: a tool call in
+//! it is not run, and a reply with no text is answered in the composer's
+//! words. A run with no first call asks as it always did.
 
 mod common;
 
@@ -22,11 +24,13 @@ use tokio::sync::mpsc;
 const DRAW: &str = "builtin:generate_image";
 const READ: &str = "3:read_file";
 const NOT_ASKED: &str = "the model did not ask for the picture";
+const NO_WORDS: &str = "The model said nothing after the tool ran.";
 
 fn first_call(tool: &str) -> FirstCall {
     FirstCall {
         tool: tool.to_owned(),
         if_missing: NOT_ASKED.to_owned(),
+        if_wordless: NO_WORDS.to_owned(),
     }
 }
 
@@ -40,12 +44,28 @@ async fn run(
     Vec<AgentEvent>,
     Vec<(String, serde_json::Value)>,
 ) {
-    let ok = |content: &str| MockToolBehavior::Immediate {
-        content: content.to_owned(),
+    let drew = MockToolBehavior::Immediate {
+        content: "Drew 1 image.".to_owned(),
+    };
+    run_drawing(llm, first_call, drew).await
+}
+
+/// [`run`], with the image tool answering as `draws` says.
+async fn run_drawing(
+    llm: &Arc<MockLlmPort>,
+    first_call: Option<FirstCall>,
+    draws: MockToolBehavior,
+) -> (
+    Result<AgentRunOutput, AgentError>,
+    Vec<AgentEvent>,
+    Vec<(String, serde_json::Value)>,
+) {
+    let read = MockToolBehavior::Immediate {
+        content: "contents".to_owned(),
     };
     let executor = MockToolExecutorPort::new()
-        .with_tool(ToolDefinition::new(DRAW), ok("Drew 1 image."))
-        .with_tool(ToolDefinition::new(READ), ok("contents"));
+        .with_tool(ToolDefinition::new(DRAW), draws)
+        .with_tool(ToolDefinition::new(READ), read);
     let ran = Arc::clone(&executor.call_log);
     let agent = AgentLoop::build(Arc::clone(llm) as _, Arc::new(executor), None);
     let config = common::for_test(|c| c.first_call = first_call);
@@ -103,10 +123,11 @@ fn offers(offered: &[String], names: &[&str]) -> bool {
     offered.len() == names.len() && names.iter().all(|name| offered.iter().any(|o| o == name))
 }
 
-/// The first call offers the demanded tool alone and demands a call; the
-/// second offers every tool and demands nothing, so the model can answer.
+/// The first call offers the demanded tool alone and demands a call; once
+/// the tool has run the second offers no tools and demands nothing, and what
+/// the model says is the answer.
 #[tokio::test]
-async fn the_first_call_offers_one_tool_and_demands_it_and_the_next_is_free() {
+async fn the_first_call_offers_one_tool_and_demands_it_and_the_next_offers_none() {
     let llm = Arc::new(
         MockLlmPort::new()
             .push(MockLlmResponse::tool_call(
@@ -123,29 +144,139 @@ async fn the_first_call_offers_one_tool_and_demands_it_and_the_next_is_free() {
     let asked = llm.asked().await;
     assert_eq!(asked.len(), 2);
     assert_eq!(asked[0], (vec![DRAW.to_owned()], true));
-    assert!(offers(&asked[1].0, &[DRAW, READ]), "{:?}", asked[1]);
-    assert!(!asked[1].1, "only the first call is demanded");
+    assert_eq!(asked[1], (vec![], false), "no tools, nothing demanded");
     assert_eq!(names(&ran), [DRAW]);
 }
 
-/// A run with no first call asks as it always did: every tool, no demand.
+/// A second reply that calls the tool again, beside some text, runs
+/// nothing: its text is the answer and the run ends there.
 #[tokio::test]
-async fn a_run_with_no_first_call_demands_nothing() {
+async fn a_second_reply_that_calls_a_tool_runs_nothing_and_its_text_is_the_answer() {
+    let again = MockLlmResponse {
+        content: Some("Here is the fox.".to_owned()),
+        ..reply_calling(&[("c2", DRAW, "a fox"), ("c3", READ, "a den")])
+    };
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push(reply_calling(&[("c1", DRAW, "a fox")]))
+            .push(again)
+            .push(MockLlmResponse::text("unreached")),
+    );
+
+    let (ended, events, ran) = run(&llm, Some(first_call(DRAW))).await;
+
+    let output = ended.unwrap();
+    assert_eq!(output.answer, "Here is the fox.");
+    assert_eq!(names(&ran), [DRAW], "one call ran, the first reply's");
+    assert_eq!(llm.asked().await.len(), 2, "the second reply ended the run");
+    let started = |event: &AgentEvent| matches!(event, AgentEvent::ToolCallStart { .. });
+    assert_eq!(events.iter().filter(|event| started(event)).count(), 1);
+    let last = output.history.last().expect("the answer is in the history");
+    match last {
+        AgentMessage::Assistant { content } => {
+            assert_eq!(content.text.as_deref(), Some("Here is the fox."));
+            assert!(content.tool_calls.is_empty(), "{:?}", content.tool_calls);
+        }
+        other => panic!("expected the assistant's answer, got {other:?}"),
+    }
+}
+
+/// A second reply that only calls a tool has no words of its own: the run
+/// ends completed with the composer's, and nothing more runs.
+#[tokio::test]
+async fn a_second_reply_with_a_call_and_no_text_ends_with_the_composers_closing_words() {
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push(reply_calling(&[("c1", DRAW, "a fox")]))
+            .push(reply_calling(&[("c2", DRAW, "a fox")]))
+            .push(MockLlmResponse::text("unreached")),
+    );
+
+    let (ended, events, ran) = run(&llm, Some(first_call(DRAW))).await;
+
+    assert_eq!(ended.unwrap().answer, NO_WORDS);
+    assert_eq!(names(&ran), [DRAW]);
+    assert_eq!(llm.asked().await.len(), 2);
+    let answers: Vec<&str> = events
+        .iter()
+        .filter_map(|event| match event {
+            AgentEvent::FinalAnswer { content } => Some(content.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(answers, [NO_WORDS]);
+    assert!(!common::event_assertions::has_error_event(&events));
+}
+
+/// A second reply of nothing but whitespace is no answer either.
+#[tokio::test]
+async fn a_second_reply_of_only_whitespace_ends_with_the_composers_closing_words() {
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push(reply_calling(&[("c1", DRAW, "a fox")]))
+            .push(MockLlmResponse::text(" \n")),
+    );
+
+    let (ended, _events, _ran) = run(&llm, Some(first_call(DRAW))).await;
+
+    assert_eq!(ended.unwrap().answer, NO_WORDS);
+}
+
+/// The tool answering the demanded call with an error changes nothing
+/// about what follows: the second call offers no tools, a call in its reply
+/// is not run, and the run ends completed.
+#[tokio::test]
+async fn a_tool_error_on_the_first_call_still_offers_no_tools_and_runs_nothing_more() {
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push(reply_calling(&[("c1", DRAW, "a fox")]))
+            .push(MockLlmResponse {
+                content: Some("The size was refused.".to_owned()),
+                ..reply_calling(&[("c2", DRAW, "a fox")])
+            })
+            .push(MockLlmResponse::text("unreached")),
+    );
+    let refuses = MockToolBehavior::Failure {
+        content: "\"\" is not a size".to_owned(),
+    };
+
+    let (ended, events, ran) = run_drawing(&llm, Some(first_call(DRAW)), refuses).await;
+
+    assert_eq!(ended.unwrap().answer, "The size was refused.");
+    let asked = llm.asked().await;
+    assert_eq!(asked.len(), 2);
+    assert_eq!(asked[1], (vec![], false));
+    assert_eq!(names(&ran), [DRAW], "the refused call was not made again");
+    assert!(common::event_assertions::has_tool_complete_with_success(
+        &events, false
+    ));
+}
+
+/// A run with no first call asks as it always did: every tool and no
+/// demand on every call, and a later reply's call is run.
+#[tokio::test]
+async fn a_run_with_no_first_call_offers_every_tool_on_every_call_and_runs_each() {
     let llm = Arc::new(
         MockLlmPort::new()
             .push(MockLlmResponse::tool_call("c1", READ, json!({})))
-            .push(MockLlmResponse::text("done")),
+            .push(MockLlmResponse::tool_call(
+                "c2",
+                DRAW,
+                json!({"prompt": "a fox"}),
+            ))
+            .push(MockLlmResponse::text("")),
     );
 
-    let (ended, _events, _ran) = run(&llm, None).await;
+    let (ended, _events, ran) = run(&llm, None).await;
 
-    assert!(ended.is_ok());
+    assert_eq!(ended.unwrap().answer, "", "an empty answer stays empty");
     let asked = llm.asked().await;
-    assert_eq!(asked.len(), 2);
+    assert_eq!(asked.len(), 3);
     for (offered, demanded) in &asked {
         assert!(offers(offered, &[DRAW, READ]), "{offered:?}");
         assert!(!demanded);
     }
+    assert_eq!(names(&ran), [READ, DRAW]);
 }
 
 /// A first reply that calls nothing ends the run there: the composer's

@@ -1,8 +1,8 @@
 //! Draw is the only thing that offers the image tool: no tool filter, `null`
 //! included, reaches it without `draw`; with `draw` a filter gains exactly
-//! the qualified name and the run's first reply must be the call for the
-//! picture; and a request that cannot draw is refused before a slot is
-//! taken or a row written.
+//! the qualified name, the run's first reply must be the call for the
+//! picture and its second is offered no tool; and a request that cannot
+//! draw is refused before a slot is taken or a row written.
 
 use std::collections::HashSet;
 
@@ -12,7 +12,7 @@ use super::{DRAW_TOOL, refuse_unavailable_drawing, with_drawing};
 use crate::error::HttpError;
 use crate::handlers::agent::run::create_run;
 use crate::handlers::agent::run_fixture::{conversation, drawing_state, saved, state};
-use crate::handlers::agent::turn_fixture::{TOOL, drawn, model, page, sent};
+use crate::handlers::agent::turn_fixture::{TOOL, drawn, model, offers_nothing, page, sent};
 
 /// The names of the tools a request to the model offers.
 fn offered(body: &Value) -> Vec<String> {
@@ -66,36 +66,23 @@ async fn without_draw_no_tool_filter_reaches_the_image_tool() {
     assert_eq!(names, [TOOL], "a filter cannot summon the image tool");
 }
 
-/// A run sent with Draw must draw: its first request offers the image tool
-/// alone and demands a call, whatever the filter names. Only after that is
-/// the model offered the image tool beside every tool, or beside exactly
-/// the tools a filter names, and left to choose.
+/// A run sent with Draw draws once: its first request offers the image tool
+/// alone and demands a call, whatever the filter names, and its second,
+/// made once the tool has run, offers no tool at all, not even the ones the
+/// filter names. A model that asks for the picture again gets no third
+/// request (`drawn` reads exactly two).
 #[tokio::test]
-async fn a_draw_runs_first_request_must_call_the_image_tool_and_later_ones_offer_the_rest() {
+async fn a_draw_runs_first_request_must_call_the_image_tool_and_its_second_offers_none() {
     let (_dir, state) = drawing_state().await;
     let id = model(&state, |_| {}).await;
-    let cases = [
-        (
-            json!({ "tool_filter": [TOOL], "draw": true }),
-            vec![DRAW_TOOL, TOOL],
-        ),
-        (json!({ "tool_filter": [], "draw": true }), vec![DRAW_TOOL]),
-    ];
-    for (asked, after) in cases {
+    let filters = [json!([TOOL]), json!([]), json!(null)];
+    for filter in filters {
+        let asked = json!({ "tool_filter": filter, "draw": true });
         let [first, later] = drawn(&state, id, page(&state, asked).await).await;
         assert_eq!(offered(&first), [DRAW_TOOL], "only the image tool at first");
         assert_eq!(first["tool_choice"], "required");
-        assert_eq!(offered(&later), after);
-        assert_eq!(later["tool_choice"], "auto");
+        assert!(offers_nothing(&later), "{later}");
     }
-
-    let every = json!({ "tool_filter": null, "draw": true });
-    let [first, later] = drawn(&state, id, page(&state, every).await).await;
-    assert_eq!(offered(&first), [DRAW_TOOL]);
-    assert_eq!(first["tool_choice"], "required");
-    let names = offered(&later);
-    assert!(names.contains(&DRAW_TOOL.to_owned()), "{names:?}");
-    assert!(names.contains(&TOOL.to_owned()), "{names:?}");
 }
 
 /// A model that answers a message sent with Draw in words, as one that

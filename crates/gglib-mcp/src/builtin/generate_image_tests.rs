@@ -204,6 +204,23 @@ fn the_pages_builtin_list_never_carries_generate_image() {
     assert!(names.contains(&"get_current_time".to_owned()));
 }
 
+/// What a run sent with Draw is held to: the tool's qualified name, and the
+/// two sentences, written out here so that neither can be emptied unseen.
+#[test]
+fn the_first_call_names_the_tool_and_carries_both_sentences() {
+    let first = DrawingTool::first_call();
+
+    assert_eq!(first.tool, DRAW);
+    assert_eq!(
+        first.if_missing,
+        "the model did not ask for the picture; try again or pick a model that calls tools"
+    );
+    assert_eq!(
+        first.if_wordless,
+        "The model said nothing after the drawing tool ran."
+    );
+}
+
 // ── a render ─────────────────────────────────────────────────────────────
 
 /// What it drew is stored, and the model reads one sentence: the count, the

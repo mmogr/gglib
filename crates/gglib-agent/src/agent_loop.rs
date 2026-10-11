@@ -8,9 +8,10 @@
 //!   ├─ context_pruning::Pruned::new()             initial budget trim (before loop)
 //!   │
 //!   └─ [per iteration]
-//!       ├─ llm.chat_stream()                          LLM call (streaming); the first is
+//!       ├─ llm.chat_stream()                          LLM call (streaming); when the run has
+//!       │                                             a `first_call`, the first is
 //!       │                                             chat_stream_requiring_call() with one tool
-//!       │                                             when the run has a `first_call`
+//!       │                                             and the second, with no tools, is the last
 //!       ├─ stream_collector::collect_stream()          text forwarded live ──→ AgentEvent::TextDelta
 //!       ├─ StagnationDetector::record()               stagnation guard ──→ AgentEvent::Error (on failure)
 //!       ├─ LoopDetector::check()                      loop guard       ──→ AgentEvent::Error (on failure)
@@ -231,6 +232,35 @@ impl AgentLoop {
         Ok(response)
     }
 
+    /// The reply after a demanded first call's tool has run: the model is
+    /// offered no tools, so all it can do is say what happened, and what it
+    /// says is the run's answer.
+    ///
+    /// A tool call in this reply all the same (a dialect model's markup, or
+    /// an upstream that calls a tool it was not offered) is not run: `run`
+    /// ends with this reply's text and never looks at its calls. A reply
+    /// with no text is answered with `first.if_wordless`, never with an
+    /// empty answer.
+    async fn call_for_words(
+        &self,
+        messages: &Pruned,
+        first: &FirstCall,
+        tx: &mpsc::Sender<AgentEvent>,
+    ) -> Result<CollectedResponse, AgentError> {
+        let mut response = self.call_and_collect(messages, &[], tx).await?;
+        if !response.tool_calls.is_empty() {
+            warn!(
+                tool = %first.tool,
+                ignored = response.tool_calls.len(),
+                "a reply that was offered no tools called some; none is run"
+            );
+        }
+        if response.content.trim().is_empty() {
+            response.content.clone_from(&first.if_wordless);
+        }
+        Ok(response)
+    }
+
     /// Collect a reply `stream` the LLM port answered with (step 3).
     async fn collect(
         &self,
@@ -312,7 +342,7 @@ impl AgentLoop {
         total_completion_tokens: Option<u64>,
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<AgentRunOutput, AgentError> {
-        debug!("no tool calls; final answer reached");
+        debug!("final answer reached");
         let _ = tx
             .send(AgentEvent::FinalAnswer {
                 content: content.clone(),
@@ -402,7 +432,8 @@ impl AgentLoopPort for AgentLoop {
     /// # Returns
     ///
     /// - `Ok(AgentRunOutput)` — the model produced a response without
-    ///   requesting further tool calls.
+    ///   requesting further tool calls, or, in a run with
+    ///   `config.first_call`, gave the reply that follows that call.
     /// - `Err(AgentError::MaxIterationsReached)` — reached `config.max_iterations`
     ///   without a final answer.
     /// - `Err(AgentError::LoopDetected)` — the same tool batch repeated
@@ -439,16 +470,30 @@ impl AgentLoopPort for AgentLoop {
         for iteration in 0..config.max_iterations {
             debug!(iteration, "agent loop iteration starting");
 
-            // Only the run's first call is ever demanded: held to a call on
-            // every turn, a model could never give its answer.
-            let demanded = config.first_call.as_ref().filter(|_| iteration == 0);
-            let response = match demanded {
+            // A run with a demanded first call is that call, then words: its
+            // first reply is held to the one tool, and once that has run the
+            // model is offered none and the reply that follows ends the run.
+            let words_only = config.first_call.is_some() && iteration > 0;
+            let response = match &config.first_call {
+                Some(first) if words_only => self.call_for_words(&messages, first, &tx).await?,
                 Some(first) => self.call_demanding(&messages, &tools, first, &tx).await?,
                 None => self.call_and_collect(&messages, &tools, &tx).await?,
             };
             if let Some(ct) = response.completion_tokens {
                 total_completion_tokens =
                     Some(total_completion_tokens.unwrap_or(0) + u64::from(ct));
+            }
+            if words_only {
+                // This reply ends the run whatever it holds: a call in it
+                // is not run, so there is nothing for a guard to judge.
+                return Self::finalize_answer(
+                    &mut messages,
+                    response.content,
+                    iteration,
+                    total_completion_tokens,
+                    &tx,
+                )
+                .await;
             }
 
             report_tool_call_truncation(&response, &tx).await;

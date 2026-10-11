@@ -5,7 +5,8 @@
 //! button pressed. [`DrawSwitch`] is that switch: `/draw` asks the daemon
 //! whether it can draw and arms it, and it is cleared after each send, so a
 //! model never starts a render on its own. The message sent while it is
-//! armed does draw: its run's first reply must be the call for the picture
+//! armed does draw, once: its run's first reply must be the call for the
+//! picture, and the reply after it is offered no tools
 //! ([`DrawSwitch::first_call`]).
 //!
 //! The CLI never drives `sd-server` itself. The tool draws through the
@@ -112,8 +113,9 @@ impl DrawSwitch {
     }
 
     /// What the next message's run is held to while the switch is armed:
-    /// its first reply calls the image tool, as a run sent with the page's
-    /// Draw button does. Nothing while it is off.
+    /// its first reply calls the image tool and its second is offered no
+    /// tools, as with a run sent with the page's Draw button. Nothing while
+    /// it is off.
     pub(crate) fn first_call(&self) -> Option<FirstCall> {
         self.armed
             .load(Ordering::SeqCst)

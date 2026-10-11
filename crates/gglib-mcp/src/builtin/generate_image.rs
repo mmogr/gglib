@@ -13,7 +13,7 @@
 //! Whether the tool is offered at all is [`DrawArm`]'s: armed for a run sent
 //! with `draw: true`, or for the next message after `/draw` in `gglib chat`.
 //! Such a run does not leave drawing to the model: its first reply must
-//! call this tool ([`DrawingTool::first_call`]).
+//! call this tool, and it calls it once ([`DrawingTool::first_call`]).
 
 use std::fmt;
 use std::sync::Arc;
@@ -35,9 +35,14 @@ use super::BUILTIN_PREFIX;
 pub(crate) const NAME: &str = "generate_image";
 
 /// What a run's failure says when a message sent with Draw got a first
-/// reply that called no tool.
+/// reply that did not call this tool.
 pub const NOT_ASKED: &str =
     "the model did not ask for the picture; try again or pick a model that calls tools";
+
+/// The answer of a run sent with Draw when the model, asked after the tool
+/// ran, says nothing. True whether the picture was drawn or the tool
+/// answered with an error: the tool's own row says which.
+pub const NO_WORDS: &str = "The model said nothing after the drawing tool ran.";
 
 /// Whether the drawing tool is offered right now.
 #[derive(Debug, Clone)]
@@ -95,13 +100,16 @@ impl DrawingTool {
     /// What a run sent with Draw pressed is held to: its first reply calls
     /// this tool, by its qualified name, and is offered no other. Pressing
     /// Draw is the person's explicit ask, so whether to draw is not left to
-    /// the model; a first reply with no call fails the run with
-    /// [`NOT_ASKED`].
+    /// the model; a first reply that does not call this tool fails the run
+    /// with [`NOT_ASKED`]. The tool then runs once: the model's next reply
+    /// is offered no tools and is the run's answer, or [`NO_WORDS`] when it
+    /// has no text.
     #[must_use]
     pub fn first_call() -> FirstCall {
         FirstCall {
             tool: format!("{BUILTIN_PREFIX}{NAME}"),
             if_missing: NOT_ASKED.to_owned(),
+            if_wordless: NO_WORDS.to_owned(),
         }
     }
 

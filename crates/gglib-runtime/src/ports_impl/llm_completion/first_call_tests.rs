@@ -2,9 +2,11 @@
 //! real agent loop over this adapter, against a llama-server that keeps
 //! each request's body and answers from a script.
 //!
-//! The first request offers that tool alone and demands a call; every later
-//! one offers the run's whole list and leaves the choice to the model. A
-//! run that demands nothing sends what it always did.
+//! The first request offers that tool alone and demands a call. The second
+//! carries no `tools`, no `tool_choice` and no grammar, for a model that
+//! writes its calls in a dialect as for any other, and a call its reply
+//! makes all the same is not run. A run that demands nothing sends what it
+//! always did.
 
 use std::sync::{Arc, Mutex};
 
@@ -28,6 +30,7 @@ use super::images::ImageUrls;
 const DRAW: &str = "builtin:generate_image";
 const READ: &str = "3:read_file";
 const NOT_ASKED: &str = "the model did not ask for the picture";
+const NO_WORDS: &str = "The model said nothing after the tool ran.";
 
 /// One reply that calls `DRAW`, as llama-server streams a native call.
 fn calls_draw() -> String {
@@ -118,6 +121,7 @@ fn draw_first() -> FirstCall {
     FirstCall {
         tool: DRAW.to_owned(),
         if_missing: NOT_ASKED.to_owned(),
+        if_wordless: NO_WORDS.to_owned(),
     }
 }
 
@@ -133,9 +137,24 @@ async fn run(
     Vec<Value>,
     Vec<String>,
 ) {
+    run_on(ModelContext::passthrough(), script, first_call).await
+}
+
+/// [`run`], on the model `context` describes.
+async fn run_on(
+    context: ModelContext,
+    script: Vec<String>,
+    first_call: Option<FirstCall>,
+) -> (
+    Result<String, AgentError>,
+    Vec<AgentEvent>,
+    Vec<Value>,
+    Vec<String>,
+) {
     let (base, bodies) = llama(script).await;
     let tools = Arc::new(TwoTools::default());
-    let adapter = LlmCompletionAdapter::new(&base, Some("m".to_owned()));
+    let adapter =
+        LlmCompletionAdapter::new(&base, Some("m".to_owned())).with_model_context(context);
     let executor = Arc::clone(&tools) as Arc<dyn ToolExecutorPort>;
     let agent = AgentLoop::build(Arc::new(adapter), executor, None);
     let mut config = AgentConfig::default();
@@ -169,10 +188,31 @@ fn offered(body: &Value) -> Vec<&str> {
         .unwrap_or_default()
 }
 
+/// A model that writes its calls in Qwen's dialect.
+fn qwen() -> ModelContext {
+    ModelContext {
+        tags: vec![FORMAT_QWEN_XML.to_owned()],
+        dialect: Some(DialectSpec::qwen_xml()),
+        capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS
+            | ModelCapabilities::SUPPORTS_SYSTEM_ROLE,
+        catalog_resolved: true,
+        ..ModelContext::passthrough()
+    }
+}
+
+/// Whether `body` offers the model nothing to call: no `tools`, no
+/// `tool_choice` and no grammar.
+fn offers_nothing(body: &Value) -> bool {
+    ["tools", "tool_choice", "grammar"]
+        .iter()
+        .all(|key| body.get(key).is_none())
+}
+
 /// The run's first request offers exactly the demanded tool and demands a
-/// call; the second offers every tool and leaves the choice to the model.
+/// call; the second offers no tools and demands nothing, and still shows
+/// the model the call it made and the tool's answer.
 #[tokio::test]
-async fn the_first_request_offers_only_the_demanded_tool_and_requires_a_call() {
+async fn the_first_request_demands_the_one_tool_and_the_second_offers_none() {
     let script = vec![calls_draw(), says("A red fox in the snow.")];
 
     let (ended, _events, bodies, ran) = run(script, Some(draw_first())).await;
@@ -181,9 +221,36 @@ async fn the_first_request_offers_only_the_demanded_tool_and_requires_a_call() {
     assert_eq!(bodies.len(), 2, "two calls to the model");
     assert_eq!(offered(&bodies[0]), [DRAW]);
     assert_eq!(bodies[0]["tool_choice"], "required");
-    assert_eq!(offered(&bodies[1]), [DRAW, READ]);
-    assert_eq!(bodies[1]["tool_choice"], "auto");
+    assert!(offers_nothing(&bodies[1]), "{}", bodies[1]);
+    let roles: Vec<&str> = bodies[1]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|message| message["role"].as_str())
+        .collect();
+    assert_eq!(roles, ["user", "assistant", "tool"]);
     assert_eq!(ran, [DRAW]);
+}
+
+/// A model that writes its calls in a dialect gets the grammar on its first
+/// request and none on its second. A second reply that writes the call out
+/// again in the dialect's markup is parsed as a call and not run; with no
+/// text beside it, the run ends in the composer's closing words.
+#[tokio::test]
+async fn a_dialect_models_second_request_has_no_grammar_and_its_markup_is_not_run() {
+    let markup = format!(
+        "<tool_call>\n{}\n</tool_call>",
+        json!({"name": DRAW, "arguments": {"prompt": "a red fox"}})
+    );
+    let script = vec![says(&markup), says(&markup)];
+
+    let (ended, _events, bodies, ran) = run_on(qwen(), script, Some(draw_first())).await;
+
+    assert_eq!(ended.unwrap(), NO_WORDS);
+    assert_eq!(bodies.len(), 2, "the second reply ended the run");
+    assert!(bodies[0]["grammar"].is_string(), "{}", bodies[0]);
+    assert!(offers_nothing(&bodies[1]), "{}", bodies[1]);
+    assert_eq!(ran, [DRAW], "the second reply's call was not run");
 }
 
 /// A run that demands nothing sends what it always did: every tool and the
@@ -263,16 +330,8 @@ fn only_tool_choice_tells_a_demanded_body_from_any_other() {
 /// colon included, the grammar can spell.
 #[test]
 fn a_dialect_model_gets_a_grammar_for_the_one_demanded_tool() {
-    let qwen = ModelContext {
-        tags: vec![FORMAT_QWEN_XML.to_owned()],
-        dialect: Some(DialectSpec::qwen_xml()),
-        capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS
-            | ModelCapabilities::SUPPORTS_SYSTEM_ROLE,
-        catalog_resolved: true,
-        ..ModelContext::passthrough()
-    };
     let adapter = LlmCompletionAdapter::new("http://127.0.0.1:0", Some("m".to_owned()))
-        .with_model_context(qwen);
+        .with_model_context(qwen());
     let tools = [ToolDefinition::new(DRAW)];
     let messages = [AgentMessage::user("draw a red fox")];
 
@@ -293,4 +352,8 @@ fn a_dialect_model_gets_a_grammar_for_the_one_demanded_tool() {
         free.get("grammar").is_none(),
         "nothing demanded, no grammar"
     );
+    let none = adapter
+        .shaped_body(&messages, &[], &ImageUrls::default(), false)
+        .unwrap();
+    assert!(offers_nothing(&none), "{none}");
 }

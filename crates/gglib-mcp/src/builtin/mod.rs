@@ -18,7 +18,8 @@ use gglib_core::{McpTool, ToolCall, ToolDefinition, ToolResult};
 use serde_json::{Value, json};
 
 pub use generate_image::{
-    DrawArm, DrawingTool, NOT_ASKED as DRAW_NOT_ASKED, request_of as image_request_of,
+    DrawArm, DrawingTool, NO_WORDS as DRAW_NO_WORDS, NOT_ASKED as DRAW_NOT_ASKED,
+    request_of as image_request_of,
 };
 
 /// Prefix applied to all tool names produced by this executor.

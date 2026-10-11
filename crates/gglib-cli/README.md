@@ -237,9 +237,12 @@ You: what does the stack trace say?
 message typed, and only that one. It writes the detailed prompt itself, draws
 through the daemon's image model, and says what it drew; the line shows the
 render's progress. The reply to that message must start with the call for
-the picture: a model that answers in words instead ends the turn with "the
-model did not ask for the picture; try again or pick a model that calls
-tools". `/draw` says why when nothing can draw (no daemon, no
+the picture: a model that answers in words instead, or calls only some other
+tool, ends the turn with "the model did not ask for the picture; try again
+or pick a model that calls tools". The picture is asked for once: after the
+tool has run the model is offered no tools and can only answer in words,
+and if it says nothing the answer is "The model said nothing after the
+drawing tool ran." `/draw` says why when nothing can draw (no daemon, no
 image runtime or model, or a `--remote` session, whose model is on the other
 machine).
 

@@ -189,7 +189,8 @@ pub(super) async fn prepare_over(
     let mut config = config_for(state, req.config).await;
     // Pressing Draw is the person's explicit ask: the run's first reply
     // must be the call for the picture, offered that tool alone, and is
-    // never left to the model to decide. Every door that composes a run
+    // never left to the model to decide. The picture is asked for once:
+    // the reply after it is offered no tools. Every door that composes a run
     // with `draw` comes through here: the page's runs, a device's turn and
     // a chat run with builtins. A run on another machine's model was
     // refused `draw` before this.

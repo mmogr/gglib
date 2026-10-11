@@ -267,7 +267,7 @@ pub(super) async fn work(
 /// own message can quote the model or a tool. The reason in full is the
 /// run's last `error` event.
 ///
-/// A first reply that had to call a tool and called none is the one error
+/// A first reply that had to call a tool and did not call it is the one error
 /// that carries its words: they are the composer's, fixed, and only a run
 /// sent with Draw is held to a first call, so its code is the one a picture
 /// that was not drawn has.

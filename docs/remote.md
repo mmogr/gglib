@@ -810,9 +810,12 @@ only then is the desktop's chat model offered its image tool, for that one
 message: it writes the prompt, draws with the desktop's image model, and the
 picture is saved on the reply's tool row. Whether to draw is not left to the
 model: the reply's first step must be the call for the picture, and a model
-that answers in words instead ends the run `failed`,
-`image_generation_failed`, "the model did not ask for the picture; try again
-or pick a model that calls tools". This needs no `--allow-mcp`, which
+that answers in words instead, or calls only some other tool, ends the run
+`failed`, `image_generation_failed`, "the model did not ask for the picture;
+try again or pick a model that calls tools". The picture is asked for once:
+after the tool has run the model is offered no tools, and what it then says
+is the reply's text ("The model said nothing after the drawing tool ran."
+when it says nothing). This needs no `--allow-mcp`, which
 still gates every MCP tool, and it holds for a chat with its tools turned
 off: the button is the person's choice for that message. A turn without the
 key is offered no image tool. A desktop that cannot draw refuses the turn,

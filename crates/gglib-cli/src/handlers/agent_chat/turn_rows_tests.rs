@@ -457,5 +457,6 @@ async fn a_send_after_draw_holds_its_run_to_the_image_tool_and_the_next_to_nothi
     let first = held[0].as_ref().expect("the armed send is held to a call");
     assert_eq!(first.tool, "builtin:generate_image");
     assert_eq!(first.if_missing, gglib_mcp::DRAW_NOT_ASKED);
+    assert_eq!(first.if_wordless, gglib_mcp::DRAW_NO_WORDS);
     assert_eq!(held[1], None, "the message after is held to nothing");
 }
