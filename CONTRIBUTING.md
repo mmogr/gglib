@@ -601,7 +601,10 @@ make pre-commit
 A build from this checkout uses the same data folder as an installed gglib:
 your real library, settings and llama.cpp install (`gglib config paths` shows
 the folder and which binary is running). `make install` warns when another
-`gglib` on `PATH` is shadowed, and `make uninstall` never deletes the folder.
+`gglib` on `PATH` is shadowed. `make uninstall` asks three things before it
+deletes anything, each with No as the default: whether to remove the build,
+whether to delete that folder and the desktop app, and whether to delete your
+downloaded models.
 
 To work against a library of your own, for example while changing the
 database schema, give the build its own folder and its own daemon port:
