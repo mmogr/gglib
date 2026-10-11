@@ -225,7 +225,16 @@ after the picture, one model asked for the same picture on every later
 reply, five identical renders from one message, and another ended each run
 with a tool call written out as text
 ([log-0018, 2026-10-11](log-0018.md#2026-10-11-draw-from-a-chat-draws-on-two-models-and-a-message-sent-with-draw-draws-once)).
-The rule that answers that has not itself been run against a real model.
+Run against two real models, the rule held: 8 of 8 runs made one render and
+ended in words. But the words denied the picture in 7 of the 8 ("I'm sorry,
+I cannot draw images"). So the second request ends with one instruction
+from the drawing side, a `user` message after the tool's result that goes
+to the model for that request only and is in no row, no event and no later
+request: to say in one or two sentences what it asked the tool to draw, or,
+when the tool answered with an error, what went wrong
+([log-0018, 2026-10-11](log-0018.md#2026-10-11-a-run-sent-with-draw-draws-once-on-two-models-and-its-closing-reply-is-told-what-to-say)).
+The instruction as built has not been run through gglib against a real
+model.
 An empty `size` argument is read as none, the image model's default.
 A run ended for want of that call has still left rows on a door that saves
 the chat: the
@@ -359,9 +368,13 @@ The request's sampling is not read; its Thinking choice,
   models, through the page's door, a chat run with builtins and `gglib
   chat`
   ([log-0018, 2026-10-11](log-0018.md#2026-10-11-draw-from-a-chat-draws-on-two-models-and-a-message-sent-with-draw-draws-once)).
-  What follows the picture went wrong in that run, and the rule that
-  answers it, a second request with no tools, has only been run against a
-  scripted model. A device's hub turn, a real tunnel and a reasoning model
+  What follows the picture went wrong in that run. The rule that answers
+  it, a second request with no tools, then made one render in 8 of 8 runs
+  on the same two models, with closing words that denied the picture in 7;
+  the instruction that answers that has been sent to llama-server directly
+  and to a scripted model through gglib, never through gglib to a real one
+  ([log-0018, 2026-10-11](log-0018.md#2026-10-11-a-run-sent-with-draw-draws-once-on-two-models-and-its-closing-reply-is-told-what-to-say)).
+  A device's hub turn, a real tunnel and a reasoning model
   have not drawn at all. Every test runs a scripted job or a stand-in
   server.
 - MLX, ComfyUI, img2img, edits, LoRA, ControlNet, upscaling and video.
