@@ -365,14 +365,15 @@ fn sampling(pass: u32, step: u32, total: u32) -> ImageStage {
 
 // ── refused before anything queues ───────────────────────────────────────
 
-/// A size off the family's rule, a chat model, too many images and an empty
-/// prompt are refused before the model is admitted.
+/// A size off the family's rule, a chat model, a named model that lacks a
+/// file, too many images and an empty prompt are refused before the model is
+/// admitted and before any stage is reported.
 #[tokio::test(start_paused = true)]
 async fn a_request_the_recipe_refuses_never_queues() {
     let jobs = Arc::new(Timeline::new(flux_like()));
     let host = Host::new();
     let driver = driver(models(), &jobs, &host);
-    let (tx, _rx) = mpsc::channel(64);
+    let (tx, mut rx) = mpsc::channel(64);
 
     let seven = ImageRequest {
         size: Some(ImageSize {
@@ -418,7 +419,7 @@ async fn a_request_the_recipe_refuses_never_queues() {
         model: Some("nope".to_owned()),
         ..sdxl_request()
     };
-    let refused = driver.generate(unknown, tx).await.unwrap_err();
+    let refused = driver.generate(unknown, tx.clone()).await.unwrap_err();
     assert!(
         matches!(
             refused,
@@ -426,7 +427,23 @@ async fn a_request_the_recipe_refuses_never_queues() {
         ),
         "{refused:?}"
     );
+    // Flux lacks its three files: refused by name here, though SDXL, the
+    // only complete image model, could have drawn.
+    let lacking = ImageRequest {
+        model: Some("flux".to_owned()),
+        ..sdxl_request()
+    };
+    let refused = driver.generate(lacking, tx).await.unwrap_err();
+    assert!(
+        matches!(
+            &refused,
+            ImageError::Runtime(ModelRuntimeError::ImageModelIncomplete { model, .. })
+                if model == "flux"
+        ),
+        "{refused:?}"
+    );
 
+    assert!(drain(&mut rx).is_empty(), "no stage was reported");
     assert_eq!(
         host.admits.load(Ordering::SeqCst),
         0,

@@ -32,11 +32,12 @@ use gglib_core::ports::{
     ImageBatch, ImageError, ImageGenerationPort, ImageProgress, ImageRequest, ImageStage,
     LaunchOverrides, ModelCatalogPort, ModelRuntimeError, SettingsRepository,
 };
+use gglib_core::services::resolve_image_model;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Instant;
 
 use super::job_api::{HttpSdJobs, SdJobs};
-use super::job_plan::{Plan, drawing_model, plan};
+use super::job_plan::{Plan, plan};
 use super::job_poll::{Job, Render};
 use crate::process::ProcessManager;
 
@@ -284,7 +285,7 @@ impl ImageGenerationPort for SdImageDriver {
             });
         }
         let default_model = self.default_model(&ImageRequest::new("")).await;
-        drawing_model(self.catalog.as_ref(), default_model)
+        resolve_image_model(self.catalog.as_ref(), default_model, None)
             .await
             .map(|spec| spec.name)
     }
