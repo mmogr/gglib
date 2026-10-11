@@ -20,6 +20,7 @@ use gglib_core::domain::{Machine, RuntimeKind};
 use gglib_core::ports::{Admission, LaunchOverrides};
 
 use super::AgentChatRequest;
+use super::launch::Loading;
 use super::run::coded;
 use crate::error::HttpError;
 use crate::state::AppState;
@@ -125,10 +126,13 @@ fn serving(running: &[ServerInfo], id: i64) -> Option<u16> {
 /// running, as `/v1/models/{name}/load` does. A running server is matched by
 /// the id `model` resolves to, and a load is asked for by that id, so a
 /// second model of the same name is neither found nor loaded in its place.
+/// `loading` is told before a load is asked for, which may take minutes or
+/// wait behind an image render.
 pub(super) async fn on_model(
     state: &AppState,
     model: &str,
     mut chat: AgentChatRequest,
+    loading: &Loading,
 ) -> Result<AgentChatRequest, HttpError> {
     let id = state
         .core
@@ -143,6 +147,7 @@ pub(super) async fn on_model(
         chat.port = port;
         return Ok(chat);
     }
+    loading.waiting();
     let model = id.map_or_else(|| model.to_owned(), |id| id.to_string());
     let default_ctx = state
         .core

@@ -18,5 +18,6 @@ chat completions.
 | `meta_tools`  | Progressive-disclosure index + 3 meta-tool specs   |
 | `handlers`    | Axum route handlers for POST/GET/DELETE `/mcp`     |
 | `call_result` | A server's tool result as MCP items, images inline |
+| `drawing`     | `builtin__generate_image`, behind `mcp_drawing`    |
 
 <!-- module-docs:end -->

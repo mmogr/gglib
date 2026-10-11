@@ -73,6 +73,12 @@ export interface RunRequestOptions {
    * says: weighing the two is the daemon's.
    */
   thinking?: Thinking;
+  /**
+   * Sent with Draw pressed: the daemon offers this run its drawing tool.
+   * The key is in the body only then; a run without it is offered no
+   * drawing tool, whatever its `tool_filter` says.
+   */
+  draw?: boolean;
   /** `false` exposes no tools (an empty `tool_filter`); otherwise permissive. */
   supportsToolCalls?: boolean | null;
   /**
@@ -133,6 +139,7 @@ export function buildRunRequest(options: RunRequestOptions): AgentRunRequest {
     reasoning_effort: (options.reasoning?.reasoning_effort as ReasoningEffort | undefined) ?? null,
     reasoning_budget_tokens: options.reasoning?.reasoning_budget_tokens ?? null,
     ...(options.thinking !== undefined && { thinking: options.thinking }),
+    ...(options.draw === true && { draw: true }),
   };
 }
 
@@ -147,7 +154,7 @@ export type RunTarget = Pick<RunRequestOptions, 'selectedServerPort' | 'supports
  */
 export function runBodyFor(
   target: RunTarget,
-  run: Pick<RunRequestOptions, 'conversationId' | 'messages' | 'answerSaved' | 'thinking'>,
+  run: Pick<RunRequestOptions, 'conversationId' | 'messages' | 'answerSaved' | 'thinking' | 'draw'>,
 ): AgentRunRequest {
   return buildRunRequest({
     ...target,

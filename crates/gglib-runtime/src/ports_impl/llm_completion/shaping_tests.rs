@@ -30,7 +30,7 @@ fn user(text: &str) -> AgentMessage {
 
 fn body_of(adapter: &LlmCompletionAdapter, messages: &[AgentMessage]) -> Value {
     adapter
-        .shaped_body(messages, &[], &ImageUrls::default())
+        .shaped_body(messages, &[], &ImageUrls::default(), false)
         .unwrap()
 }
 
@@ -280,7 +280,7 @@ fn an_untrimmable_conversation_is_rejected() {
     }];
 
     let err = adapter
-        .shaped_body(&messages, &[], &ImageUrls::default())
+        .shaped_body(&messages, &[], &ImageUrls::default(), false)
         .unwrap_err();
     assert!(
         err.to_string().contains("context budget"),

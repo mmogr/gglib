@@ -6,9 +6,11 @@ mod limits;
 pub(crate) mod loop_detection;
 pub(crate) mod messages;
 mod messages_serde;
+mod openai_history;
 mod replay;
 pub(crate) mod stagnation;
 pub mod tool_display;
+pub(crate) mod tool_progress;
 pub(crate) mod tool_types;
 mod transcript;
 mod turn_usage;
@@ -16,22 +18,29 @@ mod turn_usage;
 // Re-export everything so callers continue to use `gglib_core::AgentConfig` etc.
 pub use config::{
     AgentConfig, AgentConfigError, DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_PARALLEL_TOOLS,
-    DEFAULT_MAX_STAGNATION_STEPS, MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING,
+    DEFAULT_MAX_STAGNATION_STEPS, FirstCall, MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING,
     MAX_STAGNATION_STEPS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING, MIN_CONTEXT_BUDGET_CHARS,
     MIN_TOOL_TIMEOUT_MS,
 };
-pub use events::{AGENT_EVENT_CHANNEL_CAPACITY, AgentEvent, LlmStreamEvent};
+pub use events::{AGENT_EVENT_CHANNEL_CAPACITY, AgentEvent, LlmStreamEvent, WaitingFor};
 pub use limits::TurnLimits;
 pub use loop_detection::results::{batch_results_hash, hash_result_content, hash_result_text};
 pub use loop_detection::{
     BatchRecord, LoopDetector, RepeatOutcome, batch_signature, is_observation_batch,
 };
 pub use messages::{AgentMessage, AssistantContent, IMAGE_CHARGE_CHARS};
+pub use openai_history::{
+    HistoryError, OpenAiImage, OpenAiTurn, inline_images, into_agent_messages,
+    parse_openai_messages,
+};
 pub use replay::{
     INCOMPLETE_KEY, MADE_KEYS, MadeKeys, THINKING_DURATION_KEY, THINKING_KEY, UNFINISHED_TOOL_CALL,
     rows_from_frames, rows_from_timed_frames,
 };
 pub use stagnation::StagnationDetector;
+pub use tool_progress::{
+    NoProgress, PreviewFrame, ToolProgressSink, ToolProgressUpdate, ToolStage,
+};
 pub use tool_types::{ToolCall, ToolDefinition, ToolResult};
 pub use transcript::{saved_history, to_new_message};
 pub use turn_usage::{ContextReading, TurnUsage};

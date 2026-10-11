@@ -91,3 +91,173 @@ fn turn_usage_carries_its_reading_flat() {
     let back: TurnUsage = serde_json::from_value(json).unwrap();
     assert_eq!(back, usage);
 }
+
+/// A tool's progress on the wire: its counts flat beside the tag, and one it
+/// did not report absent.
+#[test]
+fn tool_progress_serialises_flat_and_leaves_out_what_is_unknown() {
+    let evt = AgentEvent::ToolProgress {
+        tool_call_id: "c1".into(),
+        stage: ToolStage::Sampling,
+        pass: Some(1),
+        done: Some(2),
+        total: Some(4),
+        position: None,
+    };
+    assert_eq!(
+        serde_json::to_string(&evt).unwrap(),
+        r#"{"type":"tool_progress","tool_call_id":"c1","stage":"sampling","pass":1,"done":2,"total":4}"#
+    );
+    let queued = AgentEvent::ToolProgress {
+        tool_call_id: "c1".into(),
+        stage: ToolStage::Queued,
+        pass: None,
+        done: None,
+        total: None,
+        position: Some(2),
+    };
+    assert_eq!(
+        serde_json::to_string(&queued).unwrap(),
+        r#"{"type":"tool_progress","tool_call_id":"c1","stage":"queued","position":2}"#
+    );
+}
+
+/// Every stage's wire name.
+#[test]
+fn tool_stages_are_snake_case() {
+    let names: Vec<String> = [
+        ToolStage::Queued,
+        ToolStage::Loading,
+        ToolStage::Sampling,
+        ToolStage::Decoding,
+        ToolStage::Finishing,
+    ]
+    .iter()
+    .map(|s| serde_json::to_string(s).unwrap())
+    .collect();
+    assert_eq!(
+        names,
+        [
+            r#""queued""#,
+            r#""loading""#,
+            r#""sampling""#,
+            r#""decoding""#,
+            r#""finishing""#
+        ]
+    );
+}
+
+/// A preview frame on the wire.
+#[test]
+fn tool_preview_serialises_its_frame() {
+    let evt = AgentEvent::ToolPreview {
+        tool_call_id: "c1".into(),
+        frame: PreviewFrame::png(3, 20, "iVBO"),
+    };
+    assert_eq!(
+        serde_json::to_string(&evt).unwrap(),
+        r#"{"type":"tool_preview","tool_call_id":"c1","frame":{"mime":"image/png","step":3,"total":20,"b64":"iVBO"}}"#
+    );
+}
+
+/// A wait on the wire, for each thing waited for.
+#[test]
+fn waiting_serialises_its_reason() {
+    let evt = AgentEvent::Waiting {
+        reason: WaitingFor::ImageRender,
+        step: 3,
+        total: 20,
+        position: 1,
+    };
+    assert_eq!(
+        serde_json::to_string(&evt).unwrap(),
+        r#"{"type":"waiting","reason":"image_render","step":3,"total":20,"position":1}"#
+    );
+    let load = AgentEvent::Waiting {
+        reason: WaitingFor::ModelLoad,
+        step: 0,
+        total: 0,
+        position: 0,
+    };
+    assert_eq!(serde_json::to_value(&load).unwrap()["reason"], "model_load");
+}
+
+/// An agent run's frames while it draws: a wait, the call, its progress
+/// through every stage, and its completion with the image it made. No
+/// `tool_preview`: a preview is never a logged frame.
+fn drawing_frames() -> Vec<AgentEvent> {
+    let progress = |stage, pass, done, position| AgentEvent::ToolProgress {
+        tool_call_id: "call_1".into(),
+        stage,
+        pass,
+        done,
+        total: done.map(|_| 20),
+        position,
+    };
+    let mut result = ToolResult::text(
+        "call_1",
+        "Drew 1 image, 1024x1024 PNG, with flux-dev in 76 s; the user can see it, you cannot.",
+        true,
+    );
+    result.images = vec![crate::domain::AttachmentInfo {
+        id: crate::domain::AttachmentId::of(b"drawn"),
+        mime: "image/png".into(),
+        width: 1024,
+        height: 1024,
+    }];
+    vec![
+        AgentEvent::Waiting {
+            reason: WaitingFor::ImageRender,
+            step: 12,
+            total: 20,
+            position: 1,
+        },
+        AgentEvent::ToolCallStart {
+            tool_call: ToolCall {
+                id: "call_1".into(),
+                name: "builtin:generate_image".into(),
+                arguments: serde_json::json!({ "prompt": "a red fox in fresh snow, morning light" }),
+            },
+            display_name: "Generate Image".into(),
+            args_summary: None,
+        },
+        progress(ToolStage::Queued, None, None, Some(1)),
+        progress(ToolStage::Loading, None, None, None),
+        progress(ToolStage::Sampling, Some(1), Some(1), None),
+        progress(ToolStage::Sampling, Some(1), Some(20), None),
+        progress(ToolStage::Decoding, None, None, None),
+        progress(ToolStage::Finishing, None, None, None),
+        AgentEvent::ToolCallComplete {
+            tool_name: "builtin:generate_image".into(),
+            result,
+            wait_ms: 0,
+            execute_duration_ms: 76_000,
+            display_name: "Generate Image".into(),
+            duration_display: "76.0s".into(),
+        },
+    ]
+}
+
+/// The checked-in `contracts/runs/tool_progress.json` is exactly these
+/// frames, for every client that reads an agent run. Run with
+/// `GGLIB_RECORD_CONTRACTS=1` to rewrite it after a deliberate change.
+#[test]
+fn drawing_frames_match_the_checked_in_contract() {
+    let frames: Vec<serde_json::Value> = drawing_frames()
+        .iter()
+        .map(|e| serde_json::to_value(e).unwrap())
+        .collect();
+    let mut want = serde_json::to_string_pretty(&frames).expect("serialise");
+    want.push('\n');
+    assert!(!want.contains("tool_preview"));
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../contracts/runs/tool_progress.json");
+    if std::env::var_os("GGLIB_RECORD_CONTRACTS").is_some() {
+        std::fs::write(&path, &want).expect("write tool_progress.json");
+    }
+    let have = std::fs::read_to_string(&path).expect("read contracts/runs/tool_progress.json");
+    assert!(
+        have == want,
+        "contracts/runs/tool_progress.json is stale; rerun with GGLIB_RECORD_CONTRACTS=1\n{want}"
+    );
+}

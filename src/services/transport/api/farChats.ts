@@ -7,7 +7,8 @@
  * store answered (`uploadAttachment(source 'far', …)`): the far machine
  * rebuilds the history from its own record, runs the reply and saves it
  * there. The turn that changes the chat's Thinking choice says that too,
- * and the far machine remembers it.
+ * and the far machine remembers it. A turn sent with Draw pressed says
+ * `draw`, and no other turn does.
  */
 
 import type { HubChat } from '../../../types/generated/HubChat';
@@ -40,7 +41,10 @@ export async function openFarChat(id: number): Promise<HubChatOpen> {
  * leaves `images` out, as a far gglib from before images reads it. Only the
  * turn that changes the chat's Thinking choice carries `thinking`: a far
  * gglib from before the choice refuses the key, and lists no model as one
- * that thinks, so the page offers no switch to change it by.
+ * that thinks, so the page offers no switch to change it by. Only a turn
+ * sent with Draw pressed carries `draw`, for the same reason: the button is
+ * pressed only after the far machine answered that it can draw
+ * (`drawingAvailability`), which one from before drawing never does.
  */
 export async function addFarTurn(
   id: number,
@@ -48,11 +52,13 @@ export async function addFarTurn(
   content: string,
   images: string[] = [],
   thinking?: Thinking,
+  draw = false,
 ): Promise<RunInfo> {
   const body: RemoteTurnBody = {
     content,
     ...(images.length > 0 && { images }),
     ...(thinking !== undefined && { thinking }),
+    ...(draw && { draw: true }),
   };
   return put<RunInfo>(`/api/remote/chats/${id}/turns/${encodeURIComponent(runId)}`, body);
 }

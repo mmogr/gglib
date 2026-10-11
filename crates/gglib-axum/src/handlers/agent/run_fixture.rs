@@ -92,6 +92,36 @@ pub(in crate::handlers) async fn state() -> (tempfile::TempDir, AppState) {
     (dir, Arc::new(state))
 }
 
+/// An image driver that can draw: `drawing_model` names `flux1-schnell`,
+/// and `generate` is never reached by a test that only composes.
+#[derive(Debug)]
+pub(in crate::handlers) struct CanDraw;
+
+#[async_trait::async_trait]
+impl gglib_core::ports::ImageGenerationPort for CanDraw {
+    async fn generate(
+        &self,
+        _request: gglib_core::ports::ImageRequest,
+        _progress: mpsc::Sender<gglib_core::ports::ImageProgress>,
+    ) -> Result<gglib_core::ports::ImageBatch, gglib_core::ports::ImageError> {
+        Err(gglib_core::ports::ImageError::Failed {
+            message: "a test's driver draws nothing".to_owned(),
+        })
+    }
+
+    async fn drawing_model(&self) -> Result<String, gglib_core::ports::ImageError> {
+        Ok("flux1-schnell".to_owned())
+    }
+}
+
+/// [`state`], on a machine whose image driver can draw.
+pub(in crate::handlers) async fn drawing_state() -> (tempfile::TempDir, AppState) {
+    let (dir, state) = state().await;
+    let mut state = Arc::into_inner(state).expect("the only handle");
+    state.images = Arc::new(CanDraw);
+    (dir, Arc::new(state))
+}
+
 pub(super) fn user() -> AgentMessage {
     AgentMessage::User {
         content: "PROMPT-SECRET".to_owned(),
@@ -272,6 +302,7 @@ pub(super) async fn drain(mut events: gglib_core::ports::RunEvents) -> (usize, O
         while let Some(event) = events.next().await {
             match event {
                 gglib_core::ports::RunEvent::Frame { .. } => frames += 1,
+                gglib_core::ports::RunEvent::Preview { .. } => {}
                 gglib_core::ports::RunEvent::End(info) => return Some(info),
             }
         }

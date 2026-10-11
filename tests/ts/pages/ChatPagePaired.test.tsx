@@ -13,6 +13,10 @@
  * And the session's machine is fixed: the head names the model and its
  * machine, no picker offers this machine's models in its place, and a
  * conversation made here is made for the far model.
+ *
+ * Its Draw button is greyed: this machine is asked whether a message can
+ * draw and told the model is the other machine's, and its reason is the
+ * button's title.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -34,6 +38,15 @@ const getServerToolSupport = vi.fn(async () => ({
   supports_tool_calls: true,
   detected_format: null,
 }));
+
+/** As the daemon answers for a chat whose model is far (`drawing_availability`). */
+const FAR_MODEL_REASON =
+  "this chat's model is on another machine; a chat kept there draws with that machine's image model";
+const drawingAvailability = vi.fn(async (_source: string, chat: { far?: boolean } = {}) =>
+  chat.far
+    ? { available: false, code: 'drawing_unavailable', reason: FAR_MODEL_REASON }
+    : { available: true, model: 'flux' },
+);
 
 vi.mock('../../../src/services/transport', async () => {
   const actual = await vi.importActual<Record<string, unknown>>(
@@ -58,6 +71,7 @@ vi.mock('../../../src/services/transport', async () => {
       getThread: vi.fn(async () => ({ messages: [] })),
       listRuns: vi.fn(async () => []),
       getSettings: vi.fn(async () => ({})),
+      drawingAvailability,
       subscribe: vi.fn(() => () => {}),
     }),
   };
@@ -111,6 +125,17 @@ describe('ChatPage, paired', () => {
     expect(screen.getByRole('tab', { name: /chat/i })).toBeInTheDocument();
     // No model id here to ask about, so the capability probe is never sent.
     expect(getServerToolSupport).not.toHaveBeenCalled();
+  });
+
+  it('greys Draw with this machine\'s reason, asked by saying the model is the other machine\'s', async () => {
+    render(<ChatPage paired={paired} modelName="qwen3" onClose={async () => {}} />, { wrapper });
+    await screen.findByText('qwen3 on desk');
+
+    const draw = await screen.findByRole('button', { name: 'Draw' });
+    await waitFor(() => expect(draw).toHaveAttribute('title', FAR_MODEL_REASON));
+    expect(draw).toBeDisabled();
+    expect(draw).toHaveAttribute('aria-pressed', 'false');
+    expect(drawingAvailability).toHaveBeenLastCalledWith('this', { far: true, callsTools: null });
   });
 
   it('offers no picker, since the session cannot move to this machine', async () => {

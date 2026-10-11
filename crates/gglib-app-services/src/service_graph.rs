@@ -27,9 +27,9 @@ use std::sync::Arc;
 
 use gglib_core::cache_config::CacheRamSetting;
 use gglib_core::ports::{
-    AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GgufParserPort, HfClientPort,
-    LoopGuardTripSink, ModelCatalogPort, ModelRepository, ModelRuntimePort, RemoteGatewayPort,
-    Repos, RunsPort, SystemProbePort, ToolSupportDetectorPort,
+    AppEventEmitter, BenchmarkRepositoryPort, DownloadManagerPort, GenerationGate, GgufParserPort,
+    HfClientPort, ImageGenerationPort, LoopGuardTripSink, ModelCatalogPort, ModelRepository,
+    ModelRuntimePort, RemoteGatewayPort, Repos, RunsPort, SystemProbePort, ToolSupportDetectorPort,
 };
 use gglib_core::server_config::ServerConfigOptions;
 use gglib_core::services::AppCore;
@@ -37,6 +37,7 @@ use gglib_mcp::McpService;
 use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
 use gglib_runtime::process::{ProcessManager, RuntimeBinaries};
 use gglib_runtime::proxy::ProxySupervisor;
+use gglib_runtime::sd::SdImageDriver;
 
 use crate::benchmark::{BenchmarkDeps, BenchmarkOps};
 use crate::downloads::{DownloadDeps, DownloadOps};
@@ -124,6 +125,12 @@ pub struct AppServices {
     pub catalog: Arc<dyn ModelCatalogPort>,
     /// The shared runtime — one llama-server at a time, system-wide.
     pub runtime: Arc<dyn ModelRuntimePort>,
+    /// The shared manager's generation gate: whose turn it is on the GPU.
+    pub generation_gate: Arc<dyn GenerationGate>,
+    /// Drawing: the one `sd-server` job driver, over the same manager, so a
+    /// render queues, takes its turn and is retired through the same
+    /// admission queue as every chat.
+    pub images: Arc<dyn ImageGenerationPort>,
 }
 
 /// Build the shared domain-ops graph.
@@ -186,6 +193,12 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
     ));
     let runtime: Arc<dyn ModelRuntimePort> =
         Arc::new(RuntimePortImpl::new(Arc::clone(&process_manager)));
+    let generation_gate = process_manager.generation_gate();
+    let images: Arc<dyn ImageGenerationPort> = Arc::new(SdImageDriver::new(
+        Arc::clone(&catalog),
+        repos.settings.clone(),
+        Arc::clone(&process_manager),
+    ));
     // Same manager, no prompt cache — one would perturb prefill timings and
     // RAM footprint, and benchmarks exist to measure exactly those.
     let benchmark_runtime: Arc<dyn ModelRuntimePort> = Arc::new(RuntimePortImpl::with_cache_ram(
@@ -225,6 +238,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         Arc::clone(&core),
     ));
     proxy.bind_runs(&(Arc::clone(&runs) as Arc<dyn RunsPort>));
+    proxy.bind_images(Arc::clone(&images));
     proxy.bind_chats(Arc::new(crate::HubChats::new(Arc::clone(&core), &runs)));
 
     let models = Arc::new(ModelOps::new(ModelDeps {
@@ -293,5 +307,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
         model_repo,
         catalog,
         runtime,
+        generation_gate,
+        images,
     })
 }

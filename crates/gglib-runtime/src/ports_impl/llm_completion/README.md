@@ -67,6 +67,18 @@ candidate is what the sweep measures and not a flag for the ladder to judge.
 [`LlmCompletionAdapter::with_sampling_observer`] tells a caller how a request
 resolved, so none has a reason to fold a ladder to find out.
 
+# Generation turns
+
+An image render on `sd-server` needs the GPU to itself, so a send to this
+machine's llama-server waits on the daemon's generation gate
+([`LlmCompletionAdapter::with_generation_gate`]) for its turn. The wait comes
+before the send, outside the send timer and the retry policy's deadline,
+and is reported through the retry observer. The turn rides inside the
+returned stream and ends when the reply ends or is dropped, not when its
+headers arrive. A send to another machine takes no turn here: that
+machine's proxy counts it. A caller with no gate, such as a benchmark arm,
+waits on nothing.
+
 # Layout
 
 `mod.rs` holds the struct and its request path; `builder.rs` the two
@@ -74,7 +86,8 @@ constructors and the `with_*` builders; `far_machine.rs` the other end of a
 remote turn; `retry/` the send loop; `body.rs` and `stream.rs` the two ends
 of the wire format; `images.rs` reads the images a message names by id and
 writes each as an `image_url` data URL, the one place an id becomes bytes; `writing_time.rs` times the model's writing on the
-decoded stream, before a dialect parser holds tool-call markup back.
+decoded stream, before a dialect parser holds tool-call markup back;
+`turn.rs` takes a send's generation turn and holds it in the reply's stream.
 
 # Lifetime
 

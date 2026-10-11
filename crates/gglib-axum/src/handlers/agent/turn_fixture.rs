@@ -29,6 +29,16 @@ pub(super) const REPLY: &str = concat!(
     "data: [DONE]\n\n",
 );
 
+/// One reply that calls the image tool, as llama-server streams a native
+/// call.
+pub(super) const DRAWS: &str = concat!(
+    "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"c1\",",
+    "\"type\":\"function\",\"function\":{\"name\":\"builtin:generate_image\",",
+    "\"arguments\":\"{\\\"prompt\\\":\\\"a fox\\\"}\"}}]}}]}\n\n",
+    "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n",
+    "data: [DONE]\n\n",
+);
+
 /// The built-in tool, as a tool filter names it.
 pub(super) const TOOL: &str = "builtin:get_current_time";
 
@@ -101,6 +111,25 @@ pub(super) async fn sent(state: &AppState, model_id: i64, chat: AgentChatRequest
     assert!(turn.ended_well, "{:?}", turn.events);
     assert_eq!(turn.requests.len(), 1, "one request");
     turn.requests.remove(0)
+}
+
+/// The two requests of a turn sent with Draw, to a model that answers every
+/// request with a call for the picture: the one held to that call, and the
+/// one made once the tool has run. There are only two: the second reply's
+/// call is not run, and the turn ends there.
+pub(super) async fn drawn(state: &AppState, model_id: i64, chat: AgentChatRequest) -> [Value; 2] {
+    let mut turn = turn(state, model_id, chat, DRAWS).await;
+    assert_eq!(turn.requests.len(), 2, "{:?}", turn.events);
+    let later = turn.requests.remove(1);
+    [turn.requests.remove(0), later]
+}
+
+/// Whether a request to the model offers it nothing to call: no `tools`,
+/// no `tool_choice` and no grammar.
+pub(super) fn offers_nothing(body: &Value) -> bool {
+    ["tools", "tool_choice", "grammar"]
+        .iter()
+        .all(|key| body.get(key).is_none())
 }
 
 /// Add a model that can call tools to the catalogue, as `edit` leaves it.
@@ -197,6 +226,7 @@ pub(super) async fn phone(state: &AppState, model_id: i64) -> AgentChatRequest {
         images: Vec::new(),
         thinking: None,
         answer_saved: false,
+        draw: false,
     };
     super::hub_turn::plan(state, turn).await.unwrap().chat
 }

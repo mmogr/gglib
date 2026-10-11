@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+mod chat_turn;
 mod compose;
 mod dto;
 mod guard;
@@ -28,7 +29,7 @@ use crate::state::AppState;
 use gglib_core::domain::agent::AgentEvent;
 use gglib_core::ports::AgentError;
 
-use compose::{Prepared, frame, prepare, take_permit};
+use compose::{Prepared, frame, prepare, refuse_unavailable_drawing, take_permit};
 use guard::AgentTaskGuard;
 
 /// `POST /api/agent/chat` — start an agentic conversation with SSE streaming.
@@ -70,6 +71,9 @@ pub(crate) async fn chat(
     State(state): State<AppState>,
     Json(req): Json<AgentChatRequest>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static>, HttpError> {
+    // Before a slot is taken: a message sent with Draw pressed that this
+    // machine cannot draw for is refused, saying why.
+    refuse_unavailable_drawing(&state, &req).await?;
     // Acquire a concurrency permit — reject immediately with 429 if all
     // slots are occupied rather than queuing (each active agent loop
     // consumes LLM inference time and tool I/O).
@@ -107,7 +111,7 @@ pub(crate) async fn chat(
     });
 
     let sse_stream = AgentTaskGuard::new(ReceiverStream::new(rx), handle)
-        .map(|event| Ok::<Event, Infallible>(sse_event(&event)));
+        .filter_map(|event| std::future::ready(sse_event(&event).map(Ok::<Event, Infallible>)));
 
     Ok(Sse::new(sse_stream).keep_alive(
         KeepAlive::new()
@@ -116,9 +120,13 @@ pub(crate) async fn chat(
     ))
 }
 
-/// One event as this route's SSE frame.
-fn sse_event(event: &AgentEvent) -> Event {
-    Event::default().data(frame(event))
+/// One event as this route's SSE frame; none for a tool's preview frame,
+/// which this route does not carry (a run's readers get it beside the log).
+fn sse_event(event: &AgentEvent) -> Option<Event> {
+    if matches!(event, AgentEvent::ToolPreview { .. }) {
+        return None;
+    }
+    Some(Event::default().data(frame(event)))
 }
 
 #[cfg(test)]
@@ -144,6 +152,9 @@ mod run_made_tests;
 #[cfg(test)]
 #[path = "run_model_tests.rs"]
 mod run_model_tests;
+#[cfg(test)]
+#[path = "run_preview_tests.rs"]
+mod run_preview_tests;
 #[cfg(test)]
 #[path = "run_privacy_tests.rs"]
 mod run_privacy_tests;

@@ -18,6 +18,32 @@ its chat's saved one, or the stored one. The handler spawns the loop as
 a background task and bridges the resulting `mpsc::Receiver<AgentEvent>` to an
 Axum [`Sse`] response, each event framed by `compose::frame`.
 
+A request sent with `draw: true` (the page's Draw button) is the only one
+whose model is offered `builtin:generate_image`: `compose::prepare_over`
+composes the drawing tool for it, armed, and adds exactly that qualified name
+to a tool filter that lists names. Such a run draws once: its first request
+to the model offers that tool alone and demands a call (`tool_choice:
+"required"`), and a first reply that does not call it, whether it calls
+nothing or only some other tool, ends the run `failed`,
+`image_generation_failed`, saying the model did not ask for the picture.
+Once the tool has run, drawn or refused, the second request offers no tools
+at all (no `tools`, no `tool_choice`, no grammar) and its reply ends the
+run: its text is the answer, a tool call in it is not run, and a reply with
+no text is answered "The model said nothing after the drawing tool ran."
+(`gglib_mcp::DRAW_NO_WORDS`). That second request ends with one `user`
+message the run's rows and events never hold, telling the model what to say:
+`gglib_mcp::DRAW_THEN_SAY` when the tool drew (say in one or two sentences
+what it asked the tool to draw, without apology or saying it cannot draw)
+and `gglib_mcp::DRAW_THEN_SAY_FAILED` when the tool answered with an error
+(say what went wrong). The tools a filter names are not offered to
+such a run at any point. That holds for every run composed here with
+`draw`: the page's, a device's turn, and a chat run with builtins. Without
+`draw` the tool is in no list and
+cannot be called, `tool_filter: null` included. Both doors first ask
+`compose::refuse_unavailable_drawing`, before a slot is taken or a row
+written: a model on another machine, or a machine that cannot draw, is
+`400 drawing_unavailable` with the reason `GET /api/images/drawing` gives.
+
 Inline `<think>` reclassification is handled upstream by
 [`gglib_core::normalize::NormalizingStream`] in the LLM adapter, so this
 handler only forwards already-typed [`AgentEvent`](gglib_core::domain::agent::AgentEvent)s.
@@ -34,6 +60,12 @@ run's own by port and id. A run on the paired machine's model, or on a model
 in the second slot, stamps none, and the figure is left out: never a default.
 The loop itself counts the messages it left out of each request and reports
 why the model stopped.
+
+Every loop composed here waits on the daemon's generation gate before each
+send to this machine's model, so a reply waits for an image render rather
+than sharing the GPU with it. `retry_notice` reports that wait as a
+`waiting` event with the render's step, beside its retry notices; a run on
+the paired machine's model takes no turn here.
 
 # Which upstream
 
@@ -154,5 +186,36 @@ tunnel to them (then only those the settings name), and the reply runs on the ch
 (`hub_model`: its own, its settings', its last reply's, the one running on
 the hub (the one started last, of several), or the hub's default), loaded first when it is not running, as an agent run in the
 device's scope saved to the chat.
+
+A turn that says `draw: true` (the device's Draw button) is planned with
+the image tool beside whatever MCP tools it may call: `tools_of` adds
+exactly `builtin:generate_image`, never the bare name, which would let an
+MCP server's tool of that name through to a device without `--allow-mcp`.
+The chat's `no_tools` does not stop it, since the button is the person's
+choice for that message, and a hub that cannot draw refuses the turn `400
+drawing_unavailable` before anything is written.
+
+`chat_turn` is the starter's other door, the proxy's
+`PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true]`: a chat a paired
+phone keeps itself, sent whole as an `OpenAI` request and run through the
+loop so that it can draw. Its history is read by core's
+`parse_openai_messages`, each inline image stored once as an attachment no
+chat links (swept at the first daemon start a day or more later), its model resolved and loaded as a turn's
+is, its only tool the image tool and that only with `draw`, the request's
+sampling not read except that `"reasoning_budget_tokens": 0`, a phone's
+Thinking off, runs it with a thinking budget of 0, and no row written anywhere. Its run is a chat run in
+the device's scope whose `frames` say `agent`.
+
+The run exists before its model does (`launch::launch_turn`). The `PUT`
+reads the turn, takes a slot, reserves the run and answers; finding or
+loading the model, composing the loop, holding the model and writing the
+turn's rows (`launch::begin_writes`, which the page's run calls at its
+reservation) are the run's own work. A cold load, or a load queued behind an
+image render, is then a `waiting` event (`model_load`) in the run's log, not
+a `PUT` that hangs past the bound a device or the tunnel gives it. What is
+refused once the run exists ends it `failed` with the code the `PUT`
+answered before (`model_unavailable`, `unavailable`, `conflict`), and no row
+is written: the turn's writes begin only once the loop is ready, and a run
+whose writes never began saves no reply.
 
 <!-- module-docs:end -->

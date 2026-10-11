@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use gglib_core::utils::system::GpuInfo;
 use tokio::sync::mpsc;
 
-use super::install::{sd_build_args, sd_clone_args, sd_cmake_flag, sd_configure_args};
+use super::pipeline::{sd_build_args, sd_clone_args, sd_cmake_flag, sd_configure_args};
 use super::release::{SD_RELEASE, sd_platform_asset};
 use crate::binary_install::fake_github::{FakeGitHub, Reply};
 use crate::binary_install::{

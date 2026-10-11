@@ -19,6 +19,8 @@ import {
   applyReasoningDelta,
   addToolCallPart,
   applyToolResult,
+  applyToolProgress,
+  applyWaiting,
   applyPromptProgress,
   applyTurnUsage,
   setFullText,
@@ -112,6 +114,20 @@ export function dispatchAgentEvent(event: AgentEvent, state: DispatchState, deps
         waitMs: event.wait_ms,
         durationMs: event.execute_duration_ms,
       });
+      return false;
+    }
+
+    case 'tool_progress': {
+      // How far a tool that takes minutes has got: the bar in its row.
+      if (typeof event.tool_call_id !== 'string' || typeof event.stage !== 'string') return false;
+      applyToolProgress(setMessages, state.currentId, event);
+      return false;
+    }
+
+    case 'waiting': {
+      // The turn cannot start until something else finishes; the page says what.
+      if (typeof event.reason !== 'string') return false;
+      applyWaiting(setMessages, state.currentId, event);
       return false;
     }
 

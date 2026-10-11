@@ -352,3 +352,32 @@ fn an_image_model_that_does_not_fit_is_a_retryable_503_naming_the_held_model_and
          model, or draw from a chat on the paired machine."
     );
 }
+
+/// Records every place it is told.
+#[derive(Debug, Default)]
+struct Places(std::sync::Mutex<Vec<usize>>);
+
+impl AdmitObserver for Places {
+    fn queued(&self, position: usize) {
+        self.0.lock().unwrap().push(position);
+    }
+}
+
+/// A runtime with no queue admits through `admit` when asked to observe, and
+/// tells the observer nothing: it never waited.
+#[tokio::test]
+async fn an_observed_admission_defaults_to_admit_and_reports_no_wait() {
+    let places = Arc::new(Places::default());
+    let admission = MinimalRuntime
+        .admit_observed(
+            "flux",
+            None,
+            Some(4096),
+            LaunchOverrides::default(),
+            Some(Arc::clone(&places) as Arc<dyn AdmitObserver>),
+        )
+        .await
+        .expect("admitted");
+    assert_eq!(admission.target.model_name, "flux");
+    assert!(places.0.lock().unwrap().is_empty());
+}

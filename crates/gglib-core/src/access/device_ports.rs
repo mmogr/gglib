@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::ports::{AgentRunStarter, HubChatsPort, RunsPort};
+use crate::ports::{AgentRunStarter, HubChatsPort, ImageGenerationPort, RunsPort};
 
 /// What the daemon hands every proxy it starts for its paired devices.
 ///
@@ -19,4 +19,7 @@ pub struct DevicePorts {
     /// What starts a device's turn on a hub chat, at
     /// `PUT /v1/runs/{id}?kind=agent`.
     pub turns: Option<Arc<dyn AgentRunStarter>>,
+    /// The daemon's image driver, at `POST /v1/images/generations` for every
+    /// client the proxy serves, local or paired.
+    pub images: Option<Arc<dyn ImageGenerationPort>>,
 }

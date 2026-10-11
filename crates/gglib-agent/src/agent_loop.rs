@@ -8,7 +8,11 @@
 //!   ├─ context_pruning::Pruned::new()             initial budget trim (before loop)
 //!   │
 //!   └─ [per iteration]
-//!       ├─ llm.chat_stream()                          LLM call (streaming)
+//!       ├─ llm.chat_stream()                          LLM call (streaming); when the run has
+//!       │                                             a `first_call`, the first is
+//!       │                                             chat_stream_requiring_call() with one tool
+//!       │                                             and the second, with no tools and the
+//!       │                                             composer's instruction, is the last
 //!       ├─ stream_collector::collect_stream()          text forwarded live ──→ AgentEvent::TextDelta
 //!       ├─ StagnationDetector::record()               stagnation guard ──→ AgentEvent::Error (on failure)
 //!       ├─ LoopDetector::check()                      loop guard       ──→ AgentEvent::Error (on failure)
@@ -37,6 +41,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use gglib_core::domain::agent::{FirstCall, LlmStreamEvent};
 use gglib_core::ports::{
     AgentError, AgentGuardReporter, AgentLoopPort, AgentRunOutput, EmptyToolExecutor,
     FilteredToolExecutor, LlmCompletionPort, ToolExecutorPort,
@@ -44,6 +49,10 @@ use gglib_core::ports::{
 use gglib_core::{
     AgentConfig, AgentEvent, AgentMessage, AssistantContent, ToolCall, ToolDefinition, ToolResult,
 };
+
+/// What [`LlmCompletionPort::chat_stream`] answers with.
+type LlmStream =
+    std::pin::Pin<Box<dyn futures_core::Stream<Item = anyhow::Result<LlmStreamEvent>> + Send>>;
 
 use crate::turn_usage::measure_turn;
 use tokio::sync::mpsc;
@@ -178,10 +187,110 @@ impl AgentLoop {
         tools: &[ToolDefinition],
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<CollectedResponse, AgentError> {
+        self.collect(self.llm.chat_stream(messages, tools).await, messages, tx)
+            .await
+    }
+
+    /// The run's first reply, when it must call `first`'s tool: the model
+    /// is offered that tool alone and the request demands a call.
+    ///
+    /// A reply that does not call that tool all the same (an upstream that
+    /// ignores the demand) ends the run here, with the composer's words as
+    /// its `error` event, never as a text answer. Of a reply that does, only
+    /// its first call of that tool is kept: the reply's other calls, of
+    /// other tools or of that one again, are dropped before anything runs
+    /// or is recorded.
+    async fn call_demanding(
+        &self,
+        messages: &Pruned,
+        tools: &[ToolDefinition],
+        first: &FirstCall,
+        tx: &mpsc::Sender<AgentEvent>,
+    ) -> Result<CollectedResponse, AgentError> {
+        let Some(only) = tools.iter().find(|tool| tool.name == first.tool) else {
+            let missing = format!(
+                "the run's first reply must call '{}', which is not among its tools",
+                first.tool
+            );
+            return fail_loop(tx, missing).await;
+        };
+        let only = std::slice::from_ref(only);
+        let demanded = self.llm.chat_stream_requiring_call(messages, only).await;
+        let mut response = self.collect(demanded, messages, tx).await?;
+        let Some(at) = response
+            .tool_calls
+            .iter()
+            .position(|call| call.name == first.tool)
+        else {
+            warn!(tool = %first.tool, "the first reply did not call the tool demanded of it");
+            emit_error_event(tx, &first.if_missing).await;
+            return Err(AgentError::FirstCallMissing {
+                message: first.if_missing.clone(),
+            });
+        };
+        let kept = response.tool_calls.swap_remove(at);
+        response.tool_calls = vec![kept];
+        Ok(response)
+    }
+
+    /// The reply after a demanded first call's tool has run: the model is
+    /// offered no tools, so all it can do is say what happened, and what it
+    /// says is the run's answer.
+    ///
+    /// The request ends with one message the run's history does not hold:
+    /// the composer's instruction for this reply, as a `user` message after
+    /// the tool's result, `first.then_say` when the tool `succeeded` and
+    /// `first.then_say_failed` when it did not. It goes to the model in a
+    /// copy of `messages`, so it is in no event and not in the history the
+    /// run returns. A `user` message because a `system` one that is not
+    /// first is refused by some chat templates, and this loop's own pruning
+    /// keeps every `system` message at the front.
+    ///
+    /// A tool call in this reply all the same (a dialect model's markup, or
+    /// an upstream that calls a tool it was not offered) is not run: `run`
+    /// ends with this reply's text and never looks at its calls. A reply
+    /// with no text is answered with `first.if_wordless`, never with an
+    /// empty answer.
+    async fn call_for_words(
+        &self,
+        messages: &Pruned,
+        first: &FirstCall,
+        succeeded: bool,
+        tx: &mpsc::Sender<AgentEvent>,
+    ) -> Result<CollectedResponse, AgentError> {
+        let told = if succeeded {
+            &first.then_say
+        } else {
+            &first.then_say_failed
+        };
+        let mut asked = messages.to_vec();
+        asked.push(AgentMessage::user(told.clone()));
+        let reply = self.llm.chat_stream(&asked, &[]).await;
+        let mut response = self.collect(reply, messages, tx).await?;
+        if !response.tool_calls.is_empty() {
+            warn!(
+                tool = %first.tool,
+                ignored = response.tool_calls.len(),
+                "a reply that was offered no tools called some; none is run"
+            );
+        }
+        if response.content.trim().is_empty() {
+            response.content.clone_from(&first.if_wordless);
+        }
+        Ok(response)
+    }
+
+    /// Collect a reply `stream` the LLM port answered with (step 3).
+    async fn collect(
+        &self,
+        stream: anyhow::Result<LlmStream>,
+        messages: &Pruned,
+        tx: &mpsc::Sender<AgentEvent>,
+    ) -> Result<CollectedResponse, AgentError> {
         // `{:#}` rather than `{}` on both arms: these errors carry their cause
         // as a source chain, and the transport failures worth telling apart —
         // an idle timeout against a mid-stream reset — differ only there.
-        let stream = match self.llm.chat_stream(messages, tools).await {
+        let stream = match stream {
             Ok(s) => s,
             Err(e) => return fail_loop(tx, format!("LLM stream error: {e:#}")).await,
         };
@@ -252,7 +361,7 @@ impl AgentLoop {
         total_completion_tokens: Option<u64>,
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<AgentRunOutput, AgentError> {
-        debug!("no tool calls; final answer reached");
+        debug!("final answer reached");
         let _ = tx
             .send(AgentEvent::FinalAnswer {
                 content: content.clone(),
@@ -274,6 +383,9 @@ impl AgentLoop {
 
     /// Execute tools, append assistant + tool-result messages, prune the
     /// context budget, and emit `IterationComplete`.
+    ///
+    /// Answers with the hash of the batch's answers, and whether every tool
+    /// in it succeeded, read from each result's own `success`.
     async fn execute_tool_iteration(
         &self,
         messages: &mut Pruned,
@@ -282,7 +394,7 @@ impl AgentLoop {
         iteration: usize,
         tx: &mpsc::Sender<AgentEvent>,
         tools: &[ToolDefinition],
-    ) -> Option<u64> {
+    ) -> (Option<u64>, bool) {
         let results =
             execute_tools_parallel(&response.tool_calls, &self.tool_executor, config, tx, tools)
                 .await;
@@ -326,7 +438,7 @@ impl AgentLoop {
             "iteration complete"
         );
 
-        answers_hash
+        (answers_hash, tool_failures == 0)
     }
 }
 
@@ -342,7 +454,8 @@ impl AgentLoopPort for AgentLoop {
     /// # Returns
     ///
     /// - `Ok(AgentRunOutput)` — the model produced a response without
-    ///   requesting further tool calls.
+    ///   requesting further tool calls, or, in a run with
+    ///   `config.first_call`, gave the reply that follows that call.
     /// - `Err(AgentError::MaxIterationsReached)` — reached `config.max_iterations`
     ///   without a final answer.
     /// - `Err(AgentError::LoopDetected)` — the same tool batch repeated
@@ -350,6 +463,8 @@ impl AgentLoopPort for AgentLoop {
     ///   `config.max_repeated_batch_steps` times.
     /// - `Err(AgentError::StagnationDetected)` — the assistant repeated the same
     ///   text content for too many consecutive iterations.
+    /// - `Err(AgentError::FirstCallMissing)` — `config.first_call` demanded a
+    ///   call of one tool of the first reply and the model did not make it.
     async fn run(
         &self,
         messages: Vec<AgentMessage>,
@@ -374,13 +489,40 @@ impl AgentLoopPort for AgentLoop {
         // so "not measured" stays distinct from "zero tokens".
         let mut total_completion_tokens: Option<u64> = None;
 
+        // Whether the tools the last batch ran all succeeded: which of its
+        // two instructions a `first_call` run's closing request carries.
+        let mut succeeded = false;
+
         for iteration in 0..config.max_iterations {
             debug!(iteration, "agent loop iteration starting");
 
-            let response = self.call_and_collect(&messages, &tools, &tx).await?;
+            // A run with a demanded first call is that call, then words: its
+            // first reply is held to the one tool, and once that has run the
+            // model is offered none and the reply that follows ends the run.
+            let words_only = config.first_call.is_some() && iteration > 0;
+            let response = match &config.first_call {
+                Some(first) if words_only => {
+                    self.call_for_words(&messages, first, succeeded, &tx)
+                        .await?
+                }
+                Some(first) => self.call_demanding(&messages, &tools, first, &tx).await?,
+                None => self.call_and_collect(&messages, &tools, &tx).await?,
+            };
             if let Some(ct) = response.completion_tokens {
                 total_completion_tokens =
                     Some(total_completion_tokens.unwrap_or(0) + u64::from(ct));
+            }
+            if words_only {
+                // This reply ends the run whatever it holds: a call in it
+                // is not run, so there is nothing for a guard to judge.
+                return Self::finalize_answer(
+                    &mut messages,
+                    response.content,
+                    iteration,
+                    total_completion_tokens,
+                    &tx,
+                )
+                .await;
             }
 
             report_tool_call_truncation(&response, &tx).await;
@@ -443,11 +585,12 @@ impl AgentLoopPort for AgentLoop {
                 .await;
             }
 
-            let answers = self
+            let (answers, all_succeeded) = self
                 .execute_tool_iteration(&mut messages, response, &config, iteration, &tx, &tools)
                 .await;
             // Straight-line: no `?` between the execution and the record.
             guards.record_results(batch, answers);
+            succeeded = all_succeeded;
         }
 
         warn!(max = config.max_iterations, "agent loop hit max iterations");

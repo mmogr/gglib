@@ -76,6 +76,11 @@ pub enum GateError {
         .0.as_secs()
     )]
     Stalled(Duration),
+
+    /// This gate cannot grant the turn asked for, for the reason given (the
+    /// CLI's gate draws through the daemon and grants no render turns).
+    #[error("{0}")]
+    Unavailable(String),
 }
 
 /// The gate side of a [`GenerationTurn`]: what to call as the turn makes

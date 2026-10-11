@@ -16,9 +16,12 @@ use super::resolve_model_display;
 use super::settings_display::{print_display_rows, settings_display_rows};
 use crate::bootstrap::CliContext;
 use crate::config_commands::SettingsSetArgs;
+use crate::handlers::model::resolver;
 
-/// The update the flags a person passed amount to.
-fn update_from(args: SettingsSetArgs) -> SettingsUpdate {
+/// The update the flags a person passed amount to, with `image_model` the
+/// id `--default-image-model` resolved to: the flag names a model by id or
+/// name, and only the library can say which id a name is.
+fn update_from(args: SettingsSetArgs, image_model: Option<i64>) -> SettingsUpdate {
     SettingsUpdate {
         default_download_path: args.default_download_path.map(Some),
         default_context_size: args.default_context_size.map(Some),
@@ -29,6 +32,7 @@ fn update_from(args: SettingsSetArgs) -> SettingsUpdate {
         max_tool_iterations: args.max_tool_iterations.map(Some),
         max_stagnation_steps: args.max_stagnation_steps.map(Some),
         default_model_id: None,
+        default_image_model_id: image_model.map(Some),
         inference_defaults: None,
         inference_profiles: None,
         setup_completed: None,
@@ -39,6 +43,7 @@ fn update_from(args: SettingsSetArgs) -> SettingsUpdate {
         trust_client_sampling: args.trust_client_sampling.map(Some),
         loop_guard_mode: args.loop_guard_mode.map(|m| Some(m.into())),
         tool_call_repair: args.tool_call_repair.map(Some),
+        mcp_drawing: args.mcp_drawing.map(Some),
         agentic_sampling: args.agentic_sampling.map(Some),
         proxy_autostart: args.proxy_autostart.map(Some),
         close_to_tray: args.close_to_tray.map(Some),
@@ -71,7 +76,13 @@ fn changed_keys(update: &SettingsUpdate) -> Result<BTreeSet<String>> {
 
 /// Apply the flags a person passed, then print only what changed.
 pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Result<()> {
-    let update = update_from(args);
+    // Resolved here; whether the model draws is the settings service's
+    // check, so this surface refuses in the same sentence as the others.
+    let image_model = match args.default_image_model_id.as_deref() {
+        Some(named) => Some(resolver::resolve_model_identifier(ctx, named).await?.id),
+        None => None,
+    };
+    let update = update_from(args, image_model);
     let changed = changed_keys(&update)?;
     if changed.is_empty() {
         println!("No settings provided. Use --help to see available options.");
@@ -79,8 +90,8 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
     }
 
     let updated = ctx.app.settings().update(update).await?;
-    let model_display = resolve_model_display(ctx, &updated).await?;
-    let all_rows = settings_display_rows(&updated, model_display);
+    let (model_display, image_display) = resolve_model_display(ctx, &updated).await?;
+    let all_rows = settings_display_rows(&updated, model_display, image_display);
 
     // Match exact key OR any dot-notation sub-row that starts with
     // "{changed_key}." — needed for nested fields such as inference-defaults.
@@ -101,3 +112,7 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
 #[cfg(test)]
 #[path = "set_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "set_drawing_tests.rs"]
+mod drawing_tests;

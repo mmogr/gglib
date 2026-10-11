@@ -10,7 +10,7 @@
  * @module turnFigures
  */
 
-import type { GglibMessageCustom, PromptReading } from '../../../types/messages';
+import type { GglibMessageCustom, PromptReading, TurnWaiting } from '../../../types/messages';
 import type { TurnMade } from '../../../utils/messages/turnMade';
 import { formatCount } from '../../../utils/format';
 import { formatPerSecond } from '../../../utils/formatPerSecond';
@@ -36,6 +36,8 @@ export interface ReplyFacts {
   unfinished: boolean;
   /** How far the prompt was read, from the run's events: only while it arrives. */
   prompt?: PromptReading;
+  /** What the turn is waiting for, from the run's events: only while it arrives. */
+  waiting?: TurnWaiting;
   /** How the turn was made. */
   made?: TurnMade;
 }
@@ -78,14 +80,22 @@ export function madeLines(facts: ReplyFacts): string[] {
 /** What a reply still arriving is doing, as its events so far say. */
 export type ArrivingPhase =
   | 'Waiting for the model'
+  | 'Queued behind an image render'
+  | 'Waiting for the model to load'
   | 'Reading the prompt'
   | 'Starting the reply'
   | 'Thinking'
   | 'Writing'
   | 'Calling tools';
 
+/**
+ * A wait is said only until the model reads the prompt: a prompt reading
+ * that comes after it takes it off the turn, so one still there is the
+ * newer of the two.
+ */
 export function arrivingPhase(parts: {
   prompt?: PromptReading;
+  waiting?: TurnWaiting;
   hasReasoning: boolean;
   hasText: boolean;
   toolCallsRunning: boolean;
@@ -93,9 +103,24 @@ export function arrivingPhase(parts: {
   if (parts.toolCallsRunning) return 'Calling tools';
   if (parts.hasText) return 'Writing';
   if (parts.hasReasoning) return 'Thinking';
+  if (parts.waiting) {
+    return parts.waiting.reason === 'image_render' ? 'Queued behind an image render' : 'Waiting for the model to load';
+  }
   if (parts.prompt && parts.prompt.processed < parts.prompt.total) return 'Reading the prompt';
   if (parts.prompt) return 'Starting the reply';
   return 'Waiting for the model';
+}
+
+/**
+ * How far the render a reply is queued behind has got, and the reply's
+ * place in line when it is not next: each only when the wait says it.
+ */
+export function waitingLines(waiting: TurnWaiting): string[] {
+  if (waiting.reason !== 'image_render') return [];
+  const lines: string[] = [];
+  if (waiting.total > 0) lines.push(`step ${waiting.step} of ${waiting.total}`);
+  if (waiting.position > 1) lines.push(`${waiting.position} in line`);
+  return lines;
 }
 
 /** The message shape the facts are read from: assistant-ui's, loosely. */
@@ -120,6 +145,7 @@ export function replyFacts(message: MessageLike): ReplyFacts {
     toolCalls,
     unfinished: saved && message.status?.type === 'incomplete',
     prompt: custom?.prompt,
+    waiting: custom?.waiting,
     made: custom?.made,
   };
 }

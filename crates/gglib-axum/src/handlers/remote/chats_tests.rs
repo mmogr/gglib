@@ -8,8 +8,8 @@ use http_body_util::BodyExt;
 
 use super::super::fake_far::{KEY, carries_key, far, json, only, read};
 use super::{
-    RemoteTurnBody, add_turn_via, cancel_run_via, list_chats_via, list_runs_via, open_chat_via,
-    run_events_via,
+    RemoteTurnBody, add_turn_via, cancel_run_via, drawing_via, list_chats_via, list_runs_via,
+    open_chat_via, run_events_via,
 };
 
 #[tokio::test]
@@ -51,6 +51,7 @@ async fn a_turn_is_the_chat_and_the_message_only_and_its_201_comes_back() {
         content: "And how do I fix it?".to_owned(),
         images: Vec::new(),
         thinking: None,
+        draw: false,
     };
 
     let (status, answer) = read(add_turn_via(&far, 12, "chat-1", body).await.unwrap()).await;
@@ -66,6 +67,24 @@ async fn a_turn_is_the_chat_and_the_message_only_and_its_201_comes_back() {
         json(&seen.body),
         serde_json::json!({ "conversation_id": 12, "content": "And how do I fix it?" })
     );
+}
+
+/// A turn sent with Draw pressed says so to the far machine; one sent
+/// without carries no such key, which an older far machine would refuse.
+#[tokio::test]
+async fn a_turn_sent_with_draw_says_so_and_one_without_carries_no_key() {
+    let (fake, hub) = far(201, "{}").await;
+    let pressed: RemoteTurnBody =
+        serde_json::from_str(r#"{"content":"a fox","draw":true}"#).unwrap();
+
+    read(add_turn_via(&hub, 12, "chat-1", pressed).await.unwrap()).await;
+
+    assert_eq!(
+        json(&only(&fake).body),
+        serde_json::json!({ "conversation_id": 12, "content": "a fox", "draw": true })
+    );
+    let unsaid: RemoteTurnBody = serde_json::from_str(r#"{"content":"hi"}"#).unwrap();
+    assert!(!unsaid.draw);
 }
 
 /// A turn's images go on as their ids, in order, and a turn may be its
@@ -131,6 +150,28 @@ async fn the_runs_and_a_cancel_reach_the_far_runs() {
         seen.iter()
             .all(|s| s.bearer.as_deref() == Some(key.as_str()))
     );
+}
+
+/// The far machine's drawing availability comes back as it answered, and an
+/// older far machine's 404 is passed on, which a client reads as "cannot".
+#[tokio::test]
+async fn the_far_drawing_availability_comes_back_as_it_was() {
+    let answer = r#"{"available":true,"model":"sdxl"}"#;
+    let (fake, hub) = far(200, answer).await;
+
+    let (status, body) = read(drawing_via(&hub).await.unwrap()).await;
+
+    assert_eq!((status, body.as_str()), (StatusCode::OK, answer));
+    let seen = only(&fake);
+    assert_eq!(
+        (seen.method.as_str(), seen.uri.as_str()),
+        ("GET", "/v1/images/drawing")
+    );
+    assert!(carries_key(&seen), "{seen:?}");
+
+    let (_, older) = far(404, "").await;
+    let (status, _) = read(drawing_via(&older).await.unwrap()).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 /// Frame one arrives while the far run is still writing: the stream is

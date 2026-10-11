@@ -39,4 +39,12 @@ thinking?: Thinking,
  * saved, rather than adding a message: it then carries no text and no
  * image, and only its reply is saved. Left out of the body when false.
  */
-answer_saved?: boolean, };
+answer_saved?: boolean, 
+/**
+ * The message was sent with Draw pressed: the hub offers its model the
+ * image tool for this turn, and only then. Left out of the body when
+ * `false`, so a hub too old to know the key is never sent it by a
+ * client that did not press Draw; a client asks
+ * `GET /v1/images/drawing` before it offers the button.
+ */
+draw?: boolean, };

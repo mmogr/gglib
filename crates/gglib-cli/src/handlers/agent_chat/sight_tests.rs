@@ -192,6 +192,7 @@ fn params(identifier: &str, target: Target, port: Option<u16>) -> AgentSessionPa
         retry_policy: gglib_core::retry::RetryPolicy::default(),
         profile: None,
         turn: None,
+        drawing: None,
     }
 }
 

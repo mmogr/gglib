@@ -11,7 +11,7 @@ use reqwest::Client;
 use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
-    ports::{AttachmentStore, LlmCompletionPort, RetryObserver, UsageSink},
+    ports::{AttachmentStore, GenerationGate, LlmCompletionPort, RetryObserver, UsageSink},
     request_pipeline::{self, ModelContext, SamplingDecision, SamplingLayers},
     retry::RetryPolicy,
 };
@@ -21,6 +21,7 @@ mod far_machine;
 mod images;
 mod retry;
 mod stream;
+mod turn;
 mod writing_time;
 
 pub use far_machine::FarMachine;
@@ -140,6 +141,11 @@ pub struct LlmCompletionAdapter {
     /// the case for CLI `gglib chat`/`q`, which render the loop's events
     /// directly.
     retry_observer: Option<Arc<dyn RetryObserver>>,
+    /// The daemon's generation gate, on which a send to this machine's
+    /// llama-server waits for its turn behind an image render (`turn.rs`).
+    /// `None` (the default) for a caller with no gate to wait on, such as a
+    /// benchmark arm, which runs when someone chose to run it.
+    generation_gate: Option<Arc<dyn GenerationGate>>,
     /// Skip the request-shaping pipeline entirely and send the bare body.
     ///
     /// The control arm of an A/B evaluation: no sampling resolution (the
@@ -198,6 +204,14 @@ impl LlmCompletionAdapter {
     /// omits `first_turn_tool_choice`. That is the contract — one adapter
     /// serves one run, and the demand belongs to its opening turn.
     ///
+    /// With `must_call` the body demands a call of one of `tools`
+    /// (`tool_choice: "required"`) where it would leave the choice to the
+    /// model: what the loop asks of a run's first reply when its caller
+    /// demanded a tool ([`LlmCompletionPort::chat_stream_requiring_call`]).
+    /// It is written before the pipeline runs, which reads it as it reads a
+    /// client's: a dialect model gets a grammar for the call, and any other
+    /// the server's own.
+    ///
     /// # Errors
     ///
     /// When the conversation cannot be made to fit the model's context budget.
@@ -209,9 +223,13 @@ impl LlmCompletionAdapter {
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
         images: &images::ImageUrls,
+        must_call: bool,
     ) -> Result<serde_json::Value> {
         let sampling = self.sampling.as_ref();
         let mut body = body::build_chat_body(&self.model, messages, tools, sampling, images);
+        if must_call && !tools.is_empty() {
+            body["tool_choice"] = serde_json::Value::String("required".to_owned());
+        }
 
         // Written before the pipeline runs so the shaping stages read it
         // exactly as they would an external client's tool_choice — and only on
@@ -327,13 +345,45 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         messages: &[AgentMessage],
         tools: &[ToolDefinition],
     ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
+        self.send(messages, tools, false).await
+    }
+
+    async fn chat_stream_requiring_call(
+        &self,
+        messages: &[AgentMessage],
+        tools: &[ToolDefinition],
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
+        self.send(messages, tools, true).await
+    }
+}
+
+impl LlmCompletionAdapter {
+    /// One request to the model and its reply as events; with `must_call`
+    /// the request demands a tool call ([`Self::shaped_body`]).
+    async fn send(
+        &self,
+        messages: &[AgentMessage],
+        tools: &[ToolDefinition],
+        must_call: bool,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<LlmStreamEvent>> + Send>>> {
         // Shaped once, outside the retry loop: the pipeline runs truncation and
         // logs what it trimmed, and neither should repeat per attempt. The body
         // is deterministic, so every attempt sends identical bytes.
         // Before it, each image the messages name is read from the store: a
         // refusal here (an id not stored, too many bytes) sends nothing.
         let images = images::resolve(self.attachments.as_ref(), messages).await?;
-        let body = self.shaped_body(messages, tools, &images)?;
+        let body = self.shaped_body(messages, tools, &images, must_call)?;
+
+        // A send to this machine's llama-server waits for its generation
+        // turn first, outside the send timer and the policy's deadline: an
+        // image render can hold the GPU for longer than either. A send to
+        // another machine takes none here; that machine's proxy counts it.
+        // A failed send below drops the turn at once.
+        let gate = self
+            .generation_gate
+            .as_ref()
+            .filter(|_| self.far_machine.is_none());
+        let turn = turn::take(gate, self.retry_observer.as_ref()).await?;
 
         // Each attempt's connect + first-byte phase is bounded by the send
         // timeout, and the whole sequence by the policy's own deadline, so a
@@ -356,15 +406,21 @@ impl LlmCompletionPort for LlmCompletionAdapter {
         .await?;
 
         // Decode, normalize, and (when a sink is set) tap prompt-cache usage.
-        Ok(stream::normalized_event_stream(
+        // The turn rides in the stream: the generation lasts as long as the
+        // reply does, not until its headers.
+        let events = stream::normalized_event_stream(
             response,
             self.model_context.dialect.as_ref(),
             self.usage_sink.clone(),
             self.stream_idle_timeout,
-        ))
+        );
+        Ok(Box::pin(turn::held(events, turn)))
     }
 }
 
+#[cfg(test)]
+#[path = "first_call_tests.rs"]
+mod first_call_tests;
 #[cfg(test)]
 #[path = "shaping_tests.rs"]
 mod shaping_tests;

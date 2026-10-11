@@ -38,7 +38,8 @@ This module contains reusable presentation logic for formatting CLI output. It e
 Formats model information for terminal output.
 
 **Key Functions:**
-- `display_model_summary()` - Renders model details with metadata
+- `display_model_summary()` - Renders model details with metadata; a model that draws gets no `Parameters` line
+- `summary_lines()` - The lines it prints
 - `ModelSummaryOpts` - Which fields to include, built by `with_title()` or `for_removal()`
 
 **Example:**

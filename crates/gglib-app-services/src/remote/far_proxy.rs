@@ -214,6 +214,17 @@ impl FarProxy {
             .await
     }
 
+    /// `GET /v1/images/drawing`: whether that machine can draw for a turn
+    /// sent with Draw pressed, and why not. An older hub answers 404.
+    ///
+    /// # Errors
+    ///
+    /// `Unavailable` when the request did not get through.
+    pub async fn drawing(&self) -> Result<reqwest::Response, GuiError> {
+        self.send(self.bounded.get(self.url("/images/drawing")))
+            .await
+    }
+
     /// `GET /v1/runs`: the runs this device may see there.
     ///
     /// # Errors

@@ -156,3 +156,7 @@ mod tests;
 #[cfg(test)]
 #[path = "settings_models_dir_tests.rs"]
 mod models_dir_tests;
+
+#[cfg(test)]
+#[path = "settings_drawing_tests.rs"]
+mod drawing_tests;

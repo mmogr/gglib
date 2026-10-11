@@ -24,11 +24,21 @@ use settings_display::{print_sections, settings_display_rows, settings_to_sectio
 
 pub(crate) use profiles::handle_profile;
 
-/// Resolve the display string for `default-model-id`, performing a DB lookup when set.
-///
-/// Returns `Some("42 (ModelName)")`, `Some("42 (not found)")`, or `None`.
-async fn resolve_model_display(ctx: &CliContext, settings: &Settings) -> Result<Option<String>> {
-    match settings.default_model_id {
+/// The display strings for `default-model-id` and `default-image-model-id`,
+/// in that order, each looked up in the library when set.
+async fn resolve_model_display(
+    ctx: &CliContext,
+    settings: &Settings,
+) -> Result<(Option<String>, Option<String>)> {
+    Ok((
+        model_display(ctx, settings.default_model_id).await?,
+        model_display(ctx, settings.default_image_model_id).await?,
+    ))
+}
+
+/// `Some("42 (ModelName)")`, `Some("42 (not found)")`, or `None` for no id.
+async fn model_display(ctx: &CliContext, id: Option<i64>) -> Result<Option<String>> {
+    match id {
         Some(model_id) => match ctx.app.models().get_by_id(model_id).await? {
             Some(model) => Ok(Some(format!("{} ({})", model_id, model.name))),
             None => Ok(Some(format!("{model_id} (not found)"))),
@@ -139,8 +149,8 @@ pub(crate) async fn handle_settings(ctx: &CliContext, command: SettingsCommand) 
     match command {
         SettingsCommand::Show => {
             let settings = ctx.app.settings().get().await?;
-            let model_display = resolve_model_display(ctx, &settings).await?;
-            let rows = settings_display_rows(&settings, model_display);
+            let (model_display, image_display) = resolve_model_display(ctx, &settings).await?;
+            let rows = settings_display_rows(&settings, model_display, image_display);
             println!("Current application settings:");
             print_sections(&settings_to_sections(&rows));
             Ok(())

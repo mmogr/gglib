@@ -23,6 +23,9 @@ use super::state::{GateTicket, GateVerdict, Resident};
 /// noticed when nothing at all happens. The same tick residency waits on.
 const GATE_POLL_TICK: Duration = Duration::from_millis(250);
 
+/// What a render is told when its image model was stopped under it.
+pub const RENDER_STOPPED: &str = "the image model was stopped before the picture was finished";
+
 /// The admission queue seen as a [`GenerationGate`].
 #[derive(Debug)]
 struct QueueGate(Arc<AdmissionQueue>);
@@ -98,6 +101,11 @@ impl AdmissionQueue {
                     return Ok(GenerationTurn::new(owner, id, kind, lease));
                 }
                 GateVerdict::Stalled(waited) => return Err(GateError::Stalled(waited)),
+                // The lease drops with this, on a slot the Stop has not
+                // emptied yet: the Stop waits for exactly that.
+                GateVerdict::Stopped => {
+                    return Err(GateError::Unavailable(RENDER_STOPPED.to_owned()));
+                }
                 GateVerdict::Wait(wait) => {
                     // Outside the lock, and only when there is news.
                     if let (Some(observer), Some(wait)) = (&observer, wait)
@@ -115,8 +123,35 @@ impl AdmissionQueue {
         }
     }
 
-    /// Retire a render whose `sd-server` had to be killed (a stall, or the
-    /// job deadline), in the one order that cannot hurt a newcomer.
+    /// Ask every render on model `model_id` to stop: the one drawing with
+    /// it and any waiting in line with a lease on it. Whether there was one.
+    ///
+    /// A Stop must not empty a slot a render's lease pins: the lease,
+    /// released later by slot, would take a request from whatever was
+    /// launched there in between. So the Stop asks, and waits until this
+    /// answers `false`: a waiting render leaves the line and drops its
+    /// lease, and the driver of one that is drawing retires it
+    /// ([`Self::retire_render`]) at its next look at the job.
+    pub fn ask_render_stop(&self, model_id: u32) -> bool {
+        let (asked, news) = self.lock().gate_ask_render_stop(model_id);
+        // Only for a render not asked before: a Stop that waits here asks
+        // again at every wakeup, and must not be the one that wakes it.
+        if news {
+            self.notify();
+        }
+        asked
+    }
+
+    /// Whether a Stop was asked of model `model_id` while the render that
+    /// holds the GPU draws with it: what its driver reads to retire it.
+    #[must_use]
+    pub fn render_stop_asked(&self, model_id: u32) -> bool {
+        self.lock().gate_render_stop_asked(model_id)
+    }
+
+    /// Retire a render whose `sd-server` had to be killed (a stall, the job
+    /// deadline, or a person's Stop), in the one order that cannot hurt a
+    /// newcomer.
     ///
     /// 1. `kill` runs to completion first, with no lock held.
     /// 2. Under one lock, the render's slot is emptied, which settles its

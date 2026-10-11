@@ -2,6 +2,7 @@
 pub mod attachments;
 pub mod daemon;
 pub mod hf;
+pub mod images;
 
 // Re-export for convenience
 pub use hf::*;

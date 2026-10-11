@@ -2,6 +2,7 @@ export { SettingField } from './SettingField';
 export { NumberSettingField } from './NumberSettingField';
 export { ToggleField } from './ToggleField';
 export { DesktopSettings } from './DesktopSettings';
+export { DrawingSettings } from './DrawingSettings';
 export { PathSettings } from './PathSettings';
 export { ModelDefaults } from './ModelDefaults';
 export { PortSettings } from './PortSettings';

@@ -5,6 +5,9 @@ mod filtered;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod progress_tests;
+
 pub use empty::EmptyToolExecutor;
 pub use filtered::FilteredToolExecutor;
 

@@ -518,6 +518,16 @@ impl From<&ModelRuntimeError> for RuntimeErrorEnvelope {
     }
 }
 
+/// Told where a request waiting in the admission queue stands.
+///
+/// Called with no lock held, only after the queue has answered "wait" and
+/// only when the place has changed since the last call. Must not block: a
+/// slow observer delays the admission it describes.
+pub trait AdmitObserver: Send + Sync + fmt::Debug {
+    /// The request is waiting, `position` in line, 1 being next.
+    fn queued(&self, position: usize);
+}
+
 /// Port for admitting requests to a running model: the proxy's way to a
 /// running model server. Implementations handle:
 /// - Model resolution (name → file path)
@@ -568,6 +578,30 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
         overrides: LaunchOverrides,
     ) -> Result<Admission, ModelRuntimeError>;
 
+    /// [`Self::admit`], telling `observer` the request's place in line each
+    /// time it is asked to wait and that place has changed, so a person
+    /// waiting on a long admission (an image render's model behind a chat)
+    /// sees why nothing is happening yet.
+    ///
+    /// Defaults to [`Self::admit`], telling the observer nothing: a runtime
+    /// with no queue never waits.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::admit`].
+    async fn admit_observed(
+        &self,
+        model_name: &str,
+        num_ctx: Option<u64>,
+        default_ctx: Option<u64>,
+        overrides: LaunchOverrides,
+        observer: Option<Arc<dyn AdmitObserver>>,
+    ) -> Result<Admission, ModelRuntimeError> {
+        let _ = observer;
+        self.admit(model_name, num_ctx, default_ctx, overrides)
+            .await
+    }
+
     /// What the admission queue and the VRAM resident set look like right now.
     ///
     /// Synchronous for the same reason [`Self::pinned`] is: it is a
@@ -611,6 +645,8 @@ pub trait ModelRuntimePort: Send + Sync + fmt::Debug {
 
     /// Stop the current model, even one a run holds: an explicit stop (a
     /// person's, a benchmark's), or the proxy's restart of a dead server.
+    /// An image model that is drawing is asked and waited for, as
+    /// [`Self::stop_model`] does.
     async fn stop_current(&self) -> Result<(), ModelRuntimeError>;
 
     /// Stop model `model_id` wherever it is resident, the primary slot or the

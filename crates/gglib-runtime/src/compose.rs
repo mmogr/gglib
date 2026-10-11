@@ -31,16 +31,32 @@ use std::sync::Arc;
 use gglib_agent::AgentLoop;
 use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::{
-    AgentGuardReporter, AgentLoopPort, AttachmentStore, LlmCompletionPort, RetryObserver,
-    ToolExecutorPort, UsageSink,
+    AgentGuardReporter, AgentLoopPort, AttachmentStore, GenerationGate, LlmCompletionPort,
+    RetryObserver, ToolExecutorPort, UsageSink,
 };
 use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use gglib_core::retry::RetryPolicy;
 use gglib_core::services::AttachmentService;
-use gglib_mcp::{CombinedToolExecutor, McpService};
+use gglib_mcp::{
+    BuiltinToolExecutorAdapter, CombinedToolExecutor, DrawArm, DrawingTool, McpService,
+};
 use reqwest::Client;
 
 use crate::{FarMachine, LlmCompletionAdapter, SamplingObserver};
+
+/// What a loop needs to share the GPU with image generation.
+#[derive(Debug, Clone, Default)]
+pub struct LoopGeneration {
+    /// The gate each send to this machine's llama-server waits on for its
+    /// turn, holding it until the reply ends
+    /// ([`LlmCompletionAdapter::with_generation_gate`]). `None` waits on
+    /// nothing: a session with no daemon to share the GPU with.
+    pub gate: Option<Arc<dyn GenerationGate>>,
+    /// The drawing tool and when it is offered: armed for a run sent with
+    /// `draw: true`, or a session's switch that `/draw` sets. `None` never
+    /// offers `generate_image`, whatever the tool filter says.
+    pub drawing: Option<(DrawingTool, DrawArm)>,
+}
 
 /// Compose a ready-to-run [`AgentLoopPort`] from infrastructure primitives.
 ///
@@ -92,6 +108,10 @@ use crate::{FarMachine, LlmCompletionAdapter, SamplingObserver};
 /// * `attachments` — where the images a message names by id are read from,
 ///   just before each request is sent, and where the images an MCP tool
 ///   returns are stored.
+/// * `generation` — the daemon's generation gate, so a reply on this
+///   machine's model waits for an image render rather than sharing the GPU
+///   with it. A send to `far_machine` takes no turn. With it, the drawing
+///   tool, offered only while its arm says so.
 #[allow(clippy::too_many_arguments)]
 #[allow(
     clippy::implicit_hasher,
@@ -111,6 +131,7 @@ pub fn compose_agent_loop(
     layers: SamplingLayers,
     far_machine: Option<FarMachine>,
     attachments: Arc<dyn AttachmentStore>,
+    generation: LoopGeneration,
 ) -> Arc<dyn AgentLoopPort> {
     compose_agent_loop_inner(
         base_url,
@@ -132,6 +153,7 @@ pub fn compose_agent_loop(
         None,
         far_machine,
         attachments,
+        generation,
     )
 }
 
@@ -153,6 +175,9 @@ pub fn compose_agent_loop(
 ///
 /// `attachments` is the store the CLI's own images were put in: the CLI
 /// opens the database itself.
+///
+/// `generation` carries the daemon's gate when one is running to share the
+/// GPU with; `gglib chat` takes its turns there over a connection.
 #[allow(clippy::too_many_arguments)]
 #[allow(
     clippy::implicit_hasher,
@@ -174,6 +199,7 @@ pub fn compose_agent_loop_with_sampling(
     retry_policy: Option<RetryPolicy>,
     far_machine: Option<FarMachine>,
     attachments: Arc<dyn AttachmentStore>,
+    generation: LoopGeneration,
 ) -> Arc<dyn AgentLoopPort> {
     compose_agent_loop_inner(
         base_url,
@@ -194,6 +220,7 @@ pub fn compose_agent_loop_with_sampling(
         retry_policy,
         far_machine,
         attachments,
+        generation,
     )
 }
 
@@ -215,6 +242,7 @@ fn compose_agent_loop_inner(
     retry_policy: Option<RetryPolicy>,
     far_machine: Option<FarMachine>,
     attachments: Arc<dyn AttachmentStore>,
+    generation: LoopGeneration,
 ) -> Arc<dyn AgentLoopPort> {
     let images = Arc::new(AttachmentService::new(Arc::clone(&attachments)));
     let llm: Arc<dyn LlmCompletionPort> = Arc::new(
@@ -227,11 +255,16 @@ fn compose_agent_loop_inner(
             .with_model_context(model_context)
             .with_usage_sink(usage_sink)
             .with_retry_observer(retry_observer)
-            .with_retry_policy(retry_policy.unwrap_or_else(RetryPolicy::from_env)),
+            .with_retry_policy(retry_policy.unwrap_or_else(RetryPolicy::from_env))
+            .with_generation_gate(generation.gate),
     );
-    let tool_executor: Arc<dyn ToolExecutorPort> = match sandbox_root {
-        Some(root) => Arc::new(CombinedToolExecutor::with_sandbox(mcp, images, root)),
-        None => Arc::new(CombinedToolExecutor::new(mcp, images)),
-    };
+    let builtin = sandbox_root
+        .map_or_else(
+            BuiltinToolExecutorAdapter::default,
+            BuiltinToolExecutorAdapter::with_sandbox,
+        )
+        .with_drawing(generation.drawing);
+    let tool_executor: Arc<dyn ToolExecutorPort> =
+        Arc::new(CombinedToolExecutor::with_builtin(mcp, images, builtin));
     AgentLoop::build_observed(llm, tool_executor, tool_filter, guard)
 }

@@ -7,6 +7,7 @@
 
 import type { ThreadMessageLike } from '@assistant-ui/react';
 import type { TurnMade } from '../utils/messages/turnMade';
+import type { AgentToolProgressEvent, AgentWaitingEvent } from './events/agentEvent';
 import type { AttachmentInfo } from './generated/AttachmentInfo';
 
 /**
@@ -57,11 +58,31 @@ export type ReasoningPart = Extract<MessagePart, { type: 'reasoning' }>;
  * `artifact` holds the images the tool made, when it made any: put there by
  * `applyToolResult` from a live result and by `foldToolMessages` from a
  * saved tool row, so both show the same tiles.
+ *
+ * `progress` is how far the tool has got, from its last `tool_progress`
+ * event: only on a call drawn from a run and still running. Saved rows do
+ * not keep it.
  */
 export interface GglibToolCallPart extends ToolCallPart {
   waitMs?: number;
   durationMs?: number;
   artifact?: ToolCallArtifact;
+  progress?: ToolProgress;
+}
+
+/** A `tool_progress` event, as its call keeps it. */
+export type ToolProgress = Omit<AgentToolProgressEvent, 'type' | 'tool_call_id'>;
+
+/** A `waiting` event, as a turn keeps it. */
+export type TurnWaiting = Omit<AgentWaitingEvent, 'type'>;
+
+/**
+ * The progress a tool-call part carries; none for a part without it.
+ * Read with care for the reason `toolCallImages` is.
+ */
+export function toolCallProgress(part: { progress?: unknown }): ToolProgress | undefined {
+  const progress = part.progress as ToolProgress | null | undefined;
+  return typeof progress?.stage === 'string' ? progress : undefined;
 }
 
 /**
@@ -108,6 +129,11 @@ export type GglibMessageCustom = {
    * not keep it.
    */
   prompt?: PromptReading;
+  /**
+   * What the turn is waiting for, from the run's last `waiting` event:
+   * only on a turn drawn from a run, and only until its prompt is read.
+   */
+  waiting?: TurnWaiting;
   /** How the turn was made, from its `turn_usage` event or its saved row. */
   made?: TurnMade;
   /** The paired device that sent a user's turn, from its saved row. */

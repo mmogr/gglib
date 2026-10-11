@@ -7,12 +7,14 @@ import {
   SecuritySettings,
   DisplaySettings,
   DesktopSettings,
+  DrawingSettings,
   AdvancedSettings,
   SetupWizardRow,
 } from "./fields";
 import type { DesktopSettingsValues } from "./useDesktopSettings";
 import type { NetworkSettingsValues } from "./useNetworkSettings";
 import type { AgentGuardSettingsValues } from "./useAgentGuardSettings";
+import type { DrawingSettingsValues } from "./useDrawingSettings";
 
 interface GeneralSettingsProps {
   // Directory state
@@ -56,6 +58,13 @@ interface GeneralSettingsProps {
   setDesktopSetting: <K extends keyof DesktopSettingsValues>(
     key: K,
     value: DesktopSettingsValues[K],
+  ) => void;
+
+  // Drawing: default image model and the /mcp switch
+  drawingSettings: DrawingSettingsValues;
+  setDrawingSetting: <K extends keyof DrawingSettingsValues>(
+    key: K,
+    value: DrawingSettingsValues[K],
   ) => void;
 
   // Default model state
@@ -108,6 +117,8 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   setShowFitIndicators,
   desktopSettings,
   setDesktopSetting,
+  drawingSettings,
+  setDrawingSetting,
   defaultModelInput,
   setDefaultModelInput,
   models,
@@ -162,6 +173,14 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
         setContextSizeInput={setContextSizeInput}
         defaultModelInput={defaultModelInput}
         setDefaultModelInput={setDefaultModelInput}
+        models={models}
+        loadingModels={loadingModels}
+        saving={saving}
+      />
+
+      <DrawingSettings
+        values={drawingSettings}
+        onChange={setDrawingSetting}
         models={models}
         loadingModels={loadingModels}
         saving={saving}

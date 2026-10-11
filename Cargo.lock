@@ -2384,6 +2384,7 @@ version = "0.24.2"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "clap",
  "clap_complete",
@@ -2553,6 +2554,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "axum",
+ "base64 0.22.1",
  "bytes",
  "futures-util",
  "gglib-build-info",
@@ -2584,6 +2586,7 @@ dependencies = [
  "anyhow",
  "async-stream",
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "flate2",
  "futures-core",

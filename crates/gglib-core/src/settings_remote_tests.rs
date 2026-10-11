@@ -180,6 +180,7 @@ fn a_remote_machine() -> Settings {
         max_tool_iterations: Some(40),
         max_stagnation_steps: Some(9),
         default_model_id: Some(7),
+        default_image_model_id: Some(8),
         inference_defaults: Some(sampling.clone()),
         inference_profiles: Some(vec![InferenceProfile {
             name: "focused".to_owned(),
@@ -194,6 +195,7 @@ fn a_remote_machine() -> Settings {
         trust_client_sampling: Some(true),
         loop_guard_mode: Some(LoopGuardMode::Refuse),
         tool_call_repair: Some(false),
+        mcp_drawing: Some(true),
         agentic_sampling: Some(true),
         proxy_autostart: Some(true),
         close_to_tray: Some(true),

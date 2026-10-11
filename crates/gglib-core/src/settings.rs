@@ -93,6 +93,16 @@ pub struct Settings {
     /// Default model ID for commands that support a default model.
     pub default_model_id: Option<i64>,
 
+    /// The image model a drawing request uses when it names none: the twin
+    /// of [`Self::default_model_id`], for models that draw.
+    ///
+    /// `None` means none is chosen. A write that names a model that does not
+    /// draw, or no model at all, is refused by
+    /// [`SettingsService::update`](crate::services::SettingsService::update)
+    /// with a sentence saying which; a model removed after it was chosen is
+    /// left here, and is for whatever reads the setting to report.
+    pub default_image_model_id: Option<i64>,
+
     /// Global inference parameter defaults.
     ///
     /// Applied when neither request nor per-model defaults are specified.
@@ -217,6 +227,15 @@ pub struct Settings {
     /// See [Tool-call repair](https://github.com/mmogr/gglib/blob/main/docs/tool-call-repair.md).
     pub tool_call_repair: Option<bool>,
 
+    /// Whether the proxy's `/mcp` gateway offers MCP clients gglib's own
+    /// drawing tool, `builtin__generate_image`.
+    ///
+    /// `None`/`Some(false)` → off, the default, with the polarity of
+    /// [`Self::trust_client_sampling`]: drawing holds the GPU for minutes,
+    /// so it is something a client is explicitly granted. Read through
+    /// [`Self::effective_mcp_drawing`].
+    pub mcp_drawing: Option<bool>,
+
     // ── Agentic-turn sampling ───────────────────────────────────────
     /// Whether a request carrying tools gets the agentic-turn temperature
     /// ceiling — see
@@ -326,6 +345,7 @@ impl Settings {
             max_stagnation_steps: Some(crate::domain::agent::DEFAULT_MAX_STAGNATION_STEPS as u32),
             agentic_sampling: None,
             default_model_id: None,
+            default_image_model_id: None,
             inference_defaults: None,
             inference_profiles: None,
             setup_completed: None,
@@ -336,6 +356,7 @@ impl Settings {
             trust_client_sampling: None,
             loop_guard_mode: None,
             tool_call_repair: None,
+            mcp_drawing: None,
             proxy_autostart: None,
             close_to_tray: None,
             start_at_login: None,
@@ -378,6 +399,13 @@ impl Settings {
         !matches!(self.agentic_sampling, Some(false))
     }
 
+    /// Whether `/mcp` offers the drawing tool: the stored
+    /// [`Self::mcp_drawing`], and off when none is stored.
+    #[must_use]
+    pub const fn effective_mcp_drawing(&self) -> bool {
+        matches!(self.mcp_drawing, Some(true))
+    }
+
     /// Merge another settings into this one, only updating fields that are Some.
     pub fn merge(&mut self, other: &SettingsUpdate) {
         if let Some(ref path) = other.default_download_path {
@@ -407,6 +435,9 @@ impl Settings {
         if let Some(ref model_id) = other.default_model_id {
             self.default_model_id = *model_id;
         }
+        if let Some(model_id) = other.default_image_model_id {
+            self.default_image_model_id = model_id;
+        }
         if let Some(ref inference_defaults) = other.inference_defaults {
             self.inference_defaults.clone_from(inference_defaults);
         }
@@ -433,6 +464,9 @@ impl Settings {
         }
         if let Some(v) = other.tool_call_repair {
             self.tool_call_repair = v;
+        }
+        if let Some(v) = other.mcp_drawing {
+            self.mcp_drawing = v;
         }
         if let Some(ref v) = other.loop_guard_mode {
             self.loop_guard_mode = *v;
@@ -538,3 +572,7 @@ mod settings_tests;
 #[cfg(test)]
 #[path = "settings_remote_tests.rs"]
 mod settings_remote_tests;
+
+#[cfg(test)]
+#[path = "settings_drawing_tests.rs"]
+mod settings_drawing_tests;

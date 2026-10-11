@@ -1,5 +1,7 @@
 //! Tool-schema and tool-call/result types.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 use crate::domain::AttachmentInfo;
@@ -37,6 +39,14 @@ pub struct ToolDefinition {
     /// `format_tool_display_name()`.  Not serialized to the LLM.
     #[serde(skip)]
     pub title: Option<String>,
+
+    /// How long one call may run, when the tool knows better than the
+    /// session's `tool_timeout_ms` (an image render takes minutes).
+    ///
+    /// Set by the tool itself, never by a request, so the request clamp does
+    /// not apply to it. Not serialized to the LLM.
+    #[serde(skip)]
+    pub deadline: Option<Duration>,
 }
 
 impl ToolDefinition {
@@ -48,6 +58,7 @@ impl ToolDefinition {
             description: None,
             input_schema: None,
             title: None,
+            deadline: None,
         }
     }
 
@@ -62,6 +73,14 @@ impl ToolDefinition {
     #[must_use]
     pub fn with_input_schema(mut self, schema: serde_json::Value) -> Self {
         self.input_schema = Some(schema);
+        self
+    }
+
+    /// Give each call of this tool its own deadline, in place of the
+    /// session's `tool_timeout_ms`.
+    #[must_use]
+    pub const fn with_deadline(mut self, deadline: Duration) -> Self {
+        self.deadline = Some(deadline);
         self
     }
 }

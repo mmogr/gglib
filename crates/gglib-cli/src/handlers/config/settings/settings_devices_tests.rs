@@ -32,7 +32,7 @@ fn settings_show_prints_no_whole_endpoint_id() {
         ..Settings::default()
     };
 
-    let rows = settings_display_rows(&settings, None);
+    let rows = settings_display_rows(&settings, None, None);
 
     for (key, value) in &rows {
         assert!(

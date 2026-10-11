@@ -1,6 +1,6 @@
 import { FC, useContext } from 'react';
 import { ComposerPrimitive } from '@assistant-ui/react';
-import { Brain, CircleOff } from 'lucide-react';
+import { Brain, CircleOff, ImagePlus } from 'lucide-react';
 import { Button } from '../../ui/Button';
 import { Chip } from '../../ui/Chip';
 import { Icon } from '../../ui/Icon';
@@ -8,6 +8,7 @@ import { ToolsPopover } from '../../ToolsPopover';
 import { ToolSupportIndicator } from '../../ToolSupportIndicator';
 import { getToolRegistry } from '../../../services/tools';
 import type { ThinkingSwitch } from '../../../hooks/useThinkingSwitch';
+import type { DrawSwitch } from '../../../hooks/useDrawSwitch';
 import { TurnRow } from './TurnRow';
 import { ModelPicker, type ModelChoice } from './ModelPicker';
 import { AttachImageButton, ComposerImages, ImageInputContext } from './ComposerImages';
@@ -35,22 +36,39 @@ interface ComposerFooterProps {
   toolFormat?: string | null;
   /** The chat's Thinking switch; drawn only where it says it is shown. */
   thinking?: ThinkingSwitch;
+  /** The Draw button; drawn wherever one is given, greyed where a message cannot draw. */
+  draw?: DrawSwitch;
 }
 
 const THINKING_ON = 'Thinking is on for this chat. Click to switch it off from the next message.';
 const THINKING_OFF = 'Thinking is off for this chat. Click to switch it back on from the next message.';
+const DRAW_ARMED = 'The next message draws an image. Click to send it without drawing.';
+
+/** What pressing Draw would do, naming the image model when its machine did. */
+function drawOffer(model: string | undefined): string {
+  return `Let the next message draw an image${model ? ` with ${model}` : ''}. It applies to that message only.`;
+}
+
+/** The Draw button's title: why it is greyed, or what it does as it stands. */
+function drawTitle(draw: DrawSwitch): string | undefined {
+  if (!draw.available) return draw.reason;
+  return draw.armed ? DRAW_ARMED : drawOffer(draw.model);
+}
 
 /**
  * The composer, on the notebook's grid: the model (a picker, on this
- * machine), the tools, the context ring and the Thinking switch in the
- * margin; in the body, the images attached, then the attach button, the text
- * box and Stop or Send. An image is attached by the button, a paste or a
- * drop, each only where the model takes images, as `ImageInputContext` says.
+ * machine), the tools, the context ring, the Thinking switch and the Draw
+ * button in the margin; in the body, the images attached, then the attach
+ * button, the text box and Stop or Send. An image is attached by the button,
+ * a paste or a drop, each only where the model takes images, as
+ * `ImageInputContext` says.
  * The switch is a button, pressed while the chat thinks and there only for
  * a model that does; it changes what the next send says, never a reply
  * already being written. Its name is "Thinking" either way; switched off it
  * reads "Thinking off" beside another icon, so which way it is never rests
- * on its colours alone.
+ * on its colours alone. Draw is a button too, pressed for the next message
+ * alone and reading "Draw on" while it is; where a message cannot draw it is
+ * greyed, and its title says why.
  */
 export const ComposerFooter: FC<ComposerFooterProps> = ({
   isServerConnected,
@@ -65,6 +83,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   supportsToolCalls,
   toolFormat,
   thinking,
+  draw,
 }) => {
   const imageInput = useContext(ImageInputContext);
   return (
@@ -98,6 +117,17 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
                 title={thinking.on ? THINKING_ON : THINKING_OFF}
               >
                 Thinking{!thinking.on && <span aria-hidden="true"> off</span>}
+              </Chip>
+            )}
+            {draw && (
+              <Chip
+                leftIcon={<Icon icon={ImagePlus} size={12} />}
+                selected={draw.armed}
+                onClick={draw.toggle}
+                disabled={!draw.available}
+                title={drawTitle(draw)}
+              >
+                Draw{draw.armed && <span aria-hidden="true"> on</span>}
               </Chip>
             )}
           </div>

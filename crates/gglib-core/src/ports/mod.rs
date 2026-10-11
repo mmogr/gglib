@@ -13,6 +13,7 @@ pub(crate) mod generation_gate;
 pub(crate) mod gguf_parser;
 pub(crate) mod hub_chats;
 pub mod huggingface;
+pub(crate) mod image_generation;
 mod jinja_mode;
 pub(crate) mod llm_completion;
 pub(crate) mod loop_guard_trips;
@@ -75,6 +76,10 @@ pub use huggingface::{
     HfClientPort, HfFileInfo, HfModelKind, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
     HfSearchResult, HfSortField, SNIFF_HEAD_BYTES,
 };
+pub use image_generation::{
+    GeneratedImage, IMAGE_JOB_DEADLINE, ImageBatch, ImageError, ImageGenerationPort, ImageProgress,
+    ImageRequest, ImageSize, ImageStage, MAX_IMAGES_PER_REQUEST, UnreadableSize,
+};
 pub use jinja_mode::JinjaMode;
 pub use mcp_dto::{ResolutionAttempt, ResolutionStatus};
 pub use mcp_error::McpServiceError;
@@ -86,7 +91,7 @@ pub use model_files::ModelFilesRepositoryPort;
 pub use model_registrar::{CompletedDownload, ModelRegistrarPort, RegisteredDownload};
 pub use model_repository::ModelRepository;
 pub use model_runtime::{
-    Admission, AdmissionLease, AdmissionRelease, LaunchOverrides, ModelRuntimeError,
+    Admission, AdmissionLease, AdmissionRelease, AdmitObserver, LaunchOverrides, ModelRuntimeError,
     ModelRuntimePort, NoopModelRuntime, PinnedSpec, RunningTarget, RuntimeErrorEnvelope,
 };
 pub use process_runner::{ProcessHandle, ServerConfig};

@@ -1,8 +1,8 @@
 //! Settings service - orchestrates settings operations.
 
 use crate::domain::builtin_templates;
-use crate::ports::{CoreError, SettingsRepository};
-use crate::settings::{Settings, SettingsUpdate, validate_settings};
+use crate::ports::{CoreError, ModelRepository, RepositoryError, SettingsRepository};
+use crate::settings::{Settings, SettingsError, SettingsUpdate, validate_settings};
 use std::sync::{Arc, Mutex, PoisonError};
 
 /// What installing the starter profiles did, by profile name.
@@ -17,12 +17,28 @@ pub struct TemplateInstall {
 /// Service for settings operations.
 pub struct SettingsService {
     repo: Arc<dyn SettingsRepository>,
+    /// The library a written default image model is looked up in; see
+    /// [`Self::with_models`].
+    models: Option<Arc<dyn ModelRepository>>,
 }
 
 impl SettingsService {
     /// Create a new settings service.
     pub fn new(repo: Arc<dyn SettingsRepository>) -> Self {
-        Self { repo }
+        Self { repo, models: None }
+    }
+
+    /// This service, checking a written default image model against
+    /// `models`.
+    ///
+    /// [`AppCore`](super::AppCore) builds its service this way, so every
+    /// surface that writes settings through it, the CLI and the HTTP API
+    /// alike, is checked. A service built with [`Self::new`] alone has no
+    /// library to look in and writes the id unchecked.
+    #[must_use]
+    pub fn with_models(mut self, models: Arc<dyn ModelRepository>) -> Self {
+        self.models = Some(models);
+        self
     }
 
     /// Return the underlying settings repository.
@@ -42,7 +58,17 @@ impl SettingsService {
     /// repository reads, applies and stores in one step
     /// ([`SettingsRepository::modify`]). A field this update does not set is
     /// left as its last writer left it, whichever process that was.
+    ///
+    /// An update that writes a default image model is refused, storing
+    /// nothing, unless the id names a model in the library that draws
+    /// ([`SettingsError::UnknownImageModel`],
+    /// [`SettingsError::NotAnImageModel`]). The model is looked up before the
+    /// write, and only when this update names one: clearing the setting, or
+    /// writing any other field, reads no model.
     pub async fn update(&self, update: SettingsUpdate) -> Result<Settings, CoreError> {
+        if let (Some(Some(id)), Some(models)) = (update.default_image_model_id, &self.models) {
+            check_image_model(models.as_ref(), id).await?;
+        }
         self.repo
             .modify(&|settings: &mut Settings| {
                 settings.merge(&update);
@@ -108,6 +134,24 @@ impl SettingsService {
         self.repo.save(settings).await.map_err(CoreError::from)
     }
 }
+
+/// `Ok` when model `id` is in the library and draws images.
+async fn check_image_model(models: &dyn ModelRepository, id: i64) -> Result<(), CoreError> {
+    match models.get_by_id(id).await {
+        Ok(model) if model.image_family.is_some() => Ok(()),
+        Ok(model) => Err(SettingsError::NotAnImageModel {
+            id,
+            name: model.name,
+        }
+        .into()),
+        Err(RepositoryError::NotFound(_)) => Err(SettingsError::UnknownImageModel(id).into()),
+        Err(unread) => Err(unread.into()),
+    }
+}
+
+#[cfg(test)]
+#[path = "settings_service_image_tests.rs"]
+mod image_tests;
 
 #[cfg(test)]
 mod tests {

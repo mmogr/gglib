@@ -85,6 +85,32 @@ pub struct SizeRule {
     pub min: u32,
     /// The longest side.
     pub max: u32,
+    /// Each side of the square drawn when a request names no size.
+    pub default_side: u32,
+}
+
+impl SizeRule {
+    /// Whether this family draws a `width` by `height` image: each side a
+    /// multiple of [`Self::step`], from [`Self::min`] to [`Self::max`].
+    #[must_use]
+    pub const fn check(&self, width: u32, height: u32) -> bool {
+        self.side(width) && self.side(height)
+    }
+
+    const fn side(&self, side: u32) -> bool {
+        side >= self.min && side <= self.max && side.is_multiple_of(self.step)
+    }
+}
+
+impl fmt::Display for SizeRule {
+    /// "each side a multiple of 64 from 256 to 1536", for a refusal to name.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "each side a multiple of {} from {} to {}",
+            self.step, self.min, self.max
+        )
+    }
 }
 
 /// How a family is drawn: what it needs beside its main file, and its
@@ -116,12 +142,13 @@ pub struct Recipe {
 /// One GiB, for the compute margins.
 const GIB: u64 = 1024 * 1024 * 1024;
 
-/// The one size rule's bounds; the step differs by family.
+/// The one size rule's bounds and default; the step differs by family.
 const fn sizes(step: u32) -> SizeRule {
     SizeRule {
         step,
         min: 256,
         max: 1536,
+        default_side: 1024,
     }
 }
 

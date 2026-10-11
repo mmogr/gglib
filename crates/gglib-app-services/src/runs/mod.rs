@@ -69,6 +69,9 @@ mod limits_tests;
 #[path = "local_tests.rs"]
 mod local_tests;
 #[cfg(test)]
+#[path = "preview_tests.rs"]
+mod preview_tests;
+#[cfg(test)]
 #[path = "privacy_tests.rs"]
 mod privacy_tests;
 #[cfg(test)]

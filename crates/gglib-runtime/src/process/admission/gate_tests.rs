@@ -526,3 +526,60 @@ async fn the_snapshot_shows_the_render_the_chats_and_the_line() {
     );
     drop(chat_turn);
 }
+
+/// A Stop on the image model asks the render that draws with it and empties
+/// nothing: the slot and the render's count stand until the render is
+/// retired, and only the render it was asked of reads the question.
+#[tokio::test]
+async fn a_stop_asks_the_render_that_holds_the_model() {
+    let (q, lease) = chat_and_image();
+    let gate = q.generation_gate();
+    assert!(!q.ask_render_stop(FLUX), "a lease alone is no render");
+    let turn = granted(pin!(gate.render_turn(lease, None)).as_mut());
+    assert!(!q.render_stop_asked(FLUX));
+
+    assert!(!q.ask_render_stop(QWEN), "the chat model draws nothing");
+    assert!(!q.render_stop_asked(FLUX));
+    assert!(q.ask_render_stop(FLUX));
+
+    assert!(q.render_stop_asked(FLUX));
+    assert!(!q.render_stop_asked(QWEN));
+    assert_eq!(inflight(&q, 1), 1, "nothing was emptied or released");
+    let retired = q.retire_render(turn, FLUX, async {}).await;
+    assert_eq!(retired.map(|r| r.model_id), Some(FLUX));
+    assert!(!q.ask_render_stop(FLUX), "nothing is left to ask");
+    assert!(!q.render_stop_asked(FLUX));
+}
+
+/// A render still waiting for its turn when its model is stopped leaves the
+/// line with its lease, released on the slot it was counted in, and the
+/// chats it queued behind it go on.
+#[tokio::test]
+async fn a_stop_sends_a_waiting_render_out_of_the_line() {
+    let (q, lease) = chat_and_image();
+    let gate = q.generation_gate();
+    let chat = granted(pin!(gate.llm_turn(None)).as_mut());
+    let mut render = pin!(gate.render_turn(lease, None));
+    assert!(poll(render.as_mut()).is_pending());
+    assert_eq!(inflight(&q, 1), 1);
+
+    // A chat that arrived after the render waits in the line behind it.
+    let mut behind = pin!(gate.llm_turn(None));
+    assert!(poll(behind.as_mut()).is_pending());
+
+    assert!(q.ask_render_stop(FLUX));
+    assert!(!q.render_stop_asked(FLUX), "it never drew");
+
+    // Only the asked render leaves: the chat behind it, asked first, is
+    // still waiting on it and is not told the stop.
+    assert!(poll(behind.as_mut()).is_pending());
+    match poll(render.as_mut()) {
+        Poll::Ready(Err(GateError::Unavailable(why))) => assert_eq!(why, RENDER_STOPPED),
+        other => panic!("expected the stop, got {other:?}"),
+    }
+    assert_eq!(q.slot(1).map(|r| r.model_id), Some(FLUX));
+    assert_eq!(inflight(&q, 1), 0, "its lease went back to its own slot");
+    assert!(!q.ask_render_stop(FLUX), "no render holds the model now");
+    drop(granted(behind.as_mut()));
+    drop(chat);
+}

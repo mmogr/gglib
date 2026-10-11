@@ -19,6 +19,7 @@ use crate::bootstrap::CliContext;
 use crate::conversation_settings::ConversationSettingsBuilder;
 use crate::handlers::agent_chat::config::{AgentSessionParams, compose};
 use crate::handlers::agent_chat::drain::drain_event_stream;
+use crate::handlers::agent_chat::draw::DrawSwitch;
 use crate::handlers::agent_chat::images::TurnImages;
 use crate::handlers::agent_chat::persistence::{Conversation, Reply};
 use crate::handlers::agent_chat::repl::run_repl_with_history;
@@ -108,6 +109,8 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         // Filled in below, once settings have supplied the profile list.
         profile: None,
         turn: None,
+        // A question is one message with no Draw switch.
+        drawing: None,
     };
 
     // If no model was specified, look up the default from settings
@@ -285,7 +288,10 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
         if let Some(history) = history
             && super::question_input::ask_continue()?
         {
-            run_repl_with_history(agent, history, config, verbose, persistence, images).await?;
+            // Composed with no drawing tool: `/draw` belongs to `gglib chat`.
+            let draw = DrawSwitch::off("a question's session has no image tool; use `gglib chat`");
+            run_repl_with_history(agent, history, config, verbose, persistence, images, draw)
+                .await?;
         }
     } else if !completed {
         return Err(anyhow!("agent did not produce a final answer"));

@@ -291,6 +291,56 @@ pub struct AgentConfig {
     ///
     /// Default: `Some(15)`.
     pub max_observation_steps: Option<usize>,
+
+    /// The one tool this run's first reply must call, when its caller
+    /// demands one, after which the model is offered no tool again
+    /// ([`FirstCall`]); `None` (the default) leaves every reply to the model.
+    ///
+    /// Not serialised and in no request DTO: only the code that composes a
+    /// run sets it, for a message whose sender asked for that tool by name.
+    #[serde(skip)]
+    pub first_call: Option<FirstCall>,
+}
+
+/// A tool a run's first reply must call, once: the person asked for it, so
+/// the model is not left to decide whether, and it is not asked twice.
+///
+/// Such a run is that call, then words. On the run's first call to the
+/// model the loop offers this tool alone and demands a call
+/// ([`LlmCompletionPort::chat_stream_requiring_call`](crate::ports::LlmCompletionPort::chat_stream_requiring_call)).
+/// A first reply that does not call it ends the run with
+/// [`AgentError::FirstCallMissing`](crate::ports::AgentError::FirstCallMissing),
+/// never with that reply as its answer. Once the tool has run, whether it
+/// succeeded or answered with an error, the loop asks the model once more,
+/// offering no tools at all, and that reply's text is the run's answer: a
+/// tool call in it is not run, and a reply with no text is answered with
+/// [`if_wordless`](Self::if_wordless).
+///
+/// That second request ends with one message more than the run's history
+/// holds: the composer's instruction for the reply, as a `user` message
+/// after the tool's result, [`then_say`](Self::then_say) when the tool
+/// succeeded and [`then_say_failed`](Self::then_say_failed) when it
+/// answered with an error. A model offered no tools is otherwise apt to
+/// say it cannot do what the tool has just done. The instruction is for
+/// the model alone, on that request alone: it is in no event the run sends
+/// and not in the history the run returns.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FirstCall {
+    /// The tool, by the name the run's tool list gives it.
+    pub tool: String,
+    /// What the person is told when the first reply does not call it: fixed
+    /// words of the composer's, never the model's.
+    pub if_missing: String,
+    /// The run's answer when the reply after the tool ran has no text: fixed
+    /// words of the composer's, true whether the tool succeeded or not.
+    pub if_wordless: String,
+    /// What the model is told before the reply after the tool succeeded:
+    /// fixed words of the composer's, sent to the model and shown to no one.
+    pub then_say: String,
+    /// What the model is told before the reply after the tool answered with
+    /// an error: fixed words of the composer's, sent to the model and shown
+    /// to no one.
+    pub then_say_failed: String,
 }
 
 impl Default for AgentConfig {
@@ -360,6 +410,7 @@ impl Default for AgentConfig {
                 "fetch_webpage".into(),
             ],
             max_observation_steps: Some(DEFAULT_MAX_OBSERVATION_STEPS),
+            first_call: None,
         }
     }
 }

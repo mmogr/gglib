@@ -54,38 +54,52 @@ impl<'a> ModelSummaryOpts<'a> {
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) fn display_model_summary(model: &Model, opts: ModelSummaryOpts) {
+    for line in summary_lines(model, &opts) {
+        println!("{line}");
+    }
+}
+
+/// The lines [`display_model_summary`] prints, in order.
+///
+/// A model that draws has no `Parameters` line: its file names no parameter
+/// count and none is asked for, so the stored zero is not a reading.
+pub(crate) fn summary_lines(model: &Model, opts: &ModelSummaryOpts) -> Vec<String> {
+    let mut lines = Vec::new();
     if let Some(title) = opts.title {
-        println!("{title}");
+        lines.push(title.to_owned());
     }
 
     if opts.show_id {
-        println!("  ID: {}", model.id);
+        lines.push(format!("  ID: {}", model.id));
     }
 
-    println!("  Name: {}", model.name);
+    lines.push(format!("  Name: {}", model.name));
 
     if opts.show_file_path {
-        println!("  File: {}", model.file_path.display());
+        lines.push(format!("  File: {}", model.file_path.display()));
     }
 
-    println!("  Parameters: {:.1}B", model.param_count_b);
+    if model.image_family.is_none() {
+        lines.push(format!("  Parameters: {:.1}B", model.param_count_b));
+    }
 
     if let Some(arch) = &model.architecture {
-        println!("  Architecture: {arch}");
+        lines.push(format!("  Architecture: {arch}"));
     }
 
     if let Some(quant) = &model.quantization {
-        println!("  Quantization: {quant}");
+        lines.push(format!("  Quantization: {quant}"));
     }
 
     if let Some(ctx) = model.context_length {
-        println!("  Context Length: {ctx} tokens");
+        lines.push(format!("  Context Length: {ctx} tokens"));
     }
 
     if opts.show_added_at {
-        println!(
+        lines.push(format!(
             "  Added: {}",
             model.added_at.format("%Y-%m-%d %H:%M:%S UTC")
-        );
+        ));
     }
+    lines
 }

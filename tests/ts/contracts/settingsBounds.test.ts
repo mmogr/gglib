@@ -32,6 +32,8 @@ import { describe, it, expect } from 'vitest';
 
 import * as settingsDefaults from '../../../src/constants/settingsDefaults';
 import { INFERENCE_PARAMS } from '../../../src/constants/inferenceDefaults';
+import { drawingValuesFrom } from '../../../src/components/SettingsModal/useDrawingSettings';
+import { appSettings } from '../fixtures/settings';
 import type { SamplingParamKey } from '../../../src/types';
 
 import { rust } from './rustSource';
@@ -129,6 +131,15 @@ describe('settings fields vs validate_settings', () => {
     expect(statedDefault(settingsDefaults.MAX_TOOL_ITERATIONS)).toBe(
       recorded<number | null>('settings_defaults', 'max_tool_iterations'),
     );
+  });
+});
+
+describe('the drawing settings vs Settings::with_defaults()', () => {
+  it('leaves both unset, which the page reads as no default model and the switch off', () => {
+    expect(recorded<number | null>('settings_defaults', 'default_image_model_id')).toBeNull();
+    expect(recorded<number | null>('settings_defaults', 'mcp_drawing')).toBeNull();
+
+    expect(drawingValuesFrom(appSettings())).toEqual({ defaultImageModel: '', mcpDrawing: false });
   });
 });
 

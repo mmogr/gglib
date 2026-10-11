@@ -2,6 +2,8 @@
 
 use std::time::Duration;
 
+use crate::ports::GateWait;
+
 /// A sink for retry activity on a request that is being re-attempted.
 ///
 /// The reporting site — the LLM completion adapter's retry loop — records that
@@ -27,4 +29,11 @@ pub trait RetryObserver: Send + Sync {
     /// The sequence gave up. `reason` describes which limit was reached — see
     /// [`GiveUpReason::as_str`](crate::retry::GiveUpReason::as_str).
     fn on_exhausted(&self, attempts: u32, elapsed: Duration, reason: &str);
+
+    /// The request is waiting for a generation turn before it can be sent:
+    /// an image render has the GPU. Called again whenever what `wait`
+    /// reports changes. Does nothing unless the observer cares.
+    fn on_gate_wait(&self, wait: GateWait) {
+        let _ = wait;
+    }
 }

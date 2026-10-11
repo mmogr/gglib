@@ -106,6 +106,10 @@ pub(crate) async fn execute(
              metadata only and leaves the stored parameter count alone."
         );
         None
+    } else if gguf_metadata.image_family.is_some() {
+        // Nothing to ask of a model that draws: its file names no parameter
+        // count, and nothing reads one for it.
+        None
     } else if let Some(params) = gguf_metadata.param_count_b {
         let user_input =
             input::prompt_float_with_default("Parameter count (in billions)", Some(params))?;

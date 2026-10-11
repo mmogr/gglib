@@ -16,6 +16,30 @@ pub enum RunKind {
     Agent,
 }
 
+/// The shape of the events a run logs, which says how a reader decodes
+/// them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub enum RunFrames {
+    /// `OpenAI` chat-completion chunks, as a chat run records them. What a
+    /// run says by leaving the field out, and what a reader that has never
+    /// heard of the field assumes.
+    #[default]
+    Openai,
+    /// The agent loop's events: an agent run, and a chat run started with
+    /// gglib's builtins.
+    Agent,
+}
+
+impl RunFrames {
+    /// Whether these are `OpenAI` chunks, and so left out of the body.
+    #[must_use]
+    pub fn is_openai(&self) -> bool {
+        *self == Self::Openai
+    }
+}
+
 /// Where a run is in its life.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -92,6 +116,13 @@ pub struct RunInfo {
     #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<RunError>,
+    /// How to decode the run's events: `agent` for an agent run and for a
+    /// chat run started with builtins; left out, and read as `openai`, for
+    /// a chat run's `OpenAI` chunks. A reader resuming from a listing picks
+    /// its decoder by this, not by `kind`.
+    #[cfg_attr(feature = "ts-bindings", ts(as = "Option<RunFrames>", optional))]
+    #[serde(default, skip_serializing_if = "RunFrames::is_openai")]
+    pub frames: RunFrames,
 }
 
 impl RunInfo {

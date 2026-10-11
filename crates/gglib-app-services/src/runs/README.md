@@ -24,8 +24,13 @@ runs/
   local.rs        — a run the daemon starts with work it prepared (an
                     agent run): reserve in a scope, then start; never on
                     the port
-  cell.rs         — one run: status, log, the watch its readers wait on
-  reader.rs       — a run's event stream: the log by index, then live
+  cell.rs         — one run: status, log, the watch its readers wait on,
+                    and its latest preview frame, kept beside the log and
+                    never in it, forgotten when its call completes or the
+                    run ends
+  reader.rs       — a run's event stream: the log by index, then live; the
+                    preview only to a reader that has caught up, once per
+                    frame, with no seq
   executor.rs     — the seam an executor writes a run's events through
   chat.rs         — the chat executor: the body to the daemon's own proxy,
                     each `data:` payload logged verbatim, `[DONE]` not;
