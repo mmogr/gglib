@@ -112,7 +112,10 @@ async fn a_lone_render_gets_its_turn_at_once() {
 #[tokio::test]
 async fn an_image_model_is_served_while_a_render_holds_the_gate() {
     let q = Arc::new(AdmissionQueue::new());
-    // Two image models: sdxl swaps qwen out of the primary, flux loads beside.
+    // Two image models: sdxl swaps qwen out of the primary, and flux is
+    // recorded beside it directly. The queue places no second image model
+    // beside a first, and with one request at a time for each, only a
+    // second one shows the fast path passing the gate.
     let ticket = q.enqueue("qwen");
     assert!(matches!(
         q.poll(&ticket, NEVER_FITS),
@@ -126,11 +129,6 @@ async fn an_image_model_is_served_while_a_render_holds_the_gate() {
         AdmissionDecision::Launch { slot: 0, .. }
     ));
     let lease = q.install(0, resident(5, "sdxl", RuntimeKind::StableDiffusion));
-    let ticket = q.enqueue("flux");
-    assert!(matches!(
-        q.poll(&ticket, Candidate::image(ALWAYS_FITS)),
-        AdmissionDecision::Launch { slot: 1, .. }
-    ));
     drop(q.install(1, resident(FLUX, "flux", RuntimeKind::StableDiffusion)));
 
     let gate = q.generation_gate();

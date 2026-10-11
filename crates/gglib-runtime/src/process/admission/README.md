@@ -104,6 +104,15 @@ ceiling that keeps large chat models in the swap path. Otherwise it swaps into
 an evictable primary under the ordinary turn rules. The caller says which
 program serves a request in its [`Candidate`].
 
+One image model is loaded at a time. While another image model is in a slot,
+loaded or still loading, that slot is the only one an image model may use,
+whatever the memory check says: it swaps in there once that model is idle,
+and waits while it renders or loads. It never loads beside it and never
+evicts the chat model to do so, and a chat model a run holds does not refuse
+it. A slot that is loading names its runtime for this. The memory check
+places an image model only when no other is in a slot, so one that needs the
+chat model's memory as well is still loaded in the other's place.
+
 # The generation gate
 
 Residency says which models are loaded; the gate says which of them may

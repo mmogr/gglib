@@ -318,3 +318,250 @@ async fn a_model_that_chats_still_takes_an_empty_primary() {
     );
     assert_eq!(Candidate::from(NEVER_FITS), Candidate::llama(NEVER_FITS));
 }
+
+// ── one image model at a time ────────────────────────────────────────────
+
+/// The ids of the two image models in the tests below.
+const FLUX: u32 = 2;
+const QWEN_IMAGE: u32 = 3;
+
+/// Record image model `name` as loaded in `slot` and idle.
+fn image_resident(q: &Arc<AdmissionQueue>, slot: usize, model_id: u32, name: &str) {
+    drop(q.install(
+        slot,
+        Resident {
+            runtime: RuntimeKind::StableDiffusion,
+            ..resident(model_id, name)
+        },
+    ));
+}
+
+/// A chat model idle in the primary and Flux idle beside it.
+fn chat_and_flux() -> Arc<AdmissionQueue> {
+    let q = queue();
+    chat_resident(&q, "qwen", 1);
+    assert_eq!(
+        poll_once(&q, "flux", IMAGE_FITS),
+        AdmissionDecision::Launch {
+            slot: 1,
+            evict: None
+        },
+        "precondition: flux launches beside the chat model"
+    );
+    image_resident(&q, 1, FLUX, "flux");
+    q
+}
+
+/// Every model loaded, by slot.
+fn loaded(q: &Arc<AdmissionQueue>) -> Vec<(usize, u32)> {
+    q.residents()
+        .iter()
+        .map(|(slot, r)| (*slot, r.model_id))
+        .collect()
+}
+
+/// How many image models are loaded.
+fn image_models_loaded(q: &Arc<AdmissionQueue>) -> usize {
+    q.residents()
+        .iter()
+        .filter(|(_, r)| r.runtime == RuntimeKind::StableDiffusion)
+        .count()
+}
+
+/// With Flux idle beside an idle chat model, a second image model takes
+/// Flux's slot and the chat model stays, whatever the memory check says of
+/// it. Before this rule the one with no room evicted the chat model and
+/// kept Flux.
+#[tokio::test]
+async fn a_picked_image_model_replaces_the_idle_one_and_the_chat_model_stays() {
+    for candidate in [IMAGE_NO_ROOM, IMAGE_UNKNOWN, IMAGE_FITS] {
+        let q = chat_and_flux();
+        assert_eq!(
+            poll_once(&q, "qwen-image", candidate),
+            AdmissionDecision::Launch {
+                slot: 1,
+                evict: Some(FLUX)
+            },
+            "{candidate:?}"
+        );
+        assert_eq!(loaded(&q), [(PRIMARY_SLOT, 1)], "the chat model stays");
+    }
+}
+
+/// A chat model a run holds does not refuse a second image model: it swaps
+/// in where the idle one is. With no other image model loaded the same
+/// request is still refused, as before.
+#[tokio::test]
+async fn under_a_held_chat_model_a_picked_image_model_swaps_in_and_is_not_refused() {
+    let q = queue();
+    chat_resident(&q, "qwen", 1);
+    let _hold = q.hold(8001, 1).expect("qwen is resident on its port");
+    assert!(
+        matches!(
+            poll_once(&q, "qwen-image", IMAGE_NO_ROOM),
+            AdmissionDecision::Refuse(Refusal::HeldSlot { .. })
+        ),
+        "precondition: alone, it is refused under the held chat model"
+    );
+
+    let q = chat_and_flux();
+    let _hold = q.hold(8001, 1).expect("qwen is resident on its port");
+    assert_eq!(
+        poll_once(&q, "qwen-image", IMAGE_NO_ROOM),
+        AdmissionDecision::Launch {
+            slot: 1,
+            evict: Some(FLUX)
+        }
+    );
+}
+
+/// An image model that is rendering is waited for: it is not evicted, and
+/// the idle chat model is not evicted to load a second image model beside
+/// it. When the render ends the newcomer takes its place.
+#[tokio::test]
+async fn a_rendering_image_model_is_waited_for_and_nothing_is_evicted() {
+    for candidate in [IMAGE_NO_ROOM, IMAGE_FITS] {
+        let q = chat_and_flux();
+        let render = q.lease(1).expect("a lease on flux");
+
+        let ticket = q.enqueue("qwen-image");
+        assert_eq!(q.poll(&ticket, candidate), AdmissionDecision::Wait);
+        assert_eq!(loaded(&q), [(PRIMARY_SLOT, 1), (1, FLUX)]);
+        assert!(!q.is_loading(), "nothing was started");
+
+        drop(render);
+        assert_eq!(
+            q.poll(&ticket, candidate),
+            AdmissionDecision::Launch {
+                slot: 1,
+                evict: Some(FLUX)
+            },
+            "{candidate:?}"
+        );
+    }
+}
+
+/// An image model that swapped into the primary is replaced there. The
+/// newcomer does not load beside it in the empty second slot, though the
+/// memory check grants that.
+#[tokio::test]
+async fn an_image_model_in_the_primary_is_replaced_where_it_is() {
+    let q = queue();
+    chat_resident(&q, "qwen", 1);
+    assert_eq!(
+        poll_once(&q, "flux", IMAGE_NO_ROOM),
+        AdmissionDecision::Launch {
+            slot: PRIMARY_SLOT,
+            evict: Some(1)
+        },
+        "precondition: flux swaps into the primary"
+    );
+    image_resident(&q, PRIMARY_SLOT, FLUX, "flux");
+
+    assert_eq!(
+        poll_once(&q, "qwen-image", IMAGE_FITS),
+        AdmissionDecision::Launch {
+            slot: PRIMARY_SLOT,
+            evict: Some(FLUX)
+        }
+    );
+    assert_eq!(loaded(&q), [], "and nothing is loaded beside it");
+}
+
+/// An image model still loading is waited for too. Before the slot named
+/// its runtime, the newcomer evicted the idle chat model to load beside it.
+/// Once the first has landed and is idle, the newcomer takes its place.
+#[tokio::test]
+async fn an_image_model_still_loading_is_waited_for() {
+    let q = queue();
+    chat_resident(&q, "qwen", 1);
+    assert_eq!(
+        poll_once(&q, "flux", IMAGE_FITS),
+        AdmissionDecision::Launch {
+            slot: 1,
+            evict: None
+        }
+    );
+
+    let ticket = q.enqueue("qwen-image");
+    for candidate in [IMAGE_NO_ROOM, IMAGE_FITS] {
+        assert_eq!(q.poll(&ticket, candidate), AdmissionDecision::Wait);
+    }
+    assert_eq!(loaded(&q), [(PRIMARY_SLOT, 1)], "the chat model stays");
+    assert_eq!(q.slot_of("qwen-image"), None);
+
+    image_resident(&q, 1, FLUX, "flux");
+    assert_eq!(
+        q.poll(&ticket, IMAGE_NO_ROOM),
+        AdmissionDecision::Launch {
+            slot: 1,
+            evict: Some(FLUX)
+        }
+    );
+}
+
+/// Picking one image model, then the other, then the first again never
+/// leaves two loaded, and the chat model is there throughout: it serves
+/// afterwards, and another chat model swaps into its slot as before.
+#[tokio::test]
+async fn picking_back_and_forth_never_loads_two_image_models() {
+    let q = chat_and_flux();
+    let picks = [
+        ("qwen-image", QWEN_IMAGE, FLUX, IMAGE_NO_ROOM),
+        ("flux", FLUX, QWEN_IMAGE, IMAGE_FITS),
+        ("qwen-image", QWEN_IMAGE, FLUX, IMAGE_UNKNOWN),
+    ];
+    for (name, id, replaced, candidate) in picks {
+        assert_eq!(
+            poll_once(&q, name, candidate),
+            AdmissionDecision::Launch {
+                slot: 1,
+                evict: Some(replaced)
+            },
+            "{name}"
+        );
+        assert_eq!(image_models_loaded(&q), 0, "{name}: the other is gone");
+        image_resident(&q, 1, id, name);
+        assert_eq!(image_models_loaded(&q), 1, "{name}");
+        assert_eq!(loaded(&q), [(PRIMARY_SLOT, 1), (1, id)], "{name}");
+    }
+
+    let chat = q.enqueue("qwen");
+    assert_eq!(
+        q.poll(&chat, NEVER_FITS),
+        AdmissionDecision::Serve { slot: PRIMARY_SLOT }
+    );
+    drop(q.claim(PRIMARY_SLOT));
+    assert_eq!(
+        poll_once(&q, "llama", NEVER_FITS.into()),
+        AdmissionDecision::Launch {
+            slot: PRIMARY_SLOT,
+            evict: Some(1)
+        },
+        "another chat model swaps into the primary and leaves the image model"
+    );
+}
+
+/// The rule is about image models only: a model that chats is placed beside
+/// a loaded image model by the rules it always had.
+#[tokio::test]
+async fn a_model_that_chats_is_placed_as_before_beside_an_image_model() {
+    let q = chat_and_flux();
+    assert_eq!(
+        poll_once(&q, "llama", NEVER_FITS.into()),
+        AdmissionDecision::Launch {
+            slot: PRIMARY_SLOT,
+            evict: Some(1)
+        }
+    );
+
+    let q = chat_and_flux();
+    assert_eq!(
+        poll_once(&q, "embedder", ALWAYS_FITS.into()),
+        AdmissionDecision::Launch {
+            slot: 1,
+            evict: Some(FLUX)
+        },
+        "a small model that chats may still take the idle image model's slot"
+    );
+}

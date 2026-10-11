@@ -109,6 +109,8 @@ pub enum SlotState {
     Loading {
         /// The model being launched.
         model: String,
+        /// The program that will serve it.
+        runtime: RuntimeKind,
     },
     /// A model is loaded and serving.
     Resident(Box<Resident>),
@@ -127,8 +129,17 @@ impl SlotState {
     fn model(&self) -> Option<&str> {
         match self {
             Self::Empty => None,
-            Self::Loading { model } => Some(model),
+            Self::Loading { model, .. } => Some(model),
             Self::Resident(r) => Some(&r.model_name),
+        }
+    }
+
+    /// The program serving what this slot holds or is loading, if anything.
+    const fn runtime(&self) -> Option<RuntimeKind> {
+        match self {
+            Self::Empty => None,
+            Self::Loading { runtime, .. } => Some(*runtime),
+            Self::Resident(r) => Some(r.runtime),
         }
     }
 
@@ -406,6 +417,7 @@ impl QueueState {
         self.forget(ticket);
         self.slots[slot] = SlotState::Loading {
             model: ticket.model.clone(),
+            runtime: candidate.runtime,
         };
         self.turn = Some(Turn {
             model: ticket.model.clone(),
@@ -635,7 +647,7 @@ impl QueueState {
     /// Which slot is mid-launch for `model`, if any.
     fn loading_slot(&self, model: &str) -> Option<usize> {
         (0..SLOT_COUNT).find(
-            |&slot| matches!(&self.slots[slot], SlotState::Loading { model: m } if m == model),
+            |&slot| matches!(&self.slots[slot], SlotState::Loading { model: m, .. } if m == model),
         )
     }
 
