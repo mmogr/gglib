@@ -264,4 +264,28 @@ describe('ChatPage, the image model menu', () => {
     expect(started.at(-1)!.draw).toBe(true);
     expect(started.at(-1)!.image_model).toBe(3);
   });
+
+  it('stays while a pick stands though the list has shrunk to one, so the pick can be taken back', async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    // Every model but one leaves the machine after the list was read.
+    models = [FLUX];
+    await pick(user, /^qwen-image-q8/);
+
+    await waitFor(() => expect(drawButton()).toBeDisabled());
+    expect(drawButton()).toHaveAttribute('title', 'the image model chosen (id 7) is no longer on this machine; choose another');
+    const options = within(menu()).getAllByRole('option') as HTMLOptionElement[];
+    expect(options.map((option) => option.textContent)).toEqual([
+      'Default (flux-schnell)',
+      'Model 7 (no longer listed)',
+      'flux-schnell · Flux.1 · loaded',
+    ]);
+    expect(menu()).toHaveValue('7');
+
+    await pick(user, /^Default/);
+    expect(drawButton()).toBeEnabled();
+    expect(askedAbout().at(-1)).toBeNull();
+    // Nothing chosen and one model: there is nothing to choose again.
+    noMenu();
+  });
 });

@@ -26,7 +26,9 @@ function missingTitle(row: ImageModelRow): string | undefined {
  * button: the machine's default rule, naming what it draws with, then each
  * image model in the machine's order. One that lacks a file is listed and
  * cannot be chosen; its title says what it lacks. Nothing is drawn where the
- * machine lists fewer than two, since there is then nothing to choose.
+ * machine lists fewer than two and the chat has chosen none, since there is
+ * then nothing to choose; a chat that has chosen keeps the menu however
+ * short the list has become, so the choice can always be taken back.
  *
  * It stays usable while the button is greyed: a choice that no longer draws
  * is changed here. A choice the machine no longer lists keeps an option of
@@ -34,7 +36,7 @@ function missingTitle(row: ImageModelRow): string | undefined {
  */
 export const ImageModelMenu: FC<{ draw: DrawSwitch }> = ({ draw }) => {
   const { models, picked, pick } = draw;
-  if (models.length < 2) return null;
+  if (models.length < 2 && picked === null) return null;
   const standing = models.find((row) => row.default);
   const unlisted = picked !== null && !models.some((row) => row.id === picked);
   return (
