@@ -17,7 +17,8 @@ use super::config::SdServerConfig;
 /// checkpoint), each component in role order (`--vae`, `--clip_l`,
 /// `--t5xxl`, `--llm`) whatever order it was given in, the loopback address
 /// and `port`, then the recipe's steps, guidance scale and sampler, and
-/// `--fa` when the recipe turns flash attention on.
+/// the recipe's flash attention flag, `--fa` or `--diffusion-fa`, when it has
+/// one.
 pub(crate) fn sd_server_args(config: &SdServerConfig, port: u16) -> Vec<OsString> {
     let recipe = config.family.recipe();
     let mut args: Vec<OsString> = Vec::new();
@@ -47,8 +48,8 @@ pub(crate) fn sd_server_args(config: &SdServerConfig, port: u16) -> Vec<OsString
     flag("--cfg-scale", recipe.cfg.to_string().into());
     flag("--sampling-method", recipe.sampler.into());
 
-    if recipe.flash_attention {
-        args.push("--fa".into());
+    if let Some(flash_attention) = recipe.flash_attention.flag() {
+        args.push(flash_attention.into());
     }
     args
 }

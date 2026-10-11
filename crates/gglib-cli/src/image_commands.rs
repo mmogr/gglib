@@ -12,7 +12,8 @@ pub struct ImageCommandArgs {
     /// What to draw
     pub prompt: String,
     /// The size, as `WIDTHxHEIGHT` (each side a multiple of 64, or 32 for
-    /// Qwen-Image 2.1, from 256 to 1536) [default: 1024x1024]
+    /// Qwen-Image 2.1, or 16 for Z-Image, from 256 to 1536) [default:
+    /// 1024x1024]
     #[arg(long, value_name = "WxH")]
     pub size: Option<ImageSize>,
     /// How many images, 1 to 4

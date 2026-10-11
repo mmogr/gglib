@@ -3,7 +3,7 @@
 //! Each golden is the whole command line, not a set of contains checks: a
 //! flag added, dropped or moved fails here. The values are the recipes' own
 //! (`gglib_core::domain::ImageFamily::recipe`), which match the measured
-//! 2026-10-09 runs.
+//! 2026-10-09 runs; Z-Image's are its guide's, and no run has used them.
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -91,6 +91,28 @@ fn qwen_image_loads_its_vae_and_language_model_with_flash_attention() {
             "--diffusion-model M --vae V --llm L \
              --listen-ip 127.0.0.1 --listen-port 9123 \
              --steps 20 --cfg-scale 6 --sampling-method euler --fa"
+        )
+    );
+}
+
+/// Z-Image Turbo as stable-diffusion.cpp's guide runs it: the diffusion
+/// model, the Flux.1 VAE, Qwen3 4B as `--llm`, 8 steps at guidance 1, and
+/// flash attention in the diffusion model alone.
+#[test]
+fn z_image_loads_its_vae_and_language_model_at_turbos_steps() {
+    let z_image = config(
+        ImageFamily::ZImage,
+        vec![
+            component(ComponentRole::Llm, "L"),
+            component(ComponentRole::Vae, "V"),
+        ],
+    );
+    assert_eq!(
+        argv(&z_image),
+        words(
+            "--diffusion-model M --vae V --llm L \
+             --listen-ip 127.0.0.1 --listen-port 9123 \
+             --steps 8 --cfg-scale 1 --sampling-method euler --diffusion-fa"
         )
     );
 }

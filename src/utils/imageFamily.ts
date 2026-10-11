@@ -5,6 +5,7 @@ const FAMILY_LABELS: Record<ImageFamily, string> = {
   flux1: 'Flux.1',
   sdxl: 'SDXL',
   'qwen-image-2.1': 'Qwen-Image 2.1',
+  'z-image': 'Z-Image',
 };
 
 /** Each component role by the name `ComponentRole::label()` gives it in Rust, so the page and the terminal agree; the wire name is stable-diffusion.cpp's flag. */

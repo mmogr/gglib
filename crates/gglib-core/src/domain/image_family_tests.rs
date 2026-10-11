@@ -3,7 +3,7 @@
 //! file fits.
 
 use super::*;
-use crate::domain::image_family_goldens::Golden;
+use crate::domain::image_family_goldens::{Golden, StandIn};
 use crate::domain::tensor_table::TensorInfo;
 
 fn shape(table: &TensorTable, name: &str) -> Vec<u64> {
@@ -319,22 +319,216 @@ fn sdxl_without_its_second_encoder_is_not_sdxl() {
     assert_eq!(ImageFamily::sniff(&table), None);
 }
 
+// ── Z-Image ─────────────────────────────────────────────────────────────────
+
+fn prefixed(table: &TensorTable, prefix: &str) -> TensorTable {
+    let mut table = table.clone();
+    for tensor in &mut table.tensors {
+        tensor.name = format!("{prefix}{}", tensor.name);
+    }
+    table
+}
+
+/// The stand-in holds the shapes read from the real Turbo header, outermost
+/// first: the header's own `[2560, 3840]` for `cap_embedder.1.weight` is
+/// ggml's innermost-first order.
+#[test]
+fn the_z_image_stand_in_holds_the_tensors_the_rule_reads() {
+    let table = StandIn::ZImageTurboQ8.table();
+    assert_eq!(table.format, WeightsFormat::Gguf);
+    assert_eq!(table.architecture, None);
+    assert_eq!(shape(&table, "cap_embedder.0.weight"), [2560]);
+    assert_eq!(shape(&table, "cap_embedder.1.weight"), [3840, 2560]);
+    assert_eq!(shape(&table, "x_embedder.weight"), [3840, 64]);
+    assert_eq!(shape(&table, "final_layer.linear.weight"), [64, 3840]);
+}
+
+/// Z-Image Turbo is Z-Image as the file names its tensors, and under either
+/// prefix stable-diffusion.cpp strips.
+#[test]
+fn a_z_image_turbo_table_is_z_image() {
+    let table = StandIn::ZImageTurboQ8.table();
+    assert_eq!(ImageFamily::sniff(&table), Some(ImageFamily::ZImage));
+    for prefix in ["model.diffusion_model.", "diffusion_model."] {
+        assert_eq!(
+            ImageFamily::sniff(&prefixed(&table, prefix)),
+            Some(ImageFamily::ZImage),
+            "{prefix}"
+        );
+    }
+    assert_eq!(ImageFamily::sniff(&prefixed(&table, "transformer.")), None);
+}
+
+/// Z-Image L2P keeps Z-Image's names and shapes and adds a local decoder
+/// that draws pixels with no VAE: stable-diffusion.cpp loads it as another
+/// model, and so it is no family here, whichever prefix it is written under.
+#[test]
+fn a_z_image_l2p_table_is_not_z_image() {
+    let turbo = StandIn::ZImageTurboQ8.table();
+    let l2p = with(&turbo, "local_decoder.out_conv.weight", &[3, 64, 3, 3]);
+    assert_eq!(ImageFamily::sniff(&l2p), None);
+    assert_eq!(
+        ImageFamily::sniff(&prefixed(&l2p, "model.diffusion_model.")),
+        None
+    );
+    // As L2P really is: 16 by 16 patches of RGB pixels, 768 input features.
+    let pixels = reshaped(&l2p, "x_embedder.weight", &[3840, 768]);
+    assert_eq!(ImageFamily::sniff(&pixels), None);
+}
+
+/// Ming Image has Z-Image's caption embedder and a connector in its text
+/// encoder; stable-diffusion.cpp loads it as Ming Image.
+#[test]
+fn a_ming_image_table_is_not_z_image() {
+    let ming = with(
+        &StandIn::ZImageTurboQ8.table(),
+        "text_encoders.llm.connector.layers.0.self_attn.q_proj.weight",
+        &[2560, 2560],
+    );
+    assert_eq!(ImageFamily::sniff(&ming), None);
+}
+
+/// The caption embedder's name alone is not Z-Image: the patch embedder
+/// must take the Flux.1 VAE's 16 channels in 2 by 2 patches, and the caption
+/// embedder Qwen3 4B's 2560 features, or the recipe's companions do not fit.
+#[test]
+fn a_cap_embedder_of_other_shapes_is_not_z_image() {
+    let turbo = StandIn::ZImageTurboQ8.table();
+    for (what, table) in [
+        (
+            "32 latent channels",
+            reshaped(&turbo, "x_embedder.weight", &[3840, 128]),
+        ),
+        ("no patch embedder", without_prefix(&turbo, "x_embedder.")),
+        (
+            "a 4096-wide text encoder",
+            reshaped(&turbo, "cap_embedder.1.weight", &[3840, 4096]),
+        ),
+        (
+            "no caption projection",
+            without_prefix(&turbo, "cap_embedder.1."),
+        ),
+        ("no caption norm", without_prefix(&turbo, "cap_embedder.0.")),
+        (
+            "the caption norm under a longer name",
+            renamed(&turbo, "cap_embedder.0.weight", "foo.cap_embedder.0.weight"),
+        ),
+    ] {
+        assert_eq!(ImageFamily::sniff(&table), None, "{what}");
+    }
+}
+
+/// No measured family's file is Z-Image, and a Z-Image table is none of
+/// them: the families share no tensor a rule reads.
+#[test]
+fn z_image_and_the_measured_families_do_not_overlap() {
+    for (golden, family) in [
+        (Golden::FluxSchnellQ8, ImageFamily::Flux1),
+        (Golden::QwenImage21Q8, ImageFamily::QwenImage21),
+        (Golden::SdxlBase, ImageFamily::Sdxl),
+    ] {
+        let table = golden.table();
+        assert_eq!(ImageFamily::sniff(&table), Some(family), "{golden:?}");
+        for name in [
+            "cap_embedder.0.weight",
+            "cap_embedder.1.weight",
+            "x_embedder.weight",
+        ] {
+            assert!(table.get(name).is_none(), "{golden:?} holds no {name}");
+            assert!(
+                table
+                    .get(&format!("model.diffusion_model.{name}"))
+                    .is_none(),
+                "{golden:?} holds no {name}"
+            );
+        }
+    }
+    let turbo = StandIn::ZImageTurboQ8.table();
+    for name in [
+        "txt_in.text_norm.weight",
+        "double_blocks.0.img_attn.qkv.weight",
+        "single_blocks.0.linear1.weight",
+        "input_blocks.0.0.weight",
+        "img_in.weight",
+        "txt_in.weight",
+    ] {
+        assert!(turbo.get(name).is_none(), "{name}");
+    }
+    assert_eq!(ImageFamily::sniff(&StandIn::Qwen34bQ8.table()), None);
+}
+
+/// Z-Image decodes with the Flux.1 VAE and no other.
+#[test]
+fn z_image_takes_the_flux_vae_and_not_qwen_images() {
+    assert_eq!(
+        ComponentRole::Vae.fits(ImageFamily::ZImage, &Golden::FluxVae.table()),
+        Ok(())
+    );
+    let expected = Err(
+        "a Flux.1 VAE: decoder.conv_in.weight with 16 input channels, and encoder.conv_in.weight",
+    );
+    assert_eq!(
+        ComponentRole::Vae.fits(ImageFamily::ZImage, &Golden::QwenImage21Vae.table()),
+        expected
+    );
+    assert_eq!(
+        ComponentRole::Vae.fits(ImageFamily::ZImage, &StandIn::Qwen34bQ8.table()),
+        expected
+    );
+}
+
+/// Z-Image's text encoder is Qwen3 4B, 2560 wide; Qwen-Image 2.1's is
+/// Qwen3-VL 8B, 4096 wide. Neither passes for the other, and each refusal
+/// names what its family needs.
+#[test]
+fn z_image_takes_qwen3_4b_and_qwen_image_takes_qwen3_vl() {
+    let small = StandIn::Qwen34bQ8.table();
+    let large = Golden::Qwen3Vl8bQ8.table();
+    let z_needs = Err("a Qwen3 4B GGUF: architecture qwen3, token_embd.weight of width 2560");
+    assert_eq!(ComponentRole::Llm.fits(ImageFamily::ZImage, &small), Ok(()));
+    assert_eq!(
+        ComponentRole::Llm.fits(ImageFamily::ZImage, &large),
+        z_needs
+    );
+    assert_eq!(
+        ComponentRole::Llm.fits(ImageFamily::QwenImage21, &small),
+        Err("a Qwen3-VL 8B GGUF: architecture qwen3vl, token_embd.weight of width 4096")
+    );
+
+    // Each part of the rule alone: the width, the architecture, the format.
+    let wide = reshaped(&small, "token_embd.weight", &[151_936, 4096]);
+    assert_eq!(ComponentRole::Llm.fits(ImageFamily::ZImage, &wide), z_needs);
+    let mut vision = small.clone();
+    vision.architecture = Some("qwen3vl".to_owned());
+    assert_eq!(
+        ComponentRole::Llm.fits(ImageFamily::ZImage, &vision),
+        z_needs
+    );
+    let mut safetensors = small;
+    safetensors.format = WeightsFormat::Safetensors;
+    assert_eq!(
+        ComponentRole::Llm.fits(ImageFamily::ZImage, &safetensors),
+        z_needs
+    );
+}
+
 // ── Role fits ───────────────────────────────────────────────────────────────
 
 #[test]
 fn every_recipe_component_fits_its_role() {
-    let golden = |role, family| match (role, family) {
-        (ComponentRole::Vae, ImageFamily::Flux1) => Golden::FluxVae,
-        (ComponentRole::ClipL, _) => Golden::ClipL,
-        (ComponentRole::T5xxl, _) => Golden::T5xxl,
-        (ComponentRole::Vae, ImageFamily::QwenImage21) => Golden::QwenImage21Vae,
-        (ComponentRole::Llm, _) => Golden::Qwen3Vl8bQ8,
-        other => panic!("no golden for {other:?}"),
+    let file = |role, family| match (role, family) {
+        (ComponentRole::Vae, ImageFamily::Flux1 | ImageFamily::ZImage) => Golden::FluxVae.table(),
+        (ComponentRole::ClipL, _) => Golden::ClipL.table(),
+        (ComponentRole::T5xxl, _) => Golden::T5xxl.table(),
+        (ComponentRole::Vae, ImageFamily::QwenImage21) => Golden::QwenImage21Vae.table(),
+        (ComponentRole::Llm, ImageFamily::QwenImage21) => Golden::Qwen3Vl8bQ8.table(),
+        (ComponentRole::Llm, ImageFamily::ZImage) => StandIn::Qwen34bQ8.table(),
+        other => panic!("no file for {other:?}"),
     };
     let mut checked = 0;
     for family in ImageFamily::ALL {
         for spec in family.recipe().components {
-            let table = golden(spec.role, family).table();
+            let table = file(spec.role, family);
             assert_eq!(
                 spec.role.fits(family, &table),
                 Ok(()),
@@ -344,7 +538,7 @@ fn every_recipe_component_fits_its_role() {
             checked += 1;
         }
     }
-    assert_eq!(checked, 5);
+    assert_eq!(checked, 7);
 }
 
 #[test]
@@ -540,6 +734,14 @@ fn a_role_outside_the_recipe_is_refused() {
         ComponentRole::Vae.fits(ImageFamily::Sdxl, &Golden::FluxVae.table()),
         refused
     );
+    assert_eq!(
+        ComponentRole::ClipL.fits(ImageFamily::ZImage, &Golden::ClipL.table()),
+        refused
+    );
+    assert_eq!(
+        ComponentRole::T5xxl.fits(ImageFamily::ZImage, &Golden::T5xxl.table()),
+        refused
+    );
 }
 
 // ── Names and the recipe table ──────────────────────────────────────────────
@@ -553,11 +755,11 @@ fn names_round_trip_through_serde_from_str_and_display() {
     }
     assert_eq!(
         ImageFamily::ALL.map(ImageFamily::as_str),
-        ["qwen-image-2.1", "flux1", "sdxl"]
+        ["qwen-image-2.1", "flux1", "sdxl", "z-image"]
     );
     assert_eq!(
         ImageFamily::ALL.map(ImageFamily::label),
-        ["Qwen-Image 2.1", "Flux.1", "SDXL"]
+        ["Qwen-Image 2.1", "Flux.1", "SDXL", "Z-Image"]
     );
     for role in ComponentRole::ALL {
         let wire = serde_json::to_string(&role).unwrap();
@@ -572,6 +774,11 @@ fn names_round_trip_through_serde_from_str_and_display() {
         ComponentRole::ALL.map(ComponentRole::label),
         ["VAE", "CLIP-L", "T5-XXL", "LLM"]
     );
+    let unknown = "zimage".parse::<ImageFamily>().unwrap_err();
+    assert_eq!(
+        unknown.to_string(),
+        "unknown image family \"zimage\"; expected one of flux1, sdxl, qwen-image-2.1, z-image"
+    );
     let unknown = "clip".parse::<ComponentRole>().unwrap_err();
     assert_eq!(
         unknown.to_string(),
@@ -585,7 +792,7 @@ fn the_recipes_are_the_measured_ones() {
     assert_eq!(flux.placement, Placement::DiffusionOnly);
     assert_eq!(
         (flux.steps, flux.sampler, flux.flash_attention),
-        (4, "euler", false)
+        (4, "euler", FlashAttention::Off)
     );
     assert_eq!(
         flux.size,
@@ -600,10 +807,14 @@ fn the_recipes_are_the_measured_ones() {
     assert_eq!(sdxl.placement, Placement::AllInOne);
     assert!(sdxl.components.is_empty());
     assert_eq!((sdxl.steps, sdxl.sampler), (20, "euler_a"));
+    assert_eq!(sdxl.flash_attention, FlashAttention::Off);
+    assert_eq!(FlashAttention::Off.flag(), None);
+    assert_eq!(FlashAttention::Everywhere.flag(), Some("--fa"));
+    assert_eq!(FlashAttention::DiffusionOnly.flag(), Some("--diffusion-fa"));
     let qwen = ImageFamily::QwenImage21.recipe();
     assert_eq!(
         (qwen.steps, qwen.sampler, qwen.flash_attention),
-        (20, "euler", true)
+        (20, "euler", FlashAttention::Everywhere)
     );
     assert_eq!(qwen.size.step, 32);
     let roles = |r: &Recipe| r.components.iter().map(|c| c.role).collect::<Vec<_>>();
@@ -618,7 +829,42 @@ fn the_recipes_are_the_measured_ones() {
     assert_eq!(roles(qwen), [ComponentRole::Vae, ComponentRole::Llm]);
 }
 
-/// Each family's compute margin is its measured 1024x1024 VAE decode
+/// Z-Image's recipe is stable-diffusion.cpp's guide for Z-Image Turbo, not a
+/// measurement: 8 steps at guidance 1.0, the Flux.1 VAE and Qwen3 4B.
+#[test]
+fn the_z_image_recipe_is_turbos() {
+    let z = ImageFamily::ZImage.recipe();
+    assert_eq!(z.placement, Placement::DiffusionOnly);
+    assert_eq!(
+        (z.steps, z.cfg, z.sampler, z.flash_attention),
+        (8, 1.0, "euler", FlashAttention::DiffusionOnly)
+    );
+    assert_eq!(
+        z.size,
+        SizeRule {
+            step: 16,
+            min: 256,
+            max: 1536,
+            default_side: 1024,
+        }
+    );
+    assert_eq!(
+        z.components,
+        [
+            ImageFamily::Flux1.recipe().components[0],
+            ComponentSpec {
+                role: ComponentRole::Llm,
+                repo: "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+                path: "Qwen3-4B-Instruct-2507-Q8_0.gguf",
+                size: 4_280_405_600,
+            },
+        ]
+    );
+    assert_eq!(z.components[0].role, ComponentRole::Vae);
+    assert_eq!(z.components[0].path, "ae.safetensors");
+}
+
+/// Each measured family's compute margin is its measured 1024x1024 VAE decode
 /// buffer rounded up to a whole GiB.
 #[test]
 fn each_family_reserves_its_decode_buffer_rounded_up() {
@@ -631,9 +877,22 @@ fn each_family_reserves_its_decode_buffer_rounded_up() {
     );
 }
 
+/// Z-Image's margin is the reading of 2026-10-11: its largest buffer was the
+/// Flux.1 VAE's decode, 6,657 MB, as Flux.1's was; its own diffusion buffer
+/// was 690 MB with flash attention in the diffusion model.
+#[test]
+fn z_image_reserves_what_its_vae_decode_was_read_to_take() {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    assert_eq!(ImageFamily::ZImage.recipe().compute_margin_bytes, 7 * GIB);
+    assert_eq!(
+        ImageFamily::ZImage.recipe().compute_margin_bytes,
+        ImageFamily::Flux1.recipe().compute_margin_bytes
+    );
+}
+
 /// Every family draws 1024x1024 by default, and refuses a size off its step
-/// or outside its bounds; Qwen-Image 2.1 steps by 32 where the others step
-/// by 64.
+/// or outside its bounds; Qwen-Image 2.1 steps by 32 and Z-Image by 16 where
+/// the others step by 64.
 #[test]
 fn a_size_is_checked_against_its_familys_rule() {
     for family in ImageFamily::ALL {
@@ -650,6 +909,10 @@ fn a_size_is_checked_against_its_familys_rule() {
     let flux = ImageFamily::Flux1.recipe().size;
     assert!(qwen.check(1056, 1024), "Qwen-Image 2.1 steps by 32");
     assert!(!flux.check(1056, 1024), "Flux.1 steps by 64");
+    let z = ImageFamily::ZImage.recipe().size;
+    assert!(z.check(1040, 1024), "Z-Image steps by 16");
+    assert!(!qwen.check(1040, 1024), "Qwen-Image 2.1 steps by 32");
+    assert!(!z.check(1032, 1024), "8 is under Z-Image's step");
     assert_eq!(
         flux.to_string(),
         "each side a multiple of 64 from 256 to 1536"
