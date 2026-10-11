@@ -801,7 +801,7 @@ a request is refused with: `model_not_found` for a model no longer there,
 the reason. A chosen model is never swapped for the default.
 
 A paired device may read the desktop's chats at `/v1/chats` and carry one on
-with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content, images?, thinking?, draw?}`: the
+with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content, images?, thinking?, draw?, image_model?}`: the
 desktop runs the reply from its own record and saves both rows, marked with
 the device's name, and its own page and every paired device can follow that
 run. A chat that stored its model runs on that model by its id, the one its
