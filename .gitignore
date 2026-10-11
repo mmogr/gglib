@@ -5,6 +5,8 @@
 /src-tauri/target
 /src-tauri/WixTools
 /src-tauri/gen
+# The CLI release.yml copies in for the app to carry (tauri.sidecar.conf.json)
+/src-tauri/binaries
 
 # Icon source files (generated icons are tracked)
 /app-icon.png

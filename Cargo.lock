@@ -2280,6 +2280,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-autostart",
  "tauri-plugin-dialog",
+ "tempfile",
  "tokio",
  "tracing",
 ]

@@ -14,9 +14,11 @@
 
 1. **Connect to the daemon** — `daemon::Daemon::connect_or_launch` probes
    `127.0.0.1:{daemon_port()}` for `{"service": "gglib-daemon"}`. If nothing
-   answers it launches `gglib daemon run` detached, preferring a binary
-   beside the app bundle and falling back to `$PATH`; with no binary at all it
-   hosts the daemon composition in-process, behind the daemon's own file lock.
+   answers it launches `gglib daemon run` detached from the CLI beside the
+   app, which every release puts there (`daemon/launch.rs` says how), and
+   never one found on `$PATH`; with none beside it, as in a checkout whose
+   CLI is not built, it hosts the daemon composition in-process, behind the
+   daemon's own file lock.
    This blocks for up to 15 seconds on a cold start.
 
    A failure here is **not fatal**. The app comes up with a disconnected
