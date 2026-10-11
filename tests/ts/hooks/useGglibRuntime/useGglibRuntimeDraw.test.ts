@@ -116,6 +116,18 @@ describe('useGglibRuntime, a send with Draw pressed', () => {
     await waitFor(() => expect(hook.result.current.isRunning).toBe(false));
     expect(accepted).toHaveBeenCalledTimes(1);
   });
+
+  it('says the image model the caller chose beside draw, as its id, and tells the caller which chat took the turn', async () => {
+    const accepted = vi.fn();
+    const hook = await mount({ ...local, draw: () => ({ accepted, imageModel: 7 }) });
+
+    const body = await exchange(hook, 'draw a lighthouse');
+
+    expect(body).toMatchObject({ draw: true, image_model: 7 });
+    expect(accepted).toHaveBeenCalledTimes(1);
+    expect(accepted).toHaveBeenCalledWith(body.conversation_id);
+    expect(typeof body.conversation_id).toBe('number');
+  });
 });
 
 describe('useGglibRuntime, a far turn with Draw pressed', () => {
@@ -152,6 +164,16 @@ describe('useGglibRuntime, a far turn with Draw pressed', () => {
     expect(Object.keys(untouched as object)).toEqual(['content']);
     // Nothing went to this machine's own run route.
     expect(daemons.here.requests).toEqual([]);
+  });
+
+  it('says the image model the caller chose beside draw, as its id, and tells the caller which chat took the turn', async () => {
+    const accepted = vi.fn();
+    const hook = await mount({ conversationId: 1, source: 'far', draw: () => ({ accepted, imageModel: 7 }) });
+
+    send(hook, 'draw a lighthouse');
+    await waitFor(() => expect(accepted).toHaveBeenCalledWith(1));
+    const turn = daemons.farRequests.filter((r) => r.method === 'PUT').at(-1)!.body;
+    expect(turn).toEqual({ content: 'draw a lighthouse', draw: true, image_model: 7 });
   });
 });
 

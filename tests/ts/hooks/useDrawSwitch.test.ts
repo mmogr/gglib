@@ -27,6 +27,7 @@ import {
   type DrawSwitchChat,
 } from '../../../src/hooks/useDrawSwitch';
 import type { DrawingAvailability } from '../../../src/types/generated/DrawingAvailability';
+import type { ImageModelRow } from '../../../src/types/generated/ImageModelRow';
 import type { ModelRef } from '../../../src/types/generated/ModelRef';
 
 const CAN: DrawingAvailability = { available: true, model: 'flux-schnell', models: [] };
@@ -257,5 +258,108 @@ describe('useDrawSwitch, armed for one message', () => {
 
     expect(hook.result.current.armed).toBe(false);
     await waitFor(() => expect(hook.result.current.forSend()).toBeUndefined());
+  });
+
+  describe('the image model', () => {
+    const row = (id: number, name: string): ImageModelRow => ({
+      id,
+      name,
+      family: 'flux1',
+      complete: true,
+      missing: [],
+      default: false,
+      resident: false,
+    });
+    const TWO: DrawingAvailability = { ...CAN, models: [row(3, 'flux-schnell'), row(7, 'qwen-image')] };
+    /** An answer from a machine from before the list: no `models` key at all. */
+    const OLDER = { available: true, model: 'flux-schnell' } as unknown as DrawingAvailability;
+
+    it('lists the machine\'s image models, and none for a machine whose answer has no list', async () => {
+      answers.here = TWO;
+      answers.far = OLDER;
+      const hook = await mounted(here(1));
+      expect(hook.result.current.models.map((each) => each.id)).toEqual([3, 7]);
+      expect(hook.result.current.picked).toBeNull();
+
+      hook.rerender({ conversationId: 1, far: true });
+      await waitFor(() => expect(hook.result.current.available).toBe(true));
+      expect(hook.result.current.models).toEqual([]);
+    });
+
+    it('a pick asks the machine about that model, presses the button, and is what the send says', async () => {
+      answers.here = TWO;
+      const hook = await mounted(here(1));
+
+      act(() => hook.result.current.pick(7));
+      await waitFor(() => expect(asked.at(-1)).toBe('/api/images/drawing?image_model=7'));
+      await waitFor(() => expect(hook.result.current.armed).toBe(true));
+      expect(hook.result.current.picked).toBe(7);
+      expect(hook.result.current.forSend()?.imageModel).toBe(7);
+
+      // Kept after its turn: said again the next time the button is pressed.
+      act(() => hook.result.current.forSend()?.accepted(1));
+      expect(hook.result.current.forSend()).toBeUndefined();
+      expect(hook.result.current.picked).toBe(7);
+      act(() => hook.result.current.toggle());
+      expect(hook.result.current.forSend()?.imageModel).toBe(7);
+
+      act(() => hook.result.current.pick(null));
+      await waitFor(() => expect(asked.at(-1)).toBe('/api/images/drawing'));
+      await waitFor(() => expect(hook.result.current.armed).toBe(true));
+      expect(hook.result.current.forSend()).toBeDefined();
+      expect(hook.result.current.forSend()?.imageModel).toBeUndefined();
+    });
+
+    it('asks the far machine about a far chat\'s pick, and holds each chat\'s pick apart', async () => {
+      answers.far = TWO;
+      const hook = await mounted({ conversationId: 4, far: true });
+      act(() => hook.result.current.pick(7));
+      await waitFor(() => expect(asked.at(-1)).toBe('/api/remote/images/drawing?image_model=7'));
+
+      hook.rerender({ conversationId: 5, far: true });
+      expect(hook.result.current.picked).toBeNull();
+      hook.rerender(here(4));
+      expect(hook.result.current.picked).toBeNull();
+      hook.rerender({ conversationId: 4, far: true });
+      expect(hook.result.current.picked).toBe(7);
+    });
+
+    it('a machine whose answer has no list is never sent a pick, though one is held', async () => {
+      answers.far = OLDER;
+      const hook = await mounted({ conversationId: 4, far: true });
+
+      act(() => hook.result.current.pick(7));
+      await waitFor(() => expect(hook.result.current.armed).toBe(true));
+      const said = hook.result.current.forSend();
+      expect(said).toBeDefined();
+      expect(said?.imageModel).toBeUndefined();
+    });
+
+    it('a pick the machine refuses greys the button with its reason, keeps the list, and is not sent', async () => {
+      answers.here = TWO;
+      const hook = await mounted(here(1));
+      answers.here = { available: false, code: 'image_model_incomplete', reason: 'qwen-image lacks its llm', models: TWO.models };
+
+      act(() => hook.result.current.pick(7));
+      await waitFor(() => expect(hook.result.current.reason).toBe('qwen-image lacks its llm'));
+      expect(hook.result.current.available).toBe(false);
+      expect(hook.result.current.armed).toBe(false);
+      expect(hook.result.current.forSend()).toBeUndefined();
+      expect(hook.result.current.models.map((each) => each.id)).toEqual([3, 7]);
+      expect(hook.result.current.picked).toBe(7);
+    });
+
+    it('a pick made before the chat has an id moves to the chat its first accepted turn makes', async () => {
+      answers.here = TWO;
+      const hook = await mounted(here(null));
+      act(() => hook.result.current.pick(7));
+      await waitFor(() => expect(hook.result.current.armed).toBe(true));
+
+      act(() => hook.result.current.forSend()?.accepted(42));
+      hook.rerender(here(42));
+      expect(hook.result.current.picked).toBe(7);
+      hook.rerender(here(null));
+      expect(hook.result.current.picked).toBeNull();
+    });
   });
 });

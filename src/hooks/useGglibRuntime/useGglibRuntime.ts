@@ -90,7 +90,7 @@ export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpen
   /** What a send says of the chat's Thinking choice, asked at each send: nothing unless it changed, and `accepted` is called once its turn is. */
   thinking?: () => { said: RunRequestOptions['thinking']; accepted: () => void } | undefined;
   /** Whether a send says `draw`, asked at each send: something only while the Draw button is armed, and `accepted` is called once its turn is. */
-  draw?: () => { accepted: () => void } | undefined;
+  draw?: () => { accepted: (conversationId?: number) => void; imageModel?: number } | undefined;
 }
 
 export interface UseGglibRuntimeReturn {
@@ -151,10 +151,10 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     const thinking = options.thinking?.();
     const runId = mintRunId();
     const draw = options.draw?.();
-    const body = runBodyFor(target, { conversationId: cid, messages: [], answerSaved: true, thinking: thinking?.said, draw: draw !== undefined });
+    const body = runBodyFor(target, { conversationId: cid, messages: [], answerSaved: true, thinking: thinking?.said, draw: draw !== undefined, imageModel: draw?.imageModel });
     await getTransport().startAgentRun(runId, body);
     thinking?.accepted();
-    draw?.accepted();
+    draw?.accepted(cid);
     if (stopAskedRef.current) await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
     return runId;
   };
@@ -219,14 +219,14 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       const history = [...base, attached.length > 0 ? { ...asked, attachments: attached } : asked];
       const thinking = options.thinking?.();
       const draw = options.draw?.();
-      const request = far ? null : runBodyFor(target, { conversationId: cid, messages: history, thinking: thinking?.said, draw: draw !== undefined });
+      const request = far ? null : runBodyFor(target, { conversationId: cid, messages: history, thinking: thinking?.said, draw: draw !== undefined, imageModel: draw?.imageModel });
       messagesRef.current = history;
       setMessages(history);
       const runId = mintRunId();
       if (request) await getTransport().startAgentRun(runId, request);
-      else await getTransport().addFarTurn(cid, runId, turnText(content), attached.map((image) => image.id), thinking?.said, draw !== undefined);
+      else await getTransport().addFarTurn(cid, runId, turnText(content), attached.map((image) => image.id), thinking?.said, draw !== undefined, draw?.imageModel);
       thinking?.accepted();
-      draw?.accepted();
+      draw?.accepted(cid);
       if (stopAskedRef.current) await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
       if (!signal.aborted) await reader.follow(cid, runId, signal);
     } catch (error) {

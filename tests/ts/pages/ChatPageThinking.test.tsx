@@ -624,12 +624,12 @@ describe('ChatPage, the Thinking switch on a far chat', () => {
     const user = userEvent.setup();
     await openFar(user);
 
-    expect(await farExchange(user, 'one')).toEqual([1, expect.stringMatching(/^chat-/), 'one', [], undefined, false]);
+    expect(await farExchange(user, 'one')).toEqual([1, expect.stringMatching(/^chat-/), 'one', [], undefined, false, undefined]);
     await user.click(chip()!);
     expect(chip()).toHaveAttribute('aria-pressed', 'false');
-    expect(await farExchange(user, 'two')).toEqual([1, expect.stringMatching(/^chat-/), 'two', [], 'off', false]);
+    expect(await farExchange(user, 'two')).toEqual([1, expect.stringMatching(/^chat-/), 'two', [], 'off', false, undefined]);
     expect(chip()).toHaveAttribute('aria-pressed', 'false');
-    expect(await farExchange(user, 'three')).toEqual([1, expect.stringMatching(/^chat-/), 'three', [], undefined, false]);
+    expect(await farExchange(user, 'three')).toEqual([1, expect.stringMatching(/^chat-/), 'three', [], undefined, false, undefined]);
     // No run was started on this machine for any of them.
     expect(started).toEqual([]);
   });

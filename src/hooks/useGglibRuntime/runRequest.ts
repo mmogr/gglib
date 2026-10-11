@@ -79,6 +79,12 @@ export interface RunRequestOptions {
    * drawing tool, whatever its `tool_filter` says.
    */
   draw?: boolean;
+  /**
+   * The image model chosen for this chat's pictures, by its id. In the body
+   * only on a run that says `draw`, and on every one that does while the
+   * choice stands: the daemon remembers nothing of it.
+   */
+  imageModel?: number;
   /** `false` exposes no tools (an empty `tool_filter`); otherwise permissive. */
   supportsToolCalls?: boolean | null;
   /**
@@ -140,6 +146,7 @@ export function buildRunRequest(options: RunRequestOptions): AgentRunRequest {
     reasoning_budget_tokens: options.reasoning?.reasoning_budget_tokens ?? null,
     ...(options.thinking !== undefined && { thinking: options.thinking }),
     ...(options.draw === true && { draw: true }),
+    ...(options.draw === true && options.imageModel !== undefined && { image_model: options.imageModel }),
   };
 }
 
@@ -154,7 +161,7 @@ export type RunTarget = Pick<RunRequestOptions, 'selectedServerPort' | 'supports
  */
 export function runBodyFor(
   target: RunTarget,
-  run: Pick<RunRequestOptions, 'conversationId' | 'messages' | 'answerSaved' | 'thinking' | 'draw'>,
+  run: Pick<RunRequestOptions, 'conversationId' | 'messages' | 'answerSaved' | 'thinking' | 'draw' | 'imageModel'>,
 ): AgentRunRequest {
   return buildRunRequest({
     ...target,
