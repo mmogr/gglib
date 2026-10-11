@@ -393,8 +393,11 @@ a tool its tunnel did not open, and on a dialect model `tool_choice:
 "none"` comes back as tool markup in the text.
 
 What this leaves. A chat a phone keeps itself sends no call and no tool message, so its
-requests get none until ggchat sends them. No model is sent the picture
-itself (ADR 0016).
+requests get none until ggchat sends them. ~~No model is sent the picture
+itself (ADR 0016).~~
+Retracted on 2026-10-11: a model that reads images is shown the most recent
+picture, as decision 19 says
+([log-0018](log-0018.md#2026-10-11-a-model-that-reads-images-is-shown-the-most-recent-drawn-picture)).
 
 ### 15. A render nobody waits for is stopped, not followed
 
@@ -588,6 +591,104 @@ What this leaves. Whether a Z-Image file written with
 diffusers' tensor names, which sd.cpp renames as it loads, is known: its
 patch embedder has another name, and gglib would answer no family.
 
+### 19. A model that reads images is shown the most recent drawn picture
+
+A picture is saved on its tool row, and a tool message is sent to the model
+as text, so a model with a projector could not see the picture it had just
+had drawn: "what is in the corner?" was answered from the prompt it wrote.
+ADR 0016's decision 5 said a tool's image is never sent to a model. The
+owner reversed that for this one case on 2026-10-11
+([log-0018](log-0018.md#2026-10-11-a-model-that-reads-images-is-shown-the-most-recent-drawn-picture)).
+
+The rule is one function, `request_pipeline::shown_picture`, over the
+messages a request is built from:
+
+1. Only for a chat model that reads images (a projector linked). Any other
+   model is sent what it was sent before, the note of decision 14 included,
+   and is never refused for a picture a tool made: the refusal for a model
+   with no projector counts the images a person attached, and no others.
+2. Only a picture `builtin:generate_image` made: the images of a `tool`
+   message that answers a call of that exact name. Another tool's image, an
+   MCP server's `generate_image` among them, is shown to no model.
+3. Only the most recent one, the last image of the last such message. An
+   older picture stays as its tool message's sentence.
+4. It goes on the first `user` message after that tool message, which is the
+   message the person sent next. That is the same message on every later
+   request. When another picture is drawn, the newer one goes on the message
+   after it and the older message is sent as it was written.
+5. Nothing is added while no `user` message follows the picture, and nothing
+   on the closing request of a run sent with Draw, whose last message is
+   decision 9's instruction and not the person's.
+
+The message that carries it is sent as parts: one line of text, the picture
+as an `image_url` part, then the person's own text and images as they would
+have been sent. The line is `request_pipeline::DRAWN_PICTURE_LINE`: "(Added
+automatically, not written by the person: the image below is the most recent
+picture the drawing tool made in this conversation, the same one the person
+sees. You can see it now, although the tool's answer said you could not. The
+person's own message follows.)" It says whose the image is, so the model
+does not take it for something the person attached, and it takes back the
+tool's "the user can see it, you cannot" for this picture. The tool's answer
+is sent as it was saved and no row is rewritten; the note of decision 14 is
+unchanged, and is true with the picture shown or not.
+
+A `user` message, because an OpenAI `tool` message is text and whether
+llama-server reads an image part in one is unverified (ADR 0016's second
+reading, not taken). A message of its own straight after the tool's answer
+was set aside: a `user` message between a tool's answer and the reply to it
+is a shape no template here has been sent.
+
+**Where.** The completion adapter (`gglib-runtime`,
+`ports_impl/llm_completion/images.rs`) asks the rule for each request it
+builds, reads the picture from the attachment store and writes the two
+parts into that request's body. It is the one place an image's id becomes
+its bytes, and every agent loop sends through it: the page's run, a device's
+turn on a hub chat, a chat run with builtins and `gglib chat`. The messages
+themselves are not changed, so the picture is in no row, no event and no
+history a run returns. For the ids to reach the adapter, `AgentMessage::Tool`
+carries `images`: a saved tool row resumes with them, the loop keeps a
+result's, and the page sends them on its tool entries. Whether the model
+reads images is `ModelContext::image_input`, from the catalogue row; a model
+the catalogue does not hold is shown nothing.
+
+**Seeing is not drawing.** A request that shows the picture offers the
+image tool exactly when decision 9 says so, which is only a message sent
+with Draw. Asked for a change without Draw, the model can now say what to
+change from the picture itself, and decision 14's note still has it tell
+the person to press Draw.
+
+**What it costs.** The picture is priced as any image a model reads
+(ADR 0015): 1,024 prompt tokens for 1024 by 1024, at most 4,096. The request
+pipeline's budget counts it, since it measures the body; the agent loop's
+own pruning estimate and the doors' check of a request's images before a run
+do not, since they count the messages, which do not hold it. The adapter
+counts it against the request's 16 MiB after the person's own images and
+leaves it out, with its line, when it would not fit. A picture that is no
+longer stored or cannot be read is left out the same way. Neither ends the
+request. The message that carries the picture is new on the request that
+first carries it, so showing it changes nothing earlier in the prompt. Once
+another picture is drawn the older message is sent without its picture,
+from that run's closing request on, and that one request reads the prompt
+again from the older message where it would otherwise have read only what
+the run added. The message after it reads the whole prompt again in any
+case, as decision 14's note returns to the front.
+
+What this leaves.
+
+- A run on the paired machine's model is shown the picture when that
+  machine's answer to the model lookup says `imageInput`; its proxy receives
+  an ordinary image part. `gglib chat --remote` knows nothing of its model
+  and shows none.
+- A chat a phone keeps itself has no tool row here. Its client holds the
+  picture and shows it by sending it as an image part of its own message
+  ([docs/clients.md](../clients.md#images)); gglib then adds nothing.
+- The plain proxy path adds no picture to any request.
+- **No real model has been shown a drawn picture through gglib.** Every
+  test reads the request a scripted server received. How a chat template
+  renders two text parts around an image in a `user` message that follows a
+  tool exchange, and whether a model takes the line as the person's words,
+  are unread.
+
 ## Consequences
 
 - A person presses Draw, sends a message, and sees a picture arrive in the
@@ -643,6 +744,16 @@ patch embedder has another name, and gglib would answer no family.
   73.47 s of sampling and the source build at 82.06 s, under load. A repeat
   of both on a quiet machine in which the asset samples slower than the
   source build makes the source build the macOS default.
+- **The shown picture misleads the model.** Decision 19 has been sent to no
+  real model
+  ([log-0018, 2026-10-11](log-0018.md#2026-10-11-a-model-that-reads-images-is-shown-the-most-recent-drawn-picture)).
+  Send the saved shape of a draw turn and then "what is in the corner?" to a
+  vision model's llama-server, three seeds, with the line and the picture
+  on that message. If a reply treats the line as the person's words, or says
+  it cannot see the picture, change the line's wording first. If
+  llama-server refuses the message or the model describes nothing of the
+  picture, take ADR 0016's reading of an image part in the `tool` message;
+  if that is read, the picture moves there and the line goes.
 
 ## Out of scope
 
@@ -663,8 +774,11 @@ patch embedder has another name, and gglib would answer no family.
   have not drawn at all. Every test runs a scripted job or a stand-in
   server.
 - MLX, ComfyUI, img2img, edits, LoRA, ControlNet, upscaling and video.
-- A tool's image sent back to the model as context
-  ([ADR 0016](0016-a-tools-image-is-an-attachment-on-its-tool-row.md)).
+- ~~A tool's image sent back to the model as context
+  ([ADR 0016](0016-a-tools-image-is-an-attachment-on-its-tool-row.md)).~~
+  Retracted on 2026-10-11 for the drawing tool's most recent picture
+  (decision 19). Any other tool's image, and an older drawn picture, are
+  still sent to no model.
 - ~~Families beyond Flux.1, SDXL and Qwen-Image 2.1, and the variants of those
   sd.cpp loads differently.~~ Flux dev reads as Flux.1 and takes schnell's
   steps; none was measured.

@@ -107,6 +107,35 @@ Which models read images is in `/v1/models`: such a model's entry carries
   reads the bytes at `GET /v1/attachments/{id}`. Through the `/mcp` gateway
   nothing is stored: a server's image item comes back as an MCP image item,
   with its base64 `data` and `mimeType`.
+- **A model that reads images is shown the most recent drawn picture.** For
+  a chat gglib holds (the page's, a hub chat, `gglib chat`) gglib does it:
+  on each request, the first `user` message after the drawing tool's answer
+  is sent as three kinds of part, in this order: one text part with the line
+  below, the picture as an `image_url` part, then the person's own text and
+  images. Only the newest picture of the chat, only one that
+  `builtin:generate_image` made, and only for a model whose entry in
+  `GET /v1/models` lists `vision`; any other model is sent the chat without
+  it and is not refused. Nothing is saved: the rows, the events and the
+  history are as they were.
+
+  ```text
+  (Added automatically, not written by the person: the image below is the most recent picture the drawing tool made in this conversation, the same one the person sees. You can see it now, although the tool's answer said you could not. The person's own message follows.)
+  ```
+
+  A client that keeps its own chats holds the picture itself, and gglib has
+  no id to read. Such a client shows the picture by sending it, on
+  `POST /v1/chat/completions` and on a chat run with builtins alike, as an
+  ordinary image of its own message: in the first `user` message after the
+  draw's `tool` message, a text part with the line above, an `image_url`
+  part with the picture as a base64 data URL, then the message's own parts.
+  The same message carries it on every later request, until a newer picture
+  is drawn; then that picture goes on the message after it and the older
+  message is sent as text again. gglib treats the part as any image a person
+  attached: it counts toward the request's 16 MiB, and a model that does not
+  list `vision` is refused `model_cannot_read_images`, so the client sends
+  it only to one that does. gglib adds no second picture: it finds one to
+  add only on a tool message that names its images by id, which an OpenAI
+  `tool` message does not.
 
 ## Thinking
 

@@ -8,6 +8,13 @@
 - **Superseded by:** nothing
 - **Log:** none
 
+> **Amended 2026-10-11.** The title's "never sent to the model" no longer
+> holds for one image: the most recent picture the drawing tool made is shown
+> to a chat model that reads images
+> ([ADR 0018, decision 19](0018-gglib-draws-with-stable-diffusion-cpp.md#19-a-model-that-reads-images-is-shown-the-most-recent-drawn-picture)).
+> It holds for every other tool's image, and for every model with no
+> projector. Decision 5 and the kill criterion below carry the same note.
+
 ## Context
 
 An MCP tool can return an image. A `tools/call` result is a `content` list
@@ -101,13 +108,25 @@ characters and its length, and a reply to another request only by its id
 
 ### 5. A tool's image is never sent to the model
 
-`AgentMessage::Tool` is unchanged, a tool call id and the text, and has no
+~~`AgentMessage::Tool` is unchanged, a tool call id and the text, and has no
 field for an image. A resumed tool row drops its images
 (`a_tool_message_resumes_without_its_images`), and the completion body for
 a saved tool row with images, with their bytes in the store, is the body
 without them (`a_saved_tool_rows_images_never_reach_the_model`,
-`crates/gglib-runtime/src/ports_impl/llm_completion/images_tests.rs`). The
+`crates/gglib-runtime/src/ports_impl/llm_completion/images_tests.rs`).~~ The
 model reads the sentence that names the image.
+
+Amended on 2026-10-11, for one case: the most recent picture the drawing
+tool made (`builtin:generate_image`) is shown to a chat model that reads
+images, on the message the person sends after it
+([ADR 0018, decision 19](0018-gglib-draws-with-stable-diffusion-cpp.md#19-a-model-that-reads-images-is-shown-the-most-recent-drawn-picture)).
+For that, `AgentMessage::Tool` gained `images`, the ids of the images the
+tool made, and a resumed tool row keeps them
+(`a_tool_message_resumes_with_the_ids_of_its_images`). What still holds: a
+tool message is sent as its text and its call id, whatever the model reads
+(`a_saved_tool_rows_images_are_never_sent_with_the_row`); a model with no
+projector is sent no tool's image at all; and an image made by any other
+tool, an MCP server's among them, is sent to no model.
 
 ### 6. `/mcp` answers protocol image items
 
@@ -196,6 +215,13 @@ still a success.
   answer that describes the image is the reading; whether llama-server reads
   an image there is unverified. Both together reverse decision 5; either
   alone does not.
+
+  Amended on 2026-10-11: decision 5 was reopened for the drawing tool's
+  picture by the owner's decision, with neither reading taken
+  ([ADR 0018, decision 19](0018-gglib-draws-with-stable-diffusion-cpp.md#19-a-model-that-reads-images-is-shown-the-most-recent-drawn-picture)).
+  The picture goes in a `user` message, so it does not rest on the second
+  reading, which is still not taken. Both readings still stand for any other
+  tool's image.
 
 ## Out of scope
 
