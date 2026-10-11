@@ -59,6 +59,14 @@ pub struct ModelContext {
     /// nothing: unknown never gates. Nothing consumes this yet; the effort
     /// gate arrives in a later PR of the arc.
     pub template_caps: Option<TemplateCaps>,
+    /// Whether the model reads images: it is linked to a projector.
+    ///
+    /// `false` on a passthrough context, where nobody knows. It decides one
+    /// thing: whether a request is shown the most recent drawn picture
+    /// ([`super::shown_picture`]), which an unknown model is not. It refuses
+    /// nothing; the doors refuse an image for a model that cannot read one
+    /// from the catalogue row itself.
+    pub image_input: bool,
     /// Whether this context came from an actual catalog row.
     ///
     /// `false` for [`passthrough`](Self::passthrough) — the fallback for
@@ -123,6 +131,7 @@ impl From<&ModelSummary> for ModelContext {
             defaults_origin: summary.defaults_origin,
             context_length: summary.context_length,
             template_caps: summary.template_caps.clone(),
+            image_input: summary.image_input,
             catalog_resolved: true,
         }
     }

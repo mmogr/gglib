@@ -853,6 +853,14 @@ Cancelling the run while the picture is drawn (`POST
 picture loads the image model again. The run ends `cancelled`, as any
 cancelled run does.
 
+On the turns after a picture, a chat model that reads images is shown the
+most recent one: the desktop sends it with the message that followed it,
+from its own rows, on every later turn of that chat. A device sends nothing
+for this, and a turn is never refused `model_cannot_read_images` for a
+picture a tool made; a model with no projector reads the chat without it
+([Images](clients.md#images)). Seeing the picture does not let the model
+draw: a turn without `"draw": true` is still offered no image tool.
+
 A turn that draws may also say which of the desktop's image models draws
 it: `"image_model": <id>`, the `id` of a row in `GET /v1/images/drawing`'s
 `models`. It goes with `"draw": true`; a turn that says it without is

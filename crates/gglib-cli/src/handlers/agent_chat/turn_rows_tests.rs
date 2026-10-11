@@ -212,6 +212,7 @@ fn pruned(given: Vec<AgentMessage>) -> Vec<AgentMessage> {
     let result = AgentMessage::Tool {
         tool_call_id: "c1".to_owned(),
         content: "fn main() {}".to_owned(),
+        images: Vec::new(),
     };
     let asked = given.into_iter().next_back();
     let added = [

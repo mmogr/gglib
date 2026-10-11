@@ -21,6 +21,9 @@ import type { AttachmentInfo } from "./AttachmentInfo";
  * A tool that makes images stores them and lists them in [`Self::images`].
  * They are saved on the result's tool row and shown to the user; the model
  * reads only [`Self::content`], so the tool names each image there in words.
+ * One image is shown to a model later, apart from its result: the drawing
+ * tool's most recent picture, to a model that reads images
+ * ([`crate::request_pipeline::shown_picture`]).
  */
 export type ToolResult = { 
 /**

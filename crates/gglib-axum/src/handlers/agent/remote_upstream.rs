@@ -257,7 +257,13 @@ pub(super) async fn remote(far: &FarProxy, model: &ModelRef) -> Result<Upstream,
         // comes back to the adapter, which by then has no way to ask who was
         // asked.
         far_machine: Some(far.far_machine()),
-        model_context: ModelContext::passthrough(),
+        // Nothing of that machine's row is known here but what its lookup
+        // answered. Whether the model reads images is, and decides one
+        // thing: whether it is shown the most recent drawn picture.
+        model_context: ModelContext {
+            image_input: detail.image_input,
+            ..ModelContext::passthrough()
+        },
         // Nothing stored here applies to that machine's model, this
         // machine's agentic switch included: the ceiling stays on.
         layers: SamplingLayers {

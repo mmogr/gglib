@@ -66,6 +66,7 @@ fn build_long_history(n_pairs: u32) -> Vec<AgentMessage> {
         messages.push(AgentMessage::Tool {
             tool_call_id: format!("old_tc{i}"),
             content: format!("old result {i}: {}", "x".repeat(40)),
+            images: Vec::new(),
         });
     }
     messages

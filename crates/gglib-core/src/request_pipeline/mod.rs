@@ -4,6 +4,7 @@ pub(crate) mod chat_runtime;
 pub(crate) mod constrain;
 pub(crate) mod content;
 pub(crate) mod drawn_note;
+pub(crate) mod drawn_picture;
 pub(crate) mod effort_gate;
 pub mod explain;
 pub(crate) mod image_size;
@@ -29,6 +30,7 @@ pub use drawn_note::{
     DRAW_THEN_SAY, DRAW_THEN_SAY_FAILED, DRAW_TOOL_NAME, DRAWN_NOTE, DREW_HEAD, DREW_SEEN,
     PLACEMENT as DRAWN_NOTE_PLACEMENT, Placement as DrawnNotePlacement,
 };
+pub use drawn_picture::{DRAWN_PICTURE_LINE, ShownPicture, shown_picture};
 pub use effort_gate::{SuppressedEffort, suppress_stored_effort, suppress_unsupported_effort};
 pub use explain::explain_stored;
 pub use image_size::{

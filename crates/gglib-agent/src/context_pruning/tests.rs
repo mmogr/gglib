@@ -38,6 +38,7 @@ fn tool_result(call_id: &str, content: &str) -> AgentMessage {
     AgentMessage::Tool {
         tool_call_id: call_id.to_owned(),
         content: content.to_owned(),
+        images: Vec::new(),
     }
 }
 

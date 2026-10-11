@@ -320,6 +320,7 @@ pub(super) fn model_context_for(model: &Model) -> ModelContext {
         defaults_origin: model.defaults_origin,
         context_length: model.context_length,
         template_caps: model.template_caps.clone(),
+        image_input: model.image_input(),
         catalog_resolved: true,
     }
 }

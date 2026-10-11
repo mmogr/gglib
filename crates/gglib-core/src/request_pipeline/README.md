@@ -72,6 +72,11 @@ does either.
   that tool, gains [`DRAWN_NOTE`] at the front of its prompt, so a model
   offered no tool does not deny the picture. Its module docs hold the exact
   rule. [`DRAW_TOOL_NAME`] is the tool's name for every crate that spells it.
+- [`drawn_picture`] — [`shown_picture()`], which is no stage: over the
+  agent's messages, not a body, it says which drawn picture a model that
+  reads images is shown (the most recent one) and on which message (the
+  first `user` one after it), and [`DRAWN_PICTURE_LINE`] is the text that
+  goes before it. The completion adapter asks it as it builds a request.
 - [`truncation`] — [`truncate_history()`], stage 3: trimming stale tool results
   and oversized assistant turns to fit the model's context budget, and
   rejecting the request when it cannot be made to fit.

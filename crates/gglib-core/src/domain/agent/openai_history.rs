@@ -287,10 +287,7 @@ pub fn into_agent_messages(
                 OpenAiTurn::Tool {
                     tool_call_id,
                     content,
-                } => AgentMessage::Tool {
-                    tool_call_id,
-                    content,
-                },
+                } => AgentMessage::tool(tool_call_id, content),
             })
         })
         .collect()

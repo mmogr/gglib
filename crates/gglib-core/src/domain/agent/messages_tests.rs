@@ -82,6 +82,7 @@ fn serde_tag_matches_wire_format() {
     let msg = AgentMessage::Tool {
         tool_call_id: "call_1".into(),
         content: "ok".into(),
+        images: Vec::new(),
     };
     let json = serde_json::to_value(&msg).unwrap();
     assert_eq!(json["role"], "tool");

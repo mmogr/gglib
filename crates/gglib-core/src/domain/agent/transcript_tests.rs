@@ -176,6 +176,7 @@ fn tool_message_maps_correctly() {
     let msg = AgentMessage::Tool {
         tool_call_id: "call_1".into(),
         content: "file contents here".into(),
+        images: Vec::new(),
     };
     let out = to_new_message(&msg, 42);
     assert_eq!(out.role, MessageRole::Tool);
@@ -185,7 +186,7 @@ fn tool_message_maps_correctly() {
 }
 
 #[test]
-fn a_user_message_keeps_its_images_and_no_other_row_has_any() {
+fn a_user_and_a_tool_message_keep_their_images_and_no_other_row_has_any() {
     use crate::domain::AttachmentId;
 
     let images = vec![AttachmentId::of(b"b"), AttachmentId::of(b"a")];
@@ -194,6 +195,12 @@ fn a_user_message_keeps_its_images_and_no_other_row_has_any() {
         images: images.clone(),
     };
     assert_eq!(to_new_message(&msg, 42).images, images);
+    let made = AgentMessage::Tool {
+        tool_call_id: "call_1".into(),
+        content: "t".into(),
+        images: images.clone(),
+    };
+    assert_eq!(to_new_message(&made, 42).images, images);
 
     let others = [
         AgentMessage::System {
@@ -208,6 +215,7 @@ fn a_user_message_keeps_its_images_and_no_other_row_has_any() {
         AgentMessage::Tool {
             tool_call_id: "call_1".into(),
             content: "t".into(),
+            images: Vec::new(),
         },
     ];
     for other in &others {

@@ -17,7 +17,8 @@ use super::messages::AgentMessage;
 /// - `System` / `User` → role + content, no metadata; a user message's
 ///   images go with it, by id
 /// - `Assistant` → text in `content`, tool calls (if any) in `metadata.tool_calls`
-/// - `Tool` → result in `content`, `tool_call_id` in `metadata`
+/// - `Tool` → result in `content`, `tool_call_id` in `metadata`; the images
+///   the tool made go with it, by id
 pub fn to_new_message(msg: &AgentMessage, conversation_id: i64) -> NewMessage {
     match msg {
         AgentMessage::System { content } => NewMessage {
@@ -53,12 +54,13 @@ pub fn to_new_message(msg: &AgentMessage, conversation_id: i64) -> NewMessage {
         AgentMessage::Tool {
             tool_call_id,
             content,
+            images,
         } => NewMessage {
             conversation_id,
             role: MessageRole::Tool,
             content: content.clone(),
             metadata: Some(serde_json::json!({ "tool_call_id": tool_call_id })),
-            images: Vec::new(),
+            images: images.clone(),
         },
     }
 }

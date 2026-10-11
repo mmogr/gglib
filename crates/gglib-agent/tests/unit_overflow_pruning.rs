@@ -51,6 +51,7 @@ async fn a_refused_batch_over_budget_is_pruned_and_counted() {
         history.push(AgentMessage::Tool {
             tool_call_id: id,
             content: "x".repeat(60),
+            images: Vec::new(),
         });
     }
     history.push(AgentMessage::user("And now?"));

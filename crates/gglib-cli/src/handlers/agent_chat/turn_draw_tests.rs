@@ -29,7 +29,7 @@ const DRAWS: &str = concat!(
 );
 
 /// One reply in words.
-const WORDS: &str = concat!(
+pub(super) const WORDS: &str = concat!(
     "data: {\"choices\":[{\"delta\":{\"content\":\"The driver was not there.\"}}]}\n\n",
     "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
     "data: [DONE]\n\n",
@@ -43,7 +43,7 @@ fn llama() -> (u16, Arc<Mutex<Vec<Value>>>) {
 
 /// A llama-server on loopback that answers one request with each of
 /// `replies`, in order, and keeps each request's body.
-fn answering(replies: &'static [&'static str]) -> (u16, Arc<Mutex<Vec<Value>>>) {
+pub(super) fn answering(replies: &'static [&'static str]) -> (u16, Arc<Mutex<Vec<Value>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
     let port = listener.local_addr().expect("its address").port();
     let bodies = Arc::new(Mutex::new(Vec::new()));
@@ -71,7 +71,7 @@ fn answering(replies: &'static [&'static str]) -> (u16, Arc<Mutex<Vec<Value>>>) 
 /// A driver that can draw and whose render fails, so the tool answers the
 /// call with an error.
 #[derive(Debug)]
-struct DrawsNothing;
+pub(super) struct DrawsNothing;
 
 #[async_trait::async_trait]
 impl ImageGenerationPort for DrawsNothing {
@@ -215,6 +215,7 @@ async fn the_message_after_a_drawn_picture_tells_the_model_and_no_row_or_later_c
         AgentMessage::Tool {
             tool_call_id: "c1".to_owned(),
             content: answer.to_owned(),
+            images: Vec::new(),
         },
         AgentMessage::Assistant {
             content: AssistantContent {

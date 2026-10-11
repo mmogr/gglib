@@ -226,6 +226,7 @@ async fn a_run_over_budget_reports_the_count_on_its_turn_usage() {
         history.push(AgentMessage::Tool {
             tool_call_id: format!("old{i}"),
             content: "x".repeat(60),
+            images: Vec::new(),
         });
     }
     history.push(AgentMessage::User {

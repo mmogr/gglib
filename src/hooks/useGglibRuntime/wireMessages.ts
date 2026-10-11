@@ -12,7 +12,7 @@
 import { appLogger } from '../../services/platform';
 import type { AgentMessage } from '../../types/generated/AgentMessage';
 import type { ToolCall } from '../../types/generated/ToolCall';
-import { extractParts, type GglibMessage, type GglibToolCallPart, type TextPart } from '../../types/messages';
+import { extractParts, toolCallImages, type GglibMessage, type GglibToolCallPart, type TextPart } from '../../types/messages';
 
 // ---------------------------------------------------------------------------
 // Type guards
@@ -104,8 +104,12 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentMessage[] 
         ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
       });
 
-      // Emit a `tool` entry for each completed call.
+      // Emit a `tool` entry for each completed call. The images the tool
+      // made go with it by id, never their bytes: they are not sent to the
+      // model with the entry, and tell the backend which drawn picture a
+      // model that reads images is shown.
       for (const p of completedToolCallParts) {
+        const images = toolCallImages(p).map(image => image.id);
         result.push({
           role: 'tool',
           tool_call_id: p.toolCallId,
@@ -113,6 +117,7 @@ export function convertToWireMessages(messages: GglibMessage[]): AgentMessage[] 
             typeof p.result === 'string'
               ? p.result
               : JSON.stringify(p.result),
+          ...(images.length > 0 && { images }),
         });
       }
     }

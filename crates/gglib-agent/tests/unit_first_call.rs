@@ -181,6 +181,46 @@ async fn the_closing_request_ends_with_the_instruction_and_the_history_never_hol
     assert!(!logged.contains(SAY_DRAWN), "{logged}");
 }
 
+/// The picture a tool made stays on its tool message, by id, in the closing
+/// request and in the history the run returns: what a later request shows
+/// the model is decided from it. A result with no image leaves none.
+#[tokio::test]
+async fn the_tools_message_keeps_the_id_of_the_picture_it_made() {
+    use gglib_core::domain::{AttachmentId, AttachmentInfo};
+
+    let picture = AttachmentInfo {
+        id: AttachmentId::of(b"a fox"),
+        mime: "image/png".to_owned(),
+        width: 1024,
+        height: 1024,
+    };
+    let made = |history: &[AgentMessage]| match &history[2] {
+        AgentMessage::Tool { images, .. } => images.clone(),
+        other => panic!("not the tool's message: {other:?}"),
+    };
+    let replies = || {
+        Arc::new(
+            MockLlmPort::new()
+                .push(reply_calling(&[("c1", DRAW, "a fox")]))
+                .push(MockLlmResponse::text("A red fox in the snow.")),
+        )
+    };
+
+    let llm = replies();
+    let drew = MockToolBehavior::Pictured {
+        content: "Drew 1 image.".to_owned(),
+        image: picture.clone(),
+    };
+    let (ended, _, _) = run_drawing(&llm, Some(first_call(DRAW)), drew).await;
+    let kept = vec![picture.id];
+    assert_eq!(made(&llm.messages_received().await[1]), kept);
+    assert_eq!(made(&ended.unwrap().history), kept);
+
+    let llm = replies();
+    let (ended, _, _) = run(&llm, Some(first_call(DRAW))).await;
+    assert!(made(&ended.unwrap().history).is_empty());
+}
+
 /// After a tool that answered with an error, the closing request ends with
 /// the composer's other instruction, and the history holds neither.
 #[tokio::test]

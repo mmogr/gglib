@@ -149,27 +149,34 @@ fn a_user_message_resumes_with_its_images_by_id_in_order() {
     assert!(images.is_empty());
 }
 
-/// A tool row's images are the user's to see: the message it resumes as,
-/// which is what the model is sent, is the same with them as without.
+/// A tool row resumes with the ids of the images it made, in order, beside
+/// the text the model is sent. The ids are sent to no model with the tool
+/// message; they say which drawn picture a model that reads images is shown
+/// (`request_pipeline::shown_picture`).
 #[test]
-fn a_tool_message_resumes_without_its_images() {
+fn a_tool_message_resumes_with_the_ids_of_its_images() {
     let tool_row = |images| Message {
         metadata: Some(serde_json::json!({ "tool_call_id": "c1" })),
         ..message(MessageRole::Tool, images)
     };
-    let with = tool_row(vec![image(b"a", 1)]).to_agent_message();
+    let (a, b) = (image(b"a", 1), image(b"b", 2));
+    let with = tool_row(vec![b.clone(), a.clone()]).to_agent_message();
     let without = tool_row(Vec::new()).to_agent_message();
 
     assert_eq!(
-        serde_json::to_value(&with).unwrap(),
-        serde_json::to_value(&without).unwrap()
+        serde_json::to_value(&without).unwrap(),
+        serde_json::json!({ "role": "tool", "tool_call_id": "c1", "content": "look" }),
+        "a tool message with no images is the JSON it always was"
     );
+    assert!(!with.has_images(), "a tool's images refuse no model");
     let AgentMessage::Tool {
         tool_call_id,
         content,
+        images,
     } = with
     else {
         panic!("expected AgentMessage::Tool");
     };
     assert_eq!((tool_call_id.as_str(), content.as_str()), ("c1", "look"));
+    assert_eq!(images, [b.id, a.id]);
 }
