@@ -771,12 +771,34 @@ small preview frame, whose `size` is the size asked for, not its own), and
 one `image_generation.completed` per image, which also names the image
 model that drew it in gglib's own `model` key. Drawing uses the desktop and
 changes nothing on it, like a chat. `GET /v1/images/drawing` answers whether
-the desktop can draw, `{available, code?, reason?, model?}`, with the reason
-when it cannot (no image runtime, no image model, several and no default).
-That answer is always a 200: its `code`, `drawing_unavailable`, is the code
-a request to draw would be refused with, not an error of the question;
-a device asks it before offering a Draw button, and a desktop too old to
-have the route answers 404, which means it cannot.
+the desktop can draw, `{available, code?, reason?, model?, model_id?, models}`,
+with the reason when it cannot (no image runtime, no image model, several
+and no default). That answer is always a 200: its `code`,
+`drawing_unavailable`, is the code a request to draw would be refused with,
+not an error of the question; a device asks it before offering a Draw
+button, and a desktop too old to have the route answers 404, which means it
+cannot.
+
+`models` lists the desktop's image models, so a device can let a person pick
+one: `{id, name, family, complete, missing, default, resident}` each, by
+family and then by name. `complete` is false for a model with no file for a
+role its family needs, and `missing` names those roles; such a model cannot
+be chosen. `default` marks the one a request that names no model draws with,
+on at most one row. `resident` is true for one loaded now: choosing
+another means a load before the picture starts. The list is
+there also when `available` is false, and is empty when the desktop has no
+image runtime. A desktop from before the list sends no `models` key, and a
+device offers no choice there. A device already reads each image model's
+name and id from `/v1/models`; this adds its family, whether its files are
+complete and which roles are not, which is the default and which is loaded.
+No path is sent, and nothing about a model that chats.
+
+`GET /v1/images/drawing?image_model=<id>` asks about one of those models, by
+its `id`: the answer is whether a message drawn with it would be accepted,
+`model` and `model_id` naming it when so. When not, `code` is the code such
+a request is refused with: `model_not_found` for a model no longer there,
+`not_an_image_model`, or `image_model_incomplete` with the missing roles in
+the reason. A chosen model is never swapped for the default.
 
 A paired device may read the desktop's chats at `/v1/chats` and carry one on
 with `PUT /v1/runs/{id}?kind=agent` and `{conversation_id, content, images?, thinking?, draw?}`: the
