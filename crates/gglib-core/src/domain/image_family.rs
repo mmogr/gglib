@@ -18,7 +18,7 @@ use super::tensor_table::{TensorTable, WeightsFormat};
 
 /// A family of image models gglib can draw with.
 ///
-/// On the wire `flux1`, `sdxl` and `qwen-image-2.1`.
+/// On the wire `flux1`, `sdxl`, `qwen-image-2.1` and `z-image`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum ImageFamily {
@@ -31,6 +31,10 @@ pub enum ImageFamily {
     /// Qwen-Image 2.1.
     #[serde(rename = "qwen-image-2.1")]
     QwenImage21,
+    /// Z-Image (Turbo; a base Z-Image file is expected to sniff the same,
+    /// and none was read).
+    #[serde(rename = "z-image")]
+    ZImage,
 }
 
 /// A file a family draws with beside its main weights, named by the
@@ -60,6 +64,30 @@ pub enum Placement {
     /// The main file holds the diffusion model only, loaded with
     /// `--diffusion-model`; the rest are components.
     DiffusionOnly,
+}
+
+/// Where a recipe turns flash attention on, by the stable-diffusion.cpp flag
+/// that does it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FlashAttention {
+    /// Nowhere: no flag.
+    Off,
+    /// In the diffusion model, the text encoders and the VAE (`--fa`).
+    Everywhere,
+    /// In the diffusion model alone (`--diffusion-fa`).
+    DiffusionOnly,
+}
+
+impl FlashAttention {
+    /// The flag `sd-server` is given, or none.
+    #[must_use]
+    pub const fn flag(self) -> Option<&'static str> {
+        match self {
+            Self::Off => None,
+            Self::Everywhere => Some("--fa"),
+            Self::DiffusionOnly => Some("--diffusion-fa"),
+        }
+    }
 }
 
 /// Where a component is fetched from by default.
@@ -127,15 +155,16 @@ pub struct Recipe {
     pub cfg: f32,
     /// The stable-diffusion.cpp sampler name.
     pub sampler: &'static str,
-    /// Whether flash attention is on.
-    pub flash_attention: bool,
+    /// Where flash attention is on.
+    pub flash_attention: FlashAttention,
     /// The sizes it draws.
     pub size: SizeRule,
     /// The memory a render needs beyond the files, for placing the model:
     /// the largest compute buffer of a 1024x1024 render, which is the VAE
     /// decode, rounded up to a whole GiB. Measured on Metal on 2026-10-09
     /// (`runs/*.log` in the image-gen handoff): Flux.1 6,657 MB, SDXL
-    /// 7,680 MB, Qwen-Image 2.1 8,650 MB.
+    /// 7,680 MB, Qwen-Image 2.1 8,650 MB. Z-Image's is not measured: see
+    /// [`Z_IMAGE_MARGIN_ESTIMATE`].
     pub compute_margin_bytes: u64,
 }
 
@@ -152,18 +181,21 @@ const fn sizes(step: u32) -> SizeRule {
     }
 }
 
-/// Flux.1: sources checked against the Hub on 2026-10-09. The VAE comes from
+/// The Flux.1 VAE, which Z-Image decodes with too: from
 /// `unsloth/FLUX.1-schnell`, an ungated copy byte-identical to the gated
 /// `black-forest-labs` file the measurement used.
+const FLUX_VAE: ComponentSpec = ComponentSpec {
+    role: ComponentRole::Vae,
+    repo: "unsloth/FLUX.1-schnell",
+    path: "ae.safetensors",
+    size: 335_304_388,
+};
+
+/// Flux.1: sources checked against the Hub on 2026-10-09.
 const FLUX1: Recipe = Recipe {
     placement: Placement::DiffusionOnly,
     components: &[
-        ComponentSpec {
-            role: ComponentRole::Vae,
-            repo: "unsloth/FLUX.1-schnell",
-            path: "ae.safetensors",
-            size: 335_304_388,
-        },
+        FLUX_VAE,
         ComponentSpec {
             role: ComponentRole::ClipL,
             repo: "comfyanonymous/flux_text_encoders",
@@ -180,7 +212,7 @@ const FLUX1: Recipe = Recipe {
     steps: 4,
     cfg: 1.0,
     sampler: "euler",
-    flash_attention: false,
+    flash_attention: FlashAttention::Off,
     size: sizes(64),
     compute_margin_bytes: 7 * GIB,
 };
@@ -193,7 +225,7 @@ const SDXL: Recipe = Recipe {
     steps: 20,
     cfg: 7.0,
     sampler: "euler_a",
-    flash_attention: false,
+    flash_attention: FlashAttention::Off,
     size: sizes(64),
     compute_margin_bytes: 8 * GIB,
 };
@@ -218,32 +250,74 @@ const QWEN_IMAGE_21: Recipe = Recipe {
     steps: 20,
     cfg: 6.0,
     sampler: "euler",
-    flash_attention: true,
+    flash_attention: FlashAttention::Everywhere,
     size: sizes(32),
     compute_margin_bytes: 9 * GIB,
 };
 
+/// Z-Image's compute margin, an ESTIMATE: no Z-Image render has been
+/// measured. It decodes with the Flux.1 VAE, whose decode of a 1024x1024
+/// image was the largest buffer of the Flux.1 runs at 6,657 MB (7 GiB
+/// rounded up); one GiB is added because the buffer of Z-Image's own
+/// diffusion model (3840 wide against Flux.1's 3072, whose buffer was
+/// 2,361 MB) is unread. To be replaced by the largest `compute buffer size`
+/// line of a real 1024x1024 render.
+const Z_IMAGE_MARGIN_ESTIMATE: u64 = 8 * GIB;
+
+/// Z-Image, with Z-Image Turbo's settings: 8 steps at guidance 1.0, as
+/// stable-diffusion.cpp's guide (`docs/z_image.md`) runs Turbo. A base
+/// Z-Image file is the same family and is drawn with these, though the guide
+/// runs it at guidance 5.0 and its default steps. `euler` is
+/// stable-diffusion.cpp's default sampler for a diffusion transformer; the
+/// guide names none. Flash attention is on in the diffusion model alone
+/// (`--diffusion-fa`), as the guide runs it: `--fa` would turn it on in the
+/// Flux.1 VAE too, where it has never run. Sizes step by 16: the VAE's 8
+/// times the model's patch of 2.
+/// The text encoder is Qwen3 4B, sizes checked against the Hub on
+/// 2026-10-11. Nothing here has drawn a picture yet.
+const Z_IMAGE: Recipe = Recipe {
+    placement: Placement::DiffusionOnly,
+    components: &[
+        FLUX_VAE,
+        ComponentSpec {
+            role: ComponentRole::Llm,
+            repo: "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+            path: "Qwen3-4B-Instruct-2507-Q8_0.gguf",
+            size: 4_280_405_600,
+        },
+    ],
+    steps: 8,
+    cfg: 1.0,
+    sampler: "euler",
+    flash_attention: FlashAttention::DiffusionOnly,
+    size: sizes(16),
+    compute_margin_bytes: Z_IMAGE_MARGIN_ESTIMATE,
+};
+
 impl ImageFamily {
     /// Every family, in sniff order.
-    pub const ALL: [Self; 3] = [Self::QwenImage21, Self::Flux1, Self::Sdxl];
+    pub const ALL: [Self; 4] = [Self::QwenImage21, Self::Flux1, Self::Sdxl, Self::ZImage];
 
-    /// The name a person reads: "Flux.1", "SDXL", "Qwen-Image 2.1".
+    /// The name a person reads: "Flux.1", "SDXL", "Qwen-Image 2.1",
+    /// "Z-Image".
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
             Self::Flux1 => "Flux.1",
             Self::Sdxl => "SDXL",
             Self::QwenImage21 => "Qwen-Image 2.1",
+            Self::ZImage => "Z-Image",
         }
     }
 
-    /// The wire name: `flux1`, `sdxl`, `qwen-image-2.1`.
+    /// The wire name: `flux1`, `sdxl`, `qwen-image-2.1`, `z-image`.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Flux1 => "flux1",
             Self::Sdxl => "sdxl",
             Self::QwenImage21 => "qwen-image-2.1",
+            Self::ZImage => "z-image",
         }
     }
 
@@ -254,6 +328,7 @@ impl ImageFamily {
             Self::Flux1 => &FLUX1,
             Self::Sdxl => &SDXL,
             Self::QwenImage21 => &QWEN_IMAGE_21,
+            Self::ZImage => &Z_IMAGE,
         }
     }
 
@@ -277,6 +352,13 @@ impl ImageFamily {
     ///   and `output_blocks.3.1.transformer_blocks.1.` (Vega and SSD-1B lack
     ///   the last two), and `input_blocks.0.0.weight` with 4 input channels
     ///   (9 is inpainting, 8 pix2pix).
+    /// - Z-Image: `cap_embedder.0.weight`, and neither
+    ///   `text_encoders.llm.connector.layers.0.self_attn.q_proj.weight` (Ming
+    ///   Image) nor `local_decoder.out_conv.weight` (Z-Image L2P, which draws
+    ///   pixels with no VAE). Two shapes its own loader sizes the model from
+    ///   are held to what the recipe's companions fit: `x_embedder.weight`
+    ///   with 64 input features (a patch of 2 by 2 over the Flux.1 VAE's 16
+    ///   channels) and `cap_embedder.1.weight` with 2560 (Qwen3 4B's width).
     #[must_use]
     pub fn sniff(table: &TensorTable) -> Option<Self> {
         let names = Normalised::of(table);
@@ -300,6 +382,14 @@ impl ImageFamily {
             && names.dim("input_blocks.0.0.weight", 1) == Some(4)
         {
             return Some(Self::Sdxl);
+        }
+        if names.has("cap_embedder.0.weight")
+            && !names.has("text_encoders.llm.connector.layers.0.self_attn.q_proj.weight")
+            && !names.has("local_decoder.out_conv.weight")
+            && names.dim("x_embedder.weight", 1) == Some(64)
+            && names.dim("cap_embedder.1.weight", 1) == Some(2560)
+        {
+            return Some(Self::ZImage);
         }
         None
     }
@@ -354,7 +444,7 @@ impl ComponentRole {
         let dim =
             |name: &str, axis: usize| table.get(name).and_then(|t| t.shape.get(axis).copied());
         let (fits, expected) = match (self, family) {
-            (Self::Vae, ImageFamily::Flux1) => (
+            (Self::Vae, ImageFamily::Flux1 | ImageFamily::ZImage) => (
                 dim("decoder.conv_in.weight", 1) == Some(16)
                     && table.get("encoder.conv_in.weight").is_some(),
                 "a Flux.1 VAE: decoder.conv_in.weight with 16 input channels, and encoder.conv_in.weight",
@@ -383,6 +473,12 @@ impl ComponentRole {
                     && table.architecture.as_deref() == Some("qwen3vl")
                     && dim("token_embd.weight", 1) == Some(4096),
                 "a Qwen3-VL 8B GGUF: architecture qwen3vl, token_embd.weight of width 4096",
+            ),
+            (Self::Llm, ImageFamily::ZImage) => (
+                table.format == WeightsFormat::Gguf
+                    && table.architecture.as_deref() == Some("qwen3")
+                    && dim("token_embd.weight", 1) == Some(2560),
+                "a Qwen3 4B GGUF: architecture qwen3, token_embd.weight of width 2560",
             ),
             _ => (false, "a role this family's recipe does not use"),
         };
@@ -464,7 +560,7 @@ impl FromStr for ImageFamily {
             .ok_or_else(|| UnknownName {
                 what: "image family",
                 given: s.to_owned(),
-                expected: "flux1, sdxl, qwen-image-2.1",
+                expected: "flux1, sdxl, qwen-image-2.1, z-image",
             })
     }
 }

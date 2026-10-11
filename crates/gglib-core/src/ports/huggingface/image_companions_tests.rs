@@ -4,12 +4,13 @@
 use std::path::Path;
 
 use super::*;
-use crate::domain::image_family_goldens::Golden;
+use crate::domain::image_family_goldens::{Golden, StandIn};
 use crate::ports::huggingface::fake_hub::{FakeHub, hub_file};
 use crate::ports::{GgufCapabilities, GgufMetadata, GgufParseError, TensorTable};
 
 /// Reads a head that is a measured file's name as that file's tensor table,
-/// and any other head as a chat model's, whose metadata runs past it.
+/// the Z-Image stand-in's name as its table, and any other head as a chat
+/// model's, whose metadata runs past it.
 pub(crate) struct HeadParser;
 
 /// The golden a head names, when it is one's file name.
@@ -39,6 +40,10 @@ impl GgufParserPort for HeadParser {
         unimplemented!("only heads are read here")
     }
     fn tensor_table_of_head(&self, head: &[u8]) -> Result<TensorTable, GgufParseError> {
+        let z_image = StandIn::ZImageTurboQ8;
+        if z_image.file_name().as_bytes() == head {
+            return Ok(z_image.table());
+        }
         golden_named(head).map(Golden::table).ok_or_else(|| {
             GgufParseError::Io("failed to fill whole buffer: the head ended".to_owned())
         })
@@ -179,6 +184,53 @@ async fn a_qwen_image_head_brings_its_vae_and_language_model() {
             (ComponentRole::Vae, "Comfy-Org/Qwen-Image-2.1"),
             (ComponentRole::Llm, "Qwen/Qwen3-VL-8B-Instruct-GGUF"),
         ]
+    );
+}
+
+/// Z-Image brings the Flux.1 VAE, the very file a Flux.1 download brings,
+/// and Qwen3 4B as its language model.
+#[tokio::test]
+async fn a_z_image_head_brings_the_flux_vae_and_qwen3_4b() {
+    let path = "z_image_turbo-Q8_0.gguf";
+    let hub = hub(path, path.as_bytes(), listed(ImageFamily::ZImage));
+
+    let (family, companions) = image_companions(
+        &hub,
+        &HeadParser,
+        "leejet/Z-Image-Turbo-GGUF",
+        &hub_file(path, 1, "w"),
+    )
+    .await
+    .unwrap()
+    .expect("an image model");
+
+    assert_eq!(family, ImageFamily::ZImage);
+    let found: Vec<_> = companions
+        .iter()
+        .map(|c| (c.role, c.repo.as_str(), c.file.path.as_str(), c.file.size))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (
+                ComponentRole::Vae,
+                "unsloth/FLUX.1-schnell",
+                "ae.safetensors",
+                335_304_388
+            ),
+            (
+                ComponentRole::Llm,
+                "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+                "Qwen3-4B-Instruct-2507-Q8_0.gguf",
+                4_280_405_600
+            ),
+        ]
+    );
+    let flux_vae = &listed(ImageFamily::Flux1)[0];
+    assert_eq!(
+        (companions[0].repo.as_str(), &companions[0].file.path),
+        (flux_vae.0.as_str(), &flux_vae.1.path),
+        "one file on disk serves both families"
     );
 }
 

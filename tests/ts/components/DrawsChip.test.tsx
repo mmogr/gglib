@@ -56,6 +56,12 @@ describe('the Draws chip', () => {
     expect(screen.getByText('Draws · SDXL')).toBeInTheDocument();
   });
 
+  it('names Z-Image by its label and not its wire name', () => {
+    header({ name: 'z-image-turbo', imageInput: false, imageFamily: 'z-image' });
+    expect(screen.getByText('Draws · Z-Image')).toBeInTheDocument();
+    expect(screen.queryByText(/z-image$/)).not.toBeInTheDocument();
+  });
+
   it("is not in the inspector's header for a model that chats", () => {
     header({ name: 'X', imageInput: false });
     expect(screen.getByRole('heading', { name: 'X' })).toBeInTheDocument();

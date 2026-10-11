@@ -218,6 +218,11 @@ fn table_of(family: ImageFamily) -> TensorTable {
             tensor("txt_in.text_norm.weight", &[4096]),
             tensor("img_in.weight", &[4096, 64]),
         ],
+        ImageFamily::ZImage => vec![
+            tensor("cap_embedder.0.weight", &[2560]),
+            tensor("cap_embedder.1.weight", &[3840, 2560]),
+            tensor("x_embedder.weight", &[3840, 64]),
+        ],
     };
     TensorTable {
         format: WeightsFormat::Gguf,

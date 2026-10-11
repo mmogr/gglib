@@ -148,8 +148,11 @@ on the paired machine — connected, away or not — without asking that machine
 anything; `list --remote` lists that machine's models by their ids there, and
 `inspect --remote` reads one of them.
 
-An image model (Flux.1, SDXL or Qwen-Image 2.1, known from its tensor names)
-draws with companion files beside its weights. `list` names its family in the
+An image model (Flux.1, SDXL, Qwen-Image 2.1 or Z-Image, known from its
+tensor names) draws with companion files beside its weights. Z-Image is drawn
+with Z-Image Turbo's settings, 8 steps at guidance 1.0: a base Z-Image file is
+expected to be known as the same family, and is then drawn with those too.
+`list` names its family in the
 `Draws` column, with the components it still needs; `inspect` names its family
 and each component, linked or missing. `add` and `update` link one with
 `--component <role>=<path>` (`vae`, `clip_l`, `t5xxl` or `llm`, repeatable)

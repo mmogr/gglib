@@ -40,7 +40,7 @@ infrastructure concerns (database, filesystem, etc.).
   safetensors file declares (`TensorTable`), which is all an image model's GGUF
   says about itself
 - `image_family` - An image model's family (`ImageFamily`: Flux.1, SDXL,
-  Qwen-Image 2.1), sniffed from its tensor names by stable-diffusion.cpp's
+  Qwen-Image 2.1, Z-Image), sniffed from its tensor names by stable-diffusion.cpp's
   rules; the files a family draws with beside its main weights
   (`ComponentRole`) and whether a file fits one; and each family's `Recipe`,
   the one table of its components' default sources and its drawing defaults.

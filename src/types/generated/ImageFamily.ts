@@ -3,6 +3,6 @@
 /**
  * A family of image models gglib can draw with.
  *
- * On the wire `flux1`, `sdxl` and `qwen-image-2.1`.
+ * On the wire `flux1`, `sdxl`, `qwen-image-2.1` and `z-image`.
  */
-export type ImageFamily = "flux1" | "sdxl" | "qwen-image-2.1";
+export type ImageFamily = "flux1" | "sdxl" | "qwen-image-2.1" | "z-image";
