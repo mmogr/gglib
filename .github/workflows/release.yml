@@ -1138,3 +1138,67 @@ jobs:
             fi
             cd ..
           done
+
+  # The gglib formula and gglib-gui cask, rendered from packaging/homebrew
+  # with the release's own SHA256SUMS and pushed to mmogr/homebrew-tap, so
+  # `brew install mmogr/tap/gglib` and `brew install --cask
+  # mmogr/tap/gglib-gui` work.
+  #
+  # The tap is shared: other projects' formulae and casks live there too, so
+  # this job writes only gglib's two files and leaves the rest alone.
+  #
+  # HOMEBREW_TAP_DEPLOY_KEY is the private half of a deploy key with write
+  # access on the tap repository. Until it is set this renders, then stops
+  # with a notice instead of failing the release.
+  homebrew:
+    name: Publish to the Homebrew tap
+    runs-on: ubuntu-24.04
+    needs: [check-version, publish-gate]
+    env:
+      VERSION: ${{ needs.check-version.outputs.new-version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # From the release, for the reason the `aur` job gives.
+      - name: Fetch SHA256SUMS
+        run: curl -fsSL -o SHA256SUMS "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/SHA256SUMS"
+
+      - name: Render the formula and cask
+        run: |
+          set -euo pipefail
+          scripts/render_homebrew.sh "$VERSION" SHA256SUMS tap
+          for f in tap/*/*.rb; do ruby -c "$f"; done
+
+      - name: Push to the tap
+        env:
+          HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$HOMEBREW_TAP_DEPLOY_KEY" ]; then
+            echo "::notice::HOMEBREW_TAP_DEPLOY_KEY is not set; the formula and cask were rendered but not pushed"
+            exit 0
+          fi
+
+          mkdir -p -m 700 ~/.ssh
+          printf '%s\n' "$HOMEBREW_TAP_DEPLOY_KEY" > ~/.ssh/tap
+          chmod 600 ~/.ssh/tap
+          # GitHub's published Ed25519 host key.
+          echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
+          git clone git@github.com:${{ github.repository_owner }}/homebrew-tap.git push-tap
+          mkdir -p push-tap/Formula push-tap/Casks
+          cp tap/Formula/*.rb push-tap/Formula/
+          cp tap/Casks/*.rb push-tap/Casks/
+          cd push-tap
+          git config user.name "mmogr"
+          git config user.email "172192206+mmogr@users.noreply.github.com"
+          git add Formula Casks
+          if git diff --cached --quiet; then
+            echo "The tap is already at $VERSION"
+          else
+            git commit -m "gglib $VERSION"
+            git push origin HEAD
+            echo "::notice::pushed gglib $VERSION to the tap"
+          fi

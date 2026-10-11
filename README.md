@@ -50,6 +50,13 @@ sudo apt update && sudo apt install gglib   # the desktop app is gg-lib-gui
 The repository carries stable releases only. Release candidates are on the
 [Releases page](https://github.com/mmogr/gglib/releases) as prereleases.
 
+### Homebrew (macOS on Apple silicon, Linux)
+
+```bash
+brew install mmogr/tap/gglib
+brew install --cask mmogr/tap/gglib-gui   # the desktop app, macOS only
+```
+
 ### Arch Linux (AUR)
 
 ```bash

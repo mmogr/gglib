@@ -66,6 +66,7 @@ deliberate growth is one row edited by hand.
 | `build_cli_deb.sh` | Packages the Linux CLI binary as a `.deb` | `release.yml` |
 | `build_apt_repo.sh` | Builds and signs the apt repository served at `/apt` on the Pages site | `release.yml` |
 | `render_aur.sh` | Fills the `packaging/aur` PKGBUILD templates with a release's version and checksums | `release.yml` |
+| `render_homebrew.sh` | Fills the `packaging/homebrew` formula and cask with a release's version and checksums | `release.yml` |
 | `lock_changes.py` | Lists what moved between two copies of a lockfile | `update-deps.yml` |
 | `llama_upstream.py` | Collects what a llama.cpp release changes for gglib, against the pinned one: the relevant upstream commits, the `--help` diff, a launch with the flags gglib emits, the release assets, the sampler defaults and the diff of each file an ADR cites. CONTRIBUTING's [The llama.cpp pin](../CONTRIBUTING.md#the-llamacpp-pin) has the routine | `llama-upstream.yml` |
 | `llama_upstream_verdict.py` | Reads the verdict on that evidence: whether gglib must change to move the pin, and what the change is. Claude reads it through the Claude Agent SDK with read-only tools, and the script writes the verdict, or the reason there is none | `llama-upstream.yml` |
