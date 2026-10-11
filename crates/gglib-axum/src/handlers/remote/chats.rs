@@ -44,7 +44,7 @@ pub(crate) struct RemoteTurnBody {
     pub thinking: Option<Thinking>,
     /// The message was sent with Draw pressed, as [`HubTurn::draw`] carries
     /// it: the far machine offers its model the image tool for this turn.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
     pub draw: bool,
 }

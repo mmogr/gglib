@@ -194,7 +194,7 @@ pub(crate) struct AgentChatRequest {
     /// be called, `tool_filter: null` included. Refused `400
     /// drawing_unavailable` when this machine cannot draw for it
     /// (`GET /api/images/drawing` says why beforehand).
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
     pub draw: bool,
 }
