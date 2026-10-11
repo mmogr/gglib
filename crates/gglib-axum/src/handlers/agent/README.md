@@ -38,7 +38,12 @@ and `gglib_mcp::DRAW_THEN_SAY_FAILED` when the tool answered with an error
 (say what went wrong). A later message of that chat, sent without `draw`,
 is offered no image tool, and its request carries a note at the front that
 the picture exists (`gglib_core::request_pipeline::DRAWN_NOTE`, added by
-the request pipeline and held by no row or event). The tools a filter names are not offered to
+the request pipeline and held by no row or event). When the model on the
+other end reads images, that request and every later one also shows it the
+most recent drawn picture, on the message that followed it
+(`gglib_core::request_pipeline::shown_picture`, applied by the completion
+adapter and held by no row or event); a model that does not is sent none and
+is not refused for it. The tools a filter names are not offered to
 such a run at any point. That holds for every run composed here with
 `draw`: the page's, a device's turn, and a chat run with builtins. Without
 `draw` the tool is in no list and

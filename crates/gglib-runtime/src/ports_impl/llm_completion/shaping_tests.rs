@@ -88,6 +88,7 @@ fn coalescing_preserves_tool_call_ids() {
         AgentMessage::Tool {
             tool_call_id: "call_1".to_owned(),
             content: "result".to_owned(),
+            images: Vec::new(),
         },
     ];
     let body = body_of(&adapter(strict_turns(), None), &messages);
@@ -200,10 +201,12 @@ fn long_conversation(tool_result_chars: usize) -> Vec<AgentMessage> {
         AgentMessage::Tool {
             tool_call_id: "call_1".to_owned(),
             content: "x".repeat(tool_result_chars),
+            images: Vec::new(),
         },
         AgentMessage::Tool {
             tool_call_id: "call_2".to_owned(),
             content: "x".repeat(tool_result_chars),
+            images: Vec::new(),
         },
     ];
     for _ in 0..8 {

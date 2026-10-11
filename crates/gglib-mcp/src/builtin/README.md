@@ -62,6 +62,12 @@ to a request whose history holds a drawn picture
 and by an answer that starts "Drew " and contains "the user can see ", so
 those words of `drew_sentence` are held to its constants by a test here.
 
+The answer ends "you cannot". For a chat model that reads images that stops
+being true one message later: the completion adapter shows it the most
+recent picture on the next message, with a line that says so
+(`request_pipeline::shown_picture`, ADR 0018 decision 18). The answer itself
+is not rewritten.
+
 An empty `size` (`""`, or only spaces) is no size: the picture is drawn at
 the image model's default, as when the argument is left out. A size that
 says something is refused as before: here when it is not `WIDTHxHEIGHT`,

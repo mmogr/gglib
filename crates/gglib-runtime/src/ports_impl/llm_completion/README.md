@@ -41,6 +41,18 @@ part an image. A message with no image is sent as the bare string it always
 was. An id the store lacks, or images over 16 MiB together, end the request
 before anything is sent.
 
+A tool message is sent as its text; the ids of the images its tool made are
+not. One of them is read all the same, for a model whose
+`ModelContext::image_input` is set: the most recent picture the drawing
+tool made, written at the start of the first user message after it as a
+text part ([`DRAWN_PICTURE_LINE`]) and an `image_url` part
+([`shown_picture`] is the rule). It is counted with the request's images
+and never ends a request: a picture that is not stored, cannot be read or
+would take the request over 16 MiB is left out, with its line.
+
+[`DRAWN_PICTURE_LINE`]: gglib_core::request_pipeline::DRAWN_PICTURE_LINE
+[`shown_picture`]: gglib_core::request_pipeline::shown_picture
+
 [`AttachmentStore`]: gglib_core::ports::AttachmentStore
 
 # Sampling

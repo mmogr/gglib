@@ -371,7 +371,10 @@ impl LlmCompletionAdapter {
         // is deterministic, so every attempt sends identical bytes.
         // Before it, each image the messages name is read from the store: a
         // refusal here (an id not stored, too many bytes) sends nothing.
-        let images = images::resolve(self.attachments.as_ref(), messages).await?;
+        // The drawn picture a model that reads images is shown is read with
+        // them, and refuses nothing.
+        let sees = self.model_context.image_input;
+        let images = images::resolve(self.attachments.as_ref(), messages, sees).await?;
         let body = self.shaped_body(messages, tools, &images, must_call)?;
 
         // A send to this machine's llama-server waits for its generation

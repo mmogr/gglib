@@ -9,6 +9,12 @@
 //! resolved here too: its proxy is sent the parts, as any `OpenAI` client
 //! sends them.
 //!
+//! One image no message names is written here too: the most recent picture
+//! the drawing tool made, for a model that reads images, on the message
+//! [`shown_picture`] says. It is read after the images the messages name
+//! and never ends a request: a picture that is not stored, cannot be read,
+//! or would take the request over the cap is left out, with its line.
+//!
 //! Nothing here logs an image, and no error here carries one: only ids.
 
 use std::collections::HashMap;
@@ -17,12 +23,18 @@ use std::sync::Arc;
 use gglib_core::domain::AttachmentId;
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::ports::{AttachmentError, AttachmentStore};
-use gglib_core::request_pipeline::MAX_REQUEST_IMAGE_BYTES;
+use gglib_core::request_pipeline::{DRAWN_PICTURE_LINE, MAX_REQUEST_IMAGE_BYTES, shown_picture};
 use serde_json::{Value, json};
 
-/// The data URL of each image one request names, by its id.
+/// The data URL of each image one request names, by its id, and the drawn
+/// picture the request shows its model.
 #[derive(Default)]
-pub(super) struct ImageUrls(HashMap<AttachmentId, String>);
+pub(super) struct ImageUrls {
+    named: HashMap<AttachmentId, String>,
+    /// The index of the user message that carries the drawn picture, and
+    /// the picture's data URL.
+    shown: Option<(usize, String)>,
+}
 
 /// The ids a message carries; none for any but a user's.
 fn images_of(message: &AgentMessage) -> &[AttachmentId] {
@@ -32,9 +44,13 @@ fn images_of(message: &AgentMessage) -> &[AttachmentId] {
     }
 }
 
-/// Read every image `messages` name, history included.
+/// Read every image `messages` name, history included, and then, for a
+/// model that reads images (`image_input`), the drawn picture they show it.
 ///
-/// An image named twice is read once and counted twice, as it is sent.
+/// An image named twice is read once and counted twice, as it is sent. The
+/// drawn picture is counted with them, and is the one image left out when
+/// the request would be over the cap with it: nobody attached it, so it
+/// refuses nothing.
 ///
 /// # Errors
 ///
@@ -46,6 +62,7 @@ fn images_of(message: &AgentMessage) -> &[AttachmentId] {
 pub(super) async fn resolve(
     store: Option<&Arc<dyn AttachmentStore>>,
     messages: &[AgentMessage],
+    image_input: bool,
 ) -> Result<ImageUrls, AttachmentError> {
     let mut urls = HashMap::new();
     let mut sizes: HashMap<&AttachmentId, usize> = HashMap::new();
@@ -72,29 +89,56 @@ pub(super) async fn resolve(
             return Err(AttachmentError::RequestTooLarge);
         }
     }
-    Ok(ImageUrls(urls))
+    let shown = match (shown_picture(messages, image_input), store) {
+        (Some(shown), Some(store)) => drawn(store.as_ref(), shown.image, total)
+            .await
+            .map(|url| (shown.at, url)),
+        _ => None,
+    };
+    Ok(ImageUrls { named: urls, shown })
+}
+
+/// The drawn picture `id` as a data URL, when it can be read and fits under
+/// [`MAX_REQUEST_IMAGE_BYTES`] beside the `named` bytes the request already
+/// carries; `None` otherwise, whatever the reason.
+async fn drawn(store: &dyn AttachmentStore, id: &AttachmentId, named: usize) -> Option<String> {
+    let blob = store.blob(id).await.ok().flatten()?;
+    (named + blob.data.len() <= MAX_REQUEST_IMAGE_BYTES).then(|| blob.data_url())
 }
 
 impl ImageUrls {
-    /// A user message's `content` on the wire.
+    /// The `content` on the wire of the user message at `index` of the
+    /// request's messages.
     ///
     /// With no image it is the bare text, as it was before a message could
     /// carry one. With images it is an array: the text part first, left out
     /// when the text is empty, then one `image_url` part an image, in order.
     /// An id [`resolve`] did not read has no part.
-    pub(super) fn user_content(&self, text: &str, images: &[AttachmentId]) -> Value {
-        if images.is_empty() {
+    ///
+    /// The message that carries the drawn picture is an array that starts
+    /// with two more parts, [`DRAWN_PICTURE_LINE`] and the picture, before
+    /// the person's own text and images.
+    pub(super) fn user_content(&self, index: usize, text: &str, images: &[AttachmentId]) -> Value {
+        let shown = self.shown.as_ref().filter(|(at, _)| *at == index);
+        if images.is_empty() && shown.is_none() {
             return Value::String(text.to_owned());
         }
+        let image = |url: &String| json!({ "type": "image_url", "image_url": { "url": url } });
+        let shown = shown.into_iter().flat_map(|(_, url)| {
+            [
+                json!({ "type": "text", "text": DRAWN_PICTURE_LINE }),
+                image(url),
+            ]
+        });
         let text = (!text.is_empty()).then(|| json!({ "type": "text", "text": text }));
-        let images = images
-            .iter()
-            .filter_map(|id| self.0.get(id))
-            .map(|url| json!({ "type": "image_url", "image_url": { "url": url } }));
-        Value::Array(text.into_iter().chain(images).collect())
+        let images = images.iter().filter_map(|id| self.named.get(id)).map(image);
+        Value::Array(shown.chain(text).chain(images).collect())
     }
 }
 
+#[cfg(test)]
+#[path = "drawn_picture_tests.rs"]
+mod drawn_picture_tests;
 #[cfg(test)]
 #[path = "far_images_tests.rs"]
 mod far_images_tests;

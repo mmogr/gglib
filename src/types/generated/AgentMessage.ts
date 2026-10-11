@@ -58,4 +58,12 @@ tool_call_id: string,
 /**
  * Serialised output of the tool (or error description if it failed).
  */
-content: string, };
+content: string, 
+/**
+ * The images the tool made, by id, in order. Left out of the JSON
+ * when there are none. They are not part of what the model reads of
+ * this message: only the drawing tool's most recent picture is ever
+ * sent, on a later message, and only to a model that reads images
+ * ([`crate::request_pipeline::shown_picture`]).
+ */
+images?: Array<string>, };

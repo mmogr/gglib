@@ -191,15 +191,14 @@ fn set_made(row: &mut NewMessage, usage: TurnUsage) {
 }
 
 /// A result's row: its text as the model read it, and the images it made,
-/// by id, which the model never sees.
+/// by id, which are not sent with it.
 fn tool_row(result: ToolResult, conversation_id: i64) -> NewMessage {
     let message = AgentMessage::Tool {
         tool_call_id: result.tool_call_id,
         content: result.content,
+        images: result.images.into_iter().map(|image| image.id).collect(),
     };
-    let mut row = to_new_message(&message, conversation_id);
-    row.images = result.images.into_iter().map(|image| image.id).collect();
-    row
+    to_new_message(&message, conversation_id)
 }
 
 /// Set `key` in a row's metadata, making the metadata an object if it had

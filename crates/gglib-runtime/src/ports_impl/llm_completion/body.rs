@@ -29,8 +29,10 @@ use super::images::ImageUrls;
 // =============================================================================
 
 /// Map a domain [`AgentMessage`] to the `OpenAI` `messages` array element.
-/// A user message's images are written from `images`, by id.
-fn message_to_openai(msg: &AgentMessage, images: &ImageUrls) -> Value {
+/// A user message's images are written from `images`, by id, and so is the
+/// drawn picture the message at `index` carries, when it is the one that
+/// does. A tool message is its text: the ids of its images are not sent.
+fn message_to_openai(index: usize, msg: &AgentMessage, images: &ImageUrls) -> Value {
     match msg {
         AgentMessage::System { content } => {
             json!({ "role": "system", "content": content })
@@ -39,7 +41,7 @@ fn message_to_openai(msg: &AgentMessage, images: &ImageUrls) -> Value {
             content,
             images: ids,
         } => {
-            json!({ "role": "user", "content": images.user_content(content, ids) })
+            json!({ "role": "user", "content": images.user_content(index, content, ids) })
         }
         AgentMessage::Assistant { content } => {
             // When tool_calls are present but text is None, omit the
@@ -66,6 +68,7 @@ fn message_to_openai(msg: &AgentMessage, images: &ImageUrls) -> Value {
         AgentMessage::Tool {
             tool_call_id,
             content,
+            ..
         } => {
             json!({ "role": "tool", "tool_call_id": tool_call_id, "content": content })
         }
@@ -122,7 +125,8 @@ pub(super) fn build_chat_body(
 ) -> Value {
     let openai_messages: Vec<Value> = messages
         .iter()
-        .map(|message| message_to_openai(message, images))
+        .enumerate()
+        .map(|(index, message)| message_to_openai(index, message, images))
         .collect();
     let openai_tools: Vec<Value> = tools.iter().map(tool_def_to_openai).collect();
 

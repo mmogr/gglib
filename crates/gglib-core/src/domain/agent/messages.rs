@@ -123,6 +123,15 @@ pub enum AgentMessage {
 
         /// Serialised output of the tool (or error description if it failed).
         content: String,
+
+        /// The images the tool made, by id, in order. Left out of the JSON
+        /// when there are none. They are not part of what the model reads of
+        /// this message: only the drawing tool's most recent picture is ever
+        /// sent, on a later message, and only to a model that reads images
+        /// ([`crate::request_pipeline::shown_picture`]).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[cfg_attr(feature = "ts-bindings", ts(type = "Array<string>", optional))]
+        images: Vec<AttachmentId>,
     },
 }
 
@@ -136,7 +145,18 @@ impl AgentMessage {
         }
     }
 
-    /// Whether the message carries an image.
+    /// A tool's answer of text alone.
+    #[must_use]
+    pub fn tool(tool_call_id: impl Into<String>, content: impl Into<String>) -> Self {
+        Self::Tool {
+            tool_call_id: tool_call_id.into(),
+            content: content.into(),
+            images: Vec::new(),
+        }
+    }
+
+    /// Whether the message carries an image the person attached. A tool's
+    /// images do not count: no model is refused for a picture a tool made.
     #[must_use]
     pub fn has_images(&self) -> bool {
         matches!(self, Self::User { images, .. } if !images.is_empty())
@@ -179,9 +199,12 @@ impl AgentMessage {
                         })
                         .sum::<usize>()
             }
+            // A tool's images are not charged: at most one is ever sent,
+            // and the request pipeline measures it where it is written.
             Self::Tool {
                 tool_call_id,
                 content,
+                ..
             } => tool_call_id.chars().count() + content.chars().count(),
         }
     }

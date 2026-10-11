@@ -45,7 +45,7 @@ impl AttachmentStore for One {
 }
 
 /// The end of a request's head, and where its body starts.
-fn head_end(bytes: &[u8]) -> Option<usize> {
+pub(super) fn head_end(bytes: &[u8]) -> Option<usize> {
     bytes
         .windows(4)
         .position(|w| w == b"\r\n\r\n")
@@ -55,7 +55,7 @@ fn head_end(bytes: &[u8]) -> Option<usize> {
 /// Accept one request, read it whole (head, then the body its
 /// `content-length` names), answer an empty stream, and give back what was
 /// read.
-async fn capture_one(listener: TcpListener) -> String {
+pub(super) async fn capture_one(listener: TcpListener) -> String {
     let (mut socket, _) = listener.accept().await.unwrap();
     let mut read = Vec::new();
     let mut chunk = [0_u8; 8192];

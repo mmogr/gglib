@@ -293,6 +293,9 @@ mod context_tests;
 #[path = "compose_draw_tests.rs"]
 mod draw_tests;
 #[cfg(test)]
+#[path = "compose_drawn_picture_tests.rs"]
+mod drawn_picture_tests;
+#[cfg(test)]
 #[path = "compose_gate_tests.rs"]
 mod gate_tests;
 #[cfg(test)]

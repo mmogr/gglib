@@ -92,6 +92,7 @@ async fn a_conversation_over_the_models_context_is_trimmed_before_it_is_sent() {
             .map(|id| AgentMessage::Tool {
                 tool_call_id: id.to_owned(),
                 content: "x".repeat(30_000),
+                images: Vec::new(),
             })
             .into();
         messages.extend((0..8).map(|_| AgentMessage::user("ok")));

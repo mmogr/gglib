@@ -38,6 +38,14 @@ pub(crate) enum MockToolBehavior {
         /// Content returned to the LLM as the tool output.
         content: String,
     },
+    /// Returns `content` and one stored image, as a tool that makes a
+    /// picture does.
+    Pictured {
+        /// Content returned to the LLM as the tool output.
+        content: String,
+        /// The image the result lists.
+        image: gglib_core::domain::AttachmentInfo,
+    },
     /// Returns a **different** successful result on every call.
     ///
     /// The shape of an agent polling for output: same call, moving answer.
@@ -151,6 +159,11 @@ impl ToolExecutorPort for MockToolExecutorPort {
         match behavior {
             MockToolBehavior::Immediate { content } => {
                 Ok(ToolResult::text(call.id.clone(), content, true))
+            }
+            MockToolBehavior::Pictured { content, image } => {
+                let mut result = ToolResult::text(call.id.clone(), content, true);
+                result.images = vec![image];
+                Ok(result)
             }
             MockToolBehavior::Delayed { millis, content } => {
                 tokio::time::sleep(std::time::Duration::from_millis(millis)).await;

@@ -227,3 +227,56 @@ fn a_request_after_a_drawn_picture_is_forwarded_with_the_note() {
     let theirs = history("generate_image");
     assert_eq!(forwarded(&theirs)["messages"], theirs["messages"]);
 }
+
+/// A model that reads images is shown a drawn picture by whoever holds the
+/// chat. For a chat its device keeps, that is the device: it sends the
+/// picture as an image part of its own message, and the proxy forwards the
+/// messages as they came, with the note and no second picture. A history
+/// that holds a drawn picture and no image part gains none here.
+#[test]
+fn a_request_after_a_drawn_picture_gains_no_image_from_the_proxy() {
+    use gglib_core::request_pipeline::{DRAW_TOOL_NAME, DRAWN_NOTE, DRAWN_PICTURE_LINE};
+    let history = |last: serde_json::Value| {
+        serde_json::json!({"model": "m", "messages": [
+            {"role": "user", "content": "draw a fox"},
+            {"role": "assistant", "content": null, "tool_calls": [{
+                "id": "c1", "type": "function",
+                "function": {"name": DRAW_TOOL_NAME, "arguments": "{\"prompt\":\"a fox\"}"},
+            }]},
+            {"role": "tool", "tool_call_id": "c1", "content":
+                "Drew 1 image, 1024x1024 PNG, with flux in 76 s; the user can see it, you cannot."},
+            {"role": "assistant", "content": "I asked for a red fox."},
+            {"role": "user", "content": last},
+        ]})
+    };
+    let sees = ModelContext {
+        image_input: true,
+        ..ModelContext::passthrough()
+    };
+    let forwarded = |sent: &serde_json::Value| -> serde_json::Value {
+        let shaped = shape_request_body(
+            Bytes::from(serde_json::to_vec(sent).unwrap()),
+            &sees,
+            &SamplingLayers::default(),
+            Some(chars(100_000)),
+        )
+        .expect("it fits");
+        serde_json::from_slice(&shaped.body).expect("valid json")
+    };
+
+    let theirs = history(serde_json::json!([
+        {"type": "text", "text": DRAWN_PICTURE_LINE},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,Zm94"}},
+        {"type": "text", "text": "what is in the corner?"},
+    ]));
+    let sent = forwarded(&theirs);
+    assert_eq!(sent["messages"][0]["content"], DRAWN_NOTE);
+    assert_eq!(
+        sent["messages"].as_array().unwrap()[1..],
+        theirs["messages"].as_array().unwrap()[..]
+    );
+
+    let text_alone = forwarded(&history("thanks".into()));
+    assert!(!text_alone.to_string().contains("image_url"));
+    assert!(!text_alone.to_string().contains(DRAWN_PICTURE_LINE));
+}

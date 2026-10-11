@@ -110,7 +110,9 @@ impl Message {
     ///
     /// Tool call metadata is faithfully restored from the JSON `"tool_calls"` key
     /// (assistant messages) or `"tool_call_id"` key (tool messages). A user
-    /// message keeps its images, by id.
+    /// message keeps its images, by id, and so does a tool message: a tool's
+    /// are not sent with it, and say which picture a model that reads images
+    /// is shown ([`crate::request_pipeline::shown_picture`]).
     #[must_use]
     pub fn to_agent_message(&self) -> AgentMessage {
         match self.role {
@@ -150,6 +152,7 @@ impl Message {
                 AgentMessage::Tool {
                     tool_call_id,
                     content: self.content.clone(),
+                    images: self.images.iter().map(|image| image.id.clone()).collect(),
                 }
             }
         }

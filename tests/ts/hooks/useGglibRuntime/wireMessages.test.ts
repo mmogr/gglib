@@ -178,6 +178,31 @@ describe('convertToWireMessages — assistant tool calls', () => {
       { role: 'tool', tool_call_id: 'tc1', content: 'found it' },
     ]);
     expect('content' in wire[0]).toBe(false);
+    expect('images' in wire[1]).toBe(false);
+  });
+
+  it('names the images a tool made by id on its tool entry, in order', () => {
+    // The ids tell the backend which drawn picture a model that reads
+    // images is shown; the facts beside them (type, size) are not sent.
+    const image = (id: string) => ({ id, mime: 'image/png', width: 1024, height: 1024 });
+    const wire = convertToWireMessages([
+      assistantMsgRaw([
+        {
+          type: 'tool-call',
+          toolCallId: 'c1',
+          toolName: 'builtin:generate_image',
+          args: { prompt: 'a fox' },
+          result: 'Drew 2 images.',
+          artifact: { images: [image('b'.repeat(64)), image('a'.repeat(64))] },
+        },
+      ]),
+    ]);
+    expect(wire[1]).toEqual<AgentMessage>({
+      role: 'tool',
+      tool_call_id: 'c1',
+      content: 'Drew 2 images.',
+      images: ['b'.repeat(64), 'a'.repeat(64)],
+    });
   });
 
   it('excludes in-flight tool calls (no result) from the wire format', () => {

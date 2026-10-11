@@ -356,6 +356,9 @@ pub(super) fn tools_of(
 #[path = "hub_turn_answer_tests.rs"]
 mod hub_turn_answer_tests;
 #[cfg(test)]
+#[path = "hub_turn_drawn_tests.rs"]
+mod hub_turn_drawn_tests;
+#[cfg(test)]
 #[path = "hub_turn_forget_tests.rs"]
 mod hub_turn_forget_tests;
 #[cfg(test)]

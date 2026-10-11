@@ -17,18 +17,18 @@ use super::resolve;
 
 /// A store of what a test put in it.
 #[derive(Default)]
-struct Kept(HashMap<AttachmentId, AttachmentBlob>);
+pub(super) struct Kept(HashMap<AttachmentId, AttachmentBlob>);
 
 impl Kept {
     /// Keep `data` as `mime`, and answer its id.
-    fn keep(&mut self, mime: &str, data: Vec<u8>) -> AttachmentId {
+    pub(super) fn keep(&mut self, mime: &str, data: Vec<u8>) -> AttachmentId {
         let id = AttachmentId::of(&data);
         let mime = mime.to_owned();
         self.0.insert(id.clone(), AttachmentBlob { mime, data });
         id
     }
 
-    fn store(self) -> Arc<dyn AttachmentStore> {
+    pub(super) fn store(self) -> Arc<dyn AttachmentStore> {
         Arc::new(self)
     }
 }
@@ -59,7 +59,7 @@ impl AttachmentStore for Kept {
     }
 }
 
-fn user(content: &str, images: &[&AttachmentId]) -> AgentMessage {
+pub(super) fn user(content: &str, images: &[&AttachmentId]) -> AgentMessage {
     AgentMessage::User {
         content: content.to_owned(),
         images: images.iter().map(|id| (*id).clone()).collect(),
@@ -68,7 +68,7 @@ fn user(content: &str, images: &[&AttachmentId]) -> AgentMessage {
 
 /// The `messages` of the body the adapter builds for `messages`.
 async fn wire(store: &Arc<dyn AttachmentStore>, messages: &[AgentMessage]) -> Value {
-    let images = resolve(Some(store), messages).await.unwrap();
+    let images = resolve(Some(store), messages, false).await.unwrap();
     build_chat_body("m", messages, &[], None, &images)["messages"].take()
 }
 
@@ -80,7 +80,7 @@ async fn a_message_with_no_image_is_its_bare_text() {
     let want = json!([{ "role": "user", "content": "hello" }]);
 
     assert_eq!(wire(&Kept::default().store(), &messages).await, want);
-    let images = resolve(None, &messages).await.unwrap();
+    let images = resolve(None, &messages, false).await.unwrap();
     let body = build_chat_body("m", &messages, &[], None, &images);
     assert_eq!(body["messages"], want);
     assert_eq!(
@@ -149,6 +149,7 @@ async fn an_image_in_the_history_is_resolved_with_its_turn() {
         AgentMessage::Tool {
             tool_call_id: "c1".to_owned(),
             content: "ok".to_owned(),
+            images: Vec::new(),
         },
         user("and now?", &[]),
     ];
@@ -226,7 +227,7 @@ async fn images_over_the_request_limit_are_refused_before_anything_is_sent() {
     assert!(!shown.contains("AQEBAQEB"), "nor any of one's base64");
 
     let at = [user("one", &[&full]), user("two", &[&also_full])];
-    assert!(resolve(Some(&store), &at).await.is_ok());
+    assert!(resolve(Some(&store), &at, false).await.is_ok());
 }
 
 /// An image named in two messages is sent twice, so it is counted twice.
@@ -238,9 +239,9 @@ async fn an_image_named_twice_counts_twice() {
     let twice = [user("one", &[&full]), user("again", &[&full])];
     let thrice = [user("one", &[&full, &full]), user("again", &[&full])];
 
-    assert!(resolve(Some(&store), &twice).await.is_ok());
+    assert!(resolve(Some(&store), &twice, false).await.is_ok());
     assert!(matches!(
-        resolve(Some(&store), &thrice).await,
+        resolve(Some(&store), &thrice, false).await,
         Err(AttachmentError::RequestTooLarge)
     ));
 }
@@ -299,11 +300,12 @@ async fn an_adapter_with_no_store_sends_no_message_that_names_an_image() {
     assert!(!upstream.was_dialled().await);
 }
 
-/// A saved tool row's images are the user's alone: resumed and sent, the row
-/// is on the wire exactly what it is without them, even with the bytes in
-/// the store.
+/// A saved tool row is on the wire its text and its call id, with or
+/// without images and whatever the model reads: the ids are never sent with
+/// it. To a model that reads no images the bytes go nowhere at all; what a
+/// model that does is shown, and where, is `drawn_picture_tests`.
 #[tokio::test]
-async fn a_saved_tool_rows_images_never_reach_the_model() {
+async fn a_saved_tool_rows_images_are_never_sent_with_the_row() {
     use gglib_core::domain::{Message, MessageRole};
 
     let mut kept = Kept::default();
@@ -328,12 +330,15 @@ async fn a_saved_tool_rows_images_never_reach_the_model() {
         width: 1,
         height: 1,
     };
+    let text_alone =
+        json!([{ "role": "tool", "tool_call_id": "c1", "content": "[image 1x1 PNG stored]" }]);
 
-    let with = wire(&store, &[row(vec![info])]).await;
+    for image_input in [false, true] {
+        let messages = [row(vec![info.clone()])];
+        let images = resolve(Some(&store), &messages, image_input).await.unwrap();
+        let with = build_chat_body("m", &messages, &[], None, &images)["messages"].take();
 
-    assert_eq!(with, wire(&store, &[row(Vec::new())]).await);
-    assert_eq!(
-        with,
-        json!([{ "role": "tool", "tool_call_id": "c1", "content": "[image 1x1 PNG stored]" }])
-    );
+        assert_eq!(with, text_alone, "image_input: {image_input}");
+        assert_eq!(with, wire(&store, &[row(Vec::new())]).await);
+    }
 }

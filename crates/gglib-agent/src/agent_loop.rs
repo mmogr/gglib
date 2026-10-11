@@ -692,9 +692,13 @@ fn append_iteration_messages(
     };
     messages.push(assistant);
     for result in results {
+        // The ids of the images the tool made stay on its message: what a
+        // later request shows the model is decided from them
+        // (`gglib_core::request_pipeline::shown_picture`).
         messages.push(AgentMessage::Tool {
             tool_call_id: result.tool_call_id,
             content: result.content,
+            images: result.images.into_iter().map(|image| image.id).collect(),
         });
     }
 }
