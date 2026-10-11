@@ -11,7 +11,8 @@
 //!       ├─ llm.chat_stream()                          LLM call (streaming); when the run has
 //!       │                                             a `first_call`, the first is
 //!       │                                             chat_stream_requiring_call() with one tool
-//!       │                                             and the second, with no tools, is the last
+//!       │                                             and the second, with no tools and the
+//!       │                                             composer's instruction, is the last
 //!       ├─ stream_collector::collect_stream()          text forwarded live ──→ AgentEvent::TextDelta
 //!       ├─ StagnationDetector::record()               stagnation guard ──→ AgentEvent::Error (on failure)
 //!       ├─ LoopDetector::check()                      loop guard       ──→ AgentEvent::Error (on failure)
@@ -236,6 +237,15 @@ impl AgentLoop {
     /// offered no tools, so all it can do is say what happened, and what it
     /// says is the run's answer.
     ///
+    /// The request ends with one message the run's history does not hold:
+    /// the composer's instruction for this reply, as a `user` message after
+    /// the tool's result, `first.then_say` when the tool `succeeded` and
+    /// `first.then_say_failed` when it did not. It goes to the model in a
+    /// copy of `messages`, so it is in no event and not in the history the
+    /// run returns. A `user` message because a `system` one that is not
+    /// first is refused by some chat templates, and this loop's own pruning
+    /// keeps every `system` message at the front.
+    ///
     /// A tool call in this reply all the same (a dialect model's markup, or
     /// an upstream that calls a tool it was not offered) is not run: `run`
     /// ends with this reply's text and never looks at its calls. A reply
@@ -245,9 +255,18 @@ impl AgentLoop {
         &self,
         messages: &Pruned,
         first: &FirstCall,
+        succeeded: bool,
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<CollectedResponse, AgentError> {
-        let mut response = self.call_and_collect(messages, &[], tx).await?;
+        let told = if succeeded {
+            &first.then_say
+        } else {
+            &first.then_say_failed
+        };
+        let mut asked = messages.to_vec();
+        asked.push(AgentMessage::user(told.clone()));
+        let reply = self.llm.chat_stream(&asked, &[]).await;
+        let mut response = self.collect(reply, messages, tx).await?;
         if !response.tool_calls.is_empty() {
             warn!(
                 tool = %first.tool,
@@ -364,6 +383,9 @@ impl AgentLoop {
 
     /// Execute tools, append assistant + tool-result messages, prune the
     /// context budget, and emit `IterationComplete`.
+    ///
+    /// Answers with the hash of the batch's answers, and whether every tool
+    /// in it succeeded, read from each result's own `success`.
     async fn execute_tool_iteration(
         &self,
         messages: &mut Pruned,
@@ -372,7 +394,7 @@ impl AgentLoop {
         iteration: usize,
         tx: &mpsc::Sender<AgentEvent>,
         tools: &[ToolDefinition],
-    ) -> Option<u64> {
+    ) -> (Option<u64>, bool) {
         let results =
             execute_tools_parallel(&response.tool_calls, &self.tool_executor, config, tx, tools)
                 .await;
@@ -416,7 +438,7 @@ impl AgentLoop {
             "iteration complete"
         );
 
-        answers_hash
+        (answers_hash, tool_failures == 0)
     }
 }
 
@@ -467,6 +489,10 @@ impl AgentLoopPort for AgentLoop {
         // so "not measured" stays distinct from "zero tokens".
         let mut total_completion_tokens: Option<u64> = None;
 
+        // Whether the tools the last batch ran all succeeded: which of its
+        // two instructions a `first_call` run's closing request carries.
+        let mut succeeded = false;
+
         for iteration in 0..config.max_iterations {
             debug!(iteration, "agent loop iteration starting");
 
@@ -475,7 +501,10 @@ impl AgentLoopPort for AgentLoop {
             // model is offered none and the reply that follows ends the run.
             let words_only = config.first_call.is_some() && iteration > 0;
             let response = match &config.first_call {
-                Some(first) if words_only => self.call_for_words(&messages, first, &tx).await?,
+                Some(first) if words_only => {
+                    self.call_for_words(&messages, first, succeeded, &tx)
+                        .await?
+                }
                 Some(first) => self.call_demanding(&messages, &tools, first, &tx).await?,
                 None => self.call_and_collect(&messages, &tools, &tx).await?,
             };
@@ -556,11 +585,12 @@ impl AgentLoopPort for AgentLoop {
                 .await;
             }
 
-            let answers = self
+            let (answers, all_succeeded) = self
                 .execute_tool_iteration(&mut messages, response, &config, iteration, &tx, &tools)
                 .await;
             // Straight-line: no `?` between the execution and the record.
             guards.record_results(batch, answers);
+            succeeded = all_succeeded;
         }
 
         warn!(max = config.max_iterations, "agent loop hit max iterations");

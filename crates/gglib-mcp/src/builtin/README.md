@@ -36,6 +36,18 @@ offered, and that reply ends the run: its text is the answer, a call in it
 is not run, and a reply with no text is answered with `DRAW_NO_WORDS`, "The
 model said nothing after the drawing tool ran."
 
+That second request ends with one instruction the transcript never holds, a
+`user` message placed after the tool's result and sent to the model for that
+request alone. A model offered no tools otherwise tends to say it cannot
+draw, though the picture is on the tool's row. When the tool drew it is
+`DRAW_THEN_SAY`: "The picture has been made by the drawing tool and the
+person is looking at it now. Reply in one or two sentences saying what you
+asked the tool to draw. Do not apologise, do not say you cannot draw, and do
+not call a tool." When the tool answered with an error it is
+`DRAW_THEN_SAY_FAILED`: "The drawing tool did not make a picture; its answer
+above says why. Tell the person in one or two sentences what went wrong. Do
+not call a tool."
+
 An empty `size` (`""`, or only spaces) is no size: the picture is drawn at
 the image model's default, as when the argument is left out. A size that
 says something is refused as before: here when it is not `WIDTHxHEIGHT`,

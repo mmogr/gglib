@@ -5,8 +5,9 @@
 //! The first request offers that tool alone and demands a call. The second
 //! carries no `tools`, no `tool_choice` and no grammar, for a model that
 //! writes its calls in a dialect as for any other, and a call its reply
-//! makes all the same is not run. A run that demands nothing sends what it
-//! always did.
+//! makes all the same is not run. Its last message is the composer's
+//! instruction for the reply, as a `user` message after the tool's result.
+//! A run that demands nothing sends what it always did.
 
 use std::sync::{Arc, Mutex};
 
@@ -31,6 +32,8 @@ const DRAW: &str = "builtin:generate_image";
 const READ: &str = "3:read_file";
 const NOT_ASKED: &str = "the model did not ask for the picture";
 const NO_WORDS: &str = "The model said nothing after the tool ran.";
+const SAY_DRAWN: &str = "Say what you asked the tool for.";
+const SAY_FAILED: &str = "Say what went wrong.";
 
 /// One reply that calls `DRAW`, as llama-server streams a native call.
 fn calls_draw() -> String {
@@ -122,6 +125,8 @@ fn draw_first() -> FirstCall {
         tool: DRAW.to_owned(),
         if_missing: NOT_ASKED.to_owned(),
         if_wordless: NO_WORDS.to_owned(),
+        then_say: SAY_DRAWN.to_owned(),
+        then_say_failed: SAY_FAILED.to_owned(),
     }
 }
 
@@ -209,8 +214,9 @@ fn offers_nothing(body: &Value) -> bool {
 }
 
 /// The run's first request offers exactly the demanded tool and demands a
-/// call; the second offers no tools and demands nothing, and still shows
-/// the model the call it made and the tool's answer.
+/// call; the second offers no tools and demands nothing, still shows the
+/// model the call it made and the tool's answer, and ends with the
+/// composer's instruction as a `user` message.
 #[tokio::test]
 async fn the_first_request_demands_the_one_tool_and_the_second_offers_none() {
     let script = vec![calls_draw(), says("A red fox in the snow.")];
@@ -228,7 +234,14 @@ async fn the_first_request_demands_the_one_tool_and_the_second_offers_none() {
         .iter()
         .filter_map(|message| message["role"].as_str())
         .collect();
-    assert_eq!(roles, ["user", "assistant", "tool"]);
+    assert_eq!(roles, ["user", "assistant", "tool", "user"]);
+    let last = bodies[1]["messages"].as_array().unwrap().last().unwrap();
+    assert_eq!(last, &json!({ "role": "user", "content": SAY_DRAWN }));
+    let first: Vec<&Value> = bodies[0]["messages"].as_array().unwrap().iter().collect();
+    assert_eq!(
+        first,
+        [&json!({ "role": "user", "content": "draw a red fox" })]
+    );
     assert_eq!(ran, [DRAW]);
 }
 
@@ -267,6 +280,8 @@ async fn a_run_that_demands_no_call_offers_every_tool_and_requires_nothing() {
         assert_eq!(offered(body), [DRAW, READ]);
         assert_eq!(body["tool_choice"], "auto");
     }
+    let last = bodies[1]["messages"].as_array().unwrap().last().unwrap();
+    assert_eq!(last["role"], "tool", "no instruction follows the result");
 }
 
 /// A first reply that calls nothing, from a server that ignored the demand,

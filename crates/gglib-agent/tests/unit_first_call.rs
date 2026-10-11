@@ -6,7 +6,10 @@
 //! reply's first call of it is kept. Once the tool has run, well or not, the
 //! second call offers no tools and its reply ends the run: a tool call in
 //! it is not run, and a reply with no text is answered in the composer's
-//! words. A run with no first call asks as it always did.
+//! words. That second call ends with the composer's instruction for the
+//! reply, one for a tool that succeeded and one for a tool that did not,
+//! which the run's history never holds. A run with no first call asks as it
+//! always did.
 
 mod common;
 
@@ -25,12 +28,16 @@ const DRAW: &str = "builtin:generate_image";
 const READ: &str = "3:read_file";
 const NOT_ASKED: &str = "the model did not ask for the picture";
 const NO_WORDS: &str = "The model said nothing after the tool ran.";
+const SAY_DRAWN: &str = "Say what you asked the tool for.";
+const SAY_FAILED: &str = "Say what went wrong.";
 
 fn first_call(tool: &str) -> FirstCall {
     FirstCall {
         tool: tool.to_owned(),
         if_missing: NOT_ASKED.to_owned(),
         if_wordless: NO_WORDS.to_owned(),
+        then_say: SAY_DRAWN.to_owned(),
+        then_say_failed: SAY_FAILED.to_owned(),
     }
 }
 
@@ -116,6 +123,91 @@ async fn shown(llm: &MockLlmPort, request: usize) -> (Vec<String>, Vec<String>) 
         }
     }
     (calls, results)
+}
+
+/// `messages` as they are serialised, to compare them whole.
+fn wire(messages: &[AgentMessage]) -> serde_json::Value {
+    serde_json::to_value(messages).unwrap()
+}
+
+/// Every message of `messages` that says either instruction, whoever says
+/// it.
+fn instructions(messages: &[AgentMessage]) -> Vec<&AgentMessage> {
+    let instructs = |message: &&AgentMessage| {
+        let text = match message {
+            AgentMessage::System { content }
+            | AgentMessage::User { content, .. }
+            | AgentMessage::Tool { content, .. } => Some(content.as_str()),
+            AgentMessage::Assistant { content } => content.text.as_deref(),
+        };
+        text.is_some_and(|text| text.contains(SAY_DRAWN) || text.contains(SAY_FAILED))
+    };
+    messages.iter().filter(instructs).collect()
+}
+
+/// The closing request of a run whose tool succeeded ends with the
+/// composer's instruction for a tool that did, as a `user` message after
+/// the tool's result, and holds no other. The first request holds none, and
+/// neither does the history the run returns, which ends with the result and
+/// the answer.
+#[tokio::test]
+async fn the_closing_request_ends_with_the_instruction_and_the_history_never_holds_it() {
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push(reply_calling(&[("c1", DRAW, "a fox")]))
+            .push(MockLlmResponse::text("A red fox in the snow.")),
+    );
+
+    let (ended, events, _ran) = run(&llm, Some(first_call(DRAW))).await;
+
+    let sent = llm.messages_received().await;
+    assert_eq!(sent.len(), 2);
+    assert!(instructions(&sent[0]).is_empty(), "{:?}", sent[0]);
+    assert_eq!(
+        sent[1].len(),
+        4,
+        "the message, the call, its result, the instruction"
+    );
+    assert!(matches!(sent[1][2], AgentMessage::Tool { .. }));
+    assert_eq!(wire(&sent[1][3..]), wire(&[AgentMessage::user(SAY_DRAWN)]));
+    assert_eq!(instructions(&sent[1]).len(), 1);
+
+    let history = ended.unwrap().history;
+    assert!(instructions(&history).is_empty(), "{history:?}");
+    assert_eq!(history.len(), 4, "{history:?}");
+    assert_eq!(wire(&history[..3]), wire(&sent[1][..3]));
+    assert!(matches!(history[3], AgentMessage::Assistant { .. }));
+    let logged = serde_json::to_string(&events).unwrap();
+    assert!(!logged.contains(SAY_DRAWN), "{logged}");
+}
+
+/// After a tool that answered with an error, the closing request ends with
+/// the composer's other instruction, and the history holds neither.
+#[tokio::test]
+async fn after_a_tool_error_the_closing_request_ends_with_the_failed_instruction() {
+    let llm = Arc::new(
+        MockLlmPort::new()
+            .push(reply_calling(&[("c1", DRAW, "a fox")]))
+            .push(MockLlmResponse::text("The size was refused.")),
+    );
+    let refuses = MockToolBehavior::Failure {
+        content: "\"7x7\" is not a size".to_owned(),
+    };
+
+    let (ended, events, _ran) = run_drawing(&llm, Some(first_call(DRAW)), refuses).await;
+
+    let sent = llm.messages_received().await;
+    let last = sent[1].len() - 1;
+    assert!(matches!(sent[1][last - 1], AgentMessage::Tool { .. }));
+    assert_eq!(
+        wire(&sent[1][last..]),
+        wire(&[AgentMessage::user(SAY_FAILED)])
+    );
+    assert_eq!(instructions(&sent[1]).len(), 1);
+    let history = ended.unwrap().history;
+    assert!(instructions(&history).is_empty(), "{history:?}");
+    let logged = serde_json::to_string(&events).unwrap();
+    assert!(!logged.contains(SAY_FAILED), "{logged}");
 }
 
 /// Whether the tools `offered` are exactly `names`, in any order.
@@ -277,6 +369,11 @@ async fn a_run_with_no_first_call_offers_every_tool_on_every_call_and_runs_each(
         assert!(!demanded);
     }
     assert_eq!(names(&ran), [READ, DRAW]);
+    for request in llm.messages_received().await {
+        assert!(instructions(&request).is_empty(), "{request:?}");
+        let users = |m: &&AgentMessage| matches!(m, AgentMessage::User { .. });
+        assert_eq!(request.iter().filter(users).count(), 1, "{request:?}");
+    }
 }
 
 /// A first reply that calls nothing ends the run there: the composer's

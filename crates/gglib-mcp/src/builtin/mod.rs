@@ -19,6 +19,7 @@ use serde_json::{Value, json};
 
 pub use generate_image::{
     DrawArm, DrawingTool, NO_WORDS as DRAW_NO_WORDS, NOT_ASKED as DRAW_NOT_ASKED,
+    THEN_SAY as DRAW_THEN_SAY, THEN_SAY_FAILED as DRAW_THEN_SAY_FAILED,
     request_of as image_request_of,
 };
 

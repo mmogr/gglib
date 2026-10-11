@@ -815,7 +815,9 @@ that answers in words instead, or calls only some other tool, ends the run
 try again or pick a model that calls tools". The picture is asked for once:
 after the tool has run the model is offered no tools, and what it then says
 is the reply's text ("The model said nothing after the drawing tool ran."
-when it says nothing). This needs no `--allow-mcp`, which
+when it says nothing). For those words the desktop tells the model, in an
+instruction no transcript holds, to say in a sentence or two what it asked
+the tool to draw, or what went wrong. This needs no `--allow-mcp`, which
 still gates every MCP tool, and it holds for a chat with its tools turned
 off: the button is the person's choice for that message. A turn without the
 key is offered no image tool. A desktop that cannot draw refuses the turn,

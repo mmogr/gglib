@@ -39,7 +39,8 @@ independently readable:
 - [`draw`]     — `/draw`, the session's Draw switch: it asks the daemon
   whether it can draw, arms the image tool for the next message, whose
   reply must start with the call for the picture and is offered no tools
-  after it, and is off
+  after it, only an instruction for its closing words that no row or later
+  message holds, and is off
   again once that message is sent; the tool draws through the daemon
 - [`sight`]    — whether the session's model can read an image, asked before
   the loop is composed: the catalogue row, or `/props` of a `--port` server

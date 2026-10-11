@@ -24,8 +24,8 @@ pub use gglib_core::{
 };
 // Re-export this crate's public types
 pub use builtin::{
-    BuiltinToolExecutorAdapter, DRAW_NO_WORDS, DRAW_NOT_ASKED, DrawArm, DrawingTool,
-    image_request_of,
+    BuiltinToolExecutorAdapter, DRAW_NO_WORDS, DRAW_NOT_ASKED, DRAW_THEN_SAY, DRAW_THEN_SAY_FAILED,
+    DrawArm, DrawingTool, image_request_of,
 };
 pub use combined::CombinedToolExecutor;
 pub use service::{McpServerInfo, McpService};

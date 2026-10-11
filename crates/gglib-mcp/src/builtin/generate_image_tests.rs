@@ -204,10 +204,11 @@ fn the_pages_builtin_list_never_carries_generate_image() {
     assert!(names.contains(&"get_current_time".to_owned()));
 }
 
-/// What a run sent with Draw is held to: the tool's qualified name, and the
-/// two sentences, written out here so that neither can be emptied unseen.
+/// What a run sent with Draw is held to: the tool's qualified name, the two
+/// sentences a person may read and the two instructions the model is given,
+/// written out here so that none can be emptied or swapped unseen.
 #[test]
-fn the_first_call_names_the_tool_and_carries_both_sentences() {
+fn the_first_call_names_the_tool_and_carries_its_sentences() {
     let first = DrawingTool::first_call();
 
     assert_eq!(first.tool, DRAW);
@@ -218,6 +219,17 @@ fn the_first_call_names_the_tool_and_carries_both_sentences() {
     assert_eq!(
         first.if_wordless,
         "The model said nothing after the drawing tool ran."
+    );
+    assert_eq!(
+        first.then_say,
+        "The picture has been made by the drawing tool and the person is looking at it now. \
+         Reply in one or two sentences saying what you asked the tool to draw. Do not \
+         apologise, do not say you cannot draw, and do not call a tool."
+    );
+    assert_eq!(
+        first.then_say_failed,
+        "The drawing tool did not make a picture; its answer above says why. Tell the person \
+         in one or two sentences what went wrong. Do not call a tool."
     );
 }
 

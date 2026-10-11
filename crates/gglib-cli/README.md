@@ -242,7 +242,10 @@ tool, ends the turn with "the model did not ask for the picture; try again
 or pick a model that calls tools". The picture is asked for once: after the
 tool has run the model is offered no tools and can only answer in words,
 and if it says nothing the answer is "The model said nothing after the
-drawing tool ran." `/draw` says why when nothing can draw (no daemon, no
+drawing tool ran." For that closing reply the model is told, in an
+instruction that is not saved to the chat and not sent with later messages,
+to say in a sentence or two what it asked the tool to draw, or what went
+wrong when the tool drew nothing. `/draw` says why when nothing can draw (no daemon, no
 image runtime or model, or a `--remote` session, whose model is on the other
 machine).
 

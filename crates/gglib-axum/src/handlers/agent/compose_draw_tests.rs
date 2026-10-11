@@ -85,6 +85,48 @@ async fn a_draw_runs_first_request_must_call_the_image_tool_and_its_second_offer
     }
 }
 
+/// A run sent with Draw ends its second request with the drawing side's
+/// instruction, as a `user` message after the tool's result: here the one
+/// for a tool that answered with an error, since this state's driver draws
+/// nothing. Its first request holds no instruction. Saved as a run's rows
+/// are, from the events its loop sent, the turn has no row that holds one.
+#[tokio::test]
+async fn a_draw_runs_closing_instruction_reaches_the_model_and_no_saved_row() {
+    use crate::handlers::agent::run_fixture::{End, prepared, settled, start};
+    use crate::handlers::agent::turn_fixture::{DRAWS, turn};
+
+    let (_dir, state) = drawing_state().await;
+    let id = model(&state, |_| {}).await;
+    let asked = page(&state, json!({ "tool_filter": [], "draw": true })).await;
+    let instructs = |text: &str| {
+        text.contains(gglib_mcp::DRAW_THEN_SAY) || text.contains(gglib_mcp::DRAW_THEN_SAY_FAILED)
+    };
+
+    let turn = turn(&state, id, asked, DRAWS).await;
+
+    assert!(turn.ended_well, "{:?}", turn.events);
+    assert_eq!(turn.requests.len(), 2);
+    assert!(!instructs(&turn.requests[0].to_string()));
+    let sent = turn.requests[1]["messages"].as_array().unwrap();
+    assert_eq!(sent[sent.len() - 2]["role"], "tool");
+    let told = json!({ "role": "user", "content": gglib_mcp::DRAW_THEN_SAY_FAILED });
+    assert_eq!(sent[sent.len() - 1], told);
+    assert!(offers_nothing(&turn.requests[1]));
+
+    let chat = conversation(&state).await;
+    let (run, _) = prepared(turn.events, End::Finish);
+    start(&state, "r1", Some(chat), run).await;
+    settled(&state).await;
+    let rows = saved(&state, chat).await;
+    let tool = gglib_core::domain::chat::MessageRole::Tool;
+    assert!(rows.iter().any(|row| row.role == tool), "{rows:?}");
+    for row in &rows {
+        let metadata = row.metadata.as_ref().map(Value::to_string);
+        assert!(!instructs(&row.content), "{}", row.content);
+        assert!(!instructs(&metadata.unwrap_or_default()), "{row:?}");
+    }
+}
+
 /// A model that answers a message sent with Draw in words, as one that
 /// writes its call as text does, ends the run failed with a sentence that
 /// says so: one request, no answer, and the run's code is a picture's.

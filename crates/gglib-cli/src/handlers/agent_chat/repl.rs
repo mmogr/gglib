@@ -356,6 +356,9 @@ async fn run_single_turn(
 }
 
 #[cfg(test)]
+#[path = "turn_draw_tests.rs"]
+mod turn_draw_tests;
+#[cfg(test)]
 #[path = "turn_resumed_tests.rs"]
 mod turn_resumed_tests;
 #[cfg(test)]

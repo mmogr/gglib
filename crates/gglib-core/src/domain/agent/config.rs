@@ -315,6 +315,15 @@ pub struct AgentConfig {
 /// offering no tools at all, and that reply's text is the run's answer: a
 /// tool call in it is not run, and a reply with no text is answered with
 /// [`if_wordless`](Self::if_wordless).
+///
+/// That second request ends with one message more than the run's history
+/// holds: the composer's instruction for the reply, as a `user` message
+/// after the tool's result, [`then_say`](Self::then_say) when the tool
+/// succeeded and [`then_say_failed`](Self::then_say_failed) when it
+/// answered with an error. A model offered no tools is otherwise apt to
+/// say it cannot do what the tool has just done. The instruction is for
+/// the model alone, on that request alone: it is in no event the run sends
+/// and not in the history the run returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FirstCall {
     /// The tool, by the name the run's tool list gives it.
@@ -325,6 +334,13 @@ pub struct FirstCall {
     /// The run's answer when the reply after the tool ran has no text: fixed
     /// words of the composer's, true whether the tool succeeded or not.
     pub if_wordless: String,
+    /// What the model is told before the reply after the tool succeeded:
+    /// fixed words of the composer's, sent to the model and shown to no one.
+    pub then_say: String,
+    /// What the model is told before the reply after the tool answered with
+    /// an error: fixed words of the composer's, sent to the model and shown
+    /// to no one.
+    pub then_say_failed: String,
 }
 
 impl Default for AgentConfig {

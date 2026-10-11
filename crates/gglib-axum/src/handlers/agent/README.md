@@ -30,7 +30,12 @@ Once the tool has run, drawn or refused, the second request offers no tools
 at all (no `tools`, no `tool_choice`, no grammar) and its reply ends the
 run: its text is the answer, a tool call in it is not run, and a reply with
 no text is answered "The model said nothing after the drawing tool ran."
-(`gglib_mcp::DRAW_NO_WORDS`). The tools a filter names are not offered to
+(`gglib_mcp::DRAW_NO_WORDS`). That second request ends with one `user`
+message the run's rows and events never hold, telling the model what to say:
+`gglib_mcp::DRAW_THEN_SAY` when the tool drew (say in one or two sentences
+what it asked the tool to draw, without apology or saying it cannot draw)
+and `gglib_mcp::DRAW_THEN_SAY_FAILED` when the tool answered with an error
+(say what went wrong). The tools a filter names are not offered to
 such a run at any point. That holds for every run composed here with
 `draw`: the page's, a device's turn, and a chat run with builtins. Without
 `draw` the tool is in no list and
