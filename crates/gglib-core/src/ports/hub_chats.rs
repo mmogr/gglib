@@ -133,7 +133,8 @@ pub trait AgentRunStarter: Send + Sync + std::fmt::Debug {
     /// Start `device`'s run `id` on a chat the device keeps itself, with
     /// gglib's builtins: `body` is its `OpenAI` chat request, whole history
     /// included, run through the agent loop on the model it names. The
-    /// image tool is offered only with `draw`. Nothing is saved to any
+    /// image tool is offered only with `draw`, and draws with
+    /// `image_model` when the person chose one. Nothing is saved to any
     /// chat here, and the run's events are the agent loop's.
     ///
     /// # Errors
@@ -141,12 +142,14 @@ pub trait AgentRunStarter: Send + Sync + std::fmt::Debug {
     /// A [`TurnRefused`]: a body that is not a chat request, a history that
     /// cannot be read, an image that cannot be stored, a model that draws
     /// or cannot read the history's images, `draw` where nothing can draw,
-    /// no free agent slot, and the runs' own.
+    /// an `image_model` without `draw` or one that cannot draw, no free
+    /// agent slot, and the runs' own.
     async fn start_chat(
         &self,
         device: &str,
         id: &str,
         body: serde_json::Value,
         draw: bool,
+        image_model: Option<u32>,
     ) -> Result<Created, TurnRefused>;
 }

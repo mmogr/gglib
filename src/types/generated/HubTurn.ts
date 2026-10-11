@@ -47,4 +47,13 @@ answer_saved?: boolean,
  * client that did not press Draw; a client asks
  * `GET /v1/images/drawing` before it offers the button.
  */
-draw?: boolean, };
+draw?: boolean, 
+/**
+ * The image model the person chose for this turn's picture, by the
+ * `id` of its row in the hub's `GET /v1/images/drawing` answer. Only
+ * with `draw`; left out, the hub's default rule draws. Nothing of it
+ * is remembered by the hub: a client that keeps the choice says it on
+ * every turn that draws. Left out of the body when unsaid, so only a
+ * hub whose answer listed `models` is ever sent it.
+ */
+image_model?: number, };

@@ -23,6 +23,13 @@ message after `/draw` in `gglib chat`. Listing and calling both read the
 table, so a tool that is not listed is refused when called. The page's tool
 list (`bare_definitions`) never carries `generate_image`.
 
+Which image model draws is never the calling model's to say: the tool has no
+such argument, and a `model` key in a call is not read. A person's choice
+reaches the tool through `DrawWith`, a cell its composer holds (a run's door
+sets it once, `gglib chat` changes it with `/draw <model>`), and the tool
+sets it as the model of the request it hands the image driver. With none
+chosen the request names no model and the driver's default rule draws.
+
 A message sent with Draw makes one call of `generate_image`. Pressing the
 button is the person's explicit ask, so whether to draw is not left to the
 model: the run's first reply is held to a call of `generate_image`, offered

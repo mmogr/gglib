@@ -471,3 +471,6 @@ async fn each_stage_of_the_render_is_the_tools_progress() {
         ]
     );
 }
+
+#[path = "generate_image_model_tests.rs"]
+mod model_tests;

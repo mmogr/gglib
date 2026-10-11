@@ -234,6 +234,21 @@ it a resumed chat runs as it remembers, and a chat switched off says so on
 stderr when that sets a typed budget aside. See
 [the two reasoning controls](sampling.md#the-two-reasoning-controls).
 
+In the session, `/draw` lets the model draw a picture for the next message
+typed, and only that one, with the daemon's image model. `/draw list` prints
+the daemon's image models, one to a line: a `*` on the one the next `/draw`
+message would draw with, its id, name and family, and whether it is the
+default, loaded, this session's choice, or missing a file. `/draw <model>`
+chooses one for the session, by its id, its name, or a part of the name no
+other has, and arms the next message; a name that fits none or several
+changes nothing and is answered with the list, and a model that cannot draw
+with the daemon's reason. The choice is held until the session ends: every
+later `/draw` draws with it and says so. `/draw default` forgets it. A
+chosen model that has since gone, or lost a file, is never swapped for the
+default: `/draw` says why it cannot draw and how to choose again. The choice
+is not saved with the chat, and the chat model is neither told of it nor
+able to make it.
+
 Local models need guardrails to finish a tool-calling task, so the loop carries
 iteration limits (`--max-iterations`; without it the limit a resumed chat
 saved, then the `max-tool-iterations` setting, which is the order the chat

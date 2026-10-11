@@ -476,6 +476,18 @@ is a setting, and it is the only one. The wire is
 this decision's first change makes the rule and the list, and the field on
 a run's request follows it.
 
+The field is on every door a message sent with Draw comes through: the
+page's run and a device's hub turn carry it in the body, a phone-kept chat
+run in its query, and a far chat's turn is handed on with it untouched for
+the far machine to judge. It is judged by row 1 of the rule and refused with
+that row's code before anything is written or loaded. `image_model` without
+`draw` is refused `invalid_request`: a run without Draw is offered no image
+tool, and the choice would be dropped in silence. A hub turn still refuses
+a key it does not know, so a client sends `image_model` only to a machine
+whose answer listed `models`. On the page, picking a model presses Draw for
+the next message. `gglib image -m` and `POST /v1/images/generations` named
+their model before this and are unchanged.
+
 The model that calls the tool never picks. `generate_image` has no argument
 for the image model, in a run and through `/mcp` alike: whoever calls the
 tool is a model, and the image model is a person's choice or the machine's

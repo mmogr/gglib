@@ -44,7 +44,9 @@ export async function openFarChat(id: number): Promise<HubChatOpen> {
  * that thinks, so the page offers no switch to change it by. Only a turn
  * sent with Draw pressed carries `draw`, for the same reason: the button is
  * pressed only after the far machine answered that it can draw
- * (`drawingAvailability`), which one from before drawing never does.
+ * (`drawingAvailability`), which one from before drawing never does. Only a
+ * turn whose image model was chosen carries `image_model`, and a choice is
+ * offered only where the far machine's answer listed its image models.
  */
 export async function addFarTurn(
   id: number,
@@ -53,12 +55,14 @@ export async function addFarTurn(
   images: string[] = [],
   thinking?: Thinking,
   draw = false,
+  imageModel?: number,
 ): Promise<RunInfo> {
   const body: RemoteTurnBody = {
     content,
     ...(images.length > 0 && { images }),
     ...(thinking !== undefined && { thinking }),
     ...(draw && { draw: true }),
+    ...(draw && imageModel !== undefined && { image_model: imageModel }),
   };
   return put<RunInfo>(`/api/remote/chats/${id}/turns/${encodeURIComponent(runId)}`, body);
 }

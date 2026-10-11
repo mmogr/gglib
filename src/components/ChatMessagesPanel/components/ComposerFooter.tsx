@@ -13,6 +13,7 @@ import { TurnRow } from './TurnRow';
 import { ModelPicker, type ModelChoice } from './ModelPicker';
 import { AttachImageButton, ComposerImages, ImageInputContext } from './ComposerImages';
 import { ContextRing } from './ContextRing';
+import { ImageModelMenu } from './ImageModelMenu';
 
 interface ComposerFooterProps {
   isServerConnected: boolean;
@@ -68,7 +69,9 @@ function drawTitle(draw: DrawSwitch): string | undefined {
  * reads "Thinking off" beside another icon, so which way it is never rests
  * on its colours alone. Draw is a button too, pressed for the next message
  * alone and reading "Draw on" while it is; where a message cannot draw it is
- * greyed, and its title says why.
+ * greyed, and its title says why. Beside it, where the machine that draws
+ * has two or more image models, is the menu that picks one for the chat
+ * (`ImageModelMenu`).
  */
 export const ComposerFooter: FC<ComposerFooterProps> = ({
   isServerConnected,
@@ -130,6 +133,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
                 Draw{draw.armed && <span aria-hidden="true"> on</span>}
               </Chip>
             )}
+            {draw && <ImageModelMenu draw={draw} />}
           </div>
         }
         body={

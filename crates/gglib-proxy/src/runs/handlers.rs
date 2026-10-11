@@ -82,6 +82,12 @@ pub(crate) struct PutQuery {
     /// with `kind=agent`, whose turn says `draw` in its body.
     #[serde(default)]
     draw: bool,
+    /// With `tools=builtin&draw=true`: the image model the person chose
+    /// for the picture, by its id in `GET /v1/images/drawing`'s `models`.
+    /// Absent, the default rule draws. Refused with `kind=agent`, whose
+    /// turn says `image_model` in its body, and on a plain chat run.
+    #[serde(default)]
+    image_model: Option<u32>,
 }
 
 /// What `?tools=` may say.
@@ -105,7 +111,8 @@ pub(crate) async fn put_run(
 ) -> Answer {
     let Ok(Query(query)) = query else {
         return Err(invalid(
-            "`kind` is `chat` or `agent`, `tools` is `builtin`, and `draw` is `true` or `false`",
+            "`kind` is `chat` or `agent`, `tools` is `builtin`, `draw` is `true` or `false`, \
+             and `image_model` is an image model's id",
         ));
     };
     let body = match body {
@@ -121,19 +128,23 @@ pub(crate) async fn put_run(
     if query.kind == Some(RunKind::Agent) {
         // Never dropped in silence: a turn that said Draw here would run
         // and draw nothing.
-        if query.draw {
+        if query.draw || query.image_model.is_some() {
             return Err(invalid(
-                "an agent run says `draw` in its body, `\"draw\": true`, not in the query",
+                "an agent run says `draw` and `image_model` in its body, `\"draw\": true`, not \
+                 in the query",
             ));
         }
         return super::turn::put(&state, scope, &id, body).await;
     }
     if query.tools == Some(Tools::Builtin) {
-        return super::turn::put_chat(&state, scope, &id, body, query.draw).await;
+        // An `image_model` without `draw` is the starter's to refuse, with
+        // every other door's.
+        let drawing = (query.draw, query.image_model);
+        return super::turn::put_chat(&state, scope, &id, body, drawing).await;
     }
-    if query.draw {
+    if query.draw || query.image_model.is_some() {
         return Err(invalid(
-            "`draw` goes with `tools=builtin`: a plain chat run calls no tool",
+            "`draw` and `image_model` go with `tools=builtin`: a plain chat run calls no tool",
         ));
     }
     let runs = runs(&state).ok_or_else(unavailable)?;

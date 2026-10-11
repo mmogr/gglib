@@ -256,6 +256,22 @@ the next message draws, with flux1-schnell
 You: a red fox in the snow at dawn
 ```
 
+With more than one image model on the daemon, `/draw list` prints them,
+`/draw <model>` chooses one for the session by name or id and arms the next
+message, and `/draw default` goes back to the daemon's default. The choice
+lasts until the session ends and is not saved with the chat; a chosen model
+that can no longer draw is refused with the reason, never swapped for the
+default.
+
+```bash
+You: /draw list
+     7  qwen-image-q8  (Qwen-Image 2.1)
+*    3  flux1-schnell  (Flux.1, default, loaded)
+  /draw <name or id> chooses one for this session; /draw default forgets it
+You: /draw qwen
+the next message draws, with qwen-image-q8, this session's image model
+```
+
 - **Stored once, sent by id.** Each file is stored in this machine's database
   exactly as it is on disk, under the SHA-256 of its bytes, and the message
   names it by that id. The bytes become an `image_url` only in the request to

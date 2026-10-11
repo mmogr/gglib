@@ -39,7 +39,7 @@ export const DrawingSettings: FC<DrawingSettingsProps> = ({
       <SettingField
         id="default-image-model-select"
         label="Default Image Model"
-        description="The model a drawing uses when it names none. Only models that draw are listed."
+        description="The model a drawing uses when it names none. Only models that draw are listed. A chat can pick another from the menu beside its Draw button."
       >
         <Select
           id="default-image-model-select"

@@ -227,6 +227,7 @@ pub(super) async fn phone(state: &AppState, model_id: i64) -> AgentChatRequest {
         thinking: None,
         answer_saved: false,
         draw: false,
+        image_model: None,
     };
     super::hub_turn::plan(state, turn).await.unwrap().chat
 }

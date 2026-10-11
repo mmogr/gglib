@@ -8,7 +8,7 @@ the daemon's `/api/runs/*`, served through the `RunsPort` the proxy was
 started with, and answered `503 runs_unavailable` without one.
 
 `PUT /v1/runs/{id}?kind=agent` with `{conversation_id, content, images?,
-thinking?, answer_saved?, draw?}` is a
+thinking?, answer_saved?, draw?, image_model?}` is a
 paired device's turn on one of the hub's chats: handed to the daemon's
 `AgentRunStarter`, which runs the reply as an agent run in the device's
 scope and saves it to the chat. Only a named device may; anything else is
@@ -18,7 +18,8 @@ key, is `400 invalid_request`. `answer_saved: true`, with empty `content` and
 no image, answers the question the chat already ends in, as a change at
 `/v1/chats/{id}/changes` leaves it (ADR 0017); on a chat that ends in none it
 is `409 nothing_to_answer`. `draw` is the device's Draw button, sent only
-when pressed.
+when pressed, and `image_model` the id of the image model the person chose
+for that picture, sent only when one was.
 
 `PUT /v1/runs/{id}?kind=chat&tools=builtin` is a chat run for a chat the
 device keeps itself, run through the agent loop with gglib's builtins: the
@@ -28,6 +29,10 @@ message. Only a named device may. The run it answers says `frames: "agent"`:
 its events are the agent loop's, not `OpenAI` chunks, and a reader picks its
 decoder by that key. Without `tools` a chat run is what it always was, its
 answer carries no `frames` key, and `draw` alone is `400 invalid_request`.
+`&image_model=<id>` beside `&draw=true` is the chosen image model, handed to
+the starter as the query said it; on a plain chat run, or beside
+`kind=agent` (whose turn says it in its body), it is `400 invalid_request`,
+and without `draw` the starter refuses it the same.
 
 A request the tunnel edge marked is served in the scope of the device it
 named, and sees that device's runs and every run on one of the hub's

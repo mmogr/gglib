@@ -343,3 +343,7 @@ mod tests;
 #[cfg(test)]
 #[path = "drawing_model_tests.rs"]
 mod model_tests;
+
+#[cfg(test)]
+#[path = "drawing_contract_tests.rs"]
+mod contract_tests;

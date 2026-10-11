@@ -33,6 +33,7 @@ async fn a_run_id_that_could_name_another_route_is_refused_before_sending() {
         thinking: None,
         answer_saved: false,
         draw: false,
+        image_model: None,
     };
     for id in ["..", "a/b", "", "run.1", &"x".repeat(65)] {
         assert!(

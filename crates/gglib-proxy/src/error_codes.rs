@@ -95,7 +95,7 @@ const CODES: &[ErrorCode] = &[
     // The proxy's own refusals: `ErrorResponse`'s constructors.
     row("model_loading", UNAVAILABLE, Some(503), "The model is still loading; retry shortly."),
     row("admission_timeout", UNAVAILABLE, Some(503), "The request waited its limit for the model without being admitted; retry shortly."),
-    row("model_not_found", INVALID, Some(404), "No model with that id or name is in the catalog."),
+    row("model_not_found", INVALID, None, "No model with that id or name is in the catalog: a 404. A run or turn that says draw and names an image_model no longer in the catalog is refused with this code as a 400."),
     row("profile_not_found", INVALID, Some(404), "No model has that name, and its :suffix names no inference profile."),
     row("not_an_embedding_model", INVALID, Some(400), "An embeddings request named a model not tagged embedding."),
     row("embedding_model_cannot_chat", INVALID, Some(400), "A chat request named an embedding model."),
@@ -104,7 +104,7 @@ const CODES: &[ErrorCode] = &[
     row("image_runtime_not_installed", SERVER, Some(503), "An image model was asked for and stable-diffusion.cpp's sd-server is not installed; install it with gglib config sd install. Retrying will not help."),
     row("image_model_does_not_fit", UNAVAILABLE, Some(503), "An image model needs more memory than is free, and the model it would displace is held by a run; refused at once, retry when that run ends."),
     // Drawing: `ImageError::code`, on `/v1/images/generations` and the daemon's twin.
-    row("not_an_image_model", INVALID, Some(400), "An image request named a model that is not an image model; name an image model, or leave the model out."),
+    row("not_an_image_model", INVALID, Some(400), "An image request named a model that is not an image model; name an image model, or leave the model out. Also what a run or turn is refused with when its image_model is not an image model."),
     row("invalid_image_size", INVALID, Some(400), "The size cannot be read as WIDTHxHEIGHT, or is not one the image model's family draws, in which case the message gives the family's rule and a size to try."),
     row("drawing_unavailable", INVALID, Some(400), "Nothing here can draw the request, or draw for a run that says draw: the chat's model is on another machine, the chat's model calls no tools, the proxy runs outside the daemon, there is no image runtime or no image model, there are several and none is named or set as the default, or the default or the only one is missing a file; the message says which. The availability routes answer 200 and give this code, with the reason, as what a request to draw would be refused with."),
     row("image_generation_failed", SERVER, Some(502), "No picture was drawn: the image runtime took the render and failed it, or lost it (the message carries its words; try another prompt or size, or retry); the image model was stopped while it drew; or a run sent with Draw ended because its model's first reply did not call the image tool (try again, or pick a model that calls tools)."),

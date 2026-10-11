@@ -117,6 +117,15 @@ pub struct HubTurn {
     #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub draw: bool,
+    /// The image model the person chose for this turn's picture, by the
+    /// `id` of its row in the hub's `GET /v1/images/drawing` answer. Only
+    /// with `draw`; left out, the hub's default rule draws. Nothing of it
+    /// is remembered by the hub: a client that keeps the choice says it on
+    /// every turn that draws. Left out of the body when unsaid, so only a
+    /// hub whose answer listed `models` is ever sent it.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_model: Option<u32>,
 }
 
 #[cfg(test)]

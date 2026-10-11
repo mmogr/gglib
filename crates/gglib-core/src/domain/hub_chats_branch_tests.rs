@@ -114,6 +114,7 @@ pub(super) fn answer_turn() -> HubTurn {
         thinking: None,
         answer_saved: true,
         draw: false,
+        image_model: None,
     }
 }
 

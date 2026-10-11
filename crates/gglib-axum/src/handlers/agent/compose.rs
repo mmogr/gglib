@@ -13,7 +13,7 @@ use gglib_core::domain::ModelRef;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_core::ports::{AdmissionLease, AgentGuardReporter, AgentLoopPort, RetryObserver};
 use gglib_core::services::{AttachmentService, drawing_availability};
-use gglib_mcp::{DrawArm, DrawingTool};
+use gglib_mcp::{DrawArm, DrawWith, DrawingTool};
 use gglib_runtime::{LoopGeneration, compose_agent_loop};
 
 use super::AgentChatRequest;
@@ -61,31 +61,64 @@ pub(crate) const DRAW_TOOL: &str = gglib_core::request_pipeline::DRAW_TOOL_NAME;
 
 /// Refuse a request sent with Draw pressed that this machine cannot draw
 /// for: its model on another machine, no image runtime, no usable image
-/// model. Called before a slot is taken or anything is written. A request
-/// without `draw` passes: it is offered no image tool at all.
+/// model, or a chosen image model (`image_model`) that is gone, is not one
+/// or lacks a file. Called before a slot is taken or anything is written. A
+/// request without `draw` passes, unless it chose an image model: it is
+/// offered no image tool at all, so the choice would be dropped in silence.
+///
+/// The one place every door's `draw` and `image_model` are judged: the
+/// page's run, a device's turn, a chat run with builtins and the chat
+/// route.
 ///
 /// # Errors
 ///
-/// `drawing_unavailable` (400) with the reason.
+/// `invalid_request` (400) for `image_model` without `draw`; otherwise 400
+/// with the availability answer's own code (`drawing_unavailable`,
+/// `model_not_found`, `not_an_image_model`, `image_model_incomplete`) and
+/// its reason.
 pub(crate) async fn refuse_unavailable_drawing(
     state: &AppState,
     req: &AgentChatRequest,
 ) -> Result<(), HttpError> {
+    let refused = |code, message| HttpError::Coded {
+        status: axum::http::StatusCode::BAD_REQUEST,
+        code,
+        message,
+    };
     if !req.draw {
+        if req.image_model.is_some() {
+            return Err(refused(
+                "invalid_request",
+                "`image_model` goes with `draw`: it chooses what a message sent with Draw \
+                 pressed draws with"
+                    .to_owned(),
+            ));
+        }
         return Ok(());
     }
-    let answer =
-        drawing_availability(Some(state.images.as_ref()), req.far.is_some(), None, None).await;
+    let images = Some(state.images.as_ref());
+    let answer = drawing_availability(images, req.far.is_some(), None, req.image_model).await;
     if answer.available {
         return Ok(());
     }
-    Err(HttpError::Coded {
-        status: axum::http::StatusCode::BAD_REQUEST,
-        code: "drawing_unavailable",
-        message: answer
+    Err(refused(
+        drawing_code(answer.code.as_deref()),
+        answer
             .reason
             .unwrap_or_else(|| "this machine cannot draw".to_owned()),
-    })
+    ))
+}
+
+/// An availability answer's code as the refusal's: one of the four a
+/// request to draw is refused with, and `drawing_unavailable` for an answer
+/// that gives none or one not known here.
+fn drawing_code(code: Option<&str>) -> &'static str {
+    match code {
+        Some("model_not_found") => "model_not_found",
+        Some("not_an_image_model") => "not_an_image_model",
+        Some("image_model_incomplete") => "image_model_incomplete",
+        _ => "drawing_unavailable",
+    }
 }
 
 /// A request's tool filter once Draw is counted: every tool stays every
@@ -136,10 +169,13 @@ pub(super) async fn prepare_over(
     let tool_filter = with_drawing(req.tool_filter.map(|f| f.into_iter().collect()), req.draw);
     // The image tool exists for this loop only when the message was sent
     // with Draw pressed; without it no filter, `null` included, reaches one.
+    // The image model the person chose goes on the tool, for the request it
+    // hands the driver, and into nothing the chat model is sent.
     let drawing = req.draw.then(|| {
         let store = AttachmentService::new(state.core.attachments().store());
         (
-            DrawingTool::new(Arc::clone(&state.images), Arc::new(store)),
+            DrawingTool::new(Arc::clone(&state.images), Arc::new(store))
+                .drawing_with(DrawWith::model(req.image_model)),
             DrawArm::Fixed(true),
         )
     });

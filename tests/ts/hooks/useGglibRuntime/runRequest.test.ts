@@ -101,6 +101,19 @@ describe('buildRunRequest', () => {
     expect(buildRunRequest(options({ draw: true }))).toEqual({ ...unsaid, draw: true });
   });
 
+  it('says the image model only beside draw, by its id, and has no such key otherwise', () => {
+    const drawn = buildRunRequest(options({ draw: true }));
+    expect(Object.keys(drawn)).not.toContain('image_model');
+    expect(buildRunRequest(options({ draw: true, imageModel: 7 }))).toEqual({ ...drawn, image_model: 7 });
+
+    // A choice is the chat's, held between drawings: a run without Draw never carries it.
+    for (const draw of [false, undefined]) {
+      const plain = buildRunRequest(options({ draw, imageModel: 7 }));
+      expect(Object.keys(plain)).not.toContain('image_model');
+      expect(Object.keys(plain)).not.toContain('draw');
+    }
+  });
+
   it('never says draw by the tool filter: a model that calls no tools still names none', () => {
     expect(buildRunRequest(options({ supportsToolCalls: false }))).toMatchObject({ tool_filter: [] });
     expect(Object.keys(buildRunRequest(options({ supportsToolCalls: false })))).not.toContain('draw');

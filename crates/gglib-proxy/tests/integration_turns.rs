@@ -45,6 +45,7 @@ async fn a_named_devices_turn_reaches_the_starter_in_its_name() {
         thinking: None,
         answer_saved: false,
         draw: false,
+        image_model: None,
     };
     assert_eq!(started, vec![(DEVICE.to_owned(), "d1".to_owned(), turn)]);
     assert!(runs.scopes().is_empty(), "no chat run was made");
@@ -73,6 +74,7 @@ async fn a_turns_images_reach_the_starter_by_id() {
         thinking: None,
         answer_saved: false,
         draw: false,
+        image_model: None,
     };
     let started = turns.started.lock().unwrap().clone();
     assert_eq!(started, vec![(DEVICE.to_owned(), "d1".to_owned(), turn)]);
@@ -228,6 +230,102 @@ async fn a_chat_run_with_builtins_reaches_the_starter_with_its_body_and_draw() {
     }
     assert!(turns.started.lock().unwrap().is_empty(), "no hub turn");
     assert!(runs.scopes().is_empty(), "no chat run was made");
+    cancel.cancel();
+}
+
+/// `&image_model=<id>` reaches the starter as the query said it, with
+/// `draw` and without: the starter refuses the one without, as every door
+/// does. Absent, none is chosen.
+#[tokio::test]
+async fn a_chat_run_with_builtins_hands_the_starter_its_image_model() {
+    let turns = Arc::new(FakeTurns::default());
+    let runs = Arc::new(FakeRuns::default());
+    let (base, cancel) = serve(Some(Arc::clone(&turns)), Arc::clone(&runs)).await;
+
+    for (query, draw, image_model) in [
+        (
+            "?kind=chat&tools=builtin&draw=true&image_model=7",
+            true,
+            Some(7),
+        ),
+        ("?kind=chat&tools=builtin&draw=true", true, None),
+        ("?tools=builtin&image_model=7", false, Some(7)),
+    ] {
+        let sent = from_device(put_chat(&base, query, &chat_request()));
+        let (status, run) = json(sent.send().await.unwrap()).await;
+        assert_eq!(status, StatusCode::CREATED, "{query}: {run}");
+        let started = turns.chats.lock().unwrap().last().cloned().unwrap();
+        assert_eq!(started.2, chat_request(), "the body is untouched");
+        assert_eq!(started.3, draw, "{query}");
+        assert_eq!(
+            *turns.chose.lock().unwrap().last().unwrap(),
+            image_model,
+            "{query}"
+        );
+    }
+
+    // Each of the starter's refusals of a chosen model comes back as given.
+    for refused in [
+        "invalid_request",
+        "model_not_found",
+        "not_an_image_model",
+        "image_model_incomplete",
+    ] {
+        *turns.fail.lock().unwrap() = Some(TurnRefused {
+            status: 400,
+            code: refused.to_owned(),
+            message: "why".to_owned(),
+        });
+        let query = "?tools=builtin&draw=true&image_model=7";
+        let sent = from_device(put_chat(&base, query, &chat_request()));
+        let (status, answer) = json(sent.send().await.unwrap()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
+        assert_eq!(code(&answer), refused);
+    }
+    cancel.cancel();
+}
+
+/// `image_model` is refused where it would be dropped: on a plain chat
+/// run, which calls no tool, and beside `kind=agent`, whose turn says it in
+/// its body; and it is an id, nothing else.
+#[tokio::test]
+async fn an_image_model_in_the_query_is_refused_where_it_means_nothing() {
+    let turns = Arc::new(FakeTurns::default());
+    let runs = Arc::new(FakeRuns::default());
+    let (base, cancel) = serve(Some(Arc::clone(&turns)), Arc::clone(&runs)).await;
+
+    for query in [
+        "?image_model=7",
+        "?kind=chat&image_model=7",
+        "?tools=builtin&draw=true&image_model=default",
+        "?tools=builtin&draw=true&image_model=-1",
+    ] {
+        let sent = from_device(put_chat(&base, query, &chat_request()));
+        let (status, answer) = json(sent.send().await.unwrap()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{query}: {answer}");
+        assert_eq!(code(&answer), "invalid_request", "{query}");
+    }
+    let turn = json!({ "conversation_id": 7, "content": "a fox", "draw": true });
+    let sent = from_device(put_chat(&base, "?kind=agent&image_model=7", &turn));
+    let (status, answer) = json(sent.send().await.unwrap()).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
+    assert_eq!(code(&answer), "invalid_request");
+    let message = answer["error"]["message"].as_str().unwrap();
+    assert!(message.contains("in its body"), "{message}");
+
+    // In the body, where a turn says it, it reaches the starter.
+    let turn = json!({ "conversation_id": 7, "content": "a fox", "draw": true, "image_model": 7 });
+    let sent = from_device(put_chat(&base, "?kind=agent", &turn));
+    let (status, answer) = json(sent.send().await.unwrap()).await;
+    assert_eq!(status, StatusCode::CREATED, "{answer}");
+    let started = turns.started.lock().unwrap().clone();
+    assert_eq!(started.len(), 1);
+    assert_eq!(
+        (started[0].2.draw, started[0].2.image_model),
+        (true, Some(7))
+    );
+    assert!(turns.chats.lock().unwrap().is_empty());
+    assert!(runs.scopes().is_empty());
     cancel.cancel();
 }
 

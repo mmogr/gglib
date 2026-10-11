@@ -35,6 +35,8 @@ pub(super) struct Recorded {
     pub(super) change: ChatChange,
     pub(super) changed: ChatChanged,
     pub(super) answer_turn: HubTurn,
+    /// A turn sent with Draw pressed and an image model chosen for it.
+    image_model_turn: HubTurn,
 }
 
 /// The image the recorded chat carries: a 1280x720 PNG, as an upload answers
@@ -114,6 +116,7 @@ fn turn(content: &str) -> HubTurn {
         thinking: None,
         answer_saved: false,
         draw: false,
+        image_model: None,
     }
 }
 
@@ -251,6 +254,11 @@ pub(super) fn recorded() -> Recorded {
         change: branch::change(),
         changed: branch::changed(),
         answer_turn: branch::answer_turn(),
+        image_model_turn: HubTurn {
+            draw: true,
+            image_model: Some(7),
+            ..turn("Draw a red dot.")
+        },
     }
 }
 
@@ -424,6 +432,7 @@ fn a_tool_row_carries_the_images_its_tool_made() {
 fn a_turn_says_draw_only_when_it_was_pressed() {
     let pressed = HubTurn {
         draw: true,
+        image_model: None,
         ..turn("a fox")
     };
     assert_eq!(
@@ -434,4 +443,32 @@ fn a_turn_says_draw_only_when_it_was_pressed() {
     assert!(plain.get("draw").is_none(), "{plain}");
     let read: HubTurn = serde_json::from_str(r#"{"conversation_id":12,"content":"hi"}"#).unwrap();
     assert!(!read.draw);
+}
+
+/// The chosen image model travels only when one was chosen, as its id; a
+/// body without the key reads as none chosen, and a turn still refuses a
+/// key it does not know.
+#[test]
+fn a_turn_says_its_image_model_only_when_one_was_chosen() {
+    let chosen = HubTurn {
+        draw: true,
+        image_model: Some(7),
+        ..turn("a fox")
+    };
+    let wire = serde_json::json!(
+        { "conversation_id": 12, "content": "a fox", "draw": true, "image_model": 7 }
+    );
+    assert_eq!(serde_json::to_value(&chosen).unwrap(), wire);
+    assert_eq!(serde_json::from_value::<HubTurn>(wire).unwrap(), chosen);
+    let plain = serde_json::to_value(turn("hi")).unwrap();
+    assert!(plain.get("image_model").is_none(), "{plain}");
+    let read: HubTurn = serde_json::from_str(r#"{"conversation_id":12,"content":"hi"}"#).unwrap();
+    assert_eq!(read.image_model, None);
+    for odd in [
+        r#"{"conversation_id":12,"content":"hi","draw":true,"image_model":"default"}"#,
+        r#"{"conversation_id":12,"content":"hi","draw":true,"image_model":-1}"#,
+        r#"{"conversation_id":12,"content":"hi","draw":true,"imageModel":7}"#,
+    ] {
+        assert!(serde_json::from_str::<HubTurn>(odd).is_err(), "{odd}");
+    }
 }

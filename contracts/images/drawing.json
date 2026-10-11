@@ -1,0 +1,192 @@
+{
+  "unnamed": {
+    "available": true,
+    "model": "sdxl-turbo",
+    "model_id": 4,
+    "models": [
+      {
+        "id": 2,
+        "name": "flux",
+        "family": "flux1",
+        "complete": false,
+        "missing": [
+          "vae",
+          "clip_l",
+          "t5xxl"
+        ],
+        "default": false,
+        "resident": false
+      },
+      {
+        "id": 1,
+        "name": "sdxl",
+        "family": "sdxl",
+        "complete": true,
+        "missing": [],
+        "default": false,
+        "resident": true
+      },
+      {
+        "id": 4,
+        "name": "sdxl-turbo",
+        "family": "sdxl",
+        "complete": true,
+        "missing": [],
+        "default": true,
+        "resident": false
+      }
+    ]
+  },
+  "chosen": {
+    "available": true,
+    "model": "sdxl",
+    "model_id": 1,
+    "models": [
+      {
+        "id": 2,
+        "name": "flux",
+        "family": "flux1",
+        "complete": false,
+        "missing": [
+          "vae",
+          "clip_l",
+          "t5xxl"
+        ],
+        "default": false,
+        "resident": false
+      },
+      {
+        "id": 1,
+        "name": "sdxl",
+        "family": "sdxl",
+        "complete": true,
+        "missing": [],
+        "default": false,
+        "resident": true
+      },
+      {
+        "id": 4,
+        "name": "sdxl-turbo",
+        "family": "sdxl",
+        "complete": true,
+        "missing": [],
+        "default": true,
+        "resident": false
+      }
+    ]
+  },
+  "chosen_incomplete": {
+    "available": false,
+    "code": "image_model_incomplete",
+    "reason": "Image model 'flux' has no VAE, CLIP-L or T5-XXL linked, so it cannot draw. Link each with `gglib model update \"flux\" --component vae=<path> --component clip_l=<path> --component t5xxl=<path>`.",
+    "models": [
+      {
+        "id": 2,
+        "name": "flux",
+        "family": "flux1",
+        "complete": false,
+        "missing": [
+          "vae",
+          "clip_l",
+          "t5xxl"
+        ],
+        "default": false,
+        "resident": false
+      },
+      {
+        "id": 1,
+        "name": "sdxl",
+        "family": "sdxl",
+        "complete": true,
+        "missing": [],
+        "default": false,
+        "resident": true
+      },
+      {
+        "id": 4,
+        "name": "sdxl-turbo",
+        "family": "sdxl",
+        "complete": true,
+        "missing": [],
+        "default": true,
+        "resident": false
+      }
+    ]
+  },
+  "chosen_gone": {
+    "available": false,
+    "code": "model_not_found",
+    "reason": "the image model chosen (id 99) is no longer on this machine; choose another",
+    "models": [
+      {
+        "id": 2,
+        "name": "flux",
+        "family": "flux1",
+        "complete": false,
+        "missing": [
+          "vae",
+          "clip_l",
+          "t5xxl"
+        ],
+        "default": false,
+        "resident": false
+      },
+      {
+        "id": 1,
+        "name": "sdxl",
+        "family": "sdxl",
+        "complete": true,
+        "missing": [],
+        "default": false,
+        "resident": true
+      },
+      {
+        "id": 4,
+        "name": "sdxl-turbo",
+        "family": "sdxl",
+        "complete": true,
+        "missing": [],
+        "default": true,
+        "resident": false
+      }
+    ]
+  },
+  "several_and_no_default": {
+    "available": false,
+    "code": "drawing_unavailable",
+    "reason": "this machine has 2 image models that can draw (sdxl, sdxl-turbo); name the one to draw with, or set a default with `gglib config settings set --default-image-model <name>`",
+    "models": [
+      {
+        "id": 2,
+        "name": "flux",
+        "family": "flux1",
+        "complete": false,
+        "missing": [
+          "vae",
+          "clip_l",
+          "t5xxl"
+        ],
+        "default": false,
+        "resident": false
+      },
+      {
+        "id": 1,
+        "name": "sdxl",
+        "family": "sdxl",
+        "complete": true,
+        "missing": [],
+        "default": false,
+        "resident": false
+      },
+      {
+        "id": 4,
+        "name": "sdxl-turbo",
+        "family": "sdxl",
+        "complete": true,
+        "missing": [],
+        "default": false,
+        "resident": false
+      }
+    ]
+  }
+}

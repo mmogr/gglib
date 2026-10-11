@@ -48,6 +48,12 @@ pub(crate) struct RemoteTurnBody {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts-bindings", ts(as = "Option<bool>", optional))]
     pub draw: bool,
+    /// The image model chosen for this turn's picture, as
+    /// [`HubTurn::image_model`] carries it: an id in the far machine's own
+    /// list, handed on as it came for that machine to judge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub image_model: Option<u32>,
 }
 
 /// `?after=N` on a run's events.
@@ -134,6 +140,7 @@ pub(super) async fn add_turn_via(
         thinking: body.thinking,
         answer_saved: false,
         draw: body.draw,
+        image_model: body.image_model,
     };
     Ok(relay(far.add_turn(run_id, &turn).await?).await)
 }

@@ -39,6 +39,7 @@ const RECORDED = JSON.parse(rust('contracts/chats/recorded.json')) as {
   change: ChatChange;
   changed: ChatChanged;
   answer_turn: HubTurn;
+  image_model_turn: HubTurn;
 };
 
 /** The two keys every turn carries. */
@@ -52,6 +53,7 @@ const TURN_OPTIONAL: Record<Exclude<keyof HubTurn, keyof typeof TURN_KEYS>, stri
   thinking: 'string',
   answer_saved: 'boolean',
   draw: 'boolean',
+  image_model: 'number',
 };
 
 /** What a stored image is told as: its id and what its header says. */
@@ -175,9 +177,19 @@ describe('the recorded hub chats', () => {
     });
   });
 
-  it('a turn carries no key but its two, its images, its thinking choice, whether it answers a saved question and draw', () => {
-    expect(Object.keys(TURN_OPTIONAL).sort()).toEqual(['answer_saved', 'draw', 'images', 'thinking']);
-    for (const turn of [RECORDED.turn, RECORDED.image_turn, RECORDED.thinking_turn, RECORDED.answer_turn]) {
+  it('a turn sent with Draw and an image model chosen says both beside the message, the model by its id', () => {
+    expect(RECORDED.image_model_turn).toEqual({
+      conversation_id: 12,
+      content: 'Draw a red dot.',
+      draw: true,
+      image_model: 7,
+    });
+  });
+
+  it('a turn carries no key but its two, its images, its thinking choice, whether it answers a saved question, draw and the image model', () => {
+    expect(Object.keys(TURN_OPTIONAL).sort()).toEqual(['answer_saved', 'draw', 'image_model', 'images', 'thinking']);
+    const turns = [RECORDED.turn, RECORDED.image_turn, RECORDED.thinking_turn, RECORDED.answer_turn, RECORDED.image_model_turn];
+    for (const turn of turns) {
       expectKeys(turn as unknown as Body, TURN_KEYS, TURN_OPTIONAL);
     }
   });
