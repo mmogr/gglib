@@ -79,9 +79,9 @@ help: ## Show this help
 
 ##@ Build and install
 
-# Where `install` puts the binary, and so what `uninstall` removes. It is a
-# plain copy: no `cargo install` ever ran, so `cargo uninstall` has nothing to
-# remove.
+# Where `install` puts the binary, and so what `uninstall` removes (the same
+# path is in `scripts/uninstall.sh`). It is a plain copy: no `cargo install`
+# ever ran, so `cargo uninstall` has nothing to remove.
 INSTALLED_BIN := $$HOME/.cargo/bin/gglib
 
 # Uses pre-built binary from target/release/ (built by build-tauri or cargo build)
@@ -110,23 +110,11 @@ path-check:
 		echo "  Both use the same library. \`gglib config paths\` says which binary is running."; \
 	fi
 
-uninstall: ## Remove the installed gglib binary and build artifacts (never your library)
-	@echo "This removes $(INSTALLED_BIN) and this checkout's build artifacts"
-	@echo "(target/, node_modules/, web_ui/, src-tauri/gen/)."
-	@echo "Your library, settings and llama.cpp install are left alone: every gglib"
-	@echo "build shares them with any packaged install."
-	@printf "Proceed? [y/N] "; \
-	read REPLY; \
-	if [ "$$REPLY" = "y" ] || [ "$$REPLY" = "Y" ]; then \
-		rm -f "$(INSTALLED_BIN)"; \
-		$(CARGO) clean || true; \
-		rm -rf node_modules web_ui src-tauri/gen; \
-		echo "✓ Uninstalled"; \
-		echo "  Your data is in the data_root that \`gglib config paths\` printed; delete it"; \
-		echo "  by hand only if no other gglib on this machine should keep it."; \
-	else \
-		echo "Cancelled."; \
-	fi
+# Asks before each of three things, in `scripts/uninstall.sh`: the program,
+# gglib's data (the shared data folder, what an older build left in this
+# checkout, the desktop app), and the downloaded models.
+uninstall: ## Remove gglib; asks before deleting your data, and again for your models
+	@./scripts/uninstall.sh
 
 build: ## Build Rust CLI in release mode
 	@echo "Building release binary..."
