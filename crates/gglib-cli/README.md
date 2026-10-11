@@ -113,6 +113,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `config profile install-templates` | Install the starter profiles: three sampling (coding, chat, creative) and six reasoning rungs (minimal…max) |
 | `config sd install [--build] [--force]` | Install stable-diffusion.cpp's `sd-server`, which serves image models: the pinned pre-built release for this platform (a CPU-only build is warned about before it starts), or a source build with `--build` or where no release fits |
 | `config sd status` | Show whether `sd-server` is installed, as a download or a source build, with its release, platform, commit and path |
+| `config sd prompt` | Offer to install `sd-server`, as `make setup` does: asks at a terminal, No by default; says so and asks nothing when it is installed or there is no terminal; a failed install is a skipped step. Exits 0 in each case |
 | `config sd uninstall [--force]` | Remove `.sd/`, the image runtime's whole install, and say what was removed; refused while the daemon runs an image model |
 | `verify <id\|name>` | Verify model integrity via SHA256 hash comparison |
 | `repair <id\|name>` | Re-download corrupt shards for a model |

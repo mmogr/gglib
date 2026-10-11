@@ -3,7 +3,8 @@
 //! The image runtime: `sd-server`, which serves the models that draw. The
 //! twin of [`LlamaCommand`](crate::llama_commands::LlamaCommand) for the
 //! three verbs the image runtime has: it has no update or rebuild of its
-//! own, since reinstalling (`--force`) is both.
+//! own, since reinstalling (`--force`) is both. `prompt` is the offer of
+//! the install that `make setup` makes.
 
 use clap::Subcommand;
 
@@ -29,6 +30,9 @@ pub enum SdCommand {
         #[arg(short, long)]
         force: bool,
     },
+
+    /// Offer to install it, interactively. Skips without a terminal
+    Prompt,
 }
 
 #[cfg(test)]
@@ -102,6 +106,17 @@ mod tests {
             parsed(&["gglib", "config", "sd", "uninstall", "--force"]),
             SdCommand::Uninstall { force: true }
         ));
+    }
+
+    #[test]
+    fn prompt_parses_and_takes_no_flags() {
+        assert!(matches!(
+            parsed(&["gglib", "config", "sd", "prompt"]),
+            SdCommand::Prompt
+        ));
+        assert!(
+            crate::Cli::try_parse_from(["gglib", "config", "sd", "prompt", "--force"]).is_err()
+        );
     }
 
     /// The source build has no acceleration flags of its own: it builds for

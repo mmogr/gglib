@@ -332,14 +332,19 @@ its own: `add` refuses a name another server already has.
   in the daemon's own environment outranks the stored directory.
 - **`llama`** — install, status, check-updates, update, rebuild, uninstall.
   gglib manages llama.cpp itself; see [Llama Management](../crates/gglib-runtime/src/llama/README.md).
-- **`sd`** — install, status, uninstall for stable-diffusion.cpp's
+- **`sd`** — install, status, uninstall, prompt for stable-diffusion.cpp's
   `sd-server`, the runtime that serves image models. `install` takes the
   pinned pre-built release for this platform, warning first when that is a
   CPU-only build, or builds from source with `--build` or where no release
   fits; `--force` reinstalls. `uninstall` removes `.sd/` whole, and refuses
   while the daemon that serves this data root runs an image model, as
   Settings does; with no such daemon running nothing serves one, since only
-  a daemon launches them, so it is not refused. See
+  a daemon launches them, so it is not refused. `prompt` is the offer
+  `make setup` makes: at a terminal with no `sd-server` installed it asks
+  whether to install now, No by default, and a yes runs `install`; an
+  install that fails is reported as a skipped step. Installed already, or
+  with no terminal, it says so in a line and asks nothing. It exits 0 in
+  each of those cases. See
   [Stable Diffusion](../crates/gglib-runtime/src/sd/README.md).
 - **`check-deps`** — report what is missing and print your platform's exact
   install commands. Reporting only; it installs nothing.

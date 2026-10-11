@@ -8,6 +8,7 @@
         clean clean-gui clean-llama clean-db clean-all \
         check-deps check-deps-bootstrap check-rust \
         llama-install llama-install-auto llama-update llama-status llama-rebuild \
+        sd-install sd-status clean-sd \
         run-serve run-proxy run-gui run-web
 
 # Platform specific configuration
@@ -501,6 +502,26 @@ llama-status: ## Show llama.cpp status
 llama-rebuild: clean-llama llama-install-auto ## Reinstall llama.cpp from scratch
 	@echo "✓ llama.cpp rebuilt"
 
+##@ Image runtime
+
+# stable-diffusion.cpp's sd-server, which serves image models. Optional:
+# `make setup` offers it and goes on without it.
+sd-install: ## Install the image runtime (stable-diffusion.cpp's sd-server)
+	@echo "Installing the image runtime..."
+	@$(GGLIB) config sd install
+
+sd-status: ## Show the image runtime's status
+	@$(GGLIB) config sd status
+
+# A checkout keeps the install in .sd/, beside .llama/.
+clean-sd: ## Remove the image runtime installation
+	@echo "Removing the image runtime installation..."
+	@if [ -d .sd ]; then \
+		rm -rf .sd && echo "✓ Removed .sd/ directory"; \
+	else \
+		echo "⚠ .sd/ directory not found"; \
+	fi
+
 ##@ Running
 
 # Quick run targets
@@ -574,6 +595,10 @@ setup: check-deps build-tauri install ## Full setup (check deps + build + instal
 	@# without a terminal and reports a failed provision as a skipped step —
 	@# but setup must not break over an optional extra, so belt and braces.
 	@./target/release/gglib config fast-downloads prompt || true
+	@# Optional image runtime, on the same terms: the command skips without a
+	@# terminal, asks with No as the default, and reports a failed install
+	@# as a skipped step.
+	@./target/release/gglib config sd prompt || true
 	@echo "✓ Core setup complete!"
 	@$(MAKE) llama-install-auto
 
