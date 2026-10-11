@@ -37,6 +37,19 @@ Windows) and run it:
 ./gglib up
 ```
 
+### apt (Ubuntu 24.04+, Debian 13+)
+
+```bash
+curl -fsSL https://mmogr.github.io/gglib/apt/gglib-archive-keyring.gpg \
+  | sudo tee /usr/share/keyrings/gglib-archive-keyring.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/gglib-archive-keyring.gpg] https://mmogr.github.io/gglib/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/gglib.list
+sudo apt update && sudo apt install gglib   # the desktop app is gg-lib-gui
+```
+
+The repository carries stable releases only. Release candidates are on the
+[Releases page](https://github.com/mmogr/gglib/releases) as prereleases.
+
 ### Build from source
 
 Requires Rust, Node.js 20.19+, and a C++ toolchain with CMake.

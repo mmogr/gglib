@@ -81,6 +81,14 @@ jobs:
             echo "New version detected: v$CURRENT_VERSION"
           fi
 
+      # A stable version is released only as its last release candidate with
+      # the version changed. Checked before create-release tags anything, so a
+      # refused promotion leaves no tag and no release behind; the script's
+      # header says how to recover.
+      - name: Require a stable release to match its last RC
+        if: steps.version-check.outputs.changed == 'true' && steps.version-check.outputs.is-test != 'true' && steps.version-check.outputs.is-prerelease != 'true'
+        run: scripts/check_rc_promotion.sh
+
       - name: Check if tag exists
         id: tag-check
         run: |
@@ -132,7 +140,11 @@ jobs:
   deploy-docs:
     name: Deploy Documentation
     runs-on: ubuntu-24.04
-    needs: [check-version, create-release]
+    # The apt repository is served from the same Pages site, under /apt, and
+    # a Pages deploy replaces the whole site. So this job publishes both and
+    # waits for `apt-repo`, which waits for the `publish` approval: a stable
+    # release reaches the docs and apt together or not at all.
+    needs: [check-version, create-release, apt-repo]
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.check-version.outputs.version-changed == 'true' && needs.check-version.outputs.is-test-version != 'true' && needs.check-version.outputs.is-prerelease != 'true' && inputs.test_run != true
     # Allow one concurrent deployment
     concurrency:
@@ -222,6 +234,12 @@ jobs:
           </body>
           </html>
           EOF
+
+      - name: Collect the apt repository
+        uses: actions/download-artifact@v8
+        with:
+          name: apt-repo
+          path: target/doc/apt
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -339,9 +357,12 @@ jobs:
           # packages were vestigial here and cost runner minutes on every
           # release. gglib-app's job installs its own set separately.
           sudo apt-get update
+          # dpkg-dev provides dpkg-shlibdeps, which computes the CLI .deb's
+          # Depends below.
           sudo apt-get install -y \
             libasound2-dev \
-            pkg-config
+            pkg-config \
+            dpkg-dev
 
       - name: Install Rust toolchain
         run: rustup target add ${{ matrix.target }}
@@ -416,6 +437,21 @@ jobs:
           cp target/${{ matrix.target }}/release/gglib package/
           tar czf dist/gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz \
             -C package gglib
+
+      # Into dist/ with the tarball, so it is hashed, attested and attached to
+      # the release like every other asset. The apt repository is built from
+      # this same file by the `apt-repo` job.
+      - name: Package CLI .deb (Linux)
+        if: runner.os == 'Linux'
+        run: scripts/build_cli_deb.sh target/${{ matrix.target }}/release/gglib ${{ needs.check-version.outputs.new-version }} dist
+
+      - name: Upload .deb for the apt repository
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: deb-cli
+          path: dist/*.deb
+          retention-days: 7
 
       - name: Package binary (Windows)
         if: matrix.os == 'windows-2022'
@@ -763,6 +799,14 @@ jobs:
             stage dmg dmg
           fi
 
+      - name: Upload .deb for the apt repository
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: deb-gui
+          path: dist/*.deb
+          retention-days: 7
+
       - name: Stage GUI installers (Windows)
         if: matrix.os == 'windows-2022'
         shell: bash
@@ -937,3 +981,76 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
           files: SHA256SUMS
+
+  # Everything past the GitHub release that a user's package manager reads
+  # waits here for a person: the `publish` environment has required reviewers
+  # (Settings > Environments > publish). Approve in the run's summary page.
+  #
+  # Stable releases only. A release candidate gets its GitHub prerelease and
+  # stops; nothing it builds reaches apt or the docs. That is what lets RCs be
+  # cut as often as wanted.
+  #
+  # One gate job that the publishers depend on, rather than `environment:` on
+  # each, so a release asks for one approval however many channels it feeds.
+  # The cost is that the publishers' secrets are repository secrets, not
+  # environment secrets; nothing but these jobs reads them.
+  publish-gate:
+    name: Approve publishing
+    runs-on: ubuntu-24.04
+    needs: [check-version, create-release, checksums]
+    if: >-
+      !cancelled()
+      && needs.checksums.result == 'success'
+      && needs.create-release.result == 'success'
+      && needs.check-version.outputs.is-prerelease != 'true'
+      && needs.check-version.outputs.is-test-version != 'true'
+      && inputs.test_run != true
+    environment: publish
+    steps:
+      - name: Approved
+        run: echo "::notice::Publishing v${{ needs.check-version.outputs.new-version }} to package managers"
+
+  apt-repo:
+    name: Build apt repository
+    runs-on: ubuntu-24.04
+    needs: [check-version, publish-gate]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install apt-ftparchive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-utils
+
+      - name: Collect .deb packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: deb-*
+          merge-multiple: true
+          path: debs
+
+      # The key is generated once, off CI, and stored as the
+      # APT_GPG_PRIVATE_KEY secret (armored); APT_GPG_PASSPHRASE only if it
+      # has one. Its public half ships with the repository on every build.
+      - name: Import signing key
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$APT_GPG_PRIVATE_KEY" ]; then
+            echo "::error::APT_GPG_PRIVATE_KEY is not set; the apt repository cannot be signed"
+            exit 1
+          fi
+          printf '%s\n' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+
+      - name: Build and sign the repository
+        env:
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: scripts/build_apt_repo.sh debs apt
+
+      - name: Upload apt repository
+        uses: actions/upload-artifact@v7
+        with:
+          name: apt-repo
+          path: apt
+          retention-days: 1
