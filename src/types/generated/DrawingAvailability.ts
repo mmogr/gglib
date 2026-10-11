@@ -2,8 +2,9 @@
 import type { ImageModelRow } from "./ImageModelRow";
 
 /**
- * Whether a message sent with Draw pressed can draw here, and if not why:
- * what greys the Draw button, with its reason as the button's title. With
+ * Whether a message sent with Draw pressed can draw here, and if not why.
+ *
+ * What greys the Draw button, with its reason as the button's title. With
  * it, every image model on this machine, for a surface that lets a person
  * pick one.
  */
