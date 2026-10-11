@@ -10,11 +10,14 @@
 //! So is one whose image model a person asked to stop: the Stop leaves the
 //! slot to the render, which lets go of it in that same order.
 //!
-//! Dropped before its job ends, a render asks `sd-server` to cancel it. A
-//! queued job stops; a generating one cannot (409), so a task keeps the turn
-//! and follows the job to its end under the same two clocks.
+//! Dropped before its job ends, a render nobody reads any more is stopped
+//! ([`leave`]). `sd-server` is asked to cancel the job: a queued one stops
+//! there and the turn ends with nothing killed. A generating one cannot be
+//! cancelled (409), so the render is retired at once, in that same order,
+//! and the next request for the image model loads it again.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -22,10 +25,14 @@ use gglib_core::domain::agent::PreviewFrame;
 use gglib_core::ports::{GeneratedImage, GenerationTurn, ImageError, ImageStage};
 use gglib_core::request_pipeline::{PNG_MIME, image_mime, image_size};
 use tokio::time::Instant;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use super::job::{JobTiming, RenderHost, Report};
 use super::job_api::{CancelOutcome, JobPreview, JobState, SdJobs};
+
+/// How long a render nobody reads waits for `sd-server`'s answer to its
+/// cancel before it is retired as one that is generating.
+pub(crate) const CANCEL_WAIT: Duration = Duration::from_secs(5);
 
 /// A submitted job: the server it runs on and its id there.
 #[derive(Debug, Clone)]
@@ -50,7 +57,7 @@ enum Seen {
 }
 
 /// The render's clocks and the last step it saw.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct Watch {
     timing: JobTiming,
     submitted: Instant,
@@ -198,48 +205,43 @@ impl Drop for Render {
         let Ok(runtime) = tokio::runtime::Handle::try_current() else {
             return;
         };
-        runtime.spawn(abandon(
+        runtime.spawn(leave(
             turn,
             self.job.clone(),
             Arc::clone(&self.jobs),
             Arc::clone(&self.host),
             self.model_id,
-            self.watch.clone(),
         ));
     }
 }
 
-/// Cancel an abandoned job, and hold `turn` until it is over.
-async fn abandon(
+/// Stop a render whose reader left before its job ended. `turn` is the
+/// render's, and with it the image model's lease; this task is the only one
+/// that holds it, so the render is stopped once.
+///
+/// `sd-server` is asked to cancel the job. One it had not started, had
+/// finished or no longer knows is over, and the turn ends here with the
+/// model left loaded. One that is generating is refused (409) and would run
+/// to its end with the GPU held, so the render is retired
+/// ([`RenderHost::retire`]): the server killed, then the lease released and
+/// the slot emptied, then the turn ended. A cancel that fails, or is not
+/// answered within [`CANCEL_WAIT`], is read as a job that is generating.
+async fn leave(
     turn: GenerationTurn,
     job: Job,
     jobs: Arc<dyn SdJobs>,
     host: Arc<dyn RenderHost>,
     model_id: u32,
-    mut watch: Watch,
 ) {
-    match jobs.cancel(&job.base_url, &job.id).await {
-        Ok(CancelOutcome::Over | CancelOutcome::Gone) => return,
-        Ok(CancelOutcome::Running) => {
-            debug!(job = %job.id, "the abandoned render is generating; holding it to its end");
-        }
-        Err(e) => debug!(job = %job.id, error = %e, "could not cancel the abandoned render"),
+    let cancel = jobs.cancel(&job.base_url, &job.id);
+    match tokio::time::timeout(CANCEL_WAIT, cancel).await {
+        Ok(Ok(CancelOutcome::Over | CancelOutcome::Gone)) => return,
+        Ok(Ok(CancelOutcome::Running)) => {}
+        Ok(Err(e)) => debug!(job = %job.id, error = %e, "could not cancel the render"),
+        Err(_) => debug!(job = %job.id, "sd-server did not answer the cancel"),
     }
-    loop {
-        tokio::time::sleep(watch.timing.poll).await;
-        if let Ok(state) = jobs.poll(&job.base_url, &job.id).await {
-            match watch.see(state) {
-                Seen::Step(preview) => turn.progress(preview.step, preview.total),
-                Seen::Done(_) | Seen::Failed(_) => return,
-                Seen::Loading | Seen::Same => {}
-            }
-        }
-        if let Some(error) = ending(&watch, host.as_ref(), model_id) {
-            warn!(job = %job.id, %error, "retiring the abandoned render");
-            host.retire(turn, model_id).await;
-            return;
-        }
-    }
+    info!(job = %job.id, "nobody reads the render any more; retiring it");
+    host.retire(turn, model_id).await;
 }
 
 /// Why the render on `model_id` must be retired now, if it must: a person

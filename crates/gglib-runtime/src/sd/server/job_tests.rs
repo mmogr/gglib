@@ -1,7 +1,8 @@
 //! The driver against a scripted job and a real admission queue, on a paused
 //! clock: what a request is refused for before it queues, how a job's
-//! states become stages, what a dropped render keeps, and how a stalled or
-//! overlong render is retired.
+//! states become stages, and how a stalled, overlong or stopped render is
+//! retired. What a render nobody reads any more comes to is in
+//! `job_leave_tests.rs`.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -38,6 +39,10 @@ const SDXL_ID: u32 = 1;
 struct Timeline {
     states: Vec<(u64, JobState)>,
     cancel: CancelOutcome,
+    /// How long `sd-server` takes to answer a cancel.
+    cancel_takes: Duration,
+    /// The cancel fails, in these words, instead of answering.
+    cancel_fails: Option<String>,
     refuse: Option<String>,
     /// How long `sd-server` takes to answer the submission.
     submit_takes: Duration,
@@ -52,6 +57,8 @@ impl Timeline {
         Self {
             states,
             cancel: CancelOutcome::Over,
+            cancel_takes: Duration::ZERO,
+            cancel_fails: None,
             refuse: None,
             submit_takes: Duration::ZERO,
             submitted: Mutex::new(None),
@@ -92,7 +99,8 @@ impl SdJobs for Timeline {
 
     async fn cancel(&self, _base_url: &str, _id: &str) -> Result<CancelOutcome, String> {
         self.cancels.fetch_add(1, Ordering::SeqCst);
-        Ok(self.cancel)
+        tokio::time::sleep(self.cancel_takes).await;
+        self.cancel_fails.clone().map_or(Ok(self.cancel), Err)
     }
 }
 
@@ -286,6 +294,22 @@ fn driver_with_default(
         Arc::clone(host) as Arc<dyn RenderHost>,
         Arc::clone(jobs) as Arc<dyn SdJobs>,
         JobTiming::default(),
+    )
+}
+
+/// A driver that reads its job on `timing`'s clocks.
+fn driver_timed(
+    catalog: Vec<ModelLaunchSpec>,
+    jobs: &Arc<Timeline>,
+    host: &Arc<Host>,
+    timing: JobTiming,
+) -> SdImageDriver {
+    SdImageDriver::with_parts(
+        Arc::new(Catalog(catalog)),
+        Arc::new(InMemorySettings::with(Settings::with_defaults())),
+        Arc::clone(host) as Arc<dyn RenderHost>,
+        Arc::clone(jobs) as Arc<dyn SdJobs>,
+        timing,
     )
 }
 
@@ -731,81 +755,6 @@ async fn a_refused_submission_is_a_failure() {
     assert_eq!(host.inflight(), Some(0));
 }
 
-// ── a dropped render ─────────────────────────────────────────────────────
-
-/// A render dropped while generating asks sd-server to cancel, is told it
-/// cannot (409), and keeps the lease until the job ends.
-#[tokio::test(start_paused = true)]
-async fn a_dropped_render_keeps_the_lease_until_its_job_ends() {
-    let jobs = Arc::new(Timeline::new(flux_like()).cancelled_with(CancelOutcome::Running));
-    let host = Host::new();
-    let driver = Arc::new(driver(models(), &jobs, &host));
-    let (tx, _rx) = mpsc::channel(64);
-    let task_driver = Arc::clone(&driver);
-    let render = tokio::spawn(async move { task_driver.generate(sdxl_request(), tx).await });
-
-    tokio::time::sleep(Duration::from_secs(40)).await;
-    render.abort();
-    let _ = render.await;
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    assert_eq!(jobs.cancels.load(Ordering::SeqCst), 1, "cancel was asked");
-    assert_eq!(host.inflight(), Some(1), "the lease is held while it runs");
-
-    tokio::time::sleep(Duration::from_secs(25)).await;
-    assert_eq!(host.inflight(), Some(1), "still generating at 66 s");
-
-    tokio::time::sleep(Duration::from_secs(10)).await;
-    assert_eq!(host.inflight(), Some(0), "released once the job completed");
-}
-
-/// A render dropped while its job can still be cancelled lets the lease go
-/// at once.
-#[tokio::test(start_paused = true)]
-async fn a_dropped_render_whose_job_stops_lets_the_lease_go() {
-    let jobs = Arc::new(Timeline::new(flux_like()).cancelled_with(CancelOutcome::Over));
-    let host = Host::new();
-    let driver = Arc::new(driver(models(), &jobs, &host));
-    let (tx, _rx) = mpsc::channel(64);
-    let task_driver = Arc::clone(&driver);
-    let render = tokio::spawn(async move { task_driver.generate(sdxl_request(), tx).await });
-    tokio::time::sleep(Duration::from_secs(3)).await;
-    render.abort();
-    let _ = render.await;
-    tokio::time::sleep(Duration::from_millis(10)).await;
-    assert_eq!(jobs.cancels.load(Ordering::SeqCst), 1);
-    assert_eq!(host.inflight(), Some(0));
-}
-
-/// A request dropped while its job is still being submitted leaves a job
-/// `sd-server` may already have taken: the submission is finished, the job
-/// is asked to cancel, and the lease is held until it is over.
-#[tokio::test(start_paused = true)]
-async fn a_render_dropped_during_its_submission_still_cancels_and_keeps_the_lease() {
-    let jobs = Timeline {
-        submit_takes: Duration::from_secs(5),
-        ..Timeline::new(flux_like()).cancelled_with(CancelOutcome::Running)
-    };
-    let jobs = Arc::new(jobs);
-    let host = Host::new();
-    let driver = Arc::new(driver(models(), &jobs, &host));
-    let (tx, _rx) = mpsc::channel(64);
-    let task_driver = Arc::clone(&driver);
-    let render = tokio::spawn(async move { task_driver.generate(sdxl_request(), tx).await });
-
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    assert_eq!(jobs.bodies.lock().unwrap().len(), 1, "the job was sent");
-    render.abort();
-    let _ = render.await;
-    assert_eq!(jobs.cancels.load(Ordering::SeqCst), 0, "not answered yet");
-
-    tokio::time::sleep(Duration::from_secs(5)).await;
-    assert_eq!(jobs.cancels.load(Ordering::SeqCst), 1, "cancel was asked");
-    assert_eq!(host.inflight(), Some(1), "the lease is held while it runs");
-
-    tokio::time::sleep(Duration::from_secs(70)).await;
-    assert_eq!(host.inflight(), Some(0), "released once the job completed");
-}
-
 // ── stalls and deadlines ─────────────────────────────────────────────────
 
 /// A job that never steps is retired after three minutes: its server killed
@@ -862,33 +811,6 @@ async fn a_render_past_its_deadline_is_retired() {
     );
 }
 
-/// An abandoned render that stops stepping is retired under the same rule.
-#[tokio::test(start_paused = true)]
-async fn an_abandoned_render_that_stalls_is_retired() {
-    let jobs = Arc::new(
-        Timeline::new(vec![(0, JobState::Generating(None)), (36, step(1, 1, 4))])
-            .cancelled_with(CancelOutcome::Running),
-    );
-    let host = Host::new();
-    let driver = Arc::new(driver(models(), &jobs, &host));
-    let (tx, _rx) = mpsc::channel(64);
-    let task_driver = Arc::clone(&driver);
-    let render = tokio::spawn(async move { task_driver.generate(sdxl_request(), tx).await });
-    tokio::time::sleep(Duration::from_secs(40)).await;
-    render.abort();
-    let _ = render.await;
-
-    tokio::time::sleep(Duration::from_secs(170)).await;
-    assert_eq!(
-        host.inflight(),
-        Some(1),
-        "36 s + 170 s: under three minutes quiet"
-    );
-    tokio::time::sleep(Duration::from_secs(20)).await;
-    assert_eq!(host.inflight(), None, "retired: the slot is empty");
-    assert_eq!(host.log.lock().unwrap().len(), 2);
-}
-
 // ── a person's Stop ──────────────────────────────────────────────────────
 
 /// A Stop on the image model while it draws does not empty the slot under
@@ -937,28 +859,6 @@ async fn a_stop_mid_render_retires_it_and_spares_the_slots_next_model() {
     drop(newcomer);
 }
 
-/// A render nobody reads any more is retired by a Stop in the same way.
-#[tokio::test(start_paused = true)]
-async fn a_stop_retires_an_abandoned_render_too() {
-    let jobs = Arc::new(Timeline::new(flux_like()).cancelled_with(CancelOutcome::Running));
-    let host = Host::new();
-    let driver = Arc::new(driver(models(), &jobs, &host));
-    let (tx, _rx) = mpsc::channel(64);
-    let task_driver = Arc::clone(&driver);
-    let render = tokio::spawn(async move { task_driver.generate(sdxl_request(), tx).await });
-    tokio::time::sleep(Duration::from_secs(40)).await;
-    render.abort();
-    let _ = render.await;
-    tokio::time::sleep(Duration::from_secs(2)).await;
-    assert_eq!(host.inflight(), Some(1), "held to the job's end");
-
-    assert!(host.queue.ask_render_stop(SDXL_ID));
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    assert_eq!(host.inflight(), None, "retired: the slot is empty");
-    assert_eq!(host.log.lock().unwrap().len(), 2);
-}
-
 /// Each step is progress on the queue: a rival waiting for the image
 /// model's slot is still waiting past the admission deadline while the
 /// render steps.
@@ -991,3 +891,6 @@ async fn steps_keep_a_rival_waiting_past_the_admission_deadline() {
     host.queue.abandon(&rival);
     render.await.unwrap().expect("drawn");
 }
+
+#[path = "job_leave_tests.rs"]
+mod leave;

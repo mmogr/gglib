@@ -824,6 +824,12 @@ key is offered no image tool. A desktop that cannot draw refuses the turn,
 `400 drawing_unavailable`, with the reason; a device asks
 `GET /v1/images/drawing` first, and never sends the key to a desktop that
 answers 404 there, which would refuse a body with a key it does not know.
+Cancelling the run while the picture is drawn (`POST
+/v1/runs/{id}/cancel`, a device's Stop) stops the render on the desktop:
+`sd-server` cannot interrupt a job that is generating, so the desktop stops
+`sd-server`, the chats that waited behind the render go on, and the next
+picture loads the image model again. The run ends `cancelled`, as any
+cancelled run does.
 
 A chat the device keeps itself can draw too. `PUT
 /v1/runs/{id}?kind=chat&tools=builtin&draw=true` takes the device's

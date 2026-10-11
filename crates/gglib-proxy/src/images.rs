@@ -11,8 +11,8 @@
 //! events (`images_stream.rs`): progress at every stage and step, partial
 //! images up to the number asked for, then one completed event per image. A
 //! client that leaves drops the render, which cancels its job; `sd-server`
-//! cannot stop a generating job, so the driver keeps its model until the job
-//! ends.
+//! cannot stop a generating job, so the driver stops `sd-server` itself and
+//! the image model is loaded again for the next picture.
 //!
 //! The driver refuses what the image model cannot draw, before anything
 //! queues; this file refuses only what no driver is asked: a body that does

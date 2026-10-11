@@ -9,17 +9,17 @@
 //! (`job_poll.rs`): nothing reports a step until the first one finishes,
 //! about 40 s into a Flux render, so the stage is Loading until then.
 //!
-//! `sd-server` cannot interrupt a generating job. A request dropped part way
-//! (a client that left) cancels the job and keeps the turn, and with it the
-//! lease, until the job ends, under the same stall and deadline rules. That
-//! holds from the moment the job is submitted: the submission runs in its
-//! own task, so a request dropped during it still ends in a render that is
-//! cancelled and followed.
+//! `sd-server` cannot interrupt a generating job, so a render nobody waits
+//! for is stopped by stopping its server. A request dropped part way (a run
+//! cancelled, a client that left) asks `sd-server` to cancel the job; a job
+//! that is generating is retired at once: the server stopped, the lease
+//! settled with the slot it was counted in, the turn ended. The next request
+//! for the image model loads it again. That holds from the moment the job is
+//! submitted: the submission runs in its own task, so a request dropped
+//! during it still ends in a render that is cancelled or retired.
 //!
-//! A person's Stop on the image model never empties its slot under a render.
-//! It asks, and the render, dropped or not, retires its model at its next
-//! read of the job: the server stopped, the lease settled with the slot it
-//! was counted in, the turn ended.
+//! A person's Stop on the image model never empties its slot under a render:
+//! it asks, and the render retires its model at its next read of the job.
 
 use std::fmt;
 use std::sync::{Arc, Mutex};
@@ -183,9 +183,9 @@ impl SdImageDriver {
     /// of its own that owns `turn`: a request dropped while the job is being
     /// submitted does not drop the submission with it. `sd-server` may have
     /// taken the job by then, so the task finishes the submission and drops
-    /// the render it would have handed back, which cancels the job and keeps
-    /// the turn, and with it the lease, until the job is over, as a render
-    /// dropped any later does.
+    /// the render it would have handed back, which cancels the job or, when
+    /// it is generating, retires the render, as a render dropped any later
+    /// does. Until then the task keeps the turn, and with it the lease.
     async fn submit(
         &self,
         turn: GenerationTurn,

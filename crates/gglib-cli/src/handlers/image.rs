@@ -7,9 +7,9 @@
 //! loading, sampling step of total (and image of images for more than one),
 //! decoding. Where stderr is not a terminal there is no line to redraw, so
 //! each of those is printed there once, as a plain line, when it changes
-//! ([`PlainLines`]). `sd-server` cannot interrupt a generating job, so
-//! Ctrl-C says that the daemon finishes the render and discards it, and
-//! exits 130.
+//! ([`PlainLines`]). Ctrl-C says that the render is stopped and exits 130;
+//! the daemon, whose reader has then left, stops a job that is generating by
+//! stopping `sd-server`, so the next picture loads the image model again.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -25,8 +25,7 @@ use crate::daemon_client::images::DaemonImageGenerator;
 use crate::image_commands::ImageCommandArgs;
 
 /// What Ctrl-C prints before the command exits 130.
-pub(crate) const INTERRUPTED: &str =
-    "the render cannot be interrupted; the daemon finishes it and discards it";
+pub(crate) const INTERRUPTED: &str = "stopped; the daemon stops the render too";
 
 /// Run `gglib image`.
 pub(crate) async fn execute(ctx: &CliContext, args: ImageCommandArgs) -> Result<()> {

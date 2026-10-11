@@ -306,9 +306,9 @@ pub trait ImageGenerationPort: Send + Sync + fmt::Debug {
     /// stage and step. Sends never wait: a report the reader is not ready
     /// for is dropped.
     ///
-    /// Dropping the returned future abandons the request, but not the GPU
-    /// work already started: an implementation that cannot interrupt its
-    /// runtime keeps the model and its turn until the runtime finishes.
+    /// Dropping the returned future abandons the request and stops the GPU
+    /// work it started: an implementation that cannot interrupt its runtime
+    /// stops the runtime, and loads the model again for the next request.
     ///
     /// # Errors
     ///
