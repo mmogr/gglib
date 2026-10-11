@@ -8,8 +8,7 @@
 //! (ids, labels, last-seen) stays in settings; only the secrets are here.
 //!
 //! Same directory and same posture as the endpoint identity: `0600`, under
-//! `data/`, which a debug build resolves to the repository checkout where
-//! `.gitignore` covers it.
+//! the data root's `data/`.
 
 use std::collections::BTreeMap;
 use std::fs;

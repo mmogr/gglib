@@ -5,7 +5,7 @@
         test test-helper check fmt lint doc doc-check dev pre-commit release \
         lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
         bindings bindings-check \
-        clean clean-gui clean-llama clean-db clean-all \
+        clean clean-gui clean-llama clean-all path-check \
         check-deps check-deps-bootstrap check-rust \
         llama-install llama-install-auto llama-update llama-status llama-rebuild \
         sd-install sd-status clean-sd \
@@ -93,55 +93,37 @@ ifeq ($(UNAME_S),Darwin)
 	@codesign --force --sign - "$(INSTALLED_BIN)"
 endif
 	@echo "✓ Installed gglib to ~/.cargo/bin/gglib"
+	@$(MAKE) --no-print-directory path-check
 
-uninstall: ## Uninstall gglib and remove local state
-	@echo "⚠️  WARNING: This will uninstall gglib and remove:"
-	@echo "  - Binary from ~/.cargo/bin"
-	@echo "  - System configuration and database (~/Library/Application Support/gglib or ~/.local/share/gglib)"
-	@echo "  - Local build artifacts (target/, node_modules/, etc.)"
-	@echo "  (Note: Your downloaded models in ~/.local/share/llama_models will be PRESERVED)"
-	@echo ""
-	@printf "Remove local data/ directory? [y/N] "; \
-	read REMOVE_DATA; \
-	echo ""; \
-	printf "Proceed with uninstall? [y/N] "; \
+# Every gglib on PATH shares one data folder, so which one a shell runs
+# decides the version, not the library. Says so when the copy just installed
+# is not the one `gglib` runs, or another one sits behind it.
+path-check:
+	@first="$$(command -v gglib 2>/dev/null || true)"; \
+	others="$$(which -a gglib 2>/dev/null | grep -vx "$(INSTALLED_BIN)" | sort -u || true)"; \
+	if [ "$$first" != "$(INSTALLED_BIN)" ]; then \
+		echo "⚠ \`gglib\` in this shell runs $${first:-nothing}, not $(INSTALLED_BIN)."; \
+		echo "  Put ~/.cargo/bin earlier on PATH, or run $(INSTALLED_BIN) by its full path."; \
+	elif [ -n "$$others" ]; then \
+		echo "⚠ This build now shadows another gglib on PATH:"; \
+		echo "$$others" | sed 's/^/    /'; \
+		echo "  Both use the same library. \`gglib config paths\` says which binary is running."; \
+	fi
+
+uninstall: ## Remove the installed gglib binary and build artifacts (never your library)
+	@echo "This removes $(INSTALLED_BIN) and this checkout's build artifacts"
+	@echo "(target/, node_modules/, web_ui/, src-tauri/gen/)."
+	@echo "Your library, settings and llama.cpp install are left alone: every gglib"
+	@echo "build shares them with any packaged install."
+	@printf "Proceed? [y/N] "; \
 	read REPLY; \
 	if [ "$$REPLY" = "y" ] || [ "$$REPLY" = "Y" ]; then \
-		echo "Uninstalling binary..."; \
 		rm -f "$(INSTALLED_BIN)"; \
-		if [ "$$REMOVE_DATA" = "y" ] || [ "$$REMOVE_DATA" = "Y" ]; then \
-			echo "Removing system data..."; \
-			rm -rf "$$HOME/Library/Application Support/gglib" 2>/dev/null || true; \
-			rm -rf "$$HOME/.local/share/gglib" 2>/dev/null || true; \
-		else \
-			echo "Preserving system data (config and database retained)"; \
-		fi; \
-		echo "Cleaning build artifacts..."; \
 		$(CARGO) clean || true; \
-		if [ -d node_modules ]; then rm -rf node_modules || true; fi; \
-		if [ -d web_ui ]; then rm -rf web_ui || true; fi; \
-		if [ -d src-tauri/gen ]; then rm -rf src-tauri/gen || true; fi; \
-		if [ -d .llama ]; then rm -rf .llama || true; fi; \
-		if [ -d .gglib-runtime ]; then rm -rf .gglib-runtime || true; fi; \
-		if [ -d .python ]; then rm -rf .python || true; fi; \
-		if [ -d .conda ]; then rm -rf .conda || true; fi; \
-		if [ -d pids ]; then rm -rf pids || true; fi; \
-		if [ -f .env ]; then rm -f .env || true; fi; \
-		if [ "$$REMOVE_DATA" = "y" ] || [ "$$REMOVE_DATA" = "Y" ]; then \
-			rm -rf data/ || true; \
-		fi; \
-		if [ -d .git ]; then \
-			if [ "$$REMOVE_DATA" = "y" ] || [ "$$REMOVE_DATA" = "Y" ]; then \
-				git clean -xffd || true; \
-			else \
-				git clean -xffd -e data/ || true; \
-			fi; \
-		fi; \
-		if [ "$$REMOVE_DATA" = "y" ] || [ "$$REMOVE_DATA" = "Y" ]; then \
-			echo "✓ Uninstall complete (including data/)"; \
-		else \
-			echo "✓ Uninstall complete (data/ preserved)"; \
-		fi; \
+		rm -rf node_modules web_ui src-tauri/gen; \
+		echo "✓ Uninstalled"; \
+		echo "  Your data is in the data_root that \`gglib config paths\` printed; delete it"; \
+		echo "  by hand only if no other gglib on this machine should keep it."; \
 	else \
 		echo "Cancelled."; \
 	fi
@@ -446,23 +428,10 @@ clean-gui: ## Remove web UI build and node_modules
 		echo "⚠ node_modules/ directory not found"; \
 	fi
 
-# Clean llama.cpp installation
-clean-llama: ## Remove llama.cpp installation
-	@echo "Removing llama.cpp installation..."
-	@if [ -d .llama ]; then \
-		rm -rf .llama && echo "✓ Removed .llama/ directory"; \
-	else \
-		echo "⚠ .llama/ directory not found"; \
-	fi
-
-# Clean database files
-clean-db: ## Remove database files
-	@echo "Removing database files..."
-	@if [ -d data ]; then \
-		rm -rf data && echo "✓ Removed data/ directory"; \
-	else \
-		echo "⚠ data/ directory not found"; \
-	fi
+# The install lives in the shared data folder, not the checkout, so the CLI
+# removes it: it knows where, and asks a running daemon first.
+clean-llama: ## Remove the llama.cpp installation (shared by every gglib build)
+	@$(GGLIB) config llama uninstall
 
 # Nuclear option - remove everything
 clean-all: ## Remove everything (git clean -xffd)
@@ -513,14 +482,9 @@ sd-install: ## Install the image runtime (stable-diffusion.cpp's sd-server)
 sd-status: ## Show the image runtime's status
 	@$(GGLIB) config sd status
 
-# A checkout keeps the install in .sd/, beside .llama/.
-clean-sd: ## Remove the image runtime installation
-	@echo "Removing the image runtime installation..."
-	@if [ -d .sd ]; then \
-		rm -rf .sd && echo "✓ Removed .sd/ directory"; \
-	else \
-		echo "⚠ .sd/ directory not found"; \
-	fi
+# Through the CLI for the reason clean-llama gives.
+clean-sd: ## Remove the image runtime installation (shared by every gglib build)
+	@$(GGLIB) config sd uninstall
 
 ##@ Running
 

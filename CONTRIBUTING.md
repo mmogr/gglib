@@ -596,6 +596,27 @@ make doc
 make pre-commit
 ```
 
+### Your data while developing
+
+A build from this checkout uses the same data folder as an installed gglib:
+your real library, settings and llama.cpp install (`gglib config paths` shows
+the folder and which binary is running). `make install` warns when another
+`gglib` on `PATH` is shadowed, and `make uninstall` never deletes the folder.
+
+To work against a library of your own, for example while changing the
+database schema, give the build its own folder and its own daemon port:
+
+```bash
+export GGLIB_DATA_DIR="$PWD/.dev" GGLIB_DAEMON_PORT=9888
+cargo run -p gglib-cli -- up
+```
+
+A change to the database schema raises `SCHEMA_GENERATION` in
+`crates/gglib-db/src/setup_generation.rs` and rewrites the snapshot with
+`GGLIB_UPDATE_SCHEMA_SNAPSHOT=1 cargo test -p gglib-db schema_snapshot`; the
+`schema_snapshot` test fails until both are done. An older gglib then
+refuses the upgraded library instead of writing to it.
+
 ### Working on the frontend
 
 ```bash

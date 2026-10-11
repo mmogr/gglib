@@ -15,7 +15,7 @@ pub const LLAMA_INSTALL_COMMAND: &str = "gglib config llama install";
 /// Get the gglib data directory containing llama binaries.
 ///
 /// Returns the `.llama/` directory containing helper binaries.
-/// In dev, this is in the repo. In release, this is in the user data dir.
+/// Under the resource root, which is the data root unless `GGLIB_RESOURCE_DIR` names another.
 pub fn gglib_data_dir() -> Result<PathBuf, PathError> {
     Ok(resource_root()?.join(".llama"))
 }
@@ -65,9 +65,25 @@ pub fn llama_config_path() -> Result<PathBuf, PathError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::paths::test_utils::{ENV_LOCK, EnvVarGuard};
+
+    /// A data root of the test's own, under the lock: these resolve through
+    /// the data root, which is otherwise the user's real one. In the order a
+    /// tuple drops them: the variable is restored before the lock is let go.
+    fn own_root() -> (
+        EnvVarGuard,
+        tempfile::TempDir,
+        std::sync::MutexGuard<'static, ()>,
+    ) {
+        let guard = ENV_LOCK.lock().unwrap();
+        let root = tempfile::tempdir().expect("tempdir");
+        let env = EnvVarGuard::set("GGLIB_DATA_DIR", root.path().to_string_lossy().as_ref());
+        (env, root, guard)
+    }
 
     #[test]
     fn test_llama_server_path() {
+        let _root = own_root();
         let result = llama_server_path();
         assert!(result.is_ok());
 
@@ -81,6 +97,7 @@ mod tests {
 
     #[test]
     fn test_llama_bench_path() {
+        let _root = own_root();
         let result = llama_bench_path();
         assert!(result.is_ok());
 

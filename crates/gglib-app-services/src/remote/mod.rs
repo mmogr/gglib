@@ -158,8 +158,8 @@ pub struct RemoteOps {
     lost_with_proxy: watch::Sender<u64>,
     /// The file the device keys are kept in, or `None` for the one beside
     /// the endpoint identity, where a daemon keeps them. A test names its
-    /// own: in a debug build the default is the checkout's `data/`, which is
-    /// also the installed daemon's.
+    /// own: the default is the user's real `data/`, which is also the
+    /// installed daemon's.
     device_keys: Option<PathBuf>,
     /// The directory the keys this machine joins other machines with are
     /// kept in, or `None` for `<data root>/data/remote_join`, where a daemon

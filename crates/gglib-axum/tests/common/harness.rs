@@ -3,12 +3,12 @@
 //! Every test here needs the same two properties, and wrote them out by hand:
 //!
 //! 1. **Isolation.** [`bootstrap`] without a `db_path` resolves through
-//!    `gglib_core::paths::database_path()`, which in a debug build is the
-//!    developer's own checkout. No suite had this. Tests were reading rows
+//!    `gglib_core::paths::database_path()`, which is the developer's real
+//!    gglib folder. No suite had this. Tests were reading rows
 //!    they did not create and leaving rows behind for the next run. All else
 //!    a context resolves from the data root is in the binary's own root
-//!    (`isolate_data_root`, #955); left to the checkout, five binaries here
-//!    made or tightened its `data/`.
+//!    (`isolate_data_root`, #955); left to the default, five binaries here
+//!    made or tightened the real `data/`.
 //! 2. **Honesty.** A bootstrap failure has to fail the test. Every suite but
 //!    `daemon_route_contract` skipped instead — `Err(_) => return` in four of
 //!    them, `bootstrap(..).ok()?` behind a let-else in `daemon_access` —

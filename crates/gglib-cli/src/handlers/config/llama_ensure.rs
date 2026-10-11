@@ -7,7 +7,7 @@
 //! progress.
 
 use anyhow::Result;
-use gglib_core::paths::{is_prebuilt_binary, llama_server_path};
+use gglib_core::paths::{llama_server_path, source_checkout};
 use gglib_runtime::llama::{build_tool_install_lines, check_prebuilt_availability};
 
 use super::llama_events::{built_in_passing, downloaded_in_passing};
@@ -39,7 +39,7 @@ pub(crate) async fn ensure_installed(yes: bool) -> Result<()> {
     let method = choose_install_method(
         false,
         detect,
-        !is_prebuilt_binary(),
+        source_checkout().is_some(),
         check_prebuilt_availability,
     );
 

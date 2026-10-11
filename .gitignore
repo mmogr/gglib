@@ -113,3 +113,6 @@ src/types/generated.new/
 # `make bindings-check` only inspects src/types/generated, so 242 of these
 # were committed once without any gate noticing.
 crates/*/bindings/
+
+# A development build's own data folder (GGLIB_DATA_DIR, see CONTRIBUTING)
+/.dev

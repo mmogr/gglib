@@ -137,14 +137,37 @@ pub(crate) fn unauthorized_hint() -> String {
 /// What to tell someone whose daemon call came back 401 with `body`: the
 /// daemon's own sentence when a route wanted its token, which says how to get
 /// it, and [`unauthorized_hint`] otherwise.
+///
+/// Under `GGLIB_DATA_DIR` the likelier cause is named as well: the token this
+/// command sent is its own data root's, and the daemon on the port belongs to
+/// another one.
 pub(crate) fn unauthorized(body: &str) -> String {
-    serde_json::from_str::<serde_json::Value>(body)
+    unauthorized_under(body, std::env::var_os("GGLIB_DATA_DIR").is_some())
+}
+
+/// [`unauthorized`], told whether `GGLIB_DATA_DIR` is set.
+fn unauthorized_under(body: &str, own_data_root: bool) -> String {
+    let wanted_token = serde_json::from_str::<serde_json::Value>(body)
         .ok()
         .filter(|v| v.get("type").and_then(|t| t.as_str()) == Some(DAEMON_TOKEN_REQUIRED_TYPE))
-        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_owned))
-        .unwrap_or_else(unauthorized_hint)
+        .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_owned));
+    match wanted_token {
+        Some(sentence) if own_data_root => other_data_root(&sentence),
+        Some(sentence) => sentence,
+        None => unauthorized_hint(),
+    }
 }
 
 #[cfg(test)]
 #[path = "auth_tests.rs"]
 mod auth_tests;
+
+/// The daemon's `sentence`, and what it most likely means for a command run
+/// under `GGLIB_DATA_DIR`.
+fn other_data_root(sentence: &str) -> String {
+    format!(
+        "{sentence}. GGLIB_DATA_DIR is set for this command, so the daemon on port {} is \
+         probably another data folder's: set GGLIB_DAEMON_PORT as well, to run one of its own.",
+        gglib_core::daemon_port()
+    )
+}

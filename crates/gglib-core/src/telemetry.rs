@@ -102,8 +102,8 @@ fn resolve_log_dir() -> PathBuf {
     // The data root decides in every build, so a test daemon pointed at an
     // isolated `GGLIB_DATA_DIR` never interleaves its lines into the real
     // installation's log file. `data_root()` prefers `GGLIB_DATA_DIR`, then
-    // the local repo in debug builds; if it fails, the fallback root is the
-    // working directory itself.
+    // the user's gglib folder; if it fails, the fallback root is the working
+    // directory itself.
     let dir = data_root()
         .unwrap_or_else(|_| PathBuf::from("."))
         .join("logs");

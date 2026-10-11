@@ -1,7 +1,7 @@
 //! Platform-specific path detection and resolution.
 //!
-//! This module contains private helpers for detecting the runtime environment
-//! (local repo vs installed binary) and resolving platform-appropriate paths.
+//! The data and resource roots every other path hangs off, and the one place
+//! that asks whether this binary was built from a source checkout.
 //! Public API is exposed through sibling modules.
 
 use std::env;
@@ -10,76 +10,41 @@ use std::path::PathBuf;
 
 use super::error::PathError;
 
-/// Detect if we are running from the local repository.
+/// The source checkout this binary was built from, while that checkout is
+/// still there.
 ///
-/// Returns `Some(path)` if we are in a dev environment or running a release build
-/// from within the source repo (e.g. `make setup`).
-/// Returns `None` if we are running a standalone binary (e.g. installed via cargo install,
-/// downloaded, or bundled as a macOS/Linux app).
-#[allow(clippy::unnecessary_wraps)] // Option is needed for release builds
-pub(super) fn detect_local_repo() -> Option<PathBuf> {
+/// This says nothing about where data lives: every build keeps its state in
+/// [`data_root`], whatever it was built from. It answers two narrower
+/// questions a build from source has: whether to build llama.cpp from source
+/// as well, and where `gglib gui` finds an app built in the same checkout.
+///
+/// `GGLIB_REPO_ROOT` is the workspace root of whoever compiled this binary.
+/// For a release built in CI that is a runner path no user machine has, so
+/// the answer there is `None`. A wrong answer is harmless: llama.cpp is built
+/// rather than downloaded, or `gglib gui` looks in one more place.
+#[must_use]
+pub fn source_checkout() -> Option<PathBuf> {
     let repo_root = PathBuf::from(env!("GGLIB_REPO_ROOT"));
-
-    #[cfg(debug_assertions)]
-    {
-        // In debug mode, always assume we want to use the repo we are building from
-        Some(repo_root)
-    }
-
-    #[cfg(not(debug_assertions))]
-    {
-        // In release mode, check if this binary was built from a local repo.
-
-        // First, verify the repo path exists and looks like a valid gglib repo
-        if !repo_root.exists()
-            || (!repo_root.join(".git").exists() && !repo_root.join("Cargo.toml").exists())
-        {
-            return None;
-        }
-
-        // Strategy 1: Check for the .gglib_repo_path marker file created by build.rs
-        let marker_file = repo_root.join("data").join(".gglib_repo_path");
-        if marker_file.exists() {
-            if let Ok(contents) = fs::read_to_string(&marker_file) {
-                let marker_path = contents.trim();
-                if marker_path == repo_root.to_string_lossy() {
-                    return Some(repo_root);
-                }
-            }
-        }
-
-        // Strategy 2 (fallback): Check if executable is inside the repo
-        if let Ok(exe_path) = env::current_exe() {
-            if let Ok(canonical_exe) = exe_path.canonicalize() {
-                if let Ok(canonical_repo) = repo_root.canonicalize() {
-                    if canonical_exe.starts_with(&canonical_repo) {
-                        return Some(repo_root);
-                    }
-                }
-            }
-        }
-
-        None
-    }
+    (repo_root.join("Cargo.toml").is_file() && repo_root.join(".git").exists()).then_some(repo_root)
 }
 
-/// Check if we are running from a pre-built binary (not from the source repo).
-///
-/// Returns `true` if this is a standalone/installed binary.
-/// Returns `false` if running from the source repository.
-pub fn is_prebuilt_binary() -> bool {
-    detect_local_repo().is_none()
-}
-
-/// Get the root directory for application data (database, config).
+/// The per-user directory every gglib build keeps its state in.
 ///
 /// Resolution order:
-/// 1. `GGLIB_DATA_DIR` environment variable (highest priority)
-/// 2. Local repository (if running from source)
-/// 3. System data directory (e.g., `~/.local/share/gglib`)
+/// 1. `GGLIB_DATA_DIR` environment variable
+/// 2. The OS's per-user data directory: `~/.local/share/gglib` on Linux,
+///    `~/Library/Application Support/gglib` on macOS,
+///    `%LOCALAPPDATA%\gglib` on Windows
+///
+/// One folder for every build, packaged or built from a checkout, so the
+/// desktop app, the CLI and the daemon always agree on the database, the
+/// daemon token and lock, and the llama.cpp install, whichever of them is
+/// running. A checkout holds source and build output and nothing else; to
+/// keep a development build's state apart, set `GGLIB_DATA_DIR` (and
+/// `GGLIB_DAEMON_PORT`, so it runs a daemon of its own).
 ///
 /// A test binary built with this crate's `test-utils` feature can set a root
-/// of its own with `isolate_data_root`, which comes before all three. A build
+/// of its own with `isolate_data_root`, which comes before both. A build
 /// without the feature neither looks for one nor can set one. One that a
 /// test run compiles with it, such as the `gglib` the CLI's tests start,
 /// looks and finds none, since only a test calls `isolate_data_root`.
@@ -90,22 +55,14 @@ pub fn data_root() -> Result<PathBuf, PathError> {
         return Ok(root.to_path_buf());
     }
 
-    // 1. Runtime override (highest priority)
     if let Ok(path) = env::var("GGLIB_DATA_DIR") {
         return Ok(PathBuf::from(path));
     }
 
-    // 2. Try local repo (e.g. make setup)
-    if let Some(repo) = detect_local_repo() {
-        return Ok(repo);
-    }
+    let root = dirs::data_local_dir()
+        .ok_or(PathError::NoDataDir)?
+        .join("gglib");
 
-    // 3. Default to system data directory
-    let data_dir = dirs::data_local_dir().ok_or(PathError::NoDataDir)?;
-
-    let root = data_dir.join("gglib");
-
-    // Ensure it exists
     if !root.exists() {
         fs::create_dir_all(&root).map_err(|e| PathError::CreateFailed {
             path: root.clone(),
@@ -116,12 +73,26 @@ pub fn data_root() -> Result<PathBuf, PathError> {
     Ok(root)
 }
 
-/// Get the root directory for application resources (binaries, static assets).
+/// Where a data root came from, for `gglib config paths`.
+#[must_use]
+pub fn data_root_source() -> &'static str {
+    #[cfg(feature = "test-utils")]
+    if super::test_root::root().is_some() {
+        return "test";
+    }
+    if env::var_os("GGLIB_DATA_DIR").is_some() {
+        "GGLIB_DATA_DIR"
+    } else {
+        "default"
+    }
+}
+
+/// Get the root directory for application resources (llama.cpp and
+/// sd-server installs).
 ///
 /// Resolution order:
 /// 1. `GGLIB_RESOURCE_DIR` environment variable
-/// 2. Local repository (if running from source)
-/// 3. Falls back to data root
+/// 2. The data root
 ///
 /// A test binary's own root comes first here too, as for [`data_root`], so a
 /// test resolves no llama-server but one it installed there itself.
@@ -132,17 +103,10 @@ pub fn resource_root() -> Result<PathBuf, PathError> {
         return Ok(root.to_path_buf());
     }
 
-    // 1. Runtime override
     if let Ok(path) = env::var("GGLIB_RESOURCE_DIR") {
         return Ok(PathBuf::from(path));
     }
 
-    // 2. Try local repo
-    if let Some(repo) = detect_local_repo() {
-        return Ok(repo);
-    }
-
-    // 3. Fallback to system data directory
     data_root()
 }
 

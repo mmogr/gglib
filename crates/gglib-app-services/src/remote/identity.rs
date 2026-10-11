@@ -134,8 +134,8 @@ impl RemoteOps {
     /// `<data root>/data/remote_join`.
     ///
     /// For a test. [`RemoteOps::new`] leaves the default, which is what a
-    /// daemon runs with; in a debug build that default is the checkout's
-    /// `data/`, which is also the installed daemon's.
+    /// daemon runs with; that default is the user's real `data/`, which is
+    /// also the installed daemon's.
     ///
     /// Public although only tests call it: as `pub(crate)`, the library
     /// build, which has no tests in it, would warn that it is never used.

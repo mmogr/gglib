@@ -3,8 +3,8 @@
 //!
 //! Each test resolves in this binary's own data root, set first, and checks
 //! that it did: resolving the database path makes `<data root>/data`, which
-//! in a debug build is otherwise the checkout's, and an installed daemon may
-//! share it (#955).
+//! is otherwise the user's real one, and an installed daemon shares it
+//! (#955).
 
 use gglib_core::paths::{ModelsDirSource, ResolvedPaths, isolate_data_root};
 

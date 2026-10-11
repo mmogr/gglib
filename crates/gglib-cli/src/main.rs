@@ -12,8 +12,6 @@ use gglib_cli::{Cli, bootstrap, dispatch};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenvy::dotenv().ok();
-
     let cli = Cli::parse();
     gglib_core::telemetry::init_tracing(cli.verbose)?;
     let ctx = bootstrap().await?;

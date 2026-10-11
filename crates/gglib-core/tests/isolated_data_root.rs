@@ -1,6 +1,6 @@
 //! With a test binary's own data root set, every path built on the data and
-//! resource roots resolves under it, and not into the checkout a debug build
-//! otherwise answers (#955).
+//! resource roots resolves under it, and not into the user's real gglib
+//! folder every build otherwise answers (#955).
 //!
 //! A binary of its own because the root is set once per process and comes
 //! before `GGLIB_DATA_DIR`: this crate's unit tests point that variable at

@@ -23,6 +23,9 @@ pub use settings_update::{SettingsError, SettingsUpdate};
 mod settings_validate;
 pub use settings_validate::{validate_inference_config, validate_inference_profiles};
 
+#[path = "settings_daemon_port.rs"]
+mod settings_daemon_port;
+pub use settings_daemon_port::daemon_port;
 #[path = "settings_remote.rs"]
 mod settings_remote;
 pub use settings_remote::{Device, RemotePairing, RemoteServe};
@@ -30,13 +33,9 @@ pub use settings_remote::{Device, RemotePairing, RemoteServe};
 /// Default port for the OpenAI-compatible proxy server.
 pub const DEFAULT_PROXY_PORT: u16 = 8080;
 
-/// Fixed loopback port for the gglib daemon's management API.
-///
-/// Deliberately a compile-time constant rather than a setting: the daemon is
-/// the one process every client (CLI, desktop app, browser dashboard) must be
-/// able to find without configuration, and a configurable port would reopen
-/// the "two daemons on different ports" split-brain this constant closes.
-pub const DAEMON_PORT: u16 = 9887;
+/// The loopback port of the gglib daemon's management API, unless
+/// `GGLIB_DAEMON_PORT` names another: see [`daemon_port`].
+pub const DEFAULT_DAEMON_PORT: u16 = 9887;
 
 /// Default base port for llama-server instance allocation.
 pub const DEFAULT_LLAMA_BASE_PORT: u16 = 9000;

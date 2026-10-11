@@ -18,6 +18,8 @@ pub use attachments::sweep_unlinked_attachments;
 mod attachments;
 #[path = "setup_branches.rs"]
 mod branches;
+#[path = "setup_generation.rs"]
+mod generation;
 #[path = "setup_model_components.rs"]
 mod model_components;
 #[path = "setup_model_files.rs"]
@@ -94,7 +96,7 @@ async fn add_column_if_missing(
 /// 1. Establishes a connection to the `SQLite` database file
 /// 2. Creates the database file if it doesn't exist; it and the directory holding it are made this user's alone
 /// 3. Creates all tables and indexes
-/// 4. Runs any necessary schema migrations
+/// 4. Runs any necessary schema migrations, unless a newer build wrote the file
 ///
 /// # Arguments
 ///
@@ -138,8 +140,9 @@ pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
         )
         .await?;
 
-    // Create all tables and indexes
+    generation::refuse_newer(&pool).await?; // before anything is created or altered
     create_schema(&pool).await?;
+    generation::stamp(&pool).await?;
 
     settings::reclaim_auto_tune(&pool).await?;
 
@@ -153,6 +156,7 @@ pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
 pub async fn setup_test_database() -> Result<SqlitePool> {
     let pool = SqlitePool::connect("sqlite::memory:").await?;
     create_schema(&pool).await?;
+    generation::stamp(&pool).await?;
     Ok(pool)
 }
 

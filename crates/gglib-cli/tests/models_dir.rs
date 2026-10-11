@@ -1,10 +1,9 @@
 //! `gglib config models-dir set` and `prompt`, and what the next run resolves.
 //!
-//! Two runs of the binary, because the point is the second one. It starts
-//! either in a directory that is not the data root, as an installed `gglib`
-//! does, so nothing loads the stored directory into its environment for it,
-//! or in the data root, as a run from the checkout does, so the whole `.env`
-//! there is loaded and has to survive the line the first run wrote.
+//! Two runs of the binary, because the point is the second one. It starts in
+//! a directory that is not the data root, as every `gglib` does: nothing
+//! loads a `.env` into its environment, and the stored directory is read
+//! from the data root's `.env` alone.
 
 use std::io::Write;
 use std::path::Path;
@@ -123,21 +122,18 @@ fn a_models_directory_typed_at_the_prompt_is_the_one_the_next_run_resolves() {
     );
 }
 
-/// A run started in the data root loads the `.env` there into its
-/// environment, and loading stops at a line it cannot read. The line a `set`
-/// writes for a directory with a space in its name is one it can: the next
-/// run has that directory from it, and the line after it as well.
+/// The line a `set` writes for a directory with a space in its name is one
+/// the data root's `.env` reader reads back, and the lines around it stay.
 #[test]
-fn a_stored_directory_with_a_space_in_its_name_leaves_the_rest_of_the_env_file_loading() {
+fn a_stored_directory_with_a_space_in_its_name_is_read_back_and_the_other_lines_kept() {
     let data = tempfile::tempdir().expect("temp data dir");
     let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
     let before = data.path().join("before");
     let chosen = data.path().join("my models");
-    // Forward slashes on every platform, so the line needs no escaping.
-    let resources = data.path().join("res").to_string_lossy().replace('\\', "/");
+    let kept = "GGLIB_RESOURCE_DIR=\"/somewhere\"";
     std::fs::write(
         data.path().join(".env"),
-        format!("GGLIB_MODELS_DIR=\"/replaced\"\nGGLIB_RESOURCE_DIR=\"{resources}\"\n"),
+        format!("GGLIB_MODELS_DIR=\"/replaced\"\n{kept}\n"),
     )
     .expect("an .env with a line after the models directory");
 
@@ -150,13 +146,12 @@ fn a_stored_directory_with_a_space_in_its_name_leaves_the_rest_of_the_env_file_l
     );
     assert!(set.status.success(), "the set must succeed\n{}", text(&set));
 
-    let paths = config(data.path(), data.path(), None, &["paths"], None);
+    let paths = config(data.path(), elsewhere.path(), None, &["paths"], None);
     assert!(paths.status.success(), "{}", text(&paths));
     let stdout = String::from_utf8_lossy(&paths.stdout);
     for line in [
         format!("models_dir = {}", chosen.display()),
         "models_source = EnvVar".to_owned(),
-        format!("resource_root = {resources}"),
     ] {
         assert!(
             stdout.lines().any(|printed| printed == line),
@@ -164,6 +159,11 @@ fn a_stored_directory_with_a_space_in_its_name_leaves_the_rest_of_the_env_file_l
             text(&paths)
         );
     }
+    let env = std::fs::read_to_string(data.path().join(".env")).expect("the .env");
+    assert!(
+        env.lines().any(|l| l == kept),
+        "the other line must stay\n{env}"
+    );
 }
 
 /// A directory that is absent is refused under `--no-create`, in the words

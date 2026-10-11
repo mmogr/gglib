@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 
-use gglib_core::DAEMON_PORT;
+use gglib_core::daemon_port;
 
 use crate::bootstrap::CliContext;
 
@@ -19,15 +19,14 @@ const PROBE_TIMEOUT: Duration = Duration::from_millis(500);
 /// DB migration and the orphan sweep, so this is generous.
 const LAUNCH_WAIT: Duration = Duration::from_secs(10);
 
-/// The daemon's base URL. The port is a compile-time constant by design —
-/// see `gglib_core::DAEMON_PORT`.
+/// The daemon's base URL, on the port `gglib_core::daemon_port` names.
 #[must_use]
 pub(crate) fn base_url() -> String {
     #[cfg(test)]
     if let Ok(port) = STAND_IN_PORT.try_with(|port| *port) {
         return format!("http://127.0.0.1:{port}");
     }
-    format!("http://127.0.0.1:{DAEMON_PORT}")
+    format!("http://127.0.0.1:{}", daemon_port())
 }
 
 #[cfg(test)]
@@ -196,8 +195,9 @@ pub(crate) async fn ensure_daemon(ctx: &CliContext) -> Result<DaemonHandle> {
     match probe(&client).await {
         DaemonProbe::Running => return Ok(DaemonHandle { client, api_key }),
         DaemonProbe::ForeignServer => bail!(
-            "port {DAEMON_PORT} is in use by another program (not a gglib daemon). \
-             Free the port and retry."
+            "port {} is in use by another program (not a gglib daemon). \
+             Free the port and retry.",
+            daemon_port()
         ),
         DaemonProbe::NotRunning => {}
     }
@@ -229,7 +229,10 @@ async fn wait_for_launch<F: Future<Output = DaemonProbe>>(
                 return Ok(DaemonHandle { client, api_key });
             }
             DaemonProbe::ForeignServer => {
-                bail!("port {DAEMON_PORT} was taken by another program while the daemon started")
+                bail!(
+                    "port {} was taken by another program while the daemon started",
+                    daemon_port()
+                )
             }
             DaemonProbe::NotRunning => {}
         }
