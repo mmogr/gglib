@@ -5,10 +5,20 @@
 //!
 //! The app prefers an external daemon over hosting one in-process: it survives
 //! a crash of this app, and it is the same process the CLI would have started.
-//! That preference is only as good as the lookup below — when it fails, the
-//! app silently falls back to hosting, which dies with the window.
+//! When there is no CLI to launch, the app hosts the daemon itself, which
+//! dies with the window.
+//!
+//! The CLI it launches is the one beside it, never one found on `$PATH`. Every
+//! release puts one there: the macOS bundle, the Windows installer, the
+//! `AppImage` and the rpm carry their own copy (Tauri's `externalBin`, set by
+//! `tauri.sidecar.conf.json` when release.yml bundles), the deb depends on the
+//! `gglib` package of the same version, which installs `/usr/bin/gglib` beside
+//! `/usr/bin/gglib-app`, and the archives hold both. A build from a checkout
+//! has `target/<profile>/gglib` beside it once the CLI is built. So the daemon
+//! the app starts is always the app's own version, whatever else is on
+//! `$PATH`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// The `gglib` CLI's filename on this platform.
 ///
@@ -23,19 +33,20 @@ fn cli_binary_name() -> String {
     format!("gglib{}", std::env::consts::EXE_SUFFIX)
 }
 
-/// Spawn `gglib daemon run` detached: sibling binary first, then `$PATH`.
+/// The `gglib` CLI in the directory `exe` is in, when there is one.
+fn sibling_cli(exe: &Path) -> Option<PathBuf> {
+    exe.parent()
+        .map(|dir| dir.join(cli_binary_name()))
+        .filter(|p| p.is_file())
+}
+
+/// Spawn `gglib daemon run` detached, from the CLI beside this app.
 pub(super) fn spawn_external_daemon() -> Result<(), String> {
-    let name = cli_binary_name();
-
-    let candidate = std::env::current_exe()
+    let program = std::env::current_exe()
         .ok()
-        .and_then(|exe| exe.parent().map(|dir| dir.join(&name)))
-        .filter(|p| p.exists());
-
-    let program = match candidate {
-        Some(path) => path,
-        None => which_gglib().ok_or("no `gglib` binary next to the app or on PATH")?,
-    };
+        .as_deref()
+        .and_then(sibling_cli)
+        .ok_or("no `gglib` binary beside the app")?;
 
     let log = daemon_log_file().map_err(|e| format!("opening daemon log: {e}"))?;
 
@@ -53,15 +64,6 @@ pub(super) fn spawn_external_daemon() -> Result<(), String> {
 
     cmd.spawn().map_err(|e| e.to_string())?;
     Ok(())
-}
-
-/// Locate `gglib` on `$PATH` without shelling out.
-fn which_gglib() -> Option<PathBuf> {
-    let name = cli_binary_name();
-    let paths = std::env::var_os("PATH")?;
-    std::env::split_paths(&paths)
-        .map(|dir| dir.join(&name))
-        .find(|candidate| candidate.is_file())
 }
 
 /// The log file an auto-launched daemon writes to.
@@ -104,25 +106,27 @@ mod tests {
         assert_eq!(name, "gglib");
     }
 
-    /// Both lookups must derive their filename from the same place. Them
-    /// drifting apart is how the sibling probe gets fixed while the `$PATH`
-    /// fallback silently keeps failing.
-    ///
-    /// Asserted by construction rather than by planting a file on `$PATH`:
-    /// `set_var` is process-global and `unsafe` under edition 2024, so a test
-    /// that rewrote `$PATH` would be both racy under the parallel harness and
-    /// a new `unsafe` block.
+    /// The CLI beside the app is found, and nothing is when it is absent:
+    /// a directory holding only the app means hosting in-process, not a
+    /// search elsewhere.
     #[test]
-    fn both_lookups_share_one_name_source() {
-        let name = cli_binary_name();
-        assert_eq!(
-            name,
-            cli_binary_name(),
-            "cli_binary_name must be the single source both lookups call"
-        );
-        assert!(
-            !name.contains(std::path::MAIN_SEPARATOR),
-            "{name:?} is a file name, not a path — callers join it onto a dir"
-        );
+    fn the_cli_is_taken_from_beside_the_app_or_not_at_all() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let app = dir.path().join("gglib-app");
+        std::fs::write(&app, b"").expect("the app");
+
+        assert_eq!(sibling_cli(&app), None);
+
+        let cli = dir.path().join(cli_binary_name());
+        std::fs::write(&cli, b"").expect("the cli");
+        assert_eq!(sibling_cli(&app), Some(cli));
+    }
+
+    /// A directory by the CLI's name is not a CLI.
+    #[test]
+    fn a_directory_named_like_the_cli_is_not_taken() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir(dir.path().join(cli_binary_name())).expect("a directory");
+        assert_eq!(sibling_cli(&dir.path().join("gglib-app")), None);
     }
 }

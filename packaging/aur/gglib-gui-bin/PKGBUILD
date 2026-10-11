@@ -5,7 +5,10 @@
 # not the copy on the AUR: each stable release overwrites that copy.
 #
 # Repackages the release's .deb, which Tauri builds with the binary, desktop
-# entry and icons already laid out under /usr.
+# entry and icons already laid out under /usr. The deb does not carry the CLI
+# the app launches: it depends on gglib's own package for that, so this one
+# depends on gglib-bin of the same version, which installs /usr/bin/gglib
+# beside /usr/bin/gglib-app.
 pkgname=gglib-gui-bin
 pkgver=@VERSION@
 pkgrel=1
@@ -13,8 +16,7 @@ pkgdesc='Local model runtime and OpenAI-compatible proxy for llama.cpp (desktop 
 arch=('x86_64')
 url='https://github.com/mmogr/gglib'
 license=('AGPL-3.0-only')
-depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'librsvg' 'alsa-lib' 'hicolor-icon-theme')
-optdepends=('gglib-bin: the gglib command-line tool')
+depends=("gglib-bin=${pkgver}" 'webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'librsvg' 'alsa-lib' 'hicolor-icon-theme')
 provides=('gglib-gui')
 conflicts=('gglib-gui')
 source=("gglib-gui-${pkgver}-x86_64-unknown-linux-gnu.deb::${url}/releases/download/v${pkgver}/gglib-gui-${pkgver}-x86_64-unknown-linux-gnu.deb")

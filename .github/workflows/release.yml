@@ -638,19 +638,78 @@ jobs:
             libgtk-3-dev \
             libssl-dev \
             libasound2-dev \
-            pkg-config
+            pkg-config \
+            rpm
 
+      # The app launches the CLI beside it and never one from PATH
+      # (src-tauri/src/daemon/launch.rs), so every artifact below has one
+      # there. Built first, with the dashboard it embeds, and copied to where
+      # Tauri's externalBin takes it from: binaries/gglib-<target triple>.
+      - name: Build the CLI the app carries
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build
+          test -f web_ui/index.html
+          cargo build --release --target ${{ matrix.target }} -p gglib-cli
+          ext=""
+          if [ "${{ runner.os }}" = "Windows" ]; then ext=".exe"; fi
+          mkdir -p src-tauri/binaries
+          cp "target/${{ matrix.target }}/release/gglib${ext}" \
+            "src-tauri/binaries/gglib-${{ matrix.target }}${ext}"
+
+      # tauri.sidecar.conf.json adds the CLI as an externalBin. It is merged
+      # in here only, not in tauri.conf.json: tauri-build refuses to compile
+      # the app when an externalBin is missing, and every `cargo check` and
+      # clippy run in CI would need a CLI binary built first.
+      #
+      # The deb is the one artifact without it. Tauri installs an externalBin
+      # to /usr/bin/gglib, the very file the CLI's own deb installs, and apt
+      # refuses to install the two together. So the deb depends on the gglib
+      # package of this version instead, which puts the CLI beside
+      # /usr/bin/gglib-app all the same. The rpm and AppImage carry it: there
+      # is no CLI rpm for them to depend on.
       - name: Build Tauri app
         run: |
+          set -euo pipefail
           echo "Building Tauri app for ${{ matrix.target }}"
+          sidecar=src-tauri/tauri.sidecar.conf.json
           if [ "${{ matrix.os }}" == "windows-2022" ]; then
-            npm run tauri:build -- --target ${{ matrix.target }} --bundles nsis
+            npm run tauri:build -- --target ${{ matrix.target }} --bundles nsis --config "$sidecar"
           elif [ "${{ runner.os }}" = "Linux" ]; then
-            npm run tauri:build -- --target ${{ matrix.target }} --bundles appimage,deb,rpm
+            npm run tauri:build -- --target ${{ matrix.target }} --bundles appimage,rpm --config "$sidecar"
+            version="${{ needs.check-version.outputs.new-version }}"
+            depends="{\"bundle\":{\"linux\":{\"deb\":{\"depends\":[\"gglib (= ${version/-/\~})\"]}}}}"
+            npm run tauri:build -- --target ${{ matrix.target }} --bundles deb --config "$depends"
           else
-            npm run tauri:build -- --target ${{ matrix.target }}
+            npm run tauri:build -- --target ${{ matrix.target }} --config "$sidecar"
           fi
         shell: bash
+
+      # Proof, before anything ships, that each artifact has the CLI the app
+      # will look for, and that the deb names the package that supplies it.
+      - name: Check the app carries its CLI (Unix)
+        if: matrix.os != 'windows-2022'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="target/${{ matrix.target }}/release/bundle"
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            deb=$(find "$bundle/deb" -maxdepth 1 -name '*.deb' | head -n1)
+            dpkg-deb --field "$deb" Depends | tee /dev/stderr | grep -q 'gglib (= '
+            if dpkg-deb --contents "$deb" | grep -q '/usr/bin/gglib$'; then
+              echo "::error::the deb carries /usr/bin/gglib, which the CLI's deb owns"
+              exit 1
+            fi
+            rpm=$(find "$bundle/rpm" -maxdepth 1 -name '*.rpm' | head -n1)
+            rpm -qlp "$rpm" | grep -qx '/usr/bin/gglib'
+            appimage=$(find "$bundle/appimage" -maxdepth 1 -name '*.AppImage' | head -n1)
+            chmod +x "$appimage"
+            ( cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/$appimage" --appimage-extract >/dev/null )
+            test -x "$RUNNER_TEMP/squashfs-root/usr/bin/gglib"
+          else
+            test -x "$bundle/macos/GGLib GUI.app/Contents/MacOS/gglib"
+          fi
         
       - name: Debug build output (Windows)
         if: matrix.os == 'windows-2022'
@@ -714,7 +773,8 @@ jobs:
         run: |
           mkdir -p gui-release
           cp target/${{ matrix.target }}/release/gglib-app gui-release/
-          chmod +x gui-release/gglib-app
+          cp target/${{ matrix.target }}/release/gglib gui-release/
+          chmod +x gui-release/gglib-app gui-release/gglib
 
       - name: Prepare GUI binary for packaging (macOS)
         if: startsWith(matrix.os, 'macos')
@@ -732,8 +792,8 @@ jobs:
           # First check for the bare binary (always created)
           if [ -f "target/${{ matrix.target }}/release/gglib-app" ]; then
             echo "Found bare binary in target-specific directory, copying..."
-            cp "target/${{ matrix.target }}/release/gglib-app" gui-release/
-            chmod +x gui-release/gglib-app
+            cp "target/${{ matrix.target }}/release/gglib-app" "target/${{ matrix.target }}/release/gglib" gui-release/
+            chmod +x gui-release/gglib-app gui-release/gglib
           else
             echo "ERROR: Bare binary not found! target/${{ matrix.target }}/release/gglib-app does not exist."
             exit 1
@@ -758,6 +818,7 @@ jobs:
         run: |
           mkdir gui-release
           copy target\${{ matrix.target }}\release\gglib-app.exe gui-release\
+          copy target\${{ matrix.target }}\release\gglib.exe gui-release\
 
       # The installers below were built by the step above and then discarded:
       # nothing copied them out of target/, so no release has ever carried an
