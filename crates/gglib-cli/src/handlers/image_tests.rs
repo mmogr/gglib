@@ -232,5 +232,5 @@ fn a_failure_says_the_daemons_words() {
         })
         .starts_with("the render failed:")
     );
-    assert!(INTERRUPTED.contains("cannot be interrupted"));
+    assert!(INTERRUPTED.contains("the daemon stops the render too"));
 }

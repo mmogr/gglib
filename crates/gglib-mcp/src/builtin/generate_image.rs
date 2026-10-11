@@ -324,3 +324,7 @@ pub(crate) fn definition() -> McpTool {
 #[cfg(test)]
 #[path = "generate_image_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "generate_image_cancel_tests.rs"]
+mod cancel_tests;

@@ -81,19 +81,28 @@ its frame and as progress on the turn, which keeps requests queued behind
 the render from expiring, then Decoding after the last step of the last
 pass, then the PNGs, their sizes read from the images.
 
-sd-server cannot interrupt a generating job (cancel answers 409). A render
-dropped part way cancels its job and, when the job runs on, a task keeps the
-turn and its lease until the job ends; the submission runs in a task of its
-own, so that holds for a request dropped while its job is being submitted. A render with no new step for
-`IMAGE_STALL` (3 minutes, from submission) or running past
-`IMAGE_JOB_DEADLINE` (30 minutes) is retired through
+sd-server cannot interrupt a generating job (cancel answers 409), so a
+render nobody waits for is stopped by stopping sd-server. A render dropped
+part way (a run cancelled, Ctrl-C in `gglib image`, a client that left)
+asks sd-server to cancel its job. A job still queued there, finished or
+forgotten is over: the turn and the lease go and the model stays loaded. A
+job that is generating is retired at once through
 `ProcessManager::retire_render`: its server stopped, its lease released and
-slot emptied, then its turn ended. A person's Stop on the model while it
-draws is not a bare eviction either: the Stop asks, and the render, read or
-abandoned, retires itself the same way at its next read of the job and
-answers `image_generation_failed`, saying only that the model was stopped. `server/job_tests.rs` drives all of this against
-a scripted job and a real admission queue on a paused clock;
-`server/job_api_tests.rs` reads every answer the fake's job API scripts.
+slot emptied, then its turn ended, so whatever waited for the GPU goes, and
+the next request for the image model loads it again. A cancel that fails,
+or is not answered within `CANCEL_WAIT` (5 seconds), is read as a job that
+is generating. The submission runs in a task of its own, so all of this
+holds for a request dropped while its job is being submitted. A request
+dropped while it only waits for the model or for its turn leaves the line
+and stops nothing. A render with no new step for `IMAGE_STALL` (3 minutes,
+from submission) or running past `IMAGE_JOB_DEADLINE` (30 minutes) is
+retired the same way. A person's Stop on the model while it draws is not a
+bare eviction either: the Stop asks, and the render retires itself the same
+way at its next read of the job and answers `image_generation_failed`,
+saying only that the model was stopped. `server/job_tests.rs` and
+`server/job_leave_tests.rs` drive the driver against a scripted job and a
+real admission queue on a paused clock; `server/job_api_tests.rs` reads
+every answer the fake's job API scripts.
 
 ## The source build
 

@@ -139,7 +139,7 @@ crates/gglib-gguf/src/reader_tests.rs 416
 crates/gglib-hf/src/http.rs 514
 crates/gglib-hf/src/parsing.rs 429
 crates/gglib-hf/src/url.rs 403
-crates/gglib-mcp/src/builtin/generate_image.rs 326
+crates/gglib-mcp/src/builtin/generate_image.rs 330
 crates/gglib-mcp/src/builtin/generate_image_tests.rs 443
 crates/gglib-mcp/src/builtin/mod.rs 447
 crates/gglib-mcp/src/client.rs 509
@@ -211,7 +211,8 @@ crates/gglib-runtime/src/process/residency/vram.rs 390
 crates/gglib-runtime/src/proxy/supervisor.rs 502
 crates/gglib-runtime/src/sd/install/install_tests.rs 316
 crates/gglib-runtime/src/sd/server/job.rs 355
-crates/gglib-runtime/src/sd/server/job_tests.rs 993
+crates/gglib-runtime/src/sd/server/job_leave_tests.rs 459
+crates/gglib-runtime/src/sd/server/job_tests.rs 896
 crates/gglib-runtime/src/system/mod.rs 623
 crates/gglib-runtime/src/unified_server_config.rs 465
 crates/gglib-sse/src/lib.rs 320

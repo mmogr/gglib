@@ -150,8 +150,8 @@ impl AdmissionQueue {
     }
 
     /// Retire a render whose `sd-server` had to be killed (a stall, the job
-    /// deadline, or a person's Stop), in the one order that cannot hurt a
-    /// newcomer.
+    /// deadline, a person's Stop, or a reader that left while it was
+    /// generating), in the one order that cannot hurt a newcomer.
     ///
     /// 1. `kill` runs to completion first, with no lock held.
     /// 2. Under one lock, the render's slot is emptied, which settles its

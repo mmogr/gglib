@@ -307,8 +307,8 @@ pub enum Commands {
     ///
     /// Shows the render on one line (queued, loading, each step, decoding),
     /// saves each image as a PNG and prints where. The daemon draws, so a
-    /// render queues behind its chats; Ctrl-C leaves, but the daemon finishes
-    /// a render already generating and discards it.
+    /// render queues behind its chats; Ctrl-C leaves, and the daemon stops a
+    /// render already generating, loading the image model again next time.
     #[command(display_order = 15)]
     Image(crate::image_commands::ImageCommandArgs),
 

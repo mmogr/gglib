@@ -126,6 +126,7 @@ render waited on it, the self-wait shape of
 A render step is progress, so nobody behind a long render reaches
 [`ADMISSION_DEADLINE`] while it keeps stepping, and a gate waiter expires
 under the same stall rule as a ticket. A render whose process had to be killed
+(it stalled, ran past its deadline, or was generating when its reader left)
 is retired by `AdmissionQueue::retire_render`: the kill first, then one locked
 release and eviction that touches the slot only while it still holds that
 model, then the turn ends. A person's Stop on an image model a render holds

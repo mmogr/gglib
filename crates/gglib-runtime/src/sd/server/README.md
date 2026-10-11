@@ -14,7 +14,7 @@ the drawing rules are in [the parent README](../README.md).
 | `job.rs`         | `SdImageDriver`, the image generation port: admit, turn, submit, follow |
 | `job_plan.rs`    | a request's model, size and count, refused before anything queues       |
 | `job_api.rs`     | sd-server's async job API: submit, read a job, cancel                    |
-| `job_poll.rs`    | following one job: stages, steps, decode, cancel, stall and deadline    |
+| `job_poll.rs`    | following one job: stages, steps, decode, stall and deadline, and stopping one nobody reads |
 | `fake_server.rs` | a test-only stand-in for `sd-server`: its model list and its job API    |
 
 <!-- module-docs:end -->

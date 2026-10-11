@@ -266,9 +266,11 @@ unless `--size` gives another the family draws; `-n` draws up to four;
 `--seed` repeats a drawing. Images go to
 `-o PATH`, or `gglib-<unix time>.png` here, with `-1`, `-2`, … for more
 than one; an existing file is never replaced. The first step of a Flux.1
-render comes about 40 seconds in. Ctrl-C leaves at once, but a render
-already generating cannot be interrupted: the daemon finishes it and
-discards it. Stopping the image model, or removing it with force, while it
+render comes about 40 seconds in. Ctrl-C leaves at once, and the daemon
+stops the render: one that is already generating is stopped by stopping
+`sd-server`, so the picture is lost, the chats that waited go on, and the
+next picture loads the image model again.
+Stopping the image model, or removing it with force, while it
 draws waits up to 20 seconds for the render to stop, and answers an error
 if it has not, leaving the model loaded.
 
