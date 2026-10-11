@@ -159,7 +159,7 @@ async fn the_far_drawing_availability_comes_back_as_it_was() {
     let answer = r#"{"available":true,"model":"sdxl"}"#;
     let (fake, hub) = far(200, answer).await;
 
-    let (status, body) = read(drawing_via(&hub).await.unwrap()).await;
+    let (status, body) = read(drawing_via(&hub, None).await.unwrap()).await;
 
     assert_eq!((status, body.as_str()), (StatusCode::OK, answer));
     let seen = only(&fake);
@@ -170,8 +170,27 @@ async fn the_far_drawing_availability_comes_back_as_it_was() {
     assert!(carries_key(&seen), "{seen:?}");
 
     let (_, older) = far(404, "").await;
-    let (status, _) = read(drawing_via(&older).await.unwrap()).await;
+    let (status, _) = read(drawing_via(&older, None).await.unwrap()).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// A chosen image model goes to the far machine with the question, as the
+/// `image_model` its own route reads.
+#[tokio::test]
+async fn the_far_drawing_question_carries_the_chosen_image_model() {
+    let answer =
+        r#"{"available":false,"code":"image_model_incomplete","reason":"why","models":[]}"#;
+    let (fake, hub) = far(200, answer).await;
+
+    let (status, body) = read(drawing_via(&hub, Some(12)).await.unwrap()).await;
+
+    assert_eq!((status, body.as_str()), (StatusCode::OK, answer));
+    let seen = only(&fake);
+    assert_eq!(
+        (seen.method.as_str(), seen.uri.as_str()),
+        ("GET", "/v1/images/drawing?image_model=12")
+    );
+    assert!(carries_key(&seen), "{seen:?}");
 }
 
 /// Frame one arrives while the far run is still writing: the stream is

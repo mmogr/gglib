@@ -96,7 +96,11 @@ export function useDrawSwitch(chat: DrawSwitchChat): DrawSwitch {
     getTransport()
       .drawingAvailability(source, { far: pairedModel, callsTools })
       .then(answered, (error: unknown) =>
-        answered({ available: false, reason: `${DRAW_UNCHECKED}: ${error instanceof Error ? error.message : String(error)}` }),
+        answered({
+          available: false,
+          reason: `${DRAW_UNCHECKED}: ${error instanceof Error ? error.message : String(error)}`,
+          models: [],
+        }),
       );
     return () => {
       left = true;

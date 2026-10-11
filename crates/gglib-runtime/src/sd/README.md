@@ -68,7 +68,9 @@ within the health client's two seconds.
 builds one over the daemon's manager. A request names its model, or draws
 with the default image model the settings name (refused when it lacks a
 file), or else with the only image model that has every file its family
-needs; the
+needs: core's `resolve_image_model` (`gglib-core/src/services/drawing.rs`)
+is that rule, and a named model that is unknown, chats or lacks a file is
+refused, never replaced by the default. The
 family's recipe judges its size (1024x1024 by default) and one to four
 images, all before anything queues. Then the image model is admitted
 (launching sd-server if it is not resident, its place in line reported as

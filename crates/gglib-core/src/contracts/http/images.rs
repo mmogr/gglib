@@ -18,6 +18,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::{ComponentRole, ImageFamily};
+
 /// The proxy's route.
 pub const IMAGES_GENERATIONS_PATH: &str = "/v1/images/generations";
 
@@ -149,14 +151,19 @@ pub enum ImageStreamEvent {
     },
 }
 
-/// Whether a message sent with Draw pressed can draw here, and if not why:
-/// what greys the Draw button, with its reason as the button's title.
+/// Whether a message sent with Draw pressed can draw here, and if not why.
+///
+/// What greys the Draw button, with its reason as the button's title. With
+/// it, every image model on this machine, for a surface that lets a person
+/// pick one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct DrawingAvailability {
     /// Whether it can.
     pub available: bool,
-    /// Why not, as a code (`drawing_unavailable`); absent when it can.
+    /// Why not, as the code a request to draw would be refused with:
+    /// `drawing_unavailable`, or for a chosen model `model_not_found`,
+    /// `not_an_image_model` or `image_model_incomplete`; absent when it can.
     #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
@@ -164,10 +171,49 @@ pub struct DrawingAvailability {
     #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
-    /// The image model that would draw, when it can.
+    /// The image model that would draw, when it can: the one the question
+    /// chose, else the one a request that names none draws with.
     #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// That model's id, the one in [`ImageModelRow::id`]. Absent when it
+    /// cannot draw, and from a service that names a model without its id.
+    #[cfg_attr(feature = "ts-bindings", ts(optional = nullable))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<u32>,
+    /// Every image model on this machine, complete or not, by family (in
+    /// [`ImageFamily::ALL`]'s order) and then by name. Listed whenever the
+    /// image driver could read them, also when `available` is false; empty
+    /// when the question was refused before the driver was asked, or there
+    /// is no image runtime.
+    #[serde(default)]
+    pub models: Vec<ImageModelRow>,
+}
+
+/// One image model on this machine, as a picker shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct ImageModelRow {
+    /// Its id in this machine's catalogue: what a client sends back to
+    /// choose it.
+    pub id: u32,
+    /// Its name.
+    pub name: String,
+    /// Its family.
+    pub family: ImageFamily,
+    /// Whether it has a file for every role its family needs. One that does
+    /// not cannot be chosen.
+    pub complete: bool,
+    /// The roles it has no file for, in the recipe's order; empty when
+    /// `complete`.
+    pub missing: Vec<ComponentRole>,
+    /// Whether it is the one a request that names no model draws with: the
+    /// settings' default, else the only complete image model. True on at
+    /// most one row, and on none when such a request would be refused.
+    pub default: bool,
+    /// Whether it is loaded now. Choosing one that is not means a load
+    /// before the picture starts.
+    pub resident: bool,
 }
 
 impl DrawingAvailability {
@@ -179,6 +225,8 @@ impl DrawingAvailability {
             code: None,
             reason: None,
             model: Some(model.into()),
+            model_id: None,
+            models: Vec::new(),
         }
     }
 
@@ -190,12 +238,24 @@ impl DrawingAvailability {
             code: Some(code.into()),
             reason: Some(reason.into()),
             model: None,
+            model_id: None,
+            models: Vec::new(),
         }
+    }
+
+    /// The same answer over this machine's image models.
+    #[must_use]
+    pub fn listing(mut self, models: Vec<ImageModelRow>) -> Self {
+        self.models = models;
+        self
     }
 }
 
-/// The query of a drawing availability route: `far` when the chat's model is
-/// on another machine, `calls_tools=false` for a model that calls no tools.
+/// The query of a drawing availability route.
+///
+/// `far` when the chat's model is on another machine, `calls_tools=false`
+/// for a model that calls no tools, `image_model=<id>` to judge the image
+/// model a person chose.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 pub struct DrawingQuery {
     /// The chat's model is on another machine.
@@ -204,6 +264,11 @@ pub struct DrawingQuery {
     /// Whether the chat's model calls tools; absent when unknown.
     #[serde(default)]
     pub calls_tools: Option<bool>,
+    /// The id of the image model chosen ([`ImageModelRow::id`]), judged as a
+    /// request naming it would be; absent to ask what a request that names
+    /// none draws with.
+    #[serde(default)]
+    pub image_model: Option<u32>,
 }
 
 /// The steps, counted across every pass (`1..=total`), at which a render

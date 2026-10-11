@@ -72,6 +72,7 @@ export const NO_DRAWING: DrawingAvailability = {
   available: false,
   code: 'drawing_unavailable',
   reason: 'no image model is installed; download one first',
+  models: [],
 };
 
 export interface ChatFixture {

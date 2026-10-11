@@ -74,7 +74,8 @@ pub(crate) async fn refuse_unavailable_drawing(
     if !req.draw {
         return Ok(());
     }
-    let answer = drawing_availability(Some(state.images.as_ref()), req.far.is_some(), None).await;
+    let answer =
+        drawing_availability(Some(state.images.as_ref()), req.far.is_some(), None, None).await;
     if answer.available {
         return Ok(());
     }

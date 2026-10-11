@@ -14,6 +14,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use gglib_app_services::FarProxy;
+use gglib_core::contracts::http::images::DrawingQuery;
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::domain::{AttachmentId, Thinking};
 use serde::Deserialize;
@@ -84,9 +85,15 @@ pub(crate) async fn list_runs(State(state): State<AppState>) -> Result<Response,
 }
 
 /// `GET /api/remote/images/drawing`: whether the far machine can draw for a
-/// turn on one of its chats, passed through as it answers.
-pub(crate) async fn drawing(State(state): State<AppState>) -> Result<Response, HttpError> {
-    drawing_via(&state.remote.far().await?).await
+/// turn on one of its chats, and its image models, passed through as it
+/// answers. `?image_model=<id>` goes with the question, so the far machine
+/// judges a choice among its own models; `far` and `calls_tools` are about a
+/// chat kept here and are not sent.
+pub(crate) async fn drawing(
+    State(state): State<AppState>,
+    Query(query): Query<DrawingQuery>,
+) -> Result<Response, HttpError> {
+    drawing_via(&state.remote.far().await?, query.image_model).await
 }
 
 /// `POST /api/remote/runs/{run_id}/cancel`.
@@ -135,8 +142,11 @@ pub(super) async fn list_runs_via(far: &FarProxy) -> Result<Response, HttpError>
     Ok(relay(far.list_runs().await?).await)
 }
 
-pub(super) async fn drawing_via(far: &FarProxy) -> Result<Response, HttpError> {
-    Ok(relay(far.drawing().await?).await)
+pub(super) async fn drawing_via(
+    far: &FarProxy,
+    image_model: Option<u32>,
+) -> Result<Response, HttpError> {
+    Ok(relay(far.drawing(image_model).await?).await)
 }
 
 pub(super) async fn cancel_run_via(far: &FarProxy, run_id: &str) -> Result<Response, HttpError> {

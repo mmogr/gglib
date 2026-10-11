@@ -11,6 +11,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
+use gglib_core::contracts::http::images::DrawingAvailability;
 use gglib_core::domain::{
     CacheRamHealth, ImageFamily, ModelSamplingDefaults, RuntimeKind, SecondarySlotDecision,
 };
@@ -208,6 +209,14 @@ impl RenderHost for Host {
     fn stop_asked(&self, model_id: u32) -> bool {
         self.queue.render_stop_asked(model_id)
     }
+
+    fn resident_models(&self) -> Vec<u32> {
+        self.queue
+            .residents()
+            .into_iter()
+            .map(|(_slot, resident)| resident.model_id)
+            .collect()
+    }
 }
 
 /// Image models and a chat model, by id or name.
@@ -365,14 +374,15 @@ fn sampling(pass: u32, step: u32, total: u32) -> ImageStage {
 
 // ── refused before anything queues ───────────────────────────────────────
 
-/// A size off the family's rule, a chat model, too many images and an empty
-/// prompt are refused before the model is admitted.
+/// A size off the family's rule, a chat model, a named model that lacks a
+/// file, too many images and an empty prompt are refused before the model is
+/// admitted and before any stage is reported.
 #[tokio::test(start_paused = true)]
 async fn a_request_the_recipe_refuses_never_queues() {
     let jobs = Arc::new(Timeline::new(flux_like()));
     let host = Host::new();
     let driver = driver(models(), &jobs, &host);
-    let (tx, _rx) = mpsc::channel(64);
+    let (tx, mut rx) = mpsc::channel(64);
 
     let seven = ImageRequest {
         size: Some(ImageSize {
@@ -418,7 +428,7 @@ async fn a_request_the_recipe_refuses_never_queues() {
         model: Some("nope".to_owned()),
         ..sdxl_request()
     };
-    let refused = driver.generate(unknown, tx).await.unwrap_err();
+    let refused = driver.generate(unknown, tx.clone()).await.unwrap_err();
     assert!(
         matches!(
             refused,
@@ -426,7 +436,23 @@ async fn a_request_the_recipe_refuses_never_queues() {
         ),
         "{refused:?}"
     );
+    // Flux lacks its three files: refused by name here, though SDXL, the
+    // only complete image model, could have drawn.
+    let lacking = ImageRequest {
+        model: Some("flux".to_owned()),
+        ..sdxl_request()
+    };
+    let refused = driver.generate(lacking, tx).await.unwrap_err();
+    assert!(
+        matches!(
+            &refused,
+            ImageError::Runtime(ModelRuntimeError::ImageModelIncomplete { model, .. })
+                if model == "flux"
+        ),
+        "{refused:?}"
+    );
 
+    assert!(drain(&mut rx).is_empty(), "no stage was reported");
     assert_eq!(
         host.admits.load(Ordering::SeqCst),
         0,
@@ -534,48 +560,75 @@ async fn with_no_model_named_the_default_image_model_draws_first() {
     }
 }
 
-/// The model a Draw button would draw with, asked without queueing: no
-/// runtime is refused before any model is looked at; then the same rule a
-/// request that names none is planned by, the default first.
+/// The Draw button's answer, asked without queueing: no runtime is refused
+/// before any model is looked at; then core's rule over this driver's
+/// catalogue and settings, and its host's residents.
 #[tokio::test(start_paused = true)]
-async fn the_drawing_model_is_asked_runtime_first_then_by_the_planning_rule() {
+async fn the_drawing_answer_is_runtime_first_then_cores_rule_over_this_driver() {
     let jobs = Arc::new(Timeline::new(flux_like()));
-    let ask = |catalog, default, host: Arc<Host>| {
-        let jobs = Arc::clone(&jobs);
-        async move {
-            driver_with_default(catalog, default, &jobs, &host)
-                .drawing_model()
-                .await
-        }
-    };
-    let unavailable = |answer: Result<String, ImageError>| match answer {
-        Err(ImageError::Unavailable { reason }) => reason,
-        other => panic!("expected Unavailable, got {other:?}"),
+    let two = || {
+        vec![
+            spec(SDXL_ID, "sdxl", Some(ImageFamily::Sdxl)),
+            spec(4, "sdxl-turbo", Some(ImageFamily::Sdxl)),
+        ]
     };
 
-    let model = ask(models(), None, Host::new()).await;
-    assert_eq!(model.expect("sdxl is the only complete one"), "sdxl");
-
-    let no_runtime = unavailable(ask(models(), None, Host::without_runtime()).await);
+    let no_runtime = driver(models(), &jobs, &Host::without_runtime())
+        .drawing(None)
+        .await;
     assert_eq!(
         no_runtime,
-        ModelRuntimeError::ImageRuntimeNotInstalled.to_string()
+        DrawingAvailability::refused(
+            "drawing_unavailable",
+            ModelRuntimeError::ImageRuntimeNotInstalled.to_string()
+        ),
+        "refused with no rows"
     );
 
-    let two = vec![
-        spec(SDXL_ID, "sdxl", Some(ImageFamily::Sdxl)),
-        spec(4, "sdxl-turbo", Some(ImageFamily::Sdxl)),
-    ];
-    let defaulted = ask(two.clone(), Some(4), Host::new()).await;
-    assert_eq!(defaulted.expect("the default"), "sdxl-turbo");
-    let several = unavailable(ask(two, None, Host::new()).await);
-    assert!(several.contains("sdxl, sdxl-turbo"), "{several}");
-    let lacking = unavailable(ask(models(), Some(2), Host::new()).await);
-    assert!(lacking.contains("flux"), "{lacking}");
+    // The settings' default is this driver's, and decides between two.
+    let defaulted = driver_with_default(two(), Some(4), &jobs, &Host::new())
+        .drawing(None)
+        .await;
+    assert_eq!(defaulted.model.as_deref(), Some("sdxl-turbo"));
+    let several = driver(two(), &jobs, &Host::new()).drawing(None).await;
+    assert_eq!(several.code.as_deref(), Some("drawing_unavailable"));
+
+    // A chosen model is judged, whatever the default.
+    let chosen = driver_with_default(two(), Some(4), &jobs, &Host::new())
+        .drawing(Some(SDXL_ID))
+        .await;
+    assert_eq!(chosen.model_id, Some(SDXL_ID));
+
+    // Resident is what the host's queue holds now: nothing, then SDXL once
+    // a render has loaded it.
+    let host = Host::new();
+    let driver = driver(models(), &jobs, &host);
+    let resident = |answer: &DrawingAvailability| {
+        answer
+            .models
+            .iter()
+            .map(|row| (row.name.clone(), row.resident))
+            .collect::<Vec<_>>()
+    };
+    let before = driver.drawing(None).await;
+    assert_eq!(
+        resident(&before),
+        [("flux".to_owned(), false), ("sdxl".to_owned(), false)]
+    );
+    let (tx, _rx) = mpsc::channel(64);
+    driver
+        .generate(ImageRequest::new("a fox"), tx)
+        .await
+        .expect("sdxl draws");
+    let after = driver.drawing(None).await;
+    assert_eq!(
+        resident(&after),
+        [("flux".to_owned(), false), ("sdxl".to_owned(), true)]
+    );
     assert_eq!(
         jobs.bodies.lock().unwrap().len(),
-        0,
-        "nothing was submitted"
+        1,
+        "asking submitted nothing; the one render did"
     );
 }
 

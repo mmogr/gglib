@@ -29,11 +29,12 @@ import {
 import type { DrawingAvailability } from '../../../src/types/generated/DrawingAvailability';
 import type { ModelRef } from '../../../src/types/generated/ModelRef';
 
-const CAN: DrawingAvailability = { available: true, model: 'flux-schnell' };
+const CAN: DrawingAvailability = { available: true, model: 'flux-schnell', models: [] };
 const NO_MODEL: DrawingAvailability = {
   available: false,
   code: 'drawing_unavailable',
   reason: 'no image model is installed; download one first',
+  models: [],
 };
 const paired: ModelRef = { machine: { kind: 'paired', fingerprint: '3ca82708b995' }, id: 3 };
 
@@ -111,7 +112,7 @@ describe('useDrawSwitch, whether a message can draw', () => {
   });
 
   it('says so when a machine answers no and gives no reason', async () => {
-    answers.here = { available: false };
+    answers.here = { available: false, models: [] };
     const hook = await mounted(here(1));
     expect(hook.result.current).toMatchObject({ available: false, reason: DRAW_UNAVAILABLE });
   });
@@ -172,7 +173,7 @@ describe('useDrawSwitch, whether a message can draw', () => {
 
     let release = () => {};
     gate = new Promise((resolve) => (release = resolve));
-    answers.here = { available: false, reason: 'this chat\'s model calls no tools, so it cannot draw' };
+    answers.here = { available: false, reason: 'this chat\'s model calls no tools, so it cannot draw', models: [] };
     hook.rerender(here(1, { supportsToolCalls: false }));
 
     // The earlier yes was about another model: not shown, and nothing is said.

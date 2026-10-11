@@ -27,11 +27,24 @@ pub(crate) async fn generations(State(state): State<AppState>, body: Bytes) -> R
 }
 
 /// Whether drawing is available, for the chat's model `far` and whether it
-/// `calls_tools`. Always 200: `code`, when it is not, is the code a request
-/// to draw would be refused with, not an error of this one.
+/// `calls_tools`, with the image model `image_model` chosen when one is, and
+/// every image model here. Always 200: `code`, when it is not, is the code
+/// a request to draw would be refused with, not an error of this one.
 pub(crate) async fn drawing(
     State(state): State<AppState>,
     Query(query): Query<DrawingQuery>,
 ) -> Json<DrawingAvailability> {
-    Json(drawing_availability(Some(state.images.as_ref()), query.far, query.calls_tools).await)
+    Json(
+        drawing_availability(
+            Some(state.images.as_ref()),
+            query.far,
+            query.calls_tools,
+            query.image_model,
+        )
+        .await,
+    )
 }
+
+#[cfg(test)]
+#[path = "images_tests.rs"]
+mod tests;

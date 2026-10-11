@@ -40,8 +40,15 @@ impl ImageGenerationPort for OneImage {
         })
     }
 
-    async fn drawing_model(&self) -> Result<String, ImageError> {
-        Ok("sdxl".to_owned())
+    /// Its model, and as that model's id whatever was chosen.
+    async fn drawing(
+        &self,
+        chosen: Option<u32>,
+    ) -> gglib_core::contracts::http::images::DrawingAvailability {
+        gglib_core::contracts::http::images::DrawingAvailability {
+            model_id: chosen,
+            ..gglib_core::contracts::http::images::DrawingAvailability::with("sdxl")
+        }
     }
 }
 
@@ -105,7 +112,8 @@ async fn a_proxy_with_no_driver_cannot_draw() {
 }
 
 /// Whether a turn sent with Draw pressed can draw: behind the token, the
-/// driver's model when it can, the reason when it cannot.
+/// driver's model when it can, the reason when it cannot; `image_model`
+/// reaches the driver as the model chosen.
 #[tokio::test]
 async fn the_drawing_route_says_whether_the_daemons_driver_can_draw() {
     let (base, cancel) = serve(Some(Arc::new(OneImage))).await;
@@ -124,7 +132,15 @@ async fn the_drawing_route_says_whether_the_daemons_driver_can_draw() {
     assert_eq!(refused.status(), StatusCode::UNAUTHORIZED);
 
     let can: Value = get("").await.unwrap().json().await.unwrap();
-    assert_eq!(can, json!({"available": true, "model": "sdxl"}));
+    assert_eq!(
+        can,
+        json!({"available": true, "model": "sdxl", "models": []})
+    );
+    let chosen: Value = get("?image_model=7").await.unwrap().json().await.unwrap();
+    assert_eq!(
+        chosen,
+        json!({"available": true, "model": "sdxl", "model_id": 7, "models": []})
+    );
     let no_tools: Value = get("?calls_tools=false")
         .await
         .unwrap()

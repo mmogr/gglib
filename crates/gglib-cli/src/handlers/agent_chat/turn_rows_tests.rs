@@ -362,8 +362,11 @@ async fn a_send_switches_draw_off_again() {
             unreachable!("the scripted loop draws nothing")
         }
 
-        async fn drawing_model(&self) -> Result<String, ImageError> {
-            Ok("sdxl".to_owned())
+        async fn drawing(
+            &self,
+            _chosen: Option<u32>,
+        ) -> gglib_core::contracts::http::images::DrawingAvailability {
+            gglib_core::contracts::http::images::DrawingAvailability::with("sdxl")
         }
     }
 
@@ -411,8 +414,11 @@ async fn a_send_after_draw_holds_its_run_to_the_image_tool_and_the_next_to_nothi
             unreachable!("the recording loop draws nothing")
         }
 
-        async fn drawing_model(&self) -> Result<String, ImageError> {
-            Ok("sdxl".to_owned())
+        async fn drawing(
+            &self,
+            _chosen: Option<u32>,
+        ) -> gglib_core::contracts::http::images::DrawingAvailability {
+            gglib_core::contracts::http::images::DrawingAvailability::with("sdxl")
         }
     }
 

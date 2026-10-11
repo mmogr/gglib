@@ -38,7 +38,7 @@ type Item =
   | { type: 'preview'; toolCallId: string; data: string }
   | { type: 'end'; info: RunInfo };
 
-const CAN: DrawingAvailability = { available: true, model: 'flux-schnell' };
+const CAN: DrawingAvailability = { available: true, model: 'flux-schnell', models: [] };
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACA';
 
 let fixture: ChatFixture;

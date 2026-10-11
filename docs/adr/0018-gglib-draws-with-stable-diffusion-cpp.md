@@ -158,9 +158,10 @@ orders generation, not memory.
 ### 8. Everything that draws goes through one driver
 
 `SdImageDriver` (`crates/gglib-runtime/src/sd/server/job.rs`) is the one
-implementation of core's `ImageGenerationPort`. It resolves the model (the
-one named, else the settings' `default_image_model_id`, else the only image
-model with every file), refuses what the recipe refuses, admits the model,
+implementation of core's `ImageGenerationPort`. It resolves the model by
+core's one rule ("One rule picks the image model" below: the one named,
+else the settings' `default_image_model_id`, else the only image model with
+every file), refuses what the recipe refuses, admits the model,
 takes the render turn, submits an `sd-server` job with `preview: proj` and
 `preview_interval: 1`, and reads it once a second: Loading until the first
 step, each step with its frame, Decoding, then the PNGs. ~~`sd-server` cannot
@@ -263,7 +264,10 @@ own `draw: true`, with reasons in one order: the chat's model is on another
 machine; the model calls no tools; this process has no image driver; then
 what the driver says (no image runtime, no image model, several and no
 default, a file missing). Every refusal carries `drawing_unavailable` and
-the reason. A run that says `draw` is refused 400; the availability routes
+the reason, except that of an image model the question chose, which carries
+the code a request naming that model is refused with ("One rule picks the
+image model" below). A run
+that says `draw` is refused 400; the availability routes
 always answer 200, with the code and the reason in the body, and a client
 greys its button with those words. Only the
 availability routes are told whether the model calls tools: a run's own
@@ -354,6 +358,59 @@ same image model that arrives while `sd-server` is being stopped, and
 finds it still answering, is admitted to it, and its job then fails; so
 does a second picture that already waited in line for that model. A
 picture that was one step from done is lost like any other.
+
+### 16. One rule picks the image model, and a person picks among them
+
+A machine may hold several image models. Which one draws a request is one
+rule, `resolve_image_model` in `crates/gglib-core/src/services/drawing.rs`,
+and every door asks it. The first row that applies decides:
+
+| | The model is | unknown | not an image model | lacks a file | otherwise |
+|---|---|---|---|---|---|
+| 1 | the one the request names, by id or name | refused `model_not_found` | refused `not_an_image_model` | refused `image_model_incomplete` | it draws |
+| 2 | the settings' default image model | passed over | passed over | refused `drawing_unavailable`, naming what it lacks | it draws |
+| 3 | the only image model with every file | | | refused `drawing_unavailable` when there is none, or several | it draws |
+
+A named model is never replaced. When it is gone or lacks a file the request
+is refused with why, before anything queues or loads, and neither the
+default nor the only complete model is drawn with in its place: a person
+chose it on purpose.
+
+The availability answer of decision 11 lists the machine's image models,
+`models`, each with its `id`, `name`, `family`, whether it is `complete` and
+the roles it is `missing`, whether it is the `default` (the one a request
+that names none would draw with, so at most one row, and none when such a
+request would be refused) and whether it is `resident` (loaded now). The
+key is always in the answer, so its absence tells a client the machine is an
+older gglib; the rows are there whenever the driver could read them, also
+when `available` is false, so a greyed button can still offer the others.
+Asked with
+`?image_model=<id>`, the answer judges that choice by row 1 and refuses it
+with row 1's code, still as a 200; the far passthrough sends the query on.
+A paired device already reads every image model's name and catalogue id from
+`/v1/models`; the list adds its family, whether it has its files and which
+roles it lacks, which one is the default and which is loaded. It carries no
+path and nothing about a model that chats.
+
+The choice belongs to the message, not to the machine. It is to travel as
+`image_model` beside `draw` on each message sent with Draw, and the surface
+that sent it remembers it for that chat: the page per conversation, a phone
+on its own conversation, `gglib chat` for its session. gglib stores no
+image model per chat and syncs none between devices; the machine's default
+is a setting, and it is the only one. The wire is
+`image_model`, the row's `id`, optional and meaningful only with `draw`;
+this decision's first change makes the rule and the list, and the field on
+a run's request follows it.
+
+The model that calls the tool never picks. `generate_image` has no argument
+for the image model, in a run and through `/mcp` alike: whoever calls the
+tool is a model, and the image model is a person's choice or the machine's
+default. An `/mcp` client draws with the default rule.
+
+Two image models are not meant to be loaded together: picking the one that
+is not loaded swaps it in. This decision changes nothing in how a model is
+placed (decision 6), and decision 6 alone does not always swap the right
+one out; that is recorded in the log and left to its own change.
 
 ## Consequences
 

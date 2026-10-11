@@ -26,17 +26,19 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
+use gglib_core::contracts::http::images::DrawingAvailability;
 use gglib_core::domain::agent::PreviewFrame;
 use gglib_core::ports::{
     Admission, AdmitObserver, GateWait, GateWaitObserver, GenerationGate, GenerationTurn,
     ImageBatch, ImageError, ImageGenerationPort, ImageProgress, ImageRequest, ImageStage,
     LaunchOverrides, ModelCatalogPort, ModelRuntimeError, SettingsRepository,
 };
+use gglib_core::services::{drawing_refusal, image_model_answer};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Instant;
 
 use super::job_api::{HttpSdJobs, SdJobs};
-use super::job_plan::{Plan, drawing_model, plan};
+use super::job_plan::{Plan, plan};
 use super::job_poll::{Job, Render};
 use crate::process::ProcessManager;
 
@@ -93,6 +95,10 @@ pub(crate) trait RenderHost: Send + Sync {
     /// Whether a person asked to stop `model_id` while this render draws
     /// with it: [`ProcessManager::render_stop_asked`].
     fn stop_asked(&self, model_id: u32) -> bool;
+
+    /// The ids of the models loaded in a slot now:
+    /// [`ProcessManager::resident_models`].
+    fn resident_models(&self) -> Vec<u32>;
 }
 
 #[async_trait]
@@ -126,6 +132,10 @@ impl RenderHost for ProcessManager {
 
     fn stop_asked(&self, model_id: u32) -> bool {
         self.render_stop_asked(model_id)
+    }
+
+    fn resident_models(&self) -> Vec<u32> {
+        Self::resident_models(self)
     }
 }
 
@@ -275,18 +285,17 @@ impl ImageGenerationPort for SdImageDriver {
         })
     }
 
-    /// No runtime first, as a launch would find it, then the model rule a
-    /// request that names none is planned by.
-    async fn drawing_model(&self) -> Result<String, ImageError> {
+    /// No runtime first, as a launch would find it; then core's answer over
+    /// the catalogue, the settings' default and what is loaded now.
+    async fn drawing(&self, chosen: Option<u32>) -> DrawingAvailability {
         if !self.host.runtime_installed().await {
-            return Err(ImageError::Unavailable {
+            return drawing_refusal(&ImageError::Unavailable {
                 reason: ModelRuntimeError::ImageRuntimeNotInstalled.to_string(),
             });
         }
         let default_model = self.default_model(&ImageRequest::new("")).await;
-        drawing_model(self.catalog.as_ref(), default_model)
-            .await
-            .map(|spec| spec.name)
+        let resident = self.host.resident_models();
+        image_model_answer(self.catalog.as_ref(), default_model, chosen, &resident).await
     }
 }
 

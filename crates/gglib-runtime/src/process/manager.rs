@@ -289,6 +289,18 @@ impl ProcessManager {
         self.residency.queue().render_stop_asked(model_id)
     }
 
+    /// The ids of the models loaded in a slot now, chat or image. A model
+    /// still launching is not among them.
+    #[must_use]
+    pub fn resident_models(&self) -> Vec<u32> {
+        self.residency
+            .queue()
+            .residents()
+            .into_iter()
+            .map(|(_slot, resident)| resident.model_id)
+            .collect()
+    }
+
     /// Check if any slot is mid-launch.
     #[must_use]
     pub fn is_loading(&self) -> bool {

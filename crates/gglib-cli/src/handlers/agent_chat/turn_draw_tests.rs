@@ -79,8 +79,11 @@ impl ImageGenerationPort for DrawsNothing {
         })
     }
 
-    async fn drawing_model(&self) -> Result<String, ImageError> {
-        Ok("sdxl".to_owned())
+    async fn drawing(
+        &self,
+        _chosen: Option<u32>,
+    ) -> gglib_core::contracts::http::images::DrawingAvailability {
+        gglib_core::contracts::http::images::DrawingAvailability::with("sdxl")
     }
 }
 

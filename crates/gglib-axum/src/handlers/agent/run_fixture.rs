@@ -92,7 +92,8 @@ pub(in crate::handlers) async fn state() -> (tempfile::TempDir, AppState) {
     (dir, Arc::new(state))
 }
 
-/// An image driver that can draw: `drawing_model` names `flux1-schnell`,
+/// An image driver that can draw: `drawing` names `flux1-schnell`, with
+/// whatever was chosen as its id,
 /// and `generate` is never reached by a test that only composes.
 #[derive(Debug)]
 pub(in crate::handlers) struct CanDraw;
@@ -109,8 +110,14 @@ impl gglib_core::ports::ImageGenerationPort for CanDraw {
         })
     }
 
-    async fn drawing_model(&self) -> Result<String, gglib_core::ports::ImageError> {
-        Ok("flux1-schnell".to_owned())
+    async fn drawing(
+        &self,
+        chosen: Option<u32>,
+    ) -> gglib_core::contracts::http::images::DrawingAvailability {
+        gglib_core::contracts::http::images::DrawingAvailability {
+            model_id: chosen,
+            ..gglib_core::contracts::http::images::DrawingAvailability::with("flux1-schnell")
+        }
     }
 }
 

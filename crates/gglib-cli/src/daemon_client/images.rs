@@ -24,6 +24,7 @@ use gglib_core::ports::{
     ImageSize, ImageStage,
 };
 use gglib_core::request_pipeline::{PNG_MIME, image_mime, image_size};
+use gglib_core::services::drawing_refusal;
 use gglib_core::sse::DataFrames;
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -100,36 +101,29 @@ impl ImageGenerationPort for DaemonImageGenerator {
         })
     }
 
-    /// The daemon's own answer (`GET /api/images/drawing`): its image model
-    /// when it can draw, its reason when it cannot. A daemon that cannot be
-    /// reached, or is too old to have the route, cannot draw.
-    async fn drawing_model(&self) -> Result<String, ImageError> {
-        let unavailable = |reason: String| ImageError::Unavailable { reason };
-        let response = self
-            .daemon
-            .get(paths::IMAGES_DRAWING_PATH)
-            .send()
-            .await
-            .map_err(|e| unavailable(format!("could not reach the gglib daemon: {e}")))?;
+    /// The daemon's own answer (`GET /api/images/drawing`), as it gave it:
+    /// its image model when it can draw, its code and reason when it
+    /// cannot, and its image models; `chosen` goes as `?image_model=<id>`.
+    /// A daemon that cannot be reached, or is too old to have the route,
+    /// cannot draw.
+    async fn drawing(&self, chosen: Option<u32>) -> DrawingAvailability {
+        let unavailable = |reason: String| drawing_refusal(&ImageError::Unavailable { reason });
+        let asked = chosen.map_or_else(String::new, |id| format!("?image_model={id}"));
+        let path = format!("{}{asked}", paths::IMAGES_DRAWING_PATH);
+        let response = match self.daemon.get(&path).send().await {
+            Ok(response) => response,
+            Err(e) => return unavailable(format!("could not reach the gglib daemon: {e}")),
+        };
         if !response.status().is_success() {
-            return Err(unavailable(format!(
+            return unavailable(format!(
                 "the gglib daemon answered {} when asked whether it can draw; restart it so \
                  it runs this version",
                 response.status().as_u16()
-            )));
+            ));
         }
-        let answer: DrawingAvailability = response.json().await.map_err(|e| {
+        response.json().await.unwrap_or_else(|e| {
             unavailable(format!("the gglib daemon's answer could not be read: {e}"))
-        })?;
-        if answer.available {
-            Ok(answer
-                .model
-                .unwrap_or_else(|| "the daemon's image model".to_owned()))
-        } else {
-            Err(unavailable(answer.reason.unwrap_or_else(|| {
-                "the gglib daemon cannot draw".to_owned()
-            })))
-        }
+        })
     }
 }
 
