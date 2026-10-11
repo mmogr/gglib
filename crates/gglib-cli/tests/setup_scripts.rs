@@ -295,6 +295,8 @@ fn make_setup_runs_its_steps_in_the_order_it_always_has() {
         ("cp target/release/gglib", 1),
         ("./target/release/gglib config models-dir prompt", 1),
         ("./target/release/gglib config fast-downloads prompt", 1),
+        ("./target/release/gglib config sd prompt", 1),
+        ("Core setup complete", 1),
         ("llama-install-auto", 1),
         ("scripts/install-llama.sh", 1),
     ];

@@ -22,12 +22,13 @@ build or a download is rendered for a terminal.
 `install` (a download, or a source build on `--build` or where no release
 fits), `status` and `uninstall` (refused while the daemon that serves this
 data root runs an image model); `sd_ensure` is the install `gglib serve`
-offers when it is asked for an image model and finds no `sd-server`. Both
-draw with `llama_events` too, under stable-diffusion.cpp's name.
+offers when it is asked for an image model and finds no `sd-server`, and
+`sd_prompt` is the one `make setup` offers, which a no or a failure leaves
+as a skipped step. All three install with `sd`'s `install`, which draws
+with `llama_events` too, under stable-diffusion.cpp's name.
 
-`check_deps` reports and installs nothing. `fast_downloads` is the one
-handler here that provisions anything, and only on an explicit
-`enable`, or when the user accepts the offer its `prompt` subcommand
-makes from `make setup` and `gglib up`.
+`check_deps` reports and installs nothing. `fast_downloads` provisions
+only on an explicit `enable`, or when the user accepts the offer its
+`prompt` subcommand makes from `make setup` and `gglib up`.
 
 <!-- module-docs:end -->

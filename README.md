@@ -48,6 +48,10 @@ make setup   # checks deps, builds everything, installs the gglib CLI
 gglib up
 ```
 
+`make setup` also offers two optional extras, and goes on without either:
+faster downloads, and the image runtime that draws pictures with an image
+model.
+
 `gglib up` reads your hardware, installs llama.cpp if missing, recommends a
 model that fits your VRAM, starts the proxy, sends a test request to prove it
 works, and prints the settings to paste into your client. You have a working

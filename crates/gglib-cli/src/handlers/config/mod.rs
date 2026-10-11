@@ -17,6 +17,7 @@ mod llama_update;
 pub(crate) mod paths;
 pub(crate) mod sd;
 pub(crate) mod sd_ensure;
+mod sd_prompt;
 pub(crate) mod settings;
 
 use anyhow::Result;
