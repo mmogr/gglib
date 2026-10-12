@@ -172,6 +172,41 @@ describe('PictureEditor', () => {
     expect(strokes.map((stroke) => stroke.erase ?? false)).toEqual([false, true]);
   });
 
+  it('counts a press that reports the same place again as one point, which paints a dot', async () => {
+    const { maskPng } = await import('../../../src/utils/pictureMask');
+    editor();
+    const canvas = screen.getByLabelText('Brush over the part to fix');
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 100 }) as DOMRect;
+    const here = { clientX: 20, clientY: 10, pointerId: 1, isPrimary: true };
+    fireEvent.pointerDown(canvas, here);
+    fireEvent.pointerMove(canvas, here);
+    fireEvent.pointerMove(canvas, here);
+    fireEvent.pointerUp(canvas, here);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fix this part' }));
+    await sentRedraw();
+
+    expect(vi.mocked(maskPng).mock.calls[0][0]).toEqual([{ points: [{ x: 100, y: 50 }], width: 60 }]);
+  });
+
+  it('keeps a move back to where a stroke began, and one that changes only its height', async () => {
+    const { maskPng } = await import('../../../src/utils/pictureMask');
+    editor();
+    const canvas = screen.getByLabelText('Brush over the part to fix');
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 100 }) as DOMRect;
+    const at = (x: number, y: number) => ({ clientX: x, clientY: y, pointerId: 1, isPrimary: true });
+    fireEvent.pointerDown(canvas, at(20, 10));
+    fireEvent.pointerMove(canvas, at(20, 30));
+    fireEvent.pointerMove(canvas, at(20, 10));
+    fireEvent.pointerUp(canvas, at(20, 10));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fix this part' }));
+    await sentRedraw();
+
+    const points = vi.mocked(maskPng).mock.calls[0][0][0].points;
+    expect(points).toEqual([{ x: 100, y: 50 }, { x: 100, y: 150 }, { x: 100, y: 50 }]);
+  });
+
   it('follows one pointer through a stroke, and no other that moves or lifts meanwhile', async () => {
     const { maskPng } = await import('../../../src/utils/pictureMask');
     editor();

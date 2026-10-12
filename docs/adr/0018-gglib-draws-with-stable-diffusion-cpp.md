@@ -804,6 +804,11 @@ that uses it, which is not in this repository.
   no canvas (jsdom has none): they read the strokes handed to the painter
   and the request the page sent to a scripted transport.
 
+Amended on 2026-10-12: the editor has been brushed in a browser, with no
+model and outside the chat page
+([log-0018](log-0018.md#2026-10-12-the-picture-editor-is-looked-at-in-a-browser)).
+Its controls now sit beside the picture in a window from the `md` width up.
+
 ## Consequences
 
 - A person presses Draw, sends a message, and sees a picture arrive in the

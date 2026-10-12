@@ -1,7 +1,7 @@
 src/components/Benchmark/Tune/TuneTab.tsx 306
 src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 329
 src/components/ChatMessagesPanel/components/MessageBubbles.tsx 301
-src/components/ChatMessagesPanel/components/PictureEditor.tsx 307
+src/components/ChatMessagesPanel/components/PictureEditor.tsx 318
 src/components/FilterPopover/FilterPopover.tsx 340
 src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 347
 src/components/McpServersPanel.tsx 459
