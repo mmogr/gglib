@@ -227,7 +227,7 @@ page on another site, and one from a browser extension (`chrome-extension://`,
 | `/v1/models/{name}/detail` | GET | bearer | One model in full, by id, name or `name:profile` — see [The model list](#the-model-list) |
 | `/v1/chat/completions` | POST | bearer | Chat completion (streaming/non-streaming) |
 | `/v1/embeddings` | POST | bearer | Embeddings — see [Embeddings](#embeddings) |
-| `/v1/images/generations` | POST | bearer | Draw with the daemon's image driver, `OpenAI`'s Images API; `stream: true` for progress, partial images and one completed event per image |
+| `/v1/images/generations` | POST | bearer | Draw with the daemon's image driver, `OpenAI`'s Images API; `stream: true` for progress, partial images and one completed event per image; gglib's `image`, `mask` and `strength` draw from a picture, all of it or where the mask is white |
 | `/v1/images/drawing` | GET | bearer | Whether a turn sent with Draw pressed can draw here, and the image models to choose from: `{available, code?, reason?, model?, model_id?, models}`; `?image_model=<id>` judges that one |
 | `/mcp` | POST | bearer | MCP Streamable HTTP — JSON-RPC dispatch |
 | `/mcp` | GET | bearer | Returns 405 (server-push not yet supported) |

@@ -1,6 +1,8 @@
 //! Drawing an image: [`ImageGenerationPort`], what it is asked
 //! ([`ImageRequest`]), what it reports while it works ([`ImageProgress`]),
 //! what it returns ([`ImageBatch`]) and why it refuses ([`ImageError`]).
+//! A request may carry a picture to draw from ([`ImageSource`]): the whole
+//! of it drawn again, or only where a mask is white.
 //!
 //! One driver implements it in the daemon (`gglib-runtime`'s `sd-server`
 //! job driver), and the CLI implements it again over the daemon's
@@ -64,8 +66,30 @@ impl FromStr for ImageSize {
     }
 }
 
+/// The strength a picture is redrawn at when a request gives one and names
+/// no strength: most of the picture's shapes kept, its detail drawn again.
+pub const DEFAULT_REDRAW_STRENGTH: f32 = 0.6;
+
+/// A picture to draw from, in place of noise alone.
+///
+/// With no `mask` the whole picture is drawn again. With one, only where the
+/// mask is white is, and every pixel of the result more than 16 pixels from
+/// the white is the picture's own (the driver puts them back; the image
+/// runtime alone moves them).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImageSource {
+    /// The picture, an encoded PNG.
+    pub image: Vec<u8>,
+    /// The mask, an encoded PNG the picture's size: white where the picture
+    /// is drawn again, black where it is kept.
+    pub mask: Option<Vec<u8>>,
+    /// How far from the picture the result may go: from 0.05, where almost
+    /// nothing changes, to 1, where the picture is only a size.
+    pub strength: f32,
+}
+
 /// What to draw.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ImageRequest {
     /// The image model to draw with, by id or name; `None` for the settings'
     /// default image model, else the only one with every file.
@@ -78,6 +102,9 @@ pub struct ImageRequest {
     pub n: u8,
     /// The seed; `None` for a random one.
     pub seed: Option<i64>,
+    /// The picture to draw from; `None` to draw from the prompt alone. With
+    /// one, the result is the picture's size and `size` must be `None`.
+    pub source: Option<ImageSource>,
 }
 
 impl ImageRequest {
@@ -90,6 +117,7 @@ impl ImageRequest {
             size: None,
             n: 1,
             seed: None,
+            source: None,
         }
     }
 }

@@ -5,9 +5,11 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use clap::Parser as _;
-use gglib_core::ports::{ImageError, ImageProgress, ImageSize, ImageStage};
+use gglib_core::ports::{
+    DEFAULT_REDRAW_STRENGTH, ImageError, ImageProgress, ImageSize, ImageSource, ImageStage,
+};
 
-use super::{INTERRUPTED, PlainLines, failure, line, output_paths, say};
+use super::{INTERRUPTED, PlainLines, failure, line, output_paths, say, source_of};
 use crate::commands::Commands;
 use crate::image_commands::ImageCommandArgs;
 use crate::parser::Cli;
@@ -233,4 +235,93 @@ fn a_failure_says_the_daemons_words() {
         .starts_with("the render failed:")
     );
     assert!(INTERRUPTED.contains("the daemon stops the render too"));
+}
+
+/// `--from`, `--mask` and `--strength` parse; a mask or a strength needs a
+/// picture, and a picture's size is its own, so `--size` is refused beside
+/// it.
+#[test]
+fn image_takes_a_picture_to_draw_from_with_a_mask_and_a_strength() {
+    let args = parsed(&[
+        "gglib",
+        "image",
+        "a red fox",
+        "--from",
+        "fox.png",
+        "--mask",
+        "paw.png",
+        "--strength",
+        "0.4",
+    ]);
+    assert_eq!(args.from, Some(PathBuf::from("fox.png")));
+    assert_eq!(args.mask, Some(PathBuf::from("paw.png")));
+    assert_eq!(args.strength, Some(0.4));
+
+    let plain = parsed(&["gglib", "image", "a red fox"]);
+    assert_eq!((plain.from, plain.mask, plain.strength), (None, None, None));
+
+    for argv in [
+        &["gglib", "image", "a fox", "--mask", "paw.png"][..],
+        &["gglib", "image", "a fox", "--strength", "0.4"],
+        &[
+            "gglib", "image", "a fox", "--from", "fox.png", "--size", "512x512",
+        ],
+    ] {
+        assert!(Cli::try_parse_from(argv).is_err(), "{argv:?}");
+    }
+}
+
+/// A strength is a number from 0.05 to 1: `nan` and `inf`, which the body
+/// would carry as no strength at all, are refused with the rest.
+#[test]
+fn image_refuses_a_strength_that_is_not_from_a_twentieth_to_one() {
+    let with = |strength: &'static str| {
+        [
+            "gglib",
+            "image",
+            "a fox",
+            "--from",
+            "f.png",
+            "--strength",
+            strength,
+        ]
+    };
+    for strength in ["nan", "inf", "-inf", "0.04", "1.01", "0", "strong"] {
+        assert!(Cli::try_parse_from(with(strength)).is_err(), "{strength}");
+    }
+    for (text, strength) in [("0.05", 0.05), ("1", 1.0)] {
+        assert_eq!(parsed(&with(text)).strength, Some(strength));
+    }
+}
+
+/// The picture and the mask are read from disk as they are; a strength left
+/// out is the default; a file that cannot be read is named.
+#[test]
+fn the_pictures_files_are_read_and_a_missing_one_is_named() {
+    let dir = tempfile::tempdir().unwrap();
+    let (picture, mask) = (dir.path().join("fox.png"), dir.path().join("paw.png"));
+    std::fs::write(&picture, b"picture").unwrap();
+    std::fs::write(&mask, b"mask").unwrap();
+
+    assert_eq!(source_of(None, None, None).unwrap(), None);
+    assert_eq!(
+        source_of(Some(&picture), Some(&mask), Some(0.4)).unwrap(),
+        Some(ImageSource {
+            image: b"picture".to_vec(),
+            mask: Some(b"mask".to_vec()),
+            strength: 0.4,
+        })
+    );
+    assert_eq!(
+        source_of(Some(&picture), None, None).unwrap(),
+        Some(ImageSource {
+            image: b"picture".to_vec(),
+            mask: None,
+            strength: DEFAULT_REDRAW_STRENGTH,
+        })
+    );
+
+    let missing = dir.path().join("gone.png");
+    let error = source_of(Some(&picture), Some(&missing), None).unwrap_err();
+    assert!(error.to_string().contains("gone.png"), "{error}");
 }

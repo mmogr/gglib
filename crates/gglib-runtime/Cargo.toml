@@ -34,6 +34,8 @@ serde = { workspace = true }
 # sd-server's images and previews arrive as base64
 base64 = { workspace = true }
 serde_json = { workspace = true }
+# A picture drawn from is decoded, and a masked result pasted back over it
+image = { version = "0.25", default-features = false, features = ["png"] }
 chrono = { workspace = true }
 
 # Async utilities

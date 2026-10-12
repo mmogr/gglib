@@ -13,6 +13,7 @@ the drawing rules are in [the parent README](../README.md).
 | `spawn.rs`       | starting it, with piped output, as llama-server is started              |
 | `job.rs`         | `SdImageDriver`, the image generation port: admit, turn, submit, follow |
 | `job_plan.rs`    | a request's model, size and count, refused before anything queues       |
+| `source.rs`      | the picture a request draws from: read, sent, and pasted back around a mask |
 | `job_api.rs`     | sd-server's async job API: submit, read a job, cancel                    |
 | `job_poll.rs`    | following one job: stages, steps, decode, stall and deadline, and stopping one nobody reads |
 | `fake_server.rs` | a test-only stand-in for `sd-server`: its model list and its job API    |

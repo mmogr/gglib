@@ -85,6 +85,15 @@ its frame and as progress on the turn, which keeps requests queued behind
 the render from expiring, then Decoding after the last step of the last
 pass, then the PNGs, their sizes read from the images.
 
+A request that carries a picture is drawn from it, at the picture's size,
+which the family's rule judges like any size. The job carries the picture
+as `init_image`, the request's strength, and the recipe's steps divided by
+the strength, rounded up, because sd-server shortens the schedule by it.
+With a mask it carries `mask_image` too and draws again only where the mask
+is white; the result is then pasted over the picture, since sd-server does
+not hand back the rest as it was: sd-server's pixels on the white, the
+picture's own more than 16 pixels from it, a blend between.
+
 sd-server cannot interrupt a generating job (cancel answers 409), so a
 render nobody waits for is stopped by stopping sd-server. A render dropped
 part way (a run cancelled, Ctrl-C in `gglib image`, a client that left)

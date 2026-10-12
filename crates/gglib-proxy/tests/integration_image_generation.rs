@@ -170,3 +170,28 @@ async fn the_drawing_route_says_whether_the_daemons_driver_can_draw() {
     assert_eq!(none["available"], false);
     cancel.cancel();
 }
+
+/// A body that carries a picture is far over axum's 2 MiB: the route takes
+/// one up to the limit `/v1/chat/completions` has, and refuses a longer one
+/// with its code.
+#[tokio::test]
+async fn the_route_takes_a_body_long_enough_for_a_picture() {
+    let (base, cancel) = serve(Some(Arc::new(OneImage))).await;
+    let post = |megabytes: usize| {
+        let picture = "A".repeat(megabytes * 1024 * 1024);
+        reqwest::Client::new()
+            .post(format!("{base}/v1/images/generations"))
+            .bearer_auth("secret123")
+            .json(&json!({"prompt": "a cat", "image": picture}))
+            .send()
+    };
+
+    let drawn = post(6).await.unwrap();
+    assert_eq!(drawn.status(), StatusCode::OK);
+
+    let refused = post(33).await.unwrap();
+    assert_eq!(refused.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let body: Value = refused.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "request_too_large");
+    cancel.cancel();
+}

@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::body::Bytes;
+use axum::extract::rejection::BytesRejection;
 use axum::extract::{Query, State};
 use axum::response::Response;
 use gglib_core::contracts::http::images::{DrawingAvailability, DrawingQuery};
@@ -21,9 +22,13 @@ use gglib_core::services::drawing_availability;
 
 use crate::state::AppState;
 
-/// Draw, answering as the proxy's route does.
-pub(crate) async fn generations(State(state): State<AppState>, body: Bytes) -> Response {
-    gglib_proxy::images::generations(Some(Arc::clone(&state.images)), body).await
+/// Draw, answering as the proxy's route does, a body over the limit
+/// included.
+pub(crate) async fn generations(
+    State(state): State<AppState>,
+    body: Result<Bytes, BytesRejection>,
+) -> Response {
+    gglib_proxy::images::generations_read(Some(Arc::clone(&state.images)), body).await
 }
 
 /// Whether drawing is available, for the chat's model `far` and whether it

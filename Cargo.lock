@@ -2594,6 +2594,7 @@ dependencies = [
  "gglib-core",
  "gglib-mcp",
  "gglib-proxy",
+ "image",
  "nix 0.30.1",
  "num_cpus",
  "reqwest",

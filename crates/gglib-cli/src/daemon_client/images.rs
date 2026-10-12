@@ -50,8 +50,10 @@ impl DaemonImageGenerator {
     }
 }
 
-/// The body sent for `request`: streamed, no partial images.
+/// The body sent for `request`: streamed, no partial images, and the
+/// picture it draws from, when it has one, as base64.
 pub(crate) fn body_of(request: &ImageRequest) -> ImageGenerationsRequest {
+    let source = request.source.as_ref();
     ImageGenerationsRequest {
         model: request.model.clone(),
         prompt: request.prompt.clone(),
@@ -59,6 +61,9 @@ pub(crate) fn body_of(request: &ImageRequest) -> ImageGenerationsRequest {
         size: request.size.map(|s| s.to_string()),
         seed: request.seed,
         stream: true,
+        image: source.map(|s| BASE64.encode(&s.image)),
+        mask: source.and_then(|s| s.mask.as_ref().map(|mask| BASE64.encode(mask))),
+        strength: source.map(|s| s.strength),
         ..ImageGenerationsRequest::default()
     }
 }

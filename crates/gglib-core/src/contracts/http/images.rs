@@ -6,7 +6,10 @@
 //! The shapes follow `OpenAI`'s Images API: a body of `model`, `prompt`, `n`,
 //! `size` (`WIDTHxHEIGHT`), `response_format` (only `b64_json` here),
 //! `output_format` (only `png`), `stream` and `partial_images` (0 to 3), plus
-//! gglib's `seed`; unknown fields are ignored. The streamed event names and
+//! gglib's `seed`; unknown fields are ignored. gglib's own `image`, `mask`
+//! and `strength` make the same route draw from a picture: `OpenAI` does that
+//! at `/v1/images/edits` with a multipart body, which gglib does not read.
+//! The streamed event names and
 //! keys, `image_generation.partial_image` and `image_generation.completed`,
 //! were checked against the openai-python and openai-node sources on
 //! 2026-10-10 (`ImageGenPartialImageEvent`, `ImageGenCompletedEvent`). Both
@@ -40,7 +43,7 @@ pub const COMPLETED_EVENT: &str = "image_generation.completed";
 pub const MAX_PARTIAL_IMAGES: u32 = 3;
 
 /// The body of a request.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ImageGenerationsRequest {
     /// The image model, by id or name; absent for this machine's own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -68,6 +71,18 @@ pub struct ImageGenerationsRequest {
     /// How many partial images a streamed render sends, 0 to 3.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub partial_images: Option<u32>,
+    /// gglib's own: a picture to draw from, a base64 PNG (a `data:` URL is
+    /// read too). The answer is its size, so `size` is left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+    /// gglib's own: a base64 PNG the picture's size, white where the picture
+    /// is drawn again and black where it is kept. Only with `image`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask: Option<String>,
+    /// gglib's own: how far from the picture the answer may go, from 0.05 to
+    /// 1; absent for 0.6. Only with `image`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strength: Option<f32>,
 }
 
 /// One image of an answer.

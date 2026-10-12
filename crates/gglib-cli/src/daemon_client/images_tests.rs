@@ -10,7 +10,8 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use futures_util::stream;
 use gglib_core::contracts::http::images::{DrawingAvailability, ImageStreamEvent};
 use gglib_core::ports::{
-    ImageError, ImageGenerationPort, ImageProgress, ImageRequest, ImageSize, ImageStage,
+    ImageError, ImageGenerationPort, ImageProgress, ImageRequest, ImageSize, ImageSource,
+    ImageStage,
 };
 use tokio::sync::mpsc;
 
@@ -96,6 +97,30 @@ fn the_body_asks_for_a_stream_of_what_was_asked() {
         serde_json::to_value(body_of(&request)).unwrap(),
         serde_json::json!({"model": "flux", "prompt": "a cat", "n": 2,
                            "size": "512x768", "seed": 3, "stream": true})
+    );
+}
+
+/// A picture to draw from rides in the body as base64, with its mask and
+/// its strength; a request with none sends none of the three.
+#[test]
+fn the_body_carries_the_picture_a_request_draws_from() {
+    let from = |mask: Option<Vec<u8>>| ImageRequest {
+        source: Some(ImageSource {
+            image: b"picture".to_vec(),
+            mask,
+            strength: 0.25,
+        }),
+        ..ImageRequest::new("a cat")
+    };
+    assert_eq!(
+        serde_json::to_value(body_of(&from(Some(b"mask".to_vec())))).unwrap(),
+        serde_json::json!({"prompt": "a cat", "n": 1, "stream": true,
+                           "image": "cGljdHVyZQ==", "mask": "bWFzaw==", "strength": 0.25})
+    );
+    assert_eq!(
+        serde_json::to_value(body_of(&from(None))).unwrap(),
+        serde_json::json!({"prompt": "a cat", "n": 1, "stream": true,
+                           "image": "cGljdHVyZQ==", "strength": 0.25})
     );
 }
 

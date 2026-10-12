@@ -29,6 +29,10 @@ fn body() -> ImgGenBody {
         output_format: "png",
         preview: "proj",
         preview_interval: 1,
+        init_image: None,
+        mask_image: None,
+        strength: None,
+        sample_params: None,
     }
 }
 
@@ -52,6 +56,32 @@ async fn a_render_is_submitted_with_previews_on_and_its_id_read_back() {
             "prompt": "a cat", "width": 1024, "height": 768, "seed": -1,
             "batch_count": 2, "output_format": "png", "preview": "proj",
             "preview_interval": 1
+        })
+    );
+}
+
+/// A render drawn from a picture adds the picture, the mask, the strength
+/// and the steps, as `sd-server` names them.
+#[tokio::test]
+async fn a_render_from_a_picture_is_submitted_with_its_picture_mask_strength_and_steps() {
+    let (fake, jobs, base) = served(script(vec![ok("{}")], ok("{}"))).await;
+    let from_picture = ImgGenBody {
+        init_image: Some("cGljdHVyZQ==".to_owned()),
+        mask_image: Some("bWFzaw==".to_owned()),
+        strength: Some(0.5),
+        sample_params: Some(SampleParams { sample_steps: 8 }),
+        ..body()
+    };
+    jobs.submit(&base, &from_picture).await.expect("accepted");
+    let sent: serde_json::Value = serde_json::from_str(&fake.submitted()[0]).unwrap();
+    assert_eq!(
+        sent,
+        serde_json::json!({
+            "prompt": "a cat", "width": 1024, "height": 768, "seed": -1,
+            "batch_count": 2, "output_format": "png", "preview": "proj",
+            "preview_interval": 1, "init_image": "cGljdHVyZQ==",
+            "mask_image": "bWFzaw==", "strength": 0.5,
+            "sample_params": {"sample_steps": 8}
         })
     );
 }

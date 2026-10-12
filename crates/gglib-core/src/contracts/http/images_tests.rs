@@ -103,6 +103,9 @@ fn a_request_ignores_fields_it_does_not_know() {
             output_format: None,
             stream: true,
             partial_images: Some(2),
+            image: None,
+            mask: None,
+            strength: None,
         }
     );
     assert_eq!(

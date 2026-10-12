@@ -5,7 +5,10 @@
 //! The body and the answer are `OpenAI`'s (`gglib_core::contracts::http::images`
 //! says which fields, and what was checked against the SDKs): a prompt, an
 //! optional model, one to four images, a `WIDTHxHEIGHT` size, gglib's seed,
-//! base64 PNGs only. Without `stream` the answer is `{created, data:
+//! base64 PNGs only. With gglib's `image` the picture it carries is drawn
+//! from, at `strength`, and with `mask` only where the mask is white; a body
+//! may be [`MAX_BODY_BYTES`](gglib_core::contracts::http::MAX_BODY_BYTES)
+//! long to carry them. Without `stream` the answer is `{created, data:
 //! [{b64_json}], output_format}` once the render is done, minutes later, with
 //! no progress on the way. With `stream: true` the answer is server-sent
 //! events (`images_stream.rs`): progress at every stage and step, partial
@@ -23,6 +26,7 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::body::Bytes;
+use axum::extract::rejection::BytesRejection;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -33,8 +37,10 @@ use gglib_core::contracts::http::images::{
     ImageGenerationsResponse, MAX_PARTIAL_IMAGES,
 };
 use gglib_core::ports::{
-    ImageError, ImageGenerationPort, ImageRequest, ImageSize, MAX_IMAGES_PER_REQUEST,
+    DEFAULT_REDRAW_STRENGTH, ImageError, ImageGenerationPort, ImageRequest, ImageSize, ImageSource,
+    MAX_IMAGES_PER_REQUEST,
 };
+use gglib_core::request_pipeline::image_size;
 use gglib_core::services::drawing_availability;
 use tokio::sync::mpsc;
 use tracing::debug;
@@ -65,8 +71,23 @@ pub(crate) async fn drawing_route(
 }
 
 /// The proxy's door: the driver the daemon handed this proxy, if any.
-pub(crate) async fn generations_route(State(state): State<AppState>, body: Bytes) -> Response {
-    generations(state.images.clone(), body).await
+pub(crate) async fn generations_route(
+    State(state): State<AppState>,
+    body: Result<Bytes, BytesRejection>,
+) -> Response {
+    generations_read(state.images.clone(), body).await
+}
+
+/// [`generations`] for a body as a door's extractor read it: one over the
+/// limit is refused with its code (`request_too_large`), at either door.
+pub async fn generations_read(
+    images: Option<Arc<dyn ImageGenerationPort>>,
+    body: Result<Bytes, BytesRejection>,
+) -> Response {
+    match body {
+        Ok(body) => generations(images, body).await,
+        Err(rejection) => crate::body_limit::rejected(rejection),
+    }
 }
 
 /// The handler body both doors share: read the request, draw, answer it as
@@ -163,6 +184,14 @@ fn read(request: &ImageGenerationsRequest) -> Result<Ask, Box<Response>> {
             )
         })?),
     };
+    let source = source_of(request).map_err(invalid)?;
+    // A picture's size is the render's, so it is the size a stream names.
+    let size_label = source
+        .as_ref()
+        .and_then(|source| image_size(&source.image))
+        .map(|(width, height)| format!("{width}x{height}"))
+        .or_else(|| request.size.clone())
+        .unwrap_or_else(|| "auto".to_owned());
     Ok(Ask {
         request: ImageRequest {
             model: request.model.clone(),
@@ -170,10 +199,47 @@ fn read(request: &ImageGenerationsRequest) -> Result<Ask, Box<Response>> {
             size,
             n,
             seed: request.seed,
+            source,
         },
         partial_images,
-        size_label: request.size.clone().unwrap_or_else(|| "auto".to_owned()),
+        size_label,
     })
+}
+
+/// The picture a request draws from, with its mask and strength; `Err` with
+/// what to put right for base64 that does not decode, and for a mask or a
+/// strength sent with no picture. Whether the bytes are a PNG, and a size
+/// the model draws, is the driver's to say.
+fn source_of(request: &ImageGenerationsRequest) -> Result<Option<ImageSource>, String> {
+    let Some(image) = request.image.as_deref() else {
+        return match (&request.mask, request.strength) {
+            (Some(_), _) => Err("mask goes with image: send the picture the mask is for".into()),
+            (None, Some(_)) => {
+                Err("strength goes with image: send the picture to draw from".into())
+            }
+            (None, None) => Ok(None),
+        };
+    };
+    Ok(Some(ImageSource {
+        image: base64_field("image", image)?,
+        mask: request
+            .mask
+            .as_deref()
+            .map(|mask| base64_field("mask", mask))
+            .transpose()?,
+        strength: request.strength.unwrap_or(DEFAULT_REDRAW_STRENGTH),
+    }))
+}
+
+/// The bytes of `text`, base64 with or without a `data:` URL's prefix.
+fn base64_field(name: &str, text: &str) -> Result<Vec<u8>, String> {
+    let encoded = match text.split_once(";base64,") {
+        Some((prefix, encoded)) if prefix.starts_with("data:") => encoded,
+        _ => text,
+    };
+    BASE64
+        .decode(encoded.trim())
+        .map_err(|e| format!("{name} is not base64: {e}"))
 }
 
 async fn unary(images: &dyn ImageGenerationPort, ask: Ask) -> Response {

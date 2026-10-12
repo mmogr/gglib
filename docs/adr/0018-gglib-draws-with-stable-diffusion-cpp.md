@@ -92,6 +92,11 @@ Qwen-Image 2.1, from 256 to 1536 a side, 1024x1024 when unsaid), because
 Amended on 2026-10-11: Z-Image's recipe is decision 18's: 8 steps, 1.0,
 `euler`, flash attention in the diffusion model alone, and a multiple of 16.
 
+Amended on 2026-10-12: a request still cannot choose its steps, but a
+request drawn from a picture (decision 20) is not sent the recipe's count:
+it is sent that count divided by its strength, rounded up, and its size is
+the picture's.
+
 ### 4. `sd-server` is installed pinned, pre-built where there is a build
 
 The pin is `master-948-228c707` (`PINNED_SD_RELEASE`,
@@ -689,6 +694,58 @@ What this leaves.
   tool exchange, and whether a model takes the line as the person's words,
   are unread.
 
+### 20. A request may draw from a picture, and gglib keeps what a mask leaves alone
+
+A picture that is almost right could only be drawn again from nothing.
+`sd-server` at the pinned release reads a picture to start from, a mask and
+a strength on the route gglib already submits to
+([log-0018, 2026-10-12](log-0018.md#2026-10-12-a-request-draws-from-a-picture-and-a-masked-result-is-pasted-back)).
+
+1. **The same route, three more fields.** `POST /v1/images/generations` and
+   its twin at the daemon read gglib's own `image`, `mask` and `strength`:
+   base64 PNGs and a number from 0.05 to 1, 0.6 when absent. OpenAI draws
+   from a picture at `/v1/images/edits` with a multipart body, which gglib
+   does not serve; a second route would have been a second handler over the
+   same driver. The route takes a body of 32 MiB, as `/v1/chat/completions`
+   does, since a picture rides in it. `gglib image` has `--from`, `--mask`
+   and `--strength`.
+2. **The picture's size is the render's.** `size` beside `image` is refused.
+   The size is judged by the rule of the family that draws: a picture one
+   family drew is refused by a family that does not draw that size, not
+   resized, because a result of another size cannot be laid over the
+   picture. A mask of another size, a mask with no white, and a picture or
+   mask that is not a PNG are refused too, all before anything queues.
+3. **White is drawn again.** A mask is read as black below mid-grey and
+   white from it. `sd-server` is sent the picture without alpha and the
+   mask as one channel.
+4. **gglib pastes the result back.** `sd-server` does not return the pixels
+   outside the mask as they were: in the one render compared, 98.8% of them
+   differed from the picture's. So a masked result is laid over the
+   picture: `sd-server`'s pixel on the white, the picture's own more than
+   16 pixels from it (along a row or a column, whichever is further), and a
+   blend that only falls between the two. A request with no mask is
+   answered with `sd-server`'s picture as it wrote it. The previews on the
+   way are `sd-server`'s own frames, unpasted.
+5. **The steps are the recipe's over the strength.** `sd-server` shortens a
+   schedule by the strength: nine renders sampled `floor(steps x strength)`
+   steps. A redraw sent the recipe's count would sample two of Flux.1's
+   four at 0.6. It is sent the fewest steps whose share at its strength is
+   the recipe's count.
+6. **Any image model may be asked.** Decision 16's rule picks the model, and
+   no family is refused for how it patches. One picture and one seed a
+   family is too little to refuse on: Z-Image Turbo and Qwen-Image 2.1
+   patched a hand without a visible seam, Flux.1 schnell broke what crossed
+   the mask's edge in five of five.
+
+Not built here: a brush on the page or the phone, a redraw offered by the
+drawing tool, the versions of a picture in a chat, a redraw of a box around
+the mask at the model's full size, and edit models that take an instruction
+(FLUX.1 Kontext, Qwen-Image-Edit).
+
+- **No real model has drawn from a picture through gglib.** The renders
+  the log reads were `sd-cli`'s, at the pinned release, with gglib's files.
+  No test here runs a model.
+
 ## Consequences
 
 - A person presses Draw, sends a message, and sees a picture arrive in the
@@ -773,7 +830,9 @@ What this leaves.
   A device's hub turn, a real tunnel and a reasoning model
   have not drawn at all. Every test runs a scripted job or a stand-in
   server.
-- MLX, ComfyUI, img2img, edits, LoRA, ControlNet, upscaling and video.
+- MLX, ComfyUI, ~~img2img, edits,~~ LoRA, ControlNet, upscaling and video.
+  Amended on 2026-10-12: decision 20 draws from a picture, with or without
+  a mask. Edit models that take an instruction are still out.
 - ~~A tool's image sent back to the model as context
   ([ADR 0016](0016-a-tools-image-is-an-attachment-on-its-tool-row.md)).~~
   Retracted on 2026-10-11 for the drawing tool's most recent picture

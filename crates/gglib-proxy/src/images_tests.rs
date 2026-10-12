@@ -7,11 +7,13 @@ use std::time::Duration;
 use async_trait::async_trait;
 use axum::body::Bytes;
 use axum::http::StatusCode;
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use gglib_core::domain::ImageFamily;
 use gglib_core::domain::agent::PreviewFrame;
 use gglib_core::ports::{
-    GeneratedImage, ImageBatch, ImageError, ImageGenerationPort, ImageProgress, ImageRequest,
-    ImageSize, ImageStage, ModelRuntimeError,
+    DEFAULT_REDRAW_STRENGTH, GeneratedImage, ImageBatch, ImageError, ImageGenerationPort,
+    ImageProgress, ImageRequest, ImageSize, ImageSource, ImageStage, ModelRuntimeError,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -143,6 +145,7 @@ async fn a_request_is_answered_with_openais_shape() {
             }),
             n: 2,
             seed: Some(9),
+            source: None,
         }
     );
 }
@@ -455,4 +458,111 @@ fn an_availability_refusal_carries_this_routes_code() {
         assert!(route.code.is_some(), "{error:?}");
         assert_eq!(answer.code, route.code, "{error:?}");
     }
+}
+
+/// gglib's `image`, `mask` and `strength` reach the driver as the picture
+/// to draw from: the bytes decoded, a `data:` URL's prefix dropped, and 0.6
+/// for a strength left out.
+#[tokio::test]
+async fn a_picture_reaches_the_driver_with_its_mask_and_strength() {
+    let port = Scripted::new(render(1), Ok(batch(1)));
+    // "picture" and "mask", base64.
+    let cases = [
+        (
+            json!({"prompt": "a cat", "image": "cGljdHVyZQ==", "mask": "bWFzaw==",
+                   "strength": 0.25}),
+            Some(b"mask".to_vec()),
+            0.25,
+        ),
+        (
+            json!({"prompt": "a cat", "image": "data:image/png;base64,cGljdHVyZQ=="}),
+            None,
+            DEFAULT_REDRAW_STRENGTH,
+        ),
+    ];
+    for (body, mask, strength) in cases {
+        let (status, answer) = post(Some(Arc::clone(&port)), &body).await;
+        assert_eq!(status, StatusCode::OK, "{answer}");
+        let asked = port
+            .asked
+            .lock()
+            .unwrap()
+            .pop()
+            .expect("the driver was asked");
+        assert_eq!(
+            asked.source,
+            Some(ImageSource {
+                image: b"picture".to_vec(),
+                mask,
+                strength,
+            })
+        );
+        assert_eq!(
+            asked.size, None,
+            "the picture's size is the driver's to read"
+        );
+    }
+
+    post(Some(Arc::clone(&port)), &json!({"prompt": "a cat"})).await;
+    assert_eq!(port.asked.lock().unwrap()[0].source, None);
+}
+
+/// A mask or a strength with no picture, and a picture or a mask that is
+/// not base64, are refused before the driver is asked.
+#[tokio::test]
+async fn a_picture_field_that_cannot_be_read_is_refused() {
+    let port = Scripted::new(render(1), Ok(batch(1)));
+    for (body, words) in [
+        (
+            json!({"prompt": "a cat", "mask": "bWFzaw=="}),
+            "mask goes with image",
+        ),
+        (
+            json!({"prompt": "a cat", "strength": 0.5}),
+            "strength goes with image",
+        ),
+        (
+            json!({"prompt": "a cat", "image": "not base64!"}),
+            "image is not base64",
+        ),
+        (
+            json!({"prompt": "a cat", "image": "cGljdHVyZQ==", "mask": "not base64!"}),
+            "mask is not base64",
+        ),
+    ] {
+        let (status, answer) = post(Some(Arc::clone(&port)), &body).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
+        let answer: Value = serde_json::from_str(&answer).unwrap();
+        assert_eq!(answer["error"]["code"], "invalid_request", "{answer}");
+        let message = answer["error"]["message"].as_str().unwrap();
+        assert!(message.contains(words), "{message}");
+    }
+    assert!(
+        port.asked.lock().unwrap().is_empty(),
+        "the driver was not asked"
+    );
+}
+
+/// A stream of a render drawn from a picture names the picture's size, read
+/// from its header, on each partial image.
+#[tokio::test]
+async fn a_stream_from_a_picture_names_the_pictures_size() {
+    let mut header = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13];
+    header.extend(b"IHDR");
+    header.extend(256_u32.to_be_bytes());
+    header.extend(320_u32.to_be_bytes());
+    header.extend([8, 6, 0, 0, 0]);
+    let port = Scripted::new(render(1), Ok(batch(1)));
+    let (status, body) = post(
+        Some(port),
+        &json!({"prompt": "a cat", "stream": true, "partial_images": 1,
+                "image": BASE64.encode(header)}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let partial = events(&body)
+        .into_iter()
+        .find(|(name, _)| name == "image_generation.partial_image")
+        .expect("a partial image");
+    assert_eq!(partial.1["size"], "256x320", "{partial:?}");
 }
