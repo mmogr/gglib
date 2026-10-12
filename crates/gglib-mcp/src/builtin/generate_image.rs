@@ -306,11 +306,10 @@ pub fn request_of(arguments: &Value) -> Result<ImageRequest, String> {
         None => 1,
     };
     Ok(ImageRequest {
-        model: None,
-        prompt: prompt.to_owned(),
         size,
         n,
         seed: arguments.get("seed").and_then(Value::as_i64),
+        ..ImageRequest::new(prompt)
     })
 }
 

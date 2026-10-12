@@ -5,6 +5,7 @@ mod job;
 mod job_api;
 mod job_plan;
 mod job_poll;
+mod source;
 mod spawn;
 
 pub use config::SdServerConfig;

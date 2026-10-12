@@ -281,7 +281,13 @@ more than one, decoding), saves each PNG and prints `[image WxH] <path>`.
 The model is the settings' default image model, else the only one with
 every file its family needs, unless `-m` names one; the size is 1024x1024
 unless `--size` gives another the family draws; `-n` draws up to four;
-`--seed` repeats a drawing. Images go to
+`--seed` repeats a drawing. `--from PNG` draws from a picture in place of
+starting from nothing: the result is the picture's size (so `--size` is
+refused beside it, and the size must be one the model's family draws), and
+`--strength`, from 0.05 to 1 and 0.6 when left out, says how far from the
+picture it may go. With `--mask PNG` as well, a PNG the picture's size, only
+what is white in the mask is drawn again: every pixel more than 16 pixels
+from the white is the picture's own, unchanged. Images go to
 `-o PATH`, or `gglib-<unix time>.png` here, with `-1`, `-2`, … for more
 than one; an existing file is never replaced. The first step of a Flux.1
 render comes about 40 seconds in. Ctrl-C leaves at once, and the daemon
@@ -295,6 +301,8 @@ if it has not, leaving the model loaded.
 ```bash
 gglib image "a lighthouse at dusk, oil painting"
 gglib image "a red fox in snow" --size 1024x768 -n 2 -o fox.png
+gglib image "a red fox in snow" --from fox.png --strength 0.4 -o fox-again.png
+gglib image "a fox's paw in snow" --from fox.png --mask paw.png -o fox-fixed.png
 ```
 
 ### `attachment save`

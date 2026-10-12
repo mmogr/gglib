@@ -5,8 +5,18 @@ use std::path::PathBuf;
 use clap::Args;
 use gglib_core::ports::{ImageSize, MAX_IMAGES_PER_REQUEST};
 
+/// `--strength`'s number: from 0.05 to 1, so not `nan` or `inf` either,
+/// which would reach the daemon as no strength at all.
+fn strength(text: &str) -> Result<f32, String> {
+    text.parse::<f32>()
+        .ok()
+        .filter(|strength| (0.05..=1.0).contains(strength))
+        .ok_or_else(|| format!("\"{text}\" is not a strength from 0.05 to 1"))
+}
+
 /// `gglib image "<prompt>"`: draw with this machine's image model, through
-/// the daemon, and save what it drew.
+/// the daemon, and save what it drew. With `--from` it draws from a picture:
+/// all of it again, or with `--mask` only where the mask is white.
 #[derive(Args, Debug, Clone)]
 pub struct ImageCommandArgs {
     /// What to draw
@@ -32,6 +42,19 @@ pub struct ImageCommandArgs {
     /// default image model, else the only one with every file]
     #[arg(long, short)]
     pub model: Option<String>,
+    /// A PNG to draw from, in place of starting from nothing: the result is
+    /// its size, so `--size` is left out
+    #[arg(long, value_name = "PNG", conflicts_with = "size")]
+    pub from: Option<PathBuf>,
+    /// A PNG the size of `--from`'s, white over what to draw again and
+    /// black over what to keep; every pixel more than 16 pixels from the
+    /// white is kept as it was
+    #[arg(long, value_name = "PNG", requires = "from")]
+    pub mask: Option<PathBuf>,
+    /// How far from `--from`'s picture the result may go, from 0.05 (almost
+    /// nothing changes) to 1 (only its size is kept) [default: 0.6]
+    #[arg(long, value_name = "0.05-1", requires = "from", value_parser = strength)]
+    pub strength: Option<f32>,
     /// Where to save the image; `gglib-<unix time>.png` here when omitted.
     /// With more than one, each name gains -1, -2, …
     #[arg(short = 'o', long = "output", value_name = "PATH")]

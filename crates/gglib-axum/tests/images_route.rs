@@ -80,3 +80,39 @@ async fn the_drawing_route_says_why_drawing_is_unavailable() {
         "{far}"
     );
 }
+
+/// A body that carries a picture is longer than axum's 2 MiB: the daemon's
+/// door reads one and answers it as any request (here, with nothing to draw
+/// with), and refuses one over the limit with the proxy's code.
+#[tokio::test]
+async fn the_route_reads_a_body_long_enough_for_a_picture() {
+    let post = |megabytes: usize| async move {
+        let picture = "A".repeat(megabytes * 1024 * 1024);
+        let body = serde_json::json!({"prompt": "a lighthouse", "image": picture});
+        test_app(CorsConfig::LocalOnly)
+            .await
+            .oneshot(
+                authed()
+                    .method("POST")
+                    .uri("/api/images/generations")
+                    .header("host", HOST)
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    };
+
+    let read = post(6).await;
+    assert_eq!(read.status(), StatusCode::BAD_REQUEST);
+    let body: serde_json::Value =
+        serde_json::from_slice(&read.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(body["error"]["code"], "drawing_unavailable", "{body}");
+
+    let refused = post(33).await;
+    assert_eq!(refused.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let body: serde_json::Value =
+        serde_json::from_slice(&refused.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(body["error"]["code"], "request_too_large", "{body}");
+}

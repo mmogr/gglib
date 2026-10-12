@@ -18,6 +18,10 @@
 //! submitted: the submission runs in its own task, so a request dropped
 //! during it still ends in a render that is cancelled or retired.
 //!
+//! A request that carries a picture is drawn from it (`source.rs`): the
+//! body carries the picture, the mask and the strength, and each result is
+//! pasted against the picture before it is handed back.
+//!
 //! A person's Stop on the image model never empties its slot under a render:
 //! it asks, and the render retires its model at its next read of the job.
 
@@ -276,8 +280,13 @@ impl ImageGenerationPort for SdImageDriver {
         report.stage(ImageStage::Loading);
 
         let mut render = self.submit(turn, base_url, &plan).await?;
-        let images = render.follow(&report).await?;
+        let mut images = render.follow(&report).await?;
         report.stage(ImageStage::Finishing);
+        if let Some(source) = &plan.source {
+            for image in &mut images {
+                image.bytes = source.paste(std::mem::take(&mut image.bytes))?;
+            }
+        }
         Ok(ImageBatch {
             model: plan.model_name,
             images,

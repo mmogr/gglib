@@ -77,8 +77,9 @@ pub use huggingface::{
     HfSearchResult, HfSortField, SNIFF_HEAD_BYTES,
 };
 pub use image_generation::{
-    GeneratedImage, IMAGE_JOB_DEADLINE, ImageBatch, ImageError, ImageGenerationPort, ImageProgress,
-    ImageRequest, ImageSize, ImageStage, MAX_IMAGES_PER_REQUEST, UnreadableSize,
+    DEFAULT_REDRAW_STRENGTH, GeneratedImage, IMAGE_JOB_DEADLINE, ImageBatch, ImageError,
+    ImageGenerationPort, ImageProgress, ImageRequest, ImageSize, ImageSource, ImageStage,
+    MAX_IMAGES_PER_REQUEST, UnreadableSize,
 };
 pub use jinja_mode::JinjaMode;
 pub use mcp_dto::{ResolutionAttempt, ResolutionStatus};

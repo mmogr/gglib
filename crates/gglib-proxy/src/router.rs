@@ -89,7 +89,7 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
         // Drawing, local or paired: a turn's worth of use, like a chat.
         .route(
             "/v1/images/generations",
-            post(crate::images::generations_route),
+            post(crate::images::generations_route).layer(crate::body_limit::layer()),
         )
         .route("/v1/images/drawing", get(crate::images::drawing_route))
         .route("/v1/proxy/status", get(handle_proxy_status))

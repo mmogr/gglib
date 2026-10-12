@@ -2,7 +2,9 @@
 //! read its state, ask it to stop.
 //!
 //! stable-diffusion.cpp 228c707 (`examples/server`): `POST
-//! /sdcpp/v1/img_gen` answers 202 with the job's `id` (400 for a request it
+//! /sdcpp/v1/img_gen` (which reads `init_image`, `mask_image`, `strength`
+//! and `sample_params.sample_steps` beside a render's own fields, each a
+//! base64 image or a number, per its `api.md`) answers 202 with the job's `id` (400 for a request it
 //! cannot read, 429 when its queue is full, each with
 //! `{"error": <words>, "message"?: <more>}`); `GET /sdcpp/v1/jobs/{id}`
 //! answers the job's `status`, `queued`, `generating`, `completed`, `failed`
@@ -26,9 +28,15 @@ use serde::{Deserialize, Serialize};
 /// 1024x1024), and all of it is local.
 const CALL_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// One render, as `POST /sdcpp/v1/img_gen` reads it. Steps, guidance and
-/// sampler come from the server's launch flags (the family's recipe).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// One render, as `POST /sdcpp/v1/img_gen` reads it. Guidance and sampler
+/// come from the server's launch flags (the family's recipe), and so do the
+/// steps of a render drawn from the prompt alone.
+///
+/// A render drawn from a picture carries the last four fields, which a
+/// render from the prompt alone leaves out of its body: the picture, the
+/// mask when only part is drawn again, the strength, and the steps to
+/// schedule (`job_plan.rs` says how many).
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct ImgGenBody {
     pub(crate) prompt: String,
     pub(crate) width: u32,
@@ -42,6 +50,26 @@ pub(crate) struct ImgGenBody {
     pub(crate) preview: &'static str,
     /// Every step.
     pub(crate) preview_interval: u32,
+    /// The picture to draw from, a base64 RGB PNG.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) init_image: Option<String>,
+    /// A base64 PNG of one channel, white where the picture is drawn again.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) mask_image: Option<String>,
+    /// How far from the picture the render may go, from 0.05 to 1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) strength: Option<f32>,
+    /// The steps to schedule, in place of the launch flag's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) sample_params: Option<SampleParams>,
+}
+
+/// The one sampling setting a request changes; `sd-server` keeps its launch
+/// flags for every field a request's `sample_params` leaves out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub(crate) struct SampleParams {
+    /// The steps the schedule is made of, before strength shortens it.
+    pub(crate) sample_steps: u32,
 }
 
 /// The step a generating job last previewed.

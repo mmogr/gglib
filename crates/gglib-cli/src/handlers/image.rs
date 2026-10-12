@@ -1,6 +1,9 @@
 //! `gglib image`: draw through the daemon, show the render on one live line,
 //! save each image, and print where it went.
 //!
+//! `--from` reads a picture to draw from, `--mask` a mask over the part to
+//! draw again, and both ride in the request as the daemon reads them.
+//!
 //! The daemon owns the image model and its job (`daemon_client::images`), so
 //! this command starts the daemon when none runs and never drives
 //! `sd-server` itself. The line reads queued (with the place in line),
@@ -15,7 +18,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context as _, Result, bail};
-use gglib_core::ports::{ImageError, ImageGenerationPort, ImageProgress, ImageRequest, ImageStage};
+use gglib_core::ports::{
+    DEFAULT_REDRAW_STRENGTH, ImageError, ImageGenerationPort, ImageProgress, ImageRequest,
+    ImageSource, ImageStage,
+};
 use indicatif::{ProgressBar, ProgressStyle};
 use tokio::sync::mpsc;
 
@@ -27,6 +33,27 @@ use crate::image_commands::ImageCommandArgs;
 /// What Ctrl-C prints before the command exits 130.
 pub(crate) const INTERRUPTED: &str = "stopped; the daemon stops the render too";
 
+/// The picture `--from` names, with `--mask`'s and `--strength`, read from
+/// disk; `None` without `--from`. Whether they are PNGs of one size is the
+/// daemon's to say.
+fn source_of(
+    from: Option<&Path>,
+    mask: Option<&Path>,
+    strength: Option<f32>,
+) -> Result<Option<ImageSource>> {
+    let Some(from) = from else {
+        return Ok(None);
+    };
+    let read = |path: &Path| {
+        std::fs::read(path).with_context(|| format!("could not read {}", path.display()))
+    };
+    Ok(Some(ImageSource {
+        image: read(from)?,
+        mask: mask.map(read).transpose()?,
+        strength: strength.unwrap_or(DEFAULT_REDRAW_STRENGTH),
+    }))
+}
+
 /// Run `gglib image`.
 pub(crate) async fn execute(ctx: &CliContext, args: ImageCommandArgs) -> Result<()> {
     let paths = output_paths(args.output.as_deref(), usize::from(args.n), unix_now());
@@ -36,6 +63,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: ImageCommandArgs) -> Result<
             taken.display()
         );
     }
+    let source = source_of(args.from.as_deref(), args.mask.as_deref(), args.strength)?;
     let generator = DaemonImageGenerator::new(ensure_daemon(ctx).await?);
     let request = ImageRequest {
         model: args.model,
@@ -43,6 +71,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: ImageCommandArgs) -> Result<
         size: args.size,
         n: args.n,
         seed: args.seed,
+        source,
     };
 
     let bar = ctx.console.add_bar(ProgressBar::new_spinner());

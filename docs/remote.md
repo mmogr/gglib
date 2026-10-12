@@ -763,6 +763,9 @@ boundary.
 A paired device may draw with the desktop's image model at
 `POST /v1/images/generations`, OpenAI's Images API: `{prompt, model?, n?,
 size?, seed?}` answered with `{created, data: [{b64_json}], output_format}`.
+gglib's own `image` (a base64 PNG) draws from that picture at its size, at
+`strength` (0.05 to 1, 0.6 when absent), and with `mask` (a base64 PNG the
+picture's size) only where the mask is white; the body may be 32 MiB.
 That synchronous form carries no progress, and a render takes minutes; with
 `"stream": true` the answer is server-sent events, gglib's
 `image_generation.progress` at every stage and step, OpenAI's

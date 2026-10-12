@@ -708,6 +708,7 @@ async fn decoding_follows_the_last_step_of_the_last_pass() {
     let request = ImageRequest {
         n: 2,
         seed: Some(7),
+        source: None,
         ..sdxl_request()
     };
     let batch = driver(models(), &jobs, &host)
@@ -947,3 +948,6 @@ async fn steps_keep_a_rival_waiting_past_the_admission_deadline() {
 
 #[path = "job_leave_tests.rs"]
 mod leave;
+
+#[path = "job_source_tests.rs"]
+mod source;

@@ -293,14 +293,13 @@ async fn an_invoke_answers_the_image_inline_and_one_sentence() {
     assert_eq!(
         *port.asked.lock().unwrap(),
         [ImageRequest {
-            model: None,
-            prompt: "a red fox".to_owned(),
             size: Some(ImageSize {
                 width: 1024,
                 height: 768
             }),
             n: 2,
             seed: Some(9),
+            ..ImageRequest::new("a red fox")
         }]
     );
 }
