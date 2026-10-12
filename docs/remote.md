@@ -864,6 +864,27 @@ picture a tool made; a model with no projector reads the chat without it
 ([Images](clients.md#images)). Seeing the picture does not let the model
 draw: a turn without `"draw": true` is still offered no image tool.
 
+A device that has drawn a picture again from one a tool drew, fixed or
+redone, keeps the result beside it with `POST /v1/chats/{id}/pictures` and
+`{"from": <id>, "image": <id>}`. Both are ids of images the desktop holds:
+`from` is the picture it was made from, and `image` is the newer one, sent
+first to `POST /v1/attachments`. The desktop links `image` to the latest
+tool row of the chat that carries `from`, after the images that row has, in
+place and on no branch, and answers `200` with that row's images, oldest
+first, each `{id, mime, width, height}`, the kept one last. A picture the
+row already carries is not linked twice: the row is answered as it was,
+with that picture where it already sat. When the row is the chat's most
+recent that drew, its last image is the one a chat model that reads images
+is shown; a picture kept on an older reply's row is not. A chat that is not
+there is
+`404 not_found`. A `from` no tool row of the chat carries, or an `image`
+the desktop does not hold, is `400 attachment_not_found`. A body that is
+not those two ids, one with any other key included, is `400
+invalid_request`. A refusal writes nothing. The route is for a named device
+only, as `/v1/chats` is. A desktop whose gglib predates it answers 404 with
+no `code`. This machine's daemon does not relay it to a paired machine:
+there is no `/api/remote` route for it.
+
 A turn that draws may also say which of the desktop's image models draws
 it: `"image_model": <id>`, the `id` of a row in `GET /v1/images/drawing`'s
 `models`. It goes with `"draw": true`; a turn that says it without is

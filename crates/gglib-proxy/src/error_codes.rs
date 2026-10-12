@@ -114,7 +114,7 @@ const CODES: &[ErrorCode] = &[
     // An image a message carries by id (`AttachmentError`).
     row("image_too_large", INVALID, Some(413), "An uploaded image is over the 8 MiB one image may be."),
     row("unsupported_image", INVALID, Some(400), "An uploaded file is not a PNG or a JPEG whose size can be read."),
-    row("attachment_not_found", INVALID, None, "A message names an image id that is not stored (400), or an image was asked for by an id that is not stored (404); upload the image again."),
+    row("attachment_not_found", INVALID, None, "A message names an image id that is not stored (400), or an image was asked for by an id that is not stored (404); upload the image again. Also what keeping a picture on a chat is refused with (400): when the picture to keep is not stored, which an upload fixes, or when the picture it was made from is on no tool row of that chat, which no upload changes."),
     row("request_images_too_large", INVALID, Some(400), "The images a chat's messages carry, history included, are over the 16 MiB one request to a model may carry; the run is refused before it starts. Start a new chat, or send fewer or smaller images."),
     row("upstream_error", MANY, None, "The model server (for a run, the proxy) failed, could not be reached, or ended a reply early; the type beside it may be llama-server's."),
     row("context_length_exceeded", Kind::One("context_length_exceeded"), Some(400), "The conversation does not fit the model's context even trimmed; start a new one."),

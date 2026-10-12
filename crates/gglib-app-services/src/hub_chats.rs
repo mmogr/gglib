@@ -3,7 +3,8 @@
 //!
 //! Nothing here writes a row itself, and nothing logs a title, a row or an
 //! image: only ids and counts. A change a device asks for is the chat
-//! history service's to make, as the page's is (ADR 0017). An image a
+//! history service's to make, as the page's is (ADR 0017), and so is a
+//! picture it keeps beside the one a tool drew (ADR 0018). An image a
 //! device sends is stored by the one ingest every surface uses.
 
 use std::collections::HashMap;
@@ -12,7 +13,7 @@ use std::sync::{Arc, Weak};
 use async_trait::async_trait;
 use gglib_core::domain::branching::{ChatChange, ChatChanged};
 use gglib_core::domain::hub_chats::{HubChat, HubChatList, HubChatOpen};
-use gglib_core::domain::{AttachmentBlob, AttachmentId, AttachmentUpload};
+use gglib_core::domain::{AttachmentBlob, AttachmentId, AttachmentInfo, AttachmentUpload};
 use gglib_core::ports::{AttachmentError, ChatHistoryError, HubChatsError, HubChatsPort};
 use gglib_core::services::{AppCore, ChangeError};
 
@@ -114,6 +115,22 @@ impl HubChatsPort for HubChats {
                 HubChatsError::NotFound
             }
             ChangeError::History(_) => HubChatsError::Unreadable,
+        })
+    }
+
+    async fn keep_picture(
+        &self,
+        id: i64,
+        from: &AttachmentId,
+        image: &AttachmentId,
+    ) -> Result<Vec<AttachmentInfo>, HubChatsError> {
+        let kept = self.core.chat_history().keep_picture(id, from, image).await;
+        kept.map_err(|e| match e {
+            ChatHistoryError::ConversationNotFound(_) => HubChatsError::NotFound,
+            ChatHistoryError::Attachment(AttachmentError::NotFound(_)) => {
+                HubChatsError::PictureNotFound
+            }
+            _ => HubChatsError::Unreadable,
         })
     }
 

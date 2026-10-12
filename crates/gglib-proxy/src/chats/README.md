@@ -21,6 +21,17 @@ now to be answered, which the device does with a turn that says
 (`unchanged`, `not_a_reply`, `nothing_to_answer`, `message_not_found`,
 `invalid_request`), a body that is no change `400 invalid_request`.
 
+`POST /v1/chats/{id}/pictures` keeps a picture beside the one it was made
+from (ADR 0018, decision 21). The body is `{"from": <id>, "image": <id>}`,
+two stored images: `image` joins the latest tool row of the chat that
+carries `from`, after the images that row has, in place and on no branch.
+The answer is that row's images, oldest first, each `{id, mime, width,
+height}`, the kept one last; one the row already carries is not linked
+twice, and the row is answered as it was. A chat that is not there is `404 not_found`. A `from` no tool row of
+the chat carries, or an `image` that is not stored, is `400
+attachment_not_found`. A body that is not those two ids, one with any other
+key included, is `400 invalid_request`. Nothing is written by a refusal.
+
 `/v1/attachments` is the images those chats' turns carry. A device sends
 one as the raw body of `POST /v1/attachments`, at most 8 MiB, and is
 answered its id, type, size and estimated tokens; a turn then names it by
@@ -43,8 +54,8 @@ chats/
   mod.rs       — the module
   attachments.rs — an image sent and one read back; no image is logged
   guard.rs     — only a named device passes
-  handlers.rs  — list, open and change, with errors in the proxy's shape;
-                 nothing a client sent is echoed
+  handlers.rs  — list, open, change and keep a picture, with errors in the
+                 proxy's shape; nothing a client sent is echoed
 ```
 
 <!-- module-docs:end -->

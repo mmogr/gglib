@@ -59,6 +59,8 @@ pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
         .route("/v1/chats/{id}", get(crate::chats::open_chat))
         // A change to one, made as the hub's own page makes it (ADR 0017).
         .route("/v1/chats/{id}/changes", post(crate::chats::change_chat))
+        // A picture drawn again, kept beside the one a tool drew (ADR 0018).
+        .route("/v1/chats/{id}/pictures", post(crate::chats::keep_picture))
         // The images their turns carry: sent once, read back by id.
         .route(
             "/v1/attachments",

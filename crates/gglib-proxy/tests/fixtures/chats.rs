@@ -2,7 +2,8 @@
 //!
 //! Counts every call, so a test can say whether a request reached the chats
 //! at all, and answers from a fixed pair of chats. Its images go through
-//! the real ingest, into a map.
+//! the real ingest, into a map. The chat that opens has one tool row with a
+//! drawn picture, and a picture kept beside it shows on that row after it.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -23,6 +24,9 @@ pub(crate) const OPEN_ID: i64 = 7;
 /// The branch a change to [`OPEN_ID`] makes.
 pub(crate) const BRANCH_ID: i64 = 8;
 
+/// The tool row of [`OPEN_ID`], which carries [`drawn`].
+pub(crate) const TOOL_ROW: i64 = 2;
+
 /// A message no chat holds: a change naming it is refused.
 pub(crate) const NO_MESSAGE: i64 = 99;
 
@@ -33,6 +37,8 @@ pub(crate) struct FakeChats {
     images: Arc<Images>,
     /// Every change made, in order.
     pub(crate) changes: Mutex<Vec<ChatChange>>,
+    /// Every picture kept beside [`drawn`], in order.
+    kept: Mutex<Vec<AttachmentInfo>>,
 }
 
 /// The images the stub holds, by id.
@@ -110,6 +116,16 @@ impl FakeChats {
     }
 }
 
+/// The picture the tool row of [`OPEN_ID`] carries.
+pub(crate) fn drawn() -> AttachmentInfo {
+    AttachmentInfo {
+        id: AttachmentId::of(b"a drawn picture"),
+        mime: "image/png".to_owned(),
+        width: 1024,
+        height: 1024,
+    }
+}
+
 /// What every listing answers with.
 pub(crate) fn listed() -> HubChatList {
     HubChatList {
@@ -136,8 +152,24 @@ pub(crate) fn listed() -> HubChatList {
     }
 }
 
-/// What opening [`OPEN_ID`] answers with.
+/// What opening [`OPEN_ID`] answers with, before a picture is kept.
 pub(crate) fn opened() -> HubChatOpen {
+    let row = |id, role, content: &str, images| Message {
+        id,
+        conversation_id: OPEN_ID,
+        origin_id: None,
+        role,
+        content: content.to_owned(),
+        created_at: "2026-09-30 09:12:00".to_owned(),
+        metadata: None,
+        images,
+    };
+    let screenshot = AttachmentInfo {
+        id: AttachmentId::of(b"a screenshot"),
+        mime: "image/png".to_owned(),
+        width: 640,
+        height: 480,
+    };
     HubChatOpen {
         conversation: Conversation {
             id: OPEN_ID,
@@ -150,21 +182,10 @@ pub(crate) fn opened() -> HubChatOpen {
             branch_of: None,
             lineage_id: None,
         },
-        messages: vec![Message {
-            id: 1,
-            conversation_id: OPEN_ID,
-            origin_id: None,
-            role: MessageRole::User,
-            content: "why".to_owned(),
-            created_at: "2026-09-30 09:12:00".to_owned(),
-            metadata: None,
-            images: vec![AttachmentInfo {
-                id: AttachmentId::of(b"a screenshot"),
-                mime: "image/png".to_owned(),
-                width: 640,
-                height: 480,
-            }],
-        }],
+        messages: vec![
+            row(1, MessageRole::User, "why", vec![screenshot]),
+            row(TOOL_ROW, MessageRole::Tool, "drawn", vec![drawn()]),
+        ],
         points: Vec::new(),
         answerable: false,
     }
@@ -180,7 +201,10 @@ impl HubChatsPort for FakeChats {
     async fn open(&self, id: i64) -> Result<HubChatOpen, HubChatsError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         if id == OPEN_ID {
-            Ok(opened())
+            let mut open = opened();
+            let kept = self.kept.lock().unwrap().clone();
+            open.messages[1].images.extend(kept);
+            Ok(open)
         } else {
             Err(HubChatsError::NotFound)
         }
@@ -205,6 +229,34 @@ impl HubChatsPort for FakeChats {
             forked: true,
             answer: true,
         })
+    }
+
+    /// A stored image is kept on the tool row of [`OPEN_ID`] when `from` is
+    /// a picture that row carries; any other chat is not found.
+    async fn keep_picture(
+        &self,
+        id: i64,
+        from: &AttachmentId,
+        image: &AttachmentId,
+    ) -> Result<Vec<AttachmentInfo>, HubChatsError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        if id != OPEN_ID {
+            return Err(HubChatsError::NotFound);
+        }
+        let stored = self.images.0.lock().unwrap().get(image).cloned();
+        let mut row = vec![drawn()];
+        row.extend(self.kept.lock().unwrap().iter().cloned());
+        if !row.iter().any(|on_row| on_row.id == *from) {
+            return Err(HubChatsError::PictureNotFound);
+        }
+        let Some((info, _)) = stored else {
+            return Err(HubChatsError::PictureNotFound);
+        };
+        if !row.contains(&info) {
+            self.kept.lock().unwrap().push(info.clone());
+            row.push(info);
+        }
+        Ok(row)
     }
 
     async fn attach(&self, bytes: &[u8]) -> Result<AttachmentUpload, AttachmentError> {
