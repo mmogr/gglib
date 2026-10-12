@@ -134,7 +134,10 @@ export const PictureEditor: FC<PictureEditorProps> = ({ open, onClose, picture, 
     const point = pointOf(event);
     setStrokes((before) => {
       const last = before[before.length - 1];
-      return last ? [...before.slice(0, -1), { ...last, points: [...last.points, point] }] : before;
+      const at = last?.points[last.points.length - 1];
+      // A move that has not moved adds nothing: a line of no length paints nothing.
+      if (!last || (at && at.x === point.x && at.y === point.y)) return before;
+      return [...before.slice(0, -1), { ...last, points: [...last.points, point] }];
     });
   };
   const end = (event: PointerEvent<HTMLCanvasElement>) => {
@@ -205,46 +208,49 @@ export const PictureEditor: FC<PictureEditorProps> = ({ open, onClose, picture, 
       footer={footer}
       footerClassName="justify-start"
     >
-      <div className="flex flex-col gap-md">
-        {editing && (
-          <div className="flex gap-sm" role="group" aria-label="What to do">
-            <Button variant={mode === 'fix' ? 'primary' : 'ghost'} size="sm" aria-pressed={mode === 'fix'} onClick={() => choose('fix')}>
-              Fix a part
-            </Button>
-            <Button variant={mode === 'redo' ? 'primary' : 'ghost'} size="sm" aria-pressed={mode === 'redo'} onClick={() => choose('redo')}>
-              Redo the whole picture
-            </Button>
+      {/* Beside the picture where there is room, so nothing a person sets is
+          under the fold; below it on a narrow window. */}
+      <div className="flex flex-col gap-md md:flex-row md:items-start">
+        <div className="flex min-w-0 flex-1 flex-col gap-md">
+          <div className="relative mx-auto max-w-full select-none" style={{ aspectRatio: `${picture.width} / ${picture.height}`, maxHeight: '55vh' }}>
+            {shown && <img src={shown} alt={drawn && !comparing ? 'The picture drawn again' : 'The picture'} className="block h-full w-full object-contain" draggable={false} />}
+            {frame && (
+              <img src={`data:image/png;base64,${frame}`} alt="The picture so far" className="absolute inset-0 h-full w-full object-contain opacity-90" />
+            )}
+            {editing && mode === 'fix' && (
+              <canvas
+                ref={canvas}
+                width={picture.width}
+                height={picture.height}
+                aria-label="Brush over the part to fix"
+                className="absolute inset-0 h-full w-full cursor-crosshair touch-none opacity-50"
+                onPointerDown={begin}
+                onPointerMove={extend}
+                onPointerUp={end}
+                onPointerCancel={end}
+              />
+            )}
           </div>
-        )}
-        <div className="relative mx-auto max-w-full select-none" style={{ aspectRatio: `${picture.width} / ${picture.height}`, maxHeight: '55vh' }}>
-          {shown && <img src={shown} alt={drawn && !comparing ? 'The picture drawn again' : 'The picture'} className="block h-full w-full object-contain" draggable={false} />}
-          {frame && (
-            <img src={`data:image/png;base64,${frame}`} alt="The picture so far" className="absolute inset-0 h-full w-full object-contain opacity-90" />
-          )}
-          {editing && mode === 'fix' && (
-            <canvas
-              ref={canvas}
-              width={picture.width}
-              height={picture.height}
-              aria-label="Brush over the part to fix"
-              className="absolute inset-0 h-full w-full cursor-crosshair touch-none opacity-50"
-              onPointerDown={begin}
-              onPointerMove={extend}
-              onPointerUp={end}
-              onPointerCancel={end}
-            />
-          )}
+          {state.phase === 'failed' && <p role="alert" className="m-0 text-sm text-danger">{state.message}</p>}
+          {state.phase === 'drawn' && state.problem && <p role="alert" className="m-0 text-sm text-danger">{state.problem}</p>}
         </div>
-        {state.phase === 'failed' && <p role="alert" className="m-0 text-sm text-danger">{state.message}</p>}
-        {state.phase === 'drawn' && state.problem && <p role="alert" className="m-0 text-sm text-danger">{state.problem}</p>}
         {editing && (
-          <>
+          <div className="flex flex-col gap-md text-sm text-text-secondary md:w-[260px] md:shrink-0">
+            <div className="flex flex-wrap gap-sm" role="group" aria-label="What to do">
+              <Button variant={mode === 'fix' ? 'primary' : 'ghost'} size="sm" aria-pressed={mode === 'fix'} onClick={() => choose('fix')}>
+                Fix a part
+              </Button>
+              <Button variant={mode === 'redo' ? 'primary' : 'ghost'} size="sm" aria-pressed={mode === 'redo'} onClick={() => choose('redo')}>
+                Redo the whole picture
+              </Button>
+            </div>
             {mode === 'fix' && (
-              <div className="flex flex-wrap items-center gap-md text-sm text-text-secondary">
+              <div className="flex flex-col gap-sm">
                 <label className="flex items-center gap-sm">
                   Brush
                   <input
                     type="range"
+                    className="min-w-0 flex-1 accent-primary"
                     min={Math.round(Math.max(picture.width, picture.height) * 0.01)}
                     max={Math.round(Math.max(picture.width, picture.height) * 0.25)}
                     value={brush}
@@ -252,26 +258,28 @@ export const PictureEditor: FC<PictureEditorProps> = ({ open, onClose, picture, 
                     aria-label="Brush size"
                   />
                 </label>
-                <Button variant={erasing ? 'primary' : 'ghost'} size="sm" aria-pressed={erasing} onClick={() => setErasing(!erasing)}>
-                  Rub out
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setStrokes((before) => before.slice(0, -1))} disabled={strokes.length === 0}>
-                  Undo
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setStrokes([])} disabled={strokes.length === 0}>
-                  Clear
-                </Button>
+                <div className="flex flex-wrap gap-sm">
+                  <Button variant={erasing ? 'primary' : 'ghost'} size="sm" aria-pressed={erasing} onClick={() => setErasing(!erasing)}>
+                    Rub out
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setStrokes((before) => before.slice(0, -1))} disabled={strokes.length === 0}>
+                    Undo
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setStrokes([])} disabled={strokes.length === 0}>
+                    Clear
+                  </Button>
+                </div>
               </div>
             )}
-            <label className="flex flex-col gap-xs text-sm text-text-secondary">
+            <label className="flex flex-col gap-xs">
               {mode === 'fix' ? 'What the brushed part should show' : 'What the picture should show'}
-              <Textarea value={words} onChange={(event) => setWords(event.target.value)} rows={2} />
+              <Textarea value={words} onChange={(event) => setWords(event.target.value)} rows={4} />
             </label>
-            <label className="flex items-center gap-sm text-sm text-text-secondary">
-              <span className="shrink-0">Change it a little</span>
+            <label className="flex flex-col gap-xs">
+              How much to change
               <input
                 type="range"
-                className="flex-1"
+                className="accent-primary"
                 min={0.1}
                 max={1}
                 step={0.05}
@@ -279,11 +287,14 @@ export const PictureEditor: FC<PictureEditorProps> = ({ open, onClose, picture, 
                 onChange={(event) => setStrength(Number(event.target.value))}
                 aria-label="How much to change"
               />
-              <span className="shrink-0">a lot</span>
+              <span className="flex justify-between text-xs text-text-muted" aria-hidden>
+                <span>a little</span>
+                <span>a lot</span>
+              </span>
             </label>
             {usable.length > 1 && (
-              <label className="flex items-center gap-sm text-sm text-text-secondary">
-                <span className="shrink-0">Drawn with</span>
+              <label className="flex flex-col gap-xs">
+                Drawn with
                 <Select
                   size="sm"
                   aria-label="Image model"
@@ -299,7 +310,7 @@ export const PictureEditor: FC<PictureEditorProps> = ({ open, onClose, picture, 
                 </Select>
               </label>
             )}
-          </>
+          </div>
         )}
       </div>
     </Modal>
