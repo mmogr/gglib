@@ -788,8 +788,17 @@ the result has to live in the chat.
    can still draw with it. A far chat has no
    drawing route to send its picture to, and offers none.
 
-Not built here: the same on the phone, and on the proxy for a chat the
-hub keeps.
+~~Not built here: the same on the phone, and on the proxy for a chat the
+hub keeps.~~
+Amended on 2026-10-12: the proxy keeps a picture on a chat the hub keeps.
+`POST /v1/chats/{id}/pictures` takes the same `{from, image}` from a paired
+device and makes the same link, behind the guards of `/v1/chats`, and
+answers the row's images
+([log-0018](log-0018.md#2026-10-12-a-paired-device-keeps-a-redrawn-picture-on-a-hub-chat)).
+The proxy draws nothing for it: a device draws the picture where it can
+and stores it with `POST /v1/attachments` first. This machine's daemon does
+not relay the route to a paired machine. Still not built here: a phone
+that uses it, which is not in this repository.
 
 - **Nobody has used the brush with a real model.** The page's tests paint
   no canvas (jsdom has none): they read the strokes handed to the painter

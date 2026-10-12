@@ -21,6 +21,8 @@
 /// chat, which is use: it changes no model and no setting. So is a change
 /// to a chat (ADR 0017): it writes the chats a turn writes, adding a branch
 /// or replacing a question nothing answers yet, and never a saved reply.
+/// So is keeping a picture (ADR 0018, decision 21): it adds a stored image
+/// to a tool row of a chat, and alters no saved reply.
 const TUNNEL_REACHABLE: &[&str] = &[
     "/health",
     "/v1/models",
@@ -41,6 +43,7 @@ const TUNNEL_REACHABLE: &[&str] = &[
     "/v1/chats",
     "/v1/chats/{id}",
     "/v1/chats/{id}/changes",
+    "/v1/chats/{id}/pictures",
     "/v1/attachments",
     "/v1/attachments/{id}",
     "/mcp",

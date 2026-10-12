@@ -120,7 +120,7 @@
       "code": "attachment_not_found",
       "type": "invalid_request_error",
       "status": null,
-      "meaning": "A message names an image id that is not stored (400), or an image was asked for by an id that is not stored (404); upload the image again."
+      "meaning": "A message names an image id that is not stored (400), or an image was asked for by an id that is not stored (404); upload the image again. Also what keeping a picture on a chat is refused with (400): when the picture to keep is not stored, which an upload fixes, or when the picture it was made from is on no tool row of that chat, which no upload changes."
     },
     {
       "code": "request_images_too_large",

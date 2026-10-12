@@ -1,4 +1,5 @@
-//! `GET /v1/chats`, `GET /v1/chats/{id}` and `POST /v1/chats/{id}/changes`.
+//! `GET /v1/chats`, `GET /v1/chats/{id}`, `POST /v1/chats/{id}/changes` and
+//! `POST /v1/chats/{id}/pictures`.
 //!
 //! Every error message here is fixed text or a [`HubChatsError`]'s, which is
 //! fixed text too: nothing echoes a path, a title or a row.
@@ -10,6 +11,7 @@ use axum::extract::rejection::JsonRejection;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use gglib_core::domain::attachment::KeepPicture;
 use gglib_core::domain::branching::ChatChange;
 use gglib_core::ports::{HubChatsError, HubChatsPort};
 use serde_json::Value;
@@ -107,6 +109,47 @@ fn not_a_change() -> Response {
         StatusCode::BAD_REQUEST,
         Json(ErrorResponse::with_code(
             "a change's body is {\"kind\": \"edit\", \"message_id\": <number>, \"content\": <text>, \"images\": [<id>]}, or {\"kind\": \"regenerate\" or \"branch\", \"message_id\": <number>}",
+            "invalid_request_error",
+            "invalid_request",
+        )),
+    )
+        .into_response()
+}
+
+/// `POST /v1/chats/{id}/pictures`: keep a picture beside the one it was made
+/// from (ADR 0018, decision 21). The body names two stored images, `from`
+/// and `image`; `image` joins the latest tool row of the chat that carries
+/// `from`, after the images that row has, and the answer is that row's
+/// images in order. A body that is not those two ids is refused
+/// `invalid_request`.
+pub(crate) async fn keep_picture(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    body: Result<Json<Value>, JsonRejection>,
+) -> Answer {
+    let chats = chats(&state).ok_or_else(unavailable)?;
+    let id = id
+        .parse::<i64>()
+        .map_err(|_| refused(&HubChatsError::NotFound))?;
+    let Some(kept) = body
+        .ok()
+        .and_then(|Json(body)| serde_json::from_value::<KeepPicture>(body).ok())
+    else {
+        return Err(not_a_picture());
+    };
+    let images = chats
+        .keep_picture(id, &kept.from, &kept.image)
+        .await
+        .map_err(|e| refused(&e))?;
+    Ok(Json(images).into_response())
+}
+
+/// The answer to a body that names no picture to keep.
+fn not_a_picture() -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ErrorResponse::with_code(
+            "a picture to keep is {\"from\": <id>, \"image\": <id>}, each the id of a stored image",
             "invalid_request_error",
             "invalid_request",
         )),
