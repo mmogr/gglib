@@ -15,10 +15,12 @@ import type {
   SavedThread,
 } from '../types/chat';
 import { DEFAULT_TITLE_GENERATION_PROMPT } from '../types/chat';
+import type { AttachmentInfo } from '../../../types/generated/AttachmentInfo';
 import type { ChatChange } from '../../../types/generated/ChatChange';
 import type { ChatChanged } from '../../../types/generated/ChatChanged';
 import type { ChatTitleRequest } from '../../../types/generated/ChatTitleRequest';
 import type { CreateConversationRequest } from '../../../types/generated/CreateConversationRequest';
+import type { KeepPicture } from '../../../types/generated/KeepPicture';
 import type { UpdateConversationRequest } from '../../../types/generated/UpdateConversationRequest';
 
 // Re-export the constant for convenience
@@ -96,6 +98,18 @@ export async function changeConversation(
   change: ChatChange,
 ): Promise<ChatChanged> {
   return post<ChatChanged>(`/api/conversations/${conversationId}/changes`, change);
+}
+
+/**
+ * Keep a picture beside the one it was made from: `kept.image`, already in
+ * this machine's store, joins the tool row that carries `kept.from`, after
+ * the images that row has. The answer is the row's images, the newest last.
+ */
+export async function keepPicture(
+  conversationId: ConversationId,
+  kept: KeepPicture,
+): Promise<AttachmentInfo[]> {
+  return post<AttachmentInfo[]>(`/api/conversations/${conversationId}/pictures`, kept);
 }
 
 /**

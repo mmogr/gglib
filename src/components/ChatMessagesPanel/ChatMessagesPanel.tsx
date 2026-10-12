@@ -26,6 +26,7 @@ import type { MessageActionsContextValue, ModelChoice } from './components';
 import {
   useTitleGeneration,
   useMessageDeletion,
+  usePictureKeeping,
 } from './hooks';
 import { useSharedTicker } from './hooks/useSharedTicker';
 import { ThinkingTimingProvider } from './context/ThinkingTimingContext';
@@ -195,10 +196,20 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
     readOnly: source === 'far',
   });
 
+  // Fixing and redoing a drawn picture: here for the reason deletion is.
+  const pictures = usePictureKeeping({
+    threadRuntime,
+    activeConversationId,
+    activeConversation,
+    source,
+    models: draw?.models,
+    picked: draw?.picked,
+  });
+
   // Context value for message actions
   const messageActionsValue = useMemo<MessageActionsContextValue>(
-    () => ({ onDeleteMessage: initiateDelete, source }),
-    [initiateDelete, source]
+    () => ({ onDeleteMessage: initiateDelete, source, ...(pictures && { pictures }) }),
+    [initiateDelete, source, pictures]
   );
 
   // Stable components map (component references don't change)

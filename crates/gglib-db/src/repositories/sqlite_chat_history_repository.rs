@@ -5,10 +5,12 @@ use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, SqlitePool};
 
 use gglib_core::{
+    domain::attachment::{AttachmentId, AttachmentInfo},
     domain::branching::LineChat,
     domain::chat::{
         Conversation, ConversationUpdate, Message, MessageRole, NewConversation, NewMessage,
     },
+    ports::attachment_store::AttachmentError,
     ports::chat_history::{ChatHistoryError, ChatHistoryRepository},
 };
 
@@ -305,6 +307,46 @@ impl ChatHistoryRepository for SqliteChatHistoryRepository {
                 .map_err(|e| ChatHistoryError::Database(e.to_string()))?;
 
         Ok(row.get("count"))
+    }
+
+    async fn keep_picture(
+        &self,
+        conversation_id: i64,
+        from: &AttachmentId,
+        image: &AttachmentId,
+    ) -> Result<Vec<AttachmentInfo>, ChatHistoryError> {
+        let db = |e: sqlx::Error| ChatHistoryError::Database(e.to_string());
+        // Dropped before `commit`, the transaction rolls back.
+        let mut tx = self.pool.begin().await.map_err(db)?;
+        // A write first, as in `replace_from`: the transaction holds the
+        // write lock from its first statement.
+        let stamped =
+            sqlx::query("UPDATE chat_conversations SET updated_at = datetime('now') WHERE id = ?")
+                .bind(conversation_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(db)?;
+        if stamped.rows_affected() == 0 {
+            return Err(ChatHistoryError::ConversationNotFound(conversation_id));
+        }
+        let row: Option<i64> = sqlx::query_scalar(
+            "SELECT l.message_id FROM message_attachments l \
+             JOIN chat_messages m ON m.id = l.message_id \
+             WHERE m.conversation_id = ? AND m.role = 'tool' AND l.attachment_id = ? \
+             ORDER BY l.message_id DESC LIMIT 1",
+        )
+        .bind(conversation_id)
+        .bind(from.as_str())
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(db)?;
+        let Some(row) = row else {
+            return Err(AttachmentError::NotFound(from.clone()).into());
+        };
+        message_rows::link_after(&mut tx, row, image).await?;
+        let images = message_rows::images_of(&mut tx, row).await?;
+        tx.commit().await.map_err(db)?;
+        Ok(images)
     }
 }
 

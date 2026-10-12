@@ -5,6 +5,8 @@ export type {
   UseMessageDeletionResult,
 } from './useMessageDeletion';
 
+export { usePictureKeeping } from './usePictureKeeping';
+
 export { useTitleGeneration } from './useTitleGeneration';
 export type {
   UseTitleGenerationOptions,

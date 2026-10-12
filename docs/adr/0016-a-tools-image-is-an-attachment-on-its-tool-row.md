@@ -91,6 +91,12 @@ The daemon and the CLI save a reply through `rows_from_timed_frames`
 (`a_tool_row_carries_the_ids_of_the_images_its_result_made`). No other row
 gains the image, and the schema does not change.
 
+Amended on 2026-10-12: a tool row may gain an image its tool did not
+return. A picture a person has had drawn again from one on the row is kept
+on that row, after the images it has
+([ADR 0018, decision 21](0018-gglib-draws-with-stable-diffusion-cpp.md#21-a-picture-drawn-again-is-kept-beside-the-one-it-came-from)).
+It goes through the same intake and the same link.
+
 ### 4. No image item's bytes are in a result's text
 
 The result's text, which the model reads, the `tool_call_complete` frame

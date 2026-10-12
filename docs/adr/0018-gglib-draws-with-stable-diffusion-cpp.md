@@ -742,9 +742,58 @@ drawing tool, the versions of a picture in a chat, a redraw of a box around
 the mask at the model's full size, and edit models that take an instruction
 (FLUX.1 Kontext, Qwen-Image-Edit).
 
-- **No real model has drawn from a picture through gglib.** The renders
-  the log reads were `sd-cli`'s, at the pinned release, with gglib's files.
-  No test here runs a model.
+- ~~**No real model has drawn from a picture through gglib.**~~ One has,
+  once: Qwen-Image 2.1 redrew a masked hand through `gglib image`, and
+  every pixel that changed was within 16 pixels of the mask
+  ([log-0018, 2026-10-12](log-0018.md#2026-10-12-a-drawn-picture-is-fixed-or-redone-from-the-chat-page)).
+  The other renders the log reads were `sd-cli`'s. No test runs a model.
+
+Amended on 2026-10-12, by that run: point 5's "nine renders sampled
+`floor(steps x strength)`" is a reading of those nine and not the engine's
+rule. Asked for 27 steps at 0.75, `sd-server` sampled 21.
+
+### 21. A picture drawn again is kept beside the one it came from
+
+Decision 20 left a redrawn picture with whoever asked for it. On the chat
+page a person fixes or redoes a picture a reply's drawing tool made, and
+the result has to live in the chat.
+
+1. **It joins the tool row its source is on, last.** `POST
+   /api/conversations/{id}/pictures` takes `{from, image}`, two ids in this
+   machine's store, and links `image` to the latest tool row of the chat
+   that carries `from`, after the images that row has. The row then shows
+   its pictures oldest first. Decision 19 shows a model the last image of
+   the chat's last row that drew, so where the picture kept is on that row
+   the model is shown it, with no change there; a picture kept on an older
+   reply's row is not what the model is shown. A picture already on the row
+   is not linked twice.
+2. **In place, on no branch.** ADR 0017 branches a chat for a change that
+   would discard or alter a saved reply. This adds to one: the older
+   picture and the reply's words are as they were. For the same reason it
+   is not refused while a reply to the chat is being written.
+3. **The page draws, then keeps.** The page sends the picture and the mask
+   it painted to `/api/images/generations`, which knows nothing of chats;
+   the result is held by the page until a person presses Keep, and only
+   then stored (`POST /api/attachments`) and linked. Discard and Try again
+   store nothing. A Keep that fails leaves the picture with the page, to
+   be kept again, and the dialog does not close on a drawn picture except
+   by Keep or Discard.
+4. **The mask is painted on black, at the picture's own size.** The driver
+   reads a mask's colour and not its alpha, so a canvas left clear where
+   nothing was brushed would not read as "keep".
+5. **Only where the result can be kept.** The button is on a picture the
+   drawing tool made, in a saved chat of this machine, once its reply is a
+   saved row: until then there is no tool row to keep the result on. The
+   editor's image model starts at the one the chat chose, when the machine
+   can still draw with it. A far chat has no
+   drawing route to send its picture to, and offers none.
+
+Not built here: the same on the phone, and on the proxy for a chat the
+hub keeps.
+
+- **Nobody has used the brush with a real model.** The page's tests paint
+  no canvas (jsdom has none): they read the strokes handed to the painter
+  and the request the page sent to a scripted transport.
 
 ## Consequences
 

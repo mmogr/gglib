@@ -75,6 +75,52 @@ async fn link(
     Ok(())
 }
 
+/// Link `image` to message `message_id` after the images it has, unless it
+/// already carries it. [`AttachmentError::NotFound`] for an image the store
+/// lacks, as [`insert`] answers it.
+pub(super) async fn link_after(
+    tx: &mut SqliteConnection,
+    message_id: i64,
+    image: &AttachmentId,
+) -> Result<(), ChatHistoryError> {
+    let carried: Option<i64> = sqlx::query_scalar(
+        "SELECT position FROM message_attachments WHERE message_id = ? AND attachment_id = ?",
+    )
+    .bind(message_id)
+    .bind(image.as_str())
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| db(&e))?;
+    if carried.is_some() {
+        return Ok(());
+    }
+    let next: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(position), -1) + 1 FROM message_attachments WHERE message_id = ?",
+    )
+    .bind(message_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| db(&e))?;
+    link(tx, message_id, next, image).await
+}
+
+/// The images of message `message_id`, in order. No bytes are read.
+pub(super) async fn images_of(
+    tx: &mut SqliteConnection,
+    message_id: i64,
+) -> Result<Vec<AttachmentInfo>, ChatHistoryError> {
+    let rows = sqlx::query(
+        "SELECT a.id, a.mime, a.width, a.height FROM message_attachments l \
+         JOIN attachments a ON a.id = l.attachment_id \
+         WHERE l.message_id = ? ORDER BY l.position",
+    )
+    .bind(message_id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|e| db(&e))?;
+    Ok(rows.iter().filter_map(info_of).collect())
+}
+
 /// Stamp `conversation_id` as changed now.
 pub(super) async fn touch(
     tx: &mut SqliteConnection,

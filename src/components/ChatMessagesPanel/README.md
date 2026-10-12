@@ -42,6 +42,6 @@ On this machine's chats a question and a reply can each be edited, a reply regen
 |-----------|----------|
 | `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptSection`, `ChatStatusBanners`, `ComposerFooter`, `ConfirmDeleteModal`) and message rendering (`MessageBubbles`, `BranchSwitcher`, `BranchingContext`, `Unanswered`, `MarkdownMessageContent`, `ThinkingBlock`, `MessageActionsContext`) |
 | `context/` | `ThinkingTimingContext` — decoupled timer updates to avoid full list re-renders |
-| `hooks/` | `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration`, `useImageUrl`, `useContextReading` |
+| `hooks/` | `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration`, `useImageUrl`, `useContextReading`, `usePictureRedraw`, `usePictureKeeping` |
 
 <!-- module-docs:end -->

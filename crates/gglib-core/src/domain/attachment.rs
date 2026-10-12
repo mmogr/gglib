@@ -91,6 +91,24 @@ pub struct AttachmentInfo {
     pub height: u32,
 }
 
+/// A picture to keep beside the one it was made from.
+///
+/// What a client sends once a picture a tool drew has been drawn again, in
+/// part or whole, and the result stored. The newer picture joins the older
+/// one's tool row, after it, so the row's last image is the one last kept.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct KeepPicture {
+    /// The picture it was made from, by id: one a tool row of the chat
+    /// carries.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
+    pub from: AttachmentId,
+    /// The newer picture, by the id the store answered.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "string"))]
+    pub image: AttachmentId,
+}
+
 /// The answer to an upload: the stored image, and what it costs to send.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]

@@ -9,6 +9,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 
+use gglib_core::domain::attachment::{AttachmentInfo, KeepPicture};
 use gglib_core::domain::branching::{ChatChange, ChatChanged, ChatThread};
 use gglib_core::services::ChangeError;
 
@@ -38,4 +39,25 @@ pub(crate) async fn change(
     let busy = state.runs.live_on(id).is_some();
     let changed = state.core.chat_history().change(id, &change, busy).await?;
     Ok(Json(changed))
+}
+
+/// Keep a picture beside the one it was made from: the newer one, already
+/// in the store, joins the older one's tool row after it, and the answer is
+/// that row's images in order. In place, on no branch: the older picture
+/// and the reply's words are as they were. Where that row is the chat's
+/// last that drew, a chat model that reads images is shown its last image
+/// (ADR 0018, decision 19). Not refused while a reply is being written: it
+/// adds to a saved row and takes nothing from one.
+/// POST /api/conversations/:id/pictures
+pub(crate) async fn keep_picture(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(kept): Json<KeepPicture>,
+) -> Result<Json<Vec<AttachmentInfo>>, HttpError> {
+    let images = state
+        .core
+        .chat_history()
+        .keep_picture(id, &kept.from, &kept.image)
+        .await;
+    Ok(Json(images.map_err(ChangeError::from)?))
 }

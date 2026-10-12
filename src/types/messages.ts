@@ -103,6 +103,44 @@ export function toolCallImages(part: { artifact?: unknown }): readonly Attachmen
   return Array.isArray(images) ? (images as AttachmentInfo[]) : [];
 }
 
+/** The drawing tool's name, as a tool call carries it. */
+const DRAW_TOOL_NAME = 'builtin:generate_image';
+
+/**
+ * What a tool-call part of the drawing tool was asked to draw: its `prompt`
+ * argument. None for any other tool's call, or one with no prompt to read.
+ */
+function drawnPrompt(part: { toolName?: unknown; args?: unknown }): string | undefined {
+  if (part.toolName !== DRAW_TOOL_NAME) return undefined;
+  const prompt = (part.args as { prompt?: unknown } | null | undefined)?.prompt;
+  return typeof prompt === 'string' && prompt.trim() ? prompt : undefined;
+}
+
+/** One image a reply's tools made, with what it was drawn from when the drawing tool made it. */
+export interface ToolImage {
+  image: AttachmentInfo;
+  /** The drawing tool's prompt; absent for another tool's image, and for a reply that is not a saved row yet. */
+  prompt?: string;
+}
+
+/**
+ * The images a reply's tool calls made, in order. One the drawing tool made
+ * carries its prompt, which is what fixing or redoing it starts from, once
+ * the reply is a saved row (`metadata.custom.dbId`): a reply still being
+ * written, or written and not yet read back, has no tool row to keep a
+ * newer picture on, and carries none.
+ */
+export function replyImages(reply: { content: unknown; metadata?: unknown }): ToolImage[] {
+  const parts: readonly unknown[] = Array.isArray(reply.content) ? reply.content : [];
+  const saved = (reply.metadata as { custom?: { dbId?: unknown } } | undefined)?.custom?.dbId != null;
+  return parts
+    .filter((part) => (part as { type?: unknown }).type === 'tool-call')
+    .flatMap((part) => {
+      const prompt = saved ? drawnPrompt(part as { toolName?: unknown; args?: unknown }) : undefined;
+      return toolCallImages(part as { artifact?: unknown }).map((image) => ({ image, ...(prompt && { prompt }) }));
+    });
+}
+
 /**
  * Union of all content parts that may appear in a GglibMessage.
  *
