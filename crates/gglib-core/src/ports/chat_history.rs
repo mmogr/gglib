@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use super::attachment_store::AttachmentError;
+use crate::domain::attachment::{AttachmentId, AttachmentInfo};
 use crate::domain::branching::LineChat;
 use crate::domain::chat::{Conversation, ConversationUpdate, Message, NewConversation, NewMessage};
 
@@ -119,4 +120,20 @@ pub trait ChatHistoryRepository: Send + Sync {
     /// messages but system ones, oldest first, as the branch points read
     /// them. Empty when no conversation has that id.
     async fn lineage(&self, conversation_id: i64) -> Result<Vec<LineChat>, ChatHistoryError>;
+
+    /// Keep `image` as a newer picture beside `from`: link it to the latest
+    /// tool row of `conversation_id` that carries `from`, after the images
+    /// that row has, and answer the row's images in order. A row that
+    /// already carries `image` is left as it is.
+    ///
+    /// `ConversationNotFound` for no such conversation,
+    /// `Attachment(NotFound(from))` when none of its tool rows carries
+    /// `from`, and `Attachment(NotFound(image))` for an image that is not
+    /// stored: nothing is written.
+    async fn keep_picture(
+        &self,
+        conversation_id: i64,
+        from: &AttachmentId,
+        image: &AttachmentId,
+    ) -> Result<Vec<AttachmentInfo>, ChatHistoryError>;
 }

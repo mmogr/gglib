@@ -24,7 +24,7 @@ import { useRunPreviews } from '../context/RunPreviewsContext';
 import { ToolUsageBadge } from '../../ToolUsageBadge';
 import { ToolExecutionProgress } from '../../ToolExecutionProgress';
 import { extractReasoningText } from '../../../utils/messages';
-import { toolCallImages, type GglibMessageCustom } from '../../../types/messages';
+import { replyImages, type GglibMessageCustom } from '../../../types/messages';
 
 import { cn } from '../../../utils/cn';
 
@@ -90,9 +90,7 @@ export const AssistantMessageBubble: React.FC = () => {
 
   const isStreaming = timing?.currentStreamingAssistantMessageId === message.id;
   const isCurrentlyThinking = isStreaming && !!thinkingText && !contentText;
-  const toolImages = contentArray
-    .filter((part) => (part as { type?: unknown }).type === 'tool-call')
-    .flatMap((part) => toolCallImages(part as { artifact?: unknown }));
+  const madeImages = replyImages(message);
   const toolCallsRunning = contentArray.some(
     (part) => (part as { type?: unknown }).type === 'tool-call' && !('result' in (part as object)),
   );
@@ -165,7 +163,7 @@ export const AssistantMessageBubble: React.FC = () => {
                 </p>
               )}
             </div>
-            <ToolImages images={toolImages} />
+            <ToolImages images={madeImages} />
             <ActionBarPrimitive.Root className={ACTION_BAR}>
               <ActionBarPrimitive.Copy className={ACTION_BTN} title="Copy message" aria-label="Copy message">
                 <Icon icon={Copy} size={14} />

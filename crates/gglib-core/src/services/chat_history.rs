@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use crate::domain::attachment::{AttachmentId, AttachmentInfo};
 use crate::domain::branching::{
     self, ChatChange, ChatChanged, ChatThread, EDITED_KEY, Plan, Refused, Then,
 };
@@ -258,6 +259,23 @@ impl ChatHistoryService {
             answerable: branching::answerable(&messages).is_ok(),
             messages,
         })
+    }
+
+    /// Keep `image` as a newer picture beside `from` in conversation `id`
+    /// ([`ChatHistoryRepository::keep_picture`]), and answer the images of
+    /// the tool row that now carries both.
+    ///
+    /// # Errors
+    ///
+    /// As the repository's: no such conversation, no tool row of it that
+    /// carries `from`, or an image that is not stored. Nothing is written.
+    pub async fn keep_picture(
+        &self,
+        id: i64,
+        from: &AttachmentId,
+        image: &AttachmentId,
+    ) -> Result<Vec<AttachmentInfo>, ChatHistoryError> {
+        self.repo.keep_picture(id, from, image).await
     }
 
     async fn require(&self, id: i64) -> Result<(), ChatHistoryError> {

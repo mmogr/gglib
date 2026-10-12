@@ -62,6 +62,7 @@ pub(crate) struct UpdateConversationRequest {
 /// - `/api/conversations/{id}` - Get/update/delete conversation
 /// - `/api/conversations/{id}/thread` - A chat with its branch points
 /// - `/api/conversations/{id}/changes` - Edit, regenerate or branch a chat
+/// - `/api/conversations/{id}/pictures` - Keep a picture beside the one it was made from
 /// - `/api/messages/{id}` - Delete a message and those after it
 /// - `/api/chat` - Ask the model a chat runs on for the chat's title
 ///
@@ -95,6 +96,11 @@ pub(crate) fn chat_routes_no_prefix() -> Router<AppState> {
         // A chat read with its branch points, and changed (ADR 0017)
         .route("/conversations/{id}/thread", get(chat_changes::thread))
         .route("/conversations/{id}/changes", post(chat_changes::change))
+        // A picture drawn again, kept beside the one it was made from
+        .route(
+            "/conversations/{id}/pictures",
+            post(chat_changes::keep_picture),
+        )
         .route("/messages/{id}", delete(delete_message))
         // A chat's title, asked of the model it runs on
         .route("/chat", post(chat_title::generate))

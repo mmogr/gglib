@@ -284,3 +284,136 @@ async fn deleting_a_conversation_drops_every_link_of_its_messages() {
     assert_eq!(f.count("message_attachments").await, 0);
     assert_eq!(f.count("attachments").await, 1);
 }
+
+impl Fixture {
+    /// Save a `role` row carrying `images`, in another conversation when
+    /// `elsewhere` names one; its id.
+    async fn row(&self, role: MessageRole, images: &[&AttachmentInfo]) -> i64 {
+        let message = NewMessage {
+            role,
+            ..self.message("row", images)
+        };
+        self.repo.save_message(message).await.unwrap()
+    }
+
+    async fn images_of(&self, message: i64) -> Vec<AttachmentInfo> {
+        let messages = self.repo.get_messages(self.conversation).await.unwrap();
+        let row = messages.into_iter().find(|m| m.id == message).unwrap();
+        row.images
+    }
+}
+
+/// A picture kept beside the one it was made from joins that picture's tool
+/// row after the images it has, and a second one after the first: the row's
+/// last image is the one last kept. The answer is the row's images, and the
+/// conversation is stamped as changed.
+#[tokio::test]
+async fn a_kept_picture_joins_its_sources_tool_row_after_the_images_it_has() {
+    let f = fixture().await;
+    let (drawn, other, fixed, again) = (
+        f.image("drawn", 1).await,
+        f.image("other", 2).await,
+        f.image("fixed", 3).await,
+        f.image("again", 4).await,
+    );
+    let row = f.row(MessageRole::Tool, &[&drawn, &other]).await;
+    let stamped = f.stamp().await;
+
+    let kept = f.repo.keep_picture(f.conversation, &drawn.id, &fixed.id);
+    let expected = vec![drawn.clone(), other.clone(), fixed.clone()];
+    assert_eq!(kept.await.unwrap(), expected);
+    assert_eq!(f.images_of(row).await, expected);
+    assert_ne!(
+        f.updated_at().await,
+        stamped,
+        "the chat is stamped as changed"
+    );
+
+    // Made from the fixed one, it joins the same row, last.
+    let kept = f.repo.keep_picture(f.conversation, &fixed.id, &again.id);
+    assert_eq!(kept.await.unwrap().last(), Some(&again));
+    assert_eq!(f.images_of(row).await.len(), 4);
+}
+
+/// Kept twice, a picture is on its row once.
+#[tokio::test]
+async fn a_picture_kept_twice_is_on_its_row_once() {
+    let f = fixture().await;
+    let (drawn, fixed) = (f.image("drawn", 1).await, f.image("fixed", 2).await);
+    let row = f.row(MessageRole::Tool, &[&drawn]).await;
+    for _ in 0..2 {
+        let kept = f.repo.keep_picture(f.conversation, &drawn.id, &fixed.id);
+        assert_eq!(kept.await.unwrap(), vec![drawn.clone(), fixed.clone()]);
+    }
+    assert_eq!(f.images_of(row).await.len(), 2);
+    assert_eq!(f.count("message_attachments").await, 2);
+}
+
+/// Of two tool rows that carry the picture, the later one takes the newer
+/// picture; a person's own image, on a user row, is no picture to keep
+/// beside.
+#[tokio::test]
+async fn the_latest_tool_row_that_carries_the_picture_takes_the_newer_one() {
+    let f = fixture().await;
+    let (drawn, fixed, mine) = (
+        f.image("drawn", 1).await,
+        f.image("fixed", 2).await,
+        f.image("mine", 3).await,
+    );
+    let first = f.row(MessageRole::Tool, &[&drawn]).await;
+    let second = f.row(MessageRole::Tool, &[&drawn]).await;
+    f.row(MessageRole::User, &[&mine, &drawn]).await;
+
+    let kept = f.repo.keep_picture(f.conversation, &drawn.id, &fixed.id);
+    kept.await.unwrap();
+    assert_eq!(f.images_of(first).await, vec![drawn.clone()]);
+    assert_eq!(f.images_of(second).await, vec![drawn, fixed.clone()]);
+
+    let refused = f.repo.keep_picture(f.conversation, &mine.id, &fixed.id);
+    assert!(is_not_found(&refused.await.unwrap_err(), &mine.id));
+}
+
+/// Nothing is written for a chat that is not there, a picture no tool row
+/// of this chat carries (another chat's included), or a newer picture the
+/// store lacks.
+#[tokio::test]
+async fn a_picture_that_cannot_be_kept_writes_nothing() {
+    let f = fixture().await;
+    let (drawn, fixed, stray) = (
+        f.image("drawn", 1).await,
+        f.image("fixed", 2).await,
+        f.image("stray", 3).await,
+    );
+    f.row(MessageRole::Tool, &[&drawn]).await;
+    let other_chat = f
+        .repo
+        .create_conversation(NewConversation {
+            title: "Another".to_owned(),
+            model_id: None,
+            system_prompt: None,
+            settings: None,
+        })
+        .await
+        .unwrap();
+    let stamped = f.stamp().await;
+    let links = f.count("message_attachments").await;
+
+    let gone = f.repo.keep_picture(999, &drawn.id, &fixed.id).await;
+    assert!(matches!(
+        gone,
+        Err(ChatHistoryError::ConversationNotFound(999))
+    ));
+
+    let elsewhere = f.repo.keep_picture(other_chat, &drawn.id, &fixed.id).await;
+    assert!(is_not_found(&elsewhere.unwrap_err(), &drawn.id));
+
+    let unlinked = f.repo.keep_picture(f.conversation, &stray.id, &fixed.id);
+    assert!(is_not_found(&unlinked.await.unwrap_err(), &stray.id));
+
+    let missing = AttachmentId::of(b"never stored");
+    let unstored = f.repo.keep_picture(f.conversation, &drawn.id, &missing);
+    assert!(is_not_found(&unstored.await.unwrap_err(), &missing));
+
+    assert_eq!(f.count("message_attachments").await, links);
+    assert_eq!(f.updated_at().await, stamped, "no refusal stamped the chat");
+}

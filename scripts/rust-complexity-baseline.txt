@@ -112,7 +112,8 @@ crates/gglib-core/src/request_pipeline/truncation.rs 313
 crates/gglib-core/src/request_pipeline/truncation_tests.rs 443
 crates/gglib-core/src/request_pipeline/validate.rs 497
 crates/gglib-core/src/server_config.rs 715
-crates/gglib-core/src/services/app_core.rs 305
+crates/gglib-core/src/services/app_core.rs 313
+crates/gglib-core/src/services/chat_history.rs 318
 crates/gglib-core/src/services/drawing.rs 349
 crates/gglib-core/src/services/drawing_tests.rs 347
 crates/gglib-core/src/services/model_components_tests.rs 637
@@ -127,7 +128,8 @@ crates/gglib-core/src/settings_tests.rs 474
 crates/gglib-core/src/sse/parser.rs 781
 crates/gglib-core/src/utils/system/packages.rs 586
 crates/gglib-db/src/repositories/sqlite_benchmark_repository.rs 655
-crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 321
+crates/gglib-db/src/repositories/sqlite_chat_history_images_tests.rs 419
+crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 363
 crates/gglib-db/src/repositories/sqlite_chat_history_repository_tests.rs 322
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 354
 crates/gglib-db/src/repositories/sqlite_mcp_repository_tests.rs 377

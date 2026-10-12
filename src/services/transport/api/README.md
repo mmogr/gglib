@@ -25,7 +25,7 @@ Axum backend (HTTP response) → typed result
 | `client.ts` | HTTP client with auth injection, retry, and error normalization; `apiFetch` for a stream or a body that is not JSON |
 | `renew.ts` | A stream refused with a 401 renews the session's credential before it reconnects |
 | `daemonToken.ts` | The daemon's token from the link `gglib web` prints: stripped from the address bar, kept until the daemon next starts |
-| `chat.ts` | Conversations and messages, and a chat's title asked of its model (`POST /api/chat`) |
+| `chat.ts` | Conversations and messages, a chat's title asked of its model (`POST /api/chat`), and a picture kept beside the one it was made from (`POST /api/conversations/{id}/pictures`) |
 | `servers.ts` | llama.cpp server lifecycle and proxy |
 | `downloads.ts` | Download queue management |
 | `mcp.ts` | MCP server config, lifecycle and config test |
@@ -40,7 +40,7 @@ Axum backend (HTTP response) → typed result
 | `sse.ts` | `streamSse`: a POST whose reply is an event stream (llama install and update), handed to callbacks frame by frame |
 | `runs.ts` | Runs (`/api/runs`): start an agent run under a minted id, list, cancel, and read its events from any point |
 | `farChats.ts` | The far machine's chats and runs (`/api/remote/chats`, `/api/remote/runs`), forwarded by this machine's daemon: list, open, add a turn of text and images (by the ids the far store answered) that says the chat's Thinking choice only when it changes it and `draw` only when sent with Draw pressed, with `image_model` beside it only when one was chosen, and read, list and cancel its runs |
-| `images.ts` | Whether a message sent with Draw pressed can draw, and why not (`/api/images/drawing`, told whether the chat's model is the paired machine's and whether it calls tools; the far machine's answer at `/api/remote/images/drawing` for a far chat), with that machine's image models; either is asked about a chosen one with `image_model` |
+| `images.ts` | Whether a message sent with Draw pressed can draw, and why not (`/api/images/drawing`, told whether the chat's model is the paired machine's and whether it calls tools; the far machine's answer at `/api/remote/images/drawing` for a far chat), with that machine's image models; either is asked about a chosen one with `image_model`. Also a picture drawn again from itself (`redrawPicture`): `/api/images/generations` sent the picture, a strength and a mask, read as the stream it answers |
 | `attachments.ts` | The image stores (`/api/attachments`, and the far machine's at `/api/remote/attachments` for a far chat): upload an image as its raw bytes, and read one's bytes back with the page's credential |
 | `farModels.ts` | The paired machine's models (`/api/remote/models`), read by this machine's daemon: the list with that machine and what may be done there, one model by its id there, and a load |
 | `version.ts` | Which build of gglib the daemon is running |

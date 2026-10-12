@@ -249,6 +249,14 @@ mod tests {
         ) -> Result<Vec<crate::domain::branching::LineChat>, ChatHistoryError> {
             Ok(vec![])
         }
+        async fn keep_picture(
+            &self,
+            _conversation_id: i64,
+            _from: &crate::domain::attachment::AttachmentId,
+            _image: &crate::domain::attachment::AttachmentId,
+        ) -> Result<Vec<crate::domain::attachment::AttachmentInfo>, ChatHistoryError> {
+            Ok(vec![])
+        }
     }
 
     struct MockAttachmentStore;

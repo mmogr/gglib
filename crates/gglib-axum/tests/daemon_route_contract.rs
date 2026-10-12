@@ -213,6 +213,7 @@ const WITHOUT_A_CLIENT: &[(&str, &str)] = &[
 const BESIDE_THEM: &[(&[&str], &str)] = &[
     (&["GET"], "/api/conversations/1/thread"),
     (&["POST"], "/api/conversations/1/changes"),
+    (&["POST"], "/api/conversations/1/pictures"),
     (&["DELETE"], "/api/messages/1"),
     (&["GET"], "/api/benchmark/runs"),
     (&["GET"], "/api/models/1/agentic-history"),
