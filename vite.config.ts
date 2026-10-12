@@ -95,6 +95,9 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       setupFiles: ['./tests/ts/setup.ts'],
       include: ['tests/ts/**/*.test.{ts,tsx}'],
+      // Vitest's five seconds is the wait in tests/ts/setup.ts, so a test of
+      // several steps gets room for more than one slow wait.
+      testTimeout: 20000,
       coverage: {
         provider: 'v8',
         reporter: ['text', 'json', 'json-summary', 'html'],

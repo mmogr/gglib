@@ -4,10 +4,17 @@
  * This file runs before each test file and sets up:
  * - DOM testing utilities from @testing-library/jest-dom
  * - Tauri API mocks for testing components that use Tauri
+ * - A longer wait for `findBy*` and `waitFor`
  */
 
 import '@testing-library/jest-dom';
+import { configure } from '@testing-library/react';
 import { vi } from 'vitest';
+
+// Testing Library gives up after one second by default. A chat page mounted
+// under coverage on a CI runner has taken longer than that to show its
+// buttons, so the wait is five seconds; a passing test is no slower.
+configure({ asyncUtilTimeout: 5000 });
 
 // Mock Tauri's invoke API
 const mockInvoke = vi.fn();
