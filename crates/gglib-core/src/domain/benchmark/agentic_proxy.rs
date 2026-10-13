@@ -14,9 +14,9 @@
 //! [`EvalArm::RawAuto`]: the same requests, sent straight to llama-server.
 //!
 //! The delta between them is everything the proxy does to those requests and
-//! their answers: its request pipeline (per-model sampling among it), repair,
-//! the loop guard and response normalisation, together. It does not say which
-//! of them moved a score. The repair counts in [`ProxyArms::defects`] say
+//! their answers: its request pipeline (per-model sampling and the thinking
+//! policy among it), repair, the loop guard and response normalisation,
+//! together. It does not say which of them moved a score. The repair counts in [`ProxyArms::defects`] say
 //! whether repair did anything at all.
 //!
 //! Neither is compared with the raw or gglib arm. Each of those pairs changes
@@ -32,7 +32,7 @@ use super::super::tune::result::TuneTaskResult;
 use super::EvalArm;
 use super::{AgenticEvalReport, ArmDelta, ArmScores, PairedEffect};
 use crate::domain::defect_counts::ModelDefectCounts;
-use crate::settings::LoopGuardMode;
+use crate::settings::{AgenticThinking, LoopGuardMode};
 
 /// The proxy arm and its raw-auto pair, when the eval ran them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,9 +63,11 @@ pub struct ProxyArms {
     /// judge broke its schema. A call whose schema it cannot judge is forwarded without a
     /// count here.
     pub defects: ModelDefectCounts,
-    /// Two of the settings the proxy ran under. The others it was given are
-    /// fixed and not recorded: client sampling trusted, so each run's seed
-    /// reaches llama-server, and no global sampling defaults.
+    /// Three of the settings the proxy ran under. The others it was given
+    /// are fixed and not recorded: client sampling trusted, so each run's
+    /// seed reaches llama-server, and no global sampling defaults. Every
+    /// setting it was not given is unset, so the proxy runs it at its
+    /// default, the agentic temperature ceiling among them.
     pub settings: ProxyArmSettings,
     /// Per-task drill-down, one entry per suite task, in suite order.
     pub tasks: Vec<ProxyTaskRuns>,
@@ -105,10 +107,10 @@ impl ProxyArms {
     }
 }
 
-/// Two of the settings the in-process proxy ran under.
+/// Three of the settings the in-process proxy ran under.
 ///
 /// The eval fixes the proxy's settings rather than reading this machine's, so
-/// a reading means the same on any machine. These two are recorded because
+/// a reading means the same on any machine. These three are recorded because
 /// they decide what the pair can show. The rest are fixed and listed at
 /// [`ProxyArms::settings`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,6 +124,15 @@ pub struct ProxyArmSettings {
     pub tool_call_repair: bool,
     /// What the loop guard did with a tripped conversation.
     pub loop_guard_mode: LoopGuardMode,
+    /// The thinking policy the proxy applied to each turn, which carries
+    /// tools: it decides how much the proxy arm thinks where the raw-auto arm
+    /// thinks as the model does ([ADR 0019]). `None`, and absent on the
+    /// wire, in a report written before this was recorded.
+    ///
+    /// [ADR 0019]: https://github.com/mmogr/gglib/blob/main/docs/adr/0019-a-tool-turn-acts.md
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agentic_thinking: Option<AgenticThinking>,
 }
 
 /// One task's per-seed runs under the two arms, in seed order.

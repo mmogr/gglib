@@ -7,6 +7,7 @@ import { Textarea } from '../../ui/Textarea';
 import { InferenceParametersForm } from '../../InferenceParametersForm';
 import type { SparseInferenceConfig } from '../../../types';
 import type { AgentGuardSettingsValues } from '../useAgentGuardSettings';
+import type { AgenticThinking } from '../../../types/generated/AgenticThinking';
 import type { LoopGuardMode } from '../../../types/generated/LoopGuardMode';
 import { Label } from '../../primitives';
 import { MAX_STAGNATION_STEPS, MAX_TOOL_ITERATIONS } from '../../../constants/settingsDefaults';
@@ -176,7 +177,46 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
           device, and in <code className="font-mono">gglib chat</code> and{' '}
           <code className="font-mono">gglib q</code>. A chat with a paired
           machine&apos;s model does not follow it: that machine&apos;s settings apply there.
+          Turning this off also switches off the thinking policy below.
         </ToggleField>
+
+        <SettingField
+          id="agentic-thinking-input"
+          label="Thinking on tool turns, on the proxy endpoint"
+          description={
+            <>
+              How much a request that carries tools may think. The proxy sets a reasoning
+              budget only where nobody chose one: a client&apos;s own{' '}
+              <code className="font-mono">reasoning_budget_tokens</code> (
+              <code className="font-mono">-1</code> for the model&apos;s default), the
+              proxy&apos;s <code className="font-mono">--reasoning-budget-tokens</code> flag, a
+              profile, a budget set on the model by hand or measured for it, and the global
+              default all stand; one gglib detected or the model&apos;s author published is
+              replaced. A reasoning effort chosen in a profile, on the model, globally or by the
+              proxy&apos;s flag stands the same way, and a client&apos;s does while client
+              sampling is trusted. A budget does nothing on a model that does not think, and this
+              setting does nothing while the cap above is off. Chats here and on a paired device
+              do not follow this: each has its own Thinking switch.
+            </>
+          }
+        >
+          <Select
+            id="agentic-thinking-input"
+            aria-describedby={settingDescriptionId('agentic-thinking-input')}
+            value={agentGuards.agenticThinking}
+            onChange={(event) =>
+              setAgentGuardSetting('agenticThinking', event.target.value as AgenticThinking)
+            }
+            disabled={saving}
+          >
+            <option value="when-asked">
+              When asked — think after the user&apos;s message, act after a tool result (default)
+            </option>
+            <option value="off">Off — no thinking on any turn that carries tools</option>
+            <option value="brief">Brief — up to 512 tokens of thinking on such a turn</option>
+            <option value="default">Unchanged — gglib sets no budget</option>
+          </Select>
+        </SettingField>
 
         <ToggleField
           id="tool-call-repair-input"

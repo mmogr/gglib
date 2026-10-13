@@ -599,6 +599,7 @@ mod tests {
             floor: FloorClass::Default,
             agentic_turn: false,
             agentic_ceiling_applied: None,
+            agentic_budget_applied: None,
             client_fields_rejected: Vec::new(),
             client_fields_discarded: Vec::new(),
             applied: true,

@@ -7,7 +7,7 @@
 
 use clap::{Args, ValueEnum};
 
-use gglib_core::LoopGuardMode;
+use gglib_core::{AgenticThinking, LoopGuardMode};
 
 /// The CLI's mirror of [`LoopGuardMode`].
 ///
@@ -32,6 +32,32 @@ impl From<LoopGuardModeArg> for LoopGuardMode {
             LoopGuardModeArg::Off => Self::Off,
             LoopGuardModeArg::Note => Self::Note,
             LoopGuardModeArg::Refuse => Self::Refuse,
+        }
+    }
+}
+
+/// The CLI's mirror of [`AgenticThinking`], for the reason given at
+/// [`LoopGuardModeArg`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum AgenticThinkingArg {
+    /// Change nothing: a turn thinks as the model and its sampling have it.
+    Default,
+    /// A reasoning budget of 0 on every turn that carries tools.
+    Off,
+    /// A budget of 512 tokens on every turn that carries tools.
+    Brief,
+    /// A budget of 0 on a turn that carries tools, unless its last message
+    /// is the user's.
+    WhenAsked,
+}
+
+impl From<AgenticThinkingArg> for AgenticThinking {
+    fn from(arg: AgenticThinkingArg) -> Self {
+        match arg {
+            AgenticThinkingArg::Default => Self::Default,
+            AgenticThinkingArg::Off => Self::Off,
+            AgenticThinkingArg::Brief => Self::Brief,
+            AgenticThinkingArg::WhenAsked => Self::WhenAsked,
         }
     }
 }
@@ -120,9 +146,29 @@ pub struct SettingsSetArgs {
     /// These do not read it, and are capped whatever it says: a chat with a
     /// `--port` server the library does not know, `gglib benchmark tune`,
     /// the pipeline arms of `gglib benchmark agentic`, and a chat with a
-    /// paired machine's model as it leaves this machine.
+    /// paired machine's model as it leaves this machine. Setting this false
+    /// also switches off --agentic-thinking, as `GGLIB_DISABLE_AGENTIC_SAMPLING`
+    /// does.
     #[arg(long)]
     pub agentic_sampling: Option<bool>,
+    /// How much a request that carries tools may think, on the proxy.
+    /// `when-asked` (the default) sends a reasoning budget of 0 unless the
+    /// request's last message is the user's, so the model acts on a tool
+    /// result at once and still thinks when a person has just spoken. `off`
+    /// sends 0 on every such request, `brief` sends 512 tokens, and
+    /// `default` changes nothing. Only a budget nobody chose is set: a
+    /// client's own `reasoning_budget_tokens` (-1 for the model's default),
+    /// the proxy's --reasoning-budget-tokens flag, a profile, a budget set on
+    /// the model by hand or measured for it, and a global default all stand;
+    /// one gglib detected or the model's author published is replaced. A
+    /// reasoning effort chosen in one of those places stands the same way, a
+    /// client's only while --trust-client-sampling is true. A budget does
+    /// nothing on a model that does not think. Inert
+    /// while --agentic-sampling is false or `GGLIB_DISABLE_AGENTIC_SAMPLING` is
+    /// set. `gglib chat`, `gglib q`, the chat page and a paired device do
+    /// not follow this: each chat has its own Thinking switch.
+    #[arg(long, value_enum)]
+    pub agentic_thinking: Option<AgenticThinkingArg>,
     /// Re-issue a malformed tool call under a grammar: `tool_choice: "required"`, or gglib's own.
     /// Enabled by default: a call that fails schema validation is
     /// attempted once more, with llama.cpp's own grammar made non-lazy or,
@@ -162,10 +208,57 @@ pub struct SettingsSetArgs {
 
 #[cfg(test)]
 mod tests {
-    use super::{LoopGuardModeArg, SettingsSetArgs};
+    use super::{AgenticThinkingArg, LoopGuardModeArg, SettingsSetArgs};
     use clap::{Args, Command, FromArgMatches};
     use gglib_core::settings::{CONTEXT_SIZE_RANGE, DOWNLOAD_QUEUE_RANGE, MIN_PORT};
-    use gglib_core::{LoopGuardMode, MAX_ITERATIONS_CEILING};
+    use gglib_core::{AgenticThinking, LoopGuardMode, MAX_ITERATIONS_CEILING};
+
+    /// Per variant, as for the loop guard below: a mis-mapping compiles.
+    #[test]
+    fn every_cli_thinking_policy_maps_to_its_own_domain_policy() {
+        assert_eq!(
+            AgenticThinking::from(AgenticThinkingArg::Default),
+            AgenticThinking::Default
+        );
+        assert_eq!(
+            AgenticThinking::from(AgenticThinkingArg::Off),
+            AgenticThinking::Off
+        );
+        assert_eq!(
+            AgenticThinking::from(AgenticThinkingArg::Brief),
+            AgenticThinking::Brief
+        );
+        assert_eq!(
+            AgenticThinking::from(AgenticThinkingArg::WhenAsked),
+            AgenticThinking::WhenAsked
+        );
+    }
+
+    /// The flag parses the four spellings a person types, and nothing else.
+    #[test]
+    fn the_thinking_flag_accepts_exactly_its_four_values() {
+        for (typed, expected) in [
+            ("default", AgenticThinkingArg::Default),
+            ("off", AgenticThinkingArg::Off),
+            ("brief", AgenticThinkingArg::Brief),
+            ("when-asked", AgenticThinkingArg::WhenAsked),
+        ] {
+            let m = SettingsSetArgs::augment_args(Command::new("t"))
+                .try_get_matches_from(["t", "--agentic-thinking", typed])
+                .unwrap_or_else(|e| panic!("--agentic-thinking {typed} must parse: {e}"));
+            let args = SettingsSetArgs::from_arg_matches(&m).expect("args");
+            assert_eq!(args.agentic_thinking, Some(expected), "for {typed}");
+        }
+
+        for refused in ["when_asked", "whenasked", "on", "true"] {
+            assert!(
+                SettingsSetArgs::augment_args(Command::new("t"))
+                    .try_get_matches_from(["t", "--agentic-thinking", refused])
+                    .is_err(),
+                "{refused} must be refused, not silently defaulted"
+            );
+        }
+    }
 
     /// Every variant maps to its own, and the mapping is the only place the
     /// two enums meet.

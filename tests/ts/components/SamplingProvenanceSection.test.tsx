@@ -155,6 +155,12 @@ describe('describeSource', () => {
     expect(describeSource({ param: 'temperature', kind: 'unset' }, ctx)).toBe('unset by design');
   });
 
+  it("names a budget the proxy's thinking policy set, and no rung", () => {
+    expect(describeSource({ param: 'reasoningBudgetTokens', kind: 'agenticTurn' }, ctx)).toBe(
+      "set by the proxy's thinking policy",
+    );
+  });
+
   it('names the profile rung without a name when none was selected', () => {
     expect(
       describeSource({ param: 'temperature', kind: 'layer', layer: 'profile' }, {

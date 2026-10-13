@@ -653,6 +653,23 @@ fn the_table_agrees_with_the_suppression_it_reports() {
     );
 }
 
+/// The explanation is of stored configuration, with no request in hand, so
+/// the proxy's thinking policy never shows in it, whatever the settings store.
+#[test]
+fn a_stored_thinking_policy_sets_nothing_in_the_explanation() {
+    let settings = Settings {
+        agentic_thinking: Some(gglib_core::AgenticThinking::Off),
+        ..Settings::with_defaults()
+    };
+    let dto = explain(&model(), &settings, None);
+
+    assert_eq!(dto.resolved.reasoning_budget_tokens, None);
+    assert_eq!(
+        source_for(&dto, "reasoningBudgetTokens").kind,
+        ProvenanceKindDto::Unset
+    );
+}
+
 /// The budget is enforced by llama.cpp's own sampler, not by a template, so it
 /// survives on exactly the model where the effort does not. A client that
 /// greyed out both controls on a `no` would be wrong about the half that works.
@@ -728,4 +745,19 @@ fn the_suppression_is_absent_from_the_payload_unless_it_happened() {
     assert!(loud.contains(r#""level":"high""#), "{loud}");
     assert!(loud.contains(r#""layer":"profile""#), "{loud}");
     assert!(loud.contains(r#""kind":"suppressedByTemplate""#), "{loud}");
+}
+
+/// The one arm no explanation reaches: a budget the proxy's thinking policy
+/// set keeps its own kind on the wire and names no rung.
+#[test]
+fn a_budget_the_thinking_policy_set_keeps_its_kind_and_names_no_rung() {
+    let dto = provenance("reasoning_budget_tokens", ParamSource::AgenticTurn);
+
+    assert_eq!(dto.param, "reasoningBudgetTokens");
+    assert_eq!(dto.kind, ProvenanceKindDto::AgenticTurn);
+    assert_eq!(dto.layer, None);
+    assert_eq!(
+        serde_json::to_value(&dto).unwrap(),
+        json!({"param": "reasoningBudgetTokens", "kind": "agenticTurn"})
+    );
 }

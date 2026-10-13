@@ -120,6 +120,33 @@ mod update_settings_request_tests {
         }
     }
 
+    /// The same hop for the two agentic settings: what is stored is what the
+    /// settings page is shown, and a value dropped here would open the page
+    /// on "not stored" whatever the file holds.
+    #[test]
+    fn the_stored_agentic_settings_reach_the_settings_ui() {
+        use gglib_core::{AgenticThinking, Settings};
+
+        for policy in [
+            None,
+            Some(AgenticThinking::Default),
+            Some(AgenticThinking::Off),
+            Some(AgenticThinking::Brief),
+            Some(AgenticThinking::WhenAsked),
+        ] {
+            for switch in [None, Some(false), Some(true)] {
+                let settings = Settings {
+                    agentic_thinking: policy,
+                    agentic_sampling: switch,
+                    ..Settings::with_defaults()
+                };
+                let dto = super::super::AppSettings::from(settings);
+                assert_eq!(dto.agentic_thinking, policy, "for {policy:?}");
+                assert_eq!(dto.agentic_sampling, switch, "for {switch:?}");
+            }
+        }
+    }
+
     /// The write hop: what the GUI select sends is what the domain applies.
     ///
     /// This is the line the whole Tier 1 claim rests on — the select's only

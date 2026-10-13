@@ -38,9 +38,11 @@ does either.
 - [`mod@resolve`] — [`resolve()`], the single catalog round-trip that produces one,
   and [`resolve_summary()`], the same lookup for a caller that refuses a model
   the catalog does not hold rather than degrade it.
-- [`request_shape`] — [`carries_tools()`], the one thing the stages need to know
-  about the *request* rather than the model: whether it is asking for a tool
-  call. Read by two stages for different purposes, so it lives in neither.
+- [`request_shape`] — what the stages need to know about the *request* rather
+  than the model: [`carries_tools()`], whether it is asking for a tool call,
+  read by two stages for different purposes, so it lives in neither; and
+  [`LastSpeaker`], who wrote the last message, which [`apply()`] reads
+  before any stage changes one; and [`TurnShape`], the two held together.
 - [`content`] — [`text_len()`] and [`for_each_text_mut()`], the two shapes a
   message's `content` takes (a string, or an array of parts), read and
   rewritten in one place for every stage that handles message text; and
@@ -87,8 +89,13 @@ does either.
   request's serialized length, with each image counted at its estimated
   tokens in place of the length of its URL.
 - [`sampling`] — [`resolve_sampling()`] and [`SamplingLayers`], stages 4–5: the
-  sampling hierarchy, the floor selection (neutral / reasoning / tool-call), and
-  the `cache_prompt` pin. Everything that touches top-level keys.
+  sampling hierarchy, the floor selection (neutral / reasoning / tool-call), the
+  two adjustments a turn that carries tools gets after the fold (the
+  temperature ceiling, and the reasoning budget a caller's
+  `AgenticThinking` policy sets,
+  [ADR 0019](https://github.com/mmogr/gglib/blob/main/docs/adr/0019-a-tool-turn-acts.md)),
+  and the `cache_prompt` pin.
+  Everything that touches top-level keys.
 - [`effort_gate`] — stage 5b: deleting a resolved `reasoning_effort` the
   model's observed template does not read, and writing down what was deleted so
   a surface can say whose setting went nowhere.

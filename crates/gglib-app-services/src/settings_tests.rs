@@ -171,6 +171,7 @@ fn profiles_use_camel_case_on_the_wire() {
         tool_call_repair: None,
         mcp_drawing: None,
         agentic_sampling: Some(false),
+        agentic_thinking: Some(gglib_core::AgenticThinking::WhenAsked),
         proxy_autostart: None,
         close_to_tray: None,
         start_at_login: None,
@@ -187,6 +188,7 @@ fn profiles_use_camel_case_on_the_wire() {
     // Wire visibility is the point of adding agentic_sampling to the
     // response DTO — a toggle that saves but cannot read back resets.
     assert_eq!(json["agenticSampling"], false);
+    assert_eq!(json["agenticThinking"], "when-asked");
 
     // And the update request accepts the same shape back.
     let request: UpdateSettingsRequest = serde_json::from_value(serde_json::json!({
@@ -201,6 +203,35 @@ fn profiles_use_camel_case_on_the_wire() {
     let parsed = request.inference_profiles.flatten().expect("present");
     assert_eq!(parsed[0].name, "chat");
     assert!(!parsed[0].list_in_models);
+}
+
+/// The update request tells a policy to store from a `null` that clears it
+/// and from a key left out, and each reaches the core update as itself.
+#[test]
+fn the_thinking_policy_is_set_cleared_or_left_alone_on_the_wire() {
+    use gglib_core::{AgenticThinking, SettingsUpdate};
+    let update = |body: serde_json::Value| -> SettingsUpdate {
+        serde_json::from_value::<UpdateSettingsRequest>(body)
+            .expect("deserializes")
+            .into()
+    };
+
+    assert_eq!(
+        update(serde_json::json!({"agenticThinking": "brief"})).agentic_thinking,
+        Some(Some(AgenticThinking::Brief))
+    );
+    assert_eq!(
+        update(serde_json::json!({"agenticThinking": null})).agentic_thinking,
+        Some(None)
+    );
+    assert_eq!(update(serde_json::json!({})).agentic_thinking, None);
+    assert!(
+        serde_json::from_value::<UpdateSettingsRequest>(
+            serde_json::json!({"agenticThinking": "whenAsked"})
+        )
+        .is_err(),
+        "the wire spelling is kebab-case"
+    );
 }
 
 /// `proxyLoopDetection` was the loop guard's switch before `loopGuardMode`,

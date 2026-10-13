@@ -1,16 +1,20 @@
 //! What kind of turn a request body represents.
 //!
 //! The pipeline's shaping stages are otherwise built entirely from facts about
-//! the *model* ([`ModelContext`](super::ModelContext)). This module holds the
-//! one thing they need to know about the *request*: whether it is asking the
-//! model to emit a tool call.
+//! the *model* ([`ModelContext`](super::ModelContext)). This module holds what
+//! they need to know about the *request*: whether it is asking the model to
+//! emit a tool call ([`carries_tools`]), and who spoke last
+//! ([`LastSpeaker`]). [`TurnShape`] holds the two together. They are not read
+//! at the same moment: the pipeline reads who spoke last before its first
+//! stage and the tools after the stage that strips them
+//! ([`apply`](mod@super::apply)).
 //!
 //! It lives here, rather than inside the stage that first needed it, because
-//! two stages read the same signal for different purposes —
-//! [`sampling`](super::sampling) caps the temperature from it, and
-//! [`constrain`](super::constrain) decides whether to originate a grammar —
-//! and a second copy of "does this request carry tools" would eventually
-//! answer differently from the first.
+//! two stages read the tools signal for different purposes —
+//! [`sampling`](super::sampling) caps the temperature and sets a reasoning
+//! budget from it, and [`constrain`](super::constrain) decides whether to
+//! originate a grammar — and a second copy of "does this request carry tools"
+//! would eventually answer differently from the first.
 
 use serde_json::Value;
 
@@ -57,6 +61,62 @@ pub fn carries_tools(body: &Value) -> bool {
         .is_some_and(|tools| !tools.is_empty())
 }
 
+/// Who wrote the last message of a request.
+///
+/// # This reads a role, and nothing else
+///
+/// It is the `role` string of the last element of `messages`. It cannot tell
+/// a person's message from text a client appended under the `user` role, for
+/// example a reminder placed after a batch of tool results, and it cannot
+/// tell a tool result from one a client sent as a `user` message. Both read
+/// as written. [ADR 0019] records that limit.
+///
+/// The pipeline reads it from the request as the client sent it, before any
+/// stage runs, so a `system` message a later stage rewrites as a `user` one
+/// is still [`Work`](Self::Work).
+///
+/// [ADR 0019]: https://github.com/mmogr/gglib/blob/main/docs/adr/0019-a-tool-turn-acts.md
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LastSpeaker {
+    /// The last message has the role `user`.
+    Person,
+    /// Anything else: a tool result, an assistant turn, a system message, a
+    /// message with no readable role, or no message at all.
+    Work,
+}
+
+impl LastSpeaker {
+    /// Read it from a request body.
+    ///
+    /// A body with no `messages` array, or an empty one, is
+    /// [`Work`](Self::Work): only a last message whose role is `user` is the
+    /// person's.
+    #[must_use]
+    pub fn of(body: &Value) -> Self {
+        let last_role = body
+            .get("messages")
+            .and_then(Value::as_array)
+            .and_then(|messages| messages.last())
+            .and_then(|message| message.get("role"))
+            .and_then(Value::as_str);
+        if last_role == Some("user") {
+            Self::Person
+        } else {
+            Self::Work
+        }
+    }
+}
+
+/// The two facts about a request the sampling stage decides by, taken
+/// together. That stage assembles it: there is no one body both are read from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TurnShape {
+    /// [`carries_tools`], with every limit written there.
+    pub carries_tools: bool,
+    /// Who wrote the last message.
+    pub last_speaker: LastSpeaker,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -95,6 +155,50 @@ mod tests {
             json!([1, 2, 3]),
         ] {
             assert!(!carries_tools(&body), "{body} should not read as tools");
+        }
+    }
+
+    #[test]
+    fn only_a_last_message_from_the_user_is_the_persons() {
+        let last = |role: &str| {
+            json!({"messages": [
+                {"role": "system", "content": "s"},
+                {"role": "user", "content": "first"},
+                {"role": role, "content": "last"},
+            ]})
+        };
+        assert_eq!(LastSpeaker::of(&last("user")), LastSpeaker::Person);
+        for role in ["tool", "assistant", "system", "developer", "User"] {
+            assert_eq!(LastSpeaker::of(&last(role)), LastSpeaker::Work, "{role}");
+        }
+    }
+
+    /// The last message decides, whoever spoke before it.
+    #[test]
+    fn an_earlier_user_message_does_not_make_a_tool_result_the_persons() {
+        let body = json!({"messages": [
+            {"role": "user", "content": "go"},
+            {"role": "assistant", "content": null, "tool_calls": []},
+            {"role": "tool", "tool_call_id": "c1", "content": "done"},
+        ]});
+        assert_eq!(LastSpeaker::of(&body), LastSpeaker::Work);
+    }
+
+    #[test]
+    fn no_readable_last_message_is_not_the_persons() {
+        for body in [
+            json!({}),
+            json!({"messages": []}),
+            json!({"messages": null}),
+            json!({"messages": "user"}),
+            json!({"messages": [{"content": "no role"}]}),
+            json!({"messages": [{"role": 7}]}),
+            json!({"messages": [{"role": null}]}),
+            json!({"messages": [null]}),
+            json!({"messages": ["user"]}),
+            json!([{"role": "user"}]),
+        ] {
+            assert_eq!(LastSpeaker::of(&body), LastSpeaker::Work, "{body}");
         }
     }
 }

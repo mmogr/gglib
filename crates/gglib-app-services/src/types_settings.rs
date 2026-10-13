@@ -4,7 +4,7 @@
 //! `types`. `scripts/check_settings_surfaces.sh` reads this file by name for
 //! the `double_option` guard.
 
-use gglib_core::LoopGuardMode;
+use gglib_core::{AgenticThinking, LoopGuardMode};
 use serde::{Deserialize, Serialize};
 
 /// Application settings for the settings UI.
@@ -54,10 +54,14 @@ pub struct AppSettings {
     /// Whether `/mcp` offers MCP clients the drawing tool. Absent means off.
     pub mcp_drawing: Option<bool>,
     /// Whether structured-output turns get their temperature capped when no
-    /// human chose one. Absent means on (see `gglib_core::Settings`). Read
+    /// human chose one, and whether `agentic_thinking` below acts at all.
+    /// Absent means on (see `gglib_core::Settings`). Read
     /// back here for the GUI's toggle: a toggle that saves but cannot read
     /// back silently resets on every reopen.
     pub agentic_sampling: Option<bool>,
+    /// The proxy's thinking policy for a turn that carries tools. Absent
+    /// means `when-asked` (see `gglib_core::Settings::agentic_thinking`).
+    pub agentic_thinking: Option<AgenticThinking>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
     pub proxy_autostart: Option<bool>,
     pub close_to_tray: Option<bool>,
@@ -104,6 +108,7 @@ impl From<gglib_core::Settings> for AppSettings {
             tool_call_repair: settings.tool_call_repair,
             mcp_drawing: settings.mcp_drawing,
             agentic_sampling: settings.agentic_sampling,
+            agentic_thinking: settings.agentic_thinking,
             proxy_autostart: settings.proxy_autostart,
             close_to_tray: settings.close_to_tray,
             start_at_login: settings.start_at_login,
@@ -223,6 +228,15 @@ pub struct UpdateSettingsRequest {
         with = "serde_with::rust::double_option"
     )]
     pub agentic_sampling: Option<Option<bool>>,
+    // The proxy's thinking policy; explicit `null` restores `when-asked`
+    // (see `gglib_core::Settings::agentic_thinking`). `as`, for the reason
+    // given at `loop_guard_mode`.
+    #[cfg_attr(
+        feature = "ts-bindings",
+        ts(as = "Option<Option<AgenticThinking>>", optional)
+    )]
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub agentic_thinking: Option<Option<AgenticThinking>>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
     #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
@@ -260,6 +274,7 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             tool_call_repair: request.tool_call_repair,
             mcp_drawing: request.mcp_drawing,
             agentic_sampling: request.agentic_sampling,
+            agentic_thinking: request.agentic_thinking,
             proxy_autostart: request.proxy_autostart,
             close_to_tray: request.close_to_tray,
             start_at_login: request.start_at_login,

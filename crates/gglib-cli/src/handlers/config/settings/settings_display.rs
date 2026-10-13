@@ -187,6 +187,9 @@ pub(super) fn settings_display_rows(
             // Absent is off, and the row says so rather than leave "None"
             // to be read either way.
             rows.push((kebab_key, "None (off)".to_owned()));
+        } else if kebab_key == "agentic-thinking" && val.is_null() {
+            // Unset is not the value `default`, which changes nothing.
+            rows.push((kebab_key, "None (when-asked)".to_owned()));
         } else if kebab_key == "default-context-size" && val.is_null() {
             // Unset is the ordinary — and preferred — state for this one
             // field: it is what lets the daemon size each launch. A bare

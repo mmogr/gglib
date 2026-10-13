@@ -197,6 +197,7 @@ fn a_remote_machine() -> Settings {
         tool_call_repair: Some(false),
         mcp_drawing: Some(true),
         agentic_sampling: Some(true),
+        agentic_thinking: Some(AgenticThinking::Brief),
         proxy_autostart: Some(true),
         close_to_tray: Some(true),
         start_at_login: Some(true),

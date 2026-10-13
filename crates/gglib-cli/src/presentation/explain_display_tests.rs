@@ -698,3 +698,13 @@ fn the_reasoning_rows_and_their_note_fit_the_table_width() {
         );
     }
 }
+
+/// The one kind `explain` never produces still has its own words, and they
+/// name the policy, not a rung or the floor.
+#[test]
+fn a_budget_the_thinking_policy_set_is_worded_as_the_policys() {
+    assert_eq!(
+        describe(ProvenanceKindDto::AgenticTurn, None, &plain()),
+        "set by the proxy's thinking policy"
+    );
+}

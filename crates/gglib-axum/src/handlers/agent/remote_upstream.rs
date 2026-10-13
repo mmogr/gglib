@@ -9,7 +9,11 @@
 //! switch; the far case takes the port the tunnel bound, attaches the key
 //! from the pairing (ADR 0012, decision 7 — the listener does not inject
 //! it), looks the model up there by its id, and shapes nothing, because the
-//! far proxy runs its own pipeline over its own models.
+//! far proxy runs its own pipeline over its own models. That pipeline has a
+//! thinking policy for a request with tools that names no budget (ADR 0019),
+//! and a run's thinking is its chat's switch to say, so the completion
+//! adapter gives a far turn with tools a budget of `-1` when the run names
+//! none.
 
 use gglib_app_services::FarProxy;
 use gglib_app_services::transcript::MadeBy;
@@ -155,6 +159,8 @@ pub(super) async fn local(
     let settings = state.core.settings().get().await.unwrap_or_default();
     let layers = SamplingLayers {
         agentic_adjustments: settings.effective_agentic_sampling(),
+        // The chat's own Thinking switch decides here, not the proxy's policy.
+        agentic_thinking: gglib_core::AgenticThinking::Default,
         global: settings.inference_defaults,
         ..SamplingLayers::default()
     };

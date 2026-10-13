@@ -467,6 +467,26 @@ touched. Disable with `gglib config settings set --agentic-sampling false` or
 `GGLIB_DISABLE_AGENTIC_SAMPLING=1`; see
 [Sampling resolution](../../docs/sampling.md#the-agentic-turn-temperature-ceiling).
 
+The same request may be sent a reasoning budget. With nothing stored, a
+request carrying `tools` whose last message is not the user's is sent
+`reasoning_budget_tokens: 0`, so the model acts on a tool result without
+thinking first, and one whose last message is the user's is sent none.
+`gglib config settings set --agentic-thinking off|brief|default|when-asked`
+chooses otherwise. Only a budget nobody chose is set: the request's own (`-1`
+for the model's default), a `--reasoning-budget-tokens` flag, a profile, a
+model's user-set or measured defaults and the global defaults stand, and a
+budget written at import or published by the model's author is replaced. No
+budget is set either on a request whose own budget gglib could not read, or
+where a `reasoning_effort` was chosen on one of those rungs (a client's only
+with `trust_client_sampling` on). Who spoke last is read from the request as
+the client sent it, before the loop guard's note or any shaping. The
+`reasoning` tag is not consulted, since llama-server ignores a budget on a
+template that does not think. The two switches above turn this off as well.
+The status reports it as `sampling_audit.reasoning.latest.budget`, with the
+source `agentic turn`. See
+[The agentic-turn reasoning budget](../../docs/sampling.md#the-agentic-turn-reasoning-budget)
+and [ADR 0019](../../docs/adr/0019-a-tool-turn-acts.md).
+
 Resolution runs through `InferenceConfig::resolve_with_profile`, the single
 source of truth for the merge order.  The resolved values are aggressively
 written into the forwarded request body (via `body_obj.insert`) so llama-server

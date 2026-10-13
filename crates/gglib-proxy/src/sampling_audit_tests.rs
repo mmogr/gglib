@@ -29,6 +29,7 @@ fn decision(resolved: InferenceConfig, sources: FieldSources) -> SamplingDecisio
         floor: FloorClass::Default,
         agentic_turn: false,
         agentic_ceiling_applied: None,
+        agentic_budget_applied: None,
         client_fields_rejected: Vec::new(),
         client_fields_discarded: Vec::new(),
         applied: true,
@@ -921,6 +922,36 @@ fn the_latest_resolved_reasoning_is_recorded_with_both_rungs() {
     let budget = latest.budget.expect("the budget is held");
     assert_eq!(budget.tokens, 4096);
     assert_eq!(budget.source, "global");
+}
+
+/// A budget the thinking policy set is recorded under the policy's name, not
+/// under the rung or the floor the fold would have named. The decision comes
+/// from the pipeline itself, so this follows the provenance it really writes.
+#[test]
+fn a_budget_the_thinking_policy_set_is_recorded_as_the_policys() {
+    use gglib_core::AgenticThinking;
+    use gglib_core::request_pipeline::{ModelContext, SamplingLayers, resolve_sampling};
+
+    let mut body = serde_json::json!({
+        "tools": [{"function": {"name": "read_file"}}],
+        "messages": [{"role": "tool", "content": "out"}],
+    });
+    let d = resolve_sampling(
+        &mut body,
+        &ModelContext::passthrough(),
+        &SamplingLayers {
+            agentic_adjustments: true,
+            agentic_thinking: AgenticThinking::WhenAsked,
+            ..SamplingLayers::default()
+        },
+    );
+    let store = SamplingAuditStore::new();
+    store.record_intent(&d, None);
+
+    let latest = store.snapshot().reasoning.latest.expect("recorded");
+    let budget = latest.budget.expect("the budget is held");
+    assert_eq!(budget.tokens, 0);
+    assert_eq!(budget.source, "agentic turn");
 }
 
 /// A suppressed level must still appear — marked. Rendering the level without

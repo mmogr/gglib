@@ -80,6 +80,15 @@ pub enum ParamSource {
     ///
     /// [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
     SuppressedByTemplate,
+    /// The proxy's thinking policy set the value on a turn that carries
+    /// tools, over one nobody chose. The resolved value is what was sent.
+    ///
+    /// Only `reasoning_budget_tokens` can carry this. It replaces the rung
+    /// the fold reported, so that no surface credits a rung or the floor
+    /// with a budget the policy wrote ([ADR 0019]).
+    ///
+    /// [ADR 0019]: https://github.com/mmogr/gglib/blob/main/docs/adr/0019-a-tool-turn-acts.md
+    AgenticTurn,
     /// Nothing named it and the class floor carries none either, so no value
     /// is sent and llama.cpp's own default applies. Which fields those are is
     /// whatever
@@ -115,10 +124,15 @@ impl ParamSource {
             // A rung someone configured — unless it is the auto-detected
             // recipe, which nobody reviewed.
             Self::Layer(i) => i != auto_detected_rung,
-            // Nothing named it, the coupling rule passed over whatever did, or
-            // a template gate threw away what a rung chose. None of the three
-            // leaves a chosen value standing on *this* parameter.
-            Self::Floor | Self::FloorCoupled | Self::Unset | Self::SuppressedByTemplate => false,
+            // Nothing named it, the coupling rule passed over whatever did, a
+            // template gate threw away what a rung chose, or gglib's own
+            // policy wrote it. None of the four leaves a value a person chose
+            // standing on *this* parameter.
+            Self::Floor
+            | Self::FloorCoupled
+            | Self::Unset
+            | Self::SuppressedByTemplate
+            | Self::AgenticTurn => false,
         }
     }
 }
@@ -278,6 +292,7 @@ impl FieldSources {
                     ParamSource::Floor | ParamSource::FloorCoupled => "floor",
                     ParamSource::Unset => "unset",
                     ParamSource::SuppressedByTemplate => "suppressed-by-template",
+                    ParamSource::AgenticTurn => "agentic-turn",
                 };
                 format!("{field}={label}")
             })

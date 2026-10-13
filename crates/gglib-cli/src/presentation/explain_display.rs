@@ -340,6 +340,9 @@ fn describe(
         // "unset" would report that nobody configured a control somebody
         // configured.
         ProvenanceKindDto::SuppressedByTemplate => "suppressed by this model's template".to_owned(),
+        // Not reachable from `explain`, which has no request in hand: only a
+        // request that carries tools gets a budget from the proxy's policy.
+        ProvenanceKindDto::AgenticTurn => "set by the proxy's thinking policy".to_owned(),
     }
 }
 

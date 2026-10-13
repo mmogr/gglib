@@ -12,6 +12,7 @@ fn settings() -> ProxyArmSettings {
     ProxyArmSettings {
         tool_call_repair: true,
         loop_guard_mode: LoopGuardMode::Note,
+        agentic_thinking: Some(AgenticThinking::WhenAsked),
     }
 }
 
@@ -146,4 +147,23 @@ fn a_stored_count_without_a_newer_counter_reads_it_as_zero() {
         ),
         (7, 2, 0)
     );
+}
+
+/// A report stored before the thinking policy was recorded has no such field,
+/// and still reads: the policy is then not recorded, which is not a policy.
+#[test]
+fn settings_stored_without_the_thinking_policy_still_read() {
+    let old = r#"{"tool_call_repair":true,"loop_guard_mode":"note"}"#;
+    let read: ProxyArmSettings = serde_json::from_str(old).expect("an old report reads");
+    assert_eq!(read.agentic_thinking, None);
+    assert_eq!(read.loop_guard_mode, LoopGuardMode::Note);
+
+    let written = serde_json::to_value(settings()).unwrap();
+    assert_eq!(written["agentic_thinking"], "when-asked");
+    let again: ProxyArmSettings = serde_json::from_value(written).unwrap();
+    assert_eq!(again, settings());
+
+    // An old report is written back as it was read, with no such key.
+    let rewritten = serde_json::to_value(read).unwrap();
+    assert!(rewritten.get("agentic_thinking").is_none(), "{rewritten}");
 }

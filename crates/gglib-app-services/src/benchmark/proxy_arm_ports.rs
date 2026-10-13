@@ -9,7 +9,7 @@ use gglib_core::ports::{
     Admission, LaunchOverrides, McpRepositoryError, McpServerRepository, ModelRuntimeError,
     ModelRuntimePort, PinnedSpec, RepositoryError, RunningTarget, SettingsRepository,
 };
-use gglib_core::{LoopGuardMode, Settings};
+use gglib_core::{AgenticThinking, LoopGuardMode, Settings};
 
 /// A runtime port that serves one already-admitted target and nothing else.
 #[derive(Debug)]
@@ -76,6 +76,9 @@ impl FixedSettings {
             trust_client_sampling: Some(true),
             tool_call_repair: Some(true),
             loop_guard_mode: Some(LoopGuardMode::Note),
+            // Named, though it is what an unset install runs: a later change
+            // of that default then leaves stored comparisons where they were.
+            agentic_thinking: Some(AgenticThinking::WhenAsked),
             ..Settings::default()
         })
     }
@@ -84,6 +87,12 @@ impl FixedSettings {
     /// report records.
     pub(super) const fn loop_guard_mode(&self) -> LoopGuardMode {
         self.0.effective_loop_guard_mode()
+    }
+
+    /// The thinking policy the proxy reads from these settings, which the
+    /// report records.
+    pub(super) const fn agentic_thinking(&self) -> AgenticThinking {
+        self.0.effective_agentic_thinking()
     }
 }
 

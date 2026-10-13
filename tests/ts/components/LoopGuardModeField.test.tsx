@@ -18,6 +18,7 @@ const noop = () => {};
 const guards = (overrides: Partial<AgentGuardSettingsValues> = {}): AgentGuardSettingsValues => ({
   loopGuardMode: 'note',
   agenticSampling: true,
+  agenticThinking: 'when-asked',
   toolCallRepair: true,
   maxStagnationSteps: '',
   ...overrides,

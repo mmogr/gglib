@@ -15,6 +15,12 @@ pub use settings_bounds::*;
 mod settings_loop_guard;
 pub use settings_loop_guard::LoopGuardMode;
 
+#[path = "settings_agentic_thinking.rs"]
+mod settings_agentic_thinking;
+pub use settings_agentic_thinking::{
+    AGENTIC_BRIEF_BUDGET_TOKENS, AGENTIC_BUDGET_MESSAGE, AgenticThinking,
+};
+
 #[path = "settings_update.rs"]
 mod settings_update;
 pub use settings_update::{SettingsError, SettingsUpdate};
@@ -246,7 +252,8 @@ pub struct Settings {
     /// and only on a model class that has a ceiling. Reasoning models have
     /// none (see `agentic_temperature_ceiling`), so on them this setting
     /// gates nothing. Anything set by a person stands. `Some(false)` disables
-    /// the cap.
+    /// the cap, and with it the proxy's [`Self::agentic_thinking`] policy: the
+    /// two adjustments share this switch.
     ///
     /// Same polarity as [`Self::loop_guard_mode`], and for the same
     /// reason: this is a correction the endpoint should not silently lose.
@@ -257,6 +264,15 @@ pub struct Settings {
     /// a config that uses that name loading.
     #[serde(alias = "tool_call_floor")]
     pub agentic_sampling: Option<bool>,
+
+    /// What the proxy does to the reasoning budget of a request carrying
+    /// tools, when nobody chose how much it thinks: see [`AgenticThinking`].
+    ///
+    /// Read through [`Self::effective_agentic_thinking`], which supplies
+    /// `when-asked` when none is stored. It acts only while
+    /// [`Self::agentic_sampling`] is on, and only on the proxy: a chat with
+    /// gglib's own agent follows its chat's Thinking switch.
+    pub agentic_thinking: Option<AgenticThinking>,
 
     // ── Always-on proxy (desktop app) ───────────────────────────────
     /// Whether the desktop app starts the OpenAI-compatible proxy as soon as
@@ -343,6 +359,7 @@ impl Settings {
             #[allow(clippy::cast_possible_truncation)]
             max_stagnation_steps: Some(crate::domain::agent::DEFAULT_MAX_STAGNATION_STEPS as u32),
             agentic_sampling: None,
+            agentic_thinking: None,
             default_model_id: None,
             default_image_model_id: None,
             inference_defaults: None,
@@ -396,6 +413,21 @@ impl Settings {
     #[must_use]
     pub const fn effective_agentic_sampling(&self) -> bool {
         !matches!(self.agentic_sampling, Some(false))
+    }
+
+    /// The proxy's thinking policy for a turn that carries tools: the stored
+    /// [`Self::agentic_thinking`], or [`AgenticThinking::WhenAsked`] when none
+    /// is stored.
+    ///
+    /// The one place that default is supplied. It is not
+    /// `AgenticThinking::default()`, which changes nothing and is what a
+    /// caller with no settings passes.
+    #[must_use]
+    pub const fn effective_agentic_thinking(&self) -> AgenticThinking {
+        match self.agentic_thinking {
+            Some(policy) => policy,
+            None => AgenticThinking::WhenAsked,
+        }
     }
 
     /// Whether `/mcp` offers the drawing tool: the stored
@@ -472,6 +504,9 @@ impl Settings {
         }
         if let Some(ref v) = other.agentic_sampling {
             self.agentic_sampling = *v;
+        }
+        if let Some(v) = other.agentic_thinking {
+            self.agentic_thinking = v;
         }
         if let Some(ref v) = other.proxy_autostart {
             self.proxy_autostart = *v;
@@ -563,6 +598,10 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
 #[cfg(test)]
 #[path = "settings_loop_guard_tests.rs"]
 mod settings_loop_guard_tests;
+
+#[cfg(test)]
+#[path = "settings_agentic_thinking_tests.rs"]
+mod settings_agentic_thinking_tests;
 
 #[cfg(test)]
 #[path = "settings_tests.rs"]

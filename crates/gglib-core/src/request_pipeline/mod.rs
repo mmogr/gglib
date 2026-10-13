@@ -44,11 +44,11 @@ pub use measure::ContextBudget;
 pub use messages::shape_messages;
 pub use model_context::ModelContext;
 pub use profile_route::{ModelRoute, resolve_route};
-pub use request_shape::carries_tools;
+pub use request_shape::{LastSpeaker, TurnShape, carries_tools};
 pub use resolve::{resolve, resolve_summary};
 pub use sampling::{
     CLIENT_AUTHORITATIVE_KEYS, DISABLE_AGENTIC_SAMPLING_ENV, FloorClass, LADDER_RUNGS,
-    SamplingDecision, SamplingLayers, resolve_sampling,
+    REASONING_BUDGET_MESSAGE_KEY, SamplingDecision, SamplingLayers, resolve_sampling,
 };
 pub use tools::strip_unsupported_tools;
 pub use truncation::{CHARS_PER_TOKEN_APPROX, TruncationError, TruncationReport, truncate_history};

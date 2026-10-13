@@ -27,7 +27,9 @@ use gglib_core::ports::{Admission, ModelCatalogPort, ModelRuntimeError, ModelRun
 use gglib_core::ports::{
     AgentRunStarter, HubChatsPort, ImageGenerationPort, RemoteGatewayPort, RunsPort,
 };
-use gglib_core::request_pipeline::{ModelContext, ModelRoute, SamplingLayers, resolve_route};
+use gglib_core::request_pipeline::{
+    LastSpeaker, ModelContext, ModelRoute, SamplingLayers, resolve_route,
+};
 use gglib_core::retry::RetryPolicy;
 use gglib_mcp::McpService;
 
@@ -674,9 +676,19 @@ pub(crate) async fn chat_completions(
     // path that derives from it carries it: both attempts, the unary path and
     // the repair re-issue. After the scan above, so it can never trip the
     // guard that wrote it.
-    let body = match guard_note {
-        Some(note) => note.append_to(body),
-        None => body,
+    //
+    // Who spoke last is read first, on a noted request only: where the last
+    // message has no text to add the note to, the note goes on as a new `user`
+    // message, and the thinking policy would read gglib's own note as the
+    // person speaking.
+    let (body, last_speaker) = match guard_note {
+        Some(note) => {
+            let spoke = serde_json::from_slice::<serde_json::Value>(&body)
+                .ok()
+                .map(|sent| LastSpeaker::of(&sent));
+            (note.append_to(body), spoke)
+        }
+        None => (body, None),
     };
 
     let ctx = RequestCtx {
@@ -685,6 +697,7 @@ pub(crate) async fn chat_completions(
         session_id: sanitized_session_id.as_deref(),
         profile: request_profile,
         context: model_context,
+        last_speaker,
     };
 
     // The first attempt gets a clone of the body, so the original is still in
@@ -749,6 +762,11 @@ struct RequestCtx<'a> {
     /// follows a restart of the same model, so reading the catalog again
     /// could only return what is already in hand.
     context: ModelContext,
+    /// Who spoke last in the request as the client sent it, when the loop
+    /// guard's note went on after it was read; `None` on a request that
+    /// carries no note, which the pipeline reads for itself. A retry sends
+    /// the noted body again, so it keeps this.
+    last_speaker: Option<LastSpeaker>,
 }
 
 /// Forward `body` to the server `admission` names: one attempt at the request
@@ -838,6 +856,11 @@ async fn attempt(
         trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
         // Opt-out: absent means on. The rule every chat reads it by.
         agentic_adjustments: settings.effective_agentic_sampling(),
+        // Unset means `when-asked`. Read only while the switch above is on.
+        // This is the one caller that passes the stored policy (ADR 0019):
+        // https://github.com/mmogr/gglib/blob/main/docs/adr/0019-a-tool-turn-acts.md
+        agentic_thinking: settings.effective_agentic_thinking(),
+        last_speaker: ctx.last_speaker,
     };
 
     // Build StreamConfig for this attempt (Some only when cache is enabled).

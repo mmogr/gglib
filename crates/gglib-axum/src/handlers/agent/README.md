@@ -126,11 +126,17 @@ switch. No profile, since nothing in the request can name one. So a turn that
 names nothing and carries no tools is sent what `gglib model explain` reports
 for its model, and one with tools has a temperature nobody chose capped, as
 `gglib chat`'s is, unless the model is tagged `reasoning` or the settings
-store `agentic_sampling` off. The same context switches on the pipeline's
+store `agentic_sampling` off. The proxy's `agentic_thinking` policy is not
+handed over: a turn here thinks as its chat's Thinking switch says. The same
+context switches on the pipeline's
 other per-model stages: capability shaping, the truncation budget, the effort
 gate and the tool-call dialect parser. A far turn is handed nothing this
 machine stores, that switch included: its turn with tools is capped as it
-leaves here, and the far proxy resolves it by its own settings.
+leaves here, and the far proxy resolves it by its own settings. One of those
+is the far proxy's `agentic_thinking` policy, which sets a budget on a request
+with tools that names none. So a far turn with tools that names no budget is
+sent `reasoning_budget_tokens: -1`, the model's launch default, by the
+completion adapter; Thinking off is still `0`.
 
 # Cancellation
 

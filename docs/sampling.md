@@ -128,6 +128,10 @@ is honoured even when `trust_client_sampling` is off — it joins `max_tokens` a
 a bound the caller sets on its own turn — while a client's `reasoning_effort`
 is gated like every other sampling opinion.
 
+On the proxy, a request that carries tools and resolves no budget anybody
+chose may be given one: see
+[The agentic-turn reasoning budget](#the-agentic-turn-reasoning-budget).
+
 **A chat can remember that thinking is off.** A turn on one of gglib's own
 chats (a paired device's turn, the chat page's turn on a paired machine, or
 this machine's own agent run) may say `thinking: "off"` or `"default"`. `off`
@@ -896,8 +900,9 @@ adjustment, not a tool-emission one — it applies to prose turns in an agentic
 session too, which is why the cap is mild rather than near-greedy.
 
 Disable it with `gglib config settings set --agentic-sampling false`, or
-per-process with `GGLIB_DISABLE_AGENTIC_SAMPLING=1`. The setting is this
-machine's. The proxy follows it, and so does a chat with one of this machine's
+per-process with `GGLIB_DISABLE_AGENTIC_SAMPLING=1`. Either also switches off
+[the agentic-turn reasoning budget](#the-agentic-turn-reasoning-budget). The
+setting is this machine's. The proxy follows it, and so does a chat with one of this machine's
 models: `gglib chat` and `gglib q` on a model in the library, and a chat in
 the app, on the chat page or from a paired device.
 
@@ -919,3 +924,102 @@ Two surfaces cannot report it, both by construction: `gglib model explain` and
 the GUI's sampling provenance explain *stored configuration* with no request in
 hand. The proxy's `sampling resolved` debug line carries `agentic_turn` and
 `agentic_ceiling` for the turns where it applied.
+
+## The agentic-turn reasoning budget
+
+On the proxy, a request carrying a non-empty `tools` array may be sent a
+`reasoning_budget_tokens` it did not ask for. Which, if any, is one setting:
+
+| `--agentic-thinking` | A request that carries tools is sent |
+|---|---|
+| `when-asked` (unset means this) | a budget of `0`, unless its last message has the role `user`, in which case nothing |
+| `off` | a budget of `0` |
+| `brief` | a budget of `512`, and `reasoning_budget_message: "Enough thinking. Act now."` unless the request carries its own |
+| `default` | nothing |
+
+```bash
+gglib config settings set --agentic-thinking off
+gglib config settings unset agentic-thinking     # back to when-asked
+```
+
+In the app it is **Thinking on tool turns, on the proxy endpoint**, under
+Settings → Advanced.
+
+An agentic client replays the conversation every turn, and most of its
+requests hand back a tool result. Under `when-asked` the model acts on those
+at once and still thinks when a person has just spoken.
+[ADR 0019](adr/0019-a-tool-turn-acts.md) has the two runs behind the default,
+their scope, and what would reopen it.
+
+### It acts only where nobody chose how much the turn thinks
+
+The rule is the ceiling's. The budget is set after resolution, and only when
+the `reasoning_budget_tokens` that resolved came from a source nobody
+deliberately chose: nothing at all, an auto-detected recipe, or the model
+author's published one. A budget from the request, a
+`--reasoning-budget-tokens` flag, a profile, a model's own user-set defaults,
+the global defaults or a tune sweep's measured recipe stands.
+
+Two more things stand the policy down, with no resolved budget:
+
+- **A budget the client sent that gglib could not read**, under
+  `reasoning_budget_tokens` or `thinking_budget_tokens`: for example a number
+  below `-1`, or a string. The request goes on as it does under
+  `default`. The canonical key is forwarded as written, and llama-server
+  answers a number below `-1` with a 400, unless a stored budget is written
+  over it; the alias is removed, as it always is.
+- **A `reasoning_effort` somebody chose**, with no budget beside it: from the
+  proxy's flag, a profile, a model's user-set or measured defaults, or the
+  global defaults, and from the request only while `trust_client_sampling` is
+  on. With it off a client's effort is discarded as before, and the policy
+  still acts. The effort is judged where the ladder resolved it. A model
+  whose template does not read the effort has it removed afterwards
+  ([The two reasoning controls](#the-two-reasoning-controls)), and that turn
+  is then sent neither an effort nor a budget.
+
+So a client opts out per request by sending its own budget:
+`"reasoning_budget_tokens": -1` asks for the model's launch default, and any
+whole number above it is that budget.
+
+### It is a budget, so it works on any model
+
+The policy does not ask whether the model is tagged `reasoning`. llama-server
+enforces a budget in the sampler when the rendered template has thinking tags
+and ignores it when the template has none, so the key is sent either way
+(ADR 0019 has the source lines). gglib sends no `chat_template_kwargs`.
+
+A budget of `0` is sent without a message: there is no thought for the message
+to end.
+
+### Scope
+
+It reads `tools` being present, as the ceiling does, and the role of the last
+message. It cannot tell a person's message from text a client appended under
+the `user` role after its tool results; such a request reads as the person's,
+and `when-asked` leaves it alone. The role is read from the request as the
+client sent it. A `system` message that gglib sends as a `user` one, to a
+model with no system role, is not the person speaking, and neither is the
+loop guard's note.
+
+Only the proxy applies it. A chat with gglib's own agent, on the chat page,
+from a paired device or in `gglib chat` and `gglib q`, follows its own
+Thinking switch and is sent no budget by this setting. When that chat's model
+is on a paired machine, the agent's requests go to that machine's proxy, and
+it opts out there as any client does: a request with tools that names no
+budget is sent `reasoning_budget_tokens: -1`, and Thinking off is sent as
+`0`. A budget stored on that machine (a profile's, the model's or its global
+defaults') therefore does not reach such a turn; its
+`--reasoning-budget-tokens` flag does.
+
+It is off whenever the ceiling's switch is off: `--agentic-sampling false`, or
+`GGLIB_DISABLE_AGENTIC_SAMPLING=1` in the proxy's process.
+
+What it did is recorded three ways. `GET /v1/proxy/status` reports the latest
+request's budget and its source under `sampling_audit.reasoning.latest.budget`,
+with the source `agentic turn`; `gglib proxy dashboard` and the app's proxy
+panel print the same record. The proxy's `sampling resolved` debug line carries
+`agentic_budget`, and `reasoning_budget_tokens=agentic-turn` in its `from`.
+And each row of `recent_requests` in the status carries `reasoning_chars`,
+what the turn then thought. `gglib model explain` and the GUI's sampling
+provenance cannot show it: they explain stored configuration with no request
+in hand.

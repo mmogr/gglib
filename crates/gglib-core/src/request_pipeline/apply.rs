@@ -4,6 +4,7 @@
 //!
 //! | # | Stage | Lives in | Reads |
 //! |---|---|---|---|
+//! | 0 | Read who spoke last | [`super::request_shape`] | the last message's role |
 //! | 1 | Strip prior reasoning | [`super::messages`] | `messages` |
 //! | 1b | Note a drawn picture | [`super::drawn_note`] | `messages`, `tools` |
 //! | 2 | Coalesce for capabilities | [`super::messages`] | `messages` |
@@ -16,6 +17,14 @@
 //! | 6 | Constrain dialect tool calls | [`super::constrain`] | `tools`, `tool_choice`, tags |
 //!
 //! # The order is load-bearing
+//!
+//! **0 before everything.** The thinking policy in stage 4 reads the role of
+//! the last message the client sent. Stage 2 rewrites a `system` message as a
+//! `user` one for a model with no system role, so read after it a turn that
+//! ends in a `system` message is the person's on that model and nobody's on
+//! any other. Read first, the answer does not depend on the model. Whether
+//! the request carries tools is still read in stage 4, after stage 2b has
+//! taken them from a model that cannot call them.
 //!
 //! **1 before 2.** Coalescing merges message *content*. Stripping afterwards
 //! would have to find and excise `<think>` blocks inside text that has already
@@ -89,6 +98,7 @@ use serde_json::Value;
 
 use super::effort_gate::SuppressedEffort;
 use super::measure::ContextBudget;
+use super::request_shape::LastSpeaker;
 use super::sampling::SamplingDecision;
 use super::truncation::{TruncationError, TruncationReport};
 use super::{
@@ -147,6 +157,11 @@ pub fn apply(
     layers: &SamplingLayers,
     budget: Option<ContextBudget>,
 ) -> Result<PipelineReport, TruncationError> {
+    // Stage 0. A caller that changed `messages` before this call says who
+    // spoke last in what the client sent; otherwise it is read here, before
+    // any stage below can change it.
+    let last_speaker = layers.last_speaker.unwrap_or_else(|| LastSpeaker::of(body));
+
     messages::shape_messages(body, ctx);
     tools::strip_unsupported_tools(body, ctx);
 
@@ -155,7 +170,7 @@ pub fn apply(
         None => TruncationReport::default(),
     };
 
-    let mut sampling = sampling::resolve_sampling(body, ctx, layers);
+    let mut sampling = sampling::resolve_sampling_spoken(body, ctx, layers, last_speaker);
 
     // Stage 5b. After the fold, never before it: the level worth catching is
     // the one gglib itself resolved, and until stage 4 has run there is no
@@ -223,3 +238,7 @@ mod live_shape_probe {
 #[cfg(test)]
 #[path = "apply_tests.rs"]
 mod apply_tests;
+
+#[cfg(test)]
+#[path = "apply_last_speaker_tests.rs"]
+mod apply_last_speaker_tests;

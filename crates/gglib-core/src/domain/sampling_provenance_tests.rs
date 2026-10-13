@@ -229,3 +229,15 @@ fn layer_indices_match_the_resolve_with_profile_ladder() {
     );
     assert_eq!(SamplingLayer::from_index(5), None);
 }
+
+/// A budget the thinking policy wrote is gglib's, not a person's, on whatever
+/// rung the question is asked about: the policy may write over it again and
+/// the temperature ceiling's rule reads it the same way.
+#[test]
+fn a_value_the_thinking_policy_set_is_nobodys_choice() {
+    for auto_detected_rung in [0, 4, 5] {
+        assert!(!ParamSource::AgenticTurn.is_deliberate_choice(auto_detected_rung));
+    }
+    // The control: a rung a person set is a choice.
+    assert!(ParamSource::Layer(1).is_deliberate_choice(5));
+}

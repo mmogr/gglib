@@ -15,7 +15,7 @@ use crate::domain::{InferenceConfig, InferenceProfile};
 use super::settings_bounds::{
     CONTEXT_SIZE_RANGE, DOWNLOAD_QUEUE_RANGE, MAX_DEVICE_ID_LEN, MIN_PORT,
 };
-use super::{Device, LoopGuardMode, RemotePairing, RemoteServe};
+use super::{AgenticThinking, Device, LoopGuardMode, RemotePairing, RemoteServe};
 
 /// Partial settings update.
 ///
@@ -51,6 +51,8 @@ pub struct SettingsUpdate {
     pub mcp_drawing: Option<Option<bool>>,
     /// See [`Settings::agentic_sampling`](super::Settings::agentic_sampling).
     pub agentic_sampling: Option<Option<bool>>,
+    /// See [`Settings::agentic_thinking`](super::Settings::agentic_thinking).
+    pub agentic_thinking: Option<Option<AgenticThinking>>,
     pub proxy_autostart: Option<Option<bool>>,
     pub close_to_tray: Option<Option<bool>>,
     pub start_at_login: Option<Option<bool>>,

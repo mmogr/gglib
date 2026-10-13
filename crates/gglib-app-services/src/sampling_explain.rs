@@ -216,6 +216,10 @@ pub enum ProvenanceKindDto {
     /// [`ParamSource`] and a mirror missing an arm is how a surface starts
     /// rendering a suppressed value as if it had been sent.
     SuppressedByTemplate,
+    /// The proxy's thinking policy set a reasoning budget on a turn that
+    /// carries tools (ADR 0019). Unreachable from this module, which has no
+    /// request in hand; here so the DTO mirrors every [`ParamSource`].
+    AgenticTurn,
 }
 
 /// The wire form of [`SamplingLayer`].
@@ -307,7 +311,8 @@ const fn layer_of(source: ParamSource) -> Option<SamplingLayerDto> {
         ParamSource::Floor
         | ParamSource::FloorCoupled
         | ParamSource::Unset
-        | ParamSource::SuppressedByTemplate => None,
+        | ParamSource::SuppressedByTemplate
+        | ParamSource::AgenticTurn => None,
     }
 }
 
@@ -319,6 +324,7 @@ fn provenance(field: &'static str, source: ParamSource) -> ParamProvenanceDto {
         ParamSource::FloorCoupled => ProvenanceKindDto::FloorCoupled,
         ParamSource::Unset => ProvenanceKindDto::Unset,
         ParamSource::SuppressedByTemplate => ProvenanceKindDto::SuppressedByTemplate,
+        ParamSource::AgenticTurn => ProvenanceKindDto::AgenticTurn,
     };
 
     ParamProvenanceDto {

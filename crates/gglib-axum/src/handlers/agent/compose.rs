@@ -301,3 +301,6 @@ mod gate_tests;
 #[cfg(test)]
 #[path = "compose_sampling_tests.rs"]
 mod sampling_tests;
+#[cfg(test)]
+#[path = "compose_thinking_tests.rs"]
+mod thinking_tests;

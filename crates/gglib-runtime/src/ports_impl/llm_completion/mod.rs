@@ -177,6 +177,9 @@ pub struct LlmCompletionAdapter {
     first_turn_pending: AtomicBool,
 }
 
+/// The `reasoning_budget_tokens` that asks for the model's launch default.
+const LAUNCH_DEFAULT_BUDGET: i32 = -1;
+
 /// Told what one request's sampling resolved to, once the pipeline has
 /// decided it: the values sent and the rung that supplied each.
 ///
@@ -193,6 +196,33 @@ pub type SamplingObserver = Arc<dyn Fn(&SamplingDecision) + Send + Sync>;
 mod builder;
 
 impl LlmCompletionAdapter {
+    /// The caller's own parameters as the request carries them.
+    ///
+    /// To a llama-server on this machine, as given. To another machine, a
+    /// turn that carries tools and names no reasoning budget is given
+    /// [`LAUNCH_DEFAULT_BUDGET`]. That machine's proxy sets a budget of its
+    /// own on a request with tools that names none (its `agentic_thinking`
+    /// policy, [ADR 0019]), and a budget the client sent is what that policy
+    /// leaves alone. This turn's thinking is the caller's to say, by the
+    /// Thinking switch or `--thinking`: off arrives here as a budget of `0`
+    /// and is sent as that.
+    ///
+    /// The cost is recorded in the same ADR: a client's budget outranks that
+    /// machine's own stored budgets too, so one its profile, model or global
+    /// defaults name does not reach such a turn.
+    ///
+    /// [ADR 0019]: https://github.com/mmogr/gglib/blob/main/docs/adr/0019-a-tool-turn-acts.md
+    fn own_sampling(&self, tools: &[ToolDefinition]) -> Option<InferenceConfig> {
+        let mut sampling = self.sampling.clone();
+        if self.far_machine.is_some() && !tools.is_empty() {
+            sampling
+                .get_or_insert_with(InferenceConfig::default)
+                .reasoning_budget_tokens
+                .get_or_insert(LAUNCH_DEFAULT_BUDGET);
+        }
+        sampling
+    }
+
     /// Build the request body and run the shared request-shaping pipeline over
     /// it — everything that happens before the bytes leave this process.
     ///
@@ -225,7 +255,8 @@ impl LlmCompletionAdapter {
         images: &images::ImageUrls,
         must_call: bool,
     ) -> Result<serde_json::Value> {
-        let sampling = self.sampling.as_ref();
+        let sampling = self.own_sampling(tools);
+        let sampling = sampling.as_ref();
         let mut body = body::build_chat_body(&self.model, messages, tools, sampling, images);
         if must_call && !tools.is_empty() {
             body["tool_choice"] = serde_json::Value::String("required".to_owned());
@@ -421,6 +452,9 @@ impl LlmCompletionAdapter {
     }
 }
 
+#[cfg(test)]
+#[path = "far_budget_tests.rs"]
+mod far_budget_tests;
 #[cfg(test)]
 #[path = "first_call_tests.rs"]
 mod first_call_tests;

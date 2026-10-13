@@ -69,6 +69,7 @@ const renderAdvanced = (
       agentGuards={{
         loopGuardMode: 'note',
         agenticSampling: true,
+        agenticThinking: 'when-asked',
         toolCallRepair: true,
         maxStagnationSteps: overrides.stagnation ?? '',
       }}

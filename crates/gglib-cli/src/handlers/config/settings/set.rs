@@ -45,6 +45,7 @@ fn update_from(args: SettingsSetArgs, image_model: Option<i64>) -> SettingsUpdat
         tool_call_repair: args.tool_call_repair.map(Some),
         mcp_drawing: args.mcp_drawing.map(Some),
         agentic_sampling: args.agentic_sampling.map(Some),
+        agentic_thinking: args.agentic_thinking.map(|policy| Some(policy.into())),
         proxy_autostart: args.proxy_autostart.map(Some),
         close_to_tray: args.close_to_tray.map(Some),
         start_at_login: args.start_at_login.map(Some),

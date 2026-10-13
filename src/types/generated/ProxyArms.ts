@@ -46,9 +46,11 @@ paired: PairedEffect | null,
  */
 defects: ModelDefectCounts, 
 /**
- * Two of the settings the proxy ran under. The others it was given are
- * fixed and not recorded: client sampling trusted, so each run's seed
- * reaches llama-server, and no global sampling defaults.
+ * Three of the settings the proxy ran under. The others it was given
+ * are fixed and not recorded: client sampling trusted, so each run's
+ * seed reaches llama-server, and no global sampling defaults. Every
+ * setting it was not given is unset, so the proxy runs it at its
+ * default, the agentic temperature ceiling among them.
  */
 settings: ProxyArmSettings, 
 /**

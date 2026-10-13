@@ -103,6 +103,10 @@ export function describeSource(entry: ParamProvenance, ctx: SourceContext): stri
       return 'unset by design';
     case 'suppressedByTemplate':
       return 'suppressed (this template does not read it)';
+    case 'agenticTurn':
+      // Not reachable from stored configuration: only a request that carries
+      // tools gets a budget from the proxy's thinking policy.
+      return "set by the proxy's thinking policy";
     default:
       return UNKNOWN;
   }

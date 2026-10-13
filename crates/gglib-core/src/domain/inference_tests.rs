@@ -651,6 +651,8 @@ fn assert_sources_explain_values(layers: &[Option<&InferenceConfig>], floor: &In
             // Suppression is a later pipeline stage acting on the folded
             // result; the fold itself can never report it.
             ParamSource::SuppressedByTemplate => unreachable!("{name}: the fold cannot suppress"),
+            // Written after the fold too, by the thinking policy.
+            ParamSource::AgenticTurn => unreachable!("{name}: the fold sets no policy budget"),
         }
     }
 }

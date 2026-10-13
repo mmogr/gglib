@@ -33,7 +33,7 @@ fn every_flag_clap_accepts_is_a_write_reported_under_the_flags_own_name() {
 
     for flag in flags {
         let long = format!("--{flag}");
-        let given = ["true", "8192", "refuse"]
+        let given = ["true", "8192", "refuse", "brief"]
             .into_iter()
             .find_map(|value| parsed(&[&long, value]))
             .unwrap_or_else(|| panic!("{long} takes none of the sample values"));

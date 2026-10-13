@@ -1,8 +1,8 @@
 //! Tests for the proxy arm's runtime port and settings in
 //! `proxy_arm_ports.rs`, and its lifecycle in `proxy_arm.rs`.
 
-use gglib_core::LoopGuardMode;
 use gglib_core::ports::{LaunchOverrides, ModelRuntimeError, ModelRuntimePort, SettingsRepository};
+use gglib_core::{AgenticThinking, LoopGuardMode};
 
 use super::super::mock_upstream::{MockUpstream, OneModelCatalog};
 use super::*;
@@ -44,13 +44,15 @@ async fn the_pinned_target_never_launches_or_stops_a_model() {
 }
 
 /// What the proxy reads: client sampling trusted, so seeds survive, repair on,
-/// the loop guard in `note` mode, and no global sampling defaults.
+/// the loop guard in `note` mode, the thinking policy `when-asked`, and no
+/// global sampling defaults.
 #[tokio::test]
 async fn the_fixed_settings_trust_client_sampling_and_add_no_defaults() {
     let settings = FixedSettings::for_eval().load().await.expect("loads");
     assert_eq!(settings.trust_client_sampling, Some(true));
     assert_eq!(settings.tool_call_repair, Some(true));
     assert_eq!(settings.effective_loop_guard_mode(), LoopGuardMode::Note);
+    assert_eq!(settings.agentic_thinking, Some(AgenticThinking::WhenAsked));
     assert!(settings.inference_defaults.is_none());
 }
 
@@ -66,6 +68,25 @@ async fn the_report_records_the_loop_guard_mode_the_proxy_reads() {
     let (_, recorded) = arm.finish().await;
     let read = FixedSettings::for_eval().load().await.expect("loads");
     assert_eq!(recorded.loop_guard_mode, read.effective_loop_guard_mode());
+}
+
+/// The thinking policy the report records is the one the fixed settings
+/// give, and they name it: an unset one would follow whatever an unset
+/// install runs.
+#[tokio::test]
+async fn the_report_records_the_thinking_policy_the_proxy_reads() {
+    let upstream = MockUpstream::spawn().await;
+    let held = RunningTarget::local(upstream.port, 1, "held".to_owned(), 4096, false);
+    let arm = ProxyArm::start(held, Arc::new(OneModelCatalog("held")))
+        .await
+        .expect("starts");
+    let (_, recorded) = arm.finish().await;
+    let read = FixedSettings::for_eval().load().await.expect("loads");
+    assert_eq!(read.agentic_thinking, Some(AgenticThinking::WhenAsked));
+    assert_eq!(
+        recorded.agentic_thinking,
+        Some(read.effective_agentic_thinking())
+    );
 }
 
 /// Every early return in the eval drops the arm, and the drop has to stop the

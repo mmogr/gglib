@@ -150,6 +150,8 @@ pub(crate) async fn compose(
         let settings = ctx.app.settings().get().await?;
         SamplingLayers {
             agentic_adjustments: settings.effective_agentic_sampling(),
+            // `--thinking` decides here, not the proxy's policy.
+            agentic_thinking: gglib_core::AgenticThinking::Default,
             profile: params.profile.as_ref().map(|chosen| chosen.config.clone()),
             global: settings.inference_defaults,
             ..SamplingLayers::default()

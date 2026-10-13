@@ -23,6 +23,28 @@ fn camel_to_kebab_converts_correctly() {
 
 // ── settings_display_rows ─────────────────────────────────────────────────
 
+/// An unset thinking policy runs `when-asked`, and one of its values is
+/// spelled `default`: the row says which the unset one is, and a stored one
+/// prints as the word `settings set` takes.
+#[test]
+fn an_unset_thinking_policy_says_what_unset_means() {
+    use gglib_core::AgenticThinking;
+    let shown = |stored| {
+        let settings = Settings {
+            agentic_thinking: stored,
+            ..Settings::default()
+        };
+        settings_display_rows(&settings, None, None)
+            .into_iter()
+            .find(|(k, _)| k == "agentic-thinking")
+            .expect("the row is listed")
+            .1
+    };
+    assert_eq!(shown(None), "None (when-asked)");
+    assert_eq!(shown(Some(AgenticThinking::Default)), "default");
+    assert_eq!(shown(Some(AgenticThinking::WhenAsked)), "when-asked");
+}
+
 /// An unset context is the recommended state, not a gap, and `show` is
 /// where a person looks to find out what is configured. A bare "None"
 /// there reads as something missing.

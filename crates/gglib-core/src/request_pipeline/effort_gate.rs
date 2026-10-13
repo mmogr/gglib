@@ -216,14 +216,16 @@ pub fn suppress_stored_effort(
 /// Name the rung a suppressed level came from, for the debug line.
 ///
 /// A floor label is unreachable — no floor names an effort — but the arm is
-/// spelled out rather than guessed at, and a value already suppressed cannot
-/// be suppressed twice.
+/// spelled out rather than guessed at, a value already suppressed cannot be
+/// suppressed twice, and the thinking policy writes the budget, never an
+/// effort.
 fn describe_rung(source: ParamSource, names: &[&'static str]) -> &'static str {
     match source {
         ParamSource::Layer(i) => names.get(i).copied().unwrap_or("?"),
         ParamSource::Floor | ParamSource::FloorCoupled => "floor",
         ParamSource::Unset => "unset",
         ParamSource::SuppressedByTemplate => "suppressed-by-template",
+        ParamSource::AgenticTurn => "agentic-turn",
     }
 }
 

@@ -41,6 +41,7 @@ const settings = {
   showMemoryFitIndicators: false,
   titleGenerationPrompt: 'a prompt the user wrote',
   agenticSampling: false,
+  agenticThinking: 'off',
   toolCallRepair: false,
   maxStagnationSteps: 7,
   defaultDownloadPath: '/downloads',

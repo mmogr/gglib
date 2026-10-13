@@ -47,6 +47,7 @@ const settings = {
   titleGenerationPrompt: 'a prompt the user wrote',
   maxToolIterations: 12,
   agenticSampling: false,
+  agenticThinking: 'brief',
   toolCallRepair: false,
   maxStagnationSteps: 7,
   defaultModelId: 3,
@@ -161,6 +162,7 @@ const changes: [string, Change, UpdateSettingsRequest][] = [
   ['client sampling trust', advanced(toggle('trust-client-sampling-input')), { trustClientSampling: false }],
   ['loop guard mode', advanced(choose('loop-guard-mode-input', 'off')), { loopGuardMode: 'off' }],
   ['agentic sampling cap', advanced(toggle('agentic-sampling-input')), { agenticSampling: true }],
+  ['thinking policy', advanced(choose('agentic-thinking-input', 'off')), { agenticThinking: 'off' }],
   ['tool call repair', advanced(toggle('tool-call-repair-input')), { toolCallRepair: true }],
   ['stagnation limit', advanced(retype('max-stagnation-steps-input', '9')), { maxStagnationSteps: 9 }],
 ];

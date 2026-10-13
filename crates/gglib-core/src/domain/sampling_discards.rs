@@ -108,11 +108,13 @@ const fn won(source: ParamSource, rung: usize) -> bool {
         // Everything else means this caller's value is not what runs:
         // `FloorCoupled` — the coupling rule passed every lower rung over,
         // this one included; `SuppressedByTemplate` — a later stage dropped it
-        // because the template never reads the field; `Floor`/`Unset` — nobody
-        // named it, so this caller did not either. Listed rather than
-        // wildcarded so a new variant forces a decision here.
+        // because the template never reads the field; `AgenticTurn` — the
+        // thinking policy wrote the value; `Floor`/`Unset` — nobody named it,
+        // so this caller did not either. Listed rather than wildcarded so a
+        // new variant forces a decision here.
         ParamSource::FloorCoupled
         | ParamSource::SuppressedByTemplate
+        | ParamSource::AgenticTurn
         | ParamSource::Floor
         | ParamSource::Unset => false,
     }

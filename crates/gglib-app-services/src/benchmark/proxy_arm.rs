@@ -5,7 +5,10 @@
 //! tool-call repair and the loop guard, the two things it is chosen for,
 //! through the proxy that applies them (#1047). It sends every turn through
 //! `gglib_proxy::serve`, bound to a free loopback port, in front of the model
-//! the eval already holds.
+//! the eval already holds. The same proxy applies its thinking policy to
+//! those turns, each of which carries tools ([ADR 0019]), so a difference
+//! between this arm and raw-auto is repair, the loop guard and that policy
+//! together.
 //!
 //! What the proxy is given, and why:
 //!
@@ -17,9 +20,10 @@
 //!   admission with the held target, refuses any other model, and refuses to
 //!   stop anything.
 //! - **Fixed settings** ([`FixedSettings`]): repair on, the loop guard in its
-//!   default `note` mode, client sampling trusted so each run's seed survives,
-//!   and no global sampling defaults. A reading then means the same on any
-//!   machine. The report records the first two ([`ProxyArmSettings`]).
+//!   default `note` mode, the thinking policy `when-asked`, client sampling
+//!   trusted so each run's seed survives, and no global sampling defaults. A
+//!   reading then means the same on any machine. The report records the
+//!   first three ([`ProxyArmSettings`]).
 //! - **Its own defect ledger and no trip log.** No other arm sends it a
 //!   request, so the ledger's counts are this arm's alone. Benchmark traffic
 //!   never reaches the daemon's loop-guard log, which ADR 0011's kill
@@ -27,6 +31,8 @@
 //! - **An MCP service with no servers** ([`NoMcpServers`]). The proxy serves
 //!   `/mcp`, and this one has no API key; given the daemon's servers, any local
 //!   process could reach their tools through it while the arm ran.
+//!
+//! [ADR 0019]: https://github.com/mmogr/gglib/blob/main/docs/adr/0019-a-tool-turn-acts.md
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -82,6 +88,7 @@ impl ProxyArm {
                 gglib_proxy::repair::DISABLE_REPAIR_ENV,
             ),
             loop_guard_mode: fixed.loop_guard_mode(),
+            agentic_thinking: Some(fixed.agentic_thinking()),
         };
         let observers = gglib_proxy::ProxyObservers {
             defects: Arc::clone(&defects),

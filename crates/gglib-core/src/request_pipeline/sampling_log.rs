@@ -82,6 +82,9 @@ pub(super) fn log_resolution(decision: &SamplingDecision) {
         // rung, it caps what it supplied.
         agentic_turn = decision.agentic_turn,
         agentic_ceiling = decision.agentic_ceiling_applied,
+        // The reasoning budget the thinking policy set. `from` reads
+        // `reasoning_budget_tokens=agentic-turn` on the same line.
+        agentic_budget = ?decision.agentic_budget_applied,
         "sampling resolved"
     );
 }

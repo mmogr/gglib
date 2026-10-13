@@ -153,6 +153,28 @@ whatever `trust_client_sampling` says
 ([The two reasoning controls](sampling.md#the-two-reasoning-controls)). The
 choice is the client's to keep: gglib remembers nothing of such a request.
 
+A request to `POST /v1/chat/completions` that carries `tools` and names no
+budget may be given one by the proxy. Unless the machine's settings say
+otherwise, such a request is sent on with `reasoning_budget_tokens: 0` when
+its last message is not from the user, and is left alone when its last
+message is the user's. A request an agentic client makes to hand back a tool
+result ends in that result, unless the client puts a `user`-role message
+after it, and then it reads as the user's. A client that wants its tool turns
+to think sends its own budget on them: `"reasoning_budget_tokens": -1` asks
+for the model's launch default, and any whole number above it is that budget.
+The policy sets nothing on a request that carries `reasoning_budget_tokens`
+or `thinking_budget_tokens` with any value but `null`. A value gglib cannot
+read, such as a number below `-1`, is treated as it was before the policy
+existed: under `reasoning_budget_tokens` it is forwarded, and llama-server
+refuses a number below `-1` with a 400, unless the machine stores a budget of
+its own, which is then sent in its place. With `trust_client_sampling` on, a
+`reasoning_effort` the client sends also stands the policy down, when it is a
+level gglib reads (`minimal` to `max`); `"none"` is refused and does not. The
+person
+running gglib changes this for every client with
+`gglib config settings set --agentic-thinking default`
+([The agentic-turn reasoning budget](sampling.md#the-agentic-turn-reasoning-budget)).
+
 gglib's own turn routes take the choice as a word and remember it on the
 chat: `"thinking": "off"` or `"thinking": "default"` beside the message, on a
 paired device's turn (`PUT /v1/runs/{id}?kind=agent`), on the chat page's

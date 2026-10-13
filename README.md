@@ -123,6 +123,16 @@ Everything between the OpenAI request and llama-server is the product:
   per-model → global → floor) resolves every sampling parameter server-side.
   Client values are untrusted by default, so no request can silently override
   your configuration. [Details →](docs/sampling.md)
+- **Tool turns act**: an agentic client hands every tool result back as a new
+  request, and a model that thinks reasons before each one. Unless a budget
+  was chosen, the proxy sends a request that carries tools a reasoning budget
+  of zero when its last message is not the user's, and leaves it to think
+  when a person has just spoken. On the one task measured (one model, one
+  client, one run of each arm, thinking off on every turn) the plan was as
+  good and took a third of the time. `--agentic-thinking` changes it, and it
+  sets nothing on a request that carries its own `reasoning_budget_tokens`.
+  [Details →](docs/sampling.md#the-agentic-turn-reasoning-budget),
+  [decision →](docs/adr/0019-a-tool-turn-acts.md)
 - **Context defense**: tool-heavy sessions balloon past the context window
   because most clients don't compact for custom endpoints. The proxy
   truncates oversized tool and assistant messages before forwarding, scaled

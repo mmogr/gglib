@@ -1,7 +1,7 @@
 //! Stage 4–5: resolving what the model is asked to sample with.
 //!
-//! Unlike [`super::messages`], nothing here reads `messages` — these transforms
-//! only ever touch top-level keys.
+//! Unlike [`super::messages`], nothing here changes `messages` — these
+//! transforms only ever write top-level keys.
 //!
 //! **Tier B — Policy** ([ADR 0001]). llama-server is one process serving one
 //! model with no catalog, no profiles and no view of the client, so it cannot
@@ -14,18 +14,27 @@
 //! defaults, which makes them compensation rather than policy. See
 //! [ADR 0003], which decides they are deferred.
 //!
+//! One decision here depends on `messages`, and only on the last one's role: a
+//! turn that carries tools may have its reasoning budget set by who spoke last
+//! ([`SamplingLayers::agentic_thinking`], [ADR 0019]). [`apply`](super::apply())
+//! reads that role before any stage runs and hands it in;
+//! [`resolve_sampling`], called by itself, reads it from the body it is given.
+//!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+//! [ADR 0019]: https://github.com/mmogr/gglib/blob/main/docs/adr/0019-a-tool-turn-acts.md
 //! [`RuntimeCapabilities`]: crate::domain::RuntimeCapabilities
 
 use serde_json::Value;
 use tracing::debug;
 
 use super::ModelContext;
+use super::request_shape::{LastSpeaker, TurnShape, carries_tools};
 use crate::domain::inference::{
     REASONING_BUDGET_TOKENS_KEY, REASONING_EFFORT_KEY, THINKING_BUDGET_TOKENS_KEY,
 };
 use crate::domain::{DefaultsOrigin, FieldIssue, FieldSources, InferenceConfig, ParamSource};
+use crate::settings::{AGENTIC_BUDGET_MESSAGE, AgenticThinking};
 
 /// The sampling layers that sit *below* the client's own request parameters.
 ///
@@ -66,8 +75,10 @@ pub struct SamplingLayers {
     /// same settings snapshot as [`Self::global`], which is why it lives here
     /// rather than as a separate parameter threaded through every caller.
     pub trust_client_sampling: bool,
-    /// Whether a request carrying tools gets the agentic-turn temperature
-    /// ceiling — see [`InferenceConfig::agentic_temperature_ceiling`].
+    /// Whether a request carrying tools gets the agentic-turn adjustments:
+    /// the temperature ceiling
+    /// ([`InferenceConfig::agentic_temperature_ceiling`]) and whatever
+    /// [`Self::agentic_thinking`] sets.
     ///
     /// Set by the caller rather than defaulted on, because callers differ: the
     /// proxy and a chat on this machine's model hand over the settings' switch
@@ -75,6 +86,26 @@ pub struct SamplingLayers {
     /// no settings to follow turns it on. `Default` leaves it off so a bare
     /// `SamplingLayers::default()` applies no adjustment.
     pub agentic_adjustments: bool,
+    /// What a request carrying tools has done to its reasoning budget when
+    /// nobody chose how much it thinks — see [`AgenticThinking`] and
+    /// [ADR 0019].
+    ///
+    /// Read only while [`Self::agentic_adjustments`] holds. The proxy hands
+    /// over `Settings::effective_agentic_thinking`; every other caller passes
+    /// [`AgenticThinking::Default`], which is also what `Default` gives, and
+    /// sets no budget.
+    ///
+    /// [ADR 0019]: https://github.com/mmogr/gglib/blob/main/docs/adr/0019-a-tool-turn-acts.md
+    pub agentic_thinking: AgenticThinking,
+    /// Who spoke last in the request as the client sent it, from a caller
+    /// that changed `messages` before handing the body over.
+    ///
+    /// The proxy is the one such caller: its loop guard's note is added to
+    /// the last message, and where that message has no text to add to it is
+    /// added as a new `user` message. `None`, which `Default` gives, has the
+    /// pipeline read the role from the body it is handed, before any stage
+    /// changes it.
+    pub last_speaker: Option<LastSpeaker>,
 }
 
 /// Which class floor sat beneath the ladder.
@@ -130,6 +161,13 @@ pub struct SamplingDecision {
     /// the value named, because that rung did supply it — the ceiling capped
     /// what it supplied.
     pub agentic_ceiling_applied: Option<f32>,
+    /// The reasoning budget the thinking policy set, if it set one.
+    ///
+    /// `Some` means `resolved.reasoning_budget_tokens` is this value and
+    /// `sources.reasoning_budget_tokens` is [`ParamSource::AgenticTurn`]: the
+    /// policy replaces the value and its provenance together, where the
+    /// ceiling above caps a value and leaves its rung named.
+    pub agentic_budget_applied: Option<i32>,
     /// Client fields that could not be read as sent. See [`FieldIssue`].
     pub client_fields_rejected: Vec<FieldIssue>,
     /// Client fields dropped by the trust gate rather than by a parse
@@ -155,7 +193,8 @@ pub struct SamplingDecision {
 /// ladder's width or index its last rung share one number.
 pub const LADDER_RUNGS: usize = 6;
 
-/// Environment kill switch for the agentic-turn adjustments.
+/// Environment kill switch for the agentic-turn adjustments: the temperature
+/// ceiling and the thinking policy's reasoning budget.
 ///
 /// Truthy values (case-insensitive `1`, `true`, `yes`, `on`) disable it for
 /// every caller, whatever their settings say — the same contract as
@@ -163,6 +202,10 @@ pub const LADDER_RUNGS: usize = 6;
 ///
 /// [`DISABLE_GRAMMAR_ENV`]: super::constrain::DISABLE_GRAMMAR_ENV
 pub const DISABLE_AGENTIC_SAMPLING_ENV: &str = "GGLIB_DISABLE_AGENTIC_SAMPLING";
+
+/// The request key carrying the text llama-server inserts before the end tag
+/// it forces when a reasoning budget above zero runs out.
+pub const REASONING_BUDGET_MESSAGE_KEY: &str = "reasoning_budget_message";
 
 /// Whether [`DISABLE_AGENTIC_SAMPLING_ENV`] is set to a truthy value.
 fn agentic_sampling_disabled_via_env() -> bool {
@@ -395,7 +438,10 @@ fn strip_unmodelled_sampler_keys(body: &mut Value, trust_client_sampling: bool) 
 /// - [`REASONING_BUDGET_TOKENS_KEY`], refused → **left in place**, like every
 ///   other field. The client gets upstream's honest 400. And if the ladder
 ///   resolves a budget of its own, the force-insert overwrites the client's
-///   text before it is ever sent, so the refusal costs nothing.
+///   text before it is ever sent, so the refusal costs nothing. The agentic
+///   thinking policy is not the ladder: it sets no budget on a request whose
+///   budget was refused under either spelling, so its value never takes the
+///   place of the client's text.
 ///
 /// A [`FieldIssue::Normalised`] deletes nothing under either rule: the
 /// substitute is either force-inserted over the client's spelling or is an
@@ -514,13 +560,42 @@ const fn model_rung(
 /// and ADR 0007's finding behind it.
 ///
 /// A body that is not a JSON object is left alone.
+///
+/// # Who spoke last
+///
+/// The thinking policy reads the role of the request's last message.
+/// [`SamplingLayers::last_speaker`] supplies it when the caller set it, and
+/// otherwise it is read here, from `body` as this function is handed it.
+/// [`apply`](super::apply()) does not call this: it reads the role before its
+/// first stage and calls [`resolve_sampling_spoken`].
 pub fn resolve_sampling(
     body: &mut Value,
     ctx: &ModelContext,
     layers: &SamplingLayers,
 ) -> SamplingDecision {
+    let last_speaker = layers.last_speaker.unwrap_or_else(|| LastSpeaker::of(body));
+    resolve_sampling_spoken(body, ctx, layers, last_speaker)
+}
+
+/// [`resolve_sampling`], told who spoke last instead of reading it.
+///
+/// For [`apply`](super::apply()), whose earlier stages can change the role of
+/// the last message: stage 2 turns a `system` message into a `user` one for a
+/// model with no system role.
+pub(crate) fn resolve_sampling_spoken(
+    body: &mut Value,
+    ctx: &ModelContext,
+    layers: &SamplingLayers,
+    last_speaker: LastSpeaker,
+) -> SamplingDecision {
     let (client_layer, issues, mut discarded) =
         read_client_layer(body, layers.trust_client_sampling);
+    // A budget the reader refused, under either spelling. It is in no layer,
+    // so the fold cannot report it; the thinking policy reads this instead.
+    let client_budget_refused = issues.iter().any(|issue| {
+        matches!(issue, FieldIssue::Rejected { field, .. }
+            if [REASONING_BUDGET_TOKENS_KEY, THINKING_BUDGET_TOKENS_KEY].contains(field))
+    });
 
     // Keys the ladder cannot govern get no layer to lose in — they would ride
     // the body straight to llama-server, past the gate that just ran. Strip
@@ -562,9 +637,15 @@ pub fn resolve_sampling(
     // so this cannot fire on a model that would never emit a tool call —
     // except on a passthrough context, where nothing is known about the model
     // and nothing was stripped.
-    let agentic_turn = layers.agentic_adjustments
-        && !agentic_sampling_disabled_via_env()
-        && super::request_shape::carries_tools(body);
+    //
+    // So the tools are read here, after that stage, while who spoke last was
+    // read before any stage ran.
+    let shape = TurnShape {
+        carries_tools: carries_tools(body),
+        last_speaker,
+    };
+    let agentic_turn =
+        layers.agentic_adjustments && !agentic_sampling_disabled_via_env() && shape.carries_tools;
 
     // `model` occupies one of two rungs depending on how it was set — never
     // both — so an auto-detected guess can't silently outrank global
@@ -586,7 +667,7 @@ pub fn resolve_sampling(
         ordered.iter().map(|(_, config)| *config).collect();
     // Values and provenance come from the same pass over the same ladder, so
     // the log can never name a layer the resolution did not use.
-    let (mut resolved, sources) =
+    let (mut resolved, mut sources) =
         InferenceConfig::resolve_layers_with_sources(&layer_configs, &floor);
 
     // Cap the temperature for an agentic turn — but only over a value nobody
@@ -632,6 +713,48 @@ pub fn resolve_sampling(
         resolved.temperature = Some(ceiling);
     }
 
+    // Set the reasoning budget for an agentic turn, by the same provenance
+    // rule as the ceiling: only where nobody deliberately chose how much the
+    // turn thinks, and never over a measured model rung. Three things count
+    // as that choice:
+    //
+    // - A resolved budget from a rung a person set. A client's own budget is
+    //   the client rung, so it stands, `-1` included.
+    // - A budget the client sent that the reader refused, under either
+    //   spelling. It is in no rung, and the policy still leaves it alone, so
+    //   the request goes on as it would with no policy:
+    //   `erase_unadopted_client_keys` says what that is for each spelling.
+    // - A resolved `reasoning_effort` from a rung a person set, with no
+    //   budget beside it. The effort is judged by the rung the fold named.
+    //   Stage 5b runs after this and may still delete an effort the model's
+    //   template does not read; the policy has stood down by then and does
+    //   not come back. An untrusted client's effort never reaches the fold,
+    //   so it is no choice here.
+    //
+    // The `reasoning` tag is not consulted. llama-server applies a budget only
+    // when the rendered template has thinking tags, so it is inert on a model
+    // that does not think, and the tag is a guess that can be absent on one
+    // that does. ADR 0019 has the source lines and the measurement.
+    //
+    // Unlike the ceiling, this replaces the value, so the provenance is
+    // rewritten with it: a rung that did not supply the number is not named.
+    let measured_model = matches!(ctx.defaults_origin, Some(DefaultsOrigin::Measured));
+    let chosen = |source: ParamSource| {
+        source.is_deliberate_choice(auto_detected_rung)
+            || (measured_model && source == ParamSource::Layer(auto_detected_rung))
+    };
+    let thinking_is_unchosen = !chosen(sources.reasoning_budget_tokens)
+        && !chosen(sources.reasoning_effort)
+        && !client_budget_refused;
+    let applied_budget = layers
+        .agentic_thinking
+        .budget_for(shape.last_speaker)
+        .filter(|_| agentic_turn && thinking_is_unchosen);
+    if let Some(budget) = applied_budget {
+        resolved.reasoning_budget_tokens = Some(budget);
+        sources.reasoning_budget_tokens = ParamSource::AgenticTurn;
+    }
+
     // Nothing is logged here. The whole decision is rendered once, by
     // `super::sampling_log`, after stage 5b — which can still delete a resolved
     // `reasoning_effort` and would leave this line stating that gglib sent one.
@@ -648,6 +771,7 @@ pub fn resolve_sampling(
         },
         agentic_turn,
         agentic_ceiling_applied: applied_ceiling,
+        agentic_budget_applied: applied_budget,
         client_fields_rejected: issues.clone(),
         client_fields_discarded: discarded.clone(),
         applied,
@@ -659,6 +783,15 @@ pub fn resolve_sampling(
 
     for (key, value) in resolved.to_openai_json_patch() {
         obj.insert(key, value);
+    }
+
+    // A budget above zero can run out mid-thought, and the message is what the
+    // model reads at that point. A budget of zero ends thinking before any
+    // thought, so there is nothing for a message to interrupt. The client's
+    // own message, when it sent one, is kept.
+    if applied_budget.is_some_and(|budget| budget > 0) {
+        obj.entry(REASONING_BUDGET_MESSAGE_KEY)
+            .or_insert_with(|| Value::String(AGENTIC_BUDGET_MESSAGE.to_owned()));
     }
 
     // Force-insert (not or_insert) llama-server's own `cache_prompt` flag.
@@ -677,3 +810,11 @@ pub fn resolve_sampling(
 #[cfg(test)]
 #[path = "sampling_tests.rs"]
 mod sampling_tests;
+
+#[cfg(test)]
+#[path = "sampling_budget_tests.rs"]
+mod sampling_budget_tests;
+
+#[cfg(test)]
+#[path = "sampling_thinking_choice_tests.rs"]
+mod sampling_thinking_choice_tests;

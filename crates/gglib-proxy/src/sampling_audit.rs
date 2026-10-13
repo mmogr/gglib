@@ -1144,6 +1144,9 @@ fn describe_source(source: ParamSource, names: &[&'static str]) -> String {
         // `unreachable!` — a mislabelled rung in an audit record is a smaller
         // fault than a panic on the request path.
         ParamSource::SuppressedByTemplate => "suppressed (template)".to_string(),
+        // Reached through `resolved_reasoning`, for a budget the thinking
+        // policy set (ADR 0019).
+        ParamSource::AgenticTurn => "agentic turn".to_string(),
     }
 }
 

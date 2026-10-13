@@ -114,6 +114,8 @@ fn each_layer_beats_the_ones_below_it() {
             // client layer at all. See `client_sampling_is_ignored_by_default`.
             trust_client_sampling: true,
             agentic_adjustments: false,
+            agentic_thinking: crate::settings::AgenticThinking::Default,
+            last_speaker: None,
         };
         resolve_sampling(&mut body, &model_ctx(model.map(temp)), &layers);
         assert_param(&body, "temperature", expected);
@@ -144,6 +146,8 @@ fn a_sparse_profile_leaves_other_model_defaults_intact() {
             global: None,
             trust_client_sampling: false,
             agentic_adjustments: false,
+            agentic_thinking: crate::settings::AgenticThinking::Default,
+            last_speaker: None,
         },
     );
 
@@ -450,6 +454,8 @@ fn a_profile_temperature_does_not_carry_model_penalties() {
             global: None,
             trust_client_sampling: false,
             agentic_adjustments: false,
+            agentic_thinking: crate::settings::AgenticThinking::Default,
+            last_speaker: None,
         },
     );
 
@@ -1670,6 +1676,8 @@ fn each_rung_can_supply_a_reasoning_control() {
             // its own tests directly above.
             trust_client_sampling: true,
             agentic_adjustments: false,
+            agentic_thinking: crate::settings::AgenticThinking::Default,
+            last_speaker: None,
         };
 
         let decision = resolve_sampling(&mut body, &ctx, &layers);

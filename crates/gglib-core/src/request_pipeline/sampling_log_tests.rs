@@ -251,3 +251,47 @@ fn every_resolved_parameter_still_reaches_the_line() {
         let _ = on_resolved_line(&events, field);
     }
 }
+
+/// The budget the thinking policy set is on the line three ways: the value
+/// sent, the policy as its provenance, and `agentic_budget`. A turn the policy
+/// left alone reports none of them.
+#[test]
+fn the_line_carries_the_budget_the_thinking_policy_set() {
+    let line_for = |last_role: &str| {
+        capture(|| {
+            let mut value = serde_json::json!({
+                "model": "m",
+                "tools": [{"function": {"name": "read_file"}}],
+                "messages": [{"role": last_role, "content": "x"}],
+            });
+            let layers = SamplingLayers {
+                agentic_adjustments: true,
+                agentic_thinking: crate::settings::AgenticThinking::WhenAsked,
+                ..SamplingLayers::default()
+            };
+            apply(&mut value, &ModelContext::passthrough(), &layers, None).expect("applies");
+        })
+    };
+
+    let after_work = line_for("tool");
+    assert_eq!(on_resolved_line(&after_work, "agentic_budget"), "Some(0)");
+    assert_eq!(
+        on_resolved_line(&after_work, "reasoning_budget_tokens"),
+        "Some(0)"
+    );
+    assert!(
+        on_resolved_line(&after_work, "from").contains("reasoning_budget_tokens=agentic-turn"),
+        "{after_work:?}"
+    );
+
+    let after_person = line_for("user");
+    assert_eq!(on_resolved_line(&after_person, "agentic_budget"), "None");
+    assert_eq!(
+        on_resolved_line(&after_person, "reasoning_budget_tokens"),
+        "None"
+    );
+    assert!(
+        on_resolved_line(&after_person, "from").contains("reasoning_budget_tokens=unset"),
+        "{after_person:?}"
+    );
+}
