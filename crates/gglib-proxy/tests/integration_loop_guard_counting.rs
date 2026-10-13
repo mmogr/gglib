@@ -98,6 +98,21 @@ async fn a_noted_request_that_is_then_clamped_still_counts_its_trip() {
         "the clamp abort carries the trip: {dashboard}"
     );
     assert_eq!(counts["loop_guard_loops"].as_u64(), Some(1), "{dashboard}");
+    // Nothing was generated, and the clamped entry says so by its defaults:
+    // no readings, which is not readings of zero.
+    let entry = &dashboard["recent_requests"][0];
+    assert_eq!(entry["was_clamped"], true, "{dashboard}");
+    assert_eq!(
+        json!([
+            entry["completion_tokens"],
+            entry["reasoning_chars"],
+            entry["tool_calls"],
+            entry["finish_reason"],
+            entry["generation_ms"]
+        ]),
+        json!([null, 0, 0, null, null]),
+        "{dashboard}"
+    );
 
     proxy_cancel.cancel();
     upstream_cancel.cancel();

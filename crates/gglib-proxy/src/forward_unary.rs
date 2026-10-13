@@ -31,6 +31,7 @@ use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::domain::DialectSpec;
 
 use crate::forward::{ForwardError, REPAIR_REISSUE_TIMEOUT};
+use crate::generation::TurnGeneration;
 use crate::metrics::ContextMetricsStore;
 use crate::models::ErrorResponse;
 use crate::repair::{Decision, RepairTurn, Skipped, choose, decide, read_second_draw};
@@ -89,6 +90,7 @@ pub(crate) async fn forward_unary(
             }
         };
     let answer = repair(again, &body, answer, dialect, metrics, snapshot_seq, turn).await;
+    metrics.flag_generation(snapshot_seq, TurnGeneration::of_unary_body(&answer));
     Ok(answer_with(content_type, answer))
 }
 
@@ -148,3 +150,8 @@ async fn repair(
 #[cfg(test)]
 #[path = "forward_unary_repair_tests.rs"]
 mod forward_unary_repair_tests;
+
+/// What a non-streaming turn is recorded as having generated.
+#[cfg(test)]
+#[path = "forward_unary_generation_tests.rs"]
+mod forward_unary_generation_tests;

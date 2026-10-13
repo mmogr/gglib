@@ -14,6 +14,7 @@ use crate::cache_lifecycle::{StreamConfig, save_after_generation};
 use crate::client_send::ClientSender;
 use crate::connections::ConnectionGuard;
 use crate::forward::{drain_events, failed_turn_body};
+use crate::generation::TurnGeneration;
 use crate::repair::{RepairContext, RepairTurn};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
@@ -216,6 +217,11 @@ pub(crate) fn spawn_and_return(
                     told,
                 )
                 .await;
+                // Written for every drained turn, one the client left
+                // included. Its readings were taken as events were read,
+                // until the drain found the client gone, and its `tool_calls`
+                // counts only the calls that were queued for the client.
+                context_metrics.flag_generation(snapshot_seq, TurnGeneration::of_stream(&outcome));
                 if outcome.repair_attempted {
                     warn!(
                         model = %model_name_owned,

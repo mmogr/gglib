@@ -7,6 +7,15 @@
 //! over `GET /v1/proxy/status/stream`, consumed by both the CLI (`gglib
 //! proxy dashboard`) and the web GUI's Proxy Dashboard modal.
 //!
+//! A snapshot is recorded before its request is forwarded, so what is learnt
+//! of the turn afterwards is filed by its sequence number, through the
+//! `flag_*` methods. Three of them write onto the snapshot:
+//! [`ContextMetricsStore::flag_dialect_residue`],
+//! [`ContextMetricsStore::flag_tool_repair`] and
+//! [`ContextMetricsStore::flag_generation`], which writes what the turn
+//! generated. The others read the snapshot only for its model's name, to
+//! count against that model in the ledger.
+//!
 //! ## Concurrency design
 //!
 //! [`ContextMetricsStore`] uses `std::sync::Mutex` — not `tokio::sync::Mutex`
@@ -20,6 +29,8 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use gglib_core::domain::defects::LoopGuardTrip;
+
+use crate::generation::TurnGeneration;
 
 // =============================================================================
 // Constants
@@ -63,6 +74,65 @@ pub struct ContextSnapshot {
     /// Back-patched after the response streams via
     /// [`ContextMetricsStore::flag_tool_repair`].
     pub tool_repaired: bool,
+    /// `usage.completion_tokens` as the upstream reported it.
+    ///
+    /// This and the four fields after it are what the turn generated. They
+    /// keep their defaults until the turn is over, when
+    /// [`ContextMetricsStore::flag_generation`] writes them. They stay at
+    /// their defaults on any turn that ended before an answer was read, for
+    /// example one never forwarded, one whose upstream answered with an error
+    /// status, or one whose upstream could not be reached or did not answer
+    /// in time.
+    ///
+    /// Streamed: from the turn's `Usage` frame, and `None` when the turn ended
+    /// without one being read. Non-streaming: from the body the client is
+    /// answered with, and `None` when it carries none.
+    ///
+    /// A turn whose tool call is re-issued generates twice. Streamed, this is
+    /// the first generation's count, because the re-issue's answer is read
+    /// only for its tool calls. Non-streaming, it is the count in whichever of
+    /// the two bodies the client is answered with.
+    pub completion_tokens: Option<u32>,
+    /// Characters of reasoning, counted as Unicode scalar values, not bytes.
+    ///
+    /// Streamed: summed over every reasoning delta read out of normalization,
+    /// the first generation's only on a re-issued turn. Non-streaming: the
+    /// length of the first choice's `message.reasoning_content` in the body
+    /// the client is answered with. Zero when there was none.
+    pub reasoning_chars: usize,
+    /// Tool calls queued for the client.
+    ///
+    /// Streamed: the distinct call indices among the tool-call frames queued
+    /// for the client. Calls are told apart by the `index` their frames carry
+    /// on the wire. A call split over many fragments counts once; a call
+    /// withheld for repair counts when its frames are released, not when they
+    /// are held; and when a re-issue's calls replace the originals, the
+    /// replacements are the ones counted. Non-streaming: the length of the
+    /// first choice's `message.tool_calls` in the body the client is answered
+    /// with. Zero when there was none.
+    pub tool_calls: u32,
+    /// The `finish_reason` the turn ended with.
+    ///
+    /// Streamed: the one on the turn's `Done` event, the first generation's on
+    /// a re-issued turn, and `None` when no `Done` was read or it carried
+    /// none. Non-streaming: the first choice's, in the body the client is
+    /// answered with.
+    pub finish_reason: Option<String>,
+    /// Milliseconds between the first and the last generated token the
+    /// upstream streamed, whatever the normalizer later made of them. A
+    /// token is a text, reasoning or tool-call delta, timed as its event is
+    /// read from the upstream and before normalization, so a call a model writes
+    /// as text is timed over all of its markup, though the normalizer makes
+    /// one event of it.
+    ///
+    /// Prefill progress, the usage frame, the turn's finish and an error
+    /// frame are not tokens. The wait before the first token is not in the
+    /// figure, and neither is a tool call's re-issue. `Some(0)` when the
+    /// upstream streamed one token. `None` when it streamed none, and on
+    /// every non-streaming turn: that body arrives whole, so there are no
+    /// tokens to time.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
+    pub generation_ms: Option<u64>,
     /// The detector that made the pre-dispatch loop guard act on this request
     /// — forward it with a note, or refuse it with an HTTP 400 (see
     /// `loop_guard`) — or `None`.
@@ -284,6 +354,21 @@ impl ContextMetricsStore {
         self.with_model(seq, |ledger, model| {
             ledger.record_normalization_error(model);
         });
+    }
+
+    /// Write what the turn recorded with `seq` generated onto its snapshot.
+    ///
+    /// Does nothing when that snapshot has left the ring buffer. It counts
+    /// nothing: no total, and nothing in the ledger.
+    pub fn flag_generation(&self, seq: u64, generation: TurnGeneration) {
+        let mut guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(snapshot) = guard.iter_mut().find(|s| s.seq == seq) {
+            snapshot.completion_tokens = generation.completion_tokens;
+            snapshot.reasoning_chars = generation.reasoning_chars;
+            snapshot.tool_calls = generation.tool_calls;
+            snapshot.finish_reason = generation.finish_reason;
+            snapshot.generation_ms = generation.generation_ms;
+        }
     }
 
     /// Look up `seq`'s model name and hand it to the ledger.
