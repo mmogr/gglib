@@ -42,6 +42,7 @@ const settings = {
   titleGenerationPrompt: 'a prompt the user wrote',
   agenticSampling: false,
   agenticThinking: 'off',
+  agenticPromptNote: true,
   toolCallRepair: false,
   maxStagnationSteps: 7,
   defaultDownloadPath: '/downloads',

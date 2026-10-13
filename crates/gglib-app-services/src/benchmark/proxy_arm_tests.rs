@@ -44,8 +44,8 @@ async fn the_pinned_target_never_launches_or_stops_a_model() {
 }
 
 /// What the proxy reads: client sampling trusted, so seeds survive, repair on,
-/// the loop guard in `note` mode, the thinking policy `when-asked`, and no
-/// global sampling defaults.
+/// the loop guard in `note` mode, the thinking policy `when-asked`, no
+/// batching note, and no global sampling defaults.
 #[tokio::test]
 async fn the_fixed_settings_trust_client_sampling_and_add_no_defaults() {
     let settings = FixedSettings::for_eval().load().await.expect("loads");
@@ -53,6 +53,8 @@ async fn the_fixed_settings_trust_client_sampling_and_add_no_defaults() {
     assert_eq!(settings.tool_call_repair, Some(true));
     assert_eq!(settings.effective_loop_guard_mode(), LoopGuardMode::Note);
     assert_eq!(settings.agentic_thinking, Some(AgenticThinking::WhenAsked));
+    assert_eq!(settings.agentic_prompt_note, Some(false));
+    assert!(!settings.effective_agentic_prompt_note());
     assert!(settings.inference_defaults.is_none());
 }
 

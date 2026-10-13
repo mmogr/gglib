@@ -172,6 +172,7 @@ fn profiles_use_camel_case_on_the_wire() {
         mcp_drawing: None,
         agentic_sampling: Some(false),
         agentic_thinking: Some(gglib_core::AgenticThinking::WhenAsked),
+        agentic_prompt_note: Some(true),
         proxy_autostart: None,
         close_to_tray: None,
         start_at_login: None,
@@ -189,6 +190,7 @@ fn profiles_use_camel_case_on_the_wire() {
     // response DTO — a toggle that saves but cannot read back resets.
     assert_eq!(json["agenticSampling"], false);
     assert_eq!(json["agenticThinking"], "when-asked");
+    assert_eq!(json["agenticPromptNote"], true);
 
     // And the update request accepts the same shape back.
     let request: UpdateSettingsRequest = serde_json::from_value(serde_json::json!({
@@ -203,6 +205,36 @@ fn profiles_use_camel_case_on_the_wire() {
     let parsed = request.inference_profiles.flatten().expect("present");
     assert_eq!(parsed[0].name, "chat");
     assert!(!parsed[0].list_in_models);
+}
+
+/// The update request tells a note switch to store from a `null` that clears
+/// it and from a key left out, and each reaches the core update as itself.
+#[test]
+fn the_prompt_note_is_set_cleared_or_left_alone_on_the_wire() {
+    use gglib_core::SettingsUpdate;
+    let update = |body: serde_json::Value| -> SettingsUpdate {
+        serde_json::from_value::<UpdateSettingsRequest>(body)
+            .expect("deserializes")
+            .into()
+    };
+
+    assert_eq!(
+        update(serde_json::json!({"agenticPromptNote": true})).agentic_prompt_note,
+        Some(Some(true))
+    );
+    assert_eq!(
+        update(serde_json::json!({"agenticPromptNote": false})).agentic_prompt_note,
+        Some(Some(false))
+    );
+    assert_eq!(
+        update(serde_json::json!({"agenticPromptNote": null})).agentic_prompt_note,
+        Some(None)
+    );
+    assert_eq!(update(serde_json::json!({})).agentic_prompt_note, None);
+    assert_eq!(
+        update(serde_json::json!({"agenticSampling": false})).agentic_prompt_note,
+        None
+    );
 }
 
 /// The update request tells a policy to store from a `null` that clears it

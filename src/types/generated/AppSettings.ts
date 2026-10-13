@@ -46,4 +46,10 @@ agenticSampling: boolean | null,
  * The proxy's thinking policy for a turn that carries tools. Absent
  * means `when-asked` (see `gglib_core::Settings::agentic_thinking`).
  */
-agenticThinking: AgenticThinking | null, proxyAutostart: boolean | null, closeToTray: boolean | null, startAtLogin: boolean | null, };
+agenticThinking: AgenticThinking | null, 
+/**
+ * Whether the proxy adds its batching note to the system prompt of a
+ * request that carries tools. Absent means off (see
+ * `gglib_core::Settings::agentic_prompt_note`).
+ */
+agenticPromptNote: boolean | null, proxyAutostart: boolean | null, closeToTray: boolean | null, startAtLogin: boolean | null, };

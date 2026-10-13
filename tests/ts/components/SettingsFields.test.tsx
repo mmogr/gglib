@@ -70,6 +70,7 @@ const renderAdvanced = (
         loopGuardMode: 'note',
         agenticSampling: true,
         agenticThinking: 'when-asked',
+        agenticPromptNote: false,
         toolCallRepair: true,
         maxStagnationSteps: overrides.stagnation ?? '',
       }}

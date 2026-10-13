@@ -22,12 +22,21 @@ use tracing::debug;
 
 use super::ModelContext;
 
+/// Whether this stage takes the tools from a request to `ctx`'s model: a
+/// model the catalog resolved, which cannot call them.
+///
+/// Stage 1c reads it too, before this stage runs, so the two cannot answer
+/// differently.
+pub(crate) const fn strips_tools(ctx: &ModelContext) -> bool {
+    ctx.catalog_resolved && !ctx.capabilities.supports_tool_calls()
+}
+
 /// Remove `tools` and `tool_choice` when the resolved model cannot use them.
 ///
 /// No-op for tool-capable models, for unresolved (passthrough) contexts, and
 /// for requests that carry no tools.
 pub fn strip_unsupported_tools(body: &mut Value, ctx: &ModelContext) {
-    if !ctx.catalog_resolved || ctx.capabilities.supports_tool_calls() {
+    if !strips_tools(ctx) {
         return;
     }
     let Some(obj) = body.as_object_mut() else {

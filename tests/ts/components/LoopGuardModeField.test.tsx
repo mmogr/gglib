@@ -19,6 +19,7 @@ const guards = (overrides: Partial<AgentGuardSettingsValues> = {}): AgentGuardSe
   loopGuardMode: 'note',
   agenticSampling: true,
   agenticThinking: 'when-asked',
+  agenticPromptNote: false,
   toolCallRepair: true,
   maxStagnationSteps: '',
   ...overrides,

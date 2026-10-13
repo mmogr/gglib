@@ -131,6 +131,9 @@ Everything between the OpenAI request and llama-server is the product:
   client, one run of each arm, thinking off on every turn) the plan was as
   good and took a third of the time. `--agentic-thinking` changes it, and it
   sets nothing on a request that carries its own `reasoning_budget_tokens`.
+  `--agentic-prompt-note true` also adds a note to the system prompt of a
+  request that carries tools, asking the model to batch its tool calls; it is
+  off by default and has not been measured.
   [Details →](docs/sampling.md#the-agentic-turn-reasoning-budget),
   [decision →](docs/adr/0019-a-tool-turn-acts.md)
 - **Context defense**: tool-heavy sessions balloon past the context window

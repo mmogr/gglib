@@ -1,6 +1,6 @@
 /**
  * State for the agent-guard settings (agentic sampling cap, thinking policy,
- * stagnation limit).
+ * batching note, stagnation limit).
  *
  * Same rationale as `useDesktopSettings`: the group owns its own state and
  * hands back a ready-made slice of the update request.
@@ -21,6 +21,8 @@ export interface AgentGuardSettingsValues {
   agenticSampling: boolean;
   /** How much a proxy turn that carries tools may think. */
   agenticThinking: AgenticThinking;
+  /** Whether the proxy adds its batching note to a turn that carries tools. */
+  agenticPromptNote: boolean;
   /** Inverse polarity on the wire: unset means enabled. */
   toolCallRepair: boolean;
   /** Raw input string; blank = server default. */
@@ -31,6 +33,7 @@ const DEFAULTS: AgentGuardSettingsValues = {
   loopGuardMode: 'note',
   agenticSampling: true,
   agenticThinking: 'when-asked',
+  agenticPromptNote: false,
   toolCallRepair: true,
   maxStagnationSteps: '',
 };
@@ -49,6 +52,7 @@ export interface UseAgentGuardSettingsResult {
     | 'loopGuardMode'
     | 'agenticSampling'
     | 'agenticThinking'
+    | 'agenticPromptNote'
     | 'toolCallRepair'
     | 'maxStagnationSteps'
   >>;
@@ -61,6 +65,8 @@ const valuesFrom = (settings: AppSettings): AgentGuardSettingsValues => ({
   agenticSampling: settings.agenticSampling !== false,
   // Unset means `when-asked`, which is not the value `default`.
   agenticThinking: settings.agenticThinking ?? 'when-asked',
+  // Unset means off: only a stored `true` turns the note on.
+  agenticPromptNote: settings.agenticPromptNote === true,
   toolCallRepair: settings.toolCallRepair !== false,
   maxStagnationSteps: settings.maxStagnationSteps?.toString() ?? '',
 });
@@ -71,6 +77,7 @@ const requestFrom = (values: AgentGuardSettingsValues) => {
     loopGuardMode: values.loopGuardMode,
     agenticSampling: values.agenticSampling,
     agenticThinking: values.agenticThinking,
+    agenticPromptNote: values.agenticPromptNote,
     toolCallRepair: values.toolCallRepair,
     maxStagnationSteps: Number.isFinite(parsed) ? parsed : null,
   };

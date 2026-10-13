@@ -62,6 +62,10 @@ pub struct AppSettings {
     /// The proxy's thinking policy for a turn that carries tools. Absent
     /// means `when-asked` (see `gglib_core::Settings::agentic_thinking`).
     pub agentic_thinking: Option<AgenticThinking>,
+    /// Whether the proxy adds its batching note to the system prompt of a
+    /// request that carries tools. Absent means off (see
+    /// `gglib_core::Settings::agentic_prompt_note`).
+    pub agentic_prompt_note: Option<bool>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
     pub proxy_autostart: Option<bool>,
     pub close_to_tray: Option<bool>,
@@ -109,6 +113,7 @@ impl From<gglib_core::Settings> for AppSettings {
             mcp_drawing: settings.mcp_drawing,
             agentic_sampling: settings.agentic_sampling,
             agentic_thinking: settings.agentic_thinking,
+            agentic_prompt_note: settings.agentic_prompt_note,
             proxy_autostart: settings.proxy_autostart,
             close_to_tray: settings.close_to_tray,
             start_at_login: settings.start_at_login,
@@ -237,6 +242,11 @@ pub struct UpdateSettingsRequest {
     )]
     #[serde(default, with = "serde_with::rust::double_option")]
     pub agentic_thinking: Option<Option<AgenticThinking>>,
+    // The proxy's batching note; explicit `null` turns it off again
+    // (see `gglib_core::Settings::agentic_prompt_note`)
+    #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
+    #[serde(default, with = "serde_with::rust::double_option")]
+    pub agentic_prompt_note: Option<Option<bool>>,
     // Always-on proxy, desktop app only (see `gglib_core::Settings`)
     #[cfg_attr(feature = "ts-bindings", ts(type = "boolean | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
@@ -275,6 +285,7 @@ impl From<UpdateSettingsRequest> for gglib_core::SettingsUpdate {
             mcp_drawing: request.mcp_drawing,
             agentic_sampling: request.agentic_sampling,
             agentic_thinking: request.agentic_thinking,
+            agentic_prompt_note: request.agentic_prompt_note,
             proxy_autostart: request.proxy_autostart,
             close_to_tray: request.close_to_tray,
             start_at_login: request.start_at_login,

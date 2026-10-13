@@ -1,6 +1,7 @@
 //! Test fixtures shared by proxy integration tests.
 #![allow(dead_code)]
 pub(crate) mod access;
+pub(crate) mod agentic;
 pub(crate) mod chats;
 #[allow(
     clippy::significant_drop_tightening,

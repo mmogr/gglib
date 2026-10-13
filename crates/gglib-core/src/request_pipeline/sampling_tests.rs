@@ -115,6 +115,7 @@ fn each_layer_beats_the_ones_below_it() {
             trust_client_sampling: true,
             agentic_adjustments: false,
             agentic_thinking: crate::settings::AgenticThinking::Default,
+            agentic_prompt_note: false,
             last_speaker: None,
         };
         resolve_sampling(&mut body, &model_ctx(model.map(temp)), &layers);
@@ -147,6 +148,7 @@ fn a_sparse_profile_leaves_other_model_defaults_intact() {
             trust_client_sampling: false,
             agentic_adjustments: false,
             agentic_thinking: crate::settings::AgenticThinking::Default,
+            agentic_prompt_note: false,
             last_speaker: None,
         },
     );
@@ -455,6 +457,7 @@ fn a_profile_temperature_does_not_carry_model_penalties() {
             trust_client_sampling: false,
             agentic_adjustments: false,
             agentic_thinking: crate::settings::AgenticThinking::Default,
+            agentic_prompt_note: false,
             last_speaker: None,
         },
     );
@@ -1677,6 +1680,7 @@ fn each_rung_can_supply_a_reasoning_control() {
             trust_client_sampling: true,
             agentic_adjustments: false,
             agentic_thinking: crate::settings::AgenticThinking::Default,
+            agentic_prompt_note: false,
             last_speaker: None,
         };
 

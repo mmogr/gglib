@@ -37,6 +37,7 @@ const UNSET: AppSettings = {
   mcpDrawing: null,
   agenticSampling: null,
   agenticThinking: null,
+  agenticPromptNote: null,
   proxyAutostart: null,
   closeToTray: null,
   startAtLogin: null,

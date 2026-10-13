@@ -183,7 +183,9 @@ pub(super) fn settings_display_rows(
         } else if kebab_key == "default-image-model-id" {
             let display = image_display.clone().unwrap_or_else(|| "None".to_owned());
             rows.push((kebab_key, display));
-        } else if kebab_key == "mcp-drawing" && val.is_null() {
+        } else if matches!(kebab_key.as_str(), "mcp-drawing" | "agentic-prompt-note")
+            && val.is_null()
+        {
             // Absent is off, and the row says so rather than leave "None"
             // to be read either way.
             rows.push((kebab_key, "None (off)".to_owned()));

@@ -860,6 +860,9 @@ async fn attempt(
         // This is the one caller that passes the stored policy (ADR 0019):
         // https://github.com/mmogr/gglib/blob/main/docs/adr/0019-a-tool-turn-acts.md
         agentic_thinking: settings.effective_agentic_thinking(),
+        // Off unless stored on, and not gated by the switch above: the note
+        // is not a sampling change. Only this caller passes it.
+        agentic_prompt_note: settings.effective_agentic_prompt_note(),
         last_speaker: ctx.last_speaker,
     };
 

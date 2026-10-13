@@ -4,12 +4,13 @@
 //! are grouped in [`shape_messages`] because they are the contiguous run of
 //! message-level work in the pipeline — see [`mod@super::apply`] for why the order
 //! within that run is fixed. Stage 1b, the note for a chat that holds a drawn
-//! picture, is [`super::drawn_note`]'s.
+//! picture, is [`super::drawn_note`]'s, and stage 1c, the batching note for a
+//! request that carries tools, is [`super::agentic_note`]'s.
 
 use serde_json::Value;
 use tracing::{Level, debug, enabled, warn};
 
-use super::{ModelContext, drawn_note};
+use super::{ModelContext, agentic_note, drawn_note};
 use crate::domain::{ChatMessage, ModelCapabilities, transform_messages_for_capabilities};
 use crate::normalize::strip_thinking_debt;
 
@@ -20,13 +21,26 @@ use crate::normalize::strip_thinking_debt;
 /// payload untouched — which is not merely an optimisation for the proxy,
 /// where history truncation measures the payload in **wire bytes** and would
 /// otherwise measure a re-encoded body instead of the one the client sent.
+///
+/// Stage 1c is left out: it runs only for a caller that asks for it, through
+/// [`apply`](super::apply()).
 pub fn shape_messages(body: &mut Value, ctx: &ModelContext) -> bool {
+    shape_messages_noting(body, ctx, false)
+}
+
+/// [`shape_messages`], with stage 1c when `agentic_prompt_note` says so.
+pub(super) fn shape_messages_noting(
+    body: &mut Value,
+    ctx: &ModelContext,
+    agentic_prompt_note: bool,
+) -> bool {
     // Evaluated eagerly, not short-circuited: coalescing must run even when
     // the reasoning strip found nothing to do.
     let stripped = strip_prior_reasoning(body);
     let noted = drawn_note::note_drawn_picture(body);
+    let told = agentic_prompt_note && agentic_note::note_batching(body, ctx);
     let coalesced = coalesce_for_capabilities(body, ctx.capabilities);
-    stripped || noted || coalesced
+    stripped || noted || told || coalesced
 }
 
 /// Stage 1 — scrub reasoning artefacts from prior assistant turns.

@@ -97,6 +97,18 @@ pub struct SamplingLayers {
     ///
     /// [ADR 0019]: https://github.com/mmogr/gglib/blob/main/docs/adr/0019-a-tool-turn-acts.md
     pub agentic_thinking: AgenticThinking,
+    /// Whether a request carrying tools has [`AGENTIC_NOTE`] added to its
+    /// system prompt (stage 1c, [`super::agentic_note`]).
+    ///
+    /// Not a sampling value: no sampling stage reads it, and
+    /// [`Self::agentic_adjustments`] does not gate it. It is here because it
+    /// comes from the same settings snapshot as the fields above and reaches
+    /// [`apply`](super::apply()) with them. The proxy hands over
+    /// `Settings::effective_agentic_prompt_note`; every other caller leaves
+    /// it `false`, which is also what `Default` gives.
+    ///
+    /// [`AGENTIC_NOTE`]: super::AGENTIC_NOTE
+    pub agentic_prompt_note: bool,
     /// Who spoke last in the request as the client sent it, from a caller
     /// that changed `messages` before handing the body over.
     ///

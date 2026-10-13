@@ -175,6 +175,11 @@ running gglib changes this for every client with
 `gglib config settings set --agentic-thinking default`
 ([The agentic-turn reasoning budget](sampling.md#the-agentic-turn-reasoning-budget)).
 
+The person running gglib can also have the proxy add four lines to the system
+prompt of a request that carries `tools`, asking the model to batch its tool
+calls. It is off unless they turn it on, and it has not been measured
+([The agentic-turn batching note](sampling.md#the-agentic-turn-batching-note)).
+
 gglib's own turn routes take the choice as a word and remember it on the
 chat: `"thinking": "off"` or `"thinking": "default"` beside the message, on a
 paired device's turn (`PUT /v1/runs/{id}?kind=agent`), on the chat page's

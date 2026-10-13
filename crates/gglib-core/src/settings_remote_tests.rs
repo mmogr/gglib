@@ -198,6 +198,7 @@ fn a_remote_machine() -> Settings {
         mcp_drawing: Some(true),
         agentic_sampling: Some(true),
         agentic_thinking: Some(AgenticThinking::Brief),
+        agentic_prompt_note: Some(true),
         proxy_autostart: Some(true),
         close_to_tray: Some(true),
         start_at_login: Some(true),

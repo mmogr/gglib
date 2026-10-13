@@ -2,6 +2,7 @@
 //!
 //! Split out via `#[path]` so the module itself stays inside the file budget.
 
+use super::super::AGENTIC_NOTE;
 use super::super::tests_support::chars;
 use super::*;
 use crate::domain::{InferenceConfig, ModelCapabilities};
@@ -166,4 +167,87 @@ fn sampling_keys_are_not_counted_against_the_budget() {
         "stage 4 must not have run before the measurement that rejected this"
     );
     assert!(payload_chars > 200);
+}
+
+// ── Stage 1c ─────────────────────────────────────────────────────────────
+
+fn tool_turn(messages: &Value) -> Value {
+    json!({
+        "model": "m",
+        "messages": messages,
+        "tools": [{ "type": "function", "function": { "name": "read_file" } }],
+    })
+}
+
+/// The layers of the one caller that turns the batching note on.
+fn noting() -> SamplingLayers {
+    SamplingLayers {
+        agentic_prompt_note: true,
+        ..SamplingLayers::default()
+    }
+}
+
+/// How many times the batching note appears anywhere in `body`.
+fn batching_notes(body: &Value) -> usize {
+    let escaped = Value::from(AGENTIC_NOTE).to_string();
+    body.to_string().matches(escaped.trim_matches('"')).count()
+}
+
+/// Stage 1c runs before stage 2: a model with no system role reads the note
+/// where the pipeline puts any system text, in a `[System]:` user message,
+/// and no `system` message is left. Shaped again, the body does not change.
+#[test]
+fn a_model_with_no_system_role_reads_the_note_as_user_text() {
+    let strict = ModelContext {
+        capabilities: ModelCapabilities::REQUIRES_STRICT_TURNS,
+        ..ModelContext::passthrough()
+    };
+    for messages in [
+        json!([{"role": "system", "content": "Be brief."}, {"role": "user", "content": "go"}]),
+        json!([{"role": "user", "content": "go"}]),
+    ] {
+        let mut shaped = tool_turn(&messages);
+        apply(&mut shaped, &strict, &noting(), None).unwrap();
+
+        let sent = shaped["messages"].as_array().unwrap();
+        assert!(sent.iter().all(|message| message["role"] != "system"));
+        assert_eq!(sent[0]["role"], "user");
+        let first = sent[0]["content"].as_str().unwrap();
+        assert!(first.starts_with("[System]: "), "{first}");
+        assert!(first.contains(AGENTIC_NOTE), "{first}");
+        assert_eq!(batching_notes(&shaped), 1);
+
+        let once = shaped["messages"].to_string();
+        apply(&mut shaped, &strict, &noting(), None).unwrap();
+        assert_eq!(shaped["messages"].to_string(), once, "shaped twice");
+    }
+}
+
+/// Stage 1c runs before stage 3: the same request measures longer with the
+/// note by exactly the bytes the note adds to it.
+#[test]
+fn the_pipeline_measures_the_note_with_the_request() {
+    let body = tool_turn(&json!([
+        {"role": "system", "content": "Be brief."},
+        {"role": "user", "content": "go"},
+    ]));
+    let budget = Some(chars(100_000));
+
+    let mut untold = body.clone();
+    let without = apply(
+        &mut untold,
+        &ModelContext::passthrough(),
+        &SamplingLayers::default(),
+        budget,
+    )
+    .unwrap();
+    let mut told = body;
+    let with = apply(&mut told, &ModelContext::passthrough(), &noting(), budget).unwrap();
+    assert_eq!(batching_notes(&told), 1);
+
+    let added = Value::from(format!("\n\n{AGENTIC_NOTE}")).to_string().len() - "\"\"".len();
+    assert_eq!(
+        with.truncation.payload_chars_before,
+        without.truncation.payload_chars_before + added
+    );
 }

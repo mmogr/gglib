@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+pub(crate) mod agentic_note;
 pub mod apply;
 pub(crate) mod chat_runtime;
 pub(crate) mod constrain;
@@ -22,6 +23,7 @@ pub(crate) mod truncation;
 pub(crate) mod truncation_parts;
 pub mod validate;
 
+pub use agentic_note::AGENTIC_NOTE;
 pub use apply::{PipelineReport, apply};
 pub use chat_runtime::{DrawsImages, refuse_unless_chats};
 pub use constrain::{DISABLE_GRAMMAR_ENV, constrain_tool_calls};

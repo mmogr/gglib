@@ -487,6 +487,12 @@ source `agentic turn`. See
 [The agentic-turn reasoning budget](../../docs/sampling.md#the-agentic-turn-reasoning-budget)
 and [ADR 0019](../../docs/adr/0019-a-tool-turn-acts.md).
 
+With `gglib config settings set --agentic-prompt-note true`, a request
+carrying `tools` also has a four-line note asking the model to batch its tool
+calls appended to its system prompt. It is off by default and unmeasured, and
+the two switches above do not govern it; see
+[The agentic-turn batching note](../../docs/sampling.md#the-agentic-turn-batching-note).
+
 Resolution runs through `InferenceConfig::resolve_with_profile`, the single
 source of truth for the merge order.  The resolved values are aggressively
 written into the forwarded request body (via `body_obj.insert`) so llama-server

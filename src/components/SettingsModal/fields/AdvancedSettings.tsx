@@ -219,6 +219,23 @@ export const AdvancedSettings: FC<AdvancedSettingsProps> = ({
         </SettingField>
 
         <ToggleField
+          id="agentic-prompt-note-input"
+          label="Batching note on tool turns, on the proxy endpoint"
+          checked={agentGuards.agenticPromptNote}
+          onChange={(value) => setAgentGuardSetting('agenticPromptNote', value)}
+          disabled={saving}
+        >
+          Off by default, and not measured: nothing shows yet that it changes how a model
+          calls tools. When on, the proxy adds four lines to the system prompt of a request
+          that carries tools, asking the model to make independent reads and searches in one
+          turn, to search for a name before reading a file, to read only the part of a file
+          it needs, and to say what it will do in one line before calling tools. The text is
+          the same on every request. The cap above does not switch this off. Chats here and on
+          a paired device do not follow this; a chat with a paired machine&apos;s model follows
+          that machine&apos;s setting.
+        </ToggleField>
+
+        <ToggleField
           id="tool-call-repair-input"
           label="Tool call repair"
           checked={agentGuards.toolCallRepair}

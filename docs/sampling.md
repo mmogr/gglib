@@ -1023,3 +1023,50 @@ And each row of `recent_requests` in the status carries `reasoning_chars`,
 what the turn then thought. `gglib model explain` and the GUI's sampling
 provenance cannot show it: they explain stored configuration with no request
 in hand.
+
+## The agentic-turn batching note
+
+This one is not a sampling change. It is here because it acts on the same
+requests as the two sections above.
+
+On the proxy, a request carrying a non-empty `tools` array can have four
+lines added to its system prompt:
+
+```text
+When several reads or searches are independent, make all of those tool calls in one turn.
+Search for a name before reading a file.
+Read the part of a file you need, not the whole file.
+Say what you will do in one line, then call the tools.
+```
+
+**It is off by default, and it has not been measured.** No run has been taken
+with it on. In the thinking-off run [ADR 0019](adr/0019-a-tool-turn-acts.md)
+records, taken without it, 10 of the 50 turns made more than one tool call.
+
+```bash
+gglib config settings set --agentic-prompt-note true
+gglib config settings unset agentic-prompt-note     # back to off
+```
+
+In the app it is **Batching note on tool turns, on the proxy endpoint**, under
+Settings → Advanced.
+
+The note is appended to the request's first `system` message, after a blank
+line, or as one more text part when that message's content is an array of
+parts. A request with no `system` message gains one, before everything else.
+What the client sent before the note is unchanged, and the note is the same
+text on every request, so the front of the prompt does not move from turn to
+turn. A request whose first `system` message, or whose first message,
+already holds the note is left as it is.
+
+It is not added to a request without tools, or to a request for a model in
+the library that cannot call tools, whose `tools` gglib removes.
+
+The switch for the two sections above (`--agentic-sampling false`, or
+`GGLIB_DISABLE_AGENTIC_SAMPLING=1`) governs sampling changes and does not
+turn the note off; it has its own switch.
+
+Only the proxy adds it. gglib's own agent adds no note to a chat, on the chat
+page, from a paired device or in `gglib chat` and `gglib q`. When that chat's
+model is on a paired machine, the agent's requests go to that machine's
+proxy, which adds the note when its own setting is on.

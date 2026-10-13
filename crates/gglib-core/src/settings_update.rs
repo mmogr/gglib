@@ -53,6 +53,8 @@ pub struct SettingsUpdate {
     pub agentic_sampling: Option<Option<bool>>,
     /// See [`Settings::agentic_thinking`](super::Settings::agentic_thinking).
     pub agentic_thinking: Option<Option<AgenticThinking>>,
+    /// See [`Settings::agentic_prompt_note`](super::Settings::agentic_prompt_note).
+    pub agentic_prompt_note: Option<Option<bool>>,
     pub proxy_autostart: Option<Option<bool>>,
     pub close_to_tray: Option<Option<bool>>,
     pub start_at_login: Option<Option<bool>>,

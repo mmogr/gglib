@@ -7,6 +7,7 @@
 //! | 0 | Read who spoke last | [`super::request_shape`] | the last message's role |
 //! | 1 | Strip prior reasoning | [`super::messages`] | `messages` |
 //! | 1b | Note a drawn picture | [`super::drawn_note`] | `messages`, `tools` |
+//! | 1c | Tell a tool turn to batch | [`super::agentic_note`] | `messages`, `tools`, capabilities |
 //! | 2 | Coalesce for capabilities | [`super::messages`] | `messages` |
 //! | 2b | Strip unsupported tools | [`super::tools`] | `tools`, capabilities |
 //! | 3 | Truncate stale history | [`super::truncation`] | `messages`, payload size |
@@ -37,6 +38,11 @@
 //!
 //! **1b before 3.** The note is text gglib adds to the conversation the model
 //! reads, so stage 3 measures it with the rest.
+//!
+//! **1c before 2 and 3.** The same argument as 1b. The batching note may be a
+//! `system` message of its own, which stage 2 has to see, and it is text
+//! gglib adds to what the model reads, which stage 3 has to measure. It runs
+//! only when [`SamplingLayers::agentic_prompt_note`] is set.
 //!
 //! **2 before 3.** Both stages 1 and 2 only ever shrink the body, and stage 3
 //! measures it. Truncating first would size its budget against bytes that were
@@ -162,7 +168,7 @@ pub fn apply(
     // any stage below can change it.
     let last_speaker = layers.last_speaker.unwrap_or_else(|| LastSpeaker::of(body));
 
-    messages::shape_messages(body, ctx);
+    messages::shape_messages_noting(body, ctx, layers.agentic_prompt_note);
     tools::strip_unsupported_tools(body, ctx);
 
     let truncation = match budget {

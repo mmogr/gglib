@@ -69,11 +69,20 @@ does either.
   place the stage order and its rationale are written down. **Read this first.**
 - [`messages`] — [`shape_messages()`], stages 1–2: reasoning strip and
   capability coalescing. Everything that rewrites the `messages` array.
+  Called on its own it leaves stage 1c out.
 - [`drawn_note`] — stage 1b, called by [`shape_messages()`]: a request whose
   history holds a picture the drawing tool drew, and which does not offer
   that tool, gains [`DRAWN_NOTE`] at the front of its prompt, so a model
   offered no tool does not deny the picture. Its module docs hold the exact
   rule. [`DRAW_TOOL_NAME`] is the tool's name for every crate that spells it.
+- [`agentic_note`] — stage 1c, called from [`apply()`] after stage 1b: a
+  request that carries tools, for a model whose tools stage 2b will not
+  strip, gains [`AGENTIC_NOTE`] on its first `system` message, or as a
+  `system` message of its own. It runs only when
+  [`SamplingLayers::agentic_prompt_note`] is set, which the proxy does from
+  the `agentic_prompt_note` setting and no other caller does. Off by default
+  and unmeasured. The agentic-sampling switch does not gate it: the note is
+  not a sampling change.
 - [`drawn_picture`] — [`shown_picture()`], which is no stage: over the
   agent's messages, not a body, it says which drawn picture a model that
   reads images is shown (the most recent one) and on which message (the

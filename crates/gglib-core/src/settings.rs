@@ -274,6 +274,16 @@ pub struct Settings {
     /// gglib's own agent follows its chat's Thinking switch.
     pub agentic_thinking: Option<AgenticThinking>,
 
+    /// Whether the proxy adds a note to the system prompt of a request
+    /// carrying tools, asking the model to batch its tool calls: see
+    /// [`AGENTIC_NOTE`](crate::request_pipeline::AGENTIC_NOTE).
+    ///
+    /// Off unless stored `true`, and unmeasured. Read through
+    /// [`Self::effective_agentic_prompt_note`]. It is not a sampling change,
+    /// so [`Self::agentic_sampling`] does not gate it, and only the proxy
+    /// reads it: gglib's own agent adds no note to a chat.
+    pub agentic_prompt_note: Option<bool>,
+
     // ── Always-on proxy (desktop app) ───────────────────────────────
     /// Whether the desktop app starts the OpenAI-compatible proxy as soon as
     /// it launches, rather than waiting for the user to switch it on.
@@ -360,6 +370,7 @@ impl Settings {
             max_stagnation_steps: Some(crate::domain::agent::DEFAULT_MAX_STAGNATION_STEPS as u32),
             agentic_sampling: None,
             agentic_thinking: None,
+            agentic_prompt_note: None,
             default_model_id: None,
             default_image_model_id: None,
             inference_defaults: None,
@@ -428,6 +439,14 @@ impl Settings {
             Some(policy) => policy,
             None => AgenticThinking::WhenAsked,
         }
+    }
+
+    /// Whether the proxy adds the batching note to a request that carries
+    /// tools: the stored [`Self::agentic_prompt_note`], and off when none is
+    /// stored.
+    #[must_use]
+    pub const fn effective_agentic_prompt_note(&self) -> bool {
+        matches!(self.agentic_prompt_note, Some(true))
     }
 
     /// Whether `/mcp` offers the drawing tool: the stored
@@ -507,6 +526,9 @@ impl Settings {
         }
         if let Some(v) = other.agentic_thinking {
             self.agentic_thinking = v;
+        }
+        if let Some(v) = other.agentic_prompt_note {
+            self.agentic_prompt_note = v;
         }
         if let Some(ref v) = other.proxy_autostart {
             self.proxy_autostart = *v;
@@ -602,6 +624,10 @@ mod settings_loop_guard_tests;
 #[cfg(test)]
 #[path = "settings_agentic_thinking_tests.rs"]
 mod settings_agentic_thinking_tests;
+
+#[cfg(test)]
+#[path = "settings_agentic_prompt_note_tests.rs"]
+mod settings_agentic_prompt_note_tests;
 
 #[cfg(test)]
 #[path = "settings_tests.rs"]

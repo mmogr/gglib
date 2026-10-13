@@ -188,7 +188,7 @@ fn drawn_picture(messages: &[Value]) -> Option<usize> {
     drawn_at
 }
 
-fn role(message: &Value) -> &str {
+pub(super) fn role(message: &Value) -> &str {
     message.get("role").and_then(Value::as_str).unwrap_or("")
 }
 
@@ -203,7 +203,7 @@ fn texts(message: &Value) -> impl Iterator<Item = &str> {
 }
 
 /// Whether some piece of `message`'s text holds `words`.
-fn says(message: &Value, words: &str) -> bool {
+pub(super) fn says(message: &Value, words: &str) -> bool {
     texts(message).any(|text| text.contains(words))
 }
 

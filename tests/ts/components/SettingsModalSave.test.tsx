@@ -48,6 +48,7 @@ const settings = {
   maxToolIterations: 12,
   agenticSampling: false,
   agenticThinking: 'brief',
+  agenticPromptNote: true,
   toolCallRepair: false,
   maxStagnationSteps: 7,
   defaultModelId: 3,
@@ -163,6 +164,7 @@ const changes: [string, Change, UpdateSettingsRequest][] = [
   ['loop guard mode', advanced(choose('loop-guard-mode-input', 'off')), { loopGuardMode: 'off' }],
   ['agentic sampling cap', advanced(toggle('agentic-sampling-input')), { agenticSampling: true }],
   ['thinking policy', advanced(choose('agentic-thinking-input', 'off')), { agenticThinking: 'off' }],
+  ['batching note', advanced(toggle('agentic-prompt-note-input')), { agenticPromptNote: false }],
   ['tool call repair', advanced(toggle('tool-call-repair-input')), { toolCallRepair: true }],
   ['stagnation limit', advanced(retype('max-stagnation-steps-input', '9')), { maxStagnationSteps: 9 }],
 ];

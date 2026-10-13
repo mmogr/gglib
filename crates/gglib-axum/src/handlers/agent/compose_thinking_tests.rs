@@ -54,6 +54,31 @@ async fn a_stored_policy_sets_no_budget_on_a_tool_turn_for_this_machines_model()
     }
 }
 
+/// The proxy's batching note is the proxy's too: with it stored on, a tool
+/// turn on this machine's model reaches the model without it.
+#[tokio::test]
+async fn a_stored_prompt_note_is_not_added_to_a_tool_turn_for_this_machines_model() {
+    let (_dir, state) = state().await;
+    let id = model(&state, |_| {}).await;
+    let update = SettingsUpdate {
+        agentic_prompt_note: Some(Some(true)),
+        ..SettingsUpdate::default()
+    };
+    state.core.settings().update(update).await.unwrap();
+    let stored = state.core.settings().get().await.unwrap();
+    assert!(stored.effective_agentic_prompt_note());
+
+    let note = Value::from(gglib_core::request_pipeline::AGENTIC_NOTE).to_string();
+    for (door, chat) in doors(&state, id, true).await {
+        let body = sent(&state, id, chat).await;
+        assert!(carries_tools(&body), "{door}");
+        assert!(
+            !body.to_string().contains(note.trim_matches('"')),
+            "{door}: {body}"
+        );
+    }
+}
+
 /// The far detail route's answer for model 3, as a gglib proxy writes it.
 const LOOKUP: &str = r#"{"detail":{"id":3,"name":"org/qwen3","paramCountB":8.0,
     "quantization":"Q4_K_M","addedAt":"2026-10-01 09:00:00","isServing":false,"metadata":{}}}"#;

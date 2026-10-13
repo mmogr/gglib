@@ -169,6 +169,21 @@ pub struct SettingsSetArgs {
     /// not follow this: each chat has its own Thinking switch.
     #[arg(long, value_enum)]
     pub agentic_thinking: Option<AgenticThinkingArg>,
+    /// Add a note to the system prompt of a request that carries tools, on the proxy.
+    /// Off by default, and not measured: nothing shows yet that it changes
+    /// how a model calls tools. When true, the proxy appends four lines to
+    /// the request's first system message, or adds a system message when
+    /// there is none: make independent reads and searches in one turn,
+    /// search for a name before reading a file, read the part of a file you
+    /// need, and say what you will do in one line before calling tools. The
+    /// text is the same on every request. A request with no tools gets no
+    /// note, and neither does a model gglib knows cannot call tools.
+    /// --agentic-sampling does not switch this off: it is not a sampling
+    /// change. `gglib chat`, `gglib q`, the chat page and a paired device do
+    /// not follow this; a chat with a paired machine's model goes through
+    /// that machine's proxy, which follows its own setting.
+    #[arg(long)]
+    pub agentic_prompt_note: Option<bool>,
     /// Re-issue a malformed tool call under a grammar: `tool_choice: "required"`, or gglib's own.
     /// Enabled by default: a call that fails schema validation is
     /// attempted once more, with llama.cpp's own grammar made non-lazy or,

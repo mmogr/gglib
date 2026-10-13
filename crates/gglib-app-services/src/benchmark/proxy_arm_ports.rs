@@ -79,6 +79,8 @@ impl FixedSettings {
             // Named, though it is what an unset install runs: a later change
             // of that default then leaves stored comparisons where they were.
             agentic_thinking: Some(AgenticThinking::WhenAsked),
+            // Named for the same reason: the arm adds no note to a prompt.
+            agentic_prompt_note: Some(false),
             ..Settings::default()
         })
     }

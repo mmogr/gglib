@@ -147,6 +147,21 @@ mod update_settings_request_tests {
         }
     }
 
+    /// The same hop for the batching note's switch.
+    #[test]
+    fn the_stored_prompt_note_reaches_the_settings_ui() {
+        use gglib_core::Settings;
+
+        for stored in [None, Some(false), Some(true)] {
+            let settings = Settings {
+                agentic_prompt_note: stored,
+                ..Settings::with_defaults()
+            };
+            let dto = super::super::AppSettings::from(settings);
+            assert_eq!(dto.agentic_prompt_note, stored, "for {stored:?}");
+        }
+    }
+
     /// The write hop: what the GUI select sends is what the domain applies.
     ///
     /// This is the line the whole Tier 1 claim rests on — the select's only
