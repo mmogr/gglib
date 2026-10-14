@@ -114,7 +114,7 @@ fn a_passthrough_context_merges_nothing() {
     assert_eq!(body["messages"].as_array().unwrap().len(), 2);
 }
 
-// ── Stages 4–5: sampling and cache_prompt ─────────────────────────────────
+// ── Stage 4: sampling ─────────────────────────────────────────────────────
 
 /// The per-model layer the agent path never applied.
 #[test]
@@ -174,23 +174,14 @@ fn caller_temperature_does_not_inherit_model_penalties() {
 
     assert!((body["temperature"].as_f64().unwrap() - 0.11).abs() < 1e-6);
     // The caller claimed the temperature and named no penalty, so the model's
-    // 1.5 is passed over and nothing is sent. Since ADR 0003 the floor no
-    // longer restates upstream's own 0.0 here, so the parameter is absent
-    // rather than zeroed — the model still decodes at 0.0, supplied by
-    // llama.cpp. Absence is the assertion: a value here would be gglib
+    // 1.5 is passed over and nothing is sent. There is no floor (ADR 0022),
+    // so the parameter is absent rather than zeroed — the model still decodes
+    // at 0.0, supplied by llama.cpp. Absence is the assertion: a value here would be gglib
     // overriding whatever upstream defaults to next.
     assert!(
         body.get("presence_penalty").is_none(),
         "presence_penalty must be deferred to llama.cpp: {body}"
     );
-}
-
-/// Pinned here for the same reason it is pinned in the proxy: the agent path
-/// benefits from the same KV reuse, and the two bodies should not differ.
-#[test]
-fn cache_prompt_is_pinned() {
-    let body = body_of(&adapter(ModelContext::passthrough(), None), &[user("hi")]);
-    assert_eq!(body["cache_prompt"], true);
 }
 
 // ── Stage 3: history truncation ───────────────────────────────────────────

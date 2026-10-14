@@ -10,9 +10,10 @@
 //! above or below global settings depending on whether a person set them.
 //!
 //! The resolved numbers alone cannot distinguish a value someone chose from
-//! one that fell out of a floor. `0.0` is a number; "`0.0`, from the floor,
-//! because the profile claimed the temperature" is an explanation, and only
-//! the second makes the behaviour auditable.
+//! one that was passed over. "No `presence_penalty` sent" is an absence;
+//! "none sent, because the profile claimed the temperature and the model's
+//! 1.5 was tuned for another" is an explanation, and only the second makes
+//! the behaviour auditable.
 //!
 //! ## One computation, not two
 //!
@@ -42,32 +43,16 @@ use serde::{Deserialize, Serialize};
 pub enum ParamSource {
     /// The layer at this index in the resolved ladder named the value.
     Layer(usize),
-    /// The class floor, because no layer named a value at all.
-    Floor,
-    /// A layer claimed `temperature` and this parameter is tuned against it,
-    /// so no layer beneath was eligible to supply one.
+    /// A layer claimed `temperature`, this parameter is tuned against it, and
+    /// neither that layer nor any above it named one, so no value is sent.
     ///
-    /// Distinct from [`Floor`](Self::Floor) in the fact that matters: here a
+    /// Distinct from [`Unset`](Self::Unset) in the fact that matters: here a
     /// lower layer may well have named a value and was **deliberately passed
-    /// over**. That is what the coupling rule does, and it is the one thing a
-    /// bare resolved number can never explain.
-    ///
-    /// # It does not imply a value was supplied
-    ///
-    /// The name predates [ADR 0003], when the floor filled all seven
-    /// parameters and being passed over always meant landing on a floor value.
-    /// Six of those are now deferred to llama.cpp, so a coupled parameter can
-    /// resolve to `None`: the rule fired, nothing beneath was eligible, and
-    /// the floor had nothing to offer either.
-    ///
-    /// The variant still reports the rule rather than degrading to
-    /// [`Unset`](Self::Unset), because "a value was discarded here" and
-    /// "nobody ever named one" are different explanations and only the first
-    /// tells a reader where to look. Check the resolved value for whether
-    /// anything was ultimately sent.
-    ///
-    /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
-    FloorCoupled,
+    /// over**. That is what the coupling rule does, and it is the one thing an
+    /// absent key can never explain. "A value was discarded here" and "nobody
+    /// ever named one" are different explanations, and only the first tells a
+    /// reader where to look.
+    Coupled,
     /// A layer named a value, and a later stage **suppressed** it because the
     /// model's observed template capabilities say the template never reads the
     /// field. Nothing was sent.
@@ -80,22 +65,17 @@ pub enum ParamSource {
     ///
     /// [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
     SuppressedByTemplate,
-    /// Nothing named it and the class floor carries none either, so no value
-    /// is sent and llama.cpp's own default applies. Which fields those are is
-    /// whatever
-    /// [`InferenceConfig::with_hardcoded_defaults`](crate::domain::InferenceConfig::with_hardcoded_defaults)
-    /// leaves unset — deliberately not restated here, where a list would go
-    /// stale as fields are added.
+    /// Nothing named it, so no value is sent and llama.cpp's own default
+    /// applies. There is no floor beneath the ladder (ADR 0022).
     Unset,
 }
 
 impl ParamSource {
     /// Whether a person actually chose this value.
     ///
-    /// `auto_detected_rung` is the index of the auto-detected per-model rung
-    /// in the ladder being asked about — a recipe written at import time is a
-    /// guess, not a choice, which is why it already ranks below global
-    /// settings.
+    /// `auto_detected_rung` is the index of the model's recipe rung in the
+    /// ladder being asked about — a recipe nobody here reviewed is not a
+    /// choice, which is why it already ranks below global settings.
     ///
     /// # Why this is a method and not a `matches!` at the call site
     ///
@@ -118,7 +98,7 @@ impl ParamSource {
             // Nothing named it, the coupling rule passed over whatever did, or
             // a template gate threw away what a rung chose. None of the three
             // leaves a chosen value standing on *this* parameter.
-            Self::Floor | Self::FloorCoupled | Self::Unset | Self::SuppressedByTemplate => false,
+            Self::Coupled | Self::Unset | Self::SuppressedByTemplate => false,
         }
     }
 }
@@ -127,11 +107,11 @@ impl ParamSource {
 /// [`resolve_with_profile`](crate::domain::InferenceConfig::resolve_with_profile)
 /// builds, in priority order.
 ///
-/// Only one of [`ModelUserSet`](Self::ModelUserSet) and
-/// [`ModelAutoDetected`](Self::ModelAutoDetected) is ever populated for a
-/// given model — both name `Model.inference_defaults`, and
-/// [`DefaultsOrigin`](crate::domain::DefaultsOrigin) decides which rung it
-/// occupies.
+/// [`ModelUserSet`](Self::ModelUserSet) and
+/// [`ModelAutoDetected`](Self::ModelAutoDetected) are both the model's own:
+/// what a person set, and the recipe beneath global settings.
+/// [`ModelSamplingContext::model_rungs`](crate::domain::ModelSamplingContext::model_rungs)
+/// decides what each holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SamplingLayer {
     /// Caller-supplied overrides — request parameters or CLI flags.
@@ -143,10 +123,11 @@ pub enum SamplingLayer {
     /// Global settings defaults.
     Global,
     /// Per-model defaults no person in this installation chose, so they rank
-    /// below global settings. Three origins share this rung by replacement —
+    /// below global settings. Three recipes share this rung by replacement —
     /// the `reasoning`-tag guess, the model author's published recipe, and a
-    /// tune sweep's measured winner — and `DefaultsOrigin` says which one is
-    /// actually in it; the surfaces that name the rung read that, not this.
+    /// tune sweep's measured winner — and `DefaultsOrigin` says which stored
+    /// one is in it, or none for the `reasoning` recipe; the surfaces that
+    /// name the rung read that, not this.
     ModelAutoDetected,
 }
 
@@ -275,7 +256,7 @@ impl FieldSources {
             .map(|(field, source)| {
                 let label = match source {
                     ParamSource::Layer(i) => names.get(i).copied().unwrap_or("?"),
-                    ParamSource::Floor | ParamSource::FloorCoupled => "floor",
+                    ParamSource::Coupled => "coupled",
                     ParamSource::Unset => "unset",
                     ParamSource::SuppressedByTemplate => "suppressed-by-template",
                 };

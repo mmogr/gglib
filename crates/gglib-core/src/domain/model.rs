@@ -123,11 +123,11 @@ pub struct Model {
     /// Per-model inference parameter defaults.
     ///
     /// These are preferred over global settings when making inference requests.
-    /// If not set, falls back to global settings or hardcoded defaults.
+    /// If not set, falls back to global settings and the model's recipe.
     #[serde(default)]
     pub inference_defaults: Option<InferenceConfig>,
-    /// Whether [`Self::inference_defaults`] was set by the user or
-    /// auto-detected at import time from the `reasoning` tag.
+    /// Who wrote [`Self::inference_defaults`]: a person, the import, or a
+    /// tune sweep.
     ///
     /// Always `None` when [`Self::inference_defaults`] is `None` — there is
     /// nothing to have an origin. See [`DefaultsOrigin`] for why this
@@ -226,7 +226,7 @@ pub struct NewModel {
     /// Per-model inference parameter defaults.
     ///
     /// These are preferred over global settings when making inference requests.
-    /// If not set, falls back to global settings or hardcoded defaults.
+    /// If not set, falls back to global settings and the model's recipe.
     #[serde(default)]
     pub inference_defaults: Option<InferenceConfig>,
     /// See [`Model::defaults_origin`].

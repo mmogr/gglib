@@ -156,10 +156,8 @@ async fn a_database_never_stamped_is_folded_too() {
     let pool = setup_database(&path).await.expect("the boot");
 
     assert_eq!(answer(&pool).await, Off);
-    assert_eq!(
-        user_version(&pool).await.expect("a version"),
-        LOOP_GUARD_MODE_SCHEMA_VERSION
-    );
+    // At least the fold's stamp: later passes stamp higher still.
+    assert!(user_version(&pool).await.expect("a version") >= LOOP_GUARD_MODE_SCHEMA_VERSION);
 }
 
 /// The stamp is what makes it once: a switch written into a stamped database,
@@ -170,9 +168,8 @@ async fn the_fold_runs_once_and_a_switch_written_after_it_is_not_folded() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("gglib.db");
     let pool = setup_database(&path).await.expect("a fresh database");
-    assert_eq!(
-        user_version(&pool).await.expect("a version"),
-        LOOP_GUARD_MODE_SCHEMA_VERSION,
+    assert!(
+        user_version(&pool).await.expect("a version") >= LOOP_GUARD_MODE_SCHEMA_VERSION,
         "a fresh database is stamped as it is made"
     );
     plant(&pool, SWITCH, "false").await;

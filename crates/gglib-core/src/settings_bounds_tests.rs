@@ -54,15 +54,13 @@ fn above(exclusive_min: impl Into<Value>) -> Accepted {
 }
 
 /// `contracts/settings/bounds.json`: the range each validator holds a number
-/// to, under the name the number is stored by, and the defaults and floors the
-/// settings page states.
+/// to, under the name the number is stored by, and the defaults the settings
+/// page states.
 #[derive(Serialize)]
 struct Bounds {
     settings: BTreeMap<&'static str, Accepted>,
     settings_defaults: BTreeMap<&'static str, Value>,
     inference: BTreeMap<&'static str, Accepted>,
-    inference_floor: InferenceConfig,
-    reasoning_floor: InferenceConfig,
 }
 
 fn bounds() -> Bounds {
@@ -108,8 +106,6 @@ fn bounds() -> Bounds {
             ("dryAllowedLength", at_least(DRY_ALLOWED_LENGTH_MIN)),
             ("dryPenaltyLastN", at_least(DRY_PENALTY_LAST_N_MIN)),
         ]),
-        inference_floor: InferenceConfig::with_hardcoded_defaults(),
-        reasoning_floor: InferenceConfig::reasoning_floor(),
     }
 }
 
@@ -273,8 +269,9 @@ fn bounds_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../contracts/settings/bounds.json")
 }
 
-/// The checked-in file is exactly what the constants and the floors give. Run
-/// with `GGLIB_RECORD_CONTRACTS=1` to rewrite it after a deliberate change.
+/// The checked-in file is exactly what the constants and
+/// `Settings::with_defaults` give. Run with `GGLIB_RECORD_CONTRACTS=1` to
+/// rewrite it after a deliberate change.
 #[test]
 fn the_checked_in_bounds_are_the_ones_the_validators_use() {
     let mut want = serde_json::to_string_pretty(&bounds()).expect("serialise");

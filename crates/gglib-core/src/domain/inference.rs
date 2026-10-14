@@ -5,22 +5,19 @@
 //! `presence_penalty`, `min_p`).
 //!
 //! **Tier B — Policy** ([ADR 0001]) for the hierarchy: the ordered fold,
-//! profiles, the user-set versus auto-detected split and the class floors are
-//! decisions llama-server is structurally not in a position to make, so
+//! profiles and the split between a person's defaults and a model's recipe
+//! are decisions llama-server is structurally not in a position to make, so
 //! nothing here gates on [`RuntimeCapabilities`].
 //!
-//! [`with_hardcoded_defaults`](InferenceConfig::with_hardcoded_defaults) is
-//! the exception, and it is the same shape as ADR 0001's `truncation` caveat:
-//! the *policy* of having a floor is gglib's, but a floor *value* that equals
-//! llama.cpp's own default is a redundant assertion rather than a decision.
-//! Six of the seven were measured to be exactly that. [ADR 0003] decides they
-//! are deferred, leaving `temperature` — the one genuine divergence, 0.7
-//! against upstream's 0.8 — plus
-//! [`reasoning_floor`](InferenceConfig::reasoning_floor)'s class-aware
-//! overrides.
+//! There is no floor beneath the ladder ([ADR 0022]). A field no rung names is
+//! not sent, and llama.cpp's own default applies. [ADR 0003] measured six of
+//! the old floor's seven values to restate that default already; ADR 0022
+//! deferred the seventh, `temperature: 0.7`, and the `reasoning` class's
+//! `presence_penalty: 1.0` and `min_p: 0.0`.
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+//! [ADR 0022]: https://github.com/mmogr/gglib/blob/main/docs/adr/0022-the-proxy-does-less.md
 //! [`RuntimeCapabilities`]: crate::domain::RuntimeCapabilities
 //!
 //! This module provides the core `InferenceConfig` type that is reused across:
@@ -54,9 +51,13 @@ use crate::domain::sampling_provenance::{FieldSources, ParamSource};
 /// 1. Request-level override (user specified for this request)
 /// 2. Selected profile (`Settings.inference_profiles`, chosen as
 ///    `{model}:{profile}`; absent on surfaces without profiles)
-/// 3. Per-model defaults (stored in `Model.inference_defaults`)
+/// 3. Per-model defaults a person set (stored in `Model.inference_defaults`)
 /// 4. Global settings (stored in `Settings.inference_defaults`)
-/// 5. Hardcoded fallback (e.g., temperature = 0.7)
+/// 5. The model's recipe: a published or measured one stored in
+///    `Model.inference_defaults`, else the `reasoning` recipe for a
+///    `reasoning`-tagged model
+/// 6. llama.cpp's own defaults, for anything still unset (gglib sends no
+///    value for it)
 ///
 /// # Examples
 ///
@@ -153,13 +154,11 @@ pub struct InferenceConfig {
     /// Minimum-probability sampling threshold (0.0 - 1.0).
     ///
     /// Removes tokens whose probability is below `min_p × P(top token)`.
-    /// - 0.0: Disabled (explicit off; recommended by Qwen3.6, and the floor
-    ///   for `reasoning`-tagged models — see [`reasoning_floor`])
-    /// - 0.05: llama.cpp's own default, and the neutral floor here — see
-    ///   [`with_hardcoded_defaults`]
+    /// - 0.0: Disabled (explicit off; recommended by Qwen3.6, and what
+    ///   [`reasoning_profile`] names)
+    /// - 0.05: llama.cpp's own default, which applies when no rung names one
     ///
-    /// [`reasoning_floor`]: Self::reasoning_floor
-    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
+    /// [`reasoning_profile`]: Self::reasoning_profile
     pub min_p: Option<f32>,
 
     /// Dynamic-temperature half-range — entropy-adaptive temperature.
@@ -207,7 +206,7 @@ pub struct InferenceConfig {
     /// Penalises tokens that would extend a sequence already present in the
     /// context, which catches the multi-token degenerate loops that
     /// `repeat_penalty` — a flat per-token penalty — cannot see.
-    /// - 0.0: Disabled (llama.cpp's default, and the floor here)
+    /// - 0.0: Disabled (llama.cpp's default)
     /// - 0.8: A common starting point for long agentic sessions
     ///
     /// Left alone on agentic turns, deliberately, although structured output
@@ -251,8 +250,7 @@ pub struct InferenceConfig {
     /// and a seed stored per model would pin every response that model ever
     /// produces to the same text. So:
     ///
-    /// - no floor names it, on either class floor;
-    /// - nothing gglib writes at import names it;
+    /// - no recipe gglib resolves names it;
     /// - the CLI, profile and settings surfaces do not expose it.
     ///
     /// It lives here anyway, rather than beside the hierarchy, for the reason
@@ -318,10 +316,9 @@ pub struct InferenceConfig {
     /// That trade only exists if the rejection also *removes the key*, and it
     /// is this field that forces the point. Every other reader here rejects
     /// only what upstream would have rejected too, so a forwarded reject came
-    /// back as an HTTP 400 and the damage was visible; and floored fields are
-    /// overwritten by the resolved patch anyway. This field is neither — no
-    /// layer or floor ever names it (`no_floor_names_a_reasoning_control`) and
-    /// upstream validates nothing — so a rejection that stopped at the layer
+    /// back as an HTTP 400 and the damage was visible. This field is not —
+    /// no recipe gglib resolves names it (`no_recipe_names_a_reasoning_control`)
+    /// and upstream validates nothing — so a rejection that stopped at the layer
     /// would be a report with no effect, and `"banana"` would reach the
     /// prompt with gglib's own `client_fields_rejected` recording that it had
     /// been stopped. See the body cleanup in `request_pipeline::sampling`, and
@@ -342,16 +339,15 @@ pub struct InferenceConfig {
     /// field is modelled here rather than left to ride the body ungoverned
     /// (ADR 0007 finding 6, the #779 shape under a new name).
     ///
-    /// # No floor names one
+    /// # No recipe names one
     ///
-    /// See [`with_hardcoded_defaults`]. Several templates default themselves
-    /// (`gpt-oss` to `medium`); a floor here would override each template's own
-    /// choice with a value nobody made.
+    /// Several templates default themselves (`gpt-oss` to `medium`); a value
+    /// gglib supplied on its own would override each template's own choice
+    /// with a value nobody made.
     ///
     /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
     /// [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
     /// [`extract_client_sampling`]: Self::extract_client_sampling
-    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     pub reasoning_effort: Option<ReasoningEffort>,
 
     /// How many tokens of thinking the model is allowed before it is cut off —
@@ -406,58 +402,46 @@ pub struct InferenceConfig {
     /// that ADR's own earlier claim; do not re-derive an echo from the request
     /// *parse* table.
     ///
-    /// # No floor names one
+    /// # No recipe names one
     ///
-    /// See [`with_hardcoded_defaults`]. A fleet-wide thinking budget is a
-    /// tuning decision with measurement behind it, and `-1` — the "defer"
-    /// sentinel — is exactly what omitting the key already means.
+    /// A fleet-wide thinking budget is a tuning decision with measurement
+    /// behind it, and `-1` — the "defer" sentinel — is exactly what omitting
+    /// the key already means.
     ///
     /// [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
     /// [`extract_client_sampling`]: Self::extract_client_sampling
-    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     pub reasoning_budget_tokens: Option<i32>,
 }
 
-/// Whether a model's stored `inference_defaults` were set by the user or
-/// written automatically at import time.
+/// Who wrote a model's stored `inference_defaults`.
 ///
-/// `Model.inference_defaults` is populated two ways: a user explicitly
-/// tunes it (`gglib model update --presence-penalty …`, or the `WebUI` edit
-/// form), or [`crate::services`]'s import path auto-writes
-/// [`InferenceConfig::reasoning_profile`] onto any model carrying the
-/// `reasoning` tag — a reasonable guess, not a user decision. Both end up in
-/// the same column with nothing distinguishing them, which meant an
-/// auto-written guess silently outranked the user's own global settings in
-/// the resolution ladder ([`InferenceConfig::resolve_with_profile`]) exactly
-/// as if the user had tuned it themselves.
+/// `Model.inference_defaults` is written three ways: a person tunes it
+/// (`gglib model update --presence-penalty …`, or the `WebUI` edit form), the
+/// import fetches the model author's published recipe, or a tune sweep
+/// applies its winner. Only the first is a person's choice, so only the first
+/// outranks global settings in the resolution ladder
+/// ([`InferenceConfig::resolve_with_profile`]); the other two rank below them.
 ///
-/// This type tracks which one actually happened, so resolution can rank
-/// [`AutoDetected`](Self::AutoDetected) below global settings while a real
-/// [`User`](Self::User) choice keeps outranking them.
+/// The `reasoning` recipe ([`InferenceConfig::reasoning_profile`]) is not
+/// stored and has no origin here. Resolution supplies it below global
+/// settings for any `reasoning`-tagged model whose row holds no published or
+/// measured recipe ([`ModelSamplingContext::model_rungs`]), so a model whose
+/// own defaults are cleared resolves exactly as it did on import (ADR 0022).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum DefaultsOrigin {
     /// Set explicitly by the user — a CLI flag, a model-update request, or a
-    /// `WebUI` edit. Outranks global settings, same as before this type
-    /// existed.
+    /// `WebUI` edit. Outranks global settings.
     User,
-    /// Written automatically at import time from the model's `reasoning`
-    /// tag, never reviewed by a person. Ranks below global settings.
-    AutoDetected,
     /// Read at import time from the model author's own
     /// `generation_config.json` on `HuggingFace`.
     ///
-    /// Ranks **exactly where [`Self::AutoDetected`] does** — below global
-    /// settings — and is a distinct variant because of what it is, not where
-    /// it sits. Both are written without a person reviewing them, so neither
-    /// may outrank a setting somebody chose.
-    ///
-    /// It never *coexists* with `AutoDetected`: the import prefers this when
-    /// it can fetch one, because a published recipe is evidence about this
-    /// model where [`InferenceConfig::reasoning_profile`] is a generic guess
-    /// keyed off a tag. So "above generic tag guesses" holds by replacement
-    /// rather than by rank, and no new ladder rung is needed to express it.
+    /// Ranks below global settings, where the `reasoning` recipe does,
+    /// because nobody in this installation reviewed it; and it replaces that
+    /// recipe rather than merging with it, because a published recipe is
+    /// evidence about this model where the `reasoning` recipe is a generic
+    /// guess keyed off a tag.
     ///
     /// Kept apart from `User` for the reason that distinction exists at all:
     /// this is not a value anybody in this installation decided, so the
@@ -467,13 +451,12 @@ pub enum DefaultsOrigin {
     /// model, this quant, this hardware — not a person's choice, and not a
     /// guess either.
     ///
-    /// Ranks **exactly where [`Self::AutoDetected`] does** — below global
-    /// settings. The principle that puts it there is the ladder's oldest one:
-    /// nothing a person chose may be outranked by anything a person did not,
-    /// and an automated apply is not a person. Like [`Self::Published`], it
-    /// never coexists with the other below-global origins: applying a winner
-    /// overwrites `inference_defaults`, so "above the guesses" holds by
-    /// replacement rather than by rank.
+    /// Ranks below global settings, where [`Self::Published`] does. The
+    /// principle that puts it there is the ladder's oldest one: nothing a
+    /// person chose may be outranked by anything a person did not, and an
+    /// automated apply is not a person. Applying a winner overwrites
+    /// `inference_defaults`, so it replaces a published recipe and the
+    /// `reasoning` recipe alike.
     ///
     /// Unlike both of them, the **agentic-turn ceiling never caps it**. The
     /// sweep resolves its candidates against this model's real context
@@ -488,7 +471,6 @@ impl std::fmt::Display for DefaultsOrigin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::User => write!(f, "user"),
-            Self::AutoDetected => write!(f, "auto_detected"),
             Self::Published => write!(f, "published"),
             Self::Measured => write!(f, "measured"),
         }
@@ -501,11 +483,10 @@ impl std::str::FromStr for DefaultsOrigin {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "user" => Ok(Self::User),
-            "auto_detected" => Ok(Self::AutoDetected),
             "published" => Ok(Self::Published),
             "measured" => Ok(Self::Measured),
             other => Err(format!(
-                "unknown defaults origin '{other}'; expected user, auto_detected, published or measured"
+                "unknown defaults origin '{other}'; expected user, published or measured"
             )),
         }
     }
@@ -521,14 +502,29 @@ impl std::str::FromStr for DefaultsOrigin {
 /// of two easily transposed booleans.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ModelSamplingContext {
-    /// Whether the model carries gglib's `reasoning` capability tag. Selects
-    /// the coupled-trio floor — see [`InferenceConfig::reasoning_floor`].
+    /// Whether the model carries gglib's `reasoning` capability tag. Supplies
+    /// [`InferenceConfig::reasoning_profile`] below global settings when the
+    /// row stores no recipe of its own — see [`Self::model_rungs`].
     pub is_reasoning: bool,
-    /// Whether the model's `inference_defaults` were user-set or
-    /// auto-detected. `None` when the model has no stored
-    /// `inference_defaults` at all, in which case it has no effect either
-    /// way. See [`DefaultsOrigin`].
+    /// Who wrote the model's `inference_defaults`. `None` when the model has
+    /// no stored `inference_defaults` at all. See [`DefaultsOrigin`].
     pub defaults_origin: Option<DefaultsOrigin>,
+}
+
+/// The recipe a `reasoning`-tagged model resolves with when its row stores
+/// none of its own.
+static REASONING_RECIPE: InferenceConfig = InferenceConfig::reasoning_profile();
+
+/// Where a model's own sampling sits on the ladder: at most one config above
+/// global settings and at most one below.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct ModelRungs<'a> {
+    /// What a person set for this model. Outranks global settings.
+    pub user_set: Option<&'a InferenceConfig>,
+    /// A published or measured recipe stored on the row, or else the
+    /// `reasoning` recipe for a `reasoning`-tagged model. Ranks below global
+    /// settings.
+    pub below_global: Option<&'a InferenceConfig>,
 }
 
 impl ModelSamplingContext {
@@ -539,14 +535,44 @@ impl ModelSamplingContext {
     /// from the tag list inline. Two fields is exactly the size at which
     /// hand-construction looks harmless and stops being so: the pair travels
     /// together, both are read by the same fold, and a call site that filled
-    /// one and defaulted the other would resolve against the wrong floor or
-    /// mis-rank the model's own defaults against global settings — silently,
-    /// in both cases.
+    /// one and defaulted the other would drop the model's recipe or mis-rank
+    /// the model's own defaults against global settings — silently, in both
+    /// cases.
     #[must_use]
     pub fn for_model(model: &crate::domain::Model) -> Self {
         Self {
             is_reasoning: crate::domain::capability_tags::is_reasoning(&model.tags),
             defaults_origin: model.defaults_origin,
+        }
+    }
+
+    /// Place a model's stored defaults on the ladder.
+    ///
+    /// The one decision both ladders read, so `gglib model explain` and the
+    /// request pipeline cannot rank a model's defaults differently:
+    ///
+    /// - stored by a person ([`DefaultsOrigin::User`], or no origin): above
+    ///   global settings;
+    /// - stored by the import or a tune sweep ([`DefaultsOrigin::Published`],
+    ///   [`DefaultsOrigin::Measured`]): below global settings;
+    /// - and below global settings, when nothing is stored there, the
+    ///   `reasoning` recipe for a `reasoning`-tagged model.
+    ///
+    /// The last line is why clearing a model's own defaults gives back the
+    /// recipe it was imported with: the recipe is never stored, so no edit can
+    /// remove it (#1428).
+    ///
+    /// Exhaustive on purpose: a catch-all would rank any future origin nobody
+    /// reviewed above global settings, which is precisely backwards.
+    #[must_use]
+    pub fn model_rungs(self, stored: Option<&InferenceConfig>) -> ModelRungs<'_> {
+        let (user_set, stored_below) = match self.defaults_origin {
+            Some(DefaultsOrigin::Published | DefaultsOrigin::Measured) => (None, stored),
+            Some(DefaultsOrigin::User) | None => (stored, None),
+        };
+        ModelRungs {
+            user_set,
+            below_global: stored_below.or_else(|| self.is_reasoning.then_some(&REASONING_RECIPE)),
         }
     }
 }
@@ -757,11 +783,9 @@ fn read_i32(
 /// Read `max_tokens`, which is `u32` internally and `-1` on the wire.
 ///
 /// `-1` is llama.cpp's own idiom for "no limit", and omitting the key means
-/// exactly that here — see
-/// [`with_hardcoded_defaults`](InferenceConfig::with_hardcoded_defaults),
-/// which deliberately leaves `max_tokens` unset. So `-1` is not an error to
-/// be reported, it is a spelling of a value this type already has. Any other
-/// negative is a client bug.
+/// exactly that here: a `max_tokens` no rung names is not sent. So `-1` is
+/// not an error to be reported, it is a spelling of a value this type already
+/// has. Any other negative is a client bug.
 fn read_max_tokens(
     obj: &serde_json::Map<String, serde_json::Value>,
     issues: &mut Vec<FieldIssue>,
@@ -1008,10 +1032,10 @@ fn read_i32_raw(v: &serde_json::Value) -> Option<i32> {
 /// Which ladder rung supplied each member of the temperature-coupled set.
 ///
 /// Purely an intermediate inside [`InferenceConfig::resolve_layers_with_sources`]:
-/// the two arms of the coupling rule each produce one of these, and the
-/// provenance record is built from it. Named fields rather than a tuple
-/// because both arms and the provenance construction read it positionally
-/// otherwise, and the three are easy to transpose.
+/// the coupling rule produces one of these, and the provenance record is built
+/// from it. Named fields rather than a tuple because the provenance
+/// construction would read it positionally otherwise, and the three are easy
+/// to transpose.
 #[derive(Debug, Clone, Copy)]
 struct CoupledLayers {
     repeat_penalty: Option<usize>,
@@ -1020,89 +1044,6 @@ struct CoupledLayers {
 }
 
 impl InferenceConfig {
-    /// Merge another config into this one, preferring values from `other`.
-    ///
-    /// For each field, if `other` has Some(value), use it; otherwise keep self's value.
-    /// This is useful for applying fallback chains.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use gglib_core::domain::InferenceConfig;
-    ///
-    /// let mut request = InferenceConfig {
-    ///     temperature: Some(0.8),
-    ///     ..Default::default()
-    /// };
-    ///
-    /// let model_defaults = InferenceConfig {
-    ///     temperature: Some(0.5),
-    ///     top_p: Some(0.9),
-    ///     ..Default::default()
-    /// };
-    ///
-    /// request.merge_with(&model_defaults);
-    /// assert_eq!(request.temperature, Some(0.8)); // Request value wins
-    /// assert_eq!(request.top_p, Some(0.9));      // Fallback to model default
-    /// ```
-    pub const fn merge_with(&mut self, other: &Self) {
-        if self.temperature.is_none() {
-            self.temperature = other.temperature;
-        }
-        if self.top_p.is_none() {
-            self.top_p = other.top_p;
-        }
-        if self.top_k.is_none() {
-            self.top_k = other.top_k;
-        }
-        if self.max_tokens.is_none() {
-            self.max_tokens = other.max_tokens;
-        }
-        if self.repeat_penalty.is_none() {
-            self.repeat_penalty = other.repeat_penalty;
-        }
-        if self.presence_penalty.is_none() {
-            self.presence_penalty = other.presence_penalty;
-        }
-        if self.frequency_penalty.is_none() {
-            self.frequency_penalty = other.frequency_penalty;
-        }
-        if self.min_p.is_none() {
-            self.min_p = other.min_p;
-        }
-        if self.dynatemp_range.is_none() {
-            self.dynatemp_range = other.dynatemp_range;
-        }
-        if self.dynatemp_exponent.is_none() {
-            self.dynatemp_exponent = other.dynatemp_exponent;
-        }
-        if self.top_n_sigma.is_none() {
-            self.top_n_sigma = other.top_n_sigma;
-        }
-        if self.dry_multiplier.is_none() {
-            self.dry_multiplier = other.dry_multiplier;
-        }
-        if self.dry_base.is_none() {
-            self.dry_base = other.dry_base;
-        }
-        if self.dry_allowed_length.is_none() {
-            self.dry_allowed_length = other.dry_allowed_length;
-        }
-        if self.dry_penalty_last_n.is_none() {
-            self.dry_penalty_last_n = other.dry_penalty_last_n;
-        }
-        // Still `const`: `ReasoningEffort` is a fieldless `Copy` enum and the
-        // budget is an `i32`, so both moves are plain copies. A non-`Copy`
-        // field here (a `String` level, say) would have forced the keyword off
-        // this function and quietly turned every merge into a clone.
-        if self.reasoning_effort.is_none() {
-            self.reasoning_effort = other.reasoning_effort;
-        }
-        if self.reasoning_budget_tokens.is_none() {
-            self.reasoning_budget_tokens = other.reasoning_budget_tokens;
-        }
-    }
-
     /// Write the temperature-coupled set into `result` and report which rung
     /// supplied each member.
     ///
@@ -1117,27 +1058,18 @@ impl InferenceConfig {
         temperature: Option<usize>,
         result: &mut Self,
     ) -> CoupledLayers {
+        // With a claim, only the claimant and the layers above it may supply
+        // the set: a lower layer's value was tuned for a temperature that
+        // lost, and a field the claimant left unset is not sent rather than
+        // inherited. Without one, nothing was tuned against anything, so the
+        // set gap-fills like any uncoupled parameter.
+        let eligible = temperature.map_or(layers.len(), |claim| claim + 1);
         let first = |declares: &dyn Fn(&Self) -> bool| -> Option<usize> {
-            layers.iter().position(|l| l.is_some_and(declares))
+            layers[..eligible]
+                .iter()
+                .position(|l| l.is_some_and(declares))
         };
 
-        // The layer claiming `temperature` supplies the whole set, including
-        // the fields it left unset — those drop to the floor rather than
-        // inheriting a value tuned for a temperature nobody chose.
-        if let Some(claim) = temperature {
-            let c = layers[claim].expect("index came from a Some layer");
-            result.repeat_penalty = c.repeat_penalty;
-            result.presence_penalty = c.presence_penalty;
-            result.min_p = c.min_p;
-            return CoupledLayers {
-                repeat_penalty: c.repeat_penalty.and(Some(claim)),
-                presence_penalty: c.presence_penalty.and(Some(claim)),
-                min_p: c.min_p.and(Some(claim)),
-            };
-        }
-
-        // Nothing was tuned against anything, so the set gap-fills like any
-        // uncoupled parameter.
         let found = CoupledLayers {
             repeat_penalty: first(&|c| c.repeat_penalty.is_some()),
             presence_penalty: first(&|c| c.presence_penalty.is_some()),
@@ -1154,8 +1086,10 @@ impl InferenceConfig {
     }
 
     /// Resolve an ordered list of sampling layers (highest priority first)
-    /// into a single fully-resolved config, filling anything still unset from
-    /// `floor`, and report which layer supplied each field.
+    /// into a single config, and report which layer supplied each field.
+    ///
+    /// A field no layer names stays `None`: it is not sent, and llama.cpp's
+    /// own default applies. There is no floor beneath the ladder (ADR 0022).
     ///
     /// This is the one fold every multi-layer resolution surface goes
     /// through: [`resolve_with_profile`] wraps it for the simple
@@ -1189,11 +1123,14 @@ impl InferenceConfig {
     /// near-greedy one.
     ///
     /// So: `temperature` resolves to the first layer that sets one. If some
-    /// layer does, the coupled trio comes *only* from that same layer — never
-    /// a layer beneath it — falling to `floor` for anything that layer itself
-    /// left unset. If **no** layer sets a temperature at all, nothing has been
-    /// tuned against anything, so the trio gap-fills normally, exactly like
-    /// the uncoupled parameters.
+    /// layer does, each member of the coupled trio comes from that layer or a
+    /// layer above it — never a layer beneath it — and is not sent when none
+    /// of those names it. A layer above the claim that names a member without
+    /// a temperature is a choice that stands on its own: a person who sets
+    /// only `presence_penalty` on a model keeps it, whatever temperature the
+    /// model's recipe resolves beneath (ADR 0022). If **no** layer sets a
+    /// temperature at all, nothing has been tuned against anything, so the
+    /// trio gap-fills normally, exactly like the uncoupled parameters.
     ///
     /// # Why DRY is *not* coupled
     ///
@@ -1215,10 +1152,7 @@ impl InferenceConfig {
     /// [`resolve_with_profile`]: Self::resolve_with_profile
     /// [`reasoning_profile`]: Self::reasoning_profile
     #[must_use]
-    pub fn resolve_layers_with_sources(
-        layers: &[Option<&Self>],
-        floor: &Self,
-    ) -> (Self, FieldSources) {
+    pub fn resolve_layers_with_sources(layers: &[Option<&Self>]) -> (Self, FieldSources) {
         // Index into `layers` — not into the flattened iterator — so a caller
         // can map it back to the name it gave that rung.
         let first = |declares: &dyn Fn(&Self) -> bool| -> Option<usize> {
@@ -1264,7 +1198,7 @@ impl InferenceConfig {
             dry_penalty_last_n.and_then(|i| layers[i].and_then(|c| c.dry_penalty_last_n));
         // Uncoupled, and never coupled: a seed says nothing about how sharp the
         // distribution is, so pairing it with a temperature would be
-        // meaningless. See the field docs for why no floor names it either.
+        // meaningless. See the field docs for why no recipe names it either.
         result.seed = seed.and_then(|i| layers[i].and_then(|c| c.seed));
         // Uncoupled, and never coupled — for a stronger reason than the seed's.
         // The coupled trio travels with `temperature` because all four shape
@@ -1281,259 +1215,38 @@ impl InferenceConfig {
 
         let coupled_layers = Self::resolve_coupled(layers, temperature, &mut result);
 
-        result.merge_with(floor);
-
-        // A field no layer claimed came from the floor — or from nowhere, when
-        // the floor has none either, which is whatever `with_hardcoded_defaults`
-        // leaves unset rather than a list worth restating here.
-        //
-        // The coupling rule is checked **before** the floor's emptiness, and
-        // the order is load-bearing. `Unset` means "nobody named this"; when a
-        // layer named it and the coupling rule passed it over, that is a
-        // different and more interesting fact, and it stays true whether or
-        // not the floor then had a value to offer. Testing `!has_floor` first
-        // would report a passed-over coupled field as a plain absence wherever
-        // the floor names nothing, which the neutral floor does for the whole
-        // trio (ADR 0003).
+        // The coupling rule is checked before plain absence. `Unset` means
+        // "nobody eligible named this"; when a temperature was claimed, a
+        // layer beneath the claim may well have named a coupled field and been
+        // passed over, which is a different and more interesting fact.
         let coupled = temperature.is_some();
-        let source = |won: Option<usize>, has_floor: bool, is_coupled: bool| match won {
+        let source = |won: Option<usize>, is_coupled: bool| match won {
             Some(i) => ParamSource::Layer(i),
-            None if is_coupled => ParamSource::FloorCoupled,
-            None if !has_floor => ParamSource::Unset,
-            None => ParamSource::Floor,
+            None if is_coupled => ParamSource::Coupled,
+            None => ParamSource::Unset,
         };
 
         let sources = FieldSources {
-            temperature: source(temperature, floor.temperature.is_some(), false),
-            top_p: source(top_p, floor.top_p.is_some(), false),
-            top_k: source(top_k, floor.top_k.is_some(), false),
-            presence_penalty: source(
-                coupled_layers.presence_penalty,
-                floor.presence_penalty.is_some(),
-                coupled,
-            ),
-            repeat_penalty: source(
-                coupled_layers.repeat_penalty,
-                floor.repeat_penalty.is_some(),
-                coupled,
-            ),
-            min_p: source(coupled_layers.min_p, floor.min_p.is_some(), coupled),
-            dynatemp_range: source(dynatemp_range, floor.dynatemp_range.is_some(), false),
-            dynatemp_exponent: source(dynatemp_exponent, floor.dynatemp_exponent.is_some(), false),
-            top_n_sigma: source(top_n_sigma, floor.top_n_sigma.is_some(), false),
-            frequency_penalty: source(frequency_penalty, floor.frequency_penalty.is_some(), false),
-            dry_multiplier: source(dry_multiplier, floor.dry_multiplier.is_some(), false),
-            dry_base: source(dry_base, floor.dry_base.is_some(), false),
-            dry_allowed_length: source(
-                dry_allowed_length,
-                floor.dry_allowed_length.is_some(),
-                false,
-            ),
-            dry_penalty_last_n: source(
-                dry_penalty_last_n,
-                floor.dry_penalty_last_n.is_some(),
-                false,
-            ),
-            max_tokens: source(max_tokens, floor.max_tokens.is_some(), false),
-            reasoning_effort: source(reasoning_effort, floor.reasoning_effort.is_some(), false),
-            reasoning_budget_tokens: source(
-                reasoning_budget_tokens,
-                floor.reasoning_budget_tokens.is_some(),
-                false,
-            ),
+            temperature: source(temperature, false),
+            top_p: source(top_p, false),
+            top_k: source(top_k, false),
+            presence_penalty: source(coupled_layers.presence_penalty, coupled),
+            repeat_penalty: source(coupled_layers.repeat_penalty, coupled),
+            min_p: source(coupled_layers.min_p, coupled),
+            dynatemp_range: source(dynatemp_range, false),
+            dynatemp_exponent: source(dynatemp_exponent, false),
+            top_n_sigma: source(top_n_sigma, false),
+            frequency_penalty: source(frequency_penalty, false),
+            dry_multiplier: source(dry_multiplier, false),
+            dry_base: source(dry_base, false),
+            dry_allowed_length: source(dry_allowed_length, false),
+            dry_penalty_last_n: source(dry_penalty_last_n, false),
+            max_tokens: source(max_tokens, false),
+            reasoning_effort: source(reasoning_effort, false),
+            reasoning_budget_tokens: source(reasoning_budget_tokens, false),
         };
 
         (result, sources)
-    }
-
-    /// The floor beneath every sampling ladder: what gglib asserts when no
-    /// layer named a value.
-    ///
-    /// # It asserts one parameter, not seven
-    ///
-    /// [ADR 0003] measured this floor against a bare `llama-server` on the
-    /// pinned build and found six of its seven values were *exactly* the
-    /// upstream default:
-    ///
-    /// ```text
-    ///   parameter          gglib floor   upstream   verdict
-    ///   temperature                0.7        0.8   DIVERGES -> policy
-    ///   top_p                     0.95       0.95   EQUALS   -> deleted
-    ///   top_k                       40         40   EQUALS   -> deleted
-    ///   repeat_penalty             1.0        1.0   EQUALS   -> deleted
-    ///   presence_penalty           0.0        0.0   EQUALS   -> deleted
-    ///   min_p                     0.05       0.05   EQUALS   -> deleted
-    ///   dry_multiplier             0.0        0.0   EQUALS   -> deleted
-    /// ```
-    ///
-    /// Restating a value that is already the answer is not a decision, it is
-    /// a redundant assertion — and a costly one, because it silently overrides
-    /// whatever upstream chooses next (#739: a floor of `min_p: 0.0` disabled
-    /// the tail cut on every untuned request).
-    ///
-    /// The six are **deferred**, not disabled. Nothing is emitted for them, so
-    /// llama.cpp applies its own default — on this build, the upstream column
-    /// above. Provenance reports them as [`ParamSource::Unset`], which is
-    /// precisely what deferral is: gglib names no value.
-    ///
-    /// # `temperature: 0.7` stays, and upstream's is 0.8
-    ///
-    /// The one genuine policy choice in the set, stated here because an
-    /// undocumented divergence is invisible. gglib decodes slightly more
-    /// conservatively than llama.cpp's default for agentic work.
-    ///
-    /// # The floor differs by model class
-    ///
-    /// [`reasoning_floor`] asserts `presence_penalty: 1.0` and `min_p: 0.0`
-    /// for `reasoning`-tagged models, which are class-aware policy llama.cpp
-    /// has no notion of. So `min_p` is asserted for reasoning models and
-    /// deferred for every other model: the floor differs by class in what it
-    /// *names*, not only in what it names it as.
-    ///
-    /// # Deferral is safe only while the build is pinned
-    ///
-    /// [ADR 0002] pins the llama.cpp build; [ADR 0004]'s `/props` baseline
-    /// check reads the default table back and flags any field that moves.
-    /// That pairing is what makes deleting a value behaviour-preserving
-    /// rather than hopeful.
-    ///
-    /// [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md
-    /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
-    /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
-    /// [`reasoning_floor`]: Self::reasoning_floor
-    ///
-    /// # `max_tokens` has no fallback
-    ///
-    /// It is deliberately `None`. Resolution force-writes every `Some` field
-    /// into the outgoing request, so a value here would cap *every* request
-    /// that did not name its own — silently truncating long answers. Left
-    /// unset, no `max_tokens` key is emitted and llama-server applies its own
-    /// `n_predict` default of `-1`, generating until a stop token or the
-    /// context limit.
-    ///
-    /// Omitting the key is exactly equivalent to sending `-1` (llama.cpp's
-    /// `has_budget()` treats `-1` as limitless) and is the better of the two:
-    /// `max_tokens: -1` is invalid under the `OpenAI` schema, which requires a
-    /// positive integer, so a strict client or intermediary proxy may reject
-    /// it. Omission keeps the forwarded body `OpenAI`-legal.
-    ///
-    /// Explicit per-request, per-profile, and per-model values are unaffected —
-    /// [`reasoning_profile`] still sets its own ceiling.
-    ///
-    /// # Why `min_p` is deferred rather than restated
-    ///
-    /// `0.0` reads like an absence but is not one — [`to_openai_json_patch`]
-    /// drops only `None`, so a floor of `0.0` *explicitly disables* the tail
-    /// cut on every untuned request (#739). Restating upstream's `0.05` keeps
-    /// it visible in provenance at the price of a permanent silent override.
-    /// Deferral reports as unset *because it is unset*, and [ADR 0004]'s
-    /// readback names llama.cpp's own number instead of gglib restating it.
-    ///
-    /// [`reasoning_profile`]: Self::reasoning_profile
-    /// [`to_openai_json_patch`]: Self::to_openai_json_patch
-    #[must_use]
-    pub const fn with_hardcoded_defaults() -> Self {
-        Self {
-            // No floor names a seed. See the field docs: a seed is not a
-            // sampling policy, and a floor that pinned one would make every
-            // untuned request in the installation decode identically.
-            seed: None,
-            // The one value gglib asserts. Upstream's is 0.8; see above.
-            temperature: Some(0.7),
-            // Everything below is deferred to llama.cpp, which is a decision
-            // and not an omission — ADR 0003 finding 1 measured each of them
-            // equal to the upstream default on the pinned build. Setting any
-            // of these again means overriding whatever upstream chooses next,
-            // so do it only with a measurement saying upstream is wrong.
-            top_p: None,
-            top_k: None,
-            repeat_penalty: None,
-            presence_penalty: None,
-            min_p: None,
-            // Never floored: modelled after ADR 0003, under its rule. llama.cpp
-            // defaults it to 0.0 (off) and no measurement says otherwise; it is
-            // governed here so the untrusted-client gate covers it, not so a
-            // floor can assert it.
-            frequency_penalty: None,
-            // Never floored: introduced after ADR 0003, under its rule — the
-            // floor asserts only measured divergences from upstream, and no
-            // measurement says llama.cpp's own defaults (range 0.0 / exponent
-            // 1.0 / sigma −1.0, all "off") are wrong as a fleet-wide floor.
-            // Switching either mechanism on is a per-model or per-profile
-            // tuning decision with sweep data behind it.
-            dynatemp_range: None,
-            dynatemp_exponent: None,
-            top_n_sigma: None,
-            // DRY stays off, and says so by silence rather than by
-            // asserting the zero llama.cpp already defaults to. Enabling it
-            // fleet-wide is a tuning decision for a per-model or per-profile
-            // layer with sweep data behind it, not for the floor every untuned
-            // model lands on.
-            dry_multiplier: None,
-            // No floor: with the multiplier off they have no effect,
-            // and asserting values would claim a recipe nobody has measured.
-            dry_base: None,
-            dry_allowed_length: None,
-            dry_penalty_last_n: None,
-            // No fallback by design — see above.
-            max_tokens: None,
-            // Neither reasoning control is floored, and neither ever should
-            // be. A floored `reasoning_effort` would override each template's
-            // *own* internal default with a value nobody chose — `gpt-oss`
-            // sets itself to `medium` when no kwarg arrives, and other
-            // templates have other defaults or none. That is the #739 shape
-            // (a floor silently displacing the value the thing beneath already
-            // had) applied to a control that is not even observable
-            // afterwards. A floored budget is the same mistake with a number:
-            // `-1` already means "defer to the launch default", which is what
-            // emitting no key does for free.
-            reasoning_effort: None,
-            reasoning_budget_tokens: None,
-        }
-    }
-
-    /// The coupled-trio floor for models tagged `reasoning`.
-    ///
-    /// [`resolve_layers_with_sources`] falls back to a floor once it has decided which
-    /// layer (if any) claims the coupled set and that layer left a field
-    /// unset. [`with_hardcoded_defaults`]'s neutral `presence_penalty: 0.0` is
-    /// the right floor for most models, but wrong for a `reasoning`-tagged
-    /// one: those degrade under greedy or near-greedy decoding into
-    /// repetitive reasoning loops (see [`reasoning_profile`], which pairs
-    /// `presence_penalty: 1.5` with `temperature: 1.0` specifically to
-    /// prevent this). `1.0` keeps a real guard in place at the floor without
-    /// asserting the full recipe tuned for a different temperature.
-    ///
-    /// `min_p` is pinned to `0.0` for the same class-specific reason: Qwen3.6's
-    /// published guidance is to disable min-p on these models, which
-    /// [`reasoning_profile`] already encodes.
-    ///
-    /// # These two are the only class-specific *assertions*
-    ///
-    /// [ADR 0003] defers both `min_p` and `presence_penalty` to llama.cpp, so
-    /// this function reads as "two values the neutral floor does not name at
-    /// all": **`min_p` is asserted for reasoning models and deferred for
-    /// everything else.** A reasoning model gets `min_p: 0.0` on the wire;
-    /// every other model gets no `min_p` key and llama.cpp's own 0.05. That
-    /// asymmetry is deliberate — one is a measured divergence from upstream,
-    /// the other is agreement with it — but it will look like a bug to anyone
-    /// diffing two requests without this paragraph.
-    ///
-    /// `presence_penalty: 1.0` is the same shape: asserted here, deferred
-    /// elsewhere.
-    ///
-    /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
-    ///
-    /// [`resolve_layers_with_sources`]: Self::resolve_layers_with_sources
-    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
-    /// [`reasoning_profile`]: Self::reasoning_profile
-    #[must_use]
-    pub const fn reasoning_floor() -> Self {
-        Self {
-            presence_penalty: Some(1.0),
-            min_p: Some(0.0),
-            ..Self::with_hardcoded_defaults()
-        }
     }
 
     /// The highest temperature an agentic turn should decode at, when the
@@ -1556,7 +1269,7 @@ impl InferenceConfig {
     /// model manufactures the repetition its own vendors warn about.
     ///
     /// So a reasoning model's resolved temperature stands on agentic turns,
-    /// which in the shipped default means its auto-detected recipe's `1.0`.
+    /// which in the shipped default means the `reasoning` recipe's `1.0`.
     ///
     /// # `0.3` for everything else — unmeasured
     ///
@@ -1564,12 +1277,12 @@ impl InferenceConfig {
     /// rationale is steady structured output without being greedy, and it
     /// stays until it earns the same treatment: evidence, not argument.
     ///
-    /// # Why a ceiling and not a floor
+    /// # It only lowers a value a rung supplied
     ///
-    /// Any layer outranks a floor, so a floor never fires on a model whose
-    /// auto-detected recipe names a temperature. A ceiling gated on provenance
-    /// does, and stays out of the way everywhere a person actually made a
-    /// choice.
+    /// A ceiling gated on provenance caps a recipe nobody here reviewed and
+    /// stays out of the way everywhere a person actually made a choice. Where
+    /// no rung names a temperature, nothing is sent and the ceiling does not
+    /// add one: llama.cpp's own default applies (ADR 0022).
     ///
     /// [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
     #[must_use]
@@ -1579,17 +1292,20 @@ impl InferenceConfig {
 
     /// Return a recommended [`InferenceConfig`] profile for reasoning / thinking models.
     ///
-    /// Applied automatically at import time when the `"reasoning"` capability tag is
-    /// detected (e.g. Qwen3.6, `DeepSeek-R1`, `QwQ`). Values follow the Qwen3.6 upstream
-    /// guidance for **thinking mode — general tasks** and are conservative enough to
-    /// work well across all thinking-capable models.
+    /// Resolved below global settings for any model carrying the `"reasoning"`
+    /// capability tag (e.g. Qwen3.6, `DeepSeek-R1`, `QwQ`) whose row stores no
+    /// published or measured recipe — see [`ModelSamplingContext::model_rungs`].
+    /// Never stored, so clearing a model's own defaults gives it back. Values
+    /// follow the Qwen3.6 upstream guidance for **thinking mode — general
+    /// tasks** and are conservative enough to work well across all
+    /// thinking-capable models.
     ///
     /// | Parameter | Value | Rationale |
     /// |-----------|-------|-----------|
     /// | `temperature` | 1.0 | Recommended thinking-mode baseline |
     /// | `top_p` | 0.95 | Broad nucleus; standard for reasoning |
-    /// | `top_k` | 20 | Tighter than the 40 fallback; suppresses low-quality tokens |
-    /// | `max_tokens` | 8192 | Safe out-of-the-box ceiling; increase for complex tasks |
+    /// | `top_k` | 20 | Tighter than llama.cpp's 40; suppresses low-quality tokens |
+    /// | `max_tokens` | 32768 | Room for a long plan; a turn that hits the cap ends mid-thought |
     /// | `repeat_penalty` | 1.0 | No penalty; `presence_penalty` handles anti-repetition |
     /// | `presence_penalty` | 1.5 | Prevents repetitive reasoning loops |
     /// | `min_p` | 0.0 | Explicitly disabled per Qwen3.6 spec |
@@ -1605,18 +1321,13 @@ impl InferenceConfig {
             temperature: Some(1.0),
             top_p: Some(0.95),
             top_k: Some(20),
-            max_tokens: Some(8192),
+            max_tokens: Some(32_768),
             repeat_penalty: Some(1.0),
             presence_penalty: Some(1.5),
             min_p: Some(0.0),
-            // Deliberately unset, and this must stay that way: legacy rows are
-            // classified as auto-detected by comparing their stored defaults
-            // against this recipe verbatim (`resolve_defaults_origin`). Rows
-            // written before DRY existed deserialize these as `None`, so any
-            // value here would make every one of them compare unequal and
-            // silently reclassify as user-set, moving them up a resolution
-            // rung. The same holds for every field added since — dynatemp,
-            // top-n-sigma and frequency_penalty included.
+            // Deliberately unset: the Qwen3.6 guidance this recipe follows
+            // names none of them, and a value here would apply to every
+            // `reasoning`-tagged model with no measurement behind it.
             dry_multiplier: None,
             dry_base: None,
             dry_allowed_length: None,
@@ -1625,8 +1336,7 @@ impl InferenceConfig {
             dynatemp_exponent: None,
             top_n_sigma: None,
             frequency_penalty: None,
-            // Deliberately unset for the same legacy-row reason as the block
-            // above — and independently, because this recipe is keyed off the
+            // Deliberately unset, because this recipe is keyed off the
             // `reasoning` *tag*, which says a model thinks, not how hard it
             // should be asked to. Nothing observes whether the level landed,
             // so a guess written here would be an unfalsifiable one.
@@ -1642,8 +1352,8 @@ impl InferenceConfig {
     /// has no notion of a named profile: the benchmark's compare request.
     ///
     /// `model_ctx` carries the two facts about the target model that change
-    /// how resolution behaves — see [`ModelSamplingContext`],
-    /// [`resolve_layers_with_sources`] and [`reasoning_floor`].
+    /// how resolution behaves — see [`ModelSamplingContext`] and
+    /// [`resolve_layers_with_sources`].
     ///
     /// # Example
     ///
@@ -1656,14 +1366,12 @@ impl InferenceConfig {
     /// let resolved = request.resolve_with_defaults(Some(&model), None, ModelSamplingContext::default());
     /// assert_eq!(resolved.temperature, Some(0.9)); // request wins
     /// assert_eq!(resolved.top_p,       Some(0.8)); // model fills in
-    /// assert_eq!(resolved.top_k,       None);      // no layer named it, and
-    ///                                              // the floor defers top_k
-    ///                                              // to llama.cpp (ADR 0003)
+    /// assert_eq!(resolved.top_k,       None);      // no layer named it, so
+    ///                                              // llama.cpp's own applies
     /// ```
     ///
     /// [`resolve_with_profile`]: Self::resolve_with_profile
     /// [`resolve_layers_with_sources`]: Self::resolve_layers_with_sources
-    /// [`reasoning_floor`]: Self::reasoning_floor
     #[must_use]
     pub fn resolve_with_defaults(
         self,
@@ -1683,9 +1391,10 @@ impl InferenceConfig {
     /// 2. `profile` — the named profile the request selected, if any
     /// 3. `model` — per-model stored defaults, *if user-set*
     /// 4. `global` — global settings defaults
-    /// 5. `model` again, *if auto-detected* — see below
-    /// 6. the model-class floor — [`reasoning_floor`] when
-    ///    `model_ctx.is_reasoning`, otherwise [`with_hardcoded_defaults`]
+    /// 5. the model's recipe — a published or measured one stored on the
+    ///    row, or the `reasoning` recipe — see below
+    ///
+    /// A field none of them names is not sent.
     ///
     /// This is the single source of truth for inference parameter resolution
     /// across every gglib surface that does not need its own layer set;
@@ -1707,27 +1416,27 @@ impl InferenceConfig {
     /// from the model, which is what keeps one global profile safe to apply
     /// across differing architectures.
     ///
-    /// # Why `model` can rank below `global`
+    /// # Why a model's recipe ranks below `global`
     ///
     /// `model` is only ever a stand-in for `Model.inference_defaults`, which
-    /// gets written two different ways (see [`DefaultsOrigin`]): a person
-    /// tuning it deliberately, or gglib's own import-time guess for any
-    /// model tagged `reasoning`. Those deserve different authority. A
-    /// deliberate per-model choice should keep outranking the operator's
-    /// global defaults — that is what "per-model" means. A guess nobody
-    /// reviewed should not: above global, it silently shadows the user's own
-    /// configured global settings (#685). `model_ctx.defaults_origin`
-    /// decides which rung `model` occupies for this call — never both at
-    /// once, since only one of rungs 3 and 5 is ever populated for a given
-    /// model.
+    /// a person writes deliberately or the import and a tune sweep write with
+    /// nobody reviewing it (see [`DefaultsOrigin`]), and the `reasoning`
+    /// recipe is gglib's own guess for any model tagged `reasoning`. Those
+    /// deserve different authority. A deliberate per-model choice should keep
+    /// outranking the operator's global defaults — that is what "per-model"
+    /// means. A recipe nobody reviewed should not: above global, it silently
+    /// shadows the user's own configured global settings (#685).
+    /// [`ModelSamplingContext::model_rungs`] decides which rung `model`
+    /// occupies, and supplies the `reasoning` recipe beneath global settings
+    /// whenever nothing published or measured is stored there.
     ///
     /// # Temperature-tuned parameters do not fall through
     ///
     /// See [`resolve_layers_with_sources`] for the full rule. In short: once a layer
     /// declares a `temperature`, lower layers may not contribute
     /// `presence_penalty`, `repeat_penalty` or `min_p` — those resolve from
-    /// the claiming layer alone, falling to the class floor if it left them
-    /// unset.
+    /// the claiming layer or one above it, and are not sent when none of those
+    /// names them.
     ///
     /// # Example
     ///
@@ -1749,13 +1458,11 @@ impl InferenceConfig {
     ///     .resolve_with_profile(Some(&profile), Some(&model), None, model_ctx);
     ///
     /// assert_eq!(resolved.temperature,      Some(0.2)); // profile beats model
-    /// assert_eq!(resolved.presence_penalty, Some(1.0)); // reasoning floor, NOT the model's 1.5
+    /// assert_eq!(resolved.presence_penalty, None);      // NOT the model's 1.5
     /// assert_eq!(resolved.top_k,            Some(20));  // untuned: still fills
     /// ```
     ///
     /// [`resolve_layers_with_sources`]: Self::resolve_layers_with_sources
-    /// [`reasoning_floor`]: Self::reasoning_floor
-    /// [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
     /// [`resolve_with_defaults`]: Self::resolve_with_defaults
     #[must_use]
     pub fn resolve_with_profile(
@@ -1773,8 +1480,8 @@ impl InferenceConfig {
     /// field.
     ///
     /// This is the implementation; [`resolve_with_profile`] delegates here and
-    /// discards the provenance, so the ladder — including the user/auto rung
-    /// split and the floor selection — is built exactly once.
+    /// discards the provenance, so the ladder — including the split between a
+    /// person's defaults and the model's recipe — is built exactly once.
     ///
     /// Map a [`ParamSource::Layer`] index back to a rung with
     /// [`SamplingLayer::from_index`], which is kept beside this ladder for
@@ -1791,25 +1498,14 @@ impl InferenceConfig {
         global: Option<&Self>,
         model_ctx: ModelSamplingContext,
     ) -> (Self, FieldSources) {
-        let floor = if model_ctx.is_reasoning {
-            Self::reasoning_floor()
-        } else {
-            Self::with_hardcoded_defaults()
-        };
-        // Exhaustive on purpose. The catch-all this replaced sent every
-        // not-`AutoDetected` origin to the user-set rung, so adding
-        // `Published` would silently have ranked a fetched recipe *above*
-        // global settings — the one thing an unreviewed origin must never do.
-        let (user_model, auto_model) = match model_ctx.defaults_origin {
-            Some(
-                DefaultsOrigin::AutoDetected | DefaultsOrigin::Published | DefaultsOrigin::Measured,
-            ) => (None, model),
-            Some(DefaultsOrigin::User) | None => (model, None),
-        };
-        Self::resolve_layers_with_sources(
-            &[Some(&self), profile, user_model, global, auto_model],
-            &floor,
-        )
+        let rungs = model_ctx.model_rungs(model);
+        Self::resolve_layers_with_sources(&[
+            Some(&self),
+            profile,
+            rungs.user_set,
+            global,
+            rungs.below_global,
+        ])
     }
 
     /// Parse inference parameters from an OpenAI-format JSON body

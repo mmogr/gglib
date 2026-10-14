@@ -127,8 +127,8 @@ pub struct ModelDetailDto {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inference_defaults: Option<gglib_core::domain::InferenceConfig>,
-    /// Whether [`Self::inference_defaults`] was set by the user or
-    /// auto-detected at import time. See `gglib_core::domain::DefaultsOrigin`.
+    /// Who wrote [`Self::inference_defaults`]: a person, the import, or a
+    /// tune sweep. See `gglib_core::domain::DefaultsOrigin`.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub defaults_origin: Option<gglib_core::domain::DefaultsOrigin>,

@@ -16,21 +16,21 @@ import { samplingExplanation } from '../fixtures/explain';
  * reads the same constant it asserts on would pass whatever that constant said.
  * settingsBounds.test.ts is what ties these to Rust.
  */
-const PARAMS: { label: string; floor: string | null; min: number; max: number }[] = [
-  { label: 'Temperature', floor: '0.7', min: 0, max: 2 },
-  { label: 'Top P', floor: null, min: 0, max: 1 },
-  { label: 'Top K', floor: null, min: 1, max: 200 },
-  { label: 'Max Tokens', floor: null, min: 1, max: 8192 },
-  { label: 'Repeat Penalty', floor: null, min: 0.05, max: 2 },
-  { label: 'Presence Penalty', floor: null, min: 0, max: 2 },
-  { label: 'Min P', floor: null, min: 0, max: 1 },
-  { label: 'DRY Multiplier', floor: null, min: 0, max: 2 },
-  { label: 'DRY Base', floor: null, min: 1.05, max: 4 },
-  { label: 'DRY Allowed Length', floor: null, min: 0, max: 20 },
-  { label: 'DRY Penalty Last N', floor: null, min: -1, max: 8192 },
+const PARAMS: { label: string; min: number; max: number }[] = [
+  { label: 'Temperature', min: 0, max: 2 },
+  { label: 'Top P', min: 0, max: 1 },
+  { label: 'Top K', min: 1, max: 200 },
+  { label: 'Max Tokens', min: 1, max: 32768 },
+  { label: 'Repeat Penalty', min: 0.05, max: 2 },
+  { label: 'Presence Penalty', min: 0, max: 2 },
+  { label: 'Min P', min: 0, max: 1 },
+  { label: 'DRY Multiplier', min: 0, max: 2 },
+  { label: 'DRY Base', min: 1.05, max: 4 },
+  { label: 'DRY Allowed Length', min: 0, max: 20 },
+  { label: 'DRY Penalty Last N', min: -1, max: 8192 },
 ];
 
-const FLOOR: InferenceFallback = { kind: 'floor' };
+const UPSTREAM: InferenceFallback = { kind: 'upstream' };
 
 /** An explanation in which every parameter came from the global settings. */
 function fromGlobal(overrides: Partial<SamplingExplanation> = {}): SamplingExplanation {
@@ -76,13 +76,13 @@ function renderForm(fallback: InferenceFallback, value?: SparseInferenceConfig) 
 
 describe('InferenceParametersForm', () => {
   it.each(PARAMS)('$label is reachable by its label', ({ label }) => {
-    renderForm(FLOOR);
+    renderForm(UPSTREAM);
 
     expect(screen.getByLabelText(label)).toBeInTheDocument();
   });
 
   it.each(PARAMS)('$label constrains input to the range the backend accepts', ({ label, min, max }) => {
-    renderForm(FLOOR);
+    renderForm(UPSTREAM);
 
     const control = screen.getByLabelText(label);
     expect(control).toHaveAttribute('min', String(min));
@@ -90,48 +90,31 @@ describe('InferenceParametersForm', () => {
   });
 
   it('will not let Repeat Penalty reach zero, which the backend rejects', () => {
-    renderForm(FLOOR);
+    renderForm(UPSTREAM);
 
     // validate_inference_config rejects repeat_penalty <= 0.0, so the left
     // stop of the track used to be a value that could not be saved.
     expect(Number(screen.getByLabelText('Repeat Penalty').getAttribute('min'))).toBeGreaterThan(0);
   });
 
-  describe('on the global settings surface, where the floor is what applies', () => {
-    it.each(PARAMS.filter((p) => p.floor !== null))('$label states the floor', ({ label, floor }) => {
-      renderForm(FLOOR);
+  describe('on the global settings surface, where llama.cpp\'s defaults apply', () => {
+    // There is no floor (ADR 0022), so no field states a default of gglib's
+    // own and none names a value for reasoning models.
+    it.each(PARAMS)('$label states no default of gglib\'s own', ({ label }) => {
+      renderForm(UPSTREAM);
 
-      expect(screen.getByLabelText(label)).toHaveAccessibleDescription(
-        new RegExp(`Default: ${floor}`),
-      );
-    });
-
-    // reasoning_floor() asserts exactly these two, and this surface has no
-    // model to check the tag against, so both captions name the alternative.
-    //
-    // Load-bearing since ADR 0003 in a way it was not before: these are now
-    // the only parameters gglib asserts for one model class and defers for
-    // every other, so the note is the sole on-screen explanation of why two
-    // models decode differently. An earlier draft of the deferral dropped it,
-    // because the deferred branch returned before consulting the overrides.
-    it.each([
-      ['Presence Penalty', /1\.0 for reasoning models/],
-      ['Min P', /0\.0 for reasoning models/],
-    ])('%s names the floor reasoning models use instead', (label, pattern) => {
-      renderForm(FLOOR);
-
-      expect(screen.getByLabelText(label)).toHaveAccessibleDescription(pattern);
+      const field = screen.getByLabelText(label);
+      expect(field).not.toHaveAccessibleDescription(/^Default: /);
+      expect(field).not.toHaveAccessibleDescription(/for reasoning models/);
     });
 
     // Max Tokens' "No limit" wording describes unbounded generation. Every
-    // other floorless parameter means something different: gglib names no
-    // value and llama.cpp's own default applies — a number worth naming, and
-    // nothing to do with a limit.
-    //
-    // Since ADR 0003 that is most of the list. The six deferred parameters
-    // must keep stating the number that actually applies; a blank caption
-    // would read as "nothing happens here", which is the opposite of true.
+    // other parameter means something different: gglib names no value and
+    // llama.cpp's own default applies — a number worth naming, and nothing to
+    // do with a limit. A blank caption would read as "nothing happens here",
+    // which is the opposite of true.
     it.each([
+      ['Temperature', /llama\.cpp default: 0\.8/],
       ['Top P', /llama\.cpp default: 0\.95/],
       ['Top K', /llama\.cpp default: 40/],
       ['Repeat Penalty', /llama\.cpp default: 1\.0/],
@@ -142,7 +125,7 @@ describe('InferenceParametersForm', () => {
       ['DRY Allowed Length', /llama\.cpp default: 2/],
       ['DRY Penalty Last N', /llama\.cpp default: 64/],
     ])('%s cites llama.cpp rather than borrowing Max Tokens wording', (label, pattern) => {
-      renderForm(FLOOR);
+      renderForm(UPSTREAM);
 
       const field = screen.getByLabelText(label);
       expect(field).toHaveAccessibleDescription(pattern);
@@ -150,7 +133,7 @@ describe('InferenceParametersForm', () => {
     });
 
     it('claims no default for Max Tokens, because the backend has none', () => {
-      renderForm(FLOOR);
+      renderForm(UPSTREAM);
 
       const maxTokens = screen.getByLabelText('Max Tokens');
       expect(maxTokens).not.toHaveAttribute('placeholder');
@@ -173,7 +156,7 @@ describe('InferenceParametersForm', () => {
       );
     });
 
-    it('never states the floor as though it were the answer', () => {
+    it('never states a fixed default as though it were the answer', () => {
       renderForm(resolved(fromGlobal()));
 
       // The bug this replaced: a slider parked at 0.70 reading "(default)"
@@ -183,7 +166,7 @@ describe('InferenceParametersForm', () => {
       expect(temperature).toHaveValue('1.2');
     });
 
-    it('puts the placeholder on the inherited value, not the floor', () => {
+    it('puts the placeholder on the inherited value', () => {
       renderForm(resolved(fromGlobal()));
 
       expect(screen.getByLabelText('Top K')).toHaveAttribute('placeholder', '60');
@@ -222,7 +205,7 @@ describe('InferenceParametersForm', () => {
 
   describe('editing', () => {
     it('reports a typed value to onChange', async () => {
-      const onChange = renderForm(FLOOR);
+      const onChange = renderForm(UPSTREAM);
 
       await userEvent.type(screen.getByLabelText('Top K'), '5');
 
@@ -230,7 +213,7 @@ describe('InferenceParametersForm', () => {
     });
 
     it('drops the caption once a value is set, and offers a reset', () => {
-      renderForm(FLOOR, { topK: 80 });
+      renderForm(UPSTREAM, { topK: 80 });
 
       expect(screen.getByLabelText('Top K')).toHaveValue(80);
       expect(screen.getByLabelText('Top K')).not.toHaveAccessibleDescription();
@@ -238,7 +221,7 @@ describe('InferenceParametersForm', () => {
     });
 
     it('clears the parameter when reset is pressed', async () => {
-      const onChange = renderForm(FLOOR, { topK: 80 });
+      const onChange = renderForm(UPSTREAM, { topK: 80 });
 
       await userEvent.click(screen.getByRole('button', { name: /Reset Top K to default/ }));
 
@@ -257,7 +240,7 @@ describe('InferenceParametersForm', () => {
     // would change: clearing must reach `onChange` as an object without the
     // key, not as one carrying `null`.
     it('un-sets reasoning effort by dropping the key, not by nulling it', async () => {
-      const onChange = renderForm(FLOOR, { reasoningEffort: 'high' });
+      const onChange = renderForm(UPSTREAM, { reasoningEffort: 'high' });
 
       await userEvent.selectOptions(screen.getByLabelText('Reasoning Effort'), '');
 

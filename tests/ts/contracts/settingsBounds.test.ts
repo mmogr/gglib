@@ -10,8 +10,8 @@
  * The Rust side of the comparison is `contracts/settings/bounds.json`.
  * `gglib-core`'s settings-bounds tests write it from the constants
  * `validate_settings` and `validate_inference_config` check against, and from
- * what `Settings::with_defaults()` and the two inference floors return, and
- * fail there when it goes stale. So a bound or a default moved in Rust moves
+ * what `Settings::with_defaults()` returns, and fail there when it goes
+ * stale. So a bound or a default moved in Rust moves
  * the file, and this holds the GUI's copies to the file:
  *
  *   1. The GUI never accepts what the backend rejects — every `[min, max]` is a
@@ -55,10 +55,6 @@ const BOUNDS = JSON.parse(rust('contracts/settings/bounds.json')) as {
   settings_defaults: Record<string, number | null>;
   /** By `InferenceConfig` wire key: what `validate_inference_config` holds it to. */
   inference: Record<string, Accepted>;
-  /** `InferenceConfig::with_hardcoded_defaults()`, as it serialises. */
-  inference_floor: Record<string, unknown>;
-  /** `InferenceConfig::reasoning_floor()`, as it serialises. */
-  reasoning_floor: Record<string, unknown>;
 };
 
 /** One entry of the file, or a throw naming what it lacks. */
@@ -153,8 +149,7 @@ describe('the drawing settings vs Settings::with_defaults()', () => {
  * `reasoningBudgetTokens` is among them though it is not a sampling
  * parameter: it is the one reasoning control with a number and a Rust-side
  * range, which is exactly what this table checks. Its twin `reasoningEffort`
- * is an enum with no bounds and no numeric floor, so it is absent from
- * `SamplingParamKey`.
+ * is an enum with no bounds, so it is absent from `SamplingParamKey`.
  */
 const PARAMS = Object.keys(INFERENCE_PARAMS) as SamplingParamKey[];
 
@@ -163,21 +158,9 @@ describe('sampling parameters vs validate_inference_config', () => {
     expectOffersOnlyAccepted(INFERENCE_PARAMS[param], recorded<Accepted>('inference', param));
   });
 
-  it.each(PARAMS)('%s states the floor with_hardcoded_defaults() actually uses', (param) => {
-    // null on both sides is the point for max_tokens: Rust leaves it unset
-    // deliberately, so the GUI must not invent one.
-    expect(INFERENCE_PARAMS[param].default).toBe(recorded<number | null>('inference_floor', param));
-  });
-
-  it('only presence_penalty and min_p differ in the reasoning floor', () => {
-    // inferenceDefaults.ts annotates presencePenalty and minP as the two
-    // model-dependent floors. If reasoning_floor() ever overrides a third
-    // field, those comments — and the settings-surface captions built on
-    // them — go stale.
-    const differing = Object.keys(BOUNDS.reasoning_floor).filter(
-      (key) => BOUNDS.reasoning_floor[key] !== BOUNDS.inference_floor[key],
-    );
-
-    expect(differing.sort()).toEqual(['minP', 'presencePenalty']);
+  it('records no floor beneath the ladder (ADR 0022)', () => {
+    // The GUI states no fallback value, so the file must not offer one to
+    // hold it to.
+    expect(Object.keys(BOUNDS).sort()).toEqual(['inference', 'settings', 'settings_defaults']);
   });
 });

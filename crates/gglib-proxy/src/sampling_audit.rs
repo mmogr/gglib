@@ -276,7 +276,7 @@ pub struct Divergence {
     pub observed: f64,
     /// The ladder rung the sent value came from, for the log line. A
     /// divergence on a value someone deliberately set reads very differently
-    /// from one on a value that fell to the floor.
+    /// from one on a value from a recipe nobody here reviewed.
     pub provenance: String,
 }
 
@@ -1134,13 +1134,12 @@ pub enum PublishedOverrideState {
 fn describe_source(source: ParamSource, names: &[&'static str]) -> String {
     match source {
         ParamSource::Layer(i) => (*names.get(i).unwrap_or(&"?")).to_string(),
-        ParamSource::Floor => "floor".to_string(),
-        ParamSource::FloorCoupled => "floor (coupled)".to_string(),
+        ParamSource::Coupled => "unset (coupled)".to_string(),
         ParamSource::Unset => "unset".to_string(),
         // Unreachable from both callers, for different reasons. `compare`
         // renders the seven readback fields and never a reasoning control
         // (finding 7a); [`SuppressedEffort`] captures the rung *before* stage
-        // 5b overwrites it, and no floor names an effort. Labelled rather than
+        // 5b overwrites it, and only a rung names an effort. Labelled rather than
         // `unreachable!` — a mislabelled rung in an audit record is a smaller
         // fault than a panic on the request path.
         ParamSource::SuppressedByTemplate => "suppressed (template)".to_string(),

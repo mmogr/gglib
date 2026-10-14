@@ -99,18 +99,13 @@ async fn slot_roundtrip_non_streaming_verify_order_and_counts() {
         "Expected restore→generate→save order, got: {actions:?}"
     );
 
-    // Regression test: llama-server's KV reuse (n_past = get_common_prefix(...)
-    // in server-context.cpp) is gated entirely behind the request's own
-    // `cache_prompt` flag — if it's ever false, restore/save succeeding is
-    // meaningless, since the server discards the match and fully re-prefills
-    // anyway. The client above never set this field; verify the proxy forces
-    // it to true regardless.
+    // llama-server defaults `cache_prompt` to true, so the proxy adds no key
+    // of its own: the client above never set one, and none is forwarded.
     let forwarded_body = last_chat_body.lock().await.clone().expect("body captured");
     let forwarded_json: serde_json::Value = serde_json::from_slice(&forwarded_body).unwrap();
-    assert_eq!(
-        forwarded_json["cache_prompt"],
-        serde_json::json!(true),
-        "proxy must force cache_prompt=true so llama-server's reuse path isn't silently skipped, got: {forwarded_json}"
+    assert!(
+        forwarded_json.get("cache_prompt").is_none(),
+        "the proxy must not add cache_prompt, got: {forwarded_json}"
     );
 
     // Atomic save regression: the final `.bin` must exist post-save (the mock
@@ -209,14 +204,10 @@ async fn slot_roundtrip_no_header_falls_back_to_content_hash() {
     let _ = std::fs::remove_dir_all(&slot_dir);
 }
 
-/// Regression test: if the calling client explicitly sends `cache_prompt:
-/// false` (some OpenAI-compatible clients do, for reasons unrelated to
-/// llama-server's KV reuse semantics), the proxy must still force it back to
-/// true before forwarding. Without this, restore/save can both succeed and
-/// llama-server will still discard the entire match and fully re-prefill —
-/// silently defeating the whole point of this feature with no visible error.
+/// A client's own `cache_prompt` is a key gglib does not model, so it is
+/// forwarded as sent, like any other unknown key.
 #[tokio::test]
-async fn client_sent_cache_prompt_false_is_overridden_to_true() {
+async fn client_sent_cache_prompt_false_passes_through() {
     let slot_dir =
         std::env::temp_dir().join(format!("gglib-slot-cache-prompt-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&slot_dir);
@@ -247,8 +238,8 @@ async fn client_sent_cache_prompt_false_is_overridden_to_true() {
     let forwarded_json: serde_json::Value = serde_json::from_slice(&forwarded_body).unwrap();
     assert_eq!(
         forwarded_json["cache_prompt"],
-        serde_json::json!(true),
-        "proxy must override an explicit client cache_prompt=false, got: {forwarded_json}"
+        serde_json::json!(false),
+        "the client's cache_prompt must pass through, got: {forwarded_json}"
     );
 
     proxy_cancel.cancel();

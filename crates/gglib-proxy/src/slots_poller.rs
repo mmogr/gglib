@@ -556,7 +556,7 @@ mod tests {
 
     use crate::sampling_audit::AuditState;
     use gglib_core::domain::{FieldSources, InferenceConfig, ParamSource};
-    use gglib_core::request_pipeline::{FloorClass, SamplingDecision};
+    use gglib_core::request_pipeline::SamplingDecision;
 
     /// Built through the real parser rather than by hand, so these tests
     /// exercise the `/slots` shape the poller actually receives.
@@ -577,7 +577,7 @@ mod tests {
                 ..Default::default()
             },
             sources: FieldSources {
-                temperature: ParamSource::Floor,
+                temperature: ParamSource::Layer(1),
                 top_p: ParamSource::Unset,
                 top_k: ParamSource::Unset,
                 max_tokens: ParamSource::Unset,
@@ -596,7 +596,6 @@ mod tests {
                 reasoning_budget_tokens: ParamSource::Unset,
             },
             layer_names: ["cli", "client", "profile", "model", "global", "auto"],
-            floor: FloorClass::Default,
             agentic_turn: false,
             agentic_ceiling_applied: None,
             client_fields_rejected: Vec::new(),
@@ -643,7 +642,7 @@ mod tests {
         let snap = audit.snapshot();
         assert_eq!(snap.recent_divergences.len(), 1);
         assert_eq!(snap.recent_divergences[0].field, "temperature");
-        assert_eq!(snap.recent_divergences[0].provenance, "floor");
+        assert_eq!(snap.recent_divergences[0].provenance, "client");
     }
 
     /// An idle slot carries no `params`, so a quiet server must leave the

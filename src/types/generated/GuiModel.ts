@@ -23,8 +23,8 @@ expertUsedCount?: number,
  */
 expertSharedCount?: number, addedAt: string, hfRepoId: string | null, tags: Array<string>, isServing: boolean, port?: number, inferenceDefaults?: InferenceConfig, 
 /**
- * Whether [`Self::inference_defaults`] was set by the user or
- * auto-detected at import time. See `gglib_core::domain::DefaultsOrigin`.
+ * Who wrote [`Self::inference_defaults`]: a person, the import, or a
+ * tune sweep. See `gglib_core::domain::DefaultsOrigin`.
  */
 defaultsOrigin?: DefaultsOrigin, 
 /**

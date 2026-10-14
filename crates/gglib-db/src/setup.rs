@@ -26,6 +26,8 @@ mod model_components;
 mod model_files;
 #[path = "setup_models.rs"]
 mod models;
+#[path = "setup_recipes.rs"]
+mod recipes;
 #[path = "setup_settings.rs"]
 mod settings;
 
@@ -563,6 +565,10 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // A setting's row carried over into the setting that replaced it. After
     // every table exists, so a schema refused above has had no row rewritten.
     settings::fold_loop_guard_switch_into_mode(pool).await?;
+
+    // Stored copies of the `reasoning` recipe, which resolution now supplies
+    // from the tag. After the fold, whose version sits below this one.
+    recipes::drop_stored_reasoning_recipes(pool).await?;
 
     // Last, after every table it reads exists, however old the library.
     models::rebuild_models_if_needed(pool).await?;

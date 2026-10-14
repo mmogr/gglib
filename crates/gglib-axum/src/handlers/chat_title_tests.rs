@@ -154,7 +154,7 @@ fn the_settings_still_fill_what_a_title_request_does_not_say() {
 }
 
 /// The pipeline's own work, seen on a title: a strict-turn model's two
-/// messages in a row from one role are merged, and `cache_prompt` is pinned.
+/// messages in a row from one role are merged.
 #[test]
 fn the_request_is_shaped_as_a_turn_of_the_chat_is() {
     let strict = ModelContext {
@@ -173,7 +173,6 @@ fn the_request_is_shaped_as_a_turn_of_the_chat_is() {
 
     assert_eq!(roles_of(&shaped), ["user"]);
     assert_eq!(roles_of(&unshaped), ["user", "user"]);
-    assert_eq!(shaped["cache_prompt"], true);
 }
 
 #[test]

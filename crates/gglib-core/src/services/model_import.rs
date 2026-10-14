@@ -252,24 +252,20 @@ pub fn build_new_model(
         }
     }
 
-    // Seed the model's own rung of the sampling hierarchy, from the best
-    // evidence available about *this* model.
+    // Store the model author's published recipe, when the import found one.
     //
-    // Both origins rank identically — below global settings — because neither
-    // was reviewed by a person. What differs is their quality, and that is why
-    // a published recipe replaces the guess rather than merging with it:
-    //
-    // - **Published** — the author's `generation_config.json`, fetched from
-    //   the base repo. Evidence about this model.
-    // - **AutoDetected** — `reasoning_profile()`, keyed off a tag. A generic
-    //   guess that happens to be right for the Qwen3 family it was written
-    //   from.
-    //
-    // Merging them would produce a recipe no author published and gglib cannot
-    // defend, labelled as though somebody had. It would also defeat the
+    // It ranks below global settings, because nobody here reviewed it, and it
+    // replaces the `reasoning` recipe rather than merging with it: the
+    // author's `generation_config.json` is evidence about this model, where
+    // `reasoning_profile()` is a generic guess keyed off a tag. Merging them
+    // would produce a recipe no author published, and would defeat the
     // temperature-coupling rule, which exists precisely so a layer naming a
     // temperature is not silently paired with penalties tuned for a different
     // one.
+    //
+    // The `reasoning` recipe itself is never stored: resolution supplies it
+    // for a `reasoning`-tagged model with nothing published or measured on its
+    // row, so no later edit can remove it (ADR 0022).
     //
     // Only set when the model has no explicit defaults already (always true
     // here, since `model` was just constructed).
@@ -281,9 +277,6 @@ pub fn build_new_model(
         if let Some(config) = published {
             model.inference_defaults = Some(config.clone());
             model.defaults_origin = Some(DefaultsOrigin::Published);
-        } else if crate::domain::capability_tags::is_reasoning(&model.tags) {
-            model.inference_defaults = Some(InferenceConfig::reasoning_profile());
-            model.defaults_origin = Some(DefaultsOrigin::AutoDetected);
         }
     }
 
@@ -649,11 +642,12 @@ mod tests {
         assert_eq!(model.defaults_origin, Some(DefaultsOrigin::Published));
     }
 
-    /// The degradation path, and the one that must keep working: every fetch
-    /// failure arrives here as `None`, and the import behaves exactly as it
-    /// did before the lookup existed.
+    /// The degradation path: every fetch failure arrives here as `None`, and
+    /// nothing is stored. The `reasoning` recipe is supplied at resolution
+    /// from the tag, never written to the row, so no later edit of the
+    /// model's own defaults can remove it (ADR 0022, #1428).
     #[test]
-    fn no_published_recipe_falls_back_to_the_tag_guess() {
+    fn no_published_recipe_stores_nothing() {
         let hf_tags = vec!["reasoning".to_string()];
         let origin = hf_origin_with("unsloth/Qwen3-8B-GGUF", &hf_tags, None);
 
@@ -665,52 +659,9 @@ mod tests {
             Utc::now(),
         );
 
-        assert_eq!(
-            model.inference_defaults,
-            Some(InferenceConfig::reasoning_profile())
-        );
-        assert_eq!(model.defaults_origin, Some(DefaultsOrigin::AutoDetected));
-    }
-
-    #[test]
-    fn reasoning_tag_sets_inference_defaults_on_both_origins() {
-        let hf_tags = vec!["reasoning".to_string()];
-        let hf = hf_origin("unsloth/Qwen3-8B-GGUF", &hf_tags);
-        let hf_model = build_new_model(
-            Path::new("/models/m.gguf"),
-            None,
-            &NoopGgufParser,
-            &hf,
-            Utc::now(),
-        );
-        assert_eq!(
-            hf_model.inference_defaults,
-            Some(InferenceConfig::reasoning_profile())
-        );
-        assert_eq!(
-            hf_model.defaults_origin,
-            Some(DefaultsOrigin::AutoDetected),
-            "gglib's own guess, not a user choice — must rank below global settings"
-        );
-
-        let gguf = gguf_with(&[]);
-        let local = ModelOrigin::LocalFile {
-            param_count_override: None,
-        };
-        // NoopGgufParser detects no capabilities/tags, so drive the tag
-        // through metadata presence isn't possible here — this asserts the
-        // guard is origin-agnostic by checking the same code path runs for
-        // LocalFile without panicking and produces no defaults when no
-        // reasoning tag is present (see next test for the positive local case).
-        let local_model = build_new_model(
-            Path::new("/models/m.gguf"),
-            Some(&gguf),
-            &NoopGgufParser,
-            &local,
-            Utc::now(),
-        );
-        assert_eq!(local_model.inference_defaults, None);
-        assert_eq!(local_model.defaults_origin, None);
+        assert!(crate::domain::capability_tags::is_reasoning(&model.tags));
+        assert_eq!(model.inference_defaults, None);
+        assert_eq!(model.defaults_origin, None);
     }
 
     #[test]

@@ -1033,40 +1033,6 @@ mod tests {
         assert_eq!(refetched.defaults_origin, Some(DefaultsOrigin::User));
     }
 
-    /// Rows written before the `defaults_origin` column existed have `NULL`
-    /// there forever — there is no batch backfill (see `setup.rs`). This
-    /// proves the read path derives the right answer anyway, through the
-    /// real repository rather than the isolated `resolve_defaults_origin`
-    /// unit tests in `row_mappers`.
-    #[tokio::test]
-    async fn a_legacy_row_with_the_reasoning_recipe_reads_back_as_auto_detected() {
-        use gglib_core::domain::{DefaultsOrigin, InferenceConfig};
-
-        let repo = repo().await;
-        let inserted = repo.insert(&make_model("LegacyReasoning")).await.unwrap();
-
-        // Simulate a row written before this column existed: set
-        // inference_defaults directly via SQL, leaving defaults_origin NULL
-        // — bypassing the repository's own (already-informed) write path.
-        let recipe_json = serde_json::to_string(&InferenceConfig::reasoning_profile()).unwrap();
-        sqlx::query("UPDATE models SET inference_defaults = ? WHERE id = ?")
-            .bind(&recipe_json)
-            .bind(inserted.id)
-            .execute(repo.pool())
-            .await
-            .unwrap();
-
-        let refetched = repo.get_by_id(inserted.id).await.unwrap();
-        assert_eq!(
-            refetched.inference_defaults,
-            Some(InferenceConfig::reasoning_profile())
-        );
-        assert_eq!(
-            refetched.defaults_origin,
-            Some(DefaultsOrigin::AutoDetected)
-        );
-    }
-
     #[tokio::test]
     async fn get_by_name_is_deterministic_for_duplicate_names() {
         let repo = repo().await;

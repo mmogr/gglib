@@ -79,8 +79,7 @@ pub struct ModelSummary {
     /// request bodies, and by the agentic loop (`gglib chat`, `gglib q`) to
     /// apply model-specific sampling parameters.
     pub inference_defaults: Option<InferenceConfig>,
-    /// Whether [`Self::inference_defaults`] was set by the user or
-    /// auto-detected. See [`DefaultsOrigin`] and
+    /// Who wrote [`Self::inference_defaults`]. See [`DefaultsOrigin`] and
     /// [`InferenceConfig::resolve_with_profile`](crate::domain::InferenceConfig::resolve_with_profile).
     pub defaults_origin: Option<DefaultsOrigin>,
     /// Per-model server defaults (`context_length`, etc.) from the database.

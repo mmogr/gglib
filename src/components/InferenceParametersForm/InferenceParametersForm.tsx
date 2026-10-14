@@ -87,8 +87,8 @@ export const InferenceParametersForm: FC<InferenceParametersFormProps> = ({
   const renderNumberInput = (field: SamplingParamKey) => {
     const { min, max, step } = INFERENCE_PARAMS[field];
     const label = PARAM_LABELS[field];
-    // What the field will actually take if left empty — not necessarily the
-    // floor. Null when nothing applies (Max Tokens) or nothing is known yet.
+    // What the field will actually take if left empty. Null when gglib sends
+    // nothing (llama.cpp's own default applies) or nothing is known yet.
     const inherited = fallbackValue(field, fallback);
     const placeholder = inherited === null ? undefined : formatParamValue(field, inherited);
     const caption = fallbackCaption(field, fallback);

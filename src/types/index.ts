@@ -15,9 +15,12 @@ export type { ProvenanceParamKey, TemplateSupport } from './reasoning';
  * 
  * Hierarchy resolution (backend automatically applies):
  * 1. Request-level override (user specified for this request)
- * 2. Per-model defaults (stored in model.inferenceDefaults)
- * 3. Global settings (stored in AppSettings.inferenceDefaults)
- * 4. Hardcoded fallback (e.g., temperature = 0.7)
+ * 2. Selected profile (chosen as `{model}:{profile}`)
+ * 3. Per-model defaults a person set (stored in model.inferenceDefaults)
+ * 4. Global settings (stored in AppSettings.inferenceDefaults)
+ * 5. The model's recipe: a published or measured one, else the `reasoning`
+ *    recipe for a `reasoning`-tagged model
+ * 6. llama.cpp's own defaults, for anything still unset (no value is sent)
  */
 import type { InferenceConfig } from './generated/InferenceConfig';
 export type { InferenceConfig };
@@ -115,10 +118,9 @@ export type { SamplingLayerName };
  * and `PARAM_LABELS`.
  *
  * Membership here is a claim that `tests/ts/contracts/settingsBounds.test.ts`
- * can check: every key needs a `{ default, min, max, step }` entry that the
- * test holds to what Rust's `validate_inference_config` accepts and
- * `with_hardcoded_defaults` sets. `reasoningBudgetTokens` qualifies — Rust
- * gives it a floor and no default — and joins for exactly that reason.
+ * can check: every key needs a `{ min, max, step }` entry that the test holds
+ * to what Rust's `validate_inference_config` accepts. `reasoningBudgetTokens`
+ * qualifies — Rust gives it a lower bound — and joins for exactly that reason.
  *
  * `reasoningEffort` does not, and cannot: it is a string enum with no bounds
  * and no numeric default, so an entry for it would be a fabricated row in a
@@ -194,10 +196,12 @@ export type SamplingExplanation = Omit<SamplingExplanationDto, 'sources' | 'publ
  * Where a model's stored `inferenceDefaults` came from.
  *
  * - `user` — set by a person. Outranks global settings.
- * - `auto_detected` — gglib's `reasoning`-tag guess. Ranks below.
  * - `published` — the author's `generation_config.json`, read at import. Ranks
- *   exactly where `auto_detected` does; what differs is the evidence.
- * - `measured` — a tune sweep's winner on this hardware, ranked with those two.
+ *   below global settings.
+ * - `measured` — a tune sweep's winner on this hardware, ranked with it.
+ *
+ * The `reasoning` recipe ranks there too and has no origin: it is never
+ * stored (ADR 0022).
  *
  * Snake_case: this mirrors `gglib_core::domain::DefaultsOrigin` itself, which
  * is the one spelling every endpoint reporting the column now uses.

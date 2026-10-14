@@ -72,25 +72,14 @@ pub struct LlmCompletionAdapter {
     /// — the top layer of the hierarchy, equivalent to what an external client
     /// sends the proxy. Written into the body by [`body::build_chat_body`] and
     /// read back out by [`request_pipeline::apply()`], which folds
-    /// [`Self::layers`], the model's own defaults and the floor beneath it.
-    /// A value that fold passes over is taken back out of the body
-    /// ([`erase_passed_over`]), unless [`Self::keep_passed_over`] is set.
+    /// [`Self::layers`] and the model's own defaults and recipe beneath it.
+    /// Nothing outranks it there, so the fold never passes one of its values
+    /// over (ADR 0022).
     ///
     /// A value a stored layer supplied must never be handed in here: it would
     /// reach the pipeline as a person's choice, which outranks every layer
     /// and which the agentic temperature ceiling never lowers.
     sampling: Option<InferenceConfig>,
-    /// Leave in the request each parameter of [`Self::sampling`] the fold
-    /// passed over, which [`erase_passed_over`] would take out.
-    ///
-    /// Off (the default) for a person's turn: the ladder judges a flag, and a
-    /// flag it passed over is not sent. On for a tune sweep, whose candidate
-    /// is a statement of exactly what to measure. A `min_p` or
-    /// `repeat_penalty` a candidate names without a temperature is passed
-    /// over on any model whose stored defaults set one; taken out, a
-    /// candidate naming nothing else would be sent as the incumbent is, and
-    /// a sweep of that parameter alone would measure nothing.
-    keep_passed_over: bool,
     /// The stored layers beneath [`Self::sampling`]: the profile the caller
     /// selected and the settings' global defaults, and with them whether a
     /// turn with tools gets the agentic temperature ceiling. Handed to
@@ -252,8 +241,8 @@ impl LlmCompletionAdapter {
         // has already written the caller's own parameters into the body, which
         // is exactly where an external client's would be, so `apply` reads
         // them back as the top layer and resolves the caller's stored layers
-        // (`self.layers`), the model's and the floor beneath them. Whether a
-        // turn with tools is capped is those layers' to say.
+        // (`self.layers`) and the model's own beneath them. Whether a turn
+        // with tools is capped is those layers' to say.
         //
         // `trust_client_sampling: true` unconditionally: `Settings.trust_client_sampling`
         // gates an *external* client's request body against a boilerplate value it
@@ -278,12 +267,6 @@ impl LlmCompletionAdapter {
         )
         .map_err(|e| anyhow!("conversation exceeds the model's context budget: {e}"))?;
 
-        if let Some(named) = sampling
-            && !self.keep_passed_over
-        {
-            erase_passed_over(&mut body, named, &report.sampling);
-        }
-
         if let Some(observe) = &self.sampling_observer {
             observe(&report.sampling);
         }
@@ -298,39 +281,6 @@ impl LlmCompletionAdapter {
         }
 
         Ok(body)
-    }
-}
-
-/// Take out of `body` each parameter of `named` that the fold read and did
-/// not adopt, so the request carries what `decision` says and nothing beside
-/// it.
-///
-/// [`body::build_chat_body`] wrote `named` into the body for the fold to read
-/// as its top layer, and the fold only inserts what it resolved. A penalty
-/// named without the temperature it travels with is passed over when a layer
-/// beneath names one, and where the floor has no value to write over it the
-/// caller's key would ride on to the model.
-///
-/// A value the reader did not take as written stays: it was never in the fold
-/// to be passed over, and the pipeline leaves it for llama-server to answer,
-/// as it does an external client's.
-fn erase_passed_over(
-    body: &mut serde_json::Value,
-    named: &InferenceConfig,
-    decision: &SamplingDecision,
-) {
-    let Some(sent) = body.as_object_mut() else {
-        return;
-    };
-    let adopted = decision.resolved.to_openai_json_patch();
-    let unread = |key: &str| {
-        let issues = &decision.client_fields_rejected;
-        issues.iter().any(|issue| issue.field() == key)
-    };
-    for key in named.to_openai_json_patch().keys() {
-        if !adopted.contains_key(key) && !unread(key) {
-            sent.remove(key);
-        }
     }
 }
 

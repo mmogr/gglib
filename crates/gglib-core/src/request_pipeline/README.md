@@ -89,9 +89,9 @@ does either.
   the context in tokens they stand for, and the measurement stage 3 takes: a
   request's serialized length, with each image counted at its estimated
   tokens in place of the length of its URL.
-- [`sampling`] — [`resolve_sampling()`] and [`SamplingLayers`], stages 4–5: the
-  sampling hierarchy, the floor selection (neutral / reasoning / tool-call), and
-  the `cache_prompt` pin. Everything that touches top-level keys.
+- [`sampling`] — [`resolve_sampling()`] and [`SamplingLayers`], stage 4: the
+  sampling hierarchy and the agentic temperature ceiling. Everything that
+  touches top-level sampling keys.
 - [`effort_gate`] — stage 5b: deleting a resolved `reasoning_effort` the
   model's observed template does not read, and writing down what was deleted so
   a surface can say whose setting went nowhere.

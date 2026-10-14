@@ -23,13 +23,14 @@ const FLAGS_RUNG: usize = 1;
 /// sampled by: the ladder is folded where a request is shaped and nowhere
 /// before it, so that is the first moment anyone can know.
 ///
-/// The case that motivates it: `--profile chat --presence-penalty 1.2` with no
-/// `--temperature`. The profile claims the temperature, so the coupled trio
-/// comes only from the profile and the penalty is silently gone — see
-/// [`gglib_core::domain::discarded_from_rung`]. It predates profiles, though:
-/// any model with stored `inference_defaults` naming a temperature eats a bare
-/// `--presence-penalty` the same way, which is why this warns on every
-/// discard rather than only the profile case.
+/// What it catches: any flag the fold passed over — see
+/// [`gglib_core::domain::discarded_from_rung`] — which for a chat's flags is
+/// a float JSON cannot carry (`--presence-penalty NaN`), never sent whatever
+/// rung wins. A level the model's template does not read is left out: that
+/// gate has its own note. Its first case, `--profile chat --presence-penalty
+/// 1.2`, no longer discards anything: the coupling rule passes over only
+/// rungs beneath the one that claims the temperature, so a flag above it
+/// stands (ADR 0022).
 ///
 /// Never composed under `-Q`. `renderer` documents that quiet "suppresses all
 /// stderr output … ideal for scripting and piped output", and a warning that
@@ -62,7 +63,7 @@ fn warning(named: &InferenceConfig, decision: &SamplingDecision) -> Option<Strin
     )
     .into_iter()
     // A level the model's template does not read was dropped by that gate,
-    // not by the coupling the sentence below explains.
+    // which has its own note.
     .filter(|flag| !dropped_by_template(decision, flag))
     .map(|flag| format!("--{}", flag.replace('_', "-")))
     .collect();
@@ -70,8 +71,7 @@ fn warning(named: &InferenceConfig, decision: &SamplingDecision) -> Option<Strin
         return None;
     }
     Some(format!(
-        "  Warning: {} did not take effect. Sampling penalties travel with \
-         whichever layer sets the temperature; pass --temperature to set them together.",
+        "  Warning: {} did not take effect.",
         flags.join(", ")
     ))
 }

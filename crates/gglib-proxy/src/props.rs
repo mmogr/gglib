@@ -12,8 +12,9 @@
 //! # Why this is the load-bearing instrument
 //!
 //! [ADR 0003] defers six sampler values to llama.cpp on the strength of a
-//! measurement: on the pinned build, all six of gglib's floor values are
-//! *exactly* upstream's defaults, so deleting them changes nothing. Its
+//! measurement: on the build then pinned, all six of the floor values gglib
+//! then had were *exactly* upstream's defaults, so deleting them changed
+//! nothing. Its
 //! deletion criterion runs backwards from ADR 0002's:
 //!
 //! > If a pin bump moves an upstream default that gglib now defers to, the
@@ -45,10 +46,10 @@
 //!
 //! Every sampler launch flag overwrites the field it names in
 //! `default_generation_settings.params`. With flags passed at values chosen to
-//! equal upstream's, this check would compare gglib's floor against gglib's
-//! own flag and report an agreement it could never fail to report: [ADR 0002]
-//! finding 2's inert-module trap, an organ reading its own reflection and
-//! calling it health. A value the request body names beats the flag for that
+//! equal upstream's, this check would have compared the floor gglib then had
+//! against gglib's own flag and reported an agreement it could never fail to
+//! report: [ADR 0002] finding 2's inert-module trap, an organ reading its own
+//! reflection and calling it health. A value the request body names beats the flag for that
 //! request (measured for `temperature`, [ADR 0003] finding 3), which does not
 //! make the flag harmless: `/props` reports the flag.
 //!

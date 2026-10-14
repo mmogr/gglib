@@ -73,10 +73,6 @@ pub(super) fn log_resolution(decision: &SamplingDecision) {
         reasoning_effort = ?r.reasoning_effort,
         reasoning_budget_tokens = ?r.reasoning_budget_tokens,
         from = %decision.sources.describe(&decision.layer_names),
-        // Which class floor was used. `sources` says a value came from "floor"
-        // but not which one, and the explain surfaces cannot show this at all —
-        // they resolve stored configuration with no request in hand.
-        floor = decision.floor.label(),
         // Reported separately from `from`, which still names the rung the
         // temperature *would* have come from. The ceiling does not replace that
         // rung, it caps what it supplied.

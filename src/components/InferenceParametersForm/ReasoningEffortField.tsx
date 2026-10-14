@@ -56,7 +56,7 @@ function caption(support: TemplateSupport | undefined): string {
       return 'Not yet observed — start the model to find out whether its template reads this. Until then a level set here is sent as given.';
     default:
       // No model in scope. Name the condition instead of the model, the same
-      // move `fallbackCaption` makes for a floor it cannot attribute.
+      // move `fallbackCaption` makes for a value it cannot attribute.
       return 'Applies to models whose template declares reasoning effort; others ignore it.';
   }
 }

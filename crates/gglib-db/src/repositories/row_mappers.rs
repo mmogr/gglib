@@ -167,18 +167,13 @@ pub(crate) fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, Repos
     })
 }
 
-/// Resolve a model's `defaults_origin`, backfilling rows written before the
-/// column existed.
+/// Resolve a model's `defaults_origin`.
 ///
 /// `stored` is whatever is actually in the `defaults_origin` column,
-/// unparsed. When it names a known origin, that's the answer — no
-/// backfill needed. When it's absent (every row written before this column
-/// existed; there is no batch migration for them, deliberately — see
-/// `crates/gglib-db/src/setup.rs`'s `defaults_origin` `ALTER TABLE` comment)
-/// this derives one from `inference_defaults` itself: gglib has only ever
-/// auto-written one exact recipe
-/// ([`InferenceConfig::reasoning_profile`]), so a stored value that matches
-/// it precisely is that guess; anything else is something a person set.
+/// unparsed. When it names a known origin, that's the answer. Otherwise the
+/// defaults are a person's: gglib labels everything it writes itself, and the
+/// one recipe it once wrote unlabelled was cleared from every row by
+/// `setup_recipes.rs` (ADR 0022).
 ///
 /// Always `None` when there is no `inference_defaults` to have an origin at
 /// all, regardless of what the column says — a stale/orphaned value there
@@ -187,15 +182,12 @@ fn resolve_defaults_origin(
     stored: Option<String>,
     inference_defaults: Option<&InferenceConfig>,
 ) -> Option<DefaultsOrigin> {
-    let inference_defaults = inference_defaults?;
-    if let Some(origin) = stored.and_then(|s| s.parse::<DefaultsOrigin>().ok()) {
-        return Some(origin);
-    }
-    if *inference_defaults == InferenceConfig::reasoning_profile() {
-        Some(DefaultsOrigin::AutoDetected)
-    } else {
-        Some(DefaultsOrigin::User)
-    }
+    inference_defaults?;
+    Some(
+        stored
+            .and_then(|s| s.parse::<DefaultsOrigin>().ok())
+            .unwrap_or(DefaultsOrigin::User),
+    )
 }
 
 /// Try to read benchmark summary columns from a row.

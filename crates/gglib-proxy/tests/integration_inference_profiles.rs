@@ -65,8 +65,9 @@ async fn bare_model_name_is_unaffected_by_a_configured_profile() {
 
     h.post(chat_request(MODEL)).await;
 
-    // 0.7 is the hardcoded fallback — the profile's 0.2 must not leak in.
-    assert_param(&h.only_forwarded(), "temperature", 0.7);
+    // Nothing names a temperature, so none is sent — the profile's 0.2 must
+    // not leak in.
+    assert_deferred(&h.only_forwarded(), "temperature");
 }
 
 /// When the client is trusted (`Settings.trust_client_sampling: true` — an
@@ -154,8 +155,8 @@ async fn sparse_profile_does_not_forward_model_penalties() {
     assert_deferred(&body, "presence_penalty");
 
     // The end-to-end shape ADR 0003 produces, asserted here because this is
-    // the only test that sees a real forwarded body: one sampler, plus the
-    // pipeline's own `cache_prompt`. Anything else is gglib overriding an
+    // the only test that sees a real forwarded body: one sampler and nothing
+    // of gglib's own (ADR 0022). Anything else is gglib overriding an
     // upstream default on a request nobody tuned.
     let mut keys: Vec<_> = body
         .as_object()
@@ -166,7 +167,7 @@ async fn sparse_profile_does_not_forward_model_penalties() {
     keys.sort_unstable();
     assert_eq!(
         keys,
-        vec!["cache_prompt", "messages", "model", "stream", "temperature"],
+        vec!["messages", "model", "stream", "temperature"],
         "{body}"
     );
 }

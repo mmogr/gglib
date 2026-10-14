@@ -22,4 +22,4 @@ src/services/tools/registry.ts 358
 src/services/transport/api/client.ts 334
 src/services/transport/events/sse.ts 312
 src/styles/tailwind.css 402
-src/types/index.ts 570
+src/types/index.ts 574

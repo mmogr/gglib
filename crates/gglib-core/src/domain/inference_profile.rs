@@ -15,7 +15,7 @@
 //!
 //! Only the fields a profile explicitly sets are `Some`; the rest stay `None`
 //! and fall through to the layers below (per-model defaults, then global
-//! settings, then the hardcoded fallback). This is what makes one global
+//! settings, then the model's recipe). This is what makes one global
 //! profile safe to apply across heterogeneous model architectures: a `coding`
 //! profile that sets only `temperature` and `top_p` still lets a thinking model
 //! contribute its own `presence_penalty` from

@@ -136,10 +136,9 @@ async fn streaming_cache_saves_after_generation_with_no_prior_cache() {
 
     let forwarded_body = last_chat_body.lock().await.clone().expect("body captured");
     let forwarded_json: serde_json::Value = serde_json::from_slice(&forwarded_body).unwrap();
-    assert_eq!(
-        forwarded_json["cache_prompt"],
-        serde_json::json!(true),
-        "proxy must force cache_prompt=true for the streaming path too, got: {forwarded_json}"
+    assert!(
+        forwarded_json.get("cache_prompt").is_none(),
+        "the proxy must not add cache_prompt on the streaming path either, got: {forwarded_json}"
     );
 
     proxy_cancel.cancel();

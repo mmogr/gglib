@@ -26,7 +26,7 @@ fn row() -> Model {
     new.context_length = Some(4096);
     new.metadata = HashMap::from([("general.name".to_owned(), "Qwen".to_owned())]);
     new.inference_defaults = Some(sampling(0.2, Some(40)));
-    new.defaults_origin = Some(DefaultsOrigin::AutoDetected);
+    new.defaults_origin = Some(DefaultsOrigin::Published);
     new.server_defaults = Some(ServerConfig::default());
     Model::stored(1, &new)
 }

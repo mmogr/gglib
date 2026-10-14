@@ -245,7 +245,6 @@ fn every_resolved_parameter_still_reaches_the_line() {
         "reasoning_effort",
         "reasoning_budget_tokens",
         "from",
-        "floor",
         "agentic_turn",
     ] {
         let _ = on_resolved_line(&events, field);

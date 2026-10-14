@@ -50,8 +50,6 @@ export const PARAM_LABELS: Record<ProvenanceParamKey, string> = {
 export interface SourceContext {
   /** The profile applied, if one was selected. */
   profile?: string | null;
-  /** Selects which floor the coupled set falls back to. */
-  isReasoning: boolean;
   /**
    * Where the model's stored defaults came from.
    *
@@ -70,8 +68,6 @@ export interface SourceContext {
  * one in a view whose whole purpose is explanation.
  */
 export function describeSource(entry: ParamProvenance, ctx: SourceContext): string {
-  const floor = ctx.isReasoning ? 'reasoning floor' : 'default floor';
-
   switch (entry.kind) {
     case 'layer':
       switch (entry.layer) {
@@ -95,10 +91,8 @@ export function describeSource(entry: ParamProvenance, ctx: SourceContext): stri
         default:
           return 'unknown layer';
       }
-    case 'floor':
-      return floor;
-    case 'floorCoupled':
-      return `${floor} (coupled to temperature layer)`;
+    case 'coupled':
+      return 'unset (coupled to temperature layer)';
     case 'unset':
       return 'unset by design';
     case 'suppressedByTemplate':

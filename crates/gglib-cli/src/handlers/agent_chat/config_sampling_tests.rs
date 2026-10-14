@@ -191,17 +191,14 @@ async fn chat_with_no_tools_sends_what_the_stored_layers_resolve_to() {
 
     let dir = tempfile::tempdir().expect("tempdir");
     let ctx = test_context(dir.path()).await;
-    let recipe = (
-        InferenceConfig::reasoning_profile(),
-        DefaultsOrigin::AutoDetected,
-    );
-    model(&ctx, &["reasoning"], Some(recipe)).await;
+    // Nothing stored: the tag supplies the `reasoning` recipe.
+    model(&ctx, &["reasoning"], None).await;
     let body = chat_sends(&ctx, chat(MODEL, true, SamplingArgs::default())).await;
     let recipe = Value::Object(InferenceConfig::reasoning_profile().to_openai_json_patch());
     for (key, value) in recipe.as_object().expect("an object") {
         assert_eq!(&body[key], value, "{key}");
     }
-    assert_eq!(body["max_tokens"], json!(8192));
+    assert_eq!(body["max_tokens"], json!(32_768));
 }
 
 /// `--temperature` is sent as typed, and `--profile` outranks the value set
@@ -225,18 +222,21 @@ async fn a_flag_is_sent_as_typed_and_a_profile_outranks_the_model_and_the_global
     assert_eq!(body["temperature"], json!(0.9_f32));
 }
 
-/// `--presence-penalty` with no `--temperature` is not sent when the profile
-/// or the model's own value sets the temperature: the penalty travels with
-/// the temperature, the flag is passed over, and the request carries no
-/// parameter the stored layers did not resolve. From `gglib chat` and from
-/// `gglib q` alike.
+/// `--presence-penalty` with no `--temperature` is sent when the profile or
+/// the model's own value sets the temperature: the flags sit above the rung
+/// that claims it, and the coupling rule only passes over rungs beneath the
+/// claim (ADR 0022). From `gglib chat` and from `gglib q` alike.
 #[tokio::test]
-async fn a_penalty_typed_without_its_temperature_is_not_sent_beneath_a_layer_that_sets_one() {
+async fn a_penalty_typed_without_its_temperature_stands_over_a_layer_that_sets_one() {
     let penalty = || SamplingArgs {
         presence_penalty: Some(1.2),
         ..SamplingArgs::default()
     };
     let sampling = |body: &Value| InferenceConfig::extract_client_sampling(body).0;
+    let with_penalty = |value: f32| InferenceConfig {
+        presence_penalty: Some(1.2),
+        ..temperature(value)
+    };
 
     let dir = tempfile::tempdir().expect("tempdir");
     let ctx = test_context(dir.path()).await;
@@ -247,62 +247,63 @@ async fn a_penalty_typed_without_its_temperature_is_not_sent_beneath_a_layer_tha
         ..chat(MODEL, true, penalty())
     };
     let body = chat_sends(&ctx, chatted).await;
-    assert_eq!(sampling(&body), temperature(0.15), "{body}");
+    assert_eq!(sampling(&body), with_penalty(0.15), "{body}");
     let asked = QuestionArgs {
         sampling: penalty(),
         profile: Some("coding".to_owned()),
         ..question(&dir, MODEL, false)
     };
     let body = q_sends(&ctx, asked).await;
-    assert_eq!(sampling(&body), temperature(0.15), "{body}");
+    assert_eq!(sampling(&body), with_penalty(0.15), "{body}");
 
     let dir = tempfile::tempdir().expect("tempdir");
     let ctx = test_context(dir.path()).await;
     model(&ctx, &[], Some((temperature(0.55), DefaultsOrigin::User))).await;
     let body = chat_sends(&ctx, chat(MODEL, true, penalty())).await;
-    assert_eq!(sampling(&body), temperature(0.55), "{body}");
+    assert_eq!(sampling(&body), with_penalty(0.55), "{body}");
     let asked = QuestionArgs {
         sampling: penalty(),
         ..question(&dir, MODEL, false)
     };
     let body = q_sends(&ctx, asked).await;
-    assert_eq!(sampling(&body), temperature(0.55), "{body}");
+    assert_eq!(sampling(&body), with_penalty(0.55), "{body}");
 }
 
-/// An ordinary model with nothing chosen is sent the floor's 0.7, and 0.3 on
-/// a turn with tools, from `gglib chat` and from `gglib q` alike: the
-/// floor's value reaches the fold as the floor's, not as one a person typed.
+/// An ordinary model with nothing chosen is sent no temperature, with tools
+/// or without, from `gglib chat` and from `gglib q` alike: there is no floor,
+/// and the ceiling only lowers a value a rung supplied (ADR 0022).
 #[tokio::test]
-async fn an_ordinary_model_with_nothing_chosen_is_capped_on_a_turn_with_tools() {
+async fn an_ordinary_model_with_nothing_chosen_is_sent_no_temperature() {
     let dir = tempfile::tempdir().expect("tempdir");
     let ctx = test_context(dir.path()).await;
     model(&ctx, &[], None).await;
 
     let plain = chat_sends(&ctx, chat(MODEL, true, SamplingArgs::default())).await;
     assert!(!carries_tools(&plain));
-    assert_eq!(plain["temperature"], json!(0.7_f32));
+    assert_eq!(plain.get("temperature"), None);
     let tooled = chat_sends(&ctx, chat(MODEL, false, SamplingArgs::default())).await;
     assert!(carries_tools(&tooled));
-    assert_eq!(tooled["temperature"], json!(0.3_f32));
+    assert_eq!(tooled.get("temperature"), None);
 
     let plain = q_sends(&ctx, question(&dir, MODEL, false)).await;
     assert!(!carries_tools(&plain));
-    assert_eq!(plain["temperature"], json!(0.7_f32));
+    assert_eq!(plain.get("temperature"), None);
     let tooled = q_sends(&ctx, question(&dir, MODEL, true)).await;
     assert!(carries_tools(&tooled));
-    assert_eq!(tooled["temperature"], json!(0.3_f32));
+    assert_eq!(tooled.get("temperature"), None);
 }
 
 /// `gglib chat` and `gglib q` on a model in the catalogue follow this
 /// machine's agentic sampling switch. Stored off, a turn with tools is sent
-/// the floor's 0.7, the temperature it resolves to; stored on, or not stored,
-/// 0.3.
+/// the 0.9 of the model's recipe, the temperature it resolves to; stored on,
+/// or not stored, 0.3.
 #[tokio::test]
 async fn a_catalogued_models_turn_with_tools_is_capped_unless_agentic_sampling_is_stored_off() {
-    for (stored, want) in [(None, 0.3_f32), (Some(true), 0.3), (Some(false), 0.7)] {
+    for (stored, want) in [(None, 0.3_f32), (Some(true), 0.3), (Some(false), 0.9)] {
         let dir = tempfile::tempdir().expect("tempdir");
         let ctx = test_context(dir.path()).await;
-        model(&ctx, &[], None).await;
+        let recipe = (temperature(0.9), DefaultsOrigin::Published);
+        model(&ctx, &[], Some(recipe)).await;
         agentic_sampling(&ctx, stored).await;
 
         let chatted = chat_sends(&ctx, chat(MODEL, false, SamplingArgs::default())).await;
@@ -314,8 +315,8 @@ async fn a_catalogued_models_turn_with_tools_is_capped_unless_agentic_sampling_i
 }
 
 /// On a turn with tools a temperature a person chose stands, whichever layer
-/// they chose it in, and so does a reasoning model's recipe; a recipe gglib
-/// guessed for an ordinary model is capped like the floor.
+/// they chose it in, and so does a reasoning model's recipe; a recipe nobody
+/// here reviewed, on an ordinary model, is capped.
 #[tokio::test]
 async fn a_turn_with_tools_never_lowers_a_temperature_a_person_chose() {
     let sent = async |defaults, tags: &[&str], global, profile: Option<f32>, flag: Option<f32>| {
@@ -344,16 +345,16 @@ async fn a_turn_with_tools_never_lowers_a_temperature_a_person_chose() {
         sent(None, &[], Some(temperature(0.9)), None, None).await,
         hot
     );
-    let guessed = stored(DefaultsOrigin::AutoDetected);
+    let guessed = stored(DefaultsOrigin::Published);
     assert_eq!(sent(guessed, &["reasoning"], None, None, None).await, hot);
-    let guessed = stored(DefaultsOrigin::AutoDetected);
+    let guessed = stored(DefaultsOrigin::Published);
     assert_eq!(sent(guessed, &[], None, None, None).await, json!(0.3_f32));
 }
 
 /// A server on `--port` whose model this catalogue does not hold is sent the
-/// flags and nothing stored: no global value beneath them, the floor's 0.7,
-/// and 0.3 on a turn with tools, with the agentic sampling switch stored
-/// off. The switch is for this catalogue's models.
+/// flags and nothing stored: no global value beneath them, so no temperature
+/// at all unless one is typed, with tools or without. The switch is for this
+/// catalogue's models.
 #[tokio::test]
 async fn a_server_this_catalogue_does_not_know_is_sent_the_flags_and_nothing_stored() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -362,15 +363,15 @@ async fn a_server_this_catalogue_does_not_know_is_sent_the_flags_and_nothing_sto
     agentic_sampling(&ctx, Some(false)).await;
 
     let plain = chat_sends(&ctx, chat("stranger", true, SamplingArgs::default())).await;
-    assert_eq!(plain["temperature"], json!(0.7_f32));
+    assert_eq!(plain.get("temperature"), None);
     let tooled = chat_sends(&ctx, chat("stranger", false, SamplingArgs::default())).await;
-    assert_eq!(tooled["temperature"], json!(0.3_f32));
+    assert_eq!(tooled.get("temperature"), None);
     let flagged = chat_sends(&ctx, chat("stranger", false, typed(0.9))).await;
     assert_eq!(flagged["temperature"], json!(0.9_f32));
     let asked = q_sends(&ctx, question(&dir, "stranger", false)).await;
-    assert_eq!(asked["temperature"], json!(0.7_f32));
+    assert_eq!(asked.get("temperature"), None);
     let asked = q_sends(&ctx, question(&dir, "stranger", true)).await;
-    assert_eq!(asked["temperature"], json!(0.3_f32), "and `gglib q` alike");
+    assert_eq!(asked.get("temperature"), None, "and `gglib q` alike");
 }
 
 /// The tools `gglib chat served --no-tools` offers its model for a message,

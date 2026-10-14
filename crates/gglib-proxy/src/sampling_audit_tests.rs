@@ -2,7 +2,7 @@
 
 use super::*;
 use gglib_core::domain::{FieldSources, InferenceConfig};
-use gglib_core::request_pipeline::{FloorClass, LADDER_RUNGS};
+use gglib_core::request_pipeline::LADDER_RUNGS;
 
 /// Captured verbatim from a real `/slots` poll during a generation on
 /// the pinned build — `scripts/experiments/sampler_wire_semantics.py`.
@@ -26,7 +26,6 @@ fn decision(resolved: InferenceConfig, sources: FieldSources) -> SamplingDecisio
         resolved,
         sources,
         layer_names: ["cli", "client", "profile", "model", "global", "auto"],
-        floor: FloorClass::Default,
         agentic_turn: false,
         agentic_ceiling_applied: None,
         client_fields_rejected: Vec::new(),
@@ -143,7 +142,7 @@ fn a_widened_f32_does_not_read_as_a_divergence() {
         min_p: Some(0.05),
         ..Default::default()
     };
-    let d = decision(resolved, all_from(ParamSource::Floor));
+    let d = decision(resolved, all_from(ParamSource::Layer(1)));
     assert!(compare(&d, &observed).is_empty());
 }
 

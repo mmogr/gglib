@@ -69,13 +69,10 @@ it. The model's own values arrive in its context.
 `gglib_core::request_pipeline::apply` folds them once, as each request is
 shaped, which is what lets it tell a temperature a person chose from one
 nobody did. A caller that folds a layer into the first argument defeats that:
-the value arrives as a choice. What a request carries is what that fold
-resolved: a parameter the caller named and the fold passed over (a penalty
-without the temperature it travels with, beneath a layer that names one) is
-taken back out before the request is sent.
-One caller asks for it to be left in
-([`LlmCompletionAdapter::with_passed_over_kept`]): a tune sweep, whose
-candidate is what the sweep measures and not a flag for the ladder to judge.
+the value arrives as a choice. The caller's own parameters sit above every
+layer it hands over, and the coupling rule passes over only layers beneath
+the one that claims the temperature, so the fold never passes one of them
+over (ADR 0022).
 [`LlmCompletionAdapter::with_sampling_observer`] tells a caller how a request
 resolved, so none has a reason to fold a ladder to find out.
 

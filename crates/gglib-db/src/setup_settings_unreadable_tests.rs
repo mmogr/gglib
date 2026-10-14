@@ -51,9 +51,8 @@ async fn a_record_that_cannot_be_read_is_left_as_found_and_the_boot_goes_on() {
             .unwrap_or_else(|refused| panic!("{what}: the boot failed: {refused:#}"));
 
         assert_eq!(rows(&pool).await, found, "{what}");
-        assert_eq!(
-            user_version(&pool).await.expect("a version"),
-            LOOP_GUARD_MODE_SCHEMA_VERSION,
+        assert!(
+            user_version(&pool).await.expect("a version") >= LOOP_GUARD_MODE_SCHEMA_VERSION,
             "{what}: stamped all the same, so no later boot tries again"
         );
         pool.close().await;

@@ -10,7 +10,6 @@
 //! | 2b | Strip unsupported tools | [`super::tools`] | `tools`, capabilities |
 //! | 3 | Truncate stale history | [`super::truncation`] | `messages`, payload size |
 //! | 4 | Resolve the sampling hierarchy | [`super::sampling`] | top-level keys |
-//! | 5 | Pin `cache_prompt` | [`super::sampling`] | top-level keys |
 //! | 5b | Suppress an unreadable `reasoning_effort` | [`super::effort_gate`] | resolved effort, template caps |
 //! | — | Log the sampling decision | [`super::sampling_log`] | the decision |
 //! | 6 | Constrain dialect tool calls | [`super::constrain`] | `tools`, `tool_choice`, tags |
@@ -41,9 +40,6 @@
 //! the difference between measuring the conversation and measuring our own
 //! additions to it.
 //!
-//! **4 before 5.** `cache_prompt` is not an [`InferenceConfig`] field, so
-//! pinning it last means the resolved sampling patch can never overwrite it.
-//!
 //! **5b after 4.** Stage 5b deletes a `reasoning_effort` the model's observed
 //! template never reads, and the value it has to catch is usually not the
 //! client's. It arrives from the **ladder** — a `:high` profile, a per-model
@@ -62,8 +58,6 @@
 //! **6 after 3.** The grammar stage 6 *adds* a top-level key, so it runs
 //! after the measurement for the same reason sampling does: the truncation
 //! budget measures the client's conversation, not our own additions to it.
-//!
-//! [`InferenceConfig`]: crate::domain::InferenceConfig
 //!
 //! # Why the seam is `&mut Value` and not a typed request struct
 //!
@@ -104,7 +98,7 @@ pub struct PipelineReport {
     /// Stage 3. Zeroed when `budget` was `None` — the request was
     /// shaped but never measured.
     pub truncation: TruncationReport,
-    /// Stages 4–5. See [`SamplingDecision`].
+    /// Stage 4. See [`SamplingDecision`].
     pub sampling: SamplingDecision,
     /// Stage 5b. `Some` when a resolved `reasoning_effort` was thrown away
     /// because the model's observed template does not read it.
@@ -186,7 +180,6 @@ pub fn apply(
 #[cfg(test)]
 mod live_shape_probe {
     use super::*;
-    use crate::domain::{DefaultsOrigin, InferenceConfig};
 
     /// The exact body and context shape of the live hardware check that
     /// found the gated-key passthrough, end to end through `apply` rather
@@ -202,8 +195,6 @@ mod live_shape_probe {
         });
         let ctx = ModelContext {
             tags: vec!["agent".into(), "reasoning".into(), "mtp".into()],
-            inference_defaults: Some(InferenceConfig::reasoning_profile()),
-            defaults_origin: Some(DefaultsOrigin::AutoDetected),
             ..ModelContext::passthrough()
         };
         let layers = SamplingLayers::default();

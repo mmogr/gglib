@@ -14,7 +14,8 @@ import type { SuppressedEffortDto } from "./SuppressedEffortDto";
  */
 export type SamplingExplanationDto = { 
 /**
- * The fully resolved configuration, after floors.
+ * The fully resolved configuration. A field no rung names is `None`,
+ * and is not sent.
  *
  * Carried whole rather than copied field-by-field into
  * [`ParamProvenanceDto`], so each value keeps the width it was declared
@@ -30,10 +31,6 @@ sources: Array<ParamProvenanceDto>,
  * The profile applied, if the caller named one.
  */
 profile: string | null, 
-/**
- * Whether the model carries the `reasoning` tag, which selects the floor.
- */
-isReasoning: boolean, 
 /**
  * Whether client-supplied sampling is trusted, which the table cannot
  * show: that rung is never stored on the model.
@@ -59,11 +56,12 @@ published: Array<PublishedDefaultDto>,
 /**
  * Where the model's stored defaults came from.
  *
- * `Published` and `AutoDetected` share a ladder rung — both are
- * unreviewed, so both rank below global settings — which means
- * [`ParamProvenanceDto::layer`] alone cannot name its own source. Without
- * this, a recipe fetched from the model author renders as gglib's
- * reasoning-tag guess.
+ * A published recipe, a measured one and the `reasoning` recipe share a
+ * ladder rung — none was reviewed here, so all rank below global
+ * settings — which means [`ParamProvenanceDto::layer`] alone cannot name
+ * its own source. Without this, a recipe fetched from the model author
+ * renders as gglib's reasoning-tag guess. `None` or `User` on that rung
+ * means the `reasoning` recipe, which is never stored.
  *
  * The domain enum itself, not a re-spelling of it: the library list
  * reports this same column, and a wire form that differed from it in

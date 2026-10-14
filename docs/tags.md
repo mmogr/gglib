@@ -135,7 +135,7 @@ from GGUF metadata, which drive automatic flag selection at serve time:
 | Tag | Detection trigger | Effect |
 |-----|-------------------|--------|
 | `agent` | Chat template contains tool-calling syntax | `--jinja` auto-enabled |
-| `reasoning` | Chat template contains `<think>` / DeepSeek reasoning tokens | `--reasoning-format deepseek` auto-enabled; pre-tuned sampling defaults written (see [docs/sampling.md](sampling.md#2-the-reasoning-tag-guess-fallback)) |
+| `reasoning` | Chat template contains `<think>` / DeepSeek reasoning tokens | `--reasoning-format deepseek` auto-enabled; the `reasoning` sampling recipe applies (see [docs/sampling.md](sampling.md#2-the-reasoning-recipe-fallback)) |
 | `mtp` | `{arch}.nextn_predict_layers > 0` in GGUF metadata | `--spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75` auto-enabled |
 | `embedding` | Non-none `{arch}.pooling_type`, or an encoder-only `general.architecture` | `--embeddings` auto-enabled; the server refuses chat completions and serves `/v1/embeddings` |
 

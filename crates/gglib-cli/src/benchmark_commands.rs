@@ -90,9 +90,9 @@ pub enum BenchmarkCommand {
         /// dimension (`temperature`, `top_p`, `top_k`, `min_p`,
         /// `repeat_penalty`, `dry_multiplier`, `dynatemp_range`,
         /// `dynatemp_exponent`, `top_n_sigma`). A dimension left unswept is
-        /// not varied; the normal per-model/global/hardcoded fallback chain
-        /// fills it in. The grid is the cartesian product, so dimensions
-        /// multiply.
+        /// not varied; the normal per-model/global/recipe chain fills it in, or
+        /// llama.cpp's own default where none of them names it. The grid is
+        /// the cartesian product, so dimensions multiply.
         #[arg(long = "sweep", value_name = "DIM=V1,V2,...")]
         sweep: Vec<String>,
 

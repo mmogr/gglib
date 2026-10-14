@@ -203,9 +203,9 @@ async fn a_candidates_request_is_what_the_pipeline_makes_of_its_values_and_no_le
         )),
         Some((
             InferenceConfig::reasoning_profile(),
-            DefaultsOrigin::AutoDetected,
+            DefaultsOrigin::Published,
         )),
-        Some((temperature(0.9), DefaultsOrigin::AutoDetected)),
+        Some((temperature(0.9), DefaultsOrigin::Published)),
         Some((temperature(0.6), DefaultsOrigin::Measured)),
         Some((
             config(|c| {

@@ -45,8 +45,8 @@ pub struct ModelContext {
     pub dialect: Option<DialectSpec>,
     /// Per-model inference defaults to merge into each request.
     pub inference_defaults: Option<InferenceConfig>,
-    /// Whether [`inference_defaults`](Self::inference_defaults) was set by
-    /// the user or auto-detected. See [`DefaultsOrigin`].
+    /// Who wrote [`inference_defaults`](Self::inference_defaults). See
+    /// [`DefaultsOrigin`].
     pub defaults_origin: Option<DefaultsOrigin>,
     /// Maximum context the model supports, in tokens — the history-truncation
     /// budget for every surface that cannot measure a live serving context.
@@ -160,7 +160,7 @@ mod tests {
             temperature: Some(0.5),
             ..Default::default()
         });
-        summary.defaults_origin = Some(DefaultsOrigin::AutoDetected);
+        summary.defaults_origin = Some(DefaultsOrigin::Published);
         summary.context_length = Some(32_768);
         summary.template_caps = Some(TemplateCaps {
             supports_reasoning_effort: Some(true),
@@ -184,7 +184,7 @@ mod tests {
             ctx.inference_defaults.and_then(|c| c.temperature),
             Some(0.5)
         );
-        assert_eq!(ctx.defaults_origin, Some(DefaultsOrigin::AutoDetected));
+        assert_eq!(ctx.defaults_origin, Some(DefaultsOrigin::Published));
         assert_eq!(ctx.context_length, Some(32_768));
     }
 

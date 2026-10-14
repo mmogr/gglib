@@ -19,7 +19,6 @@ const BASE: SamplingExplanation = {
   resolved: resolvedConfig(),
   sources: [],
   profile: null,
-  isReasoning: false,
   trustClientSampling: false,
   published: [],
   defaultsOrigin: null,

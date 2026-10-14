@@ -9,8 +9,8 @@ use clap::Args;
 /// Sampling-parameter overrides common to all inference commands.
 ///
 /// Each field is optional. When `None`, the merge hierarchy — CLI → per-model
-/// defaults (user-set) → global defaults → per-model defaults (auto-detected)
-/// → the class floor — fills in the value. `gglib model explain <id>` shows
+/// defaults (user-set) → global defaults → the model's recipe — fills in the
+/// value, and a field none of them names is not sent. `gglib model explain <id>` shows
 /// which of those rungs actually supplied each parameter.
 #[derive(Args, Debug, Clone, Default)]
 pub struct SamplingArgs {

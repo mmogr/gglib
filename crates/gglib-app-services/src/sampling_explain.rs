@@ -31,7 +31,8 @@ use crate::error::GuiError;
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct SamplingExplanationDto {
-    /// The fully resolved configuration, after floors.
+    /// The fully resolved configuration. A field no rung names is `None`,
+    /// and is not sent.
     ///
     /// Carried whole rather than copied field-by-field into
     /// [`ParamProvenanceDto`], so each value keeps the width it was declared
@@ -42,8 +43,6 @@ pub struct SamplingExplanationDto {
     pub sources: Vec<ParamProvenanceDto>,
     /// The profile applied, if the caller named one.
     pub profile: Option<String>,
-    /// Whether the model carries the `reasoning` tag, which selects the floor.
-    pub is_reasoning: bool,
     /// Whether client-supplied sampling is trusted, which the table cannot
     /// show: that rung is never stored on the model.
     pub trust_client_sampling: bool,
@@ -65,11 +64,12 @@ pub struct SamplingExplanationDto {
     pub published: Vec<PublishedDefaultDto>,
     /// Where the model's stored defaults came from.
     ///
-    /// `Published` and `AutoDetected` share a ladder rung — both are
-    /// unreviewed, so both rank below global settings — which means
-    /// [`ParamProvenanceDto::layer`] alone cannot name its own source. Without
-    /// this, a recipe fetched from the model author renders as gglib's
-    /// reasoning-tag guess.
+    /// A published recipe, a measured one and the `reasoning` recipe share a
+    /// ladder rung — none was reviewed here, so all rank below global
+    /// settings — which means [`ParamProvenanceDto::layer`] alone cannot name
+    /// its own source. Without this, a recipe fetched from the model author
+    /// renders as gglib's reasoning-tag guess. `None` or `User` on that rung
+    /// means the `reasoning` recipe, which is never stored.
     ///
     /// The domain enum itself, not a re-spelling of it: the library list
     /// reports this same column, and a wire form that differed from it in
@@ -113,8 +113,7 @@ pub struct SuppressedEffortDto {
     /// in [`SamplingExplanationDto::sources`].
     ///
     /// `None` only for a ladder index this module cannot name, which the five
-    /// rungs it resolves cannot produce — and never for a floor, because no
-    /// floor names an effort.
+    /// rungs it resolves cannot produce.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub layer: Option<SamplingLayerDto>,
@@ -202,12 +201,11 @@ pub struct ParamProvenanceDto {
 pub enum ProvenanceKindDto {
     /// A ladder rung named the value; see [`ParamProvenanceDto::layer`].
     Layer,
-    /// The class floor, because no rung named a value at all.
-    Floor,
-    /// The class floor, because a rung claimed `temperature` and this
-    /// parameter is tuned against it.
-    FloorCoupled,
-    /// Nothing named it and the floor carries none either.
+    /// Not sent, because a rung claimed `temperature`, this parameter is tuned
+    /// against it, and neither that rung nor any above it named one.
+    Coupled,
+    /// Nothing named it, so it is not sent and llama.cpp's own default
+    /// applies.
     Unset,
     /// A rung named the value and a request-shaping stage suppressed it,
     /// because the model's observed template does not read the field
@@ -231,7 +229,8 @@ pub enum SamplingLayerDto {
     ModelUserSet,
     /// Global settings defaults.
     Global,
-    /// Per-model defaults written automatically from the `reasoning` tag.
+    /// The model's recipe beneath global settings: the `reasoning` recipe, or
+    /// a published or measured one stored on the row.
     ModelAutoDetected,
 }
 
@@ -300,14 +299,11 @@ const fn layer_of(source: ParamSource) -> Option<SamplingLayerDto> {
             Some(layer) => Some(SamplingLayerDto::from_layer(layer)),
             None => None,
         },
-        // No floor names a value it can attribute, an unset field names none at
-        // all, and a suppression has deliberately overwritten the rung it
-        // replaced — see `SamplingExplanationDto::effort_suppressed` for where
-        // that rung goes instead.
-        ParamSource::Floor
-        | ParamSource::FloorCoupled
-        | ParamSource::Unset
-        | ParamSource::SuppressedByTemplate => None,
+        // A passed-over or unset field names no rung at all, and a
+        // suppression has deliberately overwritten the rung it replaced — see
+        // `SamplingExplanationDto::effort_suppressed` for where that rung goes
+        // instead.
+        ParamSource::Coupled | ParamSource::Unset | ParamSource::SuppressedByTemplate => None,
     }
 }
 
@@ -315,8 +311,7 @@ const fn layer_of(source: ParamSource) -> Option<SamplingLayerDto> {
 fn provenance(field: &'static str, source: ParamSource) -> ParamProvenanceDto {
     let kind = match source {
         ParamSource::Layer(_) => ProvenanceKindDto::Layer,
-        ParamSource::Floor => ProvenanceKindDto::Floor,
-        ParamSource::FloorCoupled => ProvenanceKindDto::FloorCoupled,
+        ParamSource::Coupled => ProvenanceKindDto::Coupled,
         ParamSource::Unset => ProvenanceKindDto::Unset,
         ParamSource::SuppressedByTemplate => ProvenanceKindDto::SuppressedByTemplate,
     };
@@ -389,7 +384,6 @@ pub(crate) fn explain(
             .map(|(field, source)| provenance(field, source))
             .collect(),
         profile: profile.map(|selected| selected.name.clone()),
-        is_reasoning: model_ctx.is_reasoning,
         trust_client_sampling: settings.trust_client_sampling.unwrap_or(false),
         published,
         defaults_origin: model.defaults_origin,
