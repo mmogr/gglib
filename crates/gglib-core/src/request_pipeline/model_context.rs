@@ -56,8 +56,9 @@ pub struct ModelContext {
     ///
     /// `None` — on a passthrough context *or* a resolved row nobody has
     /// launched yet — means "never observed", which per decision 3 licenses
-    /// nothing: unknown never gates. Nothing consumes this yet; the effort
-    /// gate arrives in a later PR of the arc.
+    /// nothing: unknown never gates. Read by stage 1, which keeps prior
+    /// reasoning only on a positive `supports_preserve_reasoning`, and by the
+    /// effort gate, stage 5b.
     pub template_caps: Option<TemplateCaps>,
     /// Whether the model reads images: it is linked to a projector.
     ///

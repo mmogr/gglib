@@ -161,6 +161,25 @@ pub fn reasoning_effort_support(caps: &Option<TemplateCaps>) -> Support {
     }
 }
 
+/// Whether a model's template renders earlier assistant turns' reasoning back
+/// into the prompt, from its recorded caps.
+///
+/// The same three arms as [`reasoning_effort_support`]: [`Support::Unknown`]
+/// when no caps were ever recorded or the recorded caps did not carry the
+/// field. Only an explicit `true` answers [`Support::Yes`], the one arm on
+/// which stage 1 of the request pipeline leaves prior reasoning in place
+/// ([ADR 0020]).
+///
+/// [ADR 0020]: https://github.com/mmogr/gglib/blob/main/docs/adr/0020-prior-reasoning-is-kept-where-the-template-keeps-it.md
+#[must_use]
+pub fn preserve_reasoning_support(caps: &Option<TemplateCaps>) -> Support {
+    match caps.as_ref().and_then(|c| c.supports_preserve_reasoning) {
+        Some(true) => Support::Yes,
+        Some(false) => Support::No,
+        None => Support::Unknown,
+    }
+}
+
 #[cfg(test)]
 #[path = "template_caps_tests.rs"]
 mod template_caps_tests;

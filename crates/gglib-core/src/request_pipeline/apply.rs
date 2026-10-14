@@ -4,7 +4,7 @@
 //!
 //! | # | Stage | Lives in | Reads |
 //! |---|---|---|---|
-//! | 1 | Strip prior reasoning | [`super::messages`] | `messages` |
+//! | 1 | Strip prior reasoning, unless the template keeps it | [`super::messages`] | `messages`, template caps |
 //! | 1b | Note a drawn picture | [`super::drawn_note`] | `messages`, `tools` |
 //! | 2 | Coalesce for capabilities | [`super::messages`] | `messages` |
 //! | 2b | Strip unsupported tools | [`super::tools`] | `tools`, capabilities |

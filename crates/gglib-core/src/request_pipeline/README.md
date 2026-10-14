@@ -67,6 +67,9 @@ does either.
   place the stage order and its rationale are written down. **Read this first.**
 - [`messages`] — [`shape_messages()`], stages 1–2: reasoning strip and
   capability coalescing. Everything that rewrites the `messages` array.
+  Stage 1 leaves earlier turns' reasoning in place when the model's recorded
+  template caps say the template preserves it, and strips it otherwise,
+  unknown included (ADR 0020).
 - [`drawn_note`] — stage 1b, called by [`shape_messages()`]: a request whose
   history holds a picture the drawing tool drew, and which does not offer
   that tool, gains [`DRAWN_NOTE`] at the front of its prompt, so a model

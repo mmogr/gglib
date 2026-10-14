@@ -10,7 +10,10 @@ use serde_json::Value;
 use tracing::{Level, debug, enabled, warn};
 
 use super::{ModelContext, drawn_note};
-use crate::domain::{ChatMessage, ModelCapabilities, transform_messages_for_capabilities};
+use crate::domain::{
+    ChatMessage, ModelCapabilities, Support, preserve_reasoning_support,
+    transform_messages_for_capabilities,
+};
 use crate::normalize::strip_thinking_debt;
 
 /// Apply every message-level transform, in order.
@@ -23,19 +26,33 @@ use crate::normalize::strip_thinking_debt;
 pub fn shape_messages(body: &mut Value, ctx: &ModelContext) -> bool {
     // Evaluated eagerly, not short-circuited: coalescing must run even when
     // the reasoning strip found nothing to do.
-    let stripped = strip_prior_reasoning(body);
+    let stripped = strip_prior_reasoning(body, ctx);
     let noted = drawn_note::note_drawn_picture(body);
     let coalesced = coalesce_for_capabilities(body, ctx.capabilities);
     stripped || noted || coalesced
 }
 
-/// Stage 1 — scrub reasoning artefacts from prior assistant turns.
+/// Stage 1 — scrub reasoning artefacts from prior assistant turns, unless the
+/// model's template keeps them.
 ///
 /// Thin wrapper over [`strip_thinking_debt`], which owns the scrub rules; this
-/// exists only to locate the `messages` array and report whether anything
-/// changed. Reasoning models pattern-match their own past `<think>` traces
-/// when these are left in the history.
-fn strip_prior_reasoning(body: &mut Value) -> bool {
+/// exists to locate the `messages` array, report whether anything changed, and
+/// decide whether to scrub at all. Small reasoning models pattern-match their
+/// own past `<think>` traces when these are left in the history.
+///
+/// A template whose recorded caps positively say it preserves reasoning
+/// (`supports_preserve_reasoning: true`) renders earlier turns' reasoning back
+/// into the prompt by design, so the history goes as the client sent it and
+/// this returns `false` without touching it ([ADR 0020]). `false` or unknown
+/// strips as before. No `catalog_resolved` check is needed, unlike stage 5b: a
+/// passthrough context carries no caps, which answers [`Support::Unknown`], and
+/// unknown means today's behaviour.
+///
+/// [ADR 0020]: https://github.com/mmogr/gglib/blob/main/docs/adr/0020-prior-reasoning-is-kept-where-the-template-keeps-it.md
+fn strip_prior_reasoning(body: &mut Value, ctx: &ModelContext) -> bool {
+    if preserve_reasoning_support(&ctx.template_caps) == Support::Yes {
+        return false;
+    }
     let Some(messages) = body.get_mut("messages").and_then(Value::as_array_mut) else {
         return false;
     };
@@ -159,6 +176,7 @@ fn log_payload_shape(body: &Value, messages: &[ChatMessage], before_count: usize
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::TemplateCaps;
     use serde_json::json;
 
     fn ctx(capabilities: ModelCapabilities) -> ModelContext {
@@ -181,6 +199,74 @@ mod tests {
         });
         assert!(shape_messages(&mut body, &ctx(ModelCapabilities::empty())));
         assert!(body["messages"][0].get("reasoning_content").is_none());
+    }
+
+    /// A context whose recorded caps carry `preserve` as
+    /// `supports_preserve_reasoning`.
+    fn preserving(preserve: Option<bool>) -> ModelContext {
+        ModelContext {
+            template_caps: Some(TemplateCaps {
+                supports_preserve_reasoning: preserve,
+                ..TemplateCaps::default()
+            }),
+            catalog_resolved: true,
+            ..ModelContext::passthrough()
+        }
+    }
+
+    /// An agent's history over two runs: the assistant message at 1 is in an
+    /// earlier run, the one at 4 in the current run, after the last user
+    /// message. Each carries both shapes of reasoning.
+    fn two_runs() -> Value {
+        json!({"messages": [
+            {"role": "user", "content": "plan it"},
+            {"role": "assistant", "content": "<think>earlier inline</think>looked",
+             "reasoning_content": "earlier trace",
+             "tool_calls": [{"id": "c1", "type": "function",
+                             "function": {"name": "read", "arguments": "{}"}}]},
+            {"role": "tool", "tool_call_id": "c1", "content": "file"},
+            {"role": "user", "content": "now write it"},
+            {"role": "assistant", "content": "<think>current inline</think>writing",
+             "reasoning_content": "current trace",
+             "tool_calls": [{"id": "c2", "type": "function",
+                             "function": {"name": "read", "arguments": "{}"}}]},
+            {"role": "tool", "tool_call_id": "c2", "content": "more"},
+        ]})
+    }
+
+    /// The template keeps prior reasoning: every message goes as the client
+    /// sent it, and `false` reports that stage 1 changed nothing.
+    #[test]
+    fn a_template_that_preserves_reasoning_keeps_it_in_every_run() {
+        let mut body = two_runs();
+        let before = body.clone();
+        assert!(!shape_messages(&mut body, &preserving(Some(true))));
+        assert_eq!(body, before);
+        assert_eq!(body["messages"][1]["reasoning_content"], "earlier trace");
+        assert_eq!(
+            body["messages"][4]["content"],
+            "<think>current inline</think>writing"
+        );
+    }
+
+    /// A template that does not preserve reasoning, caps that did not carry
+    /// the field, and no caps at all: all strip both runs, as before.
+    #[test]
+    fn a_template_not_known_to_preserve_reasoning_is_stripped() {
+        let contexts = [
+            ("false", preserving(Some(false))),
+            ("field absent", preserving(None)),
+            ("no caps", ModelContext::passthrough()),
+        ];
+        for (case, ctx) in contexts {
+            let mut body = two_runs();
+            assert!(shape_messages(&mut body, &ctx), "{case}");
+            for (i, text) in [(1, "looked"), (4, "writing")] {
+                let m = &body["messages"][i];
+                assert!(m.get("reasoning_content").is_none(), "{case}: {m}");
+                assert_eq!(m["content"], text, "{case}");
+            }
+        }
     }
 
     #[test]

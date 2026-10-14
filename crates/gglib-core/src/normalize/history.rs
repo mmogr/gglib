@@ -8,15 +8,21 @@
 //! artifacts from prior assistant turns before the model sees them.
 //!
 //! This module is the **single source of truth** for that scrub. Every
-//! surface that builds a chat-completion request body must pipe its
-//! `messages` array through [`strip_thinking_debt`] so the proxy, the
-//! in-process agent loop (CLI / Tauri), and any future direct-mode
-//! consumer all benefit equally.
+//! surface that builds a chat-completion request body reaches it through
+//! stage 1 of the request pipeline, so the proxy, the in-process agent loop
+//! (CLI / Tauri), and any future direct-mode consumer all behave alike.
+//!
+//! Whether to scrub is stage 1's decision, not this module's: it skips the
+//! call for a model whose recorded template caps say the template preserves
+//! reasoning (`supports_preserve_reasoning: true`), since that template
+//! renders earlier turns' reasoning back into the prompt by design
+//! ([ADR 0020]). Unknown caps scrub.
 //!
 //! The transform is:
 //!
-//! * Unconditional — there is no per-model gate. Non-reasoning messages
-//!   simply have nothing to strip and pass through untouched.
+//! * Unconditional once called — the per-model gate is the caller's.
+//!   Non-reasoning messages simply have nothing to strip and pass through
+//!   untouched.
 //! * Defensive — only assistant messages are touched; user, system, tool,
 //!   and developer messages are never modified.
 //! * The same in either shape — the `reasoning_content` key is removed
@@ -31,6 +37,8 @@
 //! * Forward-safe on unclosed tags — an unclosed `<think>` from the most
 //!   recent turn is preserved verbatim; the upstream is responsible for
 //!   closing it.
+//!
+//! [ADR 0020]: https://github.com/mmogr/gglib/blob/main/docs/adr/0020-prior-reasoning-is-kept-where-the-template-keeps-it.md
 
 use serde_json::Value;
 
