@@ -55,7 +55,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 3. **Streams responses** back to clients with proper SSE formatting
 4. **Exposes MCP tools** via [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) at `/mcp`
 5. **Truncates oversized history** to protect local model context windows (see [History Truncation](#history-truncation))
-6. **Acts on looping conversations** — by default it forwards them with a note telling the model what it has repeated; set to refuse, it aborts them before they cost a model swap or a generation (see [Loop & Stagnation Defence](#loop--stagnation-defence))
+6. **Acts on looping conversations** — by default it forwards them with a note telling the model what it has repeated, and ends the run if the model repeats again after that; set to refuse, it aborts them before they cost a model swap or a generation (see [Loop & Stagnation Defence](#loop--stagnation-defence))
 7. **Exposes a live proxy dashboard** — active connections, per-slot context usage, recent request history, and prompt-cache health and reuse — via `GET /v1/proxy/status` (JSON) and `GET /v1/proxy/status/stream` (SSE), consumed by both the CLI (`gglib proxy dashboard`) and the web GUI's Proxy Dashboard modal (see [Proxy Dashboard](#proxy-dashboard))
 
 ## Internal Structure
@@ -830,16 +830,30 @@ no TTL.
 so only the proxy, which walks one detector across a whole replayed
 conversation, has to be told. Without it a person asking three times for the
 same failing build was refused on the third, while the identical conversation
-through `gglib-agent` was not. It does **not** rescue a transcript that already
-tripped: the scan returns on the first trip it finds and never reaches a later
-user turn. See [ADR 0011](../../docs/adr/0011-stagnation-is-about-prose.md).
+through `gglib-agent` was not. See
+[ADR 0011](../../docs/adr/0011-stagnation-is-about-prose.md).
+
+**Under `note`, the verdict is about the newest turn.** A trip counts only
+while the newest turn the detector judged belongs to the run that tripped: a
+different batch, or a person speaking and the model answering, clears it. A
+user turn with nothing after it does not, so a client that appends one to every
+request cannot clear a trip by doing so. Under `refuse` the first trip anywhere
+in the transcript still stands, as it always has. See
+[ADR 0021](../../docs/adr/0021-the-loop-guard-ends-the-loop.md).
 
 What a tripped guard does is one setting, `--loop-guard-mode`, with three
 values. The default, `note`, **forwards** the request with a fixed note
 appended to the last message's content behind a `[gglib loop guard]` marker,
 saying what repeated and how often: the request therefore pays the admission
 and model-swap cost it used to be refused ahead of, and a client with
-no recovery path from a 400 gets something it can act on. `refuse` is the old
+no recovery path from a 400 gets something it can act on. If the same run
+trips again on a later request, the model was told and kept repeating, so
+the proxy **ends the run**: it does not forward that request, and answers it
+with a finished assistant message (status 200, `finish_reason: "stop"`, no
+tool call) saying the run was stopped by gglib's loop guard. Every agentic
+client seen so far ends its loop on a turn with no tool call. A request that
+ends with a user turn after the trip is noted rather than ended: a person may
+have spoken. `refuse` is the old
 behaviour — HTTP 400 before any of that cost, `type` and `code` being
 `loop_detected` or `stagnation_detected` (mirroring `context_length_exceeded`'s
 shape), and the message naming `--loop-guard-mode note`. `off` does not scan at
@@ -866,8 +880,10 @@ and is counted as a repeat: an answer nobody can read is not evidence of
 progress. See [ADR 0010](../../docs/adr/0010-the-loop-guard-reads-what-came-back.md).) Detection lags the agent
 path's per-iteration check by one turn (the history at turn N shows responses
 1..N-1). Under `refuse` that caps a runaway session at threshold+1 turns;
-under the default, `note`, nothing is capped — the model is told, and a client
-that ignores the note spends a generation per stuck turn.
+under the default, `note`, at threshold+2 — one generation with the note, then
+the ending. The lap a client can fall into while re-asking for the same
+result, with varying prose and small tool calls in between, trips neither
+detector, so nothing caps it ([ADR 0021](../../docs/adr/0021-the-loop-guard-ends-the-loop.md)).
 
 One shape gets neither. A conversation that trips the guard **and** cannot be
 trimmed into the context budget is noted — the note is built and appended
@@ -891,10 +907,13 @@ Tripped requests are visible on the dashboard as `loop_guard_trip` in
 `recent_requests`, which names the detector that raised the trip (`"loop"` or
 `"stagnation"`) and is `null` for a request that did not trip at all. A
 request the guard *noted* was let through and still names its detector —
-that is the point of the field since #1052.
+that is the point of the field since #1052. A request the guard *ended* also
+sets `loop_guard_ended`.
 
 Every decision is also written to the loop guard's log in gglib's database,
-which outlives the daemon: a row per request the guard noted or refused, and,
+which outlives the daemon: a row per request the guard noted, ended or
+refused (an ended request's row reads as a noted one: the log has no column
+that tells them apart), and,
 per UTC day, model, gglib version and mode, a count of the requests it scanned
 (nothing is scanned under `off`). Read it with `gglib proxy trips`,
 `GET /api/proxy/loop-guard-trips`, or the panel under the setting. A row is the
@@ -1212,7 +1231,8 @@ uses (`SlotSnapshot::tokens_in_use()`): `n_past` → `cache_tokens` →
 | `grammar_enforced` | `bool` | The pipeline originated a decode-time GBNF grammar for this request (`request_pipeline::constrain`) |
 | `dialect_residue` | `bool` | Dialect markup survived normalization into client-visible output. Back-patched once the turn's outcome is known |
 | `tool_repaired` | `bool` | This turn's tool call failed schema validation and a re-issue produced a conformant one. Back-patched once the turn's outcome is known |
-| `loop_guard_trip` | `"loop"` \| `"stagnation"` \| `null` | The detector that made the loop guard act on this request — forward it with a note, or refuse it before dispatch — or `null` when it did not |
+| `loop_guard_trip` | `"loop"` \| `"stagnation"` \| `null` | The detector that made the loop guard act on this request — forward it with a note, end the run, or refuse it before dispatch — or `null` when it did not |
+| `loop_guard_ended` | `bool` | The loop guard ended this request's run: under `note`, the same run tripped again after its note, so the proxy answered with a finished assistant message instead of forwarding ([ADR 0021](../../docs/adr/0021-the-loop-guard-ends-the-loop.md)) |
 | `completion_tokens` | `u32` \| `null` | `usage.completion_tokens` as the upstream reported it; `null` when the turn carried no usage |
 | `reasoning_chars` | `usize` | Characters of reasoning the turn generated, `0` when none |
 | `tool_calls` | `u32` | Tool calls queued for the client, each counted once however many fragments it streamed in |

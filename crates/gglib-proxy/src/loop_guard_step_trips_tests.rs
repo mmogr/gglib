@@ -10,7 +10,7 @@ use gglib_core::ports::LoopGuardTripSink;
 use gglib_core::{LoopGuardMode, Settings};
 use serde_json::json;
 
-use super::fixtures::{MODEL, body, in_mode, looping, stagnating, store};
+use super::fixtures::{MODEL, agentic_body, body, in_mode, looping, stagnating, store};
 use super::{GuardObservers, GuardStep, run};
 use crate::loop_guard::{LoopGuardConfig, LoopGuardVerdict, scan_history};
 
@@ -175,4 +175,19 @@ fn no_sink_records_nothing_and_decides_the_same() {
         },
     );
     assert!(matches!(step, GuardStep::Note { .. }));
+}
+
+/// An ended run is logged as the trip it is, under `note`, like the first. The
+/// log has no column that tells the two apart; the dashboard's snapshot does.
+#[test]
+fn an_ended_run_is_still_one_scan_and_one_noted_decision() {
+    let sink = Recorder::default();
+    let step = step_into(&sink, &Settings::with_defaults(), &agentic_body(looping(4)));
+
+    assert!(matches!(step, GuardStep::End));
+    assert_eq!(sink.scans.lock().unwrap().len(), 1);
+    let trips = sink.trips.lock().unwrap().clone();
+    assert_eq!(trips.len(), 1);
+    assert_eq!(trips[0].mode(), LoopGuardMode::Note);
+    assert_eq!(trips[0].detector(), LoopGuardTrip::Loop);
 }

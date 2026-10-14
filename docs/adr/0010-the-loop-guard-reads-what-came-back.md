@@ -190,6 +190,11 @@ before ADR 0006 had to widen it.
 > the one known drop (a template with no `tool` branch drops the whole last
 > message on an agentic tail, and the note with it).
 
+> **Amended 2026-10-14.** "A mistaken trip now adds a sentence" holds for a
+> run's first trip only. Under `note` a run that trips again after its note is
+> now ended ([ADR 0021](0021-the-loop-guard-ends-the-loop.md)), so a mistaken
+> trip that repeats costs the run.
+
 ## Kill criteria
 
 - If `repeats_rescued` dwarfs `identical_result_repeats` in real use, the join is

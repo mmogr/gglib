@@ -27,12 +27,14 @@ use fixtures::loop_guard::{
     spawn_recording_upstream,
 };
 
-/// A history that trips the loop guard **and** cannot be trimmed to fit: four
+/// A history that trips the loop guard **and** cannot be trimmed to fit: three
 /// identical batches whose results are each far larger than the whole context
-/// budget, so every one of them is inside the protected tail.
+/// budget, so every one of them is inside the protected tail. Three, not more:
+/// a fourth would be the run's second trip, which `note` ends rather than
+/// notes (ADR 0021).
 fn oversized_looping_history() -> Vec<Value> {
     let huge = "x".repeat(20_000);
-    (0..4)
+    (0..3)
         .flat_map(|_| {
             vec![
                 json!({

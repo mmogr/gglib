@@ -54,11 +54,10 @@
 //! reason, and a test cannot be written for it.
 //!
 //! The client never sees the note — it is added to the upstream request only,
-//! and the model's answer comes back untouched — so it is never replayed, and
-//! the guard therefore re-trips and re-notes on the next turn with the count
-//! one higher. That steady state is the design: a model that ignores the note
-//! forever is what the loop guard's log (`gglib proxy trips`) makes visible
-//! across restarts — its trips climb while its distinct sessions do not.
+//! and the model's answer comes back untouched — so it is never replayed. A
+//! run that trips again on the next turn is therefore one whose model was
+//! told and kept repeating, and the guard ends it there rather than noting it
+//! a second time: see `loop_guard_end` and ADR 0021. One note per loop run, then; a stagnation trip that tool turns keep standing is noted again.
 //!
 //! # What it costs
 //!

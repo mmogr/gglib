@@ -62,8 +62,9 @@ impl ModelDefectLedger {
     /// Count one loop-guard intervention for `model`, under the detector that
     /// raised it.
     ///
-    /// An intervention is a note *or* a refusal (#1052) — the default
-    /// forwards the request with a note rather than rejecting it.
+    /// An intervention is a note, an ending *or* a refusal (#1052, ADR
+    /// 0021) — the default forwards the request with a note rather than
+    /// rejecting it, and ends a run that trips again after its note.
     ///
     /// Bumps the detector's own count and `loop_guard_trips`, which stays the
     /// sum of the two. Also counts the request itself: a trip outside its own
@@ -101,7 +102,8 @@ impl ModelDefectLedger {
     ///
     /// Deliberately does *not* bump `requests`, unlike
     /// [`Self::record_loop_guard_trip`], which counts a request the guard
-    /// acted on — refused instead of forwarding, or forwarded with a note —
+    /// acted on — refused or ended instead of forwarding, or forwarded with a
+    /// note —
     /// and so has to count its own denominator either way. A stream error
     /// happens after the request was forwarded and already counted; bumping
     /// here would count the same request twice and deflate every rate.

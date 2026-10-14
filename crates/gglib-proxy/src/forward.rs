@@ -726,6 +726,7 @@ pub(crate) async fn forward_chat_completion(
                 // is exactly the shape that reaches the context ceiling, so a
                 // noted-then-clamped request must still count its trip.
                 loop_guard_trip,
+                loop_guard_ended: false,
                 seq: 0,
                 recorded_at_secs: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -791,6 +792,7 @@ pub(crate) async fn forward_chat_completion(
         finish_reason: None,
         generation_ms: None,
         loop_guard_trip,
+        loop_guard_ended: false,
         seq: 0,
         recorded_at_secs: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -949,22 +951,43 @@ fn host_port_from_url(url: &str) -> String {
 /// frames inside an already-committed 200 stream, so an error delivered only
 /// as a structured error frame looks like an empty response.
 pub(crate) fn failed_turn_body(model: &str, notice: &str, error_frame: &str) -> String {
+    let notice = own_turn_encoder(model)
+        .encode(&LlmStreamEvent::TextDelta {
+            content: notice.to_owned(),
+        })
+        .unwrap_or_default();
+    format!("{notice}{error_frame}{DONE_SENTINEL}")
+}
+
+/// The whole body a streaming client is sent for a turn the proxy finishes
+/// itself: `text` as visible assistant text, then a `stop` with no tool call,
+/// then `[DONE]` — the frames a model's own finished answer ends with.
+///
+/// The loop guard's ending (ADR 0021) is the one caller: an agentic client
+/// stops its loop at a turn that calls no tool.
+pub(crate) fn finished_turn_body(model: &str, text: &str) -> String {
+    let encoder = own_turn_encoder(model);
+    let text = encoder
+        .encode(&LlmStreamEvent::TextDelta {
+            content: text.to_owned(),
+        })
+        .unwrap_or_default();
+    let stop = encoder
+        .encode(&LlmStreamEvent::Done {
+            finish_reason: Some("stop".to_owned()),
+        })
+        .unwrap_or_default();
+    format!("{text}{stop}{DONE_SENTINEL}")
+}
+
+/// The encoder for a turn the proxy writes without the upstream: a fresh id
+/// and the current time, as [`drain_events`] makes for a forwarded one.
+fn own_turn_encoder(model: &str) -> SseEncoder {
     let created = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
     let id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());
-    let value = serde_json::json!({
-        "id": id,
-        "object": "chat.completion.chunk",
-        "created": created,
-        "model": model,
-        "choices": [{
-            "index": 0,
-            "delta": { "content": notice },
-            "finish_reason": serde_json::Value::Null,
-        }],
-    });
-    format!("data: {value}\n\n{error_frame}{DONE_SENTINEL}")
+    SseEncoder::new(id, model, created)
 }
 
 /// [`drain_events`] over a whole upstream response, under the production idle

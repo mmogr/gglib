@@ -22,6 +22,7 @@ fn make_snapshot(model: &str) -> ContextSnapshot {
         finish_reason: None,
         generation_ms: None,
         loop_guard_trip: None,
+        loop_guard_ended: false,
         recorded_at_secs: 0,
         seq: 0,
     }

@@ -73,6 +73,7 @@ pub(crate) mod load_endpoint;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod loop_guard;
+pub(crate) mod loop_guard_end;
 pub(crate) mod loop_guard_note;
 pub(crate) mod loop_guard_step;
 pub mod loopback;

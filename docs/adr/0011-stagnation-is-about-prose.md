@@ -115,6 +115,14 @@ property of judging a whole transcript rather than the turn in front of you.
 > shape of a chat request. That needs its own argument and a measurement, and is
 > deliberately not made.
 
+> **Amended 2026-10-14.** Made for `note` only, in
+> [ADR 0021](0021-the-loop-guard-ends-the-loop.md): under `note` a verdict is
+> about the newest turn each detector judged, so a model that changed approach,
+> or answered a person, is out of the trip. A trailing user turn with nothing
+> after it still clears nothing. `refuse` keeps the first trip anywhere. The
+> "within one mode" reading below no longer holds for `note` as written: a
+> looping run is noted once and then ended, not logged on every later turn; a stagnation trip that tool turns keep standing is still noted on each later request.
+
 ## Kill criteria
 
 - ~~If `loop_guard_trips` shows stagnation rejections have effectively vanished

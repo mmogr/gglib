@@ -15,8 +15,10 @@
 //! own setting; every row is dated, so the reader chooses the window; and
 //! every row names the gglib version and the guard's mode, so a reading can be
 //! kept to one gglib release and one behaviour instead of averaged across
-//! them. `note` re-notes every later turn of a stuck conversation, while
-//! `refuse` refuses every one — which, for a client with no recovery path,
+//! them. `note` notes a looping run once and ends it if it trips again (ADR
+//! 0021), so it logs two rows for such a run, and a stagnation trip that tool
+//! turns keep standing is noted on each later request, while `refuse`
+//! refuses every later turn — which, for a client with no recovery path,
 //! ends the session — so their trip counts are different populations.
 //!
 //! That meets the objection only in part. The version is the workspace's, so
@@ -140,6 +142,8 @@ pub struct LoopGuardTripEvent {
 impl LoopGuardTripEvent {
     /// A decision taken at `recorded_at_secs` by `detector` under `mode`:
     /// [`LoopGuardMode::Note`] decided to forward the request with a note,
+    /// or, for a run that tripped again after its note, to end the run
+    /// without forwarding it — the row does not say which (ADR 0021);
     /// [`LoopGuardMode::Refuse`] refused it. Never [`LoopGuardMode::Off`],
     /// which scans nothing and so decides nothing.
     pub fn new(

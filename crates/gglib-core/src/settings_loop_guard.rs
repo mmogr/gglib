@@ -24,13 +24,16 @@ pub enum LoopGuardMode {
     /// tool-call batches with nothing in between, or repeats a response.
     Off,
     /// Forward the request, with a note appended to the last message saying
-    /// what repeated and how often.
+    /// what repeated and how often. If the same run trips again on a later
+    /// request, end it instead: the proxy answers with a finished assistant
+    /// message that calls no tool, and the request is not forwarded (ADR
+    /// 0021).
     ///
-    /// The default. The model is told what gglib can see and is left to act
-    /// on it, which is the one thing a refusal cannot offer a client that has
-    /// no recovery path. The cost is that a genuinely runaway client now
-    /// spends a generation per stuck turn instead of being stopped at
-    /// threshold + 1 — the trade #1052 asks for.
+    /// The default. The model is told what gglib can see and is given one
+    /// turn to act on it, which is the one thing a refusal cannot offer a
+    /// client that has no recovery path. The cost is that a genuinely runaway
+    /// client spends one more generation than under `refuse` — it is stopped
+    /// at threshold + 2 rather than threshold + 1 for a loop run whose requests end with the tool result — the trade #1052 asks for.
     #[default]
     Note,
     /// Refuse the request with HTTP 400, before any catalog, admission or
