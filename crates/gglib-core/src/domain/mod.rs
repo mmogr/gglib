@@ -80,7 +80,9 @@ pub use sampling_provenance::{FieldSources, ParamSource, SamplingLayer};
 pub use runtime_capabilities::{RuntimeCapabilities, RuntimeFlags};
 
 // Re-export the template-capability self-report (ADR 0007) at the domain level
-pub use template_caps::{Support, TemplateCaps, TemplateCapsState, reasoning_effort_support};
+pub use template_caps::{
+    Support, TemplateCaps, TemplateCapsState, preserve_reasoning_support, reasoning_effort_support,
+};
 
 // Re-export KV estimation helpers at the domain level for convenience
 pub use kv_estimate::{

@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::domain::{InferenceConfig, InferenceProfile};
+use gglib_core::domain::{InferenceConfig, InferenceProfile, TemplateCaps};
 use gglib_proxy::ServeConfig;
 
 use super::profile_mocks::{MODEL, NamedCatalog, RecordingRuntime, profile_settings};
@@ -90,6 +90,31 @@ pub(crate) async fn spawn_with_default_profile(
     trust_client_sampling: bool,
     default_profile: Option<String>,
 ) -> Harness {
+    spawn_full(
+        profiles,
+        catalog_names,
+        model_defaults,
+        trust_client_sampling,
+        default_profile,
+        None,
+    )
+    .await
+}
+
+/// One model, [`MODEL`], whose catalog row carries `template_caps` as a
+/// launch would have recorded them, and no profiles.
+pub(crate) async fn spawn_with_template_caps(template_caps: Option<TemplateCaps>) -> Harness {
+    spawn_full(Vec::new(), &[MODEL], None, false, None, template_caps).await
+}
+
+async fn spawn_full(
+    profiles: Vec<InferenceProfile>,
+    catalog_names: &[&str],
+    model_defaults: Option<InferenceConfig>,
+    trust_client_sampling: bool,
+    default_profile: Option<String>,
+    template_caps: Option<TemplateCaps>,
+) -> Harness {
     let forwarded: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
     let cancel = CancellationToken::new();
 
@@ -138,6 +163,7 @@ pub(crate) async fn spawn_with_default_profile(
         catalog_port: Arc::new(NamedCatalog {
             names,
             inference_defaults: model_defaults,
+            template_caps,
         }),
         cancel: cancel.clone(),
         settings_repo: Arc::new(profile_settings(profiles, trust_client_sampling)),

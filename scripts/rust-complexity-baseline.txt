@@ -105,7 +105,7 @@ crates/gglib-core/src/ports/model_runtime_tests.rs 383
 crates/gglib-core/src/ports/process_runner.rs 323
 crates/gglib-core/src/request_pipeline/constrain.rs 325
 crates/gglib-core/src/request_pipeline/drawn_note_tests.rs 416
-crates/gglib-core/src/request_pipeline/messages.rs 302
+crates/gglib-core/src/request_pipeline/messages.rs 388
 crates/gglib-core/src/request_pipeline/sampling.rs 679
 crates/gglib-core/src/request_pipeline/sampling_tests.rs 1755
 crates/gglib-core/src/request_pipeline/truncation.rs 313

@@ -124,6 +124,29 @@ fn never_observed_and_field_absent_both_answer_unknown() {
     );
 }
 
+/// The preserve-reasoning answer reads its own field, with the same three arms.
+#[test]
+fn preserve_reasoning_reads_its_own_field() {
+    let caps = |v| TemplateCaps {
+        supports_preserve_reasoning: v,
+        supports_reasoning_effort: Some(true),
+        ..TemplateCaps::default()
+    };
+    assert_eq!(
+        preserve_reasoning_support(&Some(caps(Some(true)))),
+        Support::Yes
+    );
+    assert_eq!(
+        preserve_reasoning_support(&Some(caps(Some(false)))),
+        Support::No
+    );
+    assert_eq!(
+        preserve_reasoning_support(&Some(caps(None))),
+        Support::Unknown
+    );
+    assert_eq!(preserve_reasoning_support(&None), Support::Unknown);
+}
+
 // ── The tri-state ─────────────────────────────────────────────────────────
 
 #[test]

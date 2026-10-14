@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 
 use gglib_core::Settings;
-use gglib_core::domain::{InferenceConfig, InferenceProfile};
+use gglib_core::domain::{InferenceConfig, InferenceProfile, TemplateCaps};
 use gglib_core::ports::{
     CatalogError, InMemorySettings, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
     ModelRuntimePort, ModelSummary, RunningTarget,
@@ -69,12 +69,16 @@ pub(crate) struct NamedCatalog {
     pub(crate) names: Vec<String>,
     /// Per-model stored defaults, returned for every resolved model.
     pub(crate) inference_defaults: Option<InferenceConfig>,
+    /// A launch's recorded `chat_template_caps`, returned for every resolved
+    /// model: what the runtime writes onto the row from `GET /props`.
+    pub(crate) template_caps: Option<TemplateCaps>,
 }
 
 impl NamedCatalog {
     fn summary(&self, id: u32, name: &str) -> ModelSummary {
         ModelSummary {
             inference_defaults: self.inference_defaults.clone(),
+            template_caps: self.template_caps.clone(),
             ..ModelSummary::bare(id, name)
         }
     }
