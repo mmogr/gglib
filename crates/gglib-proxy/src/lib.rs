@@ -62,6 +62,7 @@ mod error_codes;
 )]
 pub(crate) mod forward;
 pub(crate) mod forward_unary;
+pub(crate) mod generation;
 pub(crate) mod image_refusal;
 // Public: the daemon mounts the same handler at `/api/images/generations`.
 pub mod images;

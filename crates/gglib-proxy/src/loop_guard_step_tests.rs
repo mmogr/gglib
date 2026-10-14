@@ -16,6 +16,7 @@ use super::fixtures::{
     store,
 };
 use super::{GuardStep, run};
+use crate::generation::TurnGeneration;
 
 #[test]
 fn a_guard_switched_off_scans_nothing_and_forwards() {
@@ -94,6 +95,12 @@ fn a_repeated_batch_is_refused_and_counted_as_a_loop() {
     assert_eq!(recent.len(), 1);
     assert_eq!(recent[0].loop_guard_trip, Some(LoopGuardTrip::Loop));
     assert_eq!(recent[0].model_name, MODEL);
+    // Nothing was generated, and the snapshot says so by its defaults.
+    assert_eq!(
+        TurnGeneration::on(&recent[0]),
+        TurnGeneration::default(),
+        "a refused request has no readings, which is not readings of zero"
+    );
 }
 
 #[test]

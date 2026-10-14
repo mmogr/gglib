@@ -172,6 +172,11 @@ pub(crate) fn run(
             metrics.record(ContextSnapshot {
                 dialect_residue: false,
                 tool_repaired: false,
+                completion_tokens: None,
+                reasoning_chars: 0,
+                tool_calls: 0,
+                finish_reason: None,
+                generation_ms: None,
                 seq: 0,
                 model_name: model_name.to_owned(),
                 payload_chars_before: body.len(),

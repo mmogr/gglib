@@ -43,12 +43,13 @@ fn markup(content: &str) -> serde_json::Value {
 
 /// A llama-server stand-in that answers in order: the first request gets
 /// `answers[0]`, the next `answers[1]`, and the last answer repeats; a `null`
-/// answer is a 500 with an empty body. Every request is recorded.
+/// answer is a 500 with an empty body, and a [`refused`] one a 500 with a
+/// body. Every request is recorded.
 ///
 /// It dispatches on the ordinal because nothing in a body tells the two
 /// apart on this path: the first request is already `stream: false`, and a
 /// second draw under gglib's grammar keeps the first request's tool choice.
-async fn spawn_ordinal_mock(
+pub(super) async fn spawn_ordinal_mock(
     seen: Arc<std::sync::Mutex<Vec<serde_json::Value>>>,
     answers: Vec<serde_json::Value>,
 ) -> (u16, tokio::task::JoinHandle<()>) {
@@ -73,9 +74,12 @@ async fn spawn_ordinal_mock(
                     seen.len() - 1
                 };
                 let answer = &answers[ordinal.min(answers.len() - 1)];
-                let (status, body) = match answer {
-                    serde_json::Value::Null => (500, String::new()),
-                    answer => (200, answer.to_string()),
+                let (status, body) = if answer.is_null() {
+                    (500, String::new())
+                } else if let Some(body) = answer.get(REFUSED_WITH) {
+                    (500, body.to_string())
+                } else {
+                    (200, answer.to_string())
                 };
                 axum::response::Response::builder()
                     .status(status)
@@ -91,13 +95,21 @@ async fn spawn_ordinal_mock(
     (port, handle)
 }
 
+/// The key [`refused`] puts its body under.
+const REFUSED_WITH: &str = "refused_with";
+
+/// An answer [`spawn_ordinal_mock`] gives as a 500 carrying `body`.
+pub(super) fn refused(body: &serde_json::Value) -> serde_json::Value {
+    json!({ REFUSED_WITH: body })
+}
+
 /// A `read_file` request as forwarded upstream, non-streaming, with `extra`
 /// merged in.
 #[allow(
     clippy::needless_pass_by_value,
     reason = "grandfathered at lint inheritance, #1157"
 )]
-fn forwarded_body(extra: serde_json::Value) -> Bytes {
+pub(super) fn forwarded_body(extra: serde_json::Value) -> Bytes {
     let mut body = json!({
         "model": "m",
         "stream": false,
@@ -114,7 +126,7 @@ fn forwarded_body(extra: serde_json::Value) -> Bytes {
     Bytes::from(serde_json::to_vec(&body).unwrap())
 }
 
-fn snapshot() -> ContextSnapshot {
+pub(super) fn snapshot() -> ContextSnapshot {
     ContextSnapshot {
         model_name: "m".to_owned(),
         payload_chars_before: 0,
@@ -124,6 +136,11 @@ fn snapshot() -> ContextSnapshot {
         grammar_enforced: false,
         dialect_residue: false,
         tool_repaired: false,
+        completion_tokens: None,
+        reasoning_chars: 0,
+        tool_calls: 0,
+        finish_reason: None,
+        generation_ms: None,
         loop_guard_trip: None,
         seq: 0,
         recorded_at_secs: 0,
@@ -132,7 +149,7 @@ fn snapshot() -> ContextSnapshot {
 
 /// One non-streaming turn: the requests upstream saw, the body the client
 /// was answered with, and the metrics store that recorded it.
-async fn run_turn(
+pub(super) async fn run_turn(
     body: Bytes,
     answers: Vec<serde_json::Value>,
     dialect: Option<DialectSpec>,

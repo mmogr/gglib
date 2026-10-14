@@ -82,6 +82,7 @@ use gglib_core::sse::{DONE_SENTINEL, SseEncoder};
 
 use crate::client_send::ClientSender;
 use crate::connections::ConnectionGuard;
+use crate::generation::Meter;
 use crate::metrics::{ContextMetricsStore, ContextSnapshot};
 use crate::models::ErrorResponse;
 use crate::repair::{RepairContext, RepairTurn};
@@ -148,6 +149,17 @@ pub(crate) struct StreamOutcome {
     /// see [`gglib_core::LlmStreamEvent::Usage`] on why absent and zero must
     /// stay distinct. Feeds [`gglib_core::cache_metrics::CacheMetricsStore`].
     pub cached_tokens: Option<u32>,
+    /// What the turn generated, as its snapshot is given it: see
+    /// [`ContextSnapshot::completion_tokens`].
+    pub completion_tokens: Option<u32>,
+    /// See [`ContextSnapshot::reasoning_chars`].
+    pub reasoning_chars: usize,
+    /// See [`ContextSnapshot::tool_calls`].
+    pub tool_calls: u32,
+    /// See [`ContextSnapshot::generation_ms`]. Read off the meter's
+    /// [`TokenClock`](crate::generation::TokenClock), which is stamped as
+    /// events arrive from the upstream, before normalization.
+    pub generation_ms: Option<u64>,
     /// First dialect marker found in the client-visible text after
     /// normalization, if any (see `gglib_core::normalize::residue`). The
     /// spawning task back-patches the request's metrics snapshot with it.
@@ -705,6 +717,11 @@ pub(crate) async fn forward_chat_completion(
                 grammar_enforced: false,
                 dialect_residue: false,
                 tool_repaired: false,
+                completion_tokens: None,
+                reasoning_chars: 0,
+                tool_calls: 0,
+                finish_reason: None,
+                generation_ms: None,
                 // A conversation long and repetitive enough to trip the guard
                 // is exactly the shape that reaches the context ceiling, so a
                 // noted-then-clamped request must still count its trip.
@@ -768,6 +785,11 @@ pub(crate) async fn forward_chat_completion(
         grammar_enforced,
         dialect_residue: false,
         tool_repaired: false,
+        completion_tokens: None,
+        reasoning_chars: 0,
+        tool_calls: 0,
+        finish_reason: None,
+        generation_ms: None,
         loop_guard_trip,
         seq: 0,
         recorded_at_secs: std::time::SystemTime::now()
@@ -1023,13 +1045,18 @@ pub(crate) async fn drain_events(
     let encoder = SseEncoder::new(id, model_name, created).with_reading(told);
 
     // Set once a generated token comes from the upstream, seen here because
-    // the normalizer can hold tokens back from the loop below.
+    // the normalizer can hold tokens back from the loop below. The meter's
+    // clock is stamped here for the same reason: a call written as text is
+    // generated over many tokens and leaves the normalizer as one event.
     let generated = Arc::new(AtomicBool::new(false));
+    let mut meter = Meter::default();
     let events = events.inspect({
         let generated = Arc::clone(&generated);
+        let clock = meter.clock();
         move |event| {
             if event.as_ref().is_ok_and(is_generated_token) {
                 generated.store(true, Ordering::Relaxed);
+                clock.stamp();
             }
         }
     });
@@ -1059,9 +1086,11 @@ pub(crate) async fn drain_events(
     // a turn no client can consume incrementally, so it is the only part
     // where withholding costs nothing.
     let repairing = repair.is_some();
-    let mut held_tool_frames: Vec<Bytes> = Vec::new();
+    let mut held_tool_frames: Vec<HeldFrame> = Vec::new();
     let mut tool_calls = crate::repair::ToolCallAccumulator::default();
     loop {
+        // The call a frame sent below belongs to, counted once it is sent.
+        let mut sending_call = None;
         // Until the first generated token, the client's departure is watched
         // alongside each read, so a client that leaves a silent prefill ends
         // the turn at once.
@@ -1113,6 +1142,7 @@ pub(crate) async fn drain_events(
                     // ever producing content of its own.
                     connection.mark_generating();
                     outcome.saw_reasoning = true;
+                    meter.reasoning(content);
                     reasoning_buf.push_str(content);
                     encoder.encode(&ev).map(Bytes::from)
                 }
@@ -1132,14 +1162,15 @@ pub(crate) async fn drain_events(
                     outcome.saw_visible_output = true;
                     tool_calls.push(*index, id.as_deref(), name.as_deref(), arguments.as_deref());
                     if let Some(frame) = encoder.encode(&ev) {
-                        held_tool_frames.push(Bytes::from(frame));
+                        held_tool_frames.push((*index, Bytes::from(frame)));
                     }
                     // Withheld, not dropped — flushed or discarded at `Done`.
                     None
                 }
-                LlmStreamEvent::ToolCallDelta { .. } => {
+                LlmStreamEvent::ToolCallDelta { index, .. } => {
                     connection.mark_generating();
                     outcome.saw_visible_output = true;
+                    sending_call = Some(*index);
                     encoder.encode(&ev).map(Bytes::from)
                 }
                 LlmStreamEvent::UpstreamError { .. } => {
@@ -1155,7 +1186,7 @@ pub(crate) async fn drain_events(
                     // so the `Done` arm below never runs and the hold-back's
                     // contents would go out with it. Release them first, ahead
                     // of an error frame a client may read as the end of the turn.
-                    if !emit_held_frames(&tx, &mut held_tool_frames).await {
+                    if !emit_held_frames(&tx, &mut held_tool_frames, &mut meter).await {
                         client_connected = false;
                         outcome.client_aborted = true;
                     }
@@ -1182,7 +1213,7 @@ pub(crate) async fn drain_events(
                             &tx,
                         )
                         .await;
-                        if !emit_held_frames(&tx, &mut flush).await {
+                        if !emit_held_frames(&tx, &mut flush, &mut meter).await {
                             client_connected = false;
                             outcome.client_aborted = true;
                         }
@@ -1191,6 +1222,7 @@ pub(crate) async fn drain_events(
                 }
                 LlmStreamEvent::Usage {
                     prompt_tokens,
+                    completion_tokens,
                     cached_tokens,
                     ..
                 } => {
@@ -1199,6 +1231,7 @@ pub(crate) async fn drain_events(
                     // telemetry. Not visible output (its `choices` is empty).
                     outcome.prompt_tokens = Some(*prompt_tokens);
                     outcome.cached_tokens = *cached_tokens;
+                    outcome.completion_tokens = Some(*completion_tokens);
                     encoder.encode(&ev).map(Bytes::from)
                 }
                 LlmStreamEvent::WritingTime { .. } => None,
@@ -1215,7 +1248,7 @@ pub(crate) async fn drain_events(
                 // flush in that arm never happens. Whatever the hold-back
                 // captured is real model output a non-repairing turn would have
                 // shown; emit it ahead of the error frame rather than lose it.
-                if !emit_held_frames(&tx, &mut held_tool_frames).await {
+                if !emit_held_frames(&tx, &mut held_tool_frames, &mut meter).await {
                     client_connected = false;
                     outcome.client_aborted = true;
                 }
@@ -1244,15 +1277,19 @@ pub(crate) async fn drain_events(
             }
         };
 
-        if let Some(bytes) = frame
-            && !tx.send(bytes).await
-        {
-            // Client disconnected, or stopped reading for the send bound; stop
-            // draining the upstream. Recorded so the watchdog can abstain
-            // rather than score a person's hang-up as an upstream defect.
-            client_connected = false;
-            outcome.client_aborted = true;
-            break;
+        if let Some(bytes) = frame {
+            if !tx.send(bytes).await {
+                // Client disconnected, or stopped reading for the send bound;
+                // stop draining the upstream. Recorded so the watchdog can
+                // abstain rather than score a person's hang-up as an upstream
+                // defect.
+                client_connected = false;
+                outcome.client_aborted = true;
+                break;
+            }
+            if let Some(index) = sending_call {
+                meter.call_sent(index);
+            }
         }
     }
 
@@ -1267,7 +1304,7 @@ pub(crate) async fn drain_events(
             frames = held_tool_frames.len(),
             "proxy: stream ended without a terminating Done; releasing held tool-call frames"
         );
-        if !emit_held_frames(&tx, &mut held_tool_frames).await {
+        if !emit_held_frames(&tx, &mut held_tool_frames, &mut meter).await {
             client_connected = false;
             outcome.client_aborted = true;
         }
@@ -1310,6 +1347,7 @@ pub(crate) async fn drain_events(
 
     outcome.left_before_first_token = outcome.client_aborted && !generated.load(Ordering::Relaxed);
     outcome.dialect_residue = residue.hit().map(ToOwned::to_owned);
+    meter.report(&mut outcome);
     outcome
 }
 
@@ -1358,17 +1396,22 @@ async fn send_reissue_keeping_the_wire_warm(
     }
 }
 
-/// Send withheld tool-call frames to the client verbatim, in order.
+/// A tool-call frame withheld from the client, and the index of its call.
+type HeldFrame = (usize, Bytes);
+
+/// Send withheld tool-call frames to the client verbatim, in order, telling
+/// `meter` of each call a frame was sent for.
 ///
 /// Empties `held`, so a later flush cannot emit the same frames twice —
 /// Copilot executes tool calls, and a duplicate is a duplicated side effect.
 ///
 /// Returns `false` if the client went away mid-flush.
-async fn emit_held_frames(tx: &ClientSender, held: &mut Vec<Bytes>) -> bool {
-    for frame in std::mem::take(held) {
+async fn emit_held_frames(tx: &ClientSender, held: &mut Vec<HeldFrame>, meter: &mut Meter) -> bool {
+    for (index, frame) in std::mem::take(held) {
         if !tx.send(frame).await {
             return false;
         }
+        meter.call_sent(index);
     }
     true
 }
@@ -1383,11 +1426,11 @@ async fn resolve_held_tool_calls(
     repair: Option<&RepairContext>,
     dialect: Option<&DialectSpec>,
     tool_calls: &crate::repair::ToolCallAccumulator,
-    original_frames: Vec<Bytes>,
+    original_frames: Vec<HeldFrame>,
     encoder: &SseEncoder,
     outcome: &mut StreamOutcome,
     tx: &ClientSender,
-) -> Vec<Bytes> {
+) -> Vec<HeldFrame> {
     let Some(ctx) = repair else {
         return original_frames;
     };
@@ -1452,7 +1495,12 @@ async fn resolve_held_tool_calls(
     outcome.repair_succeeded = true;
     events
         .iter()
-        .filter_map(|ev| encoder.encode(ev).map(Bytes::from))
+        .filter_map(|ev| {
+            let LlmStreamEvent::ToolCallDelta { index, .. } = ev else {
+                return None;
+            };
+            Some((*index, Bytes::from(encoder.encode(ev)?)))
+        })
         .collect()
 }
 
@@ -1497,3 +1545,8 @@ mod forward_stall_health_tests;
 #[cfg(test)]
 #[path = "forward_departure_tests.rs"]
 mod forward_departure_tests;
+
+/// What a streamed turn is counted and timed as having generated.
+#[cfg(test)]
+#[path = "forward_generation_tests.rs"]
+mod forward_generation_tests;

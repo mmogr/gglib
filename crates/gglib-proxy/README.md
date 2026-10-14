@@ -134,6 +134,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`upstream_health.rs`** — Consecutive-failure watchdog that recycles a degraded (empty-response / first-byte-timeout / stalled) llama-server; feeds `DashboardSnapshot.upstream_health`
 - **`loopback.rs`** — The one builder of an HTTP client for a server on this machine: `no_proxy()` applied, so a request to `127.0.0.1` never goes through `HTTP_PROXY` or the system proxy (#1085); used by this crate's upstream client and by every other crate that talks to the daemon or llama-server
 - **`metrics.rs`** — `ContextMetricsStore` ring buffer feeding `DashboardSnapshot.recent_requests`
+- **`generation.rs`** — What one turn generated (completion tokens, reasoning characters, tool calls queued for the client, finish reason, time between the first and last generated token the upstream streamed): metered as a streamed turn drains, read from the body of one that is not, and written onto the turn's `recent_requests` entry once it is over
 - **`repair.rs`** — Tool-call repair: validates emitted `tool_calls` against the advertised schema and, when they do not conform, re-issues the turn: with `tool_choice: "required"`, so llama.cpp's own schema-derived grammar does the correcting, or, on a turn gglib's own grammar constrained, as a second draw under that same grammar. gglib originates no grammar of its own here — see [Tool-call repair](../../docs/tool-call-repair.md) and [ADR 0002](../../docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md)
 - **`connections.rs`** — `ActiveConnectionsRegistry` + RAII `ConnectionGuard`; tracks every in-flight `/v1/chat/completions` request through `Queued` → `ProcessingPrompt` → `Generating`, feeding `DashboardSnapshot.active_connections`
 - **`slots.rs`** — Fetch + defensive parsing of llama.cpp's native `GET /slots` endpoint into `SlotSnapshot`; also provides slot I/O primitives (`save_slot`, `restore_slot`, `clear_slot_files`, `sanitize_session_id`) and background LRU eviction
@@ -972,7 +973,12 @@ explicitly documented as a not-yet-consumed "future" contract).
       "payload_chars_after": 8400,
       "messages_truncated": 3,
       "was_clamped": false,
-      "recorded_at_secs": 1749283200
+      "recorded_at_secs": 1749283200,
+      "completion_tokens": 212,
+      "reasoning_chars": 640,
+      "tool_calls": 2,
+      "finish_reason": "tool_calls",
+      "generation_ms": 4180
     }
   ],
   "total_requests": 42,
@@ -1202,6 +1208,33 @@ uses (`SlotSnapshot::tokens_in_use()`): `n_past` → `cache_tokens` →
 | `dialect_residue` | `bool` | Dialect markup survived normalization into client-visible output. Back-patched once the turn's outcome is known |
 | `tool_repaired` | `bool` | This turn's tool call failed schema validation and a re-issue produced a conformant one. Back-patched once the turn's outcome is known |
 | `loop_guard_trip` | `"loop"` \| `"stagnation"` \| `null` | The detector that made the loop guard act on this request — forward it with a note, or refuse it before dispatch — or `null` when it did not |
+| `completion_tokens` | `u32` \| `null` | `usage.completion_tokens` as the upstream reported it; `null` when the turn carried no usage |
+| `reasoning_chars` | `usize` | Characters of reasoning the turn generated, `0` when none |
+| `tool_calls` | `u32` | Tool calls queued for the client, each counted once however many fragments it streamed in |
+| `finish_reason` | `string` \| `null` | The `finish_reason` the turn ended with; `null` when it ended without one |
+| `generation_ms` | `u64` \| `null` | Milliseconds between the first and the last generated token (a reasoning, text or tool-call delta) the upstream streamed, timed before normalization, whatever the normalizer later made of them; `null` when it streamed none, and on every non-streaming turn |
+
+The last five are what the turn generated. They are written once the turn is
+over, so an entry read while its turn is still streaming shows `null` and `0`.
+So does the entry of any turn that ended before an answer was read, for
+example a request never forwarded, one whose upstream answered with an error
+status, or one whose upstream could not be reached or did not answer in time.
+
+A streamed turn's readings are taken as its events are read. When the client
+hangs up they stop where the proxy finds it gone, which after the first
+generated token is a send that fails, and `tool_calls` counts only the calls
+that were queued for it. `generation_ms` is timed before normalization: a
+model that writes a tool call as text generates it over many tokens, and the
+figure spans all of them though the normalizer makes one event of the call. A
+non-streaming turn is read from the body the client is answered with, which
+carries no tokens to time.
+
+A turn whose tool call was re-issued ([Tool-call repair](../../docs/tool-call-repair.md))
+generated twice. Streamed, `completion_tokens`, `reasoning_chars`,
+`finish_reason` and `generation_ms` are the first generation's, and
+`tool_calls` counts the calls queued for the client: the re-issue's when it replaced
+the original. Non-streaming, all of them describe whichever of the two bodies
+the client is answered with.
 
 The underlying ring buffer retains at most 50 entries; `recent_requests`
 surfaces the newest 20 of those. `total_requests` grows monotonically

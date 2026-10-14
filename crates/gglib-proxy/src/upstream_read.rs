@@ -214,7 +214,9 @@ where
 /// Whether `event` is a generated token: content, reasoning or a tool call.
 /// Once one has arrived, prefill is over. It is the test behind
 /// [`UpstreamStalled::after_first_token`], and the drain applies it to the
-/// same events, before the normalizer can hold any back.
+/// same events, before the normalizer can hold any back: to tell a client
+/// that left before the first token, and to stamp the clock behind a turn's
+/// `generation_ms`. It reads the kind of event, not what the event carries.
 pub(crate) fn is_generated_token(event: &LlmStreamEvent) -> bool {
     matches!(
         event,
