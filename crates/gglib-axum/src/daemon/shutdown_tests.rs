@@ -30,6 +30,17 @@ async fn the_api_path_tolerates_a_second_cancel() {
     assert!(token.is_cancelled());
 }
 
+/// The watchdog outlasts a render stop, which teardown's stop of every model
+/// can wait out, with the rest of the teardown's time on top: a watchdog
+/// shorter than the wait would cut the stop off and leave the image model's
+/// process to the next start's orphan sweep.
+#[test]
+fn the_watchdog_outlasts_a_render_stop() {
+    assert_eq!(RENDER_STOP_WAIT, Duration::from_secs(20));
+    assert_eq!(SHUTDOWN_WATCHDOG, Duration::from_secs(30));
+    assert!(SHUTDOWN_WATCHDOG >= RENDER_STOP_WAIT + RUNS_DRAIN + TRIP_LOG_DRAIN);
+}
+
 /// The daemon's teardown writes what the loop guard recorded — through the
 /// chain the daemon builds, from the bootstrap's writer to the drain, so a link
 /// left out anywhere in it fails here: the bootstrap's writer, the service

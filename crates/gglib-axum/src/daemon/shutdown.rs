@@ -12,18 +12,26 @@ use std::future::Future;
 use std::time::Duration;
 
 use crate::state::AppState;
+use gglib_runtime::process::residency::RENDER_STOP_WAIT;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
+/// What the teardown may take besides a render stop.
+const TEARDOWN_MARGIN: Duration = Duration::from_secs(10);
+
 /// How long the whole teardown may take before the watchdog force-exits.
-const SHUTDOWN_WATCHDOG: Duration = Duration::from_secs(10);
+///
+/// Teardown stops every model the way a person's Stop does, which for an
+/// image model that is drawing waits up to [`RENDER_STOP_WAIT`] for its
+/// render to let go; the rest of the teardown has [`TEARDOWN_MARGIN`] on top.
+const SHUTDOWN_WATCHDOG: Duration = RENDER_STOP_WAIT.saturating_add(TEARDOWN_MARGIN);
 
 /// How long the loop guard's log may take over its last write, out of the
-/// watchdog's ten seconds.
+/// watchdog's margin.
 const TRIP_LOG_DRAIN: Duration = Duration::from_secs(2);
 
 /// How long the runs may take to handle their ends, such as an agent run
-/// saving its reply, out of the same ten seconds.
+/// saving its reply, out of the same margin.
 const RUNS_DRAIN: Duration = Duration::from_secs(2);
 
 /// Resolve when *either* trigger fires, then cancel the token so both converge.

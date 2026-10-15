@@ -43,7 +43,7 @@ const POLL_TICK: Duration = Duration::from_millis(250);
 /// How long a Stop waits for a render to let go of its image model: the
 /// driver's next look at the job (a second away at most) and the kill of
 /// `sd-server` that follows.
-const RENDER_STOP_WAIT: Duration = Duration::from_secs(20);
+pub const RENDER_STOP_WAIT: Duration = Duration::from_secs(20);
 
 /// The models resident in VRAM, and the machinery that puts them there.
 ///
