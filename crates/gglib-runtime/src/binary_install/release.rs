@@ -62,7 +62,8 @@ pub(crate) struct ReleaseSpec {
 pub(crate) enum ReleaseSelector {
     /// A specific tag: the pin, or an override naming one.
     Tag(String),
-    /// Whatever upstream currently calls `latest`.
+    /// Whatever upstream currently calls `latest`, followed to the release
+    /// its `nightly-tag.txt` names when it carries one.
     Latest,
 }
 

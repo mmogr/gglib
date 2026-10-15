@@ -44,8 +44,9 @@ pub(super) const PINNED_LLAMA_RELEASE: &str = "b10327";
 /// Environment override for [`PINNED_LLAMA_RELEASE`].
 ///
 /// Accepts a release tag (`b10500`) to install that release, or the literal
-/// `latest` to follow upstream's newest release. Unset — the default —
-/// installs [`PINNED_LLAMA_RELEASE`].
+/// `latest` to follow upstream's current release. That is a `v*` release
+/// with no binaries, so the `b<n>` tag its `nightly-tag.txt` names is
+/// installed. Unset — the default — installs [`PINNED_LLAMA_RELEASE`].
 ///
 /// Provided because a user debugging against an upstream fix should not have
 /// to rebuild gglib to get it, and because it is how the pin bump itself is
