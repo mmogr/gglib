@@ -82,4 +82,4 @@ pub(crate) fn refusal(id: i64, error: LinkError) -> GuiError {
 
 #[cfg(test)]
 #[path = "models_projector_tests.rs"]
-mod tests;
+pub(crate) mod tests;

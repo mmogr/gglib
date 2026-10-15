@@ -76,9 +76,6 @@ pub(super) async fn link_downloaded_components(
     if components.is_empty() {
         return Vec::new();
     }
-    let Some(family) = model.image_family else {
-        return vec![LinkError::NotAnImageModel(model.name.clone()).to_string()];
-    };
     // The library stores a model under its resolved path and is asked by it.
     let stored_at = resolved_or_literal(&model.file_path);
     let held = repo
@@ -88,6 +85,35 @@ pub(super) async fn link_downloaded_components(
         .flatten()
         .map(|held| held.components)
         .unwrap_or_default();
+    link_components(
+        &held,
+        model.image_family,
+        &model.name,
+        &mut model.components,
+        components,
+        gguf_parser,
+    )
+}
+
+/// The rule [`link_downloaded_components`] links by, for model `name` of
+/// `family`, whose links the library holds as `held`: each of `components`
+/// that passes the check and whose role has no held link is added to
+/// `links`, and a sentence answers each one that is not. A model of no
+/// family links none of them.
+pub(super) fn link_components(
+    held: &[ModelComponent],
+    family: Option<ImageFamily>,
+    name: &str,
+    links: &mut Vec<ModelComponent>,
+    components: &[(ComponentRole, PathBuf)],
+    gguf_parser: &dyn GgufParserPort,
+) -> Vec<String> {
+    if components.is_empty() {
+        return Vec::new();
+    }
+    let Some(family) = family else {
+        return vec![LinkError::NotAnImageModel(name.to_owned()).to_string()];
+    };
     let mut refusals = Vec::new();
     for (role, path) in components {
         if let Some(kept) = held.iter().find(|link| link.role == *role) {
@@ -107,14 +133,14 @@ pub(super) async fn link_downloaded_components(
             },
             gguf_parser,
         ) {
-            Ok(checked) => model.components.push(ModelComponent {
+            Ok(checked) => links.push(ModelComponent {
                 role: *role,
                 path: checked,
             }),
             Err(refused) => refusals.push(refused.to_string()),
         }
     }
-    model.components.sort_by_key(|component| component.role);
+    links.sort_by_key(|component| component.role);
     refusals
 }
 
