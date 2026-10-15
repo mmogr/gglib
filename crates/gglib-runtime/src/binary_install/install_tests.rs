@@ -114,6 +114,7 @@ fn target<'a>(dirs: &'a Dirs, matcher: AssetMatcher<'a>) -> PrebuiltTarget<'a> {
 }
 
 const LINUX: AssetMatcher<'static> = AssetMatcher {
+    starts_with: None,
     contains: &["-bin-Linux-"],
     ends_with: Some("-x86_64.zip"),
 };
@@ -404,6 +405,7 @@ async fn a_failed_download_says_so() {
 #[test]
 fn a_matcher_needs_every_part_and_the_ending() {
     let m = AssetMatcher {
+        starts_with: None,
         contains: &["-bin-win-", "cuda12"],
         ends_with: Some("-x64.zip"),
     };
@@ -413,6 +415,7 @@ fn a_matcher_needs_every_part_and_the_ending() {
     assert_eq!(m.to_string(), "-bin-win-*cuda12*-x64.zip");
 
     let plain = AssetMatcher {
+        starts_with: None,
         contains: &["bin-macos-arm64.tar.gz"],
         ends_with: None,
     };
