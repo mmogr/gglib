@@ -24,7 +24,9 @@ pub mod validate;
 
 pub use apply::{PipelineReport, apply};
 pub use chat_runtime::{DrawsImages, refuse_unless_chats};
-pub use constrain::{DISABLE_GRAMMAR_ENV, constrain_tool_calls};
+pub use constrain::{
+    DISABLE_DIALECT_PARSER_ENV, DISABLE_GRAMMAR_ENV, constrain_tool_calls, dialect_parser_disabled,
+};
 pub use content::{append_text, for_each_text_mut, image_urls, text_len, text_parts};
 pub use drawn_note::{
     DRAW_THEN_SAY, DRAW_THEN_SAY_FAILED, DRAW_TOOL_NAME, DRAWN_NOTE, DREW_HEAD, DREW_SEEN,

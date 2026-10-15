@@ -17,6 +17,7 @@ use serde_json::json;
 
 use super::*;
 use crate::generation::TurnGeneration;
+use gglib_core::domain::DialectSpec;
 
 fn reasoning(content: &str) -> LlmStreamEvent {
     LlmStreamEvent::ReasoningDelta {
@@ -184,7 +185,7 @@ async fn drain_stream(
     let outcome = drain_events(
         events,
         "m".to_owned(),
-        dialect,
+        TurnDialect::parsed(dialect),
         ClientSender::new(tx, Duration::from_secs(5)),
         &connection,
         repair,

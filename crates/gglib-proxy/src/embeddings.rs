@@ -41,6 +41,7 @@ use crate::dashboard::CacheStatus;
 use crate::forward::should_forward_header;
 use crate::models::{EmbeddingsRoutingEnvelope, ErrorResponse};
 use crate::server::{AppState, handle_runtime_error, refuse_unresolved};
+use crate::turn_dialect::TurnDialect;
 use crate::unary_body::{Exchange, answer_with, exchange};
 use gglib_core::domain::capability_tags;
 
@@ -173,7 +174,15 @@ pub(crate) async fn embeddings(
     // embeddings body has no `choices`, so normalization is a no-op.
     let request = req_builder.body(body);
     let (bound, cache_metrics) = (state.stream_bounds.unary, &state.dashboard.cache_metrics);
-    match exchange(request, bound, cache_metrics, None, None).await {
+    match exchange(
+        request,
+        bound,
+        cache_metrics,
+        &TurnDialect::parsed(None),
+        None,
+    )
+    .await
+    {
         Exchange::Answered(content_type, body) => answer_with(content_type, body),
         Exchange::Respond(response) => response,
         Exchange::SendFailed(e) => {

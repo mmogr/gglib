@@ -318,7 +318,7 @@ async fn a_bad_streamed_tool_call_is_repaired_before_the_client_sees_it() {
     let outcome = stream_response_to_channel(
         resp,
         "m".to_owned(),
-        None,
+        TurnDialect::parsed(None),
         tx,
         &connection,
         Some(RepairContext {
@@ -464,7 +464,7 @@ async fn a_stream_that_dies_mid_turn_still_releases_its_held_tool_call() {
     let outcome = stream_response_to_channel(
         resp,
         "m".to_owned(),
-        None,
+        TurnDialect::parsed(None),
         tx,
         &connection,
         Some(RepairContext {
@@ -534,7 +534,7 @@ async fn a_conformant_streamed_tool_call_is_not_reissued() {
     let outcome = stream_response_to_channel(
         resp,
         "m".to_owned(),
-        None,
+        TurnDialect::parsed(None),
         tx,
         &connection,
         Some(RepairContext {
