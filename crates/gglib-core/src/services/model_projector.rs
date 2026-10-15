@@ -5,7 +5,7 @@
 //! registered through the same check: `model_links::checked_link`, the one
 //! rule a projector and an image model's components are linked by.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::ModelService;
 use super::model_links::{LinkError, LinkRole, checked_link, resolved_or_literal};
@@ -59,13 +59,33 @@ pub(super) async fn link_downloaded_projector(
     // The library stores a model under its resolved path and is asked by it.
     let stored_at = resolved_or_literal(&model.file_path);
     let held = repo.find_by_path(&stored_at).await.ok().flatten();
-    if let Some(kept) = held.and_then(|held| held.projector_path) {
+    let held = held.and_then(|held| held.projector_path);
+    link_projector(
+        held.as_deref(),
+        &mut model.projector_path,
+        projector,
+        gguf_parser,
+    )
+}
+
+/// The rule [`link_downloaded_projector`] links by, for a model whose link
+/// the library holds as `held`: sets `link` to the downloaded `projector`
+/// when there is no held link and the file passes the check, and answers why
+/// it did not otherwise. A held link is kept, and named when it is to
+/// another file.
+pub(super) fn link_projector(
+    held: Option<&Path>,
+    link: &mut Option<PathBuf>,
+    projector: &Path,
+    gguf_parser: &dyn GgufParserPort,
+) -> Option<String> {
+    if let Some(kept) = held {
         return (kept != resolved_or_literal(projector))
             .then(|| format!("the model keeps its link to {}", kept.display()));
     }
     match checked_link(projector, LinkRole::Projector, gguf_parser) {
         Ok(checked) => {
-            model.projector_path = Some(checked);
+            *link = Some(checked);
             None
         }
         Err(refused) => Some(refused.to_string()),
