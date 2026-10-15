@@ -53,7 +53,7 @@ pub mod thinking;
 pub use machine::{Machine, ModelAction, ModelRef, UNNAMED_PAIRED, machine_name};
 pub use model::{Model, ModelComponent, ModelFilterOptions, NewModel};
 pub use model_detail::{ComponentLinkDto, ModelDetailDto, ModelLookup};
-pub use model_file::{ModelFile, NewModelFile};
+pub use model_file::{ModelFile, ModelFolder, NewModelFile};
 
 // Re-export query types at the domain level for convenience
 pub use query::{ModelListQuery, ModelSortBy, SortOrder, apply_query};
