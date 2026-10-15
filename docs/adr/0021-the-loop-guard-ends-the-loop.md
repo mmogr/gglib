@@ -73,10 +73,10 @@ not in this repository.
 
 - Under `note` a looping run whose requests end with the tool result is
   capped at threshold + 2: one generation with the note, then the ending. A
-  stagnation trip followed by tool turns is not ended: tool turns are
-  transparent to the stagnation detector, so such a run is noted on each
-  later request while the trip stands. Whether a tool turn should end a
-  stagnation run is open.
+  stagnation trip followed by tool turns was at first noted on each later
+  request and never ended; since #1435 a tool turn clears a stagnation trip,
+  as a different batch clears a loop trip, and the detector still reads
+  through it.
 - ADR 0010's 2026-09-18 note says a mistaken trip "adds a sentence instead of
   ending a session". A mistaken trip that repeats now ends the run after one
   note.

@@ -839,7 +839,8 @@ through `gglib-agent` was not. See
 
 **Under `note`, the verdict is about the newest turn.** A trip counts only
 while the newest turn the detector judged belongs to the run that tripped: a
-different batch, or a person speaking and the model answering, clears it. A
+different batch, or a person speaking and the model answering, clears it, and
+a turn that calls a tool clears a stagnation trip. A
 user turn with nothing after it does not, so a client that appends one to every
 request cannot clear a trip by doing so. Under `refuse` the first trip anywhere
 in the transcript still stands, as it always has. See

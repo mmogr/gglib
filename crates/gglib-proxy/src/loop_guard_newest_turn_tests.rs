@@ -198,3 +198,38 @@ fn a_person_speaking_after_a_second_trip_is_noted_not_ended() {
     assert!(is_loop(&outcome), "{outcome:?}");
     assert!(!outcome.tripped_before(), "{outcome:?}");
 }
+
+/// A tool turn ends a stagnation run, as a different batch ends a loop run:
+/// the model did something new, so a noted run that goes on to call tools is
+/// not noted again (#1435).
+#[test]
+fn a_stagnation_trip_followed_by_a_tool_turn_passes() {
+    let mut msgs: Vec<Value> = (0..6).map(|_| say("I cannot proceed.")).collect();
+    assert!(
+        matches!(
+            scan_history(&body(&msgs), &note()).verdict,
+            LoopGuardVerdict::StagnationDetected { .. }
+        ),
+        "precondition: six in a row trip"
+    );
+    msgs.extend(writes("a.rs", 1));
+    assert_eq!(
+        scan_history(&body(&msgs), &note()).verdict,
+        LoopGuardVerdict::Pass
+    );
+}
+
+/// The tool turn ends the run's streak, not only its trip: the same prose
+/// after it trips again, as a first trip, so it is noted rather than ended.
+#[test]
+fn the_same_prose_after_a_tool_turn_starts_its_streak_again() {
+    let mut msgs: Vec<Value> = (0..6).map(|_| say("I cannot proceed.")).collect();
+    msgs.extend(writes("a.rs", 1));
+    msgs.push(say("I cannot proceed."));
+    let outcome = scan_history(&body(&msgs), &note());
+    assert!(
+        matches!(outcome.verdict, LoopGuardVerdict::StagnationDetected { .. }),
+        "{outcome:?}"
+    );
+    assert!(!outcome.tripped_before(), "{outcome:?}");
+}

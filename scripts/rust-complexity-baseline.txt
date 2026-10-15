@@ -178,7 +178,7 @@ crates/gglib-proxy/src/forward_tests.rs 561
 crates/gglib-proxy/src/forward_unary_repair_tests.rs 316
 crates/gglib-proxy/src/images.rs 303
 crates/gglib-proxy/src/images_tests.rs 568
-crates/gglib-proxy/src/loop_guard.rs 597
+crates/gglib-proxy/src/loop_guard.rs 609
 crates/gglib-proxy/src/loop_guard_tests.rs 1182
 crates/gglib-proxy/src/mcp/drawing.rs 337
 crates/gglib-proxy/src/mcp/handlers.rs 531
