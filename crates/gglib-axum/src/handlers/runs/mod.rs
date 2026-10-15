@@ -32,6 +32,13 @@ pub(crate) struct PutQuery {
     /// `agent` starts an agent run; absent, a chat run.
     #[serde(default)]
     kind: Option<RunKind>,
+    /// Read only to be refused with `kind=agent`, whose request says
+    /// `draw` in its body, as the proxy's door refuses it.
+    #[serde(default)]
+    draw: bool,
+    /// As `draw`: an agent request names its image model in its body.
+    #[serde(default)]
+    image_model: Option<u32>,
 }
 
 /// `PUT /api/runs/{id}`: start a chat run with the body as its request, or
@@ -47,6 +54,9 @@ pub(crate) async fn put(
     let Query(query) = query.map_err(|e| invalid(e.body_text()))?;
     let Json(body) = body.map_err(|e| invalid(e.body_text()))?;
     let created = match query.kind {
+        Some(RunKind::Agent) if query.draw || query.image_model.is_some() => {
+            return Err(invalid(gglib_proxy::runs::AGENT_DRAW_IN_QUERY.to_owned()));
+        }
         Some(RunKind::Agent) => crate::handlers::agent::create_run(&state, &id, body).await?,
         Some(RunKind::Chat) | None => state.runs.create(SCOPE, &id, body)?,
     };
