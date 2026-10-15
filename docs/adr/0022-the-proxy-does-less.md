@@ -157,8 +157,8 @@ release cycle with the parser bypassed, not the presence of a PEG parser.
 - A trusted client's trio value beneath an operator-flag temperature claim
   stays in the body while provenance reports it `Coupled`. This was so on main
   for `repeat_penalty`, and now also covers `presence_penalty` and `min_p`,
-  which the reasoning floor overwrote on a tagged model. It is filed as a
-  follow-up.
+  which the reasoning floor overwrote on a tagged model. Since #1434 the
+  pipeline removes a `Coupled` trio member from the body after the fold.
 - A published recipe is still stored, and the first edit still replaces it.
   Clearing that model's defaults gives back the `reasoning` recipe for a
   `reasoning`-tagged model and nothing for any other, not the published one.

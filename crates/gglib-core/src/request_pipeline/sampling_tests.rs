@@ -509,6 +509,44 @@ fn trusted_client_temperature_zero_does_not_inherit_a_models_penalty() {
     assert_deferred(&body, "presence_penalty");
 }
 
+/// A trusted client's trio beneath an operator's temperature claim is passed
+/// over, and leaves the body with it: the wire says what the provenance says
+/// (#1434). A member the operator named is sent, and an uncoupled client
+/// value stands.
+#[test]
+fn a_trusted_clients_coupled_values_leave_the_body() {
+    let mut body = json!({
+        "temperature": 0.9,
+        "presence_penalty": 1.2,
+        "repeat_penalty": 1.1,
+        "min_p": 0.05,
+        "top_k": 30,
+    });
+    let cli = InferenceConfig {
+        temperature: Some(0.3),
+        presence_penalty: Some(0.4),
+        ..Default::default()
+    };
+    let decision = resolve_sampling(
+        &mut body,
+        &model_ctx(None),
+        &SamplingLayers {
+            cli_override: Some(cli),
+            trust_client_sampling: true,
+            ..Default::default()
+        },
+    );
+
+    assert_param(&body, "temperature", 0.3);
+    assert_param(&body, "presence_penalty", 0.4);
+    assert_param(&body, "top_k", 30.0);
+    assert_eq!(decision.sources.repeat_penalty, ParamSource::Coupled);
+    assert_eq!(decision.sources.min_p, ParamSource::Coupled);
+    assert_deferred(&body, "repeat_penalty");
+    assert_deferred(&body, "min_p");
+    assert!(decision.client_fields_discarded.is_empty());
+}
+
 // ── Client sampling authority (Settings.trust_client_sampling) ─────────
 
 /// The default. This is the actual fix for the incident that motivated
