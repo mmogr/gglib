@@ -13,6 +13,7 @@ use super::{Told, told};
 use crate::client_send::{CLIENT_SEND_TIMEOUT, ClientSender};
 use crate::connections::ActiveConnectionsRegistry;
 use crate::forward::drain_events;
+use crate::turn_dialect::TurnDialect;
 use crate::upstream_read::prefill_comment;
 
 fn shortened(messages_truncated: usize) -> TruncationReport {
@@ -90,7 +91,7 @@ async fn wire(told: Told) -> String {
     drain_events(
         futures_util::stream::iter(events),
         "m".to_owned(),
-        None,
+        TurnDialect::parsed(None),
         ClientSender::new(tx, CLIENT_SEND_TIMEOUT),
         &connection,
         None,

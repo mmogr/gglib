@@ -98,7 +98,7 @@ crates/gglib-core/src/domain/runtime_capabilities.rs 477
 crates/gglib-core/src/download/completion.rs 432
 crates/gglib-core/src/download/rate.rs 628
 crates/gglib-core/src/download/types.rs 680
-crates/gglib-core/src/normalize/parsers/delimited.rs 984
+crates/gglib-core/src/normalize/parsers/delimited.rs 985
 crates/gglib-core/src/normalize/stream.rs 662
 crates/gglib-core/src/ports/huggingface/image_companions_tests.rs 335
 crates/gglib-core/src/ports/image_generation.rs 370
@@ -106,7 +106,7 @@ crates/gglib-core/src/ports/model_catalog.rs 303
 crates/gglib-core/src/ports/model_runtime.rs 755
 crates/gglib-core/src/ports/model_runtime_tests.rs 383
 crates/gglib-core/src/ports/process_runner.rs 323
-crates/gglib-core/src/request_pipeline/constrain.rs 325
+crates/gglib-core/src/request_pipeline/constrain.rs 344
 crates/gglib-core/src/request_pipeline/drawn_note_tests.rs 416
 crates/gglib-core/src/request_pipeline/messages.rs 388
 crates/gglib-core/src/request_pipeline/sampling.rs 622
@@ -170,10 +170,10 @@ crates/gglib-proxy/src/canonicalization.rs 601
 crates/gglib-proxy/src/connections.rs 749
 crates/gglib-proxy/src/dashboard.rs 570
 crates/gglib-proxy/src/dashboard_tests.rs 567
-crates/gglib-proxy/src/forward.rs 1575
-crates/gglib-proxy/src/forward_generation_tests.rs 545
+crates/gglib-proxy/src/forward.rs 1578
+crates/gglib-proxy/src/forward_generation_tests.rs 546
 crates/gglib-proxy/src/forward_tests.rs 561
-crates/gglib-proxy/src/forward_unary_repair_tests.rs 315
+crates/gglib-proxy/src/forward_unary_repair_tests.rs 316
 crates/gglib-proxy/src/images.rs 303
 crates/gglib-proxy/src/images_tests.rs 568
 crates/gglib-proxy/src/loop_guard.rs 597
