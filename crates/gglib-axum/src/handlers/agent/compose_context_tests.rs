@@ -4,7 +4,7 @@
 //! capability shaping, the truncation budget, the effort gate and the
 //! response parser.
 
-use gglib_core::domain::agent::{AgentEvent, AgentMessage};
+use gglib_core::domain::agent::{AgentEvent, AgentMessage, AssistantContent};
 use gglib_core::domain::{InferenceConfig, ModelCapabilities, TemplateCaps};
 use gglib_core::normalize::tags::FORMAT_QWEN_XML;
 use serde_json::json;
@@ -122,6 +122,31 @@ async fn a_conversation_over_the_models_context_is_trimmed_before_it_is_sent() {
             assert_eq!(oldest.len() == 30_000, !trimmed, "{door}");
             assert_eq!(body["messages"].as_array().map(Vec::len), Some(10));
         }
+    }
+}
+
+/// A long earlier reply in a chat with no tools is trimmed to a line that
+/// names it the assistant's own, not raw tool output (#1271).
+#[tokio::test]
+async fn a_trimmed_reply_is_named_as_the_assistants_own() {
+    let (_dir, state) = state().await;
+    let id = model(&state, |entry| entry.context_length = Some(4_096)).await;
+
+    for (door, mut chat) in doors(&state, id, false).await {
+        let mut messages = vec![AgentMessage::Assistant {
+            content: AssistantContent {
+                text: Some("x".repeat(60_000)),
+                tool_calls: Vec::new(),
+            },
+        }];
+        messages.extend((0..8).map(|_| AgentMessage::user("ok")));
+        chat.messages = messages;
+        let body = sent(&state, id, chat).await;
+        let oldest = body["messages"][0]["content"].as_str().expect("text");
+        assert_eq!(
+            oldest, "[An earlier assistant reply was shortened to fit the context window.]",
+            "{door}"
+        );
     }
 }
 
