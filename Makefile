@@ -136,6 +136,12 @@ build-gui: ## Build web UI frontend
 	UV_USE_IO_URING=0 npm run build
 	@echo "✓ Web UI built to web_ui/"
 
+# Clippy's `--all-features` turns on gglib-app's `custom-protocol`, which embeds
+# web_ui/ at compile time, so `lint` needs it. Built only when missing; a stale
+# build is left alone.
+web_ui/index.html:
+	@$(MAKE) build-gui
+
 # Build everything (Rust + Web UI)
 build-all: build-gui build ## Build Rust CLI and web UI
 	@echo "✓ Built Rust CLI and Web UI"
@@ -174,7 +180,7 @@ fmt: ## Format Rust code
 	$(CARGO) fmt
 
 # Run clippy
-lint: ## Run clippy with warnings denied
+lint: web_ui/index.html ## Run clippy with warnings denied
 	@echo "Running clippy linter..."
 	@# `--all-targets --all-features`, matching ci.yml exactly. Without
 	@# --all-targets clippy skips test code, so a lint error inside a
