@@ -51,7 +51,7 @@ async fn a_repair_asks_for_the_quantization_the_model_was_stored_with() {
         ("FP16", "F16"),
         ("BF16", "BF16"),
         ("IQ4_XS", "IQ4_XS"),
-        ("imatrix", "imatrix"),
+        ("UD-Q6_K_M", "UD-Q6_K_M"),
     ];
     for (stored, asked) in stored {
         let dir = tempfile::tempdir().unwrap();
