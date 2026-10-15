@@ -126,26 +126,26 @@ fn prose_repeats_on_either_side_of_a_user_turn_do_not_accumulate() {
     assert_eq!(verdict_of(&body(&msgs), &cfg()), LoopGuardVerdict::Pass);
 }
 
-/// The control, and the limit of this change. Six in a row with nobody
-/// interrupting still stagnates — and because `scan_history` returns on the
-/// first trip it finds, it keeps stagnating on every later request, whatever
-/// the user says afterwards.
-///
-/// Recovering *that* means not returning early, which is a different change:
-/// a verdict about the end of the transcript rather than its worst moment
-/// could be cleared by any client that appends a trailing user message, which
-/// is most of them. It needs its own argument and is not made here.
+/// The control, and where the user turn's reach ends. Six in a row with nobody
+/// interrupting stagnates. Under `note` a person speaking and the model then
+/// saying something new clears it, because the verdict is about the newest
+/// prose turn (ADR 0021); before that change the scan returned on the first
+/// trip and this conversation stagnated on every later request.
 #[test]
-fn six_adjacent_prose_repeats_still_stagnate_whatever_follows() {
+fn six_adjacent_prose_repeats_are_cleared_by_a_user_turn_and_a_new_reply() {
     let mut msgs: Vec<Value> = (0..6)
         .map(|_| json!({ "role": "assistant", "content": "I cannot proceed." }))
         .collect();
+    assert!(
+        matches!(
+            verdict_of(&body(&msgs), &cfg()),
+            LoopGuardVerdict::StagnationDetected { .. }
+        ),
+        "precondition: six in a row stagnate"
+    );
     msgs.push(user("try a different approach"));
     msgs.push(json!({ "role": "assistant", "content": "Here is another way." }));
-    assert!(matches!(
-        verdict_of(&body(&msgs), &cfg()),
-        LoopGuardVerdict::StagnationDetected { .. }
-    ));
+    assert_eq!(verdict_of(&body(&msgs), &cfg()), LoopGuardVerdict::Pass);
 }
 
 /// A system message is not a person taking the wheel, but it shares the arm —

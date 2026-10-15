@@ -24,6 +24,7 @@ fn snapshot(model: &str) -> ContextSnapshot {
         finish_reason: None,
         generation_ms: None,
         loop_guard_trip: None,
+        loop_guard_ended: false,
         recorded_at_secs: 7,
         seq: 0,
     }
@@ -144,6 +145,7 @@ fn the_readings_serialise_beside_the_snapshots_other_keys() {
             "dialect_residue": false,
             "tool_repaired": false,
             "loop_guard_trip": null,
+            "loop_guard_ended": false,
             "recorded_at_secs": 7,
             "completion_tokens": null,
             "reasoning_chars": 0,

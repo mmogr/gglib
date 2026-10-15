@@ -564,7 +564,8 @@ pub(crate) async fn chat_completions(
     // The turn-level loop/stagnation guard, keyed by the model the request
     // resolved to. Under `refuse` it answers here, after the one catalog read
     // above but before admission or any model swap is paid for; under `note`
-    // the request goes on and carries the note and the trip with it. See
+    // the request goes on and carries the note and the trip with it, unless
+    // the same run already had its note, when the run is ended here. See
     // `loop_guard_step` for what it records and `loop_guard` for what a
     // replayed history means.
     let mut guard_note = None;
@@ -579,6 +580,9 @@ pub(crate) async fn chat_completions(
         crate::loop_guard_step::GuardStep::Note { note, trip } => {
             guard_note = Some(note);
             loop_guard_trip = Some(trip);
+        }
+        crate::loop_guard_step::GuardStep::End => {
+            return crate::loop_guard_end::ended_response(&model.name, is_streaming);
         }
         crate::loop_guard_step::GuardStep::Refuse(response) => return response,
     }

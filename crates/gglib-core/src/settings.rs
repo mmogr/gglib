@@ -191,7 +191,8 @@ pub struct Settings {
     /// gets the same answer back each time, or repeats the same assistant
     /// response anywhere in the session, beyond the shared agent-path
     /// thresholds, is answered per [`LoopGuardMode`]: `note` (absent, and the
-    /// default) forwards it with a note saying what repeated, `refuse` rejects
+    /// default) forwards it with a note saying what repeated and ends the run
+    /// if it trips again after that (ADR 0021), `refuse` rejects
     /// it with a clean HTTP 400 before admission, and `off` does not scan.
     /// Replaying identical batches across a history does not trip it — the
     /// batch count is back to back — and a repeat whose answer changed is not

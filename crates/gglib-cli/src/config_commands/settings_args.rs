@@ -20,7 +20,8 @@ use gglib_core::LoopGuardMode;
 pub enum LoopGuardModeArg {
     /// Do not scan the replayed history at all.
     Off,
-    /// Forward a tripped request with a note saying what repeated.
+    /// Forward a tripped request with a note saying what repeated, and end
+    /// the run if it trips again after that.
     Note,
     /// Refuse a tripped request with HTTP 400, before any model work.
     Refuse,
@@ -105,7 +106,8 @@ pub struct SettingsSetArgs {
     /// gets the same answer back each time, or repeats the same assistant
     /// prose too often in a short span, beyond the agent-path thresholds is
     /// answered by this setting: `note` (the default) forwards it with a note
-    /// saying what repeated, `refuse` rejects it with a clean 400 before any
+    /// saying what repeated and ends the run if it trips again after that,
+    /// `refuse` rejects it with a clean 400 before any
     /// model work, and `off` does not scan at all. A repeat whose answer
     /// changed is an agent polling for output, and is not counted.
     #[arg(long, value_enum)]

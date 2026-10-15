@@ -69,6 +69,7 @@ fn build_reflects_active_connection_and_metrics() {
         was_clamped: false,
         grammar_enforced: false,
         loop_guard_trip: None,
+        loop_guard_ended: false,
         recorded_at_secs: 0,
     });
 

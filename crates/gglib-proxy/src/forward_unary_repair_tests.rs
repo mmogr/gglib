@@ -142,6 +142,7 @@ pub(super) fn snapshot() -> ContextSnapshot {
         finish_reason: None,
         generation_ms: None,
         loop_guard_trip: None,
+        loop_guard_ended: false,
         seq: 0,
         recorded_at_secs: 0,
     }
