@@ -161,10 +161,7 @@ pub(super) async fn build_from_source_impl(
         for line in preflight_lines(acceleration, &install_dir) {
             println!("{line}");
         }
-        if !input::prompt_confirmation_default_yes("Continue?")? {
-            println!("Installation cancelled.");
-            return Ok(());
-        }
+        go_ahead(input::prompt_confirmation_default_yes("Continue?")?)?;
     }
 
     // Steps 4-7: delegate to the pure streaming core.
@@ -180,6 +177,16 @@ pub(super) async fn build_from_source_impl(
     render_build_events(rx, CLONING, ending, &mut std::io::stdout()).await;
     build.await??;
 
+    Ok(())
+}
+
+/// Go on after the answer to an install's "Continue?": a no is an error, so
+/// the command exits non-zero and a script that ran it knows nothing was
+/// installed.
+pub(super) fn go_ahead(agreed: bool) -> Result<()> {
+    if !agreed {
+        bail!("Installation cancelled.");
+    }
     Ok(())
 }
 
