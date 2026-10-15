@@ -3,4 +3,4 @@
 /**
  * What a GGUF file holds.
  */
-export type GgufFileRole = "Weights" | "Projector";
+export type GgufFileRole = "Weights" | "Projector" | "Sidecar";

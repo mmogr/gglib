@@ -114,10 +114,12 @@ Everything between the OpenAI request and llama-server is the product:
   is an agent polling for output, not a loop, and does not trip it. What happens
   to a stuck session is one setting: by default the request is **forwarded with
   a note** telling the model what it has repeated, so a client with no recovery
-  path from a refusal still gets an answer; `--loop-guard-mode refuse` answers
-  400 instead, before a model swap or another generation, and `off` stops the
-  scan. No run has measured how often it fires or what the note changes yet
-  ([#1047](https://github.com/mmogr/gglib/issues/1047)).
+  path from a refusal still gets an answer, and a run that trips again after
+  its note is ended with a finished reply that calls no tool
+  ([ADR 0021](docs/adr/0021-the-loop-guard-ends-the-loop.md));
+  `--loop-guard-mode refuse` answers 400 instead, before a model swap or
+  another generation, and `off` stops the scan. No run has measured how often
+  it fires or what the note changes yet ([#1047](https://github.com/mmogr/gglib/issues/1047)).
   [Details →](crates/gglib-proxy/README.md#loop--stagnation-defence)
 - **Sampling authority**: a hierarchy (request → profile → per-model →
   global → model recipe) resolves every sampling parameter server-side.

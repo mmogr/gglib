@@ -3,11 +3,12 @@
 //! This is the composition root for core services. Adapters (CLI, GUI, Web)
 //! receive an `AppCore` instance and use it to access all functionality.
 
-use crate::ports::{DownloadManagerPort, HfClientPort, Repos};
+use crate::ports::{DownloadManagerPort, GgufParserPort, HfClientPort, Repos};
 use std::sync::Arc;
 
 use super::{
-    AttachmentService, ChatHistoryService, ModelService, ModelVerificationService, SettingsService,
+    AttachmentService, ChatHistoryService, ModelRegistrar, ModelService, ModelVerificationService,
+    SettingsService,
 };
 
 /// The core application facade.
@@ -81,6 +82,17 @@ impl AppCore {
     /// Access the verification service.
     pub const fn verification(&self) -> &ModelVerificationService {
         &self.verification
+    }
+
+    /// A registrar over this core's library that reads headers with
+    /// `gguf_parser`: what an upgrade records its download with.
+    #[must_use]
+    pub fn registrar(&self, gguf_parser: Arc<dyn GgufParserPort>) -> ModelRegistrar {
+        ModelRegistrar::new(
+            Arc::clone(&self.models.repo),
+            gguf_parser,
+            Some(Arc::clone(&self.verification.model_files_repo)),
+        )
     }
 
     /// This core, holding the token its process asks the Hub with.

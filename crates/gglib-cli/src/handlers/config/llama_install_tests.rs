@@ -115,3 +115,14 @@ fn the_preflight_lists_what_was_checked_and_what_will_happen() {
         ]
     );
 }
+
+/// A no at "Continue?" is an error, so `config llama install` and
+/// `config sd install` exit non-zero, still saying so.
+#[test]
+fn a_cancelled_install_is_an_error() {
+    assert_eq!(
+        go_ahead(false).unwrap_err().to_string(),
+        "Installation cancelled."
+    );
+    assert!(go_ahead(true).is_ok());
+}

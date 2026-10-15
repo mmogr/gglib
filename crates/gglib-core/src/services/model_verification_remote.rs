@@ -18,10 +18,10 @@ use tokio::sync::mpsc;
 
 use super::model_links::resolved_or_literal;
 use super::model_verification::{
-    ModelVerificationService, OperationType, ShardHealth, ShardUpdate, UpdateCheckResult,
-    UpdateDetails,
+    FilePlace, ModelVerificationService, OperationType, ShardHealth, ShardUpdate,
+    UpdateCheckResult, UpdateDetails, VerifiedFileKind,
 };
-use crate::domain::{Model, ModelFile};
+use crate::domain::{Model, ModelFile, ModelFolder};
 use crate::download::{DownloadId, GgufFileRole, Quantization};
 use crate::ports::RepositoryError;
 use crate::ports::huggingface::download_group;
@@ -31,10 +31,10 @@ fn is_projector(file: &ModelFile) -> bool {
     GgufFileRole::classify(Path::new(&file.file_path)).is_projector()
 }
 
-/// The component `model` links to the file of `row`, read in `base_dir`, when
+/// The component `model` links to the file of `row`, read in `folder`, when
 /// it links one there.
-fn component_at(model: &Model, base_dir: &Path, row: &ModelFile) -> Option<String> {
-    let path = resolved_or_literal(&base_dir.join(&row.file_path));
+fn component_at(model: &Model, folder: &ModelFolder, row: &ModelFile) -> Option<String> {
+    let path = resolved_or_literal(&folder.file(&row.file_path));
     model
         .components
         .iter()
@@ -43,7 +43,7 @@ fn component_at(model: &Model, base_dir: &Path, row: &ModelFile) -> Option<Strin
 }
 
 /// The rows of `to_repair` that are not one of `model`'s component links,
-/// read in `base_dir`.
+/// read in `folder`.
 ///
 /// A component is never deleted by a repair: it is in its own repository's
 /// folder, and another model may draw with the same file.
@@ -55,12 +55,12 @@ fn component_at(model: &Model, base_dir: &Path, row: &ModelFile) -> Option<Strin
 /// another.
 fn without_components<'a>(
     model: &Model,
-    base_dir: &Path,
+    folder: &ModelFolder,
     to_repair: Vec<&'a ModelFile>,
 ) -> Result<Vec<&'a ModelFile>, String> {
     let (components, rest): (Vec<&ModelFile>, Vec<&ModelFile>) = to_repair
         .into_iter()
-        .partition(|file| component_at(model, base_dir, file).is_some());
+        .partition(|file| component_at(model, folder, file).is_some());
     if !rest.is_empty() || components.is_empty() {
         return Ok(rest);
     }
@@ -70,7 +70,7 @@ fn without_components<'a>(
         .collect();
     let roles: Vec<String> = components
         .iter()
-        .filter_map(|file| component_at(model, base_dir, file))
+        .filter_map(|file| component_at(model, folder, file))
         .collect();
     let role = match roles.as_slice() {
         [one] => one.as_str(),
@@ -254,12 +254,8 @@ impl ModelVerificationService {
             .await
             .map_err(|e| format!("Failed to get model files: {e}"))?;
 
-        // Get base directory from model's file path
-        let base_dir = model
-            .file_path
-            .parent()
-            .ok_or_else(|| "Failed to get model directory".to_string())?
-            .to_path_buf();
+        // The folder the download wrote the files in, where each row is read.
+        let folder = ModelFolder::of(&model.file_path, &model_files);
 
         // Determine which files to repair
         let to_repair: Vec<&ModelFile> = if let Some(indices) = shard_indices {
@@ -269,13 +265,19 @@ impl ModelVerificationService {
         } else {
             // Verify all files to find unhealthy ones
             let mut unhealthy = Vec::new();
-            for file in &model_files {
+            let kinds = VerifiedFileKind::of_rows(&model_files);
+            for (index, (file, kind)) in model_files.iter().zip(kinds).enumerate() {
                 // Nobody reads this progress. The receiver is dropped here so
                 // each send fails at once; kept alive, the channel fills
                 // after one message and the hashing thread waits forever.
                 let (tx, _) = mpsc::channel(1);
-                let resolved_path = base_dir.join(&file.file_path);
-                let health = Self::verify_shard(file, &resolved_path, model_id, 0, 1, &tx).await;
+                let resolved_path = folder.file(&file.file_path);
+                let place = FilePlace {
+                    index,
+                    total: model_files.len(),
+                    kind,
+                };
+                let health = Self::verify_shard(file, &resolved_path, model_id, place, &tx).await;
                 if matches!(health, ShardHealth::Corrupt { .. } | ShardHealth::Missing) {
                     unhealthy.push(file);
                 }
@@ -289,7 +291,7 @@ impl ModelVerificationService {
 
         // A component the model links is never deleted, whatever else is
         // repaired.
-        let mut to_repair = without_components(&model, &base_dir, to_repair)?;
+        let mut to_repair = without_components(&model, &folder, to_repair)?;
 
         // What the download queued below fetches, asked while every file is
         // still in place.
@@ -318,7 +320,7 @@ impl ModelVerificationService {
         // fetched again, since a download takes a file on disk as it is.
         let mut gone = Vec::new();
         for file in &to_repair {
-            let resolved_path = base_dir.join(&file.file_path);
+            let resolved_path = folder.file(&file.file_path);
             if resolved_path.exists()
                 && let Err(e) = tokio::fs::remove_file(&resolved_path).await
             {
@@ -391,3 +393,7 @@ mod store_tests;
 #[cfg(test)]
 #[path = "model_verification_component_tests.rs"]
 mod component_tests;
+
+#[cfg(test)]
+#[path = "model_verification_folder_tests.rs"]
+mod folder_tests;

@@ -22,19 +22,19 @@ fn linked(port: u16) -> Resident {
 
 #[test]
 fn the_same_context_and_projector_is_the_same_launch() {
-    assert!(!launched_differently(&resident(8080), (4096, None)));
+    assert!(!launched_differently(&resident(8080), (1, 4096, None)));
     assert!(!launched_differently(
         &linked(8080),
-        (4096, Some(Path::new(PROJECTOR)))
+        (1, 4096, Some(Path::new(PROJECTOR)))
     ));
 }
 
 #[test]
 fn another_context_is_a_different_launch() {
-    assert!(launched_differently(&resident(8080), (8192, None)));
+    assert!(launched_differently(&resident(8080), (1, 8192, None)));
     assert!(launched_differently(
         &linked(8080),
-        (8192, Some(Path::new(PROJECTOR)))
+        (1, 8192, Some(Path::new(PROJECTOR)))
     ));
 }
 
@@ -42,18 +42,23 @@ fn another_context_is_a_different_launch() {
 fn another_projector_is_a_different_launch() {
     let request = Some(Path::new(PROJECTOR));
     assert!(
-        launched_differently(&resident(8080), (4096, request)),
+        launched_differently(&resident(8080), (1, 4096, request)),
         "none, then one"
     );
     assert!(
-        launched_differently(&linked(8080), (4096, None)),
+        launched_differently(&linked(8080), (1, 4096, None)),
         "one, then none"
     );
     let other = Some(Path::new("/models/other-mmproj.gguf"));
     assert!(
-        launched_differently(&linked(8080), (4096, other)),
+        launched_differently(&linked(8080), (1, 4096, other)),
         "one, then another"
     );
+}
+
+#[test]
+fn another_model_of_the_same_name_is_a_different_launch() {
+    assert!(launched_differently(&resident(8080), (7, 4096, None)));
 }
 
 /// A port whose `/health` answers 200 to every request, as a llama-server
@@ -100,7 +105,7 @@ fn granted_set(resident: Resident) -> ResidentSet {
 async fn a_healthy_resident_launched_with_the_same_projector_serves() {
     let set = granted_set(linked(healthy_port()));
 
-    let request = (4096, Some(Path::new(PROJECTOR)));
+    let request = (1, 4096, Some(Path::new(PROJECTOR)));
     let served = set.serve(PRIMARY_SLOT, request, &core()).await.unwrap();
 
     assert!(served.is_some(), "kept and served");
@@ -113,7 +118,7 @@ async fn a_healthy_resident_launched_with_the_same_projector_serves() {
 async fn a_healthy_resident_launched_without_the_projector_now_linked_is_recycled() {
     let set = granted_set(resident(healthy_port()));
 
-    let request = (4096, Some(Path::new(PROJECTOR)));
+    let request = (1, 4096, Some(Path::new(PROJECTOR)));
     let served = set.serve(PRIMARY_SLOT, request, &core()).await.unwrap();
 
     assert!(served.is_none());
@@ -126,7 +131,7 @@ async fn a_healthy_resident_launched_with_a_projector_since_unlinked_is_recycled
     let set = granted_set(linked(healthy_port()));
 
     let served = set
-        .serve(PRIMARY_SLOT, (4096, None), &core())
+        .serve(PRIMARY_SLOT, (1, 4096, None), &core())
         .await
         .unwrap();
 

@@ -40,11 +40,11 @@
 
 use bytes::Bytes;
 use gglib_core::LlmStreamEvent;
-use gglib_core::domain::DialectSpec;
 use gglib_core::request_pipeline::{Verdict, validate_tool_calls};
 use serde_json::{Value, json};
 use tracing::{debug, warn};
 
+use crate::turn_dialect::TurnDialect;
 use crate::unary_body::normalize_non_streaming_body;
 
 /// Environment kill switch, matching the contract of `GGLIB_DISABLE_GRAMMAR`
@@ -392,7 +392,7 @@ pub fn choose(request_body: &[u8], original: Bytes, repaired: Bytes) -> (Bytes, 
 /// is, before anything judges it.
 pub(crate) async fn read_second_draw(
     sent: reqwest::Result<reqwest::Response>,
-    dialect: Option<&DialectSpec>,
+    dialect: &TurnDialect,
 ) -> Option<Bytes> {
     let repaired = match sent {
         Ok(resp) if resp.status().is_success() => resp.bytes().await.ok()?,

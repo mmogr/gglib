@@ -29,8 +29,17 @@ pub(crate) struct GitHubAsset {
     pub(crate) browser_download_url: String,
 }
 
+/// The one asset of a llama.cpp `v*` release: a file naming the `b<n>` tag
+/// whose release carries the binaries. `releases/latest` resolves to such a
+/// release.
+const NIGHTLY_TAG_ASSET: &str = "nightly-tag.txt";
+
 /// Fetch `spec`'s release information for `selector` from the API at
 /// `api_base`.
+///
+/// A release that carries [`NIGHTLY_TAG_ASSET`] is followed, once, to the
+/// release that file names, so `latest` installs the build upstream's
+/// current release points at.
 ///
 /// A 404 on a tag selector is reported as a missing release rather than a
 /// bare HTTP error, because the actionable cause — a pin naming a tag that
@@ -38,6 +47,51 @@ pub(crate) struct GitHubAsset {
 /// the way out is an environment variable the user has no reason to know
 /// about.
 pub(crate) async fn fetch_release(
+    client: &Client,
+    api_base: &str,
+    spec: &ReleaseSpec,
+    selector: &ReleaseSelector,
+) -> Result<GitHubRelease> {
+    let release = fetch_one_release(client, api_base, spec, selector).await?;
+    let Some(pointer) = release.assets.iter().find(|a| a.name == NIGHTLY_TAG_ASSET) else {
+        return Ok(release);
+    };
+
+    let response = client
+        .get(&pointer.browser_download_url)
+        .header("User-Agent", "gglib")
+        .send()
+        .await
+        .with_context(|| format!("Failed to fetch {NIGHTLY_TAG_ASSET}"))?;
+    if !response.status().is_success() {
+        bail!(
+            "{NIGHTLY_TAG_ASSET} of {} release {} returned HTTP {}",
+            spec.product,
+            release.tag_name,
+            response.status()
+        );
+    }
+    let text = response.text().await?;
+    let tag = text.trim();
+    if tag.is_empty() {
+        bail!(
+            "{NIGHTLY_TAG_ASSET} of {} release {} names no release",
+            spec.product,
+            release.tag_name
+        );
+    }
+
+    fetch_one_release(
+        client,
+        api_base,
+        spec,
+        &ReleaseSelector::Tag(tag.to_owned()),
+    )
+    .await
+}
+
+/// One release listing, as GitHub answers it for `selector`.
+async fn fetch_one_release(
     client: &Client,
     api_base: &str,
     spec: &ReleaseSpec,

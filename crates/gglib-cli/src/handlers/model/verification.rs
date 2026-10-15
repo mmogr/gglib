@@ -18,7 +18,10 @@ use crate::utils::input;
 /// Verifies model integrity by computing SHA256 hashes and comparing against
 /// stored OIDs from `HuggingFace`.
 ///
-/// `per_shard` prints a line per shard as it is hashed. It is deliberately not
+/// `per_shard` prints a line per file as it is hashed. Each file is named by
+/// what it is: `Shard i/n`, counted over the weights alone, `Projector`, or
+/// `Companion`; the summary adds its file index, which `repair --shards`
+/// takes. It is deliberately not
 /// spelled `--verbose`: that id belongs to the global logging flag, and a
 /// local one by the same name stops the global from ever reaching this
 /// command.
@@ -55,11 +58,7 @@ pub(crate) async fn execute_verify(
             use gglib_core::services::ShardProgress;
             match &progress.shard_progress {
                 ShardProgress::Starting => {
-                    println!(
-                        "  Shard {}/{}: Starting verification...",
-                        progress.shard_index + 1,
-                        progress.total_shards
-                    );
+                    println!("  {}: Starting verification...", progress.kind.label());
                 }
                 ShardProgress::Hashing {
                     percent,
@@ -69,9 +68,8 @@ pub(crate) async fn execute_verify(
                     let mib_processed = *bytes_processed as f64 / 1024.0 / 1024.0;
                     let mib_total = *total_bytes as f64 / 1024.0 / 1024.0;
                     println!(
-                        "  Shard {}/{}: Hashing... {}% ({:.1} MiB / {:.1} MiB)",
-                        progress.shard_index + 1,
-                        progress.total_shards,
+                        "  {}: Hashing... {}% ({:.1} MiB / {:.1} MiB)",
+                        progress.kind.label(),
                         percent,
                         mib_processed,
                         mib_total
@@ -91,12 +89,7 @@ pub(crate) async fn execute_verify(
                         ShardHealth::Missing => "✗ Missing".to_string(),
                         ShardHealth::NoOid => "⚠ No OID available".to_string(),
                     };
-                    println!(
-                        "  Shard {}/{}: {}",
-                        progress.shard_index + 1,
-                        progress.total_shards,
-                        status
-                    );
+                    println!("  {}: {}", progress.kind.label(), status);
                 }
             }
         }
@@ -132,7 +125,13 @@ pub(crate) async fn execute_verify(
             ShardHealth::Missing => "✗".to_string(),
             ShardHealth::NoOid => "⚠".to_string(),
         };
-        println!("  {} Shard {}: {}", status, shard.index, shard.file_path);
+        println!(
+            "  {} {}: {} (file {})",
+            status,
+            shard.kind.label(),
+            shard.file_path,
+            shard.index
+        );
 
         if let ShardHealth::Corrupt { expected, actual } = &shard.health {
             println!("      Expected: {expected}");

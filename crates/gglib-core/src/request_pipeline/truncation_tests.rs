@@ -94,9 +94,9 @@ fn over_budget_trims_oldest_first_and_stops_early() {
         report.messages_truncated, 3,
         "as many oldest messages as the watermark target needs"
     );
-    assert_eq!(b["messages"][0]["content"], TRUNCATION_PLACEHOLDER);
-    assert_eq!(b["messages"][1]["content"], TRUNCATION_PLACEHOLDER);
-    assert_eq!(b["messages"][2]["content"], TRUNCATION_PLACEHOLDER);
+    assert_eq!(b["messages"][0]["content"], TOOL_TRUNCATION_PLACEHOLDER);
+    assert_eq!(b["messages"][1]["content"], TOOL_TRUNCATION_PLACEHOLDER);
+    assert_eq!(b["messages"][2]["content"], TOOL_TRUNCATION_PLACEHOLDER);
     assert_eq!(
         b["messages"][3]["content"].as_str().unwrap().len(),
         100_000,
@@ -116,6 +116,30 @@ fn assistant_content_is_an_eligible_candidate() {
     let report = truncate_history(&mut b, chars(ROOMY)).unwrap();
 
     assert!(report.messages_truncated >= 1);
+    assert_eq!(
+        b["messages"][0]["content"],
+        ASSISTANT_TRUNCATION_PLACEHOLDER
+    );
+}
+
+/// A trimmed reply is named as the assistant's own, not as tool output it
+/// never was (#1271); a tool result beside it keeps the tool line.
+#[test]
+fn each_role_is_trimmed_to_its_own_placeholder() {
+    let mut b = body(&with_tail(vec![
+        msg("assistant", &big(150_000)),
+        msg("tool", &big(150_000)),
+    ]));
+
+    let report = truncate_history(&mut b, chars(ROOMY)).unwrap();
+
+    assert_eq!(report.messages_truncated, 2);
+    assert_eq!(
+        b["messages"][0]["content"],
+        ASSISTANT_TRUNCATION_PLACEHOLDER
+    );
+    assert_eq!(b["messages"][1]["content"], TOOL_TRUNCATION_PLACEHOLDER);
+    assert!(!ASSISTANT_TRUNCATION_PLACEHOLDER.contains("tool"));
 }
 
 // ── Protection ───────────────────────────────────────────────────────────────
@@ -153,7 +177,7 @@ fn the_protected_tail_is_never_trimmed() {
 
     let report = truncate_history(&mut b, chars(ROOMY)).unwrap();
 
-    assert_eq!(b["messages"][0]["content"], TRUNCATION_PLACEHOLDER);
+    assert_eq!(b["messages"][0]["content"], TOOL_TRUNCATION_PLACEHOLDER);
     assert_eq!(b["messages"][1]["content"].as_str().unwrap().len(), 30_000);
     assert_eq!(b["messages"][2]["content"].as_str().unwrap().len(), 30_000);
     assert_eq!(report.messages_truncated, 1);
@@ -195,7 +219,7 @@ fn still_over_budget_after_trimming_everything_is_an_error() {
     assert_eq!(limit_chars, ROOMY);
     assert!(payload_chars > ROOMY);
     assert_eq!(
-        b["messages"][1]["content"], TRUNCATION_PLACEHOLDER,
+        b["messages"][1]["content"], TOOL_TRUNCATION_PLACEHOLDER,
         "the eligible message was still trimmed before giving up"
     );
 }
@@ -223,7 +247,7 @@ fn a_short_array_form_message_beside_a_long_string_is_left_alone() {
     let report = truncate_history(&mut b, chars(ROOMY)).unwrap();
 
     assert_eq!(report.messages_truncated, 1, "only the oversized message");
-    assert_eq!(b["messages"][0]["content"], TRUNCATION_PLACEHOLDER);
+    assert_eq!(b["messages"][0]["content"], TOOL_TRUNCATION_PLACEHOLDER);
     assert!(b["messages"][1]["content"].is_array());
 }
 
@@ -250,7 +274,10 @@ fn tool_calls_survive_when_content_is_truncated() {
     let report = truncate_history(&mut b, chars(ROOMY)).unwrap();
 
     assert_eq!(report.messages_truncated, 1);
-    assert_eq!(b["messages"][0]["content"], TRUNCATION_PLACEHOLDER);
+    assert_eq!(
+        b["messages"][0]["content"],
+        ASSISTANT_TRUNCATION_PLACEHOLDER
+    );
     assert_eq!(b["messages"][0]["tool_calls"][0]["id"], "call_1");
 }
 
@@ -379,7 +406,7 @@ fn the_elision_set_is_stable_while_the_conversation_grows_within_a_bracket() {
             .unwrap()
             .iter()
             .enumerate()
-            .filter(|(_, m)| m["content"] == TRUNCATION_PLACEHOLDER)
+            .filter(|(_, m)| m["content"] == TOOL_TRUNCATION_PLACEHOLDER)
             .map(|(i, _)| i)
             .collect()
     }

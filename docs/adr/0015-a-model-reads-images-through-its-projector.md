@@ -9,6 +9,10 @@
 - **Superseded by:** nothing
 - **Log:** [log-0015](log-0015.md)
 
+> **Amended 2026-10-15.** The pin named under *The scope of the evidence* is
+> `b11429` from this date. Decision 1's pin-bump reading is in
+> [log-0015](log-0015.md).
+
 ## Context
 
 A client pastes a screenshot. GitHub Copilot sends it to an OpenAI endpoint as

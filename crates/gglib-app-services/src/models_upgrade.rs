@@ -93,6 +93,12 @@ impl ModelOps {
     /// Re-download the model at the latest `HuggingFace` revision and rewrite
     /// the row — `gglib model upgrade`, shared by the CLI and the GUI route.
     ///
+    /// The row is rewritten by the registrar's upgrade step
+    /// ([`ModelRegistrar::upgrade_model`](gglib_core::services::ModelRegistrar::upgrade_model)):
+    /// the model keeps its id and every field its owner set, a projector the
+    /// download brought is linked when the model has none, and each file's
+    /// `model_files` record takes its new OID.
+    ///
     /// A model that is being served is refused before the Hub is asked
     /// anything ([`refuse_if_served`](Self::refuse_if_served), the rule
     /// [`remove`](Self::remove) refuses by): the forced download replaces
@@ -133,7 +139,7 @@ impl ModelOps {
         D: FnOnce(CliUpdateRequest, Option<RowCallback>) -> DF,
         DF: Future<Output = anyhow::Result<CliDownloadResult>> + Send + 'static,
     {
-        let mut model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
+        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
         self.refuse_if_served(&model).await?;
         let (repo, quant) = Self::upgrade_source(&model)?;
         let models_dir = gglib_core::paths::resolve_models_dir(None)
@@ -161,7 +167,7 @@ impl ModelOps {
         // and leave the user with no model at all — while the row still
         // pointed at the deleted path. Spawning means the download and the row
         // rewrite always finish as a pair; only the reply is lost.
-        let core = self.deps.core.clone();
+        let registrar = self.deps.core.registrar(Arc::clone(&self.deps.gguf_parser));
         let emitter = Arc::clone(&self.deps.emitter);
         let request = CliUpdateRequest {
             model_path: model.file_path.clone(),
@@ -177,13 +183,15 @@ impl ModelOps {
                 .await
                 .map_err(|e| GuiError::Internal(format!("Upgrade download failed: {e}")))?;
 
-            model.file_path = result.primary_path.clone();
-            model.hf_commit_sha = Some(result.commit_sha.clone());
-            model.last_update_check = Some(chrono::Utc::now());
-            core.models()
-                .update(&model)
+            let upgraded = registrar
+                .upgrade_model(id, &result.completed())
                 .await
                 .map_err(|e| GuiError::from(e).context("Failed to update model row"))?;
+            let refusals = upgraded.projector_refusal.iter();
+            for refusal in refusals.chain(&upgraded.component_refusals) {
+                tracing::warn!(model_id = id, %refusal, "An upgraded model's file was not linked");
+            }
+            let model = upgraded.model;
 
             // The widest staleness window in the file: this lands minutes
             // after the request that started it, having rewritten `file_path`
@@ -204,3 +212,7 @@ impl ModelOps {
 #[cfg(test)]
 #[path = "models_upgrade_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "models_upgrade_links_tests.rs"]
+mod links_tests;

@@ -17,6 +17,7 @@ use serde_json::json;
 
 use super::*;
 use crate::generation::TurnGeneration;
+use gglib_core::domain::DialectSpec;
 
 fn reasoning(content: &str) -> LlmStreamEvent {
     LlmStreamEvent::ReasoningDelta {
@@ -166,7 +167,7 @@ async fn drain_stream(
     client: Client,
 ) -> StreamOutcome {
     let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
-    let connection = registry.register("m", true, None);
+    let connection = registry.register(1, "m", true, None);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(1);
     let reader = tokio::spawn(async move {
         match client {
@@ -184,7 +185,7 @@ async fn drain_stream(
     let outcome = drain_events(
         events,
         "m".to_owned(),
-        dialect,
+        TurnDialect::parsed(dialect),
         ClientSender::new(tx, Duration::from_secs(5)),
         &connection,
         repair,

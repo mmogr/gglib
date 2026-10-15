@@ -15,7 +15,7 @@ use gglib_core::domain::{
 use gglib_core::settings::SettingsUpdate;
 use serde_json::{Value, json};
 
-use super::compose::{Prepared, prepare_over};
+use super::compose::{Prepared, held_over, prepare_over};
 use crate::handlers::agent::AgentChatRequest;
 use crate::handlers::agent::dto::AgentRunRequest;
 use crate::handlers::agent::remote_upstream::local;
@@ -55,8 +55,20 @@ pub(super) struct Turn {
 pub(super) async fn turn(
     state: &AppState,
     model_id: i64,
+    chat: AgentChatRequest,
+    reply: &str,
+) -> Turn {
+    turn_as(state, model_id, chat, reply, false).await
+}
+
+/// [`turn`], prepared as `prepare_held` prepares a run when `held`: its
+/// model held on `state.runtime` before the loop is composed.
+async fn turn_as(
+    state: &AppState,
+    model_id: i64,
     mut chat: AgentChatRequest,
     reply: &str,
+    held: bool,
 ) -> Turn {
     let (fake, at) = far(200, reply).await;
     *fake.content_type.lock().unwrap() = "text/event-stream";
@@ -72,6 +84,11 @@ pub(super) async fn turn(
         runtime: gglib_core::domain::RuntimeKind::Llama,
     };
     let upstream = local(state, &chat, server).await.unwrap();
+    let prepared = if held {
+        held_over(state, chat, upstream).await.unwrap()
+    } else {
+        prepare_over(state, chat, upstream).await
+    };
     let Prepared {
         agent_loop,
         messages,
@@ -79,7 +96,7 @@ pub(super) async fn turn(
         tx,
         mut rx,
         ..
-    } = prepare_over(state, chat, upstream).await;
+    } = prepared;
     let ended = tokio::time::timeout(
         Duration::from_secs(30),
         agent_loop.run(messages, config, tx),
@@ -107,7 +124,16 @@ pub(super) async fn turn(
 
 /// The body of the one request a turn that ends well makes.
 pub(super) async fn sent(state: &AppState, model_id: i64, chat: AgentChatRequest) -> Value {
-    let mut turn = turn(state, model_id, chat, REPLY).await;
+    sent_as(state, model_id, chat, false).await
+}
+
+/// [`sent`], for a run that holds its model on `state.runtime`.
+pub(super) async fn sent_held(state: &AppState, model_id: i64, chat: AgentChatRequest) -> Value {
+    sent_as(state, model_id, chat, true).await
+}
+
+async fn sent_as(state: &AppState, model_id: i64, chat: AgentChatRequest, held: bool) -> Value {
+    let mut turn = turn_as(state, model_id, chat, REPLY, held).await;
     assert!(turn.ended_well, "{:?}", turn.events);
     assert_eq!(turn.requests.len(), 1, "one request");
     turn.requests.remove(0)

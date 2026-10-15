@@ -6,7 +6,7 @@
   [decision 4](0015-a-model-reads-images-through-its-projector.md#4-gglibs-own-messages-name-an-image-by-the-hash-of-its-bytes-stored-once)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
-- **Log:** none
+- **Log:** [log-0016](log-0016.md)
 
 > **Amended 2026-10-11.** The title's "never sent to the model" no longer
 > holds for one image: the most recent picture the drawing tool made is shown
@@ -14,6 +14,10 @@
 > ([ADR 0018, decision 19](0018-gglib-draws-with-stable-diffusion-cpp.md#19-a-model-that-reads-images-is-shown-the-most-recent-drawn-picture)).
 > It holds for every other tool's image, and for every model with no
 > projector. Decision 5 and the kill criterion below carry the same note.
+
+> **Amended 2026-10-15.** The kill criterion's second reading is taken, at
+> `b11429`: a model answered from an image in a tool message
+> ([log-0016](log-0016.md)). The first is not, so decision 5 stands.
 
 ## Context
 

@@ -18,6 +18,7 @@ use super::forward_stall_fixtures::{
     text, upstream,
 };
 use super::*;
+use gglib_core::domain::DialectSpec;
 
 /// An upstream that answers "Hello" and then never says another word.
 fn silent_after_hello()

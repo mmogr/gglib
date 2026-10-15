@@ -62,7 +62,8 @@ pub(crate) struct ReleaseSpec {
 pub(crate) enum ReleaseSelector {
     /// A specific tag: the pin, or an override naming one.
     Tag(String),
-    /// Whatever upstream currently calls `latest`.
+    /// Whatever upstream currently calls `latest`, followed to the release
+    /// its `nightly-tag.txt` names when it carries one.
     Latest,
 }
 
@@ -102,10 +103,12 @@ pub(crate) fn resolve_selector(spec: &ReleaseSpec) -> ReleaseSelector {
     selector_from_override(spec, &std::env::var(spec.env).unwrap_or_default())
 }
 
-/// Which asset of a release is this platform's: one whose name holds every
-/// string in `contains` and, when set, ends with `ends_with`.
+/// Which asset of a release is this platform's: one whose name, when set,
+/// starts with `starts_with`, holds every string in `contains` and, when set,
+/// ends with `ends_with`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct AssetMatcher<'a> {
+    pub(crate) starts_with: Option<&'a str>,
     pub(crate) contains: &'a [&'a str],
     pub(crate) ends_with: Option<&'a str>,
 }
@@ -113,7 +116,8 @@ pub(crate) struct AssetMatcher<'a> {
 impl AssetMatcher<'_> {
     /// Whether the asset named `name` is this platform's.
     pub(crate) fn matches(&self, name: &str) -> bool {
-        self.contains.iter().all(|part| name.contains(part))
+        self.starts_with.is_none_or(|start| name.starts_with(start))
+            && self.contains.iter().all(|part| name.contains(part))
             && self.ends_with.is_none_or(|end| name.ends_with(end))
     }
 
@@ -150,10 +154,12 @@ impl AssetMatcher<'_> {
 /// The pattern as a message shows it: the parts in order, joined by `*`.
 impl fmt::Display for AssetMatcher<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.contains.join("*"))?;
-        if let Some(end) = self.ends_with {
-            write!(f, "*{end}")?;
-        }
-        Ok(())
+        let parts: Vec<&str> = self
+            .starts_with
+            .into_iter()
+            .chain(self.contains.iter().copied())
+            .chain(self.ends_with)
+            .collect();
+        f.write_str(&parts.join("*"))
     }
 }

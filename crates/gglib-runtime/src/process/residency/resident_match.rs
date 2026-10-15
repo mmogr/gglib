@@ -4,7 +4,8 @@
 //! resident launched with another of either cannot serve the request: it is
 //! recycled and the next pass launches a fresh one. That is how a changed
 //! projector link takes effect, at the next request and with no restart asked
-//! of anyone.
+//! of anyone. A resident of another model id is never the launch asked for,
+//! whatever its name: two catalogue entries can share one.
 
 use std::path::Path;
 
@@ -17,6 +18,8 @@ use crate::process::admission::Resident;
 /// llama-server is started with, and the component files sd-server is.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct LaunchedAs<'a> {
+    /// The model's database id.
+    pub model_id: u32,
     /// The context size. Not read for an image model, which has none.
     pub context: u64,
     /// The projector linked now.
@@ -25,10 +28,11 @@ pub(super) struct LaunchedAs<'a> {
     pub components: &'a [ModelComponent],
 }
 
-/// A model that chats, at `(context, projector)`, with no components.
-impl<'a> From<(u64, Option<&'a Path>)> for LaunchedAs<'a> {
-    fn from((context, projector): (u64, Option<&'a Path>)) -> Self {
+/// A model that chats, `(model_id, context, projector)`, with no components.
+impl<'a> From<(u32, u64, Option<&'a Path>)> for LaunchedAs<'a> {
+    fn from((model_id, context, projector): (u32, u64, Option<&'a Path>)) -> Self {
         Self {
+            model_id,
             context,
             projector,
             components: &[],
@@ -38,19 +42,29 @@ impl<'a> From<(u64, Option<&'a Path>)> for LaunchedAs<'a> {
 
 /// Whether `resident` was launched otherwise than this request resolved to.
 ///
-/// A llama-server resident by its context size or projector; an
-/// `sd-server` resident by its set of component files alone, never by
-/// context: a relinked VAE takes effect at the next request, as a relinked
-/// projector does.
+/// A resident of another model id always is. Otherwise a llama-server
+/// resident by its context size or projector; an `sd-server` resident by its
+/// set of component files alone, never by context: a relinked VAE takes
+/// effect at the next request, as a relinked projector does.
 pub(super) fn launched_differently<'a>(
     resident: &Resident,
     request: impl Into<LaunchedAs<'a>>,
 ) -> bool {
     let LaunchedAs {
+        model_id,
         context,
         projector,
         components,
     } = request.into();
+    if resident.model_id != model_id {
+        info!(
+            model_name = %resident.model_name,
+            running_model_id = %resident.model_id,
+            requested_model_id = %model_id,
+            "resident is another model — recycling"
+        );
+        return true;
+    }
     if resident.runtime == RuntimeKind::StableDiffusion {
         let differs = !same_components(&resident.components, components);
         if differs {

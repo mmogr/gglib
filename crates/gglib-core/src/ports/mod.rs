@@ -102,7 +102,7 @@ pub use runs::{Created, RunEvent, RunEvents, RunScope, RunsError, RunsPort};
 pub use server_health::ServerHealthStatus;
 #[cfg(any(test, feature = "test-utils"))]
 pub use settings_fixture::InMemorySettings;
-pub use settings_repository::{SettingsChange, SettingsRepository};
+pub use settings_repository::{SettingsChange, SettingsRepository, SettingsReset};
 pub use system_probe::SystemProbePort;
 pub use tool_support::{
     ModelSource, ToolFormat, ToolSupportDetection, ToolSupportDetectionInput,

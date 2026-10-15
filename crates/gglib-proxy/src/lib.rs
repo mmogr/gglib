@@ -160,6 +160,7 @@ pub mod template_caps_read;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub(crate) mod token_calibration;
+pub(crate) mod turn_dialect;
 pub(crate) mod unary_body;
 
 pub(crate) mod upstream_health;

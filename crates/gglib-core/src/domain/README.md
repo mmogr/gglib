@@ -14,7 +14,7 @@ infrastructure concerns (database, filesystem, etc.).
   it has a projector (`Model::image_input`), and draws them exactly when its
   tensors named an image family (`Model::generates_images`)
 - `model_file` - The files a model is made of, as the library records them
-  (`ModelFile`, `NewModelFile`)
+  (`ModelFile`, `NewModelFile`), and the folder a row is read in (`ModelFolder`)
 - `model_detail` - Every stored field of one model, as the inspector reads it
   (`ModelDetailDto`), and one model as a paired machine reads it (`ModelLookup`)
 - `machine` - Which machine a model is on (`Machine`), a model named by its
