@@ -31,7 +31,7 @@ pub use model_registrar::ModelRegistrar;
 pub use model_service::{ImportMode, ModelService, RetagDiff};
 pub use model_verification::{
     ModelVerificationService, OverallHealth, ShardHealth, ShardHealthReport, ShardProgress,
-    UpdateCheckResult, UpdateDetails, VerificationProgress, VerificationReport,
+    UpdateCheckResult, UpdateDetails, VerificationProgress, VerificationReport, VerifiedFileKind,
 };
 pub use model_verification_remote::{RepairStarted, missing_after_repair};
 pub use projector_choices::projector_choices;

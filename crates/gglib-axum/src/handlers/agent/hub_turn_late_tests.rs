@@ -239,21 +239,39 @@ async fn a_refused_first_write_saves_no_reply() {
     assert_eq!(saved(&state, id).await.len(), 2, "no row was written");
 }
 
-/// A turn whose loop was prepared and whose model is then gone from its
-/// port, stopped or swapped in between, is refused at the hold: the run
-/// ends `failed` with that refusal, and neither the message nor a reply
-/// was written, because the rows are written only once the model is held.
+/// A turn whose model is gone from its port by the time it is held, stopped
+/// or swapped since it was found, is refused at the hold: the run ends
+/// `failed` with that refusal, and neither the message nor a reply was
+/// written, because the rows are written only once the model is held. The
+/// hold is the run's late step's, before its loop is composed, as
+/// `late_on` takes it once the model is found.
 #[tokio::test]
 async fn a_refusal_at_the_model_hold_ends_the_run_failed_and_writes_no_row() {
-    use crate::handlers::agent::launch::ready;
+    use crate::handlers::agent::compose::held_over;
+    use crate::handlers::agent::remote_upstream::local;
+    use crate::handlers::agent::run::with_code;
 
     let (_dir, state) = state().await;
     let id = chat(&state, None).await;
     let plan = plan(&state, turn(id, "second")).await.unwrap();
-    let (mut p, _) = prepared(finished_reply(), End::Finish);
-    p.messages = plan.chat.messages;
+    let mut chat = plan.chat;
+    chat.port = 19_555;
     // A local model on a port where nothing runs: the runtime holds none.
-    p.local_model = Some((19_555, 7));
+    let server = gglib_app_services::types::ServerInfo {
+        model_id: 7,
+        model_name: "qwen".to_owned(),
+        pid: None,
+        port: 19_555,
+        started_at: 0,
+        runtime: gglib_core::domain::RuntimeKind::Llama,
+    };
+    let at = Arc::clone(&state);
+    let late: LatePrepare = Box::new(move |_| {
+        Box::pin(async move {
+            let upstream = local(&at, &chat, server).await?;
+            held_over(&at, chat, upstream).await.map_err(with_code)
+        })
+    });
 
     begin(
         &state,
@@ -261,7 +279,7 @@ async fn a_refusal_at_the_model_hold_ends_the_run_failed_and_writes_no_row() {
         "d1",
         "qwen".to_owned(),
         plan.transcript,
-        ready(p),
+        late,
         take_permit(&state).unwrap(),
     )
     .unwrap();

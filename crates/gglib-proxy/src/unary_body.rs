@@ -19,11 +19,11 @@ use bytes::Bytes;
 use tracing::{error, warn};
 
 use gglib_core::cache_metrics::CacheMetricsStore;
-use gglib_core::domain::DialectSpec;
 
 use crate::forward::{FIRST_BYTE_DEADLINE_SECS, NORMALIZATION_NOTICE_PREFIX};
 use crate::metrics::ContextMetricsStore;
 use crate::models::ErrorResponse;
+use crate::turn_dialect::TurnDialect;
 
 /// What a non-streaming answer is given for its generation, on top of what a
 /// streamed reply is given to begin: 25 minutes, which is 15,000 tokens at 10
@@ -72,7 +72,7 @@ pub(crate) async fn exchange(
     request: reqwest::RequestBuilder,
     total: Duration,
     cache_metrics: &CacheMetricsStore,
-    dialect: Option<&DialectSpec>,
+    dialect: &TurnDialect,
     residue_sink: Option<(&ContextMetricsStore, u64)>,
 ) -> Exchange {
     let exchange = async {
@@ -166,7 +166,7 @@ fn usage_from_response_body(body: &[u8]) -> Option<(u32, Option<u32>)> {
 async fn read_non_streaming_body(
     response: reqwest::Response,
     cache_metrics: &CacheMetricsStore,
-    dialect: Option<&DialectSpec>,
+    dialect: &TurnDialect,
     residue_sink: Option<(&ContextMetricsStore, u64)>,
 ) -> reqwest::Result<(HeaderValue, Bytes)> {
     // Collect upstream headers we want to preserve
@@ -231,13 +231,14 @@ fn unreadable_upstream(e: &reqwest::Error) -> Response {
 /// survived into client-visible text, if any.
 pub(crate) fn normalize_non_streaming_body(
     body_bytes: Bytes,
-    dialect: Option<&DialectSpec>,
+    dialect: &TurnDialect,
 ) -> (Bytes, Option<String>) {
     let Ok(mut parsed) = serde_json::from_slice::<serde_json::Value>(&body_bytes) else {
         return (body_bytes, None);
     };
 
-    let errors = gglib_core::normalize::normalize_chat_completion_body(&mut parsed, dialect);
+    let errors =
+        gglib_core::normalize::normalize_chat_completion_body(&mut parsed, dialect.parser_spec());
 
     for err in &errors {
         warn!(?err, "normalization error in non-streaming response");
@@ -270,7 +271,9 @@ pub(crate) fn normalize_non_streaming_body(
                         .get("message")
                         .and_then(|m| m.get("content"))
                         .and_then(serde_json::Value::as_str)
-                        .and_then(|text| gglib_core::normalize::scan_complete(text, dialect))
+                        .and_then(|text| {
+                            gglib_core::normalize::scan_complete(text, dialect.scanned_spec())
+                        })
                 })
             })
     } else {

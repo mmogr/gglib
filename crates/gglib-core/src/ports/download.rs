@@ -143,9 +143,9 @@ impl ResolvedFile {
     }
 
     /// Whether this is one of the model's weights files: neither its
-    /// projector nor a companion.
+    /// projector, a sidecar, nor a companion.
     pub const fn is_weights(&self) -> bool {
-        !self.role.is_projector() && self.component.is_none()
+        self.role.is_weights() && self.component.is_none()
     }
 
     /// The repository the file is fetched from: its own, or `group_repo`.

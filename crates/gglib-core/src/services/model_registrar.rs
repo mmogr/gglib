@@ -9,10 +9,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
 
-use super::model_components::link_downloaded_components;
+use super::model_components::{link_components, link_downloaded_components};
 use super::model_import::fetch_published_sampling;
 use super::model_links::resolved_or_literal;
-use super::model_projector::link_downloaded_projector;
+use super::model_projector::{link_downloaded_projector, link_projector};
 use super::{HfOrigin, ModelOrigin, build_new_model};
 use crate::domain::{Model, NewModelFile};
 use crate::ports::huggingface::HfClientPort;
@@ -149,35 +149,7 @@ impl ModelRegistrarPort for ModelRegistrar {
         .await;
 
         let registered = self.model_repo.insert(&model).await?;
-
-        // One model_files record, with its OID, per file of the group (if repo is available)
-        if let Some(ref repo) = self.model_files_repo {
-            for (file_index, file_entry) in download.hf_file_entries.iter().enumerate() {
-                let Some(file_path) = model_file_path(download, &registered, file_entry) else {
-                    continue;
-                };
-                if let Some(size) = file_entry.size {
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-                    let model_file = NewModelFile::new(
-                        registered.id,
-                        file_path,
-                        file_index as i32,
-                        size as i64,
-                        file_entry.oid.clone(),
-                    );
-
-                    if let Err(e) = repo.insert(&model_file).await {
-                        // Soft fail - log but don't propagate error
-                        tracing::warn!(
-                            model_id = registered.id,
-                            file_path = %file_entry.path,
-                            error = %e,
-                            "Failed to insert model_files record - verification features may be unavailable"
-                        );
-                    }
-                }
-            }
-        }
+        self.record_files(download, &registered).await;
 
         Ok(RegisteredDownload {
             model: registered,
@@ -185,6 +157,103 @@ impl ModelRegistrarPort for ModelRegistrar {
             projector_refusal,
             component_refusals,
         })
+    }
+}
+
+impl ModelRegistrar {
+    /// Record `download`, model `model_id`'s files fetched again at a newer
+    /// revision, on the model the library holds, and answer it as stored.
+    ///
+    /// The model keeps its id, its row and every field its owner set: it is
+    /// read afresh, and only its file, its revision and the time it was last
+    /// checked are rewritten. A projector or a companion that came with the
+    /// download is linked by the rule a registration links by: a model with
+    /// no link gets one, and a link already held is kept. Each file's
+    /// `model_files` record takes the download's OID and size.
+    ///
+    /// Registering the upgrade instead would add a second model: the
+    /// library's key for a downloaded model holds its revision.
+    ///
+    /// # Errors
+    ///
+    /// When model `model_id` cannot be read or written. Nothing is written
+    /// then. A record that cannot be written is logged, as at registration.
+    pub async fn upgrade_model(
+        &self,
+        model_id: i64,
+        download: &CompletedDownload,
+    ) -> Result<RegisteredDownload, RepositoryError> {
+        let mut model = self.model_repo.get_by_id(model_id).await?;
+        model.file_path = download.db_path().to_path_buf();
+        model.hf_commit_sha = Some(download.commit_sha.clone());
+        model.last_update_check = Some(Utc::now());
+
+        let parser = self.gguf_parser.as_ref();
+        let projector_refusal = match download.projector_path.as_deref() {
+            Some(projector) => {
+                let held = model.projector_path.clone();
+                link_projector(
+                    held.as_deref(),
+                    &mut model.projector_path,
+                    projector,
+                    parser,
+                )
+            }
+            None => None,
+        };
+        let held = model.components.clone();
+        let component_refusals = link_components(
+            &held,
+            model.image_family,
+            &model.name,
+            &mut model.components,
+            &download.components,
+            parser,
+        );
+
+        self.model_repo.update(&model).await?;
+        self.record_files(download, &model).await;
+
+        Ok(RegisteredDownload {
+            model,
+            metadata_refusal: None,
+            projector_refusal,
+            component_refusals,
+        })
+    }
+
+    /// One `model_files` record, with its OID, per file of `download`, for
+    /// `registered`, when the registrar keeps them. A record that cannot be
+    /// written is logged and passed over.
+    async fn record_files(&self, download: &CompletedDownload, registered: &Model) {
+        let Some(ref repo) = self.model_files_repo else {
+            return;
+        };
+        for (file_index, file_entry) in download.hf_file_entries.iter().enumerate() {
+            let Some(file_path) = model_file_path(download, registered, file_entry) else {
+                continue;
+            };
+            let Some(size) = file_entry.size else {
+                continue;
+            };
+            #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+            let model_file = NewModelFile::new(
+                registered.id,
+                file_path,
+                file_index as i32,
+                size as i64,
+                file_entry.oid.clone(),
+            );
+            if let Err(e) = repo.insert(&model_file).await {
+                // Soft fail - log but don't propagate error
+                tracing::warn!(
+                    model_id = registered.id,
+                    file_path = %file_entry.path,
+                    error = %e,
+                    "Failed to insert model_files record - verification features may be unavailable"
+                );
+            }
+        }
     }
 }
 

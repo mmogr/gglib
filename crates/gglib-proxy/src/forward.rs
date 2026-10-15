@@ -72,7 +72,6 @@ use reqwest::Client;
 use tracing::{debug, error, info, warn};
 
 use gglib_core::LlmStreamEvent;
-use gglib_core::domain::DialectSpec;
 use gglib_core::normalize::{NormalizingStream, get_parser};
 use gglib_core::request_pipeline::{
     self, ContextBudget, ModelContext, SamplingDecision, SamplingLayers, SuppressedEffort,
@@ -88,6 +87,7 @@ use crate::models::ErrorResponse;
 use crate::repair::{RepairContext, RepairTurn};
 use crate::sampling_audit::SamplingAuditStore;
 use crate::token_calibration::TokenCalibration;
+use crate::turn_dialect::TurnDialect;
 use crate::upstream_health::{StreamVerdict, UpstreamHealth};
 use crate::upstream_read::{StreamBounds, UpstreamStalled, is_generated_token, prefill_comment};
 use gglib_core::cache_metrics::CacheMetricsStore;
@@ -700,7 +700,10 @@ pub(crate) async fn forward_chat_completion(
         tokens: effective_ctx as usize,
     });
 
-    let shaped = match shape_request_body(body, &context, &sampling, budget) {
+    // Read once, so the request's shaping and its answer's reading agree.
+    let dialect = TurnDialect::for_turn(context.dialect.clone());
+    let shaping = dialect.shaping_context(&context);
+    let shaped = match shape_request_body(body, &shaping, &sampling, budget) {
         Ok(shaped) => shaped,
         Err(e) => {
             // Hard abort: the conversation cannot be trimmed to fit. Record a
@@ -875,7 +878,6 @@ pub(crate) async fn forward_chat_completion(
         // `sse_stream::spawn_and_return`.
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(32);
         let model_name_owned = model_name.to_owned();
-        let dialect = context.dialect;
 
         return Ok(crate::sse_stream::spawn_and_return(
             req_builder,
@@ -907,7 +909,7 @@ pub(crate) async fn forward_chat_completion(
     crate::forward_unary::forward_unary(
         req_builder,
         body,
-        context.dialect.as_ref(),
+        &dialect,
         &cache_metrics,
         (metrics.as_ref(), snapshot_seq),
         RepairTurn {
@@ -997,7 +999,7 @@ fn own_turn_encoder(model: &str) -> SseEncoder {
 pub(crate) async fn stream_response_to_channel(
     response: reqwest::Response,
     model_name: String,
-    dialect: Option<DialectSpec>,
+    dialect: TurnDialect,
     tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
     connection: &ConnectionGuard,
     repair: Option<RepairContext>,
@@ -1055,7 +1057,7 @@ pub(crate) async fn stream_response_to_channel(
 pub(crate) async fn drain_events(
     events: impl futures_util::Stream<Item = anyhow::Result<LlmStreamEvent>> + Send + 'static,
     model_name: String,
-    dialect: Option<DialectSpec>,
+    dialect: TurnDialect,
     tx: ClientSender,
     connection: &ConnectionGuard,
     repair: Option<RepairContext>,
@@ -1083,7 +1085,7 @@ pub(crate) async fn drain_events(
             }
         }
     });
-    let parser = get_parser(dialect.as_ref());
+    let parser = get_parser(dialect.parser_spec());
     let normalized = NormalizingStream::new(Box::pin(events), parser);
     let mut normalized = Box::pin(normalized);
 
@@ -1091,7 +1093,8 @@ pub(crate) async fn drain_events(
     // dialect markup that survived. Observation only — never alters what
     // the client receives. Error-recovery text is deliberately excluded
     // (its ⚠-prefixed notice already flags itself), as is reasoning.
-    let mut residue = gglib_core::normalize::ResidueScanner::new(dialect.as_ref());
+    // It scans for the model's spec even when the parser is bypassed.
+    let mut residue = gglib_core::normalize::ResidueScanner::new(dialect.scanned_spec());
 
     let mut outcome = StreamOutcome::default();
     let mut client_connected = true;
@@ -1228,7 +1231,7 @@ pub(crate) async fn drain_events(
                     if !held_tool_frames.is_empty() {
                         let mut flush = resolve_held_tool_calls(
                             repair.as_ref(),
-                            dialect.as_ref(),
+                            &dialect,
                             &tool_calls,
                             std::mem::take(&mut held_tool_frames),
                             &encoder,
@@ -1447,7 +1450,7 @@ async fn emit_held_frames(tx: &ClientSender, held: &mut Vec<HeldFrame>, meter: &
 /// fail-open rule truncation and the loop guard follow.
 async fn resolve_held_tool_calls(
     repair: Option<&RepairContext>,
-    dialect: Option<&DialectSpec>,
+    dialect: &TurnDialect,
     tool_calls: &crate::repair::ToolCallAccumulator,
     original_frames: Vec<HeldFrame>,
     encoder: &SseEncoder,

@@ -201,7 +201,7 @@ impl QueueState {
     /// is waited for, and the other slot's model is left alone.
     pub(super) fn choose_image_slot(
         &self,
-        model: &str,
+        model_id: u32,
         now: Instant,
         candidate: Candidate,
     ) -> Option<usize> {
@@ -216,7 +216,7 @@ impl QueueState {
             return Some(slot);
         }
 
-        if !self.swap_is_permitted(model, now) {
+        if !self.swap_is_permitted(model_id, now) {
             return None;
         }
         if let Some(&slot) = beside.iter().find(|&&slot| self.evictable(slot)) {

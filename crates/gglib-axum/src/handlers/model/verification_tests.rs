@@ -160,7 +160,12 @@ async fn verify_answers_the_report_of_a_healthy_download() {
     assert_eq!(status, StatusCode::OK, "{body}");
     let verified_at = body["report"]["verified_at"].take();
     assert!(verified_at.is_string(), "{verified_at}");
-    let shard = json!({ "index": 0, "file_path": WEIGHTS, "health": { "type": "healthy" } });
+    let shard = json!({
+        "index": 0,
+        "kind": { "kind": "shard", "number": 1, "of": 1 },
+        "file_path": WEIGHTS,
+        "health": { "type": "healthy" },
+    });
     let report = json!({
         "model_id": id,
         "overall_health": "healthy",

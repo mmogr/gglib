@@ -17,6 +17,7 @@ use super::forward_stall_fixtures::{
 };
 use super::*;
 use crate::upstream_read::upstream_events;
+use gglib_core::domain::DialectSpec;
 
 /// An idle bound none of the tests that use it waits out.
 const LONG_IDLE: Duration = Duration::from_mins(1);
@@ -46,7 +47,7 @@ async fn leave_after(
     idle: Duration,
 ) -> Departure {
     let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
-    let connection = registry.register("m", true, None);
+    let connection = registry.register(1, "m", true, None);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(32);
 
     let client = tokio::spawn(async move {
@@ -65,7 +66,7 @@ async fn leave_after(
     let drain = drain_events(
         upstream_events(bytes, idle),
         "m".to_owned(),
-        dialect,
+        TurnDialect::parsed(dialect),
         ClientSender::new(tx, crate::client_send::CLIENT_SEND_TIMEOUT),
         &connection,
         None,

@@ -332,10 +332,11 @@ impl ResidentSet {
         request: LaunchRequest,
         observer: Option<Arc<dyn AdmitObserver>>,
     ) -> Result<Admission, ModelRuntimeError> {
+        let model_id = request.spec.id;
         let model_name = request.spec.name.clone();
         let mut queued = QueuedTicket {
             queue: Arc::clone(&self.queue),
-            ticket: self.queue.enqueue(&model_name),
+            ticket: self.queue.enqueue(model_id, &model_name),
         };
         let mut told = None;
 
@@ -353,6 +354,7 @@ impl ResidentSet {
             {
                 AdmissionDecision::Serve { slot } => {
                     let launched_as = LaunchedAs {
+                        model_id,
                         context: request.context.0,
                         projector: request.spec.projector.as_deref(),
                         components: &request.spec.components,
@@ -369,7 +371,7 @@ impl ResidentSet {
                     // was waiting out the deadline for a 503. A busy server
                     // failing its health check put real requests on exactly
                     // that path.
-                    queued.ticket = self.queue.enqueue(&model_name);
+                    queued.ticket = self.queue.enqueue(model_id, &model_name);
                 }
                 AdmissionDecision::Launch { slot, evict } => {
                     return self.launch(core, &request, slot, evict).await;

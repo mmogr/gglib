@@ -310,6 +310,16 @@ impl Standing {
         );
     }
 
+    /// A turn that called a tool. The stagnation detector reads through it,
+    /// but its run ends there, as a different batch ends a loop run: calling
+    /// a tool is the model doing something new, which is what the note asked
+    /// for. Without this a noted run that went on to call tools was noted on
+    /// every later request and never ended (#1435).
+    fn tool_turn(&mut self) {
+        self.stagnation_trip = None;
+        self.stagnation_streak = 0;
+    }
+
     fn judged(
         slot: &mut Option<Trip>,
         streak: &mut usize,
@@ -326,9 +336,9 @@ impl Standing {
 
     /// The verdict the newest turns give, and its trips in a row.
     ///
-    /// Both detectors can stand at once — a prose trip is transparent to the
-    /// loop detector and a batch trip to the stagnation detector — and the
-    /// later of the two is the one the newest turns are about. A trip that
+    /// Both detectors can stand at once — prose is transparent to the loop
+    /// detector, so a stagnation trip can follow a loop trip — and the later
+    /// of the two is the one the newest turns are about. A trip that
     /// stands from before a person last spoke counts as a first: ending that
     /// request would answer them without the model, so it is noted instead,
     /// and the model's answer to them starts a new run.
@@ -463,8 +473,9 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
         }
 
         let text = wire::extract_text(&msg.content);
-        // The turns `record` counts: the same test it applies itself, so a
-        // turn it ignores neither keeps nor clears a stagnation trip.
+        // The turns `record` counts: the same test it applies itself. Of the
+        // turns it ignores, a tool turn clears a stagnation trip and an empty
+        // one neither keeps nor clears it.
         let judged_prose = calls.is_empty() && !text.is_empty();
         match stagnation.record(&text, !calls.is_empty(), cfg.max_stagnation_steps) {
             Err(e) if first_trip_ends_the_scan => {
@@ -493,6 +504,7 @@ pub(crate) fn scan_history(body: &[u8], cfg: &LoopGuardConfig) -> ScanOutcome {
             }
             Err(e) => standing.prose_judged(i, Some(verdict(e))),
             Ok(()) if judged_prose => standing.prose_judged(i, None),
+            Ok(()) if !calls.is_empty() => standing.tool_turn(),
             Ok(()) => {}
         }
         if !calls.is_empty() {

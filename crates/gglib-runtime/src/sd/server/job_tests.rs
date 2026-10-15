@@ -929,7 +929,7 @@ async fn steps_keep_a_rival_waiting_past_the_admission_deadline() {
     let render = tokio::spawn(async move { task_driver.generate(sdxl_request(), tx).await });
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    let rival = host.queue.enqueue("flux");
+    let rival = host.queue.enqueue(2, "flux");
     let fits = Candidate::image(SecondarySlotDecision::Grant {
         footprint_bytes: 1,
         headroom_bytes: 1 << 40,

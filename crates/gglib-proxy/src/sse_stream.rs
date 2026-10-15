@@ -17,10 +17,10 @@ use crate::forward::{drain_events, failed_turn_body};
 use crate::generation::TurnGeneration;
 use crate::repair::{RepairContext, RepairTurn};
 use crate::token_calibration::TokenCalibration;
+use crate::turn_dialect::TurnDialect;
 use crate::upstream_health::UpstreamHealth;
 use crate::upstream_read::{StreamBounds, first_byte_timeout_frame, upstream_events};
 use gglib_core::cache_metrics::CacheMetricsStore;
-use gglib_core::domain::DialectSpec;
 use gglib_core::sse::SseEncoder;
 
 /// Maximum number of retry attempts for the pre-generation connection phase
@@ -65,7 +65,7 @@ pub(crate) fn spawn_and_return(
     rx: tokio::sync::mpsc::Receiver<Result<Bytes, std::io::Error>>,
     connection: ConnectionGuard,
     model_name_owned: String,
-    dialect: Option<DialectSpec>,
+    dialect: TurnDialect,
     upstream_health: Arc<UpstreamHealth>,
     bounds: StreamBounds,
     calibration: Arc<TokenCalibration>,

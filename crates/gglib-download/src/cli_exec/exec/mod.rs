@@ -110,6 +110,7 @@ pub(super) async fn download(
         quantization: quant.clone(),
         repo_id: request.model_id,
         commit_sha,
+        files: resolution.files,
     })
 }
 

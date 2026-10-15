@@ -21,7 +21,8 @@ use gglib_core::ports::ModelRuntimePort;
 mod fixtures;
 use fixtures::common::FixedUpstream;
 use fixtures::loop_guard::{
-    dashboard_of, looping_history, spawn_proxy_in_mode, spawn_recording_upstream,
+    assistant_call, dashboard_of, looping_history, spawn_proxy_in_mode, spawn_recording_upstream,
+    stagnating_history,
 };
 
 /// A proxy in `mode` in front of a recording upstream.
@@ -56,11 +57,20 @@ impl Rig {
     /// as a client carrying on by itself sends it. A trailing user turn would
     /// be a person speaking, which the guard notes rather than ends.
     async fn send(&self, n: usize, stream: bool) -> (u16, String, Option<Value>) {
+        self.send_history(looping_history(n), stream).await
+    }
+
+    /// [`Self::send`] with any history after the opening system and user turns.
+    async fn send_history(
+        &self,
+        history: Vec<Value>,
+        stream: bool,
+    ) -> (u16, String, Option<Value>) {
         let mut messages = vec![
             json!({ "role": "system", "content": "be helpful" }),
             json!({ "role": "user", "content": "plan the fix" }),
         ];
-        messages.extend(looping_history(n));
+        messages.extend(history);
         let body = json!({ "model": "test-model", "stream": stream, "messages": messages });
         let resp = Client::new()
             .post(format!("{}/v1/chat/completions", self.proxy_url))
@@ -149,6 +159,46 @@ async fn a_run_that_trips_again_after_its_note_is_ended_without_the_upstream() {
         dashboard["per_model_defects"]["test-model"]["loop_guard_trips"].as_u64(),
         Some(2),
         "the note and the ending are both trips: {dashboard}"
+    );
+}
+
+/// A stagnating run that is noted and then calls a tool did what the note
+/// asked: the next request goes through with no note, and is not ended
+/// (#1435).
+#[tokio::test]
+async fn a_noted_stagnation_that_then_calls_a_tool_is_not_noted_again() {
+    let rig = Rig::new(LoopGuardMode::Note).await;
+
+    let (status, _, forwarded) = rig.send_history(stagnating_history(6), true).await;
+    assert_eq!(status, 200);
+    let forwarded = forwarded.expect("the trip is forwarded");
+    assert!(
+        last_content(&forwarded).contains("[gglib loop guard]"),
+        "the trip carries the note: {forwarded}"
+    );
+
+    let mut history = stagnating_history(6);
+    history.push(assistant_call("write_file", r#"{"path":"src/main.rs"}"#));
+    history.push(json!({ "role": "tool", "tool_call_id": "c1", "content": "1 file changed" }));
+    let (status, text, forwarded) = rig.send_history(history, true).await;
+    assert_eq!(status, 200, "{text}");
+    let forwarded = forwarded.expect("the upstream was reached, not ended");
+    assert_eq!(last_content(&forwarded), "1 file changed", "no note");
+    assert!(
+        !forwarded.to_string().contains("[gglib loop guard]"),
+        "{forwarded}"
+    );
+
+    let dashboard = dashboard_of(&rig.proxy_url).await;
+    let newest = dashboard["recent_requests"]
+        .as_array()
+        .and_then(|r| r.last())
+        .expect("two requests were recorded");
+    assert_eq!(newest["loop_guard_trip"], Value::Null, "{dashboard}");
+    assert_eq!(
+        dashboard["per_model_defects"]["test-model"]["loop_guard_trips"].as_u64(),
+        Some(1),
+        "only the first request tripped: {dashboard}"
     );
 }
 

@@ -827,6 +827,7 @@ async fn attempt(
         .dashboard
         .connections
         .register(
+            target.model_id,
             model_name.to_owned(),
             ctx.is_streaming,
             Some(target.effective_ctx),

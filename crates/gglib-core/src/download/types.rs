@@ -176,6 +176,9 @@ pub enum Quantization {
     // 6-bit quantizations
     Q6KXl,
     Q6KL,
+    Q6KM,
+    /// Unsloth Dynamic ("UD-") variant of [`Self::Q6KM`].
+    UdQ6KM,
     Q6K,
     /// Unsloth Dynamic ("UD-") variant of [`Self::Q6K`].
     UdQ6K,
@@ -188,8 +191,6 @@ pub enum Quantization {
     Bf16,
     F16,
     F32,
-    // Special formats
-    Imatrix,
     // Unknown
     #[default]
     Unknown,
@@ -250,6 +251,7 @@ const QUANT_PATTERNS: &[(&str, Quantization)] = &[
     // 6-bit
     ("Q6_K_XL", Quantization::Q6KXl),
     ("Q6_K_L", Quantization::Q6KL),
+    ("Q6_K_M", Quantization::Q6KM),
     ("Q6_K", Quantization::Q6K),
     ("Q6", Quantization::Q6),
     // 8-bit
@@ -262,8 +264,6 @@ const QUANT_PATTERNS: &[(&str, Quantization)] = &[
     ("F16", Quantization::F16),
     ("FP32", Quantization::F32),
     ("F32", Quantization::F32),
-    // Special
-    ("IMATRIX", Quantization::Imatrix),
 ];
 
 /// Maps a base quantization to its Unsloth Dynamic ("UD-") counterpart, for the
@@ -289,6 +289,7 @@ const UD_VARIANT_MAP: &[(Quantization, Quantization)] = &[
     (Quantization::Q4KS, Quantization::UdQ4KS),
     (Quantization::Q5KM, Quantization::UdQ5KM),
     (Quantization::Q5KS, Quantization::UdQ5KS),
+    (Quantization::Q6KM, Quantization::UdQ6KM),
     (Quantization::Q6K, Quantization::UdQ6K),
 ];
 
@@ -450,6 +451,8 @@ impl Quantization {
             Self::Q5 => "Q5",
             Self::Q6KXl => "Q6_K_XL",
             Self::Q6KL => "Q6_K_L",
+            Self::Q6KM => "Q6_K_M",
+            Self::UdQ6KM => "UD-Q6_K_M",
             Self::Q6K => "Q6_K",
             Self::UdQ6K => "UD-Q6_K",
             Self::Q6 => "Q6",
@@ -459,7 +462,6 @@ impl Quantization {
             Self::Bf16 => "BF16",
             Self::F16 => "F16",
             Self::F32 => "F32",
-            Self::Imatrix => "imatrix",
             Self::Unknown => "unknown",
         }
     }
@@ -594,6 +596,34 @@ mod tests {
         );
     }
 
+    /// `Q6_K_M` is its own pattern, so `UD-Q6_K_M` is not read as the
+    /// `UD-Q6_K` it contains.
+    #[test]
+    fn test_quantization_q6_k_m_is_its_own_quantization() {
+        assert_eq!(
+            Quantization::from_filename("Qwen3.8-27B-UD-Q6_K_M.gguf"),
+            Quantization::UdQ6KM
+        );
+        assert_eq!(
+            Quantization::from_filename("Qwen3.8-27B-Q6_K_M.gguf"),
+            Quantization::Q6KM
+        );
+        assert_eq!(
+            Quantization::from_filename("Qwen3.8-27B-UD-Q6_K.gguf"),
+            Quantization::UdQ6K
+        );
+    }
+
+    /// An importance matrix is no quantization: its name reads as none.
+    #[test]
+    fn test_quantization_imatrix_is_not_one() {
+        assert_eq!(
+            Quantization::from_filename("imatrix_unsloth.gguf"),
+            Quantization::Unknown
+        );
+        assert!("imatrix".parse::<Quantization>().is_err());
+    }
+
     #[test]
     fn test_quantization_boundary_avoids_model_name_collisions() {
         // "Q6King" is not a delimited "Q6_K" token, so it must not match.
@@ -625,6 +655,7 @@ mod tests {
             (Quantization::Q4KS, Quantization::UdQ4KS),
             (Quantization::Q5KM, Quantization::UdQ5KM),
             (Quantization::Q5KS, Quantization::UdQ5KS),
+            (Quantization::Q6KM, Quantization::UdQ6KM),
             (Quantization::Q6K, Quantization::UdQ6K),
         ] {
             assert_eq!(ud.as_str(), format!("UD-{}", base.as_str()));

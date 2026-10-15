@@ -42,7 +42,7 @@ fn resident(model_id: u32, name: &str) -> Resident {
 
 /// Drive a cold queue to a slot that is mid-launch.
 fn loading_primary(q: &Arc<AdmissionQueue>) {
-    let ticket = q.enqueue("qwen-coder");
+    let ticket = q.enqueue(1, "qwen-coder");
     let decision = q.poll(&ticket, NEVER_FITS);
     assert!(
         matches!(
@@ -54,7 +54,6 @@ fn loading_primary(q: &Arc<AdmissionQueue>) {
         ),
         "precondition: a cold queue must launch, got {decision:?}"
     );
-    drop(ticket);
     assert!(q.is_loading(), "precondition: the slot is mid-launch");
 }
 
@@ -86,7 +85,7 @@ async fn a_second_launch_cannot_claim_a_slot_that_is_still_loading() {
     loading_primary(&q);
     q.evict(PRIMARY_SLOT);
 
-    let rival = q.enqueue("nomic-embed");
+    let rival = q.enqueue(2, "nomic-embed");
     assert_eq!(
         q.poll(&rival, NEVER_FITS),
         AdmissionDecision::Wait,

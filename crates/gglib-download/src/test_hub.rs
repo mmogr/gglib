@@ -78,11 +78,11 @@ impl RepoHub {
     }
 
     /// The files of one role, by path.
-    fn of_role(&self, projector: bool) -> Vec<HfFileInfo> {
+    fn of_role(&self, role: GgufFileRole) -> Vec<HfFileInfo> {
         let mut files: Vec<HfFileInfo> = self
             .files
             .iter()
-            .filter(|f| GgufFileRole::classify(Path::new(&f.path)).is_projector() == projector)
+            .filter(|f| GgufFileRole::classify(Path::new(&f.path)) == role)
             .cloned()
             .collect();
         files.sort_by(|a, b| a.path.cmp(&b.path));
@@ -94,7 +94,7 @@ impl RepoHub {
 impl HfClientPort for RepoHub {
     async fn list_quantizations(&self, _model_id: &str) -> HfPortResult<Vec<HfQuantInfo>> {
         let mut quantizations: Vec<HfQuantInfo> = Vec::new();
-        for file in self.of_role(false) {
+        for file in self.of_role(GgufFileRole::Weights) {
             let name = Quantization::from_filename(&file.path).to_string();
             if let Some(known) = quantizations.iter_mut().find(|q| q.name == name) {
                 known.shard_count += 1;
@@ -113,7 +113,7 @@ impl HfClientPort for RepoHub {
     }
 
     async fn list_projectors(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        Ok(self.of_role(true))
+        Ok(self.of_role(GgufFileRole::Projector))
     }
 
     async fn get_quantization_files(
@@ -122,7 +122,7 @@ impl HfClientPort for RepoHub {
         quantization: &str,
     ) -> HfPortResult<Vec<HfFileInfo>> {
         let files: Vec<HfFileInfo> = self
-            .of_role(false)
+            .of_role(GgufFileRole::Weights)
             .into_iter()
             .filter(|f| Quantization::from_filename(&f.path).to_string() == quantization)
             .collect();

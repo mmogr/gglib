@@ -93,6 +93,25 @@ fn grammar_disabled_via_env() -> bool {
     crate::debug_switches::enabled(DISABLE_GRAMMAR_ENV)
 }
 
+/// Developer switch, same values as [`DISABLE_GRAMMAR_ENV`], that bypasses
+/// the dialect parser on the proxy's chat paths.
+///
+/// Those paths read a dialect model's answer with the passthrough parser,
+/// and this stage originates no grammar for them. The two go together. This stage rewrites `tool_choice` to `"none"` and
+/// relies on the parser to turn the markup its grammar forces back into
+/// `tool_calls`, so a grammar without the parser would answer a demanded
+/// call with raw markup. The residue scanner keeps the spec, which is the
+/// point: a release cycle with this set is the evidence the delimited
+/// parser's deletion criterion asks for. The agent path is left on the
+/// parser, since nothing scans its answers.
+pub const DISABLE_DIALECT_PARSER_ENV: &str = "GGLIB_DISABLE_DIALECT_PARSER";
+
+/// Whether [`DISABLE_DIALECT_PARSER_ENV`] is set to a truthy value.
+#[must_use]
+pub fn dialect_parser_disabled() -> bool {
+    crate::debug_switches::enabled(DISABLE_DIALECT_PARSER_ENV)
+}
+
 /// Originate a decode-time grammar for a demanded dialect tool call.
 ///
 /// Engages only when *all* of the following hold, and is a no-op otherwise:

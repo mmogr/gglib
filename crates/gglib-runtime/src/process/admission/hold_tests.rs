@@ -49,7 +49,7 @@ async fn a_held_resident_is_not_swapped_out_until_the_hold_drops() {
     let q = with_resident();
     let hold = q.hold(8001, 1).expect("a resident listens there");
 
-    let rival = q.enqueue("nomic-embed");
+    let rival = q.enqueue(2, "nomic-embed");
     assert_eq!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Wait);
 
     drop(hold);
@@ -67,9 +67,9 @@ async fn a_held_resident_still_serves_its_own_requests() {
     let q = with_resident();
     let _hold = q.hold(8001, 1).unwrap();
     // A rival waiting would make an idle, unheld slot stand aside.
-    let _rival = q.enqueue("nomic-embed");
+    let _rival = q.enqueue(2, "nomic-embed");
 
-    let ticket = q.enqueue("qwen-coder");
+    let ticket = q.enqueue(1, "qwen-coder");
     assert_eq!(
         q.poll(&ticket, NEVER_FITS),
         AdmissionDecision::Serve { slot: PRIMARY_SLOT }
@@ -129,7 +129,7 @@ async fn a_hold_on_a_stopped_model_does_not_hold_the_next_on_its_port() {
         ..resident(2, "nomic-embed")
     };
     drop(q.install(PRIMARY_SLOT, next()));
-    let rival = q.enqueue("llama");
+    let rival = q.enqueue(3, "llama");
     assert_eq!(
         q.poll(&rival, NEVER_FITS),
         AdmissionDecision::Launch {
@@ -138,7 +138,6 @@ async fn a_hold_on_a_stopped_model_does_not_hold_the_next_on_its_port() {
         },
         "the newcomer is swapped out as any idle model is"
     );
-    drop(rival);
 
     drop(q.install(PRIMARY_SLOT, next()));
     assert!(q.evict_unheld(PRIMARY_SLOT).is_ok(), "and recycled");
@@ -153,7 +152,7 @@ async fn a_hold_reporting_progress_keeps_a_waiter_alive() {
     tokio::time::pause();
     let q = with_resident();
     let hold = q.hold(8001, 1).expect("a resident listens there");
-    let rival = q.enqueue("nomic-embed");
+    let rival = q.enqueue(2, "nomic-embed");
     assert_eq!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Wait);
 
     for _ in 0..3 {

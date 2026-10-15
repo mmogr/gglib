@@ -15,9 +15,22 @@ import { appLogger } from '../services/platform';
 import { useConfirmContext } from '../contexts/ConfirmContext';
 import type { VerificationReport, UpdateCheckResult, OverallHealth } from '../services/transport';
 import type { UpgradeCheck } from '../types';
+import type { VerifiedFileKind } from '../types/generated/VerifiedFileKind';
 
 /** Commit SHAs are 40 hex chars; 8 is the conventional readable prefix. */
 const shortSha = (sha: string) => sha.slice(0, 8);
+
+/** A file named by what it is: a shard counted over the weights alone, from 1. */
+const fileLabel = (kind: VerifiedFileKind) => {
+  switch (kind.kind) {
+    case 'shard':
+      return `Shard ${kind.number}/${kind.of}`;
+    case 'projector':
+      return 'Projector';
+    case 'companion':
+      return 'Companion';
+  }
+};
 
 interface VerificationModalProps {
   modelId: number;
@@ -170,10 +183,10 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
       : updateResult?.details?.changed_shards ?? 0;
 
     const confirmed = await confirm({
-      title: mode === 'update' ? 'Download updates?' : 'Re-download corrupt shards?',
+      title: mode === 'update' ? 'Download updates?' : 'Re-download unhealthy files?',
       description: mode === 'update'
         ? `This will download ${shardCount} updated shard(s) for "${modelName}".`
-        : `This will re-download ${shardCount} corrupt shard(s) for "${modelName}".`,
+        : `This will re-download ${shardCount} unhealthy file(s) for "${modelName}".`,
       confirmLabel: mode === 'update' ? 'Download' : 'Re-download',
     });
     if (!confirmed) return;
@@ -312,7 +325,9 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
             </div>
 
             <div className="text-sm">
-              <div className="font-semibold text-primary mb-2">Shards: {report.shards.length}</div>
+              <div className="font-semibold text-primary mb-2">
+                Shards: {report.shards.filter((shard) => shard.kind.kind === 'shard').length}
+              </div>
               <div className="max-h-48 overflow-y-auto space-y-2 border border-base rounded p-3 bg-surface">
                 {report.shards.map((shard, idx) => (
                   <div key={idx} className="flex flex-col gap-1 p-2 bg-surface-elevated rounded border border-subtle">
@@ -321,6 +336,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
                       {shard.health.type === 'corrupt' && <XCircle size={14} className="text-red-500 flex-shrink-0" />}
                       {shard.health.type === 'missing' && <AlertCircle size={14} className="text-orange-500 flex-shrink-0" />}
                       {shard.health.type === 'no_oid' && <AlertCircle size={14} className="text-yellow-500 flex-shrink-0" />}
+                      <span className="flex-shrink-0 text-secondary">{fileLabel(shard.kind)}</span>
                       <span className="truncate text-primary font-medium">{shard.file_path.split('/').pop()}</span>
                     </div>
                     <div className="ml-6 text-xs text-secondary">

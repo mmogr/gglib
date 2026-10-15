@@ -19,8 +19,8 @@
 //! 2. **Oldest-first trim to a low watermark** — only when the payload exceeds
 //!    the budget are messages elided: unprotected `role: "tool"` /
 //!    `role: "assistant"` messages whose text, in either content shape, exceeds
-//!    [`TOOL_CONTENT_THRESHOLD_CHARS`] are replaced with
-//!    [`TRUNCATION_PLACEHOLDER`] **from oldest to newest**, until the estimated
+//!    [`TOOL_CONTENT_THRESHOLD_CHARS`] are replaced with a placeholder for
+//!    their role ([`placeholder_for`]) **from oldest to newest**, until the estimated
 //!    savings reach a quantized target aimed at [`LOW_WATERMARK_PCT`] of the
 //!    budget. The freshest tool outputs — the ones the model most likely still
 //!    needs — are the last to be sacrificed.
@@ -79,7 +79,7 @@ use super::measure::{ContextBudget, measured_len};
 
 /// Maximum number of characters of text allowed in a single unprotected
 /// `role: "tool"` or `role: "assistant"` message, in either content shape,
-/// before it is eligible for replacement with [`TRUNCATION_PLACEHOLDER`].
+/// before it is eligible for replacement with its role's placeholder.
 pub(crate) const TOOL_CONTENT_THRESHOLD_CHARS: usize = 2_000;
 
 /// Character-to-token conversion factor that translates a model's **token**
@@ -110,9 +110,25 @@ pub(crate) const PROTECTED_TAIL_COUNT: usize = 8;
 /// See the module docs for why the savings target is also quantized.
 pub(crate) const LOW_WATERMARK_PCT: usize = 75;
 
-/// Replacement string inserted in place of truncated message content.
-pub(crate) const TRUNCATION_PLACEHOLDER: &str = "[Raw tool output truncated by proxy to maintain context window. \
+/// What replaces a trimmed `role: "tool"` message's text.
+pub(crate) const TOOL_TRUNCATION_PLACEHOLDER: &str = "[Raw tool output truncated by proxy to maintain context window. \
      Rely on your previous observations.]";
+
+/// What replaces a trimmed `role: "assistant"` message's text.
+///
+/// Not the tool line: a model that reads its own earlier reply called raw
+/// tool output is told to rely on observations it never made (#1271).
+pub(crate) const ASSISTANT_TRUNCATION_PLACEHOLDER: &str =
+    "[An earlier assistant reply was shortened to fit the context window.]";
+
+/// The placeholder for `msg`, by its role: an assistant reply's own, and the
+/// tool line for a tool result, the only other role trimmed.
+pub(crate) fn placeholder_for(msg: &Value) -> &'static str {
+    match msg.get("role").and_then(Value::as_str) {
+        Some("assistant") => ASSISTANT_TRUNCATION_PLACEHOLDER,
+        _ => TOOL_TRUNCATION_PLACEHOLDER,
+    }
+}
 
 // =============================================================================
 // Report and error
@@ -131,8 +147,8 @@ pub struct TruncationReport {
     /// Measured payload size after truncation. Equal to
     /// `payload_chars_before` when nothing was changed.
     pub payload_chars_after: usize,
-    /// Number of messages whose `content` was replaced with
-    /// [`TRUNCATION_PLACEHOLDER`].
+    /// Number of messages whose `content` was replaced with its role's
+    /// placeholder ([`placeholder_for`]).
     pub messages_truncated: usize,
 }
 

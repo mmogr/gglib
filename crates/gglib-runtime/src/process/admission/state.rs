@@ -51,9 +51,10 @@ pub const PRIMARY_SLOT: usize = 0;
 /// exist at spawn, so a later request has no way to recover them.
 #[derive(Debug, Clone)]
 pub struct Resident {
-    /// Database ID of the resident model.
+    /// Database ID of the resident model, which a request is matched on.
     pub model_id: u32,
-    /// Model name, matched exactly against the requested name.
+    /// Model name, for the dashboard and logs. Not unique: two quants of one
+    /// repo can share it.
     pub model_name: String,
     /// Context size this instance launched with.
     pub context_size: u64,
@@ -107,8 +108,8 @@ pub enum SlotState {
     /// A launch is in progress for this model. Exactly one requester drives it;
     /// everyone else waits and takes the fast path once it lands.
     Loading {
-        /// The model being launched.
-        model: String,
+        /// Database ID of the model being launched.
+        model_id: u32,
         /// The program that will serve it.
         runtime: RuntimeKind,
     },
@@ -125,12 +126,12 @@ impl SlotState {
         }
     }
 
-    /// The model this slot holds or is loading, if any.
-    fn model(&self) -> Option<&str> {
+    /// The id of the model this slot holds or is loading, if any.
+    const fn model_id(&self) -> Option<u32> {
         match self {
             Self::Empty => None,
-            Self::Loading { model, .. } => Some(model),
-            Self::Resident(r) => Some(&r.model_name),
+            Self::Loading { model_id, .. } => Some(*model_id),
+            Self::Resident(r) => Some(r.model_id),
         }
     }
 
@@ -179,6 +180,8 @@ struct Waiter {
     seen_epoch: u64,
     /// What this waiter last polled with; `None` until its first poll.
     candidate: Option<Candidate>,
+    /// The model's name when this request queued, for the dashboard.
+    model_name: String,
 }
 
 /// A registered place in the queue.
@@ -188,8 +191,9 @@ struct Waiter {
 /// turn open — see [`QueueState::forget`].
 #[derive(Debug)]
 pub struct Ticket {
-    /// The model this request wants.
-    pub(super) model: String,
+    /// Database ID of the model this request wants. The id and not the name:
+    /// two catalogue entries can share a name, and must not share a turn.
+    pub(super) model_id: u32,
     /// Its place in the global arrival order.
     pub(super) seq: u64,
     /// When it was created, for [`ADMISSION_DEADLINE`].
@@ -199,7 +203,7 @@ pub struct Ticket {
 /// Which model currently owns the right to keep the GPU.
 #[derive(Debug, Clone)]
 struct Turn {
-    model: String,
+    model_id: u32,
     started_at: Instant,
 }
 
@@ -241,7 +245,8 @@ pub(super) struct Stats {
 #[derive(Debug)]
 pub(super) struct QueueState {
     slots: [SlotState; SLOT_COUNT],
-    waiting: HashMap<String, VecDeque<Waiter>>,
+    /// Waiters by model id.
+    waiting: HashMap<u32, VecDeque<Waiter>>,
     next_seq: u64,
     turn: Option<Turn>,
     pub(super) stats: Stats,
@@ -277,23 +282,21 @@ impl Default for QueueState {
 }
 
 impl QueueState {
-    /// Register a request and return its place in line.
-    pub(super) fn enqueue(&mut self, model: &str, now: Instant) -> Ticket {
+    /// Register a request for model `model_id` and return its place in line.
+    pub(super) fn enqueue(&mut self, model_id: u32, model_name: &str, now: Instant) -> Ticket {
         let seq = self.next_seq;
         self.next_seq += 1;
         self.stats.total_queued += 1;
-        self.waiting
-            .entry(model.to_owned())
-            .or_default()
-            .push_back(Waiter {
-                seq,
-                enqueued_at: now,
-                stalled_since: now,
-                seen_epoch: self.progress_epoch,
-                candidate: None,
-            });
+        self.waiting.entry(model_id).or_default().push_back(Waiter {
+            seq,
+            enqueued_at: now,
+            stalled_since: now,
+            seen_epoch: self.progress_epoch,
+            candidate: None,
+            model_name: model_name.to_owned(),
+        });
         Ticket {
-            model: model.to_owned(),
+            model_id,
             seq,
             created_at: now,
         }
@@ -302,10 +305,10 @@ impl QueueState {
     /// Remove a waiter that is no longer waiting — granted, expired, or
     /// abandoned because the client hung up.
     pub(super) fn forget(&mut self, ticket: &Ticket) {
-        if let Some(queue) = self.waiting.get_mut(&ticket.model) {
+        if let Some(queue) = self.waiting.get_mut(&ticket.model_id) {
             queue.retain(|w| w.seq != ticket.seq);
             if queue.is_empty() {
-                self.waiting.remove(&ticket.model);
+                self.waiting.remove(&ticket.model_id);
             }
         }
     }
@@ -341,7 +344,7 @@ impl QueueState {
         // The fast path, and the payoff of a second slot: a co-resident model
         // serves without displacing anything, so it answers to the capacity of
         // its own slot and not to the scheduler's fairness rules.
-        if let Some(slot) = self.resident_slot(&ticket.model) {
+        if let Some(slot) = self.resident_slot(ticket.model_id) {
             if !self.may_serve(slot, now, ticket.seq) {
                 // Held back by the slot's capacity, or standing aside for a
                 // rival the turn rules have promised it to. Either way this
@@ -359,7 +362,7 @@ impl QueueState {
 
         // Someone else is already launching what this request wants. Wait for
         // it rather than starting a second copy.
-        if self.loading_slot(&ticket.model).is_some() {
+        if self.loading_slot(ticket.model_id).is_some() {
             return AdmissionDecision::Wait;
         }
 
@@ -376,7 +379,7 @@ impl QueueState {
 
         // Global FIFO: the oldest waiter across all models decides which model
         // is up next, so a busy model cannot keep jumping the line.
-        if self.oldest_waiting_model() != Some(ticket.model.as_str()) {
+        if self.oldest_waiting_model() != Some(ticket.model_id) {
             return AdmissionDecision::Wait;
         }
 
@@ -402,8 +405,8 @@ impl QueueState {
         let may_co_reside = secondary_available && secondary.is_grant();
 
         let chosen = match candidate.runtime {
-            RuntimeKind::Llama => self.choose_slot(&ticket.model, now, may_co_reside),
-            RuntimeKind::StableDiffusion => self.choose_image_slot(&ticket.model, now, candidate),
+            RuntimeKind::Llama => self.choose_slot(ticket.model_id, now, may_co_reside),
+            RuntimeKind::StableDiffusion => self.choose_image_slot(ticket.model_id, now, candidate),
         };
         let Some(slot) = chosen else {
             return AdmissionDecision::Wait;
@@ -416,11 +419,11 @@ impl QueueState {
 
         self.forget(ticket);
         self.slots[slot] = SlotState::Loading {
-            model: ticket.model.clone(),
+            model_id: ticket.model_id,
             runtime: candidate.runtime,
         };
         self.turn = Some(Turn {
-            model: ticket.model.clone(),
+            model_id: ticket.model_id,
             started_at: now,
         });
         // A launch starting is progress for everyone behind it.
@@ -464,7 +467,7 @@ impl QueueState {
     /// The queue-side record behind `ticket`, if it is still waiting.
     fn waiter_mut(&mut self, ticket: &Ticket) -> Option<&mut Waiter> {
         self.waiting
-            .get_mut(&ticket.model)?
+            .get_mut(&ticket.model_id)?
             .iter_mut()
             .find(|w| w.seq == ticket.seq)
     }
@@ -539,14 +542,15 @@ impl QueueState {
         self.swap_is_permitted(rival, now)
     }
 
-    /// Pick the slot `model` should be launched into, if one can be had.
+    /// Pick the slot model `model_id` should be launched into, if one can be
+    /// had.
     ///
     /// Preference order:
     ///
     /// 1. An empty slot — nothing is displaced, so nothing has to be justified.
     /// 2. The secondary slot, when the candidate is small enough to co-reside.
     /// 3. An evictable slot, once the fairness rules permit the swap.
-    fn choose_slot(&self, model: &str, now: Instant, may_co_reside: bool) -> Option<usize> {
+    fn choose_slot(&self, model_id: u32, now: Instant, may_co_reside: bool) -> Option<usize> {
         // 1. A free slot displaces nothing, so it needs no justification.
         if matches!(self.slots[PRIMARY_SLOT], SlotState::Empty) {
             return Some(PRIMARY_SLOT);
@@ -560,7 +564,7 @@ impl QueueState {
         }
 
         // 2. Otherwise something has to go, which the fairness rules govern.
-        if !self.swap_is_permitted(model, now) {
+        if !self.swap_is_permitted(model_id, now) {
             return None;
         }
 
@@ -621,34 +625,34 @@ impl QueueState {
     ///
     /// With no turn recorded, or with the turn belonging to a model that is no
     /// longer resident, there is nothing to protect.
-    fn swap_is_permitted(&self, challenger: &str, now: Instant) -> bool {
+    fn swap_is_permitted(&self, challenger: u32, now: Instant) -> bool {
         let Some(turn) = &self.turn else {
             return true;
         };
-        if turn.model == challenger {
+        if turn.model_id == challenger {
             return true;
         }
         // A turn holder with nothing left queued has finished its batch.
-        if !self.waiting.contains_key(&turn.model) {
+        if !self.waiting.contains_key(&turn.model_id) {
             return true;
         }
         now.duration_since(turn.started_at) >= DRAIN_QUANTUM
     }
 
-    /// Which slot holds `model`, if any.
-    fn resident_slot(&self, model: &str) -> Option<usize> {
+    /// Which slot holds model `model_id`, if any.
+    fn resident_slot(&self, model_id: u32) -> Option<usize> {
         (0..SLOT_COUNT).find(|&slot| {
             self.slots[slot]
                 .resident()
-                .is_some_and(|r| r.model_name == model)
+                .is_some_and(|r| r.model_id == model_id)
         })
     }
 
-    /// Which slot is mid-launch for `model`, if any.
-    fn loading_slot(&self, model: &str) -> Option<usize> {
-        (0..SLOT_COUNT).find(
-            |&slot| matches!(&self.slots[slot], SlotState::Loading { model: m, .. } if m == model),
-        )
+    /// Which slot is mid-launch for model `model_id`, if any.
+    fn loading_slot(&self, model_id: u32) -> Option<usize> {
+        (0..SLOT_COUNT).find(|&slot| {
+            matches!(self.slots[slot], SlotState::Loading { model_id: m, .. } if m == model_id)
+        })
     }
 
     /// The model whose oldest waiter arrived first, among those that actually
@@ -663,12 +667,12 @@ impl QueueState {
     ///
     /// Ordered by arrival sequence rather than elapsed time: the two agree, and
     /// a monotonic counter cannot be perturbed by a clock the tests pause.
-    fn oldest_waiting_model(&self) -> Option<&str> {
+    fn oldest_waiting_model(&self) -> Option<u32> {
         self.waiting
             .iter()
-            .filter(|(model, _)| self.resident_slot(model).is_none())
+            .filter(|&(&model_id, _)| self.resident_slot(model_id).is_none())
             .filter(|(_, queue)| self.may_lead(queue.front().and_then(|w| w.candidate)))
-            .filter_map(|(model, queue)| queue.front().map(|w| (w.seq, model.as_str())))
+            .filter_map(|(&model_id, queue)| queue.front().map(|w| (w.seq, model_id)))
             .min_by_key(|(seq, _)| *seq)
             .map(|(_, model)| model)
     }
@@ -758,8 +762,8 @@ impl QueueState {
             .any(|s| matches!(s, SlotState::Loading { .. }))
     }
 
-    /// Which slot holds or is loading `model`.
-    pub(super) fn slot_of(&self, model: &str) -> Option<usize> {
-        (0..SLOT_COUNT).find(|&slot| self.slots[slot].model() == Some(model))
+    /// Which slot holds or is loading model `model_id`.
+    pub(super) fn slot_of(&self, model_id: u32) -> Option<usize> {
+        (0..SLOT_COUNT).find(|&slot| self.slots[slot].model_id() == Some(model_id))
     }
 }

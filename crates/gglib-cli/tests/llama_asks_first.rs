@@ -186,7 +186,8 @@ fn a_source_install_without_the_build_tools_is_refused_and_says_how_to_get_them(
 }
 
 /// With the tools there, a source install says what it found and what it
-/// will do, and asks. Nobody answers, so nothing is cloned.
+/// will do, and asks. Nobody answers, so nothing is cloned, and the command
+/// says it was cancelled and exits with an error.
 #[cfg(unix)]
 #[test]
 fn a_source_install_with_the_build_tools_asks_before_it_clones_anything() {
@@ -204,7 +205,7 @@ fn a_source_install_with_the_build_tools_asks_before_it_clones_anything() {
         None,
     );
 
-    assert!(out.status.success(), "{}", text(&out));
+    assert_eq!(out.status.code(), Some(1), "{}", text(&out));
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
         format!(
@@ -225,10 +226,15 @@ fn a_source_install_with_the_build_tools_asks_before_it_clones_anything() {
              \x20 3. Compile llama-server (~3-5 minutes)\n\
              \x20 4. Install to {}\n\
              \n\
-             Continue? (Y/n): \n\
-             Installation cancelled.\n",
+             Continue? (Y/n): \n",
             root.path().join(".llama/bin").display()
         ),
+        "{}",
+        text(&out)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr).trim_end(),
+        "Error: Installation cancelled.",
         "{}",
         text(&out)
     );

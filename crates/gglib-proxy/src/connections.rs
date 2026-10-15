@@ -64,8 +64,9 @@
 //! parameters differed would force the audit to abstain (see
 //! [`crate::sampling_audit::compare_poll`]) while nothing was actually
 //! ambiguous. Model-change invalidation falls out for free too:
-//! [`ActiveConnectionsRegistry::in_flight_sampling`] filters by model name, so
-//! a swap needs no explicit clearing step.
+//! [`ActiveConnectionsRegistry::in_flight_sampling`] filters by model id, so
+//! a swap needs no explicit clearing step. The id and not the name: two
+//! catalogue entries can share a name, and each audits only its own requests.
 //!
 //! ## Concurrency design
 //!
@@ -142,6 +143,8 @@ pub struct ActiveConnectionSnapshot {
 /// Internal mutable record. Never exposed directly — always projected
 /// through [`ActiveConnection::snapshot`] into an [`ActiveConnectionSnapshot`].
 struct ActiveConnection {
+    /// Database ID of the serving model, which the sampling audit filters on.
+    model_id: u32,
     model_name: String,
     started_at_secs: u64,
     is_streaming: bool,
@@ -214,12 +217,14 @@ impl ActiveConnectionsRegistry {
     #[must_use]
     pub fn register(
         self: &Arc<Self>,
+        model_id: u32,
         model_name: impl Into<String>,
         is_streaming: bool,
         num_ctx: Option<u64>,
     ) -> ConnectionGuard {
         let id = Uuid::new_v4();
         let connection = ActiveConnection {
+            model_id,
             model_name: model_name.into(),
             started_at_secs: now_secs(),
             is_streaming,
@@ -282,7 +287,7 @@ impl ActiveConnectionsRegistry {
         }
     }
 
-    /// Every sampling intent currently in flight against `model_name`.
+    /// Every sampling intent currently in flight against model `model_id`.
     ///
     /// The candidate set for [`crate::sampling_audit::compare_poll`]: one
     /// entry per request that has been resolved and not yet finished. See the
@@ -296,11 +301,11 @@ impl ActiveConnectionsRegistry {
     /// Filtering would hide exactly the intent an observation might belong to,
     /// turning a correct abstention into a confident misattribution.
     #[must_use]
-    pub fn in_flight_sampling(&self, model_name: &str) -> Vec<SamplingDecision> {
+    pub fn in_flight_sampling(&self, model_id: u32) -> Vec<SamplingDecision> {
         let guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
         guard
             .values()
-            .filter(|c| c.model_name == model_name)
+            .filter(|c| c.model_id == model_id)
             .filter_map(|c| c.sampling.clone())
             .collect()
     }
@@ -453,7 +458,7 @@ mod tests {
     #[test]
     fn register_adds_entry_in_queued_phase() {
         let registry = Arc::new(ActiveConnectionsRegistry::new());
-        let guard = registry.register("test-model", true, Some(8192));
+        let guard = registry.register(1, "test-model", true, Some(8192));
 
         assert_eq!(registry.len(), 1);
         let snapshots = registry.snapshot();
@@ -470,7 +475,7 @@ mod tests {
     #[test]
     fn update_progress_transitions_phase_and_sets_fields() {
         let registry = Arc::new(ActiveConnectionsRegistry::new());
-        let guard = registry.register("test-model", true, None);
+        let guard = registry.register(1, "test-model", true, None);
 
         guard.update_progress(50, 100, 10, 250);
 
@@ -486,7 +491,7 @@ mod tests {
     #[test]
     fn mark_generating_transitions_phase() {
         let registry = Arc::new(ActiveConnectionsRegistry::new());
-        let guard = registry.register("test-model", true, None);
+        let guard = registry.register(1, "test-model", true, None);
 
         guard.update_progress(100, 100, 0, 500);
         guard.mark_generating();
@@ -498,8 +503,8 @@ mod tests {
     #[test]
     fn others_active_ignores_self_and_queued_peers() {
         let registry = Arc::new(ActiveConnectionsRegistry::new());
-        let a = registry.register("m", true, None);
-        let b = registry.register("m", true, None);
+        let a = registry.register(1, "m", true, None);
+        let b = registry.register(1, "m", true, None);
 
         // Both are in Queued phase → neither counts as busy for the other.
         assert!(!a.others_active());
@@ -523,7 +528,7 @@ mod tests {
     #[test]
     fn guard_drop_removes_entry() {
         let registry = Arc::new(ActiveConnectionsRegistry::new());
-        let guard = registry.register("test-model", false, Some(4096));
+        let guard = registry.register(1, "test-model", false, Some(4096));
         assert_eq!(registry.len(), 1);
 
         drop(guard);
@@ -537,7 +542,7 @@ mod tests {
         let registry = Arc::new(ActiveConnectionsRegistry::new());
 
         fn do_work(registry: &Arc<ActiveConnectionsRegistry>, fail: bool) -> Result<(), ()> {
-            let _guard = registry.register("test-model", false, None);
+            let _guard = registry.register(1, "test-model", false, None);
             if fail {
                 return Err(());
             }
@@ -554,7 +559,7 @@ mod tests {
         let registry_for_panic = Arc::clone(&registry);
 
         let result = std::panic::catch_unwind(move || {
-            let _guard = registry_for_panic.register("test-model", true, None);
+            let _guard = registry_for_panic.register(1, "test-model", true, None);
             panic!("simulated handler panic");
         });
 
@@ -586,7 +591,7 @@ mod tests {
         for _ in 0..8 {
             let registry = Arc::clone(&registry);
             handles.push(std::thread::spawn(move || {
-                let guard = registry.register("test-model", true, Some(2048));
+                let guard = registry.register(1, "test-model", true, Some(2048));
                 guard.update_progress(1, 2, 0, 10);
                 // Guard drops at the end of the closure.
             }));
@@ -643,16 +648,16 @@ mod tests {
     #[test]
     fn a_recorded_intent_is_visible_while_the_request_is_in_flight() {
         let registry = Arc::new(ActiveConnectionsRegistry::new());
-        let guard = registry.register("m", true, None);
+        let guard = registry.register(1, "m", true, None);
 
         assert!(
-            registry.in_flight_sampling("m").is_empty(),
+            registry.in_flight_sampling(1).is_empty(),
             "nothing to report before the pipeline has run"
         );
 
         guard.record_sampling(decision(0.7));
 
-        let intents = registry.in_flight_sampling("m");
+        let intents = registry.in_flight_sampling(1);
         assert_eq!(intents.len(), 1);
         assert_eq!(intents[0].resolved.temperature, Some(0.7));
     }
@@ -664,33 +669,35 @@ mod tests {
     #[test]
     fn a_finished_request_leaves_no_intent_behind() {
         let registry = Arc::new(ActiveConnectionsRegistry::new());
-        let guard = registry.register("m", true, None);
+        let guard = registry.register(1, "m", true, None);
         guard.record_sampling(decision(0.7));
 
         drop(guard);
 
-        assert!(registry.in_flight_sampling("m").is_empty());
+        assert!(registry.in_flight_sampling(1).is_empty());
     }
 
     /// Model-change invalidation without an invalidation step: intents are
-    /// asked for by model, so a swap simply stops matching.
+    /// asked for by model id, so a swap simply stops matching. Two models of
+    /// one name (two quants of one repo) are two models here.
     #[test]
     fn intents_are_scoped_to_their_own_model() {
         let registry = Arc::new(ActiveConnectionsRegistry::new());
-        let a = registry.register("model-a", true, None);
-        let b = registry.register("model-b", true, None);
+        let a = registry.register(3, "qwen", true, None);
+        let b = registry.register(7, "qwen", true, None);
         a.record_sampling(decision(0.7));
         b.record_sampling(decision(0.2));
 
-        assert_eq!(registry.in_flight_sampling("model-a").len(), 1);
-        assert_eq!(
-            registry.in_flight_sampling("model-a")[0]
-                .resolved
-                .temperature,
-            Some(0.7)
-        );
-        assert_eq!(registry.in_flight_sampling("model-b").len(), 1);
-        assert!(registry.in_flight_sampling("model-c").is_empty());
+        let temperatures = |id| {
+            registry
+                .in_flight_sampling(id)
+                .iter()
+                .map(|d| d.resolved.temperature)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(temperatures(3), [Some(0.7)]);
+        assert_eq!(temperatures(7), [Some(0.2)]);
+        assert!(registry.in_flight_sampling(9).is_empty());
     }
 
     /// Concurrent turns each contribute their own intent — the input the
@@ -700,15 +707,15 @@ mod tests {
         let registry = Arc::new(ActiveConnectionsRegistry::new());
         let guards: Vec<_> = (0u8..4)
             .map(|i| {
-                let g = registry.register("m", true, None);
+                let g = registry.register(1, "m", true, None);
                 g.record_sampling(decision(0.1 * f32::from(i)));
                 g
             })
             .collect();
 
-        assert_eq!(registry.in_flight_sampling("m").len(), 4);
+        assert_eq!(registry.in_flight_sampling(1).len(), 4);
         drop(guards);
-        assert!(registry.in_flight_sampling("m").is_empty());
+        assert!(registry.in_flight_sampling(1).is_empty());
     }
 
     /// A client that hangs up mid-shaping unregisters before the pipeline
@@ -724,8 +731,8 @@ mod tests {
     #[test]
     fn multiple_connections_snapshot_independently() {
         let registry = Arc::new(ActiveConnectionsRegistry::new());
-        let guard_a = registry.register("model-a", true, Some(4096));
-        let guard_b = registry.register("model-b", false, None);
+        let guard_a = registry.register(1, "model-a", true, Some(4096));
+        let guard_b = registry.register(2, "model-b", false, None);
 
         guard_a.update_progress(10, 20, 5, 100);
 

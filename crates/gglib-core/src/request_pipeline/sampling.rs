@@ -322,9 +322,9 @@ fn strip_unmodelled_sampler_keys(body: &mut Value, trust_client_sampling: bool) 
 /// Remove from the body the client keys gglib must not forward: what the trust
 /// gate binned, the budget alias gglib never emits, and one refused field.
 ///
-/// The single place body keys leave this stage. One more removal happens
-/// after it, on the in-process path only: the completion adapter takes
-/// back out a value its caller named that the fold passed over.
+/// The single place body keys leave this stage before the fold. One more
+/// removal happens after it, in [`resolve_sampling`]: a trio member the
+/// coupling rule passed over.
 ///
 /// # `discarded` — what the trust gate binned
 ///
@@ -443,8 +443,8 @@ const fn recipe_rung_name(origin: Option<DefaultsOrigin>) -> &'static str {
 ///
 /// # What leaves the body
 ///
-/// `erase_unadopted_client_keys` is the one place keys are deleted, and it
-/// deletes three things — only the first of which is about trust:
+/// `erase_unadopted_client_keys` is the one place keys are deleted before the
+/// fold, and it deletes three things — only the first of which is about trust:
 ///
 /// - **What the gate binned** — empty when the client is trusted.
 /// - **`thinking_budget_tokens`** — always. It is upstream's alias for the
@@ -463,6 +463,10 @@ const fn recipe_rung_name(origin: Option<DefaultsOrigin>) -> &'static str {
 /// So a client's `top_k: "5"`, when no layer resolves `top_k`, reaches
 /// llama-server and earns its HTTP 400. The helper carries the full argument
 /// and ADR 0007's finding behind it.
+///
+/// After the fold, one more key can leave: a trio member whose provenance is
+/// `Coupled`, so a trusted client's value beneath an operator's temperature
+/// claim is not sent while the provenance says it was passed over.
 ///
 /// A body that is not a JSON object is left alone.
 pub fn resolve_sampling(
@@ -595,6 +599,16 @@ pub fn resolve_sampling(
     let Some(obj) = body.as_object_mut() else {
         return decision(false);
     };
+
+    // A trio member the coupling rule passed over is not sent. The patch
+    // below only inserts, so a trusted client's value beneath an operator's
+    // temperature claim would otherwise ride the body while the provenance
+    // says `Coupled` (#1434). An untrusted client's left with the gate's drops.
+    for (key, source) in sources.iter() {
+        if source == ParamSource::Coupled {
+            obj.remove(key);
+        }
+    }
 
     for (key, value) in resolved.to_openai_json_patch() {
         obj.insert(key, value);

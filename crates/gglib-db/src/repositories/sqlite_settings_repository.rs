@@ -7,7 +7,8 @@ use serde_json::Value;
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, SqliteConnection, SqlitePool};
 
-use gglib_core::ports::SettingsChange;
+use gglib_core::ports::{SettingsChange, SettingsReset};
+use gglib_core::settings::KEPT_ON_RESET;
 use gglib_core::{CoreError, RepositoryError, Settings, SettingsRepository};
 
 /// `SQLite` implementation of the `SettingsRepository` trait.
@@ -102,6 +103,74 @@ impl SettingsRepository for SqliteSettingsRepository {
         tx.commit().await.map_err(storage)?;
         Ok(after)
     }
+
+    /// [`modify`](Self::modify)'s one transaction, over the rows this build
+    /// can read, so a record a newer build wrote or one edited by hand does
+    /// not stop the reset that would repair it.
+    ///
+    /// A row is readable when its value is JSON text that the field of its
+    /// key accepts on its own, and the reset reads only those. A preference
+    /// whose row is not readable is put back to its default, which for most
+    /// is no row. A kept row ([`KEPT_ON_RESET`]) that is not readable is left
+    /// as it was, since dropping the pairing or the roster locks the owner
+    /// out of his devices.
+    async fn reset_preferences(&self) -> Result<SettingsReset, CoreError> {
+        let mut tx = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(storage)?;
+        let rows = stored_rows(&mut tx).await.map_err(storage)?;
+        let mut record = serde_json::Map::new();
+        let mut unreadable = Vec::new();
+        for row in &rows {
+            // A key that is not text cannot be checked against the kept
+            // rows, so the reset refuses rather than guess.
+            let key: String = row.try_get("key").map_err(storage)?;
+            if let Some(value) = readable_value(row, &key) {
+                record.insert(key, value);
+            } else {
+                unreadable.push(key);
+            }
+        }
+        let before: Settings = serde_json::from_value(Value::Object(record)).map_err(storage)?;
+        let mut after = before.clone();
+        after.reset_preferences();
+        let (was, is) = (rows_of(&before)?, rows_of(&after)?);
+        let (kept_unreadable, dropped): (Vec<String>, Vec<String>) = unreadable
+            .into_iter()
+            .partition(|key| KEPT_ON_RESET.contains(&key.as_str()));
+        let updated_at = now();
+        let unread = |key: &String| kept_unreadable.contains(key) || dropped.contains(key);
+        for (key, value) in is
+            .iter()
+            .filter(|(key, value)| was.get(*key) != Some(*value) && !unread(key))
+        {
+            write_row(&mut tx, key, value.as_ref(), &updated_at).await?;
+        }
+        // A dropped row's key may name no field this build has, and then
+        // its default is no row.
+        for key in &dropped {
+            let default = is.get(key).and_then(Option::as_ref);
+            write_row(&mut tx, key, default, &updated_at).await?;
+        }
+        tx.commit().await.map_err(storage)?;
+        Ok(SettingsReset {
+            dropped,
+            kept_unreadable,
+        })
+    }
+}
+
+/// `row`'s value, when it is JSON text that `key`'s field accepts on its
+/// own; a key no field has accepts any JSON, as a whole record's read
+/// ignores it.
+fn readable_value(row: &SqliteRow, key: &str) -> Option<Value> {
+    let raw: String = row.try_get("value").ok()?;
+    let value: Value = serde_json::from_str(&raw).ok()?;
+    let alone = serde_json::Map::from_iter([(key.to_owned(), value.clone())]);
+    serde_json::from_value::<Settings>(Value::Object(alone)).ok()?;
+    Some(value)
 }
 
 /// Every field of `settings` by its `serde` name: `Some` with the value its
@@ -184,3 +253,7 @@ mod sqlite_settings_repository_tests;
 #[cfg(test)]
 #[path = "sqlite_settings_table_tests.rs"]
 mod sqlite_settings_table_tests;
+
+#[cfg(test)]
+#[path = "sqlite_settings_reset_tests.rs"]
+mod sqlite_settings_reset_tests;

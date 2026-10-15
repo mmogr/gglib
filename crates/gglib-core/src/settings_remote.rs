@@ -248,7 +248,7 @@ impl Settings {
     /// What `gglib config settings reset` applies. The five it keeps are not
     /// preferences: the machine this one joined, the roster of devices it
     /// admits, whether and how it serves remote access, and the proxy's API
-    /// key.
+    /// key. [`KEPT_ON_RESET`] names them as the stored record does.
     pub fn reset_preferences(&mut self) {
         *self = Self {
             proxy_api_key: self.proxy_api_key.take(),
@@ -260,6 +260,19 @@ impl Settings {
         };
     }
 }
+
+/// The five fields [`Settings::reset_preferences`] keeps, by the names their
+/// stored rows have.
+///
+/// A reset never drops one of these rows, even one this build cannot read:
+/// losing them locks the owner out of his devices.
+pub const KEPT_ON_RESET: [&str; 5] = [
+    "proxy_api_key",
+    "remote_pairing",
+    "remote_enabled",
+    "remote_serve",
+    "remote_devices",
+];
 
 /// The remote half of [`validate_settings`](super::validate_settings).
 ///

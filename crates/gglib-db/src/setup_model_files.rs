@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use gglib_core::GgufFileRole;
+use gglib_core::domain::ModelFolder;
 use gglib_core::paths::canonical_model_path_string;
 use sqlx::{Row, SqliteConnection, SqlitePool};
 
@@ -137,14 +138,17 @@ async fn add_and_link(conn: &mut SqliteConnection) -> Result<usize> {
 ///
 /// `listed` is the model's `file_paths_json`, absolute paths; a value that is
 /// not a JSON list of strings adds nothing. `rows` are its `model_files`
-/// names. [`GgufFileRole::projectors_among`] says which of the two lists'
-/// files are projectors, the listed ones first. A file that is not there is
-/// passed over: a link to it would fail a launch that succeeds without one.
+/// names, read in the model's [`ModelFolder`]. [`GgufFileRole::projectors_among`]
+/// says which of the two lists' files are projectors, the listed ones first.
+/// A file that is not there is passed over: a link to it would fail a launch
+/// that succeeds without one.
 fn own_projector(weights: &Path, listed: Option<&str>, rows: &[String]) -> Option<PathBuf> {
     let listed: Vec<String> = listed
         .and_then(|json| serde_json::from_str(json).ok())
         .unwrap_or_default();
-    GgufFileRole::projectors_among(weights, listed.iter().chain(rows)).find(|file| file.is_file())
+    let folder = ModelFolder::new(weights, rows.first().map(String::as_str));
+    GgufFileRole::projectors_among(weights, &folder, listed.iter().chain(rows))
+        .find(|file| file.is_file())
 }
 
 #[cfg(test)]

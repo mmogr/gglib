@@ -5,13 +5,14 @@ use std::sync::{Arc, Barrier};
 use std::time::Duration;
 
 use gglib_bootstrap::{BootstrapConfig, CoreBootstrap};
+use gglib_core::ports::SettingsReset;
 use gglib_core::services::SettingsService;
 use gglib_core::{
     CoreError, Device, NoopEmitter, RemotePairing, RemoteServe, Settings, SettingsRepository,
 };
 
 /// The reset `handle_reset` runs: the settings service's, over `repo`.
-async fn reset(repo: &Arc<dyn SettingsRepository>) -> Result<Settings, CoreError> {
+async fn reset(repo: &Arc<dyn SettingsRepository>) -> Result<SettingsReset, CoreError> {
     SettingsService::new(Arc::clone(repo))
         .reset_preferences()
         .await
@@ -87,7 +88,9 @@ async fn a_reset_keeps_the_remote_record_and_the_proxy_key_in_the_store() {
     let repo = store(&dir).await;
     seed(repo.as_ref()).await;
 
-    reset(&repo).await.expect("the reset is stored");
+    let done = reset(&repo).await.expect("the reset is stored");
+
+    assert_eq!(done, SettingsReset::default(), "every row was readable");
 
     let stored = repo.load().await.expect("load");
     assert_eq!(
@@ -158,4 +161,27 @@ async fn a_device_recorded_while_a_reset_waits_is_kept() {
         .collect();
     assert_eq!(ids, ["dev-0a1b2c3d", "dev-11112222"]);
     assert_eq!(stored.proxy_port, Settings::with_defaults().proxy_port);
+}
+
+/// A reset that read every row says nothing more; one that could not names
+/// each row, the dropped and the kept apart.
+#[test]
+fn the_rows_a_reset_could_not_read_are_named() {
+    assert!(super::unreadable_lines(&SettingsReset::default()).is_empty());
+
+    let lines = super::unreadable_lines(&SettingsReset {
+        dropped: vec!["loop_guard_mode".to_owned(), "proxy_port".to_owned()],
+        kept_unreadable: vec!["remote_devices".to_owned()],
+    });
+
+    assert_eq!(lines.len(), 2);
+    assert_eq!(
+        lines[0],
+        "Dropped, because this build cannot read them: loop_guard_mode, proxy_port."
+    );
+    assert!(
+        lines[1].starts_with("⚠ Kept, although this build cannot read them: remote_devices."),
+        "{}",
+        lines[1]
+    );
 }
