@@ -99,8 +99,10 @@ bitflags! {
 /// llama.cpp's `CMake` derives `LLAMA_BUILD_NUMBER` from `git describe`. A clone
 /// without release tags fetched — the ordinary state of a source build, and of
 /// gglib's own `.llama/llama.cpp` checkout — cannot derive one and falls back
-/// to `1`. The banner then reads `version: 1 (69bf643)`: a sentinel meaning
-/// *unnumbered*, not a build that predates every threshold in this module.
+/// to `1`. The banner then reads `version: 1 (69bf643)`, or, since llama.cpp
+/// took a semantic version, `version: 0.1.0-dev (build 1, commit 10bf611)`: a
+/// sentinel meaning *unnumbered*, not a build that predates every threshold in
+/// this module.
 ///
 /// Taking it literally is worse than not parsing it at all. A source build of
 /// current llama.cpp would be classified as ancient, silently losing every
@@ -219,21 +221,35 @@ impl RuntimeCapabilities {
 
 /// Extract the llama.cpp build number from a `--version` banner.
 ///
-/// Reads two shapes, in order:
+/// Reads three shapes, in order:
 ///
 /// | Shape | Example | Source |
 /// |---|---|---|
-/// | `version: <n>` | `version: 9656 (a1b2c3d)` | llama-server's own banner |
+/// | `(build <n>` | `version: 0.6.0-dev (build 11429, commit d81235049)` | llama-server's banner since llama.cpp took a semantic version |
+/// | `version: <n>` | `version: 9656 (a1b2c3d)` | llama-server's banner before that |
 /// | `b<n>` token | `llama-b10327-bin-linux` | release tag in a path or banner |
 ///
-/// Returns `None` rather than a guess when neither appears — see the module
+/// A semantic version after `version:` is not a build number, or `0.6.0-dev`
+/// would read as build 0.
+///
+/// Returns `None` rather than a guess when none appears — see the module
 /// docs on why an unparsed runtime must not look like a featureless one.
 #[must_use]
 pub(crate) fn parse_build_number(output: &str) -> Option<u32> {
+    if let Some(build) = output.split("(build ").skip(1).find_map(leading_number) {
+        return Some(build);
+    }
+
     if let Some(build) = output
         .split("version:")
         .skip(1)
-        .find_map(|rest| leading_number(rest.trim_start()))
+        .map(str::trim_start)
+        .filter(|rest| {
+            !rest
+                .trim_start_matches(|c: char| c.is_ascii_digit())
+                .starts_with('.')
+        })
+        .find_map(leading_number)
     {
         return Some(build);
     }
@@ -250,14 +266,19 @@ pub(crate) fn parse_build_number(output: &str) -> Option<u32> {
 
 /// Extract the commit sha from a `--version` banner.
 ///
-/// llama-server renders it parenthesised after the build number —
-/// `version: 1 (69bf643)`. Read as the first parenthesised run of hex digits
-/// so a banner carrying other parenthesised text does not yield a false sha.
+/// llama-server renders it parenthesised after the version, bare
+/// (`version: 1 (69bf643)`) or after `commit` (`version: 0.6.0-dev (build
+/// 11429, commit d81235049)`). Read from the first parenthesised run, which
+/// must be hex, so a banner carrying other parenthesised text does not yield
+/// a false sha.
 #[must_use]
 pub(crate) fn parse_commit(output: &str) -> Option<String> {
     let (_, after) = output.split_once('(')?;
     let (inner, _) = after.split_once(')')?;
-    let sha = inner.trim();
+    let sha = inner
+        .split_once("commit ")
+        .map_or(inner, |(_, sha)| sha)
+        .trim();
 
     (sha.len() >= 7 && sha.chars().all(|c| c.is_ascii_hexdigit())).then(|| sha.to_owned())
 }
@@ -350,6 +371,54 @@ mod tests {
         assert_eq!(caps.build, Some(10327));
         assert!(caps.has(RuntimeFlags::PEG_NATIVE_TOOL_CALLS));
         assert_eq!(caps.commit.as_deref(), Some("69bf643"));
+    }
+
+    /// The banner llama.cpp prints since it took a semantic version, read from
+    /// the b11429 release's `llama-server --version`.
+    #[test]
+    fn a_dev_version_banner_is_read() {
+        let caps = RuntimeCapabilities::from_version_output(
+            "version: 0.6.0-dev (build 11429, commit d81235049)\n\
+             built with AppleClang 21.0.0.21000101 for Darwin arm64",
+        );
+
+        assert_eq!(caps.build, Some(11429));
+        assert!(caps.has(RuntimeFlags::PEG_NATIVE_TOOL_CALLS));
+        assert_eq!(caps.commit.as_deref(), Some("d81235049"));
+    }
+
+    #[test]
+    fn a_release_version_banner_is_read() {
+        let caps = RuntimeCapabilities::from_version_output(
+            "version: 0.6.0 (build 11429, commit d81235049)",
+        );
+
+        assert_eq!(caps.build, Some(11429));
+        assert_eq!(caps.commit.as_deref(), Some("d81235049"));
+    }
+
+    /// The source build ADR 0007 §5 recorded: still unnumbered, but its sha
+    /// is kept now.
+    #[test]
+    fn an_unnumbered_dev_version_build_keeps_its_commit() {
+        let caps = RuntimeCapabilities::from_version_output(
+            "version: 0.1.0-dev (build 1, commit 10bf611)",
+        );
+
+        assert!(!caps.is_identified());
+        assert_eq!(caps.commit.as_deref(), Some("10bf611"));
+    }
+
+    #[test]
+    fn a_semantic_version_is_not_a_build_number() {
+        assert_eq!(parse_build_number("version: 0.6.0-dev"), None);
+    }
+
+    #[test]
+    fn the_build_field_takes_precedence_over_a_tag_token() {
+        let output = "version: 0.6.0-dev (build 11429, commit d81235049)\n\
+                      built from /opt/llama-b1234-src";
+        assert_eq!(parse_build_number(output), Some(11429));
     }
 
     #[test]
