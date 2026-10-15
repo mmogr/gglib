@@ -38,6 +38,6 @@ if [ -t 0 ]; then
 else
     # No terminal to answer the command's "Continue?" (make run from a script
     # or CI). This script was run to install, so answer yes: end of input
-    # alone would cancel, and the make target would still report success.
+    # alone would cancel, and the make target would fail.
     printf 'y\n' | "$GGLIB_BIN" config llama install
 fi
