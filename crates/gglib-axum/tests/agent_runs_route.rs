@@ -133,3 +133,25 @@ async fn kind_chat_starts_a_chat_run() {
     let info: RunInfo = serde_json::from_value(info).unwrap();
     assert_eq!(info.kind, RunKind::Chat);
 }
+
+/// `draw` and `image_model` belong in an agent request's body. In the query
+/// they are refused, in the proxy's words, rather than dropped: the turn
+/// would run and draw nothing.
+#[tokio::test]
+async fn draw_in_an_agent_runs_query_is_refused_as_the_proxy_refuses_it() {
+    let (_, app) = test_state_and_app(CorsConfig::AllowAll).await;
+    for query in ["draw=true", "image_model=3"] {
+        let uri = format!("{}&{query}", agent("a1"));
+
+        let (status, error) = call_json(&app, Method::PUT, &uri, Some(chat_request())).await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{query}: {error}");
+        assert_eq!(error["type"], "invalid_request", "{query}");
+        assert_eq!(
+            error["error"],
+            gglib_proxy::runs::AGENT_DRAW_IN_QUERY,
+            "{query}"
+        );
+    }
+    no_runs(&app).await;
+}
