@@ -92,6 +92,20 @@ const LLAMA_REQUIRED: &[&str] = &["llama-server"];
 /// The name the release's CUDA runtime package holds.
 const CUDART_PATTERN: &str = "cudart-llama-bin-win-cuda";
 
+/// llama.cpp's archive for the platform whose asset pattern is
+/// `asset_pattern`: a name starting `llama-` and ending in the pattern.
+///
+/// The prefix is what keeps the Windows CUDA runtime package out:
+/// `cudart-llama-bin-win-cuda-12.4-x64.zip` ends in the CUDA archive's
+/// pattern too, and the release lists it first.
+fn llama_matcher(asset_pattern: &str) -> AssetMatcher<'_> {
+    AssetMatcher {
+        starts_with: Some("llama-"),
+        contains: &[],
+        ends_with: Some(asset_pattern),
+    }
+}
+
 /// Result of checking pre-built binary availability
 #[derive(Debug)]
 pub enum PrebuiltAvailability {
@@ -245,10 +259,7 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
     let cuda_runtime =
         (cfg!(target_os = "windows") && asset_pattern.contains("cuda")).then_some(CUDART_PATTERN);
     let target = PrebuiltTarget {
-        matcher: AssetMatcher {
-            contains: &[asset_pattern.as_str()],
-            ends_with: None,
-        },
+        matcher: llama_matcher(&asset_pattern),
         description: &description,
         required: LLAMA_REQUIRED,
         bin_dir,
@@ -347,10 +358,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("a temp dir");
         let server = tmp.path().join("llama-server");
         let target = PrebuiltTarget {
-            matcher: AssetMatcher {
-                contains: &["bin-macos-arm64.tar.gz"],
-                ends_with: None,
-            },
+            matcher: llama_matcher("bin-macos-arm64.tar.gz"),
             description: "macOS ARM64 (Metal)",
             required: LLAMA_REQUIRED,
             bin_dir: tmp.path(),
@@ -377,6 +385,81 @@ mod tests {
              or GGLIB_LLAMA_RELEASE=<tag> to name a different one."
         );
         assert_eq!(fake.asked(), ["/repos/ggml-org/llama.cpp/releases/tags/b1"]);
+    }
+
+    /// Every asset of llama.cpp's b11429 release, in the order GitHub lists
+    /// them.
+    const B11429_ASSETS: &[&str] = &[
+        "cudart-llama-b11429-bin-ubuntu-cuda-12.8-x64.tar.gz",
+        "cudart-llama-b11429-bin-ubuntu-cuda-13.4-arm64.tar.gz",
+        "cudart-llama-b11429-bin-ubuntu-cuda-13.4-x64.tar.gz",
+        "cudart-llama-bin-win-cuda-12.4-x64.zip",
+        "cudart-llama-bin-win-cuda-13.4-arm64.zip",
+        "cudart-llama-bin-win-cuda-13.4-x64.zip",
+        "llama-b11429-bin-android-arm64-snapdragon.tar.gz",
+        "llama-b11429-bin-android-arm64.tar.gz",
+        "llama-b11429-bin-linux-arm64-snapdragon.tar.gz",
+        "llama-b11429-bin-macos-arm64.tar.gz",
+        "llama-b11429-bin-macos-x64.tar.gz",
+        "llama-b11429-bin-ubuntu-arm64.tar.gz",
+        "llama-b11429-bin-ubuntu-cuda-12.8-x64.tar.gz",
+        "llama-b11429-bin-ubuntu-cuda-13.4-arm64.tar.gz",
+        "llama-b11429-bin-ubuntu-cuda-13.4-x64.tar.gz",
+        "llama-b11429-bin-ubuntu-openvino-2026.4.1-x64.tar.gz",
+        "llama-b11429-bin-ubuntu-rocm-10.0-x64.tar.gz",
+        "llama-b11429-bin-ubuntu-s390x.tar.gz",
+        "llama-b11429-bin-ubuntu-sycl-fp16-x64.tar.gz",
+        "llama-b11429-bin-ubuntu-sycl-fp32-x64.tar.gz",
+        "llama-b11429-bin-ubuntu-vulkan-arm64.tar.gz",
+        "llama-b11429-bin-ubuntu-vulkan-x64.tar.gz",
+        "llama-b11429-bin-ubuntu-x64.tar.gz",
+        "llama-b11429-bin-win-cpu-arm64.zip",
+        "llama-b11429-bin-win-cpu-x64.zip",
+        "llama-b11429-bin-win-cuda-12.4-x64.zip",
+        "llama-b11429-bin-win-cuda-13.4-arm64.zip",
+        "llama-b11429-bin-win-cuda-13.4-x64.zip",
+        "llama-b11429-bin-win-opencl-adreno-arm64.zip",
+        "llama-b11429-bin-win-openvino-2026.4.1-x64.zip",
+        "llama-b11429-bin-win-rocm-10.0-x64.zip",
+        "llama-b11429-bin-win-sycl-x64.zip",
+        "llama-b11429-bin-win-vulkan-arm64.zip",
+        "llama-b11429-bin-win-vulkan-x64.zip",
+        "llama-b11429-ui.tar.gz",
+        "llama-b11429-xcframework.zip",
+    ];
+
+    /// Each platform's pattern matches its archive and nothing else in a
+    /// real release, the Windows CUDA one included: the CUDA runtime package
+    /// listed before it ends in the same pattern.
+    #[test]
+    fn each_platform_takes_its_own_archive_from_a_real_release() {
+        for (pattern, archive) in [
+            (
+                "bin-macos-arm64.tar.gz",
+                "llama-b11429-bin-macos-arm64.tar.gz",
+            ),
+            ("bin-macos-x64.tar.gz", "llama-b11429-bin-macos-x64.tar.gz"),
+            (
+                "bin-ubuntu-x64.tar.gz",
+                "llama-b11429-bin-ubuntu-x64.tar.gz",
+            ),
+            (
+                "bin-win-cuda-12.4-x64.zip",
+                "llama-b11429-bin-win-cuda-12.4-x64.zip",
+            ),
+            (
+                "bin-win-vulkan-x64.zip",
+                "llama-b11429-bin-win-vulkan-x64.zip",
+            ),
+        ] {
+            let matcher = llama_matcher(pattern);
+            let matching: Vec<&str> = B11429_ASSETS
+                .iter()
+                .copied()
+                .filter(|name| matcher.matches(name))
+                .collect();
+            assert_eq!(matching, [archive], "pattern {pattern}");
+        }
     }
 
     /// The pin has to be a real tag shape; a stray `v` prefix or a bare
