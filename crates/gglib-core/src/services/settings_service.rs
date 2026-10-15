@@ -1,7 +1,9 @@
 //! Settings service - orchestrates settings operations.
 
 use crate::domain::builtin_templates;
-use crate::ports::{CoreError, ModelRepository, RepositoryError, SettingsRepository};
+use crate::ports::{
+    CoreError, ModelRepository, RepositoryError, SettingsRepository, SettingsReset,
+};
 use crate::settings::{Settings, SettingsError, SettingsUpdate, validate_settings};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -81,14 +83,12 @@ impl SettingsService {
     /// [`Settings::reset_preferences`] keeps.
     ///
     /// One step in the store, as [`Self::update`] is: what a reset keeps is
-    /// what is stored when it writes, not what an earlier read saw.
-    pub async fn reset_preferences(&self) -> Result<Settings, CoreError> {
-        self.repo
-            .modify(&|settings: &mut Settings| {
-                settings.reset_preferences();
-                Ok(())
-            })
-            .await
+    /// what is stored when it writes, not what an earlier read saw. A record
+    /// this build cannot read is recovered rather than refused, as
+    /// [`SettingsRepository::reset_preferences`] says, and the rows it could
+    /// not read come back named.
+    pub async fn reset_preferences(&self) -> Result<SettingsReset, CoreError> {
+        self.repo.reset_preferences().await
     }
 
     /// Add the starter profiles ([`builtin_templates`]) to the stored list,
