@@ -39,7 +39,7 @@ pub fn check_llama_installed() -> bool {
 /// bump as its own commit with the observed differences in the message. What
 /// the bump would meet is read weekly by `.github/workflows/llama-upstream.yml`
 /// into one issue; CONTRIBUTING's "The llama.cpp pin" has the routine.
-pub(super) const PINNED_LLAMA_RELEASE: &str = "b10327";
+pub(super) const PINNED_LLAMA_RELEASE: &str = "b11429";
 
 /// Environment override for [`PINNED_LLAMA_RELEASE`].
 ///

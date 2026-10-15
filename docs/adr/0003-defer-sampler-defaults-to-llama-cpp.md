@@ -10,6 +10,7 @@
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
+- **Log:** [log-0003](log-0003.md)
 
 ## Context
 
