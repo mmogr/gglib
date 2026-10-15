@@ -480,10 +480,7 @@ fn an_intent_before_any_model_is_known_compares_nothing() {
 #[test]
 fn a_resolved_value_displacing_a_published_one_is_reported_as_an_override() {
     let store = SamplingAuditStore::new();
-    store.set_model_sampling(
-        "qwen",
-        Some(publishing(&[("general.sampling.temp", "0.33")])),
-    );
+    store.set_model_sampling(1, Some(publishing(&[("general.sampling.temp", "0.33")])));
 
     store.record_intent(
         &decision(
@@ -515,10 +512,7 @@ fn a_resolved_value_displacing_a_published_one_is_reported_as_an_override() {
 #[test]
 fn a_value_gglib_never_names_defers_to_the_model() {
     let store = SamplingAuditStore::new();
-    store.set_model_sampling(
-        "qwen",
-        Some(publishing(&[("general.sampling.top_p", "0.71")])),
-    );
+    store.set_model_sampling(1, Some(publishing(&[("general.sampling.top_p", "0.71")])));
 
     store.record_intent(
         &decision(InferenceConfig::default(), all_from(ParamSource::Unset)),
@@ -537,10 +531,7 @@ fn a_value_gglib_never_names_defers_to_the_model() {
 #[test]
 fn a_model_swap_resets_the_comparison() {
     let store = SamplingAuditStore::new();
-    store.set_model_sampling(
-        "qwen",
-        Some(publishing(&[("general.sampling.temp", "0.33")])),
-    );
+    store.set_model_sampling(1, Some(publishing(&[("general.sampling.temp", "0.33")])));
     store.record_intent(
         &decision(
             InferenceConfig {
@@ -553,7 +544,7 @@ fn a_model_swap_resets_the_comparison() {
     );
     assert_eq!(store.snapshot().published.intents, 1, "guards the premise");
 
-    store.set_model_sampling("llama", None);
+    store.set_model_sampling(2, None);
 
     let published = store.snapshot().published;
     assert_eq!(published.intents, 0);
@@ -566,14 +557,14 @@ fn a_model_swap_resets_the_comparison() {
 #[test]
 fn a_swap_between_two_silent_models_still_resets() {
     let store = SamplingAuditStore::new();
-    store.set_model_sampling("qwen", Some(publishing(&[])));
+    store.set_model_sampling(1, Some(publishing(&[])));
     store.record_intent(
         &decision(InferenceConfig::default(), all_from(ParamSource::Unset)),
         None,
     );
     assert_eq!(store.snapshot().published.intents, 1, "guards the premise");
 
-    store.set_model_sampling("llama", Some(publishing(&[])));
+    store.set_model_sampling(2, Some(publishing(&[])));
 
     assert_eq!(store.snapshot().published.intents, 0);
 }
@@ -584,13 +575,13 @@ fn a_swap_between_two_silent_models_still_resets() {
 fn re_setting_the_same_model_is_idempotent() {
     let store = SamplingAuditStore::new();
     let model = publishing(&[("general.sampling.temp", "0.33")]);
-    store.set_model_sampling("qwen", Some(model));
+    store.set_model_sampling(1, Some(model));
     store.record_intent(
         &decision(InferenceConfig::default(), all_from(ParamSource::Unset)),
         None,
     );
 
-    store.set_model_sampling("qwen", Some(model));
+    store.set_model_sampling(1, Some(model));
 
     assert_eq!(store.snapshot().published.intents, 1);
 }

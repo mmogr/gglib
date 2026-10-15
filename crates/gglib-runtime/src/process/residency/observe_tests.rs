@@ -63,7 +63,7 @@ async fn a_waiting_admission_is_told_its_place_once_per_change() {
         },
     )));
     // Another requester won the launch: the slot is loading for it.
-    let first = set.queue().enqueue("sdxl");
+    let first = set.queue().enqueue(999_401, "sdxl");
     let fits = SecondarySlotDecision::Grant {
         footprint_bytes: 1,
         headroom_bytes: 1 << 40,
@@ -72,7 +72,6 @@ async fn a_waiting_admission_is_told_its_place_once_per_change() {
         set.queue().poll(&first, Candidate::image(fits)),
         AdmissionDecision::Launch { .. }
     ));
-    drop(first);
 
     let places = Arc::new(Places::default());
     let observer = Arc::clone(&places) as Arc<dyn AdmitObserver>;

@@ -577,10 +577,10 @@ pub struct SamplingAuditStore {
     /// `ModelContext`, not this one, and the dashboard for this live reading
     /// lands with the readback work. The gate's *output* is on the snapshot.
     template_caps: Mutex<gglib_core::domain::TemplateCapsState>,
-    /// The running model's name and what its GGUF publishes, set once per
+    /// The running model's id and what its GGUF publishes, set once per
     /// launch by the poller. `None` until the first poll names a model; the
     /// inner `Option` is `None` for a model with no metadata read.
-    model_sampling: Mutex<Option<(String, Option<ModelSamplingDefaults>)>>,
+    model_sampling: Mutex<Option<(u32, Option<ModelSamplingDefaults>)>>,
     /// The published-vs-sent comparison, refreshed from each resolved intent.
     published: Mutex<PublishedOverrides>,
     /// Requests whose resolved `reasoning_effort` stage 5b threw away.
@@ -761,20 +761,22 @@ impl SamplingAuditStore {
     /// count must not carry across either — it counts requests resolved
     /// *against this model*.
     ///
-    /// Keyed on the model **name**, not on the defaults themselves. Two models
-    /// that publish nothing compare equal, so a value-keyed reset would carry
-    /// one model's intent count into the next and report a comparison that had
-    /// not happened. The poller retries this until `/props` reads, so it must
-    /// also be idempotent within one launch — which name-keying gives.
-    pub fn set_model_sampling(&self, model_name: &str, model: Option<ModelSamplingDefaults>) {
+    /// Keyed on the model's **id**, not on the defaults themselves nor on its
+    /// name. Two models that publish nothing compare equal, so a value-keyed
+    /// reset would carry one model's intent count into the next and report a
+    /// comparison that had not happened; two quants of one repo share a name,
+    /// so a name-keyed one would do the same across them. The poller retries
+    /// this until `/props` reads, so it must also be idempotent within one
+    /// launch — which id-keying gives.
+    pub fn set_model_sampling(&self, model_id: u32, model: Option<ModelSamplingDefaults>) {
         let mut current = self
             .model_sampling
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        if current.as_ref().is_some_and(|(name, _)| name == model_name) {
+        if current.as_ref().is_some_and(|(id, _)| *id == model_id) {
             return;
         }
-        *current = Some((model_name.to_owned(), model));
+        *current = Some((model_id, model));
         *self.published.lock().unwrap_or_else(|e| e.into_inner()) = PublishedOverrides::default();
     }
 

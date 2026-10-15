@@ -84,7 +84,7 @@ fn usage() -> LlmStreamEvent {
 /// finished and reported its usage.
 async fn wire(told: Told) -> String {
     let registry = Arc::new(ActiveConnectionsRegistry::new());
-    let connection = registry.register("m", true, None);
+    let connection = registry.register(1, "m", true, None);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let events = [progress(), text(), done(), usage()].map(Ok);
     drain_events(

@@ -78,7 +78,7 @@ pub(super) fn core() -> Arc<RwLock<GuiProcessCore>> {
 
 /// What `wait_for_slot` does before `serve`: a request for `qwen` granted.
 pub(super) fn granted(set: &ResidentSet) {
-    let ticket = set.queue().enqueue("qwen");
+    let ticket = set.queue().enqueue(1, "qwen");
     let decision = set.queue().poll(&ticket, NEVER_FITS);
     assert_eq!(decision, AdmissionDecision::Serve { slot: PRIMARY_SLOT });
 }
@@ -95,7 +95,7 @@ async fn a_request_at_another_context_is_refused_while_the_model_is_held() {
 
     granted(&set);
     let refused = set
-        .serve(PRIMARY_SLOT, (8192, None), &core())
+        .serve(PRIMARY_SLOT, (1, 8192, None), &core())
         .await
         .unwrap_err();
 
@@ -107,7 +107,7 @@ async fn a_request_at_another_context_is_refused_while_the_model_is_held() {
     drop(hold);
     granted(&set);
     let recycled = set
-        .serve(PRIMARY_SLOT, (8192, None), &core())
+        .serve(PRIMARY_SLOT, (1, 8192, None), &core())
         .await
         .unwrap();
     assert!(recycled.is_none());
@@ -125,7 +125,7 @@ async fn a_failed_health_check_does_not_recycle_a_held_model() {
 
     granted(&set);
     let refused = set
-        .serve(PRIMARY_SLOT, (4096, None), &core())
+        .serve(PRIMARY_SLOT, (1, 4096, None), &core())
         .await
         .unwrap_err();
 

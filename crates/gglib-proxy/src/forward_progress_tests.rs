@@ -67,7 +67,7 @@ async fn progress_turn(client_wants_progress: bool) -> ProgressTurn {
         .expect("mock upstream reachable");
 
     let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
-    let connection = registry.register("m", true, None);
+    let connection = registry.register(1, "m", true, None);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
 
     stream_response_to_channel(
