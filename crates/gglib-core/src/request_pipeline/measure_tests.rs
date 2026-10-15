@@ -8,7 +8,7 @@ use super::super::image_fixtures::png_url_of;
 use super::super::images::MAX_IMAGE_TOKENS;
 use super::super::tests_support::chars;
 use super::super::truncation::{
-    PROTECTED_TAIL_COUNT, TRUNCATION_PLACEHOLDER, TruncationError, truncate_history,
+    PROTECTED_TAIL_COUNT, TOOL_TRUNCATION_PLACEHOLDER, TruncationError, truncate_history,
 };
 use super::*;
 
@@ -158,7 +158,10 @@ fn images_still_past_the_budget_after_trimming_are_refused() {
 
     let err = truncate_history(&mut request, CONTEXT_32K).unwrap_err();
 
-    assert_eq!(request["messages"][1]["content"], TRUNCATION_PLACEHOLDER);
+    assert_eq!(
+        request["messages"][1]["content"],
+        TOOL_TRUNCATION_PLACEHOLDER
+    );
     assert!(wire_len(&request) < CONTEXT_32K.chars, "the text fits");
     assert_eq!(
         err,
@@ -195,7 +198,7 @@ fn an_image_in_a_message_that_is_kept_survives_trimming_byte_for_byte() {
     assert_eq!(report.messages_truncated, 1);
     assert_eq!(
         request["messages"][1]["content"][0]["text"],
-        TRUNCATION_PLACEHOLDER
+        TOOL_TRUNCATION_PLACEHOLDER
     );
     assert_eq!(image_bytes(&request, 1, 1), image_bytes(&before, 1, 1));
     assert_eq!(request["messages"][0], before["messages"][0]);

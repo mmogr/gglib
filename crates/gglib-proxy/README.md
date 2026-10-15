@@ -771,9 +771,13 @@ model's nominal `context_length` instead.
 2. **Oldest-first trim** — only when over budget, unprotected `role: "tool"` /
    `role: "assistant"` messages whose text exceeds 2,000 characters, in
    either content shape, are replaced **from oldest to newest**, stopping once the
-   savings reach the quantized watermark target, with:
+   savings reach the quantized watermark target, with a line for its role:
 
    > `[Raw tool output truncated by proxy to maintain context window. Rely on your previous observations.]`
+
+   for a tool result, and for an assistant reply:
+
+   > `[An earlier assistant reply was shortened to fit the context window.]`
 
 3. `role: "system"` messages and the last 8 messages are never modified.
 4. Array-form content (multi-part messages) is elided part by part: each text

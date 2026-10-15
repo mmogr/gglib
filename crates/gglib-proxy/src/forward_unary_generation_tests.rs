@@ -96,7 +96,7 @@ async fn a_unary_turn_the_upstream_refuses_records_nothing() {
     let response = forward_unary(
         Client::new().post(format!("http://127.0.0.1:{port}/v1/chat/completions")),
         forwarded_body(json!({})),
-        None,
+        &TurnDialect::parsed(None),
         &CacheMetricsStore::new(),
         (&metrics, seq),
         RepairTurn::ON,

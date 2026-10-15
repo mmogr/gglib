@@ -17,7 +17,8 @@ use sha2::{Digest, Sha256};
 use tokio::sync::{RwLock, mpsc};
 use tokio::task::JoinHandle;
 
-use crate::domain::ModelFile;
+use crate::domain::{ModelFile, ModelFolder};
+use crate::download::GgufFileRole;
 use crate::ports::{
     DownloadManagerPort, HfClientPort, ModelFilesRepositoryPort, ModelRepository, RepositoryError,
 };
@@ -68,15 +69,76 @@ pub enum ShardHealth {
     NoOid,
 }
 
+/// What one of a model's files is, as verification names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub enum VerifiedFileKind {
+    /// Weights shard `number` of `of`, counted from 1 over the weights alone.
+    Shard {
+        /// This shard's number, from 1.
+        number: usize,
+        /// How many weights files the model has.
+        of: usize,
+    },
+    /// The projector downloaded with the weights.
+    Projector,
+    /// An image model's companion, recorded by its absolute path.
+    Companion,
+}
+
+impl VerifiedFileKind {
+    /// The kind of each of `files`, a model's rows in file order: a row named
+    /// as a projector is the projector, a row holding an absolute path a
+    /// companion, and every other row a weights shard.
+    #[must_use]
+    pub fn of_rows(files: &[ModelFile]) -> Vec<Self> {
+        let kind_of = |file: &ModelFile| {
+            let path = Path::new(&file.file_path);
+            if path.is_absolute() {
+                Some(Self::Companion)
+            } else if GgufFileRole::classify(path).is_projector() {
+                Some(Self::Projector)
+            } else {
+                None
+            }
+        };
+        let of = files.iter().filter(|file| kind_of(file).is_none()).count();
+        let mut number = 0;
+        files
+            .iter()
+            .map(|file| {
+                kind_of(file).unwrap_or_else(|| {
+                    number += 1;
+                    Self::Shard { number, of }
+                })
+            })
+            .collect()
+    }
+
+    /// How a line of verify's output names the file: `Shard 1/2`,
+    /// `Projector`, `Companion`.
+    #[must_use]
+    pub fn label(self) -> String {
+        match self {
+            Self::Shard { number, of } => format!("Shard {number}/{of}"),
+            Self::Projector => "Projector".to_owned(),
+            Self::Companion => "Companion".to_owned(),
+        }
+    }
+}
+
 /// Progress update during model verification.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerificationProgress {
     /// Model ID being verified.
     pub model_id: i64,
-    /// Current shard index being verified.
+    /// The index of the file being verified among the model's files.
     pub shard_index: usize,
-    /// Total number of shards.
+    /// How many files the model has.
     pub total_shards: usize,
+    /// What the file being verified is.
+    pub kind: VerifiedFileKind,
     /// Progress status for this shard.
     pub shard_progress: ShardProgress,
 }
@@ -109,12 +171,14 @@ pub enum OverallHealth {
     Unverifiable,
 }
 
-/// Health report for a single shard.
+/// Health report for a single file of a model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ShardHealthReport {
-    /// Shard index.
+    /// The file's index among the model's files, which a repair names it by.
     pub index: usize,
+    /// What the file is.
+    pub kind: VerifiedFileKind,
     /// File path.
     pub file_path: String,
     /// Health status.
@@ -156,6 +220,30 @@ pub struct ShardUpdate {
     pub old_oid: String,
     /// New OID (remote).
     pub new_oid: String,
+}
+
+/// Where a file being verified stands among its model's files.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct FilePlace {
+    /// Its index among the model's files.
+    pub(super) index: usize,
+    /// How many files the model has.
+    pub(super) total: usize,
+    /// What it is.
+    pub(super) kind: VerifiedFileKind,
+}
+
+impl FilePlace {
+    /// The progress of model `model_id`'s verification at this file.
+    const fn progress(self, model_id: i64, shard_progress: ShardProgress) -> VerificationProgress {
+        VerificationProgress {
+            model_id,
+            shard_index: self.index,
+            total_shards: self.total,
+            kind: self.kind,
+            shard_progress,
+        }
+    }
 }
 
 /// Type of operation being performed on a model.
@@ -314,12 +402,9 @@ impl ModelVerificationService {
             return Err("No model files found for verification".to_string());
         }
 
-        // Get base directory from model's file path
-        let base_dir = model
-            .file_path
-            .parent()
-            .ok_or_else(|| "Failed to get model directory".to_string())?
-            .to_path_buf();
+        // The folder the download wrote the files in, where each row is read.
+        let folder = ModelFolder::of(&model.file_path, &model_files);
+        let kinds = VerifiedFileKind::of_rows(&model_files);
 
         let total_shards = model_files.len();
 
@@ -338,22 +423,19 @@ impl ModelVerificationService {
             let mut has_unhealthy = false;
             let mut has_healthy_or_no_oid = false;
 
-            for (index, file) in model_files.iter().enumerate() {
+            for (index, (file, kind)) in model_files.iter().zip(kinds).enumerate() {
+                let place = FilePlace {
+                    index,
+                    total: total_shards,
+                    kind,
+                };
                 // Send starting progress
                 let _ = tx
-                    .send(VerificationProgress {
-                        model_id,
-                        shard_index: index,
-                        total_shards,
-                        shard_progress: ShardProgress::Starting,
-                    })
+                    .send(place.progress(model_id, ShardProgress::Starting))
                     .await;
 
-                // Resolve file path relative to base directory
-                let resolved_path = base_dir.join(&file.file_path);
-                let health =
-                    Self::verify_shard(file, &resolved_path, model_id, index, total_shards, &tx)
-                        .await;
+                let resolved_path = folder.file(&file.file_path);
+                let health = Self::verify_shard(file, &resolved_path, model_id, place, &tx).await;
 
                 // Update verification timestamp
                 if let Err(e) = model_files_repo
@@ -376,18 +458,14 @@ impl ModelVerificationService {
 
                 shard_reports.push(ShardHealthReport {
                     index,
+                    kind,
                     file_path: file.file_path.clone(),
                     health: health.clone(),
                 });
 
                 // Send completion progress
                 let _ = tx
-                    .send(VerificationProgress {
-                        model_id,
-                        shard_index: index,
-                        total_shards,
-                        shard_progress: ShardProgress::Completed { health },
-                    })
+                    .send(place.progress(model_id, ShardProgress::Completed { health }))
                     .await;
             }
 
@@ -416,8 +494,7 @@ impl ModelVerificationService {
         file: &ModelFile,
         resolved_path: &Path,
         model_id: i64,
-        index: usize,
-        total_shards: usize,
+        place: FilePlace,
         tx: &mpsc::Sender<VerificationProgress>,
     ) -> ShardHealth {
         // Check if OID is available
@@ -459,16 +536,14 @@ impl ModelVerificationService {
             let mut bytes_processed = 0u64;
 
             // Initial progress
-            let _ = tx_clone.blocking_send(VerificationProgress {
+            let _ = tx_clone.blocking_send(place.progress(
                 model_id,
-                shard_index: index,
-                total_shards,
-                shard_progress: ShardProgress::Hashing {
+                ShardProgress::Hashing {
                     percent: 0,
                     bytes_processed: 0,
                     total_bytes,
                 },
-            });
+            ));
 
             loop {
                 let n = file.read(&mut buffer)?;
@@ -490,16 +565,14 @@ impl ModelVerificationService {
                     )]
                     let percent = ((bytes_processed as f64 / total_bytes as f64) * 100.0) as u8;
 
-                    let _ = tx_clone.blocking_send(VerificationProgress {
+                    let _ = tx_clone.blocking_send(place.progress(
                         model_id,
-                        shard_index: index,
-                        total_shards,
-                        shard_progress: ShardProgress::Hashing {
+                        ShardProgress::Hashing {
                             percent,
                             bytes_processed,
                             total_bytes,
                         },
-                    });
+                    ));
                 }
             }
 

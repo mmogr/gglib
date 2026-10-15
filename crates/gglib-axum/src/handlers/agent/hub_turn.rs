@@ -39,7 +39,7 @@ use gglib_core::services::ChangeError;
 use tokio::sync::OwnedSemaphorePermit;
 
 use super::AgentChatRequest;
-use super::compose::{DRAW_TOOL, prepare, refuse_unavailable_drawing, take_permit};
+use super::compose::{DRAW_TOOL, prepare_held, refuse_unavailable_drawing, take_permit};
 use super::dto::AgentRequestConfig;
 use super::hub_model::{model_for, on_model};
 use super::launch::{LatePrepare, Transcript, launch_turn};
@@ -173,12 +173,12 @@ pub(super) async fn start(
 }
 
 /// What a run on `model` does once it exists: find the model on its port
-/// or load it, then compose `chat`'s loop.
+/// or load it, then hold it and compose `chat`'s loop.
 pub(super) fn late_on(state: AppState, model: String, chat: AgentChatRequest) -> LatePrepare {
     Box::new(move |loading| {
         Box::pin(async move {
             let chat = on_model(&state, &model, chat, &loading).await?;
-            prepare(&state, chat).await.map_err(with_code)
+            prepare_held(&state, chat).await.map_err(with_code)
         })
     })
 }

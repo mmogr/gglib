@@ -115,7 +115,8 @@ impl ShardInfo {
                 of: self.total_shards,
             }),
             GgufFileRole::Weights if self.has_others => Some(FilePlace::Weights),
-            GgufFileRole::Weights => None,
+            // No download fetches a sidecar.
+            GgufFileRole::Weights | GgufFileRole::Sidecar => None,
         }
     }
 

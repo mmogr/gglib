@@ -8,6 +8,7 @@
 //! is before repair judges it.
 
 use super::*;
+use gglib_core::domain::DialectSpec;
 use serde_json::json;
 
 /// A call missing its required `path`, as a Qwen model writes it, split
@@ -182,7 +183,7 @@ async fn run_turn(
     let outcome = stream_response_to_channel(
         resp,
         "m".to_owned(),
-        Some(DialectSpec::qwen_xml()),
+        TurnDialect::parsed(Some(DialectSpec::qwen_xml())),
         tx,
         &connection,
         Some(RepairContext {

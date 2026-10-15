@@ -125,7 +125,10 @@ response — it is logged (`dialect residue reached client-visible output`),
 counted eviction-safely as `dialect_residue_total` on the dashboard
 snapshot, and flagged on the request's entry in the recent-request list.
 A firing alarm means "this model's dialect handling needs a look" —
-usually a `gglib model retag` away from fixed.
+usually a `gglib model retag` away from fixed. To measure what the parser
+catches, the developer switch `GGLIB_DISABLE_DIALECT_PARSER=1` turns the
+parser and the grammar off on the proxy's paths while the alarm keeps
+counting.
 
 ## Capability tags
 

@@ -96,6 +96,7 @@ pub(crate) fn sd_platform_asset(
 ) -> std::result::Result<SdAsset, String> {
     let asset = |contains, ends_with, description, required| SdAsset {
         matcher: AssetMatcher {
+            starts_with: None,
             contains,
             ends_with: Some(ends_with),
         },

@@ -4,6 +4,11 @@
 - **Date:** 2026-08-08 (amended 2026-08-09 with a second dialect family)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md)
 - **Supersedes:** nothing
+- **Log:** [log-0002](log-0002.md)
+
+> **Amended 2026-10-15.** `b10327` was the pin until `b11429`. The Method's
+> measurement and both #755 reproducers were rerun there, and findings 4
+> and 5 hold ([log-0002](log-0002.md)).
 
 ## Context
 

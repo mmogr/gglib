@@ -28,13 +28,13 @@ use bytes::Bytes;
 use tracing::{error, warn};
 
 use gglib_core::cache_metrics::CacheMetricsStore;
-use gglib_core::domain::DialectSpec;
 
 use crate::forward::{ForwardError, REPAIR_REISSUE_TIMEOUT};
 use crate::generation::TurnGeneration;
 use crate::metrics::ContextMetricsStore;
 use crate::models::ErrorResponse;
 use crate::repair::{Decision, RepairTurn, Skipped, choose, decide, read_second_draw};
+use crate::turn_dialect::TurnDialect;
 use crate::unary_body::{Exchange, answer_with, exchange};
 
 /// Send one shaped, non-streaming chat completion upstream and answer with
@@ -54,7 +54,7 @@ use crate::unary_body::{Exchange, answer_with, exchange};
 pub(crate) async fn forward_unary(
     req_builder: reqwest::RequestBuilder,
     body: Bytes,
-    dialect: Option<&DialectSpec>,
+    dialect: &TurnDialect,
     cache_metrics: &CacheMetricsStore,
     (metrics, snapshot_seq): (&ContextMetricsStore, u64),
     turn: RepairTurn,
@@ -105,7 +105,7 @@ async fn repair(
     again: Option<reqwest::RequestBuilder>,
     request: &Bytes,
     answer: Bytes,
-    dialect: Option<&DialectSpec>,
+    dialect: &TurnDialect,
     metrics: &ContextMetricsStore,
     snapshot_seq: u64,
     turn: RepairTurn,

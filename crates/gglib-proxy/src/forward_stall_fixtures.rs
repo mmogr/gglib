@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::upstream_read::upstream_events;
+use gglib_core::domain::DialectSpec;
 
 /// The idle bound these tests run the drain under. Long enough that a busy
 /// runner does not cut a stream that sends every half of it, short enough
@@ -215,7 +216,7 @@ async fn run_turn_with(
     let drain = drain_events(
         events,
         "m".to_owned(),
-        dialect,
+        TurnDialect::parsed(dialect),
         ClientSender::new(tx, SEND),
         &connection,
         repair,

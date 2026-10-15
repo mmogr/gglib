@@ -11,8 +11,9 @@
 //! specifically a parameter value containing a literal `</parameter>`
 //! ([#24807]) and a reasoning model emitting prose before the open marker
 //! ([#20260]). Evidence is the drift alarm ([`crate::normalize::residue`])
-//! reporting zero residue across a release cycle with this parser bypassed,
-//! not the mere presence of [`RuntimeFlags::PEG_NATIVE_TOOL_CALLS`].
+//! reporting zero residue across a release cycle with this parser bypassed
+//! (`GGLIB_DISABLE_DIALECT_PARSER`), not the mere presence of
+//! [`RuntimeFlags::PEG_NATIVE_TOOL_CALLS`].
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [`RuntimeFlags::PEG_NATIVE_TOOL_CALLS`]: crate::domain::RuntimeFlags::PEG_NATIVE_TOOL_CALLS
