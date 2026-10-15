@@ -14,6 +14,7 @@ use anyhow::{Result, bail};
 use tokio::sync::mpsc;
 
 use super::llama_events::{render_build_events, render_install_events};
+use super::llama_install::go_ahead;
 use crate::bootstrap::CliContext;
 use crate::daemon_client;
 use crate::sd_commands::SdCommand;
@@ -121,10 +122,7 @@ async fn build_from_source(no_prebuilt: Option<&str>, agreed: bool) -> Result<()
         for line in build_lines(acceleration) {
             println!("{line}");
         }
-        if !input::prompt_confirmation_default_yes("Continue?")? {
-            println!("Installation cancelled.");
-            return Ok(());
-        }
+        go_ahead(input::prompt_confirmation_default_yes("Continue?")?)?;
     }
 
     let (tx, rx) = mpsc::channel::<BuildEvent>(64);

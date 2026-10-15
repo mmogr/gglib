@@ -14,6 +14,7 @@ use serde_json::json;
 
 use super::*;
 use crate::metrics::ContextSnapshot;
+use gglib_core::domain::DialectSpec;
 
 /// A call missing its required `path`, as a Qwen model writes it.
 const BAD_MARKUP: &str = "<tool_call>\n<function=read_file>\n<parameter=max_lines>\n4242\n</parameter>\n</function>\n</tool_call>";
@@ -168,7 +169,7 @@ pub(super) async fn run_turn(
     let response = forward_unary(
         Client::new().post(&url),
         body,
-        dialect.as_ref(),
+        &TurnDialect::parsed(dialect),
         &CacheMetricsStore::new(),
         (&metrics, seq),
         turn,

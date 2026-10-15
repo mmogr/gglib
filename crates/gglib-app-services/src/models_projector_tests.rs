@@ -21,7 +21,7 @@ use crate::types::{AddModelRequest, GuiModel};
 
 /// Reads a file's role from its first bytes, as the real parser reads it from
 /// the header: `projector` is one, anything else is a model's weights.
-struct FirstBytesParser;
+pub(crate) struct FirstBytesParser;
 
 impl GgufParserPort for FirstBytesParser {
     fn parse(&self, file_path: &Path) -> Result<GgufMetadata, GgufParseError> {

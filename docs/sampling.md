@@ -119,7 +119,8 @@ template at render time. A template that branches on it produces a different
 prompt; a template that never reads the variable ignores it in perfect silence
 — HTTP 200, prompt byte-identical, no warning
 ([ADR 0007](adr/0007-ask-the-server-for-template-capabilities.md) finding 3,
-measured against the pinned build). llama.cpp validates nothing here: there is
+measured on `10bf611`, which the pin reached at `b11429`; `b10327` dropped
+every level but `"none"`). llama.cpp validates nothing here: there is
 no allowlist, and `reasoning_effort: "banana"` renders as a line in the user's
 own prompt reading `Reasoning: banana`. gglib is therefore the only party
 checking, and it accepts the six levels above and nothing else.

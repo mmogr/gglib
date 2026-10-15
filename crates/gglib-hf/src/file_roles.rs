@@ -1,10 +1,11 @@
-//! Telling a repository's weights from its projectors.
+//! Telling a repository's weights from its projectors and sidecars.
 //!
 //! A repository lists a projector as one more GGUF, and its name carries a
-//! quantization like any weights file's (`mmproj-F16.gguf`). The role is
-//! decided once, by [`GgufFileRole::classify`], and everything that groups
-//! files into quantizations asks [`HfFileEntry::is_weights`]: a projector is
-//! never a quantization of the model and never a shard of one.
+//! quantization like any weights file's (`mmproj-F16.gguf`). So may a
+//! sidecar, an importance matrix or an MTP head (`MTP/mtp-X-Q4_0.gguf`). The
+//! role is decided once, by [`GgufFileRole::classify`], and everything that
+//! groups files into quantizations asks [`HfFileEntry::is_weights`]: neither
+//! is ever a quantization of the model or a shard of one.
 
 use std::path::Path;
 
@@ -16,7 +17,7 @@ use crate::models::HfFileEntry;
 impl HfFileEntry {
     /// Whether this is a GGUF file holding a model's weights.
     pub(crate) fn is_weights(&self) -> bool {
-        self.is_gguf() && !GgufFileRole::classify(Path::new(&self.path)).is_projector()
+        self.is_gguf() && GgufFileRole::classify(Path::new(&self.path)).is_weights()
     }
 
     /// Whether this is a GGUF file holding a projector.

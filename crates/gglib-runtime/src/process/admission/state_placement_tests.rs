@@ -65,7 +65,7 @@ fn resident(model_id: u32, name: &str) -> Resident {
 
 /// Launch `model` into the primary and leave it resident and idle.
 fn chat_resident(q: &Arc<AdmissionQueue>, model: &str, model_id: u32) {
-    let ticket = q.enqueue(model);
+    let ticket = q.enqueue(model_id, model);
     let decision = q.poll(&ticket, NEVER_FITS);
     assert_eq!(
         decision,
@@ -75,12 +75,16 @@ fn chat_resident(q: &Arc<AdmissionQueue>, model: &str, model_id: u32) {
         },
         "precondition: {model} launches into the primary"
     );
-    drop(ticket);
     drop(q.install(PRIMARY_SLOT, resident(model_id, model)));
 }
 
-fn poll_once(q: &Arc<AdmissionQueue>, model: &str, candidate: Candidate) -> AdmissionDecision {
-    let ticket = q.enqueue(model);
+fn poll_once(
+    q: &Arc<AdmissionQueue>,
+    model_id: u32,
+    model: &str,
+    candidate: Candidate,
+) -> AdmissionDecision {
+    let ticket = q.enqueue(model_id, model);
     q.poll(&ticket, candidate)
 }
 
@@ -91,7 +95,7 @@ async fn on_a_cold_daemon_an_image_model_takes_the_second_slot() {
     for candidate in [IMAGE_UNKNOWN, IMAGE_NO_ROOM, IMAGE_FITS] {
         let q = queue();
         assert_eq!(
-            poll_once(&q, "flux", candidate),
+            poll_once(&q, FLUX, "flux", candidate),
             AdmissionDecision::Launch {
                 slot: 1,
                 evict: None
@@ -99,7 +103,7 @@ async fn on_a_cold_daemon_an_image_model_takes_the_second_slot() {
             "{candidate:?}"
         );
         assert!(
-            q.slot(PRIMARY_SLOT).is_none() && q.slot_of("flux") == Some(1),
+            q.slot(PRIMARY_SLOT).is_none() && q.slot_of(FLUX) == Some(1),
             "the primary stays empty"
         );
     }
@@ -112,7 +116,7 @@ async fn an_image_model_waits_rather_than_take_an_empty_primary() {
     let q = queue();
     // A model resident in the second slot with a request in flight, placed
     // there as an image model would be.
-    let ticket = q.enqueue("embedder");
+    let ticket = q.enqueue(7, "embedder");
     assert!(matches!(
         q.poll(&ticket, IMAGE_UNKNOWN),
         AdmissionDecision::Launch { slot: 1, .. }
@@ -120,7 +124,7 @@ async fn an_image_model_waits_rather_than_take_an_empty_primary() {
     let _busy = q.install(1, resident(7, "embedder"));
 
     assert_eq!(
-        poll_once(&q, "flux", IMAGE_UNKNOWN),
+        poll_once(&q, FLUX, "flux", IMAGE_UNKNOWN),
         AdmissionDecision::Wait
     );
     assert!(q.slot(PRIMARY_SLOT).is_none() && !q.is_loading());
@@ -133,7 +137,7 @@ async fn a_granted_image_model_loads_beside_the_chat_model() {
     chat_resident(&q, "qwen", 1);
 
     assert_eq!(
-        poll_once(&q, "flux", IMAGE_FITS),
+        poll_once(&q, FLUX, "flux", IMAGE_FITS),
         AdmissionDecision::Launch {
             slot: 1,
             evict: None
@@ -150,7 +154,7 @@ async fn without_room_an_image_model_swaps_into_the_primary() {
         chat_resident(&q, "qwen", 1);
 
         assert_eq!(
-            poll_once(&q, "flux", candidate),
+            poll_once(&q, FLUX, "flux", candidate),
             AdmissionDecision::Launch {
                 slot: PRIMARY_SLOT,
                 evict: Some(1)
@@ -168,9 +172,9 @@ async fn an_image_swap_waits_for_the_turn_rules() {
     let q = queue();
     chat_resident(&q, "qwen", 1);
     // A request for the turn holder, queued and not yet polled.
-    let _queued = q.enqueue("qwen");
+    let _queued = q.enqueue(1, "qwen");
 
-    let ticket = q.enqueue("flux");
+    let ticket = q.enqueue(FLUX, "flux");
     assert_eq!(q.poll(&ticket, IMAGE_NO_ROOM), AdmissionDecision::Wait);
     tokio::time::advance(DRAIN_QUANTUM).await;
     assert_eq!(
@@ -191,10 +195,10 @@ async fn an_empty_second_slot_is_taken_before_the_turn_rules() {
     let q = queue();
     chat_resident(&q, "qwen", 1);
     // A request for the turn holder, queued and not yet polled.
-    let _queued = q.enqueue("qwen");
+    let _queued = q.enqueue(1, "qwen");
 
     assert_eq!(
-        poll_once(&q, "flux", IMAGE_FITS),
+        poll_once(&q, FLUX, "flux", IMAGE_FITS),
         AdmissionDecision::Launch {
             slot: 1,
             evict: None
@@ -210,7 +214,7 @@ async fn a_held_primary_refuses_an_image_model_at_once() {
     chat_resident(&q, "qwen", 1);
     let _hold = q.hold(8001, 1).expect("qwen is resident on its port");
 
-    let ticket = q.enqueue("flux");
+    let ticket = q.enqueue(FLUX, "flux");
     assert_eq!(
         q.poll(&ticket, IMAGE_NO_ROOM),
         AdmissionDecision::Refuse(Refusal::HeldSlot {
@@ -226,7 +230,7 @@ async fn a_held_primary_refuses_an_image_model_at_once() {
 
     // An unreadable budget is refused the same way, with no bytes to name.
     assert_eq!(
-        poll_once(&q, "flux", IMAGE_UNKNOWN),
+        poll_once(&q, FLUX, "flux", IMAGE_UNKNOWN),
         AdmissionDecision::Refuse(Refusal::HeldSlot {
             held_model: "qwen".to_owned(),
             needed_bytes: None,
@@ -259,7 +263,7 @@ async fn a_held_primary_does_not_refuse_an_image_model_that_fits_beside_it() {
     let _hold = q.hold(8001, 1).expect("qwen is resident on its port");
 
     assert_eq!(
-        poll_once(&q, "flux", IMAGE_FITS),
+        poll_once(&q, FLUX, "flux", IMAGE_FITS),
         AdmissionDecision::Launch {
             slot: 1,
             evict: None
@@ -276,10 +280,10 @@ async fn a_waiter_for_a_held_slot_does_not_block_the_line() {
     chat_resident(&q, "qwen", 1);
     let hold = q.hold(8001, 1).expect("qwen is resident on its port");
 
-    let older = q.enqueue("llama-70b");
+    let older = q.enqueue(4, "llama-70b");
     assert_eq!(q.poll(&older, NEVER_FITS), AdmissionDecision::Wait);
 
-    let younger = q.enqueue("embedder");
+    let younger = q.enqueue(7, "embedder");
     assert_eq!(
         q.poll(&younger, ALWAYS_FITS),
         AdmissionDecision::Launch {
@@ -288,7 +292,6 @@ async fn a_waiter_for_a_held_slot_does_not_block_the_line() {
         },
         "the held-only waiter must not hold the front of the line"
     );
-    drop(younger);
     drop(q.install(1, resident(7, "embedder")));
 
     assert_eq!(q.poll(&older, NEVER_FITS), AdmissionDecision::Wait);
@@ -308,7 +311,7 @@ async fn a_waiter_for_a_held_slot_does_not_block_the_line() {
 #[tokio::test]
 async fn a_model_that_chats_still_takes_an_empty_primary() {
     let q = queue();
-    let ticket = q.enqueue("qwen");
+    let ticket = q.enqueue(1, "qwen");
     assert_eq!(
         q.poll(&ticket, Candidate::llama(ALWAYS_FITS)),
         AdmissionDecision::Launch {
@@ -341,7 +344,7 @@ fn chat_and_flux() -> Arc<AdmissionQueue> {
     let q = queue();
     chat_resident(&q, "qwen", 1);
     assert_eq!(
-        poll_once(&q, "flux", IMAGE_FITS),
+        poll_once(&q, FLUX, "flux", IMAGE_FITS),
         AdmissionDecision::Launch {
             slot: 1,
             evict: None
@@ -377,7 +380,7 @@ async fn a_picked_image_model_replaces_the_idle_one_and_the_chat_model_stays() {
     for candidate in [IMAGE_NO_ROOM, IMAGE_UNKNOWN, IMAGE_FITS] {
         let q = chat_and_flux();
         assert_eq!(
-            poll_once(&q, "qwen-image", candidate),
+            poll_once(&q, QWEN_IMAGE, "qwen-image", candidate),
             AdmissionDecision::Launch {
                 slot: 1,
                 evict: Some(FLUX)
@@ -398,7 +401,7 @@ async fn under_a_held_chat_model_a_picked_image_model_swaps_in_and_is_not_refuse
     let _hold = q.hold(8001, 1).expect("qwen is resident on its port");
     assert!(
         matches!(
-            poll_once(&q, "qwen-image", IMAGE_NO_ROOM),
+            poll_once(&q, QWEN_IMAGE, "qwen-image", IMAGE_NO_ROOM),
             AdmissionDecision::Refuse(Refusal::HeldSlot { .. })
         ),
         "precondition: alone, it is refused under the held chat model"
@@ -407,7 +410,7 @@ async fn under_a_held_chat_model_a_picked_image_model_swaps_in_and_is_not_refuse
     let q = chat_and_flux();
     let _hold = q.hold(8001, 1).expect("qwen is resident on its port");
     assert_eq!(
-        poll_once(&q, "qwen-image", IMAGE_NO_ROOM),
+        poll_once(&q, QWEN_IMAGE, "qwen-image", IMAGE_NO_ROOM),
         AdmissionDecision::Launch {
             slot: 1,
             evict: Some(FLUX)
@@ -424,7 +427,7 @@ async fn a_rendering_image_model_is_waited_for_and_nothing_is_evicted() {
         let q = chat_and_flux();
         let render = q.lease(1).expect("a lease on flux");
 
-        let ticket = q.enqueue("qwen-image");
+        let ticket = q.enqueue(QWEN_IMAGE, "qwen-image");
         assert_eq!(q.poll(&ticket, candidate), AdmissionDecision::Wait);
         assert_eq!(loaded(&q), [(PRIMARY_SLOT, 1), (1, FLUX)]);
         assert!(!q.is_loading(), "nothing was started");
@@ -449,7 +452,7 @@ async fn an_image_model_in_the_primary_is_replaced_where_it_is() {
     let q = queue();
     chat_resident(&q, "qwen", 1);
     assert_eq!(
-        poll_once(&q, "flux", IMAGE_NO_ROOM),
+        poll_once(&q, FLUX, "flux", IMAGE_NO_ROOM),
         AdmissionDecision::Launch {
             slot: PRIMARY_SLOT,
             evict: Some(1)
@@ -459,7 +462,7 @@ async fn an_image_model_in_the_primary_is_replaced_where_it_is() {
     image_resident(&q, PRIMARY_SLOT, FLUX, "flux");
 
     assert_eq!(
-        poll_once(&q, "qwen-image", IMAGE_FITS),
+        poll_once(&q, QWEN_IMAGE, "qwen-image", IMAGE_FITS),
         AdmissionDecision::Launch {
             slot: PRIMARY_SLOT,
             evict: Some(FLUX)
@@ -476,19 +479,19 @@ async fn an_image_model_still_loading_is_waited_for() {
     let q = queue();
     chat_resident(&q, "qwen", 1);
     assert_eq!(
-        poll_once(&q, "flux", IMAGE_FITS),
+        poll_once(&q, FLUX, "flux", IMAGE_FITS),
         AdmissionDecision::Launch {
             slot: 1,
             evict: None
         }
     );
 
-    let ticket = q.enqueue("qwen-image");
+    let ticket = q.enqueue(QWEN_IMAGE, "qwen-image");
     for candidate in [IMAGE_NO_ROOM, IMAGE_FITS] {
         assert_eq!(q.poll(&ticket, candidate), AdmissionDecision::Wait);
     }
     assert_eq!(loaded(&q), [(PRIMARY_SLOT, 1)], "the chat model stays");
-    assert_eq!(q.slot_of("qwen-image"), None);
+    assert_eq!(q.slot_of(QWEN_IMAGE), None);
 
     image_resident(&q, 1, FLUX, "flux");
     assert_eq!(
@@ -513,7 +516,7 @@ async fn picking_back_and_forth_never_loads_two_image_models() {
     ];
     for (name, id, replaced, candidate) in picks {
         assert_eq!(
-            poll_once(&q, name, candidate),
+            poll_once(&q, id, name, candidate),
             AdmissionDecision::Launch {
                 slot: 1,
                 evict: Some(replaced)
@@ -526,14 +529,14 @@ async fn picking_back_and_forth_never_loads_two_image_models() {
         assert_eq!(loaded(&q), [(PRIMARY_SLOT, 1), (1, id)], "{name}");
     }
 
-    let chat = q.enqueue("qwen");
+    let chat = q.enqueue(1, "qwen");
     assert_eq!(
         q.poll(&chat, NEVER_FITS),
         AdmissionDecision::Serve { slot: PRIMARY_SLOT }
     );
     drop(q.claim(PRIMARY_SLOT));
     assert_eq!(
-        poll_once(&q, "llama", NEVER_FITS.into()),
+        poll_once(&q, 5, "llama", NEVER_FITS.into()),
         AdmissionDecision::Launch {
             slot: PRIMARY_SLOT,
             evict: Some(1)
@@ -548,7 +551,7 @@ async fn picking_back_and_forth_never_loads_two_image_models() {
 async fn a_model_that_chats_is_placed_as_before_beside_an_image_model() {
     let q = chat_and_flux();
     assert_eq!(
-        poll_once(&q, "llama", NEVER_FITS.into()),
+        poll_once(&q, 5, "llama", NEVER_FITS.into()),
         AdmissionDecision::Launch {
             slot: PRIMARY_SLOT,
             evict: Some(1)
@@ -557,7 +560,7 @@ async fn a_model_that_chats_is_placed_as_before_beside_an_image_model() {
 
     let q = chat_and_flux();
     assert_eq!(
-        poll_once(&q, "embedder", ALWAYS_FITS.into()),
+        poll_once(&q, 7, "embedder", ALWAYS_FITS.into()),
         AdmissionDecision::Launch {
             slot: 1,
             evict: Some(FLUX)

@@ -5,7 +5,12 @@
 - **Depends on:** [ADR 0007](0007-ask-the-server-for-template-capabilities.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
-- **Log:** none
+- **Log:** [log-0020](log-0020.md)
+
+> **Amended 2026-10-15.** llama-server binds `preserve_reasoning` true by
+> default only from `b11429`. Qwen3.8's template keeps earlier reasoning when
+> it is unset, so for that model the Context holds at `b10327` too
+> ([log-0020](log-0020.md)).
 
 ## Context
 

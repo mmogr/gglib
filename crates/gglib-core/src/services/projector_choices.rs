@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use super::ModelVerificationService;
-use crate::domain::{Model, ModelFile};
+use crate::domain::{Model, ModelFile, ModelFolder};
 use crate::download::GgufFileRole;
 use crate::paths::canonical_model_path;
 use crate::ports::RepositoryError;
@@ -42,11 +42,12 @@ impl ModelVerificationService {
 /// because one projector serves every build of its base model. And each of
 /// `files`, the model's own rows, that is named as a projector and is on disk
 /// is offered under its canonical path, the form a link is stored in; a row's
-/// name is relative to the directory the model's weights are in.
+/// name is read in the model's [`ModelFolder`].
 #[must_use]
 pub fn projector_choices(model: &Model, files: &[ModelFile], library: &[Model]) -> Vec<PathBuf> {
+    let folder = ModelFolder::of(&model.file_path, files);
     let names = files.iter().map(|file| &file.file_path);
-    let own = GgufFileRole::projectors_among(&model.file_path, names)
+    let own = GgufFileRole::projectors_among(&model.file_path, &folder, names)
         .filter_map(|path| canonical_model_path(&path).ok());
     let in_use = library
         .iter()

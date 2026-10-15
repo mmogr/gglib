@@ -15,14 +15,12 @@ impl QueueState {
     pub(in crate::process::admission) fn snapshot(&self, now: Instant) -> AdmissionSnapshot {
         let mut queued: Vec<QueuedModelSnapshot> = self
             .waiting
-            .iter()
-            .filter(|(_, q)| !q.is_empty())
-            .map(|(model, q)| QueuedModelSnapshot {
-                model_name: model.clone(),
-                waiting: q.len(),
-                oldest_wait_ms: q
-                    .front()
-                    .map_or(0, |w| now.duration_since(w.enqueued_at).as_millis() as u64),
+            .values()
+            .filter_map(|q| q.front().map(|oldest| (oldest, q.len())))
+            .map(|(oldest, waiting)| QueuedModelSnapshot {
+                model_name: oldest.model_name.clone(),
+                waiting,
+                oldest_wait_ms: now.duration_since(oldest.enqueued_at).as_millis() as u64,
             })
             .collect();
         // Longest-waiting first: the entry a user needs to see is the one that

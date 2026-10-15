@@ -10,6 +10,12 @@
   is the appendix of this document
 - **Supersedes:** nothing
 - **Superseded by:** nothing
+- **Log:** [log-0007](log-0007.md)
+
+> **Amended 2026-10-15.** The findings were read on `10bf611`, past the pin
+> of the day, `b10327`, which dropped every `reasoning_effort` but `"none"`
+> and reported no `supports_reasoning_effort`. They hold at the pin from
+> `b11429` ([log-0007](log-0007.md)).
 
 ## Context
 

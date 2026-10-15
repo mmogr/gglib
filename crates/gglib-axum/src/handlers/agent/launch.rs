@@ -26,7 +26,6 @@ use gglib_core::domain::thinking::Remember;
 use gglib_core::ports::{Created, RunScope};
 
 use super::compose::{Prepared, frame};
-use super::remote_upstream;
 use super::run::{with_code, work};
 use super::transcript::{keep_machine, record_model, save_reply, save_user};
 use crate::error::HttpError;
@@ -187,8 +186,9 @@ impl Loading {
     }
 }
 
-/// What a device's turn does once its run exists: find or load its model
-/// and compose its loop, telling `Loading` when the model has to load.
+/// What a device's turn does once its run exists: find or load its model,
+/// hold it and compose its loop, telling `Loading` when the model has to
+/// load.
 pub(super) type LatePrepare =
     Box<dyn FnOnce(Loading) -> BoxFuture<'static, Result<Prepared, HttpError>> + Send>;
 
@@ -201,8 +201,8 @@ pub(super) fn ready(prepared: Prepared) -> LatePrepare {
 /// Start a device's turn: reserve `id` in `scope` for a run of `kind` (an
 /// agent run for a turn on a hub chat, a chat run for a chat the device
 /// keeps itself; either logs the agent loop's events) on `model`, and
-/// only then, as the run's own work, prepare its loop (`late`), hold its
-/// model, write its rows ([`begin_writes`]) and run it. The caller's `PUT`
+/// only then, as the run's own work, hold its model and prepare its loop
+/// (`late`), write its rows ([`begin_writes`]) and run it. The caller's `PUT`
 /// is answered as soon as the run is reserved.
 ///
 /// A refusal after the reservation ends the run `failed` with the
@@ -310,9 +310,6 @@ impl Turn {
         let mut prepared = prepared.map_err(refused)?;
         // A device's turn says so, on its message and on each turn of the reply.
         prepared.made_by.device = device;
-        remote_upstream::hold_model(state.runtime.as_ref(), &mut prepared)
-            .await
-            .map_err(refused)?;
         begin_writes(&state, transcript, &prepared)
             .await
             .map_err(refused)?;

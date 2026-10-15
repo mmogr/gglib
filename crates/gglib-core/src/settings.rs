@@ -28,7 +28,7 @@ mod settings_daemon_port;
 pub use settings_daemon_port::daemon_port;
 #[path = "settings_remote.rs"]
 mod settings_remote;
-pub use settings_remote::{Device, RemotePairing, RemoteServe};
+pub use settings_remote::{Device, KEPT_ON_RESET, RemotePairing, RemoteServe};
 
 /// Default port for the OpenAI-compatible proxy server.
 pub const DEFAULT_PROXY_PORT: u16 = 8080;

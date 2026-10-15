@@ -5,7 +5,8 @@ use serde_json::{Value, json};
 
 use super::super::tests_support::chars;
 use super::super::truncation::{
-    PROTECTED_TAIL_COUNT, TOOL_CONTENT_THRESHOLD_CHARS, TRUNCATION_PLACEHOLDER, truncate_history,
+    ASSISTANT_TRUNCATION_PLACEHOLDER, PROTECTED_TAIL_COUNT, TOOL_CONTENT_THRESHOLD_CHARS,
+    TOOL_TRUNCATION_PLACEHOLDER, truncate_history,
 };
 use super::elide;
 
@@ -50,7 +51,7 @@ fn an_array_form_tool_result_is_truncated_rather_than_skipped() {
     let parts = b["messages"][0]["content"].as_array().unwrap();
     assert_eq!(parts.len(), 1, "the array shape is kept");
     assert_eq!(parts[0]["type"], "text");
-    assert_eq!(parts[0]["text"], TRUNCATION_PLACEHOLDER);
+    assert_eq!(parts[0]["text"], TOOL_TRUNCATION_PLACEHOLDER);
     assert_eq!(
         b["messages"][3]["content"][0]["text"]
             .as_str()
@@ -86,21 +87,36 @@ fn a_part_that_is_not_text_survives_truncation() {
 
     assert_eq!(
         msg["content"][0],
-        json!({"type": "text", "text": TRUNCATION_PLACEHOLDER})
+        json!({"type": "text", "text": TOOL_TRUNCATION_PLACEHOLDER})
     );
     assert_eq!(msg["content"][1], image, "kept, in its place");
     assert_eq!(
         reclaimed,
-        TOOL_CONTENT_THRESHOLD_CHARS + 1 - TRUNCATION_PLACEHOLDER.len()
+        TOOL_CONTENT_THRESHOLD_CHARS + 1 - TOOL_TRUNCATION_PLACEHOLDER.len()
     );
+}
+
+/// An assistant reply in the array form gets the assistant's placeholder,
+/// and the arithmetic counts that one.
+#[test]
+fn an_array_form_assistant_reply_gets_its_own_placeholder() {
+    let mut msg = json!({"role": "assistant", "content": [{"type": "text", "text": big(3_000)}]});
+
+    let reclaimed = elide(&mut msg).expect("over the threshold");
+
+    assert_eq!(msg["content"][0]["text"], ASSISTANT_TRUNCATION_PLACEHOLDER);
+    assert_eq!(reclaimed, 3_000 - ASSISTANT_TRUNCATION_PLACEHOLDER.len());
 }
 
 #[test]
 fn a_string_is_elided_the_way_it_always_was() {
     let mut msg = json!({"role": "tool", "content": big(3_000)});
 
-    assert_eq!(elide(&mut msg), Some(3_000 - TRUNCATION_PLACEHOLDER.len()));
-    assert_eq!(msg["content"], TRUNCATION_PLACEHOLDER);
+    assert_eq!(
+        elide(&mut msg),
+        Some(3_000 - TOOL_TRUNCATION_PLACEHOLDER.len())
+    );
+    assert_eq!(msg["content"], TOOL_TRUNCATION_PLACEHOLDER);
 }
 
 #[test]
@@ -146,7 +162,7 @@ fn several_text_parts_each_carry_the_placeholder() {
 
     let reclaimed = elide(&mut msg).expect("3,000 characters of text, over the threshold together");
 
-    assert_eq!(msg["content"][0]["text"], TRUNCATION_PLACEHOLDER);
-    assert_eq!(msg["content"][1]["text"], TRUNCATION_PLACEHOLDER);
-    assert_eq!(reclaimed, 3_000 - 2 * TRUNCATION_PLACEHOLDER.len());
+    assert_eq!(msg["content"][0]["text"], TOOL_TRUNCATION_PLACEHOLDER);
+    assert_eq!(msg["content"][1]["text"], TOOL_TRUNCATION_PLACEHOLDER);
+    assert_eq!(reclaimed, 3_000 - 2 * TOOL_TRUNCATION_PLACEHOLDER.len());
 }

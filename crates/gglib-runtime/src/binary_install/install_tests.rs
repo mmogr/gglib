@@ -114,6 +114,7 @@ fn target<'a>(dirs: &'a Dirs, matcher: AssetMatcher<'a>) -> PrebuiltTarget<'a> {
 }
 
 const LINUX: AssetMatcher<'static> = AssetMatcher {
+    starts_with: None,
     contains: &["-bin-Linux-"],
     ends_with: Some("-x86_64.zip"),
 };
@@ -127,11 +128,20 @@ struct Run {
 }
 
 async fn run(fake: &FakeGitHub, spec: &ReleaseSpec, target: PrebuiltTarget<'_>) -> Run {
+    run_for(fake, &pinned(), spec, target).await
+}
+
+async fn run_for(
+    fake: &FakeGitHub,
+    selector: &ReleaseSelector,
+    spec: &ReleaseSpec,
+    target: PrebuiltTarget<'_>,
+) -> Run {
     let (tx, mut rx) = mpsc::channel(256);
     let mut record = None;
     let result = install_prebuilt_from(
         &fake.base,
-        &pinned(),
+        selector,
         spec,
         target,
         |r| {
@@ -247,6 +257,51 @@ async fn a_missing_tag_names_the_product_and_its_override() {
     assert_eq!(frames(&run.events), [phase("started", "fetch_release")]);
 }
 
+/// llama.cpp's `releases/latest` is a `v*` release whose one asset names the
+/// build: it is followed to that release, which is what is installed and
+/// recorded.
+#[tokio::test]
+async fn latest_follows_the_build_its_nightly_tag_names() {
+    let dirs = dirs();
+    let fake = serve(
+        &["w-v1-bin-Linux-Ubuntu-24.04-x86_64.zip"],
+        &zip_of(&["widget-server", "libwidget.so"]),
+    )
+    .await;
+    let pointer = serde_json::json!({
+        "tag_name": "v0.6.0",
+        "assets": [{
+            "name": "nightly-tag.txt",
+            "browser_download_url": format!("{}/download/nightly-tag.txt", fake.base),
+        }],
+    });
+    fake.route(
+        "/repos/acme/widget.cpp/releases/latest",
+        Reply::ok(pointer.to_string()),
+    );
+    fake.route("/download/nightly-tag.txt", Reply::ok("v1\n"));
+
+    let run = run_for(
+        &fake,
+        &ReleaseSelector::Latest,
+        &spec(AssetChoice::First),
+        target(&dirs, LINUX),
+    )
+    .await;
+
+    run.result.expect("the build it names installs");
+    assert_eq!(
+        fake.asked(),
+        [
+            "/repos/acme/widget.cpp/releases/latest",
+            "/download/nightly-tag.txt",
+            LISTING,
+            "/download/w-v1-bin-Linux-Ubuntu-24.04-x86_64.zip",
+        ]
+    );
+    assert_eq!(run.record.expect("a record").version, "v1");
+}
+
 #[tokio::test]
 async fn two_matching_assets_are_refused_when_one_is_required_and_nothing_is_downloaded() {
     let dirs = dirs();
@@ -350,6 +405,7 @@ async fn a_failed_download_says_so() {
 #[test]
 fn a_matcher_needs_every_part_and_the_ending() {
     let m = AssetMatcher {
+        starts_with: None,
         contains: &["-bin-win-", "cuda12"],
         ends_with: Some("-x64.zip"),
     };
@@ -359,6 +415,7 @@ fn a_matcher_needs_every_part_and_the_ending() {
     assert_eq!(m.to_string(), "-bin-win-*cuda12*-x64.zip");
 
     let plain = AssetMatcher {
+        starts_with: None,
         contains: &["bin-macos-arm64.tar.gz"],
         ends_with: None,
     };

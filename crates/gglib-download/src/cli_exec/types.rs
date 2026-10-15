@@ -6,6 +6,9 @@
 
 use std::path::PathBuf;
 
+use gglib_core::download::Quantization;
+use gglib_core::ports::{CompletedDownload, ResolvedFile};
+
 /// Request to download a model from `HuggingFace`.
 #[derive(Debug, Clone)]
 pub struct CliDownloadRequest {
@@ -68,6 +71,39 @@ pub struct CliDownloadResult {
     pub repo_id: String,
     /// Git commit SHA of the downloaded version.
     pub commit_sha: String,
+    /// What each of `downloaded_paths` is, in the same order: the weights,
+    /// then the projector, each with its size and OID.
+    pub files: Vec<ResolvedFile>,
+}
+
+impl CliDownloadResult {
+    /// The download as the registrar takes it: the weights as the model's
+    /// files, and the projector apart.
+    #[must_use]
+    pub fn completed(&self) -> CompletedDownload {
+        let mut weights = Vec::new();
+        let mut projector_path = None;
+        for (path, file) in self.downloaded_paths.iter().zip(&self.files) {
+            if file.role.is_projector() {
+                projector_path.get_or_insert_with(|| path.clone());
+            } else if file.is_weights() {
+                weights.push(path.clone());
+            }
+        }
+        CompletedDownload {
+            primary_path: self.primary_path.clone(),
+            all_paths: self.downloaded_paths.clone(),
+            projector_path,
+            components: Vec::new(),
+            quantization: Quantization::from_filename(&self.quantization),
+            repo_id: self.repo_id.clone(),
+            commit_sha: self.commit_sha.clone(),
+            is_sharded: weights.len() > 1,
+            file_paths: (weights.len() > 1).then_some(weights),
+            hf_tags: Vec::new(),
+            hf_file_entries: self.files.clone(),
+        }
+    }
 }
 
 /// Request to update a downloaded model.

@@ -6,7 +6,12 @@
   [ADR 0004](0004-observe-the-sampling-boundary.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
-- **Log:** none
+- **Log:** [log-0022](log-0022.md)
+
+> **Amended 2026-10-15.** The line numbers here are at `972b5fc`, not at a
+> pin. Rechecked at `b11429`, the claims hold, but kill criterion 1's `/slots`
+> reading is 0 after every finished request, so it cannot be taken as written
+> ([log-0022](log-0022.md)).
 
 ## Context
 
@@ -152,8 +157,8 @@ release cycle with the parser bypassed, not the presence of a PEG parser.
 - A trusted client's trio value beneath an operator-flag temperature claim
   stays in the body while provenance reports it `Coupled`. This was so on main
   for `repeat_penalty`, and now also covers `presence_penalty` and `min_p`,
-  which the reasoning floor overwrote on a tagged model. It is filed as a
-  follow-up.
+  which the reasoning floor overwrote on a tagged model. Since #1434 the
+  pipeline removes a `Coupled` trio member from the body after the fold.
 - A published recipe is still stored, and the first edit still replaces it.
   Clearing that model's defaults gives back the `reasoning` recipe for a
   `reasoning`-tagged model and nothing for any other, not the published one.

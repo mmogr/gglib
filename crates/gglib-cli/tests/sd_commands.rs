@@ -1,11 +1,15 @@
-//! `gglib config sd status`, `uninstall` and `prompt`, run as the binary
-//! over a data root the test laid out.
+//! `gglib config sd status`, `uninstall`, `prompt` and a source `install`
+//! told no, run as the binary over a data root the test laid out.
 //!
-//! Each run has nothing on its `PATH` and its own `GGLIB_DATA_DIR` and
-//! `GGLIB_RESOURCE_DIR`, so `.sd/` is the test's and nothing is downloaded or
-//! built. The end of input is a no; an uninstall told yes removes what the
-//! test laid out. `prompt` is run only with no terminal, where it asks
-//! nothing.
+//! Each run has nothing on its `PATH`, or only stand-in tools, and its own
+//! `GGLIB_DATA_DIR` and `GGLIB_RESOURCE_DIR`, so `.sd/` is the test's and
+//! nothing is downloaded or built. The end of input is a no; an uninstall
+//! told yes removes what the test laid out. `prompt` is run only with no
+//! terminal, where it asks nothing.
+
+#[cfg(unix)]
+#[path = "support/stub_tools.rs"]
+mod stub_tools;
 
 use std::io::Write;
 use std::path::Path;
@@ -15,12 +19,17 @@ use std::process::{Command, Output, Stdio};
 /// standard input, or the end of input when there is none.
 fn gglib(root: &Path, args: &[&str], typed: Option<&str>) -> Output {
     let nothing = tempfile::tempdir().expect("an empty PATH");
+    gglib_on(nothing.path(), root, args, typed)
+}
+
+/// [`gglib`] with `path` as its whole `PATH`.
+fn gglib_on(path: &Path, root: &Path, args: &[&str], typed: Option<&str>) -> Output {
     let elsewhere = tempfile::tempdir().expect("a working directory apart from the data root");
     let mut child = Command::new(env!("CARGO_BIN_EXE_gglib"))
         .args(args)
         .current_dir(elsewhere.path())
         .env_clear()
-        .env("PATH", nothing.path())
+        .env("PATH", path)
         .env("HOME", root)
         .env("GGLIB_DATA_DIR", root)
         .env("GGLIB_RESOURCE_DIR", root)
@@ -147,6 +156,50 @@ fn uninstall_told_yes_removes_sd_whole_and_says_what_it_removed() {
         text(&out)
     );
     assert!(!root.path().join(".sd").exists());
+}
+
+/// A source install told no says it was cancelled and exits with an error,
+/// so a script that ran it knows nothing was installed, and nothing is
+/// cloned. The stand-in `nvcc` gives a machine with no Metal a CUDA build to
+/// ask about.
+#[cfg(unix)]
+#[test]
+fn a_source_install_told_no_is_cancelled_with_an_error_and_clones_nothing() {
+    let _guard = stub_tools::one_at_a_time();
+    let root = tempfile::tempdir().unwrap();
+    let machine = stub_tools::Machine::bare()
+        .with_tool("git", "git version 2.43.0")
+        .with_tool("cmake", "cmake version 3.28.1")
+        .with_tool("g++", "g++ (GCC) 14.2.1 20240910")
+        .with_tool("nvcc", "Cuda compilation tools, release 12.4, V12.4.131");
+
+    let out = gglib_on(
+        &machine.path(),
+        root.path(),
+        &["config", "sd", "install", "--build"],
+        Some("n\n"),
+    );
+
+    assert_eq!(out.status.code(), Some(1), "{}", text(&out));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("This will:\n  1. Clone stable-diffusion.cpp and its submodules\n"),
+        "{}",
+        text(&out)
+    );
+    assert!(stdout.ends_with("Continue? (Y/n): \n"), "{}", text(&out));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr).trim_end(),
+        "Error: Installation cancelled.",
+        "{}",
+        text(&out)
+    );
+    assert!(
+        !machine.calls().iter().any(|call| call.contains("clone")),
+        "nothing was cloned: {:?}",
+        machine.calls()
+    );
+    assert!(!root.path().join(".sd").exists(), "{}", text(&out));
 }
 
 /// `make setup` from a script or CI: the offer is skipped in one line that

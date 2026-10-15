@@ -8,6 +8,18 @@ use async_trait::async_trait;
 use super::{CoreError, RepositoryError};
 use crate::settings::{Settings, SettingsError};
 
+/// The stored rows a reset could not read, by key.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SettingsReset {
+    /// Rows removed: preferences this build could not read, now back to
+    /// their defaults.
+    pub dropped: Vec<String>,
+    /// Rows left as they were although this build cannot read them, because
+    /// a reset keeps them ([`KEPT_ON_RESET`](crate::settings::KEPT_ON_RESET)).
+    /// While one is here, loading the settings still fails.
+    pub kept_unreadable: Vec<String>,
+}
+
 /// A change to stored settings: given them as they stand, alter them in
 /// place or refuse. What [`SettingsRepository::modify`] applies, and free to
 /// borrow what it needs for `'a`.
@@ -59,5 +71,27 @@ pub trait SettingsRepository: Send + Sync {
         change(&mut settings)?;
         self.save(&settings).await?;
         Ok(settings)
+    }
+
+    /// Put every preference back to its default with
+    /// [`Settings::reset_preferences`], in one step as
+    /// [`modify`](Self::modify) is.
+    ///
+    /// A store whose record can hold rows this build cannot read overrides
+    /// this, so a reset can recover such a record: each preference row that
+    /// does not parse is dropped and named, and a kept row that does not
+    /// parse is left as it was and named. The default goes through `modify`
+    /// and fails on such a record as `modify` does.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::Repository`] when the store fails.
+    async fn reset_preferences(&self) -> Result<SettingsReset, CoreError> {
+        self.modify(&|settings: &mut Settings| {
+            settings.reset_preferences();
+            Ok(())
+        })
+        .await?;
+        Ok(SettingsReset::default())
     }
 }

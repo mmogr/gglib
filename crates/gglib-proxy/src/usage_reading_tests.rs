@@ -13,6 +13,7 @@ use super::{Told, told};
 use crate::client_send::{CLIENT_SEND_TIMEOUT, ClientSender};
 use crate::connections::ActiveConnectionsRegistry;
 use crate::forward::drain_events;
+use crate::turn_dialect::TurnDialect;
 use crate::upstream_read::prefill_comment;
 
 fn shortened(messages_truncated: usize) -> TruncationReport {
@@ -84,13 +85,13 @@ fn usage() -> LlmStreamEvent {
 /// finished and reported its usage.
 async fn wire(told: Told) -> String {
     let registry = Arc::new(ActiveConnectionsRegistry::new());
-    let connection = registry.register("m", true, None);
+    let connection = registry.register(1, "m", true, None);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let events = [progress(), text(), done(), usage()].map(Ok);
     drain_events(
         futures_util::stream::iter(events),
         "m".to_owned(),
-        None,
+        TurnDialect::parsed(None),
         ClientSender::new(tx, CLIENT_SEND_TIMEOUT),
         &connection,
         None,

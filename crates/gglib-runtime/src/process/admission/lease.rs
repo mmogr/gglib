@@ -70,9 +70,10 @@ impl AdmissionQueue {
         self.wake.notify_waiters();
     }
 
-    /// Take a place in line for `model`.
-    pub fn enqueue(&self, model: &str) -> Ticket {
-        self.lock().enqueue(model, Instant::now())
+    /// Take a place in line for model `model_id`, named `model_name` on the
+    /// dashboard.
+    pub fn enqueue(&self, model_id: u32, model_name: &str) -> Ticket {
+        self.lock().enqueue(model_id, model_name, Instant::now())
     }
 
     /// Give up a place in line without having been granted anything.
@@ -210,9 +211,9 @@ impl AdmissionQueue {
             .collect()
     }
 
-    /// The slot holding or loading `model`.
-    pub fn slot_of(&self, model: &str) -> Option<usize> {
-        self.lock().slot_of(model)
+    /// The slot holding or loading model `model_id`.
+    pub fn slot_of(&self, model_id: u32) -> Option<usize> {
+        self.lock().slot_of(model_id)
     }
 
     /// The resident in `slot`, if any.

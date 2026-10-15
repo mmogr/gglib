@@ -13,9 +13,11 @@ use gglib_core::ports::{
 };
 use serde_json::json;
 
+use gglib_app_services::transcript::MadeBy;
 use gglib_app_services::types::ServerInfo;
+use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 
-use super::remote_upstream::{hold, hold_model, local};
+use super::remote_upstream::{Upstream, hold, hold_model, local};
 use super::run_fixture::{
     End, LOCAL, conversation, finished_reply, logged, meta, prepared, reply, saved, saving,
     settled, start, state,
@@ -184,41 +186,68 @@ async fn a_stalled_runs_hold_is_released_when_it_ends() {
     assert_eq!(runtime.released.count(), 1);
 }
 
-/// A run on model 1 at port 19555, as `prepare` leaves it: not yet held.
-fn local_run() -> super::compose::Prepared {
-    let (mut p, _) = prepared(reply(), End::Finish);
-    p.local_model = Some((19_555, 1));
-    p
+/// The catalogue's context for the model in [`upstream`]: what it was
+/// trained for, larger than the 8192 [`with_primary`] launches it at.
+const TRAINED: u64 = 262_144;
+
+/// A local upstream on `local_model`, as `remote_upstream::local` resolves
+/// one: not yet held, its budget the catalogue's.
+fn upstream(local_model: Option<(u16, i64)>) -> Upstream {
+    Upstream {
+        base_url: "http://127.0.0.1:19555".to_owned(),
+        far_machine: None,
+        model_context: ModelContext {
+            context_length: Some(TRAINED),
+            ..ModelContext::passthrough()
+        },
+        layers: SamplingLayers::default(),
+        model: None,
+        counted_as: "qwen".to_owned(),
+        made_by: MadeBy {
+            model: "qwen".to_owned(),
+            quantization: None,
+            device: None,
+            context_size: None,
+        },
+        local_model,
+        far_model: None,
+    }
 }
 
+/// The launched context is what the run's turns report and the budget its
+/// loop is composed with (#1272).
 #[tokio::test]
 async fn a_held_primary_model_gives_its_launched_context() {
     let runtime = with_primary(19_555, 1);
-    let mut p = local_run();
+    let mut u = upstream(Some((19_555, 1)));
 
-    hold_model(&runtime, &mut p).await.unwrap();
+    let held = hold_model(&runtime, &mut u).await.unwrap();
 
-    assert!(p.hold.is_some(), "held");
-    assert_eq!(p.made_by.context_size, Some(8192));
+    assert!(held.is_some(), "held");
+    assert_eq!(u.made_by.context_size, Some(8192));
+    assert_eq!(u.model_context.context_length, Some(8192));
 }
 
 /// The primary slot's context is another model's unless both its port and
-/// its id are the run's: a size that is not the run's own is left out.
+/// its id are the run's: a size that is not the run's own is left out, and
+/// the budget stays the catalogue's.
 #[tokio::test]
 async fn another_model_on_the_primary_slot_gives_none() {
     for (port, id) in [(19_555, 2), (19_556, 1), (19_556, 2)] {
         let runtime = with_primary(port, id);
-        let mut p = local_run();
+        let mut u = upstream(Some((19_555, 1)));
 
-        hold_model(&runtime, &mut p).await.unwrap();
+        let held = hold_model(&runtime, &mut u).await.unwrap();
 
-        assert!(p.hold.is_some(), "its own model is held all the same");
-        assert_eq!(p.made_by.context_size, None, "model {id} on {port}");
+        assert!(held.is_some(), "its own model is held all the same");
+        assert_eq!(u.made_by.context_size, None, "model {id} on {port}");
+        assert_eq!(u.model_context.context_length, Some(TRAINED));
     }
     let empty = Holding::default();
-    let mut p = local_run();
-    hold_model(&empty, &mut p).await.unwrap();
-    assert_eq!(p.made_by.context_size, None, "nothing in the primary slot");
+    let mut u = upstream(Some((19_555, 1)));
+    hold_model(&empty, &mut u).await.unwrap();
+    assert_eq!(u.made_by.context_size, None, "nothing in the primary slot");
+    assert_eq!(u.model_context.context_length, Some(TRAINED));
 }
 
 /// A run on the paired machine's model holds nothing here and reads no
@@ -226,13 +255,13 @@ async fn another_model_on_the_primary_slot_gives_none() {
 #[tokio::test]
 async fn a_far_run_reads_no_context() {
     let runtime = with_primary(19_555, 1);
-    let (mut p, _) = prepared(reply(), End::Finish);
-    assert_eq!(p.local_model, None, "as a far run is prepared");
+    let mut u = upstream(None);
 
-    hold_model(&runtime, &mut p).await.unwrap();
+    let held = hold_model(&runtime, &mut u).await.unwrap();
 
-    assert!(p.hold.is_none());
-    assert_eq!(p.made_by.context_size, None);
+    assert!(held.is_none());
+    assert_eq!(u.made_by.context_size, None);
+    assert_eq!(u.model_context.context_length, Some(TRAINED));
     assert!(runtime.asked.lock().unwrap().is_empty(), "nothing asked");
 }
 
@@ -241,10 +270,9 @@ async fn a_far_run_reads_no_context() {
 #[tokio::test]
 async fn a_run_refused_its_hold_reads_no_context() {
     let runtime = with_primary(19_555, 2);
-    let (mut p, _) = prepared(reply(), End::Finish);
-    p.local_model = Some((19_555, 2));
+    let mut u = upstream(Some((19_555, 2)));
 
-    let refused = hold_model(&runtime, &mut p).await;
+    let refused = hold_model(&runtime, &mut u).await;
 
     assert!(matches!(
         refused,
@@ -253,16 +281,17 @@ async fn a_run_refused_its_hold_reads_no_context() {
             ..
         })
     ));
-    assert_eq!(p.made_by.context_size, None);
+    assert_eq!(u.made_by.context_size, None);
+    assert_eq!(u.model_context.context_length, Some(TRAINED));
 }
 
 /// A paired device's turn on a hub chat is held and read the same way: its
-/// saved reply says the context its model was launched with.
+/// saved reply says the context its model was launched with. The turn's
+/// `late` holds the model as `prepare_held` does, over a scripted loop.
 #[tokio::test]
 async fn a_hub_chats_turn_saves_its_models_launched_context() {
-    let (_dir, mut state) = state().await;
-    let context = Arc::get_mut(&mut state).expect("not yet shared");
-    context.runtime = Arc::new(with_primary(19_555, 1));
+    let (_dir, state) = state().await;
+    let runtime = with_primary(19_555, 1);
     let id = conversation(&state).await;
     let turn = vec![
         AgentEvent::TurnUsage(TurnUsage::default()),
@@ -271,7 +300,10 @@ async fn a_hub_chats_turn_saves_its_models_launched_context() {
         },
     ];
     let (mut p, _) = prepared(turn, End::Finish);
-    p.local_model = Some((19_555, 1));
+    let mut u = upstream(Some((19_555, 1)));
+    p.hold = hold_model(&runtime, &mut u).await.unwrap();
+    p.local_model = u.local_model;
+    p.made_by = u.made_by;
     let free = super::compose::take_permit(&state);
 
     let late = super::launch::ready(p);

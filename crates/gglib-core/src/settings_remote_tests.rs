@@ -133,15 +133,6 @@ fn a_pairing_stored_before_the_remembered_model_still_loads() {
     assert_eq!(round.name.as_deref(), Some("desk"));
 }
 
-/// The five fields a reset keeps, as the stored record names them.
-const KEPT: [&str; 5] = [
-    "proxy_api_key",
-    "remote_pairing",
-    "remote_enabled",
-    "remote_serve",
-    "remote_devices",
-];
-
 /// A machine that joined another, admits one device, serves remote access
 /// with MCP on, holds a proxy key, and holds a value other than its default
 /// in every other field.
@@ -237,7 +228,10 @@ fn a_reset_still_puts_every_preference_back_to_its_default() {
     let stored = serde_json::to_value(&before).unwrap();
     let defaults = serde_json::to_value(Settings::with_defaults()).unwrap();
     let fields = stored.as_object().expect("settings serialize as a map");
-    for (field, value) in fields.iter().filter(|(f, _)| !KEPT.contains(&f.as_str())) {
+    for (field, value) in fields
+        .iter()
+        .filter(|(f, _)| !KEPT_ON_RESET.contains(&f.as_str()))
+    {
         assert_ne!(
             Some(value),
             defaults.get(field),
@@ -259,6 +253,31 @@ fn a_reset_still_puts_every_preference_back_to_its_default() {
             ..Settings::with_defaults()
         }
     );
+}
+
+/// [`KEPT_ON_RESET`] names exactly the fields a reset leaves as they were:
+/// the store protects rows by that list, so a name missing from it is a row
+/// a reset could drop.
+#[test]
+fn the_kept_list_names_exactly_what_a_reset_keeps() {
+    let before = serde_json::to_value(a_remote_machine()).unwrap();
+    let mut after = a_remote_machine();
+
+    after.reset_preferences();
+
+    let after = serde_json::to_value(after).unwrap();
+    let defaults = serde_json::to_value(Settings::with_defaults()).unwrap();
+    let mut kept: Vec<&str> = before
+        .as_object()
+        .expect("settings serialize as a map")
+        .iter()
+        .filter(|(f, v)| after.get(*f) == Some(*v) && defaults.get(*f) != Some(*v))
+        .map(|(f, _)| f.as_str())
+        .collect();
+    kept.sort_unstable();
+    let mut listed = KEPT_ON_RESET;
+    listed.sort_unstable();
+    assert_eq!(kept, listed);
 }
 
 /// A device's id may be as long as modelpipe lets a token's name be and no

@@ -99,6 +99,7 @@ async fn the_download_hands_its_row_to_the_callers_sink() {
             quantization: request.quantization,
             repo_id: request.repo_id,
             commit_sha: NEWER.to_string(),
+            files: Vec::new(),
         })
     };
     let outcome = ops
@@ -170,6 +171,7 @@ async fn an_upgrade_asks_the_hub_with_the_cores_token() {
                 quantization: request.quantization,
                 repo_id: request.repo_id,
                 commit_sha: NEWER.to_string(),
+                files: Vec::new(),
             }))
         };
         ops.apply_upgrade_with(id, None, check, download)
@@ -293,6 +295,7 @@ async fn upgrade(ops: &ModelOps, id: i64) -> (Result<UpgradeOutcome, GuiError>, 
             quantization: request.quantization,
             repo_id: request.repo_id,
             commit_sha: NEWER.to_string(),
+            files: Vec::new(),
         }))
     };
     let ended = ops.apply_upgrade_with(id, None, check, download).await;

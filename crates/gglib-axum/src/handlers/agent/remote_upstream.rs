@@ -20,7 +20,6 @@ use gglib_core::request_pipeline::{self, ModelContext, SamplingLayers};
 use gglib_runtime::FarMachine;
 
 use super::AgentChatRequest;
-use super::compose::Prepared;
 use crate::handlers::remote::far_error;
 use crate::{error::HttpError, handlers::port_utils::validate_port, state::AppState};
 
@@ -31,8 +30,9 @@ pub(super) struct Upstream {
     /// The far machine on the far path — its key and the name it is
     /// shown by; nothing locally.
     pub far_machine: Option<FarMachine>,
-    /// Locally, the context of the model the port serves; passthrough for
-    /// the far machine, whose proxy resolves.
+    /// Locally, the context of the model the port serves, with the context
+    /// it was launched with once a run holds it ([`hold_model`]);
+    /// passthrough for the far machine, whose proxy resolves.
     pub model_context: ModelContext,
     /// The stored sampling layers beneath what the request names. Locally,
     /// this machine's global defaults and its agentic sampling switch, and
@@ -221,21 +221,31 @@ async fn launched_context(
 }
 
 /// Take a run's [`hold`] on its model, then read the context that model was
-/// launched with onto the run's turns.
+/// launched with onto the run: the size its turns report, and the budget its
+/// conversation is trimmed to.
 ///
 /// In that order: until the model is held a proxy request may relaunch it at
 /// another context, and a size read before the hold could be the old one.
+/// And before the loop is composed, which takes the budget from
+/// `model_context`. Without this the budget was the catalogue's
+/// `context_length`, the model's trained ceiling, and a long chat on a
+/// smaller launched context was refused by llama-server (#1272). A size this
+/// cannot read leaves the catalogue's.
 ///
 /// # Errors
 ///
 /// Whatever [`hold`] refuses.
 pub(super) async fn hold_model(
     runtime: &dyn ModelRuntimePort,
-    prepared: &mut Prepared,
-) -> Result<(), HttpError> {
-    prepared.hold = hold(runtime, prepared.local_model)?;
-    prepared.made_by.context_size = launched_context(runtime, prepared.local_model).await;
-    Ok(())
+    upstream: &mut Upstream,
+) -> Result<Option<AdmissionLease>, HttpError> {
+    let held = hold(runtime, upstream.local_model)?;
+    let launched = launched_context(runtime, upstream.local_model).await;
+    upstream.made_by.context_size = launched;
+    if launched.is_some() {
+        upstream.model_context.context_length = launched;
+    }
+    Ok(held)
 }
 
 /// A far request's upstream: the far proxy's root through the tunnel, the
