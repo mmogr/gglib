@@ -12,7 +12,7 @@ src/components/ProxySamplingPanel.tsx 403
 src/components/SettingsModal.tsx 346
 src/components/SettingsModal/SystemSettings.tsx 304
 src/components/SetupWizard/SetupWizard.tsx 704
-src/components/VerificationModal.tsx 454
+src/components/VerificationModal.tsx 470
 src/hooks/useGglibRuntime/agentMessageState.ts 333
 src/hooks/useGglibRuntime/useGglibRuntime.ts 311
 src/hooks/useGglibRuntime/useRunReader.ts 317

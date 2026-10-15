@@ -96,16 +96,11 @@ pub(crate) async fn verify(
             "Verification progress",
         );
 
-        // Emit progress event via SSE
-        // Note: shard_name will be constructed from shard_index on the frontend
+        // Emit progress event via SSE, the file named by what it is
         let event = gglib_core::events::AppEvent::VerificationProgress {
             model_id: id,
             model_name: model.name.clone(),
-            shard_name: format!(
-                "Shard {}/{}",
-                progress.shard_index + 1,
-                progress.total_shards
-            ),
+            shard_name: progress.kind.label(),
             bytes_processed,
             total_bytes,
         };

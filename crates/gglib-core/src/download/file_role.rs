@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::types::find_boundary_match;
+use crate::domain::ModelFolder;
 
 /// The filename token that marks a projector.
 const PROJECTOR_TOKEN: &[u8] = b"mmproj";
@@ -78,18 +79,19 @@ impl GgufFileRole {
     /// The files among a model's own that are named as a projector.
     ///
     /// `names` are the model's files as the library records them. A
-    /// `model_files` name is relative to the directory `weights` is in and is
-    /// answered as a path there; a name that is already an absolute path is
-    /// answered as it is. The order is the order given. `weights` itself is
-    /// never one, whatever it is named, and nothing is read from disk.
-    pub fn projectors_among<S: AsRef<Path>>(
-        weights: &Path,
-        names: impl IntoIterator<Item = S>,
-    ) -> impl Iterator<Item = PathBuf> {
-        let dir = weights.parent().unwrap_or_else(|| Path::new(""));
+    /// `model_files` name is relative to `folder`, the folder the model was
+    /// downloaded to, and is answered as a path there; a name that is already
+    /// an absolute path is answered as it is. The order is the order given.
+    /// `weights` itself is never one, whatever it is named, and nothing is
+    /// read from disk.
+    pub fn projectors_among<'a, S: AsRef<Path>>(
+        weights: &'a Path,
+        folder: &'a ModelFolder,
+        names: impl IntoIterator<Item = S> + 'a,
+    ) -> impl Iterator<Item = PathBuf> + 'a {
         names
             .into_iter()
-            .map(move |name| dir.join(name))
+            .map(move |name| folder.file(name))
             .filter(move |file| file != weights && Self::classify(file).is_projector())
     }
 
@@ -112,6 +114,13 @@ mod tests {
 
     fn role(name: &str) -> GgufFileRole {
         GgufFileRole::classify(Path::new(name))
+    }
+
+    /// The projectors among `names` of the model whose file is `weights`,
+    /// read in the directory `weights` is in.
+    fn projectors_beside(weights: &Path, names: &[&str]) -> Vec<PathBuf> {
+        let folder = ModelFolder::new(weights, None);
+        GgufFileRole::projectors_among(weights, &folder, names).collect()
     }
 
     #[test]
@@ -162,7 +171,7 @@ mod tests {
         let weights = Path::new("/models/X/X.Q8_0.gguf");
         let names = ["X.Q8_0.gguf", "X.mmproj-Q8_0.gguf", "X.Q4_K_M.gguf"];
 
-        let found: Vec<_> = GgufFileRole::projectors_among(weights, names).collect();
+        let found = projectors_beside(weights, &names);
 
         assert_eq!(found, [Path::new("/models/X/X.mmproj-Q8_0.gguf")]);
     }
@@ -172,7 +181,7 @@ mod tests {
         let weights = Path::new("/models/X/X.Q8_0.gguf");
         let names = ["/elsewhere/mmproj-F16.gguf", "mmproj-Q8_0.gguf"];
 
-        let found: Vec<_> = GgufFileRole::projectors_among(weights, names).collect();
+        let found = projectors_beside(weights, &names);
 
         assert_eq!(
             found,
@@ -190,7 +199,24 @@ mod tests {
         let weights = Path::new("/models/X/mmproj-as-weights.gguf");
         let names = ["mmproj-as-weights.gguf", "/models/X/mmproj-as-weights.gguf"];
 
-        assert_eq!(GgufFileRole::projectors_among(weights, names).count(), 0);
+        assert!(projectors_beside(weights, &names).is_empty());
+    }
+
+    /// Weights in a repository subdirectory, and the projector at the
+    /// repository's root, where the download put it.
+    #[test]
+    fn a_projector_at_the_root_is_found_for_weights_in_a_subdirectory() {
+        let weights = Path::new("/models/o_r/BF16/X-BF16-00001-of-00002.gguf");
+        let names = [
+            "BF16/X-BF16-00001-of-00002.gguf",
+            "BF16/X-BF16-00002-of-00002.gguf",
+            "mmproj-BF16.gguf",
+        ];
+        let folder = ModelFolder::new(weights, Some(names[0]));
+
+        let found: Vec<_> = GgufFileRole::projectors_among(weights, &folder, names).collect();
+
+        assert_eq!(found, [Path::new("/models/o_r/mmproj-BF16.gguf")]);
     }
 
     #[test]

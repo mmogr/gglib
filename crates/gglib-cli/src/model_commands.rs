@@ -212,7 +212,7 @@ pub enum ModelCommand {
     Repair {
         /// Name or ID of the model to repair
         identifier: String,
-        /// Specific shard indices to repair (comma-separated, e.g., "0,2,5")
+        /// Specific file indices to repair, as verify lists them (comma-separated, e.g., "0,2,5")
         #[arg(short, long)]
         shards: Option<String>,
         /// Skip confirmation prompt
