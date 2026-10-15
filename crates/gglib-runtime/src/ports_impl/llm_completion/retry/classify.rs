@@ -22,6 +22,10 @@
 //! is not this shape at all or because its author filled in neither field.
 //! [`describe`] prints both, the `type` first; that ordering settles what
 //! gets printed, never what gets retried.
+//!
+//! The text a reason copies from the body is cut, and any image data in it
+//! is replaced, before it is printed ([`clip`]). That reads the text only to
+//! render it: nothing found there reaches the verdict.
 
 use std::time::Duration;
 
@@ -32,9 +36,17 @@ use reqwest::{Response, StatusCode};
 
 use super::headers::parse_retry_after;
 
-/// Upper bound on how much of an unrecognised error body is kept for the
-/// message. Enough to diagnose, short enough not to flood a log line.
+/// Upper bound on how much of an error body's text is kept for the message.
+/// Enough to diagnose, short enough not to flood a log line.
 const MAX_BODY_CHARS: usize = 500;
+
+/// What image data in a body's text is replaced with.
+const IMAGE_DATA_REMOVED: &str = "<image data removed>";
+
+/// The shortest unbroken base64 run taken for image data. Longer than a
+/// digest a message might name (a SHA-256 is 64 hex or 44 base64
+/// characters); a `data:` URL is removed whatever its length.
+const MIN_BASE64_RUN: usize = 100;
 
 /// modelpipe's `error.code` for a connect side that has no tunnel right now.
 const TUNNEL_UNAVAILABLE: &str = "tunnel_unavailable";
@@ -116,7 +128,7 @@ pub(super) async fn classify(response: Response, now: DateTime<Utc>) -> Result<R
         ),
         Err(_) => (
             status_is_retryable(status),
-            format!("{status}: {}", truncate(&body)),
+            format!("{status}: {}", clip(&body)),
             None,
         ),
     };
@@ -182,7 +194,7 @@ fn code_is_retryable(code: &str) -> bool {
 /// absent `type` deserializes as the empty string — and the empty label is
 /// dropped rather than printed, so a body that names neither reads as
 /// `500 Internal Server Error: boom` instead of growing a stray space before
-/// the colon.
+/// the colon. The message is [`clip`]ped like an unrecognised body.
 fn describe(status: StatusCode, error: &ErrorDetail) -> String {
     let kind = error.r#type.as_str();
     let code = error.code.as_deref().unwrap_or_default();
@@ -191,10 +203,11 @@ fn describe(status: StatusCode, error: &ErrorDetail) -> String {
         (false, true) => kind.to_owned(),
         (false, false) => format!("{kind} ({code})"),
     };
+    let message = clip(&error.message);
     if label.is_empty() {
-        format!("{status}: {}", error.message)
+        format!("{status}: {message}")
     } else {
-        format!("{status} {label}: {}", error.message)
+        format!("{status} {label}: {message}")
     }
 }
 
@@ -209,7 +222,90 @@ fn status_is_retryable(status: StatusCode) -> bool {
     )
 }
 
-/// Clip an unrecognised body to a length that is safe to log.
+/// A body's text as a reason may print it: image data replaced, then cut to
+/// a length that is safe to log.
+///
+/// A request carries each image as a `data:` URL, and an upstream that
+/// wrote any of the request back into its error would put the image in the
+/// log, the retry notice and the run's error event. The replacing comes
+/// first, so the cut cannot leave part of an image behind.
+fn clip(text: &str) -> String {
+    let text = replace_spans(text, data_url_at);
+    let text = replace_spans(&text, base64_run_at);
+    truncate(&text)
+}
+
+/// `text` with each span that `span_at` calls image data replaced by
+/// [`IMAGE_DATA_REMOVED`].
+///
+/// `span_at` is asked at a byte offset where the span ends, and whether it
+/// is image data. Every span it reports as image data starts and ends on an
+/// ASCII byte or the end of the text, so the slices below are on character
+/// boundaries.
+fn replace_spans(text: &str, span_at: fn(&[u8], usize) -> (usize, bool)) -> String {
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(text.len());
+    let (mut copied, mut at) = (0, 0);
+    while at < bytes.len() {
+        let (end, image) = span_at(bytes, at);
+        if image {
+            out.push_str(&text[copied..at]);
+            out.push_str(IMAGE_DATA_REMOVED);
+            copied = end;
+        }
+        at = end;
+    }
+    out.push_str(&text[copied..]);
+    out
+}
+
+/// A `data:` URL starting at `at`: the scheme, case aside, then everything
+/// up to the first byte no URL in a message carries, holding the comma every
+/// data URL has before its payload.
+fn data_url_at(bytes: &[u8], at: usize) -> (usize, bool) {
+    let scheme = b"data:";
+    let rest = &bytes[at..];
+    if !rest
+        .get(..scheme.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(scheme))
+    {
+        return (at + 1, false);
+    }
+    let len = rest.iter().position(|&b| ends_url(b)).unwrap_or(rest.len());
+    if rest[..len].contains(&b',') {
+        (at + len, true)
+    } else {
+        (at + 1, false)
+    }
+}
+
+/// Whether `b` ends a URL copied into a message: whitespace, a quote, a
+/// bracket, or any byte outside ASCII.
+const fn ends_url(b: u8) -> bool {
+    !b.is_ascii()
+        || b.is_ascii_whitespace()
+        || matches!(
+            b,
+            b'"' | b'\'' | b'`' | b'<' | b'>' | b'(' | b')' | b'[' | b']' | b'{' | b'}'
+        )
+}
+
+/// An unbroken run of the standard base64 alphabet starting at `at`, which
+/// is image data when it is at least [`MIN_BASE64_RUN`] long.
+fn base64_run_at(bytes: &[u8], at: usize) -> (usize, bool) {
+    let is_base64 = |b: &u8| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'=');
+    let rest = &bytes[at..];
+    match rest
+        .iter()
+        .position(|b| !is_base64(b))
+        .unwrap_or(rest.len())
+    {
+        0 => (at + 1, false),
+        len => (at + len, len >= MIN_BASE64_RUN),
+    }
+}
+
+/// Cut text to [`MAX_BODY_CHARS`].
 fn truncate(body: &str) -> String {
     if body.chars().count() <= MAX_BODY_CHARS {
         return body.to_owned();

@@ -217,3 +217,85 @@ async fn an_unparseable_body_still_falls_back_to_the_status() {
         failure.reason()
     );
 }
+
+/// A picture's worth of base64: the PNG signature's encoding, then filler.
+fn image_payload() -> String {
+    format!("iVBORw0KGgo{}", "A".repeat(4000))
+}
+
+/// An upstream that wrote the request's image back into its `error.message`
+/// gets a reason without the image, and the message is cut like any body.
+#[tokio::test]
+async fn an_error_message_that_echoes_an_image_prints_without_it() {
+    let payload = image_payload();
+    let body = serde_json::json!({
+        "error": {
+            "message": format!("cannot decode data:image/png;base64,{payload} in part 1"),
+            "type": "invalid_request_error",
+        }
+    })
+    .to_string();
+
+    let failure = classify_body(400, "Bad Request", &body).await;
+
+    assert!(
+        matches!(failure, Failure::Terminal { .. }),
+        "the verdict is the type's, whatever the message holds: {failure:?}"
+    );
+    assert_eq!(
+        failure.reason(),
+        "400 Bad Request invalid_request_error: cannot decode <image data removed> in part 1"
+    );
+}
+
+/// A body that is not the error envelope gets the same treatment, for a
+/// `data:` URL and for a bare base64 run alike.
+#[tokio::test]
+async fn a_plain_body_that_echoes_an_image_prints_without_it() {
+    let payload = image_payload();
+    let body = format!("bad part \"data:image/png;base64,{payload}\", then raw {payload}");
+
+    let reason = classify_body(500, "Internal Server Error", &body)
+        .await
+        .reason()
+        .to_owned();
+
+    assert_eq!(
+        reason,
+        "500 Internal Server Error: bad part \"<image data removed>\", then raw <image data removed>"
+    );
+}
+
+/// What is not image data is left as it was: prose naming `data:`, a URL
+/// with no payload, and a token too short to be a picture.
+#[tokio::test]
+async fn text_that_is_not_image_data_is_kept() {
+    let token = "Zm9vYmFyYmF6cXV4cXV1eHF1dXhxdXV4cXV1eHF1dXg=";
+    let message = format!("missing data: field; data:nothing here; token {token}");
+    let body = serde_json::json!({ "error": { "message": message } }).to_string();
+
+    let reason = classify_body(500, "Internal Server Error", &body)
+        .await
+        .reason()
+        .to_owned();
+
+    assert_eq!(reason, format!("500 Internal Server Error: {message}"));
+}
+
+/// An `error.message` is cut at the same length as an unrecognised body.
+#[tokio::test]
+async fn a_long_error_message_is_cut() {
+    let message = "word ".repeat(400);
+    let body = serde_json::json!({ "error": { "message": message } }).to_string();
+
+    let reason = classify_body(500, "Internal Server Error", &body)
+        .await
+        .reason()
+        .to_owned();
+
+    let kept: String = message.chars().take(500).collect();
+    assert_eq!(
+        reason,
+        format!("500 Internal Server Error: {kept}… <truncated>")
+    );
+}
