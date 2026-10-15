@@ -6,7 +6,12 @@
   [ADR 0004](0004-observe-the-sampling-boundary.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
-- **Log:** none
+- **Log:** [log-0022](log-0022.md)
+
+> **Amended 2026-10-15.** The line numbers here are at `972b5fc`, not at a
+> pin. Rechecked at `b11429`, the claims hold, but kill criterion 1's `/slots`
+> reading is 0 after every finished request, so it cannot be taken as written
+> ([log-0022](log-0022.md)).
 
 ## Context
 

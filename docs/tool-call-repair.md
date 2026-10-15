@@ -20,6 +20,8 @@ model/build pairs llama.cpp installs no grammar for it. Measured on `b10327`:
 | Qwen3.5-4B | 30/30 | 30/30 | lazy grammar |
 | Llama 3.2 3B | **≤ 4/30** | 30/30 | **none** |
 
+Re-measured on `b11429` (2026-10-15, Q8_0 files, both builds run on them): Qwen3.5-4B 30/30 and 30/30, Llama 3.2 3B 5/30 and 30/30, against 4/30 and 30/30 on `b10327` ([log-0002](adr/log-0002.md)).
+
 On Llama 3.2 the model returns `max_lines: "42"` — a string where the schema
 declares an integer — on 26 of 30 calls. The client's executor then fails,
 reports the error back to the model, and the model tries again. That loop is
