@@ -4,14 +4,21 @@
 //! capability shaping, the truncation budget, the effort gate and the
 //! response parser.
 
+use std::sync::{Arc, Mutex};
+
+use async_trait::async_trait;
 use gglib_core::domain::agent::{AgentEvent, AgentMessage, AssistantContent};
 use gglib_core::domain::{InferenceConfig, ModelCapabilities, TemplateCaps};
 use gglib_core::normalize::tags::FORMAT_QWEN_XML;
+use gglib_core::ports::{
+    Admission, AdmissionLease, AdmissionRelease, LaunchOverrides, ModelRuntimeError,
+    ModelRuntimePort, RunningTarget,
+};
 use serde_json::json;
 
 use crate::handlers::agent::run_fixture::state;
 use crate::handlers::agent::turn_fixture::{
-    TOOL, Turn, doors, model, page, sampling_of, sent, turn,
+    TOOL, Turn, doors, model, page, sampling_of, sent, sent_held, turn,
 };
 
 /// A reasoning-tagged model with nothing stored is sent the `reasoning`
@@ -88,23 +95,24 @@ async fn a_strict_turn_model_is_sent_consecutive_messages_merged() {
     }
 }
 
+/// ~60k characters of tool output, outside the protected tail.
+fn conversation() -> Vec<AgentMessage> {
+    let mut messages: Vec<_> = ["call_1", "call_2"]
+        .map(|id| AgentMessage::Tool {
+            tool_call_id: id.to_owned(),
+            content: "x".repeat(30_000),
+            images: Vec::new(),
+        })
+        .into();
+    messages.extend((0..8).map(|_| AgentMessage::user("ok")));
+    messages
+}
+
 /// A conversation larger than the model's context has its oldest tool
 /// results elided before it is sent; one the model has room for is sent
 /// whole.
 #[tokio::test]
 async fn a_conversation_over_the_models_context_is_trimmed_before_it_is_sent() {
-    let conversation = || {
-        // ~60k characters of tool output, outside the protected tail.
-        let mut messages: Vec<_> = ["call_1", "call_2"]
-            .map(|id| AgentMessage::Tool {
-                tool_call_id: id.to_owned(),
-                content: "x".repeat(30_000),
-                images: Vec::new(),
-            })
-            .into();
-        messages.extend((0..8).map(|_| AgentMessage::user("ok")));
-        messages
-    };
     for (context, trimmed) in [(4_096, true), (262_144, false)] {
         let (_dir, state) = state().await;
         // 4096 tokens is a budget of about 16k characters.
@@ -122,6 +130,82 @@ async fn a_conversation_over_the_models_context_is_trimmed_before_it_is_sent() {
             assert_eq!(oldest.len() == 30_000, !trimmed, "{door}");
             assert_eq!(body["messages"].as_array().map(Vec::len), Some(10));
         }
+    }
+}
+
+/// A runtime that holds whatever model a run asks for and reports it, in its
+/// primary slot, launched at the context its first field names.
+#[derive(Debug)]
+struct LaunchedAt(u64, Mutex<Option<(u16, u32)>>);
+
+#[derive(Debug)]
+struct Unreleased;
+
+impl AdmissionRelease for Unreleased {
+    fn release(&self, _slot: usize) {}
+
+    fn progress(&self, _slot: usize) {}
+}
+
+#[async_trait]
+impl ModelRuntimePort for LaunchedAt {
+    async fn admit(
+        &self,
+        _model_name: &str,
+        _num_ctx: Option<u64>,
+        _default_ctx: Option<u64>,
+        _overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
+        Err(ModelRuntimeError::Internal("not asked here".to_owned()))
+    }
+
+    async fn current_model(&self) -> Option<RunningTarget> {
+        let (port, id) = (*self.1.lock().unwrap())?;
+        Some(RunningTarget::local(
+            port,
+            id,
+            "served".to_owned(),
+            self.0,
+            false,
+        ))
+    }
+
+    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+        Ok(())
+    }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
+
+    fn hold(&self, port: u16, model_id: u32) -> Option<AdmissionLease> {
+        *self.1.lock().unwrap() = Some((port, model_id));
+        Some(AdmissionLease::new(Arc::new(Unreleased), 0))
+    }
+}
+
+/// A run that holds its model is trimmed to the context that model was
+/// launched with, not the larger one it was trained for (#1272). The same
+/// turn prepared without the hold keeps the trained budget and is sent
+/// whole: the control.
+#[tokio::test]
+async fn a_held_run_is_trimmed_to_its_models_launched_context() {
+    let (_dir, mut state) = state().await;
+    Arc::get_mut(&mut state).expect("not yet shared").runtime =
+        Arc::new(LaunchedAt(4_096, Mutex::new(None)));
+    let id = model(&state, |entry| entry.context_length = Some(262_144)).await;
+    let oldest = |body: &serde_json::Value| body["messages"][0]["content"].as_str().map(str::len);
+
+    for (door, mut chat) in doors(&state, id, false).await {
+        chat.messages = conversation();
+        let body = sent_held(&state, id, chat).await;
+        let first = body["messages"][0]["content"].as_str().expect("text");
+        assert!(first.starts_with("[Raw tool output truncated"), "{door}");
+    }
+    for (door, mut chat) in doors(&state, id, false).await {
+        chat.messages = conversation();
+        let body = sent(&state, id, chat).await;
+        assert_eq!(oldest(&body), Some(30_000), "{door}");
     }
 }
 

@@ -78,6 +78,8 @@ run also stamps the context its model was launched with
 cannot be an earlier launch's, and only when the primary slot's model is the
 run's own by port and id. A run on the paired machine's model, or on a model
 in the second slot, stamps none, and the figure is left out: never a default.
+The same read, taken before the loop is composed, is the budget the loop trims
+the conversation to; without it the budget is the catalogue's trained context.
 The loop itself counts the messages it left out of each request and reports
 why the model stopped.
 
