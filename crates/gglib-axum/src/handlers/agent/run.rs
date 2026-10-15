@@ -27,10 +27,9 @@ use gglib_core::domain::thinking;
 use gglib_core::ports::{AgentError, Created, RunScope};
 
 use super::AgentChatRequest;
-use super::compose::{Prepared, frame, prepare, refuse_unavailable_drawing, take_permit};
+use super::compose::{Prepared, frame, prepare_held, refuse_unavailable_drawing, take_permit};
 use super::dto::AgentRunRequest;
 use super::launch::{Transcript, launch};
-use super::remote_upstream;
 use crate::error::HttpError;
 use crate::state::AppState;
 
@@ -119,9 +118,8 @@ pub(crate) async fn create_run(
             "all agent loop slots are in use; try again later",
         )
     })?;
-    let mut prepared = prepare(state, chat).await.map_err(with_code)?;
     // Untested: `create_run` cannot be driven without a running llama-server.
-    remote_upstream::hold_model(state.runtime.as_ref(), &mut prepared).await?;
+    let prepared = prepare_held(state, chat).await.map_err(with_code)?;
     launch(state, id, RunScope::Local, transcript, prepared, permit).await
 }
 

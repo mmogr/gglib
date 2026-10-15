@@ -44,8 +44,8 @@ pub(crate) struct Prepared {
     /// The paired machine's model the loop drives, by its machine;
     /// otherwise none.
     pub(crate) far_model: Option<ModelRef>,
-    /// A run's hold on that model (`remote_upstream::hold`); `prepare` takes
-    /// none.
+    /// A run's hold on that model (`remote_upstream::hold`), taken by
+    /// [`prepare_held`]; `prepare` takes none.
     pub(crate) hold: Option<AdmissionLease>,
 }
 
@@ -150,6 +150,39 @@ pub(crate) async fn prepare(
     // and the bearer together.
     let upstream = remote_upstream::resolve(state, &req).await?;
     Ok(prepare_over(state, req, upstream).await)
+}
+
+/// [`prepare`] for a run, which holds its model while it lives: the page's
+/// run and a device's turn. The hold is taken, and the context the model was
+/// launched with read, before the loop is composed, so the loop trims the
+/// conversation to that context (`remote_upstream::hold_model`).
+///
+/// # Errors
+///
+/// Whatever [`remote_upstream::resolve`] or the hold refuses.
+pub(crate) async fn prepare_held(
+    state: &AppState,
+    req: AgentChatRequest,
+) -> Result<Prepared, HttpError> {
+    let upstream = remote_upstream::resolve(state, &req).await?;
+    held_over(state, req, upstream).await
+}
+
+/// [`prepare_held`], once the upstream is settled; drivable in a test, as
+/// [`prepare_over`] is.
+///
+/// # Errors
+///
+/// Whatever the hold refuses.
+pub(super) async fn held_over(
+    state: &AppState,
+    req: AgentChatRequest,
+    mut upstream: Upstream,
+) -> Result<Prepared, HttpError> {
+    let hold = remote_upstream::hold_model(state.runtime.as_ref(), &mut upstream).await?;
+    let mut prepared = prepare_over(state, req, upstream).await;
+    prepared.hold = hold;
+    Ok(prepared)
 }
 
 /// [`prepare`], once the upstream is settled.
