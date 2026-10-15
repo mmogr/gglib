@@ -121,7 +121,7 @@ async fn drained(dialect: TurnDialect) -> crate::forward::StreamOutcome {
         }),
     ]);
     let registry = std::sync::Arc::new(crate::connections::ActiveConnectionsRegistry::new());
-    let connection = registry.register("m", true, None);
+    let connection = registry.register(1, "m", true, None);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(8);
     let reader = tokio::spawn(async move { while rx.recv().await.is_some() {} });
     let outcome = drain_events(
