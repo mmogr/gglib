@@ -126,13 +126,8 @@ pub(crate) async fn put_run(
         }
     };
     if query.kind == Some(RunKind::Agent) {
-        // Never dropped in silence: a turn that said Draw here would run
-        // and draw nothing.
         if query.draw || query.image_model.is_some() {
-            return Err(invalid(
-                "an agent run says `draw` and `image_model` in its body, `\"draw\": true`, not \
-                 in the query",
-            ));
+            return Err(invalid(super::AGENT_DRAW_IN_QUERY));
         }
         return super::turn::put(&state, scope, &id, body).await;
     }
