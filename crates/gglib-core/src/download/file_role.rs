@@ -1,4 +1,5 @@
-//! What a GGUF file is for: a model's weights, or a multimodal projector.
+//! What a GGUF file is for: a model's weights, a multimodal projector, or a
+//! sidecar that ships beside them.
 //!
 //! A projector is the second file llama-server loads (`--mmproj`) to give a
 //! model image input. It is a GGUF like any other, so a repository listing or
@@ -6,6 +7,11 @@
 //! its header tells the two apart. [`GgufFileRole::classify`] reads the name;
 //! `gglib-gguf` reads the header and reports the same type on
 //! [`GgufMetadata::role`](crate::domain::GgufMetadata::role).
+//!
+//! A sidecar is a GGUF a repository keeps beside the weights that is neither
+//! weights nor a projector: an importance matrix, or a multi-token
+//! prediction (MTP) head. It is no quantization of the model and no shard of
+//! one.
 
 use std::path::{Path, PathBuf};
 
@@ -16,6 +22,13 @@ use super::types::find_boundary_match;
 /// The filename token that marks a projector.
 const PROJECTOR_TOKEN: &[u8] = b"mmproj";
 
+/// The filename tokens that mark a sidecar: an importance matrix, and an MTP
+/// head.
+const SIDECAR_TOKENS: [&[u8]; 2] = [b"imatrix", b"mtp"];
+
+/// The directory a repository keeps its MTP heads in.
+const MTP_DIRECTORY: &str = "MTP";
+
 /// What a GGUF file holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
@@ -25,6 +38,9 @@ pub enum GgufFileRole {
     Weights,
     /// A multimodal projector, loaded beside the weights with `--mmproj`.
     Projector,
+    /// A file that ships beside the weights and is neither: an importance
+    /// matrix, or an MTP head.
+    Sidecar,
 }
 
 impl GgufFileRole {
@@ -34,14 +50,26 @@ impl GgufFileRole {
     /// non-alphanumeric characters or an end of the name: `mmproj-F16.gguf`,
     /// `Qwen3-VL.mmproj-Q8_0.gguf`. Only the file name is read, so a weights
     /// file inside a directory named `mmproj` stays weights.
+    ///
+    /// A sidecar carries the token `imatrix` or `mtp` the same way
+    /// (`imatrix_unsloth.gguf`, `mtp-X-Q4_0.gguf`), or sits in a directory
+    /// named `MTP`, in either case. The projector's token wins over both.
     #[must_use]
     pub fn classify(path: &Path) -> Self {
-        let named_projector = path
+        let name = path
             .file_name()
             .and_then(|name| name.to_str())
-            .is_some_and(|name| find_boundary_match(name.as_bytes(), PROJECTOR_TOKEN).is_some());
-        if named_projector {
+            .unwrap_or("");
+        let names = |token: &[u8]| find_boundary_match(name.as_bytes(), token).is_some();
+        let in_mtp_directory = path
+            .parent()
+            .and_then(Path::file_name)
+            .and_then(|dir| dir.to_str())
+            .is_some_and(|dir| dir.eq_ignore_ascii_case(MTP_DIRECTORY));
+        if names(PROJECTOR_TOKEN) {
             Self::Projector
+        } else if in_mtp_directory || SIDECAR_TOKENS.into_iter().any(names) {
+            Self::Sidecar
         } else {
             Self::Weights
         }
@@ -69,6 +97,12 @@ impl GgufFileRole {
     #[must_use]
     pub const fn is_projector(self) -> bool {
         matches!(self, Self::Projector)
+    }
+
+    /// Whether this is a model's weights: neither a projector nor a sidecar.
+    #[must_use]
+    pub const fn is_weights(self) -> bool {
+        matches!(self, Self::Weights)
     }
 }
 
@@ -160,9 +194,45 @@ mod tests {
     }
 
     #[test]
+    fn an_importance_matrix_is_a_sidecar() {
+        assert_eq!(role("imatrix_unsloth.gguf"), GgufFileRole::Sidecar);
+        assert_eq!(role("X.imatrix.gguf"), GgufFileRole::Sidecar);
+        assert_eq!(role("X-IMATRIX.gguf"), GgufFileRole::Sidecar);
+    }
+
+    #[test]
+    fn an_mtp_head_is_a_sidecar_by_its_name_or_its_directory() {
+        assert_eq!(role("MTP/mtp-Qwen3.8-27B-Q4_0.gguf"), GgufFileRole::Sidecar);
+        assert_eq!(role("mtp-Qwen3.8-27B-Q4_0.gguf"), GgufFileRole::Sidecar);
+        assert_eq!(role("MTP/Qwen3.8-27B-Q4_0.gguf"), GgufFileRole::Sidecar);
+        assert_eq!(role("mtp/Qwen3.8-27B-Q4_0.gguf"), GgufFileRole::Sidecar);
+    }
+
+    /// The sidecar tokens are whole words too, and only the directory the
+    /// file is in counts.
+    #[test]
+    fn a_sidecar_token_inside_a_longer_word_is_weights() {
+        assert_eq!(role("smtp-Q4_0.gguf"), GgufFileRole::Weights);
+        assert_eq!(role("mtpx-Q4_0.gguf"), GgufFileRole::Weights);
+        assert_eq!(role("imatrixed-Q4_0.gguf"), GgufFileRole::Weights);
+        assert_eq!(role("MTP/BF16/X-BF16.gguf"), GgufFileRole::Weights);
+        assert_eq!(role("MTPX/X-Q4_0.gguf"), GgufFileRole::Weights);
+    }
+
+    #[test]
+    fn a_projector_named_like_a_sidecar_is_a_projector() {
+        assert_eq!(role("MTP/mmproj-F16.gguf"), GgufFileRole::Projector);
+        assert_eq!(role("mmproj-imatrix.gguf"), GgufFileRole::Projector);
+    }
+
+    #[test]
     fn weights_is_the_default() {
         assert_eq!(GgufFileRole::default(), GgufFileRole::Weights);
         assert!(!GgufFileRole::Weights.is_projector());
         assert!(GgufFileRole::Projector.is_projector());
+        assert!(GgufFileRole::Weights.is_weights());
+        assert!(!GgufFileRole::Projector.is_weights());
+        assert!(!GgufFileRole::Sidecar.is_weights());
+        assert!(!GgufFileRole::Sidecar.is_projector());
     }
 }

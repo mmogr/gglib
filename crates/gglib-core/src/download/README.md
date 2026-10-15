@@ -13,8 +13,9 @@ system. No I/O, networking, or runtime dependencies allowed.
   `Quantization` models Unsloth Dynamic ("UD-") quants (e.g. `UD-Q6_K`) as distinct
   values from their plain counterparts (`Q6_K`), since `HuggingFace` repos frequently
   publish both with the same bit-depth suffix.
-- `file_role` - What a GGUF file is for (`GgufFileRole`): a model's weights or a
-  multimodal projector, read from its file name (`GgufFileRole::classify`), and which of
+- `file_role` - What a GGUF file is for (`GgufFileRole`): a model's weights, a
+  multimodal projector, or a sidecar (an importance matrix or an MTP head, never a
+  quantization), read from its file name (`GgufFileRole::classify`), and which of
   a model's own files are projectors (`GgufFileRole::projectors_among`). `gglib-gguf`
   reports the same type from the file's header.
 - `projector_choice` - Which of a repository's projectors a download fetches

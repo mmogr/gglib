@@ -1,6 +1,7 @@
-//! Tests that a projector is listed apart from the quantizations.
+//! Tests that a projector and a sidecar are listed apart from the
+//! quantizations.
 
-use gglib_core::download::{Quantization, choose_projector};
+use gglib_core::download::{GgufFileRole, Quantization, choose_projector};
 
 use super::*;
 use crate::models::{HfEntryType, HfQuantization};
@@ -90,6 +91,66 @@ fn the_files_of_a_quantization_of_the_real_listing_hold_no_projector() {
         ]
     );
     assert!(filter_files_by_quantization(&files, "F16").is_empty());
+}
+
+/// The real listing's sidecars: its importance matrix and its MTP head.
+#[test]
+fn the_real_listing_holds_two_sidecars_that_are_neither_weights_nor_projectors() {
+    let sidecars: Vec<HfFileEntry> = qwen_files()
+        .into_iter()
+        .filter(|file| GgufFileRole::classify(Path::new(&file.path)) == GgufFileRole::Sidecar)
+        .collect();
+
+    assert_eq!(
+        paths(&sidecars),
+        ["MTP/mtp-Qwen3.8-27B-Q4_0.gguf", "imatrix_unsloth.gguf"]
+    );
+    for sidecar in &sidecars {
+        assert!(!sidecar.is_weights(), "{}", sidecar.path);
+        assert!(!sidecar.is_projector(), "{}", sidecar.path);
+    }
+}
+
+/// `Q4_0` is one file without the MTP head, `UD-Q6_K` one file without
+/// `UD-Q6_K_M`, which is its own, and there is no `imatrix` quantization.
+#[test]
+fn no_sidecar_of_the_real_listing_is_a_quantization_or_a_shard() {
+    let quantizations = aggregate_quantizations(&qwen_files());
+    let paths_of = |name: &str| {
+        quantizations
+            .iter()
+            .find(|q| q.name == name)
+            .map_or_else(|| panic!("no {name} quantization"), |q| q.paths.clone())
+    };
+
+    assert_eq!(paths_of("Q4_0"), ["Qwen3.8-27B-Q4_0.gguf"]);
+    assert_eq!(paths_of("UD-Q6_K"), ["Qwen3.8-27B-UD-Q6_K.gguf"]);
+    assert_eq!(paths_of("UD-Q6_K_M"), ["Qwen3.8-27B-UD-Q6_K_M.gguf"]);
+    assert!(!names(&quantizations).contains(&"imatrix"));
+    for quantization in &quantizations {
+        for path in &quantization.paths {
+            assert!(
+                !path.contains("imatrix") && !path.starts_with("MTP/"),
+                "{path} is listed under {}",
+                quantization.name
+            );
+        }
+    }
+}
+
+#[test]
+fn the_files_of_a_quantization_of_the_real_listing_hold_no_sidecar() {
+    let files = qwen_files();
+
+    assert_eq!(
+        paths(&filter_files_by_quantization(&files, "Q4_0")),
+        ["Qwen3.8-27B-Q4_0.gguf"]
+    );
+    assert_eq!(
+        paths(&filter_files_by_quantization(&files, "UD-Q6_K")),
+        ["Qwen3.8-27B-UD-Q6_K.gguf"]
+    );
+    assert!(filter_files_by_quantization(&files, "imatrix").is_empty());
 }
 
 /// What a `Q8_0` download of the real repository fetches with its weights.
