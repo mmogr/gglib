@@ -36,9 +36,9 @@ fn assert_param(body: &Value, key: &str, expected: f64) {
 /// The parameter reached the wire as an *absence*, so llama.cpp's own
 /// default applies.
 ///
-/// The normal outcome for six of the seven since ADR 0003. Asserting the
-/// key is missing is the whole point — a value here, even the right one,
-/// means gglib is overriding whatever upstream chooses next.
+/// The normal outcome for anything no rung names (ADR 0003, ADR 0022).
+/// Asserting the key is missing is the whole point — a value here, even the
+/// right one, means gglib is overriding whatever upstream chooses next.
 #[track_caller]
 fn assert_deferred(body: &Value, key: &str) {
     assert!(
@@ -97,9 +97,8 @@ fn each_layer_beats_the_ones_below_it() {
             None,
             Some(0.44),
             0.44,
-            "global beats hardcoded",
+            "global is the last rung that names one",
         ),
-        (None, None, None, None, None, 0.7, "hardcoded fallback"),
     ];
 
     for (cli, client, profile, model, global, expected, why) in cases {
@@ -122,6 +121,11 @@ fn each_layer_beats_the_ones_below_it() {
             "{why}: temperature must be present"
         );
     }
+
+    // And beneath them all, nothing: there is no floor to name one.
+    let mut body = json!({});
+    resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
+    assert_deferred(&body, "temperature");
 }
 
 /// Profiles are sparse: outranking the model layer must not blank out the
@@ -184,7 +188,6 @@ fn the_returned_sources_describe_the_ladder_the_pipeline_built() {
     assert_eq!(decision.sources.temperature, ParamSource::Layer(1));
     assert_eq!(decision.resolved.temperature, Some(0.25));
     assert!(decision.applied);
-    assert_eq!(decision.floor, FloorClass::Default);
 
     // And the decision agrees with what actually reached the body.
     assert_param(&body, "temperature", 0.25);
@@ -196,7 +199,11 @@ fn the_returned_sources_describe_the_ladder_the_pipeline_built() {
 #[test]
 fn a_non_object_body_reports_resolved_but_not_applied() {
     let mut body = json!("not an object");
-    let decision = resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
+    let decision = resolve_sampling(
+        &mut body,
+        &model_ctx(Some(temp(0.4))),
+        &SamplingLayers::default(),
+    );
 
     assert!(!decision.applied);
     assert!(decision.resolved.temperature.is_some(), "still resolved");
@@ -206,8 +213,8 @@ fn a_non_object_body_reports_resolved_but_not_applied() {
 ///
 /// When the ceiling bites, `sources.temperature` must still name the rung
 /// that supplied the value — the cap does not replace that rung, it caps
-/// what the rung supplied. Reporting `floor` here would make the log say
-/// nobody chose a temperature on a model whose recipe did.
+/// what the rung supplied. Reporting anything else here would make the log
+/// say nobody chose a temperature on a model whose recipe did.
 ///
 /// A non-reasoning model, because that is the only class that still has a
 /// ceiling — see `a_reasoning_models_recipe_stands_uncapped`.
@@ -222,7 +229,7 @@ fn the_ceiling_caps_the_value_without_rewriting_its_provenance() {
             temperature: Some(1.0),
             ..Default::default()
         }),
-        defaults_origin: Some(DefaultsOrigin::AutoDetected),
+        defaults_origin: Some(DefaultsOrigin::Published),
         ..ModelContext::passthrough()
     };
     let decision = resolve_sampling(
@@ -240,9 +247,8 @@ fn the_ceiling_caps_the_value_without_rewriting_its_provenance() {
     assert_eq!(
         decision.sources.temperature,
         ParamSource::Layer(LADDER_RUNGS - 1),
-        "provenance still names the auto-detected rung that supplied 1.0"
+        "provenance still names the recipe rung that supplied 1.0"
     );
-    assert_eq!(decision.floor, FloorClass::Default);
 }
 
 /// The trust gate's discard is the largest silent drop gglib performs, and
@@ -304,17 +310,16 @@ const LAYER_NAMES: [&str; 6] = [
 
 /// Resolve a ladder and render its provenance the way the debug line does.
 fn provenance_of(layers: &[Option<&InferenceConfig>; 6]) -> String {
-    let floor = InferenceConfig::with_hardcoded_defaults();
-    InferenceConfig::resolve_layers_with_sources(layers, &floor)
+    InferenceConfig::resolve_layers_with_sources(layers)
         .1
         .describe(&LAYER_NAMES)
 }
 
-/// The `:coding` shape. The provenance must say the penalty came from the
-/// floor, not from the model — otherwise the log would assert exactly the
-/// leak the merge now prevents.
+/// The `:coding` shape. The provenance must say the coupling rule passed the
+/// penalty over, not that the model supplied it — otherwise the log would
+/// assert exactly the leak the merge now prevents.
 #[test]
-fn provenance_reports_coupling_suppressed_layers_as_floor() {
+fn provenance_reports_coupling_suppressed_layers_as_coupled() {
     let model = InferenceConfig {
         temperature: Some(1.0),
         presence_penalty: Some(1.5),
@@ -325,7 +330,7 @@ fn provenance_reports_coupling_suppressed_layers_as_floor() {
     let got = provenance_of(&[None, None, Some(&profile), Some(&model), None, None]);
 
     assert!(got.contains("temperature=profile"), "{got}");
-    assert!(got.contains("presence_penalty=floor"), "{got}");
+    assert!(got.contains("presence_penalty=coupled"), "{got}");
     // Untuned parameters are unaffected by the claim.
     assert!(got.contains("top_k=model"), "{got}");
 }
@@ -355,15 +360,13 @@ fn provenance_names_the_cli_layer() {
     assert!(got.contains("temperature=cli"), "{got}");
 }
 
-/// The drift this unification removes. `cli` names a `presence_penalty`
-/// but no `temperature`; `model` claims the temperature, so the coupling
-/// rule resolves the penalty from `model` — and the provenance must say so.
-///
-/// The previous `describe_provenance` scanned every layer down to the
-/// claiming one and reported `cli`, naming a layer the resolution had
-/// passed over.
+/// Provenance and value come from one pass, so they cannot drift. `cli`
+/// names a `presence_penalty` but no `temperature`; `model` claims the
+/// temperature. The coupling rule only looks down from the claim, so the
+/// operator's penalty stands (ADR 0022) — and the provenance must credit the
+/// layer whose value was sent, which is `cli`, not the claimant.
 #[test]
-fn provenance_does_not_credit_a_layer_the_coupling_rule_passed_over() {
+fn provenance_credits_the_layer_whose_value_was_sent() {
     let cli = InferenceConfig {
         presence_penalty: Some(1.2),
         ..Default::default()
@@ -377,14 +380,13 @@ fn provenance_does_not_credit_a_layer_the_coupling_rule_passed_over() {
 
     let got = provenance_of(&layers);
     assert!(
-        got.contains("presence_penalty=model"),
-        "the claiming layer supplied it, got: {got}"
+        got.contains("presence_penalty=cli"),
+        "the operator's flag supplied it, got: {got}"
     );
 
     // And the value agrees with the name.
-    let floor = InferenceConfig::with_hardcoded_defaults();
-    let (resolved, _) = InferenceConfig::resolve_layers_with_sources(&layers, &floor);
-    assert_eq!(resolved.presence_penalty, Some(1.5));
+    let (resolved, _) = InferenceConfig::resolve_layers_with_sources(&layers);
+    assert_eq!(resolved.presence_penalty, Some(1.2));
 }
 
 /// Regression for #621: operator flags must beat the per-model layer.
@@ -455,30 +457,23 @@ fn a_profile_temperature_does_not_carry_model_penalties() {
 
     assert_param(&body, "temperature", 0.2);
     // The profile claimed the temperature and named no penalty, so the
-    // model's 1.5 is passed over. Nothing is sent: the floor used to
-    // restate upstream's 0.0 here, and ADR 0003 deferred it, so the model
-    // still decodes at 0.0 — supplied by llama.cpp rather than by gglib.
+    // model's 1.5 is passed over. Nothing is sent, and the model decodes at
+    // llama.cpp's own 0.0.
     assert_deferred(&body, "presence_penalty");
 }
 
 /// When the client IS trusted (`trust_client_sampling: true` — an
 /// `OpenWebUI`-style client with real sampling controls exposed to its
-/// user), a client that sends `temperature: 0` must still not silently
-/// zero out a reasoning model's only anti-repetition guard. The client
-/// still wins the temperature it asked for — it just doesn't also claim
-/// penalties it never named an opinion on. See `resolve_layers_with_sources`'s
-/// coupling rule.
+/// user), a client that sends `temperature: 0` wins the temperature it asked
+/// for, and does not inherit the recipe's penalties, which were tuned for
+/// another. No class floor stands in for them (ADR 0022): the client named
+/// none, so none is sent. See `resolve_layers_with_sources`'s coupling rule.
 #[test]
-fn trusted_client_temperature_zero_does_not_zero_a_reasoning_models_presence_penalty() {
+fn trusted_client_temperature_zero_does_not_inherit_a_reasoning_recipes_penalty() {
     let mut body = json!({"temperature": 0.0});
-    let ctx = ModelContext {
-        tags: vec!["reasoning".to_owned()],
-        inference_defaults: Some(InferenceConfig::reasoning_profile()),
-        ..ModelContext::passthrough()
-    };
     resolve_sampling(
         &mut body,
-        &ctx,
+        &reasoning_ctx(),
         &SamplingLayers {
             trust_client_sampling: true,
             ..Default::default()
@@ -486,14 +481,13 @@ fn trusted_client_temperature_zero_does_not_zero_a_reasoning_models_presence_pen
     );
 
     assert_param(&body, "temperature", 0.0);
-    assert_param(&body, "presence_penalty", 1.0);
+    assert_deferred(&body, "presence_penalty");
+    assert_deferred(&body, "min_p");
 }
 
-/// Same as above, but a non-reasoning model gets the plain neutral floor,
-/// not the reasoning one — the class floor is opt-in via the tag, not a
-/// blanket change.
+/// The same for a non-reasoning model's stored defaults.
 #[test]
-fn trusted_client_temperature_zero_leaves_a_non_reasoning_model_at_the_neutral_floor() {
+fn trusted_client_temperature_zero_does_not_inherit_a_models_penalty() {
     let mut body = json!({"temperature": 0.0});
     let model = InferenceConfig {
         temperature: Some(0.8),
@@ -511,8 +505,7 @@ fn trusted_client_temperature_zero_leaves_a_non_reasoning_model_at_the_neutral_f
 
     assert_param(&body, "temperature", 0.0);
     // The client claimed the temperature, so the model's 0.6 is passed
-    // over and no penalty is asserted — a non-reasoning model gets
-    // llama.cpp's neutral 0.0 rather than gglib restating it.
+    // over and no penalty is sent — the model gets llama.cpp's 0.0.
     assert_deferred(&body, "presence_penalty");
 }
 
@@ -529,12 +522,7 @@ fn trusted_client_temperature_zero_leaves_a_non_reasoning_model_at_the_neutral_f
 #[test]
 fn client_sampling_is_ignored_by_default() {
     let mut body = json!({"temperature": 0.0});
-    let ctx = ModelContext {
-        tags: vec!["reasoning".to_owned()],
-        inference_defaults: Some(InferenceConfig::reasoning_profile()),
-        ..ModelContext::passthrough()
-    };
-    resolve_sampling(&mut body, &ctx, &SamplingLayers::default());
+    resolve_sampling(&mut body, &reasoning_ctx(), &SamplingLayers::default());
 
     assert_param(&body, "temperature", 1.0); // the model's own, not the client's 0.0
     assert_param(&body, "presence_penalty", 1.5); // the model's tuned recipe, intact
@@ -614,8 +602,8 @@ fn a_gated_key_the_ladder_stays_silent_on_leaves_the_body() {
         "seed": 42,
         "max_tokens": 128,
     });
-    // Nothing above the floor names any of these, and the neutral floor
-    // asserts none of them — resolution emits no key for them at all.
+    // No rung names any of these, so resolution emits no key for them at
+    // all.
     resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
 
     let obj = body.as_object().unwrap();
@@ -712,12 +700,12 @@ fn no_modelled_key_is_listed_as_unmodelled() {
 // ── Measured defaults (DefaultsOrigin::Measured) ────────────────────────
 
 /// A tune sweep's winner, with the same shape and tags. Only the origin
-/// differs from [`auto_detected_ctx`] — which is the point: everything a
+/// differs from [`recipe_ctx`] — which is the point: everything a
 /// measured recipe does differently hangs off that one field.
 fn measured_ctx(defaults: InferenceConfig, reasoning: bool) -> ModelContext {
     ModelContext {
         defaults_origin: Some(DefaultsOrigin::Measured),
-        ..auto_detected_ctx(defaults, reasoning)
+        ..recipe_ctx(defaults, reasoning)
     }
 }
 
@@ -741,9 +729,9 @@ fn a_measured_recipe_ranks_below_global_settings() {
 /// The regression guard this variant exists for. The sweep resolved its
 /// candidates against the model's real context (#748) so the winner
 /// transfers to production — a ceiling capping the stored winner would
-/// un-measure it on exactly the turns it was measured for. The
-/// auto-detected contrast in the same test pins that the exemption is the
-/// origin, not a loosening of the ceiling.
+/// un-measure it on exactly the turns it was measured for. The published
+/// contrast in the same test pins that the exemption is the origin, not a
+/// loosening of the ceiling.
 #[test]
 fn the_agentic_ceiling_never_caps_a_measured_temperature() {
     let mut body = tools_body();
@@ -755,25 +743,22 @@ fn the_agentic_ceiling_never_caps_a_measured_temperature() {
     assert_param(&body, "temperature", 0.9); // measured: stands
 
     let mut body = tools_body();
-    resolve_sampling(
-        &mut body,
-        &auto_detected_ctx(temp(0.9), false),
-        &agentic_layers(),
-    );
+    resolve_sampling(&mut body, &recipe_ctx(temp(0.9), false), &agentic_layers());
     assert_param(&body, "temperature", 0.3); // the same value as a guess: capped
 }
 
-/// Only the model rung is exempt. A measured recipe that names no
-/// temperature resolves it from the floor, and nobody measured the floor.
+/// A measured recipe that names no temperature sends none, and the ceiling
+/// adds none either: llama.cpp's own default applies (ADR 0022).
 #[test]
-fn a_measured_model_resolving_temperature_from_the_floor_is_still_capped() {
+fn the_ceiling_adds_no_temperature_where_no_rung_names_one() {
     let mut body = tools_body();
     let recipe = InferenceConfig {
         top_k: Some(20),
         ..Default::default()
     };
-    resolve_sampling(&mut body, &measured_ctx(recipe, false), &agentic_layers());
-    assert_param(&body, "temperature", 0.3); // floor 0.7, capped as ever
+    let decision = resolve_sampling(&mut body, &measured_ctx(recipe, false), &agentic_layers());
+    assert_deferred(&body, "temperature");
+    assert_eq!(decision.agentic_ceiling_applied, None);
 }
 
 /// The below-global rung names its occupant, so the debug line and the
@@ -791,29 +776,28 @@ fn the_below_global_rung_is_named_for_its_origin() {
     assert_eq!(decision.layer_names[5], "model (measured)");
 
     let mut body = json!({});
-    let ctx = ModelContext {
-        defaults_origin: Some(DefaultsOrigin::Published),
-        ..auto_detected_ctx(temp(0.9), false)
-    };
-    let decision = resolve_sampling(&mut body, &ctx, &SamplingLayers::default());
+    let decision = resolve_sampling(
+        &mut body,
+        &recipe_ctx(temp(0.9), false),
+        &SamplingLayers::default(),
+    );
     assert_eq!(decision.layer_names[5], "model (published)");
+
+    let mut body = json!({});
+    let decision = resolve_sampling(&mut body, &reasoning_ctx(), &SamplingLayers::default());
+    assert_eq!(decision.layer_names[5], "model (auto-detected)");
 }
 
 // ── Model defaults provenance (Model.defaults_origin) ───────────────────
 
 /// A user's own global settings must win over gglib's unreviewed guess —
 /// this is the actual regression this feature exists for. Without it, a
-/// `reasoning`-tagged model's auto-written recipe always wins over
-/// anything configured globally, with no way to tell the two apart in
-/// the resolved output.
+/// `reasoning`-tagged model's recipe always wins over anything configured
+/// globally, with no way to tell the two apart in the resolved output.
 #[test]
 fn an_auto_detected_models_recipe_ranks_below_global_settings() {
     let mut body = json!({});
-    let ctx = ModelContext {
-        inference_defaults: Some(InferenceConfig::reasoning_profile()), // temp 1.0, presence 1.5
-        defaults_origin: Some(DefaultsOrigin::AutoDetected),
-        ..ModelContext::passthrough()
-    };
+    let ctx = reasoning_ctx(); // temp 1.0, presence 1.5
     let layers = SamplingLayers {
         global: Some(InferenceConfig {
             temperature: Some(0.2),
@@ -898,9 +882,9 @@ fn agentic_layers() -> SamplingLayers {
     }
 }
 
-/// A model whose defaults were written automatically at import, which is
-/// what every `reasoning`-tagged model gets.
-fn auto_detected_ctx(defaults: InferenceConfig, reasoning: bool) -> ModelContext {
+/// A model whose stored recipe nobody here reviewed: one the import fetched
+/// from its author. It ranks below global settings and the ceiling may cap it.
+fn recipe_ctx(defaults: InferenceConfig, reasoning: bool) -> ModelContext {
     ModelContext {
         tags: if reasoning {
             vec!["reasoning".to_owned()]
@@ -908,7 +892,16 @@ fn auto_detected_ctx(defaults: InferenceConfig, reasoning: bool) -> ModelContext
             Vec::new()
         },
         inference_defaults: Some(defaults),
-        defaults_origin: Some(DefaultsOrigin::AutoDetected),
+        defaults_origin: Some(DefaultsOrigin::Published),
+        ..ModelContext::passthrough()
+    }
+}
+
+/// An untouched `reasoning`-tagged model: nothing stored, so the `reasoning`
+/// recipe is supplied beneath global settings.
+fn reasoning_ctx() -> ModelContext {
+    ModelContext {
+        tags: vec!["reasoning".to_owned()],
         ..ModelContext::passthrough()
     }
 }
@@ -925,7 +918,7 @@ fn auto_detected_ctx(defaults: InferenceConfig, reasoning: bool) -> ModelContext
 #[test]
 fn a_reasoning_models_recipe_stands_uncapped_on_agentic_turns() {
     let mut body = tools_body();
-    let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+    let ctx = reasoning_ctx();
     let decision = resolve_sampling(&mut body, &ctx, &agentic_layers());
 
     assert!(decision.agentic_turn, "still an agentic turn");
@@ -942,7 +935,7 @@ fn a_reasoning_models_recipe_stands_uncapped_on_agentic_turns() {
 fn only_non_reasoning_models_are_capped() {
     for (reasoning, expected) in [(true, 1.0), (false, 0.3)] {
         let mut body = tools_body();
-        let ctx = auto_detected_ctx(
+        let ctx = recipe_ctx(
             InferenceConfig {
                 temperature: Some(1.0),
                 ..Default::default()
@@ -976,7 +969,7 @@ fn a_deliberate_temperature_is_never_capped() {
 #[test]
 fn dry_survives_an_agentic_turn() {
     let mut body = tools_body();
-    let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+    let ctx = reasoning_ctx();
     resolve_sampling(
         &mut body,
         &ctx,
@@ -1005,7 +998,7 @@ fn dynatemp_survives_without_a_temperature_in_the_same_layer_and_defers_otherwis
     // Nothing names the entropy-adaptive fields: they must not reach the
     // wire at all.
     let mut body = json!({});
-    let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+    let ctx = reasoning_ctx();
     resolve_sampling(&mut body, &ctx, &SamplingLayers::default());
     assert_deferred(&body, "dynatemp_range");
     assert_deferred(&body, "dynatemp_exponent");
@@ -1042,7 +1035,7 @@ fn dry_survives_without_a_temperature_in_the_same_layer() {
     let mut body = json!({});
     // The model's auto-detected recipe names a temperature, so it claims
     // the trio. The profile names only DRY.
-    let ctx = auto_detected_ctx(InferenceConfig::reasoning_profile(), true);
+    let ctx = reasoning_ctx();
     resolve_sampling(
         &mut body,
         &ctx,
@@ -1065,18 +1058,18 @@ fn dry_survives_without_a_temperature_in_the_same_layer() {
 #[test]
 fn the_ceiling_never_raises_a_temperature() {
     let mut body = tools_body();
-    let ctx = auto_detected_ctx(temp(0.1), false);
+    let ctx = recipe_ctx(temp(0.1), false);
     resolve_sampling(&mut body, &ctx, &agentic_layers());
 
     assert_param(&body, "temperature", 0.1);
 }
 
-/// `top_p` is left alone when the cap fires. The floor this replaced
-/// forced it to 1.0, which contradicted published model guidance.
+/// `top_p` is left alone when the cap fires. The rule this replaced forced
+/// it to 1.0, which contradicted published model guidance.
 #[test]
 fn the_ceiling_does_not_touch_top_p() {
     let mut body = tools_body();
-    let ctx = auto_detected_ctx(
+    let ctx = recipe_ctx(
         InferenceConfig {
             temperature: Some(1.0),
             top_p: Some(0.95),
@@ -1093,7 +1086,7 @@ fn the_ceiling_does_not_touch_top_p() {
 #[test]
 fn a_request_without_tools_is_never_capped() {
     let mut body = json!({});
-    let ctx = auto_detected_ctx(temp(1.0), false);
+    let ctx = recipe_ctx(temp(1.0), false);
     resolve_sampling(&mut body, &ctx, &agentic_layers());
 
     assert_param(&body, "temperature", 1.0);
@@ -1104,7 +1097,7 @@ fn a_request_without_tools_is_never_capped() {
 #[test]
 fn a_dangling_tool_choice_without_tools_is_not_an_agentic_turn() {
     let mut body = json!({"tool_choice": "required"});
-    let ctx = auto_detected_ctx(temp(1.0), false);
+    let ctx = recipe_ctx(temp(1.0), false);
     resolve_sampling(&mut body, &ctx, &agentic_layers());
 
     assert_param(&body, "temperature", 1.0);
@@ -1113,7 +1106,7 @@ fn a_dangling_tool_choice_without_tools_is_not_an_agentic_turn() {
 #[test]
 fn the_ceiling_does_nothing_when_the_caller_has_not_enabled_it() {
     let mut body = tools_body();
-    let ctx = auto_detected_ctx(temp(1.0), false);
+    let ctx = recipe_ctx(temp(1.0), false);
     resolve_sampling(&mut body, &ctx, &SamplingLayers::default());
 
     assert_param(&body, "temperature", 1.0);
@@ -1121,28 +1114,31 @@ fn the_ceiling_does_nothing_when_the_caller_has_not_enabled_it() {
 
 // ── cache_prompt ──────────────────────────────────────────────────────
 
+/// llama-server defaults `cache_prompt` to true, so gglib adds no key.
 #[test]
-fn cache_prompt_is_pinned_true_when_absent() {
+fn no_cache_prompt_key_is_added() {
     let mut body = json!({});
     resolve_sampling(
         &mut body,
         &ModelContext::passthrough(),
         &SamplingLayers::default(),
     );
-    assert_eq!(body["cache_prompt"], true);
+    assert!(body.get("cache_prompt").is_none(), "{body}");
 }
 
-/// The KV cache feature depends on this: a client that sends `false` must
-/// not be able to discard the whole restored cache.
+/// A client's own `cache_prompt` is a key gglib does not model, so it passes
+/// through untouched, `false` included.
 #[test]
-fn cache_prompt_is_forced_true_over_an_explicit_false() {
-    let mut body = json!({"cache_prompt": false});
-    resolve_sampling(
-        &mut body,
-        &ModelContext::passthrough(),
-        &SamplingLayers::default(),
-    );
-    assert_eq!(body["cache_prompt"], true);
+fn a_client_cache_prompt_passes_through_untouched() {
+    for sent in [false, true] {
+        let mut body = json!({"cache_prompt": sent});
+        resolve_sampling(
+            &mut body,
+            &ModelContext::passthrough(),
+            &SamplingLayers::default(),
+        );
+        assert_eq!(body["cache_prompt"], sent);
+    }
 }
 
 // ── Passthrough ───────────────────────────────────────────────────────
@@ -1229,7 +1225,7 @@ fn an_untrusted_clients_reasoning_effort_is_dropped_named_and_erased() {
 /// were *read*, and a refused one never becomes a layer value to discard. Left
 /// to the gate alone, `"banana"` was reported in `client_fields_rejected` and
 /// forwarded in the same breath — and since nothing upstream validates this
-/// field and no floor ever re-emits it, "forwarded" means rendered into the
+/// field and no recipe ever re-emits it, "forwarded" means rendered into the
 /// user's prompt as `Reasoning: banana` (ADR 0007 finding 7c). Trusting a
 /// client is not trusting a typo, so both settings are asserted.
 ///
@@ -1427,13 +1423,17 @@ fn an_empty_effort_level_is_left_for_upstream_to_ignore() {
 /// This pins the ordering the cleanup depends on — erase before the fold, so
 /// the resolved patch has the last word. Reverse them and a gated
 /// `temperature` would silently defer to llama.cpp's own default instead of
-/// gglib's floor, which is a different bug wearing this one's clothes.
+/// the model's, which is a different bug wearing this one's clothes.
 #[test]
 fn a_refused_field_falls_back_to_the_ladder_rather_than_vanishing() {
     let mut body = json!({"temperature": "0.7"});
-    let decision = resolve_sampling(&mut body, &model_ctx(None), &SamplingLayers::default());
+    let decision = resolve_sampling(
+        &mut body,
+        &model_ctx(Some(temp(0.4))),
+        &SamplingLayers::default(),
+    );
 
-    assert_param(&body, "temperature", 0.7); // the floor's, not the client's
+    assert_param(&body, "temperature", 0.4); // the model's, not the client's
     assert!(
         decision
             .client_fields_rejected
@@ -1646,7 +1646,7 @@ fn each_rung_can_supply_a_reasoning_control() {
         ("profile", ReasoningEffort::Medium, 33),
         ("model", ReasoningEffort::High, 44),
         ("global", ReasoningEffort::XHigh, 55),
-        ("model (auto-detected)", ReasoningEffort::Max, 66),
+        ("model (published)", ReasoningEffort::Max, 66),
     ];
 
     for (rung, effort, budget) in rungs {
@@ -1658,7 +1658,7 @@ fn each_rung_can_supply_a_reasoning_control() {
         let layer = with(effort, budget);
         let ctx = match rung {
             "model" => model_ctx(Some(layer.clone())),
-            "model (auto-detected)" => auto_detected_ctx(layer.clone(), false),
+            "model (published)" => recipe_ctx(layer.clone(), false),
             _ => model_ctx(None),
         };
         let layers = SamplingLayers {
@@ -1704,11 +1704,11 @@ fn each_rung_can_supply_a_reasoning_control() {
     }
 }
 
-/// Nothing names either control, and no floor does either — so no key reaches
-/// llama-server and each template's own default stands. Provenance says
-/// `Unset`, which is precisely what deferral is.
+/// Nothing names either control — so no key reaches llama-server and each
+/// template's own default stands. Provenance says `Unset`, which is
+/// precisely what deferral is.
 #[test]
-fn an_unclaimed_reasoning_control_is_deferred_rather_than_floored() {
+fn an_unclaimed_reasoning_control_is_deferred() {
     let mut body = json!({});
     let decision = resolve_sampling(
         &mut body,

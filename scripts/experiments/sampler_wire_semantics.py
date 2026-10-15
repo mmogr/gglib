@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
-"""Which of gglib's force-written sampler values does llama.cpp already supply?
+"""What does llama.cpp's sampler supply on its own, and how does it read a request?
 
-`InferenceConfig::with_hardcoded_defaults()` pins seven sampler values, and
-`resolve_sampling` force-writes all of them into every request body. Some are
-gglib policy. Others restate llama.cpp's own default — and one of those,
-`min_p: 0.0`, was silently *disabling* a sampler until #739 caught it by hand.
-
-ADR 0001 classifies the sampling hierarchy as Tier B ("llama.cpp will never do
-this, structurally"). That is true of the ladder. It is not obviously true of
-the floor beneath it: a floor value equal to the runtime's own default is not
-policy, it is a redundant assertion. This harness measures which is which,
-instead of arguing about it.
+A sampler field gglib does not send takes llama.cpp's own default, so those
+defaults, and how llama-server parses and applies a request's sampler fields,
+are what this harness measures. It was written to tell which force-written
+gglib values restated those defaults (ADR 0003, #739); that comparison went
+with the values themselves (ADR 0022).
 
 Run against a RAW llama-server, not through gglib:
 
@@ -25,8 +20,8 @@ confidently wrong answer rather than an obvious failure.
 1. **Never probe a server launched with sampler flags.** `/props` reports the
    *effective* defaults, so a server started with gglib's own
    `--temp/--top-p/--top-k/...` reports gglib's values back and you conclude
-   they are upstream's. The `defaults` arm therefore refuses to run if it
-   detects the values it is trying to measure. This is the same discipline as
+   they are upstream's. Nothing in a `/props` reading tells the two apart, so
+   the launch line is the only check. This is the same discipline as
    "run raw, not through gglib" in `lazy_grammar_conformance.py`, one layer
    lower.
 
@@ -67,11 +62,6 @@ Whether any of it produces better output. A value being redundant with
 upstream's default says nothing about whether that default is good. Quality is
 a separate instrument (`gglib benchmark agentic`) and a separate question.
 
-gglib's floor is read out of the Rust source at runtime rather than copied
-here, so this script cannot report a comparison against a floor that has since
-moved. `tests/ts/contracts/settingsParity.test.ts` uses the same trick for the
-same reason.
-
 Exit status is 0 whatever the findings — this reports, it does not judge.
 Exit 2 means the harness could not run, which is different and must stay so.
 """
@@ -81,7 +71,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import shutil
 import struct
 import sys
@@ -91,12 +80,13 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-# ── The seven force-written parameters ───────────────────────────────────────
+# ── The seven once force-written parameters ──────────────────────────────────
 #
-# Keyed by the Rust field name in `with_hardcoded_defaults()`; valued by the
-# key llama.cpp reports in `/props` and `/slots`. `max_tokens` maps to
-# `n_predict` and the three unset DRY fields are listed so the report can show
-# what gglib already defers rather than silently omitting them.
+# The values gglib's floor used to write into every request (ADR 0003, gone
+# since ADR 0022), keyed by the `InferenceConfig` field name; valued by the key
+# llama.cpp reports in `/props` and `/slots`. `max_tokens` maps to `n_predict`,
+# and the three DRY fields the floor never set are listed so the defaults table
+# shows them too.
 
 FORCE_WRITTEN = {
     "temperature": "temperature",
@@ -149,8 +139,8 @@ ODD = {
 # has to match what llama.cpp reads it back as (`get_int32` vs `get_float` in
 # `common_init_sampler_from_model`).
 #
-# Five of the twelve `general.sampling.*` keys map onto a parameter gglib has a
-# floor opinion about. `presence_penalty` and `dry_multiplier` have NO GGUF key
+# Five of the twelve `general.sampling.*` keys map onto a parameter
+# `InferenceConfig` models. `presence_penalty` and `dry_multiplier` have NO GGUF key
 # at all, which is why they stay build-attributable no matter what a model
 # ships — that asymmetry is the finding, not an implementation detail.
 
@@ -164,7 +154,8 @@ MODEL_EMBEDDED = {
     "penalty_repeat": ("general.sampling.penalty_repeat", "repeat_penalty", GGUF_F32),
 }
 
-# `general.sampling.*` keys llama.cpp reads that no gglib floor field tracks.
+# `general.sampling.*` keys llama.cpp reads that no `InferenceConfig` field
+# models.
 # Listed so the report can say what a model asked for that gglib is not
 # watching, rather than silently ignoring it.
 MODEL_EMBEDDED_UNTRACKED = (
@@ -443,49 +434,6 @@ def params_during_generation(
     return captured[0] if captured else None
 
 
-# ── gglib's floor, read from the Rust source ─────────────────────────────────
-
-
-def read_gglib_floor(repo_root: Path) -> dict[str, float | int | None]:
-    """Parse `with_hardcoded_defaults()` out of `domain/inference.rs`.
-
-    Copying the values into this file would let the script report a
-    comparison against a floor that has since moved, which is precisely the
-    class of staleness the experiment exists to detect. Raises with the symbol
-    it could not find rather than defaulting, so a restructure of the Rust
-    turns this red instead of silently retiring the guarantee.
-    """
-    src = repo_root / "crates/gglib-core/src/domain/inference.rs"
-    if not src.is_file():
-        raise SystemExit(f"error: cannot find {src} (pass --repo-root)")
-    text = src.read_text()
-
-    m = re.search(
-        r"fn with_hardcoded_defaults\(\)\s*->\s*Self\s*\{(.*?)\n    \}",
-        text,
-        re.DOTALL,
-    )
-    if not m:
-        raise SystemExit(
-            "error: could not locate `with_hardcoded_defaults()` in inference.rs"
-        )
-    body = m.group(1)
-
-    floor: dict[str, float | int | None] = {}
-    for field in list(FORCE_WRITTEN) + list(ALREADY_DEFERRED):
-        fm = re.search(rf"\b{field}:\s*(None|Some\(([^)]+)\))", body)
-        if not fm:
-            raise SystemExit(
-                f"error: `{field}` not found in with_hardcoded_defaults() — "
-                "the struct changed shape and this harness needs updating"
-            )
-        if fm.group(1) == "None":
-            floor[field] = None
-        else:
-            floor[field] = float(fm.group(2).rstrip("f32").rstrip("_"))
-    return floor
-
-
 # ── Probes ───────────────────────────────────────────────────────────────────
 
 
@@ -754,46 +702,28 @@ def fmt(v: object) -> str:
     return "—" if v is None else str(v)
 
 
-def report_floor(defaults: dict, floor: dict, arm: str) -> list[dict]:
-    print("── The floor, against upstream's own defaults " + "─" * 33)
+def report_defaults(defaults: dict, arm: str) -> None:
+    print("── llama.cpp's own defaults " + "─" * 50)
     print()
     if defaults["status"] != "ok":
         print(f"  UNMEASURABLE: {defaults['why']}")
         print()
-        return []
+        return
     if arm == "flagged":
         # Trap 1, made unmissable in the output rather than only in the
-        # docstring. On a flagged server `/props` reports gglib's own flags
-        # back, so every row reads EQUALS and the table looks like a much
-        # stronger result than it is. It is not a defaults reading at all.
+        # docstring. On a flagged server `/props` reports the launch flags
+        # back, so the table looks like a defaults reading when it is not one.
         print("  !! NOT A DEFAULTS READING — this server was launched with sampler")
         print("     flags, so /props reports those flags back. Shown only so the")
         print("     body-vs-launch probe below has its launch state on the record.")
         print("     The authoritative table comes from `--arm defaults`.")
         print()
     up = defaults["params"]
-    rows = []
-    print(f"  {'parameter':22} {'gglib floor':>12} {'upstream':>12}   verdict")
-    print(f"  {'-' * 22} {'-' * 12} {'-' * 12}   {'-' * 24}")
-    for field, wire in FORCE_WRITTEN.items():
-        g, u = floor.get(field), up.get(wire)
-        if g is None or u is None:
-            verdict = "unmeasurable"
-        elif abs(float(g) - float(u)) < 1e-6:
-            verdict = "EQUALS → compensation"
-        else:
-            verdict = "DIVERGES → policy"
-        rows.append({"param": field, "gglib": g, "upstream": u, "verdict": verdict})
-        print(f"  {field:22} {fmt(g):>12} {fmt(u):>12}   {verdict}")
+    print(f"  {'parameter':22} {'upstream':>12}")
+    print(f"  {'-' * 22} {'-' * 12}")
+    for field, wire in {**FORCE_WRITTEN, **ALREADY_DEFERRED}.items():
+        print(f"  {field:22} {fmt(up.get(wire)):>12}")
     print()
-    print("  already deferred (gglib sends no value):")
-    for field, wire in ALREADY_DEFERRED.items():
-        print(f"    {field:24} upstream default = {fmt(up.get(wire))}")
-    print()
-    n_eq = sum(1 for r in rows if r["verdict"].startswith("EQUALS"))
-    print(f"  → {n_eq} of {len(rows)} force-written values restate an upstream default.")
-    print()
-    return rows
 
 
 def report_model_embedded(res: dict) -> None:
@@ -820,7 +750,7 @@ def report_model_embedded(res: dict) -> None:
         print("  compares it against a per-build constant reports drift that is the")
         print("  model's recommendation, not a pin bump.")
         print()
-    print("  gglib tracks no floor field for these keys, so a model setting them")
+    print("  gglib models no field for these keys, so a model setting them")
     print("  moves sampling with nothing watching:")
     for key in res["untracked_keys"]:
         print(f"    {key}")
@@ -832,10 +762,10 @@ def report_model_embedded(res: dict) -> None:
     print()
 
 
-def report(results: dict, floor: dict, note: str, arm: str) -> None:
+def report(results: dict, note: str, arm: str) -> None:
     print()
     print("═" * 78)
-    print("  Sampler wire semantics — what llama.cpp supplies vs what gglib asserts")
+    print("  Sampler wire semantics — what llama.cpp supplies on its own")
     d = results.get("defaults", {})
     if d.get("status") == "ok":
         print(f"  build: {d.get('build_info')}")
@@ -848,16 +778,15 @@ def report(results: dict, floor: dict, note: str, arm: str) -> None:
         report_model_embedded(results.get("model_embedded", {"status": "unmeasurable", "why": "not probed"}))
         return
 
-    report_floor(d, floor, arm)
+    report_defaults(d, arm)
 
     if d.get("status") == "ok" and d.get("samplers"):
         print("── Sampler chain order " + "─" * 55)
         print()
         print("  " + " → ".join(d["samplers"]))
         print()
-        print("  gglib sends four truncation samplers at once and never sets")
-        print("  `--samplers`, so this composition order is load-bearing and was")
-        print("  previously unstated anywhere in the tree.")
+        print("  gglib never sets `--samplers`, so this composition order is the")
+        print("  one every request through it is sampled with.")
         print()
 
     for key, title in (
@@ -925,7 +854,7 @@ def main() -> int:
         choices=("defaults", "flagged", "model-embedded"),
         default="defaults",
         help="`defaults` needs a server launched with NO sampler flags (see trap 1); "
-        "`flagged` needs one launched with gglib's floor as flags; "
+        "`flagged` needs one launched with sampler flags (at least --temp); "
         "`model-embedded` needs one launched bare on a GGUF stamped by --stamp",
     )
     p.add_argument(
@@ -956,12 +885,6 @@ def main() -> int:
         metavar="FILE",
         help="path to a previous run's --json output from a DIFFERENT model; "
         "diffs the default tables to prove they are build-level, not model-level",
-    )
-    p.add_argument(
-        "--repo-root",
-        type=Path,
-        default=Path(__file__).resolve().parents[2],
-        help="gglib checkout, for reading the floor out of inference.rs",
     )
     p.add_argument("--note", default="", help="free text recorded in the header")
     p.add_argument("--json", action="store_true", help="emit raw results as JSON too")
@@ -1037,31 +960,10 @@ def main() -> int:
         print("  (the `defaults` arm needs NO sampler flags — see trap 1)", file=sys.stderr)
         return 2
 
-    floor = read_gglib_floor(args.repo_root)
     results: dict = {}
 
     print(f"probing defaults ...", file=sys.stderr)
     results["defaults"] = probe_defaults(base, args.timeout)
-
-    # Trap 1, enforced rather than documented: if every force-written value
-    # already matches gglib's floor including the one known to diverge, this is
-    # almost certainly a server launched with gglib's flags and the `defaults`
-    # arm would report gglib's own numbers as upstream's.
-    if args.arm == "defaults" and results["defaults"]["status"] == "ok":
-        up = results["defaults"]["params"]
-        if all(
-            floor.get(f) is not None
-            and up.get(w) is not None
-            and abs(float(floor[f]) - float(up[w])) < 1e-6
-            for f, w in FORCE_WRITTEN.items()
-        ):
-            print(
-                "error: every value already equals gglib's floor — this server was "
-                "probably launched WITH gglib's sampler flags.\n"
-                "       Relaunch with none of them, or pass --arm flagged.",
-                file=sys.stderr,
-            )
-            return 2
 
     if args.arm == "model-embedded":
         print("probing model-embedded sampling defaults ...", file=sys.stderr)
@@ -1082,7 +984,7 @@ def main() -> int:
             print(f"probing {label} ...", file=sys.stderr)
             results[label] = fn()
 
-    report(results, floor, args.note, args.arm)
+    report(results, args.note, args.arm)
 
     if args.compare_model_defaults:
         other = json.loads(Path(args.compare_model_defaults).read_text())
@@ -1103,7 +1005,7 @@ def main() -> int:
         print()
 
     if args.json:
-        print(json.dumps({"floor": floor, **results}, indent=2, default=str))
+        print(json.dumps(results, indent=2, default=str))
 
     return 0
 

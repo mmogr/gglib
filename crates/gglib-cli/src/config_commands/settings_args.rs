@@ -113,7 +113,7 @@ pub struct SettingsSetArgs {
     /// Cap the temperature on agentic turns. Enabled by default: a
     /// request carrying tools may emit structured output, so its
     /// temperature is capped at 0.3 — but only over a value nobody chose
-    /// (an auto-detected recipe or the floor), and never on a
+    /// (a model's recipe nobody here reviewed), and never on a
     /// reasoning-tagged model. Anything you set stands. The proxy follows
     /// this, and so does a chat with a model in this machine's library:
     /// from `gglib chat`, `gglib q`, the chat page and a paired device.

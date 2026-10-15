@@ -113,14 +113,14 @@ fn iter_yields_every_field_once_in_display_order() {
     let sources = FieldSources {
         temperature: ParamSource::Layer(0),
         top_p: ParamSource::Layer(0),
-        top_k: ParamSource::Floor,
-        presence_penalty: ParamSource::FloorCoupled,
-        repeat_penalty: ParamSource::FloorCoupled,
-        min_p: ParamSource::FloorCoupled,
+        top_k: ParamSource::Unset,
+        presence_penalty: ParamSource::Coupled,
+        repeat_penalty: ParamSource::Coupled,
+        min_p: ParamSource::Coupled,
         dynatemp_range: ParamSource::Unset,
         dynatemp_exponent: ParamSource::Unset,
         top_n_sigma: ParamSource::Unset,
-        dry_multiplier: ParamSource::FloorCoupled,
+        dry_multiplier: ParamSource::Coupled,
         dry_base: ParamSource::Unset,
         dry_allowed_length: ParamSource::Unset,
         dry_penalty_last_n: ParamSource::Unset,
@@ -154,17 +154,17 @@ fn iter_yields_every_field_once_in_display_order() {
     );
 }
 
-/// Both floor variants render as `floor` in the terse log form — the
-/// distinction exists for the `explain` command, which has room for it.
+/// The terse log form names each layer, and says `coupled` or `unset` for a
+/// value no layer supplied.
 #[test]
-fn describe_names_layers_and_collapses_the_floor_variants() {
+fn describe_names_layers_and_the_coupling_rule() {
     let sources = FieldSources {
         temperature: ParamSource::Layer(1),
         top_p: ParamSource::Layer(0),
-        top_k: ParamSource::Floor,
-        presence_penalty: ParamSource::FloorCoupled,
+        top_k: ParamSource::Unset,
+        presence_penalty: ParamSource::Coupled,
         repeat_penalty: ParamSource::Layer(2),
-        min_p: ParamSource::Floor,
+        min_p: ParamSource::Unset,
         frequency_penalty: ParamSource::Unset,
         dynatemp_range: ParamSource::Unset,
         dynatemp_exponent: ParamSource::Unset,
@@ -180,8 +180,8 @@ fn describe_names_layers_and_collapses_the_floor_variants() {
     let got = sources.describe(&["cli", "profile", "model"]);
     assert!(got.contains("temperature=profile"), "{got}");
     assert!(got.contains("top_p=cli"), "{got}");
-    assert!(got.contains("top_k=floor"), "{got}");
-    assert!(got.contains("presence_penalty=floor"), "{got}");
+    assert!(got.contains("top_k=unset"), "{got}");
+    assert!(got.contains("presence_penalty=coupled"), "{got}");
     assert!(got.contains("repeat_penalty=model"), "{got}");
     assert!(got.contains("dry_multiplier=model"), "{got}");
     assert!(got.contains("dry_base=unset"), "{got}");
@@ -194,16 +194,16 @@ fn describe_names_layers_and_collapses_the_floor_variants() {
 fn describe_marks_an_index_the_names_do_not_cover() {
     let sources = FieldSources {
         temperature: ParamSource::Layer(9),
-        top_p: ParamSource::Floor,
-        top_k: ParamSource::Floor,
-        presence_penalty: ParamSource::Floor,
-        repeat_penalty: ParamSource::Floor,
-        min_p: ParamSource::Floor,
+        top_p: ParamSource::Unset,
+        top_k: ParamSource::Unset,
+        presence_penalty: ParamSource::Unset,
+        repeat_penalty: ParamSource::Unset,
+        min_p: ParamSource::Unset,
         frequency_penalty: ParamSource::Unset,
         dynatemp_range: ParamSource::Unset,
         dynatemp_exponent: ParamSource::Unset,
         top_n_sigma: ParamSource::Unset,
-        dry_multiplier: ParamSource::Floor,
+        dry_multiplier: ParamSource::Unset,
         dry_base: ParamSource::Unset,
         dry_allowed_length: ParamSource::Unset,
         dry_penalty_last_n: ParamSource::Unset,

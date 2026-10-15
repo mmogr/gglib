@@ -606,33 +606,32 @@ mod tests {
     // ── Sampling intent ───────────────────────────────────────────────────
 
     fn decision(temperature: f32) -> SamplingDecision {
-        use gglib_core::domain::{FieldSources, ParamSource::Floor};
+        use gglib_core::domain::{FieldSources, ParamSource::Layer};
         SamplingDecision {
             resolved: gglib_core::domain::InferenceConfig {
                 temperature: Some(temperature),
                 ..Default::default()
             },
             sources: FieldSources {
-                temperature: Floor,
-                top_p: Floor,
-                top_k: Floor,
-                max_tokens: Floor,
-                repeat_penalty: Floor,
-                presence_penalty: Floor,
-                min_p: Floor,
-                dynatemp_range: Floor,
-                dynatemp_exponent: Floor,
-                top_n_sigma: Floor,
-                dry_multiplier: Floor,
-                dry_base: Floor,
-                dry_allowed_length: Floor,
-                dry_penalty_last_n: Floor,
-                frequency_penalty: Floor,
-                reasoning_effort: Floor,
-                reasoning_budget_tokens: Floor,
+                temperature: Layer(1),
+                top_p: Layer(1),
+                top_k: Layer(1),
+                max_tokens: Layer(1),
+                repeat_penalty: Layer(1),
+                presence_penalty: Layer(1),
+                min_p: Layer(1),
+                dynatemp_range: Layer(1),
+                dynatemp_exponent: Layer(1),
+                top_n_sigma: Layer(1),
+                dry_multiplier: Layer(1),
+                dry_base: Layer(1),
+                dry_allowed_length: Layer(1),
+                dry_penalty_last_n: Layer(1),
+                frequency_penalty: Layer(1),
+                reasoning_effort: Layer(1),
+                reasoning_budget_tokens: Layer(1),
             },
             layer_names: ["cli", "client", "profile", "model", "global", "auto"],
-            floor: gglib_core::request_pipeline::FloorClass::Default,
             agentic_turn: false,
             agentic_ceiling_applied: None,
             client_fields_rejected: Vec::new(),

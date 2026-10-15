@@ -144,16 +144,15 @@ fn inference_default_lines(dto: &ModelDetailDto) -> Vec<String> {
         return Vec::new();
     };
     let origin_suffix = match dto.defaults_origin {
-        Some(DefaultsOrigin::AutoDetected) => " (auto-detected — ranks below global settings)",
-        // Same rank as auto-detected, and said so: neither was reviewed by a
-        // person, so neither may outrank a setting somebody chose. What
-        // differs is the evidence behind it.
+        // Below global settings, and said so: nobody here reviewed it, so it
+        // may not outrank a setting somebody chose. The `reasoning` recipe
+        // ranks there too, and is never stored, so it is not listed here;
+        // `gglib model explain` shows it.
         Some(DefaultsOrigin::Published) => {
             " (published by the model author — ranks below global settings)"
         }
         // Also below global — an automated apply is not a person — but the
-        // strongest evidence of the three, and the agentic ceiling defers to
-        // it.
+        // strongest evidence there is, and the agentic ceiling defers to it.
         Some(DefaultsOrigin::Measured) => {
             " (measured by a tune sweep — ranks below global settings)"
         }

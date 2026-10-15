@@ -6,13 +6,13 @@ Tristate inference parameter form where each field can be `undefined` (inherit p
 
 ## What an empty field inherits
 
-The form renders at three different rungs of the resolution ladder (request → profile → per-model → global settings → floor), so an empty field means something different on each. The required `fallback` prop says which rung this surface edits:
+The form renders at three different rungs of the resolution ladder (request → profile → per-model → global settings, with a model's recipe beneath them), so an empty field means something different on each. Beneath the recipe there is no floor (ADR 0022): a field nothing names is not sent, and llama.cpp's own default applies. The required `fallback` prop says which rung this surface edits:
 
 | Surface | `fallback` | An empty field falls through to |
 |---|---|---|
-| Settings → Global Inference Parameter Defaults | `{ kind: 'floor' }` | the hardcoded floor — the one place a constant is correct |
+| Settings → Global Inference Parameter Defaults | `{ kind: 'upstream' }` | a model's recipe where it has one, llama.cpp's own defaults otherwise — the caption names llama.cpp's number, and a model's own answer shows on the `explain` surface |
 | `ModelEditForm` | `{ kind: 'resolved', ownLayer: 'modelUserSet' }` | the global setting, or whatever the backend says |
-| `ServeModal` | `{ kind: 'resolved', ownLayer: 'request' }` | profile → model → global, then the floor |
+| `ServeModal` | `{ kind: 'resolved', ownLayer: 'request' }` | profile → model → global → the model's recipe, then llama.cpp's defaults |
 
 On the `resolved` surfaces the caption, placeholder, and slider position all come from `GET /api/models/:id/explain`. Nothing here re-derives the ladder: `resolve_layers_with_sources` computes value and provenance in one pass so that no second implementation can explain a decision the resolution did not take.
 

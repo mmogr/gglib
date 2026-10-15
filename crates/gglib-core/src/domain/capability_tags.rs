@@ -5,8 +5,8 @@
 //! [`GgufCapabilities::to_tags`](crate::domain::GgufCapabilities::to_tags) and
 //! read afterwards to decide what gglib does differently for that model:
 //! `agent` auto-enables `--jinja`, `mtp` auto-enables speculative decoding,
-//! `embedding` auto-enables `--embeddings`, and `reasoning` selects a whole
-//! sampling floor.
+//! `embedding` auto-enables `--embeddings`, and `reasoning` supplies a whole
+//! sampling recipe.
 //!
 //! Distinct from [`crate::normalize::tags`], which holds `format:*` tags for
 //! the dialect registry. Those describe how a model's *output* is shaped; these
@@ -26,24 +26,20 @@
 //! more were the same `any` expression written out inside a
 //! [`ModelSamplingContext`](crate::domain::ModelSamplingContext) literal.
 //!
-//! The duplication was not the real cost. This predicate decides which floor a
-//! model resolves against, and since [ADR 0003] the two floors differ in *which
-//! parameters they name at all* — a reasoning model is sent `min_p: 0.0` while
-//! every other model is sent no `min_p` key. So a call site that spelled the
-//! predicate slightly differently would not produce a slightly different
-//! number; it would produce a request with a different set of keys, resolved
-//! from a different floor, and nothing would report an error.
-//!
-//! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+//! The duplication was not the real cost. This predicate decides whether a
+//! model with nothing stored resolves with the `reasoning` recipe or with
+//! nothing at all, which differ in *which parameters they name* — a reasoning
+//! model is sent `min_p: 0.0` while every other model is sent no `min_p` key.
+//! So a call site that spelled the predicate slightly differently would not
+//! produce a slightly different number; it would produce a request with a
+//! different set of keys, and nothing would report an error.
 
 /// Chain-of-thought model (Qwen3.6, DeepSeek-R1, `QwQ`, …).
 ///
-/// Selects [`InferenceConfig::reasoning_floor`] over the neutral floor, drives
-/// `--reasoning-format deepseek`, and causes
-/// [`InferenceConfig::reasoning_profile`] to be written as the model's
-/// auto-detected defaults at import.
+/// Drives `--reasoning-format deepseek`, and supplies
+/// [`InferenceConfig::reasoning_profile`] below global settings for a model
+/// whose row stores no published or measured recipe.
 ///
-/// [`InferenceConfig::reasoning_floor`]: crate::domain::InferenceConfig::reasoning_floor
 /// [`InferenceConfig::reasoning_profile`]: crate::domain::InferenceConfig::reasoning_profile
 pub const REASONING: &str = "reasoning";
 

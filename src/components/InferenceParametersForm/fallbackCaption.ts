@@ -2,9 +2,12 @@
  * What to say under an inference field that has been left empty.
  *
  * The form renders at three rungs of the resolution ladder (request → profile
- * → per-model → global settings → floor), and what an empty field falls
- * through to differs at each. Only the global-settings surface sits directly
- * above the floor, so only there can the answer be a constant.
+ * → per-model → global settings), and what an empty field falls through to
+ * differs at each. The global-settings surface is not model-specific: beneath
+ * it sit a model's recipe where it has one, and llama.cpp's own defaults
+ * otherwise (there is no floor, ADR 0022). So the constant its caption names
+ * is llama.cpp's number, and what a given model actually takes shows on the
+ * `explain` surface.
  *
  * Everywhere else the answer comes from the backend. `resolve_layers_with_sources`
  * computes value and provenance in one pass precisely so nothing has to
@@ -15,13 +18,16 @@
  */
 
 import type { SamplingExplanation, SamplingLayerName, SamplingParamKey } from '../../types';
-import { INFERENCE_PARAMS } from '../../constants/inferenceDefaults';
 import { describeSource, formatParamValue } from '../../utils/samplingProvenance';
 
 /** What sits below this surface in the ladder. */
 export type InferenceFallback =
-  /** Nothing but the floor — the global settings surface. */
-  | { kind: 'floor' }
+  /**
+   * The global settings surface: beneath it, a model's recipe where it has
+   * one, else llama.cpp's own defaults. The caption names llama.cpp's number;
+   * a model's own answer shows on the `explain` surface.
+   */
+  | { kind: 'upstream' }
   /**
    * Other layers do. `ownLayer` is the rung this form edits, so a value the
    * explanation attributes to it can be recognised as one this form is in the
@@ -37,22 +43,20 @@ export interface ResolutionState {
 }
 
 /**
- * What to say for a parameter the floor deliberately leaves unset.
+ * What to say for a parameter nothing names.
  *
  * "Unset" does not mean the same thing for all of them, so none of these can
  * be shared. Max Tokens unset means genuinely unbounded generation; an unset
- * DRY parameter means llama.cpp's own default applies, which is a number worth
+ * sampler means llama.cpp's own default applies, which is a number worth
  * naming rather than an absence. A field reaching this map without an entry
  * gets no caption at all, which is the safe answer — better silence than Max
  * Tokens' wording under a threshold it does not describe.
  */
-const UNSET_FLOOR_CAPTIONS: Partial<Record<SamplingParamKey, string>> = {
+const UNSET_CAPTIONS: Partial<Record<SamplingParamKey, string>> = {
   maxTokens: 'No limit — generates until the context is full',
-  // Deferred by ADR 0003: gglib's floor used to restate each of these and each
-  // was measured equal to llama.cpp's own default on the pinned build. The
-  // number is still what applies, so the caption still states it — what
-  // changed is who supplies it, which is why these read "llama.cpp default"
-  // rather than "Default".
+  // gglib once restated some of these as a floor (ADR 0003, ADR 0022). The
+  // number is still what applies, so the caption states it, as llama.cpp's.
+  temperature: 'llama.cpp default: 0.8',
   topP: 'llama.cpp default: 0.95',
   topK: 'llama.cpp default: 40',
   repeatPenalty: 'llama.cpp default: 1.0',
@@ -74,30 +78,9 @@ const UNSET_FLOOR_CAPTIONS: Partial<Record<SamplingParamKey, string>> = {
   reasoningBudgetTokens: 'Unset — the launch-time budget applies',
 };
 
-/**
- * Parameters whose floor depends on the model, and what `reasoning_floor()`
- * uses instead. This surface has no model to check against, so it names both.
- *
- * Since ADR 0003 these are the only two parameters gglib asserts for one model
- * class and defers for every other: a reasoning model is sent `min_p: 0.0`,
- * while everything else is sent no `min_p` at all and gets llama.cpp's 0.05.
- * That asymmetry is deliberate and invisible in the value alone, so the
- * caption has to carry it.
- */
-const REASONING_FLOOR_OVERRIDES: Partial<Record<SamplingParamKey, string>> = {
-  presencePenalty: '1.0',
-  minP: '0.0',
-};
-
-/** Append the reasoning-model carve-out to a caption, when there is one. */
-function withReasoningNote(field: SamplingParamKey, caption: string): string {
-  const reasoning = REASONING_FLOOR_OVERRIDES[field];
-  return reasoning ? `${caption} (${reasoning} for reasoning models)` : caption;
-}
-
 /** The provenance entry for one parameter, once it is safe to believe. */
 function usableEntry(field: SamplingParamKey, fallback: InferenceFallback) {
-  if (fallback.kind === 'floor') return null;
+  if (fallback.kind === 'upstream') return null;
 
   const { explanation, isLoading, hasError } = fallback.resolution;
   if (isLoading || hasError || !explanation) return null;
@@ -117,15 +100,15 @@ function usableEntry(field: SamplingParamKey, fallback: InferenceFallback) {
 /**
  * The number an empty field will actually take, or `null` if unknowable.
  *
- * Drives the placeholder and the slider thumb, so neither shows the floor on a
- * surface where the floor is not what applies — a slider parked at 0.70 beside
- * a caption reading "Resolves to 1.20" would be its own kind of wrong.
+ * Drives the placeholder and the slider thumb, so neither shows a number on a
+ * surface where that number is not what applies — a slider parked at 0.70
+ * beside a caption reading "Resolves to 1.20" would be its own kind of wrong.
  */
 export function fallbackValue(
   field: SamplingParamKey,
   fallback: InferenceFallback,
 ): number | null {
-  if (fallback.kind === 'floor') return INFERENCE_PARAMS[field].default;
+  if (fallback.kind === 'upstream') return null;
 
   const usable = usableEntry(field, fallback);
   return usable ? (usable.explanation.resolved[field] ?? null) : null;
@@ -142,19 +125,7 @@ export function fallbackCaption(
   field: SamplingParamKey,
   fallback: InferenceFallback,
 ): string | null {
-  if (fallback.kind === 'floor') {
-    const { default: floor } = INFERENCE_PARAMS[field];
-    if (floor === null) {
-      const deferred = UNSET_FLOOR_CAPTIONS[field];
-      // The carve-out applies to the deferred branch too, and did not before:
-      // once `presencePenalty` and `minP` left the neutral floor, returning
-      // early here dropped the one note that explains why a reasoning model
-      // behaves differently.
-      return deferred ? withReasoningNote(field, deferred) : null;
-    }
-
-    return withReasoningNote(field, `Default: ${formatParamValue(field, floor)}`);
-  }
+  if (fallback.kind === 'upstream') return UNSET_CAPTIONS[field] ?? null;
 
   const { isLoading, hasError, explanation } = fallback.resolution;
   if (isLoading) return null;
@@ -165,7 +136,6 @@ export function fallbackCaption(
 
   const source = describeSource(usable.entry, {
     profile: explanation.profile,
-    isReasoning: explanation.isReasoning,
     // Three origins share the auto-detected rung, and this is the only thing
     // that separates them. Omitting it does not make the caption vaguer — it
     // makes it name the reasoning-tag guess for all three, which is this

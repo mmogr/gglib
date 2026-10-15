@@ -68,9 +68,9 @@ fn every_stage_runs_in_one_call() {
     assert!(report.truncation.payload_chars_before > 0);
     // 4: the model's stored default resolved in.
     assert!((body["temperature"].as_f64().unwrap() - 0.33).abs() < 1e-6);
-    // 5: pinned over the client's explicit `false`.
-    assert_eq!(body["cache_prompt"], true);
-    // …and nothing else was disturbed.
+    // …and nothing else was disturbed, the client's own `cache_prompt`
+    // included.
+    assert_eq!(body["cache_prompt"], false);
     assert_eq!(body["model"], "m");
     assert_eq!(body["totally_made_up_key"], json!({"nested": [1, 2]}));
 }
@@ -83,21 +83,21 @@ fn a_passthrough_context_still_resolves_sampling() {
         {"role": "user", "content": "one"},
         {"role": "user", "content": "two"},
     ]});
-    apply(
-        &mut body,
-        &ModelContext::passthrough(),
-        &SamplingLayers::default(),
-        None,
-    )
-    .unwrap();
+    let layers = SamplingLayers {
+        global: Some(InferenceConfig {
+            temperature: Some(0.5),
+            ..Default::default()
+        }),
+        ..SamplingLayers::default()
+    };
+    apply(&mut body, &ModelContext::passthrough(), &layers, None).unwrap();
 
     assert_eq!(
         body["messages"].as_array().unwrap().len(),
         2,
         "unknown capabilities must not merge anything"
     );
-    assert_eq!(body["cache_prompt"], true);
-    assert!(body["temperature"].as_f64().is_some());
+    assert!((body["temperature"].as_f64().unwrap() - 0.5).abs() < 1e-6);
 }
 
 // ── Stage 3 ──────────────────────────────────────────────────────────────

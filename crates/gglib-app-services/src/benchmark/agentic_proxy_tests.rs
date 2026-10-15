@@ -235,12 +235,18 @@ async fn the_gglib_and_control_arms_send_every_value_they_name() {
 }
 
 /// The gglib arm is handed no settings, so no agentic sampling switch
-/// reaches it: its turn with tools, on an ordinary model with nothing
-/// chosen, is capped at 0.3 whatever the machine it runs on has stored.
+/// reaches it: its turn with tools, on an ordinary model whose recipe nobody
+/// here reviewed, is capped at 0.3 whatever the machine it runs on has
+/// stored.
 #[tokio::test]
 async fn the_gglib_arm_caps_a_temperature_nobody_chose_on_its_turn_with_tools() {
     let context = ModelContext {
         capabilities: ModelCapabilities::SUPPORTS_TOOL_CALLS,
+        inference_defaults: Some(InferenceConfig {
+            temperature: Some(0.9),
+            ..InferenceConfig::default()
+        }),
+        defaults_origin: Some(gglib_core::domain::DefaultsOrigin::Published),
         catalog_resolved: true,
         ..ModelContext::passthrough()
     };

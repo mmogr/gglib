@@ -80,13 +80,12 @@ across dozens of candidates never triggers a costly model reload.
 # What A Candidate's Request Carries
 
 A candidate is a statement of exactly what to measure, not a flag for the
-sampling ladder to judge. Its request is what the shared pipeline makes of
-one that names the candidate's values, with nothing taken out afterwards
-(`LlmCompletionAdapter::with_passed_over_kept`). The case that matters is
-`min_p` or `repeat_penalty` named without a temperature, on a model whose
-stored defaults set a temperature: the ladder passes it over, and it is sent
-all the same unless those defaults or the model's class floor name the same
-parameter, in which case theirs is written over it. `gglib chat` given such
-a flag does not send it.
+sampling ladder to judge. Its values sit at the top of the ladder, so the
+request is what the shared pipeline makes of one that names them, with
+nothing taken out afterwards and no adapter switch to ask for it. The case
+that matters is `min_p` or `repeat_penalty` named without a temperature, on
+a model whose stored defaults set a temperature: it is sent, because the
+coupling rule passes over only rungs beneath the temperature's claim
+([ADR 0022](../../../../../docs/adr/0022-the-proxy-does-less.md)).
 
 <!-- module-docs:end -->

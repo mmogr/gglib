@@ -4,7 +4,9 @@
 - **Date:** 2026-08-09 (amended 2026-08-09 — finding 7 overclaimed what the
   readback can catch, decision 5's mechanism was dropped on implementation,
   and finding 2's generalisation from build to every GGUF is overturned by
-  llama.cpp's model-embedded sampling parameters; see the amendments there)
+  llama.cpp's model-embedded sampling parameters; see the amendments there;
+  amended 2026-10-14 — decisions 2 and 3 are reversed by
+  [ADR 0022](0022-the-proxy-does-less.md), see the note under decision 3)
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md)
 - **Supersedes:** nothing
 - **Superseded by:** nothing
@@ -351,6 +353,13 @@ no notion of a model class — and remain force-written. Note the consequence:
 after this change `min_p` is asserted for reasoning models and deferred for
 everything else, which is the correct shape and needs saying out loud because
 it makes the floor non-uniform for the first time.
+
+> **Amended 2026-10-14.** Decisions 2 and 3 are reversed by
+> [ADR 0022](0022-the-proxy-does-less.md): there is no floor. `temperature:
+> 0.7` and the reasoning class's `presence_penalty: 1.0` and `min_p: 0.0` are
+> deferred to llama.cpp like the six above, and `with_hardcoded_defaults()`
+> and `reasoning_floor()` are deleted. Decision 1 and this ADR's measurement
+> stand.
 
 **4. The launch-flag emission is deleted.** `to_cli_args` has one production
 caller (`command.rs:291`); both go. A `llama/args/sampling.rs` resolver is

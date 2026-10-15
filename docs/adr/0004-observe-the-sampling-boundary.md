@@ -9,7 +9,8 @@
   reasoning controls are permanently outside this instrument's reach; see the
   note under decision 3. Addendum 2026-08-29 — the A/B instrument was reporting
   a comparison it had not taken; four defects, and a follow-up above whose
-  stated cause was wrong)
+  stated cause was wrong. Amended 2026-10-15 — the floor beneath the ceiling
+  is gone; see the note under "What actually ships")
 - **Depends on:** [ADR 0001](0001-runtime-capability-tiers.md),
   [ADR 0003](0003-defer-sampler-defaults-to-llama-cpp.md)
 - **Supersedes:** nothing
@@ -641,6 +642,15 @@ An auto-detected recipe is an unreviewed guess written at import time, and
 cap overruling it is consistent with the hierarchy rather than an exception to
 it. Measured on Qwen3.5-4B: no tools → `1.0`; with tools → `0.6`; a profile
 setting `0.9` with tools → `0.9`, DRY intact.
+
+> **Amended 2026-10-15.** [ADR 0022](0022-the-proxy-does-less.md) removes the
+> floor, so in the default configuration the ceiling caps one thing only: a
+> published recipe's temperature above `0.3` on a model that is not
+> `reasoning`-tagged. A tagged model's recipe, now resolved from the tag rather
+> than stored, is never capped. Where no rung names a temperature none is sent,
+> and the ceiling adds none: an ordinary model with nothing chosen decodes at
+> llama.cpp's own default on a turn with tools, where it was capped from the
+> floor's `0.7` to `0.3`.
 
 **A person may still ask for a near-greedy coding temperature.** That is what
 `{model}:{profile}` is for — `gglib config profile set coding --temperature

@@ -23,6 +23,6 @@ observed: number,
 /**
  * The ladder rung the sent value came from, for the log line. A
  * divergence on a value someone deliberately set reads very differently
- * from one on a value that fell to the floor.
+ * from one on a value from a recipe nobody here reviewed.
  */
 provenance: string, };

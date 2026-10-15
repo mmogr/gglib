@@ -3,13 +3,11 @@
  *
  * The module's rule is that it formats what `GET /api/models/:id/explain`
  * returns and never works anything out for itself. These pin the place that
- * rule is easiest to break: the auto-detected rung, where three different
- * origins share one layer name and only `defaultsOrigin` tells them apart.
- *
- * Three, not four: `user` is the one origin that cannot reach this rung.
- * Resolution picks `modelUserSet` for it and `modelAutoDetected` for the other
- * three, so a fixture pairing `user` with this layer would describe a state
- * the backend does not produce, and would pin wording nobody ever sees.
+ * rule is easiest to break: the recipe rung, where three different recipes
+ * share one layer name and only `defaultsOrigin` tells them apart — a
+ * published one, a measured one, and the `reasoning` recipe, which is never
+ * stored and so arrives with no origin, or beside a person's own `user`
+ * defaults on the rung above.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -57,20 +55,16 @@ describe('fallbackCaption on the auto-detected rung', () => {
     );
   });
 
-  it('names the tag guess when that is what it actually was', () => {
-    expect(fallbackCaption('temperature', explaining('auto_detected'))).toContain(
-      'per-model defaults (auto-detected: reasoning tag)',
-    );
-  });
-
   /**
-   * A backend too old to send the field, or a model with no origin stored.
-   * The tag guess is the pre-existing wording for that case and stays.
+   * The `reasoning` recipe is never stored, so it arrives with no origin, or
+   * with `user` when a person set some fields of their own on the rung above.
    */
-  it('keeps the old wording when the backend sent no origin at all', () => {
-    expect(fallbackCaption('temperature', explaining(undefined))).toContain(
-      'per-model defaults (auto-detected: reasoning tag)',
-    );
+  it('names the tag recipe when nothing published or measured is stored', () => {
+    for (const origin of [undefined, null, 'user'] as const) {
+      expect(fallbackCaption('temperature', explaining(origin))).toContain(
+        'per-model defaults (auto-detected: reasoning tag)',
+      );
+    }
   });
 
   it('still reports the resolved value beside the source', () => {

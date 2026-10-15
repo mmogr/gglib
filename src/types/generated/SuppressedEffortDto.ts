@@ -15,7 +15,6 @@ level: ReasoningEffort,
  * in [`SamplingExplanationDto::sources`].
  *
  * `None` only for a ladder index this module cannot name, which the five
- * rungs it resolves cannot produce — and never for a floor, because no
- * floor names an effort.
+ * rungs it resolves cannot produce.
  */
 layer?: SamplingLayerDto, };

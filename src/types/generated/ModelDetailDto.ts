@@ -128,8 +128,8 @@ capabilities: number,
  */
 inferenceDefaults?: InferenceConfig, 
 /**
- * Whether [`Self::inference_defaults`] was set by the user or
- * auto-detected at import time. See `gglib_core::domain::DefaultsOrigin`.
+ * Who wrote [`Self::inference_defaults`]: a person, the import, or a
+ * tune sweep. See `gglib_core::domain::DefaultsOrigin`.
  */
 defaultsOrigin?: DefaultsOrigin, 
 /**

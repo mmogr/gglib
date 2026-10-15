@@ -3,4 +3,4 @@
 /**
  * The wire form of [`ParamSource`], with the ladder index resolved to a name.
  */
-export type ProvenanceKindDto = "layer" | "floor" | "floorCoupled" | "unset" | "suppressedByTemplate";
+export type ProvenanceKindDto = "layer" | "coupled" | "unset" | "suppressedByTemplate";

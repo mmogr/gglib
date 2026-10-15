@@ -421,39 +421,44 @@ answers; see [`src/chats/`](src/chats/README.md).
 ### Inference Defaults Auto-Injection
 
 On every `POST /v1/chat/completions` request the proxy resolves sampling
-parameters through the same 5-level hierarchy used by every other surface:
+parameters through the same hierarchy used by every other surface:
 
 ```text
-request params  →  profile  →  model defaults  →  global settings  →  hardcoded
+request params  →  profile  →  model defaults  →  global settings  →  model recipe
 ```
 
 1. **Request params** — whatever `temperature`, `top_p`, `top_k`, `max_tokens`,
    `repeat_penalty`, `presence_penalty`, and `min_p` the client sent.
 2. **Profile** — the named profile the request selected via `{model}:{profile}`,
    if any. See *Inference Profiles* below.
-3. **Model defaults** — per-model `inference_defaults` stored in the model
-   catalog (`ModelSummary::inference_defaults`).
+3. **Model defaults** — per-model `inference_defaults` a person set, stored in
+   the model catalog (`ModelSummary::inference_defaults`).
 4. **Global settings** — `Settings::inference_defaults`, read from the
    per-request settings snapshot (`settings_cache`).
-5. **Hardcoded fallback** — `temperature=0.7`, and nothing else. Every other
-   parameter is deferred to llama.cpp, which is a decision rather than an
-   omission: [ADR 0003](../../docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md) finding 1 measured each of them equal to the upstream
-   default on the pinned build, so asserting one again would mean overriding
-   whatever upstream chooses next. This floor listed six values until that
-   measurement; `docs/sampling.md` has the current table.
+5. **Model recipe** — a published or measured recipe stored on the model, or,
+   for a `reasoning`-tagged model with neither, `InferenceConfig::reasoning_profile`,
+   which is never stored.
 
-   **`max_tokens` has no fallback**: because resolution force-writes every set
-   parameter, one here would cap every request that did not name its own. Left
-   unset, no `max_tokens` key is sent and llama-server generates until a stop
-   token or the context limit.
+There is no floor beneath them
+([ADR 0022](../../docs/adr/0022-the-proxy-does-less.md)). A parameter no level
+names is not sent, and llama.cpp's own default applies:
+[ADR 0003](../../docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md) finding 1
+measured six of the old floor's values equal to the upstream default on the
+pinned build, and ADR 0022 deferred the rest. `docs/sampling.md` has the table.
 
-   A `reasoning`-tagged model does still take a profile of its own
-   (`InferenceConfig::reasoning_profile`), which is a layer above this floor
-   rather than a variant of it.
+**`max_tokens` has no fallback**: because resolution force-writes every set
+parameter, one here would cap every request that did not name its own. Left
+unset, no `max_tokens` key is sent and llama-server generates until a stop
+token or the context limit.
+
+The proxy adds no `cache_prompt` key either. llama-server defaults it to `true`,
+and a client's own `cache_prompt` passes through as any key gglib does not model
+does (ADR 0022).
 
 A request carrying a non-empty `tools` array has its temperature **capped to
-`0.3`** — but only when the value that won came from an auto-detected recipe or
-the floor. Anything a person set stands.
+`0.3`** — but only when the value that won came from a model's recipe nobody
+here reviewed. Anything a person set stands, and a request whose temperature
+nothing names is sent none.
 
 A `reasoning`-tagged model is **not capped at all**. It used to be, at `0.6`;
 [ADR 0004](../../docs/adr/0004-observe-the-sampling-boundary.md)'s addendum named the evidence that would change that, the experiment

@@ -2,15 +2,18 @@
 //!
 //! # The gap this closes
 //!
-//! `presence_penalty`, `repeat_penalty` and `min_p` travel with whichever rung
-//! claims `temperature` — see [`InferenceConfig::resolve_layers_with_sources`].
-//! So `--profile chat --presence-penalty 1.2` with no `--temperature` silently
-//! discards the penalty: the profile claimed the temperature, and the coupled
-//! trio comes only from the rung that did.
-//!
-//! That is correct, and it is invisible. A resolved config cannot show it —
-//! a discarded value and a value nobody ever named look identical once the
+//! A value a caller names can fail to reach the wire: a rung above it names
+//! the same field (an operator's `--presence-penalty` over a client's), a
+//! later stage suppresses it because the template never reads it, or it is a
+//! float JSON cannot carry. A resolved config cannot show any of these — a
+//! discarded value and a value nobody ever named look identical once the
 //! ladder has folded. Only the provenance distinguishes them.
+//!
+//! The coupling rule no longer discards a caller's trio member: it passes over
+//! only rungs *beneath* the one that claims `temperature`, so a penalty named
+//! above the claim stands (ADR 0022). Until then this module's motivating
+//! case was `--profile chat --presence-penalty 1.2`, which now resolves to
+//! 1.2.
 //!
 //! # Why the rung is a parameter
 //!
@@ -20,12 +23,11 @@
 //! hardcoded 0 would be right on one and quietly wrong on the other, reporting
 //! the client's losses as the operator's.
 //!
-//! # Why `FloorCoupled` alone is not the test
+//! # Why the test is "did my rung win"
 //!
-//! [`ParamSource::FloorCoupled`] says the coupling rule fired — not that *this*
-//! caller lost. When the claiming rung supplied its own value the field reports
-//! [`ParamSource::Layer`] instead, and the caller's value is just as gone. The
-//! test is therefore "did my rung win", not "which rule ran".
+//! Which rule ran is not the question: a caller's value is just as gone when
+//! a higher rung supplied its own as when a stage suppressed it. The test is
+//! therefore "did my rung win", compared by value.
 
 use crate::domain::{FieldSources, InferenceConfig, ParamSource};
 
@@ -106,15 +108,12 @@ const fn won(source: ParamSource, rung: usize) -> bool {
         // The only outcome in which this caller's value is what runs.
         ParamSource::Layer(index) => index == rung,
         // Everything else means this caller's value is not what runs:
-        // `FloorCoupled` — the coupling rule passed every lower rung over,
-        // this one included; `SuppressedByTemplate` — a later stage dropped it
-        // because the template never reads the field; `Floor`/`Unset` — nobody
-        // named it, so this caller did not either. Listed rather than
-        // wildcarded so a new variant forces a decision here.
-        ParamSource::FloorCoupled
-        | ParamSource::SuppressedByTemplate
-        | ParamSource::Floor
-        | ParamSource::Unset => false,
+        // `Coupled` — the coupling rule passed every lower rung over, this one
+        // included; `SuppressedByTemplate` — a later stage dropped it because
+        // the template never reads the field; `Unset` — nobody named it, so
+        // this caller did not either. Listed rather than wildcarded so a new
+        // variant forces a decision here.
+        ParamSource::Coupled | ParamSource::SuppressedByTemplate | ParamSource::Unset => false,
     }
 }
 

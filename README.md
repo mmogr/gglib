@@ -119,8 +119,8 @@ Everything between the OpenAI request and llama-server is the product:
   scan. No run has measured how often it fires or what the note changes yet
   ([#1047](https://github.com/mmogr/gglib/issues/1047)).
   [Details →](crates/gglib-proxy/README.md#loop--stagnation-defence)
-- **Sampling authority**: a 5-level hierarchy (request → profile →
-  per-model → global → floor) resolves every sampling parameter server-side.
+- **Sampling authority**: a hierarchy (request → profile → per-model →
+  global → model recipe) resolves every sampling parameter server-side.
   Client values are untrusted by default, so no request can silently override
   your configuration. [Details →](docs/sampling.md)
 - **Context defense**: tool-heavy sessions balloon past the context window

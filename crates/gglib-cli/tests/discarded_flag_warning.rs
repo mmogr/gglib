@@ -1,11 +1,13 @@
-//! `gglib q` with a sampling flag the ladder passes over, run as a person
-//! runs it against a model server on `--port`.
+//! `gglib q` with a sampling flag, run as a person runs it against a model
+//! server on `--port`.
 //!
 //! `--profile chat --presence-penalty 1.2` with no `--temperature`: the
-//! profile sets the temperature, the penalty travels with it, and the flag is
-//! gone, from the request the server receives too. The command says so on
-//! stderr, once, when the question is sent, which is when the ladder is
-//! folded; it says nothing when the flag took effect, and nothing under `-Q`.
+//! profile sets the temperature beneath the flags, and the coupling rule only
+//! passes over rungs beneath the one that claims it (ADR 0022), so the
+//! penalty is sent and nothing is said. A value JSON cannot carry,
+//! `--presence-penalty NaN`, is never sent: the command says so on stderr,
+//! once, when the question is sent, which is when the ladder is folded; and
+//! nothing under `-Q`.
 
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -19,8 +21,7 @@ mod data_dir;
 mod model_server;
 use model_server::model_server;
 
-const WARNING: &str = "  Warning: --presence-penalty did not take effect. Sampling penalties \
-     travel with whichever layer sets the temperature; pass --temperature to set them together.";
+const WARNING: &str = "  Warning: --presence-penalty did not take effect.";
 
 /// A data directory whose catalogue holds `served`, and `tuned` with a
 /// temperature a person set on it, and whose settings hold a `chat` profile
@@ -80,38 +81,36 @@ fn warnings(stderr: &str) -> Vec<&str> {
     stderr.lines().filter(of_a_flag).collect()
 }
 
-/// The flag is warned of once and is not in the request: the profile's
-/// temperature is, or the one a person set on the model.
+/// The flag is sent beside the temperature a lower layer set — the
+/// profile's, or the one a person set on the model — and nothing is said.
 #[test]
-fn a_penalty_typed_beside_a_layer_that_sets_the_temperature_is_warned_of_once_and_not_sent() {
+fn a_penalty_typed_beside_a_layer_that_sets_the_temperature_is_sent() {
     let root = library();
 
     let beside_a_profile = ["--profile", "chat", "--presence-penalty", "1.2"];
     let (stderr, sent) = asked(root.path(), "served", &beside_a_profile);
-    assert_eq!(warnings(&stderr), [WARNING], "{stderr}");
-    assert_eq!(sent["temperature"], json!(0.8_f32), "{sent}");
-    assert_eq!(sent.get("presence_penalty"), None, "{sent}");
-
-    let (stderr, sent) = asked(root.path(), "tuned", &["--presence-penalty", "1.2"]);
-    assert_eq!(warnings(&stderr), [WARNING], "{stderr}");
-    assert_eq!(sent["temperature"], json!(0.55_f32), "{sent}");
-    assert_eq!(sent.get("presence_penalty"), None, "{sent}");
-}
-
-/// A penalty typed with its temperature is sent and warned of nothing; a
-/// quiet question is warned of nothing, and its passed-over flag is still
-/// not sent.
-#[test]
-fn a_flag_that_took_effect_and_a_quiet_question_are_warned_of_nothing() {
-    let root = library();
-    let penalty = ["--profile", "chat", "--presence-penalty", "1.2"];
-
-    let with_its_temperature = [&penalty[..], &["--temperature", "0.5"]].concat();
-    let (stderr, sent) = asked(root.path(), "served", &with_its_temperature);
     assert_eq!(warnings(&stderr), [""; 0], "{stderr}");
+    assert_eq!(sent["temperature"], json!(0.8_f32), "{sent}");
     assert_eq!(sent["presence_penalty"], json!(1.2_f32), "{sent}");
 
-    let quiet = [&penalty[..], &["-Q"]].concat();
+    let (stderr, sent) = asked(root.path(), "tuned", &["--presence-penalty", "1.2"]);
+    assert_eq!(warnings(&stderr), [""; 0], "{stderr}");
+    assert_eq!(sent["temperature"], json!(0.55_f32), "{sent}");
+    assert_eq!(sent["presence_penalty"], json!(1.2_f32), "{sent}");
+}
+
+/// A value JSON cannot carry is warned of once and is not in the request; a
+/// quiet question is warned of nothing, and the value is still not sent.
+#[test]
+fn an_unsendable_flag_is_warned_of_once_and_a_quiet_question_of_nothing() {
+    let root = library();
+    let unsendable = ["--profile", "chat", "--presence-penalty", "NaN"];
+
+    let (stderr, sent) = asked(root.path(), "served", &unsendable);
+    assert_eq!(warnings(&stderr), [WARNING], "{stderr}");
+    assert_eq!(sent.get("presence_penalty"), None, "{sent}");
+
+    let quiet = [&unsendable[..], &["-Q"]].concat();
     let (stderr, sent) = asked(root.path(), "served", &quiet);
     assert_eq!(warnings(&stderr), [""; 0], "{stderr}");
     assert_eq!(sent.get("presence_penalty"), None, "{sent}");

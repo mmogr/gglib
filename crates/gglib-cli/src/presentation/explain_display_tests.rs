@@ -4,7 +4,7 @@ use gglib_app_services::{ParamProvenanceDto, SuppressedEffortDto};
 use gglib_core::domain::InferenceConfig;
 
 use super::*;
-use ProvenanceKindDto::{Floor, FloorCoupled, Layer, SuppressedByTemplate, Unset};
+use ProvenanceKindDto::{Coupled, Layer, SuppressedByTemplate, Unset};
 use SamplingLayerDto::{Global, ModelAutoDetected, ModelUserSet, Profile};
 
 /// `resolved`, explained by [`auto_detected_sources`] for a model that
@@ -14,7 +14,6 @@ fn explained(resolved: InferenceConfig) -> SamplingExplanationDto {
         resolved,
         sources: auto_detected_sources(),
         profile: None,
-        is_reasoning: false,
         trust_client_sampling: false,
         published: Vec::new(),
         defaults_origin: None,
@@ -22,9 +21,9 @@ fn explained(resolved: InferenceConfig) -> SamplingExplanationDto {
     }
 }
 
-/// The floor's own values under [`auto_detected_sources`].
+/// Nothing resolved, under [`auto_detected_sources`].
 fn plain() -> SamplingExplanationDto {
-    explained(InferenceConfig::with_hardcoded_defaults())
+    explained(InferenceConfig::default())
 }
 
 /// `explanation`, with `param`'s row saying `kind` and `layer`.
@@ -86,7 +85,7 @@ fn note_for(lines: &[String], field: &str) -> Option<String> {
 /// command exists to make legible. In the order the wire carries them.
 fn auto_detected_sources() -> Vec<ParamProvenanceDto> {
     let auto = (Layer, Some(ModelAutoDetected));
-    let (coupled, unset) = ((FloorCoupled, None), (Unset, None));
+    let (coupled, unset) = ((Coupled, None), (Unset, None));
     let sources = [
         ("temperature", auto),
         ("topP", auto),
@@ -178,33 +177,21 @@ fn user_set_and_auto_detected_defaults_are_worded_differently() {
     assert_ne!(user, auto);
 }
 
-/// A floor reached because the coupling rule suppressed the layers below
-/// must not look like one nobody ever set a value for.
+/// A value the coupling rule passed over must not look like one nobody ever
+/// set.
 #[test]
-fn a_coupled_floor_says_why_it_is_the_floor() {
-    let floor = describe(Floor, None, &plain());
-    let coupled = describe(FloorCoupled, None, &plain());
+fn a_coupled_absence_says_why_nothing_is_sent() {
+    let unset = describe(Unset, None, &plain());
+    let coupled = describe(Coupled, None, &plain());
 
-    assert!(!floor.contains("coupled"), "{floor}");
+    assert!(!unset.contains("coupled"), "{unset}");
     assert!(
         coupled.contains("coupled to temperature layer"),
         "{coupled}"
     );
 }
 
-/// A reasoning model sits on a different floor, and the value alone does
-/// not say so.
-#[test]
-fn the_floor_is_named_so_the_two_are_distinguishable() {
-    let reasoning = SamplingExplanationDto {
-        is_reasoning: true,
-        ..plain()
-    };
-    assert!(describe(Floor, None, &reasoning).contains("reasoning floor"));
-    assert!(describe(Floor, None, &plain()).contains("default floor"));
-}
-
-/// `max_tokens` has no floor value on purpose; it must read as a decision
+/// `max_tokens` is unset on purpose; it must read as a decision
 /// rather than as a missing number.
 #[test]
 fn an_absent_max_tokens_reads_as_deliberate() {
@@ -240,7 +227,7 @@ fn values_come_from_the_resolved_config() {
     let resolved = InferenceConfig {
         temperature: Some(0.2),
         top_k: Some(20),
-        ..InferenceConfig::with_hardcoded_defaults()
+        ..InferenceConfig::default()
     };
     let lines = explanation_lines(&explained(resolved));
 
@@ -275,7 +262,7 @@ fn whole_sampling_floats_keep_one_decimal() {
 fn an_overridden_published_value_names_both_numbers() {
     let resolved = InferenceConfig {
         temperature: Some(1.0),
-        ..InferenceConfig::with_hardcoded_defaults()
+        ..InferenceConfig::default()
     };
     let overridden = PublishedStateDto::Overridden {
         published: 0.33,
@@ -301,7 +288,7 @@ fn an_overridden_published_value_names_both_numbers() {
 fn a_deferred_field_says_the_missing_number_is_the_models() {
     let resolved = InferenceConfig {
         top_k: None,
-        ..InferenceConfig::with_hardcoded_defaults()
+        ..InferenceConfig::default()
     };
     let lines = explanation_lines(&publishing(
         sourced(explained(resolved), "topK", Unset, None),
@@ -359,7 +346,7 @@ fn an_f32_widened_value_renders_as_the_number_it_is() {
 fn a_restated_value_is_marked_as_information_not_as_an_override() {
     let resolved = InferenceConfig {
         temperature: Some(0.7),
-        ..InferenceConfig::with_hardcoded_defaults()
+        ..InferenceConfig::default()
     };
     let lines = explanation_lines(&publishing(
         explained(resolved),
@@ -405,7 +392,7 @@ fn a_model_that_publishes_nothing_gains_no_notes() {
 fn a_field_no_model_can_reach_never_gains_a_note() {
     let resolved = InferenceConfig {
         presence_penalty: Some(1.5),
-        ..InferenceConfig::with_hardcoded_defaults()
+        ..InferenceConfig::default()
     };
     let lines = explanation_lines(&publishing(
         explained(resolved),
@@ -540,7 +527,7 @@ fn reasoning() -> SamplingExplanationDto {
     let resolved = InferenceConfig {
         reasoning_effort: Some(ReasoningEffort::High),
         reasoning_budget_tokens: Some(16384),
-        ..InferenceConfig::with_hardcoded_defaults()
+        ..InferenceConfig::default()
     };
     let named = sourced(explained(resolved), "reasoningEffort", Layer, Some(Profile));
     SamplingExplanationDto {
@@ -677,7 +664,7 @@ fn an_unsuppressed_effort_gains_no_note() {
 fn the_reasoning_rows_and_their_note_fit_the_table_width() {
     let resolved = InferenceConfig {
         reasoning_budget_tokens: Some(32768),
-        ..InferenceConfig::with_hardcoded_defaults()
+        ..InferenceConfig::default()
     };
     // The rung with the longest label: "per-model defaults (auto-detected:
     // reasoning tag)".

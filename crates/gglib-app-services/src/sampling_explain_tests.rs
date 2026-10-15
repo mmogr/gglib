@@ -69,13 +69,9 @@ fn a_layer_index_resolves_to_its_rung_name() {
 }
 
 #[test]
-fn the_floor_variants_stay_distinguishable_and_carry_no_layer() {
-    let floor = provenance("top_p", ParamSource::Floor);
-    assert_eq!(floor.kind, ProvenanceKindDto::Floor);
-    assert_eq!(floor.layer, None);
-
-    let coupled = provenance("min_p", ParamSource::FloorCoupled);
-    assert_eq!(coupled.kind, ProvenanceKindDto::FloorCoupled);
+fn the_unsent_variants_stay_distinguishable_and_carry_no_layer() {
+    let coupled = provenance("min_p", ParamSource::Coupled);
+    assert_eq!(coupled.kind, ProvenanceKindDto::Coupled);
     assert_eq!(coupled.layer, None);
 
     let unset = provenance("max_tokens", ParamSource::Unset);
@@ -157,18 +153,18 @@ fn every_param_is_a_key_of_the_resolved_config() {
 /// `f64` and would report a `topP` of `0.949999988079071` that no client
 /// ever receives.
 #[test]
-fn serializes_camel_case_with_the_layer_omitted_for_floors() {
+fn serializes_camel_case_with_the_layer_omitted_for_unset() {
     let dto = explain(&model(), &Settings::with_defaults(), None);
     let wire = serde_json::to_string(&dto).unwrap();
     let value: serde_json::Value = serde_json::from_str(&wire).unwrap();
 
-    assert_eq!(value["resolved"]["temperature"], json!(0.7), "{wire}");
-    assert_eq!(value["isReasoning"], json!(false));
+    assert_eq!(value["resolved"]["temperature"], json!(null), "{wire}");
+    assert_eq!(value.get("isReasoning"), None, "{wire}");
     assert_eq!(value["trustClientSampling"], json!(false));
     assert_eq!(value["profile"], json!(null));
     assert_eq!(
         value["sources"][0],
-        json!({ "param": "temperature", "kind": "floor" })
+        json!({ "param": "temperature", "kind": "unset" })
     );
     // maxTokens is last in the canonical order, after the DRY block.
     assert_eq!(
@@ -176,8 +172,8 @@ fn serializes_camel_case_with_the_layer_omitted_for_floors() {
         json!({ "param": "maxTokens", "kind": "unset" })
     );
 
-    // ADR 0003: an untuned model resolves exactly one sampler, and every
-    // other field is llama.cpp's to decide. Asserted on the wire because
+    // ADR 0003 and ADR 0022: an untuned model resolves no sampler, and
+    // every field is llama.cpp's to decide. Asserted on the wire because
     // this is the shape the frontend renders — a `null` here has to read
     // as "llama.cpp's default", never as "nothing configured this".
     assert_eq!(value["resolved"]["topP"], json!(null), "{wire}");
@@ -185,12 +181,7 @@ fn serializes_camel_case_with_the_layer_omitted_for_floors() {
     assert_eq!(value["resolved"]["dryMultiplier"], json!(null), "{wire}");
     for entry in value["sources"].as_array().expect("sources is an array") {
         let param = entry["param"].as_str().unwrap();
-        let expected = if param == "temperature" {
-            "floor"
-        } else {
-            "unset"
-        };
-        assert_eq!(entry["kind"], json!(expected), "{param} in {wire}");
+        assert_eq!(entry["kind"], json!("unset"), "{param} in {wire}");
     }
 }
 
@@ -223,17 +214,20 @@ fn sources_arrive_in_the_canonical_display_order() {
     );
 }
 
+/// No floor beneath the ladder (ADR 0022): an untagged model with nothing
+/// stored resolves nothing, and every field reads as unset.
 #[test]
-fn a_model_with_nothing_stored_resolves_entirely_from_the_floor() {
+fn a_model_with_nothing_stored_resolves_nothing() {
     let dto = explain(&model(), &Settings::with_defaults(), None);
 
-    assert_eq!(dto.resolved.temperature, Some(0.7));
-    assert_eq!(
-        source_for(&dto, "temperature").kind,
-        ProvenanceKindDto::Floor
+    assert_eq!(dto.resolved, InferenceConfig::default());
+    assert!(
+        dto.sources
+            .iter()
+            .all(|entry| entry.kind == ProvenanceKindDto::Unset),
+        "{:?}",
+        dto.sources
     );
-    assert_eq!(source_for(&dto, "maxTokens").kind, ProvenanceKindDto::Unset);
-    assert!(!dto.is_reasoning);
 }
 
 #[test]
@@ -273,7 +267,7 @@ fn a_profile_outranks_global_settings_and_is_echoed_back() {
 /// The distinction #688 introduced, which is the whole reason a per-field
 /// view beats the stored-defaults view it replaces.
 #[test]
-fn auto_detected_model_defaults_rank_below_global_settings() {
+fn an_unreviewed_recipe_ranks_below_global_settings() {
     let settings = Settings {
         inference_defaults: Some(InferenceConfig {
             temperature: Some(0.4),
@@ -287,7 +281,7 @@ fn auto_detected_model_defaults_rank_below_global_settings() {
             temperature: Some(1.0),
             ..Default::default()
         }),
-        defaults_origin: Some(DefaultsOrigin::AutoDetected),
+        defaults_origin: Some(DefaultsOrigin::Published),
         ..model()
     };
 
@@ -336,7 +330,6 @@ fn auto_detected_model_defaults_rank_below_global_settings() {
 fn every_surface_spells_an_origin_the_same_way() {
     for origin in [
         DefaultsOrigin::User,
-        DefaultsOrigin::AutoDetected,
         DefaultsOrigin::Published,
         DefaultsOrigin::Measured,
     ] {
@@ -376,10 +369,10 @@ fn every_surface_spells_an_origin_the_same_way() {
     }
 }
 
-/// The tag changes both the flag the client renders and the floor the
-/// coupled set falls back to.
+/// The tag supplies the `reasoning` recipe beneath global settings, with
+/// nothing stored on the row.
 #[test]
-fn the_reasoning_tag_selects_the_reasoning_floor() {
+fn the_reasoning_tag_supplies_the_reasoning_recipe() {
     let reasoning = Model {
         dialect_spec: None,
         tags: vec!["Reasoning".to_owned()],
@@ -388,14 +381,18 @@ fn the_reasoning_tag_selects_the_reasoning_floor() {
 
     let dto = explain(&reasoning, &Settings::with_defaults(), None);
 
-    assert!(dto.is_reasoning);
-    assert_eq!(dto.resolved.presence_penalty, Some(1.0));
+    assert_eq!(dto.resolved, InferenceConfig::reasoning_profile());
+    assert_eq!(
+        source_for(&dto, "temperature").layer,
+        Some(SamplingLayerDto::ModelAutoDetected)
+    );
+    assert_eq!(dto.defaults_origin, None);
 }
 
 /// A layer that claims `temperature` passes over lower rungs for the trio
 /// tuned against it — the case a bare value cannot explain.
 #[test]
-fn a_claimed_temperature_couples_the_trio_to_the_floor() {
+fn a_claimed_temperature_passes_over_the_trio_beneath_it() {
     let coding = profile(
         "coding",
         InferenceConfig {
@@ -416,8 +413,8 @@ fn a_claimed_temperature_couples_the_trio_to_the_floor() {
     let dto = explain(&tuned, &Settings::with_defaults(), Some(&coding));
 
     // The model's 1.5 was discarded because the profile claimed the
-    // temperature, and since ADR 0003 the floor has no `presence_penalty`
-    // to land on — so nothing is sent and llama.cpp's own default applies.
+    // temperature, and there is no floor — so nothing is sent and
+    // llama.cpp's own default applies.
     assert_eq!(dto.resolved.presence_penalty, None);
 
     // The provenance must still name the coupling rule. Reporting `Unset`
@@ -427,7 +424,7 @@ fn a_claimed_temperature_couples_the_trio_to_the_floor() {
     // `resolve_layers_with_sources`.
     assert_eq!(
         source_for(&dto, "presencePenalty").kind,
-        ProvenanceKindDto::FloorCoupled
+        ProvenanceKindDto::Coupled
     );
 }
 

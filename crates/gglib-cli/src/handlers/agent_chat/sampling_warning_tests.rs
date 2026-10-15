@@ -9,9 +9,7 @@ use serde_json::{Value, json};
 
 use super::*;
 
-const PENALTY_PASSED_OVER: &str = "  Warning: --presence-penalty did not take effect. Sampling \
-     penalties travel with whichever layer sets the temperature; pass --temperature to set \
-     them together.";
+const PENALTY_PASSED_OVER: &str = "  Warning: --presence-penalty did not take effect.";
 
 fn temperature(value: f32) -> InferenceConfig {
     InferenceConfig {
@@ -27,10 +25,18 @@ fn penalty() -> InferenceConfig {
     }
 }
 
-/// A model of this catalogue with `defaults` as gglib guessed them at import.
+/// A penalty JSON cannot carry, which never reaches the wire.
+fn unsendable_penalty() -> InferenceConfig {
+    InferenceConfig {
+        presence_penalty: Some(f32::NAN),
+        ..InferenceConfig::default()
+    }
+}
+
+/// A model of this catalogue with `defaults` as its author published them.
 fn model(defaults: Option<InferenceConfig>) -> ModelContext {
     ModelContext {
-        defaults_origin: defaults.as_ref().map(|_| DefaultsOrigin::AutoDetected),
+        defaults_origin: defaults.as_ref().map(|_| DefaultsOrigin::Published),
         inference_defaults: defaults,
         catalog_resolved: true,
         ..ModelContext::passthrough()
@@ -64,20 +70,31 @@ fn decided(
 }
 
 /// `--profile chat --presence-penalty 1.2`, and the same flag on a model
-/// whose stored defaults name a temperature: the penalty travels with the
-/// temperature, which the flags did not set.
+/// whose stored defaults name a temperature: the flags sit above the rung
+/// that claims the temperature, so the penalty stands (ADR 0022) and there
+/// is nothing to say.
 #[test]
-fn a_bare_penalty_is_named_when_a_profile_or_the_model_sets_the_temperature() {
+fn a_bare_penalty_stands_when_a_profile_or_the_model_sets_the_temperature() {
     let by_profile = decided(&penalty(), &model(None), profile(temperature(0.8)));
-    assert_eq!(
-        warning(&penalty(), &by_profile).as_deref(),
-        Some(PENALTY_PASSED_OVER)
-    );
+    assert_eq!(by_profile.resolved.presence_penalty, Some(1.2));
+    assert_eq!(warning(&penalty(), &by_profile), None);
 
     let stored = model(Some(temperature(1.0)));
     let by_model = decided(&penalty(), &stored, SamplingLayers::default());
+    assert_eq!(by_model.resolved.presence_penalty, Some(1.2));
+    assert_eq!(warning(&penalty(), &by_model), None);
+}
+
+/// A value JSON cannot carry never reaches the wire, whatever rung wins.
+#[test]
+fn an_unsendable_flag_is_named() {
+    let decision = decided(
+        &unsendable_penalty(),
+        &model(None),
+        SamplingLayers::default(),
+    );
     assert_eq!(
-        warning(&penalty(), &by_model).as_deref(),
+        warning(&unsendable_penalty(), &decision).as_deref(),
         Some(PENALTY_PASSED_OVER)
     );
 }
@@ -100,8 +117,8 @@ fn a_flag_that_took_effect_is_not_named() {
 }
 
 /// An effort level the model's template does not read is deleted by that
-/// gate. The sentence explains the temperature's coupling, which had no part
-/// in it, so the level is not named; a penalty lost beside it still is.
+/// gate, which has its own note, so the level is not named; a penalty lost
+/// beside it still is.
 #[test]
 fn an_effort_level_the_template_does_not_read_is_not_blamed_on_the_temperature() {
     let unread = ModelContext {
@@ -124,7 +141,7 @@ fn an_effort_level_the_template_does_not_read_is_not_blamed_on_the_temperature()
 
     let with_penalty = InferenceConfig {
         reasoning_effort: Some(ReasoningEffort::High),
-        ..penalty()
+        ..unsendable_penalty()
     };
     let both = decided(&with_penalty, &unread, profile(temperature(0.8)));
     assert_eq!(
@@ -146,10 +163,14 @@ fn the_flags_rung_is_the_one_the_pipeline_reads_the_callers_parameters_at() {
 fn a_session_is_told_once() {
     let said = Arc::new(Mutex::new(Vec::new()));
     let heard = Arc::clone(&said);
-    let observer = telling(penalty(), move |warning| {
+    let observer = telling(unsendable_penalty(), move |warning| {
         heard.lock().unwrap().push(warning.to_owned());
     });
-    let decision = decided(&penalty(), &model(None), profile(temperature(0.8)));
+    let decision = decided(
+        &unsendable_penalty(),
+        &model(None),
+        SamplingLayers::default(),
+    );
 
     observer(&decision);
     observer(&decision);

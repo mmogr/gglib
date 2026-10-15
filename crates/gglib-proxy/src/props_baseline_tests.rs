@@ -369,14 +369,20 @@ fn a_field_absent_from_props_is_indeterminate_not_matching() {
     );
 }
 
-/// The floor stopped asserting the six, so nothing masks the table any
-/// more. Anchored to the floor rather than to the launch path because
-/// that is what this crate can see; the launch-path half of the invariant
-/// is `gglib_runtime::llama::args::sampling`'s guard, which asserts
-/// against this very constant.
+/// An untouched resolution asserts nothing, so nothing masks the table.
+/// There is no floor beneath the ladder (ADR 0022): ADR 0003 deferred six
+/// of its seven values and ADR 0022 the seventh. Anchored to the resolution
+/// rather than to the launch path because that is what this crate can see;
+/// the launch-path half of the invariant is
+/// `gglib_runtime::llama::args::sampling`'s guard, which asserts against
+/// this very constant.
 #[test]
-fn the_floor_no_longer_restates_what_props_reports() {
-    let floor = InferenceConfig::with_hardcoded_defaults();
+fn an_untouched_resolution_restates_nothing_props_reports() {
+    let floor = InferenceConfig::default().resolve_with_defaults(
+        None,
+        None,
+        gglib_core::domain::ModelSamplingContext::default(),
+    );
     let asserted = |field: &str| match field {
         "temperature" => floor.temperature.is_some(),
         "top_p" => floor.top_p.is_some(),
@@ -393,12 +399,10 @@ fn the_floor_no_longer_restates_what_props_reports() {
         .map(|(field, _)| *field)
         .collect();
 
-    assert_eq!(
-        restated,
-        vec!["temperature"],
-        "every field here is one gglib asserts a value for. `temperature` is the \
-         measured divergence ADR 0003 kept; anything else is a floor value that was \
-         supposed to be deferred, and while it is set the launch path may restate it \
-         into /props and blind the baseline check."
+    assert!(
+        restated.is_empty(),
+        "every field here is one gglib asserts a value for on a request nobody \
+         tuned, and while it is set the launch path may restate it into /props and \
+         blind the baseline check: {restated:?}"
     );
 }

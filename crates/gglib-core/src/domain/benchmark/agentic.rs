@@ -252,8 +252,9 @@ pub const CONTROL_MIN_P: f32 = 0.0;
 /// # It differs from the gglib arm in more than one value, and that is fine
 ///
 /// Naming a temperature claims the coupled trio, so the control's
-/// `presence_penalty` and `repeat_penalty` fall to the class floor rather than
-/// matching the model's recipe. Isolating one variable is a job for an
+/// `presence_penalty` and `repeat_penalty` are not sent at all: llama.cpp's
+/// own defaults (`0.0` and `1.0`) apply rather than the model's recipe.
+/// Isolating one variable is a job for an
 /// ablation; this arm's job is to be *large and known-bad*, and breadth serves
 /// that.
 ///

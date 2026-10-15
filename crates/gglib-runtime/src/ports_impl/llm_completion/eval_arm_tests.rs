@@ -5,16 +5,23 @@
 
 use super::*;
 
-/// The eval's control arm: no pipeline at all. No sampling keys resolve in
-/// (the upstream's own defaults apply) and `cache_prompt` is never pinned.
+/// The eval's control arm: no pipeline at all. The model's own stored
+/// temperature, which the pipeline would resolve in, is never sent, so the
+/// upstream's own defaults apply.
 #[test]
 fn raw_passthrough_skips_the_pipeline_entirely() {
     let adapter = LlmCompletionAdapter::new("http://127.0.0.1:0", Some("m".to_owned()))
+        .with_model_context(ModelContext {
+            inference_defaults: Some(InferenceConfig {
+                temperature: Some(0.42),
+                ..Default::default()
+            }),
+            ..ModelContext::passthrough()
+        })
         .with_raw_passthrough(true);
     let body = body_of(&adapter, &[user("hi")]);
 
-    assert!(body.get("temperature").is_none(), "no sampling floor");
-    assert!(body.get("cache_prompt").is_none(), "no pinning");
+    assert!(body.get("temperature").is_none(), "no sampling resolved");
     assert_eq!(body["stream"], true, "transport fields still present");
 }
 

@@ -48,7 +48,7 @@ export const ModelEditForm: FC<ModelEditFormProps> = ({
   onServerDefaultsChange,
 }) => {
   // What the model's parameters resolve to today, so an empty field can say
-  // what it will inherit instead of guessing at the floor. Keyed on the saved
+  // what it will inherit instead of guessing. Keyed on the saved
   // defaults, so saving an edit re-resolves rather than leaving the captions
   // describing the previous configuration.
   const resolution = useSamplingExplanation(model.id, null, model.inferenceDefaults);

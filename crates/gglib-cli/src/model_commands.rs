@@ -375,12 +375,12 @@ pub enum ModelCommand {
     /// Show every resolved inference parameter and which layer supplied it.
     ///
     /// Sampling resolves through a five-level hierarchy — request parameters,
-    /// the selected profile, per-model defaults, global settings, and a class
-    /// floor — under two rules that are hard to predict from the numbers
-    /// alone.  Parameters tuned against a temperature travel only with the
-    /// layer that set that temperature, and a model's defaults rank below
-    /// global settings when gglib auto-detected them rather than a person
-    /// setting them.  This command shows the outcome of both.
+    /// the selected profile, per-model defaults, global settings, and the
+    /// model's recipe — under two rules that are hard to predict from the
+    /// numbers alone.  Parameters tuned against a temperature never come from
+    /// a layer beneath the one that set it, and a model's recipe ranks below
+    /// global settings because no person here chose it.  This command shows
+    /// the outcome of both.
     ///
     /// # Examples
     ///

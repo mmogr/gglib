@@ -1,4 +1,4 @@
-//! Stage 4–5: resolving what the model is asked to sample with.
+//! Stage 4: resolving what the model is asked to sample with.
 //!
 //! Unlike [`super::messages`], nothing here reads `messages` — these transforms
 //! only ever touch top-level keys.
@@ -9,13 +9,13 @@
 //! the trust gate and the provenance are permanently gglib's, and nothing here
 //! gates on [`RuntimeCapabilities`].
 //!
-//! The **floor beneath** the ladder is a separate question with a different
-//! answer: six of its seven values were measured to restate llama.cpp's own
-//! defaults, which makes them compensation rather than policy. See
-//! [ADR 0003], which decides they are deferred.
+//! There is no floor beneath the ladder. A field no rung names is not sent,
+//! and llama.cpp's own default applies: [ADR 0003] deferred six of the old
+//! floor's values and [ADR 0022] the rest.
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
+//! [ADR 0022]: https://github.com/mmogr/gglib/blob/main/docs/adr/0022-the-proxy-does-less.md
 //! [`RuntimeCapabilities`]: crate::domain::RuntimeCapabilities
 
 use serde_json::Value;
@@ -25,7 +25,9 @@ use super::ModelContext;
 use crate::domain::inference::{
     REASONING_BUDGET_TOKENS_KEY, REASONING_EFFORT_KEY, THINKING_BUDGET_TOKENS_KEY,
 };
-use crate::domain::{DefaultsOrigin, FieldIssue, FieldSources, InferenceConfig, ParamSource};
+use crate::domain::{
+    DefaultsOrigin, FieldIssue, FieldSources, InferenceConfig, ModelSamplingContext, ParamSource,
+};
 
 /// The sampling layers that sit *below* the client's own request parameters.
 ///
@@ -77,30 +79,6 @@ pub struct SamplingLayers {
     pub agentic_adjustments: bool,
 }
 
-/// Which class floor sat beneath the ladder.
-///
-/// `sources` records that a value came from "the floor" but not *which* one,
-/// and the explain surfaces cannot show it at all — they resolve stored
-/// configuration with no request in hand.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FloorClass {
-    /// [`InferenceConfig::with_hardcoded_defaults`].
-    Default,
-    /// [`InferenceConfig::reasoning_floor`] — a `reasoning`-tagged model.
-    Reasoning,
-}
-
-impl FloorClass {
-    /// The label the debug line and the readback use.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Default => "default",
-            Self::Reasoning => "reasoning",
-        }
-    }
-}
-
 /// Everything [`resolve_sampling`] decided, and why.
 ///
 /// # Why this is returned rather than logged
@@ -119,8 +97,6 @@ pub struct SamplingDecision {
     pub sources: FieldSources,
     /// The ladder's rung names, highest priority first.
     pub layer_names: [&'static str; LADDER_RUNGS],
-    /// Which class floor sat beneath it.
-    pub floor: FloorClass,
     /// Whether the request was eligible for the agentic-turn ceiling.
     pub agentic_turn: bool,
     /// The ceiling value, if it actually capped the temperature.
@@ -149,7 +125,7 @@ pub struct SamplingDecision {
 }
 
 /// Rungs in the pipeline's ladder: `cli`, `client`, `profile`, `model`,
-/// `global`, `model (auto-detected)`.
+/// `global`, and the model's recipe beneath global settings.
 ///
 /// Named so [`SamplingDecision::layer_names`] and the tests that check the
 /// ladder's width or index its last rung share one number.
@@ -352,12 +328,11 @@ fn strip_unmodelled_sampler_keys(body: &mut Value, trust_client_sampling: bool) 
 ///
 /// # `discarded` — what the trust gate binned
 ///
-/// The resolved patch is only ever *inserted*, and the class floor leaves
-/// modelled fields unset by design (ADR 0003), so a gated key the ladder then
-/// stays silent on would ride the body to llama-server exactly like an
-/// unmodelled one: an untrusted client's `frequency_penalty: 0.9` would reach
-/// `/slots` intact, because no layer names that field and nothing overwrites
-/// it.
+/// The resolved patch is only ever *inserted*, and a field no rung names is
+/// left unset (ADR 0022), so a gated key the ladder then stays silent on would
+/// ride the body to llama-server exactly like an unmodelled one: an untrusted
+/// client's `frequency_penalty: 0.9` would reach `/slots` intact, because no
+/// layer names that field and nothing overwrites it.
 ///
 /// Empty when the client is trusted.
 ///
@@ -419,45 +394,21 @@ fn erase_unadopted_client_keys(body: &mut Value, discarded: &[String], issues: &
     }
 }
 
-/// Which rung the model's stored defaults occupy, and the name that rung
-/// carries — both decided by [`DefaultsOrigin`] in one place, so resolution
-/// and its labelling cannot disagree.
-///
-/// Exhaustive on purpose — see the twin in `resolve_with_profile_explained`.
-/// A catch-all here would rank any future unreviewed origin above global
-/// settings, which is precisely backwards.
-///
-/// The name follows the origin: a static `"model (auto-detected)"` would
-/// credit gglib's guess, in the debug line and the audit's provenance
-/// strings, for a published recipe or a tune sweep's winner.
-const fn model_rung(
-    ctx: &ModelContext,
-) -> (
-    Option<&InferenceConfig>,
-    Option<&InferenceConfig>,
-    &'static str,
-) {
-    match ctx.defaults_origin {
-        Some(DefaultsOrigin::AutoDetected) => (
-            None,
-            ctx.inference_defaults.as_ref(),
-            "model (auto-detected)",
-        ),
-        Some(DefaultsOrigin::Published) => {
-            (None, ctx.inference_defaults.as_ref(), "model (published)")
-        }
-        Some(DefaultsOrigin::Measured) => {
-            (None, ctx.inference_defaults.as_ref(), "model (measured)")
-        }
-        Some(DefaultsOrigin::User) | None => (
-            ctx.inference_defaults.as_ref(),
-            None,
-            "model (auto-detected)",
-        ),
+/// The name of the rung beneath global settings, which follows what is in
+/// it: a static `"model (auto-detected)"` would credit gglib's guess, in the
+/// debug line and the audit's provenance strings, for a published recipe or a
+/// tune sweep's winner. Which rung holds what is
+/// [`ModelSamplingContext::model_rungs`](crate::domain::ModelSamplingContext::model_rungs)'s
+/// decision, shared with `gglib model explain`.
+const fn recipe_rung_name(origin: Option<DefaultsOrigin>) -> &'static str {
+    match origin {
+        Some(DefaultsOrigin::Published) => "model (published)",
+        Some(DefaultsOrigin::Measured) => "model (measured)",
+        Some(DefaultsOrigin::User) | None => "model (auto-detected)",
     }
 }
 
-/// Resolve the sampling hierarchy into `body`, then pin `cache_prompt`.
+/// Resolve the sampling hierarchy into `body`.
 ///
 /// # Force-insert, not `or_insert`
 ///
@@ -538,17 +489,7 @@ pub fn resolve_sampling(
     // was.
     erase_unadopted_client_keys(body, &discarded, &issues);
 
-    // The `reasoning` tag selects the floor beneath every layer here — a
-    // model that degrades into repetitive loops under greedy decoding still
-    // gets a real anti-repetition guard when nothing above the floor sets
-    // one, rather than the universal neutral default. See
-    // `InferenceConfig::reasoning_floor`.
     let model_is_reasoning = crate::domain::capability_tags::is_reasoning(&ctx.tags);
-    let floor = if model_is_reasoning {
-        InferenceConfig::reasoning_floor()
-    } else {
-        InferenceConfig::with_hardcoded_defaults()
-    };
 
     // Whether an agentic-turn temperature ceiling is eligible to apply. Only
     // eligibility — whether it actually bites depends on where the resolved
@@ -566,11 +507,16 @@ pub fn resolve_sampling(
         && !agentic_sampling_disabled_via_env()
         && super::request_shape::carries_tools(body);
 
-    // `model` occupies one of two rungs depending on how it was set — never
-    // both — so an auto-detected guess can't silently outrank global
-    // settings the way a deliberate per-model choice should. See
-    // `DefaultsOrigin` and `InferenceConfig::resolve_with_profile`.
-    let (user_model, auto_model, below_global_rung_name) = model_rung(ctx);
+    // A person's own defaults rank above global settings and the model's
+    // recipe below them, so a recipe nobody reviewed can't silently outrank
+    // global settings the way a deliberate per-model choice should. See
+    // `ModelSamplingContext::model_rungs`, which `gglib model explain` reads
+    // too.
+    let rungs = ModelSamplingContext {
+        is_reasoning: model_is_reasoning,
+        defaults_origin: ctx.defaults_origin,
+    }
+    .model_rungs(ctx.inference_defaults.as_ref());
 
     // Highest priority first. The single ordering both resolution and
     // provenance reporting read from, so they can never drift apart.
@@ -578,34 +524,34 @@ pub fn resolve_sampling(
         ("cli", layers.cli_override.as_ref()),
         ("client", Some(&client_layer)),
         ("profile", layers.profile.as_ref()),
-        ("model", user_model),
+        ("model", rungs.user_set),
         ("global", layers.global.as_ref()),
-        (below_global_rung_name, auto_model),
+        (recipe_rung_name(ctx.defaults_origin), rungs.below_global),
     ];
     let layer_configs: Vec<Option<&InferenceConfig>> =
         ordered.iter().map(|(_, config)| *config).collect();
     // Values and provenance come from the same pass over the same ladder, so
     // the log can never name a layer the resolution did not use.
-    let (mut resolved, sources) =
-        InferenceConfig::resolve_layers_with_sources(&layer_configs, &floor);
+    let (mut resolved, sources) = InferenceConfig::resolve_layers_with_sources(&layer_configs);
 
     // Cap the temperature for an agentic turn — but only over a value nobody
     // deliberately chose.
     //
     // The gate is provenance, not rank. A ladder rung would have been the
-    // obvious way to express "outranks the auto-detected recipe", and it is
+    // obvious way to express "outranks the model's recipe", and it is
     // wrong: a rung that names a `temperature` *claims the coupled trio* under
     // `resolve_layers_with_sources`, so `presence_penalty`, `repeat_penalty` and `min_p`
-    // would drop to the floor behind it. A `reasoning` model would silently
+    // would go unsent behind it. A `reasoning` model would silently
     // lose the 1.5 presence penalty its own recipe pairs with its temperature
     // on every agentic turn. Clamping after the fold leaves the trio
     // untouched.
     //
-    // Eligible sources are the auto-detected rung and the floor. An
-    // auto-detected recipe is an unreviewed guess written at import time, and
+    // The eligible source is the recipe rung. A recipe nobody here reviewed
     // already ranks below global settings for that reason; a task-aware
     // ceiling outranking it is consistent with that. Anything a person
-    // actually set — cli, client, profile, per-model, global — stands.
+    // actually set — cli, client, profile, per-model, global — stands. A
+    // temperature no rung names is not sent, and the ceiling does not add one
+    // (ADR 0022).
     //
     // Reasoning models have no ceiling at all — that is a measured decision,
     // not an omission; see `agentic_temperature_ceiling` for the experiment
@@ -615,9 +561,7 @@ pub fn resolve_sampling(
     // to. The tune sweep resolved its candidates against this model's real
     // context (#748) precisely so the winner transfers to production —
     // capping the stored winner here would un-measure it on exactly the
-    // turns it was measured for. Only the *model rung* is exempted: a
-    // Measured model whose recipe names no temperature still resolves from
-    // the floor, and the floor stays cappable — nobody measured the floor.
+    // turns it was measured for.
     let measured_model_rung = matches!(ctx.defaults_origin, Some(DefaultsOrigin::Measured))
         && sources.temperature == ParamSource::Layer(auto_detected_rung);
     let temperature_is_unchosen =
@@ -641,11 +585,6 @@ pub fn resolve_sampling(
         resolved: resolved.clone(),
         sources,
         layer_names,
-        floor: if model_is_reasoning {
-            FloorClass::Reasoning
-        } else {
-            FloorClass::Default
-        },
         agentic_turn,
         agentic_ceiling_applied: applied_ceiling,
         client_fields_rejected: issues.clone(),
@@ -660,16 +599,6 @@ pub fn resolve_sampling(
     for (key, value) in resolved.to_openai_json_patch() {
         obj.insert(key, value);
     }
-
-    // Force-insert (not or_insert) llama-server's own `cache_prompt` flag.
-    // It defaults to true server-side, but nothing guarantees the calling
-    // client doesn't send `false` — and if it ever did, llama-server's
-    // n_past = get_common_prefix(...) reuse computation (server-context.cpp)
-    // is skipped entirely, silently discarding 100% of any restored/hot KV
-    // state and forcing a full re-prefill regardless of how well the prompt
-    // actually matches. The whole KV cache session persistence feature depends
-    // on this staying true, so pin it rather than trusting it implicitly.
-    obj.insert("cache_prompt".to_owned(), Value::Bool(true));
 
     decision(true)
 }

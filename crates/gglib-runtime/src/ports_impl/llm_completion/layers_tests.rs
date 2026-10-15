@@ -5,8 +5,7 @@
 //! assert that the adapter gives that fold everything it was handed and
 //! resolves nothing itself, which is what lets the pipeline tell a value a
 //! person chose from one nobody did, and that the request it sends carries
-//! what the fold resolved and no parameter beside it, unless its caller keeps
-//! what the fold passed over.
+//! what the fold resolved.
 
 use std::sync::Mutex;
 
@@ -48,6 +47,11 @@ fn layers(profile: Option<f32>, global: Option<f32>) -> SamplingLayers {
 
 /// The temperature a turn is sent with, `tools` saying whether it carries one.
 fn sent(adapter: &LlmCompletionAdapter, tools: bool) -> f64 {
+    sent_if_any(adapter, tools).expect("a temperature")
+}
+
+/// The same, or `None` when the turn is sent no temperature at all.
+fn sent_if_any(adapter: &LlmCompletionAdapter, tools: bool) -> Option<f64> {
     let tool = ToolDefinition {
         name: "f".to_owned(),
         description: None,
@@ -59,13 +63,13 @@ fn sent(adapter: &LlmCompletionAdapter, tools: bool) -> f64 {
     let body = adapter
         .shaped_body(&[user("hi")], &tools, &ImageUrls::default(), false)
         .unwrap();
-    let sent = body["temperature"].as_f64().expect("a temperature");
-    (sent * 100.0).round() / 100.0
+    let sent = body["temperature"].as_f64()?;
+    Some((sent * 100.0).round() / 100.0)
 }
 
 /// The settings' global layer is the adapter's to fold: it reaches the body
 /// when nothing above it names a temperature, beneath a value a person set on
-/// the model and above one gglib guessed at import.
+/// the model and above a recipe nobody here reviewed.
 #[test]
 fn the_global_layer_is_folded_between_a_set_model_value_and_a_guessed_one() {
     let with = |ctx: ModelContext| adapter(ctx, None).with_layers(layers(None, Some(0.42)));
@@ -73,7 +77,7 @@ fn the_global_layer_is_folded_between_a_set_model_value_and_a_guessed_one() {
     assert!((sent(&with(model(None)), false) - 0.42).abs() < 1e-9);
     let set = model(Some((temperature(0.55), DefaultsOrigin::User)));
     assert!((sent(&with(set), false) - 0.55).abs() < 1e-9);
-    let guessed = model(Some((temperature(0.9), DefaultsOrigin::AutoDetected)));
+    let guessed = model(Some((temperature(0.9), DefaultsOrigin::Published)));
     assert!((sent(&with(guessed), false) - 0.42).abs() < 1e-9);
 }
 
@@ -90,16 +94,18 @@ fn the_profile_layer_outranks_the_model_and_the_callers_own_value_outranks_it() 
     assert!((sent(&typed, false) - 0.9).abs() < 1e-9);
 }
 
-/// On a turn with tools the ceiling lowers a temperature nobody chose, the
-/// floor's or an import-time guess, and never one a person did: typed for
-/// the turn, a profile's, set on the model, or the global one. That only
-/// holds because each arrives as the layer it is.
+/// On a turn with tools the ceiling lowers a temperature nobody chose, a
+/// recipe nobody here reviewed, and never one a person did: typed for the
+/// turn, a profile's, set on the model, or the global one. That only holds
+/// because each arrives as the layer it is. Where no rung names one, none is
+/// sent and the ceiling adds none (ADR 0022).
 #[test]
 fn a_turn_with_tools_caps_a_temperature_nobody_chose_and_no_other() {
-    let floor = adapter(model(None), None);
-    assert!((sent(&floor, false) - 0.7).abs() < 1e-9, "no tools, no cap");
-    assert!((sent(&floor, true) - 0.3).abs() < 1e-9);
-    let guessed = model(Some((temperature(0.9), DefaultsOrigin::AutoDetected)));
+    let bare = adapter(model(None), None);
+    assert_eq!(sent_if_any(&bare, false), None);
+    assert_eq!(sent_if_any(&bare, true), None);
+    let guessed = model(Some((temperature(0.9), DefaultsOrigin::Published)));
+    assert!((sent(&adapter(guessed.clone(), None), false) - 0.9).abs() < 1e-9);
     assert!((sent(&adapter(guessed, None), true) - 0.3).abs() < 1e-9);
 
     let typed = adapter(model(None), Some(temperature(0.9)));
@@ -113,18 +119,19 @@ fn a_turn_with_tools_caps_a_temperature_nobody_chose_and_no_other() {
 }
 
 /// Whether a turn with tools is capped is the caller's to say, in the layers
-/// it hands over: capped when they say so, and sent the floor's 0.7 when
+/// it hands over: capped when they say so, and sent the recipe's 0.9 when
 /// they do not, as a caller whose settings store the switch off hands them.
 #[test]
 fn the_ceiling_follows_the_switch_in_the_layers_a_caller_hands_over() {
     let handed = |agentic_adjustments| {
-        adapter(model(None), None).with_layers(SamplingLayers {
+        let recipe = model(Some((temperature(0.9), DefaultsOrigin::Published)));
+        adapter(recipe, None).with_layers(SamplingLayers {
             agentic_adjustments,
             ..SamplingLayers::default()
         })
     };
     assert!((sent(&handed(true), true) - 0.3).abs() < 1e-9);
-    assert!((sent(&handed(false), true) - 0.7).abs() < 1e-9);
+    assert!((sent(&handed(false), true) - 0.9).abs() < 1e-9);
 }
 
 /// The sampling parameters a request carries, as the server reads them.
@@ -139,19 +146,24 @@ fn penalty() -> InferenceConfig {
     }
 }
 
-/// A penalty a person named without the temperature it travels with is
-/// passed over by the fold when a layer beneath names one, and is not sent:
-/// the request carries what its decision says. Named with its temperature,
-/// or over layers that name none, it is what the turn runs with.
+/// A penalty a person named without the temperature it travels with is sent
+/// beside the temperature a layer beneath names: the coupling rule only
+/// passes over layers beneath the claim, and the caller's own parameters sit
+/// above every layer the adapter is handed (ADR 0022). Named with its
+/// temperature, or over layers that name none, it is what the turn runs with.
 #[test]
-fn a_parameter_the_fold_passes_over_is_not_sent() {
+fn a_penalty_named_without_its_temperature_is_sent() {
     let set = || model(Some((temperature(0.55), DefaultsOrigin::User)));
+    let beside = |value: f32| InferenceConfig {
+        temperature: Some(value),
+        ..penalty()
+    };
 
     let by_model = body_of(&adapter(set(), Some(penalty())), &[user("hi")]);
-    assert_eq!(sampling_of(&by_model), temperature(0.55), "{by_model}");
+    assert_eq!(sampling_of(&by_model), beside(0.55), "{by_model}");
     let profiled = adapter(model(None), Some(penalty())).with_layers(layers(Some(0.15), None));
     let by_profile = body_of(&profiled, &[user("hi")]);
-    assert_eq!(sampling_of(&by_profile), temperature(0.15), "{by_profile}");
+    assert_eq!(sampling_of(&by_profile), beside(0.15), "{by_profile}");
 
     let with_its_temperature = InferenceConfig {
         temperature: Some(0.5),
@@ -164,24 +176,8 @@ fn a_parameter_the_fold_passes_over_is_not_sent() {
     assert_eq!(unclaimed["presence_penalty"], json!(1.2_f32), "{unclaimed}");
 }
 
-/// A caller that keeps what the fold passes over, a tune sweep, sends the
-/// penalty its candidate named beside the temperature the model's own value
-/// sets.
-#[test]
-fn a_parameter_the_fold_passes_over_is_sent_for_a_caller_that_keeps_it() {
-    let set = model(Some((temperature(0.55), DefaultsOrigin::User)));
-    let kept = adapter(set, Some(penalty())).with_passed_over_kept(true);
-    let body = body_of(&kept, &[user("hi")]);
-    let both = InferenceConfig {
-        temperature: Some(0.55),
-        ..penalty()
-    };
-    assert_eq!(sampling_of(&body), both, "{body}");
-}
-
-/// A value the pipeline's reader refuses is not the fold's to pass over: it
-/// stays in the request for llama-server to answer, as the pipeline leaves
-/// an external client's.
+/// A value the pipeline's reader refuses stays in the request for
+/// llama-server to answer, as the pipeline leaves an external client's.
 #[test]
 fn a_parameter_the_reader_refuses_is_left_for_the_server_to_answer() {
     let below_the_range = InferenceConfig {
@@ -226,7 +222,7 @@ fn a_turn_with_no_tools_sends_what_the_stored_ladder_resolves_and_no_more() {
         Some((config(|c| c.min_p = Some(0.1)), DefaultsOrigin::User)),
         Some((
             InferenceConfig::reasoning_profile(),
-            DefaultsOrigin::AutoDetected,
+            DefaultsOrigin::Published,
         )),
         Some((temperature(0.6), DefaultsOrigin::Measured)),
     ];

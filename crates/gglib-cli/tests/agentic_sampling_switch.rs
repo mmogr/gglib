@@ -1,17 +1,18 @@
 //! `GGLIB_DISABLE_AGENTIC_SAMPLING` in the environment of `gglib q`, run as a
 //! person runs it against a model server on `--port`.
 //!
-//! An ordinary model with nothing chosen resolves the floor's 0.7 and is sent
-//! 0.3 on a turn with tools while the agentic ceiling applies. The variable
-//! switches the ceiling off whatever the settings store, for a model in the
-//! library and for a server whose model the library does not hold. Only a
-//! process of its own can hold the variable, so this runs the built binary;
-//! what the stored setting does is `config_sampling_tests`'.
+//! An ordinary model whose recipe nobody here reviewed resolves its 0.9 and
+//! is sent 0.3 on a turn with tools while the agentic ceiling applies. The
+//! variable switches the ceiling off whatever the settings store. A server
+//! whose model the library does not hold has nothing to cap: nothing names a
+//! temperature, so none is sent either way. Only a process of its own can
+//! hold the variable, so this runs the built binary; what the stored setting
+//! does is `config_sampling_tests`'.
 
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use gglib_core::domain::{ModelCapabilities, NewModel};
+use gglib_core::domain::{DefaultsOrigin, InferenceConfig, ModelCapabilities, NewModel};
 use serde_json::{Value, json};
 
 #[path = "support/data_dir.rs"]
@@ -22,13 +23,19 @@ mod model_server;
 const SWITCH: &str = "GGLIB_DISABLE_AGENTIC_SAMPLING";
 
 /// A data directory whose catalogue holds `served`, a model that can call
-/// tools, and whose settings store `agentic_sampling` as `stored`.
+/// tools with a published recipe of 0.9, and whose settings store
+/// `agentic_sampling` as `stored`.
 fn library(stored: Option<bool>) -> tempfile::TempDir {
     let root = tempfile::tempdir().expect("temp data dir");
     let path = std::path::PathBuf::from("/models/served.gguf");
     let mut model = NewModel::new("served".to_owned(), path, 7.0, chrono::Utc::now());
     model.capabilities =
         ModelCapabilities::SUPPORTS_TOOL_CALLS | ModelCapabilities::SUPPORTS_SYSTEM_ROLE;
+    model.inference_defaults = Some(InferenceConfig {
+        temperature: Some(0.9),
+        ..InferenceConfig::default()
+    });
+    model.defaults_origin = Some(DefaultsOrigin::Published);
     data_dir::add_model(root.path(), model);
     data_dir::write_settings(root.path(), |settings| settings.agentic_sampling = stored);
     root
@@ -63,17 +70,19 @@ fn sent(root: &Path, model: &str, value: Option<&str>) -> Value {
 }
 
 /// With the setting stored on, or not stored, the turn is capped; the
-/// variable set truthy sends the resolved 0.7 instead, and set to a value
+/// variable set truthy sends the resolved 0.9 instead, and set to a value
 /// that is not truthy changes nothing.
 #[test]
 fn the_environment_switch_turns_the_ceiling_off_whatever_is_stored() {
     for stored in [None, Some(true)] {
         let root = library(stored);
-        for model in ["served", "stranger"] {
-            let sent_with = |value| sent(root.path(), model, value);
-            assert_eq!(sent_with(None), json!(0.3_f32), "{model}, {stored:?}");
-            assert_eq!(sent_with(Some("0")), json!(0.3_f32), "{model}, {stored:?}");
-            assert_eq!(sent_with(Some("1")), json!(0.7_f32), "{model}, {stored:?}");
+        let sent_with = |value| sent(root.path(), "served", value);
+        assert_eq!(sent_with(None), json!(0.3_f32), "{stored:?}");
+        assert_eq!(sent_with(Some("0")), json!(0.3_f32), "{stored:?}");
+        assert_eq!(sent_with(Some("1")), json!(0.9_f32), "{stored:?}");
+        for value in [None, Some("0"), Some("1")] {
+            let sent = sent(root.path(), "stranger", value);
+            assert_eq!(sent, Value::Null, "stranger, {value:?}, {stored:?}");
         }
     }
 }

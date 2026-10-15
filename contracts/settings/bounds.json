@@ -79,45 +79,5 @@
       "min": 0.0,
       "max": 1.0
     }
-  },
-  "inference_floor": {
-    "temperature": 0.7,
-    "topP": null,
-    "topK": null,
-    "maxTokens": null,
-    "repeatPenalty": null,
-    "presencePenalty": null,
-    "frequencyPenalty": null,
-    "minP": null,
-    "dynatempRange": null,
-    "dynatempExponent": null,
-    "topNSigma": null,
-    "dryMultiplier": null,
-    "dryBase": null,
-    "dryAllowedLength": null,
-    "dryPenaltyLastN": null,
-    "seed": null,
-    "reasoningEffort": null,
-    "reasoningBudgetTokens": null
-  },
-  "reasoning_floor": {
-    "temperature": 0.7,
-    "topP": null,
-    "topK": null,
-    "maxTokens": null,
-    "repeatPenalty": null,
-    "presencePenalty": 1.0,
-    "frequencyPenalty": null,
-    "minP": 0.0,
-    "dynatempRange": null,
-    "dynatempExponent": null,
-    "topNSigma": null,
-    "dryMultiplier": null,
-    "dryBase": null,
-    "dryAllowedLength": null,
-    "dryPenaltyLastN": null,
-    "seed": null,
-    "reasoningEffort": null,
-    "reasoningBudgetTokens": null
   }
 }

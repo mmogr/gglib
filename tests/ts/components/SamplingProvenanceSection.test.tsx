@@ -30,10 +30,10 @@ vi.mock('../../../src/services/transport/api/models/local', () => ({
 function sources(overrides: Partial<Record<string, ParamProvenance>> = {}): ParamProvenance[] {
   const base: ParamProvenance[] = [
     { param: 'temperature', kind: 'layer', layer: 'profile' },
-    { param: 'topP', kind: 'floor' },
+    { param: 'topP', kind: 'layer', layer: 'modelUserSet' },
     { param: 'topK', kind: 'layer', layer: 'global' },
-    { param: 'presencePenalty', kind: 'floorCoupled' },
-    { param: 'repeatPenalty', kind: 'floor' },
+    { param: 'presencePenalty', kind: 'coupled' },
+    { param: 'repeatPenalty', kind: 'layer', layer: 'modelUserSet' },
     { param: 'minP', kind: 'layer', layer: 'modelAutoDetected' },
     { param: 'maxTokens', kind: 'unset' },
   ];
@@ -87,14 +87,12 @@ describe('SamplingProvenanceSection', () => {
     expect(screen.getByText('unset by design')).toBeInTheDocument();
   });
 
-  it('names the reasoning floor and the coupling that reached it', async () => {
-    explainModelSampling.mockResolvedValue(explanation({ isReasoning: true }));
+  it('names the coupling that left a value unsent', async () => {
     render(<SamplingProvenanceSection modelId={1} profiles={[]} />);
 
     expect(
-      await screen.findByText('reasoning floor (coupled to temperature layer)'),
+      await screen.findByText('unset (coupled to temperature layer)'),
     ).toBeInTheDocument();
-    expect(screen.getAllByText('reasoning floor').length).toBeGreaterThan(0);
   });
 
   it('states that operator flags outrank the table, and whether clients are trusted', async () => {
@@ -137,7 +135,7 @@ describe('SamplingProvenanceSection', () => {
 });
 
 describe('describeSource', () => {
-  const ctx = { profile: 'coding', isReasoning: false };
+  const ctx = { profile: 'coding' };
 
   it('matches the wording gglib model explain prints', () => {
     expect(describeSource({ param: 'temperature', kind: 'layer', layer: 'request' }, ctx)).toBe(
@@ -159,16 +157,14 @@ describe('describeSource', () => {
     expect(
       describeSource({ param: 'temperature', kind: 'layer', layer: 'profile' }, {
         profile: null,
-        isReasoning: false,
       }),
     ).toBe('profile');
   });
 
-  it('switches the floor name on the reasoning tag', () => {
-    expect(describeSource({ param: 'topP', kind: 'floor' }, ctx)).toBe('default floor');
-    expect(
-      describeSource({ param: 'topP', kind: 'floor' }, { profile: null, isReasoning: true }),
-    ).toBe('reasoning floor');
+  it('says why a coupled value is unsent', () => {
+    expect(describeSource({ param: 'topP', kind: 'coupled' }, ctx)).toBe(
+      'unset (coupled to temperature layer)',
+    );
   });
 
   /// A layer the server could not name is still worth showing.

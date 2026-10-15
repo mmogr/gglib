@@ -26,7 +26,7 @@ use sqlx::SqlitePool;
 /// column, an index, or a new step on the `user_version` ladder. Then
 /// rewrite the snapshot with
 /// `GGLIB_UPDATE_SCHEMA_SNAPSHOT=1 cargo test -p gglib-db schema_snapshot`.
-pub(super) const SCHEMA_GENERATION: i64 = 1;
+pub(super) const SCHEMA_GENERATION: i64 = 2;
 
 /// The generation stamped on the file `pool` opens, or `0` for a file no
 /// build has stamped: a new file, or one from before the generation existed.

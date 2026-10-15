@@ -291,10 +291,8 @@ fn installed_report(done: &TemplateInstall) -> String {
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-/// Apply the parameters an invocation actually named, leaving the rest alone.
-///
-/// The inverse of `InferenceConfig::merge_with`, which fills gaps in `self`
-/// from `other`; here `other` wins wherever it has an opinion.
+/// Apply the parameters an invocation actually named, leaving the rest alone:
+/// `edits` wins wherever it has an opinion.
 fn merge_set(target: &mut InferenceConfig, edits: &InferenceConfig) {
     if edits.temperature.is_some() {
         target.temperature = edits.temperature;

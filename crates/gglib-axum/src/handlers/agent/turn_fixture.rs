@@ -153,13 +153,10 @@ pub(super) fn stored(
     }
 }
 
-/// A reasoning-tagged model with the recipe its import wrote.
+/// A reasoning-tagged model as its import leaves it: the tag, and nothing
+/// stored, so resolution supplies the `reasoning` recipe.
 pub(super) fn reasoning(entry: &mut NewModel) {
     entry.tags = vec!["reasoning".to_owned()];
-    stored(
-        InferenceConfig::reasoning_profile(),
-        DefaultsOrigin::AutoDetected,
-    )(entry);
 }
 
 pub(super) async fn global(state: &AppState, config: InferenceConfig) {

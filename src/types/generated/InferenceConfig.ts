@@ -13,9 +13,13 @@ import type { ReasoningEffort } from "./ReasoningEffort";
  * 1. Request-level override (user specified for this request)
  * 2. Selected profile (`Settings.inference_profiles`, chosen as
  *    `{model}:{profile}`; absent on surfaces without profiles)
- * 3. Per-model defaults (stored in `Model.inference_defaults`)
+ * 3. Per-model defaults a person set (stored in `Model.inference_defaults`)
  * 4. Global settings (stored in `Settings.inference_defaults`)
- * 5. Hardcoded fallback (e.g., temperature = 0.7)
+ * 5. The model's recipe: a published or measured one stored in
+ *    `Model.inference_defaults`, else the `reasoning` recipe for a
+ *    `reasoning`-tagged model
+ * 6. llama.cpp's own defaults, for anything still unset (gglib sends no
+ *    value for it)
  *
  * # Examples
  *
@@ -118,13 +122,11 @@ frequencyPenalty: number | null,
  * Minimum-probability sampling threshold (0.0 - 1.0).
  *
  * Removes tokens whose probability is below `min_p × P(top token)`.
- * - 0.0: Disabled (explicit off; recommended by Qwen3.6, and the floor
- *   for `reasoning`-tagged models — see [`reasoning_floor`])
- * - 0.05: llama.cpp's own default, and the neutral floor here — see
- *   [`with_hardcoded_defaults`]
+ * - 0.0: Disabled (explicit off; recommended by Qwen3.6, and what
+ *   [`reasoning_profile`] names)
+ * - 0.05: llama.cpp's own default, which applies when no rung names one
  *
- * [`reasoning_floor`]: Self::reasoning_floor
- * [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
+ * [`reasoning_profile`]: Self::reasoning_profile
  */
 minP: number | null, 
 /**
@@ -176,7 +178,7 @@ topNSigma: number | null,
  * Penalises tokens that would extend a sequence already present in the
  * context, which catches the multi-token degenerate loops that
  * `repeat_penalty` — a flat per-token penalty — cannot see.
- * - 0.0: Disabled (llama.cpp's default, and the floor here)
+ * - 0.0: Disabled (llama.cpp's default)
  * - 0.8: A common starting point for long agentic sessions
  *
  * Left alone on agentic turns, deliberately, although structured output
@@ -224,8 +226,7 @@ dryPenaltyLastN: number | null,
  * and a seed stored per model would pin every response that model ever
  * produces to the same text. So:
  *
- * - no floor names it, on either class floor;
- * - nothing gglib writes at import names it;
+ * - no recipe gglib resolves names it;
  * - the CLI, profile and settings surfaces do not expose it.
  *
  * It lives here anyway, rather than beside the hierarchy, for the reason
@@ -292,10 +293,9 @@ seed: number | null,
  * That trade only exists if the rejection also *removes the key*, and it
  * is this field that forces the point. Every other reader here rejects
  * only what upstream would have rejected too, so a forwarded reject came
- * back as an HTTP 400 and the damage was visible; and floored fields are
- * overwritten by the resolved patch anyway. This field is neither — no
- * layer or floor ever names it (`no_floor_names_a_reasoning_control`) and
- * upstream validates nothing — so a rejection that stopped at the layer
+ * back as an HTTP 400 and the damage was visible. This field is not —
+ * no recipe gglib resolves names it (`no_recipe_names_a_reasoning_control`)
+ * and upstream validates nothing — so a rejection that stopped at the layer
  * would be a report with no effect, and `"banana"` would reach the
  * prompt with gglib's own `client_fields_rejected` recording that it had
  * been stopped. See the body cleanup in `request_pipeline::sampling`, and
@@ -316,16 +316,15 @@ seed: number | null,
  * field is modelled here rather than left to ride the body ungoverned
  * (ADR 0007 finding 6, the #779 shape under a new name).
  *
- * # No floor names one
+ * # No recipe names one
  *
- * See [`with_hardcoded_defaults`]. Several templates default themselves
- * (`gpt-oss` to `medium`); a floor here would override each template's own
- * choice with a value nobody made.
+ * Several templates default themselves (`gpt-oss` to `medium`); a value
+ * gglib supplied on its own would override each template's own choice
+ * with a value nobody made.
  *
  * [ADR 0004]: https://github.com/mmogr/gglib/blob/main/docs/adr/0004-observe-the-sampling-boundary.md
  * [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
  * [`extract_client_sampling`]: Self::extract_client_sampling
- * [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
  */
 reasoningEffort: ReasoningEffort | null, 
 /**
@@ -381,14 +380,13 @@ reasoningEffort: ReasoningEffort | null,
  * that ADR's own earlier claim; do not re-derive an echo from the request
  * *parse* table.
  *
- * # No floor names one
+ * # No recipe names one
  *
- * See [`with_hardcoded_defaults`]. A fleet-wide thinking budget is a
- * tuning decision with measurement behind it, and `-1` — the "defer"
- * sentinel — is exactly what omitting the key already means.
+ * A fleet-wide thinking budget is a tuning decision with measurement
+ * behind it, and `-1` — the "defer" sentinel — is exactly what omitting
+ * the key already means.
  *
  * [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
  * [`extract_client_sampling`]: Self::extract_client_sampling
- * [`with_hardcoded_defaults`]: Self::with_hardcoded_defaults
  */
 reasoningBudgetTokens: number | null, };

@@ -105,7 +105,8 @@ pub struct Settings {
     /// Global inference parameter defaults.
     ///
     /// Applied when neither request nor per-model defaults are specified.
-    /// If not set, hardcoded defaults are used as final fallback.
+    /// If not set, the model's recipe applies, and beneath it llama.cpp's own
+    /// defaults.
     #[serde(default)]
     pub inference_defaults: Option<InferenceConfig>,
 
@@ -242,7 +243,7 @@ pub struct Settings {
     ///
     /// `None`/`Some(true)` → active (the default): a turn that may emit
     /// structured output has its temperature capped, but only over a value
-    /// nobody deliberately chose — an auto-detected recipe or the floor —
+    /// nobody deliberately chose — a model's recipe nobody here reviewed —
     /// and only on a model class that has a ceiling. Reasoning models have
     /// none (see `agentic_temperature_ceiling`), so on them this setting
     /// gates nothing. Anything set by a person stands. `Some(false)` disables

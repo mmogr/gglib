@@ -48,8 +48,8 @@ async fn a_value_set_on_the_model_outranks_the_global_one_as_model_explain_repor
     }
 }
 
-/// A reasoning-tagged model is sent the recipe its import wrote, whole, on a
-/// turn with tools and on one without: its class has no ceiling.
+/// A reasoning-tagged model is sent the `reasoning` recipe, whole, on a turn
+/// with tools and on one without: its class has no ceiling.
 #[tokio::test]
 async fn a_reasoning_models_recipe_is_sent_whole_with_tools_and_without() {
     let (_dir, state) = state().await;
@@ -65,14 +65,16 @@ async fn a_reasoning_models_recipe_is_sent_whole_with_tools_and_without() {
     }
 }
 
-/// An ordinary model with nothing chosen is sent the floor's 0.7, and 0.3 on
-/// a turn with tools: what `gglib chat` and `gglib q` send it.
+/// An ordinary model with nothing chosen is sent no temperature, with tools
+/// or without: there is no floor, and the ceiling only lowers a value a rung
+/// supplied (ADR 0022). What `gglib chat` and `gglib q` send it.
 #[tokio::test]
-async fn an_ordinary_model_with_nothing_chosen_is_capped_on_a_turn_with_tools() {
+async fn an_ordinary_model_with_nothing_chosen_is_sent_no_temperature() {
     let (_dir, state) = state().await;
     let id = model(&state, |_| {}).await;
 
-    for (tools, want) in [(false, 0.7_f32), (true, 0.3)] {
+    for tools in [false, true] {
+        let want = serde_json::Value::Null;
         for (door, chat) in doors(&state, id, tools).await {
             let body = sent(&state, id, chat).await;
             assert_eq!(carries_tools(&body), tools, "{door}");
@@ -82,23 +84,25 @@ async fn an_ordinary_model_with_nothing_chosen_is_capped_on_a_turn_with_tools() 
 }
 
 /// Both doors follow this machine's agentic sampling switch. Stored off, a
-/// turn with tools is sent the temperature it resolves to: the floor's 0.7,
-/// or the 0.9 gglib guessed for the model. Stored on, or not stored, each is
-/// capped.
+/// turn with tools is sent the temperature it resolves to: the 0.9 of a
+/// recipe nobody here reviewed, or none at all for a model with nothing.
+/// Stored on, or not stored, the recipe's is capped; nothing is still sent
+/// nothing.
 #[tokio::test]
 async fn a_turn_with_tools_is_capped_unless_agentic_sampling_is_stored_off() {
     for (switch, floor, guess) in [
-        (None, 0.3_f32, 0.3_f32),
-        (Some(true), 0.3, 0.3),
-        (Some(false), 0.7, 0.9),
+        (None, None, 0.3_f32),
+        (Some(true), None, 0.3),
+        (Some(false), None, 0.9),
     ] {
+        let floor: Option<f32> = floor;
         let (_dir, plain) = state().await;
         let ordinary = model(&plain, |_| {}).await;
         let (_dir, guessing) = state().await;
-        let recipe = stored(temperature(0.9), DefaultsOrigin::AutoDetected);
+        let recipe = stored(temperature(0.9), DefaultsOrigin::Published);
         let guessed = model(&guessing, recipe).await;
 
-        for (state, id, want) in [(&plain, ordinary, floor), (&guessing, guessed, guess)] {
+        for (state, id, want) in [(&plain, ordinary, floor), (&guessing, guessed, Some(guess))] {
             agentic_sampling(state, switch).await;
             let mut sent_from = Vec::new();
             for (door, chat) in doors(state, id, true).await {
@@ -113,8 +117,7 @@ async fn a_turn_with_tools_is_capped_unless_agentic_sampling_is_stored_off() {
 }
 
 /// On a turn with tools a temperature a person chose stands, set on the
-/// model or globally; one gglib guessed for an ordinary model is capped like
-/// the floor.
+/// model or globally; a recipe nobody here reviewed is capped.
 #[tokio::test]
 async fn a_turn_with_tools_never_lowers_a_temperature_a_person_chose() {
     let (_dir, set) = state().await;
@@ -123,11 +126,7 @@ async fn a_turn_with_tools_never_lowers_a_temperature_a_person_chose() {
     let plain = model(&defaulted, |_| {}).await;
     global(&defaulted, temperature(0.9)).await;
     let (_dir, guess) = state().await;
-    let guessed = model(
-        &guess,
-        stored(temperature(0.9), DefaultsOrigin::AutoDetected),
-    )
-    .await;
+    let guessed = model(&guess, stored(temperature(0.9), DefaultsOrigin::Published)).await;
 
     for (state, id, want) in [
         (&set, on_model, 0.9_f32),

@@ -321,9 +321,9 @@ fn build_messages(config: &CompareConfig) -> serde_json::Value {
 
 /// Build the full chat-completions request body with resolved inference params.
 ///
-/// Applies the 4-level inference defaults hierarchy to ALL sampling parameters:
+/// Applies the inference defaults hierarchy to ALL sampling parameters:
 ///   request (`config.inference`) → model defaults → global settings defaults
-///   → hardcoded fallback (`InferenceConfig::with_hardcoded_defaults`).
+///   → the model's recipe. A parameter none of them names is not sent.
 ///
 /// This mirrors the resolution the proxy performs for every routed request.
 ///

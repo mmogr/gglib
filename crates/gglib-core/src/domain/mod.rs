@@ -68,7 +68,9 @@ pub use benchmark::{
 
 // Re-export inference types at the domain level for convenience
 pub use capability_tags::is_reasoning;
-pub use inference::{DefaultsOrigin, FieldIssue, InferenceConfig, ModelSamplingContext};
+pub use inference::{
+    DefaultsOrigin, FieldIssue, InferenceConfig, ModelRungs, ModelSamplingContext,
+};
 pub use inference_profile::{InferenceProfile, builtin_templates};
 pub use reasoning_effort::ReasoningEffort;
 

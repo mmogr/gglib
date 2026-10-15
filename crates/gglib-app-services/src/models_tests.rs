@@ -789,7 +789,7 @@ fn profile(name: &str, temperature: f32) -> gglib_core::domain::InferenceProfile
 }
 
 #[tokio::test]
-async fn explain_sampling_falls_back_to_the_floor_when_nothing_is_stored() {
+async fn explain_sampling_resolves_nothing_when_nothing_is_stored() {
     let core = test_core().await;
     let ops = make_ops(Arc::clone(&core));
     let dir = tempdir().unwrap();
@@ -797,9 +797,8 @@ async fn explain_sampling_falls_back_to_the_floor_when_nothing_is_stored() {
 
     let dto = ops.explain_sampling(id, None).await.expect("explain");
 
-    assert_eq!(dto.resolved.temperature, Some(0.7));
+    assert_eq!(dto.resolved.temperature, None);
     assert!(dto.profile.is_none());
-    assert!(!dto.is_reasoning);
     assert!(
         dto.sources
             .iter()
@@ -891,6 +890,8 @@ async fn explain_sampling_reads_the_reasoning_tag_from_the_stored_model() {
     ops.add_tag(id, "reasoning".to_owned()).await.unwrap();
 
     let dto = ops.explain_sampling(id, None).await.expect("explain");
-    assert!(dto.is_reasoning);
-    assert_eq!(dto.resolved.presence_penalty, Some(1.0));
+    assert_eq!(
+        dto.resolved,
+        gglib_core::domain::InferenceConfig::reasoning_profile()
+    );
 }

@@ -215,11 +215,12 @@ async fn a_far_run_sends_the_id_and_is_made_by_the_far_name() {
 }
 
 /// A far run is handed nothing this machine stores: no global default
-/// reaches its request, and its turn with tools is capped whatever this
-/// machine's agentic sampling switch says. That switch is for this
-/// machine's models, and the far proxy follows its own.
+/// reaches its request, and its turn with tools is sent no temperature
+/// whatever this machine's agentic sampling switch says. That switch is for
+/// this machine's models, and the far proxy folds its own layers and follows
+/// its own switch.
 #[tokio::test]
-async fn a_far_turn_with_tools_is_capped_whatever_this_machine_stores() {
+async fn a_far_turn_with_tools_is_sent_nothing_this_machine_stores() {
     use super::super::compose::{Prepared, prepare_over};
     use super::super::turn_fixture::{REPLY, TOOL, agentic_sampling, global, temperature};
 
@@ -254,8 +255,7 @@ async fn a_far_turn_with_tools_is_capped_whatever_this_machine_stores() {
                 .as_array()
                 .is_some_and(|tools| !tools.is_empty())
         );
-        let capped = serde_json::json!(0.3_f32);
-        assert_eq!(sent["temperature"], capped, "stored {stored:?}");
+        assert_eq!(sent.get("temperature"), None, "stored {stored:?}");
     }
 }
 

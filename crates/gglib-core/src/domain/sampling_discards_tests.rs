@@ -30,11 +30,12 @@ fn a_request_flag_that_won_is_not_reported() {
     assert!(discarded_from_rung(&request, &resolved, &sources, REQUEST_RUNG).is_empty());
 }
 
-/// The motivating case: the profile claims the temperature, so the coupled
-/// trio comes only from the profile — and the profile names no penalty, so the
-/// caller's is gone with nothing in its place.
+/// The case this module was written for, now resolved the other way: the
+/// profile claims the temperature beneath the request, and the coupling rule
+/// only passes over rungs beneath the claim, so the request's penalty stands
+/// and there is nothing to report (ADR 0022).
 #[test]
-fn a_coupled_flag_a_profile_passed_over_is_reported() {
+fn a_coupled_flag_above_a_profiles_claim_stands() {
     let request = InferenceConfig {
         presence_penalty: Some(1.2),
         ..Default::default()
@@ -45,18 +46,15 @@ fn a_coupled_flag_a_profile_passed_over_is_reported() {
     };
     let (resolved, sources) = resolve(&request, Some(&profile), None);
 
-    assert_eq!(sources.presence_penalty, ParamSource::FloorCoupled);
-    assert_eq!(
-        discarded_from_rung(&request, &resolved, &sources, REQUEST_RUNG),
-        vec!["presence_penalty"]
-    );
+    assert_eq!(sources.presence_penalty, ParamSource::Layer(REQUEST_RUNG));
+    assert_eq!(resolved.presence_penalty, Some(1.2));
+    assert!(discarded_from_rung(&request, &resolved, &sources, REQUEST_RUNG).is_empty());
 }
 
-/// The same loss by a different route: the claiming rung supplied its own
-/// value, so provenance reads `Layer(1)` rather than `FloorCoupled`. Testing
-/// only for `FloorCoupled` would miss this entirely.
+/// Nor does a claimant that names its own value beneath the request override
+/// the request's: the higher rung wins, as for any field.
 #[test]
-fn a_coupled_flag_the_claiming_layer_overrode_is_reported() {
+fn a_coupled_flag_beats_the_claiming_layers_own() {
     let request = InferenceConfig {
         presence_penalty: Some(1.2),
         ..Default::default()
@@ -68,12 +66,9 @@ fn a_coupled_flag_the_claiming_layer_overrode_is_reported() {
     };
     let (resolved, sources) = resolve(&request, Some(&profile), None);
 
-    assert_eq!(sources.presence_penalty, ParamSource::Layer(1));
-    assert_eq!(resolved.presence_penalty, Some(0.4));
-    assert_eq!(
-        discarded_from_rung(&request, &resolved, &sources, REQUEST_RUNG),
-        vec!["presence_penalty"]
-    );
+    assert_eq!(sources.presence_penalty, ParamSource::Layer(REQUEST_RUNG));
+    assert_eq!(resolved.presence_penalty, Some(1.2));
+    assert!(discarded_from_rung(&request, &resolved, &sources, REQUEST_RUNG).is_empty());
 }
 
 /// Nothing was lost, so nothing is said — even though the winning rung is not
@@ -132,29 +127,30 @@ fn nothing_is_reported_when_no_layer_claims_a_temperature() {
 }
 
 /// The hazard the rung parameter exists for: one resolution, read from two
-/// rungs, must give two answers. A helper that hardcoded rung 0 would report
-/// the client's losses as the operator's.
+/// rungs, must give two answers. The pipeline's ladder puts the operator's
+/// flags at rung 0 and the client at 1; a helper that hardcoded rung 0 would
+/// report the client's losses as the operator's.
 #[test]
 fn the_rung_index_is_respected() {
-    let request = InferenceConfig {
-        presence_penalty: Some(1.2),
-        ..Default::default()
-    };
-    let profile = InferenceConfig {
-        temperature: Some(0.8),
+    let cli = InferenceConfig {
         presence_penalty: Some(0.4),
         ..Default::default()
     };
-    let (resolved, sources) = resolve(&request, Some(&profile), None);
+    let client = InferenceConfig {
+        presence_penalty: Some(1.2),
+        ..Default::default()
+    };
+    let (resolved, sources) =
+        InferenceConfig::resolve_layers_with_sources(&[Some(&cli), Some(&client)]);
 
-    assert_eq!(sources.presence_penalty, ParamSource::Layer(1));
+    assert_eq!(sources.presence_penalty, ParamSource::Layer(0));
     assert_eq!(
-        discarded_from_rung(&request, &resolved, &sources, REQUEST_RUNG),
+        discarded_from_rung(&client, &resolved, &sources, 1),
         vec!["presence_penalty"],
-        "rung 0 asked for 1.2 and rung 1 won with 0.4 — rung 0 lost"
+        "rung 1 asked for 1.2 and rung 0 won with 0.4 — rung 1 lost"
     );
     assert!(
-        discarded_from_rung(&profile, &resolved, &sources, 1).is_empty(),
+        discarded_from_rung(&cli, &resolved, &sources, 0).is_empty(),
         "the same resolution, from the rung that won — nothing lost"
     );
 }

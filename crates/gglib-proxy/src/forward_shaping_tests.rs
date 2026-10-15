@@ -38,15 +38,20 @@ fn shaping_runs_the_pipeline_and_preserves_unknown_fields() {
     } = shape_request_body(
         body,
         &ModelContext::passthrough(),
-        &SamplingLayers::default(),
+        &SamplingLayers {
+            global: Some(gglib_core::domain::InferenceConfig {
+                temperature: Some(0.5),
+                ..Default::default()
+            }),
+            ..SamplingLayers::default()
+        },
         None,
     )
     .expect("no budget, so nothing to reject");
     assert!(!grammar_enforced, "passthrough context never constrains");
 
     let parsed: serde_json::Value = serde_json::from_slice(&out).expect("valid json");
-    assert_eq!(parsed["cache_prompt"], true, "the pipeline ran");
-    assert!(parsed["temperature"].is_number());
+    assert_eq!(parsed["temperature"], 0.5, "the pipeline ran");
     assert_eq!(parsed["totally_made_up"], serde_json::json!({"a": 1}));
     assert_eq!(report, TruncationReport::default(), "unmeasured, no budget");
 }

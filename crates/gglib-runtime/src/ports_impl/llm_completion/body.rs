@@ -10,8 +10,7 @@
 //! belongs to [`gglib_core::request_pipeline`] and runs on the finished body in
 //! [`LlmCompletionAdapter`]'s `chat_stream`, so the agent path and the proxy
 //! apply the same ones in the same order. What this module writes is only what
-//! the *caller* asked for. The adapter does one thing of its own afterwards:
-//! it takes back out a value its caller named that the fold passed over.
+//! the *caller* asked for.
 //!
 //! [`LlmCompletionAdapter`]: super::LlmCompletionAdapter
 

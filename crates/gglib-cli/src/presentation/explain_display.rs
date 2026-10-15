@@ -306,9 +306,9 @@ fn describe(
                 .map_or_else(|| "profile".to_owned(), |name| format!("profile '{name}'")),
             Some(SamplingLayerDto::ModelUserSet) => "per-model defaults (user-set)".to_owned(),
             Some(SamplingLayerDto::Global) => "global settings".to_owned(),
-            // `Published` and `AutoDetected` share this rung — both are
-            // unreviewed, so both rank below global settings — and the origin
-            // is what names whose numbers they are.
+            // A published, a measured and the `reasoning` recipe share this
+            // rung — none was reviewed here, so all rank below global
+            // settings — and the origin is what names whose numbers they are.
             Some(SamplingLayerDto::ModelAutoDetected) => match explanation.defaults_origin {
                 Some(DefaultsOrigin::Published) => {
                     "per-model defaults (published by the model author)".to_owned()
@@ -322,11 +322,7 @@ fn describe(
             // resolves is.
             None => "an unnamed layer".to_owned(),
         },
-        ProvenanceKindDto::Floor => format!("{} floor", floor_name(explanation)),
-        ProvenanceKindDto::FloorCoupled => format!(
-            "{} floor (coupled to temperature layer)",
-            floor_name(explanation)
-        ),
+        ProvenanceKindDto::Coupled => "unset (coupled to temperature layer)".to_owned(),
         ProvenanceKindDto::Unset => "unset by design".to_owned(),
         // Reachable, and the reason this table exists for the reasoning
         // controls at all. `explain` resolves stored configuration with no
@@ -340,15 +336,6 @@ fn describe(
         // "unset" would report that nobody configured a control somebody
         // configured.
         ProvenanceKindDto::SuppressedByTemplate => "suppressed by this model's template".to_owned(),
-    }
-}
-
-/// Which of the two class floors applies, named so the difference is visible.
-const fn floor_name(explanation: &SamplingExplanationDto) -> &'static str {
-    if explanation.is_reasoning {
-        "reasoning"
-    } else {
-        "default"
     }
 }
 

@@ -60,15 +60,13 @@ pub(super) async fn create_models_table(pool: &SqlitePool) -> Result<()> {
     // Create the models table
     sqlx::query(&models_ddl("models")).execute(pool).await?;
 
-    // Migration: add defaults_origin to models — tracks whether
-    // `inference_defaults` was set by the user or auto-detected at import
-    // time (see `gglib_core::domain::DefaultsOrigin`), so resolution can
-    // rank an auto-detected guess below the user's own global settings
-    // instead of silently outranking them. No batch backfill for rows
-    // written before this column existed — `row_to_model` derives an answer
-    // for those from `inference_defaults` itself on every read instead (see
-    // `row_mappers::resolve_defaults_origin`), so a backfill pass would only
-    // duplicate work every row already gets for free.
+    // Migration: add defaults_origin to models — who wrote
+    // `inference_defaults` (see `gglib_core::domain::DefaultsOrigin`), so
+    // resolution can rank a recipe nobody here reviewed below the user's own
+    // global settings. A row from before this column with defaults and no
+    // label reads as user-set (`row_mappers::resolve_defaults_origin`); the
+    // stored copies of the `reasoning` recipe among them were cleared by
+    // `setup_recipes.rs`.
     add_column_if_missing(pool, "models", "defaults_origin", "TEXT").await?;
 
     // Migration: add dialect_spec to models — the structured tool-call

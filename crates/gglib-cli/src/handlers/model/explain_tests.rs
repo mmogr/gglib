@@ -65,11 +65,11 @@ async fn two_models(dir: &Path) -> (CliContext, Model, Model) {
 }
 
 #[tokio::test]
-async fn a_model_that_stores_nothing_is_explained_from_the_floor() {
+async fn a_model_that_stores_nothing_is_explained_as_unset() {
     let dir = tempfile::tempdir().unwrap();
     let (ctx, plain, _) = two_models(dir.path()).await;
 
-    let rows = "  temperature             0.7     ← default floor
+    let rows = "  temperature             —       ← unset by design
   top_p                   —       ← unset by design
   top_k                   —       ← unset by design
   presence_penalty        —       ← unset by design
@@ -102,9 +102,9 @@ async fn a_models_own_defaults_are_set_against_what_its_gguf_publishes() {
         ? general.sampling.top_p is set to a value gglib cannot read
   top_k                   30      ← per-model defaults (user-set)
         ! general.sampling.top_k = 17; gglib is sending 30
-  presence_penalty        —       ← default floor (coupled to temperature layer)
-  repeat_penalty          —       ← default floor (coupled to temperature layer)
-  min_p                   —       ← default floor (coupled to temperature layer)
+  presence_penalty        —       ← unset (coupled to temperature layer)
+  repeat_penalty          —       ← unset (coupled to temperature layer)
+  min_p                   —       ← unset (coupled to temperature layer)
   frequency_penalty       0.25    ← per-model defaults (user-set)
   dynatemp_range          —       ← unset by design
   dynatemp_exponent       —       ← unset by design
@@ -135,9 +135,9 @@ async fn a_profile_is_applied_over_the_models_own_defaults() {
         ? general.sampling.top_p is set to a value gglib cannot read
   top_k                   30      ← per-model defaults (user-set)
         ! general.sampling.top_k = 17; gglib is sending 30
-  presence_penalty        —       ← default floor (coupled to temperature layer)
-  repeat_penalty          —       ← default floor (coupled to temperature layer)
-  min_p                   —       ← default floor (coupled to temperature layer)
+  presence_penalty        —       ← unset (coupled to temperature layer)
+  repeat_penalty          —       ← unset (coupled to temperature layer)
+  min_p                   —       ← unset (coupled to temperature layer)
   frequency_penalty       0.25    ← per-model defaults (user-set)
   dynatemp_range          —       ← unset by design
   dynatemp_exponent       —       ← unset by design
@@ -155,7 +155,7 @@ async fn a_profile_is_applied_over_the_models_own_defaults() {
         table(&tuned, ", profile 'creative'", rows)
     );
 
-    let rows = "  temperature             0.7     ← default floor
+    let rows = "  temperature             —       ← unset by design
   top_p                   —       ← unset by design
   top_k                   —       ← unset by design
   presence_penalty        —       ← unset by design

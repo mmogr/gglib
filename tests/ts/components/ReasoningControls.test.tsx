@@ -20,7 +20,7 @@ import { ReasoningSupport } from '../../../src/components/ModelInspectorPanel/co
 import { JinjaModeField } from '../../../src/components/ModelInspectorPanel/components/JinjaModeField';
 import type { SparseInferenceConfig, TemplateSupport } from '../../../src/types';
 
-const FLOOR: InferenceFallback = { kind: 'floor' };
+const UPSTREAM: InferenceFallback = { kind: 'upstream' };
 
 function renderForm(
   capabilities?: { reasoningEffort: TemplateSupport },
@@ -31,7 +31,7 @@ function renderForm(
     <InferenceParametersForm
       value={value}
       onChange={onChange}
-      fallback={FLOOR}
+      fallback={UPSTREAM}
       capabilities={capabilities}
     />,
   );

@@ -59,7 +59,7 @@ fn a_switch_is_on_for_the_truthy_values_and_off_for_the_rest_and_when_unset() {
 /// invisible to the mismatch warning forever, and one listed here that
 /// nothing reads reports a difference that cannot matter. So the source
 /// tree is the reference, read at test time — the same trick
-/// `sampler_wire_semantics.py` uses on the floor.
+/// `settingsParity.test.ts` uses on the Rust it pins.
 #[test]
 fn all_lists_every_switch_the_tree_reads() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

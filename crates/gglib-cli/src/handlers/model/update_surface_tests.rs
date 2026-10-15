@@ -29,7 +29,7 @@ fn seeded() -> InferenceConfig {
 async fn seeded_library(dir: &tempfile::TempDir) -> (CliContext, Model, Arc<Heard>, ModelOps) {
     let (ctx, mut model) = library(dir.path()).await;
     model.inference_defaults = Some(seeded());
-    model.defaults_origin = Some(DefaultsOrigin::AutoDetected);
+    model.defaults_origin = Some(DefaultsOrigin::Published);
     ctx.app.models().update(&model).await.expect("seeded");
     let model = stored(&ctx, model.id).await;
     let heard = Arc::new(Heard::default());
@@ -136,7 +136,7 @@ async fn setting_a_plain_field_stores_the_row_the_inspector_stores() {
     assert_eq!(cli.name, "Renamed");
     assert_eq!(cli.context_length, Some(8192));
     assert_eq!(cli.inference_defaults, Some(seeded()));
-    assert_eq!(cli.defaults_origin, Some(DefaultsOrigin::AutoDetected));
+    assert_eq!(cli.defaults_origin, Some(DefaultsOrigin::Published));
 }
 
 /// The command tells whoever is listening what it stored, as the inspector's
@@ -223,4 +223,82 @@ async fn flags_that_were_not_passed_ask_for_nothing() {
     assert!(request.metadata.is_none(), "no metadata flag was passed");
     assert!(request.inference_defaults.is_none(), "nor a sampling one");
     assert!(request.server_defaults.is_none() && request.projector_path.is_none());
+}
+
+/// #1428. A `reasoning` model's recipe is never stored, so no edit of its own
+/// defaults can remove it: one field set stands while every other field
+/// still comes from the recipe, and clearing them — all at once, or a field
+/// at a time — gives back exactly what the model resolved to on import,
+/// values and `gglib model explain`'s provenance alike, `top_k` and `top_p`
+/// included.
+#[tokio::test]
+async fn clearing_an_edited_reasoning_model_gives_back_its_import() {
+    let dir = tempfile::tempdir().unwrap();
+    let (ctx, mut model) = library(dir.path()).await;
+    model.tags = vec!["reasoning".to_owned()];
+    ctx.app.models().update(&model).await.expect("tagged");
+    let ops = ops(
+        &ctx,
+        &Arc::new(Heard::default()),
+        &Arc::new(Runtime::default()),
+    );
+    let id = model.id.to_string();
+    let update = |flags: &[&'static str]| {
+        let mut argv = vec!["gglib", "model", "update", id.as_str(), "--force"];
+        argv.extend_from_slice(flags);
+        argv
+    };
+    let explained = || ops.explain_sampling(model.id, None);
+
+    let fresh = explained().await.expect("explain");
+    let recipe = InferenceConfig::reasoning_profile();
+    assert_eq!(fresh.resolved, recipe, "guards the premise");
+    assert_eq!(recipe.top_k, Some(20), "guards the premise");
+    assert_eq!(recipe.top_p, Some(0.95), "guards the premise");
+
+    run_with(&ctx, &ops, &update(&["--presence-penalty", "1.2"]))
+        .await
+        .expect("set one field");
+    let one = explained().await.expect("explain");
+    assert_eq!(
+        one.resolved,
+        InferenceConfig {
+            presence_penalty: Some(1.2),
+            ..recipe.clone()
+        },
+        "the field set stands and the rest is the recipe"
+    );
+
+    run_with(&ctx, &ops, &update(&["--clear-inference-defaults"]))
+        .await
+        .expect("clear");
+    assert_eq!(explained().await.expect("explain"), fresh);
+
+    run_with(
+        &ctx,
+        &ops,
+        &update(&["--temperature", "0.6", "--top-k", "64", "--min-p", "0.1"]),
+    )
+    .await
+    .expect("set three fields");
+    assert_ne!(explained().await.expect("explain"), fresh);
+    run_with(
+        &ctx,
+        &ops,
+        &update(&[
+            "--unset",
+            "temperature",
+            "--unset",
+            "top-k",
+            "--unset",
+            "min-p",
+        ]),
+    )
+    .await
+    .expect("unset each");
+    assert_eq!(explained().await.expect("explain"), fresh);
+
+    let row = stored(&ctx, model.id).await;
+    assert_eq!(row.inference_defaults, None);
+    assert_eq!(row.defaults_origin, None);
 }

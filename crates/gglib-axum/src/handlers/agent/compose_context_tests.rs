@@ -1,7 +1,8 @@
 //! A daemon turn runs on the context of the model its port serves, so each
 //! stage of the request pipeline that reads that context applies to the
-//! page's run and to a paired device's turn: the class floor, capability
-//! shaping, the truncation budget, the effort gate and the response parser.
+//! page's run and to a paired device's turn: the `reasoning` recipe,
+//! capability shaping, the truncation budget, the effort gate and the
+//! response parser.
 
 use gglib_core::domain::agent::{AgentEvent, AgentMessage};
 use gglib_core::domain::{InferenceConfig, ModelCapabilities, TemplateCaps};
@@ -13,11 +14,11 @@ use crate::handlers::agent::turn_fixture::{
     TOOL, Turn, doors, model, page, sampling_of, sent, turn,
 };
 
-/// A reasoning-tagged model with no recipe of its own is sent the reasoning
-/// floor: the two penalties its class asserts, which an untagged model's
-/// floor leaves to llama-server.
+/// A reasoning-tagged model with nothing stored is sent the `reasoning`
+/// recipe, which the tag supplies; an untagged model is sent no penalty, and
+/// llama-server's own defaults apply.
 #[tokio::test]
-async fn a_reasoning_model_with_no_recipe_is_sent_the_reasoning_floor() {
+async fn a_reasoning_model_with_nothing_stored_is_sent_the_reasoning_recipe() {
     let (_dir, state) = state().await;
     let id = model(&state, |entry| {
         entry.tags = vec!["reasoning".to_owned()];
@@ -28,7 +29,7 @@ async fn a_reasoning_model_with_no_recipe_is_sent_the_reasoning_floor() {
         let body = sent(&state, id, chat).await;
         assert_eq!(
             sampling_of(&body),
-            InferenceConfig::reasoning_floor(),
+            InferenceConfig::reasoning_profile(),
             "{door}"
         );
     }
@@ -46,8 +47,14 @@ async fn a_reasoning_model_with_no_recipe_is_sent_the_reasoning_floor() {
 #[tokio::test]
 async fn a_model_that_cannot_call_tools_is_sent_none_and_is_not_capped() {
     let (_dir, state) = state().await;
+    // A recipe nobody here reviewed, which a turn with tools would cap.
     let id = model(&state, |entry| {
         entry.capabilities = ModelCapabilities::SUPPORTS_SYSTEM_ROLE;
+        entry.inference_defaults = Some(InferenceConfig {
+            temperature: Some(0.9),
+            ..InferenceConfig::default()
+        });
+        entry.defaults_origin = Some(gglib_core::domain::DefaultsOrigin::Published);
     })
     .await;
     // Every tool, which is what the page asks for with no filter.
@@ -58,7 +65,7 @@ async fn a_model_that_cannot_call_tools_is_sent_none_and_is_not_capped() {
         let body = sent(&state, id, chat).await;
         assert_eq!(body.get("tools"), None);
         assert_eq!(body.get("tool_choice"), None);
-        assert_eq!(body["temperature"], json!(0.7_f32));
+        assert_eq!(body["temperature"], json!(0.9_f32));
     }
 }
 
