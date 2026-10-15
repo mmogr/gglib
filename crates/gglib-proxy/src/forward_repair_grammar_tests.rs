@@ -177,7 +177,7 @@ async fn run_turn(
         .await
         .expect("mock upstream reachable");
     let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
-    let connection = registry.register("m", true, None);
+    let connection = registry.register(1, "m", true, None);
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
 
     let outcome = stream_response_to_channel(

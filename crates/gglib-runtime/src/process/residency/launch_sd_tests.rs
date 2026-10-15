@@ -320,7 +320,7 @@ async fn a_launch_whose_files_vanished_still_stops_the_displaced_model() {
     let (set, core) = set_and_core(late.clone(), 19_480, &llama, &dir.path().join("sd"));
     running_primary(&set, &core, dir.path(), DISPLACED_ID).await;
 
-    let ticket = set.queue().enqueue("late");
+    let ticket = set.queue().enqueue(LATE_ID, "late");
     let never_fits = SecondarySlotDecision::RefuseUnknownFootprint;
     let decision = set.queue().poll(&ticket, Candidate::llama(never_fits));
     let AdmissionDecision::Launch { slot, evict } = decision else {
@@ -475,6 +475,7 @@ fn an_sd_resident_is_recycled_for_a_relinked_component_and_never_for_context() {
     let mut shuffled = spec.components.clone();
     shuffled.reverse();
     let same = super::resident_match::LaunchedAs {
+        model_id: IMAGE_ID,
         context: 32_768,
         projector: None,
         components: &shuffled,
@@ -491,6 +492,7 @@ fn an_sd_resident_is_recycled_for_a_relinked_component_and_never_for_context() {
         }
     }
     let other_vae = super::resident_match::LaunchedAs {
+        model_id: IMAGE_ID,
         context: 0,
         projector: None,
         components: &relinked,

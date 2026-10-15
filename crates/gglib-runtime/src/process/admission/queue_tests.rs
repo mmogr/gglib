@@ -53,8 +53,8 @@ const ALWAYS_FITS: SecondarySlotDecision = SecondarySlotDecision::Grant {
 
 /// Enqueue and immediately poll, the shape every requester's first iteration
 /// takes. Returns the ticket so the caller can keep polling it.
-fn request(q: &Arc<AdmissionQueue>, model: &str) -> (Ticket, AdmissionDecision) {
-    let ticket = q.enqueue(model);
+fn request(q: &Arc<AdmissionQueue>, model_id: u32, model: &str) -> (Ticket, AdmissionDecision) {
+    let ticket = q.enqueue(model_id, model);
     let decision = q.poll(&ticket, NEVER_FITS);
     (ticket, decision)
 }
@@ -65,11 +65,10 @@ fn make_resident(
     model: &str,
     model_id: u32,
 ) -> gglib_core::ports::AdmissionLease {
-    let (ticket, decision) = request(q, model);
+    let (_ticket, decision) = request(q, model_id, model);
     let AdmissionDecision::Launch { slot, .. } = decision else {
         panic!("expected a launch for {model}, got {decision:?}");
     };
-    drop(ticket);
     q.install(slot, resident(model_id, model))
 }
 
@@ -80,7 +79,7 @@ fn make_resident(
 #[tokio::test]
 async fn the_first_request_launches_into_the_primary_slot() {
     let q = queue();
-    let (_ticket, decision) = request(&q, "qwen-coder");
+    let (_ticket, decision) = request(&q, 1, "qwen-coder");
 
     assert_eq!(
         decision,
@@ -99,8 +98,48 @@ async fn a_resident_model_serves_immediately() {
     // The launching request finishes, leaving the slot free for the next one.
     drop(make_resident(&q, "qwen-coder", 1));
 
-    let (_ticket, decision) = request(&q, "qwen-coder");
+    let (_ticket, decision) = request(&q, 1, "qwen-coder");
     assert_eq!(decision, AdmissionDecision::Serve { slot: PRIMARY_SLOT });
+}
+
+/// Two catalogue entries can share a name (two quants of one repo share
+/// GGUF `general.name`). A request is matched on the model's id, so the
+/// resident of the same name is swapped out rather than serving it.
+#[tokio::test]
+async fn a_model_is_never_served_by_another_of_the_same_name() {
+    let q = queue();
+    drop(make_resident(&q, "qwen-coder", 1));
+
+    let (_ticket, decision) = request(&q, 7, "qwen-coder");
+    assert_eq!(
+        decision,
+        AdmissionDecision::Launch {
+            slot: PRIMARY_SLOT,
+            evict: Some(1)
+        }
+    );
+}
+
+/// The same pair takes separate turns: the second waits out the first's
+/// quantum as any rival does, rather than riding its turn.
+#[tokio::test]
+async fn two_models_of_one_name_take_separate_turns() {
+    tokio::time::pause();
+    let q = queue();
+    drop(make_resident(&q, "qwen-coder", 1));
+    let _busy = q.enqueue(1, "qwen-coder");
+
+    let (other, decision) = request(&q, 7, "qwen-coder");
+    assert_eq!(decision, AdmissionDecision::Wait, "model 1's turn is young");
+
+    tokio::time::advance(DRAIN_QUANTUM + std::time::Duration::from_secs(1)).await;
+    assert_eq!(
+        q.poll(&other, NEVER_FITS),
+        AdmissionDecision::Launch {
+            slot: PRIMARY_SLOT,
+            evict: Some(1)
+        }
+    );
 }
 
 /// A resident model with no rival waiting is limited only by its own capacity,
@@ -116,7 +155,7 @@ async fn a_resident_model_is_not_throttled_without_a_rival() {
     tokio::time::advance(DRAIN_QUANTUM * 4).await;
 
     for _ in 0..5 {
-        let (ticket, decision) = request(&q, "qwen-coder");
+        let (ticket, decision) = request(&q, 1, "qwen-coder");
         let AdmissionDecision::Serve { slot } = decision else {
             panic!("a lone resident model must keep serving, got {decision:?}");
         };
@@ -131,8 +170,8 @@ async fn a_resident_model_is_not_throttled_without_a_rival() {
 async fn the_backlog_is_visible_while_it_waits() {
     let q = queue();
     let _serving = make_resident(&q, "qwen-coder", 1);
-    let (_t1, first) = request(&q, "qwen-coder");
-    let (_t2, second) = request(&q, "qwen-coder");
+    let (_t1, first) = request(&q, 1, "qwen-coder");
+    let (_t2, second) = request(&q, 1, "qwen-coder");
 
     assert_eq!(first, AdmissionDecision::Wait, "the slot is already busy");
     assert_eq!(second, AdmissionDecision::Wait);
@@ -148,8 +187,8 @@ async fn the_backlog_is_visible_while_it_waits() {
 #[tokio::test]
 async fn only_one_requester_drives_a_given_launch() {
     let q = queue();
-    let (_first, first_decision) = request(&q, "qwen-coder");
-    let (_second, second_decision) = request(&q, "qwen-coder");
+    let (_first, first_decision) = request(&q, 1, "qwen-coder");
+    let (_second, second_decision) = request(&q, 1, "qwen-coder");
 
     assert!(matches!(first_decision, AdmissionDecision::Launch { .. }));
     assert_eq!(second_decision, AdmissionDecision::Wait);
@@ -161,9 +200,8 @@ async fn only_one_requester_drives_a_given_launch() {
 #[tokio::test]
 async fn a_waiter_is_served_by_the_launch_it_waited_for() {
     let q = queue();
-    let (first, _) = request(&q, "qwen-coder");
-    let (second, _) = request(&q, "qwen-coder");
-    drop(first);
+    let (_first, _) = request(&q, 1, "qwen-coder");
+    let (second, _) = request(&q, 1, "qwen-coder");
 
     let launcher = q.install(PRIMARY_SLOT, resident(1, "qwen-coder"));
 
@@ -192,7 +230,7 @@ async fn a_slot_with_a_request_in_flight_is_never_evicted() {
     let q = queue();
     let lease = make_resident(&q, "qwen-coder", 1);
 
-    let (rival, decision) = request(&q, "nomic-embed");
+    let (rival, decision) = request(&q, 2, "nomic-embed");
     assert_eq!(
         decision,
         AdmissionDecision::Wait,
@@ -228,7 +266,7 @@ async fn a_slot_frees_only_when_the_last_lease_drops() {
     let first = make_resident(&q, "qwen-coder", 1);
     let second = q.lease(PRIMARY_SLOT).expect("resident slot leases");
 
-    let (rival, _) = request(&q, "nomic-embed");
+    let (rival, _) = request(&q, 2, "nomic-embed");
     drop(first);
     assert_eq!(
         q.poll(&rival, NEVER_FITS),
@@ -253,7 +291,7 @@ async fn a_resident_slot_admits_only_what_llama_server_can_serve() {
     let q = queue();
     let serving = make_resident(&q, "qwen-coder", 1);
 
-    let (ticket, decision) = request(&q, "qwen-coder");
+    let (ticket, decision) = request(&q, 1, "qwen-coder");
     assert_eq!(
         decision,
         AdmissionDecision::Wait,
@@ -286,12 +324,12 @@ async fn a_pipelined_client_cannot_pin_a_model_forever() {
     let in_flight = make_resident(&q, "qwen-coder", 1);
 
     // The rival arrives and waits out the incumbent's turn.
-    let (rival, _) = request(&q, "nomic-embed");
+    let (rival, _) = request(&q, 2, "nomic-embed");
     tokio::time::advance(DRAIN_QUANTUM + std::time::Duration::from_secs(1)).await;
 
     // The pipelined client has its next request queued before the current one
     // returns, which is exactly how it kept the slot pinned.
-    let (pipelined, _) = request(&q, "qwen-coder");
+    let (pipelined, _) = request(&q, 1, "qwen-coder");
     drop(in_flight);
 
     assert_eq!(
@@ -321,7 +359,7 @@ async fn a_capped_request_still_expires() {
     let q = queue();
     let _never_released = make_resident(&q, "qwen-coder", 1);
 
-    let (capped, decision) = request(&q, "qwen-coder");
+    let (capped, decision) = request(&q, 1, "qwen-coder");
     assert_eq!(decision, AdmissionDecision::Wait);
 
     tokio::time::advance(ADMISSION_DEADLINE).await;
@@ -338,7 +376,7 @@ async fn a_burst_of_queued_requests_costs_a_single_swap() {
     let outgoing = make_resident(&q, "qwen-coder", 1);
     drop(outgoing); // idle, so the swap is permitted
 
-    let tickets: Vec<Ticket> = (0..10).map(|_| q.enqueue("nomic-embed")).collect();
+    let tickets: Vec<Ticket> = (0..10).map(|_| q.enqueue(2, "nomic-embed")).collect();
 
     // The first one through drives the launch; the rest wait behind it.
     let first = q.poll(&tickets[0], NEVER_FITS);
@@ -379,8 +417,8 @@ async fn alternating_traffic_does_not_swap_per_request() {
     let q = queue();
     let mut tickets = Vec::new();
     for _ in 0..10 {
-        tickets.push(q.enqueue("qwen-coder"));
-        tickets.push(q.enqueue("nomic-embed"));
+        tickets.push(q.enqueue(1, "qwen-coder"));
+        tickets.push(q.enqueue(2, "nomic-embed"));
     }
 
     // Drive the queue to completion, serving whatever it grants.
@@ -400,7 +438,12 @@ async fn alternating_traffic_does_not_swap_per_request() {
                     progressed = true;
                 }
                 AdmissionDecision::Launch { slot, .. } => {
-                    drop(q.install(slot, resident(if slot == 0 { 1 } else { 2 }, &ticket.model)));
+                    let name = if ticket.model_id == 1 {
+                        "qwen-coder"
+                    } else {
+                        "nomic-embed"
+                    };
+                    drop(q.install(slot, resident(ticket.model_id, name)));
                     progressed = true;
                 }
                 AdmissionDecision::Wait => remaining.push(ticket),
@@ -438,8 +481,8 @@ async fn the_turn_holder_yields_once_its_quantum_elapses() {
 
     // The turn holder keeps work queued throughout, so "queue empty" never
     // fires and only the quantum can end the turn.
-    let _busy = q.enqueue("qwen-coder");
-    let (rival, _) = request(&q, "nomic-embed");
+    let _busy = q.enqueue(1, "qwen-coder");
+    let (rival, _) = request(&q, 2, "nomic-embed");
     drop(lease);
 
     assert_eq!(
@@ -466,8 +509,8 @@ async fn a_deep_queue_does_not_outrank_a_single_older_request() {
     let q = queue();
     let lease = make_resident(&q, "qwen-coder", 1);
 
-    let (lonely, _) = request(&q, "nomic-embed");
-    let _crowd: Vec<Ticket> = (0..50).map(|_| q.enqueue("qwen-coder")).collect();
+    let (lonely, _) = request(&q, 2, "nomic-embed");
+    let _crowd: Vec<Ticket> = (0..50).map(|_| q.enqueue(1, "qwen-coder")).collect();
     drop(lease);
 
     tokio::time::advance(DRAIN_QUANTUM + std::time::Duration::from_secs(1)).await;
@@ -491,7 +534,7 @@ async fn a_permanently_busy_slot_expires_the_rival_rather_than_stalling_it() {
     let q = queue();
     let _never_released = make_resident(&q, "qwen-coder", 1);
 
-    let (rival, _) = request(&q, "nomic-embed");
+    let (rival, _) = request(&q, 2, "nomic-embed");
     tokio::time::advance(DRAIN_QUANTUM * 4).await;
     assert_eq!(
         q.poll(&rival, NEVER_FITS),
@@ -511,12 +554,11 @@ async fn an_idle_turn_holder_yields_immediately() {
     let lease = make_resident(&q, "qwen-coder", 1);
     drop(lease);
 
-    let (rival, decision) = request(&q, "nomic-embed");
+    let (_rival, decision) = request(&q, 2, "nomic-embed");
     assert!(
         matches!(decision, AdmissionDecision::Launch { evict: Some(1), .. }),
         "got {decision:?}"
     );
-    drop(rival);
 }
 
 /// Arrival order decides which model is up next, so a model with many requests
@@ -527,8 +569,8 @@ async fn the_globally_oldest_waiter_decides_which_model_is_next() {
     let lease = make_resident(&q, "qwen-coder", 1);
     drop(lease);
 
-    let older = q.enqueue("model-a");
-    let newer = q.enqueue("model-b");
+    let older = q.enqueue(5, "model-a");
+    let newer = q.enqueue(6, "model-b");
 
     assert_eq!(
         q.poll(&newer, NEVER_FITS),
@@ -550,7 +592,7 @@ async fn a_model_that_fits_co_loads_rather_than_swapping() {
     let q = queue();
     let _lease = make_resident(&q, "qwen-coder", 1);
 
-    let ticket = q.enqueue("nomic-embed");
+    let ticket = q.enqueue(2, "nomic-embed");
     let decision = q.poll(&ticket, ALWAYS_FITS);
 
     assert_eq!(
@@ -570,11 +612,10 @@ async fn co_resident_models_never_contend() {
     let q = queue();
     let chat = make_resident(&q, "qwen-coder", 1);
 
-    let ticket = q.enqueue("nomic-embed");
+    let ticket = q.enqueue(2, "nomic-embed");
     let AdmissionDecision::Launch { slot, .. } = q.poll(&ticket, ALWAYS_FITS) else {
         panic!("expected a co-load");
     };
-    drop(ticket);
     let embed = q.install(slot, resident(2, "nomic-embed"));
 
     // The co-load happened while the primary was mid-generation, which is the
@@ -583,16 +624,14 @@ async fn co_resident_models_never_contend() {
 
     // Each slot has its own capacity, so both models serve at the same time —
     // neither one's cap has anything to say about the other's.
-    let (chat_again, chat_decision) = request(&q, "qwen-coder");
-    let (embed_again, embed_decision) = request(&q, "nomic-embed");
+    let (_chat_again, chat_decision) = request(&q, 1, "qwen-coder");
+    let (_embed_again, embed_decision) = request(&q, 2, "nomic-embed");
     assert_eq!(
         chat_decision,
         AdmissionDecision::Serve { slot: PRIMARY_SLOT }
     );
     assert_eq!(embed_decision, AdmissionDecision::Serve { slot });
     assert_eq!(q.snapshot().total_swaps, 0);
-
-    drop((chat_again, embed_again));
 }
 
 /// VRAM overflow is not a failure — it falls back to the swap path, which is
@@ -603,7 +642,7 @@ async fn a_model_that_does_not_fit_falls_back_to_swapping() {
     let lease = make_resident(&q, "qwen-coder", 1);
     drop(lease);
 
-    let ticket = q.enqueue("llama-70b");
+    let ticket = q.enqueue(3, "llama-70b");
     let decision = q.poll(&ticket, NEVER_FITS);
 
     assert_eq!(
@@ -623,15 +662,14 @@ async fn a_model_that_does_not_fit_falls_back_to_swapping() {
 async fn a_third_model_evicts_the_secondary_not_the_primary() {
     let q = queue();
     let chat = make_resident(&q, "qwen-coder", 1);
-    let embed_ticket = q.enqueue("nomic-embed");
+    let embed_ticket = q.enqueue(2, "nomic-embed");
     let AdmissionDecision::Launch { slot, .. } = q.poll(&embed_ticket, ALWAYS_FITS) else {
         panic!("expected a co-load");
     };
-    drop(embed_ticket);
     let embed = q.install(slot, resident(2, "nomic-embed"));
     drop((chat, embed));
 
-    let third = q.enqueue("reranker");
+    let third = q.enqueue(4, "reranker");
     assert_eq!(
         q.poll(&third, ALWAYS_FITS),
         AdmissionDecision::Launch {
@@ -653,7 +691,7 @@ async fn a_waiter_never_expires_while_a_launch_is_in_flight() {
     let q = queue();
 
     // The first requester on a cold daemon drives the launch...
-    let (driver, decision) = request(&q, "qwen-coder");
+    let (_driver, decision) = request(&q, 1, "qwen-coder");
     assert!(
         matches!(
             decision,
@@ -666,9 +704,9 @@ async fn a_waiter_never_expires_while_a_launch_is_in_flight() {
     );
 
     // ...and both a same-model waiter and a rival queue behind the load.
-    let (waiter, d) = request(&q, "qwen-coder");
+    let (waiter, d) = request(&q, 1, "qwen-coder");
     assert_eq!(d, AdmissionDecision::Wait);
-    let (rival, d) = request(&q, "nomic-embed");
+    let (rival, d) = request(&q, 2, "nomic-embed");
     assert_eq!(d, AdmissionDecision::Wait);
 
     // The load takes far longer than the deadline. Neither waiter may expire
@@ -688,7 +726,6 @@ async fn a_waiter_never_expires_while_a_launch_is_in_flight() {
     // The load lands. The turn aged past its quantum while it ran, so the
     // fairness rules now owe the slot to the rival — the waiter keeps
     // waiting, which is the point: *waiting*, not expired.
-    drop(driver);
     let lease = q.install(PRIMARY_SLOT, resident(1, "qwen-coder"));
     drop(lease);
     assert_eq!(q.poll(&waiter, NEVER_FITS), AdmissionDecision::Wait);
@@ -713,7 +750,7 @@ async fn progress_resets_the_stall_clock_and_a_true_stall_still_expires() {
     let q = queue();
     let lease = make_resident(&q, "qwen-coder", 1);
 
-    let (capped, d) = request(&q, "qwen-coder");
+    let (capped, d) = request(&q, 1, "qwen-coder");
     assert_eq!(d, AdmissionDecision::Wait, "slot at capacity");
 
     // Nearly the whole deadline passes with nothing happening...
@@ -751,7 +788,7 @@ async fn a_request_expires_once_its_deadline_passes() {
     let q = queue();
     let _held = make_resident(&q, "qwen-coder", 1); // never released
 
-    let (rival, _) = request(&q, "nomic-embed");
+    let (rival, _) = request(&q, 2, "nomic-embed");
     tokio::time::advance(ADMISSION_DEADLINE + std::time::Duration::from_secs(1)).await;
 
     assert_eq!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Expired);
@@ -768,7 +805,7 @@ async fn a_granted_ticket_is_forgotten_and_cannot_win_again() {
     let lease = make_resident(&q, "qwen-coder", 1);
     drop(lease);
 
-    let (ticket, decision) = request(&q, "qwen-coder");
+    let (ticket, decision) = request(&q, 1, "qwen-coder");
     assert_eq!(decision, AdmissionDecision::Serve { slot: PRIMARY_SLOT });
 
     // The serve fell through — the resident failed its health check and was
@@ -787,7 +824,7 @@ async fn a_granted_ticket_is_forgotten_and_cannot_win_again() {
 async fn an_abandoned_request_stops_forcing_swaps() {
     let q = queue();
     let lease = make_resident(&q, "qwen-coder", 1);
-    let (rival, _) = request(&q, "nomic-embed");
+    let (rival, _) = request(&q, 2, "nomic-embed");
 
     assert_eq!(q.snapshot().waiting(), 1);
     q.abandon(&rival);
@@ -804,15 +841,14 @@ async fn an_abandoned_request_stops_forcing_swaps() {
 #[tokio::test]
 async fn a_failed_launch_frees_the_slot_for_another_attempt() {
     let q = queue();
-    let (first, decision) = request(&q, "qwen-coder");
+    let (_first, decision) = request(&q, 1, "qwen-coder");
     let AdmissionDecision::Launch { slot, .. } = decision else {
         panic!("expected a launch");
     };
-    drop(first);
 
     q.launch_failed(slot);
 
-    let (_retry, retry_decision) = request(&q, "qwen-coder");
+    let (_retry, retry_decision) = request(&q, 1, "qwen-coder");
     assert!(
         matches!(retry_decision, AdmissionDecision::Launch { .. }),
         "got {retry_decision:?}"
@@ -825,8 +861,8 @@ async fn a_failed_launch_frees_the_slot_for_another_attempt() {
 async fn the_snapshot_reports_residency_and_queue_depth() {
     let q = queue();
     let _lease = make_resident(&q, "qwen-coder", 1);
-    let _a = q.enqueue("nomic-embed");
-    let _b = q.enqueue("nomic-embed");
+    let _a = q.enqueue(2, "nomic-embed");
+    let _b = q.enqueue(2, "nomic-embed");
 
     let snapshot = q.snapshot();
     assert_eq!(snapshot.slots.len(), 1);
@@ -844,11 +880,10 @@ async fn the_snapshot_reports_residency_and_queue_depth() {
 async fn the_snapshot_names_a_co_resident_secondary() {
     let q = queue();
     let _chat = make_resident(&q, "qwen-coder", 1);
-    let ticket = q.enqueue("nomic-embed");
+    let ticket = q.enqueue(2, "nomic-embed");
     let AdmissionDecision::Launch { slot, .. } = q.poll(&ticket, ALWAYS_FITS) else {
         panic!("expected a co-load");
     };
-    drop(ticket);
     let _embed = q.install(slot, resident(2, "nomic-embed"));
 
     let snapshot = q.snapshot();
@@ -869,7 +904,7 @@ async fn a_consulted_refusal_is_recorded_for_the_dashboard() {
     let _lease = make_resident(&q, "qwen-coder", 1);
 
     // Secondary slot is empty, so the refusal is consulted — and recorded.
-    let (_rival, _) = request(&q, "llama-70b");
+    let (_rival, _) = request(&q, 3, "llama-70b");
 
     assert_eq!(q.snapshot().secondary_slot.state, "too_large");
 }
@@ -881,7 +916,7 @@ async fn a_consulted_grant_reports_the_slot_as_available() {
     let q = queue();
     let _lease = make_resident(&q, "qwen-coder", 1);
 
-    let ticket = q.enqueue("nomic-embed");
+    let ticket = q.enqueue(2, "nomic-embed");
     let AdmissionDecision::Launch { .. } = q.poll(&ticket, ALWAYS_FITS) else {
         panic!("expected a co-load");
     };
@@ -898,13 +933,12 @@ async fn an_unconsulted_verdict_does_not_overwrite_the_recorded_one() {
 
     // A granted co-load leaves the secondary slot `Loading` — neither empty
     // nor evictable, so nothing consults a verdict while it stays that way.
-    let embed = q.enqueue("nomic-embed");
+    let embed = q.enqueue(2, "nomic-embed");
     let AdmissionDecision::Launch { .. } = q.poll(&embed, ALWAYS_FITS) else {
         panic!("expected a co-load");
     };
-    drop(embed);
 
-    let (_rival, _) = request(&q, "llama-70b"); // NEVER_FITS, unconsulted
+    let (_rival, _) = request(&q, 3, "llama-70b"); // NEVER_FITS, unconsulted
 
     assert_eq!(
         q.snapshot().secondary_slot.state,
@@ -920,7 +954,7 @@ async fn total_queued_counts_every_request_including_fast_path_ones() {
     let q = queue();
     let _lease = make_resident(&q, "qwen-coder", 1);
     for _ in 0..5 {
-        let (_t, _) = request(&q, "qwen-coder");
+        let (_t, _) = request(&q, 1, "qwen-coder");
     }
 
     assert_eq!(q.snapshot().total_queued, 6, "the launch plus five serves");
@@ -978,9 +1012,9 @@ async fn a_wakeup_between_subscribing_and_waiting_is_not_lost() {
 #[tokio::test]
 async fn a_waiters_place_counts_the_waiters_ahead_of_it() {
     let q = queue();
-    let first = q.enqueue("a");
-    let second = q.enqueue("b");
-    let third = q.enqueue("a");
+    let first = q.enqueue(10, "a");
+    let second = q.enqueue(11, "b");
+    let third = q.enqueue(10, "a");
     assert_eq!([&first, &second, &third].map(|t| q.position(t)), [1, 2, 3]);
     q.abandon(&first);
     assert_eq!([&second, &third].map(|t| q.position(t)), [1, 2]);

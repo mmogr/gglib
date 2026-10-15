@@ -142,6 +142,7 @@ fn blindness(result: &SlotsPollResult) -> Option<String> {
 /// gets counted — is testable without a server, a timer, or a spawned task.
 fn audit_one_poll(
     result: &SlotsPollResult,
+    model_id: u32,
     model_name: &str,
     connections: &ActiveConnectionsRegistry,
     audit: &SamplingAuditStore,
@@ -156,7 +157,7 @@ fn audit_one_poll(
         return;
     }
 
-    let intents = connections.in_flight_sampling(model_name);
+    let intents = connections.in_flight_sampling(model_id);
     let outcome = compare_poll(&intents, &observed);
 
     for d in &outcome.found {
@@ -223,14 +224,14 @@ fn next_delay(result: &SlotsPollResult, current_backoff: Duration) -> Option<Dur
 async fn read_baseline(
     client: &Client,
     base_url: &str,
-    model_name: &str,
+    model_id: u32,
     model: Option<&ModelSamplingDefaults>,
     audit: &SamplingAuditStore,
 ) -> bool {
     // Set before the read is attempted, and from the same value the baseline
     // check uses: an unreadable `/props` says nothing about what the model
     // publishes, which gglib knows from the GGUF either way.
-    audit.set_model_sampling(model_name, model.copied());
+    audit.set_model_sampling(model_id, model.copied());
 
     let reading = fetch_props(client, base_url).await;
 
@@ -297,27 +298,27 @@ async fn read_baseline(
 /// first has its own hole — see [`Self::due`].
 #[derive(Default)]
 struct BaselineLatch {
-    read_for: Option<String>,
+    read_for: Option<u32>,
 }
 
 impl BaselineLatch {
-    /// Whether `/props` should be read for `model_name` now.
+    /// Whether `/props` should be read for the model `model_id` now.
     ///
     /// Clears the latch as a side effect when it names a different model, so a
-    /// failed read cannot leave the *previous* model's name recorded. Without
+    /// failed read cannot leave the *previous* model's id recorded. Without
     /// that, swapping A → B where B's `/props` fails, then back to B → A,
     /// would find A still latched and skip a read that never succeeded.
-    fn due(&mut self, model_name: &str) -> bool {
-        if self.read_for.as_deref() == Some(model_name) {
+    fn due(&mut self, model_id: u32) -> bool {
+        if self.read_for == Some(model_id) {
             return false;
         }
         self.read_for = None;
         true
     }
 
-    /// Record that a read for `model_name` stored a baseline.
-    fn succeeded(&mut self, model_name: &str) {
-        self.read_for = Some(model_name.to_owned());
+    /// Record that a read for the model `model_id` stored a baseline.
+    fn succeeded(&mut self, model_id: u32) {
+        self.read_for = Some(model_id);
     }
 }
 
@@ -350,8 +351,8 @@ fn has_slots(target: &RunningTarget) -> bool {
 /// slots this poll observed.
 ///
 /// A model change also triggers a one-off `/props` read for the baseline
-/// check. Keyed on the model name rather than on `just_started`, because this
-/// task has no launch hook and a name change is the only swap signal it sees —
+/// check. Keyed on the model's id rather than on `just_started`, because this
+/// task has no launch hook and an id change is the only swap signal it sees —
 /// and on a *successful* read rather than on the attempt, so a server that was
 /// still starting when the first poll landed gets read on the next tick
 /// instead of going without a baseline for the rest of its run. See
@@ -372,17 +373,17 @@ pub(crate) fn spawn_slots_poller(
             let sleep_for = match runtime_port.current_model().await.filter(has_slots) {
                 None => BASE_POLL_INTERVAL,
                 Some(target) => {
-                    if baseline.due(&target.model_name)
+                    if baseline.due(target.model_id)
                         && read_baseline(
                             &client,
                             &target.base_url,
-                            &target.model_name,
+                            target.model_id,
                             target.model_sampling.as_ref(),
                             &audit,
                         )
                         .await
                     {
-                        baseline.succeeded(&target.model_name);
+                        baseline.succeeded(target.model_id);
                     }
 
                     let result = fetch_slots(&client, &target.base_url).await;
@@ -391,7 +392,13 @@ pub(crate) fn spawn_slots_poller(
                             "proxy dashboard: /slots poll failed ({msg}); backing off to {backoff:?}"
                         );
                     }
-                    audit_one_poll(&result, &target.model_name, &connections, &audit);
+                    audit_one_poll(
+                        &result,
+                        target.model_id,
+                        &target.model_name,
+                        &connections,
+                        &audit,
+                    );
                     let delay = next_delay(&result, backoff);
                     cache.set(result);
                     match delay {
@@ -489,12 +496,9 @@ mod tests {
     fn a_baseline_is_read_once_per_model_and_not_again() {
         let mut latch = BaselineLatch::default();
 
-        assert!(latch.due("m"));
-        latch.succeeded("m");
-        assert!(
-            !latch.due("m"),
-            "a stored baseline is not re-read every tick"
-        );
+        assert!(latch.due(1));
+        latch.succeeded(1);
+        assert!(!latch.due(1), "a stored baseline is not re-read every tick");
     }
 
     /// **The defect.** `/props` fails most often because llama-server has not
@@ -505,37 +509,37 @@ mod tests {
     fn a_failed_read_is_retried_on_the_next_tick() {
         let mut latch = BaselineLatch::default();
 
-        assert!(latch.due("m"));
+        assert!(latch.due(1));
         // read_baseline returned false, so `succeeded` is never called.
-        assert!(latch.due("m"), "a failed read must not latch");
-        assert!(latch.due("m"), "and must keep being retried");
+        assert!(latch.due(1), "a failed read must not latch");
+        assert!(latch.due(1), "and must keep being retried");
 
-        latch.succeeded("m");
-        assert!(!latch.due("m"));
+        latch.succeeded(1);
+        assert!(!latch.due(1));
     }
 
     #[test]
     fn a_model_swap_forces_a_fresh_read() {
         let mut latch = BaselineLatch::default();
-        latch.succeeded("model-a");
+        latch.succeeded(1);
 
-        assert!(latch.due("model-b"), "a different model needs its own read");
+        assert!(latch.due(2), "a different model needs its own read");
     }
 
     /// The hole that "latch only on success" leaves if the latch is not also
-    /// cleared on the way in: B's failed read would leave A's name recorded,
+    /// cleared on the way in: B's failed read would leave A's id recorded,
     /// and swapping back to A would skip a read whose result had since been
     /// cleared by that failure.
     #[test]
     fn swapping_away_and_back_after_a_failure_still_reads() {
         let mut latch = BaselineLatch::default();
-        latch.succeeded("model-a");
+        latch.succeeded(1);
 
-        assert!(latch.due("model-b"));
-        // model-b's read fails: no `succeeded` call.
+        assert!(latch.due(2));
+        // model 2's read fails: no `succeeded` call.
         assert!(
-            latch.due("model-a"),
-            "model-a's baseline was cleared by model-b's attempt, so it must be re-read"
+            latch.due(1),
+            "model 1's baseline was cleared by model 2's attempt, so it must be re-read"
         );
     }
 
@@ -609,10 +613,10 @@ mod tests {
     fn a_busy_slot_is_compared_against_the_intent_in_flight() {
         let connections = Arc::new(ActiveConnectionsRegistry::new());
         let audit = SamplingAuditStore::new();
-        let guard = connections.register("m", true, None);
+        let guard = connections.register(1, "m", true, None);
         guard.record_sampling(intent(0.7));
 
-        audit_one_poll(&slots(BUSY_AT_TEMP_0_7), "m", &connections, &audit);
+        audit_one_poll(&slots(BUSY_AT_TEMP_0_7), 1, "m", &connections, &audit);
 
         assert_eq!(
             audit.state(),
@@ -627,10 +631,10 @@ mod tests {
     fn a_divergence_reaches_the_store_with_its_provenance() {
         let connections = Arc::new(ActiveConnectionsRegistry::new());
         let audit = SamplingAuditStore::new();
-        let guard = connections.register("m", true, None);
+        let guard = connections.register(1, "m", true, None);
         guard.record_sampling(intent(0.2)); // the slot reports 0.7
 
-        audit_one_poll(&slots(BUSY_AT_TEMP_0_7), "m", &connections, &audit);
+        audit_one_poll(&slots(BUSY_AT_TEMP_0_7), 1, "m", &connections, &audit);
 
         assert_eq!(
             audit.state(),
@@ -651,10 +655,10 @@ mod tests {
     fn an_idle_slot_contributes_no_observation() {
         let connections = Arc::new(ActiveConnectionsRegistry::new());
         let audit = SamplingAuditStore::new();
-        let guard = connections.register("m", true, None);
+        let guard = connections.register(1, "m", true, None);
         guard.record_sampling(intent(0.7));
 
-        audit_one_poll(&slots(IDLE), "m", &connections, &audit);
+        audit_one_poll(&slots(IDLE), 1, "m", &connections, &audit);
 
         assert_eq!(audit.state(), AuditState::NotYetObserved);
     }
@@ -665,10 +669,10 @@ mod tests {
     fn a_slot_with_no_matching_intent_compares_nothing() {
         let connections = Arc::new(ActiveConnectionsRegistry::new());
         let audit = SamplingAuditStore::new();
-        let guard = connections.register("other-model", true, None);
+        let guard = connections.register(2, "other-model", true, None);
         guard.record_sampling(intent(0.7));
 
-        audit_one_poll(&slots(BUSY_AT_TEMP_0_7), "m", &connections, &audit);
+        audit_one_poll(&slots(BUSY_AT_TEMP_0_7), 1, "m", &connections, &audit);
 
         assert_eq!(audit.state(), AuditState::NotYetObserved);
         assert_eq!(audit.snapshot().skipped_ambiguous, 0);
@@ -681,7 +685,7 @@ mod tests {
         let connections = Arc::new(ActiveConnectionsRegistry::new());
         let audit = SamplingAuditStore::new();
 
-        audit_one_poll(&SlotsPollResult::Disabled, "m", &connections, &audit);
+        audit_one_poll(&SlotsPollResult::Disabled, 1, "m", &connections, &audit);
 
         match audit.state() {
             AuditState::Blind { reason } => assert!(reason.contains("--no-slots"), "{reason}"),
@@ -696,6 +700,7 @@ mod tests {
 
         audit_one_poll(
             &SlotsPollResult::Unreachable("connection refused".into()),
+            1,
             "m",
             &connections,
             &audit,
@@ -716,11 +721,12 @@ mod tests {
     fn only_a_real_comparison_clears_the_blind_latch() {
         let connections = Arc::new(ActiveConnectionsRegistry::new());
         let audit = SamplingAuditStore::new();
-        let guard = connections.register("m", true, None);
+        let guard = connections.register(1, "m", true, None);
         guard.record_sampling(intent(0.7));
 
         audit_one_poll(
             &SlotsPollResult::Unreachable("gone".into()),
+            1,
             "m",
             &connections,
             &audit,
@@ -728,13 +734,13 @@ mod tests {
         assert!(matches!(audit.state(), AuditState::Blind { .. }));
 
         // Reachable again, but every slot idle — nothing was compared.
-        audit_one_poll(&slots(IDLE), "m", &connections, &audit);
+        audit_one_poll(&slots(IDLE), 1, "m", &connections, &audit);
         assert!(
             matches!(audit.state(), AuditState::Blind { .. }),
             "a reachable server that was never caught mid-turn has proved nothing"
         );
 
-        audit_one_poll(&slots(BUSY_AT_TEMP_0_7), "m", &connections, &audit);
+        audit_one_poll(&slots(BUSY_AT_TEMP_0_7), 1, "m", &connections, &audit);
         assert!(audit.state().is_observing());
     }
 
@@ -743,11 +749,11 @@ mod tests {
     fn a_completed_request_stops_being_compared_against() {
         let connections = Arc::new(ActiveConnectionsRegistry::new());
         let audit = SamplingAuditStore::new();
-        let guard = connections.register("m", true, None);
+        let guard = connections.register(1, "m", true, None);
         guard.record_sampling(intent(0.7));
         drop(guard);
 
-        audit_one_poll(&slots(BUSY_AT_TEMP_0_7), "m", &connections, &audit);
+        audit_one_poll(&slots(BUSY_AT_TEMP_0_7), 1, "m", &connections, &audit);
 
         assert_eq!(audit.state(), AuditState::NotYetObserved);
     }

@@ -190,7 +190,7 @@ async fn run_turn_with(
     repair: Option<RepairContext>,
 ) -> Turn {
     let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
-    let connection = registry.register("m", true, None);
+    let connection = registry.register(1, "m", true, None);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(1);
 
     let client = tokio::spawn(async move {

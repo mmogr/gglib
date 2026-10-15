@@ -47,7 +47,7 @@ async fn leave_after(
     idle: Duration,
 ) -> Departure {
     let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
-    let connection = registry.register("m", true, None);
+    let connection = registry.register(1, "m", true, None);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(32);
 
     let client = tokio::spawn(async move {

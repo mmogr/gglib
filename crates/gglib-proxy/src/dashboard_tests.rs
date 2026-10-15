@@ -50,7 +50,7 @@ fn build_aggregates_empty_stores() {
 #[test]
 fn build_reflects_active_connection_and_metrics() {
     let connections = Arc::new(ActiveConnectionsRegistry::new());
-    let _guard = connections.register("qwen-3b", true, Some(4096));
+    let _guard = connections.register(1, "qwen-3b", true, Some(4096));
     let slots = SlotsCache::new();
     let metrics = ContextMetricsStore::new();
     metrics.record(crate::metrics::ContextSnapshot {

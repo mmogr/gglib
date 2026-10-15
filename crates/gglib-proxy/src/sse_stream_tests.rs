@@ -34,7 +34,7 @@ async fn streamed_from(url: &str) -> String {
         Bytes::from_static(b"{}"),
         ClientSender::new(tx, crate::client_send::CLIENT_SEND_TIMEOUT),
         rx,
-        registry.register("some-model", true, None),
+        registry.register(1, "some-model", true, None),
         "some-model".to_owned(),
         TurnDialect::parsed(None),
         Arc::new(UpstreamHealth::new()),

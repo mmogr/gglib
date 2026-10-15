@@ -53,13 +53,13 @@ fn resident(model_id: u32, name: &str, runtime: RuntimeKind) -> Resident {
 /// the lease flux's launch left behind: the render's own `sd-server` lease.
 fn chat_and_image() -> (Arc<AdmissionQueue>, AdmissionLease) {
     let q = Arc::new(AdmissionQueue::new());
-    let ticket = q.enqueue("qwen");
+    let ticket = q.enqueue(QWEN, "qwen");
     assert!(matches!(
         q.poll(&ticket, NEVER_FITS),
         AdmissionDecision::Launch { slot: 0, .. }
     ));
     drop(q.install(PRIMARY_SLOT, resident(QWEN, "qwen", RuntimeKind::Llama)));
-    let ticket = q.enqueue("flux");
+    let ticket = q.enqueue(FLUX, "flux");
     let image = Candidate::image(ALWAYS_FITS);
     assert!(matches!(
         q.poll(&ticket, image),
@@ -87,7 +87,7 @@ fn granted<F: Future<Output = Result<GenerationTurn, GateError>>>(
 
 /// A chat request for the resident qwen, polled once.
 fn chat(q: &Arc<AdmissionQueue>) -> (Ticket, AdmissionDecision) {
-    let ticket = q.enqueue("qwen");
+    let ticket = q.enqueue(QWEN, "qwen");
     let decision = q.poll(&ticket, NEVER_FITS);
     (ticket, decision)
 }
@@ -116,13 +116,13 @@ async fn an_image_model_is_served_while_a_render_holds_the_gate() {
     // recorded beside it directly. The queue places no second image model
     // beside a first, and with one request at a time for each, only a
     // second one shows the fast path passing the gate.
-    let ticket = q.enqueue("qwen");
+    let ticket = q.enqueue(QWEN, "qwen");
     assert!(matches!(
         q.poll(&ticket, NEVER_FITS),
         AdmissionDecision::Launch { slot: 0, .. }
     ));
     drop(q.install(PRIMARY_SLOT, resident(QWEN, "qwen", RuntimeKind::Llama)));
-    let ticket = q.enqueue("sdxl");
+    let ticket = q.enqueue(5, "sdxl");
     let no_room = Candidate::image(SecondarySlotDecision::RefuseUnknownBudget);
     assert!(matches!(
         q.poll(&ticket, no_room),
@@ -133,7 +133,7 @@ async fn an_image_model_is_served_while_a_render_holds_the_gate() {
 
     let gate = q.generation_gate();
     let _turn = granted(pin!(gate.render_turn(lease, None)).as_mut());
-    let ticket = q.enqueue("flux");
+    let ticket = q.enqueue(FLUX, "flux");
     assert_eq!(
         q.poll(&ticket, Candidate::image(ALWAYS_FITS)),
         AdmissionDecision::Serve { slot: 1 }
@@ -179,7 +179,7 @@ async fn a_chat_launch_waits_for_a_held_render() {
     let gate = q.generation_gate();
     let turn = granted(pin!(gate.render_turn(lease, None)).as_mut());
 
-    let cold = q.enqueue("llama-70b");
+    let cold = q.enqueue(3, "llama-70b");
     assert_eq!(q.poll(&cold, NEVER_FITS), AdmissionDecision::Wait);
     drop(turn);
     assert_eq!(
@@ -291,7 +291,7 @@ async fn a_dropped_render_wait_leaves_the_line() {
 async fn an_older_chat_waiting_on_the_render_slot_does_not_deadlock_it() {
     let (q, lease) = chat_and_image();
     let _hold = q.hold(8001, QWEN).expect("qwen is resident on its port");
-    let older = q.enqueue("embedder");
+    let older = q.enqueue(7, "embedder");
     assert_eq!(q.poll(&older, ALWAYS_FITS), AdmissionDecision::Wait);
 
     let gate = q.generation_gate();

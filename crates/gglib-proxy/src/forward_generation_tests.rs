@@ -167,7 +167,7 @@ async fn drain_stream(
     client: Client,
 ) -> StreamOutcome {
     let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
-    let connection = registry.register("m", true, None);
+    let connection = registry.register(1, "m", true, None);
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(1);
     let reader = tokio::spawn(async move {
         match client {

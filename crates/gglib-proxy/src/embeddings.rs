@@ -146,7 +146,12 @@ pub(crate) async fn embeddings(
     let _connection = state
         .dashboard
         .connections
-        .register(target.model_name.clone(), false, Some(target.effective_ctx))
+        .register(
+            target.model_id,
+            target.model_name.clone(),
+            false,
+            Some(target.effective_ctx),
+        )
         .holding(admission.lease);
 
     let upstream_url = format!("{}/v1/embeddings", target.base_url);
