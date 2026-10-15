@@ -217,6 +217,8 @@ crates/gglib-runtime/src/ports_impl/llm_completion/first_call_tests.rs 374
 crates/gglib-runtime/src/ports_impl/llm_completion/images_tests.rs 344
 crates/gglib-runtime/src/ports_impl/llm_completion/layers_tests.rs 309
 crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 379
+crates/gglib-runtime/src/ports_impl/llm_completion/retry/classify.rs 315
+crates/gglib-runtime/src/ports_impl/llm_completion/retry/classify_tests.rs 301
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 340
 crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 301
 crates/gglib-runtime/src/ports_impl/llm_completion/turn_tests.rs 337
