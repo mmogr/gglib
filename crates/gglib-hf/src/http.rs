@@ -269,6 +269,16 @@ pub(crate) mod testing {
         pub has_more: bool,
     }
 
+    impl CannedResponse {
+        /// `json`, as a page with none after it.
+        pub(crate) fn of(json: serde_json::Value) -> Self {
+            Self {
+                json,
+                has_more: false,
+            }
+        }
+    }
+
     /// One request the fake backend was asked, as it was asked.
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub(crate) enum Asked {
@@ -455,10 +465,7 @@ mod tests {
         async fn test_fake_backend_returns_canned_response() {
             let backend = FakeBackend::new().with_response(
                 "test-model",
-                CannedResponse {
-                    json: json!({"id": "test-model", "downloads": 100}),
-                    has_more: false,
-                },
+                CannedResponse::of(json!({"id": "test-model", "downloads": 100})),
             );
 
             let url = Url::parse("https://example.com/api/test-model").unwrap();
@@ -482,10 +489,8 @@ mod tests {
 
         #[tokio::test]
         async fn test_fake_backend_default_response() {
-            let backend = FakeBackend::new().with_default(CannedResponse {
-                json: json!({"default": true}),
-                has_more: false,
-            });
+            let backend =
+                FakeBackend::new().with_default(CannedResponse::of(json!({"default": true})));
 
             let url = Url::parse("https://example.com/anything").unwrap();
             let result: serde_json::Value = backend.get_json(&url).await.unwrap();

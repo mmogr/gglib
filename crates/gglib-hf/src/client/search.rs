@@ -94,23 +94,20 @@ mod tests {
     async fn test_search_models_page_filters_by_params() {
         let backend = FakeBackend::new().with_response(
             "huggingface.co",
-            CannedResponse {
-                json: json!([
-                    {
-                        "id": "Org/Small-GGUF",
-                        "downloads": 1000,
-                        "siblings": [{"rfilename": "model.gguf"}],
-                        "gguf": {"total": 1_000_000_000_u64}  // 1B params
-                    },
-                    {
-                        "id": "Org/Large-GGUF",
-                        "downloads": 2000,
-                        "siblings": [{"rfilename": "model.gguf"}],
-                        "gguf": {"total": 70_000_000_000_u64}  // 70B params
-                    },
-                ]),
-                has_more: false,
-            },
+            CannedResponse::of(json!([
+                {
+                    "id": "Org/Small-GGUF",
+                    "downloads": 1000,
+                    "siblings": [{"rfilename": "model.gguf"}],
+                    "gguf": {"total": 1_000_000_000_u64}  // 1B params
+                },
+                {
+                    "id": "Org/Large-GGUF",
+                    "downloads": 2000,
+                    "siblings": [{"rfilename": "model.gguf"}],
+                    "gguf": {"total": 70_000_000_000_u64}  // 70B params
+                },
+            ])),
         );
 
         let client = HfClient::with_backend(test_config(), backend);

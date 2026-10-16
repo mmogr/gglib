@@ -161,10 +161,7 @@ async fn a_repository_looked_up_by_its_id_shows_what_its_search_hit_shows() {
 async fn a_model_info_that_names_no_id_is_an_invalid_response() {
     let backend = FakeBackend::new().with_response(
         "models/o/r",
-        CannedResponse {
-            json: json!({"downloads": 3, "gguf": {"total": 1}}),
-            has_more: false,
-        },
+        CannedResponse::of(json!({"downloads": 3, "gguf": {"total": 1}})),
     );
     let client = HfClient::with_backend(HfConfig::default(), backend);
 
