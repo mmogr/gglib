@@ -37,6 +37,17 @@ Windows) and run it:
 ./gglib up
 ```
 
+The binaries are not code-signed yet, so macOS and Windows warn about them:
+
+- **macOS** refuses a file a browser downloaded. Clear the download flag
+  with `xattr -d com.apple.quarantine ./gglib`, or for the desktop app,
+  after dragging it to Applications,
+  `xattr -dr com.apple.quarantine "/Applications/GGLib GUI.app"`. The
+  desktop app's tar.gz includes `macos-install.command`, which does this,
+  and Homebrew does it for you.
+- **Windows** SmartScreen stops the desktop app's installer with "Windows
+  protected your PC". Choose **More info**, then **Run anyway**.
+
 ### apt (Ubuntu 24.04+, Debian 13+)
 
 ```bash
@@ -57,11 +68,12 @@ brew install mmogr/tap/gglib
 brew install --cask mmogr/tap/gglib-gui   # the desktop app, macOS only
 ```
 
-### Arch Linux (AUR)
+### Arch Linux
 
-```bash
-yay -S gglib-bin        # the desktop app is gglib-gui-bin
-```
+AUR packages (`gglib-bin`, `gglib-gui-bin`) will follow once the AUR takes
+new accounts again. Until then, use the Linux binary or the desktop app's
+AppImage (`chmod +x` it first) from the
+[Releases page](https://github.com/mmogr/gglib/releases).
 
 ### Build from source
 
@@ -313,6 +325,9 @@ Host-header allowlist and local-only CORS are always on. No
 multi-tenancy or rate limiting. Details in
 [gglib-proxy](crates/gglib-proxy/README.md); the tunnel's model is in
 [Remote access](docs/remote.md#how-it-stays-private).
+
+Found a vulnerability? Report it privately, as [SECURITY.md](SECURITY.md)
+says, not in a public issue.
 
 ## Architecture
 

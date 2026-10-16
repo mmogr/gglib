@@ -44,7 +44,7 @@
   "bundle": {
     "active": true,
     "category": "DeveloperTool",
-    "copyright": "Copyright \u00a9 2025 mmogr",
+    "copyright": "Copyright \u00a9 2025-2026 mmogr",
     "externalBin": [],
     "icon": [
       "icons/icon.icns",
@@ -52,7 +52,8 @@
       "icons/icon.png"
     ],
     "resources": [],
-    "shortDescription": "",
+    "shortDescription": "Desktop app for gglib, a local model runtime for llama.cpp",
+    "longDescription": "Download GGUF models, run them with llama.cpp and chat with them, all on your own machine. The desktop app for gglib.",
     "macOS": {
       "entitlements": "Entitlements.plist",
       "minimumSystemVersion": "10.13"
