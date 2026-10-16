@@ -8,7 +8,7 @@ Custom hooks for the Model Control Center page's filter state, panel layout, cha
 
 | File | Role |
 |------|------|
-| `useMccFilters.ts` | Filter state; debounced `listModels` calls (300ms) that carry every filter that is set; client-side full-text search on top of server results; model addition refresh |
+| `useMccFilters.ts` | Filter state; debounced `listModels` calls (300ms) that carry every filter that is set, re-run on every reload of the page's `models`; client-side full-text search on top of server results; model addition refresh |
 | `useMccLayout.ts` | Panel resize state via `usePanelResize`; persists panel widths across sessions |
 | `useChatSession.ts` | Which chat screen is open, local or paired; opens a local one from a served model, and a paired one from a far model's inspector, closed once another machine answers; moves an open chat to another model, serving it first if needed, landing only the last pick and only on the chat that asked; and says which model is starting meanwhile |
 | `useMccMenuActions.ts` | Registers macOS menu callbacks; wires destructive operations through `ConfirmContext` |
@@ -16,13 +16,17 @@ Custom hooks for the Model Control Center page's filter state, panel layout, cha
 ## Filter Data Flow
 
 ```
-User changes filter ──► debounced 300ms ──► API call
-                                               ▼
-                                      setServerModels(results)
-                                               ▼
-                         client-side useMemo(searchQuery, serverModels)
-                                               ▼
-                                      filteredModels → UI
+User changes filter ─────┐
+Page reloads models ─────┤  (refresh button, download done,
+                         │   library event)
+                         ▼
+              debounced 300ms ──► API call
+                                     ▼
+                            setServerModels(results)
+                                     ▼
+               client-side useMemo(searchQuery, serverModels)
+                                     ▼
+                            filteredModels → UI
 ```
 
 <!-- module-docs:end -->
