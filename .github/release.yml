@@ -1,7 +1,7 @@
 # How GitHub sorts pull requests in generated release notes. This is not the
 # release workflow, which is .github/workflows/release.yml. That workflow's
 # Create GitHub Release step asks for generated notes
-# (generate_release_notes: true, .github/workflows/release.yml:130).
+# (generate_release_notes: true, .github/workflows/release.yml:138).
 # softprops/action-gh-release v3 fetches them from the generate-notes
 # endpoint, which reads this file when it is given no other path. It takes
 # effect from the first release cut after it lands.
@@ -18,6 +18,9 @@
 # hand stays with the rest unless it carries that label. Add the label when
 # the change is routine. Leave it off when the change is worth reading.
 #
+# The Bump Version workflow's pull requests carry `version-bump` and are
+# left out: a stable release would otherwise list every candidate's bump.
+#
 # There is no category per `type:` label. Those labels are applied by hand
 # and some pull requests carry none, so a scheme built on them would file
 # real changes under a leftover heading.
@@ -32,6 +35,7 @@ changelog:
       exclude:
         labels:
           - dependencies
+          - version-bump
     - title: Dependencies
       labels:
         - dependencies
