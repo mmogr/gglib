@@ -55,7 +55,7 @@ cat > "$PKG/DEBIAN/control" <<EOF
 Package: gglib
 Version: $DEB_VERSION
 Architecture: $ARCH
-Maintainer: mmogr <noreply@github.com>
+Maintainer: mmogr <172192206+mmogr@users.noreply.github.com>
 Installed-Size: $INSTALLED_KB
 Depends: $DEPENDS
 Section: utils

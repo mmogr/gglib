@@ -2,7 +2,8 @@
 name = "gglib-app"
 version.workspace = true
 description = "Tauri GUI for GGLib - GGUF Model Manager"
-authors.workspace = true
+# The deb's Maintainer field: Debian policy wants an address in it.
+authors = ["mmogr <172192206+mmogr@users.noreply.github.com>"]
 license.workspace = true
 repository.workspace = true
 edition.workspace = true
