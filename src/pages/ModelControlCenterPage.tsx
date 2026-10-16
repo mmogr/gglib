@@ -255,7 +255,7 @@ export default function ModelControlCenterPage({
             onSelectModel={handleSelectLocalModel}
             loading={loading}
             error={error}
-            onRefresh={loadModels}
+            onRefresh={handleRefreshAll}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             tags={tags}
