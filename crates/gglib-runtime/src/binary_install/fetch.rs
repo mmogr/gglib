@@ -247,7 +247,7 @@ pub(crate) async fn download_cuda_runtime(
 
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i)?;
-        let entry_name = entry.name().to_string();
+        let entry_name = entry.name()?.to_string();
 
         if entry.is_dir() {
             continue;
