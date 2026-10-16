@@ -151,7 +151,10 @@ fn extract_binaries_zip(
         let mut entry = archive
             .by_index(i)
             .context("Failed to read archive entry")?;
-        let entry_name = entry.name().to_string();
+        let entry_name = entry
+            .name()
+            .context("Failed to read archive entry name")?
+            .to_string();
 
         if entry.is_dir() {
             continue;
