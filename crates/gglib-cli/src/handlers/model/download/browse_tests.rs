@@ -14,7 +14,7 @@ const TIPS: [&str; 2] = [
     "💡 To see all quantizations: gglib model download <model_id> --list-quants",
 ];
 
-/// A browse asks the Hub once, for `gguf` in the category's order, and
+/// A browse asks the Hub once, for no words, in the category's order, and
 /// prints for the recorded page what it printed before it searched through
 /// the shared function.
 #[tokio::test]
@@ -48,12 +48,12 @@ async fn a_browse_prints_what_it_printed_for_the_recorded_page() {
             TIPS[1],
         ])
     );
-    let asked = (Some("gguf".to_string()), 20, HfSortField::Downloads, true);
+    let asked = (None, 20, HfSortField::Downloads, true);
     assert_eq!(hub.asked(), [asked]);
 }
 
-/// The recent models of a size are the newest of a search for `gguf` and
-/// that size. A description is cut to 100 characters.
+/// The recent models of a size are the newest of a search for that size. A
+/// description is cut to 100 characters.
 #[tokio::test]
 async fn a_browse_of_a_size_searches_for_it_and_cuts_descriptions_to_100() {
     let hub = Hub::described();
@@ -93,7 +93,7 @@ async fn a_browse_of_a_size_searches_for_it_and_cuts_descriptions_to_100() {
             TIPS[1],
         ])
     );
-    let asked = (Some("gguf 7B".to_string()), 5, HfSortField::Created, true);
+    let asked = (Some("7B".to_string()), 5, HfSortField::Created, true);
     assert_eq!(hub.asked(), [asked]);
 }
 
@@ -157,13 +157,12 @@ async fn every_category_is_asked_of_the_hub_as_its_own_order() {
         run(&ctx, argv).await.expect("a browse");
     }
 
-    let gguf = || Some("gguf".to_string());
     assert_eq!(
         hub.asked(),
         [
-            (gguf(), 20, HfSortField::Downloads, true),
-            (gguf(), 20, HfSortField::Created, true),
-            (gguf(), 20, HfSortField::Downloads, true),
+            (None, 20, HfSortField::Downloads, true),
+            (None, 20, HfSortField::Created, true),
+            (None, 20, HfSortField::Downloads, true),
         ]
     );
 }

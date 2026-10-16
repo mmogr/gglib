@@ -52,7 +52,7 @@ async fn found_text(
     sort: HfSortField,
     kind: HfModelKind,
 ) -> Result<String> {
-    let hits = find(hf, query.to_string(), limit, sort, kind).await?;
+    let hits = find(hf, Some(query.to_string()), limit, sort, kind).await?;
     if hits.is_empty() {
         return Ok(format!("No models found for query: '{query}'\n"));
     }
@@ -83,16 +83,17 @@ pub(super) struct Layout {
 }
 
 /// The first `limit` GGUF repositories of `kind` the Hub finds for
-/// `query`, most of `sort_by` first, each with its quantizations.
+/// `query`, or for no words at all, most of `sort_by` first, each with its
+/// quantizations.
 pub(super) async fn find(
     hf: &dyn HfClientPort,
-    query: String,
+    query: Option<String>,
     limit: u32,
     sort_by: HfSortField,
     kind: HfModelKind,
 ) -> Result<Vec<Hit>> {
     let request = HfSearchRequest {
-        query: Some(query),
+        query,
         limit,
         sort_by,
         kind,

@@ -59,22 +59,20 @@ pub(crate) fn build_search_url(config: &HfConfig, query: &HfSearchOptions) -> Ur
 
     url.set_query(Some(&query_string));
 
-    // Always add "GGUF" to filter for repos that actually contain GGUF files
-    if let Some(ref q) = query.query {
-        let search = if q.to_lowercase().contains("gguf") {
-            q.trim().to_string()
-        } else {
-            format!("{} GGUF", q.trim())
-        };
-
+    // The words go as typed: the `gguf` tag already keeps the search to GGUF
+    // repositories, and an added "GGUF" word would hide the ones whose names
+    // don't say so.
+    if let Some(words) = query
+        .query
+        .as_deref()
+        .map(str::trim)
+        .filter(|w| !w.is_empty())
+    {
         let current = url.query().unwrap_or("");
         url.set_query(Some(&format!(
             "{current}&search={}",
-            urlencoding::encode(&search)
+            urlencoding::encode(words)
         )));
-    } else {
-        let current = url.query().unwrap_or("");
-        url.set_query(Some(&format!("{current}&search=GGUF")));
     }
 
     url
@@ -182,7 +180,6 @@ mod tests {
         assert!(url_str.contains("direction=-1"));
         assert!(url_str.contains("limit=30"));
         assert!(url_str.contains("p=0"));
-        assert!(url_str.contains("search=GGUF"));
         assert!(url_str.contains("expand[]=likes"));
     }
 
@@ -196,7 +193,6 @@ mod tests {
 
         assert_eq!(filters(&url), ["gguf", "text-to-image"]);
         assert_names_no_library_or_pipeline(&url);
-        assert!(url.as_str().contains("search=GGUF"), "{url}");
     }
 
     /// A chat search, the default, asks for the `gguf` tag alone: no library,
@@ -225,27 +221,38 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_build_search_url_with_query() {
-        let config = default_config();
-        let query = HfSearchOptions::new().with_query("llama");
-
-        let url = build_search_url(&config, &query);
-        let url_str = url.as_str();
-
-        assert!(url_str.contains("search=llama%20GGUF"));
+    /// The words `url` searches for, if it names any.
+    fn search(url: &Url) -> Option<String> {
+        url.query_pairs()
+            .find_map(|(key, value)| (key == "search").then(|| value.into_owned()))
     }
 
+    /// A search sends the words as typed, less the spaces around them, and
+    /// adds none of its own.
     #[test]
-    fn test_build_search_url_with_gguf_in_query() {
-        let config = default_config();
-        let query = HfSearchOptions::new().with_query("llama GGUF models");
+    fn a_search_sends_the_words_as_typed() {
+        for kind in [HfModelKind::Chat, HfModelKind::Image] {
+            let query = HfSearchOptions::new()
+                .with_query("  qwen unsloth 3.8 ")
+                .with_kind(kind);
 
-        let url = build_search_url(&config, &query);
-        let url_str = url.as_str();
+            let url = build_search_url(&default_config(), &query);
 
-        // Should NOT double-add GGUF
-        assert!(!url_str.contains("GGUF%20GGUF"));
+            assert_eq!(search(&url).as_deref(), Some("qwen unsloth 3.8"), "{url}");
+        }
+    }
+
+    /// A search with no words, or only spaces, names no `search` at all.
+    #[test]
+    fn a_search_without_words_names_none() {
+        for query in [
+            HfSearchOptions::new(),
+            HfSearchOptions::new().with_query("   "),
+        ] {
+            let url = build_search_url(&default_config(), &query);
+
+            assert_eq!(search(&url), None, "{url}");
+        }
     }
 
     #[test]

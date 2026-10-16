@@ -143,8 +143,8 @@ gglib model search "llama 7b" --limit 5 --sort downloads
 ```
 
 ### `browse`
-Browse popular GGUF models by category: `search`'s search for `gguf`, in the
-category's order.
+Browse popular GGUF models by category: `search`'s search with no words of
+its own (or the `--size` given), in the category's order.
 
 **Module:** `browse.rs`
 
