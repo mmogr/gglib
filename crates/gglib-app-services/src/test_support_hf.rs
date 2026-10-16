@@ -14,8 +14,7 @@ impl HfClientPort for MockHfClient {
     async fn search(&self, _options: &HfSearchOptions) -> Result<HfSearchResult, HfPortError> {
         Ok(HfSearchResult {
             items: vec![],
-            has_more: false,
-            page: 0,
+            next_cursor: None,
         })
     }
 

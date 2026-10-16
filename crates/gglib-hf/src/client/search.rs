@@ -17,14 +17,11 @@ impl<B: HttpBackend> HfClient<B> {
         &self,
         query: &HfSearchOptions,
     ) -> HfResult<HfSearchResult> {
-        // Fetch more models than requested since we filter out models without GGUF files
-        let fetch_query = HfSearchOptions {
-            limit: 100,
-            ..query.clone()
-        };
-
-        let url = build_search_url(&self.config, &fetch_query);
-        let (hits, has_more): (Vec<serde_json::Value>, bool) =
+        // Every hit of the Hub's page that passes the filters is returned:
+        // the next page starts where this one ended, so a hit left out here
+        // would never be shown.
+        let url = build_search_url(&self.config, query);
+        let (hits, next_cursor): (Vec<serde_json::Value>, Option<String>) =
             self.backend.get_json_paginated(&url).await?;
 
         // Apply parameter filtering (client-side)
@@ -49,14 +46,9 @@ impl<B: HttpBackend> HfClient<B> {
 
                 true
             })
-            .take(query.limit as usize)
             .collect();
 
-        Ok(HfSearchResult {
-            items,
-            has_more,
-            page: query.page,
-        })
+        Ok(HfSearchResult { items, next_cursor })
     }
 }
 
@@ -67,27 +59,60 @@ mod tests {
     use crate::http::testing::{CannedResponse, FakeBackend};
     use serde_json::json;
 
+    /// A search asks the Hub for the page it was asked for, returns every hit
+    /// of it, and carries on from the cursor the Hub gave.
     #[tokio::test]
-    async fn test_search_models_page() {
-        let backend = FakeBackend::new().with_response(
-            "huggingface.co",
-            CannedResponse {
-                json: json!([
-                    fake_model_json("Org/Model1-GGUF", 1000),
-                    fake_model_json("Org/Model2-GGUF", 2000),
-                ]),
-                has_more: true,
-            },
-        );
-
+    async fn a_search_pages_by_the_hubs_cursor() {
+        let backend = FakeBackend::new()
+            .with_response(
+                "limit=7",
+                CannedResponse {
+                    json: json!([
+                        fake_model_json("Org/Model1-GGUF", 1000),
+                        fake_model_json("Org/Model2-GGUF", 2000),
+                    ]),
+                    next_cursor: Some("page2".to_string()),
+                },
+            )
+            .with_response(
+                "cursor=page2",
+                CannedResponse::of(json!([fake_model_json("Org/Model3-GGUF", 500)])),
+            );
         let client = HfClient::with_backend(test_config(), backend);
-        let query = HfSearchOptions::new().with_query("llama");
+        let ids = |found: &HfSearchResult| -> Vec<String> {
+            found.items.iter().map(|m| m.model_id.clone()).collect()
+        };
 
-        let response = client.search_models_page(&query).await.unwrap();
+        let first = HfSearchOptions::new().with_query("llama").with_limit(7);
+        let first = client.search_models_page(&first).await.unwrap();
 
-        assert_eq!(response.items.len(), 2);
-        assert!(response.has_more);
-        assert_eq!(response.items[0].model_id, "Org/Model1-GGUF");
+        assert_eq!(ids(&first), ["Org/Model1-GGUF", "Org/Model2-GGUF"]);
+        assert_eq!(first.next_cursor.as_deref(), Some("page2"));
+
+        let next = HfSearchOptions::new()
+            .with_query("llama")
+            .with_limit(8)
+            .with_cursor(first.next_cursor.unwrap());
+        let next = client.search_models_page(&next).await.unwrap();
+
+        assert_eq!(ids(&next), ["Org/Model3-GGUF"]);
+        assert_eq!(next.next_cursor, None);
+    }
+
+    /// Every hit of the Hub's page that passes the filters comes back, even
+    /// past the limit: a hit cut here would never be shown on any page.
+    #[tokio::test]
+    async fn a_search_cuts_no_hit_of_the_hubs_page() {
+        let backend = FakeBackend::new().with_default(CannedResponse::of(json!([
+            fake_model_json("Org/Model1-GGUF", 1000),
+            fake_model_json("Org/Model2-GGUF", 2000),
+        ])));
+        let client = HfClient::with_backend(test_config(), backend);
+
+        let query = HfSearchOptions::new().with_limit(1);
+        let found = client.search_models_page(&query).await.unwrap();
+
+        assert_eq!(found.items.len(), 2);
     }
 
     #[tokio::test]

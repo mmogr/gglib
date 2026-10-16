@@ -156,9 +156,9 @@ crates/gglib-download/src/resolver/tests.rs 387
 crates/gglib-gguf/src/capabilities/template_probe.rs 501
 crates/gglib-gguf/src/parser.rs 356
 crates/gglib-gguf/src/reader_tests.rs 416
-crates/gglib-hf/src/http.rs 519
+crates/gglib-hf/src/http.rs 571
 crates/gglib-hf/src/parsing.rs 432
-crates/gglib-hf/src/url.rs 411
+crates/gglib-hf/src/url.rs 449
 crates/gglib-mcp/src/builtin/generate_image.rs 380
 crates/gglib-mcp/src/builtin/generate_image_tests.rs 476
 crates/gglib-mcp/src/builtin/mod.rs 447

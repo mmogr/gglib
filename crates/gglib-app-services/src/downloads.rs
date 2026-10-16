@@ -269,7 +269,7 @@ pub async fn search_hf_models(
         query: request.query,
         min_params_b: request.min_params_b,
         max_params_b: request.max_params_b,
-        page: request.page,
+        cursor: request.cursor,
         limit: request.limit,
         sort_by: request.sort_by,
         sort_ascending: request.sort_ascending,
@@ -283,8 +283,7 @@ pub async fn search_hf_models(
 
     Ok(HfSearchResponse {
         models: response.items.into_iter().map(Into::into).collect(),
-        has_more: response.has_more,
-        page: response.page,
+        next_cursor: response.next_cursor,
         total_count: None,
     })
 }

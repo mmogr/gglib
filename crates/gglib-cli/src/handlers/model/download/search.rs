@@ -82,9 +82,11 @@ pub(super) struct Layout {
     pub quantizations_tip: &'static str,
 }
 
-/// The first `limit` GGUF repositories of `kind` the Hub finds for
+/// The GGUF repositories of `kind` on the Hub's first page of `limit` for
 /// `query`, or for no words at all, most of `sort_by` first, each with its
-/// quantizations.
+/// quantizations. Fewer than `limit` when the Hub's page is shorter, or when
+/// hits are dropped for holding no GGUF file or not being of `kind`; a
+/// `limit` above 100 is asked as 100.
 pub(super) async fn find(
     hf: &dyn HfClientPort,
     query: Option<String>,

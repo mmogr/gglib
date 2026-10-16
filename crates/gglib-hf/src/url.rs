@@ -48,16 +48,24 @@ pub(crate) fn build_search_url(config: &HfConfig, query: &HfSearchOptions) -> Ur
     let mut url = config.base_url.clone();
 
     let query_string = format!(
-        "{}&{}&sort={}&direction={}&limit={}&p={}",
+        "{}&{}&sort={}&direction={}&limit={}",
         hub_filter(query.kind),
         build_expand_params(),
         sort_param(query.sort_by),
         direction,
         query.limit.clamp(1, 100),
-        query.page
     );
 
     url.set_query(Some(&query_string));
+
+    // The Hub pages by cursor; it ignores a page number.
+    if let Some(cursor) = &query.cursor {
+        let current = url.query().unwrap_or("");
+        url.set_query(Some(&format!(
+            "{current}&cursor={}",
+            urlencoding::encode(cursor)
+        )));
+    }
 
     // The words go as typed: the `gguf` tag already keeps the search to GGUF
     // repositories, and an added "GGUF" word would hide the ones whose names
@@ -179,7 +187,6 @@ mod tests {
         assert!(url_str.contains("sort=downloads"));
         assert!(url_str.contains("direction=-1"));
         assert!(url_str.contains("limit=30"));
-        assert!(url_str.contains("p=0"));
         assert!(url_str.contains("expand[]=likes"));
     }
 
@@ -221,10 +228,41 @@ mod tests {
         );
     }
 
+    /// The value `url` gives `name`, if it names it.
+    fn param(url: &Url, name: &str) -> Option<String> {
+        url.query_pairs()
+            .find_map(|(key, value)| (key == name).then(|| value.into_owned()))
+    }
+
+    /// A first page names no cursor and no page number.
+    #[test]
+    fn a_first_page_names_no_cursor() {
+        let url = build_search_url(&default_config(), &HfSearchOptions::new());
+
+        assert_eq!(param(&url, "cursor"), None, "{url}");
+        assert_eq!(param(&url, "p"), None, "{url}");
+    }
+
+    /// A later page sends the cursor it was given as one parameter, whatever
+    /// it holds, and no page number.
+    #[test]
+    fn a_later_page_sends_its_cursor_whole() {
+        for cursor in ["eyIkb3IiOlt7ImRv==", "a&search=x#y z"] {
+            let query = HfSearchOptions::new()
+                .with_query("qwen")
+                .with_cursor(cursor);
+
+            let url = build_search_url(&default_config(), &query);
+
+            assert_eq!(param(&url, "cursor").as_deref(), Some(cursor), "{url}");
+            assert_eq!(param(&url, "search").as_deref(), Some("qwen"), "{url}");
+            assert_eq!(param(&url, "p"), None, "{url}");
+        }
+    }
+
     /// The words `url` searches for, if it names any.
     fn search(url: &Url) -> Option<String> {
-        url.query_pairs()
-            .find_map(|(key, value)| (key == "search").then(|| value.into_owned()))
+        param(url, "search")
     }
 
     /// A search sends the words as typed, less the spaces around them, and

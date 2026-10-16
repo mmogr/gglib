@@ -12,8 +12,31 @@ import '@testing-library/jest-dom';
 import type { HfSearchRequest, HfSearchResponse } from '../../../src/types';
 
 /** A Hub with nothing to list. */
-const empty = async (_request: HfSearchRequest): Promise<HfSearchResponse> => ({ models: [], has_more: false, page: 0, total_count: null });
+const empty = async (_request: HfSearchRequest): Promise<HfSearchResponse> => ({ models: [], next_cursor: null, total_count: null });
 const browseHfModels = vi.fn(empty);
+
+/** A Hub that answers each page with one repo named for the cursor it was
+ * asked from, and names the cursor after it. */
+async function paged(request: HfSearchRequest): Promise<HfSearchResponse> {
+  const at = request.cursor ?? 'first';
+  return {
+    models: [
+      {
+        id: `owner/m-${at}`,
+        name: `m-${at}`,
+        author: 'owner',
+        downloads: 0,
+        likes: 0,
+        last_modified: null,
+        parameters_b: null,
+        description: null,
+        tags: [],
+      },
+    ],
+    next_cursor: `after-${at}`,
+    total_count: null,
+  };
+}
 
 vi.mock('../../../src/services/transport', () => ({
   getTransport: () => ({
@@ -60,7 +83,7 @@ describe('HuggingFaceBrowser — the Chat/Image toggle', () => {
     await user.click(screen.getByRole('button', { name: 'Image' }));
     await waitFor(() => expect(kinds()).toContain('image'));
     expect(new Set(kinds())).toEqual(new Set(['image']));
-    expect(browseHfModels.mock.calls.at(-1)?.[0].page).toBe(0);
+    expect(browseHfModels.mock.calls.at(-1)?.[0].cursor).toBeNull();
     expect(screen.getByRole('button', { name: 'Image' })).toHaveAttribute('aria-pressed', 'true');
 
     browseHfModels.mockClear();
@@ -70,24 +93,7 @@ describe('HuggingFaceBrowser — the Chat/Image toggle', () => {
   });
 
   it('asks for the next page with the kind pressed', async () => {
-    browseHfModels.mockImplementation(async (request) => ({
-      models: [
-        {
-          id: `owner/m-${request.page}`,
-          name: `m-${request.page}`,
-          author: 'owner',
-          downloads: 0,
-          likes: 0,
-          last_modified: null,
-          parameters_b: null,
-          description: null,
-          tags: [],
-        },
-      ],
-      has_more: true,
-      page: request.page,
-      total_count: null,
-    }));
+    browseHfModels.mockImplementation(paged);
     render(<HuggingFaceBrowser />);
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Image' }));
@@ -98,6 +104,52 @@ describe('HuggingFaceBrowser — the Chat/Image toggle', () => {
     await user.click(screen.getByRole('button', { name: 'Load More' }));
 
     await waitFor(() => expect(browseHfModels).toHaveBeenCalledTimes(1));
-    expect(browseHfModels.mock.calls[0][0]).toMatchObject({ kind: 'image', page: 1 });
+    expect(browseHfModels.mock.calls[0][0]).toMatchObject({ kind: 'image', cursor: 'after-first' });
+  });
+});
+
+describe('HuggingFaceBrowser — load more', () => {
+  beforeEach(() => {
+    browseHfModels.mockReset();
+    browseHfModels.mockImplementation(paged);
+  });
+
+  it("carries on from each page's cursor and adds its repos under the shown ones", async () => {
+    render(<HuggingFaceBrowser />);
+    const user = userEvent.setup();
+    await screen.findByText('m-first');
+
+    await user.click(screen.getByRole('button', { name: 'Load More' }));
+    await screen.findByText('m-after-first');
+    await user.click(screen.getByRole('button', { name: 'Load More' }));
+    await screen.findByText('m-after-after-first');
+
+    const loads = browseHfModels.mock.calls.map(([request]) => request.cursor).filter((c) => c !== null);
+    expect(loads).toEqual(['after-first', 'after-after-first']);
+    // A page is as many repos as the Hub gives at once, so a filter that drops
+    // most of them still leaves something to show.
+    expect(new Set(browseHfModels.mock.calls.map(([request]) => request.limit))).toEqual(new Set([100]));
+    expect(screen.getByText('m-first')).toBeInTheDocument();
+    expect(screen.getByText('m-after-first')).toBeInTheDocument();
+  });
+
+  it('searches again from the first page when the words change, so a cursor never outlives its search', async () => {
+    render(<HuggingFaceBrowser />);
+    const user = userEvent.setup();
+    await screen.findByText('m-first');
+
+    browseHfModels.mockClear();
+    await user.type(screen.getByPlaceholderText(/Search, paste/), 'q');
+
+    await waitFor(() => expect(browseHfModels).toHaveBeenCalled());
+    expect(browseHfModels.mock.calls.at(-1)![0]).toMatchObject({ query: 'q', cursor: null });
+  });
+
+  it('offers no more once the Hub names no next page', async () => {
+    browseHfModels.mockImplementation(async (request) => ({ ...(await paged(request)), next_cursor: null }));
+    render(<HuggingFaceBrowser />);
+
+    await screen.findByText('m-first');
+    expect(screen.queryByRole('button', { name: 'Load More' })).not.toBeInTheDocument();
   });
 });
