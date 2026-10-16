@@ -142,7 +142,7 @@ jobs:
     runs-on: ubuntu-24.04
     # The apt repository is served from the same Pages site, under /apt, and
     # a Pages deploy replaces the whole site. So this job publishes both and
-    # waits for `apt-repo`, which waits for the `publish` approval: a stable
+    # waits for `apt-repo`, which waits for the `apt` approval: a stable
     # release reaches the docs and apt together or not at all.
     needs: [check-version, create-release, apt-repo]
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.check-version.outputs.version-changed == 'true' && needs.check-version.outputs.is-test-version != 'true' && needs.check-version.outputs.is-prerelease != 'true' && inputs.test_run != true
@@ -1044,19 +1044,27 @@ jobs:
           files: SHA256SUMS
 
   # Everything past the GitHub release that a user's package manager reads
-  # waits here for a person: the `publish` environment has required reviewers
-  # (Settings > Environments > publish). Approve in the run's summary page.
+  # waits for a person. Each channel is its own environment with required
+  # reviewers (Settings > Environments): `apt`, `aur` and `homebrew`. They
+  # wait together, so one "Review deployments" dialog shows a box per
+  # channel; tick them all and approve once, or hold one back. Each
+  # environment's url is what the repository's Deployments sidebar links to:
+  # the README's install section for apt and Arch (the apt tree has no index
+  # page, and the AUR page exists only after the first push), the tap for
+  # Homebrew.
   #
   # Stable releases only. A release candidate gets its GitHub prerelease and
   # stops; nothing it builds reaches apt or the docs. That is what lets RCs be
   # cut as often as wanted.
   #
-  # One gate job that the publishers depend on, rather than `environment:` on
-  # each, so a release asks for one approval however many channels it feeds.
-  # The cost is that the publishers' secrets are repository secrets, not
-  # environment secrets; nothing but these jobs reads them.
-  publish-gate:
-    name: Approve publishing
+  # A channel's secret belongs in its environment's secrets, so a job reads
+  # only its own key. A repository secret of the same name works too, but
+  # every job can read it, and an environment secret overrides it.
+  #
+  # An environment a job names is created on first use with no reviewers, so
+  # all three must exist, with reviewers, before a stable release runs.
+  apt-repo:
+    name: Build apt repository
     runs-on: ubuntu-24.04
     needs: [check-version, create-release, checksums]
     if: >-
@@ -1066,15 +1074,9 @@ jobs:
       && needs.check-version.outputs.is-prerelease != 'true'
       && needs.check-version.outputs.is-test-version != 'true'
       && inputs.test_run != true
-    environment: publish
-    steps:
-      - name: Approved
-        run: echo "::notice::Publishing v${{ needs.check-version.outputs.new-version }} to package managers"
-
-  apt-repo:
-    name: Build apt repository
-    runs-on: ubuntu-24.04
-    needs: [check-version, publish-gate]
+    environment:
+      name: apt
+      url: https://github.com/mmogr/gglib#apt-ubuntu-2404-debian-13
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -1130,7 +1132,17 @@ jobs:
   aur:
     name: Publish to the AUR
     runs-on: ubuntu-24.04
-    needs: [check-version, publish-gate]
+    needs: [check-version, create-release, checksums]
+    if: >-
+      !cancelled()
+      && needs.checksums.result == 'success'
+      && needs.create-release.result == 'success'
+      && needs.check-version.outputs.is-prerelease != 'true'
+      && needs.check-version.outputs.is-test-version != 'true'
+      && inputs.test_run != true
+    environment:
+      name: aur
+      url: https://github.com/mmogr/gglib#arch-linux
     container: archlinux:base-devel
     env:
       VERSION: ${{ needs.check-version.outputs.new-version }}
@@ -1214,7 +1226,17 @@ jobs:
   homebrew:
     name: Publish to the Homebrew tap
     runs-on: ubuntu-24.04
-    needs: [check-version, publish-gate]
+    needs: [check-version, create-release, checksums]
+    if: >-
+      !cancelled()
+      && needs.checksums.result == 'success'
+      && needs.create-release.result == 'success'
+      && needs.check-version.outputs.is-prerelease != 'true'
+      && needs.check-version.outputs.is-test-version != 'true'
+      && inputs.test_run != true
+    environment:
+      name: homebrew
+      url: https://github.com/mmogr/homebrew-tap
     env:
       VERSION: ${{ needs.check-version.outputs.new-version }}
     steps:

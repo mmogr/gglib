@@ -6,7 +6,7 @@ on:
       # The release flow, which scripts/next_version.py spells out:
       #   0.25.0 -rc-minor-> 0.26.0-rc.1 -next-rc-> 0.26.0-rc.2 -promote-> 0.26.0
       # A release candidate becomes a GitHub prerelease and nothing more; only
-      # a promotion reaches apt and the docs, after the `publish` approval, and
+      # a promotion reaches apt and the docs, after the `apt` approval, and
       # only when its code is the last candidate's (check_rc_promotion.sh).
       bump:
         description: 'What to bump'
@@ -256,7 +256,7 @@ jobs:
             Once this PR is merged, the [Release workflow](.github/workflows/release.yml) will:
             1. Create git tag `v${{ steps.validate.outputs.version }}`
             2. Generate a GitHub release (a prerelease for an `-rc`)
-            3. For a stable version only, wait for approval in the `publish` environment, then publish the apt repository and the documentation
+            3. For a stable version only, wait for approval of each channel (`apt`, `aur`, `homebrew`), then publish them and the documentation
             
             ---
             *Triggered by @${{ github.actor }}*
