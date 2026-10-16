@@ -149,7 +149,7 @@ impl DownloadOps {
     // HuggingFace Browser Operations
     // =========================================================================
 
-    /// Search `HuggingFace` for GGUF text-generation models: the browser's
+    /// Search `HuggingFace` for GGUF models that chat or draw: the browser's
     /// search, which is [`search_hf_models`] over this handler's Hub client.
     pub async fn search_hf_models(
         &self,
@@ -256,7 +256,7 @@ impl DownloadOps {
 }
 
 /// Search `hf` for GGUF models of the kind the request names:
-/// text-generation models, or text-to-image ones.
+/// models that chat, or text-to-image ones.
 ///
 /// The one search every surface runs: the browser's, through
 /// [`DownloadOps::search_hf_models`], and `gglib model search` and `browse`,

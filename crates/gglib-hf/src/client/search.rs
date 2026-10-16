@@ -28,7 +28,7 @@ impl<B: HttpBackend> HfClient<B> {
             self.backend.get_json_paginated(&url).await?;
 
         // Apply parameter filtering (client-side)
-        let items = search_hits(&hits)
+        let items = search_hits(&hits, query.kind)
             .into_iter()
             .filter(|model| {
                 // Min params filter

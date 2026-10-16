@@ -4,8 +4,9 @@
 //! responses into typed domain objects.
 
 use crate::error::{HfError, HfResult};
+use crate::kind::keeps;
 use crate::models::{HfEntryType, HfFileEntry, HfQuantization};
-use gglib_core::ports::huggingface::HfRepoInfo;
+use gglib_core::ports::huggingface::{HfModelKind, HfRepoInfo};
 use gglib_core::{Quantization, repo_short_name};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -82,10 +83,12 @@ fn cut_description(description: &str) -> String {
     }
 }
 
-/// The hits of a search page that hold a GGUF file, each as its summary.
-pub(crate) fn search_hits(hits: &[Value]) -> Vec<HfRepoInfo> {
+/// The hits of a search page that hold a GGUF file and are of `kind`, each as
+/// its summary.
+pub(crate) fn search_hits(hits: &[Value], kind: HfModelKind) -> Vec<HfRepoInfo> {
     hits.iter()
         .filter(|hit| holds_a_gguf_file(hit))
+        .filter(|hit| keeps(kind, hit))
         .filter_map(repo_info_from_json)
         .collect()
 }

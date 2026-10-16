@@ -91,7 +91,8 @@ pub enum HfSortField {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum HfModelKind {
-    /// GGUF repositories of text-generation models (the default).
+    /// GGUF repositories of models that chat, with or without images read
+    /// alongside (the default).
     #[default]
     Chat,
     /// GGUF repositories of text-to-image models.

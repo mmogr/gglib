@@ -37,10 +37,11 @@ gglib-core (port definition)        gglib-hf (adapter implementation)
 - **`error.rs`** — Error types for API failures
 - **`file_roles.rs`** — Telling a repository's weights files from its projectors
 - **`http.rs`** — HTTP backend abstraction for testability: JSON reads, a ranged read of a file's head, and a posted form
+- **`kind.rs`** — What each `HfModelKind` of search is: the tags it asks the Hub for, and which hits it keeps
 - **`models.rs`** — What the crate holds of a repository: its reference, its file entries and its quantizations
 - **`parsing.rs`** — JSON parsing: a model's summary (`repo_info_from_json`, the one reader of a search hit and of a model info), a file tree, and the grouping of files into quantizations
 - **`port.rs`** — `HfClientPort` trait implementation
-- **`url.rs`** — URL construction helpers, the Hub's own name for each `HfSortField`, and the filter for each `HfModelKind`
+- **`url.rs`** — URL construction helpers and the Hub's own name for each `HfSortField`
 - **`client/`** — HTTP client implementation and `HuggingFace` API integration
 
 ## Usage
@@ -70,8 +71,8 @@ async fn example() {
 ## Features
 
 - **Model Search**: Search `HuggingFace` Hub for GGUF models with pagination and sorting, of
-  text-generation models (`library=gguf&pipeline_tag=text-generation`) or text-to-image ones
-  (`filter=gguf&filter=text-to-image`)
+  models that chat (`filter=gguf`, keeping the hits whose pipeline is a chat one or none) or
+  text-to-image ones (`filter=gguf&filter=text-to-image`)
 - **Quantization Listing**: List available quantization variants (`Q4_K_M`, `Q5_K_S`, etc.),
   including Unsloth Dynamic ("UD-") quants (`UD-Q4_K_M`, `UD-Q6_K`, etc.) as separate,
   independently selectable entries from their plain counterparts
