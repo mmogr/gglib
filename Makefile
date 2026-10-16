@@ -149,8 +149,19 @@ build-all: build-gui build ## Build Rust CLI and web UI
 ##@ Rust checks
 
 # Run all tests
+#
+# A test binary runs one test per core, and many of them open a database, a
+# runtime and ports of their own. On a 16-core Mac that runs past the 256 open
+# files macOS gives a shell, and dozens of tests fail with "Too many open
+# files". So the limit is raised for this run, and never lowered.
 test: ## Run Rust tests
 	@echo "Running all tests..."
+	@n=$$(ulimit -n); \
+	if [ "$$n" != unlimited ] && [ "$$n" -lt 10240 ]; then \
+		ulimit -Sn 10240 2>/dev/null || ulimit -Sn "$$(ulimit -Hn)" 2>/dev/null; \
+		n=$$(ulimit -n); \
+		[ "$$n" -ge 1024 ] || echo "The open-file limit is $$n and can go no higher here; if tests fail with \"Too many open files\", raise the hard limit."; \
+	fi; \
 	$(CARGO) test
 
 # The download accelerator's helper is Python, so `cargo test` does not run
