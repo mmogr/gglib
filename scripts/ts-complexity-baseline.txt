@@ -3,7 +3,7 @@ src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 329
 src/components/ChatMessagesPanel/components/MessageBubbles.tsx 301
 src/components/ChatMessagesPanel/components/PictureEditor.tsx 318
 src/components/FilterPopover/FilterPopover.tsx 340
-src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 347
+src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 354
 src/components/McpServersPanel.tsx 459
 src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 346
 src/components/ModelInspectorPanel/components/ServeModal.tsx 375

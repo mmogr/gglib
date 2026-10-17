@@ -80,7 +80,7 @@ vi.mock('../../../src/services/transport', async () => {
       getModelFilterOptions: filterReads.options,
       getDownloadQueue: vi.fn(async () => downloads.queue),
       queueDownload,
-      browseHfModels: vi.fn(async () => ({ models: [], has_more: false, page: 0 })),
+      browseHfModels: vi.fn(async () => ({ models: [], next_cursor: null })),
       getSettings: vi.fn(async () => ({})),
       subscribe: vi.fn(() => () => {}),
       onEventStreamOpen: vi.fn(() => () => {}),

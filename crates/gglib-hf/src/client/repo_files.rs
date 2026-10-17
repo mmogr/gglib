@@ -125,14 +125,11 @@ mod tests {
     async fn test_list_model_files() {
         let backend = FakeBackend::new().with_response(
             "tree/main",
-            CannedResponse {
-                json: json!([
-                    {"path": "README.md", "type": "file", "size": 1000},
-                    {"path": "model.Q4_K_M.gguf", "type": "file", "size": 4_000_000_000_u64},
-                    {"path": "Q8_0", "type": "directory", "size": 0}
-                ]),
-                has_more: false,
-            },
+            CannedResponse::of(json!([
+                {"path": "README.md", "type": "file", "size": 1000},
+                {"path": "model.Q4_K_M.gguf", "type": "file", "size": 4_000_000_000_u64},
+                {"path": "Q8_0", "type": "directory", "size": 0}
+            ])),
         );
 
         let client = HfClient::with_backend(test_config(), backend);
@@ -149,13 +146,10 @@ mod tests {
     async fn test_list_quantizations() {
         let backend = FakeBackend::new().with_response(
             "tree/main",
-            CannedResponse {
-                json: json!([
-                    {"path": "model-Q4_K_M.gguf", "type": "file", "size": 4_000_000_000_u64},
-                    {"path": "model-Q8_0.gguf", "type": "file", "size": 8_000_000_000_u64},
-                ]),
-                has_more: false,
-            },
+            CannedResponse::of(json!([
+                {"path": "model-Q4_K_M.gguf", "type": "file", "size": 4_000_000_000_u64},
+                {"path": "model-Q8_0.gguf", "type": "file", "size": 8_000_000_000_u64},
+            ])),
         );
 
         let client = HfClient::with_backend(test_config(), backend);
@@ -173,13 +167,10 @@ mod tests {
     async fn test_find_quantization_files() {
         let backend = FakeBackend::new().with_response(
             "tree/main",
-            CannedResponse {
-                json: json!([
-                    {"path": "model-Q4_K_M.gguf", "type": "file", "size": 4_000_000_000_u64},
-                    {"path": "model-Q8_0.gguf", "type": "file", "size": 8_000_000_000_u64},
-                ]),
-                has_more: false,
-            },
+            CannedResponse::of(json!([
+                {"path": "model-Q4_K_M.gguf", "type": "file", "size": 4_000_000_000_u64},
+                {"path": "model-Q8_0.gguf", "type": "file", "size": 8_000_000_000_u64},
+            ])),
         );
 
         let client = HfClient::with_backend(test_config(), backend);
@@ -198,12 +189,9 @@ mod tests {
     async fn test_find_quantization_files_not_found() {
         let backend = FakeBackend::new().with_response(
             "tree/main",
-            CannedResponse {
-                json: json!([
-                    {"path": "model-Q4_K_M.gguf", "type": "file", "size": 4_000_000_000_u64},
-                ]),
-                has_more: false,
-            },
+            CannedResponse::of(json!([
+                {"path": "model-Q4_K_M.gguf", "type": "file", "size": 4_000_000_000_u64},
+            ])),
         );
 
         let client = HfClient::with_backend(test_config(), backend);
@@ -221,13 +209,10 @@ mod tests {
         // though both share the same "Q6_K" bit-depth suffix.
         let backend = FakeBackend::new().with_response(
             "tree/main",
-            CannedResponse {
-                json: json!([
-                    {"path": "model-Q6_K.gguf", "type": "file", "size": 6_000_000_000_u64},
-                    {"path": "model-UD-Q6_K.gguf", "type": "file", "size": 6_500_000_000_u64},
-                ]),
-                has_more: false,
-            },
+            CannedResponse::of(json!([
+                {"path": "model-Q6_K.gguf", "type": "file", "size": 6_000_000_000_u64},
+                {"path": "model-UD-Q6_K.gguf", "type": "file", "size": 6_500_000_000_u64},
+            ])),
         );
 
         let client = HfClient::with_backend(test_config(), backend);
@@ -249,13 +234,10 @@ mod tests {
     async fn test_get_commit_sha() {
         let backend = FakeBackend::new().with_response(
             "Llama-2-7B-GGUF",
-            CannedResponse {
-                json: json!({
-                    "id": "TheBloke/Llama-2-7B-GGUF",
-                    "sha": "abc123def456"
-                }),
-                has_more: false,
-            },
+            CannedResponse::of(json!({
+                "id": "TheBloke/Llama-2-7B-GGUF",
+                "sha": "abc123def456"
+            })),
         );
 
         let client = HfClient::with_backend(test_config(), backend);
@@ -277,13 +259,8 @@ mod tests {
         ];
 
         for info in infos {
-            let backend = FakeBackend::new().with_response(
-                "Llama-2-7B-GGUF",
-                CannedResponse {
-                    json: info.clone(),
-                    has_more: false,
-                },
-            );
+            let backend = FakeBackend::new()
+                .with_response("Llama-2-7B-GGUF", CannedResponse::of(info.clone()));
             let client = HfClient::with_backend(test_config(), backend);
             let repo = HfRepoRef::new("TheBloke", "Llama-2-7B-GGUF");
 

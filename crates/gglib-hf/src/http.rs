@@ -26,11 +26,12 @@ pub trait HttpBackend: Send + Sync {
     /// Fetch JSON from a URL and deserialize it.
     async fn get_json<T: DeserializeOwned + Send>(&self, url: &Url) -> HfResult<T>;
 
-    /// Fetch JSON from a URL and return the raw response with pagination info.
+    /// Fetch JSON from a URL, with the cursor of the page after it when the
+    /// answer names one (see [`next_cursor`]).
     async fn get_json_paginated<T: DeserializeOwned + Send>(
         &self,
         url: &Url,
-    ) -> HfResult<(T, bool)>;
+    ) -> HfResult<(T, Option<String>)>;
 
     /// Fetch at most the first `max_bytes` bytes of a URL's body, asking
     /// with a `Range` header and stopping there even when the server answers
@@ -44,6 +45,24 @@ pub trait HttpBackend: Send + Sync {
         url: &Url,
         form: &[(&str, &str)],
     ) -> HfResult<T>;
+}
+
+/// The cursor of the next page a `Link` header names, as the Hub pages: its
+/// `rel="next"` address carries the cursor as a `cursor` parameter.
+///
+/// Only the cursor is taken. The address itself is never followed, so the
+/// next page is asked of the configured Hub like the first, token and all.
+pub(crate) fn next_cursor(link: &str) -> Option<String> {
+    link.split(',')
+        .find(|part| part.contains("rel=\"next\""))
+        .and_then(|part| Some(part.split_once('<')?.1.split_once('>')?.0))
+        .and_then(|address| Url::parse(address.trim()).ok())
+        .and_then(|address| {
+            address
+                .query_pairs()
+                .find_map(|(key, value)| (key == "cursor").then(|| value.into_owned()))
+        })
+        .filter(|cursor| !cursor.is_empty())
 }
 
 /// `form` encoded as a URL-encoded form body, in its order.
@@ -198,18 +217,17 @@ impl HttpBackend for ReqwestBackend {
     async fn get_json_paginated<T: DeserializeOwned + Send>(
         &self,
         url: &Url,
-    ) -> HfResult<(T, bool)> {
+    ) -> HfResult<(T, Option<String>)> {
         let response = self.fetch_with_retry(url).await?;
 
-        // Check for pagination via Link header
-        let has_more = response
+        let cursor = response
             .headers()
             .get("Link")
             .and_then(|h| h.to_str().ok())
-            .is_some_and(|link| link.contains("rel=\"next\""));
+            .and_then(next_cursor);
 
         let data: T = response.json().await?;
-        Ok((data, has_more))
+        Ok((data, cursor))
     }
 
     async fn get_head(&self, url: &Url, max_bytes: u64) -> HfResult<Vec<u8>> {
@@ -266,7 +284,18 @@ pub(crate) mod testing {
     #[derive(Clone)]
     pub(crate) struct CannedResponse {
         pub json: serde_json::Value,
-        pub has_more: bool,
+        /// The cursor of the page after this one, if any.
+        pub next_cursor: Option<String>,
+    }
+
+    impl CannedResponse {
+        /// `json`, as a page with none after it.
+        pub(crate) fn of(json: serde_json::Value) -> Self {
+            Self {
+                json,
+                next_cursor: None,
+            }
+        }
     }
 
     /// One request the fake backend was asked, as it was asked.
@@ -358,7 +387,7 @@ pub(crate) mod testing {
         async fn get_json_paginated<T: DeserializeOwned + Send>(
             &self,
             url: &Url,
-        ) -> HfResult<(T, bool)> {
+        ) -> HfResult<(T, Option<String>)> {
             let response =
                 self.find_response(url.as_str())
                     .ok_or_else(|| HfError::ApiRequestFailed {
@@ -367,7 +396,7 @@ pub(crate) mod testing {
                     })?;
 
             let data: T = serde_json::from_value(response.json)?;
-            Ok((data, response.has_more))
+            Ok((data, response.next_cursor))
         }
 
         async fn get_head(&self, url: &Url, max_bytes: u64) -> HfResult<Vec<u8>> {
@@ -445,6 +474,39 @@ mod tests {
         assert_eq!(backend.auth_token, Some("test_token".to_string()));
     }
 
+    /// The Hub's `Link` header, as it answered a search on 2026-10-16.
+    #[test]
+    fn the_next_cursor_is_read_from_the_hubs_link_header() {
+        let link = "<https://huggingface.co/api/models?filter=gguf&limit=30&search=qwen\
+                    &cursor=eyIkb3IiOlt7ImRv%3D%3D>; rel=\"next\"";
+
+        assert_eq!(next_cursor(link).as_deref(), Some("eyIkb3IiOlt7ImRv=="));
+    }
+
+    /// The cursor is the `next` link's, wherever that link stands.
+    #[test]
+    fn the_next_cursor_is_the_next_links_alone() {
+        let link = "<https://h/api/models?cursor=back>; rel=\"prev\", \
+                    <https://h/api/models?cursor=on>; rel=\"next\"";
+
+        assert_eq!(next_cursor(link).as_deref(), Some("on"));
+    }
+
+    /// A header with no `next` link, or a `next` link with no cursor, names
+    /// no next page.
+    #[test]
+    fn a_last_page_has_no_next_cursor() {
+        for link in [
+            "<https://h/api/models?cursor=back>; rel=\"prev\"",
+            "<https://h/api/models?p=2>; rel=\"next\"",
+            "<https://h/api/models?cursor=>; rel=\"next\"",
+            "rel=\"next\"",
+            "",
+        ] {
+            assert_eq!(next_cursor(link), None, "{link}");
+        }
+    }
+
     #[cfg(test)]
     mod fake_backend_tests {
         use super::testing::*;
@@ -455,10 +517,7 @@ mod tests {
         async fn test_fake_backend_returns_canned_response() {
             let backend = FakeBackend::new().with_response(
                 "test-model",
-                CannedResponse {
-                    json: json!({"id": "test-model", "downloads": 100}),
-                    has_more: false,
-                },
+                CannedResponse::of(json!({"id": "test-model", "downloads": 100})),
             );
 
             let url = Url::parse("https://example.com/api/test-model").unwrap();
@@ -482,10 +541,8 @@ mod tests {
 
         #[tokio::test]
         async fn test_fake_backend_default_response() {
-            let backend = FakeBackend::new().with_default(CannedResponse {
-                json: json!({"default": true}),
-                has_more: false,
-            });
+            let backend =
+                FakeBackend::new().with_default(CannedResponse::of(json!({"default": true})));
 
             let url = Url::parse("https://example.com/anything").unwrap();
             let result: serde_json::Value = backend.get_json(&url).await.unwrap();
@@ -499,16 +556,16 @@ mod tests {
                 "search",
                 CannedResponse {
                     json: json!([{"id": "model1"}, {"id": "model2"}]),
-                    has_more: true,
+                    next_cursor: Some("page2".to_string()),
                 },
             );
 
             let url = Url::parse("https://example.com/search?q=test").unwrap();
-            let (result, has_more): (Vec<serde_json::Value>, bool) =
+            let (result, cursor): (Vec<serde_json::Value>, Option<String>) =
                 backend.get_json_paginated(&url).await.unwrap();
 
             assert_eq!(result.len(), 2);
-            assert!(has_more);
+            assert_eq!(cursor.as_deref(), Some("page2"));
         }
     }
 }

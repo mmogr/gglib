@@ -54,7 +54,6 @@ export interface UseHuggingFaceSearchReturn {
   // Results state
   models: HfModelSummary[];
   hasMore: boolean;
-  currentPage: number;
 
   // Loading/error state
   loading: boolean;
@@ -93,8 +92,8 @@ export function useHuggingFaceSearch(
 
   // Results state
   const [models, setModels] = useState<HfModelSummary[]>([]);
-  const [hasMore, setHasMore] = useState(false);
-  const [currentPage, setCurrentPage] = useState(0);
+  // Where the next page starts, as the Hub gave it; null on the last page.
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   // Loading/error state
   const [loading, setLoading] = useState(false);
@@ -132,18 +131,18 @@ export function useHuggingFaceSearch(
     if (sortOption) {
       setSortAscending(sortOption.defaultAscending);
     }
-    // Trigger a new search with the updated sort
-    setCurrentPage(0);
   }, []);
 
-  // Build search request
+  // Build the request for a new search's first page. A page is as many
+  // repositories as the Hub gives at once, so a filter that drops most of
+  // them still leaves something to show.
   const buildSearchRequest = useCallback(
-    (page: number): HfSearchRequest => ({
+    (): HfSearchRequest => ({
       query: searchQuery.trim() || null,
       min_params_b: minParams ? parseFloat(minParams) : null,
       max_params_b: maxParams ? parseFloat(maxParams) : null,
-      page,
-      limit: 30,
+      cursor: null,
+      limit: 100,
       sort_by: sortBy,
       sort_ascending: sortAscending,
       kind,
@@ -151,18 +150,19 @@ export function useHuggingFaceSearch(
     [searchQuery, minParams, maxParams, sortBy, sortAscending, kind]
   );
 
-  // Perform search
-  const performSearch = useCallback(
-    async (page: number, append: boolean = false) => {
-      if (page === 0) {
-        setLoading(true);
-      } else {
+  // Fetch one page: a new search's first, or the page after the shown ones
+  // when `request` carries their cursor.
+  const fetchPage = useCallback(
+    async (request: HfSearchRequest) => {
+      const append = request.cursor !== null;
+      if (append) {
         setLoadingMore(true);
+      } else {
+        setLoading(true);
       }
       setError(null);
 
       try {
-        const request = buildSearchRequest(page);
         const response: HfSearchResponse = await getTransport().browseHfModels(request);
 
         if (append) {
@@ -170,8 +170,7 @@ export function useHuggingFaceSearch(
         } else {
           setModels(response.models);
         }
-        setHasMore(response.has_more);
-        setCurrentPage(response.page);
+        setNextCursor(response.next_cursor);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to search models"
@@ -181,13 +180,18 @@ export function useHuggingFaceSearch(
         setLoadingMore(false);
       }
     },
-    [buildSearchRequest]
+    []
+  );
+
+  // Run a new search from the inputs, from its first page.
+  const performSearch = useCallback(
+    () => fetchPage(buildSearchRequest()),
+    [fetchPage, buildSearchRequest]
   );
 
   // Handle search button click - now handles all intents
   const handleSearch = useCallback(() => {
-    setCurrentPage(0);
-    performSearch(0, false);
+    performSearch();
   }, [performSearch]);
 
   // Handle direct download for exact repo:quant pattern
@@ -268,10 +272,14 @@ export function useHuggingFaceSearch(
     }
   }, [searchIntent, handleDirectDownload, handleViewRepo, handleSearch]);
 
-  // Handle load more
+  // Handle load more: the search, carried on from the last page's cursor.
+  // Any change to the inputs searches again from the first page, so the
+  // cursor always belongs to the search the inputs describe.
   const handleLoadMore = useCallback(() => {
-    performSearch(currentPage + 1, true);
-  }, [performSearch, currentPage]);
+    if (nextCursor !== null) {
+      fetchPage({ ...buildSearchRequest(), cursor: nextCursor });
+    }
+  }, [fetchPage, buildSearchRequest, nextCursor]);
 
   // Handle enter key in search input - uses unified action handler
   const handleKeyDown = useCallback(
@@ -293,7 +301,7 @@ export function useHuggingFaceSearch(
     if (isInitialMount.current) {
       isInitialMount.current = false;
       // Perform initial search
-      performSearch(0, false);
+      performSearch();
       return;
     }
 
@@ -304,7 +312,7 @@ export function useHuggingFaceSearch(
   // Auto-search when the sort or the kind changes
   useEffect(() => {
     if (!isInitialMount.current) {
-      performSearch(0, false);
+      performSearch();
     }
   }, [sortBy, sortAscending, kind, performSearch]);
 
@@ -325,8 +333,7 @@ export function useHuggingFaceSearch(
 
     // Results state
     models,
-    hasMore,
-    currentPage,
+    hasMore: nextCursor !== null,
 
     // Loading/error state
     loading,

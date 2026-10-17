@@ -115,7 +115,7 @@ impl Hub {
         asked
             .iter()
             .map(|o| {
-                let untouched = o.page == 0
+                let untouched = o.cursor.is_none()
                     && !o.sort_ascending
                     && o.min_params_b.is_none()
                     && o.max_params_b.is_none();
@@ -142,8 +142,7 @@ impl HfClientPort for Hub {
         }
         Ok(HfSearchResult {
             items: self.hits.clone(),
-            has_more: true,
-            page: options.page,
+            next_cursor: Some("next".to_string()),
         })
     }
 

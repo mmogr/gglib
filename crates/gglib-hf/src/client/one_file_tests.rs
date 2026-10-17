@@ -174,13 +174,7 @@ async fn a_file_is_looked_up_by_posting_its_path() {
 /// is no file and no error.
 #[tokio::test]
 async fn a_path_the_repository_does_not_hold_is_no_file() {
-    let backend = FakeBackend::new().with_response(
-        "paths-info",
-        CannedResponse {
-            json: json!([]),
-            has_more: false,
-        },
-    );
+    let backend = FakeBackend::new().with_response("paths-info", CannedResponse::of(json!([])));
     let client = HfClient::with_backend(test_config(), backend);
     let repo = HfRepoRef::new("Comfy-Org", "Qwen-Image-2.1");
 
@@ -200,13 +194,10 @@ async fn a_path_the_repository_does_not_hold_is_no_file() {
 async fn a_folder_or_another_path_is_not_the_file() {
     let backend = FakeBackend::new().with_response(
         "paths-info",
-        CannedResponse {
-            json: json!([
-                {"type": "directory", "path": "vae", "size": 0},
-                {"type": "file", "path": "vae/other.safetensors", "size": 3}
-            ]),
-            has_more: false,
-        },
+        CannedResponse::of(json!([
+            {"type": "directory", "path": "vae", "size": 0},
+            {"type": "file", "path": "vae/other.safetensors", "size": 3}
+        ])),
     );
     let client = HfClient::with_backend(test_config(), backend);
     let repo = HfRepoRef::new("Comfy-Org", "Qwen-Image-2.1");

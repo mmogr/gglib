@@ -91,7 +91,8 @@ pub enum HfSortField {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum HfModelKind {
-    /// GGUF repositories of text-generation models (the default).
+    /// GGUF repositories of models that chat, with or without images read
+    /// alongside (the default).
     #[default]
     Chat,
     /// GGUF repositories of text-to-image models.
@@ -109,8 +110,9 @@ pub struct HfSearchOptions {
     pub max_params_b: Option<f64>,
     /// Maximum number of results
     pub limit: u32,
-    /// Page number (0-indexed)
-    pub page: u32,
+    /// Where to carry on from: the cursor the page before ended with, as
+    /// [`HfSearchResult::next_cursor`] gave it. `None` asks for the first page.
+    pub cursor: Option<String>,
     /// Sort field
     pub sort_by: HfSortField,
     /// Sort ascending (false = descending)
@@ -143,10 +145,10 @@ impl HfSearchOptions {
         self
     }
 
-    /// Set the page number.
+    /// Carry on from the page before's cursor.
     #[must_use]
-    pub const fn with_page(mut self, page: u32) -> Self {
-        self.page = page;
+    pub fn with_cursor(mut self, cursor: impl Into<String>) -> Self {
+        self.cursor = Some(cursor.into());
         self
     }
 
@@ -179,10 +181,9 @@ impl HfSearchOptions {
 pub struct HfSearchResult {
     /// Models matching the search
     pub items: Vec<HfRepoInfo>,
-    /// Whether more results are available
-    pub has_more: bool,
-    /// Current page number
-    pub page: u32,
+    /// The cursor the next page starts from, when the Hub has one: the
+    /// Hub pages by cursor and ignores page numbers.
+    pub next_cursor: Option<String>,
 }
 
 #[cfg(test)]
@@ -194,14 +195,14 @@ mod tests {
         let opts = HfSearchOptions::new()
             .with_query("llama")
             .with_limit(50)
-            .with_page(2)
+            .with_cursor("abc")
             .with_params_filter(Some(7.0), Some(70.0))
             .with_sort(HfSortField::Likes, true)
             .with_kind(HfModelKind::Image);
 
         assert_eq!(opts.query, Some("llama".to_string()));
         assert_eq!(opts.limit, 50);
-        assert_eq!(opts.page, 2);
+        assert_eq!(opts.cursor.as_deref(), Some("abc"));
         assert_eq!(opts.min_params_b, Some(7.0));
         assert_eq!(opts.max_params_b, Some(70.0));
         assert_eq!(opts.sort_by, HfSortField::Likes);

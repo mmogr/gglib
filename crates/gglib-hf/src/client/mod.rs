@@ -97,13 +97,8 @@ mod tests {
 
     #[test]
     fn test_client_with_fake_backend() {
-        let backend = FakeBackend::new().with_response(
-            "test",
-            CannedResponse {
-                json: json!({"test": true}),
-                has_more: false,
-            },
-        );
+        let backend =
+            FakeBackend::new().with_response("test", CannedResponse::of(json!({"test": true})));
         let _client = HfClient::with_backend(test_config(), backend);
     }
 }

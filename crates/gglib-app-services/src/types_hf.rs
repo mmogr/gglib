@@ -62,7 +62,10 @@ pub struct HfSearchRequest {
     pub query: Option<String>,
     pub min_params_b: Option<f64>,
     pub max_params_b: Option<f64>,
-    pub page: u32,
+    /// The `next_cursor` of the page before, to carry on from it; `None` (or
+    /// left out) asks for the first page.
+    #[serde(default)]
+    pub cursor: Option<String>,
     pub limit: u32,
     #[serde(default)]
     pub sort_by: HfSortField,
@@ -79,7 +82,7 @@ impl Default for HfSearchRequest {
             query: None,
             min_params_b: None,
             max_params_b: None,
-            page: 0,
+            cursor: None,
             limit: 30,
             sort_by: HfSortField::default(),
             sort_ascending: false,
@@ -93,8 +96,8 @@ impl Default for HfSearchRequest {
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct HfSearchResponse {
     pub models: Vec<HfModelSummary>,
-    pub has_more: bool,
-    pub page: u32,
+    /// The cursor the next page starts from, or `None` on the last page.
+    pub next_cursor: Option<String>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "number | null"))]
     pub total_count: Option<u64>,
 }

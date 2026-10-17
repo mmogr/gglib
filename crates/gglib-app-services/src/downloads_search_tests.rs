@@ -37,8 +37,10 @@ impl HfClientPort for SearchedHub {
         }
         Ok(HfSearchResult {
             items: self.hits.clone(),
-            has_more: true,
-            page: options.page,
+            next_cursor: Some(format!(
+                "after-{}",
+                options.cursor.as_deref().unwrap_or("first")
+            )),
         })
     }
     async fn get_model_info(&self, model_id: &str) -> Result<HfRepoInfo, HfPortError> {
@@ -126,7 +128,7 @@ async fn a_search_asks_the_hub_for_exactly_what_the_request_names() {
             query: Some("phi-4 mini".to_string()),
             min_params_b: Some(1.5),
             max_params_b: Some(8.0),
-            page: 2,
+            cursor: Some("c2".to_string()),
             limit: 7,
             sort_by,
             sort_ascending: true,
@@ -136,8 +138,8 @@ async fn a_search_asks_the_hub_for_exactly_what_the_request_names() {
         let found = search_hf_models(&hub, request).await.expect("a page");
 
         assert_eq!(
-            (found.page, found.has_more, found.total_count),
-            (2, true, None)
+            (found.next_cursor.as_deref(), found.total_count),
+            (Some("after-c2"), None)
         );
         let asked = hub.asked();
         let [options] = asked.as_slice() else {
@@ -148,7 +150,7 @@ async fn a_search_asks_the_hub_for_exactly_what_the_request_names() {
             (options.min_params_b, options.max_params_b),
             (Some(1.5), Some(8.0))
         );
-        assert_eq!((options.page, options.limit), (2, 7));
+        assert_eq!((options.cursor.as_deref(), options.limit), (Some("c2"), 7));
         assert_eq!(options.sort_by, sort_by);
         assert!(options.sort_ascending);
         assert_eq!(options.kind, HfModelKind::Image);
@@ -156,11 +158,11 @@ async fn a_search_asks_the_hub_for_exactly_what_the_request_names() {
 }
 
 /// A request that names no kind, as every client sent before image search,
-/// is read as a chat search and asks the Hub for one.
+/// and no cursor is read as a chat search of the first page.
 #[tokio::test]
 async fn a_request_that_names_no_kind_asks_for_chat_models() {
     let request: HfSearchRequest = serde_json::from_str(
-        r#"{"query": null, "min_params_b": null, "max_params_b": null, "page": 0, "limit": 5}"#,
+        r#"{"query": null, "min_params_b": null, "max_params_b": null, "limit": 5}"#,
     )
     .expect("a request without a kind");
     assert_eq!(request.kind, HfModelKind::Chat);
@@ -171,6 +173,7 @@ async fn a_request_that_names_no_kind_asks_for_chat_models() {
     let asked = hub.asked();
     assert_eq!(asked.len(), 1);
     assert_eq!(asked[0].kind, HfModelKind::Chat);
+    assert_eq!(asked[0].cursor, None);
 }
 
 /// The summary the browser is sent: the hit's fields under the wire's names,
@@ -215,8 +218,7 @@ async fn the_browsers_search_is_the_shared_search_over_its_own_hub() {
         wire(&from_the_browser),
         serde_json::json!({
             "models": [expected],
-            "has_more": true,
-            "page": 0,
+            "next_cursor": "after-first",
             "total_count": null,
         })
     );

@@ -28,14 +28,11 @@ mod tests {
     fn client() -> HfClient<FakeBackend> {
         let backend = FakeBackend::new().with_response(
             "tree/main",
-            CannedResponse {
-                json: json!([
-                    {"path": "X.Q8_0.gguf", "type": "file", "size": 8_000, "lfs": {"oid": "w"}},
-                    {"path": "X.mmproj-Q8_0.gguf", "type": "file", "size": 600, "lfs": {"oid": "p8"}},
-                    {"path": "mmproj-F16.gguf", "type": "file", "size": 900, "lfs": {"oid": "pf"}},
-                ]),
-                has_more: false,
-            },
+            CannedResponse::of(json!([
+                {"path": "X.Q8_0.gguf", "type": "file", "size": 8_000, "lfs": {"oid": "w"}},
+                {"path": "X.mmproj-Q8_0.gguf", "type": "file", "size": 600, "lfs": {"oid": "p8"}},
+                {"path": "mmproj-F16.gguf", "type": "file", "size": 900, "lfs": {"oid": "pf"}},
+            ])),
         );
         HfClient::with_backend(test_config(), backend)
     }

@@ -4,4 +4,8 @@ import type { HfModelSummary } from "./HfModelSummary";
 /**
  * Response from `HuggingFace` model search.
  */
-export type HfSearchResponse = { models: Array<HfModelSummary>, has_more: boolean, page: number, total_count: number | null, };
+export type HfSearchResponse = { models: Array<HfModelSummary>, 
+/**
+ * The cursor the next page starts from, or `None` on the last page.
+ */
+next_cursor: string | null, total_count: number | null, };

@@ -21,13 +21,13 @@ const UNSLOTH: &str = "unsloth/Phi-4-mini-instruct-GGUF";
 /// A client whose Hub answers a search with [`SEARCH_PAGE`] and a lookup of
 /// [`UNSLOTH`] with [`MODEL_INFO`].
 fn client() -> HfClient<FakeBackend> {
-    let answer = |recorded: &str, has_more| CannedResponse {
+    let answer = |recorded: &str, next_cursor: Option<&str>| CannedResponse {
         json: serde_json::from_str(recorded).expect("a recorded answer is JSON"),
-        has_more,
+        next_cursor: next_cursor.map(str::to_string),
     };
     let backend = FakeBackend::new()
-        .with_response("search=", answer(SEARCH_PAGE, true))
-        .with_response(&format!("models/{UNSLOTH}"), answer(MODEL_INFO, false));
+        .with_response("search=", answer(SEARCH_PAGE, Some("next")))
+        .with_response(&format!("models/{UNSLOTH}"), answer(MODEL_INFO, None));
     HfClient::with_backend(HfConfig::default(), backend)
 }
 
@@ -64,8 +64,7 @@ async fn a_search_page_gives_each_hit_the_fields_the_browser_showed() {
         .await
         .expect("a page");
 
-    assert!(found.has_more);
-    assert_eq!(found.page, 0);
+    assert_eq!(found.next_cursor.as_deref(), Some("next"));
     let hit = |id: &str, downloads, likes, tags| Shown {
         id: id.to_string(),
         name: id.rsplit('/').next().unwrap().to_string(),
@@ -161,10 +160,7 @@ async fn a_repository_looked_up_by_its_id_shows_what_its_search_hit_shows() {
 async fn a_model_info_that_names_no_id_is_an_invalid_response() {
     let backend = FakeBackend::new().with_response(
         "models/o/r",
-        CannedResponse {
-            json: json!({"downloads": 3, "gguf": {"total": 1}}),
-            has_more: false,
-        },
+        CannedResponse::of(json!({"downloads": 3, "gguf": {"total": 1}})),
     );
     let client = HfClient::with_backend(HfConfig::default(), backend);
 

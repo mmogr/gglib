@@ -5,7 +5,12 @@ import type { HfSortField } from "./HfSortField";
 /**
  * Request for searching `HuggingFace` models.
  */
-export type HfSearchRequest = { query: string | null, min_params_b: number | null, max_params_b: number | null, page: number, limit: number, sort_by: HfSortField, sort_ascending: boolean, 
+export type HfSearchRequest = { query: string | null, min_params_b: number | null, max_params_b: number | null, 
+/**
+ * The `next_cursor` of the page before, to carry on from it; `None` (or
+ * left out) asks for the first page.
+ */
+cursor: string | null, limit: number, sort_by: HfSortField, sort_ascending: boolean, 
 /**
  * Models that chat (the default) or models that draw.
  */

@@ -180,7 +180,78 @@ fn a_search_hit_without_a_gguf_file_is_dropped() {
         json!({"id": "Org/Second-GGUF", "siblings": [{"rfilename": "model.gguf"}]}),
     ];
 
-    let ids: Vec<String> = search_hits(&hits).into_iter().map(|h| h.model_id).collect();
+    let ids: Vec<String> = search_hits(&hits, HfModelKind::Chat)
+        .into_iter()
+        .map(|h| h.model_id)
+        .collect();
 
     assert_eq!(ids, ["Org/First-GGUF", "Org/Second-GGUF"]);
+}
+
+/// A GGUF search hit with `pipeline` as its pipeline tag, or none.
+fn gguf_hit(id: &str, pipeline: Option<&str>) -> Value {
+    let mut hit = json!({"id": id, "siblings": [{"rfilename": "model.gguf"}]});
+    if let Some(pipeline) = pipeline {
+        hit["pipeline_tag"] = json!(pipeline);
+    }
+    hit
+}
+
+/// The ids of the hits `kind`'s search keeps.
+fn kept(hits: &[Value], kind: HfModelKind) -> Vec<String> {
+    search_hits(hits, kind)
+        .into_iter()
+        .map(|h| h.model_id)
+        .collect()
+}
+
+/// A chat search keeps every pipeline of a model that chats, and a hit that
+/// names no pipeline, in the Hub's order.
+#[test]
+fn a_chat_search_keeps_the_models_that_chat() {
+    let hits = [
+        gguf_hit("Org/None", None),
+        gguf_hit("Org/Text", Some("text-generation")),
+        gguf_hit("Org/Vision", Some("image-text-to-text")),
+        gguf_hit("Org/Any", Some("any-to-any")),
+        gguf_hit("Org/Audio", Some("audio-text-to-text")),
+        gguf_hit("Org/Video", Some("video-text-to-text")),
+    ];
+
+    assert_eq!(
+        kept(&hits, HfModelKind::Chat),
+        [
+            "Org/None",
+            "Org/Text",
+            "Org/Vision",
+            "Org/Any",
+            "Org/Audio",
+            "Org/Video"
+        ]
+    );
+}
+
+/// A chat search drops a hit whose pipeline says it is something else.
+#[test]
+fn a_chat_search_drops_a_model_that_does_not_chat() {
+    let hits = [
+        gguf_hit("Org/Speech", Some("text-to-speech")),
+        gguf_hit("Org/Chat", Some("text-generation")),
+        gguf_hit("Org/Embed", Some("feature-extraction")),
+        gguf_hit("Org/Picture", Some("text-to-image")),
+    ];
+
+    assert_eq!(kept(&hits, HfModelKind::Chat), ["Org/Chat"]);
+}
+
+/// An image search keeps its hits whatever their pipeline: its tags already
+/// chose them.
+#[test]
+fn an_image_search_keeps_its_hits_by_their_tags_alone() {
+    let hits = [
+        gguf_hit("Org/Picture", Some("text-to-image")),
+        gguf_hit("Org/Edit", Some("image-to-image")),
+    ];
+
+    assert_eq!(kept(&hits, HfModelKind::Image), ["Org/Picture", "Org/Edit"]);
 }

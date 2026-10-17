@@ -8,6 +8,7 @@ mod config;
 mod error;
 mod file_roles;
 mod http;
+mod kind;
 mod models;
 mod parsing;
 mod port;

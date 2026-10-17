@@ -3,12 +3,23 @@
 //! This module provides pure functions for building `HuggingFace` API URLs,
 //! ensuring consistent URL construction across all API calls.
 
+use crate::kind::hub_filter;
 use crate::models::{HfConfig, HfRepoRef};
-use gglib_core::ports::huggingface::{HfModelKind, HfSearchOptions, HfSortField};
+use gglib_core::ports::huggingface::{HfSearchOptions, HfSortField};
 use url::Url;
 
 /// Fields to explicitly expand in API requests.
-const EXPAND_FIELDS: &[&str] = &["siblings", "gguf", "likes", "downloads", "tags"];
+///
+/// `pipeline_tag` is what a chat search keeps its hits by; the Hub leaves it
+/// out of a hit unless asked for it.
+const EXPAND_FIELDS: &[&str] = &[
+    "siblings",
+    "gguf",
+    "likes",
+    "downloads",
+    "tags",
+    "pipeline_tag",
+];
 
 /// Build the expand parameters string for API URLs.
 fn build_expand_params() -> String {
@@ -30,20 +41,6 @@ const fn sort_param(field: HfSortField) -> &'static str {
     }
 }
 
-/// The filter that keeps a search to GGUF repositories of one kind of model.
-///
-/// A chat search asks for the GGUF library and the text-generation pipeline.
-/// An image search asks for the `gguf` and `text-to-image` tags instead: the
-/// GGUF library with the text-to-image pipeline answered diffusers
-/// repositories holding no GGUF file (probed 2026-10-09), and the two tags
-/// answered GGUF image repositories only.
-const fn kind_filter(kind: HfModelKind) -> &'static str {
-    match kind {
-        HfModelKind::Chat => "library=gguf&pipeline_tag=text-generation",
-        HfModelKind::Image => "filter=gguf&filter=text-to-image",
-    }
-}
-
 /// Build a search URL with all required parameters.
 pub(crate) fn build_search_url(config: &HfConfig, query: &HfSearchOptions) -> Url {
     let direction = if query.sort_ascending { "1" } else { "-1" };
@@ -51,33 +48,39 @@ pub(crate) fn build_search_url(config: &HfConfig, query: &HfSearchOptions) -> Ur
     let mut url = config.base_url.clone();
 
     let query_string = format!(
-        "{}&{}&sort={}&direction={}&limit={}&p={}",
-        kind_filter(query.kind),
+        "{}&{}&sort={}&direction={}&limit={}",
+        hub_filter(query.kind),
         build_expand_params(),
         sort_param(query.sort_by),
         direction,
         query.limit.clamp(1, 100),
-        query.page
     );
 
     url.set_query(Some(&query_string));
 
-    // Always add "GGUF" to filter for repos that actually contain GGUF files
-    if let Some(ref q) = query.query {
-        let search = if q.to_lowercase().contains("gguf") {
-            q.trim().to_string()
-        } else {
-            format!("{} GGUF", q.trim())
-        };
+    // The Hub pages by cursor; it ignores a page number.
+    if let Some(cursor) = &query.cursor {
+        let current = url.query().unwrap_or("");
+        url.set_query(Some(&format!(
+            "{current}&cursor={}",
+            urlencoding::encode(cursor)
+        )));
+    }
 
+    // The words go as typed: the `gguf` tag already keeps the search to GGUF
+    // repositories, and an added "GGUF" word would hide the ones whose names
+    // don't say so.
+    if let Some(words) = query
+        .query
+        .as_deref()
+        .map(str::trim)
+        .filter(|w| !w.is_empty())
+    {
         let current = url.query().unwrap_or("");
         url.set_query(Some(&format!(
             "{current}&search={}",
-            urlencoding::encode(&search)
+            urlencoding::encode(words)
         )));
-    } else {
-        let current = url.query().unwrap_or("");
-        url.set_query(Some(&format!("{current}&search=GGUF")));
     }
 
     url
@@ -153,6 +156,7 @@ pub fn build_file_url(repo_id: &str, file_path: &str, revision: Option<&str>) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gglib_core::ports::huggingface::HfModelKind;
 
     fn default_config() -> HfConfig {
         HfConfig::default()
@@ -166,7 +170,8 @@ mod tests {
         assert!(params.contains("expand[]=likes"));
         assert!(params.contains("expand[]=downloads"));
         assert!(params.contains("expand[]=tags"));
-        assert_eq!(params.matches("expand[]=").count(), 5);
+        assert!(params.contains("expand[]=pipeline_tag"));
+        assert_eq!(params.matches("expand[]=").count(), 6);
     }
 
     #[test]
@@ -178,73 +183,114 @@ mod tests {
         let url_str = url.as_str();
 
         assert!(url_str.starts_with("https://huggingface.co/api/models"));
-        assert!(url_str.contains("library=gguf"));
-        assert!(url_str.contains("pipeline_tag=text-generation"));
+        assert!(url_str.contains("filter=gguf"));
         assert!(url_str.contains("sort=downloads"));
         assert!(url_str.contains("direction=-1"));
         assert!(url_str.contains("limit=30"));
-        assert!(url_str.contains("p=0"));
-        assert!(url_str.contains("search=GGUF"));
         assert!(url_str.contains("expand[]=likes"));
     }
 
     /// An image search asks for the `gguf` and `text-to-image` tags, and
-    /// neither the GGUF library nor the text-generation pipeline.
+    /// neither a library nor a pipeline.
     #[test]
     fn an_image_search_asks_for_the_gguf_and_text_to_image_tags() {
         let query = HfSearchOptions::new().with_kind(HfModelKind::Image);
 
         let url = build_search_url(&default_config(), &query);
 
-        let filters: Vec<String> = url
-            .query_pairs()
+        assert_eq!(filters(&url), ["gguf", "text-to-image"]);
+        assert_names_no_library_or_pipeline(&url);
+    }
+
+    /// A chat search, the default, asks for the `gguf` tag alone: no library,
+    /// which the Hub ignores, and no pipeline, which hid chat repositories.
+    #[test]
+    fn a_chat_search_asks_for_the_gguf_tag_alone() {
+        let url = build_search_url(&default_config(), &HfSearchOptions::new());
+
+        assert_eq!(filters(&url), ["gguf"]);
+        assert_names_no_library_or_pipeline(&url);
+    }
+
+    /// The tags `url` asks for, in order.
+    fn filters(url: &Url) -> Vec<String> {
+        url.query_pairs()
             .filter(|(key, _)| key == "filter")
             .map(|(_, value)| value.into_owned())
-            .collect();
-        assert_eq!(filters, ["gguf", "text-to-image"]);
+            .collect()
+    }
+
+    fn assert_names_no_library_or_pipeline(url: &Url) {
         assert!(
             url.query_pairs()
                 .all(|(key, _)| key != "library" && key != "pipeline_tag"),
             "{url}"
         );
-        assert!(url.as_str().contains("search=GGUF"), "{url}");
     }
 
-    /// A chat search, the default, asks as it always has and names no tag.
+    /// The value `url` gives `name`, if it names it.
+    fn param(url: &Url, name: &str) -> Option<String> {
+        url.query_pairs()
+            .find_map(|(key, value)| (key == name).then(|| value.into_owned()))
+    }
+
+    /// A first page names no cursor and no page number.
     #[test]
-    fn a_chat_search_asks_for_the_gguf_library_and_text_generation() {
+    fn a_first_page_names_no_cursor() {
         let url = build_search_url(&default_config(), &HfSearchOptions::new());
 
-        let pair = |name: &str| {
-            url.query_pairs()
-                .find_map(|(key, value)| (key == name).then(|| value.into_owned()))
-        };
-        assert_eq!(pair("library").as_deref(), Some("gguf"));
-        assert_eq!(pair("pipeline_tag").as_deref(), Some("text-generation"));
-        assert_eq!(pair("filter"), None);
+        assert_eq!(param(&url, "cursor"), None, "{url}");
+        assert_eq!(param(&url, "p"), None, "{url}");
     }
 
+    /// A later page sends the cursor it was given as one parameter, whatever
+    /// it holds, and no page number.
     #[test]
-    fn test_build_search_url_with_query() {
-        let config = default_config();
-        let query = HfSearchOptions::new().with_query("llama");
+    fn a_later_page_sends_its_cursor_whole() {
+        for cursor in ["eyIkb3IiOlt7ImRv==", "a&search=x#y z"] {
+            let query = HfSearchOptions::new()
+                .with_query("qwen")
+                .with_cursor(cursor);
 
-        let url = build_search_url(&config, &query);
-        let url_str = url.as_str();
+            let url = build_search_url(&default_config(), &query);
 
-        assert!(url_str.contains("search=llama%20GGUF"));
+            assert_eq!(param(&url, "cursor").as_deref(), Some(cursor), "{url}");
+            assert_eq!(param(&url, "search").as_deref(), Some("qwen"), "{url}");
+            assert_eq!(param(&url, "p"), None, "{url}");
+        }
     }
 
+    /// The words `url` searches for, if it names any.
+    fn search(url: &Url) -> Option<String> {
+        param(url, "search")
+    }
+
+    /// A search sends the words as typed, less the spaces around them, and
+    /// adds none of its own.
     #[test]
-    fn test_build_search_url_with_gguf_in_query() {
-        let config = default_config();
-        let query = HfSearchOptions::new().with_query("llama GGUF models");
+    fn a_search_sends_the_words_as_typed() {
+        for kind in [HfModelKind::Chat, HfModelKind::Image] {
+            let query = HfSearchOptions::new()
+                .with_query("  qwen unsloth 3.8 ")
+                .with_kind(kind);
 
-        let url = build_search_url(&config, &query);
-        let url_str = url.as_str();
+            let url = build_search_url(&default_config(), &query);
 
-        // Should NOT double-add GGUF
-        assert!(!url_str.contains("GGUF%20GGUF"));
+            assert_eq!(search(&url).as_deref(), Some("qwen unsloth 3.8"), "{url}");
+        }
+    }
+
+    /// A search with no words, or only spaces, names no `search` at all.
+    #[test]
+    fn a_search_without_words_names_none() {
+        for query in [
+            HfSearchOptions::new(),
+            HfSearchOptions::new().with_query("   "),
+        ] {
+            let url = build_search_url(&default_config(), &query);
+
+            assert_eq!(search(&url), None, "{url}");
+        }
     }
 
     #[test]

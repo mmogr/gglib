@@ -2,7 +2,7 @@
 
 <!-- module-docs:start -->
 
-Full-page model browser for searching and browsing GGUF models on HuggingFace Hub. Supports a Chat/Image toggle (models that chat, or models that draw, sent as the search's `kind`), free-text search, parameter count filtering, sort options (downloads, likes, modified, created, alphabetical), and load-more pagination. Also handles `user/repo:quant` shorthand for direct download without browsing.
+Full-page model browser for searching and browsing GGUF models on HuggingFace Hub. Supports a Chat/Image toggle (models that chat, or models that draw, sent as the search's `kind`), free-text search, parameter count filtering, sort options (downloads, likes, modified, created, alphabetical), and load-more pagination, carried on from the cursor each page ends with. Also handles `user/repo:quant` shorthand for direct download without browsing.
 
 ## Key Files
 

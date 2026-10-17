@@ -1,7 +1,8 @@
 //! Browse handler for `HuggingFace` Hub.
 //!
-//! A browse is a search with a fixed query and the category's order: it runs
-//! [`search`](mod@super::search)'s search and prints its listing.
+//! A browse is a search with no words of its own (or the size given) and the
+//! category's order: it runs [`search`](mod@super::search)'s search and
+//! prints its listing.
 
 use anyhow::Result;
 use gglib_core::ports::{HfClientPort, HfModelKind};
@@ -44,8 +45,9 @@ async fn found_text(
     size: Option<String>,
     kind: HfModelKind,
 ) -> Result<String> {
-    let query = size.map_or_else(|| "gguf".to_string(), |size| format!("gguf {size}"));
-    let hits = find(hf, query, limit, category.into(), kind).await?;
+    // No words of its own: the search keeps to GGUF repositories already, and
+    // a "gguf" word would hide the ones whose names don't say so.
+    let hits = find(hf, size, limit, category.into(), kind).await?;
     let image = image_word(kind);
     if hits.is_empty() {
         return Ok(format!("No {} {image}models found.\n", category.name()));
