@@ -93,9 +93,14 @@ export function useMccFilters({
     }));
   }, []);
 
-  // Debounced server-side fetch.  Runs 300 ms after the last filter change.
-  // Both the timer and any in-flight request are cancelled on cleanup so stale
-  // results never overwrite a newer response.
+  // Debounced server-side fetch.  Runs 300 ms after the last filter change,
+  // and after every reload of the parent's `models` — the refresh button, a
+  // finished download and a library event reload the page's `models`, not
+  // this list, and without it in the deps the list shown here never heard of
+  // them. So `models` must be the parent's state: a new array every render
+  // would re-fetch every 300 ms.
+  // On cleanup the timer is cleared and any in-flight answer is ignored, so
+  // stale results never overwrite a newer response.
   useEffect(() => {
     let isCurrent = true;
     const timer = setTimeout(async () => {
@@ -110,7 +115,7 @@ export function useMccFilters({
       isCurrent = false;
       clearTimeout(timer);
     };
-  }, [filters]);
+  }, [filters, models]);
 
   // Client-side text search applied on top of the server-filtered list.
   // The backend has no full-text search endpoint; a lightweight filter here

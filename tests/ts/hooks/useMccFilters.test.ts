@@ -16,6 +16,7 @@ vi.mock('../../../src/services/platform', () => ({
 }));
 
 import type { FilterState } from '../../../src/components/FilterPopover';
+import type { GgufModel } from '../../../src/types';
 import { useMccFilters } from '../../../src/pages/modelControlCenter/useMccFilters';
 import { listModels } from '../../../src/services/transport/api/models/local';
 
@@ -37,9 +38,12 @@ const UNFILTERED: FilterState = {
 
 function mounted() {
   const refresh = vi.fn(async () => {});
+  // One array for every render, as the page's state is: a new one each time
+  // would read as a reload and ask again.
+  const models: GgufModel[] = [];
   return renderHook(() =>
     useMccFilters({
-      models: [],
+      models,
       addModel: vi.fn(async () => {}),
       loadModels: refresh,
       refreshFilterOptions: refresh,
@@ -120,6 +124,29 @@ describe('the model list the library page asks for', () => {
     expect(paths()).toHaveLength(2);
     expect(paths()[1]).toBe('/api/models?sort=added_at&order=desc&min_context=8192&max_context=32768');
     expect(paths()[1]).toBe(paths()[0]);
+  });
+
+  it('asks again, and shows the answer, when the page reloads its own list', async () => {
+    const refresh = vi.fn(async () => {});
+    const { result, rerender } = renderHook(
+      ({ models }: { models: GgufModel[] }) =>
+        useMccFilters({ models, addModel: vi.fn(async () => {}), loadModels: refresh, refreshFilterOptions: refresh, loadTags: refresh }),
+      { initialProps: { models: [] as GgufModel[] } },
+    );
+    await waitFor(() => expect(paths()).toHaveLength(1));
+    expect(result.current.filteredModels).toEqual([]);
+
+    // A finished download or the refresh button: the page's list is a new
+    // array, the filters are untouched.
+    const downloaded = { id: 7, name: 'Downloaded' } as GgufModel;
+    fetchMock.mockImplementation(
+      async () => new Response(JSON.stringify([downloaded]), { status: 200, headers: { 'content-type': 'application/json' } }),
+    );
+    rerender({ models: [downloaded] });
+
+    await waitFor(() => expect(paths()).toHaveLength(2));
+    expect(paths()[1]).toBe(paths()[0]);
+    await waitFor(() => expect(result.current.filteredModels.map((m) => m.id)).toEqual([7]));
   });
 });
 

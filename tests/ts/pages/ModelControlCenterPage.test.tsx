@@ -31,6 +31,13 @@ import { ReactNode, useState } from 'react';
 // The library the page loads. Empty for the paired cases; one model for the
 // case about a model already running here.
 const library = vi.hoisted(() => ({ models: [] as unknown[] }));
+// Every read of that library, by the page's list or the sidebar's filtered one.
+const listModels = vi.hoisted(() => vi.fn(async () => library.models));
+// The reads behind the filter popover's choices.
+const filterReads = vi.hoisted(() => ({
+  options: vi.fn(async () => ({ architectures: [], quantizations: [], tags: [], parameterSizes: [] })),
+  tags: vi.fn(async () => []),
+}));
 // The paired machine's models, and whether reading them hangs.
 const far = vi.hoisted(() => ({ hang: false }));
 // This machine's model as its detail route answers, the projector and
@@ -60,7 +67,7 @@ vi.mock('../../../src/services/transport', async () => {
   return {
     ...actual,
     getTransport: () => ({
-      listModels: vi.fn(async () => library.models),
+      listModels,
       getModelDetail: vi.fn(async () => here.detail),
       updateModel,
       listPairedModels: vi.fn(() =>
@@ -69,13 +76,8 @@ vi.mock('../../../src/services/transport', async () => {
       getPairedModel: vi.fn(async (id: number) => ({ detail: farDetail(id, 'qwen3-8b') })),
       loadPairedModel: vi.fn(async () => ({ model: 'qwen3-8b', started: true, context: 30000 })),
       serveModel,
-      listTags: vi.fn(async () => []),
-      getModelFilterOptions: vi.fn(async () => ({
-        architectures: [],
-        quantizations: [],
-        tags: [],
-        parameterSizes: [],
-      })),
+      listTags: filterReads.tags,
+      getModelFilterOptions: filterReads.options,
       getDownloadQueue: vi.fn(async () => downloads.queue),
       queueDownload,
       browseHfModels: vi.fn(async () => ({ models: [], has_more: false, page: 0 })),
@@ -225,6 +227,9 @@ async function pickFar(name: RegExp) {
 describe('ModelControlCenterPage', () => {
   beforeEach(() => {
     library.models = [];
+    listModels.mockClear();
+    filterReads.options.mockClear();
+    filterReads.tags.mockClear();
     downloads.queue = queueSnapshot();
     here.detail = null;
     here.projectors = null;
@@ -368,6 +373,36 @@ describe('ModelControlCenterPage', () => {
     serveModel.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }));
     return (port: number) => act(async () => answer({ port }));
   }
+
+  it('draws a model the library gained once Refresh is pressed, with no filter touched', async () => {
+    // A download finished, or another client added one: the library has it
+    // and the page has not asked since. The page's own read and the
+    // sidebar's filtered one have both answered before the model exists.
+    renderPage();
+    await waitFor(() => expect(listModels).toHaveBeenCalledTimes(2));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 400)));
+    expect(listModels).toHaveBeenCalledTimes(2);
+    library.models = [guiModel({ id: 9, name: 'gemma-3-12b' })];
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Refresh models' }));
+
+    expect(await screen.findByRole('option', { name: /gemma-3-12b/i })).toBeInTheDocument();
+  });
+
+  it('reads the filter choices and tags again when Refresh is pressed', async () => {
+    // The model Refresh brings in can carry a quantization or tag no row had,
+    // and the filter popover offers only what these reads return.
+    renderPage();
+    await waitFor(() => expect(filterReads.options).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(filterReads.tags).toHaveBeenCalledTimes(1));
+    const refresh = screen.getByRole('button', { name: 'Refresh models' });
+    await waitFor(() => expect(refresh).toBeEnabled());
+
+    await userEvent.setup().click(refresh);
+
+    await waitFor(() => expect(filterReads.options).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(filterReads.tags).toHaveBeenCalledTimes(2));
+  });
 
   it('offers Open chat only for a model that is running', async () => {
     library.models = [guiModel({ id: 9, name: 'gemma-3-12b' })];
