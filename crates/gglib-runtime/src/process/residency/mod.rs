@@ -412,7 +412,7 @@ impl ResidentSet {
                     );
                     return Err(ModelRuntimeError::AdmissionTimeout(format!(
                         "the queue made no progress while '{model_name}' waited — \
-                         no launch running, no generation finishing"
+                         no launch running, no reply streaming or finishing"
                     )));
                 }
             }

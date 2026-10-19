@@ -61,15 +61,17 @@ renewing its lease. Without that the cap would only create an instant at zero
 in flight, and which of the woken requesters claims that instant is a race.
 
 What none of this covers is a single generation that simply runs for a very long
-time — it is indivisible, so the rival behind it waits. [`ADMISSION_DEADLINE`]
-is the backstop there: the request gives up and gets a 503 with `Retry-After`,
-and the caller controls its own backoff from there.
+time — it is indivisible, so the rival behind it waits. While that generation is
+still streaming the wait is not a stall: the proxy reports progress on its lease
+every few seconds. [`ADMISSION_DEADLINE`] is the backstop for one that has gone
+quiet: the request gives up and gets a 503 with `Retry-After`, and the caller
+controls its own backoff from there.
 
 The deadline measures **stall, not age**. A waiter's clock is paused while any
 launch is in flight (a load is bounded work, not a wedge — the first request on
 a cold daemon used to 503 against its own model load here) and resets whenever
 the queue provably moves: a lease released, a launch landing or failing, a slot
-evicted. Only a queue that does *nothing* for the whole deadline expires a
+evicted, a streamed reply still arriving, a render step. Only a queue that does *nothing* for the whole deadline expires a
 waiter, which is exactly the hog-or-wedge case the backstop exists for.
 
 This is why admission returns a lease rather than just a target — see

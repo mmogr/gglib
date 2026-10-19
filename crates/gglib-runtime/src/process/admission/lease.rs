@@ -241,8 +241,8 @@ impl AdmissionRelease for AdmissionQueue {
     }
 
     fn progress(&self, _slot: usize) {
-        // A render step: nothing is freed, but everyone waiting behind it
-        // starts their stall clock again.
+        // A render step or a streamed reply still arriving: nothing is freed,
+        // but everyone waiting behind it starts their stall clock again.
         self.lock().record_progress();
         self.notify();
     }

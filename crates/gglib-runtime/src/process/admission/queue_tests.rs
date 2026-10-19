@@ -780,6 +780,28 @@ async fn progress_resets_the_stall_clock_and_a_true_stall_still_expires() {
     drop(release);
 }
 
+/// A reply still streaming is queue progress: a request for the same model,
+/// capped behind it, outlives the deadline while the holder's lease reports
+/// progress, and gives up once a whole deadline passes without a report.
+#[tokio::test]
+async fn a_streaming_holder_keeps_a_capped_waiter_alive() {
+    tokio::time::pause();
+    let q = queue();
+    let lease = make_resident(&q, "qwen-coder", 1);
+    let (capped, d) = request(&q, 1, "qwen-coder");
+    assert_eq!(d, AdmissionDecision::Wait, "slot at capacity");
+
+    for _ in 0..3 {
+        tokio::time::advance(ADMISSION_DEADLINE * 2 / 3).await;
+        lease.progress();
+        assert_eq!(q.poll(&capped, NEVER_FITS), AdmissionDecision::Wait);
+    }
+
+    tokio::time::advance(ADMISSION_DEADLINE).await;
+    assert_eq!(q.poll(&capped, NEVER_FITS), AdmissionDecision::Expired);
+    drop(lease);
+}
+
 /// A request that never reaches the front gives up with a deadline rather than
 /// holding a connection open forever.
 #[tokio::test]

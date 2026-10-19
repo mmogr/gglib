@@ -253,8 +253,8 @@ pub(super) struct QueueState {
     /// The most recent second-slot verdict, kept so the dashboard can explain
     /// an idle secondary rather than just showing it empty.
     pub(super) secondary_slot: SecondarySlotStatus,
-    /// Bumped on every event that proves the queue is moving: a launch
-    /// starting, landing or failing, a lease released, a slot evicted.
+    /// Bumped on each sign the queue is moving: a launch starting, landing or
+    /// failing, a lease released or reporting progress, a slot evicted.
     /// Waiters compare against it to tell a queue that is working through
     /// its backlog from one that has stalled — see [`ADMISSION_DEADLINE`].
     progress_epoch: u64,

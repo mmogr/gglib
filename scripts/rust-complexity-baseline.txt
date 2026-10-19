@@ -103,7 +103,7 @@ crates/gglib-core/src/normalize/stream.rs 662
 crates/gglib-core/src/ports/huggingface/image_companions_tests.rs 335
 crates/gglib-core/src/ports/image_generation.rs 370
 crates/gglib-core/src/ports/model_catalog.rs 303
-crates/gglib-core/src/ports/model_runtime.rs 755
+crates/gglib-core/src/ports/model_runtime.rs 782
 crates/gglib-core/src/ports/model_runtime_tests.rs 383
 crates/gglib-core/src/ports/process_runner.rs 323
 crates/gglib-core/src/request_pipeline/constrain.rs 344
@@ -169,10 +169,10 @@ crates/gglib-mcp/src/service_tests.rs 667
 crates/gglib-proxy/src/audit_records.rs 309
 crates/gglib-proxy/src/cache_lifecycle.rs 480
 crates/gglib-proxy/src/canonicalization.rs 601
-crates/gglib-proxy/src/connections.rs 756
+crates/gglib-proxy/src/connections.rs 852
 crates/gglib-proxy/src/dashboard.rs 570
 crates/gglib-proxy/src/dashboard_tests.rs 567
-crates/gglib-proxy/src/forward.rs 1578
+crates/gglib-proxy/src/forward.rs 1591
 crates/gglib-proxy/src/forward_generation_tests.rs 546
 crates/gglib-proxy/src/forward_tests.rs 561
 crates/gglib-proxy/src/forward_unary_repair_tests.rs 316
@@ -224,7 +224,7 @@ crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 301
 crates/gglib-runtime/src/ports_impl/llm_completion/turn_tests.rs 337
 crates/gglib-runtime/src/ports_impl/model_catalog_tests.rs 352
 crates/gglib-runtime/src/process/admission/gate_tests.rs 585
-crates/gglib-runtime/src/process/admission/queue_tests.rs 1032
+crates/gglib-runtime/src/process/admission/queue_tests.rs 1043
 crates/gglib-runtime/src/process/admission/state.rs 769
 crates/gglib-runtime/src/process/admission/state_gate.rs 359
 crates/gglib-runtime/src/process/admission/state_placement_tests.rs 572

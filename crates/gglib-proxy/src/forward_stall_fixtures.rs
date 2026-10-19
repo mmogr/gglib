@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::upstream_read::upstream_events;
 use gglib_core::domain::DialectSpec;
+use gglib_core::ports::AdmissionLease;
 
 /// The idle bound these tests run the drain under. Long enough that a busy
 /// runner does not cut a stream that sends every half of it, short enough
@@ -167,7 +168,7 @@ pub(super) async fn run_turn(
     dialect: Option<DialectSpec>,
     pace: Reader,
 ) -> Turn {
-    run_turn_with(bytes, dialect, pace, None).await
+    run_turn_with(bytes, dialect, pace, None, None).await
 }
 
 /// [`run_turn`] with the tool-call hold-back engaged. The repair context's
@@ -180,7 +181,16 @@ pub(super) async fn run_turn_holding_back_tool_calls(
         request_body: Bytes::new(),
         turn: RepairTurn::ON,
     };
-    run_turn_with(bytes, None, Reader::default(), Some(repair)).await
+    run_turn_with(bytes, None, Reader::default(), Some(repair), None).await
+}
+
+/// [`run_turn`] for a request holding `lease`, as an admitted one does.
+pub(super) async fn run_turn_holding(
+    bytes: impl Stream<Item = Result<Bytes, std::io::Error>> + Send + 'static,
+    dialect: Option<DialectSpec>,
+    lease: AdmissionLease,
+) -> Turn {
+    run_turn_with(bytes, dialect, Reader::default(), None, Some(lease)).await
 }
 
 async fn run_turn_with(
@@ -188,9 +198,13 @@ async fn run_turn_with(
     dialect: Option<DialectSpec>,
     pace: Reader,
     repair: Option<RepairContext>,
+    lease: Option<AdmissionLease>,
 ) -> Turn {
     let registry = Arc::new(crate::connections::ActiveConnectionsRegistry::new());
-    let connection = registry.register(1, "m", true, None);
+    let mut connection = registry.register(1, "m", true, None);
+    if let Some(lease) = lease {
+        connection = connection.holding(lease);
+    }
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(1);
 
     let client = tokio::spawn(async move {

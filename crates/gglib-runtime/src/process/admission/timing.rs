@@ -60,15 +60,17 @@ pub(crate) const fn launch_timeout(health_deadline: Duration) -> Duration {
 ///   a ten-minute load should have its clock paused outright rather than
 ///   merely extended is a question this constant does not answer.
 /// - **Progress resets the clock.** A lease released (a generation finished),
-///   a launch landing or failing, a slot evicted — each proves the queue is
-///   moving, so a waiter behind it is queued, not stuck.
+///   a launch landing or failing, a slot evicted, a streamed reply still
+///   arriving, a render step — each proves the queue is moving, so a waiter
+///   behind it is queued, not stuck.
 ///
 /// [`DRAIN_QUANTUM`] bounds how long a *turn* lasts, but a turn cannot end
 /// while the outgoing model still has requests in flight — no swap may preempt
 /// a live generation. A single generation is indivisible, so the rival behind
-/// it has no bound but this one: an in-flight count that stays pinned with no
-/// release for this long is a hog or a wedge, and the waiter behind it gets
-/// its 503.
+/// it has no bound but this one while it is quiet. A generation still
+/// streaming reports progress, so the waiter behind it waits for as long as it
+/// writes; one that has sent nothing for this long is a wedge, and the waiter
+/// behind it gets its 503.
 ///
 /// A model under *overlapping* load cannot hold its slot indefinitely:
 /// `SERVER_PARALLEL` caps how many requests are in flight at once, and
