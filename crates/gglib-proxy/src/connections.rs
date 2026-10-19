@@ -43,6 +43,11 @@
 //! client hangs up a streamed request whose task is running, the slot is freed
 //! as that task ends; `spawn_and_return` and `drain_events` say when that is.
 //!
+//! The lease is also how a streamed reply tells the queue it is still moving:
+//! [`ConnectionGuard::progress`] hands out a [`StreamProgress`] that reports on
+//! it, at most once every [`PROGRESS_EVERY`], so a request waiting behind a
+//! long reply is not given up as stalled while tokens are still arriving.
+//!
 //! ## And the sampling intent
 //!
 //! [`ConnectionGuard::record_sampling`] attaches the
@@ -78,10 +83,11 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use gglib_core::ports::AdmissionLease;
+use gglib_core::ports::{AdmissionLease, LeaseProgress};
 use gglib_core::request_pipeline::SamplingDecision;
+use tokio::time::Instant;
 use uuid::Uuid;
 
 // =============================================================================
@@ -246,6 +252,7 @@ impl ActiveConnectionsRegistry {
             id,
             registry: Arc::clone(self),
             lease: None,
+            progress: StreamProgress::default(),
         }
     }
 
@@ -385,6 +392,43 @@ pub struct ConnectionGuard {
     /// `None` only where no admission was involved: tests, and the dashboard's
     /// own bookkeeping.
     lease: Option<AdmissionLease>,
+    /// Reports progress on `lease`; see [`Self::progress`].
+    progress: StreamProgress,
+}
+
+/// How often a streamed reply reports progress on its lease. Each report takes
+/// the queue's lock and wakes every waiter, so not once per token; against a
+/// three-minute deadline, every few seconds is plenty.
+pub(crate) const PROGRESS_EVERY: Duration = Duration::from_secs(5);
+
+/// Tells the queue a request's reply is still arriving, so the requests
+/// waiting behind it are not given up as stalled. Cloneable, so it can go
+/// where the guard cannot: the stream adapter that sees every upstream event
+/// before the normalizer holds any back. Reports at most once every
+/// [`PROGRESS_EVERY`], and not at all for a request with no lease.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct StreamProgress(Option<Arc<Reporting>>);
+
+#[derive(Debug)]
+struct Reporting {
+    lease: LeaseProgress,
+    /// When this last reported.
+    reported: Mutex<Option<Instant>>,
+}
+
+impl StreamProgress {
+    /// Called for every event the upstream sends.
+    pub(crate) fn report(&self) {
+        let Some(reporting) = &self.0 else { return };
+        let now = Instant::now();
+        let mut reported = reporting.reported.lock().unwrap_or_else(|e| e.into_inner());
+        if reported.is_some_and(|at| now.duration_since(at) < PROGRESS_EVERY) {
+            return;
+        }
+        *reported = Some(now);
+        drop(reported);
+        reporting.lease.report();
+    }
 }
 
 impl ConnectionGuard {
@@ -394,6 +438,10 @@ impl ConnectionGuard {
     /// so the call reads as part of registering the connection.
     #[must_use]
     pub fn holding(mut self, lease: AdmissionLease) -> Self {
+        self.progress = StreamProgress(Some(Arc::new(Reporting {
+            lease: lease.progress_handle(),
+            reported: Mutex::new(None),
+        })));
         self.lease = Some(lease);
         self
     }
@@ -408,6 +456,12 @@ impl ConnectionGuard {
     pub fn update_progress(&self, processed: u32, total: u32, cached: u32, time_ms: u64) {
         self.registry
             .update_progress(self.id, processed, total, cached, time_ms);
+    }
+
+    /// What reports this request's reply as still arriving; see
+    /// [`StreamProgress`].
+    pub(crate) fn progress(&self) -> StreamProgress {
+        self.progress.clone()
     }
 
     /// Mark this connection as generating (post-prefill).
@@ -454,6 +508,48 @@ impl Drop for ConnectionGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Counts the progress reported on a lease.
+    #[derive(Debug, Default)]
+    struct Reports(std::sync::atomic::AtomicUsize);
+
+    impl gglib_core::ports::AdmissionRelease for Reports {
+        fn release(&self, _slot: usize) {}
+
+        fn progress(&self, _slot: usize) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    /// A streamed reply reports progress at once, then at most once every
+    /// `PROGRESS_EVERY` however often, and through however many clones, it is
+    /// told a token arrived; a request with no lease reports nothing and does
+    /// not panic.
+    #[tokio::test(start_paused = true)]
+    async fn streaming_reports_progress_at_most_once_per_interval() {
+        let registry = Arc::new(ActiveConnectionsRegistry::new());
+        let reports = Arc::new(Reports::default());
+        let count = || reports.0.load(std::sync::atomic::Ordering::SeqCst);
+        let guard = registry
+            .register(1, "m", true, None)
+            .holding(AdmissionLease::new(Arc::clone(&reports) as _, 0));
+        let progress = guard.progress();
+
+        for _ in 0..50 {
+            progress.clone().report();
+        }
+        assert_eq!(count(), 1, "the first token reports, the rest wait");
+
+        tokio::time::advance(PROGRESS_EVERY / 2).await;
+        progress.report();
+        assert_eq!(count(), 1, "not yet a whole interval");
+
+        tokio::time::advance(PROGRESS_EVERY / 2).await;
+        progress.report();
+        assert_eq!(count(), 2, "a whole interval later it reports again");
+
+        registry.register(2, "m", true, None).progress().report();
+    }
 
     #[test]
     fn register_adds_entry_in_queued_phase() {

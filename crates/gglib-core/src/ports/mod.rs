@@ -92,8 +92,9 @@ pub use model_files::ModelFilesRepositoryPort;
 pub use model_registrar::{CompletedDownload, ModelRegistrarPort, RegisteredDownload};
 pub use model_repository::ModelRepository;
 pub use model_runtime::{
-    Admission, AdmissionLease, AdmissionRelease, AdmitObserver, LaunchOverrides, ModelRuntimeError,
-    ModelRuntimePort, NoopModelRuntime, PinnedSpec, RunningTarget, RuntimeErrorEnvelope,
+    Admission, AdmissionLease, AdmissionRelease, AdmitObserver, LaunchOverrides, LeaseProgress,
+    ModelRuntimeError, ModelRuntimePort, NoopModelRuntime, PinnedSpec, RunningTarget,
+    RuntimeErrorEnvelope,
 };
 pub use process_runner::{ProcessHandle, ServerConfig};
 pub use remote_gateway::RemoteGatewayPort;

@@ -200,7 +200,7 @@ pub trait AdmissionRelease: Send + Sync + fmt::Debug {
     fn release(&self, slot: usize);
 
     /// The request holding `slot` has made progress without finishing (an
-    /// image render's step), which proves the queue is moving: waiters behind
+    /// image render's step, a streamed reply still arriving), which proves the queue is moving: waiters behind
     /// it start their stall clocks again.
     ///
     /// Required, so no implementation can forget that a long render is not a
@@ -223,6 +223,23 @@ pub trait AdmissionRelease: Send + Sync + fmt::Debug {
 pub struct AdmissionLease {
     owner: Option<Arc<dyn AdmissionRelease>>,
     slot: usize,
+}
+
+/// Reports progress for an [`AdmissionLease`] without owning it; see
+/// [`AdmissionLease::progress_handle`]. Cloneable because it never releases.
+#[derive(Debug, Clone)]
+pub struct LeaseProgress {
+    owner: Option<Arc<dyn AdmissionRelease>>,
+    slot: usize,
+}
+
+impl LeaseProgress {
+    /// The same as [`AdmissionLease::progress`].
+    pub fn report(&self) {
+        if let Some(owner) = &self.owner {
+            owner.progress(self.slot);
+        }
+    }
 }
 
 impl AdmissionLease {
@@ -259,6 +276,16 @@ impl AdmissionLease {
     pub fn progress(&self) {
         if let Some(owner) = &self.owner {
             owner.progress(self.slot);
+        }
+    }
+
+    /// A handle that reports this lease's progress from somewhere the lease
+    /// cannot go, such as a `'static` stream adapter. It releases nothing.
+    #[must_use]
+    pub fn progress_handle(&self) -> LeaseProgress {
+        LeaseProgress {
+            owner: self.owner.clone(),
+            slot: self.slot,
         }
     }
 

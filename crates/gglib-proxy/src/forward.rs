@@ -1075,10 +1075,18 @@ pub(crate) async fn drain_events(
     // generated over many tokens and leaves the normalizer as one event.
     let generated = Arc::new(AtomicBool::new(false));
     let mut meter = Meter::default();
+    // Anything the upstream sends, prefill progress and markup the normalizer
+    // holds back included, is this reply still moving, which keeps the
+    // requests queued behind it from being given up as stalled. A silence
+    // sends nothing, so a wedged upstream still lets the queue's deadline run.
     let events = events.inspect({
         let generated = Arc::clone(&generated);
         let clock = meter.clock();
+        let progress = connection.progress();
         move |event| {
+            if event.is_ok() {
+                progress.report();
+            }
             if event.as_ref().is_ok_and(is_generated_token) {
                 generated.store(true, Ordering::Relaxed);
                 clock.stamp();
@@ -1560,6 +1568,11 @@ mod forward_stall_fixtures;
 #[cfg(test)]
 #[path = "forward_stall_tests.rs"]
 mod forward_stall_tests;
+
+/// What a streamed turn reports to the admission queue while it arrives.
+#[cfg(test)]
+#[path = "forward_queue_progress_tests.rs"]
+mod forward_queue_progress_tests;
 
 /// What a stalled turn tells the watchdog, and what it is not worth.
 #[cfg(test)]
