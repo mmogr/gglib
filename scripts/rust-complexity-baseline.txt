@@ -33,9 +33,9 @@ crates/gglib-axum/src/handlers/agent/hub_turn_plan_tests.rs 317
 crates/gglib-axum/src/handlers/agent/image_model_tests.rs 338
 crates/gglib-axum/src/handlers/agent/launch.rs 350
 crates/gglib-axum/src/handlers/agent/remote_upstream.rs 313
-crates/gglib-axum/src/handlers/agent/run.rs 305
+crates/gglib-axum/src/handlers/agent/run.rs 320
 crates/gglib-axum/src/handlers/agent/run_fixture.rs 321
-crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 325
+crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 356
 crates/gglib-axum/src/routes.rs 466
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 370

@@ -18,13 +18,14 @@
 use axum::http::StatusCode;
 use serde_json::Value;
 use tokio::sync::OwnedSemaphorePermit;
+use tokio::time::{Duration, Instant};
 
 use gglib_app_services::RunLog;
 use gglib_app_services::transcript::{FrameTimes, answer_history};
 use gglib_core::domain::agent::AgentEvent;
 use gglib_core::domain::runs::RunError;
 use gglib_core::domain::thinking;
-use gglib_core::ports::{AgentError, Created, RunScope};
+use gglib_core::ports::{AdmissionLease, AgentError, Created, RunScope};
 
 use super::AgentChatRequest;
 use super::compose::{Prepared, frame, prepare_held, refuse_unavailable_drawing, take_permit};
@@ -199,9 +200,17 @@ pub(super) async fn plan(
     Ok((chat, transcript))
 }
 
+/// How often a held run reports progress on its hold: each report takes the
+/// queue's lock and wakes every waiter, so not once per event.
+pub(super) const PROGRESS_EVERY: Duration = Duration::from_secs(5);
+
 /// Run the loop, logging each event as the chat route frames it. Dropped
 /// when the run is cancelled, which aborts the loop and any tool call in
 /// flight and releases the permit and the model's hold.
+///
+/// Each event is progress on the hold, reported at most once every
+/// [`PROGRESS_EVERY`], so a request waiting behind the run is not given up
+/// as stalled while the run streams.
 ///
 /// A tool's preview frame is never logged: it is kept beside the log as the
 /// run's latest (`RunLog::preview`) and forgotten in the step that logs that
@@ -221,9 +230,10 @@ pub(super) async fn work(
         tx,
         mut rx,
         made_by,
-        hold: _hold,
+        hold,
         ..
     } = prepared;
+    let progress = hold.as_ref().map(AdmissionLease::progress_handle);
     let run = async move {
         let outcome = agent_loop.run(messages, config, tx).await;
         // Its retry notices hold a sender, so the events end only once the
@@ -233,7 +243,14 @@ pub(super) async fn work(
     };
     let forward = async {
         let mut first = true;
+        let mut reported: Option<Instant> = None;
         while let Some(mut event) = rx.recv().await {
+            if let Some(progress) = &progress
+                && reported.is_none_or(|at| at.elapsed() >= PROGRESS_EVERY)
+            {
+                reported = Some(Instant::now());
+                progress.report();
+            }
             if std::mem::take(&mut first) {
                 log.started();
             }
