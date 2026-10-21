@@ -45,6 +45,7 @@ crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 458
 crates/gglib-cli/src/handlers/agent_chat/draw.rs 318
 crates/gglib-cli/src/handlers/agent_chat/mod.rs 312
 crates/gglib-cli/src/handlers/agent_chat/repl.rs 372
+crates/gglib-cli/src/handlers/agent_chat/sight_tests.rs 331
 crates/gglib-cli/src/handlers/agent_chat/turn_rows_tests.rs 471
 crates/gglib-cli/src/handlers/benchmark.rs 1613
 crates/gglib-cli/src/handlers/config/sd.rs 326

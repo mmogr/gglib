@@ -14,7 +14,7 @@ async fn a_history_that_names_an_image_not_stored_is_refused_before_the_server_i
     let (mut images, _) = attached(&service, &[], true).await.unwrap();
     // A server that cannot see: it would refuse the image, were it asked.
     let server = props_server(r#"{"modalities":{"vision":false}}"#);
-    let sight = Sight::server("qwen", reqwest::Client::new(), server.port);
+    let sight = Sight::server("qwen", reqwest::Client::new(), server.port, None);
 
     let refused = images.judge(sight, &[image_turn()]).await;
 
@@ -41,7 +41,7 @@ async fn images_over_the_cap_together_are_refused_before_the_server_is_asked() {
         let paths = std::slice::from_ref(&path);
         let (mut images, _) = attached(&service, paths, true).await.unwrap();
         let server = props_server(r#"{"modalities":{"vision":true}}"#);
-        let sight = Sight::server("qwen", reqwest::Client::new(), server.port);
+        let sight = Sight::server("qwen", reqwest::Client::new(), server.port, None);
 
         let judged = images.judge(sight, &[image_turn()]).await;
 
