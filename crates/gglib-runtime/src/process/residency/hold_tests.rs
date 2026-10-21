@@ -4,7 +4,7 @@
 use super::*;
 use crate::process::RuntimeBinaries;
 use async_trait::async_trait;
-use gglib_core::domain::{CacheRamHealth, ModelSamplingDefaults, SecondarySlotDecision};
+use gglib_core::domain::{CacheRamHealth, ModelSamplingDefaults};
 use gglib_core::ports::ModelSummary;
 use tokio::time::Instant;
 
@@ -26,11 +26,6 @@ impl ModelCatalogPort for StubCatalog {
         Ok(None)
     }
 }
-
-const NEVER_FITS: SecondarySlotDecision = SecondarySlotDecision::RefuseTooLarge {
-    footprint_bytes: 9 * 1024 * 1024 * 1024,
-    ceiling_bytes: 2 * 1024 * 1024 * 1024,
-};
 
 /// A port nothing listens on, so a health check there fails.
 fn dead_port() -> u16 {
@@ -76,11 +71,11 @@ pub(super) fn core() -> Arc<RwLock<GuiProcessCore>> {
     )))
 }
 
-/// What `wait_for_slot` does before `serve`: a request for `qwen` granted.
+/// What a `Serve` leaves for `serve` to claim: a request counted against
+/// `qwen`'s slot. Counted past the queue, where a held model's request waits.
 pub(super) fn granted(set: &ResidentSet) {
-    let ticket = set.queue().enqueue(1, "qwen");
-    let decision = set.queue().poll(&ticket, NEVER_FITS);
-    assert_eq!(decision, AdmissionDecision::Serve { slot: PRIMARY_SLOT });
+    let counted = set.queue().lease(PRIMARY_SLOT).expect("qwen is resident");
+    counted.disarm();
 }
 
 fn inflight(set: &ResidentSet) -> u32 {

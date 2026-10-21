@@ -499,6 +499,11 @@ impl QueueState {
     /// slot, in which case granting now would re-pin a slot that is one release
     /// away from changing hands.
     ///
+    /// A run's hold counts as one request against the capacity: the run talks
+    /// to llama-server directly, so a request forwarded beside it would queue
+    /// inside llama-server. Read from `holds` alone, it takes no lease, so the
+    /// gate does not count it and a run's own render never waits on it.
+    ///
     /// A llama-server resident also answers to the generation gate: it serves
     /// the request arriving as `seq` only while no render holds the GPU or
     /// waits ahead of it. An `sd-server` resident does not, so a render never
@@ -508,7 +513,7 @@ impl QueueState {
             return false;
         };
         let gated = resident.runtime == RuntimeKind::Llama;
-        resident.inflight < SERVER_PARALLEL
+        resident.inflight + u32::from(self.is_held(slot)) < SERVER_PARALLEL
             && !self.owes_slot_to_rival(slot, now)
             && (!gated || self.gate_admits_llm(seq))
     }
