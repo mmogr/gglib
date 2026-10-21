@@ -63,9 +63,16 @@ pub fn probe(binary: &Path) -> RuntimeCapabilities {
             flags = ?caps.flags,
             "probed llama-server capabilities"
         );
+    } else if let Some(name) = caps.unnumbered_source_build() {
+        warn!(
+            binary = %binary.display(),
+            version_line = %caps.version_line,
+            "llama-server is an {name} ({})",
+            RuntimeCapabilities::UNNUMBERED_REASON
+        );
     } else {
-        // Worth a warning rather than a debug: an unidentified runtime silently
-        // costs the user every native fast path gglib might otherwise defer to.
+        // Worth a warning rather than a debug: the banner said nothing gglib
+        // can read, and this line is where that shows.
         warn!(
             binary = %binary.display(),
             version_line = %caps.version_line,

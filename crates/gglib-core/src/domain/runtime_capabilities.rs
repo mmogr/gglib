@@ -96,13 +96,13 @@ bitflags! {
 
 /// Smallest build number treated as a real llama.cpp release.
 ///
-/// llama.cpp's `CMake` derives `LLAMA_BUILD_NUMBER` from `git describe`. A clone
-/// without release tags fetched — the ordinary state of a source build, and of
-/// gglib's own `.llama/llama.cpp` checkout — cannot derive one and falls back
-/// to `1`. The banner then reads `version: 1 (69bf643)`, or, since llama.cpp
-/// took a semantic version, `version: 0.1.0-dev (build 1, commit 10bf611)`: a
-/// sentinel meaning *unnumbered*, not a build that predates every threshold in
-/// this module.
+/// llama.cpp's `CMake` sets `LLAMA_BUILD_NUMBER` to `git rev-list --count
+/// HEAD`. gglib's source install clones with `--depth=1`, so the count is the
+/// commits the shallow clone holds, `1` until an update fetches more; a tree
+/// with no git history reports `0`. The banner then reads `version: 1
+/// (69bf643)`, or, since llama.cpp took a semantic version, `version:
+/// 0.1.0-dev (build 1, commit 10bf611)`: not a build that predates every
+/// threshold in this module.
 ///
 /// Taking it literally is worse than not parsing it at all. A source build of
 /// current llama.cpp would be classified as ancient, silently losing every
@@ -216,6 +216,37 @@ impl RuntimeCapabilities {
     #[must_use]
     pub const fn is_identified(&self) -> bool {
         self.build.is_some()
+    }
+
+    /// Why an unnumbered source build's number is not a release number.
+    pub const UNNUMBERED_REASON: &str = "shallow clone; the build number is not the upstream one";
+
+    /// An unnumbered source build, named by its commit when the banner carried
+    /// one: a banner whose build number is under [`MIN_PLAUSIBLE_BUILD`].
+    /// `None` for a numbered build and for a banner with no build number.
+    #[must_use]
+    pub fn unnumbered_source_build(&self) -> Option<String> {
+        let unnumbered = self.build.is_none()
+            && parse_build_number(&self.version_line).is_some_and(|b| b < MIN_PLAUSIBLE_BUILD);
+        unnumbered.then(|| {
+            self.commit.as_ref().map_or_else(
+                || "unnumbered source build".to_owned(),
+                |sha| format!("unnumbered source build at commit {sha}"),
+            )
+        })
+    }
+
+    /// How a surface names this runtime: `b11429`, an unnumbered source build
+    /// with [`Self::UNNUMBERED_REASON`], or `unidentified`.
+    #[must_use]
+    pub fn label(&self) -> String {
+        if let Some(build) = self.build {
+            return format!("b{build}");
+        }
+        self.unnumbered_source_build().map_or_else(
+            || "unidentified".to_owned(),
+            |name| format!("{name} ({})", Self::UNNUMBERED_REASON),
+        )
     }
 }
 
@@ -346,8 +377,8 @@ mod tests {
 
     /// The case that motivated [`MIN_PLAUSIBLE_BUILD`], observed on a real
     /// machine: gglib's own `.llama/llama.cpp` checkout, built from source at
-    /// a current commit, reports `version: 1` because no release tags were
-    /// fetched. Taken literally it would read as a pre-historic build.
+    /// a current commit, reports `version: 1` because the clone is shallow.
+    /// Taken literally it would read as a pre-historic build.
     #[test]
     fn an_unnumbered_source_build_is_unidentified_not_ancient() {
         let caps = RuntimeCapabilities::from_version_output("version: 1 (69bf643)");
@@ -407,6 +438,29 @@ mod tests {
 
         assert!(!caps.is_identified());
         assert_eq!(caps.commit.as_deref(), Some("10bf611"));
+    }
+
+    /// Only a build number under the floor makes a banner an unnumbered
+    /// source build; a sha alone does not.
+    #[test]
+    fn an_unnumbered_source_build_is_named_by_its_commit() {
+        let label = |banner: &str| RuntimeCapabilities::from_version_output(banner).label();
+
+        assert_eq!(
+            label("version: 0.1.0-dev (build 1, commit 10bf611)"),
+            "unnumbered source build at commit 10bf611 \
+             (shallow clone; the build number is not the upstream one)"
+        );
+        assert_eq!(
+            label("version: 1"),
+            "unnumbered source build (shallow clone; the build number is not the upstream one)"
+        );
+        assert_eq!(
+            label("version: 0.6.0-dev (build 11429, commit d81235049)"),
+            "b11429"
+        );
+        assert_eq!(label("mystery build (abc1234)"), "unidentified");
+        assert_eq!(label("binary not found"), "unidentified");
     }
 
     #[test]

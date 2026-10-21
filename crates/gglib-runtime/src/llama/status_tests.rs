@@ -49,6 +49,26 @@ fn runtime_block_is_camel_case() {
     assert!(json["flags"].is_string());
 }
 
+/// `gglib config llama status` names a shallow clone's build by its commit,
+/// and claims nothing about compensation for one it cannot read.
+#[test]
+fn the_build_line_names_an_unnumbered_source_build() {
+    let label = |banner: &str| {
+        LlamaRuntimeInfo::from(&RuntimeCapabilities::from_version_output(banner)).build_label()
+    };
+
+    assert_eq!(
+        label("version: 0.1.0-dev (build 1, commit 098ce52)"),
+        "unnumbered source build at commit 098ce52 \
+         (shallow clone; the build number is not the upstream one)"
+    );
+    assert_eq!(
+        label("version: 0.6.0 (build 11429, commit d81235049)"),
+        "b11429"
+    );
+    assert_eq!(label("some custom fork"), "unidentified");
+}
+
 /// The status of a binary that is there, with the file one of the two
 /// installs wrote beside it. The binary is not a program, so the status stops
 /// at validating it, after the record is read.
