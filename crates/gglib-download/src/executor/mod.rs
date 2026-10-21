@@ -61,7 +61,9 @@ pub(crate) struct DownloadPlan<'a> {
 /// when its environment is **already** provisioned on this machine — it is never
 /// built implicitly, because that put a Python toolchain in the way of a new
 /// user's first download. If the accelerator is present but fails, this falls
-/// back to the native path rather than failing the download.
+/// back to the native path rather than failing the download. A forced fetch
+/// always takes the native path, which keeps the old file until the new one
+/// is in place.
 ///
 /// Both transports report to one [`FileCounter`], so the caller sees one
 /// count for the file whichever of them moved its bytes, and sees it reach
@@ -87,8 +89,11 @@ where
     let dest = plan.destination.join(plan.file);
     let counter = Arc::new(FileCounter::new(plan.expected_size, plan.progress.clone()));
 
-    if let Some(accelerate) = accelerator {
-        match accelerate(counter.raw_callback()).await {
+    match accelerator {
+        // A forced fetch goes native: the accelerator's Hub client deletes
+        // the file it replaces before the first byte of its replacement.
+        Some(_) if plan.force => {}
+        Some(accelerate) => match accelerate(counter.raw_callback()).await {
             Ok(()) => {
                 counter.finish(existing_len(&dest));
                 return Ok(());
@@ -110,9 +115,8 @@ where
                 // of bytes on disk may start again. The notice says why.
                 counter.restart();
             }
-        }
-    } else {
-        suggest_accelerator_once(plan);
+        },
+        None => suggest_accelerator_once(plan),
     }
 
     run_native(plan, &dest, url, &counter).await?;
@@ -166,7 +170,10 @@ async fn run_native(
     counter: &Arc<FileCounter>,
 ) -> Result<(), DownloadError> {
     if plan.force {
-        let _ = std::fs::remove_file(dest);
+        // The old file stays in place until the new one is verified and
+        // renamed over it. Only a partial from an earlier attempt goes: its
+        // bytes may be of another revision.
+        let _ = std::fs::remove_file(native::part_path_for(dest));
     } else if dest.exists() {
         // Already here. The manager removes files that fail validation
         // before we are called, so anything still present is trusted.

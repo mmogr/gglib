@@ -161,12 +161,12 @@ impl ModelOps {
             });
         }
 
-        // Detached deliberately. The forced re-download deletes the existing
-        // file before writing its replacement, so if this ran inline in an
-        // Axum request future a client disconnect would drop it mid-transfer
-        // and leave the user with no model at all — while the row still
-        // pointed at the deleted path. Spawning means the download and the row
-        // rewrite always finish as a pair; only the reply is lost.
+        // Detached deliberately. The forced re-download writes each new file
+        // beside the old one and moves it into place once complete, so if
+        // this ran inline in an Axum request future a client disconnect could
+        // drop it after a move and before the row rewrite, leaving new bytes
+        // under a row that names the old revision. Spawning means the download
+        // and the row rewrite always finish as a pair; only the reply is lost.
         let registrar = self.deps.core.registrar(Arc::clone(&self.deps.gguf_parser));
         let emitter = Arc::clone(&self.deps.emitter);
         let request = CliUpdateRequest {
