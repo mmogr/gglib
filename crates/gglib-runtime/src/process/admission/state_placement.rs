@@ -17,8 +17,18 @@
 //! may use ([`QueueState::image_slot`]): it swaps in there once that model
 //! is idle and waits while it renders or loads. It never loads beside it,
 //! and never takes the chat model's slot to do so.
+//!
+//! A swap into the other image model's slot, or into the primary, is made
+//! only when the newcomer fits in the memory the model it replaces gives back
+//! ([`QueueState::fits_in_place_of`]); with nothing loaded beside the other
+//! image model, the newcomer replaces it whatever the budget. One too large
+//! for its place ([`QueueState::too_large_for_its_place`]) is refused at once
+//! when a run holds the model in its way; otherwise it waits without leading
+//! the line.
 
-use gglib_core::domain::{RuntimeKind, SecondarySlotDecision};
+use gglib_core::domain::{
+    RuntimeKind, SecondarySlotDecision, SlotFootprint, decide_secondary_slot_for,
+};
 use tokio::time::Instant;
 
 use super::{AdmissionDecision, PRIMARY_SLOT, QueueState, Resident, SLOT_COUNT, SlotState, Ticket};
@@ -110,11 +120,17 @@ impl QueueState {
     /// can be had right now.
     fn may_use(&self, slot: usize, candidate: Candidate) -> bool {
         // One image model at a time: the slot another one is in, and no
-        // other, whatever the memory check says.
+        // other.
         if candidate.runtime == RuntimeKind::StableDiffusion
             && let Some(place) = self.image_slot()
         {
-            return slot == place;
+            if !self.too_large_for_its_place(candidate) {
+                return slot == place;
+            }
+            // Too large for that place: it needs the memory of every other
+            // loaded model too, so each is in its way. Only the hold check
+            // reads these; `choose_image_slot` takes none of them.
+            return slot != place && self.slot(slot).is_some();
         }
         let primary_empty = matches!(self.slots[PRIMARY_SLOT], SlotState::Empty);
         match (candidate.runtime, slot == PRIMARY_SLOT) {
@@ -130,6 +146,60 @@ impl QueueState {
                 candidate.secondary.is_grant() || primary_empty
             }
         }
+    }
+
+    /// Whether image model `candidate` fits in the memory `slot`'s resident
+    /// gives back when it is swapped out.
+    ///
+    /// The verdict's free reading counts that resident as used, so it is
+    /// judged again with the resident's weights added back. True on a grant,
+    /// and when the verdict knows no footprint or no free reading, which
+    /// places an unreadable budget as before. True for a slot with no
+    /// resident: a model still loading gives nothing back yet, so the
+    /// newcomer waits for it and is judged once it lands.
+    fn fits_in_place_of(&self, slot: usize, candidate: Candidate) -> bool {
+        let verdict = candidate.secondary;
+        if verdict.is_grant() {
+            return true;
+        }
+        let (Some(needed), Some(free), Some(outgoing)) = (
+            verdict.footprint_bytes(),
+            verdict.free_bytes(),
+            self.slot(slot),
+        ) else {
+            return true;
+        };
+        decide_secondary_slot_for(
+            RuntimeKind::StableDiffusion,
+            Some(SlotFootprint {
+                weights_bytes: needed,
+                kv_bytes: 0,
+            }),
+            Some(free.saturating_add(outgoing.weights_bytes)),
+        )
+        .is_grant()
+    }
+
+    /// Whether image model `candidate` is too large for the only place it may
+    /// take with what is loaded now, so no slot coming free would place it.
+    ///
+    /// While another image model is in a slot, that is the place, and it
+    /// counts only while another model is loaded or loading beside it: alone,
+    /// the newcomer is placed whatever the budget, as on a cold daemon.
+    /// Otherwise the place is a primary that holds a model, unless the memory
+    /// check grants the second slot. It waits for what is loaded to change,
+    /// or for a reading that fits.
+    fn too_large_for_its_place(&self, candidate: Candidate) -> bool {
+        if candidate.runtime != RuntimeKind::StableDiffusion {
+            return false;
+        }
+        let occupied = |slot: usize| !matches!(self.slots[slot], SlotState::Empty);
+        let place = match self.image_slot() {
+            Some(place) if (0..SLOT_COUNT).any(|slot| slot != place && occupied(slot)) => place,
+            None if occupied(PRIMARY_SLOT) => PRIMARY_SLOT,
+            Some(_) | None => return false,
+        };
+        !self.fits_in_place_of(place, candidate)
     }
 
     /// The slot an image model is in, loaded or still loading.
@@ -181,10 +251,12 @@ impl QueueState {
 
     /// Whether a waiting model can take its turn at the front of the line:
     /// false when its oldest waiter last polled with a candidate that only a
-    /// held slot could take. Such a waiter is passed over, so it never blocks
-    /// the line for others; it keeps waiting until its own deadline.
+    /// held slot could take, or an image model too large for its place
+    /// ([`Self::too_large_for_its_place`]). Such a waiter is passed over, so
+    /// it never blocks the line for others and no resident stands aside for
+    /// it; it keeps waiting until its own deadline.
     pub(super) fn may_lead(&self, candidate: Option<Candidate>) -> bool {
-        candidate.is_none_or(|c| self.held_only(c).is_none())
+        candidate.is_none_or(|c| self.held_only(c).is_none() && !self.too_large_for_its_place(c))
     }
 
     /// Pick the slot an image model launches into, if one can be had.
@@ -199,12 +271,20 @@ impl QueueState {
     /// slot is the only one on offer. Step 1 then finds nothing and step 2
     /// takes that slot once it is evictable: a render in it, or its launch,
     /// is waited for, and the other slot's model is left alone.
+    ///
+    /// Nothing is chosen for an image model too large for its place
+    /// ([`Self::too_large_for_its_place`]): loading it there would
+    /// over-commit memory, and while another image model is loaded, loading
+    /// it anywhere else would leave two loaded.
     pub(super) fn choose_image_slot(
         &self,
         model_id: u32,
         now: Instant,
         candidate: Candidate,
     ) -> Option<usize> {
+        if self.too_large_for_its_place(candidate) {
+            return None;
+        }
         let beside = self
             .secondary_slots()
             .filter(|&slot| self.may_use(slot, candidate))

@@ -438,8 +438,8 @@ impl ResidentSet {
     /// the free reading alone, with no ceiling, and placed by the queue's
     /// image rules ([`Candidate::image`]). The reading is taken with any
     /// other image model still loaded, so it does not count what that one
-    /// gives back; the queue does not ask it then, and gives the request
-    /// that model's slot.
+    /// gives back; the queue adds that model's weights back before it swaps
+    /// the request into its slot.
     fn secondary_verdict(&self, request: &LaunchRequest) -> Candidate {
         let candidate = match request.spec.runtime() {
             RuntimeKind::StableDiffusion => {
