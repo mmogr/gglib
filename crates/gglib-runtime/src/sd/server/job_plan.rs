@@ -78,6 +78,12 @@ pub(crate) async fn plan(
     let Some(family) = spec.image_family else {
         return Err(ImageError::NotAnImageModel { model: spec.name });
     };
+    let file_name = spec.file_path.file_name().unwrap_or_default();
+    if let Some(refusal) = family.refusal(&file_name.to_string_lossy()) {
+        return Err(ImageError::Invalid {
+            message: refusal.to_owned(),
+        });
+    }
     let recipe = family.recipe();
     let rule = recipe.size;
     if request.source.is_some() && request.size.is_some() {
