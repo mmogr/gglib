@@ -71,6 +71,18 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
     handleKeyDown,
   } = useHuggingFaceSearch({ onSelectModel });
 
+  const loadMoreButton = (
+    <Button
+      variant="secondary"
+      size="lg"
+      onClick={handleLoadMore}
+      disabled={loadingMore}
+      isLoading={loadingMore}
+    >
+      Load More
+    </Button>
+  );
+
   return (
     <Stack gap="base" className="h-full overflow-hidden">
       {/* Search Section */}
@@ -188,13 +200,23 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
           </Stack>
         )}
 
-        {/* Empty State */}
+        {/* Empty State: the filters can empty a page the Hub has more after,
+            so the way on stays offered. */}
         {!loading && !error && models.length === 0 && (
-          <EmptyState
-            icon={<Icon icon={Search} size={40} />}
-            title="No models found"
-            description="Try adjusting your search query or parameter filters."
-          />
+          hasMore ? (
+            <EmptyState
+              icon={<Icon icon={Search} size={40} />}
+              title="None on this page"
+              description="The Hub has more results; load the next page or adjust your filters."
+              action={loadMoreButton}
+            />
+          ) : (
+            <EmptyState
+              icon={<Icon icon={Search} size={40} />}
+              title="No models found"
+              description="Try adjusting your search query or parameter filters."
+            />
+          )
         )}
 
         {/* Results */}
@@ -219,17 +241,7 @@ const HuggingFaceBrowser: FC<HuggingFaceBrowserProps> = ({
 
             {/* Load More Button */}
             {hasMore && (
-              <div className="p-4 flex justify-center">
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                  isLoading={loadingMore}
-                >
-                  Load More
-                </Button>
-              </div>
+              <div className="p-4 flex justify-center">{loadMoreButton}</div>
             )}
           </Stack>
         )}
