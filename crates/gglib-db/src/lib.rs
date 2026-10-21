@@ -14,6 +14,7 @@ pub mod repositories;
     reason = "grandfathered at lint inheritance, #1157"
 )]
 pub mod setup;
+mod sqlite_init;
 
 // Re-export factory for convenient access
 pub use factory::CoreFactory;

@@ -129,6 +129,7 @@ async fn add_column_if_missing(
 pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
     // Private before SQLite opens it; `database_file::prepare` says why then.
     crate::database_file::prepare(db_path)?;
+    crate::sqlite_init::ensure_initialised().await?;
 
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
@@ -156,6 +157,7 @@ pub async fn setup_database(db_path: &Path) -> Result<SqlitePool> {
 /// Creates a fresh in-memory database with the full production schema.
 #[cfg(any(test, feature = "test-utils"))]
 pub async fn setup_test_database() -> Result<SqlitePool> {
+    crate::sqlite_init::ensure_initialised().await?;
     let pool = SqlitePool::connect("sqlite::memory:").await?;
     create_schema(&pool).await?;
     generation::stamp(&pool).await?;
