@@ -82,7 +82,8 @@ impl DownloadManagerConfig {
 pub trait DownloadManagerPort: Send + Sync {
     /// Queue a download, choosing its quantization when none is named.
     ///
-    /// The one way a download is queued: by a user, and by a repair. It:
+    /// How a user and a repair queue a download; an upgrade has
+    /// [`Self::queue_upgrade`]. It:
     /// 1. Selects the best quantization if none specified
     /// 2. Validates the requested quantization exists
     /// 3. Queues the download and starts processing
@@ -108,6 +109,25 @@ pub trait DownloadManagerPort: Send + Sync {
         self: Arc<Self>,
         repo_id: String,
         quantization: Option<String>,
+    ) -> Result<DownloadId, DownloadError>;
+
+    /// Queue the upgrade of model `model_id`: its files from `repo_id` at
+    /// `quantization` fetched again at `commit`, and the model's row
+    /// rewritten to them once every file is in, rather than a model added.
+    ///
+    /// It is a download like any other: its row is in the queue snapshot,
+    /// and [`Self::cancel_download`] stops it. Each file on disk is kept
+    /// until its new copy is in place, and replaced then, one file at a
+    /// time; the model's row names `commit` once the last is in.
+    ///
+    /// Returns the download's ID. A download of the same files already
+    /// waiting or running is an error, and nothing is queued.
+    async fn queue_upgrade(
+        self: Arc<Self>,
+        repo_id: String,
+        quantization: String,
+        model_id: i64,
+        commit: String,
     ) -> Result<DownloadId, DownloadError>;
 
     /// Get a snapshot of the current queue state.

@@ -59,7 +59,8 @@ impl AppEventEmitter for RecordingEmitter {
 ///
 /// - `fail_cancel = true` → `cancel_download` returns `DownloadError::NotFound`
 /// - `reorder_position` → the position value returned by `reorder_queue`
-/// - `calls` → the cancel, remove and clear calls it was sent, in order
+/// - `calls` → the upgrade, cancel, remove and clear calls it was sent, in
+///   order
 pub(crate) struct MockDownloadManager {
     pub fail_cancel: bool,
     pub reorder_position: u32,
@@ -103,6 +104,22 @@ impl DownloadManagerPort for MockDownloadManager {
         _quantization: Option<String>,
     ) -> Result<DownloadId, DownloadError> {
         Ok(DownloadId::new("mock/model", Some("Q8_0")))
+    }
+
+    async fn queue_upgrade(
+        self: Arc<Self>,
+        repo_id: String,
+        quantization: String,
+        model_id: i64,
+        commit: String,
+    ) -> Result<DownloadId, DownloadError> {
+        self.record(format!(
+            "queue_upgrade {repo_id} {quantization} {model_id} {commit}"
+        ));
+        Ok(DownloadId::new(
+            repo_id.as_str(),
+            Some(quantization.as_str()),
+        ))
     }
 
     async fn get_queue_snapshot(&self) -> Result<QueueSnapshot, DownloadError> {

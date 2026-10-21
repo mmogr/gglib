@@ -6,7 +6,7 @@ use gglib_core::ports::ResolvedFile;
 use crate::executor::known_size;
 
 use super::shard_group::ShardGroupId;
-use super::types::QueuedItem;
+use super::types::{QueuedItem, Upgrade};
 use super::usize_to_u32_saturating;
 
 /// One queue item per file of a download group, in the order given: the
@@ -15,12 +15,13 @@ use super::usize_to_u32_saturating;
 ///
 /// Each item carries its place in the group, as [`group_files`] gives it,
 /// and a companion the repository it is fetched from. Every item is the
-/// download's, under its id and completion key, whichever repository its
-/// file comes from.
+/// download's, under its id, completion key and `upgrade`, whichever
+/// repository its file comes from.
 pub(super) fn group_items(
     id: &DownloadId,
     completion_key: &CompletionKey,
     files: &[ResolvedFile],
+    upgrade: Option<&Upgrade>,
 ) -> Vec<QueuedItem> {
     let group_id = ShardGroupId::generate(id);
     group_files(files)
@@ -34,6 +35,7 @@ pub(super) fn group_items(
                 completion_key.clone(),
             )
             .fetched_from(file.repo.clone())
+            .upgrading(upgrade)
         })
         .collect()
 }
@@ -85,7 +87,7 @@ mod tests {
             filename_canon: "zeta.Q8_0.gguf".to_string(),
             quantization: Some("Q8_0".to_string()),
         };
-        group_items(&id, &key, files)
+        group_items(&id, &key, files, None)
             .into_iter()
             .map(|item| item.shard_info.expect("every group item has its place"))
             .collect()
@@ -186,7 +188,7 @@ mod tests {
             quantization: Some("Q8_0".to_string()),
         };
 
-        let queued = group_items(&id, &key, &files);
+        let queued = group_items(&id, &key, &files, None);
 
         let places: Vec<_> = queued
             .iter()

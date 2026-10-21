@@ -22,6 +22,7 @@ use gglib_core::download::{DownloadError, DownloadId, Quantization};
 use gglib_core::ports::DownloadManagerConfig;
 
 use crate::executor::{DownloadPlan, FileProgress, download_file};
+use crate::queue::Upgrade;
 
 use super::paths::DownloadDestination;
 
@@ -57,6 +58,10 @@ pub(crate) struct DownloadJob {
     /// The file's size from HF metadata, if known. It sizes the bar before
     /// the first byte arrives.
     pub expected_size: Option<u64>,
+    /// The upgrade the file's download is: the file is fetched again at its
+    /// commit, over the copy on disk. `None` fetches `main`, and keeps a
+    /// file already there.
+    pub upgrade: Option<Upgrade>,
 }
 
 /// Progress update sent through the watch channel.
@@ -159,6 +164,14 @@ pub(crate) async fn run_job(
     let () = download_result?;
 
     // Step 3: Prepare result with metadata for manager
+    completed(&job)
+}
+
+/// What the manager registers `job`'s file with, once it is on disk.
+///
+/// The revision recorded is an upgrade's commit as it is, and otherwise the
+/// one the job names, or `main`, with a `rev:` mark.
+pub(super) fn completed(job: &DownloadJob) -> Result<CompletedJob, DownloadError> {
     let primary_path = job
         .destination
         .primary_path()
@@ -167,10 +180,11 @@ pub(crate) async fn run_job(
 
     // Extract metadata from download ID
     let repo_id = job.id.model_id().to_string();
-    let commit_sha = job.revision.as_ref().map_or_else(
-        || "rev:main".to_string(),
-        |r| format!("rev:{}", percent_encode_revision(r)),
-    );
+    let commit_sha = match (&job.upgrade, &job.revision) {
+        (Some(upgrade), _) => upgrade.commit.clone(),
+        (None, Some(r)) => format!("rev:{}", percent_encode_revision(r)),
+        (None, None) => "rev:main".to_string(),
+    };
     let quantization = job.id.quantization().map_or_else(
         || {
             job.destination
@@ -231,8 +245,9 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
 
 /// The plan that fetches `file` of `job`: from the repository the file
 /// comes from, which is the download's own or an image model's companion's,
-/// on `main`, into the job's destination.
-fn plan_for<'a>(
+/// on `main`, into the job's destination. An upgrade's file is fetched at
+/// its commit, and fetched again though it is on disk.
+pub(super) fn plan_for<'a>(
     job: &'a DownloadJob,
     file: &'a str,
     deps: &'a WorkerDeps,
@@ -241,11 +256,14 @@ fn plan_for<'a>(
 ) -> DownloadPlan<'a> {
     DownloadPlan {
         repo_id: &job.repo,
-        revision: "main",
+        revision: job
+            .upgrade
+            .as_ref()
+            .map_or("main", |upgrade| upgrade.commit.as_str()),
         destination: &job.destination.model_dir,
         file,
         token: deps.config.hf_token.as_deref(),
-        force: false,
+        force: job.upgrade.is_some(),
         progress: Some(progress),
         notice: Some(notice),
         expected_size: job.expected_size,

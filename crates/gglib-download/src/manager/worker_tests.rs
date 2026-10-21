@@ -46,6 +46,7 @@ fn a_jobs_file_is_fetched_from_the_repository_it_comes_from() {
         cancel: CancellationToken::new(),
         progress_tx,
         expected_size: Some(10),
+        upgrade: None,
     };
     let deps = WorkerDeps {
         config: DownloadManagerConfig::default(),

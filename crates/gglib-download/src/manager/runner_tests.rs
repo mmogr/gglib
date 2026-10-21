@@ -1,4 +1,4 @@
-//! Tests of the port's one way of queueing: that it starts the runner, and
+//! Tests of the port's ways of queueing: that each starts the runner, and
 //! that a quantization asked for by name is the one queued.
 
 use std::path::Path;
@@ -58,6 +58,30 @@ async fn a_download_queued_through_the_port_is_run_with_nothing_else_queued() {
 
     let id = Arc::clone(&manager)
         .queue_smart(REPO.to_string(), Some("Q8_0".to_string()))
+        .await
+        .unwrap();
+
+    let ended = ended(&manager, &id).await;
+    let DownloadOutcome::Failed { error } = &ended.outcome else {
+        panic!("the worker cannot make its folder, yet {:?}", ended.outcome);
+    };
+    assert!(error.starts_with("I/O error (create_dir)"), "{error}");
+}
+
+/// An upgrade queued through the port starts the runner the same way: it
+/// is run, and ends where the worker fails, with nothing else queued.
+#[tokio::test]
+async fn an_upgrade_queued_through_the_port_is_run_with_nothing_else_queued() {
+    let dir = tempfile::tempdir().unwrap();
+    let manager = manager_that_cannot_write(dir.path());
+
+    let id = Arc::clone(&manager)
+        .queue_upgrade(
+            REPO.to_string(),
+            "Q8_0".to_string(),
+            42,
+            "abc123".to_string(),
+        )
         .await
         .unwrap();
 

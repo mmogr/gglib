@@ -7,6 +7,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use gglib_core::events::AppEvent;
+use gglib_core::ports::ModelRegistrarPort;
 use gglib_download::cli_exec::{
     CliDownloadResult, CliUpdateRequest, RowCallback, UpdateCheckResult,
 };
@@ -94,7 +95,7 @@ impl ModelOps {
     /// the row — `gglib model upgrade`, shared by the CLI and the GUI route.
     ///
     /// The row is rewritten by the registrar's upgrade step
-    /// ([`ModelRegistrar::upgrade_model`](gglib_core::services::ModelRegistrar::upgrade_model)):
+    /// ([`ModelRegistrarPort::upgrade_model`]):
     /// the model keeps its id and every field its owner set, a projector the
     /// download brought is linked when the model has none, and each file's
     /// `model_files` record takes its new OID.

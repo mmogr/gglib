@@ -118,4 +118,22 @@ pub trait ModelRegistrarPort: Send + Sync {
         &self,
         download: &CompletedDownload,
     ) -> Result<RegisteredDownload, RepositoryError>;
+
+    /// Record `download`, model `model_id`'s files fetched again at a newer
+    /// revision, on the model the library holds, and answer it as stored.
+    ///
+    /// The model keeps its id and every field its owner set; registering
+    /// the upgrade instead would add a second model, since the library's
+    /// key for a downloaded model holds its revision.
+    ///
+    /// A registrar that keeps no library refuses, and records nothing.
+    async fn upgrade_model(
+        &self,
+        model_id: i64,
+        _download: &CompletedDownload,
+    ) -> Result<RegisteredDownload, RepositoryError> {
+        Err(RepositoryError::Storage(format!(
+            "this registrar cannot upgrade model {model_id}"
+        )))
+    }
 }

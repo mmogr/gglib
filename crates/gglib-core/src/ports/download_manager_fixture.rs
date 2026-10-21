@@ -8,7 +8,8 @@ use async_trait::async_trait;
 use super::DownloadManagerPort;
 use crate::download::{DownloadError, DownloadId, QueueSnapshot};
 
-/// Keeps each download it is asked to queue, as `(repository, quantization)`.
+/// Keeps each download it is asked to queue, an upgrade's too, as
+/// `(repository, quantization)`.
 ///
 /// It answers the ID of the download as asked for, `repository:quantization`,
 /// or refuses every request when it was made with [`Self::refusing`]. A
@@ -52,6 +53,17 @@ impl DownloadManagerPort for AskedDownloads {
             .unwrap_or_else(PoisonError::into_inner)
             .push((repo_id, quantization));
         self.refusal.clone().map_or(Ok(id), Err)
+    }
+
+    /// Kept as the download it fetches, `(repository, Some(quantization))`.
+    async fn queue_upgrade(
+        self: Arc<Self>,
+        repo_id: String,
+        quantization: String,
+        _model_id: i64,
+        _commit: String,
+    ) -> Result<DownloadId, DownloadError> {
+        self.queue_smart(repo_id, Some(quantization)).await
     }
 
     async fn get_queue_snapshot(&self) -> Result<QueueSnapshot, DownloadError> {

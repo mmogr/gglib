@@ -63,6 +63,17 @@ between the worker (core download logic) and publishing (the queue snapshot).
   answered: a projector it did not link, the companions it linked and each it
   did not, and weights the GGUF reader refused, which are in the library
   without their details.
+- **Upgrade** (`enqueue.rs`): A model in the library fetched again at a
+  newer commit, queued as a group like any other, so its row is in the
+  snapshot and a cancel stops it. Its files are the model's own
+  repository's, the weights and the projector; companions are not fetched
+  again. Every file carries the upgrade: it is fetched at the commit, over
+  the copy on disk, which the corrupt-cache check passes over and which is
+  kept until the new copy is in place. Once the last is in, the registrar's
+  upgrade step rewrites the model's row, recording the commit as it is, and
+  the model is announced as updated. The files are replaced one at a time,
+  so an upgrade stopped part-way leaves the model's files of two revisions
+  under a row that still names the old one.
 - **Companions**: The resolver reads the first 1 MiB of an image model's
   weights to know its family before anything is fetched, so its companions,
   and their bytes, are in the group from the start. A companion is fetched
