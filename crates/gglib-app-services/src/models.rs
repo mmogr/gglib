@@ -95,9 +95,9 @@ impl ModelOps {
     /// the server.
     ///
     /// The one rule for what drops a model's row or replaces its file:
-    /// [`remove`](Self::remove) and [`apply_upgrade`](Self::apply_upgrade)
-    /// both ask here. Public for a surface that asks before it prompts, as
-    /// `gglib model upgrade` does.
+    /// [`remove`](Self::remove), [`apply_upgrade`](Self::apply_upgrade) and
+    /// [`queue_upgrade`](Self::queue_upgrade) all ask here. Public for a
+    /// surface that asks before it prompts, as `gglib model upgrade` does.
     pub async fn refuse_if_served(&self, model: &Model) -> Result<(), GuiError> {
         match self.get_server_status(model.id).await {
             (_, Some(port)) => Err(GuiError::Conflict(format!(

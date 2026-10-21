@@ -155,7 +155,7 @@ fn model_routes() -> Router<AppState> {
         )
         .route(
             "/{id}/upgrade",
-            post(handlers::model::models::apply_upgrade),
+            post(handlers::model::models::queue_upgrade),
         )
         // Full inspect view: GET /api/models/{id}/detail
         // Returns ModelDetailDto — superset of GuiModel with raw GGUF metadata,

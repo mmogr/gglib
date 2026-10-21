@@ -1,11 +1,12 @@
 //! Update model handler.
 //!
 //! Upgrades a locally downloaded model to the latest `HuggingFace` revision.
-//! The check, the download and the row rewrite all live in
-//! [`ModelOps::check_upgrade`]/[`ModelOps::apply_upgrade`], the single shared
-//! implementation consumed by this CLI, the Axum `WebUI` and the Tauri app.
-//! What stays here is what only a terminal has: the plan, the prompt, the
-//! printed result, and the download board the upgrade's row is drawn on.
+//! The check lives in [`ModelOps::check_upgrade`], shared with the daemon;
+//! the download and the row rewrite live in [`ModelOps::apply_upgrade`],
+//! which only this CLI calls (the daemon queues its upgrade on the download
+//! manager instead). What stays here is what only a terminal has: the plan,
+//! the prompt, the printed result, and the download board the upgrade's row
+//! is drawn on.
 //!
 //! A model that is being served is refused before any of that, by the rule
 //! `apply_upgrade` refuses it by ([`ModelOps::refuse_if_served`]).

@@ -65,7 +65,8 @@ Nothing in this module draws. `model upgrade` downloads here, without the
 download manager, and its files are fetched by `crate::solo`, which makes
 the download's row with the queue's row builder and hands it to the
 `RowCallback` that `update_model` was given. The CLI draws that row on its
-download board. The daemon's upgrade route passes no callback, so its
-upgrade's progress is shown nowhere and its setup notes go to the console.
+download board. Only the CLI calls `update_model`: the daemon's upgrade
+route queues the upgrade on the download manager instead, where the queue's
+own row shows its progress.
 
 <!-- module-docs:end -->

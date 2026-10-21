@@ -67,8 +67,8 @@ export type { RetagResponse } from './generated/RetagResponse';
 /** Commit-SHA update check (`GET /api/models/{id}/upgrade-check`). */
 export type { UpgradeCheck } from './generated/UpgradeCheck';
 
-/** Outcome of `POST /api/models/{id}/upgrade`. */
-export type { UpgradeOutcome } from './generated/UpgradeOutcome';
+/** What `POST /api/models/{id}/upgrade` answers: the download it queued, if any. */
+export type { UpgradeQueued } from './generated/UpgradeQueued';
 
 /**
  * A named sampling profile, selectable per request as `<model>:<profile>`.

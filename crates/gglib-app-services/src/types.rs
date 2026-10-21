@@ -330,10 +330,22 @@ pub struct UpgradeCheck {
     pub latest_sha: String,
 }
 
-/// The outcome of applying an upgrade.
-#[derive(Debug, Clone, Serialize)]
+/// An upgrade on the download queue, as soon as it is asked for: the
+/// repository's latest revision, and the download that fetches it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
+pub struct UpgradeQueued {
+    pub latest_sha: String,
+    /// The download's canonical ID: the row to watch, and cancel, in the
+    /// queue. There is none when the model is already at `latestSha`, and
+    /// nothing was queued.
+    pub id: Option<String>,
+}
+
+/// The outcome of applying an upgrade in this process, as
+/// `gglib model upgrade` does.
+#[derive(Debug, Clone)]
 pub struct UpgradeOutcome {
     /// False when the model was already at the latest revision.
     pub updated: bool,
