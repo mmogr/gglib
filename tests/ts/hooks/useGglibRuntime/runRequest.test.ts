@@ -7,7 +7,7 @@
  * there could share; a local turn names no model and lets llama-server serve
  * the one it loaded. The conversation's Thinking choice is a key of its own,
  * there only when the run changes it, beside the two reasoning controls and
- * never in place of them. `draw` is a key only on a run sent with Draw
+ * never in place of them; so is its folder. `draw` is a key only on a run sent with Draw
  * pressed: the daemon offers its drawing tool by that key and nothing else.
  */
 
@@ -89,6 +89,16 @@ describe('buildRunRequest', () => {
 
     expect(buildRunRequest(options({ reasoning, thinking: 'off' }))).toEqual({ ...unsaid, thinking: 'off' });
     expect(buildRunRequest(options({ reasoning, thinking: 'default' }))).toEqual({ ...unsaid, thinking: 'default' });
+  });
+
+  it('says the folder only on a run that changes it: a path sets it, "" forgets it', () => {
+    const unsaid = buildRunRequest(options());
+    expect(Object.keys(unsaid)).not.toContain('folder');
+    expect(Object.keys(buildRunRequest(options({ folder: undefined })))).not.toContain('folder');
+
+    // Nothing else changes by it, and Clear's "" is sent, not dropped.
+    expect(buildRunRequest(options({ folder: '/home/m/src' }))).toEqual({ ...unsaid, folder: '/home/m/src' });
+    expect(buildRunRequest(options({ folder: '' }))).toEqual({ ...unsaid, folder: '' });
   });
 
   it('says draw only for a send made with Draw pressed, and has no such key otherwise', () => {

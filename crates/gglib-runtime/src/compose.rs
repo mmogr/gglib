@@ -73,6 +73,10 @@ pub struct LoopGeneration {
 /// * `mcp` — handle to the running MCP service (for tool discovery/execution).
 /// * `tool_filter` — `Some(set)` restricts the visible tools to the named
 ///   allowlist; `None` exposes all tools from all connected MCP servers.
+/// * `sandbox_root` — the run's folder, a canonical path, where gglib's own
+///   file tools read: `Some(folder)` offers them with descriptions that name
+///   it, and `None` leaves them out. External MCP servers are told nothing
+///   of it.
 /// * `usage_sink` — `Some(sink)` reports each response's token usage (e.g. the
 ///   proxy process's agent-path cache store, for GUI chat); `None` when there
 ///   is nothing to report to.
@@ -124,6 +128,7 @@ pub fn compose_agent_loop(
     model_context: ModelContext,
     mcp: Arc<McpService>,
     tool_filter: Option<HashSet<String>>,
+    sandbox_root: Option<PathBuf>,
     usage_sink: Option<Arc<dyn UsageSink>>,
     guard: AgentGuardReporter,
     retry_observer: Option<Arc<dyn RetryObserver>>,
@@ -140,7 +145,7 @@ pub fn compose_agent_loop(
         model_context,
         mcp,
         tool_filter,
-        None,
+        sandbox_root,
         sampling,
         layers,
         // A run's request names no sampler parameter the ladder could pass
@@ -157,7 +162,7 @@ pub fn compose_agent_loop(
     )
 }
 
-/// Like [`compose_agent_loop`] with optional sampling overrides and sandbox.
+/// Like [`compose_agent_loop`] with optional sampling overrides.
 ///
 /// `sampling` is the flags a person typed, and `layers` the profile they
 /// selected, the settings' global defaults and the agentic switch, as

@@ -17,7 +17,10 @@
  * its runs name the model by its machine, and a conversation made for it
  * keeps that model. Either kind of send says the chat's Thinking choice only
  * when the caller's `thinking` gives one, and calls its `accepted` once taken;
- * and says `draw` only when the caller's `draw` gives one, likewise.
+ * and says `draw` only when the caller's `draw` gives one, likewise. A run on
+ * this machine says the chat's folder only when the caller's `folder` gives
+ * one, calls its `accepted` once taken, and its `refused` when not, whose
+ * sentence is the one shown for a refusal of the folder.
  *
  * An edit, a regenerate, Retry and Branch from here are changes the daemon
  * makes (`branchChanges`): one that would rewrite a saved reply is made on a
@@ -54,6 +57,7 @@ import { giveDraftBack, imagesOf, unsentImage } from './turnImages';
 import { changeAndAnswer, editOf, regenerateOf, useBranching, type Branching } from './branchChanges';
 import { useRunReader, type RunReaderInputs } from './useRunReader';
 import type { RunPreviews } from './runPreviews';
+import type { FolderSaid } from '../useChatFolder';
 
 export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpened'> {
   conversationId?: number;
@@ -89,6 +93,8 @@ export interface UseGglibRuntimeOptions extends Pick<RunReaderInputs, 'onFarOpen
   downscaleImage?: Downscale;
   /** What a send says of the chat's Thinking choice, asked at each send: nothing unless it changed, and `accepted` is called once its turn is. */
   thinking?: () => { said: RunRequestOptions['thinking']; accepted: () => void } | undefined;
+  /** What a run on this machine says of the chat's folder, asked at each start: nothing where the chat has none to offer. */
+  folder?: () => FolderSaid | undefined;
   /** Whether a send says `draw`, asked at each send: something only while the Draw button is armed, and `accepted` is called once its turn is. */
   draw?: () => { accepted: (conversationId?: number) => void; imageModel?: number } | undefined;
 }
@@ -151,9 +157,14 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     const thinking = options.thinking?.();
     const runId = mintRunId();
     const draw = options.draw?.();
-    const body = runBodyFor(target, { conversationId: cid, messages: [], answerSaved: true, thinking: thinking?.said, draw: draw !== undefined, imageModel: draw?.imageModel });
-    await getTransport().startAgentRun(runId, body);
+    const folder = options.folder?.();
+    const body = runBodyFor(target, { conversationId: cid, messages: [], answerSaved: true, thinking: thinking?.said, folder: folder?.said, draw: draw !== undefined, imageModel: draw?.imageModel });
+    await getTransport().startAgentRun(runId, body).catch((error: unknown) => {
+      const told = folder?.refused(error, cid);
+      throw told ? new Error(told) : error;
+    });
     thinking?.accepted();
+    folder?.accepted(cid);
     draw?.accepted(cid);
     if (stopAskedRef.current) await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
     return runId;
@@ -202,6 +213,8 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
     }
     stopAskedRef.current = false;
     let cid = conversationId;
+    // Never on a far chat, which the far machine runs.
+    const folder = far ? undefined : options.folder?.();
     try {
       if (cid === undefined) {
         cid = await getTransport().createConversation({
@@ -219,13 +232,14 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       const history = [...base, attached.length > 0 ? { ...asked, attachments: attached } : asked];
       const thinking = options.thinking?.();
       const draw = options.draw?.();
-      const request = far ? null : runBodyFor(target, { conversationId: cid, messages: history, thinking: thinking?.said, draw: draw !== undefined, imageModel: draw?.imageModel });
+      const request = far ? null : runBodyFor(target, { conversationId: cid, messages: history, thinking: thinking?.said, folder: folder?.said, draw: draw !== undefined, imageModel: draw?.imageModel });
       messagesRef.current = history;
       setMessages(history);
       const runId = mintRunId();
       if (request) await getTransport().startAgentRun(runId, request);
       else await getTransport().addFarTurn(cid, runId, turnText(content), attached.map((image) => image.id), thinking?.said, draw !== undefined, draw?.imageModel);
       thinking?.accepted();
+      folder?.accepted(cid);
       draw?.accepted(cid);
       if (stopAskedRef.current) await runsOf(source).cancelRun(runId).catch((error: Error) => onError?.(error));
       if (!signal.aborted) await reader.follow(cid, runId, signal);
@@ -235,7 +249,8 @@ export function useGglibRuntime(options: UseGglibRuntimeOptions = {}): UseGglibR
       // Nothing was started and nothing changed: show what is saved, and
       // hand the text and images of the send back to the composer.
       if (cid !== undefined) await reader.showSaved(cid, signal).catch(() => {});
-      const refused = sendRefusal(error, far, attached.length > 0);
+      const folderTold = folder?.refused(error, cid) ?? null;
+      const refused = sendRefusal(error, far, attached.length > 0) ?? folderTold;
       // A store that lost an image: added back, it is uploaded again.
       if (codeOf(error) === 'attachment_not_found') images.forget(attached.flatMap((image) => image.file ?? []));
       handBack();

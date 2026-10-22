@@ -33,6 +33,16 @@ answer_saved?: boolean,
  */
 thinking?: Thinking, 
 /**
+ * The conversation's folder, where gglib's own file tools read, said
+ * only on the run that changes it: an absolute path to a folder on this
+ * machine sets it, and the run and the conversation's later ones read
+ * there; `""` forgets it. Absent, the run is as the conversation
+ * remembers, and a conversation with no folder runs without the file
+ * tools. Without a `conversation_id` it holds for this run alone, and
+ * `""` is the same as absent.
+ */
+folder?: string, 
+/**
  * Port of the llama-server instance to drive.
  *
  * Must match a currently-running server (the same constraint as the chat

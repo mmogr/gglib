@@ -118,8 +118,8 @@ impl From<&ChatArgs> for AgentSessionParams {
 /// pointed at (`--port`) or one the daemon started; either way its lifetime
 /// is not this session's concern.
 ///
-/// When `sandbox_root` is `Some`, filesystem tools are restricted to that
-/// directory.  Pass `None` for an unsandboxed session.
+/// `sandbox_root` is the folder gglib's own file tools read, read-only and
+/// nowhere outside it; with `None` they are not offered.
 pub(crate) async fn compose(
     ctx: &CliContext,
     params: &AgentSessionParams,

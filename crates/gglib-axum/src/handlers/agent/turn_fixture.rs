@@ -16,6 +16,7 @@ use gglib_core::settings::SettingsUpdate;
 use serde_json::{Value, json};
 
 use super::compose::{Prepared, held_over, prepare_over};
+use super::hub_turn::held_for_device;
 use crate::handlers::agent::AgentChatRequest;
 use crate::handlers::agent::dto::AgentRunRequest;
 use crate::handlers::agent::remote_upstream::local;
@@ -58,17 +59,27 @@ pub(super) async fn turn(
     chat: AgentChatRequest,
     reply: &str,
 ) -> Turn {
-    turn_as(state, model_id, chat, reply, false).await
+    turn_as(state, model_id, chat, reply, Prep::Over(None)).await
 }
 
-/// [`turn`], prepared as `prepare_held` prepares a run when `held`: its
-/// model held on `state.runtime` before the loop is composed.
+/// How a test's turn is prepared once its upstream is settled.
+enum Prep {
+    /// As `prepare_over` prepares it, with this folder.
+    Over(Option<PathBuf>),
+    /// As `prepare_held` prepares a run: its model held on `state.runtime`
+    /// before the loop is composed.
+    Held,
+    /// As a device's turn is, by `hub_turn::held_for_device`.
+    Device,
+}
+
+/// [`turn`], prepared as `prep` says.
 async fn turn_as(
     state: &AppState,
     model_id: i64,
     mut chat: AgentChatRequest,
     reply: &str,
-    held: bool,
+    prep: Prep,
 ) -> Turn {
     let (fake, at) = far(200, reply).await;
     *fake.content_type.lock().unwrap() = "text/event-stream";
@@ -84,10 +95,10 @@ async fn turn_as(
         runtime: gglib_core::domain::RuntimeKind::Llama,
     };
     let upstream = local(state, &chat, server).await.unwrap();
-    let prepared = if held {
-        held_over(state, chat, upstream).await.unwrap()
-    } else {
-        prepare_over(state, chat, upstream).await
+    let prepared = match prep {
+        Prep::Over(folder) => prepare_over(state, chat, upstream, folder).await,
+        Prep::Held => held_over(state, chat, upstream, None).await.unwrap(),
+        Prep::Device => held_for_device(state, chat, upstream).await.unwrap(),
     };
     let Prepared {
         agent_loop,
@@ -124,16 +135,35 @@ async fn turn_as(
 
 /// The body of the one request a turn that ends well makes.
 pub(super) async fn sent(state: &AppState, model_id: i64, chat: AgentChatRequest) -> Value {
-    sent_as(state, model_id, chat, false).await
+    sent_as(state, model_id, chat, Prep::Over(None)).await
 }
 
 /// [`sent`], for a run that holds its model on `state.runtime`.
 pub(super) async fn sent_held(state: &AppState, model_id: i64, chat: AgentChatRequest) -> Value {
-    sent_as(state, model_id, chat, true).await
+    sent_as(state, model_id, chat, Prep::Held).await
 }
 
-async fn sent_as(state: &AppState, model_id: i64, chat: AgentChatRequest, held: bool) -> Value {
-    let mut turn = turn_as(state, model_id, chat, REPLY, held).await;
+/// [`sent`], for a paired device's turn once its model is found.
+pub(super) async fn sent_by_device(
+    state: &AppState,
+    model_id: i64,
+    chat: AgentChatRequest,
+) -> Value {
+    sent_as(state, model_id, chat, Prep::Device).await
+}
+
+/// [`sent`], for a run whose folder is `folder`.
+pub(super) async fn sent_in(
+    state: &AppState,
+    model_id: i64,
+    chat: AgentChatRequest,
+    folder: Option<PathBuf>,
+) -> Value {
+    sent_as(state, model_id, chat, Prep::Over(folder)).await
+}
+
+async fn sent_as(state: &AppState, model_id: i64, chat: AgentChatRequest, prep: Prep) -> Value {
+    let mut turn = turn_as(state, model_id, chat, REPLY, prep).await;
     assert!(turn.ended_well, "{:?}", turn.events);
     assert_eq!(turn.requests.len(), 1, "one request");
     turn.requests.remove(0)
@@ -243,16 +273,20 @@ pub(super) async fn phone(state: &AppState, model_id: i64) -> AgentChatRequest {
         })
         .await
         .unwrap();
-    let turn = HubTurn {
-        conversation_id: id,
+    super::hub_turn::plan(state, hi(id)).await.unwrap().chat
+}
+
+/// A paired device's turn on chat `conversation_id` that says "hi".
+pub(super) fn hi(conversation_id: i64) -> HubTurn {
+    HubTurn {
+        conversation_id,
         content: "hi".to_owned(),
         images: Vec::new(),
         thinking: None,
         answer_saved: false,
         draw: false,
         image_model: None,
-    };
-    super::hub_turn::plan(state, turn).await.unwrap().chat
+    }
 }
 
 /// The same turn from each door: the page's run, and a paired device's on a

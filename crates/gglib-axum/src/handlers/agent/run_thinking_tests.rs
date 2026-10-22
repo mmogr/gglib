@@ -65,7 +65,7 @@ fn body(conversation: Option<i64>, more: &Value) -> Value {
 /// `id`: the thinking budget it ran with.
 async fn run(state: &AppState, id: &str, conversation: Option<i64>, more: Value) -> Option<i32> {
     let request: AgentRunRequest = serde_json::from_value(body(conversation, &more)).unwrap();
-    let (chat, transcript) = plan(state, request).await.unwrap();
+    let (chat, transcript, _) = plan(state, request).await.unwrap();
     start(state, id, transcript).await.unwrap();
     settled(state).await;
     chat.reasoning_budget_tokens
@@ -226,7 +226,7 @@ async fn a_run_on_a_registered_model_writes_its_model_and_the_choice_and_keeps_b
     };
     for (run_id, said) in [("r1", json!({ "thinking": "off" })), ("r2", json!({}))] {
         let request = serde_json::from_value(body(Some(id), &said)).unwrap();
-        let (_, transcript) = plan(&state, request).await.unwrap();
+        let (_, transcript, _) = plan(&state, request).await.unwrap();
         let (mut p, _) = prepared(finished_reply(), End::Finish);
         p.local_model = Some((19_555, model));
         let started = start_on(&state, run_id, transcript, p).await;

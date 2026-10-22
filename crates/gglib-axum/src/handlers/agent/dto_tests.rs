@@ -1,4 +1,5 @@
-//! Tests for [`super`] — the agent-chat request DTO's sampling layer.
+//! Tests for [`super`] — the agent-chat request DTO's sampling layer, and
+//! the folder a run's body says.
 //!
 //! `AgentChatRequest` accepts no sampler parameters and is not about to start;
 //! what these pin is that the two reasoning controls are carried, that they are
@@ -7,7 +8,7 @@
 
 use gglib_core::domain::ReasoningEffort;
 
-use super::{AgentChatRequest, AgentRequestConfig};
+use super::{AgentChatRequest, AgentRequestConfig, AgentRunRequest};
 
 fn parse(json: &str) -> AgentChatRequest {
     serde_json::from_str(json).expect("parses")
@@ -136,5 +137,26 @@ fn far_is_absent_unless_the_body_names_a_model_there() {
             },
             id: 3,
         })
+    );
+}
+
+/// A run's folder is said as the body has it: absent, a path, or `""` to
+/// forget, which is a word of its own and not an absence.
+#[test]
+fn a_runs_folder_is_absent_a_path_or_the_empty_word() {
+    let folder = |body: &str| {
+        serde_json::from_str::<AgentRunRequest>(body)
+            .expect("parses")
+            .folder
+    };
+
+    assert_eq!(folder(MINIMAL), None);
+    assert_eq!(
+        folder(r#"{"port":9000,"messages":[],"folder":"/work/project"}"#).as_deref(),
+        Some("/work/project")
+    );
+    assert_eq!(
+        folder(r#"{"port":9000,"messages":[],"folder":""}"#).as_deref(),
+        Some("")
     );
 }

@@ -1,5 +1,6 @@
 //! The hub's chats as a paired device reads them: newest first, each with
-//! its model's name and its live run, and one opened with its rows.
+//! its model's name and its live run, and one opened with its rows and
+//! without its folder.
 
 use std::sync::Arc;
 
@@ -188,4 +189,39 @@ async fn a_chat_opens_with_its_rows_and_their_metadata() {
         chats.open(id + 1).await.err(),
         Some(HubChatsError::NotFound)
     );
+}
+
+/// A chat opens for a device without its folder, a path on this machine,
+/// and with the rest of its settings; the chat still has it here.
+#[tokio::test]
+async fn a_chat_opens_without_its_folder() {
+    let core = test_core().await;
+    let (runs, _, _) = registry();
+    let history = core.chat_history();
+    let settings = ConversationSettings {
+        model_name: Some("qwen3-8b".to_owned()),
+        folder: Some("/home/someone/project".to_owned()),
+        ..ConversationSettings::default()
+    };
+    let id = history
+        .create_conversation(NewConversation {
+            title: "t".to_owned(),
+            settings: Some(settings),
+            ..NewConversation::default()
+        })
+        .await
+        .unwrap();
+
+    let open = HubChats::new(Arc::clone(&core), &Arc::new(runs))
+        .open(id)
+        .await
+        .unwrap();
+    let shown = open.conversation.settings.expect("settings");
+    assert_eq!(
+        (shown.folder, shown.model_name.as_deref()),
+        (None, Some("qwen3-8b"))
+    );
+    let kept = history.get_conversation(id).await.unwrap().unwrap();
+    let kept = kept.settings.expect("settings").folder;
+    assert_eq!(kept.as_deref(), Some("/home/someone/project"));
 }

@@ -216,13 +216,26 @@ a hierarchy different from the one that runs.
 
 ### `chat <identifier>`
 
-Interactive session with tool access (filesystem plus any configured MCP
-servers). `--no-tools` for plain chat. Conversations persist: `--continue <id>`
-resumes one on the machine it ran on, and `gglib chat history` lists them, each
-model by its id and its machine. A turn is saved as the web page's is: your
-message when you send it, and the reply when the turn ends, with its reasoning
-and how it was made. A turn stopped by Ctrl+C or an error keeps what had
-arrived of its reply, marked as stopped.
+Interactive session with tool access (gglib's own file tools plus any
+configured MCP servers). `--no-tools` for plain chat. Conversations persist:
+`--continue <id>` resumes one on the machine it ran on, and `gglib chat
+history` lists them, each model by its id and its machine. A turn is saved as
+the web page's is: your message when you send it, and the reply when the turn
+ends, with its reasoning and how it was made. A turn stopped by Ctrl+C or an
+error keeps what had arrived of its reply, marked as stopped.
+
+The file tools, `read_file`, `list_directory` and `grep_search`, read the
+directory `chat` was launched in, read-only, and nothing outside it. That is
+where each invocation runs, `--continue` included: a folder the chat page
+chose for the same conversation is not read here. The session says so once,
+on stderr: `Files: <dir> (read-only)`. Launched in your home folder or in
+`/` it reads no files, and says `Files: off in your home folder or /; cd into
+a project to read it, or --no-tools`; launched in a directory deleted since,
+it reads none and says it cannot read it. Under `--tools` the file tools are
+kept only when the list names one, bare (`read_file`) or as
+`builtin:read_file`; a list that names none gets none, no `Files:` line, and
+its directory is not read. An MCP server you added reads what its own
+configuration names; it is not told this folder.
 
 A chat the daemon is still replying to, for the web page or a paired device,
 is not continued: `--continue` says the chat is running elsewhere and names

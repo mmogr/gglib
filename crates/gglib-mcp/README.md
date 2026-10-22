@@ -23,7 +23,7 @@ This crate provides MCP server lifecycle management, including:
 - **JSON-RPC 2.0 protocol client** for communicating with MCP servers
 - **Server lifecycle management** (start, stop, status tracking)
 - **Tool discovery and invocation** via the MCP protocol
-- **In-process builtin tools** (filesystem, time) with optional sandbox
+- **In-process builtin tools** (filesystem, time); the file tools read only the run's folder (where `gglib chat` ran, the folder a chat page chose, none for a paired device's turn) and are not offered without one; external MCP servers are never told it
 
 ## Internal Structure
 

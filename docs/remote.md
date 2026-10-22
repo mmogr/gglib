@@ -392,6 +392,18 @@ desktop's proxy does, and refuses a model with no projector before it loads
 it, `400 model_cannot_read_images`; the laptop shows that sentence, with the
 command that links a projector, to be run on the desktop.
 
+**Files are read here.** `gglib chat --remote` reads files in the
+directory it was launched in on the laptop, as it does without the flag
+([`chat`](cli.md#chat-identifier)), and a chat page's chat with the desktop's
+model reads the folder chosen on the laptop: the agent loop, and so the file
+tools, run on the laptop. What they read goes to the desktop's model as part
+of the chat, with the folder's path, and so reaches the desktop's logs; the
+session's line says so, `Files: <dir> on this machine (read-only; what is
+read is sent to desk)`. A paired device's turn on one of the desktop's chats
+gets no folder: no route lets a device name one, and a folder the desktop's
+page chose for a chat is neither read for the device's turn nor sent to the
+device when it opens that chat.
+
 **A chat resumes on the machine it ran on.** Each conversation stores its
 model by machine and by id there, and `gglib chat --continue <id>` goes back
 to it: a chat that ran on the desktop resumes on the desktop without

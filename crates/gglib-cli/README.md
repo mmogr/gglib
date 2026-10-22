@@ -92,6 +92,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `chat <id\|name>` | Start interactive llama-cli chat |
 | `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on; refused while the daemon is still replying to it, for the web page or a paired device |
 | `chat … --thinking on\|off` | Switch the chat's Thinking on or off, as the chat page's switch does: the choice runs the session and the chat remembers it, on a new chat or with `--continue` |
+| `chat <id\|name>`, files | Reads files in the directory it was launched in, read-only, never home or `/`, and says which on one `Files:` stderr line; under `--tools`, name `read_file` to keep the file tools |
 | `question <text>` | Ask a question (with optional piped context) |
 | `question <text>` | Ask a question; filesystem tools are on unless `--no-tools` |
 | `question --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |

@@ -45,6 +45,11 @@ independently readable:
   `/draw <model>`, `/draw default` and `/draw list` choose, forget and
   list the image model the session draws with, held by the switch for the
   session and placed on each request the tool hands the daemon
+- `files`      — the folder gglib's own file tools read: the directory the
+  session was launched in, never home or `/`
+  (`gglib_core::domain::folder::launched`), and only for a `--tools` list
+  that admits a file tool; and the one `Files:` line on stderr that names it,
+  says it is read on this machine for `--remote`, or says why there is none
 - [`sight`]    — whether the session's model can read an image, asked before
   the loop is composed: the catalogue row, or `/props` of a `--port` server
 - [`tool_format`] — tool-result summary formatters

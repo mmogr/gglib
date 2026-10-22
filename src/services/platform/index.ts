@@ -14,7 +14,7 @@ export { listenToMenuEvents, MENU_EVENTS } from './menuEvents';
 export type { MenuEventHandlers } from './menuEvents';
 
 // File dialogs
-export { pickGgufFile } from './fileDialogs';
+export { pickFolder, pickGgufFile } from './fileDialogs';
 export type { FilePickerResult } from './fileDialogs';
 
 // Unified logging

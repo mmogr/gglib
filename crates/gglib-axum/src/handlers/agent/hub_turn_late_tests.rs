@@ -247,9 +247,7 @@ async fn a_refused_first_write_saves_no_reply() {
 /// `late_on` takes it once the model is found.
 #[tokio::test]
 async fn a_refusal_at_the_model_hold_ends_the_run_failed_and_writes_no_row() {
-    use crate::handlers::agent::compose::held_over;
-    use crate::handlers::agent::remote_upstream::local;
-    use crate::handlers::agent::run::with_code;
+    use crate::handlers::agent::{compose::held_over, remote_upstream::local, run::with_code};
 
     let (_dir, state) = state().await;
     let id = chat(&state, None).await;
@@ -269,7 +267,9 @@ async fn a_refusal_at_the_model_hold_ends_the_run_failed_and_writes_no_row() {
     let late: LatePrepare = Box::new(move |_| {
         Box::pin(async move {
             let upstream = local(&at, &chat, server).await?;
-            held_over(&at, chat, upstream).await.map_err(with_code)
+            held_over(&at, chat, upstream, None)
+                .await
+                .map_err(with_code)
         })
     });
 

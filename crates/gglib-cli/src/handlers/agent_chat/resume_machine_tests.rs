@@ -255,30 +255,29 @@ async fn a_resume_on_another_model_stores_that_model() {
 }
 
 /// A chat the page or a phone switched thinking off on stays switched off
-/// through a resume that moves it to another model: the resume rewrites the
+/// through a resume that moves it to another model, and a folder the page
+/// chose for it stays chosen, unread by the CLI: the resume rewrites the
 /// settings whole, and keeps what it does not set.
 #[tokio::test]
-async fn a_remembered_thinking_choice_survives_a_resume_on_another_model() {
+async fn a_remembered_thinking_choice_and_folder_survive_a_resume_on_another_model() {
+    use gglib_app_services::transcript::{remember_folder, remember_thinking};
     use gglib_core::domain::Thinking;
 
     let dir = tempfile::tempdir().expect("tempdir");
     let (ctx, _, _) = library(&dir).await;
     let started = chat(&ctx, "qwen", None).await.expect("a new chat");
     let id = started.persistence.expect("saved").id;
-    let history = ctx.app.chat_history();
-    let off = Some(Thinking::Off);
-    gglib_app_services::transcript::remember_thinking(history, id, off).await;
+    let (history, off) = (ctx.app.chat_history(), Some(Thinking::Off));
+    remember_thinking(history, id, off).await;
+    remember_folder(history, id, Some("/x".to_owned())).await;
 
-    chat(&ctx, "llama", Some(id))
-        .await
-        .expect("continued on llama");
+    chat(&ctx, "llama", Some(id)).await.expect("resumed");
 
     let row = history.get_conversation(id).await.unwrap().unwrap();
     let settings = row.settings.expect("settings");
-    assert_eq!(
-        (settings.model_name.as_deref(), settings.thinking),
-        (Some("llama"), off)
-    );
+    let kept = (settings.thinking, settings.folder.as_deref());
+    assert_eq!(settings.model_name.as_deref(), Some("llama"));
+    assert_eq!(kept, (off, Some("/x")));
 }
 
 /// A chat whose model has left this library says so, and does not send the

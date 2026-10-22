@@ -143,6 +143,9 @@ mod run_end_tests;
 #[cfg(test)]
 pub(in crate::handlers) mod run_fixture;
 #[cfg(test)]
+#[path = "run_folder_tests.rs"]
+mod run_folder_tests;
+#[cfg(test)]
 #[path = "run_hold_tests.rs"]
 mod run_hold_tests;
 #[cfg(test)]

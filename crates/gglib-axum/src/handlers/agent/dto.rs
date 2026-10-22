@@ -303,6 +303,17 @@ pub(crate) struct AgentRunRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub thinking: Option<gglib_core::domain::Thinking>,
+
+    /// The conversation's folder, where gglib's own file tools read, said
+    /// only on the run that changes it: an absolute path to a folder on this
+    /// machine sets it, and the run and the conversation's later ones read
+    /// there; `""` forgets it. Absent, the run is as the conversation
+    /// remembers, and a conversation with no folder runs without the file
+    /// tools. Without a `conversation_id` it holds for this run alone, and
+    /// `""` is the same as absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    pub folder: Option<String>,
 }
 
 #[cfg(test)]

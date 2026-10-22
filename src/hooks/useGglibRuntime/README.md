@@ -78,6 +78,14 @@ refused never calls it. The runtime keeps no choice itself and weighs nothing:
 the device-wide effort and budget go on every local run as they did, and the
 daemon lets a chat's Off win.
 
+A run on this machine says the chat's folder when the caller's `folder` gives
+one, asked as the run starts: `folder` on the run's body, a path or `""` for
+Clear, and no key otherwise; a far turn never carries it. The runtime calls
+that answer's `accepted` once the daemon has taken the run, with the chat it
+saved to, and its `refused` when the daemon refused it, also with the chat a
+first send made; a refusal for the folder (`folder_unusable`,
+`folder_missing`) is told to the caller in the sentence `refused` gives.
+
 A run that says `draw` also says `image_model` when what the caller's `draw`
 gave names one (`imageModel`), and never without `draw`.
 
@@ -117,7 +125,7 @@ loop detection) lives in the Rust `gglib-agent` crate.
 | `useRunReader.ts` | The open conversation's messages: finds its live run, loads the rows, attaches to the run, stops reading on leave, shows what was saved at a run's end; keeps how the run it last read to its end ended (`endedRun`) until the conversation is left, which is how the page knows a reply finished in front of it; keeps what the daemon says beside the rows (`answerable`, `points`); hands up each reading of a far chat, unless it was left first; holds the preview frames of the run it is reading (`previews`), and none between readings |
 | `drawRun.ts` | Reads one run's events from the first and draws them; a `preview` item goes to the frames held beside the messages, until its call's result is drawn or the reading ends |
 | `runPreviews.ts` | A run's preview frames, by tool call: a `preview` event's data read as a frame or not at all, the newest kept for each call, and a frame as an image's `src` |
-| `runRequest.ts` | The run's body (`AgentRunRequest`), as sent now with the Tools popover's limits and reasoning controls (`runBodyFor`), and the run id; a turn on the paired machine's model carries it as `far`, that machine and the model's id there, and no name; `thinking` is in the body only when the run changes the chat's choice; `answer_saved` only on a run that answers the question the chat ends in; `draw` only for a run started while Draw is armed: a send, or an answer run (an edit, a regenerate or a Retry); `image_model` only beside `draw`, when the chat chose one |
+| `runRequest.ts` | The run's body (`AgentRunRequest`), as sent now with the Tools popover's limits and reasoning controls (`runBodyFor`), and the run id; a turn on the paired machine's model carries it as `far`, that machine and the model's id there, and no name; `thinking` is in the body only when the run changes the chat's choice, and `folder` only when it changes the chat's folder (`""` for Clear); `answer_saved` only on a run that answers the question the chat ends in; `draw` only for a run started while Draw is armed: a send, or an answer run (an edit, a regenerate or a Retry); `image_model` only beside `draw`, when the chat chose one |
 | `savedRows.ts` | A conversation's saved thread with its branch points and whether it ends in a question, its live run, and the row a message is; a far chat's from the far machine, handed on as that machine answered it, its live run from the far listing's `live_run` |
 | `chatSource.ts` | Which machine a chat is on: that machine's runs (list, cancel, events) and image store (upload, read), and the text a turn carries, to a far chat or as an edit |
 | `imageAttachments.ts` | The composer's image adapter: uploads an image when it is added (never when sent), says a refusal at once, turns a sent image into its stored id (only an id its own store answered: not one from the other machine's, as when the chat list moved there with images in the composer), and remembers each upload by its file so a draft handed back or carried over a model switch is not uploaded again |

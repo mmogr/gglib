@@ -164,8 +164,8 @@ names the run's model on the
 conversation by its machine (a local run's registry id, a far run's id on the
 paired machine, and its name in the settings) so the chat's next turn from
 either door runs on it, or is refused for being the paired machine's, has
-the conversation remember the Thinking choice its turn said, and starts the
-loop.
+the conversation remember the Thinking choice its turn said and the folder
+its run said, and starts the loop.
 
 # The Thinking choice
 
@@ -188,6 +188,34 @@ applies what it said and remembers nothing. The write is
 `gglib_app_services::transcript::remember_thinking`, which the CLI's chat
 remembers a named choice through too.
 
+# The folder
+
+A chat's folder is where gglib's own file tools (`builtin:read_file`,
+`builtin:list_directory`, `builtin:grep_search`) read in its runs; a run
+with none is not offered them. Only this machine's page names one: the
+run's body says `folder` on the run that changes it, an absolute path to a
+folder on this machine to set it, or `""` to forget it, and says nothing
+otherwise. `run::plan` settles it before a slot is taken: `""` forgets it
+unchecked; a path goes through core's `folder::chosen` (absolute, exists,
+a folder) and is the run's by its canonical path, refused `400
+folder_unusable` when it fails; and with nothing said the run reads the
+folder the conversation remembers, checked again and refused `409
+folder_missing` when it is gone. Either refusal writes nothing. The
+canonical path is what `launch` writes to `ConversationSettings.folder`
+beside the Thinking choice
+(`gglib_app_services::transcript::remember_folder`), so what the page shows
+is what is read. Without a `conversation_id` a path is that run's alone and
+`""` is the same as saying nothing.
+
+`compose::prepare_over` passes the folder to `compose_agent_loop` as the
+file tools' root, whose descriptions name it, and `compose::with_folder`
+adds the three qualified names to a tool filter that lists names; `[]`, a
+model that calls no tool, stays `[]`, and `null` admits them already. The
+chat route (`POST /api/agent/chat`) and every turn a paired device sends
+pass no folder, whatever the conversation remembers: a device reaches this
+machine's tools only through `--allow-mcp` (ADR 0012, decision 5), which
+names no file tool, and no key of a device's turn names a path.
+
 # A paired device's turn
 
 `hub_turn` is the daemon's `AgentRunStarter`, handed to every proxy it
@@ -204,7 +232,8 @@ record as a resumed CLI chat reads it (core's `saved_history`: the system
 prompt, then every row but a system one; then the message), the limits from the
 conversation's settings (an iteration limit they do not name is this
 machine's stored one), no tools unless `enable --allow-mcp` opened the
-tunnel to them (then only those the settings name), and the reply runs on the chat's model
+tunnel to them (then only those the settings name), never gglib's own file
+tools, and the reply runs on the chat's model
 (`hub_model`: its own, its settings', its last reply's, the one running on
 the hub (the one started last, of several), or the hub's default), loaded first when it is not running, as an agent run in the
 device's scope saved to the chat.
