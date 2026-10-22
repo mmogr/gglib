@@ -26,11 +26,11 @@
 //! It exceeds this stage on the measured path, and the schema-constraint work
 //! this stage would otherwise have needed is dropped rather than deferred.
 //!
-//! The stage stays anyway, and the reason is the scope of the evidence: one
-//! model, one build, one schema. Deleting a stage that also serves dialects
-//! nobody has measured would trade a known cost for an unmeasured risk — the
-//! same asymmetry [`RuntimeCapabilities::unknown`] encodes. What remains
-//! before removal is a second dialect family measured to the same standard.
+//! The stage stays anyway: the second family was measured and did not
+//! generalise (ADR 0002 findings 4 and 5), and deleting the stage would trade
+//! a known cost for an unmeasured risk, the asymmetry
+//! [`RuntimeCapabilities::unknown`] encodes. What remains is a build on which
+//! `auto` installs a grammar for every measured family, and a third family.
 //!
 //! [ADR 0001]: https://github.com/mmogr/gglib/blob/main/docs/adr/0001-runtime-capability-tiers.md
 //! [ADR 0002]: https://github.com/mmogr/gglib/blob/main/docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md

@@ -90,6 +90,18 @@ impl From<&RuntimeCapabilities> for LlamaRuntimeInfo {
     }
 }
 
+impl LlamaRuntimeInfo {
+    /// How `gglib config llama status` names the build, worded as
+    /// [`RuntimeCapabilities::label`] words it.
+    #[must_use]
+    pub fn build_label(&self) -> String {
+        self.build.map_or_else(
+            || RuntimeCapabilities::unknown(self.version_line.as_str()).label(),
+            |build| format!("b{build}"),
+        )
+    }
+}
+
 /// Everything `gglib config llama status` reports.
 ///
 /// Two notions of "version" coexist here deliberately and must not be merged:

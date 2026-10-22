@@ -14,7 +14,7 @@
 
 use gglib_core::cache_config::KvCacheType;
 use gglib_core::domain::{
-    LaunchDecision, LaunchNarration, RuntimeFlags, RuntimeKind, SlotFootprint,
+    LaunchDecision, LaunchNarration, RuntimeCapabilities, RuntimeFlags, RuntimeKind, SlotFootprint,
     estimate_kv_bytes_for_context, format_gib, format_mib_as_gib, kv_bytes_per_token,
 };
 use gglib_core::normalize::tags::FORMAT_QWEN_XML;
@@ -104,21 +104,27 @@ fn backend() -> Option<String> {
 ///
 /// Read through the same probe the compensation decisions will consult, so
 /// the banner cannot claim one runtime while the pipeline assumes another.
-/// Unlike [`backend`] this never returns `None`: an unidentified runtime is
-/// precisely the case worth printing, because it is the case where gglib
-/// keeps every compensation on and the user has no other way to find out.
+/// Unlike [`backend`] this never returns `None`: a runtime gglib cannot
+/// name by a release number is precisely the case worth printing, because
+/// the user has no other way to find out.
 fn runtime_decision() -> LaunchDecision {
     let Ok(path) = gglib_core::paths::llama_server_path() else {
         return LaunchDecision::new("runtime", "unidentified", "no llama-server path");
     };
 
-    let caps = crate::llama::probe_runtime_capabilities(&path);
+    runtime_decision_for(&crate::llama::probe_runtime_capabilities(&path))
+}
 
-    let Some(build) = caps.build else {
-        return LaunchDecision::new("runtime", "unidentified", caps.version_line);
-    };
+/// The runtime line for a probed binary.
+fn runtime_decision_for(caps: &RuntimeCapabilities) -> LaunchDecision {
+    if let Some(build) = caps.build {
+        return LaunchDecision::new("runtime", format!("b{build}"), native_summary(caps.flags));
+    }
 
-    LaunchDecision::new("runtime", format!("b{build}"), native_summary(caps.flags))
+    caps.unnumbered_source_build().map_or_else(
+        || LaunchDecision::new("runtime", "unidentified", caps.version_line.as_str()),
+        |name| LaunchDecision::new("runtime", name, RuntimeCapabilities::UNNUMBERED_REASON),
+    )
 }
 
 /// How a runtime's native capabilities read on the banner.
@@ -771,5 +777,24 @@ mod tests {
             "{} decisions would overflow the banner",
             n.decisions.len()
         );
+    }
+
+    /// A shallow clone's banner is named by its commit, with why its number
+    /// is not upstream's, rather than as an unidentified runtime.
+    #[test]
+    fn runtime_line_names_an_unnumbered_source_build_by_its_commit() {
+        let caps = RuntimeCapabilities::from_version_output(
+            "version: 0.1.0-dev (build 1, commit 098ce52)",
+        );
+        let d = runtime_decision_for(&caps);
+        assert_eq!(d.value, "unnumbered source build at commit 098ce52");
+        assert_eq!(
+            d.source.as_deref(),
+            Some("shallow clone; the build number is not the upstream one")
+        );
+
+        let d = runtime_decision_for(&RuntimeCapabilities::unknown("binary not found"));
+        assert_eq!(d.value, "unidentified");
+        assert_eq!(d.source.as_deref(), Some("binary not found"));
     }
 }

@@ -96,10 +96,7 @@ pub async fn handle_status() -> Result<()> {
     if let Some(caps) = &status.runtime {
         println!();
         println!("Binary version: {}", caps.version_line);
-        match caps.build {
-            Some(build) => println!("  Build: b{build}"),
-            None => println!("  Build: unidentified — gglib will apply every compensation"),
-        }
+        println!("  Build: {}", caps.build_label());
         println!("  Native capabilities: {}", caps.flags);
     }
 

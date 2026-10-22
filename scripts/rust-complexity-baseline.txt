@@ -94,7 +94,7 @@ crates/gglib-core/src/domain/query.rs 408
 crates/gglib-core/src/domain/recommendation.rs 381
 crates/gglib-core/src/domain/residency.rs 484
 crates/gglib-core/src/domain/runs/wire_tests.rs 306
-crates/gglib-core/src/domain/runtime_capabilities.rs 477
+crates/gglib-core/src/domain/runtime_capabilities.rs 531
 crates/gglib-core/src/download/completion.rs 432
 crates/gglib-core/src/download/rate.rs 628
 crates/gglib-core/src/download/types.rs 680
@@ -207,7 +207,7 @@ crates/gglib-proxy/tests/integration_slot_roundtrip.rs 584
 crates/gglib-proxy/tests/integration_turns.rs 402
 crates/gglib-runtime/src/binary_install/install_tests.rs 438
 crates/gglib-runtime/src/command.rs 692
-crates/gglib-runtime/src/launch_narration.rs 775
+crates/gglib-runtime/src/launch_narration.rs 800
 crates/gglib-runtime/src/llama/args/cache_ram.rs 328
 crates/gglib-runtime/src/llama/build/mod.rs 415
 crates/gglib-runtime/src/llama/download/mod.rs 682
