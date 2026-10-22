@@ -173,8 +173,10 @@ pub(crate) async fn compose(
     if let Err(e) = ctx.mcp.initialize().await {
         tracing::warn!("MCP initialisation failed — tools may be unavailable: {e}");
     }
-    // Pre-warm lazy servers so they are ready before the first agent iteration.
-    ctx.mcp.prewarm_lazy().await;
+    // Pre-warm lazy servers so they are ready before the first agent
+    // iteration, and say which did not start, and why, unless quiet.
+    let unstarted = ctx.mcp.prewarm_lazy().await;
+    say_unstarted(&unstarted, banner.quiet, |line| eprintln!("{line}"));
 
     // 4. Compose the agent loop.  When tools are specified the loop is
     //    restricted to the named allowlist; otherwise all MCP tools are visible.
@@ -214,6 +216,27 @@ pub(crate) async fn compose(
     );
 
     Ok(agent)
+}
+
+/// Say one line for each MCP server the session goes on without, named
+/// with the reason it did not start, unless `quiet`: `-Q` promises silence
+/// on stderr. A reason of several lines (what was tried, a suggested fix) is
+/// made one: each line trimmed, blank ones dropped, the rest joined by ` | `.
+fn say_unstarted(unstarted: &[(String, String)], quiet: bool, mut say: impl FnMut(&str)) {
+    if quiet {
+        return;
+    }
+    for (name, why) in unstarted {
+        let why = why
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join(" | ");
+        say(&format!(
+            "  Warning: MCP server '{name}' did not start, so its tools are off: {why}"
+        ));
+    }
 }
 
 /// A session's tool allowlist: none for every tool, else the names typed,
@@ -295,6 +318,58 @@ mod tests {
         let composed = compose(&unreadable, &params, None, None, &banner).await;
         let error = composed.err().expect("the read failed").to_string();
         assert_eq!(error, UNREADABLE);
+    }
+
+    /// Each server that did not start is one line naming it and why, a
+    /// reason of several lines made one, and under `-Q` none is said.
+    #[test]
+    fn each_server_that_did_not_start_is_one_line_unless_quiet() {
+        let why = "Failed to start MCP server: Failed to start server: MCP protocol error: \
+                   Server closed connection - stderr: ENOENT /path/to/allowed";
+        // The shapes of a command that cannot be found and of one that
+        // cannot be spawned.
+        let unresolved = "Invalid configuration: Could not resolve 'npx' to an executable \
+                          path. Tried:\n  ✗ /usr/bin/npx: not found\n\nTried:\n  ✗ \
+                          /usr/bin/npx: not found\n\nSuggested fix: install Node.js\n\n\
+                          • Install Node.js if not installed";
+        let unspawned = "Failed to spawn 'npx': Permission denied (os error 13)\r\n\
+                         Args: [\"-y\"]\nCwd: None\nEffective PATH: /usr/bin";
+        let unstarted = [
+            ("files".to_string(), why.to_string()),
+            ("search".to_string(), "Invalid configuration".to_string()),
+            ("fetch".to_string(), unresolved.to_string()),
+            ("git".to_string(), unspawned.to_string()),
+        ];
+
+        let mut said = Vec::new();
+        say_unstarted(&unstarted, false, |line| said.push(line.to_owned()));
+        let off = "did not start, so its tools are off";
+        assert_eq!(
+            said,
+            [
+                format!("  Warning: MCP server 'files' {off}: {why}"),
+                format!("  Warning: MCP server 'search' {off}: Invalid configuration"),
+                format!(
+                    "  Warning: MCP server 'fetch' {off}: Invalid configuration: Could not \
+                     resolve 'npx' to an executable path. Tried: | ✗ /usr/bin/npx: not found \
+                     | Tried: | ✗ /usr/bin/npx: not found | Suggested fix: install Node.js \
+                     | • Install Node.js if not installed"
+                ),
+                format!(
+                    "  Warning: MCP server 'git' {off}: Failed to spawn 'npx': Permission \
+                     denied (os error 13) | Args: [\"-y\"] | Cwd: None | Effective PATH: \
+                     /usr/bin"
+                ),
+            ]
+        );
+        assert!(
+            said.iter().all(|line| !line.contains(['\n', '\r'])),
+            "{said:?}"
+        );
+
+        let mut said = Vec::new();
+        say_unstarted(&unstarted, true, |line| said.push(line.to_owned()));
+        assert!(said.is_empty(), "{said:?}");
     }
 
     /// A `ChatArgs` with every knob at rest, so each test states only the two

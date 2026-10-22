@@ -11,11 +11,12 @@ publish = false
 gglib-build-info.workspace = true
 gglib-core = { workspace = true }
 
-# Async runtime. `macros` is for `tokio::join!` in `combined.rs` and `process`
-# for the server child in `client.rs`; without them this crate only compiles
+# Async runtime. `macros` is for `tokio::join!` in `combined.rs`, `process`
+# for the server child in `client.rs` and `rt` for the task that drains its
+# stderr in `stderr_tail.rs`; without them this crate only compiles
 # when something else in the build graph turns the features on, so
 # `cargo check -p gglib-mcp` alone fails.
-tokio = { workspace = true, features = ["io-util", "macros", "process", "sync", "time"] }
+tokio = { workspace = true, features = ["io-util", "macros", "process", "rt", "sync", "time"] }
 
 # Async trait
 async-trait = { workspace = true }
