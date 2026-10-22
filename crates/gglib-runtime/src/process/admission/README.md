@@ -107,13 +107,22 @@ an evictable primary under the ordinary turn rules. The caller says which
 program serves a request in its [`Candidate`].
 
 One image model is loaded at a time. While another image model is in a slot,
-loaded or still loading, that slot is the only one an image model may use,
-whatever the memory check says: it swaps in there once that model is idle,
-and waits while it renders or loads. It never loads beside it and never
-evicts the chat model to do so, and a chat model a run holds does not refuse
-it. A slot that is loading names its runtime for this. The memory check
-places an image model only when no other is in a slot, so one that needs the
-chat model's memory as well is still loaded in the other's place.
+loaded or still loading, that slot is the only one an image model may use: it
+swaps in there once that model is idle, and waits while it renders or loads.
+It never loads beside it and never evicts the chat model to do so, and a chat
+model a run holds does not refuse one that fits there. A slot that is loading
+names its runtime for this.
+
+A swap into that slot, or into the primary, is made only when the image model
+fits in the memory the model it replaces gives back: the memory check's free
+reading with that model's weights added back. With nothing loaded or loading
+beside the other image model there is nothing to share memory with, so the
+newcomer replaces it whatever the budget, as on a cold daemon. One too large for its
+place is refused at once when a run holds the chat model, since it would need
+that memory too. With the chat model idle, nothing evicts both, so it waits:
+like a waiter for a held slot it is passed over at the front of the line, so
+the chat model keeps serving and other requests go, and it gets the ordinary
+stall 503 at its deadline.
 
 # The generation gate
 

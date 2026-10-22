@@ -28,9 +28,11 @@ once before the request ever joins the queue:
 An image model skips the context: it has none. It is placed by its files
 and its family's compute margin (`vram::image_footprint`) under the queue's
 image rules, and a held primary it cannot go beside refuses it at once as
-`image_model_does_not_fit`. While another image model is loaded or loading
-the queue gives it that model's slot and no other, so it replaces that
-model, waits for its render, and is not refused on the chat model's account.
+`image_model_does_not_fit`. While another image model is loaded or loading,
+that model's slot is the only one it may take, and it swaps in only when it
+fits in the memory that model gives back: it waits for the render, and is
+refused on the chat model's account only when a run holds the chat model and
+the newcomer would need its memory too (the admission README has the rules).
 
 What remains in the loop is purely scheduling. That split is what keeps the
 launch sequence a straight line rather than a state machine.

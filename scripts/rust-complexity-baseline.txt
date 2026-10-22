@@ -228,7 +228,8 @@ crates/gglib-runtime/src/process/admission/gate_tests.rs 585
 crates/gglib-runtime/src/process/admission/queue_tests.rs 1043
 crates/gglib-runtime/src/process/admission/state.rs 769
 crates/gglib-runtime/src/process/admission/state_gate.rs 359
-crates/gglib-runtime/src/process/admission/state_placement_tests.rs 572
+crates/gglib-runtime/src/process/admission/state_placement.rs 308
+crates/gglib-runtime/src/process/admission/state_placement_tests.rs 741
 crates/gglib-runtime/src/process/core.rs 304
 crates/gglib-runtime/src/process/manager.rs 321
 crates/gglib-runtime/src/process/manager_tests.rs 344

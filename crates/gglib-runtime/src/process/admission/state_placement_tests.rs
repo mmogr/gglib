@@ -40,6 +40,17 @@ const IMAGE_NO_ROOM: Candidate = Candidate::image(SecondarySlotDecision::RefuseN
 /// An image model on a machine whose free memory cannot be read.
 const IMAGE_UNKNOWN: Candidate = Candidate::image(SecondarySlotDecision::RefuseUnknownBudget);
 
+/// What a resident's weights occupy unless a test says otherwise: enough
+/// that [`IMAGE_NO_ROOM`] fits in its place, and [`IMAGE_TOO_LARGE`] does
+/// not.
+const RESIDENT_WEIGHTS: u64 = 24 * GIB;
+
+/// An image model too large even for one resident's place.
+const IMAGE_TOO_LARGE: Candidate = Candidate::image(SecondarySlotDecision::RefuseNoHeadroom {
+    footprint_bytes: 40 * GIB,
+    free_bytes: 6 * GIB,
+});
+
 fn queue() -> Arc<AdmissionQueue> {
     Arc::new(AdmissionQueue::new())
 }
@@ -59,7 +70,7 @@ fn resident(model_id: u32, name: &str) -> Resident {
         narration: None,
         inflight: 0,
         resident_since: Instant::now(),
-        weights_bytes: 512 * 1024 * 1024,
+        weights_bytes: RESIDENT_WEIGHTS,
     }
 }
 
@@ -371,10 +382,10 @@ fn image_models_loaded(q: &Arc<AdmissionQueue>) -> usize {
         .count()
 }
 
-/// With Flux idle beside an idle chat model, a second image model takes
-/// Flux's slot and the chat model stays, whatever the memory check says of
-/// it. Before this rule the one with no room evicted the chat model and
-/// kept Flux.
+/// With Flux idle beside an idle chat model, a second image model that fits
+/// in Flux's place takes Flux's slot and the chat model stays, though there
+/// is no room beside both. Before this rule the one with no room evicted the
+/// chat model and kept Flux.
 #[tokio::test]
 async fn a_picked_image_model_replaces_the_idle_one_and_the_chat_model_stays() {
     for candidate in [IMAGE_NO_ROOM, IMAGE_UNKNOWN, IMAGE_FITS] {
@@ -391,9 +402,9 @@ async fn a_picked_image_model_replaces_the_idle_one_and_the_chat_model_stays() {
     }
 }
 
-/// A chat model a run holds does not refuse a second image model: it swaps
-/// in where the idle one is. With no other image model loaded the same
-/// request is still refused, as before.
+/// A chat model a run holds does not refuse a second image model that fits
+/// in the idle one's place: it swaps in there. With no other image model
+/// loaded the same request is still refused, as before.
 #[tokio::test]
 async fn under_a_held_chat_model_a_picked_image_model_swaps_in_and_is_not_refused() {
     let q = queue();
@@ -567,4 +578,164 @@ async fn a_model_that_chats_is_placed_as_before_beside_an_image_model() {
         },
         "a small model that chats may still take the idle image model's slot"
     );
+}
+
+/// A picked image model too large for a small Flux's place, beside a chat
+/// model a run holds, is refused at once, naming the held model. With the
+/// chat model idle it waits instead: loading it in Flux's place would
+/// over-commit memory, taking the chat model's place would leave two image
+/// models loaded, and nothing evicts both. It is passed over at the front of
+/// the line meanwhile, so the chat model serves and another model's request
+/// goes first.
+#[tokio::test]
+async fn under_a_held_chat_model_an_image_model_too_large_for_the_idle_ones_place_is_refused() {
+    let q = chat_and_flux();
+    drop(q.install(
+        1,
+        Resident {
+            runtime: RuntimeKind::StableDiffusion,
+            weights_bytes: GIB,
+            ..resident(FLUX, "flux")
+        },
+    ));
+    let hold = q.hold(8001, 1).expect("qwen is resident on its port");
+    assert_eq!(
+        poll_once(&q, QWEN_IMAGE, "qwen-image", IMAGE_NO_ROOM),
+        AdmissionDecision::Refuse(Refusal::HeldSlot {
+            held_model: "qwen".to_owned(),
+            needed_bytes: Some(20 * GIB),
+            free_bytes: Some(6 * GIB),
+        })
+    );
+    assert!(
+        q.snapshot().queued.is_empty(),
+        "the refused ticket is forgotten"
+    );
+
+    drop(hold);
+    assert_eq!(
+        poll_once(&q, QWEN_IMAGE, "qwen-image", IMAGE_NO_ROOM),
+        AdmissionDecision::Wait
+    );
+    assert_eq!(
+        loaded(&q),
+        [(PRIMARY_SLOT, 1), (1, FLUX)],
+        "nothing evicted"
+    );
+    assert!(!q.is_loading(), "nothing was started");
+
+    assert_eq!(
+        poll_once(&q, 1, "qwen", NEVER_FITS.into()),
+        AdmissionDecision::Serve { slot: PRIMARY_SLOT },
+        "the chat model does not stand aside for the waiter"
+    );
+    assert_eq!(
+        poll_once(&q, 7, "embedder", ALWAYS_FITS.into()),
+        AdmissionDecision::Launch {
+            slot: 1,
+            evict: Some(FLUX)
+        },
+        "a younger request for another model goes first"
+    );
+}
+
+/// The swap into the primary is judged the same way: an image model too
+/// large for the idle chat model's place waits rather than evict it, and
+/// the chat model keeps serving once its quantum is over.
+#[tokio::test]
+async fn an_image_model_too_large_for_the_primarys_place_does_not_swap_in() {
+    tokio::time::pause();
+    let q = queue();
+    chat_resident(&q, "qwen", 1);
+    let ticket = q.enqueue(FLUX, "flux");
+    assert_eq!(q.poll(&ticket, IMAGE_TOO_LARGE), AdmissionDecision::Wait);
+    tokio::time::advance(DRAIN_QUANTUM).await;
+    assert_eq!(q.poll(&ticket, IMAGE_TOO_LARGE), AdmissionDecision::Wait);
+    assert_eq!(loaded(&q), [(PRIMARY_SLOT, 1)], "the chat model stays");
+    assert!(!q.is_loading(), "nothing was started");
+
+    assert_eq!(
+        poll_once(&q, 1, "qwen", NEVER_FITS.into()),
+        AdmissionDecision::Serve { slot: PRIMARY_SLOT },
+        "the chat model does not stand aside for the waiter"
+    );
+}
+
+/// With only Flux loaded, a picked image model too large for Flux's place
+/// replaces it anyway: nothing else shares the memory, as on a cold daemon.
+#[tokio::test]
+async fn alone_a_picked_image_model_replaces_the_other_whatever_the_budget() {
+    let q = queue();
+    assert_eq!(
+        poll_once(&q, FLUX, "flux", IMAGE_NO_ROOM),
+        AdmissionDecision::Launch {
+            slot: 1,
+            evict: None
+        },
+        "precondition: flux takes the second slot on a cold daemon"
+    );
+    drop(q.install(
+        1,
+        Resident {
+            runtime: RuntimeKind::StableDiffusion,
+            weights_bytes: GIB,
+            ..resident(FLUX, "flux")
+        },
+    ));
+    assert_eq!(
+        poll_once(&q, QWEN_IMAGE, "qwen-image", IMAGE_NO_ROOM),
+        AdmissionDecision::Launch {
+            slot: 1,
+            evict: Some(FLUX)
+        }
+    );
+}
+
+/// Under a chat model a run holds, an image model still loading is waited
+/// for, not refused: it gives no memory back until it lands, so the
+/// newcomer is judged then.
+#[tokio::test]
+async fn under_a_held_chat_model_an_image_model_still_loading_is_waited_for() {
+    let q = queue();
+    chat_resident(&q, "qwen", 1);
+    assert_eq!(
+        poll_once(&q, FLUX, "flux", IMAGE_FITS),
+        AdmissionDecision::Launch {
+            slot: 1,
+            evict: None
+        }
+    );
+    let _hold = q.hold(8001, 1).expect("qwen is resident on its port");
+
+    assert_eq!(
+        poll_once(&q, QWEN_IMAGE, "qwen-image", IMAGE_NO_ROOM),
+        AdmissionDecision::Wait
+    );
+}
+
+/// A request too large for Flux's place is not placed though an older
+/// request for the same model, last judged to fit, lets that model lead:
+/// it is judged by its own verdict, and takes neither slot.
+#[tokio::test]
+async fn a_request_too_large_for_its_place_is_not_placed_behind_one_that_fit() {
+    let q = chat_and_flux();
+    drop(q.install(
+        1,
+        Resident {
+            runtime: RuntimeKind::StableDiffusion,
+            weights_bytes: GIB,
+            ..resident(FLUX, "flux")
+        },
+    ));
+    let render = q.lease(1).expect("a lease on flux");
+    let older = q.enqueue(QWEN_IMAGE, "qwen-image");
+    assert_eq!(q.poll(&older, IMAGE_FITS), AdmissionDecision::Wait);
+    drop(render);
+
+    assert_eq!(
+        poll_once(&q, QWEN_IMAGE, "qwen-image", IMAGE_NO_ROOM),
+        AdmissionDecision::Wait
+    );
+    assert_eq!(loaded(&q), [(PRIMARY_SLOT, 1), (1, FLUX)]);
+    assert!(!q.is_loading(), "nothing was started");
 }
