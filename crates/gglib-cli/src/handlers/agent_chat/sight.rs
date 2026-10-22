@@ -5,10 +5,11 @@
 //! ([`gglib_core::request_pipeline::refuse_unless_can_see`]); this is where
 //! the CLI finds out what to ask it with. A model of this machine is judged
 //! by its catalogue row: it can see when a projector is linked. A session
-//! on `--port` talks to the server on that port, so that server is asked,
-//! through its `/props`, whatever the catalogue holds under the name. A
-//! model of the paired machine is not judged here: its own proxy refuses
-//! the request by the same code.
+//! on `--port` talks to the server on that port, so that server is asked
+//! first, through its `/props`; the row decides only when the server does
+//! not say, and a row with a projector on a server that cannot see is told
+//! the server was started without it. A model of the paired machine is not
+//! judged here: its own proxy refuses the request by the same code.
 
 use std::time::Duration;
 
@@ -34,8 +35,14 @@ pub(crate) struct Sight {
 enum Source {
     /// The catalogue row's `image_input`.
     Catalogue(bool),
-    /// The llama-server on this loopback port, asked when an image is sent.
-    Server { client: reqwest::Client, port: u16 },
+    /// The llama-server on this loopback port, asked when an image is sent,
+    /// and the catalogue row's `image_input` under the session's model, for
+    /// when the server does not say.
+    Server {
+        client: reqwest::Client,
+        port: u16,
+        catalogue: Option<bool>,
+    },
     /// Nothing here can say; whatever serves the turn answers.
     Unjudged,
 }
@@ -57,18 +64,29 @@ impl Sight {
         }
     }
 
-    /// The llama-server on `port`, called `model` in a refusal.
-    pub(crate) fn server(model: &str, client: reqwest::Client, port: u16) -> Self {
+    /// The llama-server on `port`, called `model` in a refusal; `catalogue`
+    /// is the row's `image_input`, `None` when there is no row to read.
+    pub(crate) fn server(
+        model: &str,
+        client: reqwest::Client,
+        port: u16,
+        catalogue: Option<bool>,
+    ) -> Self {
         Self {
             model: model.to_owned(),
-            source: Source::Server { client, port },
+            source: Source::Server {
+                client,
+                port,
+                catalogue,
+            },
         }
     }
 
     /// What the session `params` describes knows of its model.
     ///
-    /// `--port` names the server that answers, whatever the catalogue holds
-    /// under the same name, so there the server is the one asked.
+    /// `--port` names the server that answers, so there the server is the
+    /// one asked, and the row is read only for when it does not say. A row
+    /// that cannot be read there is no row: the server still judges.
     ///
     /// # Errors
     ///
@@ -81,7 +99,16 @@ impl Sight {
             .map_or(params.model_identifier.as_str(), |turn| turn.name.as_str());
         Ok(match (params.target, params.port) {
             (Target::Remote, _) => Self::unjudged(),
-            (Target::Local, Some(port)) => Self::server(name, ctx.http_client.clone(), port),
+            (Target::Local, Some(port)) => {
+                let catalogue = params
+                    .target
+                    .local_model(ctx, &params.model_identifier)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|model| model.image_input());
+                Self::server(name, ctx.http_client.clone(), port, catalogue)
+            }
             (Target::Local, None) => params
                 .target
                 .local_model(ctx, &params.model_identifier)
@@ -98,24 +125,37 @@ impl Sight {
     /// # Errors
     ///
     /// Core's refusal, naming the model and the command that links a
-    /// projector.
+    /// projector, or, on a server that cannot see a model whose row has
+    /// one, saying that server was started without it.
     pub(crate) async fn admit(&self, has_images: bool) -> Result<()> {
         if !has_images {
             return Ok(());
         }
-        let image_input = match &self.source {
-            Source::Catalogue(image_input) => *image_input,
-            Source::Server { client, port } => server_sees(client, *port).await.unwrap_or(true),
-            Source::Unjudged => true,
+        let (image_input, linked_on) = match &self.source {
+            Source::Catalogue(image_input) => (*image_input, None),
+            Source::Server {
+                client,
+                port,
+                catalogue,
+            } => {
+                let served = server_sees(client, *port).await;
+                let linked_on = (*catalogue == Some(true)).then_some(*port);
+                (served.or(*catalogue).unwrap_or(true), linked_on)
+            }
+            Source::Unjudged => (true, None),
         };
-        refuse_unless_can_see(image_input, has_images)
-            .map_err(|refusal| anyhow!(refusal.message(&self.model)))
+        refuse_unless_can_see(image_input, has_images).map_err(|refusal| {
+            anyhow!(linked_on.map_or_else(
+                || refusal.message(&self.model),
+                |port| refusal.started_without_projector(&self.model, port),
+            ))
+        })
     }
 }
 
 /// What the llama-server on `port` says of its image input: its `/props`
 /// `modalities.vision`. `None` when it does not answer, or answers without
-/// one, which is no refusal: an older server has no such field.
+/// one (an older server has no such field), and the row decides.
 async fn server_sees(client: &reqwest::Client, port: u16) -> Option<bool> {
     let response = client
         .get(format!("http://127.0.0.1:{port}/props"))

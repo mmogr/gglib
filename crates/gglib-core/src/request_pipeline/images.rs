@@ -90,7 +90,11 @@ pub fn has_images(body: &Value) -> bool {
 }
 
 /// The refusal of a request that carries an image for a model that cannot
-/// read one. Every surface answers with [`Self::code`] and [`Self::message`].
+/// read one.
+///
+/// Every surface answers with [`Self::code`] and [`Self::message`], or, on a
+/// `--port` server started without the projector a model is linked to,
+/// [`Self::started_without_projector`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CannotReadImages;
 
@@ -108,6 +112,18 @@ impl CannotReadImages {
         format!(
             "Model '{model}' cannot read images: it has no projector linked. Link one with \
              `gglib model update {model} --projector <path>`, or name a model that has one."
+        )
+    }
+
+    /// What the user is told when the llama-server on `port` cannot read
+    /// images though `model` is linked to a projector: that server was
+    /// started without it.
+    #[must_use]
+    pub fn started_without_projector(&self, model: &str, port: u16) -> String {
+        format!(
+            "Model '{model}' cannot read images on port {port}: the server there was started \
+             without its projector, though one is linked. Start it with `gglib serve {model}`, \
+             which loads the projector, or drop `--port`."
         )
     }
 }

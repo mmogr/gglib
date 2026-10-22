@@ -101,7 +101,7 @@ fn closed_port() -> u16 {
 /// What a `--port` session on a server answering `body` says to an image.
 async fn on_server(body: &'static str) -> Result<()> {
     let server = props_server(body);
-    Sight::server("qwen", reqwest::Client::new(), server.port)
+    Sight::server("qwen", reqwest::Client::new(), server.port, None)
         .admit(true)
         .await
 }
@@ -163,7 +163,7 @@ async fn a_server_that_names_no_modalities_proceeds() {
 
 #[tokio::test]
 async fn a_server_that_does_not_answer_proceeds() {
-    let sight = Sight::server("qwen", reqwest::Client::new(), closed_port());
+    let sight = Sight::server("qwen", reqwest::Client::new(), closed_port(), None);
 
     assert!(sight.admit(true).await.is_ok());
 }
@@ -171,7 +171,7 @@ async fn a_server_that_does_not_answer_proceeds() {
 #[tokio::test]
 async fn the_server_is_asked_its_props_and_only_when_an_image_is_sent() {
     let server = props_server(r#"{"modalities":{"vision":true}}"#);
-    let sight = Sight::server("qwen", reqwest::Client::new(), server.port);
+    let sight = Sight::server("qwen", reqwest::Client::new(), server.port, None);
 
     sight.admit(false).await.unwrap();
     assert!(server.requests().is_empty());
@@ -196,15 +196,16 @@ fn params(identifier: &str, target: Target, port: Option<u16>) -> AgentSessionPa
     }
 }
 
-/// A context whose catalogue holds `qwen`, linked to no projector.
-async fn with_unlinked_qwen(dir: &tempfile::TempDir) -> CliContext {
+/// A context whose catalogue holds `qwen`, linked to a projector or not.
+async fn with_qwen(dir: &tempfile::TempDir, linked: bool) -> CliContext {
     let ctx = test_context(dir.path()).await;
-    let model = gglib_core::domain::NewModel::new(
+    let mut model = gglib_core::domain::NewModel::new(
         "qwen".to_owned(),
         dir.path().join("qwen.gguf"),
         8.0,
         chrono::Utc::now(),
     );
+    model.projector_path = linked.then(|| dir.path().join("mmproj-F16.gguf"));
     ctx.app.models().add(model).await.expect("registered");
     ctx
 }
@@ -212,7 +213,7 @@ async fn with_unlinked_qwen(dir: &tempfile::TempDir) -> CliContext {
 #[tokio::test]
 async fn a_local_session_is_judged_by_its_catalogue_row() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = with_unlinked_qwen(&dir).await;
+    let ctx = with_qwen(&dir, false).await;
 
     let sight = Sight::of_session(&ctx, &params("qwen", Target::Local, None)).await;
     let sight = sight.expect("judged");
@@ -248,10 +249,10 @@ async fn a_local_session_whose_catalogue_cannot_be_read_is_an_error() {
     assert_eq!(error, UNREADABLE);
 }
 
-/// A session on `--port` asks its server and does not read the catalogue,
-/// so one that cannot be read does not stop it being judged.
+/// A session on `--port` whose catalogue cannot be read is still judged by
+/// its server, since the server answers the turn.
 #[tokio::test]
-async fn a_port_session_is_judged_without_reading_the_catalogue() {
+async fn a_port_session_whose_catalogue_cannot_be_read_is_judged_by_its_server() {
     let dir = tempfile::tempdir().expect("tempdir");
     let ctx = with_unreadable_catalogue(&dir).await;
     let server = props_server(r#"{"modalities":{"vision":false}}"#);
@@ -267,7 +268,7 @@ async fn a_port_session_is_judged_without_reading_the_catalogue() {
 #[tokio::test]
 async fn a_port_session_is_judged_by_its_server_not_the_catalogue() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = with_unlinked_qwen(&dir).await;
+    let ctx = with_qwen(&dir, false).await;
     let server = props_server(r#"{"modalities":{"vision":true}}"#);
     let session = params("qwen", Target::Local, Some(server.port));
 
@@ -277,12 +278,52 @@ async fn a_port_session_is_judged_by_its_server_not_the_catalogue() {
     assert_eq!(server.requests().len(), 1);
 }
 
+/// A server that does not say leaves it to the row: `qwen` has no
+/// projector, so it is refused before llama-server would answer 500.
+#[tokio::test]
+async fn a_port_session_whose_server_does_not_say_is_judged_by_the_row() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = with_qwen(&dir, false).await;
+    let server = props_server(r#"{"total_slots":1}"#);
+    let session = params("qwen", Target::Local, Some(server.port));
+
+    let sight = Sight::of_session(&ctx, &session).await.expect("judged");
+
+    let refused = sight
+        .admit(true)
+        .await
+        .expect_err("the row has no projector");
+    assert_eq!(
+        refused.to_string(),
+        gglib_core::request_pipeline::CannotReadImages.message("qwen")
+    );
+}
+
+/// `qwen` is linked to a projector and the server cannot see: it was
+/// started without it, and linking one would change nothing.
+#[tokio::test]
+async fn a_port_server_started_without_the_linked_projector_is_named() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ctx = with_qwen(&dir, true).await;
+    let server = props_server(r#"{"modalities":{"vision":false}}"#);
+    let session = params("qwen", Target::Local, Some(server.port));
+
+    let sight = Sight::of_session(&ctx, &session).await.expect("judged");
+
+    let refused = sight.admit(true).await.expect_err("the server cannot see");
+    let sentence = gglib_core::request_pipeline::CannotReadImages
+        .started_without_projector("qwen", server.port);
+    assert_eq!(refused.to_string(), sentence);
+    assert!(sentence.contains(&format!("port {}", server.port)));
+    assert!(sentence.contains("drop `--port`"));
+}
+
 /// The paired machine's model is not this catalogue's to judge, even when
 /// a model of the same name here has no projector.
 #[tokio::test]
 async fn a_far_session_is_not_judged_here() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let ctx = with_unlinked_qwen(&dir).await;
+    let ctx = with_qwen(&dir, false).await;
 
     let sight = Sight::of_session(&ctx, &params("qwen", Target::Remote, None)).await;
 

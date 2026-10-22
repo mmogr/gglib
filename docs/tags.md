@@ -159,9 +159,12 @@ decision 1).
 Two kinds of model are judged by something other than this library's link.
 With `--port` (`gglib q --port`, `gglib chat --port`), a turn goes to a
 llama-server that is already running, and that server's `GET /props` is
-asked, whatever row the library holds under the model's name:
-`modalities.vision` false is refused as a model with no projector is, and a
-server that does not answer within 2 s, or does not say, is sent the image
+asked first: `modalities.vision` false is refused as a model with no
+projector is, or, when the library links the model to a projector, with a
+sentence saying the server on that port was started without it (start it
+with `gglib serve <model>`, or drop `--port`). A server that does not answer
+within 2 s, or does not say, is judged by the library's row of that name, and
+is sent the image only when there is no such row
 ([#1255](https://github.com/mmogr/gglib/issues/1255)). A model of the paired
 machine (`--remote`, or a far model on the chat page) is judged on that
 machine, by its own link there, and its refusal comes back with the same
