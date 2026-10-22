@@ -27,7 +27,7 @@ says whether a message sent with Draw pressed can draw here, and why not,
 lists this machine's image models, and with `image_model=<id>` judges that
 one as a request naming it would be; `generate_image`
 is never in `/api/builtin/tools`, whose list the page lets a person switch
-tools on from.
+tools on from, and neither are the file tools, which need the run's folder.
 
 `chat_title.rs` is `POST /api/chat`: a chat's title, asked of the
 llama-server the chat runs on. The body names the port, the messages, a

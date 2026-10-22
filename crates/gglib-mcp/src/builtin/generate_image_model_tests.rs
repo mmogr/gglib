@@ -79,7 +79,7 @@ async fn a_model_argument_never_replaces_the_choice() {
 /// with or without a choice: its properties are the four it always had.
 #[tokio::test]
 async fn the_offered_tool_has_no_model_argument() {
-    let schema = definition().input_schema.expect("a schema");
+    let schema = definition(None).input_schema.expect("a schema");
     let mut keys: Vec<&str> = schema["properties"]
         .as_object()
         .expect("properties")

@@ -9,6 +9,33 @@ use serde_json::Value;
 
 use super::sandboxing::{Resolved, is_binary, resolve_sandboxed_path};
 
+/// The folders a search never walks into, besides hidden ones.
+pub(crate) const SKIP_DIRS: &[&str] = &[
+    "node_modules",
+    ".git",
+    "target",
+    "__pycache__",
+    ".venv",
+    "dist",
+    "build",
+    "web_ui",
+];
+
+/// The [`SKIP_DIRS`] a model is told about, as "a, b and c": the hidden ones
+/// are left out, since the description already says hidden entries are skipped.
+pub(crate) fn skipped_folders() -> String {
+    let shown: Vec<&str> = SKIP_DIRS
+        .iter()
+        .copied()
+        .filter(|name| !name.starts_with('.'))
+        .collect();
+    match shown.split_last() {
+        Some((last, [])) => (*last).to_owned(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+        None => String::new(),
+    }
+}
+
 /// Search for a pattern in files within the sandbox.
 ///
 /// Does a case-insensitive substring search across all text files under
@@ -123,18 +150,6 @@ impl Walk<'_> {
     /// a link swapped in between is read where it then points. None of the
     /// builtins writes, so only another process can swap one.
     fn walk_dir(&self, dir: &Path, ancestors: &mut Vec<PathBuf>, matches: &mut Vec<String>) {
-        // Skip common noise directories
-        const SKIP_DIRS: &[&str] = &[
-            "node_modules",
-            ".git",
-            "target",
-            "__pycache__",
-            ".venv",
-            "dist",
-            "build",
-            "web_ui",
-        ];
-
         let Some(here) = ancestors.last().cloned() else {
             return;
         };
