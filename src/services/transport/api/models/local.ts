@@ -18,7 +18,7 @@ import type {
   SetCapabilitiesRequest,
   SystemMemoryInfo,
   UpgradeCheck,
-  UpgradeOutcome,
+  UpgradeQueued,
 } from '../../../../types';
 import type { AddModelRequest } from '../../../../types/generated/AddModelRequest';
 import type { ModelListQueryParams } from '../../../../types/generated/ModelListQueryParams';
@@ -175,11 +175,13 @@ export async function checkModelUpgrade(modelId: number): Promise<UpgradeCheck> 
 }
 
 /**
- * Re-download at the latest HuggingFace revision (`gglib model upgrade`).
- * Blocking for the download's duration — callers show a busy state.
+ * Re-download at the latest HuggingFace revision (`gglib model upgrade`), on
+ * the download queue. Answers once the download is queued, with its id: the
+ * row to follow, and cancel, in the queue. The id is null when the model is
+ * already at the latest revision, and nothing was queued.
  */
-export async function upgradeModel(modelId: number): Promise<UpgradeOutcome> {
-  return post<UpgradeOutcome>(`/api/models/${modelId}/upgrade`, null);
+export async function upgradeModel(modelId: number): Promise<UpgradeQueued> {
+  return post<UpgradeQueued>(`/api/models/${modelId}/upgrade`, null);
 }
 
 

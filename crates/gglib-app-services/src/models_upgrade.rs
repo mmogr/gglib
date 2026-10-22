@@ -1,19 +1,31 @@
 //! Upgrading a model to its repository's latest revision: the check, and
 //! the download that follows it.
 //!
-//! One implementation for `gglib model upgrade` and the daemon's routes.
+//! One check for `gglib model upgrade` and the daemon's routes. The CLI
+//! downloads in its own process; the daemon queues the download.
 
 use std::future::Future;
 use std::sync::Arc;
 
+use gglib_core::download::DownloadError;
 use gglib_core::events::AppEvent;
+use gglib_core::ports::ModelRegistrarPort;
 use gglib_download::cli_exec::{
     CliDownloadResult, CliUpdateRequest, RowCallback, UpdateCheckResult,
 };
 
 use crate::error::GuiError;
 use crate::models::ModelOps;
-use crate::types::{UpgradeCheck, UpgradeOutcome};
+use crate::types::{UpgradeCheck, UpgradeOutcome, UpgradeQueued};
+
+/// What an upgrade of a model starts from, once it may go ahead: the model,
+/// the repository and quantization it downloads again, and the Hub's answer.
+struct Due {
+    model: gglib_core::Model,
+    repo: String,
+    quant: String,
+    check: UpdateCheckResult,
+}
 
 /// Ask the Hub for `repo`'s latest commit, and compare it with `recorded`.
 async fn hub_check(
@@ -90,11 +102,38 @@ impl ModelOps {
         self.check_update(id).await
     }
 
-    /// Re-download the model at the latest `HuggingFace` revision and rewrite
-    /// the row — `gglib model upgrade`, shared by the CLI and the GUI route.
+    /// Model `id`, ready to upgrade: one being served is refused before the
+    /// Hub is asked anything, then one with no repository or quantization,
+    /// and the Hub is asked with the core's token whether it has a newer
+    /// commit.
+    async fn upgrade_due<C, CF>(&self, id: i64, check: C) -> Result<Due, GuiError>
+    where
+        C: FnOnce(String, Option<String>, Option<String>) -> CF,
+        CF: Future<Output = anyhow::Result<UpdateCheckResult>>,
+    {
+        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
+        self.refuse_if_served(&model).await?;
+        let (repo, quant) = Self::upgrade_source(&model)?;
+        let check = check(
+            repo.clone(),
+            model.hf_commit_sha.clone(),
+            self.deps.core.hf_token(),
+        )
+        .await
+        .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
+        Ok(Due {
+            model,
+            repo,
+            quant,
+            check,
+        })
+    }
+
+    /// Re-download the model at the latest `HuggingFace` revision, in this
+    /// process, and rewrite the row — `gglib model upgrade`.
     ///
     /// The row is rewritten by the registrar's upgrade step
-    /// ([`ModelRegistrar::upgrade_model`](gglib_core::services::ModelRegistrar::upgrade_model)):
+    /// ([`ModelRegistrarPort::upgrade_model`]):
     /// the model keeps its id and every field its owner set, a projector the
     /// download brought is linked when the model has none, and each file's
     /// `model_files` record takes its new OID.
@@ -106,14 +145,15 @@ impl ModelOps {
     ///
     /// Checks first and returns `updated: false` without downloading when the
     /// model is already current. The HF token is the one the core was built
-    /// with, on every surface. The call does not return until the
-    /// download finishes; queue integration is future work, as is any
-    /// serialisation between two upgrades of the same model (concurrent
-    /// callers both download and the last one wins the row).
+    /// with, on every surface. The call does not return until the download
+    /// finishes. Nothing serialises two upgrades of the same model this way:
+    /// concurrent callers both download and the last one wins the row.
     ///
     /// The download is not on the queue, so no snapshot shows it. `rows` is
     /// handed its row while the files are fetched, for a caller that can
-    /// draw it; with `None` its progress is shown nowhere.
+    /// draw it; with `None` its progress is shown nowhere. The daemon's
+    /// route queues the download instead
+    /// ([`queue_upgrade`](Self::queue_upgrade)).
     pub async fn apply_upgrade(
         &self,
         id: i64,
@@ -139,20 +179,12 @@ impl ModelOps {
         D: FnOnce(CliUpdateRequest, Option<RowCallback>) -> DF,
         DF: Future<Output = anyhow::Result<CliDownloadResult>> + Send + 'static,
     {
-        let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
-        self.refuse_if_served(&model).await?;
-        let (repo, quant) = Self::upgrade_source(&model)?;
-        let models_dir = gglib_core::paths::resolve_models_dir(None)
-            .map_err(|e| GuiError::Internal(format!("Could not resolve models dir: {e}")))?
-            .path;
-
-        let check = check(
-            repo.clone(),
-            model.hf_commit_sha.clone(),
-            self.deps.core.hf_token(),
-        )
-        .await
-        .map_err(|e| GuiError::Internal(format!("Update check failed: {e}")))?;
+        let Due {
+            model,
+            repo,
+            quant,
+            check,
+        } = self.upgrade_due(id, check).await?;
         if !check.has_update {
             return Ok(UpgradeOutcome {
                 updated: false,
@@ -160,6 +192,9 @@ impl ModelOps {
                 file_path: None,
             });
         }
+        let models_dir = gglib_core::paths::resolve_models_dir(None)
+            .map_err(|e| GuiError::Internal(format!("Could not resolve models dir: {e}")))?
+            .path;
 
         // Detached deliberately. The forced re-download writes each new file
         // beside the old one and moves it into place once complete, so if
@@ -207,6 +242,60 @@ impl ModelOps {
         .await
         .map_err(|e| GuiError::Internal(format!("Upgrade task panicked: {e}")))?
     }
+
+    /// [`apply_upgrade`](Self::apply_upgrade) on the download queue, for the
+    /// daemon's route: it answers once the download is queued and started,
+    /// with its ID. The download's row is in the queue snapshot, and
+    /// cancelling the download stops it. Once its last file is in, the
+    /// manager rewrites the model's row with the registrar's upgrade step
+    /// and announces it as `model_updated`.
+    ///
+    /// The refusals and the check are `apply_upgrade`'s, and a model already
+    /// current answers no ID: nothing is queued. The files are fetched at
+    /// the commit the check found, which the row then records.
+    ///
+    /// Each file on disk is kept until its new copy is in place, and is
+    /// replaced then, one file at a time: an upgrade cancelled part-way
+    /// leaves files of two revisions under a row that names the old one.
+    pub async fn queue_upgrade(&self, id: i64) -> Result<UpgradeQueued, GuiError> {
+        self.queue_upgrade_with(id, hub_check).await
+    }
+
+    /// [`queue_upgrade`](Self::queue_upgrade) with the check passed in, as
+    /// [`apply_upgrade_with`](Self::apply_upgrade_with) takes it.
+    async fn queue_upgrade_with<C, CF>(&self, id: i64, check: C) -> Result<UpgradeQueued, GuiError>
+    where
+        C: FnOnce(String, Option<String>, Option<String>) -> CF,
+        CF: Future<Output = anyhow::Result<UpdateCheckResult>>,
+    {
+        let Due {
+            repo, quant, check, ..
+        } = self.upgrade_due(id, check).await?;
+        if !check.has_update {
+            return Ok(UpgradeQueued {
+                latest_sha: check.latest_sha,
+                id: None,
+            });
+        }
+
+        let commit = check.latest_sha.clone();
+        let queued = self
+            .deps
+            .core
+            .downloads()
+            .queue_upgrade(repo, quant, id, commit);
+        let download = queued.await.map_err(|e| match e {
+            DownloadError::AlreadyQueued { id } => GuiError::Conflict(format!(
+                "A download of {id} is already waiting or running. Upgrade the model once it \
+                 has ended."
+            )),
+            e => GuiError::Internal(format!("The upgrade could not be queued: {e}")),
+        })?;
+        Ok(UpgradeQueued {
+            latest_sha: check.latest_sha,
+            id: Some(download.to_string()),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -216,3 +305,7 @@ mod tests;
 #[cfg(test)]
 #[path = "models_upgrade_links_tests.rs"]
 mod links_tests;
+
+#[cfg(test)]
+#[path = "models_upgrade_queue_tests.rs"]
+mod queue_tests;

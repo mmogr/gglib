@@ -136,16 +136,17 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
    * this replaces the whole model at a newer repository revision.
    *
    * Confirmed through the same dialog as repair, not a label swap — it
-   * replaces a file that may be tens of gigabytes. The modal is sealed while
-   * it runs; the download itself completes server-side regardless.
+   * replaces a file that may be tens of gigabytes. The download runs on the
+   * queue: once it is queued the modal closes, as it does for a repair, and
+   * the queue shows its progress and can cancel it.
    */
   const handleUpgrade = async () => {
     const confirmed = await confirm({
       title: 'Re-download at the latest revision?',
       description:
-        `This downloads the whole of "${modelName}" again and replaces the current file. ` +
-        'There is no progress reporting yet, and it can take a long time on a large model — ' +
-        'leave gglib running until it finishes.',
+        `This downloads the whole of "${modelName}" again on the download queue, where its ` +
+        'progress shows and it can be cancelled. Each file is replaced once its new copy is in, ' +
+        'so cancelling part-way can leave a model with files of two revisions.',
       confirmLabel: 'Re-download',
       variant: 'danger',
     });
@@ -155,18 +156,19 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
     setError(null);
     setUpgradeMessage(null);
     try {
-      const outcome = await getTransport().upgradeModel(modelId);
-      setUpgradeMessage(
-        outcome.updated
-          ? `Upgraded to revision ${shortSha(outcome.latestSha)}`
-          : `Already at the latest revision (${shortSha(outcome.latestSha)})`,
-      );
+      const queued = await getTransport().upgradeModel(modelId);
+      appLogger.info('component', 'Model upgrade queued', { modelId, download: queued.id });
+      if (queued.id) {
+        // Close modal and let user monitor downloads
+        onClose();
+        return;
+      }
+      setUpgradeMessage(`Already at the latest revision (${shortSha(queued.latestSha)})`);
       setUpgradeCheck({
         hasUpdate: false,
-        currentSha: outcome.latestSha,
-        latestSha: outcome.latestSha,
+        currentSha: queued.latestSha,
+        latestSha: queued.latestSha,
       });
-      appLogger.info('component', 'Model upgrade finished', { modelId, updated: outcome.updated });
     } catch (err) {
       appLogger.error('component', 'Model upgrade failed', { error: err, modelId });
       setError(err instanceof Error ? err.message : String(err));
@@ -454,7 +456,7 @@ export const VerificationModal: FC<VerificationModalProps> = ({ modelId, modelNa
               onClick={handleUpgrade}
               className="w-full"
             >
-              {upgrading ? 'Re-downloading…' : 'Re-download at latest revision'}
+              {upgrading ? 'Queueing the re-download…' : 'Re-download at latest revision'}
             </Button>
             {upgradeMessage && (
               <p className="text-xs text-text-muted m-0" role="status">

@@ -7,6 +7,17 @@ use gglib_core::download::{CompletionKey, DownloadId, ShardInfo};
 
 use super::shard_group::ShardGroupId;
 
+/// What an upgrade's download is for: a model in the library, fetched again
+/// at a newer commit.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Upgrade {
+    /// The model whose row the download rewrites, instead of adding one.
+    pub model_id: i64,
+    /// The commit each file is fetched at, over the copy on disk, and the
+    /// revision the model's row records once every file is in.
+    pub commit: String,
+}
+
 /// A queued download item waiting to be processed.
 ///
 /// This is an internal type for the queue state machine.
@@ -28,6 +39,9 @@ pub(crate) struct QueuedItem {
     /// download's own: an image model's companion. `None` for the download's
     /// own files.
     pub repo: Option<String>,
+    /// The upgrade the file's download is, or `None` for a download that
+    /// adds a model.
+    pub upgrade: Option<Upgrade>,
 }
 
 impl QueuedItem {
@@ -43,6 +57,13 @@ impl QueuedItem {
         self
     }
 
+    /// Make the file part of `upgrade`.
+    #[must_use]
+    pub(crate) fn upgrading(mut self, upgrade: Option<&Upgrade>) -> Self {
+        self.upgrade = upgrade.cloned();
+        self
+    }
+
     /// Create a new simple (non-sharded) queued download.
     #[cfg(test)]
     pub(crate) fn new(id: DownloadId, completion_key: CompletionKey) -> Self {
@@ -53,6 +74,7 @@ impl QueuedItem {
             revision: None,
             completion_key,
             repo: None,
+            upgrade: None,
         }
     }
 
@@ -70,6 +92,7 @@ impl QueuedItem {
             revision: None,
             completion_key,
             repo: None,
+            upgrade: None,
         }
     }
 }

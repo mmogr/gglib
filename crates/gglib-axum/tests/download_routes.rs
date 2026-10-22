@@ -52,6 +52,19 @@ impl DownloadManagerPort for Recording {
         Ok(DownloadId::from(QUEUED))
     }
 
+    async fn queue_upgrade(
+        self: Arc<Self>,
+        repo_id: String,
+        quantization: String,
+        model_id: i64,
+        commit: String,
+    ) -> Result<DownloadId, DownloadError> {
+        self.record(format!(
+            "queue_upgrade {repo_id} {quantization} {model_id} {commit}"
+        ));
+        Ok(DownloadId::from(QUEUED))
+    }
+
     async fn get_queue_snapshot(&self) -> Result<QueueSnapshot, DownloadError> {
         Ok(QueueSnapshot::default())
     }

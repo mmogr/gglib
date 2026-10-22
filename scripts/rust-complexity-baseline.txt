@@ -9,6 +9,7 @@ crates/gglib-app-services/src/benchmark/mapper.rs 529
 crates/gglib-app-services/src/benchmark/tune/mod.rs 1338
 crates/gglib-app-services/src/models.rs 419
 crates/gglib-app-services/src/models_tests.rs 897
+crates/gglib-app-services/src/models_upgrade.rs 311
 crates/gglib-app-services/src/models_upgrade_tests.rs 373
 crates/gglib-app-services/src/proxy.rs 421
 crates/gglib-app-services/src/remote/far_proxy.rs 315
@@ -20,8 +21,8 @@ crates/gglib-app-services/src/servers_events_tests.rs 415
 crates/gglib-app-services/src/service_graph.rs 313
 crates/gglib-app-services/src/settings_tests.rs 327
 crates/gglib-app-services/src/setup.rs 306
-crates/gglib-app-services/src/test_support.rs 359
-crates/gglib-app-services/src/types.rs 531
+crates/gglib-app-services/src/test_support.rs 376
+crates/gglib-app-services/src/types.rs 543
 crates/gglib-app-services/src/types_model_dto_tests.rs 311
 crates/gglib-axum/src/error.rs 326
 crates/gglib-axum/src/handlers/agent/compose.rs 336
@@ -116,7 +117,7 @@ crates/gglib-core/src/request_pipeline/truncation.rs 329
 crates/gglib-core/src/request_pipeline/truncation_tests.rs 470
 crates/gglib-core/src/request_pipeline/validate.rs 497
 crates/gglib-core/src/server_config.rs 715
-crates/gglib-core/src/services/app_core.rs 325
+crates/gglib-core/src/services/app_core.rs 332
 crates/gglib-core/src/services/chat_history.rs 318
 crates/gglib-core/src/services/drawing.rs 349
 crates/gglib-core/src/services/drawing_tests.rs 347
@@ -150,9 +151,9 @@ crates/gglib-download/src/executor/native.rs 578
 crates/gglib-download/src/executor/native_tests.rs 859
 crates/gglib-download/src/manager/companion_group_tests.rs 475
 crates/gglib-download/src/manager/group_completion_tests.rs 366
-crates/gglib-download/src/manager/mod.rs 1229
+crates/gglib-download/src/manager/mod.rs 1265
 crates/gglib-download/src/quant_selector.rs 340
-crates/gglib-download/src/queue/mod.rs 1067
+crates/gglib-download/src/queue/mod.rs 1081
 crates/gglib-download/src/resolver/tests.rs 387
 crates/gglib-gguf/src/capabilities/template_probe.rs 501
 crates/gglib-gguf/src/parser.rs 356

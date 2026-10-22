@@ -158,9 +158,7 @@ impl ModelRegistrarPort for ModelRegistrar {
             component_refusals,
         })
     }
-}
 
-impl ModelRegistrar {
     /// Record `download`, model `model_id`'s files fetched again at a newer
     /// revision, on the model the library holds, and answer it as stored.
     ///
@@ -171,14 +169,11 @@ impl ModelRegistrar {
     /// no link gets one, and a link already held is kept. Each file's
     /// `model_files` record takes the download's OID and size.
     ///
-    /// Registering the upgrade instead would add a second model: the
-    /// library's key for a downloaded model holds its revision.
-    ///
     /// # Errors
     ///
     /// When model `model_id` cannot be read or written. Nothing is written
     /// then. A record that cannot be written is logged, as at registration.
-    pub async fn upgrade_model(
+    async fn upgrade_model(
         &self,
         model_id: i64,
         download: &CompletedDownload,
@@ -221,7 +216,9 @@ impl ModelRegistrar {
             component_refusals,
         })
     }
+}
 
+impl ModelRegistrar {
     /// One `model_files` record, with its OID, per file of `download`, for
     /// `registered`, when the registrar keeps them. A record that cannot be
     /// written is logged and passed over.

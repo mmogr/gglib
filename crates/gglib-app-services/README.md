@@ -74,7 +74,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`mcp.rs`** — `McpOps` MCP server configuration and management
 - **`models.rs`** — `ModelOps` model CRUD and listing operations, and `refuse_if_served`, the one rule that refuses a removal or an upgrade of a model a llama-server is serving
 - **`models_projector.rs`** — The projector link on `ModelOps`: an update's `projector_path` applied through `ModelService::set_projector`, and the choices the inspector's picker offers
-- **`models_upgrade.rs`** — `gglib model upgrade` on `ModelOps`: the commit check, and the download and row rewrite, whose progress is the download row handed to the caller's `RowCallback`; a model that is being served is refused first
+- **`models_upgrade.rs`** — `gglib model upgrade` on `ModelOps`: the commit check, and the download and row rewrite, whose progress is the download row handed to the caller's `RowCallback`; and `queue_upgrade`, the daemon's route, which queues the download at the commit the check found and answers its id; a model that is being served is refused first
 - **`proxy.rs`** — `ProxyOps` OpenAI-compatible proxy lifecycle management
 - **`servers.rs`** — `ServerOps` model server lifecycle management (a stop names the model, in whichever slot it sits)
 - **`settings.rs`** — `SettingsOps` application settings persistence

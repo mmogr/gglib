@@ -1,5 +1,5 @@
-//! An [`AppCore`] made from repositories alone, for tests that neither ask
-//! the Hub nor download.
+//! An [`AppCore`] made from repositories, and a download queue when a test
+//! gives one, for tests that do not ask the Hub.
 
 use std::sync::Arc;
 
@@ -9,8 +9,8 @@ use super::AppCore;
 use crate::download::DownloadError;
 use crate::ports::huggingface::HfPortResult;
 use crate::ports::{
-    AskedDownloads, HfClientPort, HfFileInfo, HfQuantInfo, HfRepoInfo, HfSearchOptions,
-    HfSearchResult, Repos,
+    AskedDownloads, DownloadManagerPort, HfClientPort, HfFileInfo, HfQuantInfo, HfRepoInfo,
+    HfSearchOptions, HfSearchResult, Repos,
 };
 
 impl AppCore {
@@ -21,7 +21,12 @@ impl AppCore {
     #[must_use]
     pub fn bare(repos: Repos) -> Self {
         let no_queue = DownloadError::other("a bare core has no download queue");
-        let downloads = Arc::new(AskedDownloads::refusing(no_queue));
+        Self::queueing_on(repos, Arc::new(AskedDownloads::refusing(no_queue)))
+    }
+
+    /// [`AppCore::bare`], whose downloads queue on `downloads`.
+    #[must_use]
+    pub fn queueing_on(repos: Repos, downloads: Arc<dyn DownloadManagerPort>) -> Self {
         Self::new(repos, Arc::new(NoHub), downloads)
     }
 }

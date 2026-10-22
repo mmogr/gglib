@@ -21,6 +21,8 @@ mod projector_group_tests;
 mod runner_tests;
 #[cfg(test)]
 mod test_support;
+#[cfg(test)]
+mod upgrade_registration_tests;
 
 use crate::queue::ShardGroupId;
 use std::collections::HashMap;
@@ -470,6 +472,7 @@ impl DownloadManagerImpl {
             cancel,
             progress_tx,
             expected_size: known_size(item.shard_info.as_ref().and_then(|s| s.file_size)),
+            upgrade: item.upgrade.clone(),
         }
     }
 
@@ -482,6 +485,9 @@ impl DownloadManagerImpl {
     ///
     /// A previous interrupted download may have left a truncated file that
     /// `hf_hub_download` would silently accept as "cached".
+    ///
+    /// An upgrade's file is left alone: it is the old revision's, kept in
+    /// place until its new copy, fetched beside it, replaces it.
     fn remove_corrupt_cached_file(
         item: &QueuedItem,
         primary_file_path: Option<&std::path::PathBuf>,
@@ -489,6 +495,9 @@ impl DownloadManagerImpl {
         let Some(path) = primary_file_path else {
             return;
         };
+        if item.upgrade.is_some() {
+            return;
+        }
         if !path.exists() {
             return;
         }
@@ -705,7 +714,7 @@ impl DownloadManagerImpl {
                 file_count = complete.ordered_paths.len(),
                 "All files downloaded, registering model"
             );
-            Some(self.register_completed_model(&item.id, complete).await)
+            Some(self.register_completed_model(item, complete).await)
         } else {
             tracing::debug!(
                 id = %item.id,
@@ -734,7 +743,7 @@ impl DownloadManagerImpl {
             ordered_paths: completed.all_paths.clone(),
             metadata: GroupMetadata::of(&completed, file_entries),
         };
-        self.register_completed_model(&item.id, complete).await
+        self.register_completed_model(item, complete).await
     }
 
     /// Register a completed model (all shards downloaded).
@@ -743,11 +752,15 @@ impl DownloadManagerImpl {
     /// all shards in a group are complete (or for single-file downloads).
     /// Returns how the download ended: a model that could not be registered
     /// is a failed download, whatever is on disk.
+    ///
+    /// An upgrade rewrites its model's row instead of adding one, and
+    /// announces the row as it now is.
     async fn register_completed_model(
         &self,
-        id: &DownloadId,
+        item: &QueuedItem,
         complete: shard_group_tracker::GroupComplete,
     ) -> DownloadOutcome {
+        let id = &item.id;
         // Phase 1 of finalization: bytes are on disk, we are about to gather
         // metadata (HF tags etc.). The phase is published so every surface
         // reads "Finalizing" instead of a bar frozen at 100%.
@@ -789,8 +802,17 @@ impl DownloadManagerImpl {
         self.set_phase(id, DownloadPhase::Registering).await;
 
         // Register model (soft-fail)
-        match self.model_registrar.register_model(&completed).await {
+        let registrar = &self.model_registrar;
+        let registered = match &item.upgrade {
+            Some(upgrade) => registrar.upgrade_model(upgrade.model_id, &completed).await,
+            None => registrar.register_model(&completed).await,
+        };
+        match registered {
             Ok(registered) => {
+                if item.upgrade.is_some() {
+                    let model = (&registered.model).into();
+                    self.event_emitter.emit(AppEvent::model_updated(model));
+                }
                 tracing::info!(
                     model_id = registered.model.id,
                     model_name = %registered.model.name,
@@ -1066,6 +1088,20 @@ impl DownloadManagerPort for DownloadManagerImpl {
         Ok(id)
     }
 
+    async fn queue_upgrade(
+        self: Arc<Self>,
+        repo_id: String,
+        quantization: String,
+        model_id: i64,
+        commit: String,
+    ) -> Result<DownloadId, DownloadError> {
+        let id = self
+            .queue_upgrade_download(&repo_id, &quantization, model_id, commit)
+            .await?;
+        self.ensure_runner();
+        Ok(id)
+    }
+
     async fn get_queue_snapshot(&self) -> Result<QueueSnapshot, DownloadError> {
         // Built by the builder the event stream is served from, under the
         // same mutex, so this snapshot has its own place in their order.
@@ -1196,7 +1232,7 @@ impl DownloadManagerImpl {
 
         // `None` is a repeat request, attached to the download already in
         // flight: the same answer, and nothing new to announce.
-        if let Some(position) = self.enqueue_group(&id, &resolution).await? {
+        if let Some(position) = self.enqueue_group(&id, &resolution, None).await? {
             tracing::info!(
                 id = %id,
                 position = position,

@@ -1,14 +1,60 @@
 //! Putting a resolved download group on the queue.
 
-use gglib_core::download::{CompletionKey, DownloadError, DownloadId};
-use gglib_core::ports::Resolution;
+use std::sync::Arc;
+
+use gglib_core::download::{CompletionKey, DownloadError, DownloadId, Quantization};
+use gglib_core::ports::{QuantizationResolver, Resolution};
 use gglib_core::utils::shard_filename::base_shard_filename;
 
 use super::DownloadManagerImpl;
+use crate::queue::Upgrade;
+use crate::resolver::HfQuantizationResolver;
 
 impl DownloadManagerImpl {
-    /// Queue every file of `resolution` as one group under `id`, and keep
-    /// the group's files for registration.
+    /// Queue the upgrade of model `model_id`, its files from `repo_id` at
+    /// `quantization` fetched again at `commit`, and answer its ID.
+    ///
+    /// The files are the download's own repository's: the weights and the
+    /// projector fetched with them. An image model's companions are in
+    /// their own repositories' folders and linked already, so they are not
+    /// fetched again. A download of the same files already waiting or
+    /// running is refused: the upgrade would attach to it, and be lost.
+    ///
+    /// This queues and does not start the runner: `queue_upgrade`, the
+    /// port's way in, does both.
+    pub async fn queue_upgrade_download(
+        &self,
+        repo_id: &str,
+        quantization: &str,
+        model_id: i64,
+        commit: String,
+    ) -> Result<DownloadId, DownloadError> {
+        let resolver = HfQuantizationResolver::weights_only(Arc::clone(&self.hf_client));
+        let resolution = resolver
+            .resolve(repo_id, Quantization::from_filename(quantization))
+            .await?;
+        let id = DownloadId::new(repo_id, Some(&resolution.quantization.to_string()));
+        let upgrade = Upgrade { model_id, commit };
+
+        let Some(position) = self.enqueue_group(&id, &resolution, Some(&upgrade)).await? else {
+            return Err(DownloadError::already_queued(id.to_string()));
+        };
+        tracing::info!(
+            id = %id,
+            position,
+            model_id,
+            commit = %upgrade.commit,
+            files = resolution.files.len(),
+            "Upgrade queued"
+        );
+        self.queue_notify.notify_one();
+        self.publish().await;
+        Ok(id)
+    }
+
+    /// Queue every file of `resolution` as one group under `id`, as
+    /// `upgrade` when it is one, and keep the group's files for
+    /// registration.
     ///
     /// Returns the group's 1-based position among the downloads, or `None`
     /// when `id` is already in flight and nothing was queued.
@@ -22,6 +68,7 @@ impl DownloadManagerImpl {
         &self,
         id: &DownloadId,
         resolution: &Resolution,
+        upgrade: Option<&Upgrade>,
     ) -> Result<Option<u32>, DownloadError> {
         let completion_key = completion_key(id, resolution)?;
 
@@ -39,7 +86,7 @@ impl DownloadManagerImpl {
             //
             // Deliberately narrower than "does the queue know this id": a
             // check that also matched a *failed* download would make failures
-            // permanently un-retryable. `queue_sharded` forgets the id's old
+            // permanently un-retryable. `queue_group` forgets the id's old
             // outcome instead, so a download that ended can be queued again.
             //
             // The check and the enqueue share one queue guard, taken before
@@ -52,7 +99,8 @@ impl DownloadManagerImpl {
                 return Ok(None);
             }
 
-            queue.queue_sharded(id, &completion_key, &resolution.files, running.as_ref())?
+            let files = &resolution.files;
+            queue.queue_group(id, &completion_key, files, running.as_ref(), upgrade)?
         };
 
         // The files with their OIDs and roles, for registration and for
@@ -67,7 +115,9 @@ impl DownloadManagerImpl {
 }
 
 /// The identity a group completes under: its first file, which is a weights
-/// file, with any shard numbering removed. No request names a revision.
+/// file, with any shard numbering removed. The revision is left
+/// unspecified, an upgrade's too, so a run's summary counts a model's
+/// download and its upgrade as one artifact.
 fn completion_key(
     id: &DownloadId,
     resolution: &Resolution,

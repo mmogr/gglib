@@ -14,7 +14,7 @@ use gglib_core::ports::ResolvedFile;
 
 pub(crate) use rows::{Reading, Running, running_row};
 pub(crate) use shard_group::ShardGroupId;
-pub(crate) use types::QueuedItem;
+pub(crate) use types::{QueuedItem, Upgrade};
 
 /// Saturating conversion from usize to u32 for queue positions.
 /// Returns `u32::MAX` if the value exceeds `u32::MAX`.
@@ -80,7 +80,7 @@ impl DownloadQueue {
     ///
     /// Returns the 1-based queue position on success.
     ///
-    /// Note: Production code uses `queue_sharded` for all downloads.
+    /// Note: Production code uses `queue_group` for all downloads.
     /// This method is primarily for testing single-item queue behavior.
     #[cfg(test)]
     pub(crate) fn queue(
@@ -106,18 +106,32 @@ impl DownloadQueue {
         Ok(position)
     }
 
-    /// Queue a download group: every file of one model, with a shared
-    /// `group_id`. The weights come first; a projector is the last file.
-    ///
-    /// The group is one download however many files it has. Returns its
-    /// 1-based position among the downloads, behind `running` and every
-    /// download already waiting.
+    /// [`Self::queue_group`] for a download that adds a model.
+    #[cfg(test)]
     pub(crate) fn queue_sharded(
         &mut self,
         id: &DownloadId,
         completion_key: &CompletionKey,
         shard_files: &[ResolvedFile],
         running: Option<&DownloadId>,
+    ) -> Result<u32, DownloadError> {
+        self.queue_group(id, completion_key, shard_files, running, None)
+    }
+
+    /// Queue a download group: every file of one model, with a shared
+    /// `group_id`. The weights come first; a projector is the last file.
+    /// Every file carries `upgrade`, when the download is one.
+    ///
+    /// The group is one download however many files it has. Returns its
+    /// 1-based position among the downloads, behind `running` and every
+    /// download already waiting.
+    pub(crate) fn queue_group(
+        &mut self,
+        id: &DownloadId,
+        completion_key: &CompletionKey,
+        shard_files: &[ResolvedFile],
+        running: Option<&DownloadId>,
+        upgrade: Option<&Upgrade>,
     ) -> Result<u32, DownloadError> {
         if shard_files.is_empty() {
             return Err(DownloadError::not_in_queue(id.to_string()));
@@ -130,7 +144,7 @@ impl DownloadQueue {
         let position = rows::first_waiting_position(running.is_some())
             .saturating_add(usize_to_u32_saturating(self.waiting(running).len()));
 
-        let items = group_items::group_items(id, completion_key, shard_files);
+        let items = group_items::group_items(id, completion_key, shard_files, upgrade);
         self.pending.extend(items);
 
         Ok(position)

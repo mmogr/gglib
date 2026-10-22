@@ -95,6 +95,13 @@ impl AppCore {
         )
     }
 
+    /// The download queue this core's repairs queue on, which an upgrade
+    /// queues on too.
+    #[must_use]
+    pub fn downloads(&self) -> Arc<dyn DownloadManagerPort> {
+        Arc::clone(&self.verification.downloads)
+    }
+
     /// This core, holding the token its process asks the Hub with.
     #[must_use]
     pub fn with_hf_token(mut self, token: Option<String>) -> Self {
