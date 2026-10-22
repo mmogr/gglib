@@ -4,56 +4,132 @@
 //! which ensures the resolved path is within the sandbox root directory.
 //! Symlinks are resolved before checking containment so they cannot escape
 //! the sandbox.
+//!
+//! The model is told about the root as "the working folder", never as a
+//! sandbox, and a path in a refusal is the one it can use again: what it
+//! wrote, or the part under the root of an absolute path inside it.
 
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+
+/// How a refusal for a path that names nothing ends, after the path.
+///
+/// The whole message is `No file or folder '<path>' ` followed by this.
+pub(crate) const MISSING: &str = "in the working folder. Call list_directory to see what is there.";
+
+/// How a refusal for a path that leaves the root ends, after the path.
+///
+/// The whole message is `'<path>' ` followed by this and a full stop.
+pub(crate) const OUTSIDE: &str = "is outside the working folder";
+
+/// A path the model named, resolved under the root.
+#[derive(Debug)]
+pub(crate) struct Resolved {
+    /// Its canonical form, under `root`.
+    pub(crate) path: PathBuf,
+    /// How a message names it to the model: what it wrote, or the part under
+    /// the root of an absolute path inside it.
+    pub(crate) shown: String,
+    /// The canonical root.
+    pub(crate) root: PathBuf,
+}
+
+/// The canonical form of `sandbox_root`, or the refusal the model reads when
+/// the folder has gone.
+fn canonical_root(sandbox_root: &Path) -> Result<PathBuf, String> {
+    sandbox_root
+        .canonicalize()
+        .map_err(|e| format!("The working folder cannot be read: {e}"))
+}
 
 /// Resolve `user_path` relative to `sandbox_root`, rejecting escapes.
 ///
-/// - Absolute paths are rebased relative to `sandbox_root`.
+/// - An absolute path under the root, as given or canonical, is taken as is.
+/// - Any other absolute path is rebased relative to `sandbox_root`.
 /// - `..` components that would escape are caught after canonicalization.
 /// - Symlinks are resolved (via `canonicalize`) so they cannot point outside.
 ///
-/// Returns the canonical path on success. The `Err` variant is a
-/// human-readable message intended for the LLM (not `anyhow::Error`).
+/// Returns the canonical path with its shown form on success. The `Err`
+/// variant is a human-readable message intended for the LLM (not
+/// `anyhow::Error`): a path that names nothing is `MISSING`, one that cannot
+/// be read for another reason says why.
 pub(crate) fn resolve_sandboxed_path(
     sandbox_root: &Path,
     user_path: &str,
-) -> Result<PathBuf, String> {
+) -> Result<Resolved, String> {
     let user_path = user_path.trim();
     if user_path.is_empty() {
         return Err("path must not be empty".to_string());
     }
 
+    let canon_root = canonical_root(sandbox_root)?;
     let raw = Path::new(user_path);
 
-    // Build candidate: if absolute, strip the root components and rebase
-    // inside sandbox_root so that `/etc/passwd` or `C:\secret` are treated
-    // as relative paths within the sandbox.
-    let candidate = if raw.is_absolute() {
-        use std::path::Component;
-        let relative: PathBuf = raw
-            .components()
-            .filter(|c| !matches!(c, Component::Prefix(_) | Component::RootDir))
-            .collect();
-        sandbox_root.join(relative)
+    // An absolute path under the root is taken as is, and is shown by its
+    // part under the root. Any other absolute path has its root components
+    // stripped and is rebased inside sandbox_root, so that `/etc/passwd` or
+    // `C:\secret` are treated as relative paths within the sandbox.
+    let under = if raw.is_absolute() {
+        under_root(raw, sandbox_root, &canon_root)
     } else {
-        sandbox_root.join(raw)
+        None
+    };
+    let (candidate, shown) = match under {
+        Some(rest) => {
+            let shown = if rest.as_os_str().is_empty() {
+                ".".to_string()
+            } else {
+                rest.display().to_string()
+            };
+            (raw.to_path_buf(), shown)
+        }
+        None if raw.is_absolute() => {
+            use std::path::Component;
+            let relative: PathBuf = raw
+                .components()
+                .filter(|c| !matches!(c, Component::Prefix(_) | Component::RootDir))
+                .collect();
+            (sandbox_root.join(relative), user_path.to_string())
+        }
+        None => (sandbox_root.join(raw), user_path.to_string()),
     };
 
-    // Canonicalize both to resolve symlinks and `..`
-    let canon_root = sandbox_root
-        .canonicalize()
-        .map_err(|e| format!("sandbox root does not exist: {e}"))?;
+    // Canonicalize to resolve symlinks and `..`
+    let path = candidate.canonicalize().map_err(|e| match e.kind() {
+        ErrorKind::NotFound | ErrorKind::NotADirectory => {
+            format!("No file or folder '{shown}' {MISSING}")
+        }
+        _ => format!("'{shown}' cannot be read: {e}"),
+    })?;
 
-    let canon_candidate = candidate
-        .canonicalize()
-        .map_err(|e| format!("path '{}' does not exist: {e}", candidate.display()))?;
-
-    if !canon_candidate.starts_with(&canon_root) {
-        return Err(format!("path '{user_path}' is outside the sandbox"));
+    if !path.starts_with(&canon_root) {
+        return Err(format!("'{shown}' {OUTSIDE}."));
     }
 
-    Ok(canon_candidate)
+    Ok(Resolved {
+        path,
+        shown,
+        root: canon_root,
+    })
+}
+
+/// The part of the absolute `raw` under the root, when it lies under it:
+/// lexically under the root as given or its canonical form, or under the
+/// canonical root once its longest existing part is canonicalised, so a miss
+/// through another name for the root is still under it. `None` when it lies
+/// elsewhere.
+fn under_root(raw: &Path, sandbox_root: &Path, canon_root: &Path) -> Option<PathBuf> {
+    if let Ok(rest) = raw.strip_prefix(sandbox_root) {
+        return Some(rest.to_path_buf());
+    }
+    if let Ok(rest) = raw.strip_prefix(canon_root) {
+        return Some(rest.to_path_buf());
+    }
+    let canon = raw.ancestors().find_map(|known| {
+        let tail = raw.strip_prefix(known).ok()?;
+        Some(known.canonicalize().ok()?.join(tail))
+    })?;
+    canon.strip_prefix(canon_root).ok().map(Path::to_path_buf)
 }
 
 /// Check whether a file appears to be binary by scanning for null bytes.
@@ -72,109 +148,5 @@ pub(crate) fn is_binary(path: &Path) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-
-    #[test]
-    fn relative_path_stays_inside() {
-        let dir = tempfile::tempdir().unwrap();
-        let child = dir.path().join("hello.txt");
-        fs::write(&child, "hi").unwrap();
-
-        let resolved = resolve_sandboxed_path(dir.path(), "hello.txt").unwrap();
-        assert_eq!(resolved, child.canonicalize().unwrap());
-    }
-
-    #[test]
-    fn absolute_path_is_rebased() {
-        let dir = tempfile::tempdir().unwrap();
-        let child = dir.path().join("hello.txt");
-        fs::write(&child, "hi").unwrap();
-
-        let resolved = resolve_sandboxed_path(dir.path(), "/hello.txt").unwrap();
-        assert_eq!(resolved, child.canonicalize().unwrap());
-    }
-
-    #[test]
-    fn dotdot_escape_rejected() {
-        let dir = tempfile::tempdir().unwrap();
-        let child = dir.path().join("sub");
-        fs::create_dir(&child).unwrap();
-
-        let result = resolve_sandboxed_path(&child, "../");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("outside the sandbox"));
-    }
-
-    #[test]
-    fn nonexistent_path_rejected() {
-        let dir = tempfile::tempdir().unwrap();
-        let result = resolve_sandboxed_path(dir.path(), "no_such_file.txt");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("does not exist"));
-    }
-
-    #[test]
-    fn empty_path_rejected() {
-        let dir = tempfile::tempdir().unwrap();
-        let result = resolve_sandboxed_path(dir.path(), "");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn is_binary_detects_null_bytes() {
-        let dir = tempfile::tempdir().unwrap();
-        let bin = dir.path().join("binary.dat");
-        fs::write(&bin, b"hello\x00world").unwrap();
-        assert!(is_binary(&bin));
-    }
-
-    #[test]
-    fn is_binary_allows_text() {
-        let dir = tempfile::tempdir().unwrap();
-        let txt = dir.path().join("text.txt");
-        fs::write(&txt, "hello world").unwrap();
-        assert!(!is_binary(&txt));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn symlink_escape_rejected() {
-        let dir = tempfile::tempdir().unwrap();
-        // Create a symlink inside the sandbox pointing outside
-        let link = dir.path().join("escape");
-        std::os::unix::fs::symlink("/tmp", &link).unwrap();
-        let result = resolve_sandboxed_path(dir.path(), "escape");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn backslash_dotdot_does_not_escape() {
-        // On Unix, backslashes are literal filename characters, not separators.
-        // On Windows, canonicalize + starts_with catches the escape.
-        let dir = tempfile::tempdir().unwrap();
-        let child = dir.path().join("sub");
-        fs::create_dir(&child).unwrap();
-        let result = resolve_sandboxed_path(&child, r"..\..\..\etc\passwd");
-        // Must either error or resolve inside the sandbox — never outside.
-        match result {
-            Err(_) => {} // expected: path doesn't exist (treated as literal or escaped)
-            Ok(p) => assert!(p.starts_with(child.canonicalize().unwrap())),
-        }
-    }
-
-    #[test]
-    fn whitespace_only_path_rejected() {
-        let dir = tempfile::tempdir().unwrap();
-        let result = resolve_sandboxed_path(dir.path(), "   ");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn dot_resolves_to_sandbox_root() {
-        let dir = tempfile::tempdir().unwrap();
-        let resolved = resolve_sandboxed_path(dir.path(), ".").unwrap();
-        assert_eq!(resolved, dir.path().canonicalize().unwrap());
-    }
-}
+#[path = "sandboxing_tests.rs"]
+mod tests;

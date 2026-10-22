@@ -8,6 +8,8 @@ mod time;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -25,6 +27,10 @@ pub use generate_image::{
 
 /// Prefix applied to all tool names produced by this executor.
 pub(crate) const BUILTIN_PREFIX: &str = "builtin:";
+
+/// How the refusal of a file tool in a chat with no working folder ends,
+/// after the tool's quoted name.
+const NO_FOLDER: &str = "reads a working folder, and this chat has none";
 
 // =============================================================================
 // The table
@@ -269,8 +275,9 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
         self.execute_with_progress(call, &NoProgress).await
     }
 
-    /// Every builtin but `generate_image` finishes at once and reports
-    /// nothing; `generate_image` reports each stage and step of its render
+    /// `get_current_time` answers at once. The file tools run on a blocking
+    /// thread and report nothing; a call the tool timeout abandons stops its
+    /// walk. `generate_image` reports each stage and step of its render
     /// through `sink`. A tool this adapter does not offer right now (no
     /// sandbox, or drawing not armed for this message) is refused, never
     /// run.
@@ -296,7 +303,7 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
                      was not"
                 )
             } else {
-                anyhow!("filesystem tools require a sandbox root")
+                anyhow!("'{bare}' {NO_FOLDER}")
             });
         }
 
@@ -314,14 +321,20 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
             _ => {
                 let root = self
                     .sandbox_root
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("filesystem tools require a sandbox root"))?;
-                let result = match bare {
-                    "read_file" => fs_read::read_file(&args, root),
-                    "list_directory" => fs_list::list_directory(&args, root),
-                    "grep_search" => fs_grep::grep_search(&args, root),
-                    _ => return Err(anyhow!("unknown builtin tool '{bare}'")),
-                };
+                    .clone()
+                    .ok_or_else(|| anyhow!("'{bare}' {NO_FOLDER}"))?;
+                let name = tool.name;
+                let stop = StopOnDrop::default();
+                let flag = Arc::clone(&stop.0);
+                let result = tokio::task::spawn_blocking(move || match name {
+                    "read_file" => fs_read::read_file(&args, &root),
+                    "list_directory" => fs_list::list_directory(&args, &root),
+                    "grep_search" => fs_grep::grep_search(&args, &root, &flag),
+                    _ => Err(format!("unknown builtin tool '{name}'")),
+                })
+                .await
+                .map_err(|e| anyhow!("'{bare}' failed: {e}"))?;
+                drop(stop);
                 match result {
                     Ok(content) => Ok(ToolResult::text(call.id.clone(), content, true)),
                     Err(msg) => Ok(ToolResult::text(call.id.clone(), msg, false)),
@@ -334,6 +347,18 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
 // =============================================================================
 // Shared helpers
 // =============================================================================
+
+/// Sets its flag when dropped. A file tool's call holds one while it waits
+/// for the blocking thread, so a call the tool timeout abandons, whose future
+/// is dropped mid-wait, tells the walk on that thread to stop.
+#[derive(Default)]
+struct StopOnDrop(Arc<AtomicBool>);
+
+impl Drop for StopOnDrop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
 
 /// Parse a [`ToolCall`]'s arguments into a `HashMap`, for either executor.
 ///
@@ -351,97 +376,6 @@ pub(crate) fn parse_args(call: &ToolCall) -> anyhow::Result<HashMap<String, Valu
     }
 }
 
-// =============================================================================
-// Tests
-// =============================================================================
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use gglib_core::ToolCall;
-
-    fn make_call(name: &str, args: Value) -> ToolCall {
-        ToolCall {
-            id: "test-id".to_owned(),
-            name: name.to_owned(),
-            arguments: args,
-        }
-    }
-
-    #[tokio::test]
-    async fn list_tools_returns_prefixed_names() {
-        let adapter = BuiltinToolExecutorAdapter::default();
-        let tools = adapter.list_tools().await;
-        assert!(!tools.is_empty());
-        assert!(tools.iter().all(|t| t.name.starts_with(BUILTIN_PREFIX)));
-    }
-
-    #[tokio::test]
-    async fn bare_definitions_have_no_prefix() {
-        for t in BuiltinToolExecutorAdapter::bare_definitions() {
-            assert!(!t.name.starts_with(BUILTIN_PREFIX));
-        }
-    }
-
-    #[tokio::test]
-    async fn get_current_time_human_format_returns_time_object() {
-        let adapter = BuiltinToolExecutorAdapter::default();
-        let result = adapter
-            .execute(&make_call("builtin:get_current_time", json!({})))
-            .await
-            .unwrap();
-        assert!(result.success);
-        let parsed: Value = serde_json::from_str(&result.content).unwrap();
-        assert!(parsed.get("time").is_some());
-        assert!(parsed.get("timezone").is_some());
-        assert!(parsed.get("format").is_some());
-    }
-
-    #[tokio::test]
-    async fn get_current_time_iso_format() {
-        let adapter = BuiltinToolExecutorAdapter::default();
-        let result = adapter
-            .execute(&make_call(
-                "builtin:get_current_time",
-                json!({ "format": "iso" }),
-            ))
-            .await
-            .unwrap();
-        assert!(result.success);
-        let parsed: Value = serde_json::from_str(&result.content).unwrap();
-        assert_eq!(parsed["format"], "iso");
-    }
-
-    #[tokio::test]
-    async fn get_current_time_unix_format_is_number() {
-        let adapter = BuiltinToolExecutorAdapter::default();
-        let result = adapter
-            .execute(&make_call(
-                "builtin:get_current_time",
-                json!({ "format": "unix" }),
-            ))
-            .await
-            .unwrap();
-        assert!(result.success);
-        let parsed: Value = serde_json::from_str(&result.content).unwrap();
-        assert!(parsed["time"].is_number());
-    }
-
-    #[tokio::test]
-    async fn unknown_tool_returns_error() {
-        let adapter = BuiltinToolExecutorAdapter::default();
-        let err = adapter
-            .execute(&make_call("builtin:nonexistent", json!({})))
-            .await;
-        assert!(err.is_err());
-    }
-
-    #[tokio::test]
-    async fn missing_prefix_returns_error() {
-        let adapter = BuiltinToolExecutorAdapter::default();
-        let err = adapter
-            .execute(&make_call("get_current_time", json!({})))
-            .await;
-        assert!(err.is_err());
-    }
-}
+#[path = "mod_tests.rs"]
+mod tests;

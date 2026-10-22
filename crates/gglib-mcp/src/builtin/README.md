@@ -23,6 +23,21 @@ message after `/draw` in `gglib chat`. Listing and calling both read the
 table, so a tool that is not listed is refused when called. The page's tool
 list (`bare_definitions`) never carries `generate_image`.
 
+The file tools read only under their sandbox root, which the model is told
+about as "the working folder". A path is relative to it; an absolute path
+that already lies under it is taken as is, and any other absolute path is
+read as relative to it. Every path is canonicalised and refused unless it
+stays under the canonical root (`sandboxing.rs`), and `grep_search` follows
+a symlink only when its target does too, and never into a folder it is
+already inside, so a link to `.` or `..` lists each file once. A refusal
+names the path as the model can use it again, what it wrote or the part
+under the root of an absolute path inside it, and never says "sandbox" or
+the root. A path that names nothing is refused with the next step
+(`MISSING`), one that leaves the root says so (`OUTSIDE`), and one that
+cannot be read says why. `read_file` cuts a long file between characters. The three run on a
+blocking thread, and a call the tool timeout gives up on stops its walk at
+the next entry.
+
 Which image model draws is never the calling model's to say: the tool has no
 such argument, and a `model` key in a call is not read. A person's choice
 reaches the tool through `DrawWith`, a cell its composer holds (a run's door
