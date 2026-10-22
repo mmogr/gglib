@@ -13,7 +13,8 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use gglib_core::contracts::http::images::DrawingAvailability;
 use gglib_core::domain::{
-    CacheRamHealth, ImageFamily, ModelSamplingDefaults, RuntimeKind, SecondarySlotDecision,
+    CacheRamHealth, ComponentRole, ImageFamily, ModelComponent, ModelSamplingDefaults, RuntimeKind,
+    SecondarySlotDecision,
 };
 use gglib_core::ports::{
     Admission, AdmitObserver, CatalogError, GenerationGate, GenerationTurn, ImageError,
@@ -462,6 +463,55 @@ async fn a_request_the_recipe_refuses_never_queues() {
         jobs.bodies.lock().unwrap().is_empty(),
         "nothing was submitted"
     );
+}
+
+/// A base Z-Image, known by a file name without "turbo", is refused with
+/// every file it needs before anything queues; Z-Image Turbo plans.
+#[tokio::test(start_paused = true)]
+async fn a_base_z_image_is_refused_by_name_before_it_queues() {
+    let z_image = |id, name: &str| ModelLaunchSpec {
+        components: [ComponentRole::Vae, ComponentRole::Llm]
+            .map(|role| ModelComponent {
+                role,
+                path: format!("/nonexistent/{role}").into(),
+            })
+            .into(),
+        ..spec(id, name, Some(ImageFamily::ZImage))
+    };
+    let jobs = Arc::new(Timeline::new(flux_like()));
+    let host = Host::new();
+    let catalog = vec![z_image(5, "z-image"), z_image(6, "z_image_turbo")];
+    let driver = driver(catalog, &jobs, &host);
+    let (tx, mut rx) = mpsc::channel(64);
+    let named = |model: &str| ImageRequest {
+        model: Some(model.to_owned()),
+        ..ImageRequest::new("a lighthouse at dusk")
+    };
+
+    let refused = driver
+        .generate(named("z-image"), tx.clone())
+        .await
+        .unwrap_err();
+    assert_eq!(refused.code(), Some("invalid_request"), "{refused:?}");
+    assert!(
+        refused
+            .to_string()
+            .contains("Only Z-Image Turbo is supported"),
+        "{refused}"
+    );
+    assert!(drain(&mut rx).is_empty(), "no stage was reported");
+    assert_eq!(
+        host.admits.load(Ordering::SeqCst),
+        0,
+        "nothing was admitted"
+    );
+    assert!(
+        jobs.bodies.lock().unwrap().is_empty(),
+        "nothing was submitted"
+    );
+
+    let batch = driver.generate(named("z_image_turbo"), tx).await;
+    assert_eq!(batch.expect("Turbo draws").model, "z_image_turbo");
 }
 
 /// With no model named, the only complete image model draws; with none, or

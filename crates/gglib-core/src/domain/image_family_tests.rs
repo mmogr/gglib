@@ -864,6 +864,29 @@ fn the_z_image_recipe_is_turbos() {
     assert_eq!(z.components[0].path, "ae.safetensors");
 }
 
+/// Only Z-Image Turbo is drawn: a Z-Image file whose name lacks "turbo", in
+/// any case, is refused; no other family is refused by name.
+#[test]
+fn a_z_image_file_not_named_turbo_is_refused() {
+    let refused = ImageFamily::ZImage.refusal("z-image-Q8_0.gguf");
+    assert_eq!(
+        refused,
+        Some(
+            "Only Z-Image Turbo is supported: base Z-Image needs other steps and guidance, \
+             and its Q8_0 file draws blank on Metal (stable-diffusion.cpp #2074)"
+        )
+    );
+    assert_eq!(ImageFamily::ZImage.refusal("z_image_turbo-Q8_0.gguf"), None);
+    assert_eq!(ImageFamily::ZImage.refusal("Z-Image-TURBO-q4_0.gguf"), None);
+    for family in [
+        ImageFamily::Flux1,
+        ImageFamily::Sdxl,
+        ImageFamily::QwenImage21,
+    ] {
+        assert_eq!(family.refusal("z-image-Q8_0.gguf"), None, "{family}");
+    }
+}
+
 /// Each measured family's compute margin is its measured 1024x1024 VAE decode
 /// buffer rounded up to a whole GiB.
 #[test]

@@ -31,8 +31,8 @@ pub enum ImageFamily {
     /// Qwen-Image 2.1.
     #[serde(rename = "qwen-image-2.1")]
     QwenImage21,
-    /// Z-Image (Turbo; a base Z-Image file is expected to sniff the same,
-    /// and none was read).
+    /// Z-Image (Turbo; a base file is refused by name,
+    /// [`ImageFamily::refusal`]).
     #[serde(rename = "z-image")]
     ZImage,
 }
@@ -255,12 +255,10 @@ const QWEN_IMAGE_21: Recipe = Recipe {
     compute_margin_bytes: 9 * GIB,
 };
 
-/// Z-Image, with Z-Image Turbo's settings: 8 steps at guidance 1.0, as
-/// stable-diffusion.cpp's guide (`docs/z_image.md`) runs Turbo. A base
-/// Z-Image file is the same family and is drawn with these, though the guide
-/// runs it at guidance 5.0 and its default steps. `euler` is
-/// stable-diffusion.cpp's default sampler for a diffusion transformer; the
-/// guide names none. Flash attention is on in the diffusion model alone
+/// Z-Image Turbo: 8 steps at guidance 1.0, as stable-diffusion.cpp's guide
+/// (`docs/z_image.md`) runs it; a base Z-Image file is refused
+/// ([`ImageFamily::refusal`]). `euler` is stable-diffusion.cpp's default
+/// sampler for a diffusion transformer; the guide names none. Flash attention is on in the diffusion model alone
 /// (`--diffusion-fa`), as the guide runs it: `--fa` would turn it on in the
 /// Flux.1 VAE too, where it has never run. Sizes step by 16: the VAE's 8
 /// times the model's patch of 2.
@@ -321,6 +319,18 @@ impl ImageFamily {
             Self::QwenImage21 => &QWEN_IMAGE_21,
             Self::ZImage => &Z_IMAGE,
         }
+    }
+
+    /// Why a main file named `file_name` of this family is not drawn, or
+    /// `None` when it is. stable-diffusion.cpp loads base and Turbo Z-Image
+    /// as one model, so the name is what tells them apart: a Z-Image file
+    /// whose name lacks "turbo", in any case, is refused.
+    #[must_use]
+    pub fn refusal(self, file_name: &str) -> Option<&'static str> {
+        (self == Self::ZImage && !file_name.to_ascii_lowercase().contains("turbo")).then_some(
+            "Only Z-Image Turbo is supported: base Z-Image needs other steps and guidance, \
+             and its Q8_0 file draws blank on Metal (stable-diffusion.cpp #2074)",
+        )
     }
 
     /// The family a main weights file belongs to, from its tensor names and
