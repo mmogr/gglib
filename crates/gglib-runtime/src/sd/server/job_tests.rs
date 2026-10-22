@@ -50,6 +50,8 @@ struct Timeline {
     submit_takes: Duration,
     submitted: Mutex<Option<Instant>>,
     bodies: Mutex<Vec<ImgGenBody>>,
+    /// The server each body was sent to, in the same order.
+    sent_to: Mutex<Vec<String>>,
     cancels: AtomicUsize,
 }
 
@@ -65,6 +67,7 @@ impl Timeline {
             submit_takes: Duration::ZERO,
             submitted: Mutex::new(None),
             bodies: Mutex::new(Vec::new()),
+            sent_to: Mutex::new(Vec::new()),
             cancels: AtomicUsize::new(0),
         }
     }
@@ -77,12 +80,13 @@ impl Timeline {
 
 #[async_trait]
 impl SdJobs for Timeline {
-    async fn submit(&self, _base_url: &str, body: &ImgGenBody) -> Result<String, String> {
+    async fn submit(&self, base_url: &str, body: &ImgGenBody) -> Result<String, String> {
         if let Some(words) = &self.refuse {
             return Err(words.clone());
         }
         // The job is taken at once; only the answer is slow.
         self.bodies.lock().unwrap().push(body.clone());
+        self.sent_to.lock().unwrap().push(base_url.to_owned());
         *self.submitted.lock().unwrap() = Some(Instant::now());
         tokio::time::sleep(self.submit_takes).await;
         Ok("job_1".to_owned())
@@ -142,6 +146,14 @@ impl Host {
     }
 }
 
+/// Where the `n`th admission (from 0) serves model `id`: each admission a
+/// server of its own, so a job shows which admission it was sent through.
+fn served_at(n: usize, id: u32) -> RunningTarget {
+    let port = 7100 + u16::try_from(n).expect("a few admissions");
+    RunningTarget::local(port, id, "sdxl".to_owned(), 0, false)
+        .with_runtime(RuntimeKind::StableDiffusion)
+}
+
 fn resident(model_id: u32, name: &str) -> Resident {
     Resident {
         model_sampling: ModelSamplingDefaults::default(),
@@ -168,7 +180,7 @@ impl RenderHost for Host {
         model: &str,
         observer: Arc<dyn AdmitObserver>,
     ) -> Result<Admission, ModelRuntimeError> {
-        self.admits.fetch_add(1, Ordering::SeqCst);
+        let n = self.admits.fetch_add(1, Ordering::SeqCst);
         if let Some(position) = self.queued_first {
             observer.queued(position);
         }
@@ -178,8 +190,7 @@ impl RenderHost for Host {
             None => self.queue.install(SLOT, resident(id, "sdxl")),
         };
         Ok(Admission {
-            target: RunningTarget::local(7100, id, "sdxl".to_owned(), 0, false)
-                .with_runtime(RuntimeKind::StableDiffusion),
+            target: served_at(n, id),
             lease,
         })
     }

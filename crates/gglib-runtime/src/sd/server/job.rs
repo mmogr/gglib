@@ -14,7 +14,9 @@
 //! cancelled, a client that left) asks `sd-server` to cancel the job; a job
 //! that is generating is retired at once: the server stopped, the lease
 //! settled with the slot it was counted in, the turn ended. The next request
-//! for the image model loads it again. That holds from the moment the job is
+//! for the image model loads it again, and so does one that was admitted to
+//! it before it was retired: it is admitted once more when its turn comes
+//! and the model is no longer loaded. That holds from the moment the job is
 //! submitted: the submission runs in its own task, so a request dropped
 //! during it still ends in a render that is cancelled or retired.
 //!
@@ -231,6 +233,33 @@ impl SdImageDriver {
         })
     }
 
+    /// Admit the plan's model, then wait for the render turn on its lease;
+    /// the turn and where the model answers.
+    async fn admit_and_turn(
+        &self,
+        plan: &Plan,
+        report: &Report,
+    ) -> Result<(GenerationTurn, String), ImageError> {
+        let observer: Arc<dyn AdmitObserver> = Arc::new(report.clone());
+        let admission = self
+            .host
+            .admit(&plan.model_id.to_string(), observer)
+            .await
+            .map_err(ImageError::Runtime)?;
+        let base_url = admission.target.base_url.clone();
+        report.stage(ImageStage::Loading);
+
+        let waits: Arc<dyn GateWaitObserver> = Arc::new(report.clone());
+        let turn = self
+            .host
+            .gate()
+            .render_turn(admission.lease, Some(waits))
+            .await
+            .map_err(ImageError::Gate)?;
+        report.stage(ImageStage::Loading);
+        Ok((turn, base_url))
+    }
+
     /// The settings' default image model, read when a request names none.
     /// A store that cannot be read counts as no default: the only complete
     /// image model may still draw.
@@ -261,23 +290,17 @@ impl ImageGenerationPort for SdImageDriver {
         let report = Report::new(progress);
         report.stage(ImageStage::Loading);
 
-        let observer: Arc<dyn AdmitObserver> = Arc::new(report.clone());
-        let admission = self
-            .host
-            .admit(&plan.model_id.to_string(), observer)
-            .await
-            .map_err(ImageError::Runtime)?;
-        let base_url = admission.target.base_url.clone();
-        report.stage(ImageStage::Loading);
-
-        let waits: Arc<dyn GateWaitObserver> = Arc::new(report.clone());
-        let turn = self
-            .host
-            .gate()
-            .render_turn(admission.lease, Some(waits))
-            .await
-            .map_err(ImageError::Gate)?;
-        report.stage(ImageStage::Loading);
+        let (mut turn, mut base_url) = self.admit_and_turn(&plan, &report).await?;
+        if !self.host.resident_models().contains(&plan.model_id) {
+            // Retired while this waited: emptying its slot settled this
+            // lease's count, and releasing it by slot would take a request
+            // from whatever holds the slot now.
+            if let Some(lease) = turn.take_lease() {
+                lease.disarm();
+            }
+            drop(turn);
+            (turn, base_url) = self.admit_and_turn(&plan, &report).await?;
+        }
 
         let mut render = self.submit(turn, base_url, &plan).await?;
         let mut images = render.follow(&report).await?;

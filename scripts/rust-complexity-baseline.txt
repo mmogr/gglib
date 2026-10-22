@@ -239,9 +239,9 @@ crates/gglib-runtime/src/process/residency/stop_model_tests.rs 313
 crates/gglib-runtime/src/process/residency/vram.rs 390
 crates/gglib-runtime/src/proxy/supervisor.rs 502
 crates/gglib-runtime/src/sd/install/install_tests.rs 316
-crates/gglib-runtime/src/sd/server/job.rs 373
-crates/gglib-runtime/src/sd/server/job_leave_tests.rs 459
-crates/gglib-runtime/src/sd/server/job_tests.rs 1003
+crates/gglib-runtime/src/sd/server/job.rs 396
+crates/gglib-runtime/src/sd/server/job_leave_tests.rs 537
+crates/gglib-runtime/src/sd/server/job_tests.rs 1014
 crates/gglib-runtime/src/system/mod.rs 623
 crates/gglib-runtime/src/unified_server_config.rs 465
 crates/gglib-sse/src/lib.rs 320

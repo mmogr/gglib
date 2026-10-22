@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use super::{
     Host, SDXL_ID, SLOT, Timeline, drain, driver, flux_like, models, png, resident, sdxl_request,
+    served_at,
 };
 use crate::sd::server::SdImageDriver;
 use crate::sd::server::job_api::{CancelOutcome, JobState};
@@ -348,6 +349,83 @@ async fn the_next_draw_after_a_stopped_render_loads_the_model_again() {
     assert_eq!(host.inflight(), Some(0));
     assert_eq!(jobs.bodies.lock().unwrap().len(), 2, "one job each");
     assert_eq!(log(&host), KILLED_THEN_EMPTIED, "only the first was killed");
+}
+
+/// A draw admitted while the render ahead of it drew holds a lease on the
+/// model that render's reader then retired: when its turn comes it is
+/// admitted again, loads the model afresh and draws, and nothing is sent to
+/// the server that was stopped.
+#[tokio::test(start_paused = true)]
+async fn a_draw_waiting_behind_a_stopped_render_is_admitted_again() {
+    let jobs = Arc::new(Timeline::new(flux_like()).cancelled_with(CancelOutcome::Running));
+    let host = Host::new();
+    let driver = Arc::new(driver(models(), &jobs, &host));
+    let (first, _rx) = draw(&driver);
+    tokio::time::sleep(Duration::from_secs(40)).await;
+    let (second, _second_rx) = draw(&driver);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert_eq!(host.inflight(), Some(2), "both hold a lease");
+
+    leave(first).await;
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert_eq!(host.admits.load(Ordering::SeqCst), 3, "admitted again");
+    assert_eq!(host.inflight(), Some(1), "loaded again, with its request");
+
+    let batch = second.await.unwrap().expect("drawn");
+    assert_eq!(batch.images.len(), 1);
+    assert_eq!(
+        host.queue.slot(SLOT).map(|r| r.model_id),
+        Some(SDXL_ID),
+        "loaded again"
+    );
+    assert_eq!(host.inflight(), Some(0));
+    assert_eq!(
+        *jobs.sent_to.lock().unwrap(),
+        [
+            served_at(0, SDXL_ID).base_url,
+            served_at(2, SDXL_ID).base_url
+        ],
+        "one job each, the second through its new admission"
+    );
+    assert_eq!(
+        log(&host),
+        ["kill, slot Some((1, 2))", "retired, slot None"],
+        "only the first was killed"
+    );
+}
+
+/// The same draw, when another model took the emptied slot before its turn
+/// came: its first lease was settled with the slot, so admitting it again
+/// takes no request from the newcomer.
+#[tokio::test(start_paused = true)]
+async fn a_draw_admitted_again_takes_no_request_from_a_newcomer() {
+    let jobs = Arc::new(Timeline::new(flux_like()).cancelled_with(CancelOutcome::Running));
+    let host = Host::new();
+    let driver = Arc::new(driver(models(), &jobs, &host));
+    let (first, _rx) = draw(&driver);
+    tokio::time::sleep(Duration::from_secs(40)).await;
+    let chat = chat(&host);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let (second, _second_rx) = draw(&driver);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    leave(first).await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let turn = granted(chat).await;
+    assert_eq!(host.inflight(), None, "the slot is empty");
+    let newcomer = host.queue.install(SLOT, resident(7, "embedder"));
+    drop(turn);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    assert_eq!(host.admits.load(Ordering::SeqCst), 3, "admitted again");
+    assert_eq!(
+        host.inflight(),
+        Some(2),
+        "the newcomer keeps its request, and the draw adds its own"
+    );
+    drop(newcomer);
+    second.await.unwrap().expect("drawn");
+    assert_eq!(host.inflight(), Some(0));
 }
 
 /// A request that leaves while it only waits in the gate's line, behind
