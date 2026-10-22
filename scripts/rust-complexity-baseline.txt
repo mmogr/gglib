@@ -141,7 +141,7 @@ crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 354
 crates/gglib-db/src/repositories/sqlite_mcp_repository_tests.rs 377
 crates/gglib-db/src/repositories/sqlite_model_repository.rs 1061
 crates/gglib-db/src/repositories/sqlite_model_repository_components_tests.rs 372
-crates/gglib-db/src/setup.rs 728
+crates/gglib-db/src/setup.rs 730
 crates/gglib-db/src/setup_models_tests.rs 317
 crates/gglib-download/src/cli_exec/exec/python_bridge.rs 331
 crates/gglib-download/src/cli_exec/exec/python_env.rs 1544
