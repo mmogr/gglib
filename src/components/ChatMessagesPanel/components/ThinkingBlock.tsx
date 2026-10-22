@@ -91,29 +91,19 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
     return 'Reasoning';
   };
 
-  // Markdown components for thinking content (simplified)
+  // react-markdown draws a block as <pre><code>, and says nothing else of
+  // which code is inline: the <pre> is the block, and <code> alone is inline.
   const components: Partial<Components> = {
-    code(props) {
-      const { inline, className, children, ...rest } = props as {
-        inline?: boolean;
-        className?: string;
-        children?: React.ReactNode;
-      };
-      if (inline) {
-        return (
-          <code className={cn('py-[0.125rem] px-[0.375rem] text-xs font-mono bg-background rounded-sm', className)} {...rest}>
-            {children}
-          </code>
-        );
-      }
-      return (
-        <pre className="my-[0.5rem] p-[0.625rem] text-xs font-mono bg-background rounded-base overflow-x-auto [&_code]:bg-transparent [&_code]:p-0">
-          <code className={className} {...rest}>
-            {children}
-          </code>
-        </pre>
-      );
-    },
+    pre: ({ children }) => (
+      <pre className="my-[0.5rem] p-[0.625rem] text-xs font-mono bg-background rounded-base overflow-x-auto [&_code]:bg-transparent! [&_code]:p-0!">
+        {children}
+      </pre>
+    ),
+    code: ({ className, children, node: _node, ...rest }) => (
+      <code className={cn('py-[0.125rem] px-[0.375rem] text-xs font-mono bg-background rounded-sm', className)} {...rest}>
+        {children}
+      </code>
+    ),
   };
 
   return (
