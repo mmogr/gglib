@@ -1,6 +1,8 @@
 //! A `gglib chat` session's files: the folder gglib's own file tools read,
 //! which is the directory the session was launched in, and the one stderr
-//! line the session starts with about it.
+//! line the session starts with about it ([ADR 0023], decision 2).
+//!
+//! [ADR 0023]: https://github.com/mmogr/gglib/blob/main/docs/adr/0023-a-chats-folder-is-where-gglibs-own-file-tools-read.md
 
 use std::io;
 use std::path::{Path, PathBuf};

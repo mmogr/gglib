@@ -205,7 +205,8 @@ canonical path is what `launch` writes to `ConversationSettings.folder`
 beside the Thinking choice
 (`gglib_app_services::transcript::remember_folder`), so what the page shows
 is what is read. Without a `conversation_id` a path is that run's alone and
-`""` is the same as saying nothing.
+`""` is the same as saying nothing. The decision is
+[ADR 0023](../../../../../docs/adr/0023-a-chats-folder-is-where-gglibs-own-file-tools-read.md).
 
 `compose::prepare_over` passes the folder to `compose_agent_loop` as the
 file tools' root, whose descriptions name it, and `compose::with_folder`

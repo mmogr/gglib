@@ -41,7 +41,8 @@ the root. A path that names nothing is refused with the next step
 (`MISSING`), one that leaves the root says so (`OUTSIDE`), and one that
 cannot be read says why. `read_file` cuts a long file between characters. The three run on a
 blocking thread, and a call the tool timeout gives up on stops its walk at
-the next entry.
+the next entry. In a chat's runs the root is its folder
+([ADR 0023](../../../../docs/adr/0023-a-chats-folder-is-where-gglibs-own-file-tools-read.md)).
 
 Which image model draws is never the calling model's to say: the tool has no
 such argument, and a `model` key in a call is not read. A person's choice
