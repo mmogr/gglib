@@ -88,6 +88,8 @@ tracing-subscriber = { workspace = true }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = { workspace = true }
 tempfile = { workspace = true }
+# The virtual clock a held run's progress test runs on.
+tokio = { workspace = true, features = ["test-util"] }
 
 [lints]
 workspace = true

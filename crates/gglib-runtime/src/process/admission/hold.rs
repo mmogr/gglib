@@ -3,10 +3,11 @@
 //! An agent run's loop sends to llama-server's port itself, so it takes no
 //! lease, and without one nothing stops a swap or a recycle from taking its
 //! model mid-run. A hold is counted apart from `inflight`: the model stays
-//! resident and unrecycled, but none of its `SERVER_PARALLEL` capacity is
-//! taken, so proxy requests for it are still served beside the run. An
-//! explicit stop, or the proxy's restart of a dead server, still takes a held
-//! model ([`AdmissionQueue::evict`]).
+//! resident and unrecycled, and a held slot serves one request fewer at once
+//! (`QueueState::may_serve`), so a proxy request for the held model waits
+//! here, visible and ordered, rather than inside llama-server, for as long as
+//! the run reports progress. An explicit stop, or the proxy's restart of a
+//! dead server, still takes a held model ([`AdmissionQueue::evict`]).
 
 use std::sync::Arc;
 

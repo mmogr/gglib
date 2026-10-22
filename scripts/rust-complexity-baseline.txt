@@ -33,9 +33,9 @@ crates/gglib-axum/src/handlers/agent/hub_turn_plan_tests.rs 317
 crates/gglib-axum/src/handlers/agent/image_model_tests.rs 338
 crates/gglib-axum/src/handlers/agent/launch.rs 350
 crates/gglib-axum/src/handlers/agent/remote_upstream.rs 313
-crates/gglib-axum/src/handlers/agent/run.rs 305
+crates/gglib-axum/src/handlers/agent/run.rs 320
 crates/gglib-axum/src/handlers/agent/run_fixture.rs 321
-crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 325
+crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 356
 crates/gglib-axum/src/routes.rs 466
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 370
@@ -104,7 +104,7 @@ crates/gglib-core/src/normalize/stream.rs 662
 crates/gglib-core/src/ports/huggingface/image_companions_tests.rs 335
 crates/gglib-core/src/ports/image_generation.rs 370
 crates/gglib-core/src/ports/model_catalog.rs 303
-crates/gglib-core/src/ports/model_runtime.rs 782
+crates/gglib-core/src/ports/model_runtime.rs 784
 crates/gglib-core/src/ports/model_runtime_tests.rs 383
 crates/gglib-core/src/ports/process_runner.rs 323
 crates/gglib-core/src/request_pipeline/constrain.rs 344
@@ -226,7 +226,7 @@ crates/gglib-runtime/src/ports_impl/llm_completion/turn_tests.rs 337
 crates/gglib-runtime/src/ports_impl/model_catalog_tests.rs 352
 crates/gglib-runtime/src/process/admission/gate_tests.rs 585
 crates/gglib-runtime/src/process/admission/queue_tests.rs 1043
-crates/gglib-runtime/src/process/admission/state.rs 769
+crates/gglib-runtime/src/process/admission/state.rs 774
 crates/gglib-runtime/src/process/admission/state_gate.rs 359
 crates/gglib-runtime/src/process/admission/state_placement.rs 308
 crates/gglib-runtime/src/process/admission/state_placement_tests.rs 741

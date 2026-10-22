@@ -1,4 +1,5 @@
-//! A held resident is neither swapped out nor recycled, yet still serves.
+//! A held resident is neither swapped out nor recycled, and a request for it
+//! waits in the queue while the run holds it.
 //!
 //! Helpers are duplicated from `queue_tests.rs`, which the complexity ratchet
 //! holds at its size.
@@ -62,14 +63,17 @@ async fn a_held_resident_is_not_swapped_out_until_the_hold_drops() {
     );
 }
 
+/// The run talks to llama-server itself, so a request served beside it
+/// would queue inside llama-server; it waits here instead (#1491).
 #[tokio::test]
-async fn a_held_resident_still_serves_its_own_requests() {
+async fn a_request_for_a_held_resident_waits_until_the_hold_drops() {
     let q = with_resident();
-    let _hold = q.hold(8001, 1).unwrap();
-    // A rival waiting would make an idle, unheld slot stand aside.
-    let _rival = q.enqueue(2, "nomic-embed");
+    let hold = q.hold(8001, 1).unwrap();
 
     let ticket = q.enqueue(1, "qwen-coder");
+    assert_eq!(q.poll(&ticket, NEVER_FITS), AdmissionDecision::Wait);
+
+    drop(hold);
     assert_eq!(
         q.poll(&ticket, NEVER_FITS),
         AdmissionDecision::Serve { slot: PRIMARY_SLOT }
@@ -163,4 +167,24 @@ async fn a_hold_reporting_progress_keeps_a_waiter_alive() {
 
     tokio::time::advance(ADMISSION_DEADLINE).await;
     assert_eq!(q.poll(&rival, NEVER_FITS), AdmissionDecision::Expired);
+}
+
+/// The same for a request for the held model itself: it outlives the
+/// deadline while the run reports progress, and gives up once it stops.
+#[tokio::test]
+async fn a_hold_reporting_progress_keeps_its_own_models_waiter_alive() {
+    tokio::time::pause();
+    let q = with_resident();
+    let hold = q.hold(8001, 1).expect("a resident listens there");
+    let waiter = q.enqueue(1, "qwen-coder");
+    assert_eq!(q.poll(&waiter, NEVER_FITS), AdmissionDecision::Wait);
+
+    for _ in 0..3 {
+        tokio::time::advance(ADMISSION_DEADLINE * 2 / 3).await;
+        hold.progress();
+        assert_eq!(q.poll(&waiter, NEVER_FITS), AdmissionDecision::Wait);
+    }
+
+    tokio::time::advance(ADMISSION_DEADLINE).await;
+    assert_eq!(q.poll(&waiter, NEVER_FITS), AdmissionDecision::Expired);
 }

@@ -18,27 +18,34 @@ use gglib_app_services::types::ServerInfo;
 use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 
 use super::remote_upstream::{Upstream, hold, hold_model, local};
+use super::run::PROGRESS_EVERY;
 use super::run_fixture::{
-    End, LOCAL, conversation, finished_reply, logged, meta, prepared, reply, saved, saving,
+    End, LOCAL, conversation, finished_reply, logged, meta, paced, prepared, reply, saved, saving,
     settled, start, state,
 };
 use crate::error::HttpError;
 
-/// Counts the releases of the holds it backs.
+/// Counts the releases of the holds it backs, and their progress reports.
 #[derive(Debug, Default)]
-struct Released(AtomicUsize);
+struct Released(AtomicUsize, AtomicUsize);
 
 impl AdmissionRelease for Released {
     fn release(&self, _slot: usize) {
         self.0.fetch_add(1, Ordering::SeqCst);
     }
 
-    fn progress(&self, _slot: usize) {}
+    fn progress(&self, _slot: usize) {
+        self.1.fetch_add(1, Ordering::SeqCst);
+    }
 }
 
 impl Released {
     fn count(&self) -> usize {
         self.0.load(Ordering::SeqCst)
+    }
+
+    fn reports(&self) -> usize {
+        self.1.load(Ordering::SeqCst)
     }
 }
 
@@ -152,6 +159,30 @@ async fn a_cancelled_runs_hold_is_released_when_it_ends() {
     start(&state, "h1", None, p).await;
     logged(&state, "h1", reply().len()).await;
     assert_eq!(runtime.released.count(), 0, "held while the run lives");
+
+    state.runs.cancel(&LOCAL, "h1").unwrap();
+    settled(&state).await;
+    assert_eq!(runtime.released.count(), 1);
+}
+
+/// A held run's events are progress on its hold, so a request queued behind
+/// it is not given up as stalled (#1491): reported again once every
+/// [`PROGRESS_EVERY`] while they keep coming, and not for each one.
+#[tokio::test]
+async fn a_held_runs_events_report_progress_on_its_hold() {
+    let (_dir, state) = state().await;
+    // Paused once the database is open: while that open waits on its worker
+    // thread, a paused clock would jump ahead to the pool's timeouts.
+    tokio::time::pause();
+    let runtime = Holding::default();
+    // Six events 2 s apart: reported at 0 s and 6 s.
+    let (mut p, _) = paced(reply(), End::Hang, PROGRESS_EVERY * 2 / 5);
+    p.hold = hold(&runtime, Some((19_555, 1))).unwrap();
+
+    start(&state, "h1", None, p).await;
+    tokio::time::sleep(PROGRESS_EVERY * 3).await;
+    logged(&state, "h1", reply().len()).await;
+    assert_eq!(runtime.released.reports(), 2, "one report per period");
 
     state.runs.cancel(&LOCAL, "h1").unwrap();
     settled(&state).await;
