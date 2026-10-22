@@ -25,14 +25,6 @@ export const SERVER_TEMPLATES: ServerTemplate[] = [
     description: "Search the web using Tavily API (may download package on first run)",
   },
   {
-    name: "Filesystem Access",
-    type: "stdio",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed"],
-    envKeys: [],
-    description: "Read/write files in allowed directories (may download package on first run)",
-  },
-  {
     name: "GitHub",
     type: "stdio",
     command: "npx",
@@ -69,6 +61,9 @@ export const ServerTemplatePicker: FC<ServerTemplatePickerProps> = ({ onSelectTe
           </button>
         ))}
       </div>
+      <span className="text-xs text-text-secondary">
+        Reading files is built in: choose a folder in a chat. Every template here needs an API key.
+      </span>
     </Stack>
   );
 };

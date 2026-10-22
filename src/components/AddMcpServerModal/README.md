@@ -8,7 +8,7 @@ Modal dialog for adding and configuring Model Context Protocol (MCP) servers. Ha
 
 | File | Role |
 |------|------|
-| `ServerTemplatePicker.tsx` | Predefined templates (Tavily, Filesystem, GitHub, Brave Search) for one-click configuration |
+| `ServerTemplatePicker.tsx` | Predefined templates (Tavily, GitHub, Brave Search), each needing an API key, for one-click configuration; reading files is built in |
 | `ServerTypeConfig.tsx` | Stdio vs SSE radio selector, with SSE disabled and the reason beside it; command/args/workingDir inputs for stdio mode |
 | `EnvVarManager.tsx` | Dynamic key-value editor for environment variables |
 
