@@ -152,4 +152,19 @@ describe('HuggingFaceBrowser — load more', () => {
     await screen.findByText('m-first');
     expect(screen.queryByRole('button', { name: 'Load More' })).not.toBeInTheDocument();
   });
+
+  it('still offers more when the filters empty a page the Hub has more after', async () => {
+    browseHfModels.mockImplementation(async (request) =>
+      request.cursor === null ? { models: [], next_cursor: 'after-first', total_count: null } : paged(request),
+    );
+    render(<HuggingFaceBrowser />);
+    const user = userEvent.setup();
+
+    const loadMore = await screen.findByRole('button', { name: 'Load More' });
+    expect(screen.getByText('None on this page')).toBeInTheDocument();
+    expect(screen.queryByText('No models found')).not.toBeInTheDocument();
+
+    await user.click(loadMore);
+    await screen.findByText('m-after-first');
+  });
 });
