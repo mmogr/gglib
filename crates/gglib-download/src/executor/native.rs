@@ -480,7 +480,7 @@ fn verify(
 // Helpers
 // ============================================================================
 
-fn part_path_for(dest: &Path) -> PathBuf {
+pub(super) fn part_path_for(dest: &Path) -> PathBuf {
     let mut name = dest.as_os_str().to_os_string();
     name.push(PART_SUFFIX);
     PathBuf::from(name)

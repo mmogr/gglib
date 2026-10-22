@@ -108,3 +108,79 @@ async fn a_fallback_rewinds_the_bytes_and_continues_the_wire() {
     assert_eq!(seen[seen.len() - 1], progress(4096, 5096, 4096));
     assert_eq!(std::fs::read(dir.path().join("model.gguf")).unwrap(), body);
 }
+
+/// A forced fetch that dies part-way leaves the file it was replacing
+/// where it was: the new bytes go beside it until they are complete.
+#[tokio::test]
+async fn a_forced_fetch_that_fails_keeps_the_old_file() {
+    let server = TestServer::start(vec![Reply::Truncated {
+        body: body_of(4096),
+        limit: 1000,
+    }])
+    .await;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let dest = dir.path().join("model.gguf");
+    std::fs::write(&dest, [7_u8; 640]).unwrap();
+    let (mut plan, _) = plan(dir.path(), Some(4096));
+    plan.force = true;
+
+    fetch(&plan, NO_ACCELERATOR, &server.url())
+        .await
+        .expect_err("the transfer was cut short");
+
+    assert_eq!(std::fs::read(&dest).unwrap(), [7_u8; 640]);
+}
+
+/// A forced fetch starts from nothing: a partial left by an earlier attempt
+/// is not resumed onto.
+#[tokio::test]
+async fn a_forced_fetch_does_not_resume_an_old_partial() {
+    let body = body_of(4096);
+    let server = TestServer::start(vec![Reply::File {
+        body: body.clone(),
+        etag: None,
+    }])
+    .await;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let dest = dir.path().join("model.gguf");
+    std::fs::write(&dest, [7_u8; 640]).unwrap();
+    std::fs::write(dir.path().join("model.gguf.part"), [9_u8; 100]).unwrap();
+    let (mut plan, _) = plan(dir.path(), Some(4096));
+    plan.force = true;
+
+    fetch(&plan, NO_ACCELERATOR, &server.url())
+        .await
+        .expect("the native transport fetched it");
+
+    assert_eq!(std::fs::read(&dest).unwrap(), body);
+}
+
+/// A forced fetch does not use the accelerator, whose Hub client deletes
+/// the old file before its replacement arrives: the native transport
+/// fetches it instead.
+#[tokio::test]
+async fn a_forced_fetch_skips_the_accelerator() {
+    let body = body_of(4096);
+    let server = TestServer::start(vec![Reply::File {
+        body: body.clone(),
+        etag: None,
+    }])
+    .await;
+    let dir = tempfile::tempdir().expect("tempdir");
+    let dest = dir.path().join("model.gguf");
+    std::fs::write(&dest, [7_u8; 640]).unwrap();
+    let (mut plan, _) = plan(dir.path(), Some(4096));
+    plan.force = true;
+    let ran = std::sync::atomic::AtomicBool::new(false);
+    let accelerator = |_: RawCallback| {
+        ran.store(true, std::sync::atomic::Ordering::Relaxed);
+        ready(Err(PythonBridgeError::Cancelled))
+    };
+
+    fetch(&plan, Some(accelerator), &server.url())
+        .await
+        .expect("the native transport fetched it");
+
+    assert!(!ran.load(std::sync::atomic::Ordering::Relaxed));
+    assert_eq!(std::fs::read(&dest).unwrap(), body);
+}
