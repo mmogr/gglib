@@ -33,8 +33,7 @@ use axum::response::{IntoResponse, Response};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use gglib_core::contracts::http::images::{
-    DrawingAvailability, DrawingQuery, ImageData, ImageGenerationsRequest,
-    ImageGenerationsResponse, MAX_PARTIAL_IMAGES,
+    DrawingQuery, ImageData, ImageGenerationsRequest, ImageGenerationsResponse, MAX_PARTIAL_IMAGES,
 };
 use gglib_core::ports::{
     DEFAULT_REDRAW_STRENGTH, ImageError, ImageGenerationPort, ImageRequest, ImageSize, ImageSource,
@@ -46,11 +45,13 @@ use tokio::sync::mpsc;
 use tracing::debug;
 
 use crate::models::ErrorResponse;
+use crate::remote::DeviceDrawing;
 use crate::server::{AppState, handle_runtime_error};
 
 /// `GET /v1/images/drawing`: whether a turn sent with Draw pressed can draw
 /// here, and why not, by the same rule as the daemon's
 /// `GET /api/images/drawing`. A paired device asks before it sends `draw`.
+/// Beside it, `mcp_servers`: the MCP servers a device's run is offered.
 ///
 /// Always 200. When it cannot, `code` is `drawing_unavailable`: not an
 /// error of this request, but the code a request to draw would be refused
@@ -58,16 +59,15 @@ use crate::server::{AppState, handle_runtime_error};
 pub(crate) async fn drawing_route(
     State(state): State<AppState>,
     Query(query): Query<DrawingQuery>,
-) -> Json<DrawingAvailability> {
-    Json(
-        drawing_availability(
-            state.images.as_deref(),
-            query.far,
-            query.calls_tools,
-            query.image_model,
-        )
-        .await,
+) -> Json<DeviceDrawing> {
+    let answer = drawing_availability(
+        state.images.as_deref(),
+        query.far,
+        query.calls_tools,
+        query.image_model,
     )
+    .await;
+    Json(DeviceDrawing::of(&state, answer))
 }
 
 /// The proxy's door: the driver the daemon handed this proxy, if any.

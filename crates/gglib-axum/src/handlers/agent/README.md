@@ -242,21 +242,23 @@ device's scope saved to the chat.
 `device_tools` says what a device's run is offered. Its floor is the image
 tool for a turn that says `draw: true` (the device's Draw button), named
 exactly `builtin:generate_image`, never the bare name, which would let an
-MCP server's tool of that name through to a device; else nothing. Beyond
-it are the tools of the MCP servers the live session opens (`gglib remote
-enable --allow-mcp <server>`, read from the tunnel's gateway), each by its
-qualified `{id}:{tool}`: every one for a phone's chat or a chat that names
+MCP server's tool of that name through to a device; else nothing. The
+chat's `no_tools` does not take the floor away, since the button is the
+person's choice for that message, and a hub that cannot draw refuses the
+turn `400 drawing_unavailable` before anything is written. A turn's
+`image_model`, when it says one, is the page's: copied onto the chat
+request and judged there. Beyond the floor are the tools of the MCP
+servers the live session opens (`gglib remote enable --allow-mcp
+<server>`, read from the tunnel's gateway), each by its qualified
+`{id}:{tool}`: every one for a phone's chat or a chat that names
 no tool, only those a chat's own list names exactly or by bare name
 otherwise, none when the chat turned its tools off, and never a tool the
 list names that no opened server has. A turn is planned with the floor
 alone; the rest is settled in the run's late step (`hub_turn::late_on`),
 once the model is found or loaded, where a named server that is not
 running is started (`McpService::opened_tools`). A `PUT` that is refused
-starts nothing. The decision is ADR 0024.
-The chat's `no_tools` does not stop it, since the button is the person's
-choice for that message, and a hub that cannot draw refuses the turn `400
-drawing_unavailable` before anything is written. Its `image_model`, when it
-says one, is the page's: copied onto the chat request and judged there.
+starts nothing. The decision is
+[ADR 0024](../../../../../docs/adr/0024-the-tunnel-opens-mcp-servers-by-name.md).
 
 `chat_turn` is the starter's other door, the proxy's
 `PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`: a chat a paired

@@ -1,11 +1,14 @@
 # ADR 0012 — The remote tunnel: one key at two doors, a code that dies on use, and a ticket that dies with the session
 
-- **Status:** Accepted
+- **Status:** Accepted; superseded in part by
+  [ADR 0024](0024-the-tunnel-opens-mcp-servers-by-name.md)
 - **Date:** 2026-09-05 (changed in place before ADRs froze: decision 4 on
   2026-09-09 and reversed 2026-09-10, decision 2 on 2026-09-11)
 - **Depends on:** [ADR 0008](0008-two-binaries-one-daemon.md)
 - **Supersedes:** nothing
-- **Superseded by:** nothing
+- **Superseded by:** [ADR 0024](0024-the-tunnel-opens-mcp-servers-by-name.md),
+  in part: decision 5's switch, `--allow-mcp` opening `/mcp` to tunnelled
+  requests
 - **Log:** [log-0012](log-0012.md)
 
 ## Context
