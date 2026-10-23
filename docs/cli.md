@@ -234,8 +234,10 @@ a project to read it, or --no-tools`; launched in a directory deleted since,
 it reads none and says it cannot read it. Under `--tools` the file tools are
 kept only when the list names one, bare (`read_file`) or as
 `builtin:read_file`; a list that names none gets none, no `Files:` line, and
-its directory is not read. An MCP server you added reads what its own
-configuration names; it is not told this folder.
+its directory is not read. An MCP server you added is not told this folder:
+it reads what its own arguments name, from the working directory it was
+added with. Each gglib process starts one copy of it, which every chat in
+that process shares; the daemon's serves every chat the daemon runs.
 
 A chat the daemon is still replying to, for the web page or a paired device,
 is not continued: `--continue` says the chat is running elsewhere and names

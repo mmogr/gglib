@@ -92,8 +92,8 @@ impl HubChatsPort for HubChats {
             .map_err(|_| HubChatsError::Unreadable)?
             .ok_or(HubChatsError::NotFound)?;
         // The chat's folder is a path on this machine, and a device is never
-        // told one: it reaches no file of this machine's, as ADR 0012
-        // decision 5 keeps the tools here from it.
+        // told one (ADR 0023, decision 4): it reaches no file of this
+        // machine's, as ADR 0012 decision 5 keeps the tools here from it.
         if let Some(settings) = conversation.settings.as_mut() {
             settings.folder = None;
         }

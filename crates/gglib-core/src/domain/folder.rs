@@ -5,7 +5,10 @@
 //! directory it was launched in ([`launched`]), never this machine's home
 //! folder or the filesystem's root; the page's is the folder the person
 //! chose ([`chosen`]); a paired device's turn has none. Either rule answers
-//! a canonical path, so what is shown as the folder is what is read.
+//! a canonical path, so what is shown as the folder is what is read. The
+//! decision is [ADR 0023].
+//!
+//! [ADR 0023]: https://github.com/mmogr/gglib/blob/main/docs/adr/0023-a-chats-folder-is-where-gglibs-own-file-tools-read.md
 
 use std::path::{Path, PathBuf};
 

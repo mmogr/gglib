@@ -76,7 +76,7 @@ pub struct LoopGeneration {
 /// * `sandbox_root` — the run's folder, a canonical path, where gglib's own
 ///   file tools read: `Some(folder)` offers them with descriptions that name
 ///   it, and `None` leaves them out. External MCP servers are told nothing
-///   of it.
+///   of it (ADR 0023).
 /// * `usage_sink` — `Some(sink)` reports each response's token usage (e.g. the
 ///   proxy process's agent-path cache store, for GUI chat); `None` when there
 ///   is nothing to report to.
