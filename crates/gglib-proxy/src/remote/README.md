@@ -9,9 +9,9 @@ and never forwards it.
 
 The proxy never sees the tunnel. What it has is a
 [`RemoteGatewayPort`](gglib_core::ports::RemoteGatewayPort) on its
-`AppState`, attached by whoever started it, and two things it may say to it:
-may a tunnelled request reach `/mcp`, and here is a request that came through
-the tunnel.
+`AppState`, attached by whoever started it, and one thing it may say to it:
+here is a request that came through the tunnel. `/mcp` asks it nothing,
+because no tunnelled request reaches `/mcp`.
 
 # The markers
 
@@ -56,11 +56,12 @@ a mistake would reach `POST /v1/proxy/shutdown`.
 # The `/mcp` gate
 
 [`mcp_tunnel_guard`] is a `route_layer` on `/mcp` alone, inside the bearer
-guard. A tunnelled request is refused with `403 mcp_not_allowed_over_tunnel`
-unless the owner allows it — `gglib remote enable --allow-mcp`. With no owner
-attached the answer is also no. `invoke_tool` starts the MCP servers
-configured on this machine; a leaked token with a shell server configured is
-remote code execution, which is not the same blast radius as free inference
-and does not get the same default.
+guard. Every tunnelled request is refused with
+`403 mcp_not_allowed_over_tunnel`; no flag opens it, and it asks the tunnel's
+owner nothing. `invoke_tool` starts any MCP server configured on this
+machine; a leaked token with a shell server configured is remote code
+execution, which is not the same blast radius as free inference. A paired
+device reaches the servers `gglib remote enable --allow-mcp <server>` names
+through its runs instead.
 
 <!-- module-docs:end -->

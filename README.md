@@ -308,7 +308,7 @@ gglib q --remote -m <model> "Why is this test flaky?"   # a model the desktop se
 
 The code is single-use and dies in two minutes; the ticket is fresh every
 `enable`; the tunnel enforces the same API key the proxy does, and `/mcp` is
-closed over it unless you say otherwise. On the laptop, the chat page's rail
+always closed over it. On the laptop, the chat page's rail
 switches between its own chats and the desktop's, which it reads and carries
 on live without copying them. [Details →](docs/remote.md)
 

@@ -213,9 +213,9 @@ file tools' root, whose descriptions name it, and `compose::with_folder`
 adds the three qualified names to a tool filter that lists names; `[]`, a
 model that calls no tool, stays `[]`, and `null` admits them already. The
 chat route (`POST /api/agent/chat`) and every turn a paired device sends
-pass no folder, whatever the conversation remembers: a device reaches this
-machine's tools only through `--allow-mcp` (ADR 0012, decision 5), which
-names no file tool, and no key of a device's turn names a path.
+pass no folder, whatever the conversation remembers: a device's turn calls
+no tool of this machine's but the image tool its Draw asks for, and no key
+of a device's turn names a path.
 
 # A paired device's turn
 
@@ -232,17 +232,16 @@ before anything else is read for it, and nothing is admitted. The history is reb
 record as a resumed CLI chat reads it (core's `saved_history`: the system
 prompt, then every row but a system one; then the message), the limits from the
 conversation's settings (an iteration limit they do not name is this
-machine's stored one), no tools unless `enable --allow-mcp` opened the
-tunnel to them (then only those the settings name), never gglib's own file
-tools, and the reply runs on the chat's model
+machine's stored one), no MCP tool whatever the settings name, never
+gglib's own file tools, and the reply runs on the chat's model
 (`hub_model`: its own, its settings', its last reply's, the one running on
 the hub (the one started last, of several), or the hub's default), loaded first when it is not running, as an agent run in the
 device's scope saved to the chat.
 
 A turn that says `draw: true` (the device's Draw button) is planned with
-the image tool beside whatever MCP tools it may call: `tools_of` adds
-exactly `builtin:generate_image`, never the bare name, which would let an
-MCP server's tool of that name through to a device without `--allow-mcp`.
+the image tool and nothing else: `tools_of` names exactly
+`builtin:generate_image`, never the bare name, which would let an MCP
+server's tool of that name through to a device.
 The chat's `no_tools` does not stop it, since the button is the person's
 choice for that message, and a hub that cannot draw refuses the turn `400
 drawing_unavailable` before anything is written. Its `image_model`, when it
