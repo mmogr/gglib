@@ -21,10 +21,14 @@ sandbox root, and `generate_image` (`generate_image.rs`) needs a drawing tool
 that is armed for this message, which is a run sent with `draw: true` or the
 message after `/draw` in `gglib chat`. Listing and calling both read the
 table, so a tool that is not listed is refused when called. The page's tool
-list (`bare_definitions`) never carries `generate_image`.
+list (`bare_definitions`, `GET /api/builtin/tools`) holds only the tools that
+need nothing from the run, so it never carries `generate_image` or a file
+tool: the server decides when a run is offered those.
 
 The file tools read only under their sandbox root, which the model is told
-about as "the working folder". A path is relative to it; an absolute path
+about as "the working folder"; each one's description, built when the tools
+are listed, names that folder by the absolute path the adapter was given.
+A path is relative to it; an absolute path
 that already lies under it is taken as is, and any other absolute path is
 read as relative to it. Every path is canonicalised and refused unless it
 stays under the canonical root (`sandboxing.rs`), and `grep_search` follows

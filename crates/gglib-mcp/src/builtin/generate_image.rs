@@ -19,6 +19,7 @@
 //! call this tool, and it calls it once ([`DrawingTool::first_call`]).
 
 use std::fmt;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -335,7 +336,7 @@ pub(crate) fn update_of(progress: ImageProgress) -> ToolProgressUpdate {
 }
 
 /// The tool as the model is offered it.
-pub(crate) fn definition() -> McpTool {
+pub(crate) fn definition(_root: Option<&Path>) -> McpTool {
     McpTool::new(NAME)
         .with_description(
             "The user pressed Draw for this message. Call this once with a detailed prompt you \

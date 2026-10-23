@@ -163,7 +163,7 @@ crates/gglib-hf/src/parsing.rs 432
 crates/gglib-hf/src/url.rs 449
 crates/gglib-mcp/src/builtin/generate_image.rs 380
 crates/gglib-mcp/src/builtin/generate_image_tests.rs 476
-crates/gglib-mcp/src/builtin/mod.rs 381
+crates/gglib-mcp/src/builtin/mod.rs 409
 crates/gglib-mcp/src/client.rs 580
 crates/gglib-mcp/src/client_tests.rs 366
 crates/gglib-mcp/src/manager.rs 315

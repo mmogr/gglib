@@ -36,14 +36,14 @@ describe('syncBuiltinTools', () => {
   });
 
   it('registers each tool the daemon lists under the builtin source, and counts them', async () => {
-    transport.listBuiltinTools.mockResolvedValue([makeTool('get_current_time'), makeTool('read_file')]);
+    transport.listBuiltinTools.mockResolvedValue([makeTool('get_current_time'), makeTool('other_tool')]);
 
     expect(await syncBuiltinTools()).toEqual({ added: 2, removed: 0 });
 
     const registry = getToolRegistry();
-    expect(registry.getDefinitions().map((d) => d.function.name)).toEqual(['get_current_time', 'read_file']);
+    expect(registry.getDefinitions().map((d) => d.function.name)).toEqual(['get_current_time', 'other_tool']);
     expect(registry.getSource('get_current_time')).toBe('builtin');
-    expect(registry.getSource('read_file')).toBe('builtin');
+    expect(registry.getSource('other_tool')).toBe('builtin');
   });
 
   it('names a built-in tool to the daemon as `builtin:<name>`', async () => {
@@ -55,23 +55,23 @@ describe('syncBuiltinTools', () => {
   });
 
   it('gives get_current_time its renderer, and a tool with none of its own no renderer', async () => {
-    transport.listBuiltinTools.mockResolvedValue([makeTool('get_current_time'), makeTool('read_file')]);
+    transport.listBuiltinTools.mockResolvedValue([makeTool('get_current_time'), makeTool('other_tool')]);
 
     await syncBuiltinTools();
 
     const registry = getToolRegistry();
     expect(registry.getRenderer('get_current_time')).toBe(timeRenderer);
     // No renderer registered is what sends a result to the fallback JSON view.
-    expect(registry.getRenderer('read_file')).toBeUndefined();
+    expect(registry.getRenderer('other_tool')).toBeUndefined();
   });
 
   it('replaces the built-ins of an earlier sync', async () => {
-    transport.listBuiltinTools.mockResolvedValueOnce([makeTool('get_current_time'), makeTool('read_file')]);
+    transport.listBuiltinTools.mockResolvedValueOnce([makeTool('get_current_time'), makeTool('other_tool')]);
     await syncBuiltinTools();
     transport.listBuiltinTools.mockResolvedValueOnce([makeTool('get_current_time')]);
 
     expect(await syncBuiltinTools()).toEqual({ added: 1, removed: 2 });
 
-    expect(getToolRegistry().has('read_file')).toBe(false);
+    expect(getToolRegistry().has('other_tool')).toBe(false);
   });
 });

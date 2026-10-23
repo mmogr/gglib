@@ -7,7 +7,7 @@ pub(crate) mod sandboxing;
 mod time;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -44,8 +44,9 @@ struct Builtin {
     needs_sandbox: bool,
     /// Offered only with a drawing tool, armed for this message.
     needs_drawing: bool,
-    /// How it is described to the model.
-    definition: fn() -> McpTool,
+    /// How it is described to the model, given the sandbox root a file tool
+    /// names as its folder.
+    definition: fn(Option<&Path>) -> McpTool,
     /// How long a call may take, when longer than a session's tool timeout.
     deadline: Option<Duration>,
 }
@@ -134,14 +135,16 @@ impl BuiltinToolExecutorAdapter {
     /// without the `"builtin:"` prefix so the frontend can register them as
     /// `originalName = bare_name, serverId = "builtin"`.
     ///
-    /// Never `generate_image`: a tool listed here can be switched on in the
-    /// page's tool picker and sent with any message, and drawing is offered
-    /// only to a message sent with Draw pressed, which the server decides.
+    /// Only the tools that need nothing from the run: a tool listed here can
+    /// be switched on in the page's tool picker and sent with any message.
+    /// Never `generate_image`, which is offered only to a message sent with
+    /// Draw pressed, and never the file tools, which are offered only to a
+    /// run that has a folder; the server decides both.
     pub fn bare_definitions() -> Vec<McpTool> {
         BUILTINS
             .iter()
-            .filter(|tool| !tool.needs_drawing)
-            .map(|tool| (tool.definition)())
+            .filter(|tool| !tool.needs_drawing && !tool.needs_sandbox)
+            .map(|tool| (tool.definition)(None))
             .collect()
     }
 
@@ -152,7 +155,7 @@ impl BuiltinToolExecutorAdapter {
     }
 }
 
-fn time_definition() -> McpTool {
+fn time_definition(_root: Option<&Path>) -> McpTool {
     McpTool::new("get_current_time")
         .with_description(
             "Get the current date and time. Can return time in different \
@@ -179,43 +182,67 @@ fn time_definition() -> McpTool {
         }))
 }
 
-fn read_file_definition() -> McpTool {
+/// The sentence a file tool's description ends with: its folder, by the
+/// absolute path it was given in backticks with any control character
+/// escaped, and that a path is relative to it. A file tool is offered only
+/// with a root, so the `None` form is never shown to a model; it exists
+/// because every tool's definition shares one signature.
+fn folder_sentence(root: Option<&Path>) -> String {
+    let Some(root) = root else {
+        return "A path is relative to the working folder.".to_owned();
+    };
+    let shown: String = root
+        .display()
+        .to_string()
+        .chars()
+        .map(|c| {
+            if c.is_control() {
+                c.escape_default().to_string()
+            } else {
+                c.to_string()
+            }
+        })
+        .collect();
+    format!("The working folder is `{shown}`; a path is relative to it.")
+}
+
+fn read_file_definition(root: Option<&Path>) -> McpTool {
     McpTool::new("read_file")
-        .with_description(
-            "Read the contents of a text file. Binary files are rejected. \
-             Very large files are truncated. Path is relative to the \
-             working directory.",
-        )
+        .with_description(format!(
+            "Read a text file. Binary files are refused and a very long file is cut short. {}",
+            folder_sentence(root)
+        ))
         .with_input_schema(json!({
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Path to the file (relative to working directory)"
+                    "description": "Path of the file, relative to the working folder"
                 }
             },
             "required": ["path"]
         }))
 }
 
-fn list_directory_definition() -> McpTool {
+fn list_directory_definition(root: Option<&Path>) -> McpTool {
     McpTool::new("list_directory")
-        .with_description(
-            "List entries in a directory. Directories end with '/'. \
-             Hidden files are excluded by default. Path is relative \
-             to the working directory.",
-        )
+        .with_description(format!(
+            "List what is in a folder. A folder's name ends with '/'. Hidden entries are left \
+             out unless include_hidden is true. {}",
+            folder_sentence(root)
+        ))
         .with_input_schema(json!({
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Path to list (default: current directory)",
+                    "description": "Folder to list, relative to the working folder; \
+                                    \".\" is the working folder itself",
                     "default": "."
                 },
                 "include_hidden": {
                     "type": "boolean",
-                    "description": "Include hidden files (starting with '.')",
+                    "description": "Include hidden entries (names starting with '.')",
                     "default": false
                 }
             },
@@ -223,24 +250,25 @@ fn list_directory_definition() -> McpTool {
         }))
 }
 
-fn grep_search_definition() -> McpTool {
+fn grep_search_definition(root: Option<&Path>) -> McpTool {
     McpTool::new("grep_search")
-        .with_description(
-            "Search for a text pattern in files. Case-insensitive substring \
-             search. Skips binary files and common noise directories \
-             (node_modules, .git, target). Returns matching lines with \
-             file paths and line numbers.",
-        )
+        .with_description(format!(
+            "Find lines that contain the given text, ignoring case. Skips binary files, \
+             hidden entries and the folders {}. Each match is path:line:text. {}",
+            fs_grep::skipped_folders(),
+            folder_sentence(root)
+        ))
         .with_input_schema(json!({
             "type": "object",
             "properties": {
                 "pattern": {
                     "type": "string",
-                    "description": "Text pattern to search for (case-insensitive)"
+                    "description": "Text to find (case-insensitive)"
                 },
                 "path": {
                     "type": "string",
-                    "description": "Directory or file to search (default: current directory)",
+                    "description": "Folder or file to search, relative to the working folder; \
+                                    \".\" is the working folder itself",
                     "default": "."
                 }
             },
@@ -259,7 +287,7 @@ impl ToolExecutorPort for BuiltinToolExecutorAdapter {
             .iter()
             .filter(|tool| self.offers(tool))
             .map(|tool| {
-                let t = (tool.definition)();
+                let t = (tool.definition)(self.sandbox_root.as_deref());
                 ToolDefinition {
                     name: format!("{BUILTIN_PREFIX}{}", t.name),
                     description: t.description,
