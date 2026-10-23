@@ -15,7 +15,7 @@ use std::sync::Arc;
 /// The server name gglib keeps for itself: the proxy's tool gateway lists
 /// gglib's own tools as `builtin__<tool>`, beside every server's
 /// `<server>__<tool>`.
-const RESERVED_SERVER_NAME: &str = "builtin";
+pub(crate) const RESERVED_SERVER_NAME: &str = "builtin";
 
 /// Server info with runtime status and tools.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -826,4 +826,4 @@ impl McpService {
 
 #[cfg(test)]
 #[path = "service_tests.rs"]
-mod tests;
+pub(crate) mod tests;

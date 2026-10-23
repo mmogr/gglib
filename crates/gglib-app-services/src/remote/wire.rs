@@ -44,9 +44,11 @@ pub struct RemoteStatus {
     /// Every connected peer.
     #[serde(default)]
     pub peers: Vec<RemotePeer>,
-    /// Whether tunnelled requests may reach `/mcp`.
+    /// The MCP servers, by name, the live session opens to paired devices'
+    /// chats; empty with the tunnel down. `/mcp` is never reachable through
+    /// the tunnel.
     #[serde(default)]
-    pub mcp_allowed: bool,
+    pub mcp_servers: Vec<String>,
     /// Requests that arrived through the tunnel since the daemon started.
     #[serde(default)]
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]

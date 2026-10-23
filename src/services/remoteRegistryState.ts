@@ -23,7 +23,7 @@ export const IDLE_STATUS: RemoteStatus = {
   paired: false,
   path: null,
   peers: [],
-  mcp_allowed: false,
+  mcp_servers: [],
   tunnelled_requests: 0,
   last_tunnelled_ms: null,
   last_peer: null,

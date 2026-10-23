@@ -34,9 +34,11 @@ path: string | null,
  */
 peers: Array<RemotePeer>, 
 /**
- * Whether tunnelled requests may reach `/mcp`.
+ * The MCP servers, by name, the live session opens to paired devices'
+ * chats; empty with the tunnel down. `/mcp` is never reachable through
+ * the tunnel.
  */
-mcp_allowed: boolean, 
+mcp_servers: Array<string>, 
 /**
  * Requests that arrived through the tunnel since the daemon started.
  */

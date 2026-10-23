@@ -36,8 +36,8 @@ impl Drain for modelpipe::ServeHandle {
 /// forget what the session was holding.
 ///
 /// **The drain comes before the session is reset.** What was admitted before
-/// `disable` finishes under the session it was admitted to, `/mcp` grant
-/// included. A pairing is the exception: modelpipe withdraws a live invite as
+/// `disable` finishes under the session it was admitted to, the MCP servers
+/// it opens included. A pairing is the exception: modelpipe withdraws a live invite as
 /// the listener closes, which is where the drain starts, so a pairing request
 /// whose code the edge has not redeemed by then is refused. A device that
 /// redeemed before it is recorded whichever runs first, because whoever takes
@@ -67,8 +67,8 @@ pub(super) async fn take_down<H: Drain>(live: Live<H>, gateway: &RemoteGateway) 
         warn!("remote tunnel drain hit its deadline; remaining requests were cut");
     }
     // Last, and only this session's: a code shown for a session that has
-    // ended cannot outlive it, and the `/mcp` grant and the paired flag
-    // belong to the same session.
+    // ended cannot outlive it, and the MCP servers it opens and the paired
+    // flag belong to the same session.
     gateway.reset_session_if(live.epoch);
 }
 
@@ -76,7 +76,7 @@ pub(super) async fn take_down<H: Drain>(live: Live<H>, gateway: &RemoteGateway) 
 mod tests {
     use std::sync::Arc;
 
-    use gglib_core::ports::{NoopEmitter, RemoteGatewayPort as _};
+    use gglib_core::ports::NoopEmitter;
     use tokio::sync::mpsc::unbounded_channel;
     use tokio_util::sync::CancellationToken;
 
@@ -91,7 +91,7 @@ mod tests {
     /// given carries; and the invite.
     fn gateway() -> (Arc<RemoteGateway>, u64, Arc<FakeInvite>) {
         let gateway = Arc::new(RemoteGateway::new(Arc::new(NoopEmitter)));
-        let epoch = gateway.begin_session(true);
+        let epoch = gateway.begin_session(Arc::from(["tavily".to_owned()]));
         let invite = FakeInvite::new();
         gateway.offer_pairing(epoch, DEVICE.to_owned(), Box::new(Arc::clone(&invite)));
         (gateway, epoch, invite)
@@ -169,7 +169,10 @@ mod tests {
             invite.was_withdrawn(),
             "the session is over, and so is its code"
         );
-        assert!(!gateway.mcp_allowed(), "and so is its /mcp grant");
+        assert!(
+            gateway.mcp_servers().is_empty(),
+            "and so are the MCP servers it opened"
+        );
     }
 
     /// The rotation poll and the proxy watcher both hold this token. Neither
@@ -218,7 +221,7 @@ mod tests {
 
     impl Drain for ArmingDrain {
         fn drain(&self, _grace: Duration) -> impl Future<Output = bool> + Send {
-            let epoch = self.gateway.begin_session(true);
+            let epoch = self.gateway.begin_session(Arc::from(["tavily".to_owned()]));
             self.gateway.offer_pairing(
                 epoch,
                 "dev-4e5f6a7b".to_owned(),
@@ -230,8 +233,8 @@ mod tests {
 
     /// The session that replaced this one is not this one's to end. A
     /// teardown that cleared whatever it found would withdraw a code the
-    /// operator is holding and revoke an `/mcp` grant that was just asked
-    /// for.
+    /// operator is holding and close the MCP servers that were just
+    /// opened.
     #[tokio::test]
     async fn a_session_armed_while_the_teardown_drained_survives_it() {
         let (gateway, epoch, _invite) = gateway();
@@ -249,9 +252,10 @@ mod tests {
             "the newer session's code has to still be redeemable"
         );
         assert!(!next.was_withdrawn());
-        assert!(
-            gateway.mcp_allowed(),
-            "and its /mcp grant has to still be granted"
+        assert_eq!(
+            *gateway.mcp_servers(),
+            ["tavily".to_owned()],
+            "and the MCP servers it opened have to stay open"
         );
     }
 }

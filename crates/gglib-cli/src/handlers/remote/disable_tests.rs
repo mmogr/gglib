@@ -116,7 +116,7 @@ async fn switched_on(app: &AppCore) {
         .update(SettingsUpdate {
             remote_enabled: Some(Some(true)),
             remote_serve: Some(Some(gglib_core::RemoteServe {
-                allow_mcp: true,
+                mcp_servers: vec!["tavily".to_owned()],
                 relay: None,
                 discovery: true,
             })),
@@ -154,7 +154,7 @@ async fn switching_off_with_no_daemon_leaves_the_serve_flags_alone() {
         .remote_serve
         .expect("the flags stay");
     assert!(
-        serve.allow_mcp && serve.discovery,
+        serve.mcp_servers == ["tavily"] && serve.discovery,
         "the flags were rewritten"
     );
 }

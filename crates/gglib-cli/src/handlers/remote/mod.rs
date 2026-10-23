@@ -133,14 +133,11 @@ fn print_status(status: &RemoteStatus) {
                 eprintln!("  Peer:      {}  ({})", peer.fingerprint, peer.path);
             }
         }
-        eprintln!(
-            "  /mcp:      {}",
-            if status.mcp_allowed {
-                "reachable through the tunnel"
-            } else {
-                "not reachable through the tunnel"
-            }
-        );
+        if status.mcp_servers.is_empty() {
+            eprintln!("  MCP:       none open to paired devices");
+        } else {
+            eprintln!("  MCP:       {}", status.mcp_servers.join(", "));
+        }
     } else {
         // The switch being on with nothing bound is worth its own sentence:
         // it is a machine that failed to arm at boot, or is still arming,

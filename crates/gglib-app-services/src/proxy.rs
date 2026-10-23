@@ -57,8 +57,8 @@ pub struct ProxyOps {
     /// what lets an authenticated remote client stop the whole thing.
     daemon_cancel: std::sync::OnceLock<CancellationToken>,
     /// The remote tunnel's owner, handed over the same way and for the same
-    /// reason: every proxy this starts carries it, so the pairing route and
-    /// the `/mcp` gate have someone to ask (ADR 0012).
+    /// reason: every proxy this starts carries it, so each can tell it when a
+    /// tunnelled request arrives (ADR 0012).
     remote_gateway: std::sync::OnceLock<Arc<dyn RemoteGatewayPort>>,
     /// The daemon's runs, handed over the same way, so every proxy this
     /// starts serves a paired device its own runs. Weak because the runs

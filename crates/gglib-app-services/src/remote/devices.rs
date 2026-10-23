@@ -136,7 +136,7 @@ impl RemoteOps {
             pairing,
             // The live session's answer, not the caller's flag: this path
             // deliberately leaves the flags where `enable` set them.
-            mcp_allowed: gglib_core::ports::RemoteGatewayPort::mcp_allowed(&*self.gateway),
+            mcp_servers: self.gateway.mcp_servers().to_vec(),
             // This *is* the path that finds it already up; there is no other.
             already_up: true,
         }))

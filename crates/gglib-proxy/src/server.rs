@@ -94,8 +94,8 @@ pub(crate) struct AppState {
     /// stop and the remote shutdown route says so rather than pretending.
     daemon_shutdown: Option<CancellationToken>,
     /// The remote tunnel's owner, when this proxy may be reached through one.
-    /// Asked to redeem a pairing code and whether `/mcp` is open to tunnelled
-    /// requests; told when one arrives. `None` where no tunnel can exist.
+    /// Told when a tunnelled request arrives, and asked nothing: no tunnelled
+    /// request reaches `/mcp`. `None` where no tunnel can exist.
     remote: Option<Arc<dyn RemoteGatewayPort>>,
     /// The daemon's runs, served at `/v1/runs`; `None` answers those 503.
     pub(crate) runs: Option<Arc<dyn RunsPort>>,

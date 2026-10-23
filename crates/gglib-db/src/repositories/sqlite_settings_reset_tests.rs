@@ -51,7 +51,7 @@ fn kept_rows() -> Vec<(&'static str, String)> {
         }),
         remote_enabled: Some(true),
         remote_serve: Some(RemoteServe {
-            allow_mcp: true,
+            mcp_servers: vec!["tavily".to_owned()],
             ..RemoteServe::default()
         }),
         remote_devices: Some(vec![Device {

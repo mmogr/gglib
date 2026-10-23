@@ -11,6 +11,7 @@ pub(crate) mod builtin;
 pub(crate) mod client;
 pub(crate) mod combined;
 pub(crate) mod manager;
+pub(crate) mod opened;
 pub(crate) mod path;
 pub(crate) mod resolver;
 pub(crate) mod service;
@@ -29,5 +30,6 @@ pub use builtin::{
     DRAW_THEN_SAY_FAILED, DrawArm, DrawWith, DrawingTool, FILE_TOOLS, image_request_of,
 };
 pub use combined::CombinedToolExecutor;
+pub use opened::Unopenable;
 pub use service::{McpServerInfo, McpService};
 pub use tool_images::describe_item;

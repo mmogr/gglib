@@ -110,6 +110,26 @@ async fn test_load_tolerates_rows_written_before_new_fields_existed() {
     assert_eq!(loaded.share_lan, None);
 }
 
+/// A serve row an older build wrote, its `/mcp` switch on, still reads and
+/// opens no MCP server: the list that replaced it is a key of its own, so the
+/// whole settings load does not fail on a `true` where a list is wanted.
+#[tokio::test]
+async fn a_serve_row_an_older_build_wrote_reads_and_opens_no_server() {
+    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    let repo = SqliteSettingsRepository::new(pool.clone());
+    repo.ensure_table().await.unwrap();
+    sqlx::query("INSERT INTO settings_kv (key, value, updated_at) VALUES ('remote_serve', ?, '')")
+        .bind(r#"{"allowMcp":true,"relay":null,"discovery":true}"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let serve = repo.load().await.expect("an older serve row still loads");
+    let serve = serve.remote_serve.expect("and is read as a serve row");
+    assert!(serve.mcp_servers.is_empty(), "it opens no server");
+    assert!(serve.discovery);
+}
+
 #[tokio::test]
 async fn test_none_fields_are_deleted_from_db() {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();

@@ -8,13 +8,13 @@
 //! endpoint without reaching the network, so the whole of `arm` runs here
 //! rather than stopping at the bind.
 
-use gglib_core::SettingsUpdate;
-
+use super::serve_resume_tests::switched_on;
 use super::serve_watch_tests::{offline, ops_with_key};
 use super::*;
 use crate::error::GuiError;
 
-/// A restart puts the tunnel back and arms no pairing code.
+/// A restart puts the tunnel back and arms no pairing code, and the session
+/// opens the MCP servers the switch was recorded with.
 ///
 /// `resume` used to reach the tunnel through `enable`, which mints a code
 /// unconditionally — so every daemon start opened a live two-minute code
@@ -25,24 +25,12 @@ use crate::error::GuiError;
 #[tokio::test]
 async fn a_resume_puts_the_tunnel_back_without_opening_a_pairing_window() {
     let (core, _proxy, _events, ops, _arming) = ops_with_key().await;
-    // The state `enable` leaves behind: the switch on, and the flags it was
-    // given, which is what `resume` arms from.
-    core.settings()
-        .update(SettingsUpdate {
-            remote_enabled: Some(Some(true)),
-            remote_serve: Some(Some(gglib_core::RemoteServe {
-                allow_mcp: false,
-                relay: None,
-                discovery: false,
-            })),
-            ..SettingsUpdate::default()
-        })
-        .await
-        .expect("settings update");
+    switched_on(&core, None, &["tavily"]).await;
 
     ops.resume().await;
 
     let status = ops.status().await;
+    let held = ops.gateway().mcp_servers().to_vec();
     assert!(
         status.enabled,
         "the tunnel is up: a resume that armed nothing would make this vacuous"
@@ -51,8 +39,64 @@ async fn a_resume_puts_the_tunnel_back_without_opening_a_pairing_window() {
         !status.pairing_active,
         "a resume opens no pairing window; a code nobody is watching for is a live code nobody spends"
     );
+    assert_eq!(held, ["tavily"], "the session opens the recorded servers");
+    assert_eq!(status.mcp_servers, ["tavily"], "and status says so");
 
     ops.disable().await.expect("disable");
+}
+
+/// An enable that names MCP servers opens them: stored for the next start,
+/// held by the session, and reported by status and by its own answer. An
+/// invite onto that session answers with the session's servers.
+#[tokio::test]
+async fn an_enable_naming_servers_opens_them_and_an_invite_onto_it_says_so() {
+    let (core, _proxy, _events, ops, _arming) = ops_with_key().await;
+
+    let enabled = ops
+        .enable(EnableRequest {
+            mcp_servers: vec!["tavily".to_owned()],
+            ..offline()
+        })
+        .await;
+    let stored = core
+        .settings()
+        .get()
+        .await
+        .ok()
+        .and_then(|s| s.remote_serve);
+    let held = ops.gateway().mcp_servers().to_vec();
+    let status = ops.status().await.mcp_servers;
+    // It names none, so the servers it reports can only be the session's.
+    let invited = ops
+        .enable(EnableRequest {
+            invite: true,
+            ..offline()
+        })
+        .await;
+
+    // Clean up before judging: the invite minted a real key.
+    if let Ok(Enabled {
+        pairing: Some(p), ..
+    }) = &invited
+    {
+        let _ = ops.forget(&p.device).await;
+    }
+    let stopped = ops.disable().await;
+
+    let enabled = enabled.expect("enable");
+    assert_eq!(enabled.mcp_servers, ["tavily"], "its answer");
+    assert_eq!(
+        stored.map(|s| s.mcp_servers),
+        Some(vec!["tavily".to_owned()]),
+        "the stored row"
+    );
+    assert_eq!(held, ["tavily"], "the session");
+    assert_eq!(status, ["tavily"], "status");
+    let invited = invited.expect("an invite onto a live session is offered");
+    assert!(invited.already_up, "answered from the running session");
+    assert!(invited.pairing.is_some(), "with a code");
+    assert_eq!(invited.mcp_servers, ["tavily"], "and the session's servers");
+    stopped.expect("disable");
 }
 
 /// A plain `enable` is a switch, and switches do not hand out credentials.

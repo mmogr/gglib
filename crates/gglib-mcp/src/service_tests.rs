@@ -7,7 +7,7 @@ use std::sync::Mutex;
 /// A repository in memory. It keeps whatever it is given, two servers of one
 /// name included, as the `SQLite` one does: unique names are the service's
 /// rule.
-struct MockMcpRepository {
+pub(crate) struct MockMcpRepository {
     servers: Mutex<Vec<McpServer>>,
     next_id: Mutex<i64>,
     /// How many updates were written.
@@ -18,7 +18,7 @@ struct MockMcpRepository {
 }
 
 impl MockMcpRepository {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             servers: Mutex::new(Vec::new()),
             next_id: Mutex::new(1),
@@ -118,12 +118,12 @@ impl McpServerRepository for MockMcpRepository {
 
 /// A service and the repository under it, for a test that has to store what
 /// the service would refuse.
-fn service() -> (McpService, Arc<MockMcpRepository>) {
+pub(crate) fn service() -> (McpService, Arc<MockMcpRepository>) {
     let repo = Arc::new(MockMcpRepository::new());
     (McpService::new(repo.clone()), repo)
 }
 
-fn stdio(name: &str, command: &str) -> NewMcpServer {
+pub(crate) fn stdio(name: &str, command: &str) -> NewMcpServer {
     NewMcpServer::new_stdio(name, command, vec![], None)
 }
 

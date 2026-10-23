@@ -30,13 +30,14 @@ use crate::remote::serve_watch_tests::{arming, offline, ops_with_key};
 use crate::test_support::{RecordingEmitter, test_core_and_proxy_over};
 use crate::test_support_remote::scratch_device_keys;
 
-/// The state `enable` leaves behind, which is what a re-arm arms from.
-pub(super) async fn switched_on(core: &AppCore) {
+/// The state `enable` leaves behind, which is what a re-arm arms from:
+/// `opened` is the MCP servers it was named.
+pub(super) async fn switched_on(core: &AppCore, opened: &[&str]) {
     core.settings()
         .update(SettingsUpdate {
             remote_enabled: Some(Some(true)),
             remote_serve: Some(Some(RemoteServe {
-                allow_mcp: false,
+                mcp_servers: opened.iter().map(|name| (*name).to_owned()).collect(),
                 relay: None,
                 discovery: false,
             })),
@@ -137,7 +138,7 @@ pub(super) async fn ops_over_a_parked_store() -> (
         })
         .await
         .expect("settings update");
-    switched_on(&core).await;
+    switched_on(&core, &[]).await;
     let events: Arc<dyn AppEventEmitter> = Arc::new(RecordingEmitter::default());
     let gateway = Arc::new(RemoteGateway::new(Arc::clone(&events)));
     let ops = RemoteOps::new(
@@ -222,4 +223,24 @@ async fn a_rearm_that_reaches_the_slot_after_the_token_arms_nothing() {
 
     assert_eq!(decision, Rearm::Ended);
     assert!(!up, "a re-arm armed after the daemon's token was cancelled");
+}
+
+/// A re-arm puts the tunnel back opening the MCP servers the switch was
+/// recorded with: read from the store, as there is no session to keep them.
+#[tokio::test]
+async fn a_rearm_opens_the_servers_the_switch_was_recorded_with() {
+    let (core, _parked, proxy, ops, _arming) = ops_over_a_parked_store().await;
+    switched_on(&core, &["tavily"]).await;
+
+    let decision = looking(&ops).await.expect("the look");
+    let held = ops.gateway().mcp_servers().to_vec();
+    let status = ops.status().await;
+
+    let _ = ops.disable().await;
+    let _ = proxy.stop().await;
+
+    assert_eq!(decision, Rearm::Armed);
+    assert!(status.enabled, "the tunnel is back");
+    assert_eq!(held, ["tavily"], "the session");
+    assert_eq!(status.mcp_servers, ["tavily"], "status");
 }

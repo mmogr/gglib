@@ -2,9 +2,9 @@
 //! the gate and the status surface read.
 //!
 //! `invoke_tool` starts the MCP servers configured on the serving machine, so
-//! a request that arrived through the tunnel may not reach `/mcp` unless the
-//! tunnel's owner said so — a leaked token with a shell server configured is
-//! remote code execution. The marker that says "tunnelled" is set by the
+//! a request that arrived through the tunnel never reaches `/mcp`, whatever
+//! the tunnel's owner opened — a leaked token with a shell server configured
+//! is remote code execution. The marker that says "tunnelled" is set by the
 //! tunnel edge and can also be forged by a local client; these tests pin that
 //! forging it only ever buys a refusal.
 
@@ -34,9 +34,9 @@ const TOKEN: &str = "sk-zzq-proxy-token";
 /// `integration_remote_devices.rs`.
 const DEVICE: &str = "dev-0a1b2c3d";
 
-/// A proxy with a token and a tunnel owner whose `/mcp` grant is `allow`.
-async fn tunnelled_proxy(allow_mcp: bool) -> (String, CancellationToken, Arc<StubGateway>) {
-    let gateway = Arc::new(StubGateway::new(allow_mcp));
+/// A proxy with a token and a tunnel owner.
+async fn tunnelled_proxy() -> (String, CancellationToken, Arc<StubGateway>) {
+    let gateway = Arc::new(StubGateway::new());
     let access = ProxyAccessConfig::new(
         CorsConfig::LocalOnly,
         Some(TOKEN.to_owned()),
@@ -73,13 +73,15 @@ async fn mcp_initialize(base: &str, tunnelled: bool) -> reqwest::Response {
     req.send().await.unwrap()
 }
 
-/// The default: a tunnelled request to `/mcp` is refused even with the key.
+/// A tunnelled request to `/mcp` is refused even with the key: no grant
+/// opens it.
 #[tokio::test]
-async fn a_tunnelled_request_to_mcp_is_refused_by_default() {
-    let (base, cancel, _) = tunnelled_proxy(false).await;
+async fn a_tunnelled_request_to_mcp_is_refused() {
+    let (base, cancel, _) = tunnelled_proxy().await;
 
     let res = mcp_initialize(&base, true).await;
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
+    assert!(!res.headers().contains_key("mcp-session-id"));
     let body: serde_json::Value = res.json().await.unwrap();
     assert_eq!(body["error"]["code"], "mcp_not_allowed_over_tunnel");
 
@@ -90,7 +92,7 @@ async fn a_tunnelled_request_to_mcp_is_refused_by_default() {
 /// reaches the gateway.
 #[tokio::test]
 async fn a_local_request_to_mcp_is_not_gated() {
-    let (base, cancel, _) = tunnelled_proxy(false).await;
+    let (base, cancel, _) = tunnelled_proxy().await;
 
     let res = mcp_initialize(&base, false).await;
     assert_ne!(res.status(), StatusCode::FORBIDDEN);
@@ -103,23 +105,11 @@ async fn a_local_request_to_mcp_is_not_gated() {
     cancel.cancel();
 }
 
-/// `--allow-mcp` opens the gate.
-#[tokio::test]
-async fn an_allowed_tunnel_reaches_mcp() {
-    let (base, cancel, _) = tunnelled_proxy(true).await;
-
-    let res = mcp_initialize(&base, true).await;
-    assert_ne!(res.status(), StatusCode::FORBIDDEN);
-    assert!(res.headers().contains_key("mcp-session-id"));
-
-    cancel.cancel();
-}
-
 /// The bearer guard runs first: an unauthenticated tunnelled request is a
 /// 401, and neither gate inside it learns it existed.
 #[tokio::test]
 async fn the_bearer_guard_still_comes_first() {
-    let (base, cancel, _) = tunnelled_proxy(false).await;
+    let (base, cancel, _) = tunnelled_proxy().await;
 
     let res = Client::new()
         .post(format!("{base}/mcp"))
@@ -157,7 +147,7 @@ async fn a_forged_marker_on_a_proxy_with_no_tunnel_only_denies_itself() {
 /// are not.
 #[tokio::test]
 async fn tunnelled_requests_are_counted_and_local_ones_are_not() {
-    let (base, cancel, gateway) = tunnelled_proxy(false).await;
+    let (base, cancel, gateway) = tunnelled_proxy().await;
 
     let local = Client::new()
         .get(format!("{base}/v1/models"))

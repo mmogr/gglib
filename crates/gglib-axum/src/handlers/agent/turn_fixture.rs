@@ -299,8 +299,8 @@ pub(super) async fn doors(
     let filter: Vec<String> = tools.then(|| TOOL.to_owned()).into_iter().collect();
     let page = page(state, json!({ "tool_filter": &filter })).await;
     let mut phone = phone(state, model_id).await;
-    // As a device's plan holds it once `remote enable --allow-mcp` has opened
-    // the tunnel to this machine's tools and the chat names this one.
+    // As a device's plan would hold it were it offered this tool; the
+    // filter, not where it came from, is what these tests are about.
     phone.tool_filter = Some(filter);
     [("the page", page), ("a paired device", phone)]
 }

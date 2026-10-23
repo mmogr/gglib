@@ -12,10 +12,9 @@
 //! iteration limit they do not name from this machine's settings, as it
 //! does for the page), and with thinking off
 //! when the turn says so or the chat remembers it (`thinking`). It calls no
-//! tool but the image tool of a turn that says `draw`, unless
-//! this machine lets the tunnel reach its MCP tools, and then only those the
-//! settings name, and never gglib's own file tools: a device's turn has no
-//! folder. The reply runs on the chat's
+//! tool but the image tool of a turn that says `draw`, whatever tools the
+//! chat's settings name, and never gglib's own file tools: a device's turn
+//! has no folder. The reply runs on the chat's
 //! model, loaded as `/v1/models/{name}/load` loads it when it is not
 //! running, as an agent run in the device's scope, saved to the chat.
 //!
@@ -33,9 +32,7 @@ use gglib_core::domain::chat::ConversationSettings;
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::domain::runs::RunKind;
 use gglib_core::domain::thinking;
-use gglib_core::ports::{
-    AgentRunStarter, Created, RemoteGatewayPort as _, RunScope, RunsError, TurnRefused,
-};
+use gglib_core::ports::{AgentRunStarter, Created, RunScope, RunsError, TurnRefused};
 use gglib_core::services::ChangeError;
 use tokio::sync::OwnedSemaphorePermit;
 
@@ -191,9 +188,8 @@ pub(super) fn late_on(state: AppState, model: String, chat: AgentChatRequest) ->
 
 /// A device's turn once its model is found on `upstream`: the model held
 /// and the loop composed with no folder, whatever folder its chat
-/// remembers. A folder is this machine's page's choice, and a device
-/// reaches this machine's tools only as ADR 0012 decision 5 grants it,
-/// through `--allow-mcp`, which names no file tool.
+/// remembers. A folder is this machine's page's choice, and a device's turn
+/// reaches no tool of this machine's but the image tool its Draw asks for.
 ///
 /// # Errors
 ///
@@ -306,11 +302,7 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         far: None,
         messages,
         config: config_of(&settings),
-        tool_filter: Some(tools_of(
-            &settings,
-            state.remote.gateway().mcp_allowed(),
-            turn.draw,
-        )),
+        tool_filter: Some(tools_of(turn.draw)),
         model: None,
         reasoning_effort: None,
         reasoning_budget_tokens: thinking.budget,
@@ -348,32 +340,22 @@ fn config_of(settings: &ConversationSettings) -> Option<AgentRequestConfig> {
     named.then_some(config)
 }
 
-/// The tools a device's turn may call. No MCP tool unless this machine lets
-/// the tunnel reach its MCP tools (`gglib remote enable --allow-mcp`), as
-/// `/mcp` itself does: a leaked key must not run a shell server. Then only
-/// those the conversation's settings name, and none when it names none or
-/// turned them off. Never every tool, which the page's own turns may call.
+/// The tools a device's turn may call: no MCP tool, whatever the chat's
+/// settings name. A chat's list may name a tool by its bare name, which
+/// matches that tool on every server, so it is not a grant a device may
+/// carry over the tunnel; a leaked key must not run a shell server.
 ///
-/// With `draw`, the image tool beside them, whatever the tunnel's switch
-/// and the chat's `no_tools` say: the Draw button is the person's choice
-/// for this one message, and drawing starts no MCP server. It is named
-/// [`DRAW_TOOL`], qualified, and never by its bare name, which the filter
-/// would also match against an MCP server's tool called `generate_image`
-/// and so hand a device a tool the tunnel's owner did not open.
-pub(super) fn tools_of(
-    settings: &ConversationSettings,
-    mcp_allowed: bool,
-    draw: bool,
-) -> Vec<String> {
-    let mut tools = if !mcp_allowed || settings.no_tools == Some(true) {
-        Vec::new()
-    } else {
-        settings.tools.clone()
-    };
+/// With `draw`, the image tool, whatever the chat's `no_tools` says: the
+/// Draw button is the person's choice for this one message, and drawing
+/// starts no MCP server. It is named [`DRAW_TOOL`], qualified, and never by
+/// its bare name, which the filter would also match against an MCP server's
+/// tool called `generate_image`.
+pub(super) fn tools_of(draw: bool) -> Vec<String> {
     if draw {
-        tools.push(DRAW_TOOL.to_owned());
+        vec![DRAW_TOOL.to_owned()]
+    } else {
+        Vec::new()
     }
-    tools
 }
 
 #[cfg(test)]

@@ -129,7 +129,7 @@ const CODES: &[ErrorCode] = &[
     row("origin_not_allowed", INVALID, Some(403), "A page on another site sent a change."),
     row("invalid_api_key", INVALID, Some(401), "The bearer token is missing or wrong."),
     row("device_not_paired", INVALID, Some(403), "A request came through the tunnel without a paired device's key."),
-    row("mcp_not_allowed_over_tunnel", INVALID, Some(403), "This machine does not open its MCP gateway to the tunnel."),
+    row("mcp_not_allowed_over_tunnel", INVALID, Some(403), "The MCP gateway is never reachable through the tunnel."),
     // The runs and the hub's chats.
     row("device_not_named", INVALID, Some(403), "The route serves a paired device through the tunnel, and the request did not name one."),
     row("runs_unavailable", UNAVAILABLE, Some(503), "This proxy runs outside the gglib daemon, so it holds no runs."),

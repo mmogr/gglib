@@ -2,11 +2,11 @@
 //!
 //! `gglib-app-services` owns the tunnel (ADR 0012) and `gglib-proxy` cannot
 //! depend on it — the dependency runs the other way. What the proxy needs
-//! from the tunnel is small and fits a port: say whether `/mcp` may be
-//! reached from outside, and be told that a request arrived through the
-//! tunnel at all. Pairing is not part of it: the tunnel edge answers a
-//! pairing request itself and never forwards it. Everything else about the
-//! tunnel stays where it lives.
+//! from the tunnel is small and fits a port: be told that a request arrived
+//! through the tunnel at all. `/mcp` asks it nothing, because no tunnelled
+//! request reaches `/mcp`. Pairing is not part of it either: the tunnel edge
+//! answers a pairing request itself and never forwards it. Everything else
+//! about the tunnel stays where it lives.
 //!
 //! # Design Rules
 //!
@@ -20,9 +20,6 @@
 
 /// What the proxy may ask the tunnel's owner.
 pub trait RemoteGatewayPort: Send + Sync + std::fmt::Debug {
-    /// Whether requests arriving through the tunnel may reach `/mcp`.
-    fn mcp_allowed(&self) -> bool;
-
     /// A request marked as tunnelled reached the proxy. Counted, and the
     /// peer remembered, for the status surface; never the request itself.
     ///

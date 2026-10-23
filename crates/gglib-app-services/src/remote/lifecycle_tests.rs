@@ -31,7 +31,7 @@ async fn a_daemon_that_has_done_nothing_remote_reports_every_side_as_off() {
     assert!(!status.enabled);
     assert!(!status.pairing_active);
     assert!(!status.paired);
-    assert!(!status.mcp_allowed);
+    assert!(status.mcp_servers.is_empty());
     assert_eq!(status.ticket_fingerprint, None);
     assert_eq!(status.path, None);
     assert!(status.peers.is_empty());

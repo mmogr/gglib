@@ -69,7 +69,7 @@ pub(crate) async fn spawn_proxy_holding(
     runs: Option<Arc<dyn RunsPort>>,
     chats: Option<Arc<dyn HubChatsPort>>,
 ) -> (String, CancellationToken, Arc<StubGateway>) {
-    let gateway = Arc::new(StubGateway::new(false));
+    let gateway = Arc::new(StubGateway::new());
     let access = ProxyAccessConfig::new(
         CorsConfig::LocalOnly,
         Some(key.to_owned()),
