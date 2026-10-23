@@ -3,12 +3,15 @@
  *
  * The daemon refuses an SSE server, so the form shows the choice, keeps it
  * from being made, and says why. A stdio server is saved as it always was.
+ * The quick-start templates offer no filesystem server: reading files is
+ * built in, and the picker says so.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 import { AddMcpServerModal } from '../../../src/components/AddMcpServerModal';
+import { SERVER_TEMPLATES } from '../../../src/components/AddMcpServerModal/ServerTemplatePicker';
 import type { McpServerInfo } from '../../../src/services/transport/types/mcp';
 import { mcpServerInfo } from '../fixtures/mcp';
 
@@ -39,6 +42,26 @@ describe('AddMcpServerModal', () => {
     expect(sse).not.toBeChecked();
     expect(screen.queryByLabelText('Server URL *')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Command *')).toBeInTheDocument();
+  });
+
+  it('offers no filesystem template and says reading files is built in', () => {
+    renderForm();
+
+    expect(screen.queryByText('Filesystem Access')).not.toBeInTheDocument();
+    for (const name of ['Tavily Web Search', 'GitHub', 'Brave Search']) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+    expect(
+      screen.getByText(
+        'Reading files is built in: choose a folder in a chat. Every template here needs an API key.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('every template names the API key it needs', () => {
+    for (const template of SERVER_TEMPLATES) {
+      expect(template.envKeys.length, template.name).toBeGreaterThan(0);
+    }
   });
 
   it('saves a stdio server', async () => {
