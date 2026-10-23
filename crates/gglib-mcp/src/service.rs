@@ -750,12 +750,12 @@ impl McpService {
     /// - Already running → no-op.
     /// - `Eager` or `Lazy`, not running → attempt to start (via `McpManager::ensure_started`).
     /// - `Manual`, not running → return an error (caller converts to a tool-level error).
-    async fn ensure_started_for_call(&self, server_id: i64) -> Result<(), McpServiceError> {
-        if self.manager.is_running(server_id).await {
+    pub(crate) async fn ensure_started_for_call(&self, id: i64) -> Result<(), McpServiceError> {
+        if self.manager.is_running(id).await {
             return Ok(());
         }
 
-        let server = self.repository.get_by_id(server_id).await?;
+        let server = self.repository.get_by_id(id).await?;
         Self::refuse_unsupported(server.server_type)?;
 
         match server.lifecycle {

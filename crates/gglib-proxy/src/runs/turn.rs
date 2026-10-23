@@ -11,7 +11,8 @@
 //! that says `answer_saved: true` has empty `content` and no image, and
 //! answers the question the chat already ends in (ADR 0017).
 //! `?kind=chat&tools=builtin` is the other thing the starter runs: a chat
-//! the device keeps itself, through the agent loop with builtins. Only a named device may: a local client writes to its chats at
+//! the device keeps itself, through the agent loop, offered the tools of the
+//! MCP servers the tunnel opens and, with `draw`, the image tool. Only a named device may: a local client writes to its chats at
 //! `/api`. Every error message is fixed text or the starter's, which is
 //! fixed text too.
 
@@ -66,10 +67,12 @@ pub(super) async fn put(state: &AppState, scope: RunScope, id: &str, body: Value
 }
 
 /// `PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`: a chat the
-/// device keeps itself, run through the agent loop with gglib's builtins.
+/// device keeps itself, run through the agent loop with the tools of the
+/// MCP servers the tunnel opens, and the image tool with `draw`.
 /// The body is the device's unchanged `OpenAI` chat request. Only a named
-/// device may, as for a turn: the loop's slot, its model's hold and the
-/// image tool are the daemon's, reached through the same starter.
+/// device may, as for a turn: the loop's slot, its model's hold, the MCP
+/// servers and the image tool are the daemon's, reached through the same
+/// starter.
 pub(super) async fn put_chat(
     state: &AppState,
     scope: RunScope,

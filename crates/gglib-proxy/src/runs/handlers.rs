@@ -72,9 +72,10 @@ pub(crate) struct PutQuery {
     /// `agent` adds a turn to a hub chat; absent, a chat run.
     #[serde(default)]
     kind: Option<RunKind>,
-    /// `builtin` runs a chat run through the agent loop with gglib's
-    /// builtins, for a chat the device keeps itself; absent, a plain chat
-    /// run, recorded as it always was.
+    /// `builtin` runs a chat run through the agent loop, for a chat the
+    /// device keeps itself, offered the tools of the MCP servers the tunnel
+    /// opens (`gglib remote enable --allow-mcp <server>`); absent, a plain
+    /// chat run, recorded as it always was.
     #[serde(default)]
     tools: Option<Tools>,
     /// With `tools=builtin`: the message was sent with Draw pressed, so
@@ -100,8 +101,8 @@ enum Tools {
 /// `PUT /v1/runs/{id}`: start a chat run with the body as its request, or
 /// answer with the caller's run that already has the id. 201 new, 200
 /// existing. With `?kind=agent`, a device's turn on a hub chat, and with
-/// `?tools=builtin` a chat run through the agent loop with gglib's
-/// builtins: see [`super::turn`].
+/// `?tools=builtin` a chat run through the agent loop with this machine's
+/// tools: see [`super::turn`].
 pub(crate) async fn put_run(
     State(state): State<AppState>,
     Caller(scope): Caller,

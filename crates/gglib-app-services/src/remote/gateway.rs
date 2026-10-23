@@ -77,17 +77,22 @@ impl RemoteGateway {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// The MCP servers, by name, the live session opens to paired devices.
-    pub(in crate::remote) fn mcp_servers(&self) -> Arc<[String]> {
-        Arc::clone(&self.opened())
-    }
-
-    /// The list behind [`Self::mcp_servers`], under its lock. Nothing panics
-    /// while holding it.
+    /// The list behind [`RemoteGatewayPort::mcp_servers`], under its lock.
+    /// Nothing panics while holding it.
     fn opened(&self) -> std::sync::MutexGuard<'_, Arc<[String]>> {
         self.mcp_servers
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Open `names` to paired devices, as an armed session's list does,
+    /// and touch nothing else: no session begins and no invite changes. For
+    /// another crate's tests, which cannot arm a tunnel; in a build, the list
+    /// is set by `begin_session` and cleared by `reset_session_if` alone.
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn open_for_test(&self, names: &[&str]) {
+        *self.opened() = names.iter().map(|name| (*name).to_owned()).collect();
     }
 
     pub(super) fn paired(&self) -> bool {
@@ -138,6 +143,10 @@ impl RemoteGateway {
 }
 
 impl RemoteGatewayPort for RemoteGateway {
+    fn mcp_servers(&self) -> Arc<[String]> {
+        Arc::clone(&self.opened())
+    }
+
     fn note_tunnelled_request(&self, peer: Option<&str>, device: Option<&str>) {
         self.tunnelled_requests.fetch_add(1, Ordering::Relaxed);
         let now = SystemTime::now()

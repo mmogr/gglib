@@ -30,28 +30,24 @@ pub(super) fn bare_name(qualified: &str) -> &str {
         .map_or(qualified, |pos| &qualified[pos + 1..])
 }
 
-/// What a builtin's qualified name starts with. No MCP server has this id:
-/// its ids are numbers, and the name `builtin` is refused to a server.
-const BUILTIN_PREFIX: &str = "builtin:";
-
 /// Return `true` if `allowed` contains `qualified_name` **or** its bare form.
 ///
 /// This enables the Director to emit bare names (e.g. `"browser_navigate"`) in
 /// `tool_allowlist` entries while the inner executor stores qualified names
 /// (e.g. `"2:browser_navigate"`).
 ///
-/// An entry that starts with `builtin:` names a builtin and nothing else, so
-/// it matches only as the whole qualified name. A tool's bare form that
-/// itself starts with `builtin:` is an MCP server's tool whose own name has
-/// the colon (`3:builtin:generate_image`), and it never matches by that
-/// form: an allowlist of `builtin:generate_image` would otherwise hand it to
-/// a caller who was given the builtin alone.
+/// A bare form that itself holds a `:` never matches by that form: it is a
+/// tool whose own name has the colon, and an entry of that shape is some
+/// other tool's whole qualified name. A server 7 tool named `5:search`
+/// (`7:5:search`) is not server 5's `search`, and one named
+/// `builtin:generate_image` (`3:builtin:generate_image`) is not the builtin;
+/// a caller given either entry alone is handed only that tool.
 fn is_allowed(qualified_name: &str, allowed: &HashSet<String>) -> bool {
     if allowed.contains(qualified_name) {
         return true;
     }
     let bare = bare_name(qualified_name);
-    !bare.starts_with(BUILTIN_PREFIX) && allowed.contains(bare)
+    !bare.contains(':') && allowed.contains(bare)
 }
 
 // =============================================================================
@@ -72,7 +68,8 @@ fn is_allowed(qualified_name: &str, allowed: &HashSet<String>) -> bool {
 /// **both exact and bare-name matching**.  A tool named `"2:browser_navigate"`
 /// in the inner executor will be included when the allowlist contains either
 /// `"2:browser_navigate"` (exact) or `"browser_navigate"` (bare name after
-/// stripping the `"{server-id}:"` prefix).
+/// stripping the `"{server-id}:"` prefix), and never by a bare form that
+/// holds a `:` itself.
 ///
 /// This lets the Director emit bare names in `tool_allowlist` entries —
 /// matching the clean names shown in the `{tool_catalog}` prompt placeholder —

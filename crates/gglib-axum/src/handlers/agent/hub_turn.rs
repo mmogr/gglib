@@ -12,9 +12,10 @@
 //! iteration limit they do not name from this machine's settings, as it
 //! does for the page), and with thinking off
 //! when the turn says so or the chat remembers it (`thinking`). It calls no
-//! tool but the image tool of a turn that says `draw`, whatever tools the
-//! chat's settings name, and never gglib's own file tools: a device's turn
-//! has no folder. The reply runs on the chat's
+//! MCP tool but those of the servers the tunnel opens (ADR 0024), narrowed by
+//! the tools the chat's settings name (`device_tools`), the image tool with
+//! `draw`, and never gglib's own file tools: a device's turn has no
+//! folder. The reply runs on the chat's
 //! model, loaded as `/v1/models/{name}/load` loads it when it is not
 //! running, as an agent run in the device's scope, saved to the chat.
 //!
@@ -37,7 +38,8 @@ use gglib_core::services::ChangeError;
 use tokio::sync::OwnedSemaphorePermit;
 
 use super::AgentChatRequest;
-use super::compose::{DRAW_TOOL, Prepared, held_over, refuse_unavailable_drawing, take_permit};
+use super::compose::{Prepared, held_over, refuse_unavailable_drawing, take_permit};
+use super::device_tools::{self, Asked};
 use super::dto::AgentRequestConfig;
 use super::hub_model::{model_for, on_model};
 use super::launch::{LatePrepare, Transcript, launch_turn};
@@ -165,18 +167,27 @@ pub(super) async fn start(
         model,
         chat,
         transcript,
+        asked,
     } = plan;
     let shown = shown_model(state, &model).await;
-    let late = late_on(Arc::clone(state), model, chat);
+    let late = late_on(Arc::clone(state), model, chat, asked);
     begin(state, device, id, shown, transcript, late, permit)
 }
 
 /// What a run on `model` does once it exists: find the model on its port
-/// or load it, then hold it and compose `chat`'s loop ([`held_for_device`]).
-pub(super) fn late_on(state: AppState, model: String, chat: AgentChatRequest) -> LatePrepare {
+/// or load it, settle the tools it is offered as `asked` (starting a named
+/// MCP server that is not running), then hold the model and compose `chat`'s
+/// loop ([`held_for_device`]).
+pub(super) fn late_on(
+    state: AppState,
+    model: String,
+    chat: AgentChatRequest,
+    asked: Asked,
+) -> LatePrepare {
     Box::new(move |loading| {
         Box::pin(async move {
-            let chat = on_model(&state, &model, chat, &loading).await?;
+            let mut chat = on_model(&state, &model, chat, &loading).await?;
+            chat.tool_filter = Some(device_tools::resolve(&state, &asked).await);
             let upstream = remote_upstream::resolve(&state, &chat).await;
             let upstream = upstream.map_err(with_code)?;
             held_for_device(&state, chat, upstream)
@@ -189,7 +200,9 @@ pub(super) fn late_on(state: AppState, model: String, chat: AgentChatRequest) ->
 /// A device's turn once its model is found on `upstream`: the model held
 /// and the loop composed with no folder, whatever folder its chat
 /// remembers. A folder is this machine's page's choice, and a device's turn
-/// reaches no tool of this machine's but the image tool its Draw asks for.
+/// reaches no tool of this machine's but the image tool its Draw asks for
+/// and the tools of the servers the tunnel opens (ADR 0024), which name no
+/// file tool.
 ///
 /// # Errors
 ///
@@ -231,15 +244,18 @@ pub(super) fn begin(
 
 /// A turn read against the hub's record: the model it runs on, the chat
 /// request the page would send, less the port, and where the run is saved,
-/// with what the chat is to remember of thinking once it starts.
+/// with what the chat is to remember of thinking once it starts, and what
+/// it asks of this machine's tools, settled once the run starts.
 pub(super) struct Plan {
     pub(super) model: String,
     pub(super) chat: AgentChatRequest,
     pub(super) transcript: Transcript,
+    pub(super) asked: Asked,
 }
 
-/// Read `turn` against the chat it names, with the tools the tunnel's owner
-/// lets a device's turn reach.
+/// Read `turn` against the chat it names. Its tool filter is the floor
+/// (`Asked::floor`) until the run starts and the servers the tunnel opens
+/// are read: nothing is started for a `PUT` that is then refused.
 pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpError> {
     let said = !turn.content.trim().is_empty() || !turn.images.is_empty();
     if turn.answer_saved == said {
@@ -297,12 +313,13 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
     let settings = conversation.settings.unwrap_or_default();
     // A device's turn has no budget of its own: off, or the model's default.
     let thinking = thinking::settle(turn.thinking, settings.thinking, None);
+    let asked = Asked::of_chat(&settings, turn.draw);
     let chat = AgentChatRequest {
         port: 0,
         far: None,
         messages,
         config: config_of(&settings),
-        tool_filter: Some(tools_of(turn.draw)),
+        tool_filter: Some(asked.floor()),
         model: None,
         reasoning_effort: None,
         reasoning_budget_tokens: thinking.budget,
@@ -323,6 +340,7 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         model,
         chat,
         transcript,
+        asked,
     })
 }
 
@@ -338,24 +356,6 @@ fn config_of(settings: &ConversationSettings) -> Option<AgentRequestConfig> {
         || config.max_parallel_tools.is_some()
         || config.tool_timeout_ms.is_some();
     named.then_some(config)
-}
-
-/// The tools a device's turn may call: no MCP tool, whatever the chat's
-/// settings name. A chat's list may name a tool by its bare name, which
-/// matches that tool on every server, so it is not a grant a device may
-/// carry over the tunnel; a leaked key must not run a shell server.
-///
-/// With `draw`, the image tool, whatever the chat's `no_tools` says: the
-/// Draw button is the person's choice for this one message, and drawing
-/// starts no MCP server. It is named [`DRAW_TOOL`], qualified, and never by
-/// its bare name, which the filter would also match against an MCP server's
-/// tool called `generate_image`.
-pub(super) fn tools_of(draw: bool) -> Vec<String> {
-    if draw {
-        vec![DRAW_TOOL.to_owned()]
-    } else {
-        Vec::new()
-    }
 }
 
 #[cfg(test)]

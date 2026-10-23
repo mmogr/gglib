@@ -76,7 +76,7 @@ pub(super) async fn take_down<H: Drain>(live: Live<H>, gateway: &RemoteGateway) 
 mod tests {
     use std::sync::Arc;
 
-    use gglib_core::ports::NoopEmitter;
+    use gglib_core::ports::{NoopEmitter, RemoteGatewayPort as _};
     use tokio::sync::mpsc::unbounded_channel;
     use tokio_util::sync::CancellationToken;
 

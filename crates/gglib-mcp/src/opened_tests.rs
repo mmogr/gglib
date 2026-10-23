@@ -132,3 +132,181 @@ async fn unreadable_servers_are_not_a_bad_name_and_naming_none_reads_nothing() {
     let none = service.refuse_unopenable(&[]).await;
     assert!(none.is_ok(), "a plain enable is not refused: {none:?}");
 }
+
+/// The stand-in MCP server under `name`, as `gglib mcp add` stores one: a
+/// bare command, lazy, valid.
+#[cfg(unix)]
+fn stand_in(name: &str) -> gglib_core::NewMcpServer {
+    gglib_core::NewMcpServer::new_stdio(
+        name,
+        "sh",
+        vec![
+            "-c".to_owned(),
+            crate::service::tests::STAND_IN_SERVER.to_owned(),
+        ],
+        None,
+    )
+}
+
+#[cfg(unix)]
+async fn running(service: &crate::McpService, id: i64) -> bool {
+    service.get_server_status(id).await == gglib_core::McpServerStatus::Running
+}
+
+/// A named lazy server that is not running is started, and its tools are
+/// offered by the id the agent loop calls them by, never by its name.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_named_lazy_server_is_started_and_its_tools_named_by_its_id() {
+    let (service, _) = service();
+    service.add_server(stdio("fs", "npx")).await.unwrap();
+    let tavily = service.add_server(stand_in("tavily")).await.unwrap();
+    assert!(!running(&service, tavily.id).await);
+
+    let offered = service.opened_tools(&names(&["tavily"])).await;
+
+    assert_eq!(offered, [format!("{}:echo", tavily.id)]);
+    assert!(running(&service, tavily.id).await, "started for the run");
+    service.shutdown().await;
+}
+
+/// A server running for some other reason is not offered unless named.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_running_server_not_named_is_not_offered() {
+    let (service, _) = service();
+    let tavily = service.add_server(stand_in("tavily")).await.unwrap();
+    let shell = service.add_server(stand_in("shell")).await.unwrap();
+    service.start_server(shell.id).await.unwrap();
+
+    let offered = service.opened_tools(&names(&["tavily"])).await;
+
+    assert_eq!(offered, [format!("{}:echo", tavily.id)]);
+    service.shutdown().await;
+}
+
+/// A disabled server and a manual one are neither started nor offered,
+/// though both would start, and a name no server has offers nothing; the
+/// one named after them still is.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_disabled_a_manual_and_an_unknown_server_are_skipped() {
+    let (service, _) = service();
+    let mut off = stand_in("off");
+    off.enabled = false;
+    let off = service.add_server(off).await.unwrap();
+    let manual = stand_in("manual").with_lifecycle(gglib_core::McpLifecycle::Manual);
+    let manual = service.add_server(manual).await.unwrap();
+    let tavily = service.add_server(stand_in("tavily")).await.unwrap();
+
+    let offered = service
+        .opened_tools(&names(&["off", "manual", "nope", "tavily"]))
+        .await;
+
+    assert_eq!(offered, [format!("{}:echo", tavily.id)]);
+    assert!(
+        !running(&service, off.id).await,
+        "a disabled server stays stopped"
+    );
+    assert!(!running(&service, manual.id).await, "a manual one too");
+    service.shutdown().await;
+}
+
+/// A server whose command cannot be found, and one that exits before its
+/// handshake, are skipped, and the servers named after them still offered.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_server_that_fails_to_start_is_skipped_and_the_rest_offered() {
+    let (service, _) = service();
+    service
+        .add_server(stdio("ghost", "gglib-no-such-command"))
+        .await
+        .unwrap();
+    let exits = gglib_core::NewMcpServer::new_stdio(
+        "exits",
+        "sh",
+        vec!["-c".to_owned(), "exit 1".to_owned()],
+        None,
+    );
+    service.add_server(exits).await.unwrap();
+    let tavily = service.add_server(stand_in("tavily")).await.unwrap();
+
+    let offered = service
+        .opened_tools(&names(&["ghost", "exits", "tavily"]))
+        .await;
+
+    assert_eq!(offered, [format!("{}:echo", tavily.id)]);
+    service.shutdown().await;
+}
+
+/// A server stamped invalid when it was added, its working folder missing
+/// then, is skipped as that verdict says, though the folder exists now and
+/// it would start; the server named after it is still offered.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_server_stamped_invalid_is_skipped_though_it_would_start_now() {
+    let (service, _) = service();
+    let dir = tempfile::tempdir().unwrap();
+    let later = dir.path().join("later");
+    let mut stale = stand_in("stale");
+    stale.config.working_dir = Some(later.to_string_lossy().into_owned());
+    let stale = service.add_server(stale).await.unwrap();
+    assert!(!stale.is_valid, "stamped invalid when added");
+    std::fs::create_dir(&later).unwrap();
+    let tavily = service.add_server(stand_in("tavily")).await.unwrap();
+
+    let offered = service.opened_tools(&names(&["stale", "tavily"])).await;
+
+    assert_eq!(offered, [format!("{}:echo", tavily.id)]);
+    assert!(
+        !running(&service, stale.id).await,
+        "an invalid server stays stopped"
+    );
+    service.shutdown().await;
+}
+
+/// Two servers sharing a name open neither, and neither is started.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_shared_name_opens_neither() {
+    let (service, repo) = service();
+    // An older database can hold two of one name; the service refuses it now.
+    let first = repo.insert(stand_in("tavily")).await.unwrap();
+    let second = repo.insert(stand_in("tavily")).await.unwrap();
+    service.initialize().await.unwrap();
+
+    let offered = service.opened_tools(&names(&["tavily"])).await;
+
+    assert_eq!(offered, Vec::<String>::new());
+    assert!(!running(&service, first.id).await);
+    assert!(!running(&service, second.id).await);
+    service.shutdown().await;
+}
+
+/// What a device's run is offered is exactly what the agent loop's MCP
+/// executor lists for that server: one naming rule.
+#[cfg(unix)]
+#[tokio::test]
+async fn qualified_is_what_the_executor_lists() {
+    use gglib_core::ports::ToolExecutorPort as _;
+
+    let (service, _) = service();
+    service.add_server(stdio("fs", "npx")).await.unwrap();
+    service.add_server(stand_in("tavily")).await.unwrap();
+    let service = std::sync::Arc::new(service);
+
+    let offered = service.opened_tools(&names(&["tavily"])).await;
+    let (images, _) = crate::tool_images::tool_images_tests::images();
+    let executor =
+        crate::tool_executor::McpToolExecutorAdapter::new(std::sync::Arc::clone(&service), images);
+    let listed: Vec<String> = executor
+        .list_tools()
+        .await
+        .into_iter()
+        .map(|tool| tool.name)
+        .collect();
+
+    assert!(!offered.is_empty());
+    assert_eq!(offered, listed);
+    service.shutdown().await;
+}

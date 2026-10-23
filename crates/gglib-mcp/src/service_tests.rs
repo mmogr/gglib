@@ -137,7 +137,7 @@ const SSE_NOT_SUPPORTED: &str = "SSE servers are not supported yet; only stdio s
 /// An MCP server for `sh -c`: it answers `initialize` and `tools/list` with
 /// the id it was asked under, and offers one tool.
 #[cfg(unix)]
-const STAND_IN_SERVER: &str = r#"while IFS= read -r line; do
+pub(crate) const STAND_IN_SERVER: &str = r#"while IFS= read -r line; do
   id=${line#*\"id\":}
   id=${id%%,*}
   case "$line" in

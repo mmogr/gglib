@@ -3,7 +3,8 @@
 //! `gglib-app-services` owns the tunnel (ADR 0012) and `gglib-proxy` cannot
 //! depend on it — the dependency runs the other way. What the proxy needs
 //! from the tunnel is small and fits a port: be told that a request arrived
-//! through the tunnel at all. `/mcp` asks it nothing, because no tunnelled
+//! through the tunnel at all, and say which MCP servers the live session
+//! opens to paired devices. `/mcp` asks it nothing, because no tunnelled
 //! request reaches `/mcp`. Pairing is not part of it either: the tunnel edge
 //! answers a pairing request itself and never forwards it. Everything else
 //! about the tunnel stays where it lives.
@@ -18,8 +19,15 @@
 //! - `Debug` is a supertrait because the config that carries this derives
 //!   it.
 
+use std::sync::Arc;
+
 /// What the proxy may ask the tunnel's owner.
 pub trait RemoteGatewayPort: Send + Sync + std::fmt::Debug {
+    /// The MCP servers, by the names `gglib remote enable --allow-mcp`
+    /// gave, that the live session opens to paired devices; empty with the
+    /// tunnel down. A paired device's runs are offered their tools.
+    fn mcp_servers(&self) -> Arc<[String]>;
+
     /// A request marked as tunnelled reached the proxy. Counted, and the
     /// peer remembered, for the status surface; never the request itself.
     ///
