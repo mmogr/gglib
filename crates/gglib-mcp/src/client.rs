@@ -9,6 +9,10 @@
 //! the reply whose `id` is its own arrives, and every other line before it
 //! (a notification, a reply to an earlier request that timed out, startup
 //! noise) is skipped.
+//!
+//! The server's stderr is drained as it is written into a [`StderrTail`],
+//! and a server that closes the connection is an error that ends with what
+//! it printed last: the reason a server that cannot start gives.
 
 use gglib_core::utils::process::async_cmd;
 use gglib_core::{McpTool, McpToolResult};
@@ -24,9 +28,16 @@ use tokio::process::Child;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 
+use crate::stderr_tail::StderrTail;
+
 /// How long a request waits for its reply: long enough for a server started
 /// through `npx` to come up.
 const REPLY_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How long a closed connection waits for the server's stderr to end before
+/// its error is written: a server that exited has closed it already, or is
+/// about to.
+const STDERR_SETTLE: Duration = Duration::from_millis(500);
 
 /// Errors that can occur during MCP client operations.
 #[derive(Debug, Error)]
@@ -163,6 +174,8 @@ pub(crate) struct McpClient {
     process: Option<Child>,
     /// The server's stdin and stdout, while connected
     pipes: Option<Mutex<Pipes>>,
+    /// What the server has printed on stderr lately, while connected
+    stderr: Option<StderrTail>,
     /// How long a request waits for its reply
     reply_timeout: Duration,
     /// Request ID counter
@@ -181,6 +194,7 @@ impl McpClient {
         Self {
             process: None,
             pipes: None,
+            stderr: None,
             reply_timeout: REPLY_TIMEOUT,
             request_id: AtomicU64::new(1),
             server_info: None,
@@ -244,7 +258,23 @@ impl McpClient {
             .take()
             .ok_or_else(|| McpClientError::SpawnFailed("Failed to get stdout".to_string()))?;
 
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| McpClientError::SpawnFailed("Failed to get stderr".to_string()))?;
+
+        // Windows reads it on a thread of its own: tokio's read of a Windows
+        // pipe is a blocking thread the runtime waits for at shutdown.
+        #[cfg(not(windows))]
+        let stderr = StderrTail::drain(stderr);
+        #[cfg(windows)]
+        let stderr = stderr
+            .into_owned_handle()
+            .and_then(|handle| StderrTail::drain_on_thread(std::fs::File::from(handle)))
+            .map_err(|e| McpClientError::SpawnFailed(format!("Failed to read stderr: {e}")))?;
+
         self.process = Some(child);
+        self.stderr = Some(stderr);
         self.pipes = Some(Mutex::new(Pipes {
             writer: Box::new(stdin),
             reader: BufReader::new(Box::new(stdout)),
@@ -378,11 +408,11 @@ impl McpClient {
         };
         let request_line = serde_json::to_string(&request)? + "\n";
 
+        let stderr = self.stderr.as_ref();
         let mut pipes = pipes.lock().await;
         let response = timeout(self.reply_timeout, async {
-            pipes.writer.write_all(request_line.as_bytes()).await?;
-            pipes.writer.flush().await?;
-            read_reply(&mut pipes.reader, id).await
+            write_line(&mut pipes, &request_line, stderr).await?;
+            read_reply(&mut pipes.reader, id, stderr).await
         })
         .await
         .map_err(|_| McpClientError::Timeout)??;
@@ -418,8 +448,7 @@ impl McpClient {
         let line = serde_json::to_string(&notification)? + "\n";
 
         let mut pipes = pipes.lock().await;
-        pipes.writer.write_all(line.as_bytes()).await?;
-        pipes.writer.flush().await?;
+        write_line(&mut pipes, &line, self.stderr.as_ref()).await?;
         drop(pipes);
 
         Ok(())
@@ -429,6 +458,7 @@ impl McpClient {
     pub(crate) fn disconnect(&mut self) {
         // Drop stdin to signal EOF to the child process.
         self.pipes = None;
+        self.stderr = None;
 
         // Kill the process without waiting for it to exit: this runs in a
         // synchronous Drop, where waiting would block a runtime thread.
@@ -451,8 +481,13 @@ impl McpClient {
 /// # Errors
 ///
 /// [`McpClientError::ProtocolError`] when the server closes its stdout first,
-/// [`McpClientError::IoError`] when reading fails.
-async fn read_reply<R>(reader: &mut R, id: u64) -> Result<JsonRpcResponse, McpClientError>
+/// ending with what it printed on `stderr`; [`McpClientError::IoError`] when
+/// reading fails.
+async fn read_reply<R>(
+    reader: &mut R,
+    id: u64,
+    stderr: Option<&StderrTail>,
+) -> Result<JsonRpcResponse, McpClientError>
 where
     R: AsyncBufReadExt + Unpin,
 {
@@ -460,9 +495,7 @@ where
     loop {
         line.clear();
         if reader.read_line(&mut line).await? == 0 {
-            return Err(McpClientError::ProtocolError(
-                "Server closed connection".to_string(),
-            ));
+            return Err(closed(stderr).await);
         }
         let trimmed = line.trim();
         if trimmed.is_empty() {
@@ -490,6 +523,44 @@ where
         }
         return serde_json::from_value(message).map_err(McpClientError::from);
     }
+}
+
+/// Write `line` to the server and flush it.
+///
+/// # Errors
+///
+/// [`McpClientError::ProtocolError`] when the server has exited and the pipe
+/// is broken, ending with what it printed on `stderr`;
+/// [`McpClientError::IoError`] when writing fails otherwise.
+async fn write_line(
+    pipes: &mut Pipes,
+    line: &str,
+    stderr: Option<&StderrTail>,
+) -> Result<(), McpClientError> {
+    let written = async {
+        pipes.writer.write_all(line.as_bytes()).await?;
+        pipes.writer.flush().await
+    };
+    match written.await {
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Err(closed(stderr).await),
+        written => Ok(written?),
+    }
+}
+
+/// The error for a server that closed the connection: `Server closed
+/// connection`, then ` - stderr: ` and what the server printed last, when it
+/// printed anything.
+async fn closed(stderr: Option<&StderrTail>) -> McpClientError {
+    let printed = match stderr {
+        Some(tail) => tail.settled(STDERR_SETTLE).await,
+        None => String::new(),
+    };
+    let message = if printed.is_empty() {
+        "Server closed connection".to_string()
+    } else {
+        format!("Server closed connection - stderr: {printed}")
+    };
+    McpClientError::ProtocolError(message)
 }
 
 impl Default for McpClient {

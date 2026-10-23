@@ -14,6 +14,7 @@ pub(crate) mod manager;
 pub(crate) mod path;
 pub(crate) mod resolver;
 pub(crate) mod service;
+pub(crate) mod stderr_tail;
 pub(crate) mod tool_executor;
 pub(crate) mod tool_images;
 

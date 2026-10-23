@@ -281,11 +281,50 @@ async fn starting_up_and_prewarming_try_each_stdio_server_and_leave_a_stored_sse
     }
 
     service.initialize().await.unwrap();
-    service.prewarm_lazy().await;
+    let failed = service.prewarm_lazy().await;
 
     let mut read = repo.reads_by_id.lock().unwrap().clone();
     read.dedup();
     assert_eq!(read, ghosts);
+    let named: Vec<&str> = failed.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(named, ["ghost-lazy"]);
+}
+
+/// The prewarm names each enabled lazy server that is not running after it,
+/// with why: one whose start failed with that failure, one whose
+/// configuration is invalid with its verdict. An eager server, a disabled
+/// one and a manual one are not its to name.
+#[tokio::test]
+async fn the_prewarm_names_each_lazy_server_it_could_not_start_and_why() {
+    use gglib_core::McpLifecycle::{Eager, Lazy, Manual};
+
+    let (service, _) = service();
+    for (name, command, lifecycle, enabled) in [
+        ("ghost", "gglib-no-such-command", Lazy, true),
+        ("spaced", "echo hello", Lazy, true),
+        ("eager-ghost", "gglib-no-such-command", Eager, true),
+        ("off-ghost", "gglib-no-such-command", Lazy, false),
+        ("manual-ghost", "gglib-no-such-command", Manual, true),
+    ] {
+        let mut server = stdio(name, command).with_lifecycle(lifecycle);
+        server.enabled = enabled;
+        service.add_server(server).await.unwrap();
+    }
+
+    service.initialize().await.unwrap();
+    let failed = service.prewarm_lazy().await;
+
+    assert_eq!(failed.len(), 2, "{failed:?}");
+    let (ghost, why) = &failed[0];
+    assert_eq!(ghost, "ghost");
+    assert!(
+        why.contains("Could not resolve 'gglib-no-such-command'"),
+        "{why}"
+    );
+    assert_eq!(
+        failed[1],
+        ("spaced".to_string(), SPACED_COMMAND.to_string())
+    );
 }
 
 #[tokio::test]

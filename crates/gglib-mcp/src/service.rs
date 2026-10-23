@@ -108,31 +108,48 @@ impl McpService {
         Ok(())
     }
 
-    /// Pre-warm all `Lazy` servers.
+    /// Pre-warm all enabled `Lazy` servers, and name each one that is not
+    /// running afterwards, with why: `(name, reason)`.
     ///
-    /// One-shot CLI commands (`gglib q`) call this
-    /// right after `initialize` so that tools are ready before generation begins,
-    /// avoiding per-tool spawn latency mid-stream.
-    pub async fn prewarm_lazy(&self) {
+    /// The CLI's agent sessions (`gglib chat`, `gglib q`) call this right
+    /// after `initialize` so that tools are ready before generation begins,
+    /// avoiding per-tool spawn latency mid-stream, and say each failure on
+    /// stderr. A server whose start failed is named with the start's error,
+    /// which ends with what the server printed; one not started because its
+    /// configuration is invalid is named with its `last_error`. A failure to
+    /// list the servers is logged and names none.
+    pub async fn prewarm_lazy(&self) -> Vec<(String, String)> {
         let servers = match self.runnable_servers().await {
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!(error = %e, "Failed to list servers for lazy prewarm");
-                return;
+                return Vec::new();
             }
         };
 
+        let mut failed = Vec::new();
         for server in servers {
-            if server.lifecycle == McpLifecycle::Lazy && server.enabled && server.is_valid {
-                if let Err(e) = self.start_server(server.id).await {
-                    tracing::warn!(
-                        server_name = %server.name,
-                        error = %e,
-                        "Failed to prewarm lazy MCP server"
-                    );
-                }
+            if server.lifecycle != McpLifecycle::Lazy || !server.enabled {
+                continue;
+            }
+            if !server.is_valid {
+                let why = server
+                    .last_error
+                    .unwrap_or_else(|| "Invalid configuration".to_string());
+                failed.push((server.name, why));
+                continue;
+            }
+            // Debug, not warn: the caller says it, and `-Q` keeps it silent.
+            if let Err(e) = self.start_server(server.id).await {
+                tracing::debug!(
+                    server_name = %server.name,
+                    error = %e,
+                    "Failed to prewarm lazy MCP server"
+                );
+                failed.push((server.name, e.to_string()));
             }
         }
+        failed
     }
 
     /// Validate all MCP servers and update their `is_valid/last_error` status.

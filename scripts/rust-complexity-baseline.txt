@@ -41,7 +41,7 @@ crates/gglib-axum/src/routes.rs 466
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 370
 crates/gglib-cli/src/daemon_client/images_tests.rs 387
-crates/gglib-cli/src/handlers/agent_chat/config.rs 402
+crates/gglib-cli/src/handlers/agent_chat/config.rs 477
 crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 458
 crates/gglib-cli/src/handlers/agent_chat/draw.rs 318
 crates/gglib-cli/src/handlers/agent_chat/mod.rs 312
@@ -164,10 +164,11 @@ crates/gglib-hf/src/url.rs 449
 crates/gglib-mcp/src/builtin/generate_image.rs 380
 crates/gglib-mcp/src/builtin/generate_image_tests.rs 476
 crates/gglib-mcp/src/builtin/mod.rs 447
-crates/gglib-mcp/src/client.rs 509
+crates/gglib-mcp/src/client.rs 580
+crates/gglib-mcp/src/client_tests.rs 366
 crates/gglib-mcp/src/manager.rs 315
-crates/gglib-mcp/src/service.rs 812
-crates/gglib-mcp/src/service_tests.rs 667
+crates/gglib-mcp/src/service.rs 829
+crates/gglib-mcp/src/service_tests.rs 706
 crates/gglib-proxy/src/audit_records.rs 309
 crates/gglib-proxy/src/cache_lifecycle.rs 480
 crates/gglib-proxy/src/canonicalization.rs 601
