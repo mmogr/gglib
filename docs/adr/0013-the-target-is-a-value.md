@@ -1,7 +1,8 @@
 # ADR 0013 — The target is a value: one `--remote`, decided in one place
 
 - **Status:** Accepted; superseded in part by
-  [ADR 0014](0014-a-model-is-named-by-its-machine.md)
+  [ADR 0014](0014-a-model-is-named-by-its-machine.md) and
+  [ADR 0024](0024-the-tunnel-opens-mcp-servers-by-name.md)
 - **Date:** 2026-09-10
 - **Depends on:** [ADR 0012](0012-the-remote-tunnel.md)
 - **Supersedes:** nothing
@@ -9,7 +10,11 @@
   part: decision 2's placement of every which-machine question in
   `crates/gglib-cli/src/target.rs` alone, decision 3's model rows of the reach
   table, and decision 4's statement that the remembered model is a name in
-  that machine's catalogue
+  that machine's catalogue;
+  [ADR 0024](0024-the-tunnel-opens-mcp-servers-by-name.md), in part: the
+  2026-09-30 amendment's rule that a device's turn calls no tool unless
+  `--allow-mcp` opened the tunnel, and then only the tools the chat's
+  settings name
 
 ## Context
 

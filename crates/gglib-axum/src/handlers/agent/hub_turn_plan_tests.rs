@@ -5,7 +5,8 @@ use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewMessage};
 
 use super::hub_turn_tests::{chat, turn};
-use super::{plan, tools_of};
+use super::plan;
+use crate::handlers::agent::device_tools::Asked;
 use crate::handlers::agent::hub_model::model_for;
 use crate::handlers::agent::run_fixture::state;
 
@@ -50,10 +51,11 @@ async fn the_history_is_the_prompt_the_rows_and_the_new_message() {
     );
 }
 
-/// A device's turn calls no MCP tool whatever its chat names, by a
-/// qualified name or a bare one, and with Draw only the image tool.
+/// A device's turn is planned with no MCP tool whatever its chat names, by
+/// a qualified name or a bare one: the servers the tunnel opens are read,
+/// and started, only once the run exists.
 #[tokio::test]
-async fn a_device_turn_calls_no_mcp_tool_whatever_its_chat_names() {
+async fn a_device_turn_is_planned_with_no_mcp_tool_whatever_its_chat_names() {
     let (_dir, state) = state().await;
     let named = ConversationSettings {
         max_iterations: Some(4),
@@ -66,11 +68,19 @@ async fn a_device_turn_calls_no_mcp_tool_whatever_its_chat_names() {
     assert_eq!(plan.chat.config.and_then(|c| c.max_iterations), Some(4));
 }
 
-/// Draw adds exactly the image tool's qualified name, and nothing without it.
+/// Draw adds exactly the image tool's qualified name, and nothing without
+/// it, whatever the chat's `no_tools` says.
 #[test]
 fn draw_adds_exactly_the_qualified_image_tool() {
-    assert_eq!(tools_of(false), Vec::<String>::new());
-    assert_eq!(tools_of(true), ["builtin:generate_image"]);
+    let off = ConversationSettings {
+        no_tools: Some(true),
+        ..ConversationSettings::default()
+    };
+    for settings in [ConversationSettings::default(), off] {
+        let floor = |draw| Asked::of_chat(&settings, draw).floor();
+        assert_eq!(floor(false), Vec::<String>::new());
+        assert_eq!(floor(true), ["builtin:generate_image"]);
+    }
 }
 
 /// An MCP server's tool that happens to be called `generate_image` is not
@@ -106,7 +116,10 @@ async fn a_draw_turn_never_reaches_an_mcp_tool_named_generate_image() {
         }
     }
 
-    let filter = tools_of(true).into_iter().collect();
+    let filter = Asked::of_chat(&ConversationSettings::default(), true)
+        .floor()
+        .into_iter()
+        .collect();
     let tools = FilteredToolExecutor::new(Arc::new(Both), filter);
 
     let listed: Vec<String> = tools

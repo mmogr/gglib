@@ -20,6 +20,7 @@
 
 use std::sync::Arc;
 
+use gglib_core::ports::RemoteGatewayPort as _;
 use tracing::{info, warn};
 
 use super::RemoteOps;

@@ -36,7 +36,14 @@ const DEVICE: &str = "dev-0a1b2c3d";
 
 /// A proxy with a token and a tunnel owner.
 async fn tunnelled_proxy() -> (String, CancellationToken, Arc<StubGateway>) {
-    let gateway = Arc::new(StubGateway::new());
+    tunnelled_proxy_over(StubGateway::new()).await
+}
+
+/// A proxy with a token and `gateway` as its tunnel owner.
+async fn tunnelled_proxy_over(
+    gateway: StubGateway,
+) -> (String, CancellationToken, Arc<StubGateway>) {
+    let gateway = Arc::new(gateway);
     let access = ProxyAccessConfig::new(
         CorsConfig::LocalOnly,
         Some(TOKEN.to_owned()),
@@ -78,6 +85,21 @@ async fn mcp_initialize(base: &str, tunnelled: bool) -> reqwest::Response {
 #[tokio::test]
 async fn a_tunnelled_request_to_mcp_is_refused() {
     let (base, cancel, _) = tunnelled_proxy().await;
+
+    let res = mcp_initialize(&base, true).await;
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+    assert!(!res.headers().contains_key("mcp-session-id"));
+    let body: serde_json::Value = res.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "mcp_not_allowed_over_tunnel");
+
+    cancel.cancel();
+}
+
+/// Opening servers to a device's runs does not open `/mcp`: the gateway
+/// would start any configured server, named or not.
+#[tokio::test]
+async fn opening_servers_does_not_open_mcp() {
+    let (base, cancel, _) = tunnelled_proxy_over(StubGateway::opening(&["tavily"])).await;
 
     let res = mcp_initialize(&base, true).await;
     assert_eq!(res.status(), StatusCode::FORBIDDEN);

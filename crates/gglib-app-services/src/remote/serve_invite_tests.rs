@@ -8,6 +8,8 @@
 //! endpoint without reaching the network, so the whole of `arm` runs here
 //! rather than stopping at the bind.
 
+use gglib_core::ports::RemoteGatewayPort;
+
 use super::serve_resume_tests::switched_on;
 use super::serve_watch_tests::{offline, ops_with_key};
 use super::*;

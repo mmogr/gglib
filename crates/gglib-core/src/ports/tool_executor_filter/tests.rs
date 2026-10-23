@@ -244,6 +244,21 @@ async fn a_builtin_entry_matches_only_the_builtin_never_a_servers_tool_named_lik
     );
 }
 
+/// A qualified entry names that one tool: server 7's tool whose own name is
+/// `5:search` is neither listed nor run under server 5's `5:search`.
+#[tokio::test]
+async fn another_servers_tool_named_like_a_qualified_entry_is_not_matched() {
+    let allowed: HashSet<String> = ["5:search".to_owned()].into();
+    let f = FilteredToolExecutor::new(
+        Arc::new(StubExecutor::new(&["5:search", "7:5:search"])) as Arc<dyn ToolExecutorPort>,
+        allowed,
+    );
+    let listed: Vec<String> = f.list_tools().await.into_iter().map(|t| t.name).collect();
+    assert_eq!(listed, ["5:search"]);
+    let err = f.execute(&make_call("7:5:search")).await.unwrap_err();
+    assert!(err.to_string().contains(TOOL_NOT_AVAILABLE_MSG));
+}
+
 // ------------------------------------------------------------------
 // EmptyToolExecutor
 // ------------------------------------------------------------------

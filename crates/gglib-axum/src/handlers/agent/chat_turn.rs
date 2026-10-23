@@ -14,9 +14,10 @@
 //! One thing of it is: the phone's Thinking choice. A body that turns
 //! thinking off as a phone-kept chat does on the chat route,
 //! `"reasoning_budget_tokens": 0`, runs with a thinking budget of `0`; any
-//! other budget is sampling, and is not read. Its only tool is the
-//! image tool, and only with `draw`, drawing with the `image_model` the
-//! query names when it names one. Nothing is written to any chat: the
+//! other budget is sampling, and is not read. It is offered the tools of
+//! the MCP servers the tunnel opens, settled when the run starts
+//! (`device_tools`, ADR 0024), and the image tool with `draw`, drawing with
+//! the `image_model` the query names when it names one. Nothing is written to any chat: the
 //! phone keeps the conversation, and reads the reply from the run, whose
 //! events are the agent loop's (`frames: agent`).
 //!
@@ -34,7 +35,8 @@ use gglib_core::domain::runs::RunKind;
 use gglib_core::ports::{Created, RunScope};
 
 use super::AgentChatRequest;
-use super::compose::{DRAW_TOOL, refuse_unavailable_drawing, take_permit};
+use super::compose::{refuse_unavailable_drawing, take_permit};
+use super::device_tools::Asked;
 use super::hub_turn::{late_on, shown_model};
 use super::launch::{Transcript, launch_turn};
 use super::run::coded;
@@ -96,7 +98,12 @@ pub(super) async fn start(
         )
     })?;
     let shown = shown_model(state, &model).await;
-    let late = late_on(Arc::clone(state), model, chat);
+    let late = late_on(
+        Arc::clone(state),
+        model,
+        chat,
+        Asked::of_phone(drawing.draw),
+    );
     // Saved to no chat: the phone keeps this conversation.
     let transcript = Transcript {
         conversation_id: None,
@@ -145,8 +152,9 @@ pub(super) async fn read(
         far: None,
         messages: Vec::new(),
         config: None,
-        // The image tool and nothing else, and that only with Draw.
-        tool_filter: Some(draw.then(|| DRAW_TOOL.to_owned()).into_iter().collect()),
+        // The floor: the image tool with Draw. The servers the tunnel opens
+        // are read when the run starts, not for a request that is refused.
+        tool_filter: Some(Asked::of_phone(draw).floor()),
         model: None,
         // The request's own sampling is not read: the model's, as on a hub
         // turn. Its Thinking choice is: off, or the model's default.

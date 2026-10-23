@@ -7,8 +7,8 @@
 //! of it: the tunnel edge answers a pairing request itself, and nothing
 //! reaches the proxy.
 
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use gglib_core::ports::RemoteGatewayPort;
 use reqwest::RequestBuilder;
@@ -31,14 +31,22 @@ pub(crate) struct StubGateway {
     /// The device name the edge said admitted the most recent tunnelled
     /// request, when it named one.
     pub(crate) last_device: Mutex<Option<String>>,
+    /// The MCP servers the stand-in's session opens to paired devices.
+    pub(crate) mcp_servers: Mutex<Arc<[String]>>,
 }
 
 impl StubGateway {
     pub(crate) fn new() -> Self {
+        Self::opening(&[])
+    }
+
+    /// A session that opens the MCP servers `names` names.
+    pub(crate) fn opening(names: &[&str]) -> Self {
         Self {
             tunnelled: AtomicUsize::new(0),
             last_peer: Mutex::new(None),
             last_device: Mutex::new(None),
+            mcp_servers: Mutex::new(names.iter().map(|name| (*name).to_owned()).collect()),
         }
     }
 }
@@ -50,6 +58,10 @@ impl std::fmt::Debug for StubGateway {
 }
 
 impl RemoteGatewayPort for StubGateway {
+    fn mcp_servers(&self) -> Arc<[String]> {
+        Arc::clone(&self.mcp_servers.lock().unwrap())
+    }
+
     fn note_tunnelled_request(&self, peer: Option<&str>, device: Option<&str>) {
         self.tunnelled.fetch_add(1, Ordering::SeqCst);
         *self.last_peer.lock().unwrap() = peer.map(str::to_owned);

@@ -76,6 +76,10 @@ sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
 # Re-declared to turn on `test-support`, which carries
 # `Broadcaster::subscribe_events`. The feature stays off in the normal build.
 gglib-sse = { workspace = true, features = ["test-support"] }
+# Re-declared to turn on `test-support`, which carries
+# `RemoteGateway::open_for_test`: a device's run is offered the servers the
+# gateway opens. The feature stays off in the normal build.
+gglib-app-services = { workspace = true, features = ["test-support"] }
 # A data root of each test binary's own, so a context resolves nothing into
 # the checkout (#955).
 gglib-core = { workspace = true, features = ["test-utils"] }

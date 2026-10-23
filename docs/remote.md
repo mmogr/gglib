@@ -772,7 +772,8 @@ with one exception. `/mcp`, the tool gateway, is refused to every request
 through the tunnel, whatever `enable` was given, because it starts any MCP
 server configured on the desktop and a leaked key with a shell server
 configured there is remote code execution. The refusal is a `403`
-`mcp_not_allowed_over_tunnel`; local clients are unaffected. The proxy tells a
+`mcp_not_allowed_over_tunnel`; local clients are unaffected. A device reaches
+the servers `--allow-mcp` names through its runs instead (below). The proxy tells a
 tunnelled request apart by a marker the tunnel edge sets and a peer cannot
 remove. Forging it denies yourself `/mcp`, and on `/v1/runs`, where a device
 sees the runs it started and every run on the desktop's chats, and `/v1/chats`,
@@ -801,6 +802,14 @@ and no default). That answer is always a 200: its `code`,
 not an error of the question; a device asks it before offering a Draw
 button, and a desktop too old to have the route answers 404, which means it
 cannot.
+
+The proxy's answer also says which MCP servers a device's runs are offered:
+`mcp_servers`, the names `gglib remote enable --allow-mcp` gave the live
+session, `[]` when it names none, and there whether or not the desktop can
+draw (a desktop with no image model can still search). A device that reads
+a name there sends its questions with `tools=builtin` (below); a desktop
+from before the list sends no such key, and a device sends it nothing new.
+The daemon's own `GET /api/images/drawing` does not carry it.
 
 `models` lists the desktop's image models, so a device can let a person pick
 one: `{id, name, family, complete, missing, default, resident}` each, by
@@ -834,9 +843,19 @@ one that ran on the machine the desktop is itself paired with is refused,
 is never looked up as a name in the desktop's catalogue. Nothing is copied to the device, only a named device
 gets past `403 device_not_named`, and `gglib remote forget` takes the chats
 away with the key, though a reply the device already started still finishes
-and is saved. Such a turn calls none of the desktop's MCP tools, whatever
-the chat names and whatever `--allow-mcp` names, until a device's runs are
-offered the servers that flag names. A saved reply's row says how it was made in its
+and is saved. Such a turn is offered the tools of the MCP servers the
+desktop's `--allow-mcp` names, each by its qualified `{id}:{tool}` name: all
+of them when the chat's settings name no tool, only those its list names
+when it names some, by that name or the tool's bare one, and none when its
+tools are off; never a tool no named server has, never every tool, and
+never gglib's own file tools. A named server that is not running is started
+when the run starts, after its model is ready, and one that is disabled,
+manual and not started, or fails to start is left out, with a warning in the desktop's log
+that names it and why (for one that failed to start, what it printed on stderr, as the
+desktop's own start warning does; never a tool's arguments or results), and the reply
+runs without it. The grant is the name, read when each run
+starts: a server deleted and added again under the same name is open again,
+and one renamed is not. A saved reply's row says how it was made in its
 `metadata`: beside its token counts, the context its model was launched with
 (`contextSize`), how many earlier messages the run left out to fit
 (`trimmedMessages`) and why the model stopped (`finishReason`), each only
@@ -925,7 +944,10 @@ A chat the device keeps itself can draw too. `PUT
 unchanged OpenAI chat request, whole history included, and runs it through
 the desktop's agent loop on the model it names, with the image tool offered
 for that message, whose first step must be the call for the picture as on a
-desktop chat; without `draw=true` the loop runs with no tool. The chosen
+desktop chat. Such a run is also offered the tools of the MCP servers the
+desktop's `--allow-mcp` names, as a turn on a chat that names no tool is,
+and without `draw=true` those are its only tools; a desktop that names none
+runs it with no tool. The chosen
 image model goes in the query beside it, `&image_model=<id>`, with the same
 rules and refusals as a turn's; `image_model` without `tools=builtin`, or
 beside `kind=agent`, is `400 invalid_request`. Images
@@ -940,7 +962,16 @@ The request's sampling is not read, its `max_tokens` included; the desktop's
 settings for the model apply, as on a turn. Its Thinking choice is read: a
 body with `"reasoning_budget_tokens": 0`, which is how a device turns thinking
 off for a chat it keeps ([Thinking](clients.md#thinking)), runs with a thinking
-budget of `0`, and any other budget is sampling and is not read. Without `tools=builtin` a chat run is recorded exactly
+budget of `0`, and any other budget is sampling and is not read. The run is
+the desktop's agent loop, so its iteration, loop-detection and stagnation
+limits apply, where a plain chat run honoured the body. The named servers'
+tools are offered to whatever model the request names: the model list says
+nothing yet of which models call tools, so a model that cannot is offered
+them anyway and may answer oddly. Every such run takes one of the
+desktop's four agent-loop slots, which a device's runs share with the
+desktop page's chats and runs, those that draw included: while four run at
+once, a fifth is refused `429 agent_busy` rather than queued, as a run that
+draws is. Without `tools=builtin` a chat run is recorded exactly
 as before.
 
 Such a turn may also say the chat's Thinking choice, `"thinking": "off"` or

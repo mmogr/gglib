@@ -1,6 +1,7 @@
 //! `RemoteOps::status`: both sides of the tunnel, what settings remember of
 //! the last pairing, and the roster, read for the status surface.
 
+use gglib_core::ports::RemoteGatewayPort as _;
 use tracing::warn;
 
 use super::wire::{RemotePeer, RemoteStatus};

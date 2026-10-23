@@ -214,8 +214,9 @@ adds the three qualified names to a tool filter that lists names; `[]`, a
 model that calls no tool, stays `[]`, and `null` admits them already. The
 chat route (`POST /api/agent/chat`) and every turn a paired device sends
 pass no folder, whatever the conversation remembers: a device's turn calls
-no tool of this machine's but the image tool its Draw asks for, and no key
-of a device's turn names a path.
+no tool of this machine's but the image tool its Draw asks for and the
+tools of the MCP servers the tunnel opens, which name no file tool, and no
+key of a device's turn names a path.
 
 # A paired device's turn
 
@@ -232,20 +233,32 @@ before anything else is read for it, and nothing is admitted. The history is reb
 record as a resumed CLI chat reads it (core's `saved_history`: the system
 prompt, then every row but a system one; then the message), the limits from the
 conversation's settings (an iteration limit they do not name is this
-machine's stored one), no MCP tool whatever the settings name, never
-gglib's own file tools, and the reply runs on the chat's model
+machine's stored one), the tools `device_tools` offers it, never gglib's
+own file tools, and the reply runs on the chat's model
 (`hub_model`: its own, its settings', its last reply's, the one running on
 the hub (the one started last, of several), or the hub's default), loaded first when it is not running, as an agent run in the
 device's scope saved to the chat.
 
-A turn that says `draw: true` (the device's Draw button) is planned with
-the image tool and nothing else: `tools_of` names exactly
-`builtin:generate_image`, never the bare name, which would let an MCP
-server's tool of that name through to a device.
-The chat's `no_tools` does not stop it, since the button is the person's
-choice for that message, and a hub that cannot draw refuses the turn `400
-drawing_unavailable` before anything is written. Its `image_model`, when it
-says one, is the page's: copied onto the chat request and judged there.
+`device_tools` says what a device's run is offered. Its floor is the image
+tool for a turn that says `draw: true` (the device's Draw button), named
+exactly `builtin:generate_image`, never the bare name, which would let an
+MCP server's tool of that name through to a device; else nothing. The
+chat's `no_tools` does not take the floor away, since the button is the
+person's choice for that message, and a hub that cannot draw refuses the
+turn `400 drawing_unavailable` before anything is written. A turn's
+`image_model`, when it says one, is the page's: copied onto the chat
+request and judged there. Beyond the floor are the tools of the MCP
+servers the live session opens (`gglib remote enable --allow-mcp
+<server>`, read from the tunnel's gateway), each by its qualified
+`{id}:{tool}`: every one for a phone's chat or a chat that names
+no tool, only those a chat's own list names exactly or by bare name
+otherwise, none when the chat turned its tools off, and never a tool the
+list names that no opened server has. A turn is planned with the floor
+alone; the rest is settled in the run's late step (`hub_turn::late_on`),
+once the model is found or loaded, where a named server that is not
+running is started (`McpService::opened_tools`). A `PUT` that is refused
+starts nothing. The decision is
+[ADR 0024](../../../../../docs/adr/0024-the-tunnel-opens-mcp-servers-by-name.md).
 
 `chat_turn` is the starter's other door, the proxy's
 `PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`: a chat a paired
@@ -253,7 +266,7 @@ phone keeps itself, sent whole as an `OpenAI` request and run through the
 loop so that it can draw. Its history is read by core's
 `parse_openai_messages`, each inline image stored once as an attachment no
 chat links (swept at the first daemon start a day or more later), its model resolved and loaded as a turn's
-is, its only tool the image tool and that only with `draw` (drawn with the query's `image_model` when it names one), the request's
+is, its tools those `device_tools` offers a phone's run, the image tool only with `draw` (drawn with the query's `image_model` when it names one), the request's
 sampling not read except that `"reasoning_budget_tokens": 0`, a phone's
 Thinking off, runs it with a thinking budget of 0, and no row written anywhere. Its run is a chat run in
 the device's scope whose `frames` say `agent`.

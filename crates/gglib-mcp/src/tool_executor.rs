@@ -89,7 +89,7 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
             .into_iter()
             .flat_map(|(server_id, tools)| {
                 tools.into_iter().map(move |t| ToolDefinition {
-                    name: format!("{server_id}:{}", t.name),
+                    name: qualified(server_id, &t.name),
                     description: t.description,
                     input_schema: t.input_schema,
                     title: t.title,
@@ -151,6 +151,14 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/// The name the agent loop knows server `server_id`'s `tool` by:
+/// `"{server_id}:{tool}"`. The one naming rule, shared by
+/// [`McpToolExecutorAdapter::list_tools`] and what a paired device's run is
+/// offered (`opened.rs`), so the two cannot drift.
+pub(crate) fn qualified(server_id: i64, tool: &str) -> String {
+    format!("{server_id}:{tool}")
+}
 
 /// An MCP result as the agent's [`ToolResult`]: a success's content split
 /// into text and stored images, an error's message as it came.

@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
-use gglib_core::ports::{AppEventEmitter, RepositoryError, SettingsRepository};
+use gglib_core::ports::{AppEventEmitter, RemoteGatewayPort, RepositoryError, SettingsRepository};
 use gglib_core::services::AppCore;
 use gglib_core::{RemoteServe, Settings, SettingsUpdate};
 use gglib_db::{CoreFactory, setup_test_database};

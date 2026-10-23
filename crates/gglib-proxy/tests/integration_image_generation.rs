@@ -134,12 +134,12 @@ async fn the_drawing_route_says_whether_the_daemons_driver_can_draw() {
     let can: Value = get("").await.unwrap().json().await.unwrap();
     assert_eq!(
         can,
-        json!({"available": true, "model": "sdxl", "models": []})
+        json!({"available": true, "model": "sdxl", "models": [], "mcp_servers": []})
     );
     let chosen: Value = get("?image_model=7").await.unwrap().json().await.unwrap();
     assert_eq!(
         chosen,
-        json!({"available": true, "model": "sdxl", "model_id": 7, "models": []})
+        json!({"available": true, "model": "sdxl", "model_id": 7, "models": [], "mcp_servers": []})
     );
     let no_tools: Value = get("?calls_tools=false")
         .await

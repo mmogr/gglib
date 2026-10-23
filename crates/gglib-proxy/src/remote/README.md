@@ -3,15 +3,17 @@
 <!-- module-docs:start -->
 
 The proxy's side of the remote tunnel ([ADR 0012](../../../../docs/adr/0012-the-remote-tunnel.md)):
-one middleware that reads the tunnel's markers, and two gates that use what
-it read. Pairing is not here: the tunnel edge answers a pairing request itself
-and never forwards it.
+one middleware that reads the tunnel's markers, two gates that use what it
+read, and the MCP servers a paired device's run is offered, named in the
+drawing answer. Pairing is not here: the tunnel edge answers a pairing
+request itself and never forwards it.
 
 The proxy never sees the tunnel. What it has is a
 [`RemoteGatewayPort`](gglib_core::ports::RemoteGatewayPort) on its
-`AppState`, attached by whoever started it, and one thing it may say to it:
-here is a request that came through the tunnel. `/mcp` asks it nothing,
-because no tunnelled request reaches `/mcp`.
+`AppState`, attached by whoever started it, and two things it may say to it:
+which MCP servers does the live session open to paired devices, and here is
+a request that came through the tunnel. `/mcp` asks it nothing, because no
+tunnelled request reaches `/mcp`.
 
 # The markers
 
@@ -63,5 +65,15 @@ machine; a leaked token with a shell server configured is remote code
 execution, which is not the same blast radius as free inference. A paired
 device reaches the servers `gglib remote enable --allow-mcp <server>` names
 through its runs instead.
+
+# The drawing answer's servers
+
+`GET /v1/images/drawing` answers [`DeviceDrawing`]: the drawing answer's own
+fields, flattened, and `mcp_servers`, the names the live session opens
+(`[]` with none, with the tunnel down, or with no tunnel owner), whether or
+not it can draw. It is the answer a device already reads before it sends a
+run, so a phone learns there whether its runs are offered tools
+([ADR 0024](../../../../docs/adr/0024-the-tunnel-opens-mcp-servers-by-name.md)).
+The daemon's `GET /api/images/drawing` does not carry it.
 
 <!-- module-docs:end -->
