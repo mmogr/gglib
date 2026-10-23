@@ -136,7 +136,7 @@ async fn a_conversation_over_the_models_context_is_trimmed_before_it_is_sent() {
 /// A runtime that holds whatever model a run asks for and reports it, in its
 /// primary slot, launched at the context its first field names.
 #[derive(Debug)]
-struct LaunchedAt(u64, Mutex<Option<(u16, u32)>>);
+pub(crate) struct LaunchedAt(pub(crate) u64, pub(crate) Mutex<Option<(u16, u32)>>);
 
 #[derive(Debug)]
 struct Unreleased;

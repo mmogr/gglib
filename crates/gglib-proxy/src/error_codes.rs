@@ -145,6 +145,9 @@ const CODES: &[ErrorCode] = &[
     row("no_model", INVALID, Some(422), "The chat names no model and nothing is running on the hub."),
     row("model_unavailable", SERVER, Some(503), "The chat's model could not be loaded on the hub."),
     row("unavailable", SERVER, Some(503), "Something the run needs is unavailable, such as a model stopped while the run was prepared; retry."),
+    // The daemon's refusals of its own page's run, which a device's turn never meets.
+    row("folder_unusable", UNTYPED, Some(400), "The folder a run says is not an absolute path to a folder on this machine; the message names the path."),
+    row("folder_missing", UNTYPED, Some(409), "The folder the conversation remembers is gone; say another folder, or \"\" to clear it."),
     // A change to a chat (ADR 0017), and a run that answers one, refused by the
     // branching rules: on /api the code is the refusal's type, and the proxy
     // answers a device's change or turn with it beside this type.

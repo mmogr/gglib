@@ -235,7 +235,7 @@ async fn a_far_turn_with_tools_is_sent_nothing_this_machine_stores() {
 
         let hi = r#"{"role":"user","content":"hi"}"#;
         let chat = format!(r#"{{"port":0,"messages":[{hi}],"tool_filter":["{TOOL}"]}}"#);
-        let prepared = prepare_over(&state, req(&chat), upstream).await;
+        let prepared = prepare_over(&state, req(&chat), upstream, None).await;
         let Prepared {
             agent_loop,
             messages,

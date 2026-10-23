@@ -13,6 +13,7 @@ pub mod defect_counts;
 pub mod defects;
 mod defects_agent;
 pub mod dialect;
+pub mod folder;
 pub(crate) mod generation_config;
 pub mod gguf;
 pub mod hub_chats;

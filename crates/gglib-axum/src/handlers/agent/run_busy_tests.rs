@@ -36,6 +36,7 @@ async fn a_second_run_for_a_live_conversation_is_a_conflict_and_writes_nothing()
             conversation_id: Some(id),
             answer_saved,
             remember: None,
+            remember_folder: None,
         };
         let refused = launch(&state, "e2", LOCAL, transcript, p, spare_permit()).await;
 

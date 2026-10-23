@@ -1,5 +1,5 @@
 src/components/Benchmark/Tune/TuneTab.tsx 306
-src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 329
+src/components/ChatMessagesPanel/ChatMessagesPanel.tsx 334
 src/components/ChatMessagesPanel/components/MessageBubbles.tsx 301
 src/components/ChatMessagesPanel/components/PictureEditor.tsx 318
 src/components/FilterPopover/FilterPopover.tsx 340
@@ -14,9 +14,9 @@ src/components/SettingsModal/SystemSettings.tsx 304
 src/components/SetupWizard/SetupWizard.tsx 704
 src/components/VerificationModal.tsx 472
 src/hooks/useGglibRuntime/agentMessageState.ts 333
-src/hooks/useGglibRuntime/useGglibRuntime.ts 311
+src/hooks/useGglibRuntime/useGglibRuntime.ts 326
 src/hooks/useGglibRuntime/useRunReader.ts 317
-src/pages/ChatPage.tsx 401
+src/pages/ChatPage.tsx 408
 src/pages/ModelControlCenterPage.tsx 319
 src/services/tools/registry.ts 358
 src/services/transport/api/client.ts 334

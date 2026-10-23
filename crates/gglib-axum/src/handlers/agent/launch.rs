@@ -17,7 +17,7 @@ use axum::http::StatusCode;
 use futures_util::future::BoxFuture;
 use tokio::sync::{OwnedSemaphorePermit, mpsc};
 
-use gglib_app_services::transcript::{FrameTimes, remember_thinking};
+use gglib_app_services::transcript::{FrameTimes, remember_folder, remember_thinking};
 use gglib_app_services::{Reservation, RunEnded, RunLog, RunSpec};
 use gglib_core::domain::Machine;
 use gglib_core::domain::agent::{AgentEvent, WaitingFor};
@@ -32,20 +32,29 @@ use crate::error::HttpError;
 use crate::state::AppState;
 
 /// Where a run's transcript goes, whether the run answers a question
-/// already saved there (and so saves no message of its own), and what the
-/// conversation is to remember of thinking (`thinking::settle`).
-#[derive(Clone, Copy)]
+/// already saved there (and so saves no message of its own), what the
+/// conversation is to remember of thinking (`thinking::settle`), and of
+/// its folder.
+#[derive(Clone)]
 pub(super) struct Transcript {
     pub(super) conversation_id: Option<i64>,
     pub(super) answer_saved: bool,
     pub(super) remember: Remember,
+    /// The folder the conversation is to remember once the run starts.
+    /// Only the page's run says one.
+    pub(super) remember_folder: RememberFolder,
 }
+
+/// What a chat is to remember of its folder once a run starts: `None`
+/// writes nothing, `Some(folder)` sets it to `folder`, a canonical path,
+/// and `Some(None)` forgets it.
+pub(super) type RememberFolder = Option<Option<String>>;
 
 /// Reserve the id in `scope`, refuse a run on another machine than its
 /// conversation's, save the user's message (naming the device, for a
-/// device's run), the model the run uses and the Thinking choice its turn
-/// said, and start the loop,
-/// in one task of its own: a request dropped part-way cannot split them, so
+/// device's run), the model the run uses, the Thinking choice its turn
+/// said and the folder the run said, and start the loop, in one task of its
+/// own: a request dropped part-way cannot split them, so
 /// a retry finds the run rather than saving the message, or replacing rows,
 /// again. A run that is refused, or whose id is already a run, writes none
 /// of them.
@@ -126,8 +135,8 @@ fn nothing_to_save() -> RunEnded {
 /// machine it ran on (refusing a run on another machine than the
 /// conversation's), the user's message (naming the device, for a device's
 /// run; none for a run that answers a question already saved), the model
-/// the run uses, and the Thinking choice its turn said. Nothing for a run
-/// saved to no conversation.
+/// the run uses, the Thinking choice its turn said, and the folder it said.
+/// Nothing for a run saved to no conversation.
 ///
 /// # Errors
 ///
@@ -143,6 +152,7 @@ pub(super) async fn begin_writes(
         conversation_id: Some(conversation_id),
         answer_saved,
         remember,
+        remember_folder: folder,
     } = transcript
     else {
         return Ok(());
@@ -171,6 +181,9 @@ pub(super) async fn begin_writes(
     .await;
     if let Some(choice) = remember {
         remember_thinking(state.core.chat_history(), conversation_id, choice).await;
+    }
+    if let Some(folder) = folder {
+        remember_folder(state.core.chat_history(), conversation_id, folder).await;
     }
     Ok(())
 }

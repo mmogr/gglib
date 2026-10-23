@@ -285,6 +285,18 @@
       "meaning": "Something the run needs is unavailable, such as a model stopped while the run was prepared; retry."
     },
     {
+      "code": "folder_unusable",
+      "type": null,
+      "status": 400,
+      "meaning": "The folder a run says is not an absolute path to a folder on this machine; the message names the path."
+    },
+    {
+      "code": "folder_missing",
+      "type": null,
+      "status": 409,
+      "meaning": "The folder the conversation remembers is gone; say another folder, or \"\" to clear it."
+    },
+    {
       "code": "message_not_found",
       "type": "invalid_request_error",
       "status": 404,

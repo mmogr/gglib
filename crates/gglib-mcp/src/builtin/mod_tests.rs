@@ -39,6 +39,18 @@ fn the_pages_list_carries_no_file_tool() {
     assert_eq!(names, ["get_current_time"]);
 }
 
+/// [`FILE_TOOLS`] is every builtin that needs a sandbox root and nothing
+/// else, so what names the file tools outside this crate names them all.
+#[test]
+fn the_file_tools_are_the_builtins_that_need_a_root() {
+    let needing: Vec<&str> = BUILTINS
+        .iter()
+        .filter(|tool| tool.needs_sandbox)
+        .map(|tool| tool.name)
+        .collect();
+    assert_eq!(needing, FILE_TOOLS);
+}
+
 /// The description `tools` gives the builtin named `name`.
 fn description_of(tools: &[ToolDefinition], name: &str) -> String {
     tools

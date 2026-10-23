@@ -37,6 +37,7 @@ import type { ImageInput } from '../../hooks/useImageInput';
 import type { ThinkingSwitch } from '../../hooks/useThinkingSwitch';
 import type { UseGglibRuntimeReturn } from '../../hooks/useGglibRuntime';
 import type { DrawSwitch } from '../../hooks/useDrawSwitch';
+import type { ChatFolder } from '../../hooks/useChatFolder';
 import { NO_PREVIEWS, type RunPreviews } from '../../hooks/useGglibRuntime/runPreviews';
 import { RunPreviewsProvider } from './context/RunPreviewsContext';
 
@@ -96,6 +97,8 @@ interface ChatMessagesPanelProps {
   imageInput: ImageInput;
   /** The chat's Thinking switch, for the composer's margin. */
   thinking?: ThinkingSwitch;
+  /** The chat's folder, for the composer's margin. */
+  folder?: ChatFolder;
   /** What the chat offers of its branches, and Retry; absent for a far chat. */
   branching?: UseGglibRuntimeReturn['branching'];
   /** The Draw button, for the composer's margin. */
@@ -140,6 +143,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
   source = 'this',
   imageInput,
   thinking,
+  folder,
   branching,
   draw,
   previews = NO_PREVIEWS,
@@ -304,6 +308,7 @@ const ChatMessagesPanel: React.FC<ChatMessagesPanelProps> = ({
                       supportsToolCalls={supportsToolCalls}
                       toolFormat={toolFormat}
                       thinking={thinking}
+                      folder={folder}
                       draw={draw}
                     />
                   </ThreadPrimitive.Root>

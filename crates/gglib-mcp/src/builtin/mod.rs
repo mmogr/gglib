@@ -26,7 +26,11 @@ pub use generate_image::{
 };
 
 /// Prefix applied to all tool names produced by this executor.
-pub(crate) const BUILTIN_PREFIX: &str = "builtin:";
+pub const BUILTIN_PREFIX: &str = "builtin:";
+
+/// gglib's own file tools, unprefixed: the builtins offered only with a
+/// sandbox root, each reading under it. The table names them from here.
+pub const FILE_TOOLS: [&str; 3] = ["read_file", "list_directory", "grep_search"];
 
 /// How the refusal of a file tool in a chat with no working folder ends,
 /// after the tool's quoted name.
@@ -62,21 +66,21 @@ const BUILTINS: [Builtin; 5] = [
         deadline: None,
     },
     Builtin {
-        name: "read_file",
+        name: FILE_TOOLS[0],
         needs_sandbox: true,
         needs_drawing: false,
         definition: read_file_definition,
         deadline: None,
     },
     Builtin {
-        name: "list_directory",
+        name: FILE_TOOLS[1],
         needs_sandbox: true,
         needs_drawing: false,
         definition: list_directory_definition,
         deadline: None,
     },
     Builtin {
-        name: "grep_search",
+        name: FILE_TOOLS[2],
         needs_sandbox: true,
         needs_drawing: false,
         definition: grep_search_definition,

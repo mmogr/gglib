@@ -9,7 +9,8 @@
 //! with how long each model turn thought: from its first reasoning event to
 //! its last, as they were logged.
 //! A Thinking choice the turn said is remembered on the conversation by
-//! [`remember_thinking`], whichever surface said it.
+//! [`remember_thinking`], whichever surface said it, and a folder the page
+//! chose by [`remember_folder`].
 //!
 //! The reply's rows are rebuilt from the events the turn logged, each named
 //! for the model that made it ([`MadeBy`]), and never from the loop's own
@@ -180,6 +181,26 @@ pub async fn remember_thinking(
         tracing::warn!(
             conversation = conversation_id,
             "a turn's thinking choice was not recorded on its conversation"
+        );
+    }
+}
+
+/// Set `conversation_id`'s folder to `folder`, a canonical path on this
+/// machine that a run from this machine's own page said, or forget it for
+/// `None`.
+///
+/// One field of the conversation's settings; every other stays. Not saved
+/// is logged, not refused: the run reads the folder either way.
+pub async fn remember_folder(
+    history: &ChatHistoryService,
+    conversation_id: i64,
+    folder: Option<String>,
+) {
+    let recorded = history.record_folder(conversation_id, folder).await;
+    if recorded.is_err() {
+        tracing::warn!(
+            conversation = conversation_id,
+            "a run's folder was not recorded on its conversation"
         );
     }
 }

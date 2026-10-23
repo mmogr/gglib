@@ -23,6 +23,7 @@ import { useChatModelFacts } from '../hooks/useChatModelFacts';
 import { useImageInput } from '../hooks/useImageInput';
 import { useThinkingSwitch } from '../hooks/useThinkingSwitch';
 import { useDrawSwitch } from '../hooks/useDrawSwitch';
+import { useChatFolder } from '../hooks/useChatFolder';
 import { useToastContext } from '../contexts/ToastContext';
 import { useConfirmContext } from '../contexts/ConfirmContext';
 import { cn } from '../utils/cn';
@@ -151,6 +152,10 @@ export default function ChatPage(props: ChatPageProps) {
   const [farOpen, setFarOpen] = useState<HubChatOpen | null>(null);
   const thinking = useThinkingSwitch({ conversationId: activeConversationId, conversations, far, farOpen, paired: paired?.far, thinks });
 
+  // The folder the chat's file tools read: chosen here, sent on the run that
+  // changes it; none on a far chat.
+  const folder = useChatFolder({ conversationId: activeConversationId, conversations, far, supportsToolCalls, sentTo: paired?.machineName });
+
   // The Draw button: greyed, with the reason, where a message cannot draw;
   // pressed, the next send says so, and that send alone.
   const draw = useDrawSwitch({ conversationId: activeConversationId, far, paired: paired?.far, supportsToolCalls, refresh: settings?.defaultImageModelId });
@@ -176,6 +181,7 @@ export default function ChatPage(props: ChatPageProps) {
     // assistant-ui only logs a paste or a drop that fails; this is the person told.
     onImageRefused: (sentence) => showToast(sentence, 'error'),
     thinking: thinking.forSend,
+    folder: folder.forSend,
     draw: draw.forSend,
     onFarOpened: setFarOpen,
   });
@@ -348,6 +354,7 @@ export default function ChatPage(props: ChatPageProps) {
               quantization={far ? null : quantization}
               imageInput={imageInput}
               thinking={thinking}
+              folder={folder}
               branching={far ? undefined : branching}
               draw={draw}
               previews={previews}

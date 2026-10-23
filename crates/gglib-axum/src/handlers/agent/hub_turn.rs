@@ -14,7 +14,8 @@
 //! when the turn says so or the chat remembers it (`thinking`). It calls no
 //! tool but the image tool of a turn that says `draw`, unless
 //! this machine lets the tunnel reach its MCP tools, and then only those the
-//! settings name. The reply runs on the chat's
+//! settings name, and never gglib's own file tools: a device's turn has no
+//! folder. The reply runs on the chat's
 //! model, loaded as `/v1/models/{name}/load` loads it when it is not
 //! running, as an agent run in the device's scope, saved to the chat.
 //!
@@ -39,10 +40,11 @@ use gglib_core::services::ChangeError;
 use tokio::sync::OwnedSemaphorePermit;
 
 use super::AgentChatRequest;
-use super::compose::{DRAW_TOOL, prepare_held, refuse_unavailable_drawing, take_permit};
+use super::compose::{DRAW_TOOL, Prepared, held_over, refuse_unavailable_drawing, take_permit};
 use super::dto::AgentRequestConfig;
 use super::hub_model::{model_for, on_model};
 use super::launch::{LatePrepare, Transcript, launch_turn};
+use super::remote_upstream::{self, Upstream};
 use super::run::{coded, with_code};
 use crate::bootstrap::AxumContext;
 use crate::error::HttpError;
@@ -173,14 +175,35 @@ pub(super) async fn start(
 }
 
 /// What a run on `model` does once it exists: find the model on its port
-/// or load it, then hold it and compose `chat`'s loop.
+/// or load it, then hold it and compose `chat`'s loop ([`held_for_device`]).
 pub(super) fn late_on(state: AppState, model: String, chat: AgentChatRequest) -> LatePrepare {
     Box::new(move |loading| {
         Box::pin(async move {
             let chat = on_model(&state, &model, chat, &loading).await?;
-            prepare_held(&state, chat).await.map_err(with_code)
+            let upstream = remote_upstream::resolve(&state, &chat).await;
+            let upstream = upstream.map_err(with_code)?;
+            held_for_device(&state, chat, upstream)
+                .await
+                .map_err(with_code)
         })
     })
+}
+
+/// A device's turn once its model is found on `upstream`: the model held
+/// and the loop composed with no folder, whatever folder its chat
+/// remembers. A folder is this machine's page's choice, and a device
+/// reaches this machine's tools only as ADR 0012 decision 5 grants it,
+/// through `--allow-mcp`, which names no file tool.
+///
+/// # Errors
+///
+/// Whatever the hold refuses.
+pub(super) async fn held_for_device(
+    state: &AppState,
+    chat: AgentChatRequest,
+    upstream: Upstream,
+) -> Result<Prepared, HttpError> {
+    held_over(state, chat, upstream, None).await
 }
 
 /// The name a run on `model` is listed under: the catalogue's name for it,
@@ -302,6 +325,7 @@ pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpEr
         conversation_id: Some(id),
         answer_saved: turn.answer_saved,
         remember: thinking.remember,
+        remember_folder: None,
     };
     Ok(Plan {
         model,

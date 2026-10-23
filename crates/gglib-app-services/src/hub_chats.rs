@@ -86,11 +86,17 @@ impl HubChatsPort for HubChats {
 
     async fn open(&self, id: i64) -> Result<HubChatOpen, HubChatsError> {
         let history = self.core.chat_history();
-        let conversation = history
+        let mut conversation = history
             .get_conversation(id)
             .await
             .map_err(|_| HubChatsError::Unreadable)?
             .ok_or(HubChatsError::NotFound)?;
+        // The chat's folder is a path on this machine, and a device is never
+        // told one: it reaches no file of this machine's, as ADR 0012
+        // decision 5 keeps the tools here from it.
+        if let Some(settings) = conversation.settings.as_mut() {
+            settings.folder = None;
+        }
         let thread = history.thread(id).await.map_err(|e| match e {
             ChatHistoryError::ConversationNotFound(_) => HubChatsError::NotFound,
             _ => HubChatsError::Unreadable,

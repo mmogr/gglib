@@ -3,6 +3,7 @@ mod branches;
 pub(crate) mod config;
 pub(crate) mod drain;
 pub(crate) mod draw;
+mod files;
 pub(crate) mod images;
 mod markdown;
 mod memory_jogger;
@@ -88,7 +89,11 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // The session's Draw switch, and the image tool it arms (`/draw`).
     let draw = draw::DrawSwitch::for_session(ctx, params.target, params.port).await;
     params.drawing = draw.tool(ctx);
-    let agent = config::compose(ctx, &params, None, sampling, &banner).await?;
+    let (sandbox_root, files_line) = files::of_session(&params);
+    let agent = config::compose(ctx, &params, sandbox_root, sampling, &banner).await?;
+    if let Some(line) = files_line.filter(|_| !banner.quiet) {
+        eprintln!("{line}");
+    }
 
     // The llama-server belongs to the daemon and stays warm for the next
     // session; nothing to stop here.

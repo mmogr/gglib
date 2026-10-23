@@ -52,6 +52,10 @@ infrastructure concerns (database, filesystem, etc.).
 - `thinking` - A chat's Thinking choice (`Thinking`: `off` or `default`), which a
   turn says and `ConversationSettings.thinking` remembers, and the one rule
   (`thinking::settle`) that reads a turn by it at the daemon's doors and in the CLI
+- `folder` - A chat's folder, where gglib's own file tools read in its runs:
+  `folder::launched` for `gglib chat`'s launch directory, never home or the
+  root, and `folder::chosen` for the page's pick (absolute, canonical, a
+  folder, else `FolderError`); `ConversationSettings.folder` remembers the pick
 - `kv_memory` - Shape of a model's KV memory from GGUF metadata: whether it
   keeps only part of the token history (`kv_memory_is_partial`), and how many
   layers hold a per-token cache at all (`kv_cache_layer_count`)

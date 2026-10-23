@@ -119,16 +119,40 @@ impl ChatHistoryService {
         id: i64,
         thinking: Option<Thinking>,
     ) -> Result<(), ChatHistoryError> {
+        self.amend_settings(id, |settings| settings.thinking = thinking)
+            .await
+    }
+
+    /// Set a conversation's folder: `folder`, a canonical path on this
+    /// machine, or none for `None`, keeping every other setting and the
+    /// conversation's `model_id`. Writes nothing when it already has that.
+    pub async fn record_folder(
+        &self,
+        id: i64,
+        folder: Option<String>,
+    ) -> Result<(), ChatHistoryError> {
+        self.amend_settings(id, |settings| settings.folder = folder)
+            .await
+    }
+
+    /// Make `amend` to conversation `id`'s settings, keeping its
+    /// `model_id`; writes nothing when `amend` leaves them as they were.
+    async fn amend_settings(
+        &self,
+        id: i64,
+        amend: impl FnOnce(&mut ConversationSettings),
+    ) -> Result<(), ChatHistoryError> {
         let conversation = self
             .repo
             .get_conversation(id)
             .await?
             .ok_or(ChatHistoryError::ConversationNotFound(id))?;
-        let mut settings = conversation.settings.unwrap_or_default();
-        if settings.thinking == thinking {
+        let held = conversation.settings.unwrap_or_default();
+        let mut settings = held.clone();
+        amend(&mut settings);
+        if settings == held {
             return Ok(());
         }
-        settings.thinking = thinking;
         let update = ConversationUpdate {
             settings: Some(Some(settings)),
             ..ConversationUpdate::default()

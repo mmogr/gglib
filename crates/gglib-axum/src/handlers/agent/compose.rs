@@ -3,6 +3,7 @@
 //! validates, limits and frames exactly as the chat route does.
 
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::{OwnedSemaphorePermit, mpsc};
@@ -13,7 +14,7 @@ use gglib_core::domain::ModelRef;
 use gglib_core::domain::agent::{AgentConfig, AgentEvent, AgentMessage};
 use gglib_core::ports::{AdmissionLease, AgentGuardReporter, AgentLoopPort, RetryObserver};
 use gglib_core::services::{AttachmentService, drawing_availability};
-use gglib_mcp::{DrawArm, DrawWith, DrawingTool};
+use gglib_mcp::{BUILTIN_PREFIX, DrawArm, DrawWith, DrawingTool, FILE_TOOLS};
 use gglib_runtime::{LoopGeneration, compose_agent_loop};
 
 use super::AgentChatRequest;
@@ -135,8 +136,33 @@ pub(crate) fn with_drawing(
     filter
 }
 
+/// gglib's own file tools ([`FILE_TOOLS`]), as a tool filter names them:
+/// qualified, so they can only ever match the builtins, as [`DRAW_TOOL`] is.
+pub(crate) fn file_tools() -> impl Iterator<Item = String> {
+    FILE_TOOLS
+        .iter()
+        .map(|name| format!("{BUILTIN_PREFIX}{name}"))
+}
+
+/// A request's tool filter once the run's folder is counted: a list that
+/// names any tool gains [`file_tools`] when the run has a folder, since
+/// choosing the folder is what turns them on. `[]` stays `[]`: no tool at
+/// all, for a model that calls none. Every tool stays every tool.
+pub(crate) fn with_folder(
+    mut filter: Option<HashSet<String>>,
+    has_folder: bool,
+) -> Option<HashSet<String>> {
+    if let (Some(named), true) = (filter.as_mut(), has_folder)
+        && !named.is_empty()
+    {
+        named.extend(file_tools());
+    }
+    filter
+}
+
 /// Resolve the upstream, validate the request, apply the configured limits
-/// and compose the loop.
+/// and compose the loop, with no folder: the chat route's loop offers none
+/// of gglib's own file tools.
 ///
 /// # Errors
 ///
@@ -149,13 +175,15 @@ pub(crate) async fn prepare(
     // decides the port check, the model context, the stored sampling layers
     // and the bearer together.
     let upstream = remote_upstream::resolve(state, &req).await?;
-    Ok(prepare_over(state, req, upstream).await)
+    Ok(prepare_over(state, req, upstream, None).await)
 }
 
 /// [`prepare`] for a run, which holds its model while it lives: the page's
 /// run and a device's turn. The hold is taken, and the context the model was
 /// launched with read, before the loop is composed, so the loop trims the
-/// conversation to that context (`remote_upstream::hold_model`).
+/// conversation to that context (`remote_upstream::hold_model`). `folder` is
+/// the run's, where gglib's own file tools read: the page's run passes its
+/// conversation's, and a device's turn none.
 ///
 /// # Errors
 ///
@@ -163,9 +191,10 @@ pub(crate) async fn prepare(
 pub(crate) async fn prepare_held(
     state: &AppState,
     req: AgentChatRequest,
+    folder: Option<PathBuf>,
 ) -> Result<Prepared, HttpError> {
     let upstream = remote_upstream::resolve(state, &req).await?;
-    held_over(state, req, upstream).await
+    held_over(state, req, upstream, folder).await
 }
 
 /// [`prepare_held`], once the upstream is settled; drivable in a test, as
@@ -178,14 +207,16 @@ pub(super) async fn held_over(
     state: &AppState,
     req: AgentChatRequest,
     mut upstream: Upstream,
+    folder: Option<PathBuf>,
 ) -> Result<Prepared, HttpError> {
     let hold = remote_upstream::hold_model(state.runtime.as_ref(), &mut upstream).await?;
-    let mut prepared = prepare_over(state, req, upstream).await;
+    let mut prepared = prepare_over(state, req, upstream, folder).await;
     prepared.hold = hold;
     Ok(prepared)
 }
 
-/// [`prepare`], once the upstream is settled.
+/// [`prepare`], once the upstream is settled, with `folder` as the root of
+/// gglib's own file tools: a canonical path, or `None` for no file tools.
 ///
 /// Its own function because `prepare` cannot be driven in a test: no test
 /// has a running llama-server for `remote_upstream::resolve` to find.
@@ -193,13 +224,17 @@ pub(super) async fn prepare_over(
     state: &AppState,
     req: AgentChatRequest,
     upstream: Upstream,
+    folder: Option<PathBuf>,
 ) -> Prepared {
     // Read before `tool_filter` consumes the request piecemeal, and before the
     // loop is composed: the two reasoning controls are the only sampling this
     // endpoint accepts, and they occupy the ladder's top rung.
     let sampling = req.sampling_layer();
     let draw = req.draw;
-    let tool_filter = with_drawing(req.tool_filter.map(|f| f.into_iter().collect()), req.draw);
+    // The folder before Draw: a `[]` that Draw then names the image tool in
+    // is still a model that calls no other tool.
+    let named = req.tool_filter.map(|f| f.into_iter().collect());
+    let tool_filter = with_drawing(with_folder(named, folder.is_some()), req.draw);
     // The image tool exists for this loop only when the message was sent
     // with Draw pressed; without it no filter, `null` included, reaches one.
     // The image model the person chose goes on the tool, for the request it
@@ -232,6 +267,7 @@ pub(super) async fn prepare_over(
         upstream.model_context,
         state.mcp.clone(),
         tool_filter,
+        folder,
         // GUI chat runs in the same process as the embedded proxy; report its
         // reuse to the shared agent-path store behind `agent_usage`.
         Some(state.proxy.agent_metrics()),
@@ -321,13 +357,16 @@ pub(crate) fn frame(event: &AgentEvent) -> String {
 
 #[cfg(test)]
 #[path = "compose_context_tests.rs"]
-mod context_tests;
+pub(super) mod context_tests;
 #[cfg(test)]
 #[path = "compose_draw_tests.rs"]
 mod draw_tests;
 #[cfg(test)]
 #[path = "compose_drawn_picture_tests.rs"]
 mod drawn_picture_tests;
+#[cfg(test)]
+#[path = "compose_folder_tests.rs"]
+mod folder_tests;
 #[cfg(test)]
 #[path = "compose_gate_tests.rs"]
 mod gate_tests;

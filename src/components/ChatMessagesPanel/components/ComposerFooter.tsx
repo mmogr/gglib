@@ -9,6 +9,8 @@ import { ToolSupportIndicator } from '../../ToolSupportIndicator';
 import { getToolRegistry } from '../../../services/tools';
 import type { ThinkingSwitch } from '../../../hooks/useThinkingSwitch';
 import type { DrawSwitch } from '../../../hooks/useDrawSwitch';
+import type { ChatFolder } from '../../../hooks/useChatFolder';
+import { FolderChip } from './FolderChip';
 import { TurnRow } from './TurnRow';
 import { ModelPicker, type ModelChoice } from './ModelPicker';
 import { AttachImageButton, ComposerImages, ImageInputContext } from './ComposerImages';
@@ -37,6 +39,8 @@ interface ComposerFooterProps {
   toolFormat?: string | null;
   /** The chat's Thinking switch; drawn only where it says it is shown. */
   thinking?: ThinkingSwitch;
+  /** The chat's folder, where its file tools read; drawn only where it says it is shown. */
+  folder?: ChatFolder;
   /** The Draw button; drawn wherever one is given, greyed where a message cannot draw. */
   draw?: DrawSwitch;
 }
@@ -71,7 +75,9 @@ function drawTitle(draw: DrawSwitch): string | undefined {
  * alone and reading "Draw on" while it is; where a message cannot draw it is
  * greyed, and its title says why. Beside it, where the machine that draws
  * has two or more image models, is the menu that picks one for the chat
- * (`ImageModelMenu`).
+ * (`ImageModelMenu`). Beside Thinking is the chat's folder (`FolderChip`),
+ * where one is offered; a chat with a folder has tools configured, so the
+ * tool support badge speaks of it as of an enabled tool.
  */
 export const ComposerFooter: FC<ComposerFooterProps> = ({
   isServerConnected,
@@ -86,9 +92,11 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
   supportsToolCalls,
   toolFormat,
   thinking,
+  folder,
   draw,
 }) => {
   const imageInput = useContext(ImageInputContext);
+  const hasFolder = Boolean(folder?.path);
   return (
     <div className="@container shrink-0 mx-auto w-full max-w-[1000px] px-lg">
       <TurnRow
@@ -107,7 +115,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
           <div className="flex flex-wrap items-center justify-end gap-sm">
             <ToolSupportIndicator
               supports={supportsToolCalls ?? null}
-              hasToolsConfigured={getToolRegistry().getEnabledDefinitions().length > 0}
+              hasToolsConfigured={getToolRegistry().getEnabledDefinitions().length > 0 || hasFolder}
               toolFormat={toolFormat}
             />
             <ToolsPopover opensUpward align="left" modelId={modelId} />
@@ -122,6 +130,7 @@ export const ComposerFooter: FC<ComposerFooterProps> = ({
                 Thinking{!thinking.on && <span aria-hidden="true"> off</span>}
               </Chip>
             )}
+            {folder?.shown && <FolderChip folder={folder} />}
             {draw && (
               <Chip
                 leftIcon={<Icon icon={ImagePlus} size={12} />}

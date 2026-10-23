@@ -31,7 +31,7 @@ OS-specific utilities that cannot be cleanly abstracted through the transport la
 |------|------|
 | `detect.ts` | `isDesktop()` — platform detection |
 | `openUrl.ts` | Opens URLs in system browser (Tauri: native; Web: `window.open`) |
-| `fileDialogs.ts` | Native GGUF file picker (Tauri only) |
+| `fileDialogs.ts` | Native GGUF file picker, and the native folder picker for a chat's folder (`pickFolder`, `null` on web) (Tauri only) |
 | `menuSync.ts` | Synchronises native menu bar item state with application state |
 | `menuEvents.ts` | Listens for native menu click events |
 | `serverLogs.ts` | Fetches and streams llama-server log output |

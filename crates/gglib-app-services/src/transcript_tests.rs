@@ -1,6 +1,7 @@
 //! The transcript writer over a database of its own: which message
 //! `save_user` saves and where, what `save_reply` makes of a turn's
-//! frames, and what `remember_thinking` leaves on the conversation. A whole
+//! frames, and what `remember_thinking` and `remember_folder` leave on the
+//! conversation. A whole
 //! turn's rows are pinned at each surface that saves one, against
 //! `transcript_turn.json`.
 
@@ -200,4 +201,58 @@ async fn a_thinking_choice_is_remembered_and_forgotten_beside_the_other_settings
         );
     }
     remember_thinking(history, id + 1, Some(Thinking::Off)).await;
+}
+
+/// A folder is one field of the conversation's settings: a path is
+/// remembered, and nothing forgets it, beside what the settings already
+/// held. A conversation that is not there is not a failure.
+#[tokio::test]
+async fn a_folder_is_remembered_and_forgotten_beside_the_other_settings() {
+    let core = test_core().await;
+    let history = core.chat_history();
+    let made = history.create_conversation(NewConversation {
+        title: "t".to_owned(),
+        settings: Some(ConversationSettings {
+            model_name: Some("qwen".to_owned()),
+            thinking: Some(Thinking::Off),
+            ..ConversationSettings::default()
+        }),
+        ..NewConversation::default()
+    });
+    let id = made.await.expect("a conversation");
+
+    for folder in [Some("/work/project"), Some("/work/other"), None] {
+        remember_folder(history, id, folder.map(str::to_owned)).await;
+
+        let read = history.get_conversation(id).await.expect("read");
+        let settings = read.expect("there").settings.expect("settings");
+        assert_eq!(
+            (
+                settings.folder.as_deref(),
+                settings.model_name.as_deref(),
+                settings.thinking
+            ),
+            (folder, Some("qwen"), Some(Thinking::Off))
+        );
+    }
+    remember_folder(history, id + 1, Some("/work".to_owned())).await;
+}
+
+/// A folder the conversation already has is not written again: the
+/// conversation is not touched, so it does not move up the list.
+#[tokio::test]
+async fn the_folder_a_conversation_already_has_writes_nothing() {
+    let core = test_core().await;
+    let history = core.chat_history();
+    let id = conversation(history).await;
+    remember_folder(history, id, Some("/work".to_owned())).await;
+    let before = history.get_conversation(id).await.expect("read");
+    let before = before.expect("there").updated_at;
+
+    // A second apart: `updated_at` has one-second resolution.
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    remember_folder(history, id, Some("/work".to_owned())).await;
+
+    let after = history.get_conversation(id).await.expect("read");
+    assert_eq!(after.expect("there").updated_at, before);
 }

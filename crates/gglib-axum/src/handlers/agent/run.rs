@@ -13,7 +13,10 @@
 //! runs from the conversation's saved history.
 //!
 //! Nothing here logs or returns a frame, a request body or a tool argument:
-//! only ids, statuses and counts.
+//! only ids, statuses and counts, and in a `folder_unusable` refusal the
+//! folder the run said.
+
+use std::path::{Path, PathBuf};
 
 use axum::http::StatusCode;
 use serde_json::Value;
@@ -24,13 +27,13 @@ use gglib_app_services::RunLog;
 use gglib_app_services::transcript::{FrameTimes, answer_history};
 use gglib_core::domain::agent::AgentEvent;
 use gglib_core::domain::runs::RunError;
-use gglib_core::domain::thinking;
+use gglib_core::domain::{folder, thinking};
 use gglib_core::ports::{AdmissionLease, AgentError, Created, RunScope};
 
 use super::AgentChatRequest;
 use super::compose::{Prepared, frame, prepare_held, refuse_unavailable_drawing, take_permit};
 use super::dto::AgentRunRequest;
-use super::launch::{Transcript, launch};
+use super::launch::{RememberFolder, Transcript, launch};
 use crate::error::HttpError;
 use crate::state::AppState;
 
@@ -67,6 +70,9 @@ pub(super) fn with_code(error: HttpError) -> HttpError {
 ///
 /// `invalid_request` for a body that is not an agent chat request, and
 /// whatever the chat route refuses, coded; `conversation_not_found` (404);
+/// `folder_unusable` (400) for a `folder` that is not an absolute path to a
+/// folder here, and `folder_missing` (409) when the conversation's own no
+/// longer is one;
 /// `attachment_not_found` (400) for an image a message names, history
 /// included, that is not stored, and `request_images_too_large` (400) when
 /// they are over 16 MiB together; `drawing_unavailable` (400) for `draw` on
@@ -101,7 +107,7 @@ pub(crate) async fn create_run(
             created: false,
         });
     }
-    let (chat, transcript) = plan(state, req).await?;
+    let (chat, transcript, folder) = plan(state, req).await?;
     // Before a slot is taken or a model is held, for a run on this
     // machine's model or the paired machine's: their images are read here.
     state
@@ -120,7 +126,7 @@ pub(crate) async fn create_run(
         )
     })?;
     // Untested: `create_run` cannot be driven without a running llama-server.
-    let prepared = prepare_held(state, chat).await.map_err(with_code)?;
+    let prepared = prepare_held(state, chat, folder).await.map_err(with_code)?;
     launch(state, id, RunScope::Local, transcript, prepared, permit).await
 }
 
@@ -128,23 +134,26 @@ pub(crate) async fn create_run(
 /// with the thinking budget the run uses (`thinking::settle`, over what the
 /// request says, what the conversation remembers and the request's own
 /// budget) and, where it names no iteration limit, the one the conversation
-/// saved; and what the run writes to the conversation once it starts.
+/// saved; what the run writes to the conversation once it starts; and the
+/// run's folder ([`settle_folder`]).
 ///
 /// # Errors
 ///
 /// `invalid_request` (400) for an answer run with no conversation, or one
 /// that sends messages of its own; `conversation_not_found` (404);
-/// `nothing_to_answer` (409); `internal_error` when the conversation cannot
-/// be read.
+/// `nothing_to_answer` (409); `folder_unusable` (400) and `folder_missing`
+/// (409) as [`settle_folder`] has them; `internal_error` when the
+/// conversation cannot be read.
 pub(super) async fn plan(
     state: &AppState,
     req: AgentRunRequest,
-) -> Result<(AgentChatRequest, Transcript), HttpError> {
+) -> Result<(AgentChatRequest, Transcript, Option<PathBuf>), HttpError> {
     let AgentRunRequest {
         mut chat,
         conversation_id,
         answer_saved,
         thinking: said,
+        folder: said_folder,
     } = req;
     if answer_saved && (conversation_id.is_none() || !chat.messages.is_empty()) {
         return Err(coded(
@@ -182,6 +191,9 @@ pub(super) async fn plan(
     } else {
         None
     };
+    let saved_folder = saved.as_ref().and_then(|s| s.folder.as_deref());
+    let (folder, remember_folder) =
+        settle_folder(said_folder.as_deref(), conversation_id, saved_folder)?;
     let remembered = saved.as_ref().and_then(|settings| settings.thinking);
     let settled = thinking::settle(said, remembered, chat.reasoning_budget_tokens);
     chat.reasoning_budget_tokens = settled.budget;
@@ -196,8 +208,63 @@ pub(super) async fn plan(
         conversation_id,
         answer_saved,
         remember: settled.remember,
+        remember_folder,
     };
-    Ok((chat, transcript))
+    Ok((chat, transcript, folder))
+}
+
+/// A run's folder, from what its request said (`said`) and what its
+/// conversation remembers (`saved`), and what the conversation is to
+/// remember of it ([`Transcript::remember_folder`]).
+///
+/// `""` forgets the folder, and needs no checking: the run has none. A path
+/// is the run's once [`folder::chosen`] takes it, and the conversation's
+/// from then on, by its canonical path. Absent, the run reads the folder
+/// the conversation remembers, checked again, since it may be gone. Without
+/// a conversation, a path is this run's alone and `""` is the same as
+/// absent.
+///
+/// # Errors
+///
+/// `folder_unusable` (400) for a said path that is not an absolute path to
+/// a folder here, or, in a conversation, whose canonical path is not UTF-8
+/// and so cannot be remembered; `folder_missing` (409) for a remembered one that no longer
+/// resolves to a folder. Either is refused before anything is written.
+fn settle_folder(
+    said: Option<&str>,
+    conversation_id: Option<i64>,
+    saved: Option<&str>,
+) -> Result<(Option<PathBuf>, RememberFolder), HttpError> {
+    let remembers = conversation_id.is_some();
+    match said {
+        Some("") => Ok((None, remembers.then_some(None))),
+        Some(path) => {
+            let unusable =
+                |message: String| coded(StatusCode::BAD_REQUEST, "folder_unusable", message);
+            let chosen = folder::chosen(Path::new(path)).map_err(|e| unusable(e.to_string()))?;
+            // Only a folder that is remembered must be text, to be stored.
+            if !remembers {
+                return Ok((Some(chosen), None));
+            }
+            let shown = chosen.to_str().map(str::to_owned).ok_or_else(|| {
+                unusable(format!("'{path}' resolves to a path that is not UTF-8"))
+            })?;
+            Ok((Some(chosen), Some(Some(shown))))
+        }
+        None => {
+            let Some(path) = saved else {
+                return Ok((None, None));
+            };
+            let chosen = folder::chosen(Path::new(path)).map_err(|e| {
+                coded(
+                    StatusCode::CONFLICT,
+                    "folder_missing",
+                    format!("the conversation's folder is gone: {e}; choose another or clear it"),
+                )
+            })?;
+            Ok((Some(chosen), None))
+        }
+    }
 }
 
 /// How often a held run reports progress on its hold: each report takes the

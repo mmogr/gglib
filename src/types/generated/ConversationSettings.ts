@@ -84,4 +84,13 @@ no_tools?: boolean,
  * turn that says `default` removes the key, and an absent key is a chat
  * that remembers nothing.
  */
-thinking?: Thinking, };
+thinking?: Thinking, 
+/**
+ * The chat's folder, where gglib's own file tools read in its runs on
+ * this machine: a canonical path on this machine, as `folder::chosen`
+ * answers it. Set only by a run from this machine's own page that says
+ * one (`record_folder`), and never by a paired device, which is not
+ * shown it. `gglib chat` neither reads nor writes it: its folder is
+ * where it was launched.
+ */
+folder?: string, };

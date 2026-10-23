@@ -74,6 +74,13 @@ export interface RunRequestOptions {
    */
   thinking?: Thinking;
   /**
+   * The conversation's folder, where gglib's own file tools read, on the
+   * run that changes it: a path sets it, `""` forgets it. Left out of the
+   * body otherwise, and the daemon runs the turn in the folder the
+   * conversation remembers, or with no file tools.
+   */
+  folder?: string;
+  /**
    * Sent with Draw pressed: the daemon offers this run its drawing tool.
    * The key is in the body only then; a run without it is offered no
    * drawing tool, whatever its `tool_filter` says.
@@ -145,6 +152,7 @@ export function buildRunRequest(options: RunRequestOptions): AgentRunRequest {
     reasoning_effort: (options.reasoning?.reasoning_effort as ReasoningEffort | undefined) ?? null,
     reasoning_budget_tokens: options.reasoning?.reasoning_budget_tokens ?? null,
     ...(options.thinking !== undefined && { thinking: options.thinking }),
+    ...(options.folder !== undefined && { folder: options.folder }),
     ...(options.draw === true && { draw: true }),
     ...(options.draw === true && options.imageModel !== undefined && { image_model: options.imageModel }),
   };
@@ -161,7 +169,7 @@ export type RunTarget = Pick<RunRequestOptions, 'selectedServerPort' | 'supports
  */
 export function runBodyFor(
   target: RunTarget,
-  run: Pick<RunRequestOptions, 'conversationId' | 'messages' | 'answerSaved' | 'thinking' | 'draw' | 'imageModel'>,
+  run: Pick<RunRequestOptions, 'conversationId' | 'messages' | 'answerSaved' | 'thinking' | 'folder' | 'draw' | 'imageModel'>,
 ): AgentRunRequest {
   return buildRunRequest({
     ...target,

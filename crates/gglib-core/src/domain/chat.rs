@@ -321,6 +321,15 @@ pub struct ConversationSettings {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thinking: Option<Thinking>,
+    /// The chat's folder, where gglib's own file tools read in its runs on
+    /// this machine: a canonical path on this machine, as `folder::chosen`
+    /// answers it. Set only by a run from this machine's own page that says
+    /// one (`record_folder`), and never by a paired device, which is not
+    /// shown it. `gglib chat` neither reads nor writes it: its folder is
+    /// where it was launched.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
 }
 
 #[cfg(test)]

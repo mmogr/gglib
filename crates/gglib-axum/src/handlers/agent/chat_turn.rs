@@ -102,6 +102,7 @@ pub(super) async fn start(
         conversation_id: None,
         answer_saved: false,
         remember: None,
+        remember_folder: None,
     };
     let run = (RunKind::Chat, shown);
     launch_turn(state, id, scope, run, transcript, late, permit)

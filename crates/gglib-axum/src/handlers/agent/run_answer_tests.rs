@@ -30,6 +30,7 @@ fn answering(conversation: i64) -> Transcript {
         conversation_id: Some(conversation),
         answer_saved: true,
         remember: None,
+        remember_folder: None,
     }
 }
 
