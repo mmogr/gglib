@@ -8,6 +8,10 @@ use serde_json::Value;
 
 use super::sandboxing::{is_binary, resolve_sandboxed_path};
 
+/// The most characters of a file the model is given; a longer file is cut
+/// after this many characters, never inside one.
+const MAX_CHARS: usize = 100_000;
+
 /// Read a file within the sandbox, returning its content.
 ///
 /// Returns a human-readable error string on failure (not anyhow) so the
@@ -16,30 +20,27 @@ pub(crate) fn read_file(
     args: &HashMap<String, Value>,
     sandbox_root: &Path,
 ) -> Result<String, String> {
-    const MAX_CHARS: usize = 100_000;
-
     let path = args
         .get("path")
         .and_then(Value::as_str)
         .ok_or("missing required argument 'path'")?;
 
     let resolved = resolve_sandboxed_path(sandbox_root, path)?;
+    let shown = &resolved.shown;
 
-    if is_binary(&resolved) {
-        return Err(format!("file '{path}' appears to be binary — skipped"));
+    if is_binary(&resolved.path) {
+        return Err(format!("file '{shown}' appears to be binary — skipped"));
     }
 
     let content =
-        fs::read_to_string(&resolved).map_err(|e| format!("failed to read '{path}': {e}"))?;
+        fs::read_to_string(&resolved.path).map_err(|e| format!("failed to read '{shown}': {e}"))?;
 
-    if content.len() > MAX_CHARS {
-        Ok(format!(
-            "{}\n\n[truncated — file exceeds {} characters]",
-            &content[..MAX_CHARS],
-            MAX_CHARS
-        ))
-    } else {
-        Ok(content)
+    match content.char_indices().nth(MAX_CHARS) {
+        Some((end, _)) => Ok(format!(
+            "{}\n\n[truncated — file exceeds {MAX_CHARS} characters]",
+            &content[..end],
+        )),
+        None => Ok(content),
     }
 }
 
@@ -75,6 +76,18 @@ mod tests {
     }
 
     #[test]
+    fn a_refusal_names_an_absolute_path_by_its_part_under_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let file = root.join("data.bin");
+        fs::write(&file, b"foo\x00bar").unwrap();
+
+        let err = read_file(&args_with(file.to_str().unwrap()), &root).unwrap_err();
+        assert_eq!(err, "file 'data.bin' appears to be binary — skipped");
+        assert!(!err.contains(&root.display().to_string()), "{err}");
+    }
+
+    #[test]
     fn missing_path_arg() {
         let dir = tempfile::tempdir().unwrap();
         let err = read_file(&HashMap::new(), dir.path()).unwrap_err();
@@ -85,7 +98,7 @@ mod tests {
     fn nonexistent_file() {
         let dir = tempfile::tempdir().unwrap();
         let err = read_file(&args_with("nope.txt"), dir.path()).unwrap_err();
-        assert!(err.contains("does not exist"));
+        assert!(err.starts_with("No file or folder 'nope.txt' in the working folder."));
     }
 
     #[test]
@@ -98,5 +111,31 @@ mod tests {
         let result = read_file(&args_with("big.txt"), dir.path()).unwrap();
         assert!(result.len() < 200_000);
         assert!(result.contains("[truncated"));
+    }
+
+    #[test]
+    fn truncates_multibyte_content_between_characters() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("accents.txt");
+        // Byte MAX_CHARS falls inside the second byte of an `é`.
+        let content = format!("a{}", "é".repeat(MAX_CHARS));
+        fs::write(&file, &content).unwrap();
+
+        let result = read_file(&args_with("accents.txt"), dir.path()).unwrap();
+        let (kept, note) = result.split_once("\n\n").unwrap();
+        assert_eq!(kept.chars().count(), MAX_CHARS);
+        assert!(kept.starts_with("aé"));
+        assert!(note.starts_with("[truncated"));
+    }
+
+    #[test]
+    fn keeps_a_file_of_exactly_max_chars_whole() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("full.txt");
+        let content = "é".repeat(MAX_CHARS);
+        fs::write(&file, &content).unwrap();
+
+        let result = read_file(&args_with("full.txt"), dir.path()).unwrap();
+        assert_eq!(result, content);
     }
 }

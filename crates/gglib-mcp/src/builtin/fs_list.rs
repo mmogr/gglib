@@ -19,9 +19,10 @@ pub(crate) fn list_directory(
     let path = args.get("path").and_then(Value::as_str).unwrap_or(".");
 
     let resolved = resolve_sandboxed_path(sandbox_root, path)?;
+    let shown = &resolved.shown;
 
-    if !resolved.is_dir() {
-        return Err(format!("'{path}' is not a directory"));
+    if !resolved.path.is_dir() {
+        return Err(format!("'{shown}' is not a directory"));
     }
 
     let include_hidden = args
@@ -31,8 +32,8 @@ pub(crate) fn list_directory(
 
     let mut entries: Vec<String> = Vec::new();
 
-    let read_dir = std::fs::read_dir(&resolved)
-        .map_err(|e| format!("failed to read directory '{path}': {e}"))?;
+    let read_dir = std::fs::read_dir(&resolved.path)
+        .map_err(|e| format!("failed to read directory '{shown}': {e}"))?;
 
     for entry in read_dir {
         let entry = entry.map_err(|e| format!("directory entry error: {e}"))?;
