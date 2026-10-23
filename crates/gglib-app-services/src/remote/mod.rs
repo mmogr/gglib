@@ -88,7 +88,7 @@ struct Live<H = modelpipe::ServeHandle> {
     /// token for both: neither outlives the tunnel they belong to, and a
     /// second field would only be one more thing to forget.
     cancel: CancellationToken,
-    /// Which session the gateway holds a pairing and an `/mcp` grant for on
+    /// Which session the gateway holds a pairing and its MCP servers for on
     /// this tunnel's behalf, from
     /// [`RemoteGateway::begin_session`](gateway::RemoteGateway::begin_session).
     /// Presented at teardown so a drain that took five seconds cannot clear

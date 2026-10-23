@@ -58,9 +58,9 @@ remote/
   far_read.rs       — the far answers this side reads rather than passes
                       on: the model list, one model, a load, the shutdown,
                       and the far build too old to publish model ids
-  gateway.rs        — RemoteGateway: the port the proxy asks (is /mcp open,
-                      a tunnelled request arrived), and the invite a session
-                      holds
+  gateway.rs        — RemoteGateway: the port the proxy tells (a tunnelled
+                      request arrived), the MCP servers a session opens to
+                      paired devices, and the invite a session holds
   pairing.rs        — the open invite: one at a time, read without taking it
   invite_watch.rs   — waiting for an invite to end, and handing it to the
                       gateway to record
@@ -169,10 +169,10 @@ for. Neither caller holds the `live` lock across the teardown — that would
 block `status` for the whole five seconds — so a fresh `enable` can find the
 slot empty and open a new invite while the previous session is still
 draining. A teardown that then cleared whatever it found would withdraw the
-code the operator is holding and revoke an `/mcp` grant that was just asked
-for. So `begin_session` numbers each session, `Live` carries the number, and
-`reset_session_if` clears nothing once a later session has taken the gateway
-over. Arming is what establishes the clean slate the superseded teardown will
+code the operator is holding and close the MCP servers the new session was
+just enabled with. So `begin_session` numbers each session, `Live` carries
+the number, and `reset_session_if` clears nothing once a later session has
+taken the gateway over. Arming is what establishes the clean slate the superseded teardown will
 now never provide, so it clears the paired flag too.
 
 # The address the tunnel fronts
@@ -350,8 +350,9 @@ are a `Conflict` that asks for that machine to be updated, with no fallback.
 `RemoteGateway` is always installed, tunnel up or not, because `ProxyOps`
 attaches it to every proxy it starts. It holds the invite a session has
 open, and the paired flag that says whether the code on offer was taken. It
-also holds the `/mcp` grant for tunnelled requests — off unless `enable` was
-asked for it — and counts tunnelled requests for the status surface. Its
+also holds the MCP servers a session opens to paired devices — none unless
+`enable` named them; `/mcp` itself is refused to every tunnelled request —
+and counts tunnelled requests for the status surface. Its
 `Debug` reports state and nothing an invite carries.
 
 # One at a time, without holding the lock

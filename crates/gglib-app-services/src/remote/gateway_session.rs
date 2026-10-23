@@ -30,6 +30,7 @@
 //! it, which is a no-op once it has ended, and then records whatever it ended
 //! as. A device that redeemed is recorded once, by whichever got there first.
 
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use gglib_core::events::AppEvent;
@@ -53,8 +54,8 @@ pub(in crate::remote) enum Offered {
 }
 
 impl RemoteGateway {
-    /// Arm a session — `/mcp` is open to tunnelled requests or it is not —
-    /// and say which session that is. The number comes back for
+    /// Arm a session that opens `mcp_servers` to its paired devices, and say
+    /// which session that is. The number comes back for
     /// [`Self::reset_session_if`].
     ///
     /// The paired flag is cleared here as well as there, because a teardown
@@ -68,11 +69,11 @@ impl RemoteGateway {
     /// offers a code, against a session that is already up — so an invite
     /// the previous session left open is withdrawn rather than inherited, and
     /// a restart that puts the tunnel back offers nothing at all.
-    pub(in crate::remote) fn begin_session(&self, allow_mcp: bool) -> u64 {
+    pub(in crate::remote) fn begin_session(&self, mcp_servers: Arc<[String]>) -> u64 {
         let mut session = self.session();
         *session += 1;
         self.close_invite(self.pairing.take());
-        self.mcp_allowed.store(allow_mcp, Ordering::Relaxed);
+        *self.opened() = mcp_servers;
         self.paired.store(false, Ordering::Relaxed);
         *session
     }
@@ -139,9 +140,9 @@ impl RemoteGateway {
         self.close_invite(self.pairing.take_if(device))
     }
 
-    /// Reset everything session `epoch` owns — the invite, the `/mcp` grant,
-    /// the paired flag, and the roster channel — unless a later session has
-    /// taken the gateway over since. The request counters are history and
+    /// Reset everything session `epoch` owns — the invite, the MCP servers it
+    /// opens, the paired flag, and the roster channel — unless a later session
+    /// has taken the gateway over since. The request counters are history and
     /// stay.
     ///
     /// The guard is not defensive: a teardown takes its time. `take_down`
@@ -150,7 +151,7 @@ impl RemoteGateway {
     /// `status` for the whole drain. So a `disable` and a fresh `enable` can
     /// overlap, and a teardown that cleared unconditionally would wipe the
     /// session that replaced it: the code the operator was just handed
-    /// withdrawn, and an `/mcp` grant revoked without a word.
+    /// withdrawn, and the MCP servers it opened closed without a word.
     ///
     /// Read and act under the one lock, which is the reason the epoch is not
     /// a bare atomic: an `enable` landing between a load and the clears
@@ -175,7 +176,7 @@ impl RemoteGateway {
         // code before the listener closed, and that nothing has recorded yet,
         // is recorded on this session's writer.
         self.close_invite(self.pairing.take());
-        self.mcp_allowed.store(false, Ordering::Relaxed);
+        *self.opened() = Arc::from([]);
         self.paired.store(false, Ordering::Relaxed);
         // Dropping the sender is what ends `roster_sync`: it reads until the
         // channel closes, so whatever the drain above put in the queue is

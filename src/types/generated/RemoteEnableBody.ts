@@ -2,16 +2,18 @@
 
 /**
  * Body for `POST /api/remote/enable`. Every field optional; an empty body
- * is the default: no `/mcp`, public relays, discovery on.
+ * is the default: no MCP server opened, public relays, discovery on.
  *
  * A field this does not name is ignored, so an older client that still
- * sends `keep_identity` is answered as if it had not (#1043).
+ * sends `keep_identity` is answered as if it had not (#1043), and one that
+ * sends `allow_mcp` opens nothing.
  */
 export type RemoteEnableBody = { 
 /**
- * Let tunnelled requests reach `/mcp`. Off unless asked for.
+ * The MCP servers, by name, whose tools a paired device's chats may
+ * use. None unless named; `/mcp` is never reachable through the tunnel.
  */
-allow_mcp: boolean, 
+mcp_servers: Array<string>, 
 /**
  * A self-hosted relay URL; omitted uses the public relays.
  */

@@ -3,16 +3,15 @@
 //! One `Arc<RemoteGateway>` is built with the service graph and handed to
 //! `ProxyOps`, which puts it on every proxy it starts. It is therefore
 //! always present, whether or not the tunnel is up: with the tunnel down it
-//! holds no invite, and `mcp_allowed` is whatever it was last set to, which
-//! the proxy never consults because no request is marked as tunnelled.
+//! holds no invite and opens no MCP server to a device.
 //!
 //! It also holds the invite a session has open. The code is answered at the
 //! tunnel edge, not here; `gateway_session.rs` has how the gateway learns a
 //! device paired.
 
 use std::fmt;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use gglib_core::ports::{AppEventEmitter, RemoteGatewayPort};
@@ -30,7 +29,9 @@ pub(super) use session::Offered;
 /// The tunnel's side of the proxy's questions.
 pub struct RemoteGateway {
     pub(super) pairing: Pairing,
-    mcp_allowed: AtomicBool,
+    /// The MCP servers, by name, whose tools the live session opens to its
+    /// paired devices; empty with the tunnel down.
+    mcp_servers: Mutex<Arc<[String]>>,
     paired: AtomicBool,
     /// Which session the three fields above belong to, counted up by
     /// [`RemoteGateway::begin_session`].
@@ -50,14 +51,14 @@ pub struct RemoteGateway {
     /// no tunnel — which cannot happen, since nothing is admitted then — is
     /// discarded rather than queued for a task that will never read it.
     notes: Mutex<Option<UnboundedSender<Note>>>,
-    emitter: std::sync::Arc<dyn AppEventEmitter>,
+    emitter: Arc<dyn AppEventEmitter>,
 }
 
 impl RemoteGateway {
-    pub(crate) fn new(emitter: std::sync::Arc<dyn AppEventEmitter>) -> Self {
+    pub(crate) fn new(emitter: Arc<dyn AppEventEmitter>) -> Self {
         Self {
             pairing: Pairing::default(),
-            mcp_allowed: AtomicBool::new(false),
+            mcp_servers: Mutex::new(Arc::from([])),
             paired: AtomicBool::new(false),
             session: Mutex::new(0),
             tunnelled_requests: AtomicU64::new(0),
@@ -72,6 +73,19 @@ impl RemoteGateway {
     // honest answer to an impossible poison.
     fn session(&self) -> std::sync::MutexGuard<'_, u64> {
         self.session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// The MCP servers, by name, the live session opens to paired devices.
+    pub(in crate::remote) fn mcp_servers(&self) -> Arc<[String]> {
+        Arc::clone(&self.opened())
+    }
+
+    /// The list behind [`Self::mcp_servers`], under its lock. Nothing panics
+    /// while holding it.
+    fn opened(&self) -> std::sync::MutexGuard<'_, Arc<[String]>> {
+        self.mcp_servers
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
@@ -124,10 +138,6 @@ impl RemoteGateway {
 }
 
 impl RemoteGatewayPort for RemoteGateway {
-    fn mcp_allowed(&self) -> bool {
-        self.mcp_allowed.load(Ordering::Relaxed)
-    }
-
     fn note_tunnelled_request(&self, peer: Option<&str>, device: Option<&str>) {
         self.tunnelled_requests.fetch_add(1, Ordering::Relaxed);
         let now = SystemTime::now()
@@ -163,7 +173,7 @@ impl fmt::Debug for RemoteGateway {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RemoteGateway")
             .field("pairing_active", &self.pairing.active())
-            .field("mcp_allowed", &self.mcp_allowed())
+            .field("mcp_servers", &self.mcp_servers())
             .field("paired", &self.paired())
             .field("tunnelled_requests", &self.tunnelled_requests())
             .finish_non_exhaustive()

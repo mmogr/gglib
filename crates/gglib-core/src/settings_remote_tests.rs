@@ -149,7 +149,7 @@ fn a_remote_machine() -> Settings {
         remote_pairing: Some(pairing()),
         remote_enabled: Some(true),
         remote_serve: Some(RemoteServe {
-            allow_mcp: true,
+            mcp_servers: vec!["tavily".into()],
             relay: Some("https://relay.example".to_owned()),
             discovery: false,
         }),

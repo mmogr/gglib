@@ -7,7 +7,7 @@ use super::*;
 #[test]
 fn an_empty_body_is_the_safe_default() {
     let req = RemoteEnableBody::default().into_request();
-    assert!(!req.allow_mcp);
+    assert!(req.mcp_servers.is_empty(), "no MCP server is opened");
     assert!(req.relay.is_none());
     assert!(req.discovery, "discovery is on unless switched off");
 }
@@ -33,7 +33,7 @@ fn an_exchange_that_says_nothing_still_reads() {
             pairing: None,
             expires_in_s: None,
             device: None,
-            mcp_allowed: false,
+            mcp_servers: Vec::new(),
             already_up: false,
         }
     );
@@ -83,13 +83,13 @@ fn keep_identity_is_off_the_wire_and_an_older_body_that_sends_it_still_reads() {
 
     for flag in ["true", "false"] {
         let body: RemoteEnableBody = serde_json::from_str(&format!(
-            r#"{{"allow_mcp":true,"discovery":false,"keep_identity":{flag}}}"#
+            r#"{{"mcp_servers":["tavily"],"discovery":false,"keep_identity":{flag}}}"#
         ))
         .expect("a body from an older client still deserialises");
         assert_eq!(
             body,
             RemoteEnableBody {
-                allow_mcp: true,
+                mcp_servers: vec!["tavily".to_owned()],
                 discovery: Some(false),
                 ..RemoteEnableBody::default()
             },
@@ -98,22 +98,40 @@ fn keep_identity_is_off_the_wire_and_an_older_body_that_sends_it_still_reads() {
     }
 }
 
-/// A body written before the flag existed, and one written after it is gone.
+/// A body from a client that still sends the old switch reads, and the
+/// switch opens nothing: it was every server, and no list says which.
 #[test]
-fn a_body_without_the_flag_is_unremarkable() {
+fn an_older_clients_allow_mcp_is_ignored_and_opens_nothing() {
+    for flag in ["true", "false"] {
+        let body: RemoteEnableBody =
+            serde_json::from_str(&format!(r#"{{"allow_mcp":{flag},"discovery":true}}"#))
+                .expect("a body from an older client still deserialises");
+        let req = body.into_request();
+        assert!(req.discovery);
+        assert!(
+            req.mcp_servers.is_empty(),
+            "allow_mcp={flag} opened {:?}",
+            req.mcp_servers
+        );
+    }
+}
+
+/// Each name is trimmed and named once, in the order first named; one that
+/// trims to nothing is kept, for the daemon to refuse rather than to drop.
+#[test]
+fn the_names_are_trimmed_and_deduplicated_in_order() {
     let body: RemoteEnableBody =
-        serde_json::from_str(r#"{"allow_mcp":false,"discovery":true}"#).unwrap();
-    let req = body.into_request();
-    assert!(req.discovery);
-    assert!(!req.allow_mcp);
+        serde_json::from_str(r#"{"mcp_servers":[" tavily ","fs","tavily","","  ","fs "]}"#)
+            .unwrap();
+    assert_eq!(body.into_request().mcp_servers, ["tavily", "fs", ""]);
 }
 
 #[test]
 fn discovery_off_is_carried_through() {
     let body: RemoteEnableBody =
-        serde_json::from_str(r#"{"allow_mcp":true,"discovery":false}"#).unwrap();
+        serde_json::from_str(r#"{"mcp_servers":["tavily"],"discovery":false}"#).unwrap();
     let req = body.into_request();
-    assert!(req.allow_mcp);
+    assert_eq!(req.mcp_servers, ["tavily"]);
     assert!(!req.discovery);
 }
 
@@ -133,7 +151,7 @@ fn enable_answer(device: Option<&str>) -> serde_json::Value {
         "code": "483920",
         "pairing": "pipeadlvvgabqkyqvn6vjp7nhslea45a5yls6pnkmizfv4bbu2hxa5iruaaauhlp2na-483920",
         "expires_in_s": 120,
-        "mcp_allowed": false,
+        "mcp_servers": [],
         "already_up": false,
     });
     if let Some(device) = device {

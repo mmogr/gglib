@@ -3,7 +3,6 @@
 
 use tracing::warn;
 
-use super::gateway::RemoteGateway;
 use super::wire::{RemotePeer, RemoteStatus};
 use super::{Live, RemoteOps, connect_watch, device_keys, device_view, identity, stored_pairing};
 
@@ -64,7 +63,7 @@ impl RemoteOps {
             enabled: live.full().is_some(),
             pairing_active: self.gateway.pairing.active(),
             paired: self.gateway.paired(),
-            mcp_allowed: self.gateway.mcp_allowed_now(),
+            mcp_servers: self.gateway.mcp_servers().to_vec(),
             tunnelled_requests: self.gateway.tunnelled_requests(),
             last_tunnelled_ms: self.gateway.last_tunnelled_ms(),
             last_peer: self.gateway.last_peer(),
@@ -89,14 +88,6 @@ impl RemoteOps {
                 .collect();
         }
         status
-    }
-}
-
-impl RemoteGateway {
-    /// [`RemoteGatewayPort::mcp_allowed`](gglib_core::ports::RemoteGatewayPort::mcp_allowed),
-    /// reachable without importing the trait.
-    fn mcp_allowed_now(&self) -> bool {
-        gglib_core::ports::RemoteGatewayPort::mcp_allowed(self)
     }
 }
 

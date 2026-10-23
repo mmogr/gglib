@@ -82,7 +82,7 @@ async fn an_enable_that_cannot_bring_the_tunnel_up_leaves_no_key_on_the_local_pr
 
     let error = ops
         .enable(EnableRequest {
-            allow_mcp: false,
+            mcp_servers: Vec::new(),
             // Refused by modelpipe's first and cheapest check.
             relay: Some("not a relay url".to_owned()),
             discovery: false,
@@ -116,7 +116,7 @@ async fn a_failed_enable_arms_no_pairing_and_announces_nothing() {
     let (_core, proxy, events, ops) = ops().await;
 
     ops.enable(EnableRequest {
-        allow_mcp: true,
+        mcp_servers: vec!["tavily".to_owned()],
         relay: Some("not a relay url".to_owned()),
         discovery: false,
         invite: false,
@@ -128,8 +128,8 @@ async fn a_failed_enable_arms_no_pairing_and_announces_nothing() {
     assert!(!status.enabled, "nothing is live");
     assert!(!status.pairing_active, "and no code is redeemable");
     assert!(
-        !status.mcp_allowed,
-        "least of all the /mcp grant this enable asked for"
+        status.mcp_servers.is_empty(),
+        "least of all the MCP server this enable asked to open"
     );
     assert!(
         events.events().is_empty(),
@@ -150,7 +150,7 @@ async fn a_failed_enable_leaves_the_next_one_free_to_run() {
     for _ in 0..2 {
         let error = ops
             .enable(EnableRequest {
-                allow_mcp: false,
+                mcp_servers: Vec::new(),
                 relay: Some("not a relay url".to_owned()),
                 discovery: false,
                 invite: false,
@@ -198,8 +198,8 @@ async fn a_machine_that_was_never_enabled_does_not_resume() {
 ///
 /// `enable` writes both together, so this is a hand-edited or half-migrated
 /// database rather than anything the code produces. Arming anyway would pick
-/// defaults, and the default for `--allow-mcp` is off while the machine's
-/// last real answer might have been on: guessing the security posture of a
+/// defaults, and the default for `--allow-mcp` opens nothing while the
+/// machine's last real answer might have named a server: guessing the security posture of a
 /// tunnel is worse than not arming it.
 #[tokio::test]
 async fn the_switch_without_the_flags_does_not_arm() {

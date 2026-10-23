@@ -170,13 +170,13 @@ pub enum RemoteCommand {
     /// puts the API key on the local proxy, and disabling does not take
     /// that away.
     Enable {
-        /// Let requests arriving through the tunnel reach /mcp
+        /// Let paired devices' chats use this MCP server's tools; repeat for more
         ///
-        /// Off by default: `invoke_tool` starts the MCP servers configured on
-        /// this machine, and a leaked key with a shell server configured is
-        /// remote code execution.
-        #[arg(long)]
-        allow_mcp: bool,
+        /// None by default: a named server is started for a device's run, and
+        /// a leaked key with a shell server named is remote code execution.
+        /// /mcp itself is never reachable through the tunnel.
+        #[arg(long = "allow-mcp", value_name = "SERVER")]
+        allow_mcp: Vec<String>,
         /// Self-hosted relay URL (default: iroh's public relays)
         #[arg(long)]
         relay: Option<String>,

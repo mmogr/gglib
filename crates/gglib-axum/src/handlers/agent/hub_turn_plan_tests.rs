@@ -3,7 +3,6 @@
 
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::chat::{ConversationSettings, MessageRole, NewMessage};
-use gglib_core::ports::RemoteGatewayPort as _;
 
 use super::hub_turn_tests::{chat, turn};
 use super::{plan, tools_of};
@@ -51,77 +50,31 @@ async fn the_history_is_the_prompt_the_rows_and_the_new_message() {
     );
 }
 
-/// A device's turn calls no tool while the tunnel's owner keeps the tunnel
-/// closed to this machine's MCP tools, which it is until `enable
-/// --allow-mcp`: not even the tools the chat names.
+/// A device's turn calls no MCP tool whatever its chat names, by a
+/// qualified name or a bare one, and with Draw only the image tool.
 #[tokio::test]
-async fn a_device_turn_calls_no_tool_while_the_tunnel_is_closed_to_them() {
+async fn a_device_turn_calls_no_mcp_tool_whatever_its_chat_names() {
     let (_dir, state) = state().await;
     let named = ConversationSettings {
         max_iterations: Some(4),
-        tools: vec!["fs:read_file".to_owned()],
+        tools: vec!["fs:read_file".to_owned(), "search".to_owned()],
         ..ConversationSettings::default()
     };
     let named = chat(&state, Some(named)).await;
-    assert!(!state.remote.gateway().mcp_allowed(), "closed by default");
     let plan = plan(&state, turn(named, "second")).await.unwrap();
     assert_eq!(plan.chat.tool_filter, Some(Vec::new()));
     assert_eq!(plan.chat.config.and_then(|c| c.max_iterations), Some(4));
 }
 
-/// With the tunnel open to them, only the tools the chat names: none when
-/// it names none or turned them off, never every tool.
+/// Draw adds exactly the image tool's qualified name, and nothing without it.
 #[test]
-fn with_the_tunnel_open_a_device_turn_may_call_only_the_tools_the_chat_names() {
-    let named = ConversationSettings {
-        tools: vec!["fs:read_file".to_owned()],
-        ..ConversationSettings::default()
-    };
-    let off = ConversationSettings {
-        no_tools: Some(true),
-        ..named.clone()
-    };
-    let read_file = vec!["fs:read_file".to_owned()];
-    assert_eq!(tools_of(&named, true, false), read_file);
-    assert_eq!(tools_of(&named, false, false), Vec::<String>::new());
-    assert_eq!(
-        tools_of(&ConversationSettings::default(), true, false),
-        Vec::<String>::new()
-    );
-    assert_eq!(tools_of(&off, true, false), Vec::<String>::new());
-}
-
-/// Draw adds exactly the image tool's qualified name, whatever the tunnel's
-/// switch and the chat's `no_tools` say, and nothing without it: every cell
-/// of tunnel open or closed, tools on or off, drawn or not.
-#[test]
-fn draw_adds_exactly_the_qualified_image_tool_in_every_case() {
-    let named = ConversationSettings {
-        tools: vec!["fs:read_file".to_owned()],
-        ..ConversationSettings::default()
-    };
-    let off = ConversationSettings {
-        no_tools: Some(true),
-        ..named.clone()
-    };
-    let draw = "builtin:generate_image".to_owned();
-    let read_file = "fs:read_file".to_owned();
-    for (settings, mcp_allowed, mcp) in [
-        (&named, true, vec![read_file]),
-        (&named, false, Vec::new()),
-        (&off, true, Vec::new()),
-        (&off, false, Vec::new()),
-    ] {
-        assert_eq!(tools_of(settings, mcp_allowed, false), mcp);
-        let mut drawn = mcp.clone();
-        drawn.push(draw.clone());
-        assert_eq!(tools_of(settings, mcp_allowed, true), drawn);
-    }
+fn draw_adds_exactly_the_qualified_image_tool() {
+    assert_eq!(tools_of(false), Vec::<String>::new());
+    assert_eq!(tools_of(true), ["builtin:generate_image"]);
 }
 
 /// An MCP server's tool that happens to be called `generate_image` is not
-/// reachable by a device's draw turn while the tunnel is closed to MCP
-/// tools: the filter such a turn runs under lists the builtin and refuses
+/// reachable by a device's draw turn: the filter such a turn runs under lists the builtin and refuses
 /// the other, listed or called.
 #[tokio::test]
 async fn a_draw_turn_never_reaches_an_mcp_tool_named_generate_image() {
@@ -153,11 +106,7 @@ async fn a_draw_turn_never_reaches_an_mcp_tool_named_generate_image() {
         }
     }
 
-    let named = ConversationSettings {
-        tools: vec!["read_file".to_owned()],
-        ..ConversationSettings::default()
-    };
-    let filter = tools_of(&named, false, true).into_iter().collect();
+    let filter = tools_of(true).into_iter().collect();
     let tools = FilteredToolExecutor::new(Arc::new(Both), filter);
 
     let listed: Vec<String> = tools
@@ -179,7 +128,7 @@ async fn a_draw_turn_never_reaches_an_mcp_tool_named_generate_image() {
         assert!(
             theirs.map_or(true, |result| !result.success
                 && !result.content.contains("ran ")),
-            "the MCP server's tool ran for a device without --allow-mcp"
+            "the MCP server's tool ran for a device's draw turn"
         );
     }
     let ours = tools

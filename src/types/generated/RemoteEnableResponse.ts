@@ -33,20 +33,20 @@ expires_in_s?: number,
  */
 device?: string, 
 /**
- * Whether tunnelled requests may reach `/mcp` on the session this call
- * ended up talking about — which is not always the one the caller asked
- * for. An `--invite` against a tunnel that is already up leaves the
- * flags alone, so a surface that echoed the request back would state a
- * grant the daemon did not make.
+ * The MCP servers the session this call ended up talking about opens to
+ * its paired devices — which is not always what the caller asked for.
+ * An `--invite` against a tunnel that is already up leaves the flags
+ * alone, so a surface that echoed the request back would state a grant
+ * the daemon did not make.
  */
-mcp_allowed: boolean, 
+mcp_servers: Array<string>, 
 /**
  * Whether the tunnel was already up and this answered from that session
  * rather than arming one — true for every `invite`, for an `enable` with
  * `invite` set that found one running, and for an `enable` that waited
  * while the daemon's own resume brought one back, which carries no code
  * unless `invite` was set. The request's other flags were ignored on
- * that path, and a surface cannot infer it: only "asked for `/mcp`, told
- * no" shows in the rest of the answer.
+ * that path, and a surface cannot infer it: only "named servers, told
+ * others" shows in the rest of the answer.
  */
 already_up: boolean, };

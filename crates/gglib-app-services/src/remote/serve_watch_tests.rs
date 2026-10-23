@@ -81,7 +81,7 @@ pub(super) async fn arming() -> tokio::sync::MutexGuard<'static, ()> {
 /// back a ticket without contacting anything.
 pub(super) const fn offline() -> EnableRequest {
     EnableRequest {
-        allow_mcp: false,
+        mcp_servers: Vec::new(),
         relay: None,
         discovery: false,
         invite: false,

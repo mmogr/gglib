@@ -22,7 +22,7 @@ pub(super) fn offer(pairing: &str, device: Option<&str>) -> RemoteEnableResponse
         "code": "483920",
         "pairing": pairing,
         "expires_in_s": 120,
-        "mcp_allowed": false,
+        "mcp_servers": [],
     });
     if let Some(device) = device {
         answer["device"] = device.into();

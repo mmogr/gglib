@@ -12,7 +12,7 @@
 //!         (route match)
 //!           bearer_guard   the protected group only
 //!             device_gate  the protected group: tunnelled ⇒ names a device
-//!               mcp_tunnel_guard   /mcp only: tunnelled ⇒ needs --allow-mcp
+//!               mcp_tunnel_guard   /mcp only: tunnelled ⇒ refused, always
 //!               named_device_only  /v1/chats and /v1/attachments: a named
 //!                                  device, never local
 //!                 handler
@@ -40,16 +40,12 @@ use crate::server::{
 /// Assemble the router over a built [`AppState`].
 pub(crate) fn build(state: AppState, access: &ProxyAccessConfig) -> Router {
     // `/mcp` carries one guard of its own. A request that arrived through the
-    // tunnel may not reach it unless the tunnel's owner said so, because
-    // `invoke_tool` starts the MCP servers configured on this machine — a
-    // leaked token with a shell server configured is remote code execution,
-    // not free inference (ADR 0012).
+    // tunnel never reaches it, because `invoke_tool` starts any MCP server
+    // configured on this machine — a leaked token with a shell server
+    // configured is remote code execution, not free inference (ADR 0012).
     let mcp = Router::new()
         .route("/mcp", post(post_mcp).get(get_mcp).delete(delete_mcp))
-        .route_layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            crate::remote::mcp_tunnel_guard,
-        ));
+        .route_layer(axum::middleware::from_fn(crate::remote::mcp_tunnel_guard));
 
     // The hub's chats and their images, for a paired device only: this
     // machine reads them at `/api`, and a key-holder on a LAN bind must not

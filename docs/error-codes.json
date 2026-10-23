@@ -204,7 +204,7 @@
       "code": "mcp_not_allowed_over_tunnel",
       "type": "invalid_request_error",
       "status": 403,
-      "meaning": "This machine does not open its MCP gateway to the tunnel."
+      "meaning": "The MCP gateway is never reachable through the tunnel."
     },
     {
       "code": "device_not_named",

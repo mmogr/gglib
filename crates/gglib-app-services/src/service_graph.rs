@@ -220,9 +220,9 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
     }));
 
     // The tunnel's gateway is handed to the proxy here, before anything can
-    // start one, so every proxy this daemon runs can redeem a pairing code
-    // and gate `/mcp` for tunnelled requests — whether or not the tunnel is
-    // ever enabled.
+    // start one, so every proxy this daemon runs can tell it of each
+    // tunnelled request, whether or not the tunnel is ever enabled. `/mcp`
+    // asks it nothing: no tunnelled request reaches `/mcp`.
     let remote_gateway = Arc::new(RemoteGateway::new(Arc::clone(&emitter)));
     proxy.bind_remote_gateway(Arc::clone(&remote_gateway) as Arc<dyn RemoteGatewayPort>);
     let remote = Arc::new(RemoteOps::new(

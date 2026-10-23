@@ -8,7 +8,7 @@
 //! reaches the proxy.
 
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use gglib_core::ports::RemoteGatewayPort;
 use reqwest::RequestBuilder;
@@ -24,7 +24,6 @@ pub(crate) fn from_device(request: RequestBuilder) -> RequestBuilder {
 
 /// The stub. Fields are read by the tests; the port methods write them.
 pub(crate) struct StubGateway {
-    mcp_allowed: AtomicBool,
     /// Every request the proxy reported as tunnelled.
     pub(crate) tunnelled: AtomicUsize,
     /// The peer fingerprint on the most recent tunnelled request.
@@ -35,9 +34,8 @@ pub(crate) struct StubGateway {
 }
 
 impl StubGateway {
-    pub(crate) fn new(mcp_allowed: bool) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            mcp_allowed: AtomicBool::new(mcp_allowed),
             tunnelled: AtomicUsize::new(0),
             last_peer: Mutex::new(None),
             last_device: Mutex::new(None),
@@ -52,10 +50,6 @@ impl std::fmt::Debug for StubGateway {
 }
 
 impl RemoteGatewayPort for StubGateway {
-    fn mcp_allowed(&self) -> bool {
-        self.mcp_allowed.load(Ordering::SeqCst)
-    }
-
     fn note_tunnelled_request(&self, peer: Option<&str>, device: Option<&str>) {
         self.tunnelled.fetch_add(1, Ordering::SeqCst);
         *self.last_peer.lock().unwrap() = peer.map(str::to_owned);

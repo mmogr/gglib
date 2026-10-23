@@ -4,9 +4,9 @@ import { useRemoteState } from '../../services/remoteRegistry';
 import { refreshRemoteStatus } from '../../services/remoteEvents';
 import { formatError } from '../../utils/errors';
 import { Button } from '../ui/Button';
-import { Checkbox } from '../ui/Checkbox';
 import { Label, Stack } from '../primitives';
 import { ProxyStatusPill } from '../proxy';
+import { McpServerPicker } from './McpServerPicker';
 import { PairingReveal } from './PairingReveal';
 import type { Pairing } from './PairingReveal';
 
@@ -21,9 +21,9 @@ interface ServeSectionProps {
  * it also offers a pairing — so a first run is one action — shown once in a
  * `PairingReveal` that leaves when a device pairs or the code expires.
  * `Invite` shows the same reveal for one more device, against a tunnel that
- * is already up, and changes nothing else about the session. The `/mcp` grant
- * is a checkbox that defaults off, because a leaked key with a shell MCP
- * server configured is remote code execution (ADR 0012).
+ * is already up, and changes nothing else about the session. The MCP servers
+ * a device's chats may use are ticked by name, none by default, because a
+ * leaked key with a shell server open is remote code execution (ADR 0012).
  *
  * The reveal's lifecycle carries both: it drops on a `paired` transition, and
  * `paired` is per *code* rather than per session, so a second invite clears it
@@ -33,7 +33,7 @@ interface ServeSectionProps {
  */
 export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
   const { status } = useRemoteState();
-  const [allowMcp, setAllowMcp] = useState(false);
+  const [mcpServers, setMcpServers] = useState<string[]>([]);
   // Which action is in flight, not merely that one is: with a single
   // boolean, clicking Invite relabelled Disable as "Stopping…".
   const [busy, setBusy] = useState<'enable' | 'invite' | 'disable' | null>(null);
@@ -120,7 +120,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
       // joined. After that, adding a device is Invite.
       const firstDevice = !anyJoined;
       const answer = await getTransport().enableRemote({
-        allow_mcp: allowMcp,
+        mcp_servers: mcpServers,
         invite: firstDevice,
       });
       // Present together or not at all; the daemon sends all three or none.
@@ -139,13 +139,18 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
       // while this waited, since Enable is shown only when the last status
       // read had nothing up. This
       // click switched nothing on, so the key notice is not its to give, and
-      // a /mcp box that session did not honour says so, as the CLI does.
-      const ignoredMcp = answer.already_up && allowMcp && !answer.mcp_allowed;
+      // servers ticked that the session does not open say so, as the CLI does.
+      // `?? []`: a daemon from before the list sends none.
+      const opened = new Set(answer.mcp_servers ?? []);
+      const ignoredMcp =
+        answer.already_up &&
+        mcpServers.length > 0 &&
+        (opened.size !== mcpServers.length || mcpServers.some((name) => !opened.has(name)));
       onNotice(
         answer.already_up
           ? `Remote access was already coming back up, and is on now.${
               ignoredMcp
-                ? ' The /mcp box did not take: that session keeps its own grant; disable and enable again to change it.'
+                ? ' The MCP servers ticked did not take: that session keeps its own; disable and enable again to change them.'
                 : ''
             }`
           : 'Remote access is on. The local proxy now requires the API key too.',
@@ -239,8 +244,8 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
                 ? status.peers.map((p) => `${p.fingerprint} (${p.path})`).join(', ')
                 : 'none connected'}
             </dd>
-            <dt className="text-text-muted">/mcp</dt>
-            <dd className="m-0">{status?.mcp_allowed ? 'reachable through the tunnel' : 'not reachable'}</dd>
+            <dt className="text-text-muted">MCP servers</dt>
+            <dd className="m-0">{status?.mcp_servers?.length ? status.mcp_servers.join(', ') : 'none'}</dd>
           </dl>
           <Button
             variant="secondary"
@@ -265,12 +270,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
         </Stack>
       ) : (
         <Stack gap="sm">
-          <Checkbox
-            checked={allowMcp}
-            onChange={(e) => setAllowMcp(e.target.checked)}
-            label="Let the other machine reach /mcp"
-            description="Off by default: a leaked key with a shell MCP server configured is remote code execution."
-          />
+          <McpServerPicker value={mcpServers} onChange={setMcpServers} />
           <Button
             variant="primary"
             className="w-full"

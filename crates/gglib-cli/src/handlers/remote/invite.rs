@@ -30,7 +30,7 @@ pub(crate) async fn invite(ctx: &CliContext, no_qr: bool) -> Result<()> {
 
     if no_qr || !std::io::stdout().is_terminal() {
         print_plain(&offered);
-        print_notice(offered.mcp_allowed, Arming::Invite);
+        print_notice(&offered.mcp_servers, Arming::Invite);
         return Ok(());
     }
 
@@ -67,7 +67,7 @@ pub(crate) async fn invite(ctx: &CliContext, no_qr: bool) -> Result<()> {
             eprintln!("  Left the pairing screen. The tunnel is still up; nothing was retired.");
         }
     }
-    print_notice(offered.mcp_allowed, Arming::Invite);
+    print_notice(&offered.mcp_servers, Arming::Invite);
     Ok(())
 }
 
