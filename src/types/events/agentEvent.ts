@@ -39,6 +39,8 @@ export interface AgentToolCallStartEvent {
   display_name: string;
   /** Optional one-line argument summary (e.g. a file path). */
   args_summary?: string;
+  /** Name of the MCP server the tool belongs to; absent for gglib's own tools. */
+  server?: string;
 }
 
 /** A tool execution has completed (success or failure). */

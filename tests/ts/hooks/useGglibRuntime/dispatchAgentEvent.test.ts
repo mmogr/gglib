@@ -144,6 +144,7 @@ describe('dispatchAgentEvent — tool_call_start', () => {
         type: 'tool_call_start',
         tool_call: { id: 'tc-1', name: 'search', arguments: { q: 'test' } },
         display_name: 'Search',
+        server: 'Tavily Web Search',
       },
       state,
       deps,
@@ -158,6 +159,7 @@ describe('dispatchAgentEvent — tool_call_start', () => {
       toolName: 'search',
       args: { q: 'test' },
       displayName: 'Search',
+      server: 'Tavily Web Search',
     });
   });
 });

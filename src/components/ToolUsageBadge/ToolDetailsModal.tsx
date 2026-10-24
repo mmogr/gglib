@@ -22,6 +22,8 @@ type AugmentedToolCallPart = ToolCallPart & {
   durationMs?: number;
   /** Pre-computed display name from the backend (e.g. "Read File"). */
   displayName?: string;
+  /** The MCP server the tool belongs to; absent for gglib's own tools. */
+  server?: string;
 };
 
 interface ToolDetailsModalProps {
@@ -111,7 +113,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
 
           const formattedArgs = JSON.stringify(call.args, null, 2);
           const result = 'result' in call ? call.result : null;
-          const durationMs = (call as AugmentedToolCallPart).durationMs;
+          const { durationMs, server } = call as AugmentedToolCallPart;
 
           const StatusIcon = getStatusIcon(call);
 
@@ -128,6 +130,7 @@ const ToolDetailsModal: React.FC<ToolDetailsModalProps> = ({ toolCalls, isOpen =
                 </span>
                 <span className="font-semibold text-text">{formatToolName(call)}</span>
                 <span className="text-sm text-text-secondary font-mono">({call.toolName})</span>
+                {server && <span className="text-sm text-text-secondary">on {server}</span>}
                 {durationMs !== undefined && (
                   <span className="ml-auto text-sm text-text-muted font-mono">
                     {durationMs < 1000

@@ -151,7 +151,12 @@ export function setFullText(
 // Tool calls
 // ---------------------------------------------------------------------------
 
-/** Add a pending (no result yet) tool-call part. */
+/**
+ * Add a pending (no result yet) tool-call part, with the MCP server the
+ * tool belongs to when the start names one. Like `displayName`, `server` is
+ * live only: when the run ends, and on reload, the page shows the saved
+ * rows, which do not keep it.
+ */
 export function addToolCallPart(
   setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,
   messageId: string,
@@ -159,6 +164,7 @@ export function addToolCallPart(
   toolName: string,
   toolArgs: unknown,
   displayName?: string,
+  server?: string,
 ): void {
   setMessages(prev =>
     prev.map(m => {
@@ -176,6 +182,7 @@ export function addToolCallPart(
             toolName,
             args: typeof toolArgs === 'object' ? toolArgs : {},
             ...(displayName ? { displayName } : {}),
+            ...(server ? { server } : {}),
           },
         ] as GglibContent,
       };
