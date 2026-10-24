@@ -964,8 +964,8 @@ at the first daemon start a day or more later, since no chat there links
 them. Nothing is saved to any
 chat on the desktop: the device keeps the conversation and reads the reply
 from the run. That run's listing says `"frames": "agent"`: its events are
-the agent loop's (`tool_progress`, `waiting`, `tool_call_complete` with its
-images), not OpenAI chunks, and a run without the key is read as OpenAI's.
+the agent loop's (`tool_progress`, `waiting`, `tool_call_writing` while the
+model writes a call, `tool_call_complete` with its images), not OpenAI chunks, and a run without the key is read as OpenAI's.
 A `tool_call_start` frame for an MCP server's tool names that server,
 `"server": "Tavily Web Search"`; one for gglib's own tool has no `server`
 key.

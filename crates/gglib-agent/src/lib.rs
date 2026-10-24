@@ -1,6 +1,7 @@
 #![doc = include_str!(concat!(env!("OUT_DIR"), "/README_GENERATED.md"))]
 
 pub(crate) mod agent_loop;
+pub(crate) mod call_writing;
 pub(crate) mod context_pruning;
 pub(crate) mod cut_off;
 pub(crate) mod guards;

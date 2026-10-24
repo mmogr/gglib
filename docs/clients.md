@@ -260,6 +260,37 @@ keeps them in its `metadata` as `contextSize`, `trimmedMessages` and
 `finishReason`, each only when the turn had it, so a chat opened later reads
 the same figures as one watched live.
 
+## A tool call being written
+
+An agent run streams the model's text and thinking as they come, but a tool
+call arrives in pieces that gglib keeps until the reply ends, so a reply
+spent writing a long call would show nothing. While one is written the run
+sends `tool_call_writing`:
+
+```json
+{"type":"tool_call_writing","tool_name":"builtin:generate_image","display_name":"Generate Image","tokens":512}
+```
+
+- `tool_name` is the tool as the call names it, and `display_name` the name
+  to show a person.
+- `tokens` is how many pieces of the reply's calls have streamed so far.
+  llama-server streams a call about one token a piece, so it is close to the
+  tokens the calls have taken.
+
+The first piece that names a tool sends one at once, then at most one a
+second until the reply ends; the call's `tool_call_start` follows when it
+runs. A reply cut off at its token limit while it writes a call sends no
+`tool_call_start`: the run ends `failed`, `turn_too_long`, except in the
+words after a demanded call that has run, which keep that call's work and
+say they were cut off. A client that
+does not read the type can skip it.
+
+That is so where llama-server streams the call itself. On a model whose
+calls come as text markup (one with a dialect spec, see
+[tags.md](tags.md)), gglib holds the markup back until the call is complete
+and releases it whole, so `tool_call_writing` comes once, at the end, with a
+small `tokens`, and nothing comes while the markup streams.
+
 ## Error codes
 
 Every error code gglib's proxy writes, in a refusal, in a stream's error frame

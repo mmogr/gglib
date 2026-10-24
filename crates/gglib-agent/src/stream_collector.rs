@@ -3,7 +3,8 @@
 //! Consumes a [`LlmCompletionPort`](gglib_core::ports::LlmCompletionPort)
 //! stream, forwarding text deltas and reasoning deltas to the caller's
 //! [`AgentEvent`] channel **as they arrive** and accumulating incremental
-//! tool-call deltas in memory until the stream terminates.
+//! tool-call deltas in memory until the stream terminates, while reporting
+//! how far those calls have got ([`AgentEvent::ToolCallWriting`]).
 //!
 //! Reasoning deltas ([`LlmStreamEvent::ReasoningDelta`]) are forwarded live
 //! as [`AgentEvent::ReasoningDelta`] and accumulated in a separate buffer; they
@@ -23,8 +24,10 @@ use futures_util::StreamExt as _;
 use gglib_core::normalize::NormalizationErrorKind;
 use gglib_core::{AgentEvent, LlmStreamEvent, ToolCall};
 use tokio::sync::mpsc;
+use tokio::time::Instant;
 use tracing::warn;
 
+use crate::call_writing::CallWritingReports;
 use crate::cut_off::CUT_OFF;
 use crate::util::emit_error_event;
 
@@ -150,7 +153,8 @@ struct PartialToolCall {
 ///   immediately sends [`AgentEvent::TextDelta`] on `tx`.  Send failures are
 ///   ignored (the receiver may have dropped if the client disconnected).
 /// - [`LlmStreamEvent::ToolCallDelta`] — upserts into a `Vec<PartialToolCall>`
-///   keyed by `index`, extending the `arguments` string.
+///   keyed by `index`, extending the `arguments` string, and reports the
+///   calls' progress as [`AgentEvent::ToolCallWriting`] (`call_writing`).
 /// - [`LlmStreamEvent::Done`] — assembles the partials into [`ToolCall`]s
 ///   (parsing the accumulated arguments JSON string into `serde_json::Value`).
 ///   Returns the completed [`CollectedResponse`]. A turn cut off at its token
@@ -193,6 +197,7 @@ pub async fn collect_stream(
     // usage chunk legitimately trails `Done` (before the byte stream closes).
     let mut finished: Option<(Option<String>, Vec<ToolCall>)> = None;
     let mut completion_tokens: Option<u32> = None;
+    let mut writing = CallWritingReports::default();
 
     while let Some(event) = stream.next().await {
         got_any_event = true;
@@ -235,6 +240,10 @@ pub async fn collect_stream(
                 wrote_a_call = true;
                 if upsert_tool_call_delta(&mut partials, index, id, name, arguments) {
                     tool_calls_truncated += 1;
+                }
+                let tool = partials.get(index).and_then(|p| p.name.as_deref());
+                if let Some(report) = writing.piece(tool, Instant::now()) {
+                    let _ = tx.send(report).await;
                 }
             }
 

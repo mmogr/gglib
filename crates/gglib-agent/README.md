@@ -34,7 +34,8 @@ This crate implements:
   `record_results` once its answers exist
 - **Parallel tool execution** — bounded concurrency with per-tool timeout
 - **Stream collection** — consumes `LlmCompletionPort` stream, forwards text
-  deltas in real-time, accumulates tool-call deltas until `Done`
+  deltas in real-time, accumulates tool-call deltas until `Done`, and reports
+  how far those calls have got as `tool_call_writing`, at most once a second
 - **Cut-off turns** — a reply the upstream cut off at its token limit
   (`finish_reason: "length"`) while it wrote a tool call, or before it wrote
   any text, ends the run with an `error` event: the call is not run and
@@ -61,6 +62,7 @@ any other infrastructure crate.  Concrete `LlmCompletionPort` and
 | Module | Responsibility |
 |--------|----------------|
 | `agent_loop` | `AgentLoop` struct + `AgentLoopPort` impl (main state machine) |
+| `call_writing` | The `tool_call_writing` reports a reply sends while its tool calls stream: the first piece that names a tool at once, then at most one a second |
 | `context_pruning` | Budget-aware message trimming, and the count of what it dropped (`Pruned`) |
 | `cut_off` | A reply cut off at its token limit (`finish_reason: "length"`): the `error` event and `TurnTooLong` that end the run on a cut call or a reply with no text (except the words after a Draw's picture, which are answered for), and the `system_warning` for cut text, which is taken as if it had stopped |
 | `guards` | The stagnation and loop detectors behind one verdict |

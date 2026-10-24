@@ -2,6 +2,7 @@
 
 use serde::Serialize;
 
+use super::tool_call_writing::ToolCallWriting;
 use super::tool_progress::{PreviewFrame, ToolStage};
 use super::tool_types::{ToolCall, ToolResult};
 use super::turn_usage::TurnUsage;
@@ -72,6 +73,9 @@ pub enum AgentEvent {
         /// Human-readable duration (e.g. "125ms", "1.5s").
         duration_display: String,
     },
+
+    /// How far the model has got writing a tool call: see [`ToolCallWriting`].
+    ToolCallWriting(ToolCallWriting),
 
     /// How far a running tool has got, from its
     /// [`ToolProgressUpdate`](super::ToolProgressUpdate). Logged like any

@@ -1,5 +1,5 @@
 crates/gglib-agent/src/agent_loop.rs 725
-crates/gglib-agent/src/stream_collector.rs 479
+crates/gglib-agent/src/stream_collector.rs 488
 crates/gglib-agent/tests/integration_cut_off.rs 406
 crates/gglib-agent/tests/integration_guards.rs 777
 crates/gglib-agent/tests/integration_happy_path.rs 421
@@ -73,7 +73,7 @@ crates/gglib-core/src/contracts/http/daemon.rs 386
 crates/gglib-core/src/contracts/http/images.rs 302
 crates/gglib-core/src/domain/admission.rs 367
 crates/gglib-core/src/domain/agent/config.rs 795
-crates/gglib-core/src/domain/agent/events.rs 388
+crates/gglib-core/src/domain/agent/events.rs 392
 crates/gglib-core/src/domain/agent/loop_detection/tests.rs 414
 crates/gglib-core/src/domain/agent/openai_history.rs 301
 crates/gglib-core/src/domain/agent/replay_tests.rs 350
