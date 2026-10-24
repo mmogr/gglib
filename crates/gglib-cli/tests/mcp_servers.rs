@@ -454,3 +454,30 @@ fn a_name_two_servers_share_is_refused_and_an_id_is_asked_for() {
         "got: {opened}"
     );
 }
+
+/// `gglib remote enable --allow-mcp` is refused, pointing at where the grant
+/// went, before any daemon is asked anything: the port it is pointed at
+/// listens to nothing, and nothing is started on it.
+#[test]
+fn remote_enable_with_allow_mcp_is_refused_with_a_pointer() {
+    let root = tempfile::tempdir().expect("temp data dir");
+    let port = closed_port();
+    let out = Command::new(env!("CARGO_BIN_EXE_gglib"))
+        .args(["remote", "enable", "--allow-mcp", "t"])
+        .env("GGLIB_DATA_DIR", root.path())
+        .env("GGLIB_DAEMON_PORT", port.to_string())
+        .stdin(Stdio::null())
+        .output()
+        .expect("running `gglib remote enable`");
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "stderr: {stderr}");
+    assert!(
+        stderr.contains("--allow-mcp is gone: run `gglib mcp allow-remote <names>`"),
+        "stderr: {stderr}"
+    );
+    assert!(
+        TcpListener::bind(("127.0.0.1", port)).is_ok(),
+        "no daemon was started on the port"
+    );
+}

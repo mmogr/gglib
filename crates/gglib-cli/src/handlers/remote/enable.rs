@@ -1,9 +1,8 @@
 //! `gglib remote enable`.
 
-use std::collections::BTreeSet;
 use std::io::IsTerminal as _;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use gglib_app_services::{RemoteEnableBody, RemoteEnableResponse};
 
 use super::pairing_tui::{self, Outcome};
@@ -13,8 +12,6 @@ use crate::daemon_client;
 /// What `gglib remote enable` was asked for.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct EnableArgs {
-    /// The MCP servers whose tools paired devices' chats may use.
-    pub allow_mcp: Vec<String>,
     /// A self-hosted relay URL.
     pub relay: Option<String>,
     /// Do not publish to or resolve through n0's discovery service.
@@ -23,6 +20,20 @@ pub(crate) struct EnableArgs {
     pub no_qr: bool,
     /// Offer a pairing code as well, so a first run is one command.
     pub invite: bool,
+}
+
+/// What `enable --allow-mcp` is answered with. The flag named the MCP servers
+/// a session opened to paired devices; each server now says so itself.
+pub(super) const ALLOW_MCP_GONE: &str = "--allow-mcp is gone: run `gglib mcp allow-remote <names>`";
+
+/// Refuse `--allow-mcp`, before the daemon is asked anything: a script that
+/// still passes it learns where the grant went, and no tunnel comes up
+/// opening less than it asked for.
+pub(super) fn refuse_allow_mcp(allow_mcp: &[String]) -> Result<()> {
+    if allow_mcp.is_empty() {
+        return Ok(());
+    }
+    bail!(ALLOW_MCP_GONE)
 }
 
 /// Execute `gglib remote enable`.
@@ -54,24 +65,8 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
     }
 
     // The daemon says whether it armed a session or answered from one that
-    // was already running; this is not inferred. Inference from `mcp_servers`
-    // would catch only "named servers and told others" and leave the commoner
-    // `enable --invite` with no flags reading as a fresh arm — which is the
-    // case that goes on to recommend `--allow-mcp`, a flag that cannot take
-    // on a session it did not arm.
+    // was already running; this is not inferred.
     let arming = if enabled.already_up {
-        // Every flag sent with this call was ignored, so say so for the one
-        // that has a visible effect and that someone passes on purpose.
-        if !took(&args.allow_mcp, &enabled.mcp_servers) {
-            eprintln!(
-                "  note: --allow-mcp did not take. Remote access was already on, and the MCP \
-                 servers a session opens"
-            );
-            eprintln!(
-                "        belong to the enable that armed it \u{2014} `gglib remote disable`, \
-                 then `enable --allow-mcp <server>`."
-            );
-        }
         // A code means `--invite` found a session to offer one on. None means
         // a plain `enable` that waited for the daemon's own resume, the only
         // way the daemon answers `already_up` without one.
@@ -175,18 +170,13 @@ fn print_up(enabled: &RemoteEnableResponse) {
 
 /// What enabling changed on *this* machine, said every time.
 ///
-/// Takes the daemon's answer rather than the flag this process sent. An
-/// `--invite` against a tunnel that is already up is answered by that
-/// session, whose MCP servers are whatever the `enable` that armed it named —
-/// so echoing the flag back would tell an operator that `--allow-mcp` took
-/// when it did not, or that no server is open when one is.
+/// Takes the daemon's answer for the MCP servers open to paired devices,
+/// which each server says itself; nothing this process sent names them.
 ///
 /// `Arming::Enable` says the switch was just thrown; `Arming::Invite` says it
 /// was already on and only a code was offered. The difference is not
-/// decoration: "the local proxy *now* requires the API key" and "pass
-/// `--allow-mcp`" are both true of a switch being thrown and both false when
-/// it was already on — where no flag changed, and recommending `--allow-mcp`
-/// is recommending what the person just did.
+/// decoration: "the local proxy *now* requires the API key" is true of a
+/// switch being thrown and false when it was already on.
 ///
 /// So `Arming::Invite` is not only `invite`'s. `enable --invite` against a
 /// tunnel that is already up is answered by that same session, and is the
@@ -206,45 +196,32 @@ pub(super) fn print_notice(servers: &[String], arming: Arming) {
         Arming::Invite => eprintln!("{INVITE_NOTICE}"),
         Arming::Resumed => eprintln!("{RESUMED_NOTICE}"),
     }
-    eprintln!("{}", mcp_notice(servers, arming));
+    eprintln!("{}", mcp_notice(servers));
     eprintln!("  Stop broadcasting:  gglib remote disable");
 }
 
 /// What `enable` asks the daemon for, from what it was asked.
 fn body_of(args: &EnableArgs) -> RemoteEnableBody {
     RemoteEnableBody {
-        mcp_servers: args.allow_mcp.clone(),
         relay: args.relay.clone(),
         discovery: Some(!args.no_discovery),
         invite: args.invite,
     }
 }
 
-/// What the closing notice says of the MCP servers the session opens.
-fn mcp_notice(servers: &[String], arming: Arming) -> String {
-    match arming {
-        _ if !servers.is_empty() => format!(
+/// What the closing notice says of the MCP servers open to paired devices,
+/// whichever command printed it: each server says so itself, and a change
+/// to one applies from a device's next run.
+fn mcp_notice(servers: &[String]) -> String {
+    if servers.is_empty() {
+        "  No MCP server is open to paired devices; `gglib mcp allow-remote <server>` opens one."
+            .to_owned()
+    } else {
+        format!(
             "  Paired devices' chats may use: {}. /mcp is never reachable through the tunnel.",
             servers.join(", ")
-        ),
-        Arming::Enable => "  No MCP server is open to paired devices; pass --allow-mcp <server> \
-             to open one."
-            .to_owned(),
-        // `invite` has no such flag: the servers belong to the session
-        // `enable` armed, and changing them means `disable` and `enable` again.
-        Arming::Invite | Arming::Resumed => "  No MCP server is open to paired devices; that is \
-             changed by `disable`, then `enable --allow-mcp <server>`. A machine enabled with \
-             the old switch comes back with none."
-            .to_owned(),
+        )
     }
-}
-
-/// Whether the servers `--allow-mcp` named, trimmed as the daemon trims
-/// them, are the set the session opens. Naming none asks for nothing.
-fn took(asked: &[String], opened: &[String]) -> bool {
-    let asked: BTreeSet<&str> = asked.iter().map(|name| name.trim()).collect();
-    let opened: BTreeSet<&str> = opened.iter().map(String::as_str).collect();
-    asked.is_empty() || asked == opened
 }
 
 /// What switching remote access on did to this machine's local proxy.
@@ -276,11 +253,10 @@ const INVITE_NOTICE: &str = "  Remote access was already on and still is; this o
 
 /// What a plain `enable` says when it was answered from the session the
 /// daemon's own resume brought back. Nothing was switched on by it and no flag
-/// took, so neither the key notice nor the advice to pass `--allow-mcp` is its
-/// to give. A constant, pinned by a test, as `INVITE_NOTICE` is.
+/// took, so the key notice is not its to give. A constant, pinned by a test,
+/// as `INVITE_NOTICE` is.
 const RESUMED_NOTICE: &str = "  Remote access was already coming back up when you asked, and is on now; \
-     this changed nothing about the session. `gglib remote disable`, then `enable`, changes its flags, \
-     the MCP servers it opens among them.";
+     this changed nothing about the session. `gglib remote disable`, then `enable`, changes its flags.";
 
 /// Which command is printing the closing notice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

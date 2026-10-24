@@ -149,7 +149,6 @@ fn a_remote_machine() -> Settings {
         remote_pairing: Some(pairing()),
         remote_enabled: Some(true),
         remote_serve: Some(RemoteServe {
-            mcp_servers: vec!["tavily".into()],
             relay: Some("https://relay.example".to_owned()),
             discovery: false,
         }),
@@ -205,6 +204,26 @@ fn a_reset_keeps_the_pairing_the_roster_and_the_remote_switch_and_flags() {
     assert_eq!(after.remote_devices, before.remote_devices);
     assert_eq!(after.remote_enabled, Some(true));
     assert_eq!(after.remote_serve, before.remote_serve);
+}
+
+/// The list of MCP servers an older build stored in the record is passed
+/// over: a server is opened to paired devices by a flag on its own row now,
+/// and the upgrade copied the list there once.
+#[test]
+fn an_older_records_mcp_servers_are_passed_over() {
+    let read: RemoteServe =
+        serde_json::from_str(r#"{"mcpServers":["tavily"],"relay":null,"discovery":false}"#)
+            .expect("an older record still reads");
+
+    assert_eq!(
+        read,
+        RemoteServe {
+            relay: None,
+            discovery: false,
+        }
+    );
+    let written = serde_json::to_value(&read).expect("serialise");
+    assert!(written.get("mcpServers").is_none(), "{written}");
 }
 
 #[test]

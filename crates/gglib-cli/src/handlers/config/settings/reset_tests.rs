@@ -54,14 +54,14 @@ async fn store(dir: &tempfile::TempDir) -> Arc<dyn SettingsRepository> {
 }
 
 /// A machine that joined another, admits one device, serves remote access
-/// with an MCP server open, holds a proxy key, and has moved one preference.
+/// through its own relay, holds a proxy key, and has moved one preference.
 async fn seed(repo: &dyn SettingsRepository) {
     repo.modify(&|settings: &mut Settings| {
         settings.proxy_api_key = Some("proxy-key".to_owned());
         settings.remote_pairing = Some(pairing());
         settings.remote_enabled = Some(true);
         settings.remote_serve = Some(RemoteServe {
-            mcp_servers: vec!["tavily".to_owned()],
+            relay: Some("https://relay.example".to_owned()),
             ..RemoteServe::default()
         });
         settings.remote_devices = Some(vec![device("dev-0a1b2c3d")]);
@@ -104,7 +104,7 @@ async fn a_reset_keeps_the_remote_record_and_the_proxy_key_in_the_store() {
     assert!(
         stored
             .remote_serve
-            .is_some_and(|serve| serve.mcp_servers == ["tavily"])
+            .is_some_and(|serve| serve.relay.as_deref() == Some("https://relay.example"))
     );
     assert_eq!(stored.remote_devices, Some(vec![device("dev-0a1b2c3d")]));
 }

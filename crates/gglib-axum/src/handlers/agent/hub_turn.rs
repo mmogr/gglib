@@ -12,7 +12,7 @@
 //! iteration limit they do not name from this machine's settings, as it
 //! does for the page), and with thinking off
 //! when the turn says so or the chat remembers it (`thinking`). It calls no
-//! MCP tool but those of the servers the tunnel opens (ADR 0024), narrowed by
+//! MCP tool but those of the servers open to devices (ADR 0025), narrowed by
 //! the tools the chat's settings name (`device_tools`), the image tool with
 //! `draw`, and never gglib's own file tools: a device's turn has no
 //! folder. The reply runs on the chat's
@@ -189,9 +189,9 @@ pub(super) async fn start(
 }
 
 /// What a run on `model` does once it exists: find the model on its port
-/// or load it, settle the tools it is offered as `asked` (starting a named
-/// MCP server that is not running), then hold the model and compose `chat`'s
-/// loop ([`held_for_device`]).
+/// or load it, settle the tools it is offered as `asked` (starting an MCP
+/// server open to devices that is not running), then hold the model and
+/// compose `chat`'s loop ([`held_for_device`]).
 pub(super) fn late_on(
     state: AppState,
     model: String,
@@ -200,8 +200,8 @@ pub(super) fn late_on(
 ) -> LatePrepare {
     Box::new(move |loading| {
         Box::pin(async move {
-            let mut chat = on_model(&state, &model, chat, &loading).await?;
-            chat.tool_filter = Some(device_tools::resolve(&state, &asked).await);
+            let chat = on_model(&state, &model, chat, &loading).await?;
+            let chat = device_tools::settle(&state, chat, &asked).await;
             let upstream = remote_upstream::resolve(&state, &chat).await;
             let upstream = upstream.map_err(with_code)?;
             held_for_device(&state, chat, upstream)
@@ -215,7 +215,7 @@ pub(super) fn late_on(
 /// and the loop composed with no folder, whatever folder its chat
 /// remembers. A folder is this machine's page's choice, and a device's turn
 /// reaches no tool of this machine's but the image tool its Draw asks for
-/// and the tools of the servers the tunnel opens (ADR 0024), which name no
+/// and the tools of the servers open to devices (ADR 0025), which name no
 /// file tool.
 ///
 /// # Errors
@@ -268,7 +268,7 @@ pub(super) struct Plan {
 }
 
 /// Read `turn` against the chat it names. Its tool filter is the floor
-/// (`Asked::floor`) until the run starts and the servers the tunnel opens
+/// (`Asked::floor`) until the run starts and the servers open to devices
 /// are read: nothing is started for a `PUT` that is then refused.
 pub(super) async fn plan(state: &AppState, turn: HubTurn) -> Result<Plan, HttpError> {
     let said = !turn.content.trim().is_empty() || !turn.images.is_empty();

@@ -37,7 +37,7 @@ async fn raw(pool: &SqlitePool, key: &str) -> Option<String> {
 }
 
 /// The pairing, roster, remote and proxy-key rows of a machine that joined
-/// another, serves remote access with MCP on and admits one device, as the
+/// another, serves remote access through its own relay and admits one device, as the
 /// store writes them.
 fn kept_rows() -> Vec<(&'static str, String)> {
     let settings = Settings {
@@ -51,7 +51,7 @@ fn kept_rows() -> Vec<(&'static str, String)> {
         }),
         remote_enabled: Some(true),
         remote_serve: Some(RemoteServe {
-            mcp_servers: vec!["tavily".to_owned()],
+            relay: Some("https://relay.example".to_owned()),
             ..RemoteServe::default()
         }),
         remote_devices: Some(vec![Device {

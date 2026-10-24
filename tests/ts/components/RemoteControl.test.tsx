@@ -38,14 +38,30 @@ const joinRemote = vi.fn();
 const inviteRemote = vi.fn();
 const forgetDevice = vi.fn();
 const listMcpServers = vi.fn();
+const setMcpServerRemote = vi.fn();
 
 vi.mock('../../../src/services/transport', () => ({
-  getTransport: () => ({ enableRemote, joinRemote, inviteRemote, forgetDevice, listMcpServers }),
+  getTransport: () => ({
+    enableRemote,
+    joinRemote,
+    inviteRemote,
+    forgetDevice,
+    listMcpServers,
+    setMcpServerRemote,
+  }),
 }));
 
 /** A configured MCP server as `listMcpServers` lists one; only these fields are read. */
-function mcpServer(name: string, server_type: 'stdio' | 'sse' = 'stdio') {
-  return { server: { id: 1, name, server_type }, status: 'stopped', tools: [] };
+function mcpServer(
+  name: string,
+  server_type: 'stdio' | 'sse' = 'stdio',
+  { id = 1, allow_remote = false } = {},
+) {
+  return {
+    server: { id, name, server_type, enabled: true, allow_remote },
+    status: 'stopped',
+    tools: [],
+  };
 }
 const refreshRemoteStatus = vi.fn(() => Promise.resolve(true));
 vi.mock('../../../src/services/remoteEvents', () => ({
@@ -136,6 +152,7 @@ describe('RemoteControl', () => {
     inviteRemote.mockReset();
     forgetDevice.mockReset();
     listMcpServers.mockReset().mockResolvedValue([mcpServer('tavily')]);
+    setMcpServerRemote.mockReset().mockResolvedValue(undefined);
     refreshRemoteStatus.mockReset().mockResolvedValue(true);
   });
 
@@ -149,8 +166,8 @@ describe('RemoteControl', () => {
   it('offers neither an SSE server nor builtin, which no device is opened to', async () => {
     listMcpServers.mockResolvedValue([
       mcpServer('tavily'),
-      mcpServer('remote-sse', 'sse'),
-      mcpServer('builtin'),
+      mcpServer('remote-sse', 'sse', { id: 2 }),
+      mcpServer('builtin', 'stdio', { id: 3 }),
     ]);
     await open();
     expect(await screen.findByRole('checkbox', { name: 'tavily' })).toBeInTheDocument();
@@ -173,7 +190,7 @@ describe('RemoteControl', () => {
     // plain `enable` is a switch and hands out nothing, so a first run would
     // otherwise be two actions. The other half of that predicate is pinned
     // by 'a re-enable on a paired machine…' below.
-    expect(enableRemote).toHaveBeenCalledWith({ mcp_servers: [], invite: true });
+    expect(enableRemote).toHaveBeenCalledWith({ invite: true });
     expect(await screen.findByText('483920')).toBeInTheDocument();
     expect(screen.getByText(`gglib remote join ${TICKET}-483920`)).toBeInTheDocument();
     // The id Devices lists the new row under, so a code that went to the
@@ -216,32 +233,36 @@ describe('RemoteControl', () => {
 
   it('an enable answered by a session that came back does not claim it changed the proxy', async () => {
     applyRemoteStatus({ ...IDLE_STATUS, remote_enabled: true, enabled: false, devices: [paired()] });
-    enableRemote.mockResolvedValue({ ticket: TICKET, mcp_servers: [], already_up: true });
+    enableRemote.mockResolvedValue({ ticket: TICKET, mcp_servers: ['tavily'], already_up: true });
     const user = await open();
-    await user.click(await screen.findByRole('checkbox', { name: 'tavily' }));
     await user.click(screen.getByRole('button', { name: 'Enable remote access' }));
-    expect(enableRemote).toHaveBeenCalledWith({ mcp_servers: ['tavily'], invite: false });
+    expect(enableRemote).toHaveBeenCalledWith({ invite: false });
     expect(await screen.findByText(/already coming back up/i)).toBeInTheDocument();
-    expect(screen.getByText(/the MCP servers ticked did not take/i)).toBeInTheDocument();
+    expect(screen.queryByText(/did not take/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/now requires the API key/i)).not.toBeInTheDocument();
   });
 
-  it('a session that came back opening the servers ticked says nothing did not take', async () => {
-    applyRemoteStatus({ ...IDLE_STATUS, remote_enabled: true, enabled: false, devices: [paired()] });
-    enableRemote.mockResolvedValue({ ticket: TICKET, mcp_servers: ['tavily'], already_up: true });
-    const user = await open();
-    await user.click(await screen.findByRole('checkbox', { name: 'tavily' }));
-    await user.click(screen.getByRole('button', { name: 'Enable remote access' }));
-    expect(await screen.findByText(/already coming back up/i)).toBeInTheDocument();
-    expect(screen.queryByText(/did not take/i)).not.toBeInTheDocument();
+  it('the MCP checklist shows whether remote access is on or off', async () => {
+    listMcpServers.mockResolvedValue([mcpServer('tavily', 'stdio', { allow_remote: true })]);
+    await open();
+    expect(await screen.findByRole('checkbox', { name: 'tavily' })).toBeChecked();
+    act(() => applyRemoteStatus({ ...IDLE_STATUS, enabled: true }));
+    expect(screen.getByRole('button', { name: /invite a device/i })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'tavily' })).toBeChecked();
   });
 
-  it('a live session lists the MCP servers it opens, or none', async () => {
-    applyRemoteStatus({ ...IDLE_STATUS, enabled: true, mcp_servers: ['tavily', 'fs'] });
-    await open();
-    expect(screen.getByText('tavily, fs')).toBeInTheDocument();
-    act(() => applyRemoteStatus({ ...IDLE_STATUS, enabled: true }));
-    expect(screen.getByText('none')).toBeInTheDocument();
+  it('a tick opens the server at once, on or off, and the status is read again', async () => {
+    applyRemoteStatus({ ...IDLE_STATUS, enabled: true });
+    const user = await open();
+    const box = await screen.findByRole('checkbox', { name: 'tavily' });
+    listMcpServers.mockResolvedValue([mcpServer('tavily', 'stdio', { allow_remote: true })]);
+
+    await user.click(box);
+
+    expect(setMcpServerRemote).toHaveBeenCalledWith(1, true);
+    await waitFor(() => expect(refreshRemoteStatus).toHaveBeenCalled());
+    expect(await screen.findByRole('checkbox', { name: 'tavily' })).toBeChecked();
+    expect(enableRemote).not.toHaveBeenCalled();
   });
 
   it('invite shows the same reveal against a tunnel that is already up', async () => {
@@ -283,7 +304,7 @@ describe('RemoteControl', () => {
 
     expect(screen.getByRole('heading', { name: 'This machine' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /enable remote access/i }));
-    expect(enableRemote).toHaveBeenCalledWith({ mcp_servers: [], invite: true });
+    expect(enableRemote).toHaveBeenCalledWith({ invite: true });
   });
 
   it('a device that has made requests is never called one that never joined', async () => {
@@ -559,7 +580,7 @@ describe('RemoteControl', () => {
 
     await user.click(screen.getByRole('button', { name: /enable remote access/i }));
 
-    expect(enableRemote).toHaveBeenCalledWith({ mcp_servers: [], invite: false });
+    expect(enableRemote).toHaveBeenCalledWith({ invite: false });
   });
 
   it('enable takes whether a device joined from the daemon, not from the timestamps', async () => {
@@ -575,7 +596,7 @@ describe('RemoteControl', () => {
     enableRemote.mockResolvedValue({ ticket: TICKET });
     const user = await open();
     await user.click(screen.getByRole('button', { name: /enable remote access/i }));
-    expect(enableRemote).toHaveBeenCalledWith({ mcp_servers: [], invite: false });
+    expect(enableRemote).toHaveBeenCalledWith({ invite: false });
   });
 
   it('a machine whose only row is an invite nobody took still asks for a code on enable', async () => {
@@ -596,7 +617,7 @@ describe('RemoteControl', () => {
     enableRemote.mockResolvedValue({ ticket: TICKET });
     const user = await open();
     await user.click(screen.getByRole('button', { name: /enable remote access/i }));
-    expect(enableRemote).toHaveBeenCalledWith({ mcp_servers: [], invite: true });
+    expect(enableRemote).toHaveBeenCalledWith({ invite: true });
   });
 
   it('forget asks first, and says every other device is untouched', async () => {

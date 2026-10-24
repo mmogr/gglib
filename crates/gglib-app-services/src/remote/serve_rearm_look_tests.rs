@@ -30,14 +30,12 @@ use crate::remote::serve_watch_tests::{arming, offline, ops_with_key};
 use crate::test_support::{RecordingEmitter, test_core_and_proxy_over};
 use crate::test_support_remote::scratch_device_keys;
 
-/// The state `enable` leaves behind, which is what a re-arm arms from:
-/// `opened` is the MCP servers it was named.
-pub(super) async fn switched_on(core: &AppCore, opened: &[&str]) {
+/// The state `enable` leaves behind, which is what a re-arm arms from.
+pub(super) async fn switched_on(core: &AppCore) {
     core.settings()
         .update(SettingsUpdate {
             remote_enabled: Some(Some(true)),
             remote_serve: Some(Some(RemoteServe {
-                mcp_servers: opened.iter().map(|name| (*name).to_owned()).collect(),
                 relay: None,
                 discovery: false,
             })),
@@ -138,12 +136,13 @@ pub(super) async fn ops_over_a_parked_store() -> (
         })
         .await
         .expect("settings update");
-    switched_on(&core, &[]).await;
+    switched_on(&core).await;
     let events: Arc<dyn AppEventEmitter> = Arc::new(RecordingEmitter::default());
     let gateway = Arc::new(RemoteGateway::new(Arc::clone(&events)));
     let ops = RemoteOps::new(
         Arc::clone(&proxy),
         Arc::clone(&core),
+        crate::test_support::test_mcp_over(&repos),
         gateway,
         events,
         Some(scratch_device_keys()),
@@ -225,15 +224,29 @@ async fn a_rearm_that_reaches_the_slot_after_the_token_arms_nothing() {
     assert!(!up, "a re-arm armed after the daemon's token was cancelled");
 }
 
-/// A re-arm puts the tunnel back opening the MCP servers the switch was
-/// recorded with: read from the store, as there is no session to keep them.
+/// A re-arm puts the tunnel back serving, and the server open to devices is
+/// offered again with nothing re-opened: the grant is the server's own.
 #[tokio::test]
-async fn a_rearm_opens_the_servers_the_switch_was_recorded_with() {
+async fn a_rearm_serves_the_servers_open_to_devices_again() {
     let (core, _parked, proxy, ops, _arming) = ops_over_a_parked_store().await;
-    switched_on(&core, &["tavily"]).await;
+    switched_on(&core).await;
+    let tavily = ops
+        .mcp
+        .add_server(gglib_mcp::NewMcpServer::new_stdio(
+            "tavily",
+            "npx",
+            vec![],
+            None,
+        ))
+        .await
+        .expect("a server");
+    ops.mcp
+        .set_allow_remote(tavily.id, true)
+        .await
+        .expect("opened");
 
     let decision = looking(&ops).await.expect("the look");
-    let held = ops.gateway().mcp_servers().to_vec();
+    let serving = ops.gateway().serving();
     let status = ops.status().await;
 
     let _ = ops.disable().await;
@@ -241,6 +254,6 @@ async fn a_rearm_opens_the_servers_the_switch_was_recorded_with() {
 
     assert_eq!(decision, Rearm::Armed);
     assert!(status.enabled, "the tunnel is back");
-    assert_eq!(held, ["tavily"], "the session");
+    assert!(serving, "the session");
     assert_eq!(status.mcp_servers, ["tavily"], "status");
 }

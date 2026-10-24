@@ -134,6 +134,7 @@ async fn ops_with_a_gated_switch(
     let ops = RemoteOps::new(
         proxy,
         Arc::clone(&core),
+        crate::test_support::test_mcp_over(&repos),
         gateway,
         events,
         Some(scratch_device_keys()),

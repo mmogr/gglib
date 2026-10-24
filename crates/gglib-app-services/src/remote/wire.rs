@@ -44,9 +44,10 @@ pub struct RemoteStatus {
     /// Every connected peer.
     #[serde(default)]
     pub peers: Vec<RemotePeer>,
-    /// The MCP servers, by name, the live session opens to paired devices'
-    /// chats; empty with the tunnel down. `/mcp` is never reachable through
-    /// the tunnel.
+    /// The MCP servers, by name, a paired device's runs are offered: each
+    /// flagged open to devices on its own row, enabled and stdio. Empty with
+    /// the tunnel down, since a device is then offered none. `/mcp` is never
+    /// reachable through the tunnel.
     #[serde(default)]
     pub mcp_servers: Vec<String>,
     /// Requests that arrived through the tunnel since the daemon started.

@@ -1,7 +1,6 @@
 //! `RemoteOps::status`: both sides of the tunnel, what settings remember of
 //! the last pairing, and the roster, read for the status surface.
 
-use gglib_core::ports::RemoteGatewayPort as _;
 use tracing::warn;
 
 use super::wire::{RemotePeer, RemoteStatus};
@@ -53,6 +52,10 @@ impl RemoteOps {
         // the serve slot should be doing IO that has nothing to do with the
         // slot. Named, not created: a read leaves `data/` as it was.
         let identity_path = identity::identity_location().map(|p| p.display().to_string());
+        // Before the lock too, for the same reason: a read of the database.
+        // Reported only below, when a session is live, since a device is
+        // offered no server without one.
+        let open_to_devices = self.mcp.device_server_names().await;
         let live = self.live.lock().await;
         // Under the slot, like `list`'s: what the edge holds and whether the
         // tunnel is up have to be read at one instant or a row can come back
@@ -64,7 +67,11 @@ impl RemoteOps {
             enabled: live.full().is_some(),
             pairing_active: self.gateway.pairing.active(),
             paired: self.gateway.paired(),
-            mcp_servers: self.gateway.mcp_servers().to_vec(),
+            mcp_servers: if live.full().is_some() {
+                open_to_devices
+            } else {
+                Vec::new()
+            },
             tunnelled_requests: self.gateway.tunnelled_requests(),
             last_tunnelled_ms: self.gateway.last_tunnelled_ms(),
             last_peer: self.gateway.last_peer(),

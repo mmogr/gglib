@@ -3,7 +3,8 @@
 //! One `Arc<RemoteGateway>` is built with the service graph and handed to
 //! `ProxyOps`, which puts it on every proxy it starts. It is therefore
 //! always present, whether or not the tunnel is up: with the tunnel down it
-//! holds no invite and opens no MCP server to a device.
+//! holds no invite and says no session is serving, so a device's run is
+//! offered no MCP server.
 //!
 //! It also holds the invite a session has open. The code is answered at the
 //! tunnel edge, not here; `gateway_session.rs` has how the gateway learns a
@@ -29,9 +30,9 @@ pub(super) use session::Offered;
 /// The tunnel's side of the proxy's questions.
 pub struct RemoteGateway {
     pub(super) pairing: Pairing,
-    /// The MCP servers, by name, whose tools the live session opens to its
-    /// paired devices; empty with the tunnel down.
-    mcp_servers: Mutex<Arc<[String]>>,
+    /// Whether a session is live, behind [`RemoteGatewayPort::serving`]:
+    /// set by `begin_session` and cleared by the reset of that session.
+    serving: AtomicBool,
     paired: AtomicBool,
     /// Which session the three fields above belong to, counted up by
     /// [`RemoteGateway::begin_session`].
@@ -58,7 +59,7 @@ impl RemoteGateway {
     pub(crate) fn new(emitter: Arc<dyn AppEventEmitter>) -> Self {
         Self {
             pairing: Pairing::default(),
-            mcp_servers: Mutex::new(Arc::from([])),
+            serving: AtomicBool::new(false),
             paired: AtomicBool::new(false),
             session: Mutex::new(0),
             tunnelled_requests: AtomicU64::new(0),
@@ -77,22 +78,14 @@ impl RemoteGateway {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// The list behind [`RemoteGatewayPort::mcp_servers`], under its lock.
-    /// Nothing panics while holding it.
-    fn opened(&self) -> std::sync::MutexGuard<'_, Arc<[String]>> {
-        self.mcp_servers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-
-    /// Open `names` to paired devices, as an armed session's list does,
-    /// and touch nothing else: no session begins and no invite changes. For
-    /// another crate's tests, which cannot arm a tunnel; in a build, the list
-    /// is set by `begin_session` and cleared by `reset_session_if` alone.
+    /// Say a session is serving, as an armed one does, and touch nothing
+    /// else: no session begins and no invite changes. For another crate's
+    /// tests, which cannot arm a tunnel; in a build, it is set by
+    /// `begin_session` and cleared by `reset_session_if` alone.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
-    pub fn open_for_test(&self, names: &[&str]) {
-        *self.opened() = names.iter().map(|name| (*name).to_owned()).collect();
+    pub fn serve_for_test(&self) {
+        self.serving.store(true, Ordering::Relaxed);
     }
 
     pub(super) fn paired(&self) -> bool {
@@ -143,8 +136,8 @@ impl RemoteGateway {
 }
 
 impl RemoteGatewayPort for RemoteGateway {
-    fn mcp_servers(&self) -> Arc<[String]> {
-        Arc::clone(&self.opened())
+    fn serving(&self) -> bool {
+        self.serving.load(Ordering::Relaxed)
     }
 
     fn note_tunnelled_request(&self, peer: Option<&str>, device: Option<&str>) {
@@ -182,7 +175,7 @@ impl fmt::Debug for RemoteGateway {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RemoteGateway")
             .field("pairing_active", &self.pairing.active())
-            .field("mcp_servers", &self.mcp_servers())
+            .field("serving", &self.serving())
             .field("paired", &self.paired())
             .field("tunnelled_requests", &self.tunnelled_requests())
             .finish_non_exhaustive()

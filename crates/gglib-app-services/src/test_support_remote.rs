@@ -23,7 +23,7 @@ use gglib_core::ports::AppEventEmitter;
 use gglib_core::services::AppCore;
 use gglib_core::{RemotePairing, SettingsUpdate};
 
-use crate::test_support::{RecordingEmitter, test_core_and_proxy};
+use crate::test_support::RecordingEmitter;
 
 /// Vector 1: the minimal v0 ticket, no transport addresses.
 pub(crate) const TICKET_A: &str =
@@ -118,11 +118,12 @@ pub(crate) async fn test_remote_ops_joining_from(
     // Annotated so the unsizing coercion happens here once, rather than at
     // each call that wants the trait object.
     let emitter: Arc<dyn AppEventEmitter> = events.clone();
-    let (core, proxy) = test_core_and_proxy().await;
+    let (core, proxy, mcp) = crate::test_support::test_core_proxy_and_mcp().await;
     let gateway = Arc::new(crate::RemoteGateway::new(Arc::clone(&emitter)));
     let ops = crate::RemoteOps::new(
         proxy,
         Arc::clone(&core),
+        mcp,
         gateway,
         emitter,
         Some(scratch_device_keys()),

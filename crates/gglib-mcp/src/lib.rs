@@ -30,6 +30,5 @@ pub use builtin::{
     DRAW_THEN_SAY_FAILED, DrawArm, DrawWith, DrawingTool, FILE_TOOLS, image_request_of,
 };
 pub use combined::CombinedToolExecutor;
-pub use opened::Unopenable;
 pub use service::{McpServerInfo, McpService};
 pub use tool_images::describe_item;

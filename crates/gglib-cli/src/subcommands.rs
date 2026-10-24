@@ -170,12 +170,10 @@ pub enum RemoteCommand {
     /// puts the API key on the local proxy, and disabling does not take
     /// that away.
     Enable {
-        /// Let paired devices' chats use this MCP server's tools; repeat for more
-        ///
-        /// None by default: a named server is started for a device's run, and
-        /// a leaked key with a shell server named is remote code execution.
-        /// /mcp itself is never reachable through the tunnel.
-        #[arg(long = "allow-mcp", value_name = "SERVER")]
+        /// Gone: `gglib mcp allow-remote <server>` opens a server to paired
+        /// devices. Kept hidden only to say so, before the daemon is asked
+        /// anything.
+        #[arg(long = "allow-mcp", value_name = "SERVER", hide = true)]
         allow_mcp: Vec<String>,
         /// Self-hosted relay URL (default: iroh's public relays)
         #[arg(long)]

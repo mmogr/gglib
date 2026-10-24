@@ -1,13 +1,14 @@
-//! Both of a paired device's doors, wired to the servers the live session
-//! opens: a turn on a chat this machine keeps (`hub_turn`) and a chat the
-//! phone keeps itself (`chat_turn`), each driven through its own `PUT`.
+//! Both of a paired device's doors, wired to the servers open to paired
+//! devices while a session is live: a turn on a chat this machine keeps
+//! (`hub_turn`) and a chat the phone keeps itself (`chat_turn`), each driven
+//! through its own `PUT`.
 //!
 //! A run's late step cannot finish in a test: its model is admitted on a
 //! port where no llama-server runs, so the run ends `failed` at the port
 //! check, after its tools are settled and before its loop is composed. What
-//! the step leaves behind is whether the opened server was started; what
-//! the run is offered is `resolve` of the run's own `Asked`, read from the
-//! gateway as the late step reads it.
+//! the step leaves behind is whether the open server was started; what the
+//! run is offered is `settle` of the run's own chat and `Asked`, read as the
+//! late step reads it.
 
 use std::sync::Arc;
 
@@ -24,7 +25,7 @@ use serde_json::json;
 use tokio::sync::Notify;
 
 use super::tests::STAND_IN_SERVER;
-use super::{Asked, resolve};
+use super::{Asked, resolve, settle};
 use crate::handlers::agent::run_fixture::{drawing_state, settled};
 use crate::handlers::agent::turn_fixture::hi;
 use crate::handlers::agent::{chat_turn, hub_turn, turn_fixture};
@@ -70,9 +71,9 @@ impl ModelRuntimePort for Loads {
     }
 }
 
-/// A machine that can draw, whose live session opens the stand-in MCP
-/// server under the name `tavily`, configured lazy and not running, and
-/// whose model loads when `loads` says.
+/// A machine that can draw, serving a live session, with the stand-in MCP
+/// server under the name `tavily` open to paired devices, configured lazy
+/// and not running, and whose model loads when `loads` says.
 struct Opened {
     _dir: tempfile::TempDir,
     state: AppState,
@@ -90,7 +91,8 @@ async fn opened() -> Opened {
     let args = vec!["-c".to_owned(), STAND_IN_SERVER.to_owned()];
     let server = NewMcpServer::new_stdio("tavily", "sh", args, None);
     let server = state.mcp.add_server(server).await.unwrap().id;
-    state.remote.gateway().open_for_test(&["tavily"]);
+    state.mcp.set_allow_remote(server, true).await.unwrap();
+    state.remote.gateway().serve_for_test();
     let model = turn_fixture::model(&state, |_| {}).await;
     Opened {
         _dir: dir,
@@ -166,6 +168,29 @@ async fn a_turn_starts_the_opened_server_in_its_late_step_and_not_in_its_put() {
 
     o.loaded_and_ended("phone", "d1").await;
     assert!(o.running().await, "the late step started it");
+    let settled = settle(&o.state, plan.chat, &plan.asked).await;
+    assert_eq!(
+        settled.tool_filter,
+        Some(vec![o.echo()]),
+        "the run's filter"
+    );
+    o.state.mcp.shutdown().await;
+}
+
+/// A server closed to devices since the session began offers nothing from
+/// the next run on, with no restart and no re-enable; reopened, it offers
+/// its tool again.
+#[tokio::test]
+async fn a_server_closed_to_devices_is_offered_from_the_next_run_no_more() {
+    let o = opened().await;
+    let id = o.chat(ConversationSettings::default()).await;
+    let plan = hub_turn::plan(&o.state, hi(id)).await.unwrap();
+    assert_eq!(resolve(&o.state, &plan.asked).await, [o.echo()]);
+
+    o.state.mcp.set_allow_remote(o.server, false).await.unwrap();
+    assert_eq!(resolve(&o.state, &plan.asked).await, Vec::<String>::new());
+
+    o.state.mcp.set_allow_remote(o.server, true).await.unwrap();
     assert_eq!(resolve(&o.state, &plan.asked).await, [o.echo()]);
     o.state.mcp.shutdown().await;
 }

@@ -105,9 +105,10 @@ pub struct RemotePairing {
 ///
 /// This record is the other half — the flags that `enable` was given, so a
 /// resumed tunnel is armed the way it was enabled. Without it a restart
-/// would quietly change behaviour, and the servers `--allow-mcp` names are
-/// a deliberate decision on one machine: silently forgetting them is the
-/// failure that matters, not the noise of remembering. Absent: never enabled.
+/// would quietly change behaviour. Absent: never enabled. Which MCP servers
+/// a paired device may use is not one of them: each server's own row says
+/// so (ADR 0025), and an `mcpServers` key an older build stored here is
+/// passed over.
 ///
 /// The flags `gglib remote enable` accepts, and nothing else: this is a
 /// record of a decision, not a place to configure one. There is no CLI path
@@ -120,16 +121,6 @@ pub struct RemotePairing {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteServe {
-    /// The MCP servers, by name, whose tools a paired device's chats may use.
-    ///
-    /// Empty unless named, and the one flag here with teeth: a named server
-    /// is started for a device's run. A new key, so an `allowMcp` an older
-    /// build stored is not read and opens nothing; `/mcp` itself is never
-    /// reachable through the tunnel. Surviving a restart is the point: a
-    /// posture that changes when nobody is looking is the failure.
-    #[serde(default)]
-    pub mcp_servers: Vec<String>,
-
     /// A self-hosted relay URL, or `None` for n0's public relays.
     #[serde(default)]
     pub relay: Option<String>,

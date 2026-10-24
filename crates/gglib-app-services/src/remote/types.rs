@@ -7,11 +7,6 @@
 /// What `enable` is asked for.
 #[derive(Debug, Clone, Default)]
 pub struct EnableRequest {
-    /// The MCP servers, by name, whose tools a paired device's chats may
-    /// use. Empty by default: a named server is started for a device's run,
-    /// and a leaked token with a shell server named is remote code execution.
-    /// `/mcp` itself is never reachable through the tunnel.
-    pub mcp_servers: Vec<String>,
     /// A self-hosted relay URL for this endpoint; `None` uses the public
     /// relays.
     pub relay: Option<String>,
@@ -40,14 +35,9 @@ pub struct Enabled {
     /// `None` is the ordinary case: the tunnel is up and no device is being
     /// paired right now: only an `enable` asked to invite offers one.
     pub pairing: Option<OfferedPairing>,
-    /// The MCP servers the session this call ended up talking about opens to
-    /// its paired devices.
-    ///
-    /// Reported rather than echoed, because the two can differ: an
-    /// `enable --invite` against a tunnel that is already up offers a code
-    /// and leaves the flags alone, so a caller that repeated its own
-    /// `--allow-mcp` back to the operator would be describing a grant the
-    /// daemon did not make.
+    /// The MCP servers, by name, a paired device's runs are offered now:
+    /// each one flagged open to devices on its own row, read when this call
+    /// answered. Not the tunnel's to say, so not a flag of this request.
     pub mcp_servers: Vec<String>,
     /// Whether this call found the tunnel already up and answered from that
     /// session rather than arming one. That includes an `enable` that waited
@@ -55,11 +45,9 @@ pub struct Enabled {
     /// `invite` it carries no pairing.
     ///
     /// The flags of the request are ignored on that path — the session's
-    /// grants belong to the `enable` that armed it — so a caller cannot say
-    /// what it changed without knowing which happened. Inferring it from
-    /// [`Self::mcp_servers`] only works when the caller named servers and
-    /// was told others; every other combination is indistinguishable, which
-    /// is why this is a field and not a guess.
+    /// relay and discovery belong to the `enable` that armed it — so a caller
+    /// cannot say what it changed without knowing which happened, which is
+    /// why this is a field and not a guess.
     pub already_up: bool,
 }
 

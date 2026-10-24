@@ -67,7 +67,7 @@ pub(crate) async fn drawing_route(
         query.image_model,
     )
     .await;
-    Json(DeviceDrawing::of(&state, answer))
+    Json(DeviceDrawing::of(&state, answer).await)
 }
 
 /// The proxy's door: the driver the daemon handed this proxy, if any.

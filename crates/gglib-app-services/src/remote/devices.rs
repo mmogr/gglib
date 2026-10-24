@@ -20,7 +20,6 @@
 
 use std::sync::Arc;
 
-use gglib_core::ports::RemoteGatewayPort as _;
 use tracing::{info, warn};
 
 use super::RemoteOps;
@@ -117,8 +116,9 @@ impl RemoteOps {
     ///
     /// The flags in that request are *not* applied to a session already
     /// running; only the code is new. `disable` and `enable` again to change
-    /// them, which is the one thing that has to be said out loud, because
-    /// `--allow-mcp` alongside `--invite` would otherwise look like it took.
+    /// them. Which MCP servers its devices are offered is no flag of it: each
+    /// server says so itself, and a change to one applies from a device's
+    /// next run.
     pub(super) async fn answer_if_up(&self, wanted: Offer) -> Result<Option<Enabled>, GuiError> {
         let armed = {
             let live = self.live.lock().await;
@@ -135,9 +135,9 @@ impl RemoteOps {
         Ok(Some(Enabled {
             ticket,
             pairing,
-            // The live session's answer, not the caller's flag: this path
-            // deliberately leaves the flags where `enable` set them.
-            mcp_servers: self.gateway.mcp_servers().to_vec(),
+            // Read outside the slot, which the block above released: a read
+            // of the servers is IO, which the slot is never held across.
+            mcp_servers: self.mcp.device_server_names().await,
             // This *is* the path that finds it already up; there is no other.
             already_up: true,
         }))

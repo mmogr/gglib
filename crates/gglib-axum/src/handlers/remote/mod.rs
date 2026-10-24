@@ -17,8 +17,7 @@ pub(crate) use join::{disconnect, join, kill};
 pub(crate) use models::{far_error, list_models, load_model, model_detail};
 
 use axum::{Json, extract::State};
-use gglib_app_services::{GuiError, RemoteEnableBody, RemoteEnableResponse, RemoteStatus};
-use gglib_mcp::Unopenable;
+use gglib_app_services::{RemoteEnableBody, RemoteEnableResponse, RemoteStatus};
 
 use crate::{error::HttpError, state::AppState};
 
@@ -35,26 +34,14 @@ use crate::{error::HttpError, state::AppState};
 /// and is answered by the session the resume brought up, or arms its own if
 /// the resume brought none (`RemoteOps::enable`).
 ///
-/// The MCP servers it names are checked first, against this machine's: a
-/// name that opens no one server is a `400`, servers that cannot be read a
-/// `500`, and either way nothing is armed or stored.
-/// A resume or a re-arm does not check again; a name gone since resolves to
-/// nothing when a run starts.
+/// It opens no MCP server: each server says itself whether paired devices
+/// may use it (`PUT /api/mcp/servers/{id}/remote`), and the answer names the
+/// ones that are open.
 pub(crate) async fn enable(
     State(state): State<AppState>,
     Json(body): Json<Option<RemoteEnableBody>>,
 ) -> Result<Json<RemoteEnableResponse>, HttpError> {
     let request = body.unwrap_or_default().into_request();
-    state
-        .mcp
-        .refuse_unopenable(&request.mcp_servers)
-        .await
-        .map_err(|refused| match refused {
-            Unopenable::Name(why) => GuiError::ValidationFailed(why),
-            Unopenable::Unread(e) => {
-                GuiError::Internal(format!("could not read the MCP servers: {e}"))
-            }
-        })?;
     let enabled = state.remote.enable(request).await?;
     Ok(Json(RemoteEnableResponse::from(enabled)))
 }
@@ -77,7 +64,3 @@ pub(crate) async fn disable(
 pub(crate) async fn status(State(state): State<AppState>) -> Json<RemoteStatus> {
     Json(state.remote.status().await)
 }
-
-#[cfg(test)]
-#[path = "enable_tests.rs"]
-mod enable_tests;

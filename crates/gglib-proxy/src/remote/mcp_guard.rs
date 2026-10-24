@@ -18,8 +18,8 @@ use crate::models::ErrorResponse;
 /// unauthenticated request is still a 401 and only an authenticated,
 /// tunnelled one reaches this refusal. No grant opens it: `invoke_tool`
 /// starts the MCP servers configured on this machine, every one of them, and
-/// a paired device reaches the servers `gglib remote enable --allow-mcp`
-/// names through its runs instead. A marker on a proxy that has no tunnel is
+/// a paired device reaches the servers open to it (`gglib mcp allow-remote`)
+/// through its runs instead. A marker on a proxy that has no tunnel is
 /// a local client forging one, and forging it buys exactly this refusal.
 pub(crate) async fn mcp_tunnel_guard(req: Request, next: Next) -> Response {
     let Some(tunnelled) = req.extensions().get::<Tunnelled>() else {
@@ -33,7 +33,7 @@ pub(crate) async fn mcp_tunnel_guard(req: Request, next: Next) -> Response {
         StatusCode::FORBIDDEN,
         Json(ErrorResponse::with_code(
             "The MCP gateway is not reachable through the remote tunnel. A paired device's \
-             chats reach the MCP servers `gglib remote enable --allow-mcp <server>` names, \
+             chats reach the MCP servers `gglib mcp allow-remote <server>` opens to them, \
              through their runs.",
             "invalid_request_error",
             "mcp_not_allowed_over_tunnel",

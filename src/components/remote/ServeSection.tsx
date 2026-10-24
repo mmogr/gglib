@@ -22,8 +22,11 @@ interface ServeSectionProps {
  * `PairingReveal` that leaves when a device pairs or the code expires.
  * `Invite` shows the same reveal for one more device, against a tunnel that
  * is already up, and changes nothing else about the session. The MCP servers
- * a device's chats may use are ticked by name, none by default, because a
+ * a device's chats may use are ticked one by one, none by default, because a
  * leaked key with a shell server open is remote code execution (ADR 0012).
+ * Each box is the server's own flag, shown whether remote access is on or
+ * off and read by a device's next run, so no enable or disable changes it
+ * (ADR 0025).
  *
  * The reveal's lifecycle carries both: it drops on a `paired` transition, and
  * `paired` is per *code* rather than per session, so a second invite clears it
@@ -33,7 +36,6 @@ interface ServeSectionProps {
  */
 export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
   const { status } = useRemoteState();
-  const [mcpServers, setMcpServers] = useState<string[]>([]);
   // Which action is in flight, not merely that one is: with a single
   // boolean, clicking Invite relabelled Disable as "Stopping…".
   const [busy, setBusy] = useState<'enable' | 'invite' | 'disable' | null>(null);
@@ -46,8 +48,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
   // after a start, or tried and could not, or another enable is arming. These
   // look the same from here,
   // so Enable stays live. Pressed now it waits for the first, and after the
-  // second arms the tunnel with the settings below, where a dead button
-  // would be a dead end.
+  // second arms the tunnel again, where a dead button would be a dead end.
   const comingBack = (status?.remote_enabled ?? false) && !enabled;
   // Whether any device has actually *arrived*, not merely whether the roster
   // has rows in it. An invite nobody took leaves a row behind, so counting
@@ -105,6 +106,9 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
     void refreshRemoteStatus();
   }, []);
 
+  // After a box above changes a server: the status names what is open.
+  const refreshStatus = useCallback(() => void refreshRemoteStatus(), []);
+
   const handleEnable = async () => {
     setBusy('enable');
     try {
@@ -119,10 +123,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
       // A first run is still one action, because on a first run no device has
       // joined. After that, adding a device is Invite.
       const firstDevice = !anyJoined;
-      const answer = await getTransport().enableRemote({
-        mcp_servers: mcpServers,
-        invite: firstDevice,
-      });
+      const answer = await getTransport().enableRemote({ invite: firstDevice });
       // Present together or not at all; the daemon sends all three or none.
       setReveal(
         answer.pairing && answer.code && answer.expires_in_s !== undefined
@@ -137,22 +138,11 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
       void refreshRemoteStatus();
       // `already_up` here is a session the daemon's own resume brought back
       // while this waited, since Enable is shown only when the last status
-      // read had nothing up. This
-      // click switched nothing on, so the key notice is not its to give, and
-      // servers ticked that the session does not open say so, as the CLI does.
-      // `?? []`: a daemon from before the list sends none.
-      const opened = new Set(answer.mcp_servers ?? []);
-      const ignoredMcp =
-        answer.already_up &&
-        mcpServers.length > 0 &&
-        (opened.size !== mcpServers.length || mcpServers.some((name) => !opened.has(name)));
+      // read had nothing up. This click switched nothing on, so the key
+      // notice is not its to give.
       onNotice(
         answer.already_up
-          ? `Remote access was already coming back up, and is on now.${
-              ignoredMcp
-                ? ' The MCP servers ticked did not take: that session keeps its own; disable and enable again to change them.'
-                : ''
-            }`
+          ? 'Remote access was already coming back up, and is on now.'
           : 'Remote access is on. The local proxy now requires the API key too.',
         'info',
       );
@@ -223,6 +213,12 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
         />
       )}
 
+      {/* Above the switch, in both of its states: a server is opened or
+          closed at any time, and the status re-read says what is open now. */}
+      <div className="mb-sm">
+        <McpServerPicker onChanged={refreshStatus} />
+      </div>
+
       {enabled ? (
         <Stack gap="sm">
           <dl className="grid grid-cols-[auto_1fr] gap-x-md gap-y-xs text-xs m-0">
@@ -244,8 +240,6 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
                 ? status.peers.map((p) => `${p.fingerprint} (${p.path})`).join(', ')
                 : 'none connected'}
             </dd>
-            <dt className="text-text-muted">MCP servers</dt>
-            <dd className="m-0">{status?.mcp_servers?.length ? status.mcp_servers.join(', ') : 'none'}</dd>
           </dl>
           <Button
             variant="secondary"
@@ -270,7 +264,6 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
         </Stack>
       ) : (
         <Stack gap="sm">
-          <McpServerPicker value={mcpServers} onChange={setMcpServers} />
           <Button
             variant="primary"
             className="w-full"
@@ -281,7 +274,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
           </Button>
           <Label size="xs" muted>
             {comingBack
-              ? 'Switched on, but nothing is bound yet: the daemon may still be putting it back, or could not. Enabling now waits for it, or arms it again with the settings below. '
+              ? 'Switched on, but nothing is bound yet: the daemon may still be putting it back, or could not. Enabling now waits for it, or arms it again. '
               : anyJoined
                 ? 'Devices already paired come back on their own; use Invite to add another. '
                 : 'Shows a ticket and a six-digit code once, to pair your first device. '}

@@ -110,24 +110,31 @@ async fn test_load_tolerates_rows_written_before_new_fields_existed() {
     assert_eq!(loaded.share_lan, None);
 }
 
-/// A serve row an older build wrote, its `/mcp` switch on, still reads and
-/// opens no MCP server: the list that replaced it is a key of its own, so the
-/// whole settings load does not fail on a `true` where a list is wanted.
+/// Serve rows older builds wrote, with their `/mcp` switch on or their list
+/// of MCP servers, still read: neither key is a field now, since a server is
+/// opened to paired devices by a flag on its own row, so the whole settings
+/// load does not fail on either.
 #[tokio::test]
-async fn a_serve_row_an_older_build_wrote_reads_and_opens_no_server() {
-    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-    let repo = SqliteSettingsRepository::new(pool.clone());
-    repo.ensure_table().await.unwrap();
-    sqlx::query("INSERT INTO settings_kv (key, value, updated_at) VALUES ('remote_serve', ?, '')")
-        .bind(r#"{"allowMcp":true,"relay":null,"discovery":true}"#)
+async fn a_serve_row_an_older_build_wrote_still_reads() {
+    for older in [
+        r#"{"allowMcp":true,"relay":null,"discovery":true}"#,
+        r#"{"mcpServers":["tavily"],"relay":null,"discovery":true}"#,
+    ] {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        let repo = SqliteSettingsRepository::new(pool.clone());
+        repo.ensure_table().await.unwrap();
+        sqlx::query(
+            "INSERT INTO settings_kv (key, value, updated_at) VALUES ('remote_serve', ?, '')",
+        )
+        .bind(older)
         .execute(&pool)
         .await
         .unwrap();
 
-    let serve = repo.load().await.expect("an older serve row still loads");
-    let serve = serve.remote_serve.expect("and is read as a serve row");
-    assert!(serve.mcp_servers.is_empty(), "it opens no server");
-    assert!(serve.discovery);
+        let serve = repo.load().await.expect("an older serve row still loads");
+        let serve = serve.remote_serve.expect("and is read as a serve row");
+        assert!(serve.discovery && serve.relay.is_none(), "{older}");
+    }
 }
 
 #[tokio::test]

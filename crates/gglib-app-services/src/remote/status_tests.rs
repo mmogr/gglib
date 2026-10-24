@@ -19,7 +19,7 @@ use gglib_core::domain::UNNAMED_PAIRED;
 use gglib_core::ports::AppEventEmitter;
 
 use super::super::{RemoteGateway, RemoteOps};
-use crate::test_support::{RecordingEmitter, test_core_and_proxy};
+use crate::test_support::RecordingEmitter;
 use crate::test_support_remote::{FINGERPRINT_A, KEY_A, TICKET_A, paired_with, test_remote_ops};
 
 /// The child's path in this test binary.
@@ -62,10 +62,10 @@ async fn the_child_reads_status_over_a_fresh_root() {
     let data = root.join("data");
     assert!(!data.exists(), "the child's test root is not fresh");
 
-    let (core, proxy) = test_core_and_proxy().await;
+    let (core, proxy, mcp) = crate::test_support::test_core_proxy_and_mcp().await;
     let emitter: Arc<dyn AppEventEmitter> = Arc::new(RecordingEmitter::default());
     let gateway = Arc::new(RemoteGateway::new(Arc::clone(&emitter)));
-    let ops = RemoteOps::new(proxy, core, gateway, emitter, None);
+    let ops = RemoteOps::new(proxy, core, mcp, gateway, emitter, None);
     assert!(!data.exists(), "building the ops made data/");
 
     let status = ops.status().await;

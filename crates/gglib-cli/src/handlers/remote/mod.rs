@@ -35,10 +35,10 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
             no_qr,
             invite,
         } => {
+            enable::refuse_allow_mcp(&allow_mcp)?;
             enable(
                 ctx,
                 EnableArgs {
-                    allow_mcp,
                     relay,
                     no_discovery,
                     no_qr,

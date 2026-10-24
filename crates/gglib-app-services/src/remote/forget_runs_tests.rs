@@ -160,7 +160,15 @@ async fn a_forget_whose_roster_write_fails_still_drops_the_runs_once_the_key_is_
     let (core, proxy) = test_core_and_proxy_over(&repos);
     let emitter: Arc<dyn AppEventEmitter> = Arc::new(RecordingEmitter::default());
     let gateway = Arc::new(crate::RemoteGateway::new(Arc::clone(&emitter)));
-    let ops = RemoteOps::new(proxy, core, gateway, emitter, Some(scratch_device_keys()));
+    let mcp = crate::test_support::test_mcp_over(&repos);
+    let ops = RemoteOps::new(
+        proxy,
+        core,
+        mcp,
+        gateway,
+        emitter,
+        Some(scratch_device_keys()),
+    );
     let (watched, reader) = a_device_with_a_run(&ops).await;
 
     let refused = ops.forget(DEVICE).await;
@@ -184,12 +192,13 @@ async fn a_forget_that_fails_to_remove_the_key_keeps_the_runs() {
 
     let dir = tempfile::tempdir().expect("a scratch directory");
     let keys_dir = dir.path().join("keys");
-    let (core, proxy) = crate::test_support::test_core_and_proxy().await;
+    let (core, proxy, mcp) = crate::test_support::test_core_proxy_and_mcp().await;
     let emitter: Arc<dyn AppEventEmitter> = Arc::new(RecordingEmitter::default());
     let gateway = Arc::new(crate::RemoteGateway::new(Arc::clone(&emitter)));
     let ops = RemoteOps::new(
         proxy,
         core,
+        mcp,
         gateway,
         emitter,
         Some(keys_dir.join("remote_devices")),

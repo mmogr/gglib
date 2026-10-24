@@ -12,18 +12,16 @@ use serde::{Deserialize, Serialize};
 use super::types::{EnableRequest, Enabled, JoinRequest, Joined};
 
 /// Body for `POST /api/remote/enable`. Every field optional; an empty body
-/// is the default: no MCP server opened, public relays, discovery on.
+/// is the default: public relays, discovery on.
 ///
 /// A field this does not name is ignored, so an older client that still
 /// sends `keep_identity` is answered as if it had not (#1043), and one that
-/// sends `allow_mcp` opens nothing.
+/// sends `mcp_servers` or `allow_mcp` opens nothing: an MCP server is opened
+/// to paired devices by a flag on it (`gglib mcp allow-remote`), never by
+/// `enable`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct RemoteEnableBody {
-    /// The MCP servers, by name, whose tools a paired device's chats may
-    /// use. None unless named; `/mcp` is never reachable through the tunnel.
-    #[serde(default)]
-    pub mcp_servers: Vec<String>,
     /// A self-hosted relay URL; omitted uses the public relays.
     #[serde(default)]
     pub relay: Option<String>,
@@ -41,20 +39,10 @@ pub struct RemoteEnableBody {
 }
 
 impl RemoteEnableBody {
-    /// What [`RemoteOps::enable`](super::RemoteOps::enable) is asked for:
-    /// the names trimmed, and each named once, in the order first named. A
-    /// name that trims to nothing is kept, for the daemon to refuse.
+    /// What [`RemoteOps::enable`](super::RemoteOps::enable) is asked for.
     #[must_use]
     pub fn into_request(self) -> EnableRequest {
-        let mut mcp_servers: Vec<String> = Vec::with_capacity(self.mcp_servers.len());
-        for name in self.mcp_servers {
-            let name = name.trim();
-            if !mcp_servers.iter().any(|seen| seen == name) {
-                mcp_servers.push(name.to_owned());
-            }
-        }
         EnableRequest {
-            mcp_servers,
             relay: self.relay,
             discovery: self.discovery.unwrap_or(true),
             invite: self.invite,
@@ -93,11 +81,9 @@ pub struct RemoteEnableResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     pub device: Option<String>,
-    /// The MCP servers the session this call ended up talking about opens to
-    /// its paired devices — which is not always what the caller asked for.
-    /// An `--invite` against a tunnel that is already up leaves the flags
-    /// alone, so a surface that echoed the request back would state a grant
-    /// the daemon did not make.
+    /// The MCP servers, by name, a paired device's runs are offered when
+    /// this answered: each flagged open to devices on its own row. Read, not
+    /// asked for, since `enable` opens none.
     #[serde(default)]
     pub mcp_servers: Vec<String>,
     /// Whether the tunnel was already up and this answered from that session
@@ -105,8 +91,8 @@ pub struct RemoteEnableResponse {
     /// `invite` set that found one running, and for an `enable` that waited
     /// while the daemon's own resume brought one back, which carries no code
     /// unless `invite` was set. The request's other flags were ignored on
-    /// that path, and a surface cannot infer it: only "named servers, told
-    /// others" shows in the rest of the answer.
+    /// that path, and a surface cannot infer it from the rest of the
+    /// answer.
     #[serde(default)]
     pub already_up: bool,
 }

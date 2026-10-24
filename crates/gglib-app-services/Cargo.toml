@@ -57,9 +57,9 @@ tokio-util = { workspace = true }
 futures-util = { workspace = true }
 
 [features]
-# Exposes `RemoteGateway::open_for_test`, which sets the MCP servers the live
-# session opens without arming a tunnel, for `gglib-axum`'s tests of a paired
-# device's runs. They live in another crate, so `#[cfg(test)]` cannot reach
+# Exposes `RemoteGateway::serve_for_test`, which says a session is live
+# without arming a tunnel, for `gglib-axum`'s tests of a paired device's
+# runs. They live in another crate, so `#[cfg(test)]` cannot reach
 # it. Off by default so a release build does not carry it — the same
 # arrangement `gglib-sse` uses for `test-support`.
 test-support = []

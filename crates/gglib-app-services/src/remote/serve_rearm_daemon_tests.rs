@@ -56,7 +56,7 @@ async fn until_armed(events: &RecordingEmitter, n: usize, within: Duration) -> V
 #[tokio::test]
 async fn the_task_the_daemon_spawns_puts_the_tunnel_back_and_ends_on_its_token() {
     let (core, proxy, events, ops, _arming) = ops_with_key().await;
-    switched_on(&core, &[]).await;
+    switched_on(&core).await;
     let ops = Arc::new(ops);
     let shutdown = CancellationToken::new();
     let mut task = tokio::spawn({

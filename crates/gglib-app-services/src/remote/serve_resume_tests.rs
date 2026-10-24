@@ -25,14 +25,12 @@ use tokio::sync::OwnedMutexGuard;
 use super::serve_watch_tests::{offline, ops_with_key};
 use super::*;
 
-/// The state `enable` leaves behind, which is what a resume arms from:
-/// `opened` is the MCP servers it was named.
-pub(super) async fn switched_on(core: &AppCore, relay: Option<&str>, opened: &[&str]) {
+/// The state `enable` leaves behind, which is what a resume arms from.
+pub(super) async fn switched_on(core: &AppCore, relay: Option<&str>) {
     core.settings()
         .update(SettingsUpdate {
             remote_enabled: Some(Some(true)),
             remote_serve: Some(Some(RemoteServe {
-                mcp_servers: opened.iter().map(|name| (*name).to_owned()).collect(),
                 relay: relay.map(str::to_owned),
                 discovery: false,
             })),
@@ -84,7 +82,7 @@ async fn waiting<T: Send + 'static>(
 async fn an_enable_that_arrives_during_the_startup_resume_pairs_a_device_onto_it_instead_of_refusing()
  {
     let (core, _proxy, _events, ops, _arming) = ops_with_key().await;
-    switched_on(&core, None, &[]).await;
+    switched_on(&core, None).await;
     let ops = Arc::new(ops);
     let (resume, held) = a_resume_held_at_the_slot(&ops).await;
     let enabling = waiting({
@@ -131,7 +129,7 @@ async fn an_enable_that_arrives_during_the_startup_resume_pairs_a_device_onto_it
 #[tokio::test]
 async fn a_plain_enable_that_waited_out_the_resume_is_answered_by_the_session_it_waited_for() {
     let (core, _proxy, _events, ops, _arming) = ops_with_key().await;
-    switched_on(&core, None, &[]).await;
+    switched_on(&core, None).await;
     let ops = Arc::new(ops);
     let (resume, held) = a_resume_held_at_the_slot(&ops).await;
     let enabling = waiting({
@@ -160,7 +158,7 @@ async fn a_plain_enable_that_waited_out_the_resume_is_answered_by_the_session_it
 #[tokio::test]
 async fn an_invite_that_arrives_during_the_startup_resume_offers_a_code_on_it() {
     let (core, _proxy, _events, ops, _arming) = ops_with_key().await;
-    switched_on(&core, None, &[]).await;
+    switched_on(&core, None).await;
     let ops = Arc::new(ops);
     let (resume, held) = a_resume_held_at_the_slot(&ops).await;
     let inviting = waiting({
@@ -197,7 +195,7 @@ async fn an_invite_that_arrives_during_the_startup_resume_offers_a_code_on_it() 
 #[tokio::test]
 async fn an_enable_that_waited_on_a_resume_that_armed_nothing_arms_the_tunnel_itself() {
     let (core, _proxy, _events, ops, _arming) = ops_with_key().await;
-    switched_on(&core, Some("not a relay url"), &[]).await;
+    switched_on(&core, Some("not a relay url")).await;
     let ops = Arc::new(ops);
     let (resume, held) = a_resume_held_at_the_slot(&ops).await;
     let enabling = waiting({
@@ -230,7 +228,7 @@ async fn an_enable_that_waited_on_a_resume_that_armed_nothing_arms_the_tunnel_it
 #[tokio::test]
 async fn a_disable_during_the_resume_stops_it_and_the_switch_stays_off() {
     let (core, _proxy, _events, ops, _arming) = ops_with_key().await;
-    switched_on(&core, None, &[]).await;
+    switched_on(&core, None).await;
     let ops = Arc::new(ops);
     let (resume, held) = a_resume_held_at_the_slot(&ops).await;
     tokio::time::sleep(Duration::from_millis(100)).await;
