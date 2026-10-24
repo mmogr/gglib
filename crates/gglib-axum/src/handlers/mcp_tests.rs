@@ -106,7 +106,8 @@ async fn the_remote_route_sets_the_flag_and_refuses_what_it_cannot_open() {
 
     let url = format!("sqlite:{}", dir.path().join("gglib.db").display());
     let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
-    let stored = gglib_db::SqliteMcpRepository::new(pool)
+    let repository = gglib_db::SqliteMcpRepository::new(pool);
+    let stored = repository
         .insert(NewMcpServer::new_sse("remote", "http://localhost:3001/sse"))
         .await
         .unwrap();
@@ -118,6 +119,24 @@ async fn the_remote_route_sets_the_flag_and_refuses_what_it_cannot_open() {
             StatusCode::BAD_REQUEST,
             json!({
                 "error": "SSE servers are not supported yet; only stdio servers can be run",
+                "status": 400
+            })
+        )
+    );
+
+    // An older database can hold a row named `builtin`; `mcp add` refuses one now.
+    let builtin = repository
+        .insert(NewMcpServer::new_stdio("builtin", "npx", vec![], None))
+        .await
+        .unwrap();
+    let route = format!("/api/mcp/servers/{}/remote", builtin.id);
+    let refused = send(&app, "PUT", &route, &json!({ "allow": true })).await;
+    assert_eq!(
+        refused,
+        (
+            StatusCode::BAD_REQUEST,
+            json!({
+                "error": "'builtin' is gglib's own tools and is never opened to devices",
                 "status": 400
             })
         )

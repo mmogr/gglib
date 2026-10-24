@@ -59,7 +59,7 @@ crates/gglib-cli/src/handlers/config/settings/profiles.rs 416
 crates/gglib-cli/src/handlers/image_tests.rs 327
 crates/gglib-cli/src/handlers/inference/agent_question.rs 303
 crates/gglib-cli/src/handlers/inference/serve_image_tests.rs 348
-crates/gglib-cli/src/handlers/mcp_cli.rs 335
+crates/gglib-cli/src/handlers/mcp_cli.rs 340
 crates/gglib-cli/src/handlers/model/download/interactive.rs 396
 crates/gglib-cli/src/handlers/model/list_tests.rs 314
 crates/gglib-cli/src/handlers/model/update.rs 618
@@ -71,7 +71,7 @@ crates/gglib-cli/src/model_commands.rs 399
 crates/gglib-cli/src/presentation/explain_display.rs 413
 crates/gglib-cli/src/presentation/explain_display_tests.rs 687
 crates/gglib-cli/src/presentation/inspect_display.rs 312
-crates/gglib-cli/tests/mcp_servers.rs 483
+crates/gglib-cli/tests/mcp_servers.rs 489
 crates/gglib-cli/tests/setup_scripts.rs 315
 crates/gglib-core/src/contracts/http/daemon.rs 386
 crates/gglib-core/src/contracts/http/images.rs 302

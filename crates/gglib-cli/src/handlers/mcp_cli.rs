@@ -5,7 +5,7 @@
 
 use anyhow::{Result, anyhow};
 use gglib_core::domain::mcp::{McpLifecycle, McpServerStatus, McpServerType, NewMcpServer};
-use gglib_mcp::McpServerInfo;
+use gglib_mcp::{McpServerInfo, McpService};
 
 use crate::bootstrap::CliContext;
 use crate::mcp_commands::McpCommand;
@@ -219,12 +219,17 @@ async fn set_enabled(ctx: &CliContext, identifier: &str, enabled: bool) -> Resul
 }
 
 /// Open each of `identifiers` to paired devices, or close it: the flag's own
-/// write, which never stops a server. Every one is found before any is
-/// changed, so a typo in the last changes none.
+/// write, which never stops a server. Every one is found, and checked when
+/// opening, before any is changed, so a typo or an SSE server in the last
+/// changes none.
 async fn set_allow_remote(ctx: &CliContext, identifiers: &[String], allow: bool) -> Result<()> {
     let mut found = Vec::with_capacity(identifiers.len());
     for identifier in identifiers {
-        found.push(the_one_server(ctx, identifier).await?);
+        let server = the_one_server(ctx, identifier).await?;
+        if allow {
+            McpService::refuse_opening(&server)?;
+        }
+        found.push(server);
     }
     for server in found {
         let server = ctx.mcp.set_allow_remote(server.id, allow).await?;

@@ -113,6 +113,16 @@ describe('McpServersPanel', () => {
     setAllowRemote.mockRejectedValueOnce(new Error('the daemon said no'));
     fireEvent.click(pairedDevices()[0]);
     expect(await screen.findByText('the daemon said no')).toBeInTheDocument();
+    expect(pairedDevices()[0]).not.toBeChecked();
+  });
+
+  it('an untick closes the server', async () => {
+    renderPanel(mcpServerInfo({ server: mcpServer({ id: 3, name: 'tavily', allow_remote: true }) }));
+    expect(pairedDevices()[0]).toBeChecked();
+
+    fireEvent.click(pairedDevices()[0]);
+
+    await waitFor(() => expect(setAllowRemote).toHaveBeenCalledWith(3, false));
   });
 
   it('says a disabled server offers paired devices no tools', () => {

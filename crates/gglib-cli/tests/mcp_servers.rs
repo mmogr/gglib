@@ -400,13 +400,18 @@ fn opening_a_disabled_server_says_it_offers_nothing_until_enabled() {
     );
 }
 
-/// An SSE server is never opened, and is said why; closing it is not refused.
+/// An SSE server is never opened, and is said why, before any server named
+/// beside it is opened; closing it is not refused.
 #[test]
 fn opening_an_sse_server_is_refused_with_the_reason() {
     let root = tempfile::tempdir().expect("temp data dir");
     stored_sse(root.path(), "remote", McpLifecycle::Lazy);
+    data_dir::store_mcp_server(
+        root.path(),
+        NewMcpServer::new_stdio("fs", "npx", vec![], None),
+    );
 
-    let refused = mcp_err(root.path(), &["allow-remote", "remote"]);
+    let refused = mcp_err(root.path(), &["allow-remote", "fs", "remote"]);
 
     assert!(
         refused.contains(&format!("Error: {SSE_NOT_SUPPORTED}")),
@@ -414,6 +419,7 @@ fn opening_an_sse_server_is_refused_with_the_reason() {
     );
     let listed = mcp_ok(root.path(), &["list"]);
     assert_eq!(remote_cell(&listed, "remote"), "no");
+    assert_eq!(remote_cell(&listed, "fs"), "no", "nothing changed");
     mcp_ok(root.path(), &["deny-remote", "remote"]);
 }
 

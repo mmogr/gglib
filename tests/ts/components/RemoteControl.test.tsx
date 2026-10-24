@@ -256,11 +256,13 @@ describe('RemoteControl', () => {
     const user = await open();
     const box = await screen.findByRole('checkbox', { name: 'tavily' });
     listMcpServers.mockResolvedValue([mcpServer('tavily', 'stdio', { allow_remote: true })]);
+    // Opening the popover reads the status already; only the tick's own read counts.
+    refreshRemoteStatus.mockClear();
 
     await user.click(box);
 
     expect(setMcpServerRemote).toHaveBeenCalledWith(1, true);
-    await waitFor(() => expect(refreshRemoteStatus).toHaveBeenCalled());
+    await waitFor(() => expect(refreshRemoteStatus).toHaveBeenCalledTimes(1));
     expect(await screen.findByRole('checkbox', { name: 'tavily' })).toBeChecked();
     expect(enableRemote).not.toHaveBeenCalled();
   });

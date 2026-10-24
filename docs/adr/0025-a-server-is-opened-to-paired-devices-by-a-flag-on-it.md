@@ -92,8 +92,8 @@ pointing to `gglib mcp allow-remote <names>`.
 
 `user_version` step 4 (`crates/gglib-db/src/setup_remote_grant.rs`) copies
 the old list onto the rows once. It copies only when the stored
-`remote_enabled` is `true`, and for each listed name only the one stdio
-server that has it, never `builtin`. The two settings rows are read as raw
+`remote_enabled` is `true`, and for each listed name only when exactly one
+server has it and that server is stdio, never `builtin`. The two settings rows are read as raw
 JSON, so a list the struct no longer has, and another setting this build
 cannot read, change nothing. Rows that cannot be read copy nothing, and the
 step is stamped either way.

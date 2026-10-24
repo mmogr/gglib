@@ -225,7 +225,7 @@ model that calls no tool, stays `[]`, and `null` admits them already. The
 chat route (`POST /api/agent/chat`) and every turn a paired device sends
 pass no folder, whatever the conversation remembers: a device's turn calls
 no tool of this machine's but the image tool its Draw asks for and the
-tools of the MCP servers the tunnel opens, which name no file tool, and no
+tools of the MCP servers opened to paired devices, which name no file tool, and no
 key of a device's turn names a path.
 
 # A paired device's turn

@@ -204,8 +204,8 @@ rows that runs once per database: `1` the canonical-path backfill (a blocking
 syscall per row, paid once per library), `2` the loop guard's fold above, `3`
 the stored copies of the `reasoning` recipe cleared, and `4` the remote
 tunnel's old `--allow-mcp` list copied onto `mcp_servers.allow_remote` (only
-from a machine whose tunnel was on, and only a name exactly one stdio server
-has). The column set is deliberately not on it. The `template_caps` column post-dates
+from a machine whose tunnel was on, and only a name exactly one server has,
+when that server is stdio). The column set is deliberately not on it. The `template_caps` column post-dates
 the first stamp, so a database stamped `1` or later may or may not carry it,
 and a version-gated `ALTER` that propagated errors would abort startup with
 `duplicate column name` on real installs. A column is added by asking the

@@ -40,10 +40,7 @@ impl McpService {
     ) -> Result<McpServer, McpServiceError> {
         let mut server = self.get_server(id).await?;
         if allow {
-            Self::refuse_unsupported(server.server_type)?;
-            if server.name == RESERVED_SERVER_NAME {
-                return Err(McpServiceError::NeverOpened(server.name));
-            }
+            Self::refuse_opening(&server)?;
         }
         self.repository.set_allow_remote(id, allow).await?;
         server.allow_remote = allow;
@@ -53,6 +50,21 @@ impl McpService {
             "set whether paired devices may use an MCP server"
         );
         Ok(server)
+    }
+
+    /// Refuse to open `server` to paired devices when it never can be: an
+    /// SSE server, which gglib cannot run, or `builtin`. A caller opening
+    /// several asks this of each before it changes any.
+    ///
+    /// # Errors
+    ///
+    /// [`McpServiceError::SseNotSupported`] or [`McpServiceError::NeverOpened`].
+    pub fn refuse_opening(server: &McpServer) -> Result<(), McpServiceError> {
+        Self::refuse_unsupported(server.server_type)?;
+        if server.name == RESERVED_SERVER_NAME {
+            return Err(McpServiceError::NeverOpened(server.name.clone()));
+        }
+        Ok(())
     }
 
     /// The servers a paired device's runs are offered: each one flagged

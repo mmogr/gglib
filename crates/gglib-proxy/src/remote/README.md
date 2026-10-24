@@ -11,9 +11,10 @@ request itself and never forwards it.
 The proxy never sees the tunnel. What it has is a
 [`RemoteGatewayPort`](gglib_core::ports::RemoteGatewayPort) on its
 `AppState`, attached by whoever started it, and two things it may say to it:
-which MCP servers does the live session open to paired devices, and here is
-a request that came through the tunnel. `/mcp` asks it nothing, because no
-tunnelled request reaches `/mcp`.
+is a session live, and here is a request that came through the tunnel. Which
+MCP servers are open to paired devices is each server's own flag, read from
+the proxy's `McpService`. `/mcp` asks it nothing, because no tunnelled request
+reaches `/mcp`.
 
 # The markers
 

@@ -10,8 +10,8 @@
 //!
 //! It never opens more. It copies only from a machine whose tunnel was on,
 //! since one that was off reset its list at its next `enable` anyway; and
-//! only a name that exactly one stdio server has, as the list's own read
-//! (`the_one`) opened, and never `builtin`. The rows are read as raw JSON
+//! only a name exactly one server has, when that server is stdio, as the
+//! list's own read opened, and never `builtin`. The rows are read as raw JSON
 //! and never as `Settings`, which would drop the list once that field is
 //! gone, and fail on an unrelated row it cannot read.
 
@@ -65,7 +65,7 @@ pub(super) async fn flag_listed_servers(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
-/// Flag each listed name's one stdio server.
+/// Flag each listed name's one server, when it is stdio.
 async fn flag(conn: &mut SqliteConnection) -> Result<()> {
     let list = listed(stored_rows(conn).await?);
     if list.is_empty() {
