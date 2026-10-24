@@ -13,7 +13,7 @@
   device's turn calls no tool until that switch is on and then only the
   tools the chat's settings name. Nothing else in either.
 - **Superseded by:** nothing
-- **Log:** none
+- **Log:** [log-0024](log-0024.md)
 
 > Files and functions are named as they stand at the commit
 > `feat(proxy): the drawing answer names the MCP servers a device's run is

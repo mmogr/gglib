@@ -12,6 +12,10 @@ use gglib_core::{CorsConfig, DevicePorts, ProxyAccessConfig};
 
 use super::runs::{FakeRuns, info};
 
+/// A chat run with builtins as the stub was handed it: `(device, id, body,
+/// draw, no_tools)`.
+pub(crate) type ChatStarted = (String, String, serde_json::Value, bool, bool);
+
 /// The stub.
 #[derive(Debug, Default)]
 pub(crate) struct FakeTurns {
@@ -19,8 +23,8 @@ pub(crate) struct FakeTurns {
     pub(crate) started: Mutex<Vec<(String, String, HubTurn)>>,
     /// Refuse every turn with this, when set.
     pub(crate) fail: Mutex<Option<TurnRefused>>,
-    /// Every chat run with builtins, as `(device, id, body, draw)`.
-    pub(crate) chats: Mutex<Vec<(String, String, serde_json::Value, bool)>>,
+    /// Every chat run with builtins, in order.
+    pub(crate) chats: Mutex<Vec<ChatStarted>>,
     /// The image model each of those chose, in the same order.
     pub(crate) chose: Mutex<Vec<Option<u32>>>,
 }
@@ -53,12 +57,13 @@ impl AgentRunStarter for FakeTurns {
         body: serde_json::Value,
         draw: bool,
         image_model: Option<u32>,
+        no_tools: bool,
     ) -> Result<Created, TurnRefused> {
         self.chose.lock().unwrap().push(image_model);
         self.chats
             .lock()
             .unwrap()
-            .push((device.to_owned(), id.to_owned(), body, draw));
+            .push((device.to_owned(), id.to_owned(), body, draw, no_tools));
         let fail = self.fail.lock().unwrap().clone();
         if let Some(refusal) = fail {
             return Err(refusal);

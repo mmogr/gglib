@@ -25,14 +25,22 @@ for that picture, sent only when one was.
 device keeps itself, run through the agent loop with gglib's builtins: the
 body is the device's unchanged `OpenAI` chat request, handed to the same
 starter (`start_chat`), and `&draw=true` offers the image tool for that
-message. Only a named device may. The run it answers says `frames: "agent"`:
+message. `tools=none` in place of `tools=builtin` is such a chat with its
+tools off: the starter is told `no_tools`, and the run is offered none of
+the opened servers' tools, only the image tool with `&draw=true`, and
+without it no tool at all. Any other word for `tools` is
+`400 invalid_request`, so a gglib that predates a word refuses it rather
+than running the tools it would keep out. Only a named device may. The run
+it answers says `frames: "agent"`:
 its events are the agent loop's, not `OpenAI` chunks, and a reader picks its
 decoder by that key. Without `tools` a chat run is what it always was, its
 answer carries no `frames` key, and `draw` alone is `400 invalid_request`.
 `&image_model=<id>` beside `&draw=true` is the chosen image model, handed to
-the starter as the query said it; on a plain chat run, or beside
+the starter as the query said it, beside either `tools` word; on a plain chat run, or beside
 `kind=agent` (whose turn says it in its body), it is `400 invalid_request`,
-and without `draw` the starter refuses it the same.
+and without `draw` the starter refuses it the same. `tools` beside
+`kind=agent` is `400 invalid_request` too: a hub turn takes its tools from
+the chat's settings.
 
 A request the tunnel edge marked is served in the scope of the device it
 named, and sees that device's runs and every run on one of the hub's

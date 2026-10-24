@@ -222,7 +222,7 @@ async fn a_repeated_id_answers_with_the_devices_run() {
 async fn the_starter_hands_the_proxy_the_coded_refusal() {
     use gglib_core::ports::AgentRunStarter as _;
     let (_dir, state) = state().await;
-    let starter = super::HubTurns(std::sync::Arc::downgrade(&state));
+    let starter = super::HubTurns::of(&state);
     let refusal = starter.start("phone", "d1", turn(4242, "hi")).await.err();
     let refusal = refusal.expect("refused");
     assert_eq!(

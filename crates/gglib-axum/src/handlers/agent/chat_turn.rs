@@ -1,7 +1,8 @@
 //! A chat run with builtins: the proxy's
 //! `PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`, for a chat a
 //! paired phone keeps itself, run here because the agent loop, its slot and
-//! the image tool are the daemon's.
+//! the image tool are the daemon's; and `tools=none` in place of
+//! `tools=builtin`, for such a chat with its tools off.
 //!
 //! The body is the phone's unchanged `OpenAI` chat request. Its `messages`
 //! are the whole history (`gglib_core`'s `parse_openai_messages`), and each
@@ -16,8 +17,11 @@
 //! `"reasoning_budget_tokens": 0`, runs with a thinking budget of `0`; any
 //! other budget is sampling, and is not read. It is offered the tools of
 //! the MCP servers the tunnel opens, settled when the run starts
-//! (`device_tools`, ADR 0024), and the image tool with `draw`, drawing with
-//! the `image_model` the query names when it names one. Nothing is written to any chat: the
+//! (`device_tools`, ADR 0024), unless its tools are off (`no_tools`, from
+//! `tools=none`), when no server is listed or started; and the image tool
+//! with `draw` either way, drawing with the `image_model` the query names
+//! when it names one. Without `draw` a run with its tools off calls no
+//! tool. Nothing is written to any chat: the
 //! phone keeps the conversation, and reads the reply from the run, whose
 //! events are the agent loop's (`frames: agent`).
 //!
@@ -47,22 +51,26 @@ fn invalid(message: impl Into<String>) -> HttpError {
     coded(StatusCode::BAD_REQUEST, "invalid_request", message)
 }
 
-/// What the run's query says of drawing.
+/// What the run's query says of drawing, and of the chat's tools.
 #[derive(Debug, Clone, Copy, Default)]
 pub(super) struct Drawing {
     /// `&draw=true`: the message was sent with Draw pressed.
     pub(super) draw: bool,
     /// `&image_model=<id>`: the image model the person chose for it.
     pub(super) image_model: Option<u32>,
+    /// `tools=none`: the chat's tools are off, so the run is offered no
+    /// MCP tool. Draw still offers the image tool.
+    pub(super) no_tools: bool,
 }
 
 #[cfg(test)]
 impl From<bool> for Drawing {
-    /// `draw` alone, with no image model chosen.
+    /// `draw` alone, with no image model chosen and the tools on.
     fn from(draw: bool) -> Self {
         Self {
             draw,
             image_model: None,
+            no_tools: false,
         }
     }
 }
@@ -102,7 +110,7 @@ pub(super) async fn start(
         Arc::clone(state),
         model,
         chat,
-        Asked::of_phone(drawing.draw),
+        Asked::of_phone(drawing.draw, drawing.no_tools),
     );
     // Saved to no chat: the phone keeps this conversation.
     let transcript = Transcript {
@@ -134,7 +142,11 @@ pub(super) async fn start(
 pub(super) async fn read(
     state: &AppState,
     body: &Value,
-    Drawing { draw, image_model }: Drawing,
+    Drawing {
+        draw,
+        image_model,
+        no_tools,
+    }: Drawing,
 ) -> Result<(String, AgentChatRequest), HttpError> {
     let model = body
         .get("model")
@@ -154,7 +166,7 @@ pub(super) async fn read(
         config: None,
         // The floor: the image tool with Draw. The servers the tunnel opens
         // are read when the run starts, not for a request that is refused.
-        tool_filter: Some(Asked::of_phone(draw).floor()),
+        tool_filter: Some(Asked::of_phone(draw, no_tools).floor()),
         model: None,
         // The request's own sampling is not read: the model's, as on a hub
         // turn. Its Thinking choice is: off, or the model's default.

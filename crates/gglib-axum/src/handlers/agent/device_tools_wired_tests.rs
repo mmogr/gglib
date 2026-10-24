@@ -243,7 +243,38 @@ async fn a_phone_kept_chat_run_starts_the_opened_server_in_its_late_step() {
 
     o.loaded_and_ended("phone", "p1").await;
     assert!(o.running().await, "the late step started it");
-    let phone = Asked::of_phone(false);
+    let phone = Asked::of_phone(false, false);
     assert_eq!(resolve(&o.state, &phone).await, [o.echo()]);
+    o.state.mcp.shutdown().await;
+}
+
+/// A chat the phone keeps with its tools off (`tools=none`), started as
+/// the proxy starts it, starts no opened server, in its `PUT` or its late
+/// step, and is offered none of its tools: nothing, or with Draw exactly
+/// the image tool.
+#[tokio::test]
+async fn a_phone_kept_chat_with_its_tools_off_starts_no_server_and_gets_only_the_floor() {
+    use gglib_core::ports::AgentRunStarter as _;
+
+    let o = opened().await;
+    let starter = hub_turn::HubTurns::of(&o.state);
+    let body = json!({
+        "model": "catalogue-name",
+        "messages": [{ "role": "user", "content": "what is new?" }],
+    });
+
+    let created = starter.start_chat("phone", "p1", body.clone(), false, None, true);
+    assert!(created.await.unwrap().created);
+    o.loaded_and_ended("phone", "p1").await;
+    assert!(!o.running().await, "a chat with its tools off starts none");
+    let phone = Asked::of_phone(false, true);
+    assert_eq!(resolve(&o.state, &phone).await, Vec::<String>::new());
+
+    let created = starter.start_chat("phone", "p2", body, true, None, true);
+    assert!(created.await.unwrap().created);
+    o.loaded_and_ended("phone", "p2").await;
+    assert!(!o.running().await, "nor with Draw");
+    let phone = Asked::of_phone(true, true);
+    assert_eq!(resolve(&o.state, &phone).await, [DRAW]);
     o.state.mcp.shutdown().await;
 }
