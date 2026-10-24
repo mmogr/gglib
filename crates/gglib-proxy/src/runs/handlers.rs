@@ -74,35 +74,43 @@ pub(crate) struct PutQuery {
     kind: Option<RunKind>,
     /// `builtin` runs a chat run through the agent loop, for a chat the
     /// device keeps itself, offered the tools of the MCP servers the tunnel
-    /// opens (`gglib remote enable --allow-mcp <server>`); absent, a plain
-    /// chat run, recorded as it always was.
+    /// opens (`gglib remote enable --allow-mcp <server>`); `none` runs it
+    /// the same way offered none of them, for such a chat with its tools
+    /// off; absent, a plain chat run, recorded as it always was.
     #[serde(default)]
     tools: Option<Tools>,
-    /// With `tools=builtin`: the message was sent with Draw pressed, so
-    /// the image tool is offered. Absent or `false`, it is not. Refused
-    /// with `kind=agent`, whose turn says `draw` in its body.
+    /// With `tools=builtin` or `tools=none`: the message was sent with Draw
+    /// pressed, so the image tool is offered. Absent or `false`, it is not.
+    /// Refused with `kind=agent`, whose turn says `draw` in its body.
     #[serde(default)]
     draw: bool,
-    /// With `tools=builtin&draw=true`: the image model the person chose
-    /// for the picture, by its id in `GET /v1/images/drawing`'s `models`.
-    /// Absent, the default rule draws. Refused with `kind=agent`, whose
-    /// turn says `image_model` in its body, and on a plain chat run.
+    /// With `draw=true` beside `tools=builtin` or `tools=none`: the image
+    /// model the person chose for the picture, by its id in
+    /// `GET /v1/images/drawing`'s `models`. Absent, the default rule draws.
+    /// Refused with `kind=agent`, whose turn says `image_model` in its
+    /// body, and on a plain chat run.
     #[serde(default)]
     image_model: Option<u32>,
 }
 
-/// What `?tools=` may say.
+/// What `?tools=` may say. Any other word is refused, so a gglib that
+/// predates a word refuses it rather than running the tools it would keep
+/// out.
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum Tools {
+    /// Through the agent loop, offered the opened servers' tools.
     Builtin,
+    /// Through the agent loop, offered no MCP tool: only the image tool
+    /// with `draw`, and no tool at all without it.
+    None,
 }
 
 /// `PUT /v1/runs/{id}`: start a chat run with the body as its request, or
 /// answer with the caller's run that already has the id. 201 new, 200
 /// existing. With `?kind=agent`, a device's turn on a hub chat, and with
 /// `?tools=builtin` a chat run through the agent loop with this machine's
-/// tools: see [`super::turn`].
+/// tools, or `?tools=none` one without its MCP tools: see [`super::turn`].
 pub(crate) async fn put_run(
     State(state): State<AppState>,
     Caller(scope): Caller,
@@ -112,8 +120,8 @@ pub(crate) async fn put_run(
 ) -> Answer {
     let Ok(Query(query)) = query else {
         return Err(invalid(
-            "`kind` is `chat` or `agent`, `tools` is `builtin`, `draw` is `true` or `false`, \
-             and `image_model` is an image model's id",
+            "`kind` is `chat` or `agent`, `tools` is `builtin` or `none`, `draw` is `true` or \
+             `false`, and `image_model` is an image model's id",
         ));
     };
     let body = match body {
@@ -130,17 +138,26 @@ pub(crate) async fn put_run(
         if query.draw || query.image_model.is_some() {
             return Err(invalid(super::AGENT_DRAW_IN_QUERY));
         }
+        // Refused, not ignored: a `tools=none` dropped here would run a Mac
+        // chat's tools against the word the device sent.
+        if query.tools.is_some() {
+            return Err(invalid(
+                "a turn on a hub chat takes its tools from the chat's settings; `tools` goes with `kind=chat`",
+            ));
+        }
         return super::turn::put(&state, scope, &id, body).await;
     }
-    if query.tools == Some(Tools::Builtin) {
+    if let Some(tools) = query.tools {
         // An `image_model` without `draw` is the starter's to refuse, with
         // every other door's.
         let drawing = (query.draw, query.image_model);
-        return super::turn::put_chat(&state, scope, &id, body, drawing).await;
+        let no_tools = tools == Tools::None;
+        return super::turn::put_chat(&state, scope, &id, body, drawing, no_tools).await;
     }
     if query.draw || query.image_model.is_some() {
         return Err(invalid(
-            "`draw` and `image_model` go with `tools=builtin`: a plain chat run calls no tool",
+            "`draw` and `image_model` go with `tools=builtin` or `tools=none`: a plain chat run \
+             calls no tool",
         ));
     }
     let runs = runs(&state).ok_or_else(unavailable)?;

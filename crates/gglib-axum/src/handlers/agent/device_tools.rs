@@ -40,9 +40,11 @@ impl Asked {
         }
     }
 
-    /// A chat the phone keeps itself, which names no tool of its own.
-    pub(super) fn of_phone(draw: bool) -> Self {
+    /// A chat the phone keeps itself, which names no tool of its own and
+    /// turns them all off with `no_tools` (`tools=none`).
+    pub(super) fn of_phone(draw: bool, no_tools: bool) -> Self {
         Self {
+            no_tools,
             draw,
             ..Self::default()
         }

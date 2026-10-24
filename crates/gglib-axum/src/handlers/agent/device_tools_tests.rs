@@ -32,7 +32,10 @@ fn with_nothing_opened_only_draw_draws() {
         offered(&[], &Asked::of_chat(&chat, false)),
         Vec::<String>::new()
     );
-    assert_eq!(offered(&[], &Asked::of_phone(false)), Vec::<String>::new());
+    assert_eq!(
+        offered(&[], &Asked::of_phone(false, false)),
+        Vec::<String>::new()
+    );
 }
 
 /// A chat that names no tool, and a phone's, is offered every tool of the
@@ -40,7 +43,7 @@ fn with_nothing_opened_only_draw_draws() {
 #[test]
 fn every_tool_of_an_opened_server_is_offered_qualified() {
     let opened = strings(&["3:search", "3:extract", "4:crawl"]);
-    assert_eq!(offered(&opened, &Asked::of_phone(false)), opened);
+    assert_eq!(offered(&opened, &Asked::of_phone(false, false)), opened);
     let chat = ConversationSettings::default();
     assert_eq!(
         offered(&opened, &Asked::of_chat(&chat, true)),
@@ -93,6 +96,22 @@ fn tools_off_offers_no_mcp_tool_but_draw_still_draws() {
     assert_eq!(offered(&opened, &Asked::of_chat(&off, true)), [DRAW]);
 }
 
+/// A phone's chat with its tools off (`tools=none`) is offered no tool of
+/// the opened servers: the image tool alone with Draw, nothing without it.
+#[test]
+fn a_phone_chat_with_its_tools_off_gets_only_the_floor() {
+    let opened = strings(&["3:search", "4:crawl"]);
+    assert_eq!(offered(&opened, &Asked::of_phone(true, true)), [DRAW]);
+    assert_eq!(
+        offered(&opened, &Asked::of_phone(false, true)),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        offered(&opened, &Asked::of_phone(true, false)),
+        [DRAW, "3:search", "4:crawl"]
+    );
+}
+
 /// An MCP server for `sh -c` that answers `initialize` and `tools/list`
 /// and offers one tool, `echo`.
 #[cfg(unix)]
@@ -131,7 +150,7 @@ async fn resolve_offers_the_floor_while_the_gateway_opens_nothing() {
 
     let echo = format!("{}:echo", server.id);
     assert_eq!(
-        resolve(&state, &Asked::of_phone(false)).await,
+        resolve(&state, &Asked::of_phone(false, false)).await,
         Vec::<String>::new()
     );
     let chat = named(&[echo.as_str(), "echo"]);

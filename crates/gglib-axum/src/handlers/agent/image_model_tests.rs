@@ -179,7 +179,11 @@ async fn at_every_door(
     let device = refused(
         super::hub_turn::start(state, "phone", "d1", hub_turn(hub, draw, image_model)).await,
     );
-    let drawing = Drawing { draw, image_model };
+    let drawing = Drawing {
+        draw,
+        image_model,
+        no_tools: false,
+    };
     let kept = refused(chat_turn::start(state, "phone", "p1", phone_request(), drawing).await);
     let mut route = serde_json::from_value::<AgentRunRequest>(page_run(page_chat, &said))
         .unwrap()
@@ -272,6 +276,7 @@ async fn read_at_each_door(
     let drawing = Drawing {
         draw: true,
         image_model,
+        no_tools: false,
     };
     let (_, kept) = chat_turn::read(state, &phone_request(), drawing)
         .await

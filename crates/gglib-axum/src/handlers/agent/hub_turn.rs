@@ -59,6 +59,15 @@ impl std::fmt::Debug for HubTurns {
     }
 }
 
+#[cfg(test)]
+impl HubTurns {
+    /// The starter [`bind`] hands a proxy, for a test that drives it as the
+    /// proxy does.
+    pub(super) fn of(state: &AppState) -> Self {
+        Self(Arc::downgrade(state))
+    }
+}
+
 /// Hand every proxy this daemon starts what starts a device's turn.
 pub(crate) fn bind(state: &AppState) {
     state
@@ -82,11 +91,16 @@ impl AgentRunStarter for HubTurns {
         body: serde_json::Value,
         draw: bool,
         image_model: Option<u32>,
+        no_tools: bool,
     ) -> Result<Created, TurnRefused> {
         let Some(state) = self.0.upgrade() else {
             return Err(refusal(RunsError::ShuttingDown.into()));
         };
-        let drawing = super::chat_turn::Drawing { draw, image_model };
+        let drawing = super::chat_turn::Drawing {
+            draw,
+            image_model,
+            no_tools,
+        };
         super::chat_turn::start(&state, device, id, body, drawing)
             .await
             .map_err(refusal)

@@ -252,7 +252,8 @@ servers the live session opens (`gglib remote enable --allow-mcp
 <server>`, read from the tunnel's gateway), each by its qualified
 `{id}:{tool}`: every one for a phone's chat or a chat that names
 no tool, only those a chat's own list names exactly or by bare name
-otherwise, none when the chat turned its tools off, and never a tool the
+otherwise, none when the chat turned its tools off (a phone's chat says so
+with `tools=none`), and never a tool the
 list names that no opened server has. A turn is planned with the floor
 alone; the rest is settled in the run's late step (`hub_turn::late_on`),
 once the model is found or loaded, where a named server that is not
@@ -263,7 +264,9 @@ starts nothing. The decision is
 `chat_turn` is the starter's other door, the proxy's
 `PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`: a chat a paired
 phone keeps itself, sent whole as an `OpenAI` request and run through the
-loop so that it can draw. Its history is read by core's
+loop so that it can draw. `tools=none` in place of `tools=builtin` is such
+a chat with its tools off: offered no MCP tool and starting no server, the
+image tool alone with `draw`, and no tool at all without it. Its history is read by core's
 `parse_openai_messages`, each inline image stored once as an attachment no
 chat links (swept at the first daemon start a day or more later), its model resolved and loaded as a turn's
 is, its tools those `device_tools` offers a phone's run, the image tool only with `draw` (drawn with the query's `image_model` when it names one), the request's
