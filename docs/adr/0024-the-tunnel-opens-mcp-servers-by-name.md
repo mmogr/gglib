@@ -1,6 +1,7 @@
 # ADR 0024 — The tunnel opens MCP servers by name: a paired device's runs are offered the named servers' tools, and `/mcp` is closed to the tunnel
 
-- **Status:** Accepted
+- **Status:** Accepted; superseded in part by
+  [ADR 0025](0025-a-server-is-opened-to-paired-devices-by-a-flag-on-it.md)
 - **Date:** 2026-10-23
 - **Depends on:** [ADR 0012](0012-the-remote-tunnel.md),
   [ADR 0013](0013-the-target-is-a-value.md),
@@ -12,7 +13,9 @@
   requests; and the rule ADR 0013's 2026-09-30 amendment set, that a
   device's turn calls no tool until that switch is on and then only the
   tools the chat's settings name. Nothing else in either.
-- **Superseded by:** nothing
+- **Superseded by:** [ADR 0025](0025-a-server-is-opened-to-paired-devices-by-a-flag-on-it.md),
+  in part: decision 1's list, `--allow-mcp` naming the servers a session
+  opens
 - **Log:** [log-0024](log-0024.md)
 
 > Files and functions are named as they stand at the commit
