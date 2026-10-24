@@ -108,7 +108,8 @@ describe('InferenceParametersForm', () => {
       expect(field).not.toHaveAccessibleDescription(/for reasoning models/);
     });
 
-    // Max Tokens' "No limit" wording describes unbounded generation. Every
+    // Max Tokens' "No limit" wording describes generation the proxy leaves
+    // unbounded, and a chat turn's own limit. Every
     // other parameter means something different: gglib names no value and
     // llama.cpp's own default applies — a number worth naming, and nothing to
     // do with a limit. A blank caption would read as "nothing happens here",
@@ -137,7 +138,8 @@ describe('InferenceParametersForm', () => {
 
       const maxTokens = screen.getByLabelText('Max Tokens');
       expect(maxTokens).not.toHaveAttribute('placeholder');
-      expect(maxTokens).toHaveAccessibleDescription(/No limit/);
+      expect(maxTokens).toHaveAccessibleDescription(/No limit through the proxy/);
+      expect(maxTokens).toHaveAccessibleDescription(/a chat turn gets at least 16,384 tokens/);
       expect(maxTokens).not.toHaveAccessibleDescription(/2,?048/);
     });
   });

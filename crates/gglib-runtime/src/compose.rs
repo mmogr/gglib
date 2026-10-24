@@ -14,7 +14,11 @@
 //!    tool set, and say where the loop's guard decisions are counted.
 //!
 //! Centralising this into a single function eliminates the copy-paste and
-//! ensures both entry points apply the same defaults and wiring order.
+//! ensures both entry points apply the same defaults and wiring order. One
+//! of those defaults is a turn's limit: a request that names no `max_tokens`
+//! is limited to 16384 tokens, 32768 for a `reasoning` model, or more under
+//! a thinking budget (`LlmCompletionAdapter::with_turn_limit`), so a turn
+//! the model never ends stops. A send to another machine is not limited.
 //!
 //! Every entry point hands in a [`ModelContext`] resolved by
 //! [`gglib_core::request_pipeline::resolve()`] rather than a bare tag list, so
@@ -261,7 +265,8 @@ fn compose_agent_loop_inner(
             .with_usage_sink(usage_sink)
             .with_retry_observer(retry_observer)
             .with_retry_policy(retry_policy.unwrap_or_else(RetryPolicy::from_env))
-            .with_generation_gate(generation.gate),
+            .with_generation_gate(generation.gate)
+            .with_turn_limit(true),
     );
     let builtin = sandbox_root
         .map_or_else(

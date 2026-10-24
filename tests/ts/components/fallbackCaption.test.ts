@@ -71,3 +71,28 @@ describe('fallbackCaption on the auto-detected rung', () => {
     expect(fallbackCaption('temperature', explaining('measured'))).toMatch(/^Resolves to 1\.2/);
   });
 });
+
+/** An explanation that resolves nothing, with `field` unset by design. */
+const unset = (field: 'temperature' | 'maxTokens'): InferenceFallback => ({
+  kind: 'resolved',
+  ownLayer: 'modelUserSet',
+  resolution: {
+    isLoading: false,
+    hasError: false,
+    explanation: samplingExplanation({ sources: [{ param: field, kind: 'unset' }] }),
+  },
+});
+
+describe('fallbackCaption for a field nothing resolves', () => {
+  it('never gives a sampler the token limit', () => {
+    const caption = fallbackCaption('temperature', unset('temperature'));
+    expect(caption).toBe('Unset — unset by design');
+    expect(caption).not.toMatch(/limit|16,384/);
+  });
+
+  it('gives Max Tokens the chat turn limit', () => {
+    expect(fallbackCaption('maxTokens', unset('maxTokens'))).toContain(
+      'a chat turn gets at least 16,384 tokens',
+    );
+  });
+});

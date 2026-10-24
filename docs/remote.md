@@ -970,7 +970,14 @@ A `tool_call_start` frame for an MCP server's tool names that server,
 `"server": "Tavily Web Search"`; one for gglib's own tool has no `server`
 key.
 The request's sampling is not read, its `max_tokens` included; the desktop's
-settings for the model apply, as on a turn. Its Thinking choice is read: a
+settings for the model apply, as on a turn. Where they name no `max_tokens`,
+each of the model's turns in the run is limited to 16384 tokens (32768 for
+a `reasoning`-tagged model), or to a thinking budget the settings name plus
+8192 when that is more, so a turn the model never ends stops there rather
+than at the end of the context; the device's `max_tokens` neither raises nor
+lowers it. A run on a paired machine's model is not limited from this side:
+no `max_tokens` is sent, and that machine's own settings for the model
+apply there. Its Thinking choice is read: a
 body with `"reasoning_budget_tokens": 0`, which is how a device turns thinking
 off for a chat it keeps ([Thinking](clients.md#thinking)), runs with a thinking
 budget of `0`, and any other budget is sampling and is not read. The run is

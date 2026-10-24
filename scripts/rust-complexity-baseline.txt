@@ -44,7 +44,7 @@ crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 370
 crates/gglib-cli/src/daemon_client/images_tests.rs 387
 crates/gglib-cli/src/handlers/agent_chat/config.rs 477
-crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 458
+crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 460
 crates/gglib-cli/src/handlers/agent_chat/draw.rs 318
 crates/gglib-cli/src/handlers/agent_chat/mod.rs 317
 crates/gglib-cli/src/handlers/agent_chat/repl.rs 372
@@ -222,7 +222,7 @@ crates/gglib-runtime/src/ports_impl/llm_completion/drawn_picture_tests.rs 471
 crates/gglib-runtime/src/ports_impl/llm_completion/first_call_tests.rs 374
 crates/gglib-runtime/src/ports_impl/llm_completion/images_tests.rs 344
 crates/gglib-runtime/src/ports_impl/llm_completion/layers_tests.rs 310
-crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 379
+crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 391
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/classify.rs 315
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/classify_tests.rs 301
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 340

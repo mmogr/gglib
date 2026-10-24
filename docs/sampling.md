@@ -37,7 +37,7 @@ The full set of configurable parameters, and what applies when nothing names one
 | `temperature` | `--temperature` | 0.0 – 2.0 | llama.cpp default 0.8 | |
 | `top_p` | `--top-p` | 0.0 – 1.0 | llama.cpp default 0.95 | |
 | `top_k` | `--top-k` | int | llama.cpp default 40 | |
-| `max_tokens` | `--max-tokens` | int | no limit | Deliberately unset — see below |
+| `max_tokens` | `--max-tokens` | int | no limit; an agent-loop turn gets 16384 or more | Deliberately unset — see below |
 | `repeat_penalty` | `--repeat-penalty` | > 0.0 | llama.cpp default 1.0 | Coupled to `temperature` |
 | `presence_penalty` | `--presence-penalty` | 0.0 – 2.0 | llama.cpp default 0.0 | Coupled to `temperature` |
 | `min_p` | `--min-p` | 0.0 – 1.0 | llama.cpp default 0.05 | Coupled to `temperature` |
@@ -333,10 +333,20 @@ independently regardless of temperature.
 
 **`max_tokens` has no fallback, by design.** Resolution force-writes every set
 parameter into the outgoing request, so a fallback here would cap *every* request
-that did not name its own — silently truncating long answers. Left unset, no
-`max_tokens` key is sent and llama-server applies its own `n_predict` default of
-`-1`, generating until a stop token or the context limit. Explicit per-request,
-per-profile and per-model values are unaffected.
+that did not name its own — silently truncating long answers. Left unset, the
+proxy sends no `max_tokens` key and llama-server applies its own `n_predict`
+default of `-1`, generating until a stop token or the context limit. Explicit
+per-request, per-profile and per-model values are unaffected.
+
+An agent-loop turn is the exception: the chat page, a hub turn, `gglib chat`
+and `gglib q`. After the ladder is folded, a turn it left with no `max_tokens`
+is given 16384 tokens, 32768 for a `reasoning`-tagged model, or a positive
+`reasoning_budget_tokens` plus 8192 when that is more, so a turn the model
+never ends stops. A reply cut off there while it writes a tool call, or before
+it writes any text, ends the run `turn_too_long`; one cut off in its text is
+taken as if it had stopped, with a warning. The words after a Draw's picture
+are the exception and are always answered for. A turn on a paired machine's model
+is not limited from this side, and a benchmark arm is not limited.
 
 **`min_p` is deferred rather than restated, and that took two attempts.**
 The floor was once `0.0`, which reads like an absence but was not one:
@@ -371,7 +381,7 @@ Three values are deliberately not adopted from it:
 
 | in the file | why gglib ignores it |
 |---|---|
-| `max_new_tokens` / `max_length` | `max_tokens` is unset by design, so nothing but the client bounds a response |
+| `max_new_tokens` / `max_length` | `max_tokens` is unset by design, so through the proxy nothing but the client bounds a response (an agent-loop turn has its own limit, above) |
 | `do_sample: false` | gglib has no greedy mode, and forcing `temperature: 0` is the near-greedy setting [ADR 0004](adr/0004-observe-the-sampling-boundary.md)'s addendum bans for reasoning models. Logged, never applied |
 | anything out of range | dropped rather than clamped — clamping invents a number the author did not choose and attributes it to them |
 
@@ -524,6 +534,11 @@ A `—` is not a gap. It is the normal answer for every sampler nothing names:
 gglib sends no value and llama.cpp supplies its own. The row is still worth printing, because "gglib
 chose 0.95" and "llama.cpp chose 0.95" are different facts and only one of them
 changes when the pinned build moves.
+
+`max_tokens` is the one `—` that is not always sent as nothing: through the
+proxy it is, but an agent-loop turn is given its turn limit after this
+resolution (see [Temperature coupling](#temperature-coupling)), and
+`explain` does not show that number.
 
 The `reasoning_effort` row above shows the third reason a `—` appears, and the
 only one that is worth acting on: a rung *did* name a value and this model's

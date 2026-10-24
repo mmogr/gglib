@@ -76,6 +76,25 @@ over (ADR 0022).
 [`LlmCompletionAdapter::with_sampling_observer`] tells a caller how a request
 resolved, so none has a reason to fold a ladder to find out.
 
+# A turn's limit
+
+llama-server sets no limit of its own on a reply (`n_predict: -1`), so a turn
+the model never ends runs until the context is full. The agent loop's adapter
+([`LlmCompletionAdapter::with_turn_limit`], set by `compose_agent_loop` and
+`compose_agent_loop_with_sampling`) gives a request that leaves the ladder
+with no `max_tokens` a limit of 16384 tokens, 32768 for a `reasoning`-tagged
+model, or a positive `reasoning_budget_tokens` plus 8192 when that is more. A
+request that names one keeps it: `--max-tokens`, a stored setting, the
+`reasoning` recipe's 32768. A reply cut off at the limit while it writes a
+call, or before it writes any text, ends the loop's run; one cut off in its
+text is taken as if it had stopped. The words after a Draw's picture are the
+exception and are always answered for. The limit is written after the ladder is
+folded, so the sampling observer, and `gglib model explain`, do not report it.
+A send to another machine is not limited: a run on a paired machine's model
+gets no limit from this side, and that machine's proxy applies its own
+settings for the model, as it would for any client that names none. An adapter
+without it, such as a benchmark arm's, sends none.
+
 # Generation turns
 
 An image render on `sd-server` needs the GPU to itself, so a send to this
@@ -96,7 +115,8 @@ remote turn; `retry/` the send loop; `body.rs` and `stream.rs` the two ends
 of the wire format; `images.rs` reads the images a message names by id and
 writes each as an `image_url` data URL, the one place an id becomes bytes; `writing_time.rs` times the model's writing on the
 decoded stream, before a dialect parser holds tool-call markup back;
-`turn.rs` takes a send's generation turn and holds it in the reply's stream.
+`turn.rs` takes a send's generation turn and holds it in the reply's stream;
+`turn_limit.rs` gives a loop's turn its limit.
 
 # Lifetime
 

@@ -43,17 +43,26 @@ export interface ResolutionState {
 }
 
 /**
+ * What an unset Max Tokens means for a chat: the agent loop gives each turn
+ * that names none a limit of its own (`turn_limit.rs`), 32,768 for a
+ * reasoning model and more for a thinking budget. A turn on a paired
+ * machine's model gets none from this side.
+ */
+const CHAT_TURN_LIMIT = 'a chat turn gets at least 16,384 tokens';
+
+/**
  * What to say for a parameter nothing names.
  *
  * "Unset" does not mean the same thing for all of them, so none of these can
- * be shared. Max Tokens unset means genuinely unbounded generation; an unset
+ * be shared. Max Tokens unset means unbounded generation through the proxy,
+ * and a turn's own limit in a chat ({@link CHAT_TURN_LIMIT}); an unset
  * sampler means llama.cpp's own default applies, which is a number worth
  * naming rather than an absence. A field reaching this map without an entry
  * gets no caption at all, which is the safe answer — better silence than Max
  * Tokens' wording under a threshold it does not describe.
  */
 const UNSET_CAPTIONS: Partial<Record<SamplingParamKey, string>> = {
-  maxTokens: 'No limit — generates until the context is full',
+  maxTokens: `No limit through the proxy; ${CHAT_TURN_LIMIT}`,
   // gglib once restated some of these as a floor (ADR 0003, ADR 0022). The
   // number is still what applies, so the caption states it, as llama.cpp's.
   temperature: 'llama.cpp default: 0.8',
@@ -144,7 +153,9 @@ export function fallbackCaption(
   });
   const value = explanation.resolved[field];
 
-  return value == null
-    ? `No limit — ${source}`
-    : `Resolves to ${formatParamValue(field, value)} — ${source}`;
+  if (value != null) return `Resolves to ${formatParamValue(field, value)} — ${source}`;
+  // Only Max Tokens unset is a limit; any other empty field is just unset.
+  return field === 'maxTokens'
+    ? `No limit through the proxy; ${CHAT_TURN_LIMIT} — ${source}`
+    : `Unset — ${source}`;
 }

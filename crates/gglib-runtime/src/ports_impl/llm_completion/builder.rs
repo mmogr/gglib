@@ -76,6 +76,7 @@ impl LlmCompletionAdapter {
             raw_passthrough: false,
             first_turn_tool_choice: None,
             first_turn_pending: AtomicBool::new(true),
+            limit_turns: false,
         }
     }
 
@@ -240,6 +241,20 @@ impl LlmCompletionAdapter {
     #[must_use]
     pub fn with_first_turn_tool_choice(mut self, tool_choice: Option<String>) -> Self {
         self.first_turn_tool_choice = tool_choice;
+        self
+    }
+
+    /// Give each request that leaves the ladder with no `max_tokens` a
+    /// turn's limit (16384 tokens, 32768 for a `reasoning`-tagged model, or
+    /// more for a thinking budget: see `turn_limit`), so a turn the model
+    /// never ends stops. A send to another machine
+    /// ([`with_far_machine`](Self::with_far_machine)) is never limited: that
+    /// machine's own settings apply.
+    /// For the agent loop's turns; off (the default) sends what the ladder
+    /// resolved and nothing more, as a benchmark arm needs.
+    #[must_use]
+    pub const fn with_turn_limit(mut self, limit: bool) -> Self {
+        self.limit_turns = limit;
         self
     }
 }

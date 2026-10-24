@@ -170,7 +170,11 @@ async fn a_thinking_budget_above_zero_is_sampling_and_is_not_read() {
     assert_ne!(body["reasoning_budget_tokens"], json!(4096));
     assert_ne!(body["reasoning_budget_tokens"], json!(0));
     assert_ne!(body["reasoning_effort"], json!("high"));
-    assert_ne!(body["max_tokens"], json!(5));
+    assert_eq!(
+        body["max_tokens"],
+        json!(16_384),
+        "the loop's limit, not the phone's"
+    );
 
     let (_, unsaid) = read(&state, &request("qwen-vision"), false.into())
         .await
