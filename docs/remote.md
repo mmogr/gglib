@@ -958,6 +958,9 @@ chat on the desktop: the device keeps the conversation and reads the reply
 from the run. That run's listing says `"frames": "agent"`: its events are
 the agent loop's (`tool_progress`, `waiting`, `tool_call_complete` with its
 images), not OpenAI chunks, and a run without the key is read as OpenAI's.
+A `tool_call_start` frame for an MCP server's tool names that server,
+`"server": "Tavily Web Search"`; one for gglib's own tool has no `server`
+key.
 The request's sampling is not read, its `max_tokens` included; the desktop's
 settings for the model apply, as on a turn. Its Thinking choice is read: a
 body with `"reasoning_budget_tokens": 0`, which is how a device turns thinking

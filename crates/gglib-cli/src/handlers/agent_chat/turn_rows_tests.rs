@@ -77,6 +77,7 @@ fn called() -> [AgentEvent; 3] {
             tool_call: call(),
             display_name: "Read File".to_owned(),
             args_summary: Some("src/main.rs".to_owned()),
+            server: None,
         },
         AgentEvent::ToolCallComplete {
             tool_name: "read_file".to_owned(),

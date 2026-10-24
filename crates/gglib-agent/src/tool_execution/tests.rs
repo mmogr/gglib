@@ -169,3 +169,42 @@ async fn executor_error_produces_failure_result() {
         results[0].content,
     );
 }
+
+/// A call's start names the server its definition names, and a call whose
+/// definition names none says nothing of one.
+#[tokio::test]
+async fn a_start_names_the_server_its_definition_names() {
+    let (tx, mut rx) = mpsc::channel(32);
+    let executor: Arc<dyn ToolExecutorPort> = Arc::new(OkExecutor);
+    let calls = vec![
+        call("c1", "3:search"),
+        call("c2", "builtin:get_current_time"),
+    ];
+    let tools = [
+        ToolDefinition {
+            server: Some("Tavily Web Search".into()),
+            ..ToolDefinition::new("3:search")
+        },
+        ToolDefinition::new("builtin:get_current_time"),
+    ];
+
+    execute_tools_parallel(&calls, &executor, &AgentConfig::default(), &tx, &tools).await;
+
+    let mut started = Vec::new();
+    while let Ok(event) = rx.try_recv() {
+        if let gglib_core::AgentEvent::ToolCallStart {
+            tool_call, server, ..
+        } = event
+        {
+            started.push((tool_call.name, server));
+        }
+    }
+    started.sort();
+    assert_eq!(
+        started,
+        [
+            ("3:search".to_owned(), Some("Tavily Web Search".to_owned())),
+            ("builtin:get_current_time".to_owned(), None),
+        ]
+    );
+}

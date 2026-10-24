@@ -50,6 +50,7 @@ async fn the_chat_routes_frames_are_these_bytes() {
             },
             display_name: "Read File".to_owned(),
             args_summary: None,
+            server: None,
         },
     ];
     let frames = events

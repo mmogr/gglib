@@ -44,7 +44,8 @@ async fn execute_single_tool(
     tool_timeout_ms: u64,
     def: Option<ToolDefinition>,
 ) -> ToolResult {
-    let (title, deadline) = def.map_or((None, None), |d| (d.title, d.deadline));
+    let (title, server, deadline) =
+        def.map_or((None, None, None), |d| (d.title, d.server, d.deadline));
     let timeout = deadline.unwrap_or_else(|| Duration::from_millis(tool_timeout_ms));
     // Shared failure constructor — avoids repeating the same `tool_call_id`
     // and `success: false` across every error branch.
@@ -78,6 +79,7 @@ async fn execute_single_tool(
             tool_call: tc.clone(),
             display_name: display_name.clone(),
             args_summary,
+            server,
         })
         .await;
 

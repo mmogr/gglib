@@ -38,6 +38,7 @@ fn started(id: &str) -> AgentEvent {
         tool_call: call(id),
         display_name: "Read File".to_owned(),
         args_summary: None,
+        server: Some("Files".to_owned()),
     }
 }
 

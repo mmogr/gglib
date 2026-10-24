@@ -49,6 +49,11 @@ pub enum AgentEvent {
         display_name: String,
         /// One-line argument summary (e.g. file path, search pattern).
         args_summary: Option<String>,
+        /// The name of the MCP server the tool belongs to, from its
+        /// [`ToolDefinition::server`](super::tool_types::ToolDefinition::server).
+        /// Absent for gglib's own tools, and when the servers cannot be read.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        server: Option<String>,
     },
 
     /// A tool execution has completed (success or failure).

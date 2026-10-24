@@ -74,6 +74,7 @@ fn tool_reply() -> Vec<AgentEvent> {
             tool_call: call,
             display_name: "Draw".to_owned(),
             args_summary: None,
+            server: None,
         },
         AgentEvent::ToolCallComplete {
             tool_name: "draw".to_owned(),

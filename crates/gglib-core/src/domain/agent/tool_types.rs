@@ -40,6 +40,12 @@ pub struct ToolDefinition {
     #[serde(skip)]
     pub title: Option<String>,
 
+    /// The name of the MCP server the tool belongs to, so a surface can say
+    /// where a call went. `None` for gglib's own tools, and when the
+    /// servers cannot be read. Never sent to the model.
+    #[serde(skip)]
+    pub server: Option<String>,
+
     /// How long one call may run, when the tool knows better than the
     /// session's `tool_timeout_ms` (an image render takes minutes).
     ///
@@ -58,6 +64,7 @@ impl ToolDefinition {
             description: None,
             input_schema: None,
             title: None,
+            server: None,
             deadline: None,
         }
     }

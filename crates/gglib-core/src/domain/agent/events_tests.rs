@@ -22,10 +22,31 @@ fn tool_call_start_serialises_correctly() {
         },
         display_name: "Search".into(),
         args_summary: None,
+        server: None,
     };
     let json = serde_json::to_value(&evt).unwrap();
     assert_eq!(json["type"], "tool_call_start");
     assert_eq!(json["tool_call"]["name"], "search");
+}
+
+/// An MCP tool's start names its server; gglib's own tool's start has no
+/// `server` key at all, so its frame is the one it always was.
+#[test]
+fn a_start_names_its_mcp_server_and_a_builtin_start_has_no_server_key() {
+    let start = |name: &str, server: Option<&str>| AgentEvent::ToolCallStart {
+        tool_call: ToolCall {
+            id: "c1".into(),
+            name: name.into(),
+            arguments: serde_json::json!({}),
+        },
+        display_name: "Search".into(),
+        args_summary: None,
+        server: server.map(str::to_owned),
+    };
+    let mcp = serde_json::to_string(&start("3:tavily_search", Some("Tavily Web Search"))).unwrap();
+    assert!(mcp.contains(r#""server":"Tavily Web Search""#), "{mcp}");
+    let builtin = serde_json::to_value(start("builtin:get_current_time", None)).unwrap();
+    assert!(builtin.get("server").is_none(), "{builtin}");
 }
 
 /// [`AGENT_EVENT_CHANNEL_CAPACITY`] must be positive and must be at least
@@ -220,6 +241,7 @@ fn drawing_frames() -> Vec<AgentEvent> {
             },
             display_name: "Generate Image".into(),
             args_summary: None,
+            server: None,
         },
         progress(ToolStage::Queued, None, None, Some(1)),
         progress(ToolStage::Loading, None, None, None),

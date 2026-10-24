@@ -193,6 +193,7 @@ pub(super) fn reply() -> Vec<AgentEvent> {
             },
             display_name: "Read File".to_owned(),
             args_summary: None,
+            server: None,
         },
         AgentEvent::ToolCallComplete {
             tool_name: "read_file".to_owned(),
