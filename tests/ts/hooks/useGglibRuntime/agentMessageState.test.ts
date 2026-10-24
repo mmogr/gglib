@@ -166,6 +166,16 @@ describe('addToolCallPart', () => {
     });
   });
 
+  it('carries the MCP server the start names, and no server key without one', () => {
+    const msgs = applyUpdate([emptyAssistant()], (set) => {
+      addToolCallPart(set, MSG_ID, 'tc-1', '3:tavily_search', {}, 'Tavily Search', 'Tavily Web Search');
+      addToolCallPart(set, MSG_ID, 'tc-2', 'builtin:get_current_time', {}, 'Get Current Time');
+    });
+    const parts = partsOf(msgs[0]);
+    expect(parts[0]).toMatchObject({ toolCallId: 'tc-1', server: 'Tavily Web Search' });
+    expect(parts[1]).not.toHaveProperty('server');
+  });
+
   it('defaults args to {} for non-object arguments', () => {
     const msgs = applyUpdate([emptyAssistant()], (set) =>
       addToolCallPart(set, MSG_ID, 'tc-2', 'fn', 'not-an-object'),

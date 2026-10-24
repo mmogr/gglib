@@ -29,6 +29,7 @@
 //! `images` is the [`AttachmentService`] a tool's images are stored
 //! through ([`crate::tool_images`]).
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{Context, anyhow};
@@ -36,6 +37,7 @@ use async_trait::async_trait;
 use gglib_core::ports::ToolExecutorPort;
 use gglib_core::services::AttachmentService;
 use gglib_core::{McpToolResult, ToolCall, ToolDefinition, ToolResult};
+use tracing::warn;
 
 use crate::builtin::parse_args;
 use crate::service::McpService;
@@ -82,17 +84,30 @@ impl ToolExecutorPort for McpToolExecutorAdapter {
     /// Tool names are qualified with `{server_id}:` (e.g. `"3:read_file"`)
     /// to guarantee uniqueness when multiple servers expose tools with the
     /// same bare name.  `execute()` requires this qualified format.
+    ///
+    /// Each tool's [`ToolDefinition::server`] is its server's name, from one
+    /// read of the servers; when they cannot be read, the tools are listed
+    /// without it.
     async fn list_tools(&self) -> Vec<ToolDefinition> {
+        let names: HashMap<i64, String> = match self.mcp.list_servers().await {
+            Ok(servers) => servers.into_iter().map(|s| (s.id, s.name)).collect(),
+            Err(e) => {
+                warn!("MCP servers could not be read to name their tools: {e}");
+                HashMap::new()
+            }
+        };
         self.mcp
             .list_all_tools()
             .await
             .into_iter()
             .flat_map(|(server_id, tools)| {
+                let server = names.get(&server_id).cloned();
                 tools.into_iter().map(move |t| ToolDefinition {
                     name: qualified(server_id, &t.name),
                     description: t.description,
                     input_schema: t.input_schema,
                     title: t.title,
+                    server: server.clone(),
                     deadline: None,
                 })
             })
@@ -190,106 +205,5 @@ async fn tool_result(
 // =============================================================================
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn qualified_name_splits_on_colon_separator() {
-        // execute() uses split_once(':') to parse the qualified form
-        // "{server_id}:{bare_name}".  `:` is not permitted in MCP tool names
-        // (`[a-zA-Z0-9_-]+`), making it an unambiguous separator.
-
-        let (prefix, bare) = "3:search".split_once(':').unwrap();
-        assert_eq!(prefix.parse::<i64>().unwrap(), 3i64);
-        assert_eq!(bare, "search");
-
-        let (p, b) = "7:read_file".split_once(':').unwrap();
-        assert_eq!(p.parse::<i64>().unwrap(), 7i64);
-        assert_eq!(b, "read_file");
-    }
-
-    #[test]
-    fn non_integer_server_prefix_is_an_error() {
-        // A name that contains `:` but whose prefix is not a valid i64 must
-        // cause execute() to return Err rather than panic or dispatch blindly.
-        let name = "not_int:tool";
-        let (prefix, _) = name.split_once(':').unwrap();
-        assert!(
-            prefix.parse::<i64>().is_err(),
-            "non-integer prefix must fail to parse as server id"
-        );
-    }
-
-    #[test]
-    fn unqualified_name_is_rejected() {
-        // Bare tool names (no `:`) are not supported; callers must always use
-        // names as returned by list_tools() which includes the server-id prefix.
-        let name = "search";
-        assert!(
-            name.split_once(':').is_none(),
-            "unqualified name must not contain a colon — execute() will reject it"
-        );
-    }
-
-    // ---- tool_result --------------------------------------------------------
-
-    use crate::tool_images::tool_images_tests::{ONE_PIXEL_PNG, images};
-    use serde_json::json;
-
-    async fn converted(result: McpToolResult) -> ToolResult {
-        let (images, _) = images();
-        tool_result("c1".to_owned(), result, &images).await
-    }
-
-    /// A tool error is its message, unsplit, as it always was.
-    #[tokio::test]
-    async fn an_error_is_its_message_with_no_images() {
-        let got = converted(McpToolResult::error("boom")).await;
-        assert_eq!(
-            serde_json::to_string(&got).unwrap(),
-            r#"{"tool_call_id":"c1","content":"boom","success":false}"#
-        );
-        let silent = converted(McpToolResult {
-            success: false,
-            data: Some(json!([{ "type": "image", "data": ONE_PIXEL_PNG }])),
-            error: None,
-        })
-        .await;
-        assert_eq!(silent.content, "tool returned an error without a message");
-        assert!(silent.images.is_empty());
-    }
-
-    /// Text alone is the frame it always was: no `images` key.
-    #[tokio::test]
-    async fn text_alone_is_the_result_it_always_was() {
-        let got = converted(McpToolResult::success(json!([
-            { "type": "text", "text": "line 1" },
-            { "type": "text", "text": "line 2" },
-        ])))
-        .await;
-        assert_eq!(
-            serde_json::to_string(&got).unwrap(),
-            r#"{"tool_call_id":"c1","content":"line 1\nline 2","success":true}"#
-        );
-        let nothing = converted(McpToolResult {
-            success: true,
-            data: None,
-            error: None,
-        })
-        .await;
-        assert_eq!(nothing.content, "null");
-    }
-
-    /// A stored image is on the result, for the conversation; its text names it.
-    #[tokio::test]
-    async fn a_stored_image_is_on_the_result() {
-        let got = converted(McpToolResult::success(json!([
-            { "type": "text", "text": "A dot." },
-            { "type": "image", "data": ONE_PIXEL_PNG, "mimeType": "image/png" },
-        ])))
-        .await;
-        assert!(got.success);
-        assert_eq!(got.content, "A dot.\n[image 1x1 PNG stored]");
-        assert_eq!(got.images.len(), 1);
-        assert_eq!((got.images[0].width, got.images[0].height), (1, 1));
-    }
-}
+#[path = "tool_executor_tests.rs"]
+mod tests;

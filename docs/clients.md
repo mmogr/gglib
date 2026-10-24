@@ -62,6 +62,12 @@ prints it. The port does not add it for you, on purpose — see
 `gglib q --remote` and `gglib chat --remote` need neither: they attach the
 key themselves.
 
+A client that reads an agent run's events, as a paired device does, finds
+the name of the MCP server a tool belongs to on its `tool_call_start`
+frame, `"server": "Tavily Web Search"`. A frame for one of gglib's own
+tools has no `server` key, and neither does one whose servers could not be
+read.
+
 ## Images
 
 A client that sends images in the `OpenAI` shape, as GitHub Copilot does when

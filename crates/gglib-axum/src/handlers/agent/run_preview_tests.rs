@@ -22,6 +22,7 @@ fn tool_start() -> AgentEvent {
         },
         display_name: "Generate Image".to_owned(),
         args_summary: None,
+        server: None,
     }
 }
 

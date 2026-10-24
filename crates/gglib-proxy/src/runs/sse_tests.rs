@@ -97,6 +97,7 @@ fn preview_stream() -> Vec<RunEvent> {
         },
         display_name: "Generate Image".into(),
         args_summary: None,
+        server: None,
     };
     let complete = AgentEvent::ToolCallComplete {
         tool_name: "builtin:generate_image".into(),
