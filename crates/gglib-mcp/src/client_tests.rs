@@ -183,27 +183,32 @@ async fn a_server_that_exits_silently_is_a_closed_connection() {
 /// A server that answers `initialize` and exits before reading the
 /// `initialized` notification fails the start the same way: the write finds
 /// the pipe broken, and the error ends with what the server printed.
-#[cfg(unix)]
+///
+/// Over the in-process pipe, not a child process: a child another test
+/// spawns at the same moment can hold this one's stdin open until it execs,
+/// and the write then succeeds. With no newline the reply is read only once
+/// the server is gone, so the write after it always finds no reader.
 #[tokio::test]
 async fn a_server_that_exits_after_its_reply_says_what_it_printed() {
-    let reply = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "result": {
-            "protocolVersion": "2024-11-05",
-            "serverInfo": { "name": "leaving" },
-            "capabilities": {},
-        },
+    let (mut client, mut server) = client_and_server(Duration::from_secs(5));
+    client.stderr = Some(StderrTail::drain(&b"shutting down: no workspace\n"[..]));
+    tokio::spawn(async move {
+        let id = read_request(&mut server).await;
+        let reply = json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "serverInfo": { "name": "leaving" },
+                "capabilities": {},
+            },
+        });
+        let line = reply.to_string();
+        server.get_mut().write_all(line.as_bytes()).await.unwrap();
+        drop(server);
     });
-    // stdin is closed before the reply is written, so the notification that
-    // follows it has no reader whenever the client writes it.
-    let script = format!(
-        "read -r request; exec 0<&-; echo 'shutting down: no workspace' >&2; \
-         echo '{reply}'; exit 1"
-    );
-    let (_client, connected) = connect_to_script(&script, Duration::from_secs(5)).await;
 
-    let got = connected.unwrap_err().to_string();
+    let got = client.initialize().await.unwrap_err().to_string();
     assert!(
         got.ends_with("Server closed connection - stderr: shutting down: no workspace"),
         "{got}"
