@@ -807,8 +807,10 @@ The proxy's answer also says which MCP servers a device's runs are offered:
 `mcp_servers`, the names `gglib remote enable --allow-mcp` gave the live
 session, `[]` when it names none, and there whether or not the desktop can
 draw (a desktop with no image model can still search). A device that reads
-a name there sends its questions with `tools=builtin` (below); a desktop
-from before the list sends no such key, and a device sends it nothing new.
+a name there sends its questions with `tools=builtin` (below), and those of
+a chat whose tools the person turned off as plain chat runs, or with
+`tools=none` when they draw; a desktop from before the list sends no such
+key, and a device sends it nothing new.
 The daemon's own `GET /api/images/drawing` does not carry it.
 
 `models` lists the desktop's image models, so a device can let a person pick
@@ -947,10 +949,16 @@ for that message, whose first step must be the call for the picture as on a
 desktop chat. Such a run is also offered the tools of the MCP servers the
 desktop's `--allow-mcp` names, as a turn on a chat that names no tool is,
 and without `draw=true` those are its only tools; a desktop that names none
-runs it with no tool. The chosen
+runs it with no tool. A chat the device keeps with its tools off sends
+`tools=none` in place of `tools=builtin`: the run is offered none of those
+servers' tools and starts none of them, so `draw=true` offers the image tool
+alone, and without it the run calls no tool. Any other word for `tools` is
+`400 invalid_request`, and so is `tools=none` on a desktop from before it,
+which refuses the word rather than running the tools. The chosen
 image model goes in the query beside it, `&image_model=<id>`, with the same
-rules and refusals as a turn's; `image_model` without `tools=builtin`, or
-beside `kind=agent`, is `400 invalid_request`. Images
+rules and refusals as a turn's; `image_model` without `tools`, or
+beside `kind=agent`, is `400 invalid_request`, and so is `tools` beside
+`kind=agent`, whose turn takes its tools from the chat's settings. Images
 sent inline as data URLs are stored on the desktop for the run and removed
 at the first daemon start a day or more later, since no chat there links
 them. Nothing is saved to any
@@ -971,7 +979,7 @@ them anyway and may answer oddly. Every such run takes one of the
 desktop's four agent-loop slots, which a device's runs share with the
 desktop page's chats and runs, those that draw included: while four run at
 once, a fifth is refused `429 agent_busy` rather than queued, as a run that
-draws is. Without `tools=builtin` a chat run is recorded exactly
+draws is. Without `tools` a chat run is recorded exactly
 as before.
 
 Such a turn may also say the chat's Thinking choice, `"thinking": "off"` or
