@@ -772,7 +772,9 @@ where
             // read only for the request it implies: the turn that produced it
             // emits no `IterationComplete`.
             AgentEvent::FinalAnswer { .. } => answered_in_text = true,
-            AgentEvent::SystemWarning { .. } => generated.system_warnings += 1,
+            AgentEvent::SystemWarning { .. } if counts_as_a_warning(&event) => {
+                generated.system_warnings += 1;
+            }
             _ => {}
         }
     }
@@ -840,6 +842,13 @@ where
         transport_retries: 0,
         generated,
     }
+}
+
+/// Whether `event` counts into [`GeneratedOutput::system_warnings`]: a
+/// `SystemWarning` other than the one for an answer cut off at its token
+/// limit, which is no runaway, only an answer that ran long.
+fn counts_as_a_warning(event: &AgentEvent) -> bool {
+    matches!(event, AgentEvent::SystemWarning { .. }) && !gglib_agent::is_cut_off_warning(event)
 }
 
 /// Completion-token throughput across a result set: total completion tokens
@@ -984,6 +993,25 @@ pub(crate) fn axis_scores(results: &[TuneTaskResult]) -> Option<AxisScores> {
 mod tests {
     use super::*;
     use gglib_core::domain::benchmark::tune::task::TaskSuite;
+
+    // ── What the warning count counts ────────────────────────────────────────
+
+    /// An answer cut off at its token limit is not a runaway warning; the
+    /// loop's other warnings still are.
+    #[test]
+    fn a_cut_off_answer_is_not_counted_as_a_warning() {
+        assert!(!counts_as_a_warning(&gglib_agent::cut_off_warning(Some(
+            512
+        ))));
+        assert!(!counts_as_a_warning(&gglib_agent::cut_off_warning(None)));
+        assert!(counts_as_a_warning(&AgentEvent::SystemWarning {
+            message: "Agent attempted 80 parallel tool calls (limit is 5).".to_owned(),
+            suggested_action: None,
+        }));
+        assert!(!counts_as_a_warning(&AgentEvent::FinalAnswer {
+            content: "done".to_owned(),
+        }));
+    }
 
     // ── Task seeding (the calibration instrument's integrity) ───────────────
 

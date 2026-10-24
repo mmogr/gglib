@@ -975,7 +975,13 @@ body with `"reasoning_budget_tokens": 0`, which is how a device turns thinking
 off for a chat it keeps ([Thinking](clients.md#thinking)), runs with a thinking
 budget of `0`, and any other budget is sampling and is not read. The run is
 the desktop's agent loop, so its iteration, loop-detection and stagnation
-limits apply, where a plain chat run honoured the body. The named servers'
+limits apply, where a plain chat run honoured the body. A reply the model's
+server cut off at its token limit while it wrote a call, or before it wrote
+any text, ends the run `failed`, `turn_too_long`, after an `error` event
+that says the turn ran too long, and the call is not run, unless it was the
+words after a drawn picture, which keep the picture; a reply cut off
+in its text is taken as if it had stopped, after a `system_warning` that
+says it was cut off ([Context reading](clients.md#context-reading)). The named servers'
 tools are offered to whatever model the request names: the model list says
 nothing yet of which models call tools, so a model that cannot is offered
 them anyway and may answer oddly. Every such run takes one of the

@@ -2,6 +2,7 @@
 
 pub(crate) mod agent_loop;
 pub(crate) mod context_pruning;
+pub(crate) mod cut_off;
 pub(crate) mod guards;
 pub(crate) mod stream_collector;
 pub(crate) mod tool_execution;
@@ -9,6 +10,7 @@ pub(crate) mod turn_usage;
 pub(crate) mod util;
 
 pub use agent_loop::AgentLoop;
+pub use cut_off::{cut_off_warning, is_cut_off_warning};
 
 // These symbols are public only so integration tests in `tests/` can reach
 // them.  They are NOT part of the stable public API — external crates should

@@ -89,7 +89,9 @@ max_tool_calls_in_batch: number,
  * Counts `AgentEvent::SystemWarning`, whose main source is the loop
  * recovering from a model that requested more parallel tool calls than the
  * configured limit. That recovery costs a whole extra request, and this
- * count is how the eval sees it.
+ * count is how the eval sees it. The warning for an answer cut off at
+ * its token limit is not counted: that answer ran long, it did not run
+ * away.
  *
  * **Warnings, not incidents.** One over-wide batch raises two — the
  * collector's slot limit and then the parallel-tool limit — so this

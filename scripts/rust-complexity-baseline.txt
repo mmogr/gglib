@@ -1,12 +1,13 @@
-crates/gglib-agent/src/agent_loop.rs 707
-crates/gglib-agent/src/stream_collector.rs 456
+crates/gglib-agent/src/agent_loop.rs 725
+crates/gglib-agent/src/stream_collector.rs 479
+crates/gglib-agent/tests/integration_cut_off.rs 406
 crates/gglib-agent/tests/integration_guards.rs 777
 crates/gglib-agent/tests/integration_happy_path.rs 421
 crates/gglib-agent/tests/unit_first_call.rs 527
 crates/gglib-app-services/src/benchmark/agentic.rs 745
 crates/gglib-app-services/src/benchmark/compare.rs 364
 crates/gglib-app-services/src/benchmark/mapper.rs 529
-crates/gglib-app-services/src/benchmark/tune/mod.rs 1338
+crates/gglib-app-services/src/benchmark/tune/mod.rs 1366
 crates/gglib-app-services/src/models.rs 419
 crates/gglib-app-services/src/models_tests.rs 897
 crates/gglib-app-services/src/models_upgrade.rs 311
@@ -34,7 +35,7 @@ crates/gglib-axum/src/handlers/agent/hub_turn_plan_tests.rs 317
 crates/gglib-axum/src/handlers/agent/image_model_tests.rs 343
 crates/gglib-axum/src/handlers/agent/launch.rs 360
 crates/gglib-axum/src/handlers/agent/remote_upstream.rs 313
-crates/gglib-axum/src/handlers/agent/run.rs 387
+crates/gglib-axum/src/handlers/agent/run.rs 391
 crates/gglib-axum/src/handlers/agent/run_fixture.rs 324
 crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 356
 crates/gglib-axum/src/handlers/agent/turn_fixture.rs 318

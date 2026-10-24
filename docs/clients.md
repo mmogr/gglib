@@ -235,7 +235,24 @@ reading.
 An agent run says the same of each model call. Its `turn_usage` event carries
 `context_size` and `trimmed_messages` flat, under the same two names, with
 `finish_reason` beside them (`length` is a reply cut off at the model's
-limit). There `trimmed_messages` counts the messages the run left out of the
+limit). A reply cut off while it wrote a tool call, or before it wrote any
+text, ends the run `failed`, `turn_too_long`, after an `error` event that
+says the turn ran too long. The one exception is the reply after a run's
+demanded call has run (a Draw's words, once the picture is made): cut off
+with no text, or while it wrote a call (its text is dropped), it is
+answered with gglib's own words and the warning below.
+A reply cut off in its text is taken as if it had stopped (its text is the
+answer, except in a reply that had to call a tool), after one
+`system_warning`:
+
+```json
+{"type":"system_warning","message":"The answer was cut off at its token limit after 512 tokens, before it finished.","suggested_action":"Raise max_tokens to give it more room."}
+```
+
+Its `message` always starts `The answer was cut off at its token limit`,
+and `after N tokens` is left out when the upstream reported no count.
+
+In `turn_usage`, `trimmed_messages` counts the messages the run left out of the
 request that call answered, over the whole run so far, and `context_size` is
 left out when the run does not know it: on a paired machine's model, or a
 model loaded in the second of this machine's two slots. A saved reply's row
