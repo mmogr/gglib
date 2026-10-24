@@ -21,7 +21,7 @@ import {
   updateConversationTitle,
 } from '../../../../src/services/transport/api/chat';
 import { queueDownload, reorderQueue, reorderQueueItem } from '../../../../src/services/transport/api/downloads';
-import { addMcpServer, updateMcpServer } from '../../../../src/services/transport/api/mcp';
+import { addMcpServer, setMcpServerRemote, updateMcpServer } from '../../../../src/services/transport/api/mcp';
 import {
   addModel,
   removeModel,
@@ -273,5 +273,15 @@ describe('what a typed request body sends', () => {
 
   it('switching an MCP server off sends `enabled` alone', async () => {
     expect((await sent(() => updateMcpServer(3, { enabled: false }))).body).toStrictEqual({ enabled: false });
+  });
+
+  it('opening an MCP server to paired devices puts `allow` alone on its own route', async () => {
+    expect(await sent(() => setMcpServerRemote(3, true))).toStrictEqual({
+      method: 'PUT',
+      path: '/api/mcp/servers/3/remote',
+      body: { allow: true },
+    });
+    fetchMock.mockReset();
+    expect((await sent(() => setMcpServerRemote(3, false))).body).toStrictEqual({ allow: false });
   });
 });

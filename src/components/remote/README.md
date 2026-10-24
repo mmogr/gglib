@@ -9,6 +9,7 @@ The `RemoteControl` popover's sections ([ADR 0012](../../../docs/adr/0012-the-re
 | File | Role |
 |------|------|
 | `ServeSection.tsx` | This machine as the desktop: enable (with no MCP server open by default), invite one more device, the status lines, disable |
+| `AllowRemoteCheckbox.tsx` | Whether paired devices may use one MCP server: one box for the server's own flag, set through its own route and read by a device's next run. A disabled server is said to offer nothing, and a refused change is said beside the box. The MCP panel shows one on each row it can open |
 | `McpServerPicker.tsx` | A box per MCP server a paired device's chats may use, by name, none ticked by default: `builtin` and SSE servers are not offered, and `/mcp` is never reachable through the tunnel whatever is ticked |
 | `DevicesSection.tsx` | Who holds a key, and the button that retires one. Rows come off the status this panel already reads rather than a fetch of their own, so the list cannot disagree with the tunnel state beside it, and each prints the daemon's description of it rather than one worked out here |
 | `PairingReveal.tsx` | The ticket and the code, shown once: the answer to `enable --invite` or `invite` is the only time the daemon hands that code out. Counts the code down and leaves at zero; the parent drops it the moment a device pairs, or once the daemon stops holding the code |

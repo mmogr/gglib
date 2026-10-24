@@ -11,7 +11,7 @@
  * @module utils/mcp
  */
 
-import type { McpServerInfo } from '../services/transport/types/mcp';
+import type { McpServer, McpServerInfo } from '../services/transport/types/mcp';
 
 /**
  * Check if a server is running.
@@ -26,6 +26,15 @@ export function isServerRunning(info: McpServerInfo): boolean {
  */
 export function isServerUnsupported(info: McpServerInfo): boolean {
   return info.status === 'unsupported';
+}
+
+/**
+ * Whether a server can be opened to paired devices: a stdio server, since
+ * gglib cannot run an SSE one, and not `builtin`, which is gglib's own tools.
+ * The daemon refuses opening the rest; this keeps their box from showing.
+ */
+export function canOpenToDevices(server: McpServer): boolean {
+  return server.server_type === 'stdio' && server.name !== 'builtin';
 }
 
 /**

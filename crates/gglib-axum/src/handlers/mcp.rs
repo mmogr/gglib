@@ -6,7 +6,8 @@ use axum::extract::{Path, State};
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::types::{
-    CreateMcpServerRequest, McpServerInfo, McpTestResult, UpdateMcpServerRequest,
+    CreateMcpServerRequest, McpServerDto, McpServerInfo, McpTestResult, SetMcpRemoteRequest,
+    UpdateMcpServerRequest,
 };
 
 /// List all MCP servers.
@@ -31,6 +32,18 @@ pub(crate) async fn update(
     Json(req): Json<UpdateMcpServerRequest>,
 ) -> Result<Json<McpServerInfo>, HttpError> {
     Ok(Json(state.mcp_ops.update(id, req).await?))
+}
+
+/// Open an MCP server to paired devices, or close it: whether a device's
+/// runs are offered its tools, from the next run on. Never stops it, and an
+/// edit never changes it. 404 for an unknown id; 400 for opening an SSE
+/// server or `builtin`.
+pub(crate) async fn set_remote(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(req): Json<SetMcpRemoteRequest>,
+) -> Result<Json<McpServerDto>, HttpError> {
+    Ok(Json(state.mcp_ops.set_allow_remote(id, req.allow).await?))
 }
 
 /// Remove an MCP server.

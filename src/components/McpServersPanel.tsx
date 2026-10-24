@@ -17,7 +17,14 @@ import { useConfirmContext } from "../contexts/ConfirmContext";
 import { useToastContext } from "../contexts/ToastContext";
 import { getTransport } from '../services/transport';
 import type { McpServerInfo, McpTestResult } from '../services/transport';
-import { isServerRunning, isServerUnsupported, hasServerError, getServerErrorMessage } from '../utils/mcp';
+import {
+  canOpenToDevices,
+  isServerRunning,
+  isServerUnsupported,
+  hasServerError,
+  getServerErrorMessage,
+} from '../utils/mcp';
+import { AllowRemoteCheckbox } from './remote/AllowRemoteCheckbox';
 
 const statusRow = "inline-flex items-center gap-xs text-xs text-text-muted";
 const statusDot = "w-1.5 h-1.5 rounded-full";
@@ -40,6 +47,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
     removeServer,
     startServer,
     stopServer,
+    setAllowRemote,
   } = useMcpServers();
 
   const [actionError, setActionError] = useState<string | null>(null);
@@ -317,6 +325,13 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
                       </div>
                     )}
                   </div>
+                  {canOpenToDevices(info.server) && (
+                    <AllowRemoteCheckbox
+                      server={info.server}
+                      label="Paired devices"
+                      onToggle={setAllowRemote}
+                    />
+                  )}
                   {isRunning && info.tools.length > 0 && (
                     <div className="flex flex-wrap items-center gap-xs mt-xs">
                       <span className="text-xs text-text-secondary">Tools:</span>

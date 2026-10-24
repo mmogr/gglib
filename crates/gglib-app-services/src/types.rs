@@ -498,6 +498,15 @@ pub struct UpdateMcpServerRequest {
     pub lifecycle: Option<McpLifecycle>,
 }
 
+/// Request to open an MCP server to paired devices, or close it
+/// (`PUT /api/mcp/servers/{id}/remote`).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct SetMcpRemoteRequest {
+    /// Whether a paired device's runs are offered the server's tools.
+    pub allow: bool,
+}
+
 /// MCP tool information for GUI display.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]

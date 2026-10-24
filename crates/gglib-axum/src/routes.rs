@@ -79,6 +79,7 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/mcp/servers/{id}",
             put(handlers::mcp::update).delete(handlers::mcp::remove),
         )
+        .route("/mcp/servers/{id}/remote", put(handlers::mcp::set_remote))
         .route("/mcp/servers/{id}/start", post(handlers::mcp::start))
         .route("/mcp/servers/{id}/stop", post(handlers::mcp::stop))
         .route(

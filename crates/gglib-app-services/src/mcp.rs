@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use gglib_core::McpServiceError;
+use gglib_core::{McpRepositoryError, McpServiceError};
 use gglib_mcp::{
     McpEnvEntry, McpServerConfig, McpServerStatus, McpServerType, McpService, McpTool, NewMcpServer,
 };
@@ -263,6 +263,25 @@ impl McpOps {
                 error: Some(e.to_string()),
                 tools: Vec::new(),
             }),
+        }
+    }
+
+    /// Open the server `id` to paired devices, or close it, and answer the
+    /// server as it now stands. The flag's own write: a running server keeps
+    /// running, and a device's next run reads it.
+    ///
+    /// An unknown `id` is not found, as for [`Self::test_connection`]; an
+    /// SSE server or `builtin` opened is the caller's to fix.
+    pub async fn set_allow_remote(&self, id: i64, allow: bool) -> Result<McpServerDto, GuiError> {
+        match self.mcp.set_allow_remote(id, allow).await {
+            Ok(server) => Ok(Self::server_to_dto(&server)),
+            Err(McpServiceError::Repository(McpRepositoryError::NotFound(_))) => {
+                Err(GuiError::NotFound {
+                    entity: "MCP server",
+                    id: id.to_string(),
+                })
+            }
+            Err(e) => Err(GuiError::from(e)),
         }
     }
 

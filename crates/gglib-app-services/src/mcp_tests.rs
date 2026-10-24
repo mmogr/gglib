@@ -289,3 +289,41 @@ async fn testing_a_server_that_is_not_there_is_not_found() {
         "expected NotFound, got {result:?}"
     );
 }
+
+/// The flag's route answers the server as it now stands, and the list shows
+/// it; an edit sent afterwards leaves it as it is.
+#[tokio::test]
+async fn a_server_is_opened_to_devices_and_an_edit_leaves_it_open() {
+    let ops = make_ops().await;
+    let id = ops.add(stdio_req("tavily")).await.unwrap().server.id;
+
+    let opened = ops.set_allow_remote(id, true).await.unwrap();
+
+    assert!(opened.allow_remote && opened.name == "tavily");
+    assert!(ops.list().await.unwrap()[0].server.allow_remote);
+    let rename = UpdateMcpServerRequest {
+        name: Some("search".to_owned()),
+        ..UpdateMcpServerRequest::default()
+    };
+    ops.update(id, rename).await.unwrap();
+    assert!(ops.list().await.unwrap()[0].server.allow_remote, "kept");
+    assert!(!ops.set_allow_remote(id, false).await.unwrap().allow_remote);
+}
+
+/// An unknown server is not found, not a failure of this machine; an SSE
+/// server opened is the caller's to fix, and closing it is not refused.
+#[tokio::test]
+async fn an_unknown_server_is_not_found_and_an_sse_one_is_refused_opening() {
+    let (ops, _, repo) = make_ops_over().await;
+    let stored = NewMcpServer::new_sse("remote", "http://localhost:3001/sse");
+    let id = repo.insert(stored).await.unwrap().id;
+
+    let unknown = ops.set_allow_remote(id + 100, true).await;
+    assert!(
+        matches!(&unknown, Err(GuiError::NotFound { entity: "MCP server", id: missing }) if *missing == (id + 100).to_string()),
+        "got {unknown:?}"
+    );
+    let opened = ops.set_allow_remote(id, true).await;
+    assert!(is_the_sse_refusal(&opened), "got {opened:?}");
+    assert!(!ops.set_allow_remote(id, false).await.unwrap().allow_remote);
+}

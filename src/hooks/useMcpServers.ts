@@ -28,6 +28,12 @@ interface UseMcpServersResult {
   startServer: (id: McpServerId) => Promise<McpTool[]>;
   /** Stop a server */
   stopServer: (id: McpServerId) => Promise<void>;
+  /**
+   * Open a server to paired devices, or close it, then refresh the list. A
+   * failure is thrown to the caller, the box that asked, and not set as the
+   * list's error.
+   */
+  setAllowRemote: (id: McpServerId, allow: boolean) => Promise<void>;
 }
 
 /**
@@ -159,6 +165,14 @@ export function useMcpServers(): UseMcpServersResult {
     [refresh]
   );
 
+  const setAllowRemote = useCallback(
+    async (id: McpServerId, allow: boolean) => {
+      await getTransport().setMcpServerRemote(id, allow);
+      await refresh();
+    },
+    [refresh]
+  );
+
   return {
     servers,
     loading,
@@ -169,6 +183,7 @@ export function useMcpServers(): UseMcpServersResult {
     removeServer: removeServerFn,
     startServer: startServerFn,
     stopServer: stopServerFn,
+    setAllowRemote,
   };
 }
 
