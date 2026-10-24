@@ -669,6 +669,18 @@ jobs:
       # package of this version instead, which puts the CLI beside
       # /usr/bin/gglib-app all the same. The rpm and AppImage carry it: there
       # is no CLI rpm for them to depend on.
+      #
+      # A release candidate's version, 0.26.2-rc.6, suits neither Linux
+      # package as it stands. RPM refuses a `-` in a version, and dpkg reads
+      # everything after it as the Debian revision, which sorts the candidate
+      # after 0.26.2. Tauri gives neither package a version of its own, and
+      # its `version` must be semver, so `0.26.2~rc.6` cannot be passed in. So
+      # the rpm is bundled from the built app with the version split the
+      # Fedora way, Version 0.26.2 and Release 0.rc.6, which sorts before the
+      # release's 0.26.2-1; `tauri bundle` leaves the binary, and the version
+      # it shows, alone. The deb is repacked with the `~` spelling the CLI's
+      # deb uses (build_cli_deb.sh). A stable version keeps its own version in
+      # both, and its rpm the default Release 1.
       - name: Build Tauri app
         run: |
           set -euo pipefail
@@ -677,10 +689,28 @@ jobs:
           if [ "${{ matrix.os }}" == "windows-2022" ]; then
             npm run tauri:build -- --target ${{ matrix.target }} --bundles nsis --config "$sidecar"
           elif [ "${{ runner.os }}" = "Linux" ]; then
-            npm run tauri:build -- --target ${{ matrix.target }} --bundles appimage,rpm --config "$sidecar"
             version="${{ needs.check-version.outputs.new-version }}"
+            rpm_args=(--config "$sidecar")
+            if [[ "$version" == *-* ]]; then
+              base="${version%%-*}"
+              pre="${version#*-}"
+              if [[ ! "$pre" =~ ^[A-Za-z0-9.]+$ ]]; then
+                echo "::error::cannot spell prerelease '$pre' as an rpm release"
+                exit 1
+              fi
+              rpm_args+=(--config "{\"version\":\"$base\",\"bundle\":{\"linux\":{\"rpm\":{\"release\":\"0.$pre\"}}}}")
+            fi
+            npm run tauri:build -- --target ${{ matrix.target }} --bundles appimage --config "$sidecar"
+            npm run tauri:bundle -- --target ${{ matrix.target }} --bundles rpm "${rpm_args[@]}"
             depends="{\"bundle\":{\"linux\":{\"deb\":{\"depends\":[\"gglib (= ${version/-/\~})\"]}}}}"
             npm run tauri:build -- --target ${{ matrix.target }} --bundles deb --config "$depends"
+            if [[ "$version" == *-* ]]; then
+              deb=$(find "target/${{ matrix.target }}/release/bundle/deb" -maxdepth 1 -name '*.deb' | head -n1)
+              unpacked="$RUNNER_TEMP/gui-deb"
+              dpkg-deb -R "$deb" "$unpacked"
+              sed -i "s/^Version: .*/Version: ${version/-/\~}/" "$unpacked/DEBIAN/control"
+              dpkg-deb --root-owner-group --build "$unpacked" "$deb" >/dev/null
+            fi
           else
             npm run tauri:build -- --target ${{ matrix.target }} --config "$sidecar"
           fi
@@ -697,12 +727,21 @@ jobs:
           if [ "${{ runner.os }}" = "Linux" ]; then
             deb=$(find "$bundle/deb" -maxdepth 1 -name '*.deb' | head -n1)
             dpkg-deb --field "$deb" Depends | tee /dev/stderr | grep -q 'gglib (= '
+            version="${{ needs.check-version.outputs.new-version }}"
+            deb_version=$(dpkg-deb --field "$deb" Version)
+            echo "deb Version: $deb_version"
+            test "$deb_version" = "${version/-/\~}"
             if dpkg-deb --contents "$deb" | grep -q '/usr/bin/gglib$'; then
               echo "::error::the deb carries /usr/bin/gglib, which the CLI's deb owns"
               exit 1
             fi
             rpm=$(find "$bundle/rpm" -maxdepth 1 -name '*.rpm' | head -n1)
             rpm -qlp "$rpm" | grep -qx '/usr/bin/gglib'
+            want_rpm="$version-1"
+            if [[ "$version" == *-* ]]; then want_rpm="${version%%-*}-0.${version#*-}"; fi
+            rpm_version=$(rpm -qp --qf '%{VERSION}-%{RELEASE}' "$rpm")
+            echo "rpm Version-Release: $rpm_version"
+            test "$rpm_version" = "$want_rpm"
             appimage=$(find "$bundle/appimage" -maxdepth 1 -name '*.AppImage' | head -n1)
             chmod +x "$appimage"
             ( cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/$appimage" --appimage-extract >/dev/null )
