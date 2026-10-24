@@ -59,6 +59,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use crate::context_pruning::Pruned;
+use crate::cut_off::{IfWordless, usable};
 use crate::guards::Guards;
 use crate::stream_collector::{CollectedResponse, MAX_TOOL_CALL_INDEX, collect_stream};
 use crate::tool_execution::execute_tools_parallel;
@@ -187,7 +188,8 @@ impl AgentLoop {
         tools: &[ToolDefinition],
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<CollectedResponse, AgentError> {
-        self.collect(self.llm.chat_stream(messages, tools).await, messages, tx)
+        let reply = self.llm.chat_stream(messages, tools).await;
+        self.collect(reply, messages, IfWordless::EndTheRun, tx)
             .await
     }
 
@@ -216,7 +218,9 @@ impl AgentLoop {
         };
         let only = std::slice::from_ref(only);
         let demanded = self.llm.chat_stream_requiring_call(messages, only).await;
-        let mut response = self.collect(demanded, messages, tx).await?;
+        let mut response = self
+            .collect(demanded, messages, IfWordless::EndTheRun, tx)
+            .await?;
         let Some(at) = response
             .tool_calls
             .iter()
@@ -250,7 +254,9 @@ impl AgentLoop {
     /// an upstream that calls a tool it was not offered) is not run: `run`
     /// ends with this reply's text and never looks at its calls. A reply
     /// with no text is answered with `first.if_wordless`, never with an
-    /// empty answer.
+    /// empty answer, and so is one cut off at its token limit before it
+    /// wrote any, or while it wrote a call (its text dropped), with the
+    /// cut-off warning, since the demanded call ran.
     async fn call_for_words(
         &self,
         messages: &Pruned,
@@ -266,7 +272,9 @@ impl AgentLoop {
         let mut asked = messages.to_vec();
         asked.push(AgentMessage::user(told.clone()));
         let reply = self.llm.chat_stream(&asked, &[]).await;
-        let mut response = self.collect(reply, messages, tx).await?;
+        let mut response = self
+            .collect(reply, messages, IfWordless::Answer, tx)
+            .await?;
         if !response.tool_calls.is_empty() {
             warn!(
                 tool = %first.tool,
@@ -280,11 +288,16 @@ impl AgentLoop {
         Ok(response)
     }
 
-    /// Collect a reply `stream` the LLM port answered with (step 3).
+    /// Collect a reply `stream` the LLM port answered with (step 3). A reply
+    /// cut off at its token limit is judged here ([`crate::cut_off`]), before
+    /// any path reads it: one cut off while it wrote a call, or with no
+    /// text, ends the run unless `if_wordless` keeps it (a cut call's text
+    /// dropped); any other is kept, with a warning that it was cut off.
     async fn collect(
         &self,
         stream: anyhow::Result<LlmStream>,
         messages: &Pruned,
+        if_wordless: IfWordless,
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<CollectedResponse, AgentError> {
         // `{:#}` rather than `{}` on both arms: these errors carry their cause
@@ -295,7 +308,7 @@ impl AgentLoop {
             Err(e) => return fail_loop(tx, format!("LLM stream error: {e:#}")).await,
         };
         match collect_stream(measure_turn(stream, tx.clone(), messages.dropped()), tx).await {
-            Ok(r) => Ok(r),
+            Ok(r) => usable(r, if_wordless, tx).await,
             Err(e) => fail_loop(tx, format!("stream collection error: {e:#}")).await,
         }
     }
@@ -465,6 +478,11 @@ impl AgentLoopPort for AgentLoop {
     ///   text content for too many consecutive iterations.
     /// - `Err(AgentError::FirstCallMissing)` — `config.first_call` demanded a
     ///   call of one tool of the first reply and the model did not make it.
+    /// - `Err(AgentError::TurnTooLong)` — a reply was cut off at its token
+    ///   limit (`finish_reason: "length"`) while it wrote a tool call, or
+    ///   before it wrote any text; none of it is run or answered. A reply
+    ///   cut off in its text is taken as if it had stopped, after a
+    ///   `SystemWarning`.
     async fn run(
         &self,
         messages: Vec<AgentMessage>,

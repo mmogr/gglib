@@ -89,6 +89,16 @@ than sharing the GPU with it. `retry_notice` reports that wait as a
 `waiting` event with the render's step, beside its retry notices; a run on
 the paired machine's model takes no turn here.
 
+Every loop composed here also limits each turn whose request names no
+`max_tokens` to 16384 tokens (32768 for a `reasoning`-tagged model), or to
+its thinking budget plus 8192 when that is more (`gglib_runtime`'s turn
+limit). A reply cut off there while it writes a call, or before it writes
+any text, ends the run `failed`, `turn_too_long`; one cut off in its text is
+taken as if it had stopped, after a `system_warning`. The words after a
+Draw's picture are the exception and are always answered for. A device's `max_tokens` is not read,
+so it can neither raise nor lower the limit. A run on the paired machine's
+model is not limited from this side: that machine's own settings apply.
+
 # Which upstream
 
 `remote_upstream` decides, before anything else, whether the loop drives a

@@ -375,6 +375,10 @@ pub(super) fn run_error(error: &AgentError) -> RunError {
             "The agent kept giving the same reply, so it was stopped.",
         ),
         AgentError::FirstCallMissing { message } => ("image_generation_failed", message.as_str()),
+        AgentError::TurnTooLong { .. } => (
+            "turn_too_long",
+            "The model's turn ran too long and was cut off, so the run was stopped.",
+        ),
         AgentError::Internal(_) => (
             "agent_error",
             "The agent loop failed; the reply's last event says why.",

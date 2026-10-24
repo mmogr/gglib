@@ -9,6 +9,7 @@ mod messages_serde;
 mod openai_history;
 mod replay;
 pub(crate) mod stagnation;
+pub(crate) mod tool_call_writing;
 pub mod tool_display;
 pub(crate) mod tool_progress;
 pub(crate) mod tool_types;
@@ -38,6 +39,7 @@ pub use replay::{
     rows_from_frames, rows_from_timed_frames,
 };
 pub use stagnation::StagnationDetector;
+pub use tool_call_writing::ToolCallWriting;
 pub use tool_progress::{
     NoProgress, PreviewFrame, ToolProgressSink, ToolProgressUpdate, ToolStage,
 };

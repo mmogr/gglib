@@ -121,6 +121,17 @@ pub enum AgentError {
         message: String,
     },
 
+    /// The model's turn was cut off at its token limit (`finish_reason:
+    /// "length"`) while it wrote a tool call, or before it wrote any text.
+    /// The call never closed and there is no answer to give, so the run ends
+    /// there: nothing of the turn is run or sent back to the model. A turn
+    /// cut off in its text is not this: it is taken as if it had stopped.
+    #[error("the model's turn was cut off at its token limit before it finished")]
+    TurnTooLong {
+        /// The tokens the turn took, when the upstream reported them.
+        completion_tokens: Option<u32>,
+    },
+
     /// An unrecoverable internal error inside the loop implementation.
     #[error("internal agent error: {0}")]
     Internal(String),

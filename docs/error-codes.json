@@ -357,6 +357,12 @@
       "meaning": "The model asked for more tool calls at once than are allowed."
     },
     {
+      "code": "turn_too_long",
+      "type": null,
+      "status": null,
+      "meaning": "The model's turn was cut off at its token limit while it wrote a tool call, or before it wrote any text, so the agent run stopped rather than use half of it; retry, or turn thinking off."
+    },
+    {
       "code": "agent_error",
       "type": null,
       "status": null,

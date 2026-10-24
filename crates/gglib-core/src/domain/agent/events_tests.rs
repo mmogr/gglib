@@ -181,6 +181,21 @@ fn tool_preview_serialises_its_frame() {
     );
 }
 
+/// A call being written is reported flat beside its tag: the shape
+/// docs/clients.md gives clients.
+#[test]
+fn tool_call_writing_serialises_flat() {
+    let writing = AgentEvent::ToolCallWriting(super::super::ToolCallWriting {
+        tool_name: "builtin:generate_image".into(),
+        display_name: "Generate Image".into(),
+        tokens: 512,
+    });
+    assert_eq!(
+        serde_json::to_string(&writing).unwrap(),
+        r#"{"type":"tool_call_writing","tool_name":"builtin:generate_image","display_name":"Generate Image","tokens":512}"#
+    );
+}
+
 /// A wait on the wire, for each thing waited for.
 #[test]
 fn waiting_serialises_its_reason() {

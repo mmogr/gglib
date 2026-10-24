@@ -235,13 +235,61 @@ reading.
 An agent run says the same of each model call. Its `turn_usage` event carries
 `context_size` and `trimmed_messages` flat, under the same two names, with
 `finish_reason` beside them (`length` is a reply cut off at the model's
-limit). There `trimmed_messages` counts the messages the run left out of the
+limit). A reply cut off while it wrote a tool call, or before it wrote any
+text, ends the run `failed`, `turn_too_long`, after an `error` event that
+says the turn ran too long. The one exception is the reply after a run's
+demanded call has run (a Draw's words, once the picture is made): cut off
+with no text, or while it wrote a call (its text is dropped), it is
+answered with gglib's own words and the warning below.
+A reply cut off in its text is taken as if it had stopped (its text is the
+answer, except in a reply that had to call a tool), after one
+`system_warning`:
+
+```json
+{"type":"system_warning","message":"The answer was cut off at its token limit after 512 tokens, before it finished.","suggested_action":"Raise max_tokens to give it more room."}
+```
+
+Its `message` always starts `The answer was cut off at its token limit`,
+and `after N tokens` is left out when the upstream reported no count.
+
+In `turn_usage`, `trimmed_messages` counts the messages the run left out of the
 request that call answered, over the whole run so far, and `context_size` is
 left out when the run does not know it: on a paired machine's model, or a
 model loaded in the second of this machine's two slots. A saved reply's row
 keeps them in its `metadata` as `contextSize`, `trimmedMessages` and
 `finishReason`, each only when the turn had it, so a chat opened later reads
 the same figures as one watched live.
+
+## A tool call being written
+
+An agent run streams the model's text and thinking as they come, but a tool
+call arrives in pieces that gglib keeps until the reply ends, so a reply
+spent writing a long call would show nothing. While one is written the run
+sends `tool_call_writing`:
+
+```json
+{"type":"tool_call_writing","tool_name":"builtin:generate_image","display_name":"Generate Image","tokens":512}
+```
+
+- `tool_name` is the tool as the call names it, and `display_name` the name
+  to show a person.
+- `tokens` is how many pieces of the reply's calls have streamed so far.
+  llama-server streams a call about one token a piece, so it is close to the
+  tokens the calls have taken.
+
+The first piece that names a tool sends one at once, then at most one a
+second until the reply ends; the call's `tool_call_start` follows when it
+runs. A reply cut off at its token limit while it writes a call sends no
+`tool_call_start`: the run ends `failed`, `turn_too_long`, except in the
+words after a demanded call that has run, which keep that call's work and
+say they were cut off. A client that
+does not read the type can skip it.
+
+That is so where llama-server streams the call itself. On a model whose
+calls come as text markup (one with a dialect spec, see
+[tags.md](tags.md)), gglib holds the markup back until the call is complete
+and releases it whole, so `tool_call_writing` comes once, at the end, with a
+small `tokens`, and nothing comes while the markup streams.
 
 ## Error codes
 

@@ -11,6 +11,7 @@ use reqwest::Client;
 use gglib_core::{
     domain::InferenceConfig,
     domain::agent::{AgentMessage, LlmStreamEvent, ToolDefinition},
+    domain::capability_tags,
     ports::{AttachmentStore, GenerationGate, LlmCompletionPort, RetryObserver, UsageSink},
     request_pipeline::{self, ModelContext, SamplingDecision, SamplingLayers},
     retry::RetryPolicy,
@@ -22,6 +23,7 @@ mod images;
 mod retry;
 mod stream;
 mod turn;
+mod turn_limit;
 mod writing_time;
 
 pub use far_machine::FarMachine;
@@ -164,6 +166,10 @@ pub struct LlmCompletionAdapter {
     /// global state. `shaped_body` runs once per turn — outside the retry loop
     /// — so a retried request cannot spend it early.
     first_turn_pending: AtomicBool,
+    /// Give a request that names no `max_tokens` a turn's limit
+    /// (`turn_limit`), unless it goes to another machine. Set for the agent
+    /// loop's turns; off by default.
+    limit_turns: bool,
 }
 
 /// Told what one request's sampling resolved to, once the pipeline has
@@ -269,6 +275,12 @@ impl LlmCompletionAdapter {
 
         if let Some(observe) = &self.sampling_observer {
             observe(&report.sampling);
+        }
+        // Not on a send to another machine: its proxy resolves that
+        // machine's settings, and a limit from here would outrank them.
+        if self.limit_turns && self.far_machine.is_none() {
+            let reasoning = capability_tags::is_reasoning(&self.model_context.tags);
+            turn_limit::limit_turn(&mut body, reasoning);
         }
 
         if report.truncation.messages_truncated > 0 {

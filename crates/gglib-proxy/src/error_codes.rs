@@ -163,6 +163,7 @@ const CODES: &[ErrorCode] = &[
     row("log_full", UNTYPED, None, "The reply passed the 8 MB a run may hold."),
     row("max_iterations", UNTYPED, None, "The agent reached its iteration limit without a final answer."),
     row("too_many_tool_calls", UNTYPED, None, "The model asked for more tool calls at once than are allowed."),
+    row("turn_too_long", UNTYPED, None, "The model's turn was cut off at its token limit while it wrote a tool call, or before it wrote any text, so the agent run stopped rather than use half of it; retry, or turn thinking off."),
     row("agent_error", UNTYPED, None, "The agent loop failed; the run's last event says why."),
     row("transcript_not_saved", UNTYPED, None, "The reply could not be saved to its conversation."),
 ];

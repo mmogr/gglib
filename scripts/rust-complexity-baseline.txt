@@ -1,12 +1,13 @@
-crates/gglib-agent/src/agent_loop.rs 707
-crates/gglib-agent/src/stream_collector.rs 456
+crates/gglib-agent/src/agent_loop.rs 725
+crates/gglib-agent/src/stream_collector.rs 488
+crates/gglib-agent/tests/integration_cut_off.rs 406
 crates/gglib-agent/tests/integration_guards.rs 777
 crates/gglib-agent/tests/integration_happy_path.rs 421
 crates/gglib-agent/tests/unit_first_call.rs 527
 crates/gglib-app-services/src/benchmark/agentic.rs 745
 crates/gglib-app-services/src/benchmark/compare.rs 364
 crates/gglib-app-services/src/benchmark/mapper.rs 529
-crates/gglib-app-services/src/benchmark/tune/mod.rs 1338
+crates/gglib-app-services/src/benchmark/tune/mod.rs 1366
 crates/gglib-app-services/src/models.rs 419
 crates/gglib-app-services/src/models_tests.rs 897
 crates/gglib-app-services/src/models_upgrade.rs 311
@@ -34,7 +35,7 @@ crates/gglib-axum/src/handlers/agent/hub_turn_plan_tests.rs 317
 crates/gglib-axum/src/handlers/agent/image_model_tests.rs 343
 crates/gglib-axum/src/handlers/agent/launch.rs 360
 crates/gglib-axum/src/handlers/agent/remote_upstream.rs 313
-crates/gglib-axum/src/handlers/agent/run.rs 387
+crates/gglib-axum/src/handlers/agent/run.rs 391
 crates/gglib-axum/src/handlers/agent/run_fixture.rs 324
 crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 356
 crates/gglib-axum/src/handlers/agent/turn_fixture.rs 318
@@ -43,7 +44,7 @@ crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-cli/src/commands.rs 370
 crates/gglib-cli/src/daemon_client/images_tests.rs 387
 crates/gglib-cli/src/handlers/agent_chat/config.rs 477
-crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 458
+crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 460
 crates/gglib-cli/src/handlers/agent_chat/draw.rs 318
 crates/gglib-cli/src/handlers/agent_chat/mod.rs 317
 crates/gglib-cli/src/handlers/agent_chat/repl.rs 372
@@ -72,7 +73,7 @@ crates/gglib-core/src/contracts/http/daemon.rs 386
 crates/gglib-core/src/contracts/http/images.rs 302
 crates/gglib-core/src/domain/admission.rs 367
 crates/gglib-core/src/domain/agent/config.rs 795
-crates/gglib-core/src/domain/agent/events.rs 388
+crates/gglib-core/src/domain/agent/events.rs 392
 crates/gglib-core/src/domain/agent/loop_detection/tests.rs 414
 crates/gglib-core/src/domain/agent/openai_history.rs 301
 crates/gglib-core/src/domain/agent/replay_tests.rs 350
@@ -221,7 +222,7 @@ crates/gglib-runtime/src/ports_impl/llm_completion/drawn_picture_tests.rs 471
 crates/gglib-runtime/src/ports_impl/llm_completion/first_call_tests.rs 374
 crates/gglib-runtime/src/ports_impl/llm_completion/images_tests.rs 344
 crates/gglib-runtime/src/ports_impl/llm_completion/layers_tests.rs 310
-crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 379
+crates/gglib-runtime/src/ports_impl/llm_completion/mod.rs 391
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/classify.rs 315
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/classify_tests.rs 301
 crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 340

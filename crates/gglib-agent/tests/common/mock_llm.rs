@@ -177,6 +177,22 @@ impl MockLlmPort {
         self
     }
 
+    /// Append one response given as the raw events the adapter would emit,
+    /// for a stream no [`MockLlmResponse`] can say, such as a tool call cut
+    /// off mid-argument (builder-style).
+    ///
+    /// # Panics
+    ///
+    /// Panics if called concurrently — this is a build-time helper.
+    #[must_use]
+    pub(crate) fn push_events(self, events: Vec<LlmStreamEvent>) -> Self {
+        self.responses
+            .try_lock()
+            .expect("MockLlmPort::push_events called concurrently")
+            .push_back(events);
+        self
+    }
+
     /// Append many responses from an iterator (builder-style).
     ///
     /// # Panics

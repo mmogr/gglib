@@ -233,8 +233,10 @@ async fn a_penalty_typed_without_its_temperature_stands_over_a_layer_that_sets_o
         ..SamplingArgs::default()
     };
     let sampling = |body: &Value| InferenceConfig::extract_client_sampling(body).0;
+    // With the loop's turn limit: nothing here names a `max_tokens`.
     let with_penalty = |value: f32| InferenceConfig {
         presence_penalty: Some(1.2),
+        max_tokens: Some(16_384),
         ..temperature(value)
     };
 

@@ -143,7 +143,8 @@ async fn a_turn_with_tools_never_lowers_a_temperature_a_person_chose() {
 
 /// A turn that names nothing and carries no tools sends every sampling
 /// parameter `gglib model explain` reports for its model and no other, for
-/// an ordinary model and for a reasoning one, each over global defaults.
+/// an ordinary model and for a reasoning one, each over global defaults;
+/// and, where that names no `max_tokens`, a loop turn's limit of 16384.
 #[tokio::test]
 async fn a_turn_that_names_nothing_sends_what_model_explain_reports() {
     let defaults = InferenceConfig {
@@ -165,9 +166,38 @@ async fn a_turn_that_names_nothing_sends_what_model_explain_reports() {
     for (state, id) in [(&ordinary, plain), (&thinking, thinker)] {
         let explained = state.models.explain_sampling(id, None).await.unwrap();
         assert_eq!(explained.resolved.temperature, Some(0.42));
+        let want = InferenceConfig {
+            max_tokens: explained.resolved.max_tokens.or(Some(16_384)),
+            ..explained.resolved
+        };
         for (door, chat) in doors(state, id, false).await {
             let body = sent(state, id, chat).await;
-            assert_eq!(sampling_of(&body), explained.resolved, "{door}");
+            assert_eq!(sampling_of(&body), want, "{door}");
+        }
+    }
+}
+
+/// A loop turn on a model nothing names a `max_tokens` for is limited to
+/// 16384 tokens at both doors, with tools and without, so a turn the model
+/// never ends stops there. A limit this machine's settings name is sent
+/// instead, above that or below it.
+#[tokio::test]
+async fn a_turn_is_limited_to_16384_tokens_unless_a_setting_names_a_limit() {
+    for (stored, want) in [(None, 16_384), (Some(65_536), 65_536), (Some(512), 512)] {
+        let (_dir, state) = state().await;
+        let id = model(&state, |_| {}).await;
+        if let Some(named) = stored {
+            let limit = InferenceConfig {
+                max_tokens: Some(named),
+                ..InferenceConfig::default()
+            };
+            global(&state, limit).await;
+        }
+        for tools in [false, true] {
+            for (door, chat) in doors(&state, id, tools).await {
+                let body = sent(&state, id, chat).await;
+                assert_eq!(body["max_tokens"], json!(want), "{door}, stored {stored:?}");
+            }
         }
     }
 }

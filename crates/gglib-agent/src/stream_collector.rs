@@ -3,7 +3,8 @@
 //! Consumes a [`LlmCompletionPort`](gglib_core::ports::LlmCompletionPort)
 //! stream, forwarding text deltas and reasoning deltas to the caller's
 //! [`AgentEvent`] channel **as they arrive** and accumulating incremental
-//! tool-call deltas in memory until the stream terminates.
+//! tool-call deltas in memory until the stream terminates, while reporting
+//! how far those calls have got ([`AgentEvent::ToolCallWriting`]).
 //!
 //! Reasoning deltas ([`LlmStreamEvent::ReasoningDelta`]) are forwarded live
 //! as [`AgentEvent::ReasoningDelta`] and accumulated in a separate buffer; they
@@ -23,8 +24,11 @@ use futures_util::StreamExt as _;
 use gglib_core::normalize::NormalizationErrorKind;
 use gglib_core::{AgentEvent, LlmStreamEvent, ToolCall};
 use tokio::sync::mpsc;
+use tokio::time::Instant;
 use tracing::warn;
 
+use crate::call_writing::CallWritingReports;
+use crate::cut_off::CUT_OFF;
 use crate::util::emit_error_event;
 
 // =============================================================================
@@ -109,6 +113,12 @@ pub struct CollectedResponse {
     /// collector drains the stream to its end instead of returning at the
     /// `Done` event.
     pub completion_tokens: Option<u32>,
+    /// Whether the reply was cut off at its token limit (`finish_reason:
+    /// "length"`) while it wrote a tool call: some tool-call delta came, at
+    /// any index, or a dialect parser reported a tool-call tag left open.
+    /// Its calls are then dropped unassembled, and the loop ends the run,
+    /// except on the words after a Draw's picture, which it answers for.
+    pub call_cut: bool,
 }
 
 // =============================================================================
@@ -143,10 +153,12 @@ struct PartialToolCall {
 ///   immediately sends [`AgentEvent::TextDelta`] on `tx`.  Send failures are
 ///   ignored (the receiver may have dropped if the client disconnected).
 /// - [`LlmStreamEvent::ToolCallDelta`] — upserts into a `Vec<PartialToolCall>`
-///   keyed by `index`, extending the `arguments` string.
+///   keyed by `index`, extending the `arguments` string, and reports the
+///   calls' progress as [`AgentEvent::ToolCallWriting`] (`call_writing`).
 /// - [`LlmStreamEvent::Done`] — assembles the partials into [`ToolCall`]s
 ///   (parsing the accumulated arguments JSON string into `serde_json::Value`).
-///   Returns the completed [`CollectedResponse`].
+///   Returns the completed [`CollectedResponse`]. A turn cut off at its token
+///   limit (`finish_reason: "length"`) has its calls dropped unassembled.
 ///
 /// # Errors
 ///
@@ -173,6 +185,10 @@ pub async fn collect_stream(
     // Deltas dropped for exceeding MAX_TOOL_CALL_INDEX. Counted rather than
     // fatal — see `upsert_tool_call_delta`.
     let mut tool_calls_truncated: usize = 0;
+    // Whether the reply started a call: a tool-call delta came, at any index
+    // (one past `MAX_TOOL_CALL_INDEX` lands in no partial), or a dialect
+    // parser found a tool-call tag the reply never closed.
+    let mut wrote_a_call = false;
     // Tracks whether at least one event was received before the stream ended.
     // Distinguishes a hard connectivity failure (zero events) from a
     // mid-response truncation (some events, no Done frame).
@@ -181,6 +197,7 @@ pub async fn collect_stream(
     // usage chunk legitimately trails `Done` (before the byte stream closes).
     let mut finished: Option<(Option<String>, Vec<ToolCall>)> = None;
     let mut completion_tokens: Option<u32> = None;
+    let mut writing = CallWritingReports::default();
 
     while let Some(event) = stream.next().await {
         got_any_event = true;
@@ -220,13 +237,25 @@ pub async fn collect_stream(
                 name,
                 arguments,
             } => {
+                wrote_a_call = true;
                 if upsert_tool_call_delta(&mut partials, index, id, name, arguments) {
                     tool_calls_truncated += 1;
+                }
+                let tool = partials.get(index).and_then(|p| p.name.as_deref());
+                if let Some(report) = writing.piece(tool, Instant::now()) {
+                    let _ = tx.send(report).await;
                 }
             }
 
             LlmStreamEvent::Done { finish_reason } => {
-                let tool_calls = assemble_tool_calls(std::mem::take(&mut partials), tx).await?;
+                // A cut-off call never closed, so it is not assembled; the loop
+                // ends the run on it (`call_cut`) except after a Draw's picture.
+                let partials = std::mem::take(&mut partials);
+                let tool_calls = if finish_reason.as_deref() == Some(CUT_OFF) {
+                    Vec::new()
+                } else {
+                    assemble_tool_calls(partials, tx).await?
+                };
                 finished = Some((finish_reason, tool_calls));
                 // Do not return yet: the trailing usage chunk arrives after
                 // Done. The decoder ends the stream right after the [DONE]
@@ -234,6 +263,7 @@ pub async fn collect_stream(
             }
 
             LlmStreamEvent::NormalizationError { kind, raw } => {
+                wrote_a_call |= matches!(kind, NormalizationErrorKind::UnclosedToolCallTag { .. });
                 handle_normalization_error(tx, &kind, &raw).await;
             }
 
@@ -255,6 +285,7 @@ pub async fn collect_stream(
     }
 
     if let Some((finish_reason, tool_calls)) = finished {
+        let call_cut = wrote_a_call && finish_reason.as_deref() == Some(CUT_OFF);
         return Ok(CollectedResponse {
             content: text_buf,
             reasoning_content: reasoning_buf,
@@ -262,6 +293,7 @@ pub async fn collect_stream(
             finish_reason,
             tool_calls_truncated,
             completion_tokens,
+            call_cut,
         });
     }
 
