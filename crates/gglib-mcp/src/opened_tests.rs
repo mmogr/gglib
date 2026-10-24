@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use gglib_core::ports::{McpRepositoryError, McpServerRepository};
-use gglib_core::{McpServer, NewMcpServer};
+use gglib_core::{McpServer, McpServiceError, NewMcpServer};
 
 use super::Unopenable;
 use crate::service::McpService;
@@ -117,6 +117,9 @@ impl McpServerRepository for Unreadable {
         Err(McpRepositoryError::Internal("down".to_owned()))
     }
     async fn update_last_connected(&self, _: i64) -> Result<(), McpRepositoryError> {
+        Err(McpRepositoryError::Internal("down".to_owned()))
+    }
+    async fn set_allow_remote(&self, _: i64, _: bool) -> Result<(), McpRepositoryError> {
         Err(McpRepositoryError::Internal("down".to_owned()))
     }
 }
@@ -309,4 +312,145 @@ async fn qualified_is_what_the_executor_lists() {
     assert!(!offered.is_empty());
     assert_eq!(offered, listed);
     service.shutdown().await;
+}
+
+/// Whether `id` is open to paired devices, as stored.
+async fn open(service: &McpService, id: i64) -> bool {
+    service.get_server(id).await.unwrap().allow_remote
+}
+
+/// A server running when it is opened, and when it is closed again, is still
+/// running after each: the flag's write does not go through an update,
+/// which stops a running server.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_running_server_keeps_running_when_opened_and_closed() {
+    let (service, _) = service();
+    let tavily = service.add_server(stand_in("tavily")).await.unwrap();
+    service.start_server(tavily.id).await.unwrap();
+
+    let opened = service.set_allow_remote(tavily.id, true).await.unwrap();
+    assert!(opened.allow_remote, "the server comes back open");
+    assert!(open(&service, tavily.id).await, "and is stored open");
+    assert!(
+        running(&service, tavily.id).await,
+        "still running once open"
+    );
+
+    service.set_allow_remote(tavily.id, false).await.unwrap();
+    assert!(!open(&service, tavily.id).await);
+    assert!(
+        running(&service, tavily.id).await,
+        "still running once closed"
+    );
+    service.shutdown().await;
+}
+
+/// An SSE server and one stored as `builtin` are refused when opened, each
+/// with its own reason, and stay closed; closing either is never refused.
+#[tokio::test]
+async fn an_sse_server_and_builtin_are_refused_opening_but_not_closing() {
+    let (service, repo) = service();
+    // Only the repository can hold these: the service refuses both on add.
+    let sse = repo
+        .insert(NewMcpServer::new_sse("remote", "http://localhost:3001/sse"))
+        .await
+        .unwrap();
+    let builtin = repo.insert(stdio("builtin", "npx")).await.unwrap();
+
+    let refused = service.set_allow_remote(sse.id, true).await;
+    assert!(
+        matches!(refused, Err(McpServiceError::SseNotSupported)),
+        "{refused:?}"
+    );
+    let refused = service.set_allow_remote(builtin.id, true).await;
+    let Err(why) = refused else {
+        panic!("builtin was opened: {refused:?}")
+    };
+    assert!(matches!(why, McpServiceError::NeverOpened(_)), "{why:?}");
+    assert_eq!(
+        why.to_string(),
+        "'builtin' is gglib's own tools and is never opened to devices"
+    );
+    assert!(!open(&service, sse.id).await && !open(&service, builtin.id).await);
+
+    // A database written before either was refused can hold them open.
+    repo.set_allow_remote(sse.id, true).await.unwrap();
+    repo.set_allow_remote(builtin.id, true).await.unwrap();
+    for id in [sse.id, builtin.id] {
+        let closed = service.set_allow_remote(id, false).await.unwrap();
+        assert!(!closed.allow_remote && !open(&service, id).await);
+    }
+}
+
+#[tokio::test]
+async fn an_unknown_server_is_not_found() {
+    let (service, _) = service();
+
+    let refused = service.set_allow_remote(42, true).await;
+
+    assert!(
+        matches!(
+            refused,
+            Err(McpServiceError::Repository(McpRepositoryError::NotFound(_)))
+        ),
+        "{refused:?}"
+    );
+}
+
+/// Only a server flagged open, enabled, stdio and not `builtin` is open to
+/// devices; an unflagged one is not, whatever else it is.
+#[tokio::test]
+async fn only_a_flagged_enabled_stdio_server_is_open_to_devices() {
+    let (service, repo) = service();
+    let tavily = repo.insert(stdio("tavily", "npx")).await.unwrap();
+    repo.insert(stdio("fs", "npx")).await.unwrap();
+    let mut off = stdio("off", "npx");
+    off.enabled = false;
+    let off = repo.insert(off).await.unwrap();
+    let sse = repo
+        .insert(NewMcpServer::new_sse("remote", "http://localhost:3001/sse"))
+        .await
+        .unwrap();
+    let builtin = repo.insert(stdio("builtin", "npx")).await.unwrap();
+    for id in [tavily.id, off.id, sse.id, builtin.id] {
+        repo.set_allow_remote(id, true).await.unwrap();
+    }
+
+    let opened: Vec<i64> = service
+        .open_to_devices()
+        .await
+        .unwrap()
+        .iter()
+        .map(|server| server.id)
+        .collect();
+
+    assert_eq!(opened, [tavily.id]);
+    assert_eq!(service.device_server_names().await, ["tavily"]);
+}
+
+/// Two servers sharing a name can each be open, and the name is listed once.
+#[tokio::test]
+async fn a_name_two_open_servers_share_is_listed_once() {
+    let (service, repo) = service();
+    // An older database can hold two of one name; the service refuses it now.
+    let first = repo.insert(stdio("tavily", "npx")).await.unwrap();
+    let fs = repo.insert(stdio("fs", "npx")).await.unwrap();
+    let second = repo.insert(stdio("tavily", "uvx")).await.unwrap();
+    for id in [first.id, fs.id, second.id] {
+        service.set_allow_remote(id, true).await.unwrap();
+    }
+
+    assert_eq!(service.open_to_devices().await.unwrap().len(), 3);
+    assert_eq!(service.device_server_names().await, ["fs", "tavily"]);
+}
+
+/// Servers that cannot be read open none: the read says so, and the names
+/// a status shows are none.
+#[tokio::test]
+async fn unreadable_servers_open_none_to_devices() {
+    let service = McpService::new(Arc::new(Unreadable));
+
+    assert!(service.open_to_devices().await.is_err());
+    assert_eq!(service.device_server_names().await, Vec::<String>::new());
 }

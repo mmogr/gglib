@@ -31,7 +31,8 @@ pub enum McpRepositoryError {
 ///
 /// - Environment variables are embedded in `McpServer` - no separate env API
 /// - `insert()` and `update()` each write a server whole, its env included,
-///   or not at all
+///   or not at all, save `allow_remote`, which only `set_allow_remote()`
+///   writes
 /// - Names are not unique here. The service refuses a name another server
 ///   has, and a database written before it did can hold two of one name
 ///
@@ -112,4 +113,17 @@ pub trait McpServerRepository: Send + Sync {
     /// - `NotFound` if no server with the given ID exists
     /// - `Internal` for storage errors
     async fn update_last_connected(&self, id: i64) -> Result<(), McpRepositoryError>;
+
+    /// Set only whether paired devices may use the server: its one write.
+    ///
+    /// [`update`](Self::update) never writes this flag, so a whole-row write
+    /// from a copy read before this one cannot undo it. There is no default
+    /// implementation: one built from `get_by_id` and `update` would drop
+    /// the flag without a word.
+    ///
+    /// # Errors
+    ///
+    /// - `NotFound` if no server with the given ID exists
+    /// - `Internal` for storage errors
+    async fn set_allow_remote(&self, id: i64, allow: bool) -> Result<(), McpRepositoryError>;
 }

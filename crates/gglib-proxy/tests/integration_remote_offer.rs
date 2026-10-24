@@ -73,6 +73,10 @@ impl McpServerRepository for OneServer {
     async fn update_last_connected(&self, _id: i64) -> Result<(), McpRepositoryError> {
         Ok(())
     }
+
+    async fn set_allow_remote(&self, _id: i64, _allow: bool) -> Result<(), McpRepositoryError> {
+        Err(McpRepositoryError::Internal("read only".into()))
+    }
 }
 
 const TOKEN: &str = "secret123";

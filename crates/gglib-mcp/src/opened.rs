@@ -45,6 +45,79 @@ pub enum Unopenable {
 }
 
 impl McpService {
+    /// Open the server `id` to paired devices, or close it, and return the
+    /// server as it now stands.
+    ///
+    /// The flag's own write, and nothing else: the server is not stopped,
+    /// and its row is not rewritten whole, so a running server keeps running
+    /// and a whole-row write made from an earlier read cannot undo it. A
+    /// device's next run reads it.
+    ///
+    /// # Errors
+    ///
+    /// Opening an SSE server is refused with
+    /// [`McpServiceError::SseNotSupported`], since gglib cannot run one, and
+    /// opening one named `builtin` with [`McpServiceError::NeverOpened`].
+    /// Closing a server is never refused. An unknown `id` is the
+    /// repository's `NotFound`.
+    pub async fn set_allow_remote(
+        &self,
+        id: i64,
+        allow: bool,
+    ) -> Result<McpServer, McpServiceError> {
+        let mut server = self.get_server(id).await?;
+        if allow {
+            Self::refuse_unsupported(server.server_type)?;
+            if server.name == RESERVED_SERVER_NAME {
+                return Err(McpServiceError::NeverOpened(server.name));
+            }
+        }
+        self.repository.set_allow_remote(id, allow).await?;
+        server.allow_remote = allow;
+        tracing::info!(
+            server_name = %server.name,
+            allow_remote = allow,
+            "set whether paired devices may use an MCP server"
+        );
+        Ok(server)
+    }
+
+    /// The servers a paired device's runs are offered: each one flagged
+    /// open, enabled, stdio, and not `builtin`, in the order they list.
+    ///
+    /// # Errors
+    ///
+    /// When the servers cannot be read.
+    pub async fn open_to_devices(&self) -> Result<Vec<McpServer>, McpServiceError> {
+        let mut servers = self.list_servers().await?;
+        servers.retain(|server| {
+            server.allow_remote
+                && server.enabled
+                && server.server_type == McpServerType::Stdio
+                && server.name != RESERVED_SERVER_NAME
+        });
+        Ok(servers)
+    }
+
+    /// The names of [`Self::open_to_devices`], sorted and each once, for a
+    /// status to show. None, with a warning, when the servers cannot be
+    /// read: a status that cannot say is not a failure of the tunnel.
+    pub async fn device_server_names(&self) -> Vec<String> {
+        match self.open_to_devices().await {
+            Ok(servers) => {
+                let mut names: Vec<String> =
+                    servers.into_iter().map(|server| server.name).collect();
+                names.sort_unstable();
+                names.dedup();
+                names
+            }
+            Err(e) => {
+                warn!(error = %e, "could not read the MCP servers open to paired devices");
+                Vec::new()
+            }
+        }
+    }
+
     /// Refuse `names` unless each names exactly one configured server.
     ///
     /// Naming none reads nothing, so a plain enable is never refused for a

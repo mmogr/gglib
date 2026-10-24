@@ -375,3 +375,58 @@ async fn a_database_holding_two_servers_of_one_name_opens_and_lists_both() {
     commands.sort();
     assert_eq!(commands, [Some("one".to_string()), Some("two".to_string())]);
 }
+
+/// A new server is closed to paired devices, and the flag's own write opens
+/// and closes the server it names and no other.
+#[tokio::test]
+async fn the_remote_flag_starts_off_and_is_set_on_its_server_alone() {
+    let repo = repository().await;
+    let tavily = repo
+        .insert(NewMcpServer::new_stdio("tavily", "npx", vec![], None))
+        .await
+        .unwrap();
+    let fs = repo
+        .insert(NewMcpServer::new_stdio("fs", "npx", vec![], None))
+        .await
+        .unwrap();
+    assert!(!tavily.allow_remote, "closed unless opened");
+
+    repo.set_allow_remote(tavily.id, true).await.unwrap();
+    assert!(repo.get_by_id(tavily.id).await.unwrap().allow_remote);
+    assert!(!repo.get_by_id(fs.id).await.unwrap().allow_remote);
+    assert!(repo.list().await.unwrap().iter().any(|s| s.allow_remote));
+
+    repo.set_allow_remote(tavily.id, false).await.unwrap();
+    assert!(!repo.get_by_name("tavily").await.unwrap().allow_remote);
+    assert!(matches!(
+        repo.set_allow_remote(tavily.id + 100, true).await,
+        Err(McpRepositoryError::NotFound(_))
+    ));
+}
+
+/// A whole-row write never names the flag: one made from a copy read while
+/// the server was open, saved after it was closed, leaves it closed, and one
+/// from a closed copy leaves an open server open.
+#[tokio::test]
+async fn a_whole_row_write_leaves_the_remote_flag_as_it_was() {
+    let repo = repository().await;
+    let added = repo
+        .insert(NewMcpServer::new_stdio("tavily", "npx", vec![], None))
+        .await
+        .unwrap();
+    repo.set_allow_remote(added.id, true).await.unwrap();
+    let mut read_while_open = repo.get_by_id(added.id).await.unwrap();
+    assert!(read_while_open.allow_remote);
+
+    repo.set_allow_remote(added.id, false).await.unwrap();
+    read_while_open.config.command = Some("uvx".to_owned());
+    repo.update(&read_while_open).await.unwrap();
+
+    let read = repo.get_by_id(added.id).await.unwrap();
+    assert_eq!(read.config.command.as_deref(), Some("uvx"), "the edit took");
+    assert!(!read.allow_remote, "a deny is not undone by an older copy");
+
+    repo.set_allow_remote(added.id, true).await.unwrap();
+    repo.update(&added).await.unwrap();
+    assert!(repo.get_by_id(added.id).await.unwrap().allow_remote);
+}

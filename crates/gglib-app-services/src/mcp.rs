@@ -53,6 +53,7 @@ impl McpOps {
                 url: server.config.url.clone(),
             },
             enabled: server.enabled,
+            allow_remote: server.allow_remote,
             lifecycle: server.lifecycle,
             env: server
                 .env

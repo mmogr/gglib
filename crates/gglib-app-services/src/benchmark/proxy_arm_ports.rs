@@ -136,4 +136,8 @@ impl McpServerRepository for NoMcpServers {
     async fn update_last_connected(&self, _id: i64) -> Result<(), McpRepositoryError> {
         Ok(())
     }
+
+    async fn set_allow_remote(&self, id: i64, _allow: bool) -> Result<(), McpRepositoryError> {
+        Err(McpRepositoryError::NotFound(id.to_string()))
+    }
 }

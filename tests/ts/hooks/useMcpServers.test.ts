@@ -54,6 +54,7 @@ const mockServerInfo: McpServerInfo = {
       args: ['-y', 'test-server'],
     },
     enabled: true,
+    allow_remote: false,
     lifecycle: 'lazy' as const,
     is_valid: true,
     env: [],

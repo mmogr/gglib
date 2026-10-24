@@ -16,6 +16,7 @@ const BASE: McpServer = {
   server_type: 'stdio',
   config: { command: 'echo', args: [] },
   enabled: true,
+  allow_remote: false,
   lifecycle: 'lazy',
   env: [],
   created_at: '2024-01-01T00:00:00Z',

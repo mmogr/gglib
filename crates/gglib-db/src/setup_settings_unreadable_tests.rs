@@ -106,10 +106,11 @@ async fn a_switch_stored_as_a_blob_is_left_as_found_and_the_boot_goes_on() {
 
 /// The version is asked again under the lock: a database another process
 /// stamped while this one waited is not folded, and a later stamp is not
-/// lowered to this one.
+/// lowered to this one. Later than every step a boot runs, so the boot
+/// leaves it as planted too.
 #[tokio::test]
 async fn a_database_stamped_before_the_lock_was_held_is_neither_folded_nor_restamped() {
-    const LATER: i64 = LOOP_GUARD_MODE_SCHEMA_VERSION + 1;
+    const LATER: i64 = crate::setup::remote_grant::REMOTE_GRANT_SCHEMA_VERSION + 1;
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("gglib.db");
     left_by_an_older_build(&path, LATER, &[(SWITCH, "false")]).await;

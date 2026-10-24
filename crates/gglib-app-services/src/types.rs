@@ -387,6 +387,10 @@ pub struct McpServerDto {
     pub server_type: String,
     pub config: McpServerConfigDto,
     pub enabled: bool,
+    /// Whether a paired device's runs are offered this server's tools. Read
+    /// only: an edit never sets it, as it has a write of its own.
+    #[serde(default)]
+    pub allow_remote: bool,
     pub lifecycle: McpLifecycle,
     pub env: Vec<McpEnvEntryDto>,
     pub created_at: String,

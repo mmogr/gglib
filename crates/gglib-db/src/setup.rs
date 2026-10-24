@@ -28,6 +28,8 @@ mod model_files;
 mod models;
 #[path = "setup_recipes.rs"]
 mod recipes;
+#[path = "setup_remote_grant.rs"]
+mod remote_grant;
 #[path = "setup_settings.rs"]
 mod settings;
 
@@ -306,6 +308,7 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
             name TEXT NOT NULL,
             type TEXT NOT NULL CHECK (type IN ('stdio', 'sse')),
             enabled INTEGER NOT NULL DEFAULT 1,
+            allow_remote INTEGER NOT NULL DEFAULT 0,
             lifecycle TEXT NOT NULL DEFAULT 'lazy' CHECK (lifecycle IN ('eager', 'lazy', 'manual')),
             command TEXT,
             resolved_path_cache TEXT,
@@ -321,6 +324,17 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
         ",
     )
     .execute(pool)
+    .await?;
+
+    // Migration: whether paired devices may use a server, closed unless set.
+    // The upgrade that opens the servers the old list named is
+    // `remote_grant`, a `user_version` step below.
+    add_column_if_missing(
+        pool,
+        "mcp_servers",
+        "allow_remote",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
     .await?;
 
     // Create MCP server environment variables table
@@ -571,6 +585,11 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // Stored copies of the `reasoning` recipe, which resolution now supplies
     // from the tag. After the fold, whose version sits below this one.
     recipes::drop_stored_reasoning_recipes(pool).await?;
+
+    // The MCP servers the remote tunnel's list opened, flagged on their own
+    // rows. After the recipes step, whose version sits below this one, and
+    // after the settings and MCP tables it reads exist.
+    remote_grant::flag_listed_servers(pool).await?;
 
     // Last, after every table it reads exists, however old the library.
     models::rebuild_models_if_needed(pool).await?;

@@ -17,6 +17,7 @@ const serverInfo = (status: McpServerInfo['status']): McpServerInfo => ({
     server_type: 'stdio',
     config: {},
     enabled: true,
+    allow_remote: false,
     lifecycle: 'lazy' as const,
     is_valid: true,
     env: [],

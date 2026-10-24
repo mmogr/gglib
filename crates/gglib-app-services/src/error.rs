@@ -175,10 +175,11 @@ impl From<gglib_core::McpServiceError> for GuiError {
             // The caller's to fix, by choosing another name.
             McpServiceError::NameTaken(_) => Self::Conflict(err.to_string()),
             // The caller's too: the request names a kind of server that is
-            // not run, or gives a server the name gglib keeps.
-            McpServiceError::SseNotSupported | McpServiceError::NameReserved(_) => {
-                Self::ValidationFailed(err.to_string())
-            }
+            // not run, gives a server the name gglib keeps, or opens that
+            // name to paired devices.
+            McpServiceError::SseNotSupported
+            | McpServiceError::NameReserved(_)
+            | McpServiceError::NeverOpened(_) => Self::ValidationFailed(err.to_string()),
             _ => Self::Internal(err.to_string()),
         }
     }

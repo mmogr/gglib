@@ -260,6 +260,15 @@ pub struct McpServer {
     /// Whether tools from this server are included in chat.
     pub enabled: bool,
 
+    /// Whether a paired device's runs are offered this server's tools.
+    ///
+    /// The grant itself: nothing else lists the servers opened to devices.
+    /// Off unless set, and set only by its own write
+    /// (`McpServerRepository::set_allow_remote`), never by a whole-row one,
+    /// so an edit saved from a form read before a deny cannot undo it.
+    #[serde(default)]
+    pub allow_remote: bool,
+
     /// Startup lifecycle policy: when this server is automatically started.
     pub lifecycle: McpLifecycle,
 
