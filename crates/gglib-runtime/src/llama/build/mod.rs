@@ -7,6 +7,7 @@ use super::detect::select_cuda_compiler_for_build;
 use anyhow::{Context, Result, bail};
 
 use super::build_events::{BuildEvent, BuildPhase};
+use crate::binary_install::release_number;
 use gglib_core::utils::process::cmd;
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
@@ -14,6 +15,31 @@ use std::process::{Child, Command, Stdio};
 use std::sync::mpsc as std_mpsc;
 use std::thread;
 use tokio::sync::mpsc;
+
+/// What a build of a release says about itself: llama.cpp's build number and
+/// commit, which `llama-server --version` reports.
+///
+/// A shallow clone has one commit, so left to itself llama.cpp's configure
+/// step counts build 1, which reads as no known build. These are passed in
+/// instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BuildInfo {
+    /// The `n` of the `b<n>` tag checked out.
+    pub(crate) number: u64,
+    /// The short commit checked out.
+    pub(crate) commit: String,
+}
+
+impl BuildInfo {
+    /// The build information of a checkout at `tag` and the short commit
+    /// `commit`, when the tag is a `b<n>` one.
+    pub(crate) fn of(tag: Option<&str>, commit: &str) -> Option<Self> {
+        Some(Self {
+            number: release_number(tag?)?,
+            commit: commit.to_owned(),
+        })
+    }
+}
 
 /// Build llama.cpp from source, emitting [`BuildEvent`] values over `tx`.
 ///
@@ -23,15 +49,63 @@ use tokio::sync::mpsc;
 pub(super) fn build_llama_cpp(
     llama_dir: &Path,
     acceleration: Acceleration,
+    info: Option<&BuildInfo>,
     tx: &mpsc::Sender<BuildEvent>,
 ) -> Result<()> {
     let build_dir = llama_dir.join("build");
     std::fs::create_dir_all(&build_dir).context("Failed to create build directory")?;
 
-    configure_cmake(llama_dir, &build_dir, acceleration, tx)?;
+    configure_cmake(llama_dir, &build_dir, acceleration, info, tx)?;
     build_project(&build_dir, acceleration, tx)?;
 
     Ok(())
+}
+
+/// The configure step's arguments, before any CUDA paths: a Release build of
+/// the checkout at `src` into `build`, with the server and the benchmark,
+/// linked statically, `acceleration` on, and `info` as the build's number
+/// and commit when there is one.
+///
+/// Static, so the installed binaries stand alone: one built against shared
+/// libraries loads them from the checkout's build directory, and stops
+/// working when that checkout is replaced.
+pub(crate) fn llama_configure_args(
+    src: &Path,
+    build: &Path,
+    acceleration: Acceleration,
+    info: Option<&BuildInfo>,
+) -> Vec<String> {
+    let mut args: Vec<String> = [
+        "-S",
+        &src.display().to_string(),
+        "-B",
+        &build.display().to_string(),
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DBUILD_SHARED_LIBS=OFF",
+        "-DGGML_METAL_EMBED_LIBRARY=ON",
+        "-DLLAMA_BUILD_SERVER=ON",
+        "-DLLAMA_BUILD_BENCH=ON", // Build llama-bench for throughput benchmarking
+        "-DLLAMA_BUILD_EXAMPLES=OFF", // Skip examples to avoid GCC bug in some files
+        "-DLLAMA_BUILD_TESTS=OFF", // Skip tests to avoid GCC bug in some files
+        // Upstream llama.cpp enables -Wmissing-noreturn via LLAMA_ALL_WARNINGS,
+        // which floods the build with jinja template warnings we can't fix.
+        // Disable the upstream warning flags entirely — we don't maintain that code.
+        "-DLLAMA_ALL_WARNINGS=OFF",
+    ]
+    .iter()
+    .map(|arg| (*arg).to_owned())
+    .collect();
+    args.extend(
+        acceleration
+            .cmake_flags()
+            .iter()
+            .map(|flag| (*flag).to_owned()),
+    );
+    if let Some(info) = info {
+        args.push(format!("-DLLAMA_BUILD_NUMBER={}", info.number));
+        args.push(format!("-DLLAMA_BUILD_COMMIT={}", info.commit));
+    }
+    args
 }
 
 /// Run `CMake` configuration, emitting a [`BuildEvent::PhaseStarted`] at the start
@@ -40,6 +114,7 @@ fn configure_cmake(
     llama_dir: &Path,
     build_dir: &Path,
     acceleration: Acceleration,
+    info: Option<&BuildInfo>,
     tx: &mpsc::Sender<BuildEvent>,
 ) -> Result<()> {
     let _ = tx.blocking_send(BuildEvent::PhaseStarted {
@@ -51,26 +126,7 @@ fn configure_cmake(
     let cxxflags = merge_flags("CXXFLAGS", "-O1");
     let cflags = merge_flags("CFLAGS", "-O1");
 
-    let mut args = vec![
-        "-S",
-        llama_dir.to_str().unwrap(),
-        "-B",
-        build_dir.to_str().unwrap(),
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DGGML_METAL_EMBED_LIBRARY=ON",
-        "-DLLAMA_BUILD_SERVER=ON",
-        "-DLLAMA_BUILD_BENCH=ON", // Build llama-bench for throughput benchmarking
-        "-DLLAMA_BUILD_EXAMPLES=OFF", // Skip examples to avoid GCC bug in some files
-        "-DLLAMA_BUILD_TESTS=OFF", // Skip tests to avoid GCC bug in some files
-        // Upstream llama.cpp enables -Wmissing-noreturn via LLAMA_ALL_WARNINGS,
-        // which floods the build with jinja template warnings we can't fix.
-        // Disable the upstream warning flags entirely — we don't maintain that code.
-        "-DLLAMA_ALL_WARNINGS=OFF",
-    ];
-
-    // Add acceleration-specific flags
-    let accel_flags = acceleration.cmake_flags();
-    args.extend(accel_flags);
+    let mut args = llama_configure_args(llama_dir, build_dir, acceleration, info);
 
     let mut command = cmd("cmake");
 
@@ -171,7 +227,7 @@ fn configure_cmake(
     };
 
     // Combine all arguments
-    args.extend(cuda_args.iter().map(std::string::String::as_str));
+    args.extend(cuda_args);
     command.args(&args);
 
     run_configure(command, tx)
@@ -385,6 +441,76 @@ mod step_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn a_release_is_configured_static_with_its_build_number_and_commit() {
+        let (src, build) = (PathBuf::from("/s"), PathBuf::from("/s/build"));
+        let info = BuildInfo {
+            number: 11429,
+            commit: "d812350".to_owned(),
+        };
+
+        let args = llama_configure_args(&src, &build, Acceleration::Metal, Some(&info));
+
+        assert_eq!(
+            args,
+            [
+                "-S",
+                "/s",
+                "-B",
+                "/s/build",
+                "-DCMAKE_BUILD_TYPE=Release",
+                "-DBUILD_SHARED_LIBS=OFF",
+                "-DGGML_METAL_EMBED_LIBRARY=ON",
+                "-DLLAMA_BUILD_SERVER=ON",
+                "-DLLAMA_BUILD_BENCH=ON",
+                "-DLLAMA_BUILD_EXAMPLES=OFF",
+                "-DLLAMA_BUILD_TESTS=OFF",
+                "-DLLAMA_ALL_WARNINGS=OFF",
+                "-DGGML_METAL=ON",
+                "-DLLAMA_BUILD_NUMBER=11429",
+                "-DLLAMA_BUILD_COMMIT=d812350",
+            ]
+        );
+    }
+
+    #[test]
+    fn only_a_b_tag_gives_a_build_number() {
+        assert_eq!(
+            BuildInfo::of(Some("b11429"), "d812350"),
+            Some(BuildInfo {
+                number: 11429,
+                commit: "d812350".to_owned()
+            })
+        );
+        assert_eq!(BuildInfo::of(Some("v0.7.0"), "d812350"), None);
+        assert_eq!(BuildInfo::of(None, "d812350"), None);
+    }
+
+    /// Upstream's newest has no `b<n>` to give, and llama.cpp then counts
+    /// one for itself.
+    #[test]
+    fn a_build_without_a_release_tag_passes_no_build_number() {
+        let args = llama_configure_args(
+            &PathBuf::from("/s"),
+            &PathBuf::from("/s/build"),
+            Acceleration::Cpu,
+            None,
+        );
+
+        assert!(args.contains(&"-DBUILD_SHARED_LIBS=OFF".to_owned()));
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.starts_with("-DLLAMA_BUILD_NUMBER"))
+        );
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.starts_with("-DLLAMA_BUILD_COMMIT"))
+        );
+    }
 
     #[test]
     fn test_parse_build_progress_percentage() {

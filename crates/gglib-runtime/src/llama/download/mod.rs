@@ -70,7 +70,7 @@ fn wanted(file_name: &str) -> bool {
 /// llama.cpp as a GitHub release: `ggml-org/llama.cpp`, tar.gz archives one
 /// directory deep on macOS and Linux and flat zips on Windows, the first
 /// asset whose name holds the platform's pattern.
-static LLAMA_RELEASE: ReleaseSpec = ReleaseSpec {
+pub(super) static LLAMA_RELEASE: ReleaseSpec = ReleaseSpec {
     product: "llama.cpp",
     repo: "ggml-org/llama.cpp",
     pinned: PINNED_LLAMA_RELEASE,
@@ -290,6 +290,15 @@ mod tests {
         bin_dir: &std::path::Path,
     ) -> Result<()> {
         crate::binary_install::extract_binaries(&LLAMA_RELEASE, LLAMA_REQUIRED, archive, bin_dir)
+    }
+
+    /// A source build clones the repository the downloads come from.
+    #[test]
+    fn the_source_is_cloned_from_the_release_repository() {
+        assert_eq!(
+            crate::llama::install::LLAMA_SOURCE.url,
+            format!("https://github.com/{}", LLAMA_RELEASE.repo)
+        );
     }
 
     /// The case the pin exists for: no override installs the pin, not

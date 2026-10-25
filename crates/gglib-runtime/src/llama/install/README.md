@@ -4,6 +4,12 @@
 
 Source-build installation pipeline for llama.cpp.
 
+A build is of the release the install selects, the pin unless
+`GGLIB_LLAMA_RELEASE` names another, cloned from `ggml-org/llama.cpp` by the
+checkout every product's source build shares (`binary_install::checkout`).
+It links statically and passes llama.cpp the tag's build number and commit,
+so the installed binaries stand alone and report the release they are.
+
 The primary streaming entry point is [`run_llama_source_build`], which emits
 [`BuildEvent`] values into a `Sender<BuildEvent>` channel. CLI surface concerns
 (dependency checks, user prompts, progress rendering) live in `gglib-cli`, in
@@ -23,7 +29,7 @@ neither of which had a caller — taking the `llama-build-progress` event the
 
 ## Threading model
 
-[`clone_llama_cpp`] and [`build_llama_cpp`] call `blocking_send` directly in their
+[`prepare_checkout`] and [`build_llama_cpp`] call `blocking_send` directly in their
 function bodies and must run via [`tokio::task::spawn_blocking`] from async contexts.
 [`run_llama_source_build`] handles this wrapping automatically.
 

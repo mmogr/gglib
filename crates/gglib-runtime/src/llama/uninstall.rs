@@ -2,6 +2,8 @@
 
 use anyhow::Result;
 use gglib_core::paths::gglib_data_dir;
+
+use crate::binary_install::leftovers;
 use serde::Serialize;
 
 /// What an uninstall removed.
@@ -13,8 +15,9 @@ pub struct UninstallOutcome {
     pub removed_paths: Vec<String>,
 }
 
-/// Remove the llama.cpp installation: the source checkout, the binary
-/// directory and the build configuration.
+/// Remove the llama.cpp installation: the source checkout and anything an
+/// unfinished build left beside it, the binary directory and the build
+/// configuration.
 ///
 /// Note this removes the whole `bin/` directory, so `llama-bench` goes with
 /// `llama-server` — everything a source build installs. Unconditional; the
@@ -34,9 +37,11 @@ pub async fn uninstall_llama() -> Result<UninstallOutcome> {
 
     let mut removed_paths = Vec::new();
 
-    if llama_dir.exists() {
-        std::fs::remove_dir_all(&llama_dir)?;
-        removed_paths.push(llama_dir.display().to_string());
+    for dir in std::iter::once(llama_dir.clone()).chain(leftovers(&llama_dir)) {
+        if dir.exists() {
+            std::fs::remove_dir_all(&dir)?;
+            removed_paths.push(dir.display().to_string());
+        }
     }
 
     if bin_dir.exists() {
@@ -56,11 +61,14 @@ pub async fn uninstall_llama() -> Result<UninstallOutcome> {
 }
 
 /// Whether there is anything for [`uninstall_llama`] to remove: a source
-/// checkout or a binary directory.
+/// checkout, one an unfinished build left, or a binary directory.
 ///
 /// A caller that asks before uninstalling asks this first, so that it does
 /// not ask about an install that is not there.
 pub fn llama_files_present() -> Result<bool> {
     let gglib_dir = gglib_data_dir()?;
-    Ok(gglib_dir.join("llama.cpp").exists() || gglib_dir.join("bin").exists())
+    let llama_dir = gglib_dir.join("llama.cpp");
+    Ok(llama_dir.exists()
+        || leftovers(&llama_dir).iter().any(|dir| dir.exists())
+        || gglib_dir.join("bin").exists())
 }

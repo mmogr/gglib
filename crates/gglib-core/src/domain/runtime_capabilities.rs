@@ -97,9 +97,10 @@ bitflags! {
 /// Smallest build number treated as a real llama.cpp release.
 ///
 /// llama.cpp's `CMake` sets `LLAMA_BUILD_NUMBER` to `git rev-list --count
-/// HEAD`. gglib's source install clones with `--depth=1`, so the count is the
-/// commits the shallow clone holds, `1` until an update fetches more; a tree
-/// with no git history reports `0`. The banner then reads `version: 1
+/// HEAD` unless it is given one. gglib's source install clones with
+/// `--depth=1` and passes the release tag's number, but a build of
+/// upstream's newest has no tag to take it from, so its count is the commits
+/// the shallow clone holds, `1`; a tree with no git history reports `0`. The banner then reads `version: 1
 /// (69bf643)`, or, since llama.cpp took a semantic version, `version:
 /// 0.1.0-dev (build 1, commit 10bf611)`: not a build that predates every
 /// threshold in this module.

@@ -1,29 +1,38 @@
 #![doc = include_str!("README.md")]
-use super::build::build_llama_cpp;
+use super::build::{BuildInfo, build_llama_cpp};
 use super::build_events::{BuildEvent, BuildPhase};
 use super::config::{BuildConfig, InstallRecord};
 use super::detect::Acceleration;
+use super::download::LLAMA_RELEASE;
+use crate::binary_install::{SourceRepo, prepare_checkout, resolve_selector, settle};
 use anyhow::{Context, Result, bail};
 use gglib_core::paths::{llama_bench_path, llama_config_path};
-use gglib_core::utils::process::cmd;
 use std::fs;
-use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
-use std::process::Stdio;
-use std::thread;
+use std::path::PathBuf;
 use tokio::sync::mpsc;
+
+/// Where llama.cpp's source is cloned from: the repository its releases are
+/// published from.
+pub(crate) const LLAMA_SOURCE: SourceRepo<'static> = SourceRepo {
+    product: "llama.cpp",
+    url: "https://github.com/ggml-org/llama.cpp",
+    submodules: false,
+};
 
 /// Core streaming build pipeline for llama.cpp from source.
 ///
-/// Clones or reuses the repository, configures, compiles, installs binaries, and saves
-/// the build configuration. All progress is emitted as [`BuildEvent`] values on `tx`.
+/// Builds the release the install selects, the pin unless
+/// `GGLIB_LLAMA_RELEASE` names another: a checkout already at it is reused,
+/// any other is replaced by a clone of its tag (see [`prepare_checkout`]).
+/// Then configures, compiles, installs the binaries and saves the build's
+/// record. All progress is emitted as [`BuildEvent`] values on `tx`.
 ///
 /// This function has no CLI concerns (no user prompts, no dependency checks). Callers
 /// must perform pre-flight validation before calling this.
 ///
 /// # Threading
 ///
-/// Blocking subprocess work ([`clone_llama_cpp`], [`build_llama_cpp`]) runs inside
+/// Blocking subprocess work ([`prepare_checkout`], [`build_llama_cpp`]) runs inside
 /// [`tokio::task::spawn_blocking`] so the Tokio executor is never blocked and
 /// `blocking_send` calls are always on OS threads.
 pub async fn run_llama_source_build(
@@ -32,32 +41,31 @@ pub async fn run_llama_source_build(
     server_path: PathBuf,
     tx: mpsc::Sender<BuildEvent>,
 ) -> Result<()> {
-    // Step 1: Clone or reuse repository.
-    let (version, commit_sha) = if llama_dir.exists() {
-        let _ = tx
-            .send(BuildEvent::Log {
-                message: "Using existing llama.cpp repository.".to_string(),
-            })
-            .await;
-        get_repo_info(&llama_dir)?
-    } else {
-        let tx_clone = tx.clone();
-        let dir = llama_dir.clone();
-        tokio::task::spawn_blocking(move || clone_llama_cpp(&dir, &tx_clone)).await??
+    // Step 1: The checkout, at the selected release.
+    let selector = resolve_selector(&LLAMA_RELEASE);
+    let checkout = {
+        let tx = tx.clone();
+        tokio::task::spawn_blocking(move || {
+            prepare_checkout(&LLAMA_SOURCE, &selector, &llama_dir, &tx)
+        })
+        .await??
     };
 
     // Step 2: Configure and compile.
+    let info = BuildInfo::of(checkout.tag.as_deref(), &checkout.short_sha);
     {
         let tx_clone = tx.clone();
-        let dir = llama_dir.clone();
-        tokio::task::spawn_blocking(move || build_llama_cpp(&dir, acceleration, &tx_clone))
-            .await??;
+        let dir = checkout.dir.clone();
+        tokio::task::spawn_blocking(move || {
+            build_llama_cpp(&dir, acceleration, info.as_ref(), &tx_clone)
+        })
+        .await??;
     }
 
     // Step 3: Install binaries.
     {
         let tx_clone = tx.clone();
-        let dir = llama_dir.clone();
+        let dir = checkout.dir.clone();
         let sp = server_path.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
             let _ = tx_clone.blocking_send(BuildEvent::PhaseStarted {
@@ -74,9 +82,14 @@ pub async fn run_llama_source_build(
         .await??;
     }
 
-    // Step 4: Persist build configuration.
-    let config = BuildConfig::new(version.clone(), commit_sha, acceleration);
+    // Step 4: Persist build configuration. The binaries are linked
+    // statically, so the checkout they were built in can now replace the old
+    // one. The install is done either way, so a checkout that cannot be
+    // moved is said, not failed.
+    let version = checkout.version.clone();
+    let config = BuildConfig::new(version.clone(), checkout.commit_sha.clone(), acceleration);
     InstallRecord::Built(config).save(&llama_config_path()?)?;
+    settle(checkout, &tx).await;
 
     // Step 5: Signal successful completion.
     let _ = tx
@@ -87,100 +100,6 @@ pub async fn run_llama_source_build(
         .await;
 
     Ok(())
-}
-
-/// Clone the llama.cpp repository, routing subprocess output through `tx`.
-///
-/// Git progress lines containing `\r` (animated carriage-return output) are filtered
-/// out to avoid corrupting SSE streams. Only clean, newline-terminated informational
-/// lines are emitted as [`BuildEvent::Log`].
-fn clone_llama_cpp(llama_dir: &Path, tx: &mpsc::Sender<BuildEvent>) -> Result<(String, String)> {
-    let _ = tx.blocking_send(BuildEvent::PhaseStarted {
-        phase: BuildPhase::CloneOrUpdateRepo,
-    });
-
-    if let Some(parent) = llama_dir.parent() {
-        fs::create_dir_all(parent).context("Failed to create parent directory")?;
-    }
-
-    let mut child = cmd("git")
-        .args([
-            "clone",
-            "--depth=1",
-            "https://github.com/ggerganov/llama.cpp",
-            llama_dir.to_str().unwrap(),
-        ])
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("Failed to run git clone")?;
-
-    forward_git_progress(child.stderr.take().unwrap(), tx);
-
-    let status = child.wait().context("Failed to wait for git clone")?;
-    if !status.success() {
-        bail!("Failed to clone llama.cpp repository");
-    }
-
-    let _ = tx.blocking_send(BuildEvent::PhaseCompleted {
-        phase: BuildPhase::CloneOrUpdateRepo,
-    });
-
-    get_repo_info(llama_dir)
-}
-
-/// Forward a git command's `stderr` to `tx` as [`BuildEvent::Log`] lines.
-///
-/// Git writes all progress to stderr. Read on an OS thread (blocking I/O).
-/// Carriage-return progress lines (e.g. "Receiving objects: 45%\r") are
-/// filtered: `BufRead::lines()` keeps \r as trailing content; any line
-/// containing \r is dropped to avoid corrupting SSE streams.
-pub(crate) fn forward_git_progress(
-    stderr: std::process::ChildStderr,
-    tx: &mpsc::Sender<BuildEvent>,
-) {
-    let tx_reader = tx.clone();
-    thread::spawn(move || {
-        let reader = BufReader::new(stderr);
-        for line in reader.lines().map_while(Result::ok) {
-            if line.trim().is_empty() || line.contains('\r') {
-                continue;
-            }
-            if tx_reader
-                .blocking_send(BuildEvent::Log { message: line })
-                .is_err()
-            {
-                break;
-            }
-        }
-    });
-}
-
-/// Get version and commit info from repository
-pub(crate) fn get_repo_info(llama_dir: &std::path::Path) -> Result<(String, String)> {
-    // Get commit SHA
-    let output = cmd("git")
-        .args(["-C", llama_dir.to_str().unwrap(), "rev-parse", "HEAD"])
-        .output()
-        .context("Failed to get commit SHA")?;
-
-    let commit_sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    // Get short version
-    let output = cmd("git")
-        .args([
-            "-C",
-            llama_dir.to_str().unwrap(),
-            "rev-parse",
-            "--short",
-            "HEAD",
-        ])
-        .output()
-        .context("Failed to get short commit hash")?;
-
-    let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    Ok((version, commit_sha))
 }
 
 /// Install the binary `binary_name` from the checkout's `build/` directory

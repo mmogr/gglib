@@ -9,11 +9,11 @@ use std::path::{Path, PathBuf};
 use gglib_core::utils::system::GpuInfo;
 use tokio::sync::mpsc;
 
-use super::pipeline::{sd_build_args, sd_clone_args, sd_cmake_flag, sd_configure_args};
+use super::pipeline::{SD_SOURCE, sd_build_args, sd_cmake_flag, sd_configure_args};
 use super::release::{SD_RELEASE, sd_platform_asset};
 use crate::binary_install::fake_github::{FakeGitHub, Reply};
 use crate::binary_install::{
-    PrebuiltRecord, PrebuiltTarget, ReleaseSelector, ReleaseSpec, extract_binaries,
+    PrebuiltRecord, PrebuiltTarget, ReleaseSelector, ReleaseSpec, clone_args, extract_binaries,
     install_prebuilt_from,
 };
 use crate::llama::{Acceleration, LlamaProgressEvent};
@@ -247,7 +247,11 @@ fn a_flat_archive_with_both_unpacks_them_beside_each_other() {
 fn the_source_build_clones_the_pinned_tag_shallow_with_its_submodules() {
     let dir = PathBuf::from("/x/.sd/stable-diffusion.cpp");
     assert_eq!(
-        sd_clone_args(&ReleaseSelector::Tag("master-948-228c707".into()), &dir),
+        clone_args(
+            &SD_SOURCE,
+            &ReleaseSelector::Tag("master-948-228c707".into()),
+            &dir
+        ),
         [
             "clone",
             "--depth",
@@ -261,7 +265,7 @@ fn the_source_build_clones_the_pinned_tag_shallow_with_its_submodules() {
         ]
     );
     assert_eq!(
-        sd_clone_args(&ReleaseSelector::Latest, &dir),
+        clone_args(&SD_SOURCE, &ReleaseSelector::Latest, &dir),
         [
             "clone",
             "--depth",

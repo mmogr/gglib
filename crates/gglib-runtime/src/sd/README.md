@@ -124,7 +124,10 @@ every answer the fake's job API scripts.
 -DSD_SERVER_BUILD_FRONTEND=OFF` with `-DSD_METAL=ON`, `-DSD_CUDA=ON` or
 `-DSD_VULKAN=ON`, and `cmake --build --target sd-server`. It links
 stable-diffusion.cpp statically, so the one binary is the install. The
-events are llama.cpp's `BuildEvent`s.
+events are llama.cpp's `BuildEvent`s. The checkout is the one every
+product's source build shares (`binary_install::checkout`): one already at
+the tag is reused, and any other is replaced by a clone of the tag once
+the new build is installed.
 
 macOS installs the release asset: measured on 2026-10-10 against a source
 build on the same Flux render, one run each, it sampled in 73.47 s against

@@ -103,6 +103,24 @@ pub(crate) fn resolve_selector(spec: &ReleaseSpec) -> ReleaseSelector {
     selector_from_override(spec, &std::env::var(spec.env).unwrap_or_default())
 }
 
+/// The build number a release tag carries: the `n` of llama.cpp's `b<n>` and
+/// of stable-diffusion.cpp's `master-<n>-<commit>`. Upstream counts them up
+/// with every release, so a larger one is a later release. `None` for any
+/// other tag, such as llama.cpp's `v*`.
+pub(crate) fn release_number(tag: &str) -> Option<u64> {
+    let digits = if let Some(rest) = tag.strip_prefix("master-") {
+        let (number, commit) = rest.split_once('-')?;
+        let is_commit = !commit.is_empty() && commit.bytes().all(|b| b.is_ascii_hexdigit());
+        is_commit.then_some(number)?
+    } else {
+        tag.strip_prefix('b')?
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    digits.parse().ok()
+}
+
 /// Which asset of a release is this platform's: one whose name, when set,
 /// starts with `starts_with`, holds every string in `contains` and, when set,
 /// ends with `ends_with`.
@@ -161,5 +179,35 @@ impl fmt::Display for AssetMatcher<'_> {
             .chain(self.ends_with)
             .collect();
         f.write_str(&parts.join("*"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::release_number;
+
+    #[test]
+    fn a_release_number_is_read_from_either_products_tags() {
+        assert_eq!(release_number("b11429"), Some(11429));
+        assert_eq!(release_number("master-948-228c707"), Some(948));
+    }
+
+    #[test]
+    fn a_tag_of_any_other_shape_has_no_release_number() {
+        for tag in [
+            "",
+            "b",
+            "b12x",
+            "v0.7.0",
+            "74bca39",
+            "master-",
+            "master-948",
+            "master-948-",
+            "master-x-228c707",
+            "master-948-xyz",
+            "B11429",
+        ] {
+            assert_eq!(release_number(tag), None, "{tag:?}");
+        }
     }
 }

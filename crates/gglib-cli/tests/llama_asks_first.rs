@@ -277,7 +277,7 @@ fn a_source_install_that_is_agreed_to_clones_under_its_spinner() {
     assert!(!stdout.contains("Cloning into"), "{}", text(&out));
     assert_eq!(
         String::from_utf8_lossy(&out.stderr),
-        "Error: Failed to clone llama.cpp repository\n",
+        "Error: Failed to clone the llama.cpp repository\n",
         "{}",
         text(&out)
     );

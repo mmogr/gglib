@@ -62,7 +62,7 @@ fn phase(phase: BuildPhase) -> [BuildEvent; 2] {
 /// the end.
 fn a_build() -> Vec<BuildEvent> {
     let mut events = vec![
-        log("Using existing llama.cpp repository."),
+        log("Using the existing llama.cpp checkout at b11429."),
         BuildEvent::PhaseStarted {
             phase: BuildPhase::Configure,
         },
@@ -97,7 +97,7 @@ async fn an_install_and_a_rebuild_leave_the_lines_they_always_have() {
     assert_eq!(
         build_lines(a_build(), CLONING, built_and_installed).await,
         [
-            "Using existing llama.cpp repository.",
+            "Using the existing llama.cpp checkout at b11429.",
             "",
             "✓ llama.cpp installed successfully!",
             "  Version:       abc1234",
@@ -126,7 +126,7 @@ async fn an_update_leaves_its_pull_to_git_and_ends_in_its_own_words() {
         build_lines(events, GIT_REPORTS_THE_PULL, updated).await,
         [
             "Pulling latest llama.cpp changes...",
-            "Using existing llama.cpp repository.",
+            "Using the existing llama.cpp checkout at b11429.",
             "",
             "✓ llama.cpp updated successfully!",
             "  New version: abc1234",
@@ -163,7 +163,7 @@ async fn a_build_run_in_passing_ends_in_one_line() {
     assert_eq!(
         build_lines(a_build(), CLONING, built_in_passing).await,
         [
-            "Using existing llama.cpp repository.",
+            "Using the existing llama.cpp checkout at b11429.",
             "✓ Build complete (abc1234)",
         ]
     );
@@ -178,7 +178,7 @@ async fn a_build_that_never_completes_has_no_ending() {
 
     assert_eq!(
         build_lines(events, CLONING, built_and_installed).await,
-        ["Using existing llama.cpp repository."]
+        ["Using the existing llama.cpp checkout at b11429."]
     );
 }
 
