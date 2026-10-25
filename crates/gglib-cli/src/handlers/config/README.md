@@ -22,8 +22,7 @@ What is each engine's own: `llama` routes llama.cpp's subcommands, and
 `llama_install` runs its download and its source build, with the build's
 own checks and question. `sd` routes stable-diffusion.cpp's and runs its
 download and build, its `status`, and its `uninstall`, refused while an
-image model runs; `sd_prompt` is the install `make setup` offers, which a
-no or a failure leaves as a skipped step. `llama_events` draws the
+image model runs. `llama_events` draws the
 progress of both, and is the only place a build or a download is rendered
 for a terminal.
 

@@ -38,7 +38,7 @@ pub fn check_llama_installed() -> bool {
 /// Pinning does not stop gglib tracking upstream. It makes tracking a
 /// deliberate, reviewable event: bump this constant, run the suite, ship the
 /// bump as its own commit with the observed differences in the message.
-/// CONTRIBUTING's "The llama.cpp pin" has the routine.
+/// CONTRIBUTING's "The engine pins" has the routine.
 pub(super) const PINNED_LLAMA_RELEASE: &str = "b11429";
 
 /// Environment override for [`PINNED_LLAMA_RELEASE`].

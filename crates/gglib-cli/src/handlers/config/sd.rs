@@ -49,7 +49,6 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: SdCommand) -> Result<()>
             Ok(())
         }
         SdCommand::Uninstall { force } => uninstall(ctx, force).await,
-        SdCommand::Prompt => super::sd_prompt::prompt(ctx).await,
     }
 }
 

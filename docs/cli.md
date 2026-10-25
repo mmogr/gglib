@@ -398,12 +398,10 @@ no restart. An SSE server and `builtin` are never opened
   serves this data root runs a model on it, as Settings refuses; with no
   such daemon running nothing serves one, since only a daemon launches
   them. `gglib serve` and `gglib up` offer the install when an engine is
-  missing, and the pin when what is installed is older. `sd prompt` is the offer
-  `make setup` makes: at a terminal with no `sd-server` installed it asks
-  whether to install now, No by default, and a yes runs `install`; an
-  install that fails is reported as a skipped step. Installed already, or
-  with no terminal, it says so in a line and asks nothing. It exits 0 in
-  each of those cases. See
+  missing, and the pin when what is installed is older. `make setup`
+  installs both without asking first, the image runtime after llama.cpp
+  and skipped with a line if it fails; a source build, where one is
+  needed, still asks before it starts at a terminal. See
   [Stable Diffusion](../crates/gglib-runtime/src/sd/README.md).
 - **`check-deps`** — report what is missing and print your platform's exact
   install commands. Reporting only; it installs nothing.

@@ -3,8 +3,7 @@
 //! The image runtime: `sd-server`, which serves the models that draw. The
 //! same verbs as [`LlamaCommand`](crate::llama_commands::LlamaCommand)
 //! without its `detect`: `install` installs the pinned release when what is
-//! there is missing or older, which is also what `update` does. `prompt` is
-//! the offer of the install that `make setup` makes.
+//! there is missing or older, which is also what `update` does.
 
 use clap::Subcommand;
 
@@ -32,9 +31,6 @@ pub enum SdCommand {
         #[arg(short, long)]
         force: bool,
     },
-
-    /// Offer to install it, interactively. Skips without a terminal
-    Prompt,
 }
 
 #[cfg(test)]
@@ -121,15 +117,10 @@ mod tests {
         ));
     }
 
+    /// `make setup` installs it without asking, so nothing offers it.
     #[test]
-    fn prompt_parses_and_takes_no_flags() {
-        assert!(matches!(
-            parsed(&["gglib", "config", "sd", "prompt"]),
-            SdCommand::Prompt
-        ));
-        assert!(
-            crate::Cli::try_parse_from(["gglib", "config", "sd", "prompt", "--force"]).is_err()
-        );
+    fn there_is_no_prompt_to_install() {
+        assert!(crate::Cli::try_parse_from(["gglib", "config", "sd", "prompt"]).is_err());
     }
 
     /// The source build has no acceleration flags of its own: it builds for

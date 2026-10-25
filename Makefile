@@ -464,7 +464,7 @@ llama-install: ## Install llama.cpp (manual)
 
 llama-install-auto: ## Install the pinned llama.cpp, answering its question when nobody is there to
 	@echo "Installing the pinned llama.cpp..."
-	@scripts/install-llama.sh
+	@scripts/install-engine.sh llama
 
 llama-update: ## Update llama.cpp to the pinned release
 	@echo "Updating llama.cpp..."
@@ -478,11 +478,12 @@ llama-rebuild: clean-llama llama-install-auto ## Reinstall llama.cpp from scratc
 
 ##@ Image runtime
 
-# stable-diffusion.cpp's sd-server, which serves image models. Optional:
-# `make setup` offers it and goes on without it.
-sd-install: ## Install the image runtime (stable-diffusion.cpp's sd-server)
-	@echo "Installing the image runtime..."
-	@$(GGLIB) config sd install
+# stable-diffusion.cpp's sd-server, which serves image models. `make setup`
+# installs it after llama.cpp, and goes on without it when that fails: chat
+# models need only llama.cpp.
+sd-install: ## Install the pinned image runtime (stable-diffusion.cpp's sd-server)
+	@echo "Installing the pinned image runtime..."
+	@scripts/install-engine.sh sd
 
 sd-status: ## Show the image runtime's status
 	@$(GGLIB) config sd status
@@ -554,9 +555,10 @@ build-tauri: ## Build Tauri desktop app
 # Full setup from scratch
 # Note: build-tauri builds the web UI, gglib-app and gglib-cli, so nothing
 # else here builds; install just copies the binary
-# llama-install-auto runs last and is REQUIRED to succeed: it installs the
-# pinned llama.cpp, the download where this machine has one and a source
-# build where it has none.
+# Both engines are installed at their pinned releases without setup asking
+# first: the download where this machine has one and a source build where it
+# has none, which at a terminal still asks before it starts. llama-install-auto is REQUIRED to succeed, since chat needs it; the
+# image runtime comes after it, and a failure there is said and skipped.
 setup: check-deps build-tauri install ## Full setup (check deps + build + install)
 	@echo "Configuring models directory (press Enter to accept the default)"
 	@./target/release/gglib config models-dir prompt
@@ -564,12 +566,9 @@ setup: check-deps build-tauri install ## Full setup (check deps + build + instal
 	@# without a terminal and reports a failed provision as a skipped step —
 	@# but setup must not break over an optional extra, so belt and braces.
 	@./target/release/gglib config fast-downloads prompt || true
-	@# Optional image runtime, on the same terms: the command skips without a
-	@# terminal, asks with No as the default, and reports a failed install
-	@# as a skipped step.
-	@./target/release/gglib config sd prompt || true
 	@echo "✓ Core setup complete!"
 	@$(MAKE) llama-install-auto
+	@scripts/install-engine.sh sd || echo "○ The image runtime was not installed or updated; chat models work without it. Retry with: make sd-install"
 
 # Development workflow
 dev: fmt lint test ## Format, lint and test

@@ -14,7 +14,6 @@ mod llama_events;
 pub(crate) mod llama_install;
 pub(crate) mod paths;
 pub(crate) mod sd;
-mod sd_prompt;
 pub(crate) mod settings;
 
 use anyhow::Result;
