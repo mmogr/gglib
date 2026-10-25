@@ -12,3 +12,5 @@ pub(crate) use install::{SD_RELEASE, sd_download_dir};
 pub(crate) use server::build_and_spawn_sd;
 #[cfg(test)]
 pub(crate) use server::fake_server;
+#[cfg(test)]
+pub(crate) use server::sd_server_args;

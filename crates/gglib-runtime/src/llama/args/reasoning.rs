@@ -1,5 +1,10 @@
 //! Reasoning format resolution for llama.cpp launches.
 
+/// The reasoning formats [`resolve_reasoning_format`] takes from a user's
+/// setting: `none`, `deepseek` and `deepseek-legacy`. A model resolved by its
+/// tag gets `deepseek`.
+pub const REASONING_FORMATS: [&str; 3] = ["none", "deepseek", "deepseek-legacy"];
+
 /// Indicates how the reasoning format was resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReasoningFormatSource {
@@ -77,8 +82,7 @@ pub fn resolve_reasoning_format_with_detection(
     // 1. Check explicit setting first
     if let Some(format) = explicit {
         let format_lower = format.to_lowercase();
-        if format_lower == "none" || format_lower == "deepseek" || format_lower == "deepseek-legacy"
-        {
+        if REASONING_FORMATS.contains(&format_lower.as_str()) {
             return ReasoningFormatResolution {
                 format: Some(format_lower),
                 source: ReasoningFormatSource::Explicit,
