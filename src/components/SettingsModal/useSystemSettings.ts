@@ -1,59 +1,48 @@
 /**
- * State for the System settings tab: what llama.cpp is installed, whether
- * upstream has moved, and the update/uninstall actions.
+ * State for the System settings tab: what llama.cpp is installed, where it
+ * stands against its pinned release, and the update and uninstall actions.
  *
- * Split by cost. Status is local and loads on mount; the update check runs
- * `git fetch` and only ever runs when asked. The update itself streams build
- * events, so the tab can show progress instead of an indefinite spinner.
+ * Status is local and loads on mount. The update is the daemon's install of
+ * the pinned release, the download `gglib config llama update` takes, and
+ * streams its progress, so the tab can show it instead of a spinner.
  */
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import {
-  checkLlamaUpdates,
-  getLlamaStatus,
-  streamLlamaUpdate,
-  uninstallLlama,
-} from '../../services/transport/api/setup';
-import type { BuildEvent, LlamaStatus, LlamaUpdateCheck } from '../../types/setup';
+import { getLlamaStatus, streamLlamaInstall, uninstallLlama } from '../../services/transport/api/setup';
+import type { LlamaProgressEvent, LlamaStatus } from '../../types/setup';
 import { appLogger } from '../../services/platform';
 import { formatError } from '../../utils/errors';
 
-/** Human-readable names for the build phases, in the order they run. */
-const PHASE_LABELS: Record<string, string> = {
-  clone_or_update_repo: 'Updating repository',
-  configure: 'Configuring',
-  compile: 'Compiling',
-  install_binaries: 'Installing binaries',
-};
-
 /**
- * Build state lives outside React.
+ * Install state lives outside React.
  *
- * A llama.cpp rebuild takes minutes and keeps running on the daemon whatever
- * the UI does. If this lived in component state, switching tabs or closing
- * Settings would discard it and the user would come back to a panel claiming
- * nothing is happening while a compile is running — and could start a second
- * one. Module scope means a remount re-attaches to the build in progress.
+ * An install keeps running on the daemon whatever the UI does. If this lived
+ * in component state, switching tabs or closing Settings would discard it,
+ * and the user would come back to a panel claiming nothing is happening
+ * while a download runs, and could start a second one. Module scope means a
+ * remount re-attaches to the install in progress.
  */
-interface BuildState {
-  updating: boolean;
-  progress: string | null;
+interface InstallState {
+  installing: boolean;
+  /** The install's latest event, for `InstallProgress`. */
+  progress: LlamaProgressEvent | null;
   error: string | null;
-  result: string | null;
+  /** The release a finished install put there. */
+  installedVersion: string | null;
 }
 
-let buildState: BuildState = { updating: false, progress: null, error: null, result: null };
-const buildListeners = new Set<() => void>();
+let installState: InstallState = { installing: false, progress: null, error: null, installedVersion: null };
+const installListeners = new Set<() => void>();
 
-function setBuildState(patch: Partial<BuildState>) {
-  buildState = { ...buildState, ...patch };
-  buildListeners.forEach((l) => l());
+function setInstallState(patch: Partial<InstallState>) {
+  installState = { ...installState, ...patch };
+  installListeners.forEach((l) => l());
 }
 
-function subscribeBuild(listener: () => void) {
-  buildListeners.add(listener);
+function subscribeInstall(listener: () => void) {
+  installListeners.add(listener);
   return () => {
-    buildListeners.delete(listener);
+    installListeners.delete(listener);
   };
 }
 
@@ -63,17 +52,12 @@ export interface SystemSettingsState {
   loadingStatus: boolean;
   reloadStatus: () => void;
 
-  updateCheck: LlamaUpdateCheck | null;
-  checkingUpdates: boolean;
-  checkError: string | null;
-  runUpdateCheck: () => void;
-
-  updating: boolean;
-  /** Current build phase, or the last log line — whatever is most recent. */
-  updateProgress: string | null;
-  updateError: string | null;
-  updateResult: string | null;
-  runUpdate: () => void;
+  installing: boolean;
+  progress: LlamaProgressEvent | null;
+  installError: string | null;
+  installedVersion: string | null;
+  /** Install the pinned release over what is there. */
+  runInstall: () => void;
 
   uninstalling: boolean;
   uninstallResult: string | null;
@@ -85,11 +69,7 @@ export function useSystemSettings(): SystemSettingsState {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
 
-  const [updateCheck, setUpdateCheck] = useState<LlamaUpdateCheck | null>(null);
-  const [checkingUpdates, setCheckingUpdates] = useState(false);
-  const [checkError, setCheckError] = useState<string | null>(null);
-
-  const build = useSyncExternalStore(subscribeBuild, () => buildState);
+  const install = useSyncExternalStore(subscribeInstall, () => installState);
 
   const [uninstalling, setUninstalling] = useState(false);
   const [uninstallResult, setUninstallResult] = useState<string | null>(null);
@@ -107,72 +87,57 @@ export function useSystemSettings(): SystemSettingsState {
 
   useEffect(() => {
     reloadStatus();
-    // Deliberately no teardown for the build stream: it is owned by the module
-    // store, not by this component, so leaving the tab does not stop us
-    // listening and coming back shows the build still in progress.
+    // Deliberately no teardown for the install stream: it is owned by the
+    // module store, not by this component, so leaving the tab does not stop
+    // us listening and coming back shows the install still in progress.
   }, [reloadStatus]);
 
-  const runUpdateCheck = useCallback(() => {
-    setCheckingUpdates(true);
-    setCheckError(null);
-    void checkLlamaUpdates()
-      .then(setUpdateCheck)
-      .catch((err: unknown) => {
-        setCheckError(formatError(err));
-      })
-      .finally(() => setCheckingUpdates(false));
-  }, []);
+  // An install that finishes is read back by whichever instance is mounted
+  // then: the one that started it may have gone with the tab it was on.
+  useEffect(() => {
+    if (install.installedVersion) reloadStatus();
+  }, [install.installedVersion, reloadStatus]);
 
-  const runUpdate = useCallback(() => {
-    if (buildState.updating) return;
-    setBuildState({ updating: true, error: null, result: null, progress: 'Starting…' });
+  const runInstall = useCallback(() => {
+    if (installState.installing) return;
+    // A stream ends once: `completed`, `failed`, a transport error, or a
+    // close that said neither. The first of them is the result.
+    let settled = false;
+    const fail = (message: string) => {
+      if (settled) return;
+      settled = true;
+      appLogger.error('component.settings', 'llama.cpp install failed', { message });
+      setInstallState({ installing: false, error: message });
+    };
 
-    streamLlamaUpdate(
-      (event: BuildEvent) => {
-        switch (event.type) {
-          case 'phase_started':
-            setBuildState({ progress: PHASE_LABELS[event.phase] ?? event.phase });
-            break;
-          case 'log':
-            setBuildState({ progress: event.message });
-            break;
-          case 'completed':
-            setBuildState({
-              updating: false,
-              progress: null,
-              result: `Rebuilt at ${event.version} (${event.acceleration})`,
-            });
-            setUpdateCheck(null);
-            reloadStatus();
-            break;
-          case 'failed':
-            setBuildState({ updating: false, progress: null, error: event.message });
-            break;
-          default:
-            break;
+    setInstallState({ installing: true, progress: null, error: null, installedVersion: null });
+    setUninstallResult(null);
+
+    streamLlamaInstall(
+      (event) => {
+        if (settled) return;
+        setInstallState({ progress: event });
+        if (event.type === 'completed') {
+          settled = true;
+          setInstallState({ installing: false, installedVersion: event.version });
+        } else if (event.type === 'failed') {
+          fail(event.message);
         }
       },
-      (message) => {
-        appLogger.error('component', 'llama update stream failed', { message });
-        setBuildState({ updating: false, progress: null, error: message });
-      },
+      fail,
       // A stream that ends without `completed` or `failed` — daemon restart,
       // network drop — must not leave the panel spinning forever.
-      () => {
-        if (buildState.updating) {
-          setBuildState({
-            updating: false,
-            progress: null,
-            error: 'The connection to the build ended before it reported a result. It may still be running — reopen this tab to check.',
-          });
-        }
-      },
+      () =>
+        fail(
+          'The connection to the install ended before it reported a result. It may still be running — reopen this tab to check.',
+        ),
     );
-  }, [reloadStatus]);
+  }, []);
 
   const runUninstall = useCallback(async () => {
     setUninstalling(true);
     setUninstallResult(null);
+    setInstallState({ installedVersion: null, error: null });
     try {
       const outcome = await uninstallLlama();
       setUninstallResult(
@@ -180,7 +145,6 @@ export function useSystemSettings(): SystemSettingsState {
           ? `Removed ${outcome.removedPaths.length} path(s)`
           : 'Nothing was installed',
       );
-      setUpdateCheck(null);
       reloadStatus();
     } catch (err) {
       setStatusError(formatError(err));
@@ -194,15 +158,11 @@ export function useSystemSettings(): SystemSettingsState {
     statusError,
     loadingStatus,
     reloadStatus,
-    updateCheck,
-    checkingUpdates,
-    checkError,
-    runUpdateCheck,
-    updating: build.updating,
-    updateProgress: build.progress,
-    updateError: build.error,
-    updateResult: build.result,
-    runUpdate,
+    installing: install.installing,
+    progress: install.progress,
+    installError: install.error,
+    installedVersion: install.installedVersion,
+    runInstall,
     uninstalling,
     uninstallResult,
     runUninstall,

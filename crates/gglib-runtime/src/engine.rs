@@ -40,6 +40,12 @@ pub struct PinState {
     /// the download where one fits. A source build recorded by commit, from
     /// before builds were of a release, takes the default.
     pub rebuilds: bool,
+    /// Whether the update an older install calls for is a download, which
+    /// the daemon and the app can run. When it is a source build (one of a
+    /// release is there, a GPU build would otherwise become a CPU one, or
+    /// this machine has no download), it is the command line's to run.
+    /// False whenever there is no update to make.
+    pub update_downloads: bool,
 }
 
 /// How an install of an engine goes.
@@ -121,16 +127,29 @@ fn prebuilt(kind: RuntimeKind) -> Result<(String, Option<String>), String> {
 /// resolved are an `Err`; an unreadable record counts as none.
 pub fn pin_state(kind: RuntimeKind) -> anyhow::Result<PinState> {
     let paths = EnginePaths::of(kind)?;
-    Ok(pin_state_at(
+    let mut state = pin_state_at(
         &paths.binary,
         recorded(kind, &paths.record).as_ref(),
         &paths.checkout,
         &resolve_selector(release_spec(kind)),
-    ))
+    );
+    state.update_downloads = update_downloads(kind, &state);
+    Ok(state)
+}
+
+/// Whether the update `state` calls for is a download on this machine:
+/// [`PinState::update_downloads`].
+pub(crate) fn update_downloads(kind: RuntimeKind, state: &PinState) -> bool {
+    state.standing == PinStanding::Older
+        && matches!(
+            plan_install(kind, state, false, false),
+            InstallPlan::Download { .. }
+        )
 }
 
 /// [`pin_state`] for a binary, what a record says, a checkout and a
-/// selector given.
+/// selector given; whether its update downloads is left false, for the
+/// caller that knows the engine to ask.
 pub(crate) fn pin_state_at(
     binary: &Path,
     recorded: Option<&Recorded>,
@@ -147,6 +166,7 @@ pub(crate) fn pin_state_at(
         },
         built: recorded.map(Recorded::built),
         rebuilds: recorded.is_some_and(|recorded| recorded.built() && !recorded.names_a_commit()),
+        update_downloads: false,
     }
 }
 

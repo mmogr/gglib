@@ -23,7 +23,7 @@ crates/gglib-app-services/src/servers.rs 820
 crates/gglib-app-services/src/servers_events_tests.rs 415
 crates/gglib-app-services/src/service_graph.rs 314
 crates/gglib-app-services/src/settings_tests.rs 327
-crates/gglib-app-services/src/setup.rs 321
+crates/gglib-app-services/src/setup.rs 358
 crates/gglib-app-services/src/test_support.rs 394
 crates/gglib-app-services/src/types.rs 556
 crates/gglib-app-services/src/types_model_dto_tests.rs 311
@@ -226,7 +226,6 @@ crates/gglib-runtime/src/launch_narration.rs 800
 crates/gglib-runtime/src/llama/args/cache_ram.rs 328
 crates/gglib-runtime/src/llama/build/mod.rs 541
 crates/gglib-runtime/src/llama/download/mod.rs 714
-crates/gglib-runtime/src/llama/update.rs 348
 crates/gglib-runtime/src/ports_impl/llm_completion/drawn_picture_tests.rs 471
 crates/gglib-runtime/src/ports_impl/llm_completion/first_call_tests.rs 374
 crates/gglib-runtime/src/ports_impl/llm_completion/images_tests.rs 346

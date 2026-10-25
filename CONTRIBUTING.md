@@ -85,7 +85,7 @@ Concrete examples of established patterns:
 | Agent loop | `AgentEvent` | spinner + streaming print | SSE at `POST /api/agent/chat` | same SSE stream — no Tauri event |
 | llama install | `LlamaProgressEvent` | spinner + progress bar via `render_install_events` | SSE at `POST /api/config/system/install-llama` | same SSE stream — no Tauri event |
 | image runtime install | `LlamaProgressEvent` (the same events, the download phase labelled by `InstallPhase::label_for`) | spinner + progress bar via `render_install_events` (`gglib config sd install`) | SSE at `POST /api/config/system/install-sd`, the same event names | same SSE stream — no Tauri event |
-| llama build | `BuildEvent` | spinner + progress bar via `render_build_events`, for an install and an update alike | SSE at `POST /api/config/system/update-llama` | same SSE stream — no Tauri event |
+| llama build | `BuildEvent` | spinner + progress bar via `render_build_events`, for an install and an update alike, and for stable-diffusion.cpp's build | none: a source build is the command line's, and the daemon installs downloads | none |
 
 Every row is a claim about code that exists. The `llama install` row was not
 one for a long time: the event type was declared private inside `gglib-axum`,

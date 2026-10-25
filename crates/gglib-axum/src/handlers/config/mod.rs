@@ -1,5 +1,6 @@
 #![doc = include_str!("README.md")]
 pub(crate) mod image_runtime;
+mod install_slot;
 pub(crate) mod settings;
 #[allow(
     clippy::items_after_statements,

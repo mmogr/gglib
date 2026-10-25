@@ -43,7 +43,7 @@ pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemo
     );
 
     step(2, "llama.cpp");
-    match status.llama_standing {
+    match status.llama_pin.standing {
         PinStanding::Missing => {
             if !yes {
                 require_tty("installing llama.cpp")?;

@@ -11,6 +11,7 @@ fn state(standing: PinStanding, installed: Option<&str>) -> PinState {
         target_release: Some("b11429".to_owned()),
         built: installed.map(|_| false),
         rebuilds: false,
+        update_downloads: false,
     }
 }
 
@@ -116,6 +117,7 @@ fn an_install_with_nothing_to_do_says_where_it_stands_and_how_to_force_one() {
     let built = PinState {
         built: Some(true),
         rebuilds: true,
+        update_downloads: false,
         ..state(PinStanding::AtPin, Some("b11429"))
     };
     assert_eq!(

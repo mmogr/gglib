@@ -1,8 +1,9 @@
-//! The install route's stream, with a stand-in install: the same SSE event
-//! names and payloads llama.cpp's install sends, a failure as a `failed`
-//! event in the install's words, and a second install refused while one
-//! runs. A removal holds the same slot: refused while an install runs, and
-//! refusing an install while it runs. No release is fetched.
+//! An engine's install stream, with a stand-in install: the SSE event names
+//! and payloads both engines' installs send, a failure as a `failed` event
+//! in the install's words, and a second install refused while one runs, in
+//! words naming the engine. A removal holds the same slot: refused while an
+//! install runs, and refusing an install while it runs. No release is
+//! fetched.
 
 use std::sync::atomic::AtomicBool;
 
@@ -44,7 +45,7 @@ fn frames(body: &str) -> Vec<(String, String)> {
 #[tokio::test]
 async fn an_install_streams_llama_cpps_event_names_and_payloads() {
     static SLOT: AtomicBool = AtomicBool::new(false);
-    let sse = install_stream(&SLOT, |tx| async move {
+    let sse = install_stream(&SLOT, "thing", |tx| async move {
         let phase = InstallPhase::Download;
         let _ = tx.send(LlamaProgressEvent::PhaseStarted { phase }).await;
         let _ = tx
@@ -92,7 +93,7 @@ async fn an_install_streams_llama_cpps_event_names_and_payloads() {
 #[tokio::test]
 async fn a_failed_install_ends_in_a_failed_event_with_its_words() {
     static SLOT: AtomicBool = AtomicBool::new(false);
-    let sse = install_stream(&SLOT, |_tx| async move {
+    let sse = install_stream(&SLOT, "thing", |_tx| async move {
         Err(GuiError::Internal(
             "Failed to install stable-diffusion.cpp: no asset".to_owned(),
         ))
@@ -111,7 +112,7 @@ async fn a_failed_install_ends_in_a_failed_event_with_its_words() {
 #[tokio::test]
 async fn a_second_install_is_refused_while_one_runs() {
     static SLOT: AtomicBool = AtomicBool::new(true);
-    let sse = install_stream(&SLOT, |_tx| async move {
+    let sse = install_stream(&SLOT, "thing", |_tx| async move {
         panic!("a refused install never starts");
     });
 
@@ -119,7 +120,12 @@ async fn a_second_install_is_refused_while_one_runs() {
 
     assert_eq!(frames.len(), 1, "{frames:?}");
     assert_eq!(frames[0].0, "failed");
-    assert!(frames[0].1.contains("already running"), "{frames:?}");
+    assert!(
+        frames[0]
+            .1
+            .contains("A thing install or removal is already running."),
+        "{frames:?}"
+    );
     assert!(
         SLOT.load(Ordering::SeqCst),
         "the running install keeps its slot"
@@ -131,7 +137,7 @@ async fn a_removal_is_refused_while_an_install_runs() {
     static SLOT: AtomicBool = AtomicBool::new(true);
     static RAN: AtomicBool = AtomicBool::new(false);
 
-    let refused = holding_install_slot(&SLOT, async {
+    let refused = holding_install_slot(&SLOT, "thing", async {
         RAN.store(true, Ordering::SeqCst);
         Ok::<(), GuiError>(())
     })
@@ -155,8 +161,8 @@ async fn a_removal_is_refused_while_an_install_runs() {
 async fn a_removal_holds_the_install_slot_until_it_ends() {
     static SLOT: AtomicBool = AtomicBool::new(false);
 
-    let removed = holding_install_slot(&SLOT, async {
-        let install = install_stream(&SLOT, |_tx| async move {
+    let removed = holding_install_slot(&SLOT, "thing", async {
+        let install = install_stream(&SLOT, "thing", |_tx| async move {
             panic!("no install starts during a removal");
         });
         let frames = frames(&body_of(install).await);

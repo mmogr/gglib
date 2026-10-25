@@ -82,12 +82,12 @@ describe('streamSse', () => {
     fetchMock.mockImplementation(async () => streamingResponse([]));
     const onClose = vi.fn();
 
-    streamSse('/api/config/system/update-llama', { onFrame: vi.fn(), onClose, onError: vi.fn() });
+    streamSse('/api/config/system/install-llama', { onFrame: vi.fn(), onClose, onError: vi.fn() });
     streamSse('/api/config/system/install-llama', { onFrame: vi.fn(), onClose, onError: vi.fn() }, { force: true });
     await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(2));
 
     const [bareUrl, bare] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(bareUrl).toBe('/api/config/system/update-llama');
+    expect(bareUrl).toBe('/api/config/system/install-llama');
     expect(bare.method).toBe('POST');
     expect(bare.headers).toEqual({ Accept: 'text/event-stream', Authorization: 'Bearer page-key' });
     expect(bare.body).toBeUndefined();

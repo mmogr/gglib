@@ -16,7 +16,7 @@ import { generateChatTitle } from '../../../../src/services/transport/api/chat';
 import { apiFetch, get, resetClientCache, setApiSession } from '../../../../src/services/transport/api/client';
 import { readFarRunEvents } from '../../../../src/services/transport/api/farChats';
 import { readRunEvents } from '../../../../src/services/transport/api/runs';
-import { streamLlamaInstall, streamLlamaUpdate } from '../../../../src/services/transport/api/setup';
+import { streamLlamaInstall } from '../../../../src/services/transport/api/setup';
 import { SSEConnectionManager } from '../../../../src/services/transport/events/sse';
 import { TransportError } from '../../../../src/services/transport/errors';
 
@@ -65,7 +65,6 @@ const DAEMON_FETCHES: [name: string, path: string, start: (signal: AbortSignal) 
   ['an image read', '/api/attachments/abc', () => fetchAttachmentBlob('this', 'abc').catch(noop)],
   ['a far image read', '/api/remote/attachments/abc', () => fetchAttachmentBlob('far', 'abc').catch(noop)],
   ['the llama install stream', '/api/config/system/install-llama', () => streamLlamaInstall(noop, noop)],
-  ['the llama update stream', '/api/config/system/update-llama', () => streamLlamaUpdate(noop, noop)],
   ['the server log snapshot', '/api/servers/9001/logs', () => getServerLogs(9001).catch(noop)],
   ['the server log stream', '/api/servers/9001/logs/stream', () => listenToServerLogs(9001, noop)],
   ['the event bus', '/api/events', () => new SSEConnectionManager('/api/events').subscribe(noop)],

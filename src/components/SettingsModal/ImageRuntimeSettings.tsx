@@ -3,10 +3,12 @@
  * `gglib config sd install|status|uninstall`.
  *
  * stable-diffusion.cpp's `sd-server` is what gglib draws with. This says
- * whether it is installed and what it is, installs the pinned pre-built build
- * with the setup wizard's progress, warns when that build runs on the CPU
- * alone, and removes it, never from under a running image model. Where no
- * pre-built build fits the machine it names the command that builds one.
+ * whether it is installed, what it is and where it stands against its
+ * pinned release, installs the pinned pre-built build with the setup
+ * wizard's progress (also over an older one), warns when that build runs on
+ * the CPU alone, and removes it, never from under a running image model.
+ * Where no pre-built build fits the machine it names the command that
+ * builds one.
  */
 
 import type { FC } from 'react';
@@ -19,10 +21,14 @@ import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { InstallProgress } from '../SetupWizard/InstallProgress';
 import type { ImageRuntimeStatus } from '../../types/setup';
 import { LabelledValue } from './LabelledValue';
+import { pinStanding } from './pinStanding';
 import { useImageRuntime } from './useImageRuntime';
 
 /** The product the install's labels name. */
 const PRODUCT = 'stable-diffusion.cpp';
+
+/** What a source build is updated with, from a terminal. */
+const UPDATE_COMMAND = 'gglib config sd update';
 
 /** Installed / absent, as a dot and a word. */
 const InstallState: FC<{ status: ImageRuntimeStatus }> = ({ status }) => {
@@ -69,6 +75,7 @@ export const ImageRuntimeSettings: FC = () => {
 
   const install = status?.install;
   const running = status?.runningModel ?? null;
+  const standing = install ? pinStanding(install.pin, UPDATE_COMMAND) : null;
 
   return (
     <section aria-labelledby="image-runtime-heading">
@@ -79,8 +86,12 @@ export const ImageRuntimeSettings: FC = () => {
         {status && <InstallState status={status} />}
       </div>
       <p className="m-0 mb-base text-xs text-text-muted">
-        stable-diffusion.cpp&apos;s sd-server, which serves image models. Pinned to{' '}
-        <code className="font-mono">{install?.pinnedRelease ?? '…'}</code>.
+        stable-diffusion.cpp&apos;s sd-server, which serves image models.
+        {!install?.installed && (
+          <>
+            {' '}Pinned to <code className="font-mono">{install?.pinnedRelease ?? '…'}</code>.
+          </>
+        )}
       </p>
 
       {loadingStatus && !status && (
@@ -103,6 +114,15 @@ export const ImageRuntimeSettings: FC = () => {
           {install.versionLine && <LabelledValue label="Binary reports" value={install.versionLine} />}
           {running && <LabelledValue label="Serving" value={running} mono={false} />}
         </Stack>
+      )}
+
+      {install?.installed && standing?.text && (
+        <p className="m-0 mb-base text-xs text-text-secondary">{standing.text}</p>
+      )}
+      {standing?.fromTerminal && (
+        <Banner variant="info" className="mb-base">
+          {standing.fromTerminal}
+        </Banner>
       )}
 
       {status?.warning && (
@@ -156,6 +176,19 @@ export const ImageRuntimeSettings: FC = () => {
             onClick={runInstall}
           >
             Install ({status.prebuilt})
+          </Button>
+        )}
+        {install?.installed && standing?.update && status?.prebuilt && (
+          <Button
+            variant="secondary"
+            size="sm"
+            isLoading={installing}
+            disabled={installing || uninstalling || running !== null}
+            title={running ? `Stop ${running} first.` : undefined}
+            leftIcon={<Icon icon={Download} size={14} />}
+            onClick={runInstall}
+          >
+            Update to {standing.update}
           </Button>
         )}
         {install?.installed && (

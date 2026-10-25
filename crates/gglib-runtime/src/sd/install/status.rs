@@ -8,7 +8,8 @@ use std::path::Path;
 use super::record::{SdInstallRecord, recorded_install};
 use super::release::{PINNED_SD_RELEASE, SD_RELEASE};
 use crate::binary_install::{ReleaseSelector, resolve_selector};
-use crate::engine::{PinState, pin_state_at};
+use crate::engine::{PinState, pin_state_at, update_downloads};
+use gglib_core::domain::RuntimeKind;
 
 /// Everything a status report says about the installed `sd-server`.
 ///
@@ -49,12 +50,14 @@ pub struct SdStatus {
 /// Inspect the installed `sd-server`, if any. Degraded states are values;
 /// only a data directory that cannot be resolved is an `Err`.
 pub fn sd_status() -> anyhow::Result<SdStatus> {
-    Ok(sd_status_at(
+    let mut status = sd_status_at(
         &sd_server_path()?,
         &sd_config_path()?,
         &sd_cpp_dir()?,
         &resolve_selector(&SD_RELEASE),
-    ))
+    );
+    status.pin.update_downloads = update_downloads(RuntimeKind::StableDiffusion, &status.pin);
+    Ok(status)
 }
 
 /// [`sd_status`] for a binary, a record and a source checkout at the paths

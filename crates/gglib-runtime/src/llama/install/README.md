@@ -17,15 +17,17 @@ The primary streaming entry point is [`run_llama_source_build`], which emits
 
 ## Consumer table
 
-| Consumer | Crate        | Output                                                                       |
-|----------|--------------|------------------------------------------------------------------------------|
-| CLI      | `gglib-cli`  | `indicatif` spinner + progress bar in `handlers::config::llama_events`       |
-| Axum     | `gglib-axum` | SSE stream at `POST /api/config/system/update-llama`, via `run_llama_update` |
+| Consumer | Crate       | Output                                                                 |
+|----------|-------------|------------------------------------------------------------------------|
+| CLI      | `gglib-cli` | `indicatif` spinner + progress bar in `handlers::config::llama_events` |
 
-There were two more. #834 removed both as dead end to end — the SSE route at
-`POST /api/system/build-llama-from-source` and the Tauri command behind it,
-neither of which had a caller — taking the `llama-build-progress` event the
-`WebView` listened for with them. See `llama/build_events.rs`.
+There were three more. #834 removed two as dead end to end — the SSE route
+at `POST /api/system/build-llama-from-source` and the Tauri command behind
+it, neither of which had a caller — taking the `llama-build-progress` event
+the `WebView` listened for with them. The daemon's `update-llama` route,
+which pulled llama.cpp's master and rebuilt it, went when an update became an
+install of the pinned release: the daemon and the app install downloads, and
+a source build is the command line's. See `llama/build_events.rs`.
 
 ## Threading model
 

@@ -29,4 +29,12 @@ built: boolean | null,
  * the download where one fits. A source build recorded by commit, from
  * before builds were of a release, takes the default.
  */
-rebuilds: boolean, };
+rebuilds: boolean, 
+/**
+ * Whether the update an older install calls for is a download, which
+ * the daemon and the app can run. When it is a source build (one of a
+ * release is there, a GPU build would otherwise become a CPU one, or
+ * this machine has no download), it is the command line's to run.
+ * False whenever there is no update to make.
+ */
+updateDownloads: boolean, };

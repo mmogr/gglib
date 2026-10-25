@@ -87,7 +87,7 @@ async fn the_setup_status_says_where_llama_stands_as_the_engine_does() {
         .expect("paths resolve");
 
     assert_eq!(
-        status["llamaStanding"],
-        serde_json::to_value(engine.standing).expect("json")
+        status["llamaPin"],
+        serde_json::to_value(engine).expect("json")
     );
 }

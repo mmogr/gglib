@@ -15,7 +15,7 @@ use gglib_core::ports::ModelRuntimePort;
 use gglib_runtime::llama::{LlamaProgressEvent, UninstallOutcome};
 use gglib_runtime::sd::{SdStatus, check_sd_prebuilt_availability, sd_status, uninstall_sd};
 
-use super::SetupOps;
+use super::{SetupOps, refuse_a_source_build, refuse_while_serving, running_model};
 use crate::error::GuiError;
 
 /// What the Settings page says about the image runtime.
@@ -44,11 +44,15 @@ pub struct ImageRuntimeStatus {
 
 impl SetupOps {
     /// Install the pinned pre-built `sd-server`, streaming progress on `tx`
-    /// as [`Self::install_llama`] does, with the same events.
+    /// as [`Self::install_llama`] does, with the same events, unless an
+    /// image model runs on it.
     pub async fn install_sd(
         &self,
+        runtime: &dyn ModelRuntimePort,
         tx: tokio::sync::mpsc::Sender<LlamaProgressEvent>,
     ) -> Result<(), GuiError> {
+        refuse_while_serving(runtime, RuntimeKind::StableDiffusion, "installing").await?;
+        refuse_a_source_build(RuntimeKind::StableDiffusion)?;
         gglib_runtime::sd::install_sd_prebuilt(tx)
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to install stable-diffusion.cpp: {e}")))
@@ -60,7 +64,7 @@ impl SetupOps {
         &self,
         runtime: &dyn ModelRuntimePort,
     ) -> Result<ImageRuntimeStatus, GuiError> {
-        let running_model = running_image_model(runtime).await;
+        let running_model = running_model(runtime, RuntimeKind::StableDiffusion).await;
         // Probing runs `sd-server --version`, and on Linux and Windows the
         // GPU probe runs tools too: blocking work.
         let (install, prebuilt) =
@@ -77,7 +81,7 @@ impl SetupOps {
         &self,
         runtime: &dyn ModelRuntimePort,
     ) -> Result<UninstallOutcome, GuiError> {
-        refuse_while_drawing(runtime).await?;
+        refuse_while_serving(runtime, RuntimeKind::StableDiffusion, "removing").await?;
         tokio::task::spawn_blocking(uninstall_sd)
             .await
             .map_err(|e| GuiError::Internal(format!("Uninstall task panicked: {e}")))?
@@ -108,27 +112,6 @@ pub(super) fn status_of(
         running_model,
         install_command: SD_INSTALL_COMMAND.to_owned(),
     }
-}
-
-/// The name of the image model running on `sd-server`, if one is.
-pub(super) async fn running_image_model(runtime: &dyn ModelRuntimePort) -> Option<String> {
-    runtime
-        .list_running()
-        .await
-        .into_iter()
-        .find(|handle| handle.runtime == RuntimeKind::StableDiffusion)
-        .map(|handle| handle.model_name)
-}
-
-/// A conflict while an image model runs: removing the binary and library
-/// under a running server leaves it serving from deleted files and the next
-/// launch failing.
-pub(super) async fn refuse_while_drawing(runtime: &dyn ModelRuntimePort) -> Result<(), GuiError> {
-    running_image_model(runtime).await.map_or(Ok(()), |model| {
-        Err(GuiError::Conflict(format!(
-            "{model} is running on sd-server. Stop it before removing the image runtime."
-        )))
-    })
 }
 
 #[cfg(test)]

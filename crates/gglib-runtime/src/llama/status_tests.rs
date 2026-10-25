@@ -15,6 +15,7 @@ fn not_installed() -> PinState {
         target_release: Some("b11429".to_owned()),
         built: None,
         rebuilds: false,
+        update_downloads: false,
     }
 }
 
@@ -33,6 +34,7 @@ fn status_serialises_as_camel_case() {
         prebuilt: None,
         runtime: None,
         pin: not_installed(),
+        serving: None,
     };
 
     let json = serde_json::to_value(&status).unwrap();
@@ -202,6 +204,7 @@ fn the_status_compares_the_recorded_release_with_the_pin() {
             target_release: Some("b11429".to_owned()),
             built: Some(false),
             rebuilds: false,
+            update_downloads: false,
         }
     );
 }

@@ -44,6 +44,7 @@ fn status(install_type: Option<&str>) -> SdStatus {
             target_release: Some("master-948-228c707".to_owned()),
             built: install_type.map(|kind| kind == "source"),
             rebuilds: false,
+            update_downloads: false,
         },
     }
 }

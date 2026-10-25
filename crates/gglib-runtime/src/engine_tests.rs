@@ -47,6 +47,7 @@ fn a_download_of_an_earlier_release_is_older() {
             target_release: Some("b11429".to_owned()),
             built: Some(false),
             rebuilds: false,
+            update_downloads: false,
         }
     );
 }
@@ -90,6 +91,7 @@ fn a_binary_with_no_record_is_unknown() {
             target_release: Some("b11429".to_owned()),
             built: None,
             rebuilds: false,
+            update_downloads: false,
         }
     );
 }
@@ -114,6 +116,7 @@ fn state(standing: PinStanding, installed: Option<&str>, target: Option<&str>) -
         target_release: target.map(str::to_owned),
         built: Some(false),
         rebuilds: false,
+        update_downloads: false,
     }
 }
 
@@ -173,18 +176,14 @@ fn rebuilding(rebuilds: bool) -> PinState {
 }
 
 /// A machine with a Metal download, as the platform table answers.
-#[allow(
-    clippy::unnecessary_wraps,
-    reason = "the shape plan_with asks this machine's download in"
-)]
-fn macos() -> Result<(String, Option<String>), String> {
-    Ok(("macOS ARM64 (Metal)".to_owned(), None))
+fn macos() -> (String, Option<String>) {
+    ("macOS ARM64 (Metal)".to_owned(), None)
 }
 
 #[test]
 fn an_install_downloads_where_this_machine_has_a_download() {
     assert_eq!(
-        plan_with(&rebuilding(false), false, false, macos),
+        plan_with(&rebuilding(false), false, false, || Ok(macos())),
         InstallPlan::Download {
             description: "macOS ARM64 (Metal)".to_owned(),
             warning: None,
@@ -226,7 +225,7 @@ fn a_build_asked_for_or_kept_never_asks_for_a_download() {
 #[test]
 fn force_without_build_takes_the_download_over_a_source_build() {
     assert!(matches!(
-        plan_with(&rebuilding(true), true, false, macos),
+        plan_with(&rebuilding(true), true, false, || Ok(macos())),
         InstallPlan::Download { .. }
     ));
 }
@@ -235,16 +234,14 @@ fn built_by_commit() -> PinState {
     PinState {
         built: Some(true),
         rebuilds: false,
+        update_downloads: false,
         ..state(PinStanding::Older, Some("74bca39"), Some("b11429"))
     }
 }
 
-#[allow(
-    clippy::unnecessary_wraps,
-    reason = "the shape plan_with asks this machine's download in"
-)]
-fn cpu_only() -> Result<(String, Option<String>), String> {
-    Ok(("Linux x64 (CPU)".to_owned(), Some("slow".to_owned())))
+/// A machine whose only download runs on the CPU, with its warning.
+fn cpu_only() -> (String, Option<String>) {
+    ("Linux x64 (CPU)".to_owned(), Some("slow".to_owned()))
 }
 
 /// A source build made for a GPU, recorded before builds were of a release,
@@ -252,17 +249,17 @@ fn cpu_only() -> Result<(String, Option<String>), String> {
 #[test]
 fn a_source_build_is_never_traded_for_a_cpu_only_download_unasked() {
     assert_eq!(
-        plan_with(&built_by_commit(), false, false, cpu_only),
+        plan_with(&built_by_commit(), false, false, || Ok(cpu_only())),
         InstallPlan::Build { no_download: None }
     );
     // A GPU download is the default it takes.
     assert!(matches!(
-        plan_with(&built_by_commit(), false, false, macos),
+        plan_with(&built_by_commit(), false, false, || Ok(macos())),
         InstallPlan::Download { .. }
     ));
     // Forced, the download is taken, warning and all.
     assert_eq!(
-        plan_with(&built_by_commit(), true, false, cpu_only),
+        plan_with(&built_by_commit(), true, false, || Ok(cpu_only())),
         InstallPlan::Download {
             description: "Linux x64 (CPU)".to_owned(),
             warning: Some("slow".to_owned()),

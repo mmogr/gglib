@@ -3,12 +3,15 @@
  * `gglib config sd` in its image runtime section (`ImageRuntimeSettings`).
  *
  * Answers three questions in the order a user asks them: what is installed,
- * has upstream moved, and what can I do about it. Self-contained like
- * `InferenceProfiles`; all state lives in `useSystemSettings`.
+ * where it stands against its pinned release, and what can I do about it.
+ * Self-contained like `InferenceProfiles`; all state lives in
+ * `useSystemSettings`.
  */
 
 import { FC, useState } from 'react';
+import { Download } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { Icon } from '../ui/Icon';
 import { Banner } from '../ui/Banner';
 import { Stack } from '../primitives';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
@@ -17,8 +20,13 @@ import { useSystemSettings } from './useSystemSettings';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { BuildInfo } from './BuildInfo';
 import { ImageRuntimeSettings } from './ImageRuntimeSettings';
+import { InstallProgress } from '../SetupWizard/InstallProgress';
 import type { LlamaStatus } from '../../types/setup';
 import { LabelledValue } from './LabelledValue';
+import { pinStanding } from './pinStanding';
+
+/** What a source build is updated with, from a terminal. */
+const UPDATE_COMMAND = 'gglib config llama update';
 
 /** Installed / degraded / absent, as a dot and a word. */
 const InstallState: FC<{ status: LlamaStatus }> = ({ status }) => {
@@ -41,15 +49,11 @@ export const SystemSettings: FC = () => {
     status,
     statusError,
     loadingStatus,
-    updateCheck,
-    checkingUpdates,
-    checkError,
-    runUpdateCheck,
-    updating,
-    updateProgress,
-    updateError,
-    updateResult,
-    runUpdate,
+    installing,
+    progress,
+    installError,
+    installedVersion,
+    runInstall,
     uninstalling,
     uninstallResult,
     runUninstall,
@@ -103,17 +107,16 @@ export const SystemSettings: FC = () => {
     await runUninstall();
   };
 
+  const standing = status ? pinStanding(status.pin, UPDATE_COMMAND) : null;
+
   const handleUpdate = async () => {
     const confirmed = await confirm({
-      title: 'Update llama.cpp?',
-      description:
-        'Pulls the latest upstream changes and rebuilds from source with the same acceleration ' +
-        'backend. Compiling takes several minutes and replaces the current binary. Running ' +
-        'servers keep using the old binary until they restart.',
+      title: `Update llama.cpp to ${standing?.update ?? 'the pinned release'}?`,
+      description: 'Downloads the pinned release for this machine and replaces the current binaries.',
       confirmLabel: 'Update',
     });
     if (!confirmed) return;
-    runUpdate();
+    runInstall();
   };
 
   if (loadingStatus && !status) {
@@ -170,81 +173,45 @@ export const SystemSettings: FC = () => {
         )}
       </section>
 
-      {status?.installed && (
+      {status?.installed && standing?.text && (
         <section>
-          <h3 className="m-0 mb-xs text-sm font-semibold text-text">Updates</h3>
-          <p className="m-0 mb-base text-xs text-text-muted">
-            Compares the local source checkout against upstream. Contacts GitHub, so it only runs
-            when you ask.
-          </p>
+          <h3 className="m-0 mb-xs text-sm font-semibold text-text">Pinned release</h3>
+          <p className="m-0 mb-base text-xs text-text-secondary">{standing.text}</p>
 
-          {checkError && (
-            <Banner variant="danger" className="mb-base">
-              {checkError}
-            </Banner>
-          )}
-
-          {updateCheck && !updateCheck.comparable ? (
+          {standing.fromTerminal && (
             <Banner variant="info" className="mb-base">
-              {updateCheck.repoPresent
-                ? 'There is a source checkout but no build record, so there is nothing to compare against. Rebuilding from source will record one.'
-                : 'No source checkout, so there is nothing to compare — this is a prebuilt install. Rebuilding from source in the setup wizard makes updates available.'}
+              {standing.fromTerminal}
             </Banner>
-          ) : updateCheck ? (
-            <Stack gap="xs" className="mb-base">
-              <p className="m-0 text-xs text-text-secondary">
-                {updateCheck.commitsBehind === 0
-                  ? 'Up to date with upstream.'
-                  : `${updateCheck.commitsBehind} commit(s) behind upstream.`}
-              </p>
-              {updateCheck.recentCommits.length > 0 && (
-                <ul className="m-0 pl-md list-disc">
-                  {updateCheck.recentCommits.map((line) => (
-                    <li key={line} className="text-xs text-text-muted font-mono break-all">
-                      {line}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Stack>
-          ) : null}
-
-          {updateError && (
+          )}
+          {installError && (
             <Banner variant="danger" className="mb-base">
-              {updateError}
+              {installError}
             </Banner>
           )}
-          {updateResult && (
+          {installedVersion && (
             <Banner variant="success" className="mb-base">
-              {updateResult}
+              llama.cpp {installedVersion} is installed.
             </Banner>
           )}
-          {updating && (
-            <p className="m-0 mb-base text-xs text-text-secondary" role="status">
-              {updateProgress ?? 'Building…'}
-            </p>
+          {installing && (
+            <div className="mb-base">
+              <InstallProgress progress={progress} />
+            </div>
           )}
 
-          <div className="flex gap-sm">
+          {standing.update && (
             <Button
               variant="secondary"
               size="sm"
-              isLoading={checkingUpdates}
-              disabled={checkingUpdates || updating}
-              onClick={runUpdateCheck}
-            >
-              Check for updates
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              isLoading={updating}
-              disabled={updating || updateCheck?.repoPresent === false}
+              isLoading={installing}
+              disabled={installing || uninstalling || !!status.serving}
+              title={status.serving ? `Stop ${status.serving} first.` : undefined}
+              leftIcon={<Icon icon={Download} size={14} />}
               onClick={() => void handleUpdate()}
             >
-              Update and rebuild
+              Update to {standing.update}
             </Button>
-          </div>
+          )}
         </section>
       )}
 
@@ -263,7 +230,8 @@ export const SystemSettings: FC = () => {
           variant="dangerGhost"
           size="sm"
           isLoading={uninstalling}
-          disabled={uninstalling || updating || !status?.installed}
+          disabled={uninstalling || installing || !status?.installed || !!status?.serving}
+          title={status?.serving ? `Stop ${status.serving} first.` : undefined}
           onClick={() => void handleUninstall()}
         >
           Uninstall llama.cpp

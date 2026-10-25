@@ -89,10 +89,7 @@ const LLAMA_REQUIRED: &[&str] = &["llama-server.exe"];
 const LLAMA_REQUIRED: &[&str] = &["llama-server"];
 
 /// Said when the build installed runs on the CPU alone.
-#[cfg_attr(
-    not(all(target_os = "linux", target_arch = "x86_64")),
-    allow(dead_code)
-)]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 pub(crate) const LLAMA_CPU_WARNING: &str = "No GPU runtime gglib can use was found, so the CPU \
      build of llama.cpp is installed. Replies will be slow.";
 

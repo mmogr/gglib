@@ -130,6 +130,7 @@ fn the_status_reads_the_record_and_the_binarys_own_version() {
             target_release: Some("master-948-228c707".to_owned()),
             built: Some(false),
             rebuilds: false,
+            update_downloads: false,
         }
     );
 }

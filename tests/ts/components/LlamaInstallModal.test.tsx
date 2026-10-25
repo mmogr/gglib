@@ -37,7 +37,7 @@ function installStream() {
   );
   return {
     response,
-    /** One frame, as `install_event_to_sse` writes it. */
+    /** One frame, as `install_slot::sse_frame` writes it. */
     send: (event: LlamaProgressEvent) =>
       body.enqueue(encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)),
     close: () => body.close(),
@@ -202,6 +202,19 @@ describe.each([
     stream.send({ type: 'failed', message: 'no disk space' });
 
     await vi.waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('no disk space'));
+  });
+
+  it('offers an older llama.cpp the pinned release, over the same install stream', async () => {
+    render(
+      <LlamaInstallModal canDownload update={{ installed: 'b10327', target: 'b11429' }} onSkip={vi.fn()} />,
+    );
+
+    expect(screen.getByText(/llama\.cpp b10327 is installed; gglib now uses b11429/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Not now' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Update to b11429' }));
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(`${daemon}/api/config/system/install-llama`);
   });
 
   it('offers no install where no prebuilt binary exists, only the way to build one', () => {
