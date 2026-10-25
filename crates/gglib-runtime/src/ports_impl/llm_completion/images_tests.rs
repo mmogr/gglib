@@ -178,7 +178,9 @@ impl Upstream {
     /// Whether a connection arrived. A request that was sent connects first.
     async fn was_dialled(&self) -> bool {
         let wait = std::time::Duration::from_millis(200);
-        tokio::time::timeout(wait, self.0.accept()).await.is_ok()
+        tokio::time::timeout(wait, gglib_test_http::incoming(&self.0))
+            .await
+            .is_ok()
     }
 }
 

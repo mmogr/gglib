@@ -11,12 +11,12 @@ use clap::Parser as _;
 use gglib_core::domain::{
     ComponentRole, ImageFamily, LaunchDecision, LaunchNarration, ModelComponent, NewModel,
 };
+use gglib_test_http::blocking;
 
 use super::*;
 use crate::bootstrap::test_context;
 use crate::commands::Commands;
 use crate::daemon_client::STAND_IN_PORT;
-use crate::handlers::agent_chat::sight::sight_tests::read_request;
 use crate::parser::Cli;
 use crate::target::Target;
 
@@ -143,9 +143,14 @@ fn counting_stand_in() -> (u16, Arc<AtomicUsize>) {
     let asked = Arc::new(AtomicUsize::new(0));
     let count = Arc::clone(&asked);
     std::thread::spawn(move || {
-        for mut stream in listener.incoming().flatten() {
-            let _ = read_request(&mut stream);
+        loop {
+            let Ok(taken) = blocking::incoming(&listener) else {
+                continue;
+            };
             count.fetch_add(1, Ordering::SeqCst);
+            let Ok((_, mut stream)) = taken.request() else {
+                continue;
+            };
             let reply = r#"{"service":"something-else"}"#;
             let _ = write!(
                 stream,
@@ -252,9 +257,16 @@ fn proxy_answering(status: &'static str, body: &'static str) -> (u16, Arc<Mutex<
     let seen = Arc::new(Mutex::new(Vec::new()));
     let lines = Arc::clone(&seen);
     std::thread::spawn(move || {
-        for mut stream in listener.incoming().flatten() {
-            let (line, _) = read_request(&mut stream);
-            lines.lock().unwrap().push(line);
+        loop {
+            let Ok(taken) = blocking::incoming(&listener) else {
+                continue;
+            };
+            // A connection that sends no whole request still counts as one.
+            let Ok((request, mut stream)) = taken.request() else {
+                lines.lock().unwrap().push(String::new());
+                continue;
+            };
+            lines.lock().unwrap().push(request.line().to_owned());
             let _ = write!(
                 stream,
                 "HTTP/1.1 {status}\r\ncontent-type: application/json\r\n\

@@ -1,9 +1,11 @@
 //! What each kind of session knows of its model's image input, and the
 //! `--port` path against a server that answers `/props`.
 
-use std::io::{Read as _, Write as _};
+use std::io::Write as _;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
+
+use gglib_test_http::blocking;
 
 use super::*;
 use crate::bootstrap::test_context;
@@ -45,26 +47,6 @@ impl FakeServer {
     }
 }
 
-/// Read one request from `stream`: its first line and its body.
-pub(crate) fn read_request(stream: &mut std::net::TcpStream) -> (String, String) {
-    let mut head = Vec::new();
-    let mut byte = [0_u8; 1];
-    while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).is_ok_and(|n| n == 1) {
-        head.push(byte[0]);
-    }
-    let head = String::from_utf8_lossy(&head).into_owned();
-    let length = head
-        .lines()
-        .filter_map(|line| line.split_once(':'))
-        .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
-        .and_then(|(_, value)| value.trim().parse().ok())
-        .unwrap_or(0);
-    let mut body = vec![0_u8; length];
-    let _ = stream.read_exact(&mut body);
-    let line = head.lines().next().unwrap_or_default().to_owned();
-    (line, String::from_utf8_lossy(&body).into_owned())
-}
-
 /// A [`FakeServer`] whose `/props` is `props`.
 pub(crate) fn props_server(props: &'static str) -> FakeServer {
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
@@ -72,15 +54,25 @@ pub(crate) fn props_server(props: &'static str) -> FakeServer {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let requests = Arc::clone(&seen);
     std::thread::spawn(move || {
-        for stream in listener.incoming() {
-            let Ok(mut stream) = stream else { continue };
-            let request = read_request(&mut stream);
-            let (kind, body) = if request.0.starts_with("GET /props ") {
+        loop {
+            let Ok(taken) = blocking::incoming(&listener) else {
+                continue;
+            };
+            // A connection that sends no whole request still counts as one.
+            let Ok((request, mut stream)) = taken.request() else {
+                requests
+                    .lock()
+                    .unwrap()
+                    .push((String::new(), String::new()));
+                continue;
+            };
+            let line = request.line().to_owned();
+            let (kind, body) = if line.starts_with("GET /props ") {
                 ("application/json", props)
             } else {
                 ("text/event-stream", REPLY)
             };
-            requests.lock().unwrap().push(request);
+            requests.lock().unwrap().push((line, request.body_text()));
             let _ = write!(
                 stream,
                 "HTTP/1.1 200 OK\r\ncontent-type: {kind}\r\ncontent-length: {}\r\n\

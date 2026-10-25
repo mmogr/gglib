@@ -1,7 +1,7 @@
 //! A resident launched with another projector, or another context, is
 //! recycled; one launched the same way is kept.
 
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::Path;
 
 use super::launched_differently;
@@ -75,14 +75,8 @@ pub(super) fn healthy_port() -> u16 {
 /// from a thread of its own.
 pub(super) fn answer_health(server: std::net::TcpListener) {
     std::thread::spawn(move || {
-        for mut stream in server.incoming().flatten() {
-            // The whole request head is read before answering: a peer that
-            // answers and closes with bytes unread resets the connection.
-            let mut head = Vec::new();
-            let mut byte = [0_u8; 1];
-            while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).is_ok_and(|n| n == 1) {
-                head.push(byte[0]);
-            }
+        let requests = std::iter::repeat_with(|| gglib_test_http::blocking::accept(&server));
+        for (_, mut stream) in requests.flatten() {
             let _ = stream.write_all(
                 b"HTTP/1.1 200 OK\r\nContent-Length: 15\r\nConnection: close\r\n\r\n{\"status\":\"ok\"}",
             );

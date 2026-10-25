@@ -3,9 +3,10 @@
 //! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
-use crate::health::health_proxy_tests::read_request_head;
 use futures_util::StreamExt;
+use gglib_test_http::blocking;
 use std::io::Write;
+use std::iter;
 use std::net::TcpListener;
 use std::time::Duration;
 
@@ -149,8 +150,7 @@ fn answering(status_line: &'static str) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind a health endpoint");
     let port = listener.local_addr().expect("its address").port();
     std::thread::spawn(move || {
-        for mut stream in listener.incoming().flatten() {
-            read_request_head(&stream);
+        for (_, mut stream) in iter::repeat_with(|| blocking::accept(&listener)).flatten() {
             let _ = write!(
                 stream,
                 "HTTP/1.1 {status_line}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
@@ -168,7 +168,9 @@ fn silent() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind a health endpoint");
     let port = listener.local_addr().expect("its address").port();
     std::thread::spawn(move || {
-        let held: Vec<_> = listener.incoming().flatten().collect();
+        let held: Vec<_> = iter::repeat_with(|| blocking::incoming(&listener))
+            .flatten()
+            .collect();
         drop(held);
     });
     port

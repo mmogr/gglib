@@ -4,13 +4,15 @@
 //! `hyper`: `check_boundaries.sh` forbids `hyper` anywhere in `gglib-download`'s
 //! dependency tree and `cargo tree --depth 1` sees dev-dependencies too, so a
 //! ready-made harness would fail CI. Everything here is built from `tokio`,
-//! which the crate already has.
+//! which the crate already has, and `gglib-test-http`, which reads each
+//! request over it and depends on nothing else.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use gglib_test_http::Incoming;
 use sha2::{Digest, Sha256};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
@@ -106,7 +108,7 @@ async fn serve(
     requests: Arc<AtomicUsize>,
 ) {
     loop {
-        let Ok((socket, _)) = listener.accept().await else {
+        let Ok(incoming) = gglib_test_http::incoming(&listener).await else {
             return;
         };
         let n = requests.fetch_add(1, Ordering::SeqCst);
@@ -118,35 +120,18 @@ async fn serve(
 
         let ranges = Arc::clone(&ranges);
         tokio::spawn(async move {
-            let _ = handle_one(socket, reply, ranges).await;
+            let _ = handle_one(incoming, reply, ranges).await;
         });
     }
 }
 
 async fn handle_one(
-    socket: tokio::net::TcpStream,
+    incoming: Incoming,
     reply: Reply,
     ranges: Arc<Mutex<Vec<Option<String>>>>,
 ) -> std::io::Result<()> {
-    let mut reader = BufReader::new(socket);
-
-    // Read the request head, capturing any Range header.
-    let mut range: Option<String> = None;
-    loop {
-        let mut line = String::new();
-        if reader.read_line(&mut line).await? == 0 {
-            return Ok(());
-        }
-        let trimmed = line.trim_end();
-        if trimmed.is_empty() {
-            break;
-        }
-        if let Some((name, value)) = trimmed.split_once(':') {
-            if name.eq_ignore_ascii_case("range") {
-                range = Some(value.trim().to_string());
-            }
-        }
-    }
+    let (request, mut socket) = incoming.request().await?;
+    let range = request.header("range").map(str::to_owned);
     ranges.lock().unwrap().push(range.clone());
 
     let start: usize = range
@@ -156,7 +141,7 @@ async fn handle_one(
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(0);
 
-    let socket = reader.get_mut();
+    let socket = &mut socket;
 
     match reply {
         Reply::Status(code) => {

@@ -44,34 +44,15 @@ impl FakeProxy {
         let (seen_tx, seen) = oneshot::channel();
         let (left_tx, client_left) = oneshot::channel();
         tokio::spawn(async move {
-            let (mut socket, _) = listener.accept().await.expect("accept");
-            let mut buffer = Vec::new();
+            let (request, mut socket) = gglib_test_http::accept(&listener)
+                .await
+                .expect("the whole request");
+            let body = serde_json::from_slice(&request.body).unwrap_or(Value::Null);
+            let _ = seen_tx.send(Seen {
+                head: request.head,
+                body,
+            });
             let mut chunk = [0_u8; 4096];
-            let head_end = loop {
-                if let Some(i) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
-                    break i + 4;
-                }
-                let n = socket.read(&mut chunk).await.expect("read head");
-                assert!(n > 0, "the client closed before its request was whole");
-                buffer.extend_from_slice(&chunk[..n]);
-            };
-            let head = String::from_utf8_lossy(&buffer[..head_end]).into_owned();
-            let length = head
-                .lines()
-                .find_map(|l| {
-                    l.to_ascii_lowercase()
-                        .strip_prefix("content-length:")
-                        .map(|v| v.trim().parse::<usize>().expect("length"))
-                })
-                .unwrap_or(0);
-            while buffer.len() < head_end + length {
-                let n = socket.read(&mut chunk).await.expect("read body");
-                assert!(n > 0, "the client closed before its body was whole");
-                buffer.extend_from_slice(&chunk[..n]);
-            }
-            let body =
-                serde_json::from_slice(&buffer[head_end..head_end + length]).unwrap_or(Value::Null);
-            let _ = seen_tx.send(Seen { head, body });
             loop {
                 tokio::select! {
                     part = rx.recv() => match part {

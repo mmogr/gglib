@@ -10,7 +10,7 @@ use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::{AttachmentBlob, AttachmentId, AttachmentInfo};
 use gglib_core::ports::{AttachmentError, AttachmentStore, LlmCompletionPort as _};
 use gglib_core::retry::RetryPolicy;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
 use super::super::{FarMachine, LlmCompletionAdapter};
@@ -52,33 +52,14 @@ pub(super) fn head_end(bytes: &[u8]) -> Option<usize> {
         .map(|at| at + 4)
 }
 
-/// Accept one request, read it whole (head, then the body its
-/// `content-length` names), answer an empty stream, and give back what was
-/// read.
+/// Accept one request, read it whole (head, then body), answer an empty
+/// stream, and give back what was read.
 pub(super) async fn capture_one(listener: TcpListener) -> String {
-    let (mut socket, _) = listener.accept().await.unwrap();
-    let mut read = Vec::new();
-    let mut chunk = [0_u8; 8192];
-    loop {
-        let n = socket.read(&mut chunk).await.unwrap();
-        assert!(n > 0, "the request ended early");
-        read.extend_from_slice(&chunk[..n]);
-        let Some(start) = head_end(&read) else {
-            continue;
-        };
-        let head = String::from_utf8_lossy(&read[..start]).to_ascii_lowercase();
-        let length = head
-            .lines()
-            .find_map(|line| line.strip_prefix("content-length:"))
-            .map_or(0, |value| value.trim().parse::<usize>().unwrap());
-        if read.len() >= start + length {
-            break;
-        }
-    }
+    let (request, mut socket) = gglib_test_http::accept(&listener).await.unwrap();
     let answer = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: 14\r\nconnection: close\r\n\r\ndata: [DONE]\n\n";
     socket.write_all(answer.as_bytes()).await.unwrap();
     let _ = socket.shutdown().await;
-    String::from_utf8(read).unwrap()
+    request.head + &String::from_utf8(request.body).unwrap()
 }
 
 #[tokio::test]

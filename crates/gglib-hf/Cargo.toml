@@ -35,3 +35,5 @@ urlencoding.workspace = true
 [dev-dependencies]
 # #[tokio::test] on the inline unit tests; additive with the [dependencies] set.
 tokio = { workspace = true, features = ["macros", "rt"] }
+# The connection a fake server answers on, with the request already read.
+gglib-test-http = { workspace = true }

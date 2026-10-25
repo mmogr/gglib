@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use gglib_core::RemotePairing;
 use gglib_core::domain::UNNAMED_PAIRED;
 use gglib_core::services::AppCore;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
 use super::super::stored_pairing::store_redeemed;
@@ -55,16 +55,11 @@ async fn far_answering(response: Option<&'static str>) -> FarProxy {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     tokio::spawn(async move {
-        while let Ok((mut socket, _)) = listener.accept().await {
+        while let Ok(incoming) = gglib_test_http::incoming(&listener).await {
             tokio::spawn(async move {
-                let mut head = Vec::new();
-                let mut byte = [0u8; 1];
-                while !head.ends_with(b"\r\n\r\n") {
-                    if socket.read_exact(&mut byte).await.is_err() {
-                        return;
-                    }
-                    head.push(byte[0]);
-                }
+                let Ok((_, mut socket)) = incoming.request().await else {
+                    return;
+                };
                 match response {
                     Some(response) => {
                         let _ = socket.write_all(response.as_bytes()).await;

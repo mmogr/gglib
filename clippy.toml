@@ -1,0 +1,23 @@
+# A hand-written fake HTTP server in a test takes its connections from
+# gglib-test-http, which hands a stream over only once its request has been
+# read whole. A fake that answers first races its client: on tokio 1.54 an
+# accepted socket starts writable, the answer can reach hyper before hyper has
+# sent its request, and hyper cancels it (#1553, #1556). No production code in
+# this workspace calls these; its servers are axum::serve. The helper's own two
+# calls carry the only exceptions.
+#
+# axum's Listener trait is listed too: in a crate that has axum, calling it on
+# a listener hands back a raw stream the same way.
+#
+# No `replacement`: clippy would offer it as a machine-applicable rewrite of
+# the method name, which is not how the helper is called. `allow-invalid` on
+# the tokio and axum entries because a single-crate check of a crate whose
+# dependencies do not reach `tokio::net` or axum cannot resolve the path, and
+# would print a warning for it on every target.
+disallowed-methods = [
+    { path = "tokio::net::TcpListener::accept", reason = "a fake server takes its connection from gglib_test_http::accept, or ::incoming and then Incoming::request, so the request is read first", allow-invalid = true },
+    { path = "tokio::net::TcpListener::poll_accept", reason = "a fake server takes its connection from gglib_test_http::incoming, whose Incoming gives no stream until the request is read", allow-invalid = true },
+    { path = "axum::serve::Listener::accept", reason = "a fake server takes its connection from gglib_test_http::accept, or ::incoming and then Incoming::request, so the request is read first", allow-invalid = true },
+    { path = "std::net::TcpListener::accept", reason = "a fake server takes its connection from gglib_test_http::blocking::accept, or ::incoming and then Incoming::request, so the request is read first" },
+    { path = "std::net::TcpListener::incoming", reason = "a fake server takes its connections from gglib_test_http::blocking::incoming in a loop, whose Incoming gives no stream until the request is read" },
+]

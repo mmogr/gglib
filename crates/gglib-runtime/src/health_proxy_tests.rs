@@ -22,7 +22,7 @@
 //! string. Without `--ignored` the worst a wrong filter can do is run ordinary
 //! tests twice.
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
@@ -59,27 +59,8 @@ const CHILD_BUDGET: Duration = Duration::from_mins(2);
 /// reported as a missing marker rather than waited out.
 const PIPE_GRACE: Duration = Duration::from_secs(5);
 
-/// Read an HTTP request's head, up to and including the blank line.
-///
-/// Every server here reads the request before answering, and not only for
-/// form's sake: a socket closed with unread bytes still in its receive buffer
-/// is reset rather than closed, and the answer already on the wire can be lost
-/// to the peer along with it.
-pub(crate) fn read_request_head(stream: &TcpStream) {
-    let Ok(peek) = stream.try_clone() else { return };
-    let mut reader = BufReader::new(peek);
-    let mut line = String::new();
-    while reader.read_line(&mut line).unwrap_or(0) > 0 {
-        if line == "\r\n" || line == "\n" {
-            break;
-        }
-        line.clear();
-    }
-}
-
-/// Read one HTTP request and answer it the way llama-server answers `/health`.
+/// Answer a request, already read, the way llama-server answers `/health`.
 fn answer_as_a_healthy_server(mut stream: TcpStream) {
-    read_request_head(&stream);
     let body = b"{\"status\":\"ok\"}";
     let _ = write!(
         stream,
@@ -121,13 +102,14 @@ fn a_health_check_of_this_machine_ignores_a_proxy_in_the_environment() {
 
     let counted = Arc::clone(&seen);
     std::thread::spawn(move || {
-        for stream in recorder.incoming() {
-            let Ok(mut stream) = stream else { break };
+        while let Ok(connection) = gglib_test_http::blocking::incoming(&recorder) {
             counted.fetch_add(1, Ordering::SeqCst);
             // Answer as a proxy that cannot help: the control expects exactly
             // this, and a health check that lands here fails the child's
             // assertion instead of hanging it.
-            read_request_head(&stream);
+            let Ok((_, mut stream)) = connection.request() else {
+                continue;
+            };
             let _ = stream.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n");
         }
     });
@@ -220,9 +202,13 @@ async fn the_child_checks_health_with_a_proxy_set() {
     // Two connections, one for each call below: the server closes each one
     // after answering.
     std::thread::spawn(move || {
-        for stream in server.incoming().take(2) {
-            let Ok(stream) = stream else { break };
-            answer_as_a_healthy_server(stream);
+        for _ in 0..2 {
+            let Ok(connection) = gglib_test_http::blocking::incoming(&server) else {
+                break;
+            };
+            if let Ok((_, stream)) = connection.request() {
+                answer_as_a_healthy_server(stream);
+            }
         }
     });
 

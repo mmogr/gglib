@@ -5,11 +5,12 @@
 //! presented is `auth_tests.rs`; here it is that the one resolution reaches
 //! the wire.
 
-use std::io::{Read as _, Write as _};
+use std::io::Write as _;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
 use gglib_core::Settings;
+use gglib_test_http::blocking;
 
 use super::*;
 use crate::bootstrap::test_context;
@@ -47,20 +48,17 @@ pub(crate) fn answering(health: String, rest: String) -> (u16, Asked) {
     let asked = Asked::default();
     let seen = Arc::clone(&asked);
     std::thread::spawn(move || {
-        for stream in listener.incoming() {
-            let Ok(mut stream) = stream else { continue };
-            let mut head = Vec::new();
-            let mut byte = [0_u8; 1];
-            while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).is_ok_and(|n| n == 1) {
-                head.push(byte[0]);
-            }
-            let head = String::from_utf8_lossy(&head).into_owned();
-            let line = head.lines().next().unwrap_or_default().to_owned();
-            let authorization = head
-                .lines()
-                .filter_map(|line| line.split_once(':'))
-                .find(|(name, _)| name.eq_ignore_ascii_case("authorization"))
-                .map(|(_, value)| value.trim().to_owned());
+        loop {
+            let Ok(taken) = blocking::incoming(&listener) else {
+                continue;
+            };
+            // A connection that sends no whole request was still asked.
+            let Ok((request, mut stream)) = taken.request() else {
+                seen.lock().unwrap().push((String::new(), None));
+                continue;
+            };
+            let line = request.line().to_owned();
+            let authorization = request.header("authorization").map(str::to_owned);
             let body = if line.starts_with("GET /health ") {
                 &health
             } else {

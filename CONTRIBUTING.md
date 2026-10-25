@@ -638,6 +638,10 @@ cargo test -p gglib-db --features test-utils
 cargo doc  -p gglib-db --features test-utils
 ```
 
+### A fake HTTP server in a test
+
+A hand-written stand-in server in a test (one that is not `axum::serve`) takes each connection from `gglib_test_http` (`accept`, or `incoming` and then `Incoming::request`; `blocking::` for `std::net`), never from `TcpListener::accept` or `incoming` directly; `clippy.toml` refuses those, and axum's `Listener::accept`, everywhere else. The helper hands a stream over only once the request has been read whole, because an answer written first can reach hyper before hyper has sent its request, and hyper cancels it (#1553). A test about the connection itself (was it dialled, is it held open unanswered) takes an `Incoming` and holds or drops it without reading it.
+
 ### Lockfile discipline
 
 `Cargo.lock` is committed and must stay consistent. Before anything builds, the `test` job runs `cargo metadata --locked` for the workspace and for `src-tauri`, which fails when the lock does not already satisfy every manifest. After editing a `Cargo.toml`, run `make check`, which records the change in the lock, and commit the result. To move one third-party crate, run `cargo update -p <crate> --precise <version>`, and name in the PR every version the lock diff moves. Never run `cargo generate-lockfile`: it re-resolves every dependency against whatever the registry holds that minute, so its diff carries third-party upgrades nobody reviewed.

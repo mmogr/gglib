@@ -61,14 +61,8 @@ async fn granting() -> (u16, oneshot::Receiver<()>) {
     let port = listener.local_addr().unwrap().port();
     let (closed, gone) = oneshot::channel();
     tokio::spawn(async move {
-        let (mut socket, _) = listener.accept().await.unwrap();
-        let mut head = Vec::new();
-        let mut byte = [0_u8; 1];
-        while !head.ends_with(b"\r\n\r\n") {
-            assert_eq!(socket.read(&mut byte).await.unwrap(), 1, "the head ended");
-            head.push(byte[0]);
-        }
-        assert!(head.starts_with(b"GET /api/generation/turn "));
+        let (request, mut socket) = gglib_test_http::accept(&listener).await.unwrap();
+        assert!(request.line().starts_with("GET /api/generation/turn "));
         let reply = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n\r\n\
                      event: waiting\ndata: {\"step\":1,\"total\":4,\"position\":1}\n\n\
                      event: granted\ndata: {}\n\n";

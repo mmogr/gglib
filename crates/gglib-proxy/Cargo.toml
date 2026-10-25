@@ -96,6 +96,8 @@ gglib-core = { workspace = true, features = ["test-utils"] }
 http-body-util = { workspace = true }
 tempfile = { workspace = true }
 serde_json = { workspace = true }
+# The connection a fake server answers on, with the request already read.
+gglib-test-http = { workspace = true }
 # For the two suites that put a real tunnel in front of a real proxy rather
 # than synthesising the edge's headers: `integration_remote_tunnel.rs`, about
 # a request crossing the pipe at all, and `integration_remote_devices.rs`,

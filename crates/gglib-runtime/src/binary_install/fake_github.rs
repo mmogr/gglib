@@ -1,12 +1,12 @@
 //! A loopback stand-in for GitHub's release API and download host, so the
 //! install pipeline runs end to end in a test with no network.
 //!
-//! It reads each request's head before it answers: a server that answers and
+//! It reads each request whole before it answers: a server that answers and
 //! drops the socket unread can reset it, and the client then loses the reply.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
 /// One canned answer: a status line's code and the body.
@@ -50,14 +50,15 @@ impl FakeGitHub {
         let (table, log) = (Arc::clone(&routes), Arc::clone(&asked));
         tokio::spawn(async move {
             loop {
-                let Ok((mut socket, _)) = listener.accept().await else {
+                let Ok(incoming) = gglib_test_http::incoming(&listener).await else {
                     return;
                 };
                 let (table, log) = (Arc::clone(&table), Arc::clone(&log));
                 tokio::spawn(async move {
-                    let Some(path) = read_head(&mut socket).await else {
+                    let Ok((request, mut socket)) = incoming.request().await else {
                         return;
                     };
+                    let path = request.path;
                     log.lock().expect("the log").push(path.clone());
                     let reply = table
                         .lock()
@@ -95,18 +96,4 @@ impl FakeGitHub {
     pub(crate) fn asked(&self) -> Vec<String> {
         self.asked.lock().expect("the log").clone()
     }
-}
-
-/// Read a request head to its blank line and return the path it asks for.
-async fn read_head(socket: &mut tokio::net::TcpStream) -> Option<String> {
-    let mut head = Vec::new();
-    let mut byte = [0u8; 1];
-    while !head.ends_with(b"\r\n\r\n") {
-        if socket.read(&mut byte).await.ok()? == 0 {
-            return None;
-        }
-        head.push(byte[0]);
-    }
-    let text = String::from_utf8_lossy(&head);
-    text.split_whitespace().nth(1).map(str::to_owned)
 }

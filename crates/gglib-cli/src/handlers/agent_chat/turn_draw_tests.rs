@@ -11,11 +11,11 @@ use gglib_core::domain::chat::MessageRole;
 use gglib_core::ports::{ImageBatch, ImageError, ImageGenerationPort, ImageProgress, ImageRequest};
 use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use gglib_runtime::{LoopGeneration, compose_agent_loop_with_sampling};
+use gglib_test_http::blocking;
 use serde_json::{Value, json};
 
 use super::*;
 use crate::bootstrap::test_context;
-use crate::handlers::agent_chat::sight::sight_tests::read_request;
 use crate::target::TurnModel;
 
 /// One reply that calls the image tool, as llama-server streams a native
@@ -50,13 +50,12 @@ pub(super) fn answering(replies: &'static [&'static str]) -> (u16, Arc<Mutex<Vec
     let kept = Arc::clone(&bodies);
     std::thread::spawn(move || {
         for reply in replies {
-            let Ok((mut stream, _)) = listener.accept() else {
+            let Ok((request, mut stream)) = blocking::accept(&listener) else {
                 return;
             };
-            let (_, body) = read_request(&mut stream);
             kept.lock()
                 .unwrap()
-                .push(serde_json::from_str(&body).expect("a JSON body"));
+                .push(serde_json::from_str(&request.body_text()).expect("a JSON body"));
             let _ = write!(
                 stream,
                 "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncontent-length: {}\r\n\

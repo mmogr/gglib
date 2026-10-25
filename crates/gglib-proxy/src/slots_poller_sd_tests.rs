@@ -2,7 +2,7 @@
 //! no `/props`. A llama-server there is, which shows the poller reached the
 //! port at all.
 
-use std::io::{Read as _, Write as _};
+use std::io::Write as _;
 use std::net::TcpListener;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -47,27 +47,27 @@ impl ModelRuntimePort for Primary {
     }
 }
 
-/// A server that reads each request head, answers 404, and counts.
+/// A server that counts each connection, reads its request, and answers 404.
 fn counting() -> (u16, Arc<AtomicUsize>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let asked = Arc::new(AtomicUsize::new(0));
     let count = Arc::clone(&asked);
     std::thread::spawn(move || {
-        for mut stream in listener.incoming().flatten() {
-            let mut head = Vec::new();
-            let mut byte = [0u8; 1];
-            while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).is_ok_and(|n| n == 1) {
-                head.push(byte[0]);
-            }
+        let connections = std::iter::repeat_with(|| gglib_test_http::blocking::incoming(&listener));
+        for connection in connections.flatten() {
             count.fetch_add(1, Ordering::SeqCst);
+            let Ok((_, mut stream)) = connection.request() else {
+                continue;
+            };
             let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n");
         }
     });
     (port, asked)
 }
 
-/// How many requests the poller sent `runtime`'s server in its first pass.
+/// How many connections the poller made to `runtime`'s server in its first
+/// pass.
 async fn asked_of(runtime: RuntimeKind) -> usize {
     let (port, asked) = counting();
     let target = RunningTarget::local(port, 1, "m".to_owned(), 4096, false).with_runtime(runtime);
