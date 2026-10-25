@@ -152,7 +152,7 @@ jobs:
       - name: Update lockfiles
         run: |
           # `--workspace` restricts the re-lock to the workspace's OWN members,
-          # so the only Cargo.lock diff is the 18 gglib-* version fields the
+          # so the only Cargo.lock diff is the 19 gglib-* version fields the
           # bump just moved. `cargo generate-lockfile`, which stood here, throws
           # the lockfile away and re-resolves every dependency from scratch
           # against whatever the registry holds at that minute -- so a PR titled

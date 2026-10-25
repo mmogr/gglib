@@ -8,7 +8,7 @@ use futures_util::{StreamExt as _, stream};
 use gglib_agent::AgentLoop;
 use gglib_core::domain::agent::{AgentConfig, AgentMessage, LlmStreamEvent};
 use gglib_core::ports::{AgentError, EmptyToolExecutor};
-use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+use tokio::io::AsyncWriteExt as _;
 use tokio::net::TcpListener;
 
 use super::sse_events;
@@ -34,9 +34,9 @@ async fn wedged_after_one_word() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
     let addr = listener.local_addr().expect("bound");
     tokio::spawn(async move {
-        let (mut socket, _) = listener.accept().await.expect("accept");
-        let mut request = vec![0_u8; 64 * 1024];
-        let _ = socket.read(&mut request).await;
+        let (_, mut socket) = gglib_test_http::accept(&listener)
+            .await
+            .expect("the request");
         socket
             .write_all(
                 b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",

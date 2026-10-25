@@ -277,7 +277,7 @@ jobs:
         with:
           name: test-results
           # A glob, not a list. The list this replaces named fifteen crates
-          # while badges.yml's ALL_CRATES names sixteen, and the two had
+          # while badges.yml's ALL_CRATES named sixteen, and the two had
           # already drifted: gglib-sse and gglib-build-info have badges that
           # nothing ever wrote a file for, and gglib-integration-tests had a
           # file nothing reads. Deriving the set from what was actually built

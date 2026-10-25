@@ -13,7 +13,7 @@ without a GPU, a network, or a running llama-server, and therefore testable.
 
 ## Architecture
 
-This crate is the **Core Layer** — the innermost ring of the architecture. It depends on no other gglib crate, and every other workspace crate except `gglib-build-info`, `gglib-sse` and `gglib-tauri` depends on it (`gglib-integration-tests` as a dev-dependency).
+This crate is the **Core Layer** — the innermost ring of the architecture. It depends on no other gglib crate, and every other workspace crate except `gglib-build-info`, `gglib-sse`, `gglib-tauri` and `gglib-test-http` depends on it (`gglib-integration-tests` as a dev-dependency).
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────────┐

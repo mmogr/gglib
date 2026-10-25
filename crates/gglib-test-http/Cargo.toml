@@ -1,0 +1,27 @@
+[package]
+name = "gglib-test-http"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A fake HTTP server's connection for tests: the request is read whole before the test can answer it"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "gglib_test_http"
+path = "src/lib.rs"
+
+# Taken only from `[dev-dependencies]`, so no release build carries it. It
+# depends on no gglib crate and on nothing that speaks HTTP: most crates whose
+# tests use it may not depend on hyper or axum directly, and a check one level
+# deep would not see either arriving through here.
+[dependencies]
+tokio = { workspace = true, features = ["net", "io-util"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "time"] }
+
+[lints]
+workspace = true

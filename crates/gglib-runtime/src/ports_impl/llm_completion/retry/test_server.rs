@@ -1,10 +1,12 @@
 //! Minimal scripted HTTP/1.1 server for the retry tests.
 //!
-//! Hand-rolled on a raw [`TcpListener`] rather than reaching for `wiremock`,
-//! `axum`, or `hyper`: `check_boundaries.sh` forbids all three anywhere in
-//! `gglib-runtime`'s dependency tree, and `cargo tree --depth 1` sees
-//! dev-dependencies too — so pulling one in as a test harness would fail CI.
-//! Everything here is built from `tokio`, which the crate already has.
+//! Hand-rolled on a raw [`TcpListener`] rather than reaching for `axum` or
+//! `hyper`: `check_boundaries.sh` refuses both as direct dependencies of
+//! `gglib-runtime`, and `cargo tree --depth 1` sees dev-dependencies too — so
+//! pulling one in as a test harness would fail CI.
+//! Everything here is built from `tokio`, which the crate already has, and
+//! `gglib_test_http`, which hands over each connection with its request read
+//! whole and depends on nothing that speaks HTTP.
 //!
 //! Every canned response carries `Connection: close`, so the client never
 //! reuses a connection and the accept count is exactly the request count.
@@ -16,7 +18,7 @@ use std::time::Duration;
 
 use gglib_core::ports::ModelRuntimeError;
 use gglib_proxy::models::ErrorResponse;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
@@ -30,8 +32,8 @@ pub(super) struct TestServer {
     /// Base URL, e.g. `http://127.0.0.1:54321`.
     pub(super) base_url: String,
     requests: Arc<AtomicUsize>,
-    /// What each client sent, as far as one read went — enough for the
-    /// request line and headers, which is what the tests look at.
+    /// The head each client sent: the request line and headers, which is
+    /// what the tests look at.
     heads: Arc<Mutex<Vec<String>>>,
     handle: JoinHandle<()>,
 }
@@ -89,7 +91,7 @@ async fn serve(
     heads: Arc<Mutex<Vec<String>>>,
 ) {
     loop {
-        let Ok((mut socket, _)) = listener.accept().await else {
+        let Ok(incoming) = gglib_test_http::incoming(&listener).await else {
             return;
         };
         let index = requests.fetch_add(1, Ordering::SeqCst);
@@ -99,15 +101,16 @@ async fn serve(
             .cloned()
             .unwrap_or_default();
 
-        // Drain what the client sent. The content is irrelevant — reading it
-        // just stops the peer seeing a reset before it has finished writing.
-        let mut scratch = vec![0_u8; 8192];
-        if let Ok(Ok(n)) = tokio::time::timeout(CLIENT_TIMEOUT, socket.read(&mut scratch)).await {
-            heads
-                .lock()
-                .expect("heads mutex")
-                .push(String::from_utf8_lossy(&scratch[..n]).into_owned());
-        }
+        // The whole request is read before the answer goes out. One read
+        // could stop part-way through a POST body, and answering then
+        // closing on unread bytes can reset the connection under the client
+        // before it has read the answer.
+        let Ok(Ok((request, mut socket))) =
+            tokio::time::timeout(CLIENT_TIMEOUT, incoming.request()).await
+        else {
+            continue;
+        };
+        heads.lock().expect("heads mutex").push(request.head);
 
         let _ = tokio::time::timeout(CLIENT_TIMEOUT, socket.write_all(response.as_bytes())).await;
         let _ = socket.shutdown().await;

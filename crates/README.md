@@ -62,7 +62,7 @@ not only the next: `gglib-cli` uses several infrastructure crates directly, and
 `src-tauri` depend on `gglib-axum`, which both use to host the daemon;
 `src-tauri` depends on `gglib-tauri`; `gglib-download` depends on `gglib-hf`;
 `gglib-proxy` depends on `gglib-mcp`; and `gglib-runtime` depends on `gglib-mcp`
-and `gglib-proxy`. `gglib-build-info` and `gglib-sse` depend on no gglib crate.
+and `gglib-proxy`. `gglib-build-info`, `gglib-sse` and `gglib-test-http` depend on no gglib crate.
 `src-tauri` is the desktop app and lives outside `crates/`;
 `gglib-integration-tests` holds cross-crate tests and has only dev-dependencies.
 
@@ -120,6 +120,7 @@ Each row links the crate, whose own README says what it is responsible for and h
 |-------|---------|---------------|
 | **[gglib-build-info](gglib-build-info/)** | Compile-time version and git metadata for CLI/GUI version strings. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-loc.json) |
 | **[gglib-sse](gglib-sse/)** | Generic Server-Sent Events broadcast utility shared by `gglib-axum` and `gglib-proxy`. Zero `gglib-*` dependencies. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-sse-loc.json) |
+| **[gglib-test-http](gglib-test-http/)** | The connection a test's fake HTTP server answers on, handed over only once the request has been read whole. Dev-dependency only; zero `gglib-*` dependencies. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-loc.json) |
 
 ## Development Guidelines
 
