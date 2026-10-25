@@ -350,7 +350,8 @@ winning settings straight back to the model's inference defaults.
 
 ## MCP tool servers
 
-`list`, `add`, `remove`, `start`, `stop`, `enable`, `disable`, `tools`, `test`.
+`list`, `add`, `remove`, `start`, `stop`, `enable`, `disable`, `tools`, `test`,
+`allow-remote`, `deny-remote`.
 
 A server is `stdio`: a process gglib starts and talks to. `sse` (HTTP) servers
 are not supported yet. `add` refuses one, and one stored by an earlier version
@@ -361,6 +362,12 @@ its own: `add` refuses a name another server already has. A server that cannot
 start says why: `chat` and `q` print one line on stderr for each lazy server
 they go on without (none under `-Q`), and that line and `test` end with what the
 server printed on stderr before it exited.
+
+`allow-remote <server>...` opens servers to paired devices (`gglib remote`),
+and `deny-remote` closes them, by id or by a name only one server has; `list`
+shows each server's `Remote`. A change applies from a device's next run, with
+no restart. An SSE server and `builtin` are never opened
+([ADR 0025](adr/0025-a-server-is-opened-to-paired-devices-by-a-flag-on-it.md)).
 
 ## Configuration
 

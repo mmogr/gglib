@@ -18,7 +18,7 @@ use tokio::net::TcpListener;
 use super::super::types::JoinRequest;
 use super::super::{RemoteGateway, RemoteOps};
 use crate::error::GuiError;
-use crate::test_support::{RecordingEmitter, test_core_and_proxy};
+use crate::test_support::RecordingEmitter;
 use crate::test_support_remote::{
     FINGERPRINT_A, KEY_A, TICKET_A, TICKET_A_MOVED, TICKET_B, paired_with, scratch_join_keys,
     test_remote_ops_joining_from, ticket,
@@ -65,10 +65,10 @@ async fn a_machine_keeps_one_key_whatever_address_its_ticket_carries() {
 #[tokio::test]
 async fn a_daemon_keeps_its_joining_keys_under_the_data_root() {
     let root = gglib_core::paths::isolate_data_root();
-    let (core, proxy) = test_core_and_proxy().await;
+    let (core, proxy, mcp) = crate::test_support::test_core_proxy_and_mcp().await;
     let emitter: Arc<dyn AppEventEmitter> = Arc::new(RecordingEmitter::default());
     let gateway = Arc::new(RemoteGateway::new(Arc::clone(&emitter)));
-    let ops = RemoteOps::new(proxy, core, gateway, emitter, None);
+    let ops = RemoteOps::new(proxy, core, mcp, gateway, emitter, None);
 
     let key = ops.join_key_path(&ticket(TICKET_A)).expect("named");
 

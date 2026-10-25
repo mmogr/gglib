@@ -48,4 +48,10 @@ pub enum McpServiceError {
     /// An SSE server was to be added, changed or run. gglib has no SSE client.
     #[error("SSE servers are not supported yet; only stdio servers can be run")]
     SseNotSupported,
+
+    /// A server stored under the name gglib keeps for its own tools was to
+    /// be opened to paired devices. A device is never offered gglib's own
+    /// tools by that name, so there is no other name to choose.
+    #[error("'{0}' is gglib's own tools and is never opened to devices")]
+    NeverOpened(String),
 }

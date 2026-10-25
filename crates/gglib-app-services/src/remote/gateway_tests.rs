@@ -38,25 +38,16 @@ pub(super) fn announced(events: &RecordingEmitter) -> Vec<Option<String>> {
         .collect()
 }
 
-/// Begin a session opening `servers` and open an invite for `device` on it,
-/// which is what an `enable` followed by an `invite` does. The two are separate calls in the
+/// Begin a session and open an invite for `device` on it, which is what an
+/// `enable` followed by an `invite` does. The two are separate calls in the
 /// real path because `enable` is a switch and `invite` pairs a device; these
 /// tests are about what happens once something is open.
-pub(super) fn arm_with(
-    gateway: &RemoteGateway,
-    device: &str,
-    servers: &[&str],
-) -> (u64, Arc<FakeInvite>) {
-    let epoch = gateway.begin_session(opening(servers));
+pub(super) fn arm_with(gateway: &RemoteGateway, device: &str) -> (u64, Arc<FakeInvite>) {
+    let epoch = gateway.begin_session();
     let invite = FakeInvite::new();
     let offered = gateway.offer_pairing(epoch, device.to_owned(), Box::new(Arc::clone(&invite)));
     assert_eq!(offered, Offered::Armed, "the fixture must arm");
     (epoch, invite)
-}
-
-/// The list a session is begun with, as `enable` hands it over.
-pub(super) fn opening(servers: &[&str]) -> Arc<[String]> {
-    servers.iter().map(|name| (*name).to_owned()).collect()
 }
 
 #[test]
@@ -76,7 +67,7 @@ fn tunnelled_requests_are_counted_and_the_last_peer_remembered() {
 #[test]
 fn resetting_the_session_keeps_the_history() {
     let (_, gateway) = gateway();
-    let (epoch, invite) = arm_with(&gateway, "dev-0a1b2c3d", &["tavily"]);
+    let (epoch, invite) = arm_with(&gateway, "dev-0a1b2c3d");
     invite.redeem("dev-0a1b2c3d", None);
     gateway.settle_invite("dev-0a1b2c3d");
     gateway.note_tunnelled_request(None, None);
@@ -85,10 +76,7 @@ fn resetting_the_session_keeps_the_history() {
     assert_eq!(gateway.tunnelled_requests(), 2);
 
     gateway.reset_session_if(epoch);
-    assert!(
-        gateway.mcp_servers().is_empty(),
-        "the session's servers go with it"
-    );
+    assert!(!gateway.serving(), "the session's serving goes with it");
     assert!(!gateway.paired());
     assert!(!gateway.pairing.active());
     assert_eq!(gateway.tunnelled_requests(), 2, "history survives");
@@ -101,8 +89,8 @@ fn resetting_the_session_keeps_the_history() {
 #[test]
 fn a_reset_for_a_superseded_session_leaves_the_current_one_alone() {
     let (_, gateway) = gateway();
-    let (first, first_invite) = arm_with(&gateway, "dev-0a1b2c3d", &["tavily"]);
-    let (second, second_invite) = arm_with(&gateway, "dev-4e5f6a7b", &["tavily"]);
+    let (first, first_invite) = arm_with(&gateway, "dev-0a1b2c3d");
+    let (second, second_invite) = arm_with(&gateway, "dev-4e5f6a7b");
     assert_ne!(first, second, "each session gets its own epoch");
     assert!(
         first_invite.was_withdrawn(),
@@ -110,11 +98,7 @@ fn a_reset_for_a_superseded_session_leaves_the_current_one_alone() {
     );
 
     gateway.reset_session_if(first);
-    assert_eq!(
-        *gateway.mcp_servers(),
-        ["tavily".to_owned()],
-        "the second session's servers stand"
-    );
+    assert!(gateway.serving(), "the second session still serves");
     assert!(gateway.pairing.active(), "and so does its code");
     assert!(!second_invite.was_withdrawn());
 }
@@ -126,12 +110,12 @@ fn a_reset_for_a_superseded_session_leaves_the_current_one_alone() {
 #[test]
 fn arming_a_session_starts_it_unpaired() {
     let (_, gateway) = gateway();
-    let (_, invite) = arm_with(&gateway, "dev-0a1b2c3d", &[]);
+    let (_, invite) = arm_with(&gateway, "dev-0a1b2c3d");
     invite.redeem("dev-0a1b2c3d", None);
     gateway.settle_invite("dev-0a1b2c3d");
     assert!(gateway.paired());
 
-    arm_with(&gateway, "dev-4e5f6a7b", &[]);
+    arm_with(&gateway, "dev-4e5f6a7b");
     assert!(!gateway.paired());
 }
 
@@ -146,7 +130,7 @@ fn arming_a_session_starts_it_unpaired() {
 #[test]
 fn offering_a_second_code_says_nobody_has_taken_it_yet() {
     let (_, gateway) = gateway();
-    let (epoch, invite) = arm_with(&gateway, "dev-0a1b2c3d", &[]);
+    let (epoch, invite) = arm_with(&gateway, "dev-0a1b2c3d");
     invite.redeem("dev-0a1b2c3d", None);
     gateway.settle_invite("dev-0a1b2c3d");
     assert!(gateway.paired());
@@ -169,10 +153,10 @@ fn offering_a_second_code_says_nobody_has_taken_it_yet() {
 #[test]
 fn a_session_begun_without_a_code_holds_none_and_withdraws_the_last() {
     let (_, gateway) = gateway();
-    let (_, invite) = arm_with(&gateway, "dev-0a1b2c3d", &[]);
+    let (_, invite) = arm_with(&gateway, "dev-0a1b2c3d");
     assert!(gateway.pairing.active(), "the armed session has a code");
 
-    gateway.begin_session(opening(&[]));
+    gateway.begin_session();
 
     assert!(
         !gateway.pairing.active(),
@@ -184,10 +168,26 @@ fn a_session_begun_without_a_code_holds_none_and_withdraws_the_last() {
     );
 }
 
+/// A session serves from its start: nothing serves before one begins, and
+/// `serving` is what the proxy asks before it offers any MCP server.
+#[test]
+fn a_session_serves_from_its_start_to_its_reset() {
+    let (_, gateway) = gateway();
+    assert!(!gateway.serving(), "no session, nothing served");
+
+    let epoch = gateway.begin_session();
+    assert!(gateway.serving());
+
+    gateway.reset_session_if(epoch);
+    assert!(!gateway.serving());
+    gateway.reset_session_if(epoch);
+    assert!(!gateway.serving(), "a second reset of it changes nothing");
+}
+
 #[test]
 fn debug_reports_state_only() {
     let (_, gateway) = gateway();
-    arm_with(&gateway, "dev-0a1b2c3d", &[]);
+    arm_with(&gateway, "dev-0a1b2c3d");
     let rendered = format!("{gateway:?}");
     assert!(rendered.contains("pairing_active: true"), "{rendered}");
 }
@@ -207,7 +207,7 @@ fn debug_reports_state_only() {
 #[test]
 fn a_code_cannot_be_offered_against_a_session_that_has_ended() {
     let (_recorder, gateway) = gateway();
-    let epoch = gateway.begin_session(opening(&["tavily"]));
+    let epoch = gateway.begin_session();
 
     // The teardown, with nothing taking the tunnel's place.
     gateway.reset_session_if(epoch);

@@ -225,7 +225,7 @@ model that calls no tool, stays `[]`, and `null` admits them already. The
 chat route (`POST /api/agent/chat`) and every turn a paired device sends
 pass no folder, whatever the conversation remembers: a device's turn calls
 no tool of this machine's but the image tool its Draw asks for and the
-tools of the MCP servers the tunnel opens, which name no file tool, and no
+tools of the MCP servers opened to paired devices, which name no file tool, and no
 key of a device's turn names a path.
 
 # A paired device's turn
@@ -258,18 +258,20 @@ person's choice for that message, and a hub that cannot draw refuses the
 turn `400 drawing_unavailable` before anything is written. A turn's
 `image_model`, when it says one, is the page's: copied onto the chat
 request and judged there. Beyond the floor are the tools of the MCP
-servers the live session opens (`gglib remote enable --allow-mcp
-<server>`, read from the tunnel's gateway), each by its qualified
+servers open to paired devices (`gglib mcp allow-remote <server>`, a flag
+on each), read only while the tunnel's gateway says a session is live,
+each by its qualified
 `{id}:{tool}`: every one for a phone's chat or a chat that names
 no tool, only those a chat's own list names exactly or by bare name
 otherwise, none when the chat turned its tools off (a phone's chat says so
 with `tools=none`), and never a tool the
 list names that no opened server has. A turn is planned with the floor
-alone; the rest is settled in the run's late step (`hub_turn::late_on`),
-once the model is found or loaded, where a named server that is not
-running is started (`McpService::opened_tools`). A `PUT` that is refused
-starts nothing. The decision is
-[ADR 0024](../../../../../docs/adr/0024-the-tunnel-opens-mcp-servers-by-name.md).
+alone; the rest is settled in the run's late step (`hub_turn::late_on`,
+through `device_tools::settle`), once the model is found or loaded, where
+an open server that is not running is started (`McpService::opened_tools`).
+A `PUT` that is refused starts nothing. The decisions are
+[ADR 0024](../../../../../docs/adr/0024-the-tunnel-opens-mcp-servers-by-name.md)
+and [ADR 0025](../../../../../docs/adr/0025-a-server-is-opened-to-paired-devices-by-a-flag-on-it.md).
 
 `chat_turn` is the starter's other door, the proxy's
 `PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`: a chat a paired

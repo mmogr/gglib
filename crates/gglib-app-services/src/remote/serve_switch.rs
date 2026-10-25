@@ -51,7 +51,6 @@ impl RemoteOps {
             .update(SettingsUpdate {
                 remote_enabled: Some(Some(true)),
                 remote_serve: Some(Some(RemoteServe {
-                    mcp_servers: request.mcp_servers.clone(),
                     relay: request.relay.clone(),
                     discovery: request.discovery,
                 })),
@@ -132,9 +131,7 @@ impl RemoteOps {
             warn!("remote access is switched on but no serve options were stored; not resuming");
             return;
         };
-        let opened = serve.mcp_servers.clone();
         let request = EnableRequest {
-            mcp_servers: serve.mcp_servers,
             relay: serve.relay,
             discovery: serve.discovery,
             // Never on a resume, and not reachable from here by accident:
@@ -148,7 +145,7 @@ impl RemoteOps {
         // change. Devices already paired hold a key and need no code; a new
         // one is added with `gglib remote invite`.
         match self.resume_arm(request, disables).await {
-            Ok(()) => info!(mcp = ?opened, "remote access resumed from settings"),
+            Ok(()) => info!("remote access resumed from settings"),
             Err(e) => warn!("could not resume remote access: {e}"),
         }
     }

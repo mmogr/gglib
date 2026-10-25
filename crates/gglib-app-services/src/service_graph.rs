@@ -228,6 +228,7 @@ pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<A
     let remote = Arc::new(RemoteOps::new(
         Arc::clone(&proxy),
         Arc::clone(&core),
+        Arc::clone(&mcp),
         remote_gateway,
         Arc::clone(&emitter),
         device_keys_path,

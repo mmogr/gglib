@@ -5,7 +5,7 @@
 
 use anyhow::{Result, anyhow};
 use gglib_core::domain::mcp::{McpLifecycle, McpServerStatus, McpServerType, NewMcpServer};
-use gglib_mcp::McpServerInfo;
+use gglib_mcp::{McpServerInfo, McpService};
 
 use crate::bootstrap::CliContext;
 use crate::mcp_commands::McpCommand;
@@ -48,6 +48,8 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: McpCommand) -> Result<()> {
         McpCommand::Stop { server } => stop(ctx, &server).await,
         McpCommand::Enable { server } => set_enabled(ctx, &server, true).await,
         McpCommand::Disable { server } => set_enabled(ctx, &server, false).await,
+        McpCommand::AllowRemote { servers } => set_allow_remote(ctx, &servers, true).await,
+        McpCommand::DenyRemote { servers } => set_allow_remote(ctx, &servers, false).await,
         McpCommand::Tools { server } => tools(ctx, &server).await,
         McpCommand::Test { server } => test(ctx, &server).await,
     }
@@ -66,23 +68,24 @@ async fn list(ctx: &CliContext) -> Result<()> {
 
     println!("Found {} MCP server(s):\n", servers.len());
     println!(
-        "{:<4} {:<25} {:<6} {:<9} {:<11} {:<10} {:<6}",
-        "ID", "Name", "Type", "Enabled", "Lifecycle", "Status", "Tools"
+        "{:<4} {:<25} {:<6} {:<9} {:<7} {:<11} {:<10} {:<6}",
+        "ID", "Name", "Type", "Enabled", "Remote", "Lifecycle", "Status", "Tools"
     );
-    print_separator(75);
+    print_separator(83);
 
     for info in servers {
         let s = &info.server;
         let type_str = s.server_type.to_string();
-        let enabled_str = if s.enabled { "yes" } else { "no" };
+        let yes_no = |on: bool| if on { "yes" } else { "no" };
         let lifecycle_str = s.lifecycle.to_string();
 
         println!(
-            "{:<4} {:<25} {:<6} {:<9} {:<11} {}",
+            "{:<4} {:<25} {:<6} {:<9} {:<7} {:<11} {}",
             s.id,
             truncate_string(&s.name, 24),
             type_str,
-            enabled_str,
+            yes_no(s.enabled),
+            yes_no(s.allow_remote),
             lifecycle_str,
             status_and_tools(&info)
         );
@@ -215,6 +218,36 @@ async fn set_enabled(ctx: &CliContext, identifier: &str, enabled: bool) -> Resul
     Ok(())
 }
 
+/// Open each of `identifiers` to paired devices, or close it: the flag's own
+/// write, which never stops a server. Every one is found, and checked when
+/// opening, before any is changed, so a typo or an SSE server in the last
+/// changes none.
+async fn set_allow_remote(ctx: &CliContext, identifiers: &[String], allow: bool) -> Result<()> {
+    let mut found = Vec::with_capacity(identifiers.len());
+    for identifier in identifiers {
+        let server = the_one_server(ctx, identifier).await?;
+        if allow {
+            McpService::refuse_opening(&server)?;
+        }
+        found.push(server);
+    }
+    for server in found {
+        let server = ctx.mcp.set_allow_remote(server.id, allow).await?;
+        if !allow {
+            println!("✓ '{}' is closed to paired devices", server.name);
+            continue;
+        }
+        println!("✓ '{}' is open to paired devices", server.name);
+        if !server.enabled {
+            println!(
+                "  It is disabled, so it offers them no tools until `gglib mcp enable {}`",
+                server.id
+            );
+        }
+    }
+    Ok(())
+}
+
 async fn tools(ctx: &CliContext, identifier: &str) -> Result<()> {
     let server = resolve_server(ctx, identifier).await?;
     let tools = ctx.mcp.list_server_tools(server.id).await?;
@@ -261,6 +294,32 @@ async fn test(ctx: &CliContext, identifier: &str) -> Result<()> {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+/// The one server `identifier` names: by its id, or by a name no other
+/// server has.
+///
+/// An older database can hold two servers of one name, and a lookup by name
+/// would pick either; a grant to devices must not land on the one the owner
+/// did not mean, so a shared name is refused and the ids are pointed to.
+async fn the_one_server(ctx: &CliContext, identifier: &str) -> Result<gglib_core::McpServer> {
+    if identifier.parse::<i64>().is_ok() {
+        return resolve_server(ctx, identifier).await;
+    }
+    let mut named: Vec<_> = ctx
+        .mcp
+        .list_servers()
+        .await?
+        .into_iter()
+        .filter(|server| server.name == identifier)
+        .collect();
+    match named.len() {
+        0 => Err(anyhow!("Server '{identifier}' not found")),
+        1 => Ok(named.remove(0)),
+        n => Err(anyhow!(
+            "{n} servers are named '{identifier}'; give its id (`gglib mcp list`)"
+        )),
+    }
+}
 
 /// Resolve a server identifier (numeric ID or name) to an `McpServer`.
 async fn resolve_server(ctx: &CliContext, identifier: &str) -> Result<gglib_core::McpServer> {

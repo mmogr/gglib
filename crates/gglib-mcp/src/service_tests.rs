@@ -44,6 +44,7 @@ impl McpServerRepository for MockMcpRepository {
             server_type: new_server.server_type,
             config: new_server.config,
             enabled: new_server.enabled,
+            allow_remote: false,
             lifecycle: new_server.lifecycle,
             env: new_server.env,
             created_at: chrono::Utc::now(),
@@ -82,13 +83,18 @@ impl McpServerRepository for MockMcpRepository {
         Ok(servers.clone())
     }
 
+    /// Replaces the server whole but for `allow_remote`, which only
+    /// `set_allow_remote` writes, as in the `SQLite` repository.
     async fn update(&self, server: &McpServer) -> Result<(), McpRepositoryError> {
         *self.updates.lock().unwrap() += 1;
         let mut servers = self.servers.lock().unwrap();
         servers.iter_mut().find(|s| s.id == server.id).map_or_else(
             || Err(McpRepositoryError::NotFound(server.id.to_string())),
             |s| {
-                *s = server.clone();
+                *s = McpServer {
+                    allow_remote: s.allow_remote,
+                    ..server.clone()
+                };
                 Ok(())
             },
         )
@@ -109,6 +115,16 @@ impl McpServerRepository for MockMcpRepository {
         let mut servers = self.servers.lock().unwrap();
         if let Some(s) = servers.iter_mut().find(|s| s.id == id) {
             s.last_connected_at = Some(chrono::Utc::now());
+            Ok(())
+        } else {
+            Err(McpRepositoryError::NotFound(id.to_string()))
+        }
+    }
+
+    async fn set_allow_remote(&self, id: i64, allow: bool) -> Result<(), McpRepositoryError> {
+        let mut servers = self.servers.lock().unwrap();
+        if let Some(s) = servers.iter_mut().find(|s| s.id == id) {
+            s.allow_remote = allow;
             Ok(())
         } else {
             Err(McpRepositoryError::NotFound(id.to_string()))

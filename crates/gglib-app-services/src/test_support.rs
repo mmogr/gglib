@@ -374,3 +374,21 @@ pub(crate) fn test_core_and_proxy_on(
     }));
     (core, proxy)
 }
+
+/// [`test_core_and_proxy`], and an MCP service over the same database: what
+/// a `RemoteOps` reads the servers open to paired devices from.
+pub(crate) async fn test_core_proxy_and_mcp() -> (
+    Arc<AppCore>,
+    Arc<crate::ProxyOps>,
+    Arc<gglib_mcp::McpService>,
+) {
+    let pool = setup_test_database().await.expect("in-memory DB");
+    let repos = CoreFactory::build_repos(pool);
+    let (core, proxy) = test_core_and_proxy_over(&repos);
+    (core, proxy, test_mcp_over(&repos))
+}
+
+/// An MCP service over `repos`' servers.
+pub(crate) fn test_mcp_over(repos: &gglib_core::ports::Repos) -> Arc<gglib_mcp::McpService> {
+    Arc::new(gglib_mcp::McpService::new(repos.mcp_servers.clone()))
+}

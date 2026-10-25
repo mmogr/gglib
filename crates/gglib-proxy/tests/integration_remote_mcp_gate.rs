@@ -95,11 +95,12 @@ async fn a_tunnelled_request_to_mcp_is_refused() {
     cancel.cancel();
 }
 
-/// Opening servers to a device's runs does not open `/mcp`: the gateway
-/// would start any configured server, named or not.
+/// A live session, which offers a device's runs the servers open to it, does
+/// not open `/mcp`: the gateway would start any configured server, open to
+/// devices or not.
 #[tokio::test]
-async fn opening_servers_does_not_open_mcp() {
-    let (base, cancel, _) = tunnelled_proxy_over(StubGateway::opening(&["tavily"])).await;
+async fn a_live_session_does_not_open_mcp() {
+    let (base, cancel, _) = tunnelled_proxy_over(StubGateway::serving()).await;
 
     let res = mcp_initialize(&base, true).await;
     assert_eq!(res.status(), StatusCode::FORBIDDEN);

@@ -336,3 +336,154 @@ fn testing_a_server_whose_command_cannot_be_resolved_reports_the_failed_start() 
         "got: {failed}"
     );
 }
+
+/// The cell of `listed`'s `Remote` column on the row for `name`.
+fn remote_cell<'a>(listed: &'a str, name: &str) -> &'a str {
+    let mut lines = listed.lines();
+    let column = lines
+        .by_ref()
+        .find_map(|line| line.split_whitespace().position(|cell| cell == "Remote"))
+        .unwrap_or_else(|| panic!("no Remote column, got: {listed}"));
+    lines
+        .find(|line| line.split_whitespace().nth(1) == Some(name))
+        .and_then(|row| row.split_whitespace().nth(column))
+        .unwrap_or_else(|| panic!("no row for {name}, got: {listed}"))
+}
+
+/// A server is opened to paired devices and closed again by name or id, one
+/// or several at a time, and the list says which are open.
+#[test]
+fn a_server_is_opened_to_paired_devices_and_closed_again() {
+    let root = tempfile::tempdir().expect("temp data dir");
+    let add = ["add", "--type", "stdio", "--command", "npx", "--name"];
+    mcp_ok(root.path(), &[&add[..], &["tavily"]].concat());
+    mcp_ok(root.path(), &[&add[..], &["fs"]].concat());
+    let listed = mcp_ok(root.path(), &["list"]);
+    assert_eq!(remote_cell(&listed, "tavily"), "no", "closed unless opened");
+
+    let opened = mcp_ok(root.path(), &["allow-remote", "tavily", "fs"]);
+
+    assert!(
+        opened.contains("✓ 'tavily' is open to paired devices")
+            && opened.contains("✓ 'fs' is open to paired devices"),
+        "got: {opened}"
+    );
+    let listed = mcp_ok(root.path(), &["list"]);
+    assert_eq!(remote_cell(&listed, "tavily"), "yes");
+    assert_eq!(remote_cell(&listed, "fs"), "yes");
+
+    let closed = mcp_ok(root.path(), &["deny-remote", "tavily"]);
+
+    assert!(
+        closed.contains("✓ 'tavily' is closed to paired devices"),
+        "got: {closed}"
+    );
+    let listed = mcp_ok(root.path(), &["list"]);
+    assert_eq!(remote_cell(&listed, "tavily"), "no");
+    assert_eq!(remote_cell(&listed, "fs"), "yes", "only the one named");
+}
+
+/// A disabled server can be opened, and is said to offer nothing until it
+/// is enabled.
+#[test]
+fn opening_a_disabled_server_says_it_offers_nothing_until_enabled() {
+    let root = tempfile::tempdir().expect("temp data dir");
+    let add = ["add", "--type", "stdio", "--command", "npx", "--disabled"];
+    mcp_ok(root.path(), &[&add[..], &["--name", "off"]].concat());
+
+    let opened = mcp_ok(root.path(), &["allow-remote", "off"]);
+
+    assert!(
+        opened.contains("✓ 'off' is open to paired devices")
+            && opened.contains("It is disabled, so it offers them no tools"),
+        "got: {opened}"
+    );
+}
+
+/// An SSE server is never opened, and is said why, before any server named
+/// beside it is opened; closing it is not refused.
+#[test]
+fn opening_an_sse_server_is_refused_with_the_reason() {
+    let root = tempfile::tempdir().expect("temp data dir");
+    stored_sse(root.path(), "remote", McpLifecycle::Lazy);
+    data_dir::store_mcp_server(
+        root.path(),
+        NewMcpServer::new_stdio("fs", "npx", vec![], None),
+    );
+
+    let refused = mcp_err(root.path(), &["allow-remote", "fs", "remote"]);
+
+    assert!(
+        refused.contains(&format!("Error: {SSE_NOT_SUPPORTED}")),
+        "got: {refused}"
+    );
+    let listed = mcp_ok(root.path(), &["list"]);
+    assert_eq!(remote_cell(&listed, "remote"), "no");
+    assert_eq!(remote_cell(&listed, "fs"), "no", "nothing changed");
+    mcp_ok(root.path(), &["deny-remote", "remote"]);
+}
+
+/// A name two servers share opens neither, and points to their ids; an id
+/// opens the one it names. Nothing is opened when any name is refused.
+#[test]
+fn a_name_two_servers_share_is_refused_and_an_id_is_asked_for() {
+    let root = tempfile::tempdir().expect("temp data dir");
+    // An older database can hold two of one name; `mcp add` refuses it now.
+    for command in ["npx", "uvx"] {
+        data_dir::store_mcp_server(
+            root.path(),
+            NewMcpServer::new_stdio("twin", command, vec![], None),
+        );
+    }
+    data_dir::store_mcp_server(
+        root.path(),
+        NewMcpServer::new_stdio("fs", "npx", vec![], None),
+    );
+
+    let refused = mcp_err(root.path(), &["allow-remote", "fs", "twin"]);
+
+    assert!(
+        refused.contains("2 servers are named 'twin'; give its id (`gglib mcp list`)"),
+        "got: {refused}"
+    );
+    let listed = mcp_ok(root.path(), &["list"]);
+    assert_eq!(remote_cell(&listed, "fs"), "no", "nothing changed");
+
+    let first_twin = listed
+        .lines()
+        .find(|line| line.split_whitespace().nth(1) == Some("twin"))
+        .and_then(|row| row.split_whitespace().next())
+        .expect("a twin's id");
+    let opened = mcp_ok(root.path(), &["allow-remote", first_twin]);
+    assert!(
+        opened.contains("✓ 'twin' is open to paired devices"),
+        "got: {opened}"
+    );
+}
+
+/// `gglib remote enable --allow-mcp` is refused, pointing at where the grant
+/// went, before any daemon is asked anything: the port it is pointed at
+/// listens to nothing, and nothing is started on it.
+#[test]
+fn remote_enable_with_allow_mcp_is_refused_with_a_pointer() {
+    let root = tempfile::tempdir().expect("temp data dir");
+    let port = closed_port();
+    let out = Command::new(env!("CARGO_BIN_EXE_gglib"))
+        .args(["remote", "enable", "--allow-mcp", "t"])
+        .env("GGLIB_DATA_DIR", root.path())
+        .env("GGLIB_DAEMON_PORT", port.to_string())
+        .stdin(Stdio::null())
+        .output()
+        .expect("running `gglib remote enable`");
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "stderr: {stderr}");
+    assert!(
+        stderr.contains("--allow-mcp is gone: run `gglib mcp allow-remote <names>`"),
+        "stderr: {stderr}"
+    );
+    assert!(
+        TcpListener::bind(("127.0.0.1", port)).is_ok(),
+        "no daemon was started on the port"
+    );
+}

@@ -89,6 +89,21 @@ pub enum McpCommand {
         server: String,
     },
 
+    /// Open MCP servers to paired devices: their runs are offered the
+    /// servers' tools, from their next run on
+    AllowRemote {
+        /// Server IDs or names
+        #[arg(required = true)]
+        servers: Vec<String>,
+    },
+
+    /// Close MCP servers to paired devices
+    DenyRemote {
+        /// Server IDs or names
+        #[arg(required = true)]
+        servers: Vec<String>,
+    },
+
     /// List tools exposed by a running MCP server
     Tools {
         /// Server ID or name

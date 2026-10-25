@@ -119,9 +119,15 @@ $ gglib remote list
   Retire one:  gglib remote forget <id>
 ```
 
+Which MCP servers paired devices' chats may use is not a flag of `enable`:
+each server says so itself. `gglib mcp allow-remote <server>` opens one and
+`gglib mcp deny-remote <server>` closes it again, at any time, from a
+device's next run, and `gglib mcp list` shows each server's `Remote`. None is
+open by default. `/mcp` itself is never reachable through the tunnel; see
+[What the other machine can reach](#what-the-other-machine-can-reach).
+
 | Flag | Effect |
 |------|--------|
-| `--allow-mcp SERVER` | Let paired devices' chats use this MCP server's tools, by the name `gglib mcp list` shows; repeat for more. None by default, and a name that is blank, `builtin`, unknown or shared by two servers is refused. `/mcp` itself is never reachable through the tunnel; see [What the other machine can reach](#what-the-other-machine-can-reach). |
 | `--relay URL` | Use a self-hosted iroh relay instead of the public ones. |
 | `--no-discovery` | Do not publish to or resolve through n0's discovery service. The ticket then carries only the paths it was minted with, and stops resolving for good the moment the machine changes network. Advanced. |
 | `--no-qr` | Plain text; no alternate screen. |
@@ -207,7 +213,9 @@ does not put the tunnel back, and says so.
 
 The desktop's GUI has the same controls in the **Remote** popover beside the
 proxy control, with the ticket and code shown once and cleared when a device
-pairs or the code runs out.
+pairs or the code runs out. Its MCP checklist, shown whether remote access is
+on or off, sets the same flag `allow-remote` does, as does the box on each row
+of the MCP servers panel.
 
 ### A key per device
 
@@ -251,15 +259,18 @@ second identity that would outlive the first being retired.
 — and `enable --invite` against a tunnel that is already up, which does the
 same thing — offers a code against the live session rather than refusing. It
 leaves the flags alone —
-changing the servers `--allow-mcp` names, or `--relay`, still means `disable`
-and `enable` again, and the ticket is the same one afterwards.
+changing `--relay` still means `disable` and `enable` again, and the ticket is
+the same one afterwards. The MCP servers open to devices need neither: they
+change at any time.
 
-**Upgrading from the `/mcp` switch opens nothing.** `--allow-mcp` used to be
-a yes/no switch that opened `/mcp`, every configured server at once, to the
-tunnel. It now names servers, and what an older build stored for the switch
-is not read: a machine enabled with it comes back with no MCP server open,
-and `/mcp` closed. `gglib remote disable`, then
-`gglib remote enable --allow-mcp <server>` for each server meant.
+**Upgrading keeps the servers `--allow-mcp` opened.** `--allow-mcp` used to
+name the servers a session opened, in a list kept apart from them. The first
+start of this build flags each server that list named on its own row, once,
+when remote access was on, and only a name exactly one server has, when that
+server is stdio.
+`gglib remote enable --allow-mcp` is now refused, and says to run
+`gglib mcp allow-remote <names>` instead. A machine enabled with the older
+`/mcp` switch still comes back with no MCP server open.
 
 **Upgrading breaks existing pairings, once.** A machine that paired before
 per-device keys holds the old shared key, and the edge no longer admits it.
@@ -773,7 +784,8 @@ through the tunnel, whatever `enable` was given, because it starts any MCP
 server configured on the desktop and a leaked key with a shell server
 configured there is remote code execution. The refusal is a `403`
 `mcp_not_allowed_over_tunnel`; local clients are unaffected. A device reaches
-the servers `--allow-mcp` names through its runs instead (below). The proxy tells a
+the servers open to it (`gglib mcp allow-remote`) through its runs instead
+(below). The proxy tells a
 tunnelled request apart by a marker the tunnel edge sets and a peer cannot
 remove. Forging it denies yourself `/mcp`, and on `/v1/runs`, where a device
 sees the runs it started and every run on the desktop's chats, and `/v1/chats`,
@@ -804,9 +816,9 @@ button, and a desktop too old to have the route answers 404, which means it
 cannot.
 
 The proxy's answer also says which MCP servers a device's runs are offered:
-`mcp_servers`, the names `gglib remote enable --allow-mcp` gave the live
-session, `[]` when it names none, and there whether or not the desktop can
-draw (a desktop with no image model can still search). A device that reads
+`mcp_servers`, the names of the servers open to paired devices while a
+session is live, read at each ask, `[]` when none is open, and there whether
+or not the desktop can draw (a desktop with no image model can still search). A device that reads
 a name there sends its questions with `tools=builtin` (below), and those of
 a chat whose tools the person turned off as plain chat runs, or with
 `tools=none` when they draw; a desktop from before the list sends no such
@@ -846,11 +858,11 @@ is never looked up as a name in the desktop's catalogue. Nothing is copied to th
 gets past `403 device_not_named`, and `gglib remote forget` takes the chats
 away with the key, though a reply the device already started still finishes
 and is saved. Such a turn is offered the tools of the MCP servers the
-desktop's `--allow-mcp` names, each by its qualified `{id}:{tool}` name: all
+desktop has open to paired devices, each by its qualified `{id}:{tool}` name: all
 of them when the chat's settings name no tool, only those its list names
 when it names some, by that name or the tool's bare one, and none when its
-tools are off; never a tool no named server has, never every tool, and
-never gglib's own file tools. A named server that is not running is started
+tools are off; never a tool no open server has, never every tool, and
+never gglib's own file tools. An open server that is not running is started
 when the run starts, after its model is ready, and one that is disabled,
 manual and not started, or fails to start is left out, with a warning in the desktop's log
 that names it and why (for one that failed to start, what it printed on stderr, as the
@@ -883,8 +895,8 @@ after the tool has run the model is offered no tools, and what it then says
 is the reply's text ("The model said nothing after the drawing tool ran."
 when it says nothing). For those words the desktop tells the model, in an
 instruction no transcript holds, to say in a sentence or two what it asked
-the tool to draw, or what went wrong. This needs no `--allow-mcp`, which
-names MCP servers and not the image tool, and it holds for a chat with its
+the tool to draw, or what went wrong. This needs no MCP server open, since
+the image tool is not one, and it holds for a chat with its
 tools turned off: the button is the person's choice for that message. A turn without the
 key is offered no image tool. A desktop that cannot draw refuses the turn,
 `400 drawing_unavailable`, with the reason; a device asks
@@ -947,9 +959,9 @@ unchanged OpenAI chat request, whole history included, and runs it through
 the desktop's agent loop on the model it names, with the image tool offered
 for that message, whose first step must be the call for the picture as on a
 desktop chat. Such a run is also offered the tools of the MCP servers the
-desktop's `--allow-mcp` names, as a turn on a chat that names no tool is,
-and without `draw=true` those are its only tools; a desktop that names none
-runs it with no tool. A chat the device keeps with its tools off sends
+desktop has open to paired devices, as a turn on a chat that names no tool
+is, and without `draw=true` those are its only tools; a desktop with none
+open runs it with no tool. A chat the device keeps with its tools off sends
 `tools=none` in place of `tools=builtin`: the run is offered none of those
 servers' tools and starts none of them, so `draw=true` offers the image tool
 alone, and without it the run calls no tool. Any other word for `tools` is
@@ -988,7 +1000,7 @@ any text, ends the run `failed`, `turn_too_long`, after an `error` event
 that says the turn ran too long, and the call is not run, unless it was the
 words after a drawn picture, which keep the picture; a reply cut off
 in its text is taken as if it had stopped, after a `system_warning` that
-says it was cut off ([Context reading](clients.md#context-reading)). The named servers'
+says it was cut off ([Context reading](clients.md#context-reading)). The open servers'
 tools are offered to whatever model the request names: the model list says
 nothing yet of which models call tools, so a model that cannot is offered
 them anyway and may answer oddly. Every such run takes one of the
@@ -1100,7 +1112,7 @@ here is one the desktop can retire on its own.
 | `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
 | `403 ORIGIN_NOT_ALLOWED` from `:9887`, or `origin_not_allowed` from the proxy | A page on another site asked to change something. A page of your own gets this behind a reverse proxy that rewrites `Host`: pass `Host` through, and name it with `--allowed-host`. A browser extension gets it from the proxy on every change: its `chrome-extension://` or `moz-extension://` origin is not a local page, and no setting admits one. |
 | `this route needs the daemon's token` | The daemon was asked for something without its token, or with one from before its last start. Run the command from `gglib` on this machine, as the account that runs the daemon, or open the dashboard from the link `gglib web` prints again. |
-| `403 mcp_not_allowed_over_tunnel` | `/mcp` is never reachable through the tunnel, and no flag opens it. A device's chats reach the MCP servers the desktop's `enable --allow-mcp <server>` names, through their runs. |
+| `403 mcp_not_allowed_over_tunnel` | `/mcp` is never reachable through the tunnel, and no flag opens it. A device's chats reach the MCP servers the desktop's `gglib mcp allow-remote <server>` opens to them, through their runs. |
 | A local client on the desktop starts getting `401` | Enabling put the key on the local proxy (`:8080`; the daemon on `:9887` is unaffected). Add the key to that client; it stays on after `disable`. |
 | `gglib remote enable` says it is already enabled | The switch is already on, and nothing needs re-running to keep it that way. To pair another device, `gglib remote invite` — it offers a code against the tunnel that is up rather than refusing. To change the flags it was enabled with, `disable` first; the ticket is the same one afterwards. |
 | `remote access is already being enabled` | Another `enable` is arming the tunnel; a daemon that has just started is still putting its own back after the twenty seconds commands wait for it; or the daemon is putting the tunnel back after the proxy was started again, which commands do not wait for. `gglib remote status` shows when the ticket is up; run the command again then, or `gglib remote disable` to give up on it. |

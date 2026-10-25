@@ -16,8 +16,8 @@
 //! thinking off as a phone-kept chat does on the chat route,
 //! `"reasoning_budget_tokens": 0`, runs with a thinking budget of `0`; any
 //! other budget is sampling, and is not read. It is offered the tools of
-//! the MCP servers the tunnel opens, settled when the run starts
-//! (`device_tools`, ADR 0024), unless its tools are off (`no_tools`, from
+//! the MCP servers open to paired devices, settled when the run starts
+//! (`device_tools`, ADR 0025), unless its tools are off (`no_tools`, from
 //! `tools=none`), when no server is listed or started; and the image tool
 //! with `draw` either way, drawing with the `image_model` the query names
 //! when it names one. Without `draw` a run with its tools off calls no
@@ -164,7 +164,7 @@ pub(super) async fn read(
         far: None,
         messages: Vec::new(),
         config: None,
-        // The floor: the image tool with Draw. The servers the tunnel opens
+        // The floor: the image tool with Draw. The servers open to devices
         // are read when the run starts, not for a request that is refused.
         tool_filter: Some(Asked::of_phone(draw, no_tools).floor()),
         model: None,

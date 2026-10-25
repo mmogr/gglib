@@ -12,7 +12,7 @@
 //! answers the question the chat already ends in (ADR 0017).
 //! `?kind=chat&tools=builtin` is the other thing the starter runs: a chat
 //! the device keeps itself, through the agent loop, offered the tools of the
-//! MCP servers the tunnel opens and, with `draw`, the image tool;
+//! MCP servers open to paired devices and, with `draw`, the image tool;
 //! `?kind=chat&tools=none` runs it offered none of those servers' tools,
 //! for a chat with its tools off, and with `draw` the image tool alone.
 //! Only a named device may: a local client writes to its chats at
@@ -71,7 +71,7 @@ pub(super) async fn put(state: &AppState, scope: RunScope, id: &str, body: Value
 
 /// `PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`: a chat the
 /// device keeps itself, run through the agent loop with the tools of the
-/// MCP servers the tunnel opens, and the image tool with `draw`. With
+/// MCP servers open to paired devices, and the image tool with `draw`. With
 /// `tools=none` instead (`no_tools`), none of those servers' tools: the
 /// image tool alone with `draw`, and without it a run that calls no tool.
 /// The body is the device's unchanged `OpenAI` chat request. Only a named

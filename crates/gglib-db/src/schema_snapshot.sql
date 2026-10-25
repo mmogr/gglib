@@ -1,5 +1,5 @@
--- generation 2
--- user_version 3
+-- generation 3
+-- user_version 4
 
 CREATE INDEX idx_agentic_results_model ON benchmark_agentic_results(model_id, created_at DESC);
 
@@ -131,6 +131,7 @@ CREATE TABLE mcp_servers (
             name TEXT NOT NULL,
             type TEXT NOT NULL CHECK (type IN ('stdio', 'sse')),
             enabled INTEGER NOT NULL DEFAULT 1,
+            allow_remote INTEGER NOT NULL DEFAULT 0,
             lifecycle TEXT NOT NULL DEFAULT 'lazy' CHECK (lifecycle IN ('eager', 'lazy', 'manual')),
             command TEXT,
             resolved_path_cache TEXT,

@@ -41,6 +41,10 @@ impl McpServerRepository for EmptyMcpRepo {
     async fn update_last_connected(&self, id: i64) -> Result<(), McpRepositoryError> {
         Err(McpRepositoryError::NotFound(id.to_string()))
     }
+
+    async fn set_allow_remote(&self, id: i64, _allow: bool) -> Result<(), McpRepositoryError> {
+        Err(McpRepositoryError::NotFound(id.to_string()))
+    }
 }
 
 /// Mock runtime port for testing. It admits nothing, so a request a proxy

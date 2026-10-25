@@ -141,9 +141,7 @@ impl RemoteOps {
         // Begun before the install so the epoch can go into `Live`, and
         // under the same guard so the pair is still atomic: `reset_session_if`
         // is what undoes it on the one path where the install loses.
-        let epoch = self
-            .gateway
-            .begin_session(Arc::from(request.mcp_servers.as_slice()));
+        let epoch = self.gateway.begin_session();
         let live = Live {
             handle: Arc::clone(&handle),
             cancel: watchers.clone(),
@@ -196,7 +194,7 @@ impl RemoteOps {
 
         let ticket = handle.ticket();
         let fingerprint = ticket.fingerprint();
-        info!(ticket = %fingerprint, mcp = ?request.mcp_servers, "remote tunnel enabled");
+        info!(ticket = %fingerprint, "remote tunnel enabled");
         self.emitter.emit(AppEvent::remote_enabled(fingerprint));
 
         let ticket = ticket.to_string();
@@ -207,7 +205,9 @@ impl RemoteOps {
         Ok(Enabled {
             ticket,
             pairing,
-            mcp_servers: request.mcp_servers,
+            // After the slot is dropped, above: a read of the servers is IO,
+            // which the slot is never held across.
+            mcp_servers: self.mcp.device_server_names().await,
             // This path armed the session, so the request's flags are the
             // session's flags and every one of them took.
             already_up: false,

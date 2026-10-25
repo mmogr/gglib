@@ -1,6 +1,7 @@
 //! The proxy's drawing answer names the MCP servers a paired device's run is
-//! offered, `mcp_servers`, beside whether it can draw: what the live session
-//! opens, and `[]` when it opens none or there is no tunnel.
+//! offered, `mcp_servers`, beside whether it can draw: the servers open to
+//! paired devices while a session is live, and `[]` when none is open, no
+//! session is live, or there is no tunnel.
 
 use std::sync::Arc;
 
@@ -17,12 +18,12 @@ use serde_json::{Value, json};
 mod fixtures;
 use fixtures::remote::StubGateway;
 
-/// A repository holding one valid, enabled server named `shell`, which the
-/// tunnel never opens in these tests.
+/// A repository holding one valid, enabled stdio server named `shell`, open
+/// to paired devices or not.
 struct OneServer(McpServer);
 
 impl OneServer {
-    fn new() -> Self {
+    fn new(open: bool) -> Self {
         let new = NewMcpServer::new_stdio("shell", "sh", vec![], None);
         let server = serde_json::from_value(json!({
             "id": 1,
@@ -30,6 +31,7 @@ impl OneServer {
             "server_type": new.server_type,
             "config": new.config,
             "enabled": true,
+            "allow_remote": open,
             "lifecycle": new.lifecycle,
             "env": [],
             "created_at": "2026-10-23T00:00:00Z",
@@ -73,13 +75,18 @@ impl McpServerRepository for OneServer {
     async fn update_last_connected(&self, _id: i64) -> Result<(), McpRepositoryError> {
         Ok(())
     }
+
+    async fn set_allow_remote(&self, _id: i64, _allow: bool) -> Result<(), McpRepositoryError> {
+        Err(McpRepositoryError::Internal("read only".into()))
+    }
 }
 
 const TOKEN: &str = "secret123";
 
 /// The drawing answer of a proxy with no image driver, one MCP server
-/// configured, and `gateway` as its tunnel owner, if any.
-async fn drawing(gateway: Option<StubGateway>) -> Value {
+/// configured, open to paired devices when `open` says, and `gateway` as its
+/// tunnel owner, if any.
+async fn drawing(gateway: Option<StubGateway>, open: bool) -> Value {
     let remote = gateway.map(|gateway| Arc::new(gateway) as Arc<dyn RemoteGatewayPort>);
     let access = ProxyAccessConfig::new(
         CorsConfig::LocalOnly,
@@ -90,7 +97,7 @@ async fn drawing(gateway: Option<StubGateway>) -> Value {
     .with_remote(remote);
     let proxy = fixtures::spawn::spawn(ServeConfig {
         access,
-        mcp: Arc::new(McpService::new(Arc::new(OneServer::new()))),
+        mcp: Arc::new(McpService::new(Arc::new(OneServer::new(open)))),
         ..fixtures::spawn::defaults().await
     })
     .await;
@@ -107,23 +114,28 @@ async fn drawing(gateway: Option<StubGateway>) -> Value {
     answer
 }
 
-/// The servers the session opens are named, also when it cannot draw, and
-/// the drawing answer's own fields are still there beside them.
+/// A server open to paired devices is named while a session is live, also
+/// when it cannot draw, and the drawing answer's own fields are still there
+/// beside it.
 #[tokio::test]
-async fn the_drawing_answer_names_the_servers_the_tunnel_opens() {
-    let answer = drawing(Some(StubGateway::opening(&["tavily", "fetch"]))).await;
-    assert_eq!(answer["mcp_servers"], json!(["tavily", "fetch"]));
+async fn the_drawing_answer_names_the_open_servers_while_a_session_is_live() {
+    let answer = drawing(Some(StubGateway::serving()), true).await;
+    assert_eq!(answer["mcp_servers"], json!(["shell"]));
     assert_eq!(answer["available"], false);
     assert_eq!(answer["code"], "drawing_unavailable");
     assert_eq!(answer["models"], json!([]));
 }
 
-/// None open, or no tunnel owner at all: `[]`, never absent, and never the
-/// servers merely configured here.
+/// An open server with no live session, or no tunnel owner at all, and a
+/// server merely configured here under a live session: `[]`, never absent.
 #[tokio::test]
-async fn the_drawing_answer_names_none_while_none_are_open() {
-    for gateway in [Some(StubGateway::new()), None] {
-        let answer = drawing(gateway).await;
+async fn the_drawing_answer_names_none_without_a_session_or_an_open_server() {
+    for (gateway, open) in [
+        (Some(StubGateway::new()), true),
+        (None, true),
+        (Some(StubGateway::serving()), false),
+    ] {
+        let answer = drawing(gateway, open).await;
         assert_eq!(answer["mcp_servers"], json!([]), "{answer}");
     }
 }

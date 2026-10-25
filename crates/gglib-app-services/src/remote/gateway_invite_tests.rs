@@ -19,7 +19,7 @@ use crate::remote::roster::Note;
 fn a_redeemed_invite_pairs_the_session_and_records_the_device_and_its_endpoint() {
     let (events, gateway) = gateway();
     let mut inbox = notes(&gateway);
-    let (_, invite) = arm_with(&gateway, "dev-0a1b2c3d", &[]);
+    let (_, invite) = arm_with(&gateway, "dev-0a1b2c3d");
     assert!(!gateway.paired());
 
     invite.redeem("dev-0a1b2c3d", Some("Matt's iPhone"));
@@ -59,7 +59,7 @@ fn a_redeemed_invite_pairs_the_session_and_records_the_device_and_its_endpoint()
 fn an_invite_that_ended_unredeemed_pairs_nobody_and_announces_nothing() {
     let (events, gateway) = gateway();
     let mut inbox = notes(&gateway);
-    let (_, invite) = arm_with(&gateway, "dev-0a1b2c3d", &[]);
+    let (_, invite) = arm_with(&gateway, "dev-0a1b2c3d");
 
     invite.end(InviteOutcome::Expired);
     gateway.settle_invite("dev-0a1b2c3d");
@@ -75,7 +75,7 @@ fn an_invite_that_ended_unredeemed_pairs_nobody_and_announces_nothing() {
 fn a_burned_invite_pairs_nobody_and_announces_nothing() {
     let (events, gateway) = gateway();
     let mut inbox = notes(&gateway);
-    let (_, invite) = arm_with(&gateway, "dev-0a1b2c3d", &[]);
+    let (_, invite) = arm_with(&gateway, "dev-0a1b2c3d");
 
     invite.end(InviteOutcome::Burned);
     gateway.settle_invite("dev-0a1b2c3d");
@@ -92,7 +92,7 @@ fn a_burned_invite_pairs_nobody_and_announces_nothing() {
 fn a_redemption_the_watcher_has_not_recorded_yet_is_recorded_by_the_next_offer() {
     let (events, gateway) = gateway();
     let mut inbox = notes(&gateway);
-    let (epoch, first) = arm_with(&gateway, "dev-0a1b2c3d", &[]);
+    let (epoch, first) = arm_with(&gateway, "dev-0a1b2c3d");
     first.redeem("dev-0a1b2c3d", None);
 
     let offered = gateway.offer_pairing(
@@ -126,7 +126,7 @@ fn a_redemption_the_watcher_has_not_recorded_yet_is_recorded_by_the_next_offer()
 fn a_redemption_the_watcher_has_not_recorded_yet_is_recorded_by_the_reset() {
     let (events, gateway) = gateway();
     let mut inbox = notes(&gateway);
-    let (epoch, invite) = arm_with(&gateway, "dev-0a1b2c3d", &[]);
+    let (epoch, invite) = arm_with(&gateway, "dev-0a1b2c3d");
     invite.redeem("dev-0a1b2c3d", None);
 
     gateway.reset_session_if(epoch);
@@ -144,7 +144,7 @@ fn a_redemption_the_watcher_has_not_recorded_yet_is_recorded_by_the_reset() {
 #[test]
 fn a_second_offer_while_a_code_is_live_is_refused_and_leaves_it_live() {
     let (_, gateway) = gateway();
-    let (epoch, invite) = arm_with(&gateway, "dev-0a1b2c3d", &[]);
+    let (epoch, invite) = arm_with(&gateway, "dev-0a1b2c3d");
 
     let offered = gateway.offer_pairing(
         epoch,

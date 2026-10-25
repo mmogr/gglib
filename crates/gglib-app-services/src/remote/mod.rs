@@ -49,6 +49,7 @@ use std::time::Duration;
 
 use gglib_core::ports::AppEventEmitter;
 use gglib_core::services::AppCore;
+use gglib_mcp::McpService;
 use tokio::sync::{Mutex, watch};
 use tokio_util::sync::CancellationToken;
 
@@ -88,7 +89,7 @@ struct Live<H = modelpipe::ServeHandle> {
     /// token for both: neither outlives the tunnel they belong to, and a
     /// second field would only be one more thing to forget.
     cancel: CancellationToken,
-    /// Which session the gateway holds a pairing and its MCP servers for on
+    /// Which session the gateway holds a pairing and its serving for on
     /// this tunnel's behalf, from
     /// [`RemoteGateway::begin_session`](gateway::RemoteGateway::begin_session).
     /// Presented at teardown so a drain that took five seconds cannot clear
@@ -111,6 +112,9 @@ struct Live<H = modelpipe::ServeHandle> {
 pub struct RemoteOps {
     proxy: Arc<ProxyOps>,
     core: Arc<AppCore>,
+    /// The MCP servers, which say themselves whether paired devices may use
+    /// them: read for the names `status`, `enable` and `invite` report.
+    mcp: Arc<McpService>,
     gateway: Arc<RemoteGateway>,
     emitter: Arc<dyn AppEventEmitter>,
     live: Arc<Mutex<Slot<Live>>>,
@@ -175,6 +179,7 @@ impl RemoteOps {
     pub fn new(
         proxy: Arc<ProxyOps>,
         core: Arc<AppCore>,
+        mcp: Arc<McpService>,
         gateway: Arc<RemoteGateway>,
         emitter: Arc<dyn AppEventEmitter>,
         device_keys: Option<PathBuf>,
@@ -182,6 +187,7 @@ impl RemoteOps {
         Self {
             proxy,
             core,
+            mcp,
             gateway,
             emitter,
             live: Arc::new(Mutex::new(Slot::Empty)),

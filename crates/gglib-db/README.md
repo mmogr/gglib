@@ -69,6 +69,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`setup_model_files.rs`** — The `model_files` table, and `models.projector_path` with the one-time link of each model to the projector among its own files
 - **`setup_model_components.rs`** — The `model_components` table: the files an image model draws with beside its weights, one row per role, gone with their model, indexed by path
 - **`setup_settings.rs`** — Settings rows whose setting is gone: the `auto_tune` row reclaimed, and the one-time fold of the loop guard's `proxy_loop_detection` row into `loop_guard_mode`
+- **`setup_remote_grant.rs`** — The one-time copy of the remote tunnel's old list of MCP servers onto each server's own `allow_remote` flag
 - **`repositories/`** — `SQLite` implementations of all repository ports
 
 ## Features
@@ -198,10 +199,13 @@ switched off back on. It is folded instead, once per database, gated on
 - Once stamped, a `proxy_loop_detection` row is a row no field answers to. One
   written afterwards, by a build older than this, is not folded.
 
-The `PRAGMA user_version` ladder has two rungs, and both gate a pass over
+The `PRAGMA user_version` ladder has four rungs, and each gates a pass over
 rows that runs once per database: `1` the canonical-path backfill (a blocking
-syscall per row, paid once per library), `2` the loop guard's fold above. The
-column set is deliberately not on it. The `template_caps` column post-dates
+syscall per row, paid once per library), `2` the loop guard's fold above, `3`
+the stored copies of the `reasoning` recipe cleared, and `4` the remote
+tunnel's old `--allow-mcp` list copied onto `mcp_servers.allow_remote` (only
+from a machine whose tunnel was on, and only a name exactly one server has,
+when that server is stdio). The column set is deliberately not on it. The `template_caps` column post-dates
 the first stamp, so a database stamped `1` or later may or may not carry it,
 and a version-gated `ALTER` that propagated errors would abort startup with
 `duplicate column name` on real installs. A column is added by asking the

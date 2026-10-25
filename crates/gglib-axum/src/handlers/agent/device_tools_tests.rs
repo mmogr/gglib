@@ -1,6 +1,6 @@
-//! What a paired device's run is offered: the floor, then the opened
+//! What a paired device's run is offered: the floor, then the open
 //! servers' tools narrowed by a Mac-kept chat's own list, and nothing while
-//! the tunnel opens no server.
+//! no tunnel session is live.
 
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::chat::ConversationSettings;
@@ -126,15 +126,15 @@ pub(super) const STAND_IN_SERVER: &str = r#"while IFS= read -r line; do
   esac
 done"#;
 
-/// A server configured and running here is not offered to a device while
-/// the live session opens no server, to a phone's run or a chat that names
-/// its tool.
+/// A server open to paired devices and running here is not offered to a
+/// device while no tunnel session is live, to a phone's run or a chat that
+/// names its tool, and the chat a run settles carries that floor.
 #[cfg(unix)]
 #[tokio::test]
-async fn resolve_offers_the_floor_while_the_gateway_opens_nothing() {
+async fn resolve_offers_the_floor_while_no_session_is_live() {
     use gglib_core::ports::RemoteGatewayPort as _;
 
-    use super::resolve;
+    use super::{resolve, settle};
 
     let (_dir, state) = state().await;
     let server = gglib_core::NewMcpServer::new_stdio(
@@ -144,9 +144,10 @@ async fn resolve_offers_the_floor_while_the_gateway_opens_nothing() {
         None,
     );
     let server = state.mcp.add_server(server).await.unwrap();
+    state.mcp.set_allow_remote(server.id, true).await.unwrap();
     let tools = state.mcp.start_server(server.id).await.unwrap();
     assert_eq!(tools.len(), 1, "the stand-in runs");
-    assert!(state.remote.gateway().mcp_servers().is_empty());
+    assert!(!state.remote.gateway().serving());
 
     let echo = format!("{}:echo", server.id);
     assert_eq!(
@@ -155,6 +156,9 @@ async fn resolve_offers_the_floor_while_the_gateway_opens_nothing() {
     );
     let chat = named(&[echo.as_str(), "echo"]);
     assert_eq!(resolve(&state, &Asked::of_chat(&chat, true)).await, [DRAW]);
+    let request = serde_json::from_value(json!({ "port": 0, "messages": [] })).unwrap();
+    let settled = settle(&state, request, &Asked::of_chat(&chat, true)).await;
+    assert_eq!(settled.tool_filter, Some(vec![DRAW.to_owned()]));
     state.mcp.shutdown().await;
 }
 

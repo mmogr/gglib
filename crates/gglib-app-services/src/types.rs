@@ -387,6 +387,10 @@ pub struct McpServerDto {
     pub server_type: String,
     pub config: McpServerConfigDto,
     pub enabled: bool,
+    /// Whether a paired device's runs are offered this server's tools. Read
+    /// only: an edit never sets it, as it has a write of its own.
+    #[serde(default)]
+    pub allow_remote: bool,
     pub lifecycle: McpLifecycle,
     pub env: Vec<McpEnvEntryDto>,
     pub created_at: String,
@@ -492,6 +496,15 @@ pub struct UpdateMcpServerRequest {
     pub env: Option<Vec<McpEnvEntryDto>>,
     pub enabled: Option<bool>,
     pub lifecycle: Option<McpLifecycle>,
+}
+
+/// Request to open an MCP server to paired devices, or close it
+/// (`PUT /api/mcp/servers/{id}/remote`).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct SetMcpRemoteRequest {
+    /// Whether a paired device's runs are offered the server's tools.
+    pub allow: bool,
 }
 
 /// MCP tool information for GUI display.

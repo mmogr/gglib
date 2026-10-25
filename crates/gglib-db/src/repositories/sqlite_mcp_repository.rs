@@ -18,16 +18,20 @@ use gglib_core::ports::{McpRepositoryError, McpServerRepository};
 use super::row_mappers::parse_datetime;
 
 /// Every `mcp_servers` column, as [`McpServerRow`] reads them.
-const MCP_SERVER_COLUMNS: &str = "id, name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, created_at, last_connected_at, is_valid, last_error";
+const MCP_SERVER_COLUMNS: &str = "id, name, type, enabled, allow_remote, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, created_at, last_connected_at, is_valid, last_error";
 
-/// Adds a server's row. It sets every column but the id and the two
-/// timestamps, in the order [`SqliteMcpRepository::write`] binds them.
+/// Adds a server's row. It sets every column but the id, the two
+/// timestamps and `allow_remote`, in the order [`SqliteMcpRepository::write`]
+/// binds them. A new row is closed to paired devices by the column's
+/// default.
 const INSERT_SERVER: &str = "INSERT INTO mcp_servers \
      (name, type, enabled, lifecycle, command, resolved_path_cache, args, cwd, path_extra, url, is_valid, last_error) \
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
 /// Replaces a server's row: the columns [`INSERT_SERVER`] sets, in its
-/// order, then the id of the row.
+/// order, then the id of the row. Never `allow_remote`, which only
+/// [`McpServerRepository::set_allow_remote`] writes: a whole-row write made
+/// from a copy read before a deny would otherwise open the server again.
 const UPDATE_SERVER: &str = "UPDATE mcp_servers \
      SET name = ?, type = ?, enabled = ?, lifecycle = ?, command = ?, resolved_path_cache = ?, args = ?, cwd = ?, path_extra = ?, url = ?, is_valid = ?, last_error = ? \
      WHERE id = ?";
@@ -55,6 +59,7 @@ struct McpServerRow {
     #[sqlx(rename = "type")]
     server_type: String,
     enabled: bool,
+    allow_remote: bool,
     lifecycle: String,
     command: Option<String>,
     resolved_path_cache: Option<String>,
@@ -110,6 +115,7 @@ fn row_to_server(row: McpServerRow, env: Vec<McpEnvEntry>) -> McpServer {
         server_type: row.server_type.parse::<McpServerType>().unwrap_or_default(),
         config,
         enabled: row.enabled,
+        allow_remote: row.allow_remote,
         lifecycle: row.lifecycle.parse::<McpLifecycle>().unwrap_or_default(),
         env,
         created_at: parse_datetime(Some(row.created_at)).unwrap_or_else(Utc::now),
@@ -253,6 +259,21 @@ impl McpServerRepository for SqliteMcpRepository {
                 .execute(&self.pool)
                 .await
                 .map_err(internal)?;
+
+        if result.rows_affected() == 0 {
+            return Err(McpRepositoryError::NotFound(id.to_string()));
+        }
+
+        Ok(())
+    }
+
+    async fn set_allow_remote(&self, id: i64, allow: bool) -> Result<(), McpRepositoryError> {
+        let result = sqlx::query("UPDATE mcp_servers SET allow_remote = ? WHERE id = ?")
+            .bind(allow)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(internal)?;
 
         if result.rows_affected() == 0 {
             return Err(McpRepositoryError::NotFound(id.to_string()));

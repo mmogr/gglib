@@ -33,11 +33,9 @@ expires_in_s?: number,
  */
 device?: string, 
 /**
- * The MCP servers the session this call ended up talking about opens to
- * its paired devices — which is not always what the caller asked for.
- * An `--invite` against a tunnel that is already up leaves the flags
- * alone, so a surface that echoed the request back would state a grant
- * the daemon did not make.
+ * The MCP servers, by name, a paired device's runs are offered when
+ * this answered: each flagged open to devices on its own row. Read, not
+ * asked for, since `enable` opens none.
  */
 mcp_servers: Array<string>, 
 /**
@@ -46,7 +44,7 @@ mcp_servers: Array<string>,
  * `invite` set that found one running, and for an `enable` that waited
  * while the daemon's own resume brought one back, which carries no code
  * unless `invite` was set. The request's other flags were ignored on
- * that path, and a surface cannot infer it: only "named servers, told
- * others" shows in the rest of the answer.
+ * that path, and a surface cannot infer it from the rest of the
+ * answer.
  */
 already_up: boolean, };

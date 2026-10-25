@@ -107,7 +107,7 @@ This enables:
 - **`client.rs`** — Low-level JSON-RPC 2.0 client for the MCP protocol
 - **`manager.rs`** — Server process lifecycle management (start/stop/status)
 - **`service.rs`** — High-level facade for MCP operations (CRUD + lifecycle); server names are unique, and `builtin` is refused on add and on rename, because the proxy's `/mcp` gateway lists gglib's own tools as `builtin__<tool>`
-- **`opened.rs`** — The MCP servers this machine opens to its paired devices, by name: `--allow-mcp` is checked here when the tunnel is enabled, and a blank name, `builtin`, an unknown name or one two servers share is refused
+- **`opened.rs`** — The MCP servers this machine opens to its paired devices: the flag on each server (`set_allow_remote`, its own write, which refuses opening SSE and `builtin` and never stops a server), the servers open (`open_to_devices`) and the tools a device's run is offered from them (`opened_tools`)
 - **`stderr_tail.rs`** — The last 4 KiB a server printed on stderr, read to its end by a task of its own (on Windows, a thread of its own)
 - **`path.rs`** — Path validation and PATH environment variable utilities
 - **`combined.rs`** — Unified tool executor dispatching to MCP and builtin tools

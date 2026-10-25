@@ -153,6 +153,9 @@ mod listing {
         async fn update_last_connected(&self, id: i64) -> Result<(), McpRepositoryError> {
             self.inner.update_last_connected(id).await
         }
+        async fn set_allow_remote(&self, id: i64, allow: bool) -> Result<(), McpRepositoryError> {
+            self.inner.set_allow_remote(id, allow).await
+        }
     }
 
     fn stand_in(name: &str) -> NewMcpServer {

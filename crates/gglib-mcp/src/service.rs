@@ -34,7 +34,7 @@ pub struct McpServerInfo {
 /// This is the main interface used by Tauri commands and REST API.
 /// It uses dependency injection for testability and clean architecture.
 pub struct McpService {
-    repository: Arc<dyn McpServerRepository>,
+    pub(crate) repository: Arc<dyn McpServerRepository>,
     manager: Arc<McpManager>,
     /// Held from the check that a name is free to the write that takes it,
     /// so two requests for one name cannot both pass the check.
@@ -59,7 +59,7 @@ impl McpService {
     /// leave such a server alone instead of failing on it. A stored one is
     /// still read and removed: a database written while SSE servers were
     /// accepted can hold some.
-    fn refuse_unsupported(server_type: McpServerType) -> Result<(), McpServiceError> {
+    pub(crate) fn refuse_unsupported(server_type: McpServerType) -> Result<(), McpServiceError> {
         match server_type {
             McpServerType::Stdio => Ok(()),
             McpServerType::Sse => Err(McpServiceError::SseNotSupported),

@@ -25,7 +25,7 @@ fn a_reset_keeps_the_pairing_the_device_roster_and_the_proxy_key() {
         });
         settings.remote_enabled = Some(true);
         settings.remote_serve = Some(RemoteServe {
-            mcp_servers: vec!["tavily".to_owned()],
+            relay: Some("https://relay.example".to_owned()),
             ..RemoteServe::default()
         });
         settings.remote_devices = Some(vec![Device {

@@ -73,8 +73,8 @@ pub(crate) struct PutQuery {
     #[serde(default)]
     kind: Option<RunKind>,
     /// `builtin` runs a chat run through the agent loop, for a chat the
-    /// device keeps itself, offered the tools of the MCP servers the tunnel
-    /// opens (`gglib remote enable --allow-mcp <server>`); `none` runs it
+    /// device keeps itself, offered the tools of the MCP servers open to
+    /// paired devices (`gglib mcp allow-remote <server>`); `none` runs it
     /// the same way offered none of them, for such a chat with its tools
     /// off; absent, a plain chat run, recorded as it always was.
     #[serde(default)]

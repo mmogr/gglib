@@ -7,7 +7,6 @@ use super::*;
 #[test]
 fn an_empty_body_is_the_safe_default() {
     let req = RemoteEnableBody::default().into_request();
-    assert!(req.mcp_servers.is_empty(), "no MCP server is opened");
     assert!(req.relay.is_none());
     assert!(req.discovery, "discovery is on unless switched off");
 }
@@ -82,14 +81,12 @@ fn keep_identity_is_off_the_wire_and_an_older_body_that_sends_it_still_reads() {
     );
 
     for flag in ["true", "false"] {
-        let body: RemoteEnableBody = serde_json::from_str(&format!(
-            r#"{{"mcp_servers":["tavily"],"discovery":false,"keep_identity":{flag}}}"#
-        ))
-        .expect("a body from an older client still deserialises");
+        let body: RemoteEnableBody =
+            serde_json::from_str(&format!(r#"{{"discovery":false,"keep_identity":{flag}}}"#))
+                .expect("a body from an older client still deserialises");
         assert_eq!(
             body,
             RemoteEnableBody {
-                mcp_servers: vec!["tavily".to_owned()],
                 discovery: Some(false),
                 ..RemoteEnableBody::default()
             },
@@ -98,40 +95,36 @@ fn keep_identity_is_off_the_wire_and_an_older_body_that_sends_it_still_reads() {
     }
 }
 
-/// A body from a client that still sends the old switch reads, and the
-/// switch opens nothing: it was every server, and no list says which.
+/// A body from a client that still sends the old switch or the old list
+/// reads, and opens nothing: the body has no field for either, since a
+/// server is opened to paired devices by a flag on it.
 #[test]
-fn an_older_clients_allow_mcp_is_ignored_and_opens_nothing() {
-    for flag in ["true", "false"] {
+fn an_older_clients_allow_mcp_and_mcp_servers_are_ignored() {
+    for old in [
+        r#"{"allow_mcp":true,"discovery":true}"#,
+        r#"{"allow_mcp":false,"discovery":true}"#,
+        r#"{"mcp_servers":["tavily"],"discovery":true}"#,
+    ] {
         let body: RemoteEnableBody =
-            serde_json::from_str(&format!(r#"{{"allow_mcp":{flag},"discovery":true}}"#))
-                .expect("a body from an older client still deserialises");
-        let req = body.into_request();
-        assert!(req.discovery);
-        assert!(
-            req.mcp_servers.is_empty(),
-            "allow_mcp={flag} opened {:?}",
-            req.mcp_servers
+            serde_json::from_str(old).expect("a body from an older client still deserialises");
+        assert_eq!(
+            body,
+            RemoteEnableBody {
+                discovery: Some(true),
+                ..RemoteEnableBody::default()
+            },
+            "{old}"
         );
+        assert!(body.into_request().discovery);
     }
-}
-
-/// Each name is trimmed and named once, in the order first named; one that
-/// trims to nothing is kept, for the daemon to refuse rather than to drop.
-#[test]
-fn the_names_are_trimmed_and_deduplicated_in_order() {
-    let body: RemoteEnableBody =
-        serde_json::from_str(r#"{"mcp_servers":[" tavily ","fs","tavily","","  ","fs "]}"#)
-            .unwrap();
-    assert_eq!(body.into_request().mcp_servers, ["tavily", "fs", ""]);
+    let sent = serde_json::to_value(RemoteEnableBody::default()).expect("serialise");
+    assert!(sent.get("mcp_servers").is_none(), "{sent}");
 }
 
 #[test]
 fn discovery_off_is_carried_through() {
-    let body: RemoteEnableBody =
-        serde_json::from_str(r#"{"mcp_servers":["tavily"],"discovery":false}"#).unwrap();
+    let body: RemoteEnableBody = serde_json::from_str(r#"{"discovery":false}"#).unwrap();
     let req = body.into_request();
-    assert_eq!(req.mcp_servers, ["tavily"]);
     assert!(!req.discovery);
 }
 

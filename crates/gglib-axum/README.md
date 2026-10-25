@@ -96,6 +96,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `PUT` | `/api/config/settings` | Update application settings |
 | `GET` | `/api/mcp/servers` | List MCP servers |
 | `POST` | `/api/mcp/servers/:id/start` | Start MCP server |
+| `PUT` | `/api/mcp/servers/:id/remote` | Open an MCP server to paired devices, or close it (`{"allow": bool}`) |
 | `POST` | `/api/models/:id/verify` | Verify model integrity (streams progress via SSE) |
 | `GET` | `/api/models/:id/updates` | Check for `HuggingFace` updates |
 | `POST` | `/api/models/:id/repair` | Delete a model's unhealthy files and queue the download that fetches them again; answers that download's id and the files |

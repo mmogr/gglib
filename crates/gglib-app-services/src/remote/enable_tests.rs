@@ -16,12 +16,13 @@
 use std::sync::Arc;
 
 use gglib_core::SettingsUpdate;
+use gglib_core::ports::RemoteGatewayPort as _;
 
 use crate::test_support_remote::test_remote_ops;
 
 use super::*;
 use crate::error::GuiError;
-use crate::test_support::{RecordingEmitter, test_core_and_proxy};
+use crate::test_support::RecordingEmitter;
 
 /// A port nothing is listening on, so `ensure_running` binds rather than
 /// colliding with whatever holds the default 8080 on this machine — a
@@ -42,7 +43,7 @@ pub(super) async fn ops() -> (
     Arc<RecordingEmitter>,
     RemoteOps,
 ) {
-    let (core, proxy) = test_core_and_proxy().await;
+    let (core, proxy, mcp) = crate::test_support::test_core_proxy_and_mcp().await;
     core.settings()
         .update(SettingsUpdate {
             proxy_port: Some(Some(free_port().await)),
@@ -56,6 +57,7 @@ pub(super) async fn ops() -> (
     let ops = RemoteOps::new(
         Arc::clone(&proxy),
         Arc::clone(&core),
+        mcp,
         gateway,
         Arc::clone(&events) as Arc<_>,
         Some(crate::test_support_remote::scratch_device_keys()),
@@ -82,7 +84,6 @@ async fn an_enable_that_cannot_bring_the_tunnel_up_leaves_no_key_on_the_local_pr
 
     let error = ops
         .enable(EnableRequest {
-            mcp_servers: Vec::new(),
             // Refused by modelpipe's first and cheapest check.
             relay: Some("not a relay url".to_owned()),
             discovery: false,
@@ -110,13 +111,27 @@ async fn an_enable_that_cannot_bring_the_tunnel_up_leaves_no_key_on_the_local_pr
 
 /// The rest of what a failed enable must not leave: no session on the
 /// gateway, nothing in the `live` slot, and no `remote_enabled` on the
-/// event stream for a tunnel that never came up.
+/// event stream for a tunnel that never came up. A server open to devices is
+/// not reported either: no device is offered it with no session.
 #[tokio::test]
 async fn a_failed_enable_arms_no_pairing_and_announces_nothing() {
     let (_core, proxy, events, ops) = ops().await;
+    let tavily = ops
+        .mcp
+        .add_server(gglib_mcp::NewMcpServer::new_stdio(
+            "tavily",
+            "npx",
+            vec![],
+            None,
+        ))
+        .await
+        .expect("a server");
+    ops.mcp
+        .set_allow_remote(tavily.id, true)
+        .await
+        .expect("opened to devices");
 
     ops.enable(EnableRequest {
-        mcp_servers: vec!["tavily".to_owned()],
         relay: Some("not a relay url".to_owned()),
         discovery: false,
         invite: false,
@@ -127,9 +142,10 @@ async fn a_failed_enable_arms_no_pairing_and_announces_nothing() {
     let status = ops.status().await;
     assert!(!status.enabled, "nothing is live");
     assert!(!status.pairing_active, "and no code is redeemable");
+    assert!(!ops.gateway.serving(), "nor is anything served");
     assert!(
         status.mcp_servers.is_empty(),
-        "least of all the MCP server this enable asked to open"
+        "least of all the MCP server open to devices"
     );
     assert!(
         events.events().is_empty(),
@@ -150,7 +166,6 @@ async fn a_failed_enable_leaves_the_next_one_free_to_run() {
     for _ in 0..2 {
         let error = ops
             .enable(EnableRequest {
-                mcp_servers: Vec::new(),
                 relay: Some("not a relay url".to_owned()),
                 discovery: false,
                 invite: false,
@@ -198,9 +213,8 @@ async fn a_machine_that_was_never_enabled_does_not_resume() {
 ///
 /// `enable` writes both together, so this is a hand-edited or half-migrated
 /// database rather than anything the code produces. Arming anyway would pick
-/// defaults, and the default for `--allow-mcp` opens nothing while the
-/// machine's last real answer might have named a server: guessing the security posture of a
-/// tunnel is worse than not arming it.
+/// defaults, and the machine's last real answer might have named a relay of
+/// its own: guessing how a tunnel is reached is worse than not arming it.
 #[tokio::test]
 async fn the_switch_without_the_flags_does_not_arm() {
     let (core, ops, _events) = test_remote_ops().await;

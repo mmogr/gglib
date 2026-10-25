@@ -52,7 +52,7 @@ async fn the_history_is_the_prompt_the_rows_and_the_new_message() {
 }
 
 /// A device's turn is planned with no MCP tool whatever its chat names, by
-/// a qualified name or a bare one: the servers the tunnel opens are read,
+/// a qualified name or a bare one: the servers open to devices are read,
 /// and started, only once the run exists.
 #[tokio::test]
 async fn a_device_turn_is_planned_with_no_mcp_tool_whatever_its_chat_names() {

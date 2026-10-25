@@ -168,7 +168,6 @@ impl RemoteOps {
             );
         };
         let request = EnableRequest {
-            mcp_servers: serve.mcp_servers,
             relay: serve.relay,
             discovery: serve.discovery,
             // `Caller::Rearm` offers no code whatever this says.

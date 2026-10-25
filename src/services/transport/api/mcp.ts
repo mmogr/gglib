@@ -8,11 +8,13 @@ import type { McpServerId } from '../types/ids';
 import type {
   NewMcpServer,
   UpdateMcpServer,
+  McpServer,
   McpServerInfo,
   ResolutionStatus,
   McpTestResult,
 } from '../types/mcp';
 import type { CreateMcpServerRequest } from '../../../types/generated/CreateMcpServerRequest';
+import type { SetMcpRemoteRequest } from '../../../types/generated/SetMcpRemoteRequest';
 import type { UpdateMcpServerRequest } from '../../../types/generated/UpdateMcpServerRequest';
 
 /**
@@ -65,6 +67,17 @@ export async function updateMcpServer(
   if (updates.lifecycle !== undefined) request.lifecycle = updates.lifecycle;
   
   return put<McpServerInfo>(`/api/mcp/servers/${id}`, request);
+}
+
+/**
+ * Open a server to paired devices, or close it: whether a device's runs are
+ * offered its tools, from the next run on. Its own route, so an edit never
+ * changes it and a running server keeps running. Answers the server as it
+ * now stands.
+ */
+export async function setMcpServerRemote(id: McpServerId, allow: boolean): Promise<McpServer> {
+  const request: SetMcpRemoteRequest = { allow };
+  return put<McpServer>(`/api/mcp/servers/${id}/remote`, request);
 }
 
 /**

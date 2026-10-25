@@ -2,23 +2,24 @@
 //!
 //! Both of a device's doors come here: a turn on one of this machine's
 //! chats (`hub_turn`) and a chat the phone keeps itself (`chat_turn`). A
-//! device reaches no MCP tool but those of the servers `gglib remote enable
-//! --allow-mcp <server>` names, each by its qualified name `{id}:{tool}`,
-//! narrowed by a chat's own tool list when this machine keeps the chat, and
-//! never gglib's own file tools, which a device's run has no folder for. With
-//! Draw, the image tool beside them. The servers are named by the live
-//! session's gateway, read when the run starts, and a lazy one is started
-//! then, in the run's own work and never in the `PUT` that made it. The
-//! decision is ADR 0024.
+//! device reaches no MCP tool but those of the servers open to paired
+//! devices (`gglib mcp allow-remote <server>`, a flag on each server), each
+//! by its qualified name `{id}:{tool}`, narrowed by a chat's own tool list
+//! when this machine keeps the chat, and never gglib's own file tools, which
+//! a device's run has no folder for. With Draw, the image tool beside them.
+//! The servers are read when the run starts, and only while a tunnel session
+//! is live, and a lazy one is started then, in the run's own work and never
+//! in the `PUT` that made it. The decisions are ADR 0024 and ADR 0025.
 
 use gglib_core::domain::chat::ConversationSettings;
 use gglib_core::ports::RemoteGatewayPort as _;
 
+use super::AgentChatRequest;
 use super::compose::DRAW_TOOL;
 use crate::state::AppState;
 
 /// What a device's run asks of this machine's tools, before the servers
-/// the tunnel opens are read.
+/// open to devices are read.
 #[derive(Debug, Clone, Default)]
 pub(super) struct Asked {
     /// The chat's own tool list: empty for all, else the opened tools it
@@ -50,7 +51,7 @@ impl Asked {
         }
     }
 
-    /// What the run is offered whatever the tunnel opens: the image tool
+    /// What the run is offered whatever servers are open: the image tool
     /// with Draw, by its qualified name and never its bare one, else
     /// nothing. Draw overrides the chat's `no_tools`: the button is the
     /// person's choice for that message.
@@ -90,14 +91,25 @@ pub(super) fn offered(opened: &[String], asked: &Asked) -> Vec<String> {
 }
 
 /// The tools a run that `asked` is offered on this machine now: the
-/// floor, unless the live session opens servers and the chat's tools are
-/// on, when the named servers are started as needed and their tools read.
+/// floor, unless a tunnel session is live and the chat's tools are on, when
+/// the servers open to devices are started as needed and their tools read.
 pub(super) async fn resolve(state: &AppState, asked: &Asked) -> Vec<String> {
-    let names = state.remote.gateway().mcp_servers();
-    if names.is_empty() || asked.no_tools {
+    if !state.remote.gateway().serving() || asked.no_tools {
         return asked.floor();
     }
-    offered(&state.mcp.opened_tools(&names).await, asked)
+    offered(&state.mcp.opened_tools().await, asked)
+}
+
+/// `chat` with its tool filter set to what a run that `asked` is offered on
+/// this machine now ([`resolve`]): a device's run settles its tools this way
+/// once its model is ready.
+pub(super) async fn settle(
+    state: &AppState,
+    mut chat: AgentChatRequest,
+    asked: &Asked,
+) -> AgentChatRequest {
+    chat.tool_filter = Some(resolve(state, asked).await);
+    chat
 }
 
 #[cfg(test)]
