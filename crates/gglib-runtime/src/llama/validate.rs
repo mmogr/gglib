@@ -39,7 +39,7 @@ fn validate_binary(path: &Path, binary_name: &str) -> Result<()> {
 
     if !output.status.success() {
         bail!(
-            "{} binary appears corrupted: {}\n\nRun 'gglib config llama rebuild' to fix.",
+            "{} binary appears corrupted: {}\n\nRun 'gglib config llama install --force' to reinstall it.",
             binary_name,
             path.display()
         );

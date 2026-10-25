@@ -12,7 +12,7 @@ pub(crate) mod fake_github;
 
 #[cfg(test)]
 pub(crate) use checkout::clone_args;
-pub(crate) use checkout::{SourceRepo, leftovers, prepare_checkout, settle};
+pub(crate) use checkout::{SourceRepo, leftovers, prepare_checkout, retire_checkout, settle};
 #[cfg(test)]
 pub(crate) use extract::extract_binaries;
 #[cfg(test)]

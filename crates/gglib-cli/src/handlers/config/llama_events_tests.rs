@@ -89,11 +89,11 @@ fn a_build() -> Vec<BuildEvent> {
     events
 }
 
-/// `config llama install` and `rebuild` end a build the same way. A line
-/// logged between phases is left on the terminal; one logged during a phase
-/// is drawn above its spinner, which is not in `out`.
+/// `config llama install` ends a build this way, whether it installs or
+/// updates. A line logged between phases is left on the terminal; one logged
+/// during a phase is drawn above its spinner, which is not in `out`.
 #[tokio::test]
-async fn an_install_and_a_rebuild_leave_the_lines_they_always_have() {
+async fn an_install_leaves_the_lines_it_always_has() {
     assert_eq!(
         build_lines(a_build(), CLONING, built_and_installed).await,
         [
@@ -114,32 +114,11 @@ fn a_fetch(logged: &str) -> Vec<BuildEvent> {
     vec![started, log(logged), completed]
 }
 
-/// An update is drawn as an install is but for its pull, and ends in its own
-/// words. git reports a pull on the terminal itself, so no spinner is drawn
-/// across it and the line that announces it is left on the terminal.
-#[tokio::test]
-async fn an_update_leaves_its_pull_to_git_and_ends_in_its_own_words() {
-    let mut events = a_fetch("Pulling latest llama.cpp changes...");
-    events.extend(a_build());
-
-    assert_eq!(
-        build_lines(events, GIT_REPORTS_THE_PULL, updated).await,
-        [
-            "Pulling latest llama.cpp changes...",
-            "Using the existing llama.cpp checkout at b11429.",
-            "",
-            "✓ llama.cpp updated successfully!",
-            "  New version: abc1234",
-            "  Acceleration: Metal",
-        ]
-    );
-}
-
 /// A first install clones under a spinner, so what git logs of the clone is
-/// drawn above it and is not in `out`. The spinner says it is a clone, as it
-/// always has; a pull has none to say anything untrue of it.
+/// drawn above it and is not in `out`. The spinner says it is a clone, and a
+/// fetch given no message has no spinner to say anything untrue of it.
 #[tokio::test]
-async fn a_clone_is_drawn_under_a_spinner_that_says_so_and_a_pull_under_none() {
+async fn a_clone_is_drawn_under_a_spinner_that_says_so() {
     let cloned = a_fetch("Cloning into '/data/.llama/llama.cpp'...");
     assert!(
         build_lines(cloned, CLONING, built_and_installed)
@@ -153,7 +132,7 @@ async fn a_clone_is_drawn_under_a_spinner_that_says_so_and_a_pull_under_none() {
         over_the_fetch(CLONING).as_deref(),
         Some("Cloning llama.cpp repository...")
     );
-    assert_eq!(over_the_fetch(GIT_REPORTS_THE_PULL), None);
+    assert_eq!(over_the_fetch(None), None);
 }
 
 /// The build `gglib serve` and `gglib up` run on the way to their own work

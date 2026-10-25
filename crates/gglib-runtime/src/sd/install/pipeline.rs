@@ -13,7 +13,7 @@ use super::record::{SdBuildRecord, SdInstallRecord};
 use super::release::{SD_RELEASE, check_sd_prebuilt_availability};
 use crate::binary_install::{
     PrebuiltTarget, SourceRepo, completed, install_prebuilt, prepare_checkout, resolve_selector,
-    settle, started,
+    retire_checkout, settle, started,
 };
 use crate::llama::build::{build_parallelism, run_compile, run_configure};
 use crate::llama::install::install_binary;
@@ -69,7 +69,12 @@ pub async fn install_sd_prebuilt(tx: mpsc::Sender<LlamaProgressEvent>) -> Result
         |record| SdInstallRecord::Prebuilt(record).save(&sd_config_path()?),
         &tx,
     )
-    .await
+    .await?;
+    // A source build this download replaced leaves its checkout behind.
+    if let Err(e) = retire_checkout(&sd_cpp_dir()?) {
+        debug!("the old stable-diffusion.cpp checkout was not removed: {e:#}");
+    }
+    Ok(())
 }
 
 /// The `CMake` flag that turns `acceleration` on in stable-diffusion.cpp, which

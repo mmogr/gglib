@@ -55,6 +55,7 @@ function sdStatus(installed: boolean) {
         installedRelease: null,
         targetRelease: 'master-948-228c707',
         built: null,
+        rebuilds: false,
       },
     },
     prebuilt: 'macOS universal (Metal)',

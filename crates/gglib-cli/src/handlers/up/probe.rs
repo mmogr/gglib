@@ -10,8 +10,10 @@ use gglib_runtime::DefaultSystemProbe;
 
 use super::{require_tty, row, sgr, step};
 use crate::bootstrap::CliContext;
-use crate::handlers::config::llama_ensure::ensure_installed;
+use crate::handlers::config::engine::ensure_installed;
 use crate::presentation::style::{RESET, SUCCESS};
+use gglib_core::domain::RuntimeKind;
+use gglib_runtime::engine::PinStanding;
 
 /// Run steps 1 and 2, returning the memory figures the model choice needs.
 ///
@@ -41,14 +43,23 @@ pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemo
     );
 
     step(2, "llama.cpp");
-    if status.llama_installed {
-        row("binaries", "already installed", None);
-    } else {
-        if !yes {
-            require_tty("installing llama.cpp")?;
+    match status.llama_standing {
+        PinStanding::Missing => {
+            if !yes {
+                require_tty("installing llama.cpp")?;
+            }
+            ensure_installed(ctx, RuntimeKind::Llama, yes).await?;
+            println!("  {}\u{2713}{} llama.cpp ready", sgr(SUCCESS), sgr(RESET));
         }
-        ensure_installed(yes).await?;
-        println!("  {}\u{2713}{} llama.cpp ready", sgr(SUCCESS), sgr(RESET));
+        // An update is offered, and nobody to answer declines it: what is
+        // installed already runs.
+        PinStanding::Older => {
+            ensure_installed(ctx, RuntimeKind::Llama, yes).await?;
+            row("binaries", "installed", None);
+        }
+        PinStanding::AtPin | PinStanding::Newer | PinStanding::Unknown => {
+            row("binaries", "already installed", None);
+        }
     }
 
     Ok(memory)

@@ -1,11 +1,11 @@
 #!/bin/bash
-# install-llama.sh - Install llama.cpp with the acceleration gglib detects
+# install-llama.sh - Install the pinned llama.cpp
 #
 # Runs `gglib config llama install` and chooses nothing itself. The command
-# picks Metal, CUDA or Vulkan, and refuses a machine that has none of them or
-# has a Vulkan GPU without what a Vulkan build needs, so a missing package
-# cannot turn into a CPU-only build. This script finds the binary to run and
-# answers the command's one question when nobody is there to.
+# installs the pinned release: the download where this machine has one, and
+# a source build, for the acceleration it detects, where it has none. This
+# script finds the binary to run and answers the command's one question, a
+# source build's "Continue?", when nobody is there to.
 #
 # It exits 1 without installing when it finds no gglib binary, and otherwise
 # with the command's own status.

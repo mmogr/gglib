@@ -13,15 +13,17 @@ use std::io::{BufRead, BufReader, IsTerminal, Write};
 use anyhow::Result;
 use gglib_core::paths::{SD_INSTALL_COMMAND, sd_server_path};
 
-use super::sd::install;
+use super::engine;
+use crate::bootstrap::CliContext;
 use crate::presentation::style::{BOLD, INFO, RESET, SUCCESS, WARNING};
 use crate::utils::input::confirm_from;
+use gglib_core::domain::RuntimeKind;
 
 /// Where the web page and the desktop app install it.
 const IN_SETTINGS: &str = "Settings \u{2192} System \u{2192} Image runtime";
 
 /// Offer to install the image runtime to whoever is at this terminal.
-pub(super) async fn prompt() -> Result<()> {
+pub(super) async fn prompt(ctx: &CliContext) -> Result<()> {
     let installed = sd_server_path()?.exists();
     let stdin = std::io::stdin();
     let terminal = stdin.is_terminal();
@@ -32,7 +34,7 @@ pub(super) async fn prompt() -> Result<()> {
         &mut std::io::stdout(),
         // Not forced: nothing is installed, and a source build, where no
         // release fits this machine, says what it will do and asks itself.
-        || install(false, false),
+        || engine::install(ctx, RuntimeKind::StableDiffusion, false, false),
     )
     .await
 }

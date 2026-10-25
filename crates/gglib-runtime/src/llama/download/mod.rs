@@ -3,13 +3,13 @@ use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 
-use gglib_core::paths::{data_root, llama_config_path, llama_server_path};
+use gglib_core::paths::{data_root, llama_config_path, llama_cpp_dir, llama_server_path};
 
 use super::config::InstallRecord;
 use super::install_events::{InstallPhase, LlamaProgressEvent};
 use crate::binary_install::{
     ArchiveLayout, AssetChoice, AssetMatcher, PrebuiltTarget, ReleaseSpec, completed,
-    install_prebuilt, started,
+    install_prebuilt, retire_checkout, started,
 };
 
 /// Check if llama.cpp binaries are installed.
@@ -88,6 +88,14 @@ const LLAMA_REQUIRED: &[&str] = &["llama-server.exe"];
 #[cfg(not(target_os = "windows"))]
 const LLAMA_REQUIRED: &[&str] = &["llama-server"];
 
+/// Said when the build installed runs on the CPU alone.
+#[cfg_attr(
+    not(all(target_os = "linux", target_arch = "x86_64")),
+    allow(dead_code)
+)]
+pub(crate) const LLAMA_CPU_WARNING: &str = "No GPU runtime gglib can use was found, so the CPU \
+     build of llama.cpp is installed. Replies will be slow.";
+
 /// The name the release's CUDA runtime package holds.
 const CUDART_PATTERN: &str = "cudart-llama-bin-win-cuda";
 
@@ -114,6 +122,9 @@ pub enum PrebuiltAvailability {
         asset_pattern: String,
         /// Description for user-facing messages
         description: String,
+        /// What to tell the user before installing it: set for a build that
+        /// runs on the CPU alone.
+        warning: Option<&'static str>,
     },
     /// Pre-built binaries are not available (must build from source)
     NotAvailable {
@@ -134,11 +145,13 @@ fn windows_availability_for_gpu(gpu: &gglib_core::utils::system::GpuInfo) -> Pre
         PrebuiltAvailability::Available {
             asset_pattern: "bin-win-cuda-12.4-x64.zip".to_string(),
             description: "Windows x64 (CUDA 12.4)".to_string(),
+            warning: None,
         }
     } else if gpu.has_vulkan {
         PrebuiltAvailability::Available {
             asset_pattern: "bin-win-vulkan-x64.zip".to_string(),
             description: "Windows x64 (Vulkan)".to_string(),
+            warning: None,
         }
     } else {
         PrebuiltAvailability::NotAvailable {
@@ -164,6 +177,7 @@ pub fn check_prebuilt_availability() -> PrebuiltAvailability {
             PrebuiltAvailability::Available {
                 asset_pattern: "bin-macos-arm64.tar.gz".to_string(),
                 description: "macOS ARM64 (Metal)".to_string(),
+                warning: None,
             }
         }
         #[cfg(target_arch = "x86_64")]
@@ -171,6 +185,7 @@ pub fn check_prebuilt_availability() -> PrebuiltAvailability {
             PrebuiltAvailability::Available {
                 asset_pattern: "bin-macos-x64.tar.gz".to_string(),
                 description: "macOS x64 (Metal)".to_string(),
+                warning: None,
             }
         }
         #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
@@ -203,6 +218,7 @@ pub fn check_prebuilt_availability() -> PrebuiltAvailability {
             PrebuiltAvailability::Available {
                 asset_pattern: "bin-ubuntu-x64.tar.gz".to_string(),
                 description: "Linux x64 (CPU)".to_string(),
+                warning: Some(LLAMA_CPU_WARNING),
             }
         }
         #[cfg(not(target_arch = "x86_64"))]
@@ -243,6 +259,7 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
         PrebuiltAvailability::Available {
             asset_pattern,
             description,
+            ..
         } => (asset_pattern, description),
         PrebuiltAvailability::NotAvailable { reason } => {
             bail!("Pre-built binaries not available: {reason}");
@@ -272,7 +289,12 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
         |record| InstallRecord::Prebuilt(record).save(&llama_config_path()?),
         &tx,
     )
-    .await
+    .await?;
+    // A source build this download replaced leaves its checkout behind.
+    if let Err(e) = retire_checkout(&llama_cpp_dir()?) {
+        tracing::debug!("the old llama.cpp checkout was not removed: {e:#}");
+    }
+    Ok(())
 }
 
 #[cfg(all(test, unix))]
@@ -514,6 +536,7 @@ mod tests {
             PrebuiltAvailability::Available {
                 asset_pattern,
                 description,
+                ..
             } => {
                 assert!(
                     asset_pattern.contains("cuda"),
@@ -547,6 +570,7 @@ mod tests {
             PrebuiltAvailability::Available {
                 asset_pattern,
                 description,
+                ..
             } => {
                 assert!(
                     asset_pattern.contains("vulkan"),

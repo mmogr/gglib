@@ -74,6 +74,7 @@ fn nothing_installed() -> SdStatus {
             installed_release: None,
             target_release: Some(PINNED_SD_RELEASE.to_owned()),
             built: None,
+            rebuilds: false,
         },
     }
 }

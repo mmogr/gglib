@@ -22,4 +22,11 @@ targetRelease: string | null,
 /**
  * Whether the recorded install was a source build. Null with no record.
  */
-built: boolean | null, };
+built: boolean | null, 
+/**
+ * Whether an install over this one builds from source again unless told
+ * otherwise: a source build of a release does, and anything else takes
+ * the download where one fits. A source build recorded by commit, from
+ * before builds were of a release, takes the default.
+ */
+rebuilds: boolean, };

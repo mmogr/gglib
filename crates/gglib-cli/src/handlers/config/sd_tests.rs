@@ -9,6 +9,7 @@ use crate::bootstrap::test_context;
 use crate::daemon_client::handle_tests::{answering, daemon_health, nobody};
 use crate::daemon_client::library_changes::tests::{TOKEN, beside};
 use crate::daemon_client::paths;
+use gglib_app_services::types::ServerInfo;
 
 /// What `sd_status` reports for an install of `install_type`, or for none.
 fn status(install_type: Option<&str>) -> SdStatus {
@@ -42,6 +43,7 @@ fn status(install_type: Option<&str>) -> SdStatus {
             installed_release: install_type.map(|_| "master-948-228c707".to_owned()),
             target_release: Some("master-948-228c707".to_owned()),
             built: install_type.map(|kind| kind == "source"),
+            rebuilds: false,
         },
     }
 }
@@ -121,29 +123,6 @@ fn status_of_a_binary_with_no_record_and_no_version_says_so() {
         status_lines(&bare).contains(
             &"Warning: Could not load sd-config.json: expected value at line 1".to_owned()
         )
-    );
-}
-
-/// The CPU-only build is the one the platform table warns about, and the
-/// warning comes before the download starts, not after it has finished.
-#[test]
-fn a_cpu_download_is_warned_about_before_it_starts() {
-    let warning = "No GPU runtime gglib can use was found, so the CPU build of \
-                   stable-diffusion.cpp is installed. Images will take minutes each.";
-    assert_eq!(
-        prebuilt_lines("Linux x64 (CPU)", Some(warning)),
-        [
-            format!("\u{26a0}\u{fe0f}  {warning}"),
-            "Downloading the pre-built stable-diffusion.cpp for Linux x64 (CPU)...".to_owned(),
-        ]
-    );
-}
-
-#[test]
-fn a_gpu_download_has_no_warning() {
-    assert_eq!(
-        prebuilt_lines("macOS (Metal)", None),
-        ["Downloading the pre-built stable-diffusion.cpp for macOS (Metal)..."]
     );
 }
 
@@ -283,9 +262,13 @@ async fn nothing_is_drawing_without_this_roots_daemon_or_with_only_chat_models()
         ),
         ("another root's daemon", elsewhere, None),
     ] {
-        let drawing = beside(port, token, drawing_on_the_daemon(&ctx))
-            .await
-            .expect("an answer");
+        let drawing = beside(
+            port,
+            token,
+            engine::serving_on_the_daemon(&ctx, RuntimeKind::StableDiffusion),
+        )
+        .await
+        .expect("an answer");
         assert_eq!(drawing, None, "{what}");
     }
     assert!(asked_elsewhere.lock().unwrap().is_empty());

@@ -1,19 +1,21 @@
 //! stable-diffusion.cpp management subcommands.
 //!
 //! The image runtime: `sd-server`, which serves the models that draw. The
-//! twin of [`LlamaCommand`](crate::llama_commands::LlamaCommand) for the
-//! three verbs the image runtime has: it has no update or rebuild of its
-//! own, since reinstalling (`--force`) is both. `prompt` is the offer of
-//! the install that `make setup` makes.
+//! same verbs as [`LlamaCommand`](crate::llama_commands::LlamaCommand)
+//! without its `detect`: `install` installs the pinned release when what is
+//! there is missing or older, which is also what `update` does. `prompt` is
+//! the offer of the install that `make setup` makes.
 
 use clap::Subcommand;
 
 /// stable-diffusion.cpp management commands.
 #[derive(Subcommand)]
 pub enum SdCommand {
-    /// Install stable-diffusion.cpp's sd-server, which serves image models
+    /// Install the pinned stable-diffusion.cpp release, or update to it
+    #[command(visible_alias = "update")]
     Install {
-        /// Reinstall even if already installed
+        /// Reinstall even when the pinned release is installed. Over a source
+        /// build, takes the download where one fits
         #[arg(short, long)]
         force: bool,
         /// Force building from source instead of downloading pre-built binaries
@@ -21,7 +23,7 @@ pub enum SdCommand {
         build: bool,
     },
 
-    /// Show what is installed for image generation
+    /// Show what is installed, and where it stands against the pinned release
     Status,
 
     /// Remove stable-diffusion.cpp's installation
@@ -83,6 +85,17 @@ mod tests {
             parsed(&["gglib", "config", "sd", "install", "-f"]),
             SdCommand::Install {
                 force: true,
+                build: false
+            }
+        ));
+    }
+
+    #[test]
+    fn update_is_install_with_the_same_flags() {
+        assert!(matches!(
+            parsed(&["gglib", "config", "sd", "update"]),
+            SdCommand::Install {
+                force: false,
                 build: false
             }
         ));

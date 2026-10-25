@@ -5,7 +5,7 @@ use std::process::Command;
 
 use tokio::sync::mpsc;
 
-use super::{Checkout, SourceRepo, clone_args, leftovers, prepare_checkout};
+use super::{Checkout, SourceRepo, clone_args, leftovers, prepare_checkout, retire_checkout};
 use crate::binary_install::ReleaseSelector;
 use crate::llama::BuildEvent;
 
@@ -419,4 +419,39 @@ fn following_upstream_never_reuses_and_records_the_commit() {
         git(&upstream_dir(tmp.path()), &["rev-parse", "main"])
     );
     assert_eq!(checkout.version, checkout.short_sha);
+}
+
+#[test]
+fn a_download_retires_the_checkout_and_what_a_build_left_beside_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let url = upstream(tmp.path());
+    let home = tmp.path().join("src");
+    installed(&url, "b1", &home);
+    for left in leftovers(&home) {
+        std::fs::create_dir_all(&left).unwrap();
+    }
+
+    assert!(retire_checkout(&home).expect("retires"));
+
+    assert!(!home.exists());
+    for left in leftovers(&home) {
+        assert!(!left.exists(), "{} is left", left.display());
+    }
+    assert!(
+        !retire_checkout(&home).expect("nothing there"),
+        "nothing left to remove"
+    );
+}
+
+#[test]
+fn a_download_keeps_a_checkout_with_work_of_its_own() {
+    let tmp = tempfile::tempdir().unwrap();
+    let url = upstream(tmp.path());
+    let home = tmp.path().join("src");
+    installed(&url, "b1", &home);
+    std::fs::write(home.join("release.txt"), "patched").unwrap();
+
+    assert!(!retire_checkout(&home).expect("keeps it"));
+
+    assert_eq!(release_in(&home), "patched");
 }

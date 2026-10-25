@@ -33,6 +33,10 @@ fn gglib_on(path: &Path, root: &Path, args: &[&str], typed: Option<&str>) -> Out
         .env("HOME", root)
         .env("GGLIB_DATA_DIR", root)
         .env("GGLIB_RESOURCE_DIR", root)
+        // A command that reached for GitHub would meet a proxy nobody is at.
+        .env("HTTPS_PROXY", "http://127.0.0.1:9")
+        .env("HTTP_PROXY", "http://127.0.0.1:9")
+        .env("ALL_PROXY", "http://127.0.0.1:9")
         .stdin(typed.map_or_else(Stdio::null, |_| Stdio::piped()))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -73,15 +77,11 @@ fn serve_with_no_llama_and_nobody_to_ask_installs_nothing() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(out.status.code(), Some(1), "{}", text(&out));
     assert!(
-        stdout.contains("llama.cpp binaries not found."),
+        stdout.contains("llama.cpp is not installed; chat models need its llama-server."),
         "{}",
         text(&out)
     );
-    assert!(
-        stdout.contains("Would you like to install llama.cpp now? (Y/n): "),
-        "{}",
-        text(&out)
-    );
+    assert!(stdout.contains(" it now? (Y/n): "), "{}", text(&out));
     assert!(
         !stdout.contains("Checking build dependencies"),
         "no build was started: {}",
@@ -156,7 +156,11 @@ fn uninstall_told_yes_removes_the_binaries_the_checkout_and_the_record() {
 fn a_source_install_without_the_build_tools_is_refused_and_says_how_to_get_them() {
     let root = tempfile::tempdir().unwrap();
 
-    let out = gglib(root.path(), &["config", "llama", "install", "--cuda"], None);
+    let out = gglib(
+        root.path(),
+        &["config", "llama", "install", "--build"],
+        None,
+    );
 
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(out.status.code(), Some(1), "{}", text(&out));
@@ -185,6 +189,19 @@ fn a_source_install_without_the_build_tools_is_refused_and_says_how_to_get_them(
     );
 }
 
+/// What a build detects on the stand-in machine: Metal on Apple silicon,
+/// and elsewhere CUDA, from the stand-in `nvcc`.
+#[cfg(unix)]
+const DETECTED: &str = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+    "Metal"
+} else {
+    "CUDA"
+};
+
+/// The stand-in toolkit a build detects off Apple silicon.
+#[cfg(unix)]
+const NVCC: &str = "Cuda compilation tools, release 12.4, V12.4.131";
+
 /// With the tools there, a source install says what it found and what it
 /// will do, and asks. Nobody answers, so nothing is cloned, and the command
 /// says it was cancelled and exits with an error.
@@ -196,12 +213,13 @@ fn a_source_install_with_the_build_tools_asks_before_it_clones_anything() {
     let machine = stub_tools::Machine::bare()
         .with_tool("git", "git version 2.43.0")
         .with_tool("cmake", "cmake version 3.28.1")
-        .with_tool("g++", "g++ (GCC) 14.2.1 20240910");
+        .with_tool("g++", "g++ (GCC) 14.2.1 20240910")
+        .with_tool("nvcc", NVCC);
 
     let out = gglib_on(
         &machine.path(),
         root.path(),
-        &["config", "llama", "install", "--cuda"],
+        &["config", "llama", "install", "--build"],
         None,
     );
 
@@ -214,15 +232,15 @@ fn a_source_install_with_the_build_tools_asks_before_it_clones_anything() {
              ✓ cmake (version 3.28.1)\n\
              ✓ C++ compiler g++ (g++ (GCC) 14.2.1 20240910)\n\
              \n\
-             Selected acceleration: CUDA\n\
+             Selected acceleration: {DETECTED}\n\
              \n\
              Pre-flight check:\n\
              ✓ Build dependencies installed\n\
-             ✓ Detected: CUDA\n\
+             ✓ Detected: {DETECTED}\n\
              \n\
              This will:\n\
              \x20 1. Clone llama.cpp repository (~150 MB)\n\
-             \x20 2. Configure with CMake (CUDA enabled)\n\
+             \x20 2. Configure with CMake ({DETECTED} enabled)\n\
              \x20 3. Compile llama-server (~3-5 minutes)\n\
              \x20 4. Install to {}\n\
              \n\
@@ -262,12 +280,13 @@ fn a_source_install_that_is_agreed_to_clones_under_its_spinner() {
              esac",
         )
         .with_tool("cmake", "cmake version 3.28.1")
-        .with_tool("g++", "g++ (GCC) 14.2.1 20240910");
+        .with_tool("g++", "g++ (GCC) 14.2.1 20240910")
+        .with_tool("nvcc", NVCC);
 
     let out = gglib_on(
         &machine.path(),
         root.path(),
-        &["config", "llama", "install", "--cuda"],
+        &["config", "llama", "install", "--build"],
         Some("y\n"),
     );
 

@@ -14,6 +14,7 @@ fn not_installed() -> PinState {
         installed_release: None,
         target_release: Some("b11429".to_owned()),
         built: None,
+        rebuilds: false,
     }
 }
 
@@ -200,6 +201,7 @@ fn the_status_compares_the_recorded_release_with_the_pin() {
             installed_release: Some("b10327".to_owned()),
             target_release: Some("b11429".to_owned()),
             built: Some(false),
+            rebuilds: false,
         }
     );
 }

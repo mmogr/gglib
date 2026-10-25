@@ -1,25 +1,23 @@
 //! `gglib config sd`: install, report and remove stable-diffusion.cpp's
 //! `sd-server`, the runtime that serves image models — CLI surface adapter.
 //!
-//! The twin of the llama.cpp commands beside it, and in-process as `config
-//! llama install` is. The work is `gglib_runtime::sd`'s; this file decides
-//! between a download and a build, asks, and draws the same events with
-//! `llama_events`' renderers under stable-diffusion.cpp's own name.
-//! `sd_ensure` offers the same install to `gglib serve` when it is asked for
-//! an image model and finds no `sd-server`. An uninstall asks the daemon that
-//! serves this data root, when it is up, whether an image model is running,
-//! as the web removal does.
+//! Installing, which is also updating, is `engine`'s, shared with
+//! llama.cpp: whether there is anything to install and whether it is a
+//! download or a build are decided there for both. What is stable-diffusion.cpp's
+//! own is here: running its download and its build, drawn with
+//! `llama_events`' renderers under its own name, its status, and its
+//! removal, which asks the daemon that serves this data root, when it is up,
+//! whether an image model is running, as the web removal does.
 
 use anyhow::{Result, bail};
 use tokio::sync::mpsc;
 
+use super::engine;
 use super::llama_events::{render_build_events, render_install_events};
 use super::llama_install::go_ahead;
 use crate::bootstrap::CliContext;
-use crate::daemon_client;
 use crate::sd_commands::SdCommand;
 use crate::utils::input;
-use gglib_app_services::types::ServerInfo;
 use gglib_core::domain::RuntimeKind;
 use gglib_core::paths::{SD_INSTALL_COMMAND, sd_server_path};
 use gglib_runtime::llama::{
@@ -27,8 +25,7 @@ use gglib_runtime::llama::{
     build_tools, detect_optimal_acceleration, missing_build_tools,
 };
 use gglib_runtime::sd::{
-    SdStatus, check_sd_prebuilt_availability, install_sd_prebuilt, run_sd_source_build,
-    sd_files_present, sd_status, uninstall_sd,
+    SdStatus, install_sd_prebuilt, run_sd_source_build, sd_files_present, sd_status, uninstall_sd,
 };
 
 /// The product, as every line here names it.
@@ -42,7 +39,9 @@ const NOW_USABLE: &str = "You can now serve an image model with 'gglib serve <mo
 /// Dispatch an `sd` sub-command to its handler.
 pub(crate) async fn dispatch(ctx: &CliContext, command: SdCommand) -> Result<()> {
     match command {
-        SdCommand::Install { force, build } => install(force, build).await,
+        SdCommand::Install { force, build } => {
+            engine::install(ctx, RuntimeKind::StableDiffusion, force, build).await
+        }
         SdCommand::Status => {
             for line in status_lines(&sd_status()?) {
                 println!("{line}");
@@ -50,66 +49,21 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: SdCommand) -> Result<()>
             Ok(())
         }
         SdCommand::Uninstall { force } => uninstall(ctx, force).await,
-        SdCommand::Prompt => super::sd_prompt::prompt().await,
+        SdCommand::Prompt => super::sd_prompt::prompt(ctx).await,
     }
 }
 
-/// Install `sd-server`: the platform's pre-built release, or a source build
-/// on `--build` or where no release fits this platform.
-///
-/// `force` reinstalls over an install that is there, and stands for the
-/// user's yes to a source build, as `config llama install --force` does.
-pub(super) async fn install(force: bool, build: bool) -> Result<()> {
-    let server_path = sd_server_path()?;
-    if server_path.exists() && !force {
-        let dir = server_path.parent().unwrap_or(&server_path);
-        println!("sd-server is already installed in: {}", dir.display());
-        println!("Use --force to reinstall.");
-        return Ok(());
-    }
-
-    let no_prebuilt = if build {
-        None
-    } else {
-        match check_sd_prebuilt_availability() {
-            Ok(asset) => {
-                for line in prebuilt_lines(asset.description, asset.warning) {
-                    println!("{line}");
-                }
-                return install_prebuilt().await;
-            }
-            Err(reason) => Some(reason),
-        }
-    };
-    build_from_source(no_prebuilt.as_deref(), force).await
-}
-
-/// What is said before a download starts: which build, and the warning the
-/// platform table gives a CPU-only build, before anything is fetched.
-fn prebuilt_lines(description: &str, warning: Option<&str>) -> Vec<String> {
-    let mut lines = Vec::new();
-    if let Some(warning) = warning {
-        lines.push(format!("\u{26a0}\u{fe0f}  {warning}"));
-    }
-    lines.push(format!(
-        "Downloading the pre-built {PRODUCT} for {description}..."
-    ));
-    lines
-}
-
-async fn install_prebuilt() -> Result<()> {
+/// Download and install the pinned pre-built `sd-server`, drawing progress.
+pub(super) async fn install_prebuilt() -> Result<()> {
     let (tx, rx) = mpsc::channel::<LlamaProgressEvent>(64);
     let install = tokio::spawn(install_sd_prebuilt(tx));
     render_install_events(rx, PRODUCT, downloaded, &mut std::io::stdout()).await;
     install.await?
 }
 
-/// Build `sd-server` from source for what this machine has. `no_prebuilt`
-/// is why no download was taken, when it was not the user's `--build`.
-async fn build_from_source(no_prebuilt: Option<&str>, agreed: bool) -> Result<()> {
-    if let Some(reason) = no_prebuilt {
-        println!("{reason}; building sd-server from source instead.");
-    }
+/// Build `sd-server` from source for what this machine has. `agreed` is the
+/// user's yes already given, and nothing is asked.
+pub(super) async fn build_from_source(agreed: bool) -> Result<()> {
     let tools = build_tools();
     if !missing_build_tools(&tools).is_empty() {
         for line in missing_tools_lines(&missing_build_tools(&tools)) {
@@ -262,8 +216,11 @@ pub(super) async fn uninstall(ctx: &CliContext, force: bool) -> Result<()> {
         println!("{PRODUCT} is not installed.");
         return Ok(());
     }
-    if let Some(model) = drawing_on_the_daemon(ctx).await? {
-        bail!("{model} is running on sd-server. Stop it before removing {PRODUCT}.");
+    if let Some(model) = engine::serving_on_the_daemon(ctx, RuntimeKind::StableDiffusion).await? {
+        bail!(engine::removal_refusal(
+            RuntimeKind::StableDiffusion,
+            &model
+        ));
     }
     if !force
         && !input::prompt_confirmation(&format!(
@@ -277,31 +234,6 @@ pub(super) async fn uninstall(ctx: &CliContext, force: bool) -> Result<()> {
         println!("{line}");
     }
     Ok(())
-}
-
-/// The image model the daemon that serves this data root is running on
-/// `sd-server`, when that daemon is up. With none, nothing of gglib's is
-/// running one: every image model is launched by a daemon.
-///
-/// That daemon is the one whose token is under this data root, as for
-/// `library_changes`: with no token there is no such daemon, and whatever
-/// holds the daemon's port is asked nothing.
-pub(super) async fn drawing_on_the_daemon(ctx: &CliContext) -> Result<Option<String>> {
-    if daemon_client::auth::daemon_token().is_none() {
-        return Ok(None);
-    }
-    let Ok(daemon) = daemon_client::running(ctx).await else {
-        return Ok(None);
-    };
-    Ok(image_model_in(&daemon.list_servers().await?))
-}
-
-/// The first server in `servers` that `sd-server` runs, by model name.
-fn image_model_in(servers: &[ServerInfo]) -> Option<String> {
-    servers
-        .iter()
-        .find(|server| server.runtime == RuntimeKind::StableDiffusion)
-        .map(|server| server.model_name.clone())
 }
 
 /// What an uninstall says it did: each path it removed, then that it is

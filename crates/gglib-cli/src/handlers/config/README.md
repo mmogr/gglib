@@ -9,23 +9,23 @@ settings/default/models-dir, llama.cpp lifecycle, dependency
 checks, the optional download accelerator, and resolved-path
 inspection.
 
-The llama.cpp lifecycle is six files. `llama` routes the subcommands.
-`llama_method` chooses between a download and a source build, and
-`llama_install` is the command that carries the choice out, with the source
-build's own checks and question; `llama_ensure` offers that same install to
-`gglib serve` and `gglib up` when they find no `llama-server`. `llama_update`
-runs an update that `gglib_runtime::llama::update_preflight` has allowed.
-`llama_events` draws the progress of all three, and is the only place a
-build or a download is rendered for a terminal.
+The two engines, llama.cpp and stable-diffusion.cpp, are installed the
+same way, by `engine`: `install`, which `update` is too, installs the pinned
+release when what is there is missing or older, and is refused while the
+daemon that serves this data root runs a model on that engine;
+`ensure_installed` is the offer `gglib serve` and `gglib up` make before
+they need an engine, of the install when it is missing and of the pin when
+what is there is older. Whether there is anything to install, and whether it
+is a download or a source build, are `gglib_runtime::engine`'s to say.
 
-`sd` is the image runtime's twin, stable-diffusion.cpp's `sd-server`:
-`install` (a download, or a source build on `--build` or where no release
-fits), `status` and `uninstall` (refused while the daemon that serves this
-data root runs an image model); `sd_ensure` is the install `gglib serve`
-offers when it is asked for an image model and finds no `sd-server`, and
-`sd_prompt` is the one `make setup` offers, which a no or a failure leaves
-as a skipped step. All three install with `sd`'s `install`, which draws
-with `llama_events` too, under stable-diffusion.cpp's name.
+What is each engine's own: `llama` routes llama.cpp's subcommands, and
+`llama_install` runs its download and its source build, with the build's
+own checks and question. `sd` routes stable-diffusion.cpp's and runs its
+download and build, its `status`, and its `uninstall`, refused while an
+image model runs; `sd_prompt` is the install `make setup` offers, which a
+no or a failure leaves as a skipped step. `llama_events` draws the
+progress of both, and is the only place a build or a download is rendered
+for a terminal.
 
 `check_deps` reports and installs nothing. `fast_downloads` provisions
 only on an explicit `enable`, or when the user accepts the offer its

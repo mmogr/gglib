@@ -125,6 +125,26 @@ pub(crate) async fn settle(checkout: Checkout, tx: &mpsc::Sender<BuildEvent>) {
         .await;
 }
 
+/// Remove the source checkout at `home`, with what an unfinished build left
+/// beside it, once a download has replaced the build it held. A checkout
+/// holding work of its own is kept. Whether it was removed.
+///
+/// A download is an install of its own, with its libraries beside the
+/// binary, so nothing installed loads anything from the checkout any more.
+pub(crate) fn retire_checkout(home: &Path) -> Result<bool> {
+    if is_repository(home) && has_own_work(home)? {
+        return Ok(false);
+    }
+    let mut removed = false;
+    for dir in std::iter::once(home.to_path_buf()).chain(leftovers(home)) {
+        if dir.exists() {
+            remove_if_present(&dir)?;
+            removed = true;
+        }
+    }
+    Ok(removed)
+}
+
 /// The folders a checkout at `home` can leave beside it: a new checkout from
 /// an install that did not finish, and an old one not yet removed. An
 /// uninstall removes them with the checkout.

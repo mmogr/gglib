@@ -60,7 +60,7 @@ impl Recorded {
 
     /// Whether the record names its build by commit rather than by release,
     /// as every source build did before builds were of a release.
-    fn names_a_commit(&self) -> bool {
+    pub(crate) fn names_a_commit(&self) -> bool {
         !self.release.is_empty()
             && self
                 .commit_sha

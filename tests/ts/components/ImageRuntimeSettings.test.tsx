@@ -54,6 +54,7 @@ function status(overrides: Partial<ImageRuntimeStatus> = {}, installed = false):
         installedRelease: installed ? 'master-948-228c707' : null,
         targetRelease: 'master-948-228c707',
         built: installed ? false : null,
+        rebuilds: false,
       },
     },
     prebuilt: 'macOS universal (Metal)',

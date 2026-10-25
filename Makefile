@@ -462,11 +462,11 @@ llama-install: ## Install llama.cpp (manual)
 	@echo "Installing llama.cpp (manual)..."
 	@$(GGLIB) config llama install
 
-llama-install-auto: ## Install llama.cpp (auto-detect GPU)
-	@echo "Installing llama.cpp with auto-detected GPU support..."
+llama-install-auto: ## Install the pinned llama.cpp, answering its question when nobody is there to
+	@echo "Installing the pinned llama.cpp..."
 	@scripts/install-llama.sh
 
-llama-update: ## Update llama.cpp
+llama-update: ## Update llama.cpp to the pinned release
 	@echo "Updating llama.cpp..."
 	@$(GGLIB) config llama update
 
@@ -474,7 +474,7 @@ llama-status: ## Show llama.cpp status
 	@$(GGLIB) config llama status
 
 llama-rebuild: clean-llama llama-install-auto ## Reinstall llama.cpp from scratch
-	@echo "✓ llama.cpp rebuilt"
+	@echo "✓ llama.cpp reinstalled"
 
 ##@ Image runtime
 
@@ -554,9 +554,9 @@ build-tauri: ## Build Tauri desktop app
 # Full setup from scratch
 # Note: build-tauri builds the web UI, gglib-app and gglib-cli, so nothing
 # else here builds; install just copies the binary
-# llama-install-auto runs last and is REQUIRED to succeed: the command it
-# runs refuses a machine with no GPU, and one whose GPU lacks what building
-# for it needs, sooner than produce a CPU-only llama-server.
+# llama-install-auto runs last and is REQUIRED to succeed: it installs the
+# pinned llama.cpp, the download where this machine has one and a source
+# build where it has none.
 setup: check-deps build-tauri install ## Full setup (check deps + build + install)
 	@echo "Configuring models directory (press Enter to accept the default)"
 	@./target/release/gglib config models-dir prompt

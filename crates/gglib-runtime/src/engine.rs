@@ -35,6 +35,85 @@ pub struct PinState {
     pub target_release: Option<String>,
     /// Whether the recorded install was a source build. Null with no record.
     pub built: Option<bool>,
+    /// Whether an install over this one builds from source again unless told
+    /// otherwise: a source build of a release does, and anything else takes
+    /// the download where one fits. A source build recorded by commit, from
+    /// before builds were of a release, takes the default.
+    pub rebuilds: bool,
+}
+
+/// How an install of an engine goes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InstallPlan {
+    /// Download this machine's build of the release: `description` names it,
+    /// and `warning` is what to say about it first, such as a CPU build's
+    /// slowness.
+    Download {
+        description: String,
+        warning: Option<String>,
+    },
+    /// Build from source. `no_download` says why when nobody asked for a
+    /// build: this machine has no download.
+    Build { no_download: Option<String> },
+}
+
+/// How to install `kind` over what `state` describes.
+///
+/// A build when `build` asks for one, or when what is installed is a source
+/// build of a release and `force` does not ask for the default instead; a
+/// download where this machine has one; a build otherwise. A source build is
+/// never replaced by a download that runs on the CPU alone, the one that
+/// comes with a warning, unless `force` asks: a build made for a GPU would
+/// otherwise turn into a slow one on an update nobody chose.
+#[must_use]
+pub fn plan_install(kind: RuntimeKind, state: &PinState, force: bool, build: bool) -> InstallPlan {
+    plan_with(state, force, build, || prebuilt(kind))
+}
+
+/// [`plan_install`] with this machine's download asked of `prebuilt`, which
+/// is asked only when nothing before it has decided.
+pub(crate) fn plan_with(
+    state: &PinState,
+    force: bool,
+    build: bool,
+    prebuilt: impl FnOnce() -> Result<(String, Option<String>), String>,
+) -> InstallPlan {
+    if build || (state.rebuilds && !force) {
+        return InstallPlan::Build { no_download: None };
+    }
+    match prebuilt() {
+        Ok((_, Some(_))) if state.built == Some(true) && !force => {
+            InstallPlan::Build { no_download: None }
+        }
+        Ok((description, warning)) => InstallPlan::Download {
+            description,
+            warning,
+        },
+        Err(reason) => InstallPlan::Build {
+            no_download: Some(reason),
+        },
+    }
+}
+
+/// This machine's download of `kind`, as its description and the warning it
+/// comes with, or why there is none.
+fn prebuilt(kind: RuntimeKind) -> Result<(String, Option<String>), String> {
+    match kind {
+        RuntimeKind::Llama => match crate::llama::check_prebuilt_availability() {
+            crate::llama::PrebuiltAvailability::Available {
+                description,
+                warning,
+                ..
+            } => Ok((description, warning.map(str::to_owned))),
+            crate::llama::PrebuiltAvailability::NotAvailable { reason } => Err(reason),
+        },
+        RuntimeKind::StableDiffusion => crate::sd::check_sd_prebuilt_availability().map(|asset| {
+            (
+                asset.description.to_owned(),
+                asset.warning.map(str::to_owned),
+            )
+        }),
+    }
 }
 
 /// Where `kind`'s install stands against its pin, from its binary, its
@@ -67,6 +146,7 @@ pub(crate) fn pin_state_at(
             ReleaseSelector::Latest => None,
         },
         built: recorded.map(Recorded::built),
+        rebuilds: recorded.is_some_and(|recorded| recorded.built() && !recorded.names_a_commit()),
     }
 }
 
