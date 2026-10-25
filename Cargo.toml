@@ -17,6 +17,7 @@ members = [
     "crates/gglib-runtime",
     "crates/gglib-agent",
     "crates/gglib-sse",
+    "crates/gglib-test-http",
     "crates/gglib-cli",
     "crates/gglib-axum",
     "crates/gglib-tauri",
@@ -160,6 +161,7 @@ gglib-gguf = { path = "crates/gglib-gguf" }
 gglib-hf = { path = "crates/gglib-hf" }
 gglib-runtime = { path = "crates/gglib-runtime" }
 gglib-sse = { path = "crates/gglib-sse" }
+gglib-test-http = { path = "crates/gglib-test-http" }
 gglib-axum = { path = "crates/gglib-axum" }
 gglib-app-services = { path = "crates/gglib-app-services" }
 gglib-tauri = { path = "crates/gglib-tauri" }

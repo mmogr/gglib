@@ -271,13 +271,25 @@ main() {
     fi
     log ""
 
+    # gglib-test-http: the connection a test's fake server answers on
+    # (dev-dependency only). It reads bytes and must speak no HTTP library of
+    # its own: most crates whose tests use it may not take hyper or axum as a
+    # direct dependency, and their depth-1 check would not see either arriving
+    # through it.
+    TEST_HTTP_FORBIDDEN=(axum tower tower-http hyper reqwest clap tauri sqlx)
+    log "📦 gglib-test-http (test-only leaf - reads requests, no HTTP library)"
+    if ! check_crate_deps "gglib-test-http" "${TEST_HTTP_FORBIDDEN[@]}"; then
+        FAILED=1
+    fi
+    log ""
+
     # Every infrastructure crate, the four with no forbidden list above
     # (gglib-proxy, gglib-bootstrap, gglib-build-info and
     # gglib-integration-tests) included.
     INFRA_CRATES=(
         gglib-runtime gglib-proxy gglib-agent gglib-download gglib-hf
         gglib-mcp gglib-gguf gglib-sse gglib-bootstrap gglib-build-info
-        gglib-integration-tests
+        gglib-integration-tests gglib-test-http
     )
     log "📦 Infrastructure crates (no direct dependency on a surface crate)"
     for infra_crate in "${INFRA_CRATES[@]}"; do

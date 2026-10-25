@@ -100,17 +100,23 @@ mod client_tests {
 
     use super::BenchmarkDeps;
 
-    /// Serve one SSE response, writing `frames` with `gap` between them, then
-    /// hold the socket open and silent forever.
+    /// Read the request, then serve one SSE response, writing `frames` with
+    /// `gap` between them, then hold the socket open and silent forever.
     ///
     /// Open-ended on purpose: no `Content-Length`, no terminating chunk. That
     /// is the shape of a real llama-server stream, and it is the shape a
     /// total-request deadline cannot tell apart from a hang.
+    ///
+    /// The request is read first because an answer that arrives before hyper
+    /// has sent its request is one hyper cancels, and on tokio 1.54 it often
+    /// does (#1553).
     async fn sse_stub(frames: usize, gap: Duration) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let addr = listener.local_addr().expect("addr");
         tokio::spawn(async move {
-            let (mut socket, _) = listener.accept().await.expect("accept");
+            let (_, mut socket) = gglib_test_http::accept(&listener)
+                .await
+                .expect("the request");
             socket
                 .write_all(
                     b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",

@@ -22,6 +22,7 @@ env:
     gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp
     gglib-agent gglib-proxy gglib-runtime gglib-app-services gglib-bootstrap
     gglib-cli gglib-axum gglib-tauri gglib-build-info gglib-sse
+    gglib-test-http
 
 jobs:
   # =============================================================================

@@ -65,6 +65,8 @@ tokio = { workspace = true, features = ["test-util"] }
 tempfile = { workspace = true }
 # Tests that write pidfiles do it in a data root of this binary's own (#955).
 gglib-core = { workspace = true, features = ["test-utils"] }
+# The connection a fake server answers on, with the request already read.
+gglib-test-http = { workspace = true }
 
 [lints]
 workspace = true
