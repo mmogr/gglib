@@ -97,7 +97,7 @@ pub(crate) fn narrate(inputs: &NarrationInputs<'_>) -> LaunchNarration {
 /// was built with.
 fn backend() -> Option<String> {
     let path = gglib_core::paths::llama_config_path().ok()?;
-    crate::llama::recorded_acceleration(&path)
+    crate::binary_install::recorded_acceleration(&path)
 }
 
 /// Which llama.cpp build is being spawned, and what it does natively.
@@ -356,7 +356,10 @@ pub(crate) fn narrate_sd(
 ) -> LaunchNarration {
     narrate_sd_with(
         spec,
-        crate::sd::recorded_release().as_deref(),
+        gglib_core::paths::sd_config_path()
+            .ok()
+            .and_then(|path| crate::binary_install::recorded_release(&path))
+            .as_deref(),
         slot,
         footprint,
     )

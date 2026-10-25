@@ -1,8 +1,13 @@
 //! Where an engine stands against its pin, and how a status says so.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use super::{InstallPlan, PinStanding, PinState, pin_state_at, plan_with, standing_line};
+use gglib_core::domain::RuntimeKind;
+
+use super::{
+    EnginePaths, InstallPlan, PinStanding, PinState, pin_state_at, plan_with, standing_line,
+    uninstall_from,
+};
 use crate::binary_install::{Recorded, ReleaseSelector};
 
 fn download(release: &str) -> Recorded {
@@ -264,5 +269,147 @@ fn a_source_build_is_never_traded_for_a_cpu_only_download_unasked() {
             description: "Linux x64 (CPU)".to_owned(),
             warning: Some("slow".to_owned()),
         }
+    );
+}
+
+/// An engine's folder as an install leaves it: the binary, the record, a
+/// checkout and a new one an unfinished build left; and what `installed`
+/// names of it.
+fn installed_in(engine: &Path) -> Vec<PathBuf> {
+    std::fs::create_dir_all(engine.join("bin")).unwrap();
+    std::fs::create_dir_all(engine.join("llama.cpp.new")).unwrap();
+    std::fs::create_dir_all(engine.join("llama.cpp")).unwrap();
+    std::fs::write(engine.join("bin").join("llama-server"), b"x").unwrap();
+    std::fs::write(engine.join("llama-config.json"), b"{}").unwrap();
+    [
+        "bin",
+        "llama-config.json",
+        "llama.cpp",
+        "llama.cpp.new",
+        "llama.cpp.old",
+    ]
+    .map(|name| engine.join(name))
+    .to_vec()
+}
+
+#[test]
+fn uninstalling_removes_what_gglib_installed_and_the_folder_it_empties() {
+    let tmp = tempfile::tempdir().expect("a temp dir");
+    let engine = tmp.path().join(".llama");
+    let installed = installed_in(&engine);
+
+    let outcome = uninstall_from(&engine, &installed).unwrap();
+
+    assert!(outcome.was_installed);
+    assert_eq!(
+        outcome.removed_paths,
+        installed[..4]
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+    );
+    assert!(!engine.exists(), "the folder it emptied goes too");
+    assert!(tmp.path().exists());
+
+    let again = uninstall_from(&engine, &installed).unwrap();
+    assert!(!again.was_installed);
+    assert!(again.removed_paths.is_empty());
+}
+
+/// With the data folder at home, the engine's folder is `~/.llama`, which
+/// Meta's `llama` tools keep checkpoints in. Those are not gglib's: they
+/// stay, and so does the folder that holds them.
+#[test]
+fn uninstalling_keeps_what_another_tool_put_in_the_folder() {
+    let tmp = tempfile::tempdir().expect("a temp dir");
+    let engine = tmp.path().join(".llama");
+    let installed = installed_in(&engine);
+    let theirs = engine.join("checkpoints").join("Llama3.2-1B");
+    std::fs::create_dir_all(&theirs).unwrap();
+    std::fs::write(theirs.join("consolidated.00.pth"), b"weights").unwrap();
+
+    let outcome = uninstall_from(&engine, &installed).unwrap();
+
+    assert!(outcome.was_installed);
+    assert!(theirs.join("consolidated.00.pth").exists());
+    for path in &installed {
+        assert!(!path.exists(), "{}", path.display());
+    }
+
+    // With nothing of gglib's there, nothing is installed and nothing goes.
+    let again = uninstall_from(&engine, &installed).unwrap();
+    assert!(!again.was_installed);
+    assert!(theirs.join("consolidated.00.pth").exists());
+
+    // Nor does a folder that holds nothing at all: gglib did not empty it.
+    let empty = tmp.path().join(".sd");
+    std::fs::create_dir(&empty).unwrap();
+    let none = uninstall_from(&empty, &[empty.join("bin")]).unwrap();
+    assert!(!none.was_installed);
+    assert!(empty.exists());
+}
+
+/// A path on the list that is a link is removed as a link: what it points
+/// at, outside the engine's folder, stays.
+#[cfg(unix)]
+#[test]
+fn uninstalling_removes_a_link_and_not_what_it_points_at() {
+    let tmp = tempfile::tempdir().expect("a temp dir");
+    let elsewhere = tmp.path().join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    std::fs::write(elsewhere.join("llama-server"), b"x").unwrap();
+    let engine = tmp.path().join(".llama");
+    std::fs::create_dir_all(&engine).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, engine.join("bin")).unwrap();
+
+    let outcome = uninstall_from(&engine, &[engine.join("bin")]).unwrap();
+
+    assert!(outcome.was_installed);
+    assert!(
+        engine.join("bin").symlink_metadata().is_err(),
+        "the link went"
+    );
+    assert!(elsewhere.join("llama-server").exists(), "its target stayed");
+}
+
+/// Everything an engine installs is inside its own folder and on its list,
+/// so an uninstall that removes each listed path leaves nothing of the
+/// install, and neither engine's folder holds the other's.
+#[test]
+fn each_engine_keeps_what_it_installs_in_a_folder_of_its_own() {
+    gglib_core::paths::isolate_data_root();
+    let llama = EnginePaths::of(RuntimeKind::Llama).unwrap();
+    let sd = EnginePaths::of(RuntimeKind::StableDiffusion).unwrap();
+    for paths in [&llama, &sd] {
+        let named = [&paths.binary, &paths.record, &paths.checkout];
+        for inside in named.into_iter().chain(&paths.installed) {
+            assert!(
+                inside.starts_with(&paths.dir),
+                "{} is outside {}",
+                inside.display(),
+                paths.dir.display()
+            );
+        }
+    }
+    assert!(!llama.dir.starts_with(&sd.dir) && !sd.dir.starts_with(&llama.dir));
+    for left in crate::binary_install::leftovers(&llama.checkout) {
+        assert!(llama.installed.contains(&left), "{}", left.display());
+    }
+    assert!(
+        sd.installed
+            .contains(&crate::sd::sd_download_dir().unwrap())
+    );
+}
+
+/// The keys the daemon's removal answers with, which the app reads.
+#[test]
+fn an_uninstall_answers_in_the_apps_keys() {
+    let outcome = super::UninstallOutcome {
+        was_installed: true,
+        removed_paths: vec!["/data/.sd/bin".to_owned()],
+    };
+    assert_eq!(
+        serde_json::to_value(&outcome).unwrap(),
+        serde_json::json!({ "wasInstalled": true, "removedPaths": ["/data/.sd/bin"] })
     );
 }

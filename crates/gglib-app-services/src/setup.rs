@@ -12,7 +12,7 @@ use gglib_core::domain::RuntimeKind;
 use gglib_core::ports::{ModelRuntimePort, SystemProbePort};
 use gglib_core::services::AppCore;
 use gglib_core::utils::system::SystemMemoryInfo;
-use gglib_runtime::engine::{PinStanding, PinState, pin_state};
+use gglib_runtime::engine::{PinStanding, PinState, UninstallOutcome, pin_state};
 
 use crate::error::GuiError;
 use crate::settings::{models_directory_info, system_memory};
@@ -191,14 +191,17 @@ impl SetupOps {
             .map_err(|e| GuiError::Internal(format!("Failed to install llama.cpp: {e}")))
     }
 
-    /// Remove the llama.cpp installation, unless a chat model runs on it.
-    pub async fn uninstall_llama(
+    /// Remove what `kind`'s install put in its folder, unless a model runs on
+    /// its server.
+    pub async fn uninstall(
         &self,
         runtime: &dyn ModelRuntimePort,
-    ) -> Result<gglib_runtime::llama::UninstallOutcome, GuiError> {
-        refuse_while_serving(runtime, RuntimeKind::Llama, "removing").await?;
-        gglib_runtime::llama::uninstall_llama()
+        kind: RuntimeKind,
+    ) -> Result<UninstallOutcome, GuiError> {
+        refuse_while_serving(runtime, kind, "removing").await?;
+        tokio::task::spawn_blocking(move || gglib_runtime::engine::uninstall(kind))
             .await
+            .map_err(|e| GuiError::Internal(format!("Uninstall task panicked: {e}")))?
             .map_err(|e| GuiError::Internal(e.to_string()))
     }
 

@@ -32,7 +32,7 @@ alone for a target that has none.
 | `pin.rs`      | `PinStanding`, where an installed release stands against the pin          |
 | `fetch.rs`    | the release listing, the archive stream, the CUDA runtime package         |
 | `extract.rs`  | unpacking a zip or tar.gz into the bin directory                          |
-| `record.rs`   | `PrebuiltRecord`, the four keys a download writes                         |
+| `record.rs`   | `InstallRecord`: a source build's five keys or a download's four          |
 | `install.rs`  | `install_prebuilt`, the pipeline and its phase events                     |
 
 The stream is `LlamaProgressEvent` for every product: the frames are the

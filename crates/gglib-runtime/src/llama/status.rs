@@ -5,9 +5,8 @@
 //! Axum `system/llama-status` route serialises it directly, so the two
 //! surfaces cannot drift.
 
-use super::config::recorded_install;
-use super::config::{BuildConfig, InstallRecord, PrebuiltRecord};
 use super::download::LLAMA_RELEASE;
+use crate::binary_install::{BuildRecord, InstallRecord, PrebuiltRecord, recorded_install};
 use crate::binary_install::{ReleaseSelector, resolve_selector};
 use crate::engine::{PinState, pin_state_at, update_downloads};
 use gglib_core::domain::RuntimeCapabilities;
@@ -32,8 +31,8 @@ pub struct LlamaBuildInfo {
     pub cmake_flags: Vec<String>,
 }
 
-impl From<BuildConfig> for LlamaBuildInfo {
-    fn from(config: BuildConfig) -> Self {
+impl From<BuildRecord> for LlamaBuildInfo {
+    fn from(config: BuildRecord) -> Self {
         Self {
             version: config.version,
             commit_sha: config.commit_sha,

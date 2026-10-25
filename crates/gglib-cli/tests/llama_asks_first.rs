@@ -63,6 +63,7 @@ fn install(root: &Path) {
     std::fs::create_dir_all(root.join(".llama/bin")).unwrap();
     std::fs::write(root.join(".llama/bin/llama-server"), "not a program").unwrap();
     std::fs::create_dir_all(root.join(".llama/llama.cpp")).unwrap();
+    std::fs::create_dir_all(root.join(".llama/llama.cpp.new")).unwrap();
     std::fs::write(root.join(".llama/llama-config.json"), "{}").unwrap();
 }
 
@@ -145,9 +146,10 @@ fn uninstall_told_yes_removes_the_binaries_the_checkout_and_the_record() {
         "{}",
         text(&out)
     );
-    for gone in ["bin", "llama.cpp", "llama-config.json"] {
-        assert!(!root.path().join(".llama").join(gone).exists(), "{gone}");
-    }
+    assert!(
+        !root.path().join(".llama").exists(),
+        "the folder it emptied"
+    );
 }
 
 /// A source build is refused before anything is cloned when the tools that

@@ -6,8 +6,8 @@ use tokio::sync::mpsc;
 use gglib_core::paths::{data_root, llama_config_path, llama_cpp_dir, llama_server_path};
 use gglib_core::utils::system::GpuInfo;
 
-use super::config::InstallRecord;
 use super::install_events::{InstallPhase, LlamaProgressEvent};
+use crate::binary_install::InstallRecord;
 use crate::binary_install::{
     ArchiveLayout, AssetChoice, AssetMatcher, PrebuiltTarget, ReleaseSpec, completed,
     install_prebuilt, retire_checkout, started,

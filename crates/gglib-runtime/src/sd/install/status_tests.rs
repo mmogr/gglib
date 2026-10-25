@@ -1,12 +1,10 @@
-//! What is installed: `sd-config.json`'s two shapes, the status read from
-//! it and from the binary, and the uninstall.
+//! What is installed: `sd-config.json`'s two shapes, and the status read
+//! from it and from the binary.
 
 use std::path::Path;
 
-use super::record::{SdBuildRecord, SdInstallRecord};
 use super::status::{commit_of, sd_status_at};
-use super::uninstall::uninstall_sd_at;
-use crate::binary_install::{PrebuiltRecord, ReleaseSelector};
+use crate::binary_install::{BuildRecord, InstallRecord, PrebuiltRecord, ReleaseSelector};
 #[cfg(unix)]
 use crate::engine::{PinStanding, PinState};
 use crate::llama::Acceleration;
@@ -23,14 +21,14 @@ fn both_record_shapes_round_trip_and_keep_their_keys() {
     let tmp = tempfile::tempdir().expect("a temp dir");
     let path = tmp.path().join("sd-config.json");
 
-    let built = SdInstallRecord::Built(SdBuildRecord::new(
+    let built = InstallRecord::Built(BuildRecord::new(
         "master-948-228c707".into(),
         "228c707abcdef".into(),
-        Acceleration::Metal,
+        Acceleration::Metal.display_name(),
         vec!["-DSD_METAL=ON".into()],
     ));
     built.save(&path).unwrap();
-    assert_eq!(SdInstallRecord::load(&path).unwrap(), built);
+    assert_eq!(InstallRecord::load(&path).unwrap(), built);
     assert_eq!(
         keys(&path),
         [
@@ -42,12 +40,12 @@ fn both_record_shapes_round_trip_and_keep_their_keys() {
         ]
     );
 
-    let downloaded = SdInstallRecord::Prebuilt(PrebuiltRecord::new(
+    let downloaded = InstallRecord::Prebuilt(PrebuiltRecord::new(
         "master-948-228c707",
         "macOS universal (Metal)",
     ));
     downloaded.save(&path).unwrap();
-    assert_eq!(SdInstallRecord::load(&path).unwrap(), downloaded);
+    assert_eq!(InstallRecord::load(&path).unwrap(), downloaded);
     assert_eq!(
         keys(&path),
         ["install_type", "installed_at", "platform", "version"]
@@ -99,7 +97,7 @@ fn the_status_reads_the_record_and_the_binarys_own_version() {
     .unwrap();
     std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
     let config = tmp.path().join("sd-config.json");
-    SdInstallRecord::Prebuilt(PrebuiltRecord::new(
+    InstallRecord::Prebuilt(PrebuiltRecord::new(
         "master-948-228c707",
         "macOS universal (Metal)",
     ))
@@ -165,23 +163,4 @@ fn the_commit_is_read_from_the_version_line() {
     );
     assert_eq!(commit_of("stable-diffusion.cpp version unknown"), None);
     assert_eq!(commit_of("x, commit "), None);
-}
-
-#[test]
-fn uninstalling_removes_the_directory_whole_and_says_what_it_removed() {
-    let tmp = tempfile::tempdir().expect("a temp dir");
-    let sd = tmp.path().join(".sd");
-    std::fs::create_dir_all(sd.join("bin")).unwrap();
-    std::fs::write(sd.join("bin").join("sd-server"), b"x").unwrap();
-    std::fs::write(sd.join("sd-config.json"), b"{}").unwrap();
-
-    let outcome = uninstall_sd_at(&sd).unwrap();
-
-    assert!(outcome.was_installed);
-    assert_eq!(outcome.removed_paths, [sd.display().to_string()]);
-    assert!(!sd.exists());
-
-    let again = uninstall_sd_at(&sd).unwrap();
-    assert!(!again.was_installed);
-    assert!(again.removed_paths.is_empty());
 }

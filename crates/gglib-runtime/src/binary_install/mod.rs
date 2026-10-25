@@ -20,7 +20,10 @@ pub(crate) use install::install_prebuilt_from;
 pub(crate) use install::{PrebuiltTarget, completed, install_prebuilt, started};
 pub use pin::PinStanding;
 pub(crate) use pin::{Recorded, installed_release, standing};
-pub(crate) use record::PrebuiltRecord;
+pub use record::BuildRecord;
+pub(crate) use record::{
+    InstallRecord, PrebuiltRecord, recorded_acceleration, recorded_install, recorded_release,
+};
 pub(crate) use release::{
     ArchiveLayout, AssetChoice, AssetMatcher, ReleaseSelector, ReleaseSpec, release_number,
     resolve_selector,

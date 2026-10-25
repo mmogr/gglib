@@ -1,5 +1,6 @@
 //! What `config llama` and `config sd` share: the one install, which is also
-//! the update, and the offer a command makes before it needs an engine.
+//! the update, the uninstall, and the offer a command makes before it needs
+//! an engine.
 //!
 //! What to do is `gglib_runtime::engine`'s to decide, for either engine
 //! alike: whether there is anything to install, and whether it is a download
@@ -14,7 +15,8 @@ use gglib_core::paths::{
     LLAMA_INSTALL_COMMAND, SD_INSTALL_COMMAND, llama_server_path, sd_server_path,
 };
 use gglib_runtime::engine::{
-    InstallPlan, PinStanding, PinState, pin_state, plan_install, standing_line,
+    self, InstallPlan, PinStanding, PinState, UninstallOutcome, pin_state, plan_install,
+    standing_line,
 };
 use gglib_runtime::llama::build_tool_install_lines;
 
@@ -194,10 +196,54 @@ fn serving_refusal(kind: RuntimeKind, model: &str) -> String {
     )
 }
 
+/// `gglib config <engine> uninstall`: remove what the engine's install put
+/// in its folder, asking first unless `force`, and print what was removed. Refused while the daemon
+/// serves a model on it, as the web removal is: removing the binary and its
+/// library under a running server leaves it serving from deleted files.
+pub(super) async fn uninstall(ctx: &CliContext, kind: RuntimeKind, force: bool) -> Result<()> {
+    let product = kind.label();
+    if !engine::files_present(kind)? {
+        println!("{product} is not installed.");
+        return Ok(());
+    }
+    if let Some(model) = serving_on_the_daemon(ctx, kind).await? {
+        bail!(removal_refusal(kind, &model));
+    }
+    if !force
+        && !input::prompt_confirmation(&format!(
+            "This will remove {product} and {}. Continue?",
+            kind.server_name()
+        ))?
+    {
+        println!("Uninstall cancelled.");
+        return Ok(());
+    }
+    for line in uninstall_lines(kind, &engine::uninstall(kind)?) {
+        println!("{line}");
+    }
+    Ok(())
+}
+
+/// What an uninstall says it did: each path it removed, then that it is
+/// done; or that there was nothing there to remove.
+fn uninstall_lines(kind: RuntimeKind, outcome: &UninstallOutcome) -> Vec<String> {
+    let product = kind.label();
+    if !outcome.was_installed {
+        return vec![format!("{product} is not installed.")];
+    }
+    let mut lines: Vec<String> = outcome
+        .removed_paths
+        .iter()
+        .map(|path| format!("\u{2713} Removed {path}"))
+        .collect();
+    lines.push(format!("{product} uninstalled successfully."));
+    lines
+}
+
 /// Why a removal is refused while `model` runs on `kind`'s server: removing
 /// the binary and its library under a running server leaves it serving from
 /// deleted files.
-pub(super) fn removal_refusal(kind: RuntimeKind, model: &str) -> String {
+fn removal_refusal(kind: RuntimeKind, model: &str) -> String {
     format!(
         "{model} is running on {}. Stop it before removing {}.",
         kind.server_name(),

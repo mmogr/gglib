@@ -12,12 +12,14 @@ use serde::Serialize;
 
 use gglib_core::domain::RuntimeKind;
 use gglib_core::paths::{
-    llama_config_path, llama_cpp_dir, llama_server_path, sd_config_path, sd_cpp_dir, sd_server_path,
+    gglib_data_dir, llama_config_path, llama_cpp_dir, llama_server_path, sd_config_path,
+    sd_cpp_dir, sd_data_dir, sd_server_path,
 };
 
 pub use crate::binary_install::PinStanding;
 use crate::binary_install::{
-    Recorded, ReleaseSelector, ReleaseSpec, installed_release, resolve_selector, standing,
+    Recorded, ReleaseSelector, ReleaseSpec, installed_release, leftovers, recorded_install,
+    resolve_selector, standing,
 };
 
 /// Where an engine's install stands against its pin.
@@ -129,7 +131,7 @@ pub fn pin_state(kind: RuntimeKind) -> anyhow::Result<PinState> {
     let paths = EnginePaths::of(kind)?;
     let mut state = pin_state_at(
         &paths.binary,
-        recorded(kind, &paths.record).as_ref(),
+        recorded_install(&paths.record).as_ref(),
         &paths.checkout,
         &resolve_selector(release_spec(kind)),
     );
@@ -201,26 +203,116 @@ pub fn standing_line(state: &PinState) -> Option<String> {
     })
 }
 
+/// What an uninstall removed.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UninstallOutcome {
+    /// False when there was nothing to remove; `removedPaths` is then empty.
+    pub was_installed: bool,
+    pub removed_paths: Vec<String>,
+}
+
+/// Remove everything gglib installed for `kind`, each by name.
+///
+/// That is the binaries and their libraries, the record, a source checkout
+/// with what an unfinished build left beside it, and sd's download folder.
+/// The engine's folder (`.llama/`, `.sd/`) goes too once that leaves it
+/// empty. Anything else in it was put there by something other than gglib,
+/// such as another tool's `~/.llama` when the data folder is home, and
+/// stays. Unconditional; the confirmation, and the refusal while the engine
+/// serves a model, belong to the caller.
+pub fn uninstall(kind: RuntimeKind) -> anyhow::Result<UninstallOutcome> {
+    let paths = EnginePaths::of(kind)?;
+    uninstall_from(&paths.dir, &paths.installed)
+}
+
+/// Whether there is anything for [`uninstall`] to remove.
+pub fn files_present(kind: RuntimeKind) -> anyhow::Result<bool> {
+    Ok(EnginePaths::of(kind)?
+        .installed
+        .iter()
+        .any(|path| exists(path)))
+}
+
+/// [`uninstall`] of the paths `installed`, in the engine's folder `dir`.
+pub(crate) fn uninstall_from(
+    dir: &Path,
+    installed: &[PathBuf],
+) -> anyhow::Result<UninstallOutcome> {
+    let mut removed_paths = Vec::new();
+    for path in installed {
+        let Ok(meta) = path.symlink_metadata() else {
+            continue;
+        };
+        if meta.is_dir() {
+            std::fs::remove_dir_all(path)?;
+        } else {
+            std::fs::remove_file(path)?;
+        }
+        removed_paths.push(path.display().to_string());
+    }
+    // `remove_dir` takes only an empty folder, which is the point: what is
+    // left in a folder that is not, is not gglib's. A folder this removal did
+    // not empty, one another tool made, is not touched at all.
+    if !removed_paths.is_empty() && std::fs::remove_dir(dir).is_err() {
+        tracing::debug!(dir = %dir.display(), "kept the engine's folder: not empty, or not there");
+    }
+    Ok(UninstallOutcome {
+        was_installed: !removed_paths.is_empty(),
+        removed_paths,
+    })
+}
+
+/// Whether anything is at `path`, a dangling link included.
+fn exists(path: &Path) -> bool {
+    path.symlink_metadata().is_ok()
+}
+
 /// Where an engine keeps what an install made.
 struct EnginePaths {
+    /// The engine's own folder, which holds everything below.
+    dir: PathBuf,
     binary: PathBuf,
     record: PathBuf,
     checkout: PathBuf,
+    /// Every path an install puts in the folder: what an uninstall removes.
+    installed: Vec<PathBuf>,
 }
 
 impl EnginePaths {
     fn of(kind: RuntimeKind) -> anyhow::Result<Self> {
-        Ok(match kind {
-            RuntimeKind::Llama => Self {
-                binary: llama_server_path()?,
-                record: llama_config_path()?,
-                checkout: llama_cpp_dir()?,
-            },
-            RuntimeKind::StableDiffusion => Self {
-                binary: sd_server_path()?,
-                record: sd_config_path()?,
-                checkout: sd_cpp_dir()?,
-            },
+        let (dir, binary, record, checkout) = match kind {
+            RuntimeKind::Llama => (
+                gglib_data_dir()?,
+                llama_server_path()?,
+                llama_config_path()?,
+                llama_cpp_dir()?,
+            ),
+            RuntimeKind::StableDiffusion => (
+                sd_data_dir()?,
+                sd_server_path()?,
+                sd_config_path()?,
+                sd_cpp_dir()?,
+            ),
+        };
+        let bin = binary
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| anyhow::anyhow!("{} has no folder", binary.display()))?;
+        let mut installed = vec![bin, record.clone(), checkout.clone()];
+        installed.extend(leftovers(&checkout));
+        // llama.cpp stages its archive in the data root's `downloads/`,
+        // outside `.llama/`, and its installer removes it either way; sd
+        // stages its own in its folder.
+        if kind == RuntimeKind::StableDiffusion {
+            installed.push(crate::sd::sd_download_dir()?);
+        }
+        Ok(Self {
+            dir,
+            binary,
+            record,
+            checkout,
+            installed,
         })
     }
 }
@@ -230,15 +322,6 @@ fn release_spec(kind: RuntimeKind) -> &'static ReleaseSpec {
     match kind {
         RuntimeKind::Llama => &crate::llama::LLAMA_RELEASE,
         RuntimeKind::StableDiffusion => &crate::sd::SD_RELEASE,
-    }
-}
-
-/// What `kind`'s record at `path` says was installed; `None` with no record
-/// or one that cannot be read.
-fn recorded(kind: RuntimeKind, path: &Path) -> Option<Recorded> {
-    match kind {
-        RuntimeKind::Llama => crate::llama::recorded_install(path),
-        RuntimeKind::StableDiffusion => crate::sd::recorded_install(path),
     }
 }
 

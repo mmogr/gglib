@@ -1,5 +1,5 @@
-//! `llama-config.json`: the two shapes on users' disks, and what is written
-//! now.
+//! An install's record: the two shapes on users' disks, and what is written
+//! now. The keys are llama.cpp's and sd's alike.
 
 use super::*;
 use chrono::TimeZone;
@@ -90,6 +90,39 @@ fn only_a_source_builds_file_names_a_build_and_its_acceleration() {
     assert_eq!(recorded_acceleration(&absent), None);
 }
 
+/// What the pin is compared with, and what a launch names: a build's file
+/// is a build of its commit, a download's is its release alone, and a file
+/// that is missing or broken is neither.
+#[test]
+fn a_record_is_read_as_a_build_of_its_commit_or_a_download_of_its_release() {
+    let (_built_dir, built) = file(BUILT);
+    assert_eq!(
+        recorded_install(&built),
+        Some(Recorded {
+            release: "abc1234".into(),
+            commit_sha: Some("abc1234def5678".into()),
+        })
+    );
+    assert_eq!(recorded_release(&built).as_deref(), Some("abc1234"));
+
+    let (_prebuilt_dir, prebuilt) = file(PREBUILT);
+    assert_eq!(
+        recorded_install(&prebuilt),
+        Some(Recorded {
+            release: "b10327".into(),
+            commit_sha: None,
+        })
+    );
+    assert_eq!(recorded_release(&prebuilt).as_deref(), Some("b10327"));
+
+    let (_broken_dir, broken) = file("{");
+    assert_eq!(recorded_install(&broken), None);
+    assert_eq!(recorded_release(&broken), None);
+    let absent = broken.with_file_name("absent.json");
+    assert_eq!(recorded_install(&absent), None);
+    assert_eq!(recorded_release(&absent), None);
+}
+
 /// A file that is neither shape is an error to a reader that reports one,
 /// and no backend to a launch.
 #[test]
@@ -110,7 +143,12 @@ fn what_an_install_writes_now_is_what_is_read_back() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("llama-config.json");
 
-    let built = BuildConfig::new("b1234".into(), "abc123def456".into(), Acceleration::Vulkan);
+    let built = BuildRecord::new(
+        "b1234".into(),
+        "abc123def456".into(),
+        "Vulkan",
+        vec!["-DGGML_VULKAN=ON".into()],
+    );
     InstallRecord::Built(built.clone()).save(&path).unwrap();
     assert_eq!(keys(&path), keys_of(BUILT));
     let read = recorded_build(&path).unwrap().expect("a build's record");

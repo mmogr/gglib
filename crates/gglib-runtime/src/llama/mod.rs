@@ -9,7 +9,6 @@ pub mod args;
 )]
 pub(crate) mod build;
 pub mod build_events;
-mod config;
 mod deps;
 pub(crate) mod detect;
 #[allow(
@@ -26,16 +25,12 @@ pub mod install_events;
 pub mod runtime_probe;
 mod server_availability;
 mod status;
-mod uninstall;
 mod validate;
 
 // === Public API (facade) ===
 
-// A source build's record, and the one question
-// a launch asks of that record: which acceleration the binary it is about to
-// spawn was compiled for.
-pub use config::BuildConfig;
-pub(crate) use config::recorded_acceleration;
+// A source build's record, shared with stable-diffusion.cpp.
+pub use crate::binary_install::BuildRecord;
 pub use server_availability::{LlamaServerError, LlamaServerResult, resolve_llama_server};
 
 // What the installed llama-server can do natively. Probed once per binary and
@@ -52,7 +47,6 @@ pub use install_events::{InstallPhase, LlamaProgressEvent};
 pub use deps::{BuildTool, build_tool_install_lines, build_tools, missing_build_tools};
 
 // Core functionality
-pub(crate) use config::recorded_install;
 pub use detect::{
     Acceleration, MissingPackage, VulkanStatus, detect_optimal_acceleration, vulkan_status,
 };
@@ -63,7 +57,6 @@ pub use validate::{handle_status, validate_llama_binary};
 
 // Installation
 pub use install::run_llama_source_build;
-pub use uninstall::{UninstallOutcome, llama_files_present, uninstall_llama};
 
 // Args resolution
 pub use args::{

@@ -166,7 +166,7 @@ fn a_source_build_is_reported_as_one_and_its_file_is_left_alone() {
 
 #[test]
 fn build_info_carries_both_notions_of_version() {
-    let info = LlamaBuildInfo::from(BuildConfig {
+    let info = LlamaBuildInfo::from(BuildRecord {
         version: "abc1234".into(),
         commit_sha: "abc1234def".into(),
         build_date: chrono::Utc::now(),

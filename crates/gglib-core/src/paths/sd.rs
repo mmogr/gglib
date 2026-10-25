@@ -3,7 +3,7 @@
 //! Everything gglib installs for image generation lives under one directory
 //! of its own, `.sd/`, beside llama.cpp's `.llama/`: the binary and the
 //! shared library it loads, the install's record, a source checkout, and the
-//! archive while it is unpacked. Removing that directory uninstalls it.
+//! archive while it is unpacked. Uninstalling removes each of those.
 
 use std::path::PathBuf;
 

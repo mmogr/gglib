@@ -5,9 +5,8 @@
 //! llama.cpp: whether there is anything to install and whether it is a
 //! download or a build are decided there for both. What is stable-diffusion.cpp's
 //! own is here: running its download and its build, drawn with
-//! `llama_events`' renderers under its own name, its status, and its
-//! removal, which asks the daemon that serves this data root, when it is up,
-//! whether an image model is running, as the web removal does.
+//! `llama_events`' renderers under its own name, and its status. Removing it
+//! is `engine`'s too.
 
 use anyhow::{Result, bail};
 use tokio::sync::mpsc;
@@ -21,12 +20,10 @@ use crate::utils::input;
 use gglib_core::domain::RuntimeKind;
 use gglib_core::paths::{SD_INSTALL_COMMAND, sd_server_path};
 use gglib_runtime::llama::{
-    Acceleration, BuildEvent, LlamaProgressEvent, UninstallOutcome, build_tool_install_lines,
-    build_tools, detect_optimal_acceleration, missing_build_tools,
+    Acceleration, BuildEvent, LlamaProgressEvent, build_tool_install_lines, build_tools,
+    detect_optimal_acceleration, missing_build_tools,
 };
-use gglib_runtime::sd::{
-    SdStatus, install_sd_prebuilt, run_sd_source_build, sd_files_present, sd_status, uninstall_sd,
-};
+use gglib_runtime::sd::{SdStatus, install_sd_prebuilt, run_sd_source_build, sd_status};
 
 /// The product, as every line here names it.
 pub(super) const PRODUCT: &str = RuntimeKind::StableDiffusion.label();
@@ -48,7 +45,9 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: SdCommand) -> Result<()>
             }
             Ok(())
         }
-        SdCommand::Uninstall { force } => uninstall(ctx, force).await,
+        SdCommand::Uninstall { force } => {
+            engine::uninstall(ctx, RuntimeKind::StableDiffusion, force).await
+        }
     }
 }
 
@@ -210,50 +209,6 @@ fn human_time(rfc3339: &str) -> String {
                 .to_string()
         },
     )
-}
-
-/// Remove `.sd/`, asking first unless `force`, and print what was removed.
-/// Refused while the daemon runs an image model on it, as the web removal
-/// is: removing the binary and its library under a running server leaves it
-/// serving from deleted files.
-pub(super) async fn uninstall(ctx: &CliContext, force: bool) -> Result<()> {
-    if !sd_files_present()? {
-        println!("{PRODUCT} is not installed.");
-        return Ok(());
-    }
-    if let Some(model) = engine::serving_on_the_daemon(ctx, RuntimeKind::StableDiffusion).await? {
-        bail!(engine::removal_refusal(
-            RuntimeKind::StableDiffusion,
-            &model
-        ));
-    }
-    if !force
-        && !input::prompt_confirmation(&format!(
-            "This will remove {PRODUCT} and sd-server. Continue?"
-        ))?
-    {
-        println!("Uninstall cancelled.");
-        return Ok(());
-    }
-    for line in uninstall_lines(&uninstall_sd()?) {
-        println!("{line}");
-    }
-    Ok(())
-}
-
-/// What an uninstall says it did: each path it removed, then that it is
-/// done; or that there was nothing there to remove.
-fn uninstall_lines(outcome: &UninstallOutcome) -> Vec<String> {
-    if !outcome.was_installed {
-        return vec![format!("{PRODUCT} is not installed.")];
-    }
-    let mut lines: Vec<String> = outcome
-        .removed_paths
-        .iter()
-        .map(|path| format!("\u{2713} Removed {path}"))
-        .collect();
-    lines.push(format!("{PRODUCT} uninstalled successfully."));
-    lines
 }
 
 #[cfg(test)]

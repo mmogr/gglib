@@ -10,11 +10,11 @@ Everything lives under `.sd/` beside llama.cpp's `.llama/` (paths in
 `gglib_core::paths`): `bin/sd-server` and the shared library it loads from
 beside itself (`libstable-diffusion.dylib`, `.so`, or `stable-diffusion.dll`),
 `sd-config.json`, a source checkout, and `downloads/` while an archive is
-unpacked. Uninstalling removes `.sd/` whole.
+unpacked. Uninstalling removes each of those, and `.sd/` once it is empty.
 
 | Folder     | What it holds                                                                 |
 |------------|-------------------------------------------------------------------------------|
-| `install/` | the pinned release and its platform table, the pre-built install and the source build (`pipeline.rs`), `sd-config.json`, `SdStatus`, and removing `.sd/` |
+| `install/` | the pinned release and its platform table, the pre-built install and the source build (`pipeline.rs`), and `SdStatus` |
 | `server/`  | `SdServerConfig` and `sd-server`'s argv, starting it, and `SdImageDriver` with its job API, plan and poll loop; the test-only `fake_server.rs` |
 
 ## The platform table
@@ -53,7 +53,7 @@ files plus its family's compute margin (`Recipe::compute_margin_bytes`, the
 1024x1024 VAE decode buffer rounded up: Flux.1 7 GiB, SDXL 8 GiB,
 Qwen-Image 2.1 9 GiB, Z-Image 7 GiB), spawns
 with `server/spawn.rs`, and narrates the build from
-`sd-config.json` (`recorded_release`).
+`sd-config.json` (`binary_install::recorded_release`).
 
 ## Is it up?
 

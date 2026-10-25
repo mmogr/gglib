@@ -9,11 +9,10 @@ use tracing::debug;
 use gglib_core::paths::{sd_config_path, sd_cpp_dir, sd_server_path};
 use gglib_core::utils::process::cmd;
 
-use super::record::{SdBuildRecord, SdInstallRecord};
 use super::release::{SD_RELEASE, check_sd_prebuilt_availability};
 use crate::binary_install::{
-    PrebuiltTarget, SourceRepo, completed, install_prebuilt, prepare_checkout, resolve_selector,
-    retire_checkout, settle, started,
+    BuildRecord, InstallRecord, PrebuiltTarget, SourceRepo, completed, install_prebuilt,
+    prepare_checkout, resolve_selector, retire_checkout, settle, started,
 };
 use crate::llama::build::{build_parallelism, run_compile, run_configure};
 use crate::llama::install::install_binary;
@@ -66,7 +65,7 @@ pub async fn install_sd_prebuilt(tx: mpsc::Sender<LlamaProgressEvent>) -> Result
     install_prebuilt(
         &SD_RELEASE,
         target,
-        |record| SdInstallRecord::Prebuilt(record).save(&sd_config_path()?),
+        |record| InstallRecord::Prebuilt(record).save(&sd_config_path()?),
         &tx,
     )
     .await?;
@@ -180,10 +179,10 @@ pub async fn run_sd_source_build(
         .into_iter()
         .collect();
     let version = checkout.version.clone();
-    SdInstallRecord::Built(SdBuildRecord::new(
+    InstallRecord::Built(BuildRecord::new(
         version.clone(),
         checkout.commit_sha.clone(),
-        acceleration,
+        acceleration.display_name(),
         flags,
     ))
     .save(&sd_config_path()?)?;

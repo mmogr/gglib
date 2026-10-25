@@ -139,7 +139,7 @@ fn uninstall_with_nobody_to_ask_removes_nothing() {
 }
 
 #[test]
-fn uninstall_told_yes_removes_sd_whole_and_says_what_it_removed() {
+fn uninstall_told_yes_removes_what_sd_installed_and_says_what_it_removed() {
     let root = tempfile::tempdir().unwrap();
     install(root.path());
 
@@ -147,8 +147,13 @@ fn uninstall_told_yes_removes_sd_whole_and_says_what_it_removed() {
 
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success(), "{}", text(&out));
-    let removed = format!("\u{2713} Removed {}", root.path().join(".sd").display());
-    assert!(stdout.lines().any(|l| l == removed), "{}", text(&out));
+    for name in ["bin", "sd-config.json"] {
+        let removed = format!(
+            "\u{2713} Removed {}",
+            root.path().join(".sd").join(name).display()
+        );
+        assert!(stdout.lines().any(|l| l == removed), "{}", text(&out));
+    }
     assert!(
         stdout.ends_with("stable-diffusion.cpp uninstalled successfully.\n"),
         "{}",

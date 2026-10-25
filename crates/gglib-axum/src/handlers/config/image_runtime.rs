@@ -15,7 +15,7 @@ use futures_util::stream::Stream;
 
 use gglib_app_services::ImageRuntimeStatus;
 use gglib_core::domain::RuntimeKind;
-use gglib_runtime::llama::UninstallOutcome;
+use gglib_runtime::engine::UninstallOutcome;
 
 use super::install_slot::{holding_install_slot, install_stream};
 use crate::error::HttpError;
@@ -48,13 +48,15 @@ pub(crate) async fn sd_status(
     Ok(Json(state.setup.sd_status(state.runtime.as_ref()).await?))
 }
 
-/// Remove `.sd/` whole. 409 while an image model runs on it, or while an
+/// Remove what the image runtime's install put in `.sd/`. 409 while an image model runs on it, or while an
 /// install or another removal holds the install slot; the removal holds it
 /// until it ends, so no install starts under it.
 pub(crate) async fn uninstall_sd(
     State(state): State<AppState>,
 ) -> Result<Json<UninstallOutcome>, HttpError> {
-    let removal = state.setup.uninstall_sd(state.runtime.as_ref());
+    let removal = state
+        .setup
+        .uninstall(state.runtime.as_ref(), RuntimeKind::StableDiffusion);
     Ok(Json(
         holding_install_slot(&INSTALL_IN_FLIGHT, PRODUCT, removal).await?,
     ))

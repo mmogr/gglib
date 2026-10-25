@@ -2,7 +2,7 @@
 //! keeps an engine from being replaced.
 
 use super::*;
-use gglib_runtime::engine::{InstallPlan, PinStanding, PinState};
+use gglib_runtime::engine::{InstallPlan, PinStanding, PinState, UninstallOutcome};
 
 fn state(standing: PinStanding, installed: Option<&str>) -> PinState {
     PinState {
@@ -279,4 +279,31 @@ fn a_machine_without_a_download_is_told_why_and_what_a_build_needs() {
 
     assert_eq!(lines, expected);
     assert_eq!(question, "Build it now?");
+}
+
+#[test]
+fn uninstall_says_each_path_it_removed() {
+    let outcome = UninstallOutcome {
+        was_installed: true,
+        removed_paths: vec!["/data/.sd/bin".to_owned()],
+    };
+    assert_eq!(
+        uninstall_lines(RuntimeKind::StableDiffusion, &outcome),
+        [
+            "\u{2713} Removed /data/.sd/bin",
+            "stable-diffusion.cpp uninstalled successfully."
+        ]
+    );
+}
+
+#[test]
+fn uninstall_with_nothing_removed_says_nothing_was_there() {
+    let outcome = UninstallOutcome {
+        was_installed: false,
+        removed_paths: Vec::new(),
+    };
+    assert_eq!(
+        uninstall_lines(RuntimeKind::Llama, &outcome),
+        ["llama.cpp is not installed."]
+    );
 }
