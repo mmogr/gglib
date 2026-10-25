@@ -12,12 +12,13 @@
 //! read, the last repeating) and `POST /sdcpp/v1/jobs/{id}/cancel`, keeping
 //! what it was sent and how often it was read.
 //!
-//! It reads each request's head before it answers: a server that answers and
+//! It reads each request whole before it answers: a server that answers and
 //! drops the socket unread can reset it, and the client then loses the reply.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use gglib_test_http::{Incoming, Request};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -96,10 +97,10 @@ impl FakeSdServer {
         let script = jobs.clone();
         tokio::spawn(async move {
             loop {
-                let Ok((socket, _)) = listener.accept().await else {
+                let Ok(incoming) = gglib_test_http::incoming(&listener).await else {
                     return;
                 };
-                tokio::spawn(answer(socket, body, Arc::clone(&renders), script.clone()));
+                tokio::spawn(answer(incoming, body, Arc::clone(&renders), script.clone()));
             }
         });
         Self { port, held, jobs }
@@ -132,21 +133,21 @@ impl FakeSdServer {
 }
 
 async fn answer(
-    mut socket: TcpStream,
+    incoming: Incoming,
     models_body: &'static str,
     renders: Arc<AtomicUsize>,
     jobs: Option<Jobs>,
 ) {
-    let Some((method, path, length)) = read_head(&mut socket).await else {
+    let Ok((request, mut socket)) = incoming.request().await else {
         return;
     };
     if let Some(jobs) = jobs
-        && let Some((status, body)) = job_answer(&mut socket, &jobs, &method, &path, length).await
+        && let Some((status, body)) = job_answer(&jobs, &request)
     {
         reply(&mut socket, status, &body).await;
         return;
     }
-    match (method.as_str(), path.as_str()) {
+    match (request.method.as_str(), request.path.as_str()) {
         ("GET", "/v1/models") => {
             let head = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -177,23 +178,14 @@ async fn answer(
     }
 }
 
-/// The job API's answer to a request, from the script, after reading its
-/// body; `None` for a path the job API does not serve.
-async fn job_answer(
-    socket: &mut TcpStream,
-    jobs: &Jobs,
-    method: &str,
-    path: &str,
-    length: usize,
-) -> Option<(u16, String)> {
-    let mut body = vec![0u8; length];
-    socket.read_exact(&mut body).await.ok()?;
+/// The job API's answer to a request, from the script; `None` for a path
+/// the job API does not serve.
+fn job_answer(jobs: &Jobs, request: &Request) -> Option<(u16, String)> {
     let mut guard = jobs.lock().unwrap();
     let (script, log) = &mut *guard;
-    let answer = match (method, path) {
+    let answer = match (request.method.as_str(), request.path.as_str()) {
         ("POST", "/sdcpp/v1/img_gen") => {
-            log.submitted
-                .push(String::from_utf8_lossy(&body).into_owned());
+            log.submitted.push(request.body_text());
             Some(script.submit.clone())
         }
         ("POST", p) if p.starts_with("/sdcpp/v1/jobs/") && p.ends_with("/cancel") => {
@@ -219,26 +211,4 @@ async fn reply(socket: &mut TcpStream, status: u16, body: &str) {
     let _ = socket.write_all(head.as_bytes()).await;
     let _ = socket.write_all(body.as_bytes()).await;
     let _ = socket.shutdown().await;
-}
-
-/// Read a request head to its blank line; its method, path and
-/// `Content-Length` (0 when it has none).
-async fn read_head(socket: &mut TcpStream) -> Option<(String, String, usize)> {
-    let mut head = Vec::new();
-    let mut byte = [0u8; 1];
-    while !head.ends_with(b"\r\n\r\n") {
-        if socket.read(&mut byte).await.ok()? == 0 {
-            return None;
-        }
-        head.push(byte[0]);
-    }
-    let text = String::from_utf8_lossy(&head);
-    let length = text
-        .lines()
-        .filter_map(|line| line.split_once(':'))
-        .find(|(name, _)| name.trim().eq_ignore_ascii_case("content-length"))
-        .and_then(|(_, value)| value.trim().parse().ok())
-        .unwrap_or(0);
-    let mut words = text.split_whitespace();
-    Some((words.next()?.to_owned(), words.next()?.to_owned(), length))
 }

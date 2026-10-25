@@ -1,7 +1,7 @@
 //! One file by its path: a head read with a `Range`, and a file looked up at
 //! `paths-info`, through the port and on the wire.
 
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::TcpListener;
 use std::thread::JoinHandle;
 
@@ -33,23 +33,10 @@ fn hub(status: &'static str, body: Vec<u8>) -> (String, JoinHandle<Served>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
     let base_url = format!("http://{}/api/models", listener.local_addr().unwrap());
     let served = std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().expect("a request");
         // The whole request is read before the answer is written: a peer
         // that answers and closes on unread bytes resets the connection.
-        let mut head = Vec::new();
-        let mut byte = [0_u8; 1];
-        while !head.ends_with(b"\r\n\r\n") {
-            assert_eq!(
-                stream.read(&mut byte).expect("the head"),
-                1,
-                "the head ended"
-            );
-            head.push(byte[0]);
-        }
-        let head = String::from_utf8(head).expect("a head is text");
-        let length = header(&head, "content-length").map_or(0, |n| n.parse().unwrap());
-        let mut request_body = vec![0_u8; length];
-        stream.read_exact(&mut request_body).expect("the body");
+        let (request, mut stream) =
+            gglib_test_http::blocking::accept(&listener).expect("a request");
         let answer = format!(
             "HTTP/1.1 {status}\r\ncontent-type: application/octet-stream\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
             body.len()
@@ -58,8 +45,8 @@ fn hub(status: &'static str, body: Vec<u8>) -> (String, JoinHandle<Served>) {
         // The client may stop reading once it holds what it asked for.
         let _ = stream.write_all(&body);
         Served {
-            head,
-            body: String::from_utf8(request_body).expect("a form is text"),
+            head: request.head,
+            body: String::from_utf8(request.body).expect("a form is text"),
         }
     });
     (base_url, served)

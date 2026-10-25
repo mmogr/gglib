@@ -7,11 +7,11 @@ use std::net::TcpListener;
 use std::sync::Mutex;
 
 use gglib_core::download::DownloadOutcome;
+use gglib_test_http::blocking;
 
 use super::super::monitor::tests::{COMPLETED, MINE, MINE_ID, ended, failed, running, snapshot};
 use super::*;
 use crate::daemon_client::STAND_IN_PORT;
-use crate::handlers::agent_chat::sight::sight_tests::read_request;
 use crate::handlers::model::test_library::{library, run};
 
 /// What the daemon answers a repair that deleted `a.gguf` and `b.gguf` and
@@ -193,9 +193,16 @@ fn stand_in_daemon(queue: Vec<QueueSnapshot>) -> (u16, Asked) {
     });
     std::thread::spawn(move || {
         let mut queue = VecDeque::from(queue);
-        for stream in listener.incoming() {
-            let Ok(mut stream) = stream else { continue };
-            let (line, body) = read_request(&mut stream);
+        loop {
+            let Ok(taken) = blocking::incoming(&listener) else {
+                continue;
+            };
+            // A connection that sends no whole request was still asked.
+            let Ok((request, mut stream)) = taken.request() else {
+                seen.lock().unwrap().push((String::new(), String::new()));
+                continue;
+            };
+            let (line, body) = (request.line().to_owned(), request.body_text());
             let reply = if line.starts_with("GET /health ") {
                 health.to_string()
             } else if line.starts_with("POST ") {

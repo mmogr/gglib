@@ -15,7 +15,9 @@ first write goes out at once
 how a tokio bump failed two benchmark tests on Linux CI (#1553); on a Mac,
 about one run in five failed one of them. A fake that answers and drops the
 socket with part of the request unread can instead reset the connection, and
-the client loses the answer. A fake built on this crate can do neither.
+the client loses the answer. A fake built on this crate can do neither, and
+`clippy.toml` refuses a raw `TcpListener::accept` or `incoming` anywhere else
+in the workspace.
 
 ## Architecture
 

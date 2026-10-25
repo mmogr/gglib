@@ -6,11 +6,11 @@ use std::net::TcpListener;
 
 use gglib_app_services::launch_options::plan_bare_launch;
 use gglib_core::Settings;
+use gglib_test_http::blocking;
 
 use super::*;
 use crate::bootstrap::test_context;
 use crate::daemon_client::{DaemonHandle, STAND_IN_PORT, paths};
-use crate::handlers::agent_chat::sight::sight_tests::read_request;
 
 /// A model in a fresh catalogue, trained on a window of 131072 tokens.
 async fn a_model(dir: &tempfile::TempDir) -> Model {
@@ -31,8 +31,7 @@ async fn sent(body: &StartServerBody) -> (String, String) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
     let port = listener.local_addr().expect("its address").port();
     let daemon = std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().expect("the request");
-        let request = read_request(&mut stream);
+        let (request, mut stream) = blocking::accept(&listener).expect("the request");
         let reply = r#"{"port":9001,"message":"Server started on port 9001"}"#;
         let _ = write!(
             stream,
@@ -40,7 +39,7 @@ async fn sent(body: &StartServerBody) -> (String, String) {
              content-length: {}\r\nconnection: close\r\n\r\n{reply}",
             reply.len()
         );
-        request
+        (request.line().to_owned(), request.body_text())
     });
     let handle = DaemonHandle {
         client: gglib_proxy::loopback::client(),
@@ -98,9 +97,14 @@ fn counting_stand_in() -> (u16, std::sync::Arc<std::sync::atomic::AtomicUsize>) 
     let asked = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let count = std::sync::Arc::clone(&asked);
     std::thread::spawn(move || {
-        for mut stream in listener.incoming().flatten() {
-            let _ = read_request(&mut stream);
+        loop {
+            let Ok(taken) = blocking::incoming(&listener) else {
+                continue;
+            };
             count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let Ok((_, mut stream)) = taken.request() else {
+                continue;
+            };
             let reply = r#"{"service":"something-else"}"#;
             let _ = write!(
                 stream,

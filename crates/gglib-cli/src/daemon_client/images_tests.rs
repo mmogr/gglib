@@ -1,7 +1,7 @@
 //! Drawing through the daemon: the body sent, each event read back as a
 //! report or an image, and each refusal as the daemon's code and words.
 
-use std::io::{Read as _, Write as _};
+use std::io::Write as _;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
@@ -13,6 +13,7 @@ use gglib_core::ports::{
     ImageError, ImageGenerationPort, ImageProgress, ImageRequest, ImageSize, ImageSource,
     ImageStage,
 };
+use gglib_test_http::blocking;
 use tokio::sync::mpsc;
 
 use super::{DaemonImageGenerator, body_of, progress_of, read_render, refusal};
@@ -258,26 +259,12 @@ fn stand_in(status: u16, content_type: &str, body: String) -> (u16, Arc<Mutex<Ve
     let kept = Arc::clone(&seen);
     let content_type = content_type.to_owned();
     std::thread::spawn(move || {
-        let Ok((mut socket, _)) = listener.accept() else {
+        let Ok((request, mut socket)) = blocking::accept(&listener) else {
             return;
         };
-        let mut head = Vec::new();
-        let mut byte = [0_u8; 1];
-        while !head.ends_with(b"\r\n\r\n") && socket.read(&mut byte).is_ok_and(|n| n == 1) {
-            head.push(byte[0]);
-        }
-        let head = String::from_utf8_lossy(&head).into_owned();
-        let length: usize = head
-            .lines()
-            .filter_map(|l| l.split_once(':'))
-            .find(|(n, _)| n.eq_ignore_ascii_case("content-length"))
-            .and_then(|(_, v)| v.trim().parse().ok())
-            .unwrap_or(0);
-        let mut sent = vec![0_u8; length];
-        let _ = socket.read_exact(&mut sent);
         let mut log = kept.lock().unwrap();
-        log.push(head.lines().next().unwrap_or_default().to_owned());
-        log.push(String::from_utf8_lossy(&sent).into_owned());
+        log.push(request.line().to_owned());
+        log.push(request.body_text());
         drop(log);
         let _ = write!(
             socket,

@@ -9,10 +9,10 @@ use clap::Parser as _;
 use super::{resolve_default_context, start_body, start_on};
 use crate::commands::Commands;
 use crate::daemon_client::{DaemonHandle, STAND_IN_PORT, StartProxyBody, paths};
-use crate::handlers::agent_chat::sight::sight_tests::read_request;
 use crate::parser::Cli;
 use gglib_core::Settings;
 use gglib_core::settings::DEFAULT_PROXY_PORT;
+use gglib_test_http::blocking;
 
 // ── The default context ──────────────────────────────────────────────────
 
@@ -162,8 +162,7 @@ pub(in crate::handlers) async fn started(
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
     let port = listener.local_addr().expect("its address").port();
     let daemon = std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().expect("the request");
-        let request = read_request(&mut stream);
+        let (request, mut stream) = blocking::accept(&listener).expect("the request");
         let reply = serde_json::json!({ "running": answer.is_some(), "port": answer }).to_string();
         let _ = write!(
             stream,
@@ -171,7 +170,7 @@ pub(in crate::handlers) async fn started(
              content-length: {}\r\nconnection: close\r\n\r\n{reply}",
             reply.len()
         );
-        request
+        (request.line().to_owned(), request.body_text())
     });
     let handle = DaemonHandle {
         client: gglib_proxy::loopback::client(),

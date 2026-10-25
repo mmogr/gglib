@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use gglib_core::domain::hub_chats::HubTurn;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
 use super::FarProxy;
@@ -105,20 +105,14 @@ fn it_serves_only_the_machine_it_is_on() {
     }
 }
 
-/// A far proxy on a loopback port that reads the request head, then answers
+/// A far proxy on a loopback port that reads the request, then answers
 /// a chunked event stream: `frames` frames `gap` apart, then silence for
 /// `hold` before the end.
 async fn stream_server(frames: usize, gap: Duration, hold: Duration) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     tokio::spawn(async move {
-        let (mut socket, _) = listener.accept().await.unwrap();
-        let mut head = Vec::new();
-        let mut byte = [0u8; 1];
-        while !head.ends_with(b"\r\n\r\n") {
-            socket.read_exact(&mut byte).await.unwrap();
-            head.push(byte[0]);
-        }
+        let (_, mut socket) = gglib_test_http::accept(&listener).await.unwrap();
         let start = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n\
                      transfer-encoding: chunked\r\n\r\n";
         socket.write_all(start.as_bytes()).await.unwrap();

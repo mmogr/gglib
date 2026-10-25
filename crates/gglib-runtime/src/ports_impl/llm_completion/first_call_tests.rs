@@ -21,7 +21,7 @@ use gglib_core::normalize::tags::FORMAT_QWEN_XML;
 use gglib_core::ports::{AgentError, ToolExecutorPort};
 use gglib_core::request_pipeline::ModelContext;
 use serde_json::{Value, json};
-use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+use tokio::io::AsyncWriteExt as _;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
@@ -61,10 +61,10 @@ async fn llama(script: Vec<String>) -> (String, Arc<Mutex<Vec<Value>>>) {
     let kept = Arc::clone(&bodies);
     tokio::spawn(async move {
         for reply in script {
-            let Ok((mut socket, _)) = listener.accept().await else {
+            let Ok((request, mut socket)) = gglib_test_http::accept(&listener).await else {
                 return;
             };
-            let body = read_body(&mut socket).await;
+            let body: Value = serde_json::from_slice(&request.body).unwrap();
             kept.lock().unwrap().push(body);
             let head = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n\
                         connection: close\r\n\r\n";
@@ -74,28 +74,6 @@ async fn llama(script: Vec<String>) -> (String, Arc<Mutex<Vec<Value>>>) {
         }
     });
     (base, bodies)
-}
-
-/// Read one request's head and the body its `content-length` names.
-async fn read_body(socket: &mut tokio::net::TcpStream) -> Value {
-    let mut read = Vec::new();
-    let mut chunk = [0_u8; 8192];
-    loop {
-        let n = socket.read(&mut chunk).await.unwrap();
-        assert!(n > 0, "the request ended early");
-        read.extend_from_slice(&chunk[..n]);
-        let Some(start) = read.windows(4).position(|w| w == b"\r\n\r\n") else {
-            continue;
-        };
-        let head = String::from_utf8_lossy(&read[..start]).to_ascii_lowercase();
-        let length = head
-            .lines()
-            .find_map(|line| line.strip_prefix("content-length:"))
-            .map_or(0, |value| value.trim().parse::<usize>().unwrap());
-        if read.len() >= start + 4 + length {
-            return serde_json::from_slice(&read[start + 4..start + 4 + length]).unwrap();
-        }
-    }
 }
 
 /// Lists the image tool and an MCP server's, and counts what it ran.

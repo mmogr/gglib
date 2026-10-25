@@ -17,7 +17,7 @@ use gglib_core::ports::{
     GenerationGate, GenerationTurn, LlmCompletionPort as _, RetryObserver, TurnKind, WaitReason,
 };
 use gglib_core::retry::RetryPolicy;
-use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+use tokio::io::AsyncWriteExt as _;
 use tokio::net::TcpListener;
 use tokio::sync::Semaphore;
 
@@ -51,13 +51,15 @@ impl Llama {
         let (count, gate) = (Arc::clone(&accepted), Arc::clone(&finish));
         tokio::spawn(async move {
             loop {
-                let Ok((mut socket, _)) = listener.accept().await else {
+                let Ok(incoming) = gglib_test_http::incoming(&listener).await else {
                     return;
                 };
                 count.fetch_add(1, Ordering::SeqCst);
                 let gate = Arc::clone(&gate);
                 tokio::spawn(async move {
-                    read_request(&mut socket).await;
+                    let Ok((_, mut socket)) = incoming.request().await else {
+                        return;
+                    };
                     let head = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n\
                                 connection: close\r\n\r\n";
                     socket.write_all(head.as_bytes()).await.unwrap();
@@ -78,28 +80,6 @@ impl Llama {
 
     fn accepted(&self) -> usize {
         self.accepted.load(Ordering::SeqCst)
-    }
-}
-
-/// Read one request's head and the body its `content-length` names.
-async fn read_request(socket: &mut tokio::net::TcpStream) {
-    let mut read = Vec::new();
-    let mut chunk = [0_u8; 8192];
-    loop {
-        let n = socket.read(&mut chunk).await.unwrap();
-        assert!(n > 0, "the request ended early");
-        read.extend_from_slice(&chunk[..n]);
-        let Some(start) = read.windows(4).position(|w| w == b"\r\n\r\n") else {
-            continue;
-        };
-        let head = String::from_utf8_lossy(&read[..start]).to_ascii_lowercase();
-        let length = head
-            .lines()
-            .find_map(|line| line.strip_prefix("content-length:"))
-            .map_or(0, |value| value.trim().parse::<usize>().unwrap());
-        if read.len() >= start + 4 + length {
-            return;
-        }
     }
 }
 

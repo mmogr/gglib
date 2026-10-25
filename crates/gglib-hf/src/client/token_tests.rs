@@ -1,7 +1,7 @@
 //! The Hub token on the wire: sent as a bearer on each request, and in no
 //! error.
 
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::TcpListener;
 use std::thread::JoinHandle;
 
@@ -18,25 +18,16 @@ fn hub(status: &'static str, body: &'static str) -> (String, JoinHandle<String>)
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
     let base_url = format!("http://{}/api/models", listener.local_addr().unwrap());
     let served = std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().expect("a request");
-        // The whole head is read before the answer is written: a peer that
-        // answers and closes on unread bytes resets the connection.
-        let mut head = Vec::new();
-        let mut byte = [0_u8; 1];
-        while !head.ends_with(b"\r\n\r\n") {
-            assert_eq!(
-                stream.read(&mut byte).expect("the head"),
-                1,
-                "the head ended"
-            );
-            head.push(byte[0]);
-        }
+        // The whole request is read before the answer is written: a peer
+        // that answers and closes on unread bytes resets the connection.
+        let (request, mut stream) =
+            gglib_test_http::blocking::accept(&listener).expect("a request");
         let answer = format!(
             "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
             body.len()
         );
         stream.write_all(answer.as_bytes()).expect("the answer");
-        String::from_utf8(head).expect("a head is text")
+        request.head
     });
     (base_url, served)
 }

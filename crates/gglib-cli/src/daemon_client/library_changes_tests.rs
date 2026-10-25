@@ -1,12 +1,13 @@
 //! What the daemon is sent of a command's library changes, and when it is
 //! sent nothing.
 
-use std::io::{Read as _, Write as _};
+use std::io::Write as _;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
 use gglib_core::events::{AppEvent, ModelSummary};
 use gglib_core::ports::AppEventEmitter as _;
+use gglib_test_http::blocking;
 
 use super::super::auth::STAND_IN_TOKEN;
 use super::super::handle_tests::daemon_health;
@@ -42,24 +43,19 @@ fn stand_in(health: String, answer: &'static str) -> (u16, Asked) {
     let asked = Asked::default();
     let seen = Arc::clone(&asked);
     std::thread::spawn(move || {
-        for stream in listener.incoming() {
-            let Ok(mut stream) = stream else { continue };
-            let mut head = Vec::new();
-            let mut byte = [0_u8; 1];
-            while !head.ends_with(b"\r\n\r\n") && stream.read(&mut byte).is_ok_and(|n| n == 1) {
-                head.push(byte[0]);
-            }
-            let head = String::from_utf8_lossy(&head).into_owned();
-            let header = |wanted: &str| {
-                head.lines()
-                    .filter_map(|line| line.split_once(':'))
-                    .find(|(name, _)| name.eq_ignore_ascii_case(wanted))
-                    .map(|(_, value)| value.trim().to_owned())
+        loop {
+            let Ok(taken) = blocking::incoming(&listener) else {
+                continue;
             };
-            let length = header("content-length").and_then(|n| n.parse().ok());
-            let mut body = vec![0_u8; length.unwrap_or(0)];
-            let _ = stream.read_exact(&mut body);
-            let line = head.lines().next().unwrap_or_default().to_owned();
+            // A connection that sends no whole request was still sent.
+            let Ok((request, mut stream)) = taken.request() else {
+                seen.lock()
+                    .unwrap()
+                    .push((String::new(), None, None, String::new()));
+                continue;
+            };
+            let header = |wanted: &str| request.header(wanted).map(str::to_owned);
+            let line = request.line().to_owned();
             let reply = if line.starts_with("GET /health ") {
                 format!(
                     "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\
@@ -69,7 +65,7 @@ fn stand_in(health: String, answer: &'static str) -> (u16, Asked) {
             } else {
                 format!("HTTP/1.1 {answer}\r\nconnection: close\r\n\r\n")
             };
-            let body = String::from_utf8_lossy(&body).into_owned();
+            let body = request.body_text();
             let sent = (line, header("authorization"), header("content-type"), body);
             seen.lock().unwrap().push(sent);
             let _ = stream.write_all(reply.as_bytes());

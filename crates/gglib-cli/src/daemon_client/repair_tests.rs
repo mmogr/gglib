@@ -5,9 +5,9 @@ use std::io::Write as _;
 use std::net::TcpListener;
 
 use gglib_core::services::RepairStarted;
+use gglib_test_http::blocking;
 
 use super::super::{DaemonHandle, STAND_IN_PORT};
-use crate::handlers::agent_chat::sight::sight_tests::read_request;
 
 /// Answer the one request a stand-in daemon is sent with `status` and
 /// `reply`, and hand back that request's first line and body.
@@ -18,15 +18,14 @@ fn stand_in(
     let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback port");
     let port = listener.local_addr().expect("its address").port();
     let daemon = std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().expect("the request");
-        let request = read_request(&mut stream);
+        let (request, mut stream) = blocking::accept(&listener).expect("the request");
         let _ = write!(
             stream,
             "HTTP/1.1 {status}\r\ncontent-type: application/json\r\n\
              content-length: {}\r\nconnection: close\r\n\r\n{reply}",
             reply.len()
         );
-        request
+        (request.line().to_owned(), request.body_text())
     });
     (port, daemon)
 }

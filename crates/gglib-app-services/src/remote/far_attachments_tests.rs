@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use gglib_core::domain::AttachmentId;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
 use super::super::{FarProxy, build, streaming_builder};
@@ -35,21 +35,11 @@ async fn far_proxy(
     let seen = Arc::new(Mutex::new(Seen::default()));
     let record = Arc::clone(&seen);
     tokio::spawn(async move {
-        let (mut socket, _) = listener.accept().await.unwrap();
-        let mut head = Vec::new();
-        let mut byte = [0u8; 1];
-        while !head.ends_with(b"\r\n\r\n") {
-            socket.read_exact(&mut byte).await.unwrap();
-            head.push(byte[0]);
-        }
-        let head = String::from_utf8(head).unwrap().to_ascii_lowercase();
-        let length = head
-            .lines()
-            .find_map(|line| line.strip_prefix("content-length: "))
-            .map_or(0, |n| n.trim().parse::<usize>().unwrap());
-        let mut sent = vec![0u8; length];
-        socket.read_exact(&mut sent).await.unwrap();
-        *record.lock().unwrap() = Seen { head, body: sent };
+        let (request, mut socket) = gglib_test_http::accept(&listener).await.unwrap();
+        *record.lock().unwrap() = Seen {
+            head: request.head.to_ascii_lowercase(),
+            body: request.body,
+        };
         tokio::time::sleep(DELAY).await;
         let start = format!(
             "HTTP/1.1 {status} X\r\ncontent-type: {content_type}\r\n\

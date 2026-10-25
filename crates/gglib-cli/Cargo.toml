@@ -67,6 +67,8 @@ gglib-db = { workspace = true, features = ["test-utils"] }
 gglib-core = { workspace = true, features = ["test-utils"] }
 # The GGUF files a test library holds.
 gglib-gguf = { workspace = true, features = ["test-utils"] }
+# The connection a fake server answers on, with the request already read.
+gglib-test-http = { workspace = true }
 tempfile = { workspace = true }
 
 [lints]

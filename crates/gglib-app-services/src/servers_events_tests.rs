@@ -347,24 +347,19 @@ async fn stopping_an_image_model_in_the_second_slot_stops_it_by_id() {
 
 /// A stand-in `sd-server` on a loopback port: `/v1/models` answers with
 /// sd-server's model, and anything else, `/health` included, is a 404. Each
-/// request head is read before the answer.
+/// request is read whole before the answer.
 async fn fake_sd_server() -> u16 {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::io::AsyncWriteExt;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     tokio::spawn(async move {
-        while let Ok((mut socket, _)) = listener.accept().await {
+        while let Ok(incoming) = gglib_test_http::incoming(&listener).await {
             tokio::spawn(async move {
-                let mut head = Vec::new();
-                let mut buf = [0_u8; 1024];
-                while !head.windows(4).any(|w| w == b"\r\n\r\n") {
-                    match socket.read(&mut buf).await {
-                        Ok(0) | Err(_) => return,
-                        Ok(n) => head.extend_from_slice(&buf[..n]),
-                    }
-                }
+                let Ok((request, mut socket)) = incoming.request().await else {
+                    return;
+                };
                 let body = r#"{"object":"list","data":[{"id":"sd-cpp-local","object":"model"}]}"#;
-                let reply = if head.starts_with(b"GET /v1/models ") {
+                let reply = if request.line().starts_with("GET /v1/models ") {
                     format!(
                         "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
                         body.len()

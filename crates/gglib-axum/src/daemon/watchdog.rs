@@ -209,25 +209,17 @@ mod tests {
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let _ = ready_tx.send(());
-            if let Ok((mut stream, _)) = listener.accept() {
-                // Drain the *whole* request before answering.
-                //
-                // A single `read` returns whatever one segment carried, which
-                // is the entire request when the machine is idle and only part
-                // of it when the machine is busy. Dropping the socket with
-                // unread bytes still in its receive buffer makes the OS send
-                // RST rather than FIN, and an RST discards the peer's receive
-                // buffer — destroying a response that had already been written.
-                // That is why this failed only under parallel load, and only
-                // ever on the arm that expects to read a reply.
-                let mut request = Vec::new();
-                let mut chunk = [0u8; 512];
-                while !request.windows(4).any(|w| w == b"\r\n\r\n") {
-                    match stream.read(&mut chunk) {
-                        Ok(0) | Err(_) => break,
-                        Ok(n) => request.extend_from_slice(&chunk[..n]),
-                    }
-                }
+            // The stream comes with the *whole* request read.
+            //
+            // A single `read` returns whatever one segment carried, which is
+            // the entire request when the machine is idle and only part of it
+            // when the machine is busy. Dropping the socket with unread bytes
+            // still in its receive buffer makes the OS send RST rather than
+            // FIN, and an RST discards the peer's receive buffer — destroying
+            // a response that had already been written. That is why a single
+            // `read` failed only under parallel load, and only ever on the arm
+            // that expects to read a reply.
+            if let Ok((_, mut stream)) = gglib_test_http::blocking::accept(&listener) {
                 let _ = stream.write_all(response);
                 let _ = stream.flush();
             }
@@ -264,7 +256,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").expect("ephemeral port");
         let addr = listener.local_addr().expect("bound addr");
         std::thread::spawn(move || {
-            let held = listener.accept();
+            let held = gglib_test_http::blocking::incoming(&listener);
             std::thread::sleep(Duration::from_secs(2));
             drop(held);
         });

@@ -23,9 +23,10 @@ use std::sync::{Arc, Mutex};
 
 use gglib_core::domain::ModelCapabilities;
 use gglib_core::ports::{CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelSummary};
+use gglib_test_http::Incoming;
 use serde_json::{Value, json};
-use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::io::AsyncWriteExt as _;
+use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
 /// The tool the mock's answers call.
@@ -53,8 +54,8 @@ impl MockUpstream {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&seen);
         let task = tokio::spawn(async move {
-            while let Ok((stream, _)) = listener.accept().await {
-                tokio::spawn(answer(stream, Arc::clone(&sink)));
+            while let Ok(incoming) = gglib_test_http::incoming(&listener).await {
+                tokio::spawn(answer(incoming, Arc::clone(&sink)));
             }
         });
         Self { port, seen, task }
@@ -138,18 +139,18 @@ pub(crate) fn read_lines_task() -> gglib_core::domain::benchmark::tune::task::Tu
     .expect("task")
 }
 
-async fn answer(mut stream: TcpStream, seen: Arc<Mutex<Vec<Value>>>) {
-    let Some((head, body)) = read_request(&mut stream).await else {
+async fn answer(incoming: Incoming, seen: Arc<Mutex<Vec<Value>>>) {
+    let Ok((request, mut stream)) = incoming.request().await else {
         return;
     };
-    let request_line = head.lines().next().unwrap_or_default().to_owned();
+    let request_line = request.line();
     if !request_line.starts_with("POST ") || !request_line.contains("/v1/chat/completions") {
         let _ = stream
             .write_all(b"HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
             .await;
         return;
     }
-    let parsed: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+    let parsed: Value = serde_json::from_slice(&request.body).unwrap_or(Value::Null);
     seen.lock().expect("lock").push(parsed.clone());
 
     let after_tool = parsed["messages"]
@@ -200,37 +201,4 @@ fn sse(chunks: &[Value]) -> String {
     }
     out.push_str("data: [DONE]\n\n");
     out
-}
-
-/// Read one request's head and its `content-length` body. `None` when the
-/// peer sent nothing, as a reachability probe does.
-async fn read_request(stream: &mut TcpStream) -> Option<(String, Vec<u8>)> {
-    let mut buf = Vec::new();
-    let mut chunk = [0_u8; 4096];
-    let head_end = loop {
-        if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
-            break i + 4;
-        }
-        let n = stream.read(&mut chunk).await.ok()?;
-        if n == 0 {
-            return None;
-        }
-        buf.extend_from_slice(&chunk[..n]);
-    };
-    let head = String::from_utf8_lossy(&buf[..head_end]).into_owned();
-    let length = head
-        .lines()
-        .filter_map(|l| l.split_once(':'))
-        .find(|(k, _)| k.trim().eq_ignore_ascii_case("content-length"))
-        .and_then(|(_, v)| v.trim().parse::<usize>().ok())
-        .unwrap_or(0);
-    let mut body = buf[head_end..].to_vec();
-    while body.len() < length {
-        let n = stream.read(&mut chunk).await.ok()?;
-        if n == 0 {
-            break;
-        }
-        body.extend_from_slice(&chunk[..n]);
-    }
-    Some((head, body))
 }

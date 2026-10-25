@@ -13,7 +13,8 @@
 //! unread can reset the connection, and the client can lose the answer. Both
 //! are avoided the same way: read the whole request first. A fake built on
 //! these functions gets no stream to write to until its request is read, so
-//! it cannot forget.
+//! it cannot forget, and `clippy.toml` refuses `TcpListener::accept` and
+//! `incoming` everywhere else, so a fake cannot go round them.
 //!
 //! [`accept`] takes a connection and reads its request. [`incoming`] only
 //! takes the connection, for a server that reads in a task of its own, or a
@@ -69,6 +70,10 @@ pub async fn accept(listener: &TcpListener) -> io::Result<(Request, TcpStream)> 
 ///
 /// The listener's own error.
 pub async fn incoming(listener: &TcpListener) -> io::Result<Incoming> {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the one place a connection is taken, and it gives no stream until the request is read"
+    )]
     let (stream, _) = listener.accept().await?;
     Ok(Incoming(stream))
 }

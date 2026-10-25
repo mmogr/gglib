@@ -43,6 +43,10 @@ pub fn accept(listener: &TcpListener) -> io::Result<(Request, TcpStream)> {
 ///
 /// The listener's own error.
 pub fn incoming(listener: &TcpListener) -> io::Result<Incoming> {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the one place a connection is taken, and it gives no stream until the request is read"
+    )]
     let (stream, _) = listener.accept()?;
     Ok(Incoming(stream))
 }
