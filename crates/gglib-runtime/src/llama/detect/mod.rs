@@ -59,51 +59,52 @@ impl std::fmt::Display for Acceleration {
     }
 }
 
-/// Detect the optimal acceleration type for the current system, strictly.
+/// Detect the optimal acceleration type for the current system.
 ///
-/// Returns an error if no supported GPU acceleration (Metal, CUDA, or
-/// Vulkan) is **fully buildable**. For Vulkan, that means the loader,
-/// headers, `glslc`, **and** SPIR-V headers are all present (see
-/// [`VulkanStatus::ready_for_build`]).
+/// Metal, CUDA, or Vulkan when one is **fully buildable**. For Vulkan, that
+/// means the loader, headers, `glslc`, **and** SPIR-V headers are all
+/// present (see [`VulkanStatus::ready_for_build`]). With no GPU at all, the
+/// CPU: the build runs, slowly, and the caller says so.
 ///
-/// When a GPU runtime is detected but the build dependencies are
-/// incomplete (e.g. Vulkan loader present but SPIR-V headers missing),
-/// this returns `Err` so the caller can surface install hints — we do
-/// not silently degrade to CPU when the user has a usable GPU.
+/// When a Vulkan GPU is there but its build dependencies are incomplete
+/// (e.g. the loader and a device present but SPIR-V headers missing), this
+/// returns `Err` so the caller can surface install hints — we do not
+/// silently degrade to CPU when the user has a usable GPU.
 pub fn detect_optimal_acceleration() -> Result<Acceleration> {
     if cfg!(target_os = "macos") && metal::has_metal_support() {
         Ok(Acceleration::Metal)
     } else if cuda::has_cuda_toolkit() {
         Ok(Acceleration::Cuda)
     } else {
-        let vulkan = vulkan_status();
-        if vulkan.ready_for_build() {
-            Ok(Acceleration::Vulkan)
-        } else {
-            Err(no_acceleration(&vulkan))
-        }
+        without_metal_or_cuda(
+            &vulkan_status(),
+            crate::system::gpu::vulkan_device_present(),
+        )
     }
 }
 
-/// Why no acceleration was chosen.
-///
-/// A Vulkan GPU that is there, with part of what a Vulkan build needs
-/// missing, is the one refusal with a remedy to name: the packages, and the
-/// command that lists how to install them.
-fn no_acceleration(vulkan: &VulkanStatus) -> anyhow::Error {
-    if vulkan.has_loader {
-        let missing: Vec<&str> = vulkan.missing.iter().map(MissingPackage::label).collect();
-        return anyhow!(
-            "A Vulkan GPU was detected, but a Vulkan build also needs: {}.\n\
-             Run 'gglib config llama detect' to see how to install them.\n\
-             gglib will not fall back to a CPU-only build.",
-            missing.join(", ")
-        );
+/// The choice with neither Metal nor CUDA, from what `vulkan` found and
+/// whether a GPU `device` is there: Vulkan when both its build is ready and
+/// a device is there to run it, a refusal naming what is missing when only
+/// the build is not ready, and the CPU otherwise. A Vulkan build with no
+/// device would run on the CPU and never say so.
+fn without_metal_or_cuda(vulkan: &VulkanStatus, device: bool) -> Result<Acceleration> {
+    match (device && vulkan.has_loader, vulkan.ready_for_build()) {
+        (true, true) => Ok(Acceleration::Vulkan),
+        (true, false) => Err(vulkan_unbuildable(vulkan)),
+        (false, _) => Ok(Acceleration::Cpu),
     }
+}
+
+/// Why a Vulkan GPU that is there is not built for: the packages its build
+/// also needs, and the command that lists how to install them.
+fn vulkan_unbuildable(vulkan: &VulkanStatus) -> anyhow::Error {
+    let missing: Vec<&str> = vulkan.missing.iter().map(MissingPackage::label).collect();
     anyhow!(
-        "No supported GPU acceleration found.\n\
-         gglib requires Metal (macOS), CUDA (NVIDIA), or Vulkan (AMD/Intel) for inference.\n\
-         CPU-only inference is not supported."
+        "A Vulkan GPU was detected, but a Vulkan build also needs: {}.\n\
+         Run 'gglib config llama detect' to see how to install them.\n\
+         gglib will not fall back to a CPU-only build while a GPU is there.",
+        missing.join(", ")
     )
 }
 
@@ -127,18 +128,48 @@ mod tests {
         assert!(Acceleration::Cpu.cmake_flags().is_empty());
     }
 
-    /// With no GPU there is nothing to install, and with a Vulkan one there
-    /// is: the refusal names each missing package and the command that says
-    /// how to get it.
+    fn ready() -> VulkanStatus {
+        VulkanStatus {
+            has_loader: true,
+            has_headers: true,
+            has_glslc: true,
+            has_spirv_headers: true,
+            missing: Vec::new(),
+        }
+    }
+
+    /// Vulkan needs both its build and a device; with no device, every build
+    /// package installed or not, the CPU.
+    #[test]
+    fn vulkan_is_chosen_only_where_a_device_runs_it() {
+        assert_eq!(
+            without_metal_or_cuda(&ready(), true).unwrap(),
+            Acceleration::Vulkan
+        );
+        assert_eq!(
+            without_metal_or_cuda(&ready(), false).unwrap(),
+            Acceleration::Cpu
+        );
+        assert_eq!(
+            without_metal_or_cuda(&VulkanStatus::absent(), true).unwrap(),
+            Acceleration::Cpu
+        );
+        let missing = VulkanStatus {
+            has_glslc: false,
+            missing: vec![MissingPackage::Glslc],
+            ..ready()
+        };
+        assert!(without_metal_or_cuda(&missing, true).is_err());
+        assert_eq!(
+            without_metal_or_cuda(&missing, false).unwrap(),
+            Acceleration::Cpu
+        );
+    }
+
+    /// A Vulkan GPU with part of its build missing is told each missing
+    /// package and the command that says how to get it.
     #[test]
     fn a_vulkan_gpu_without_its_build_packages_is_told_what_is_missing() {
-        let none = no_acceleration(&VulkanStatus::absent()).to_string();
-        assert!(
-            none.starts_with("No supported GPU acceleration found."),
-            "{none}"
-        );
-        assert!(!none.contains("llama detect"), "{none}");
-
         let loader_only = VulkanStatus {
             has_loader: true,
             has_headers: true,
@@ -147,11 +178,11 @@ mod tests {
             missing: vec![MissingPackage::Glslc, MissingPackage::SpirvHeaders],
         };
         assert_eq!(
-            no_acceleration(&loader_only).to_string(),
+            vulkan_unbuildable(&loader_only).to_string(),
             "A Vulkan GPU was detected, but a Vulkan build also needs: \
              SPIR-V shader compiler (glslc), SPIR-V headers (spirv-headers).\n\
              Run 'gglib config llama detect' to see how to install them.\n\
-             gglib will not fall back to a CPU-only build."
+             gglib will not fall back to a CPU-only build while a GPU is there."
         );
     }
 
@@ -163,13 +194,11 @@ mod tests {
     fn test_detect_optimal_acceleration() {
         match detect_optimal_acceleration() {
             Ok(accel) => {
-                assert!(matches!(
-                    accel,
-                    Acceleration::Metal | Acceleration::Cuda | Acceleration::Vulkan
-                ));
+                // Any of them, the CPU included on a machine with no GPU.
+                let _ = accel.display_name();
             }
             Err(_) => {
-                // No supported GPU on this machine — correct behavior
+                // A Vulkan GPU whose build packages are missing.
             }
         }
     }

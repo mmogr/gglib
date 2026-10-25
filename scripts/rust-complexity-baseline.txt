@@ -23,7 +23,7 @@ crates/gglib-app-services/src/servers.rs 820
 crates/gglib-app-services/src/servers_events_tests.rs 415
 crates/gglib-app-services/src/service_graph.rs 314
 crates/gglib-app-services/src/settings_tests.rs 327
-crates/gglib-app-services/src/setup.rs 358
+crates/gglib-app-services/src/setup.rs 360
 crates/gglib-app-services/src/test_support.rs 394
 crates/gglib-app-services/src/types.rs 556
 crates/gglib-app-services/src/types_model_dto_tests.rs 311
@@ -256,6 +256,7 @@ crates/gglib-runtime/src/sd/install/install_tests.rs 320
 crates/gglib-runtime/src/sd/server/job.rs 396
 crates/gglib-runtime/src/sd/server/job_leave_tests.rs 537
 crates/gglib-runtime/src/sd/server/job_tests.rs 1014
+crates/gglib-runtime/src/system/gpu.rs 331
 crates/gglib-runtime/src/system/mod.rs 623
 crates/gglib-runtime/src/unified_server_config.rs 465
 crates/gglib-sse/src/lib.rs 320

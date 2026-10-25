@@ -72,6 +72,12 @@ pub(super) async fn build_from_source(agreed: bool) -> Result<()> {
         bail!("Missing required build dependencies");
     }
     let acceleration = detect_optimal_acceleration()?;
+    if acceleration == Acceleration::Cpu {
+        println!(
+            "\u{26a0}\u{fe0f}  No GPU was found, so {PRODUCT} is built for the CPU. Images will take \
+             minutes each."
+        );
+    }
     if !agreed {
         for line in build_lines(acceleration) {
             println!("{line}");

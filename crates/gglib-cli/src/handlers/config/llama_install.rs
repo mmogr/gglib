@@ -73,12 +73,18 @@ pub(super) async fn build_from_source(agreed: bool, ending: BuildEnding) -> Resu
     }
     println!();
 
-    // Step 2: Detect acceleration. Missing build dependencies hard-fail
-    // with actionable hints. We do **not** silently degrade to a CPU
-    // build when a GPU runtime is detected — the user almost certainly
-    // wants to fix the missing package and re-run.
+    // Step 2: Detect acceleration. With no GPU it is the CPU, said aloud.
+    // A Vulkan GPU missing build dependencies hard-fails with actionable
+    // hints: we do **not** silently degrade to a CPU build when a GPU is
+    // there — the user almost certainly wants to fix the missing package
+    // and re-run.
     let acceleration = detect_optimal_acceleration()?;
     println!("Selected acceleration: {}", acceleration.display_name());
+    if acceleration == Acceleration::Cpu {
+        println!(
+            "\u{26a0}\u{fe0f}  No GPU was found, so llama.cpp is built for the CPU. Replies will be slow."
+        );
+    }
 
     // Step 2b: Vulkan build-readiness pre-flight. The strict detector
     // already rejects an unbuildable Vulkan, so this is defence in depth.

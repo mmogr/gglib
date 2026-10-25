@@ -87,8 +87,8 @@ pub(super) fn print_gpu_status(probe: &dyn SystemProbePort) {
             );
         }
     } else {
-        println!("  {DANGER}✗ No supported GPU detected (Metal/CUDA/Vulkan required){RESET}");
-        println!("  {DANGER}  CPU-only inference is not supported{RESET}");
+        println!("  {WARNING}○ No supported GPU detected (Metal, CUDA or Vulkan){RESET}");
+        println!("  {WARNING}  llama.cpp runs on the CPU here, and replies will be slow{RESET}");
     }
 }
 

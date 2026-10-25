@@ -154,11 +154,14 @@ describe('DiagnosticsPanel', () => {
   it('surfaces a detection failure instead of implying CPU will be used', async () => {
     mockGet.mockResolvedValue({
       ...base,
-      acceleration: { detected: null, detectionError: 'No supported GPU acceleration found' },
+      acceleration: {
+        detected: null,
+        detectionError: 'A Vulkan GPU was detected, but a Vulkan build also needs: SPIR-V headers (spirv-headers).',
+      },
     });
 
     render(<DiagnosticsPanel />);
-    expect(await screen.findByText(/No supported GPU acceleration found/)).toBeInTheDocument();
+    expect(await screen.findByText(/a Vulkan build also needs: SPIR-V headers/)).toBeInTheDocument();
   });
 
   it('enables the accelerator and re-reads the state', async () => {

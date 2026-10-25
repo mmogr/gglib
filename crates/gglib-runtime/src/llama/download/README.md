@@ -4,14 +4,16 @@
 
 Pre-built llama.cpp binary download support.
 
-This module handles downloading pre-built llama.cpp binaries from GitHub releases
-for users running pre-built gglib binaries (not building from source).
+This module downloads the pinned llama.cpp release's pre-built binaries from
+GitHub, which is how every install goes, from a checkout too, unless a source
+build is asked for or no download fits (`gglib_runtime::engine`).
 
-Platform support:
-- macOS ARM64: Metal-enabled pre-built binaries
-- macOS x64: Metal-enabled pre-built binaries
-- Windows x64: CUDA or Vulkan pre-built binaries (selected at runtime via GPU detection)
-- Linux x64: CPU pre-built binaries (CUDA requires building from source)
+Platform support (`llama_platform_asset`):
+- macOS ARM64 and x64: Metal
+- Linux x64 and ARM64: Vulkan when a Vulkan GPU is there, else the CPU build,
+  with a warning (CUDA is a source build, with `--build`)
+- Windows x64: CUDA 12.4 for an NVIDIA GPU with CUDA, else Vulkan, else the
+  CPU build, with a warning; Windows ARM64: Vulkan, else the CPU build
 
 This module holds what is llama.cpp's own: the pin and its override
 (`GGLIB_LLAMA_RELEASE`), the platform table, the CUDA runtime package, and

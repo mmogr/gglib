@@ -110,8 +110,8 @@ fn report_memory(status: &SetupStatus) -> Option<SystemMemoryInfo> {
 /// Name the acceleration backend from what the GPU probe found.
 ///
 /// An NVIDIA card without the CUDA toolkit is called out rather than reported
-/// as plain "NVIDIA": it is the difference between a fast install and a build
-/// that silently falls back to CPU.
+/// as plain "NVIDIA": it is the difference between a fast install and one
+/// that takes the Vulkan download, or a CPU build.
 #[allow(
     clippy::option_if_let_else,
     reason = "grandfathered at lint inheritance, #1157"

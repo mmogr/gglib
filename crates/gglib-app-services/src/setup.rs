@@ -262,8 +262,9 @@ impl SetupOps {
         let paths = gglib_core::paths::ResolvedPaths::resolve()
             .map_err(|e| GuiError::Internal(format!("Failed to resolve paths: {e}")))?;
 
-        // Detection refuses to fall back to CPU so callers can surface install
-        // hints. That refusal is an answer here, not a failed request.
+        // Detection refuses a Vulkan GPU whose build packages are missing, so
+        // callers can surface install hints. That refusal is an answer here,
+        // not a failed request.
         let acceleration = match gglib_runtime::llama::detect_optimal_acceleration() {
             Ok(accel) => AccelerationInfo {
                 detected: Some(accel.display_name().to_string()),
@@ -305,9 +306,10 @@ impl SetupOps {
 
 /// What acceleration a build would use.
 ///
-/// Detection is deliberately fallible — it refuses to fall back to CPU so
-/// callers can surface install hints — so the failure is carried as data
-/// rather than failing the whole diagnostics request.
+/// Detection is deliberately fallible — it refuses a Vulkan GPU whose build
+/// packages are missing, so callers can surface install hints — so the
+/// failure is carried as data rather than failing the whole diagnostics
+/// request.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
