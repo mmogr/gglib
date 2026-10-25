@@ -70,7 +70,7 @@ fn nothing_installed_is_a_status_not_an_error() {
         &pin(),
     );
     assert!(!status.installed);
-    assert_eq!(status.pinned_release, "master-948-228c707");
+    assert_eq!(status.pinned_release, super::PINNED_SD_RELEASE);
     assert_eq!(
         (
             status.install_type,

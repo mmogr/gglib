@@ -9,7 +9,7 @@ build are in [the parent README](../README.md).
 
 | File           | What it holds                                                          |
 |----------------|------------------------------------------------------------------------|
-| `release.rs`   | the pin `master-948-228c707`, `GGLIB_SD_RELEASE`, the platform table   |
+| `release.rs`   | the pin `PINNED_SD_RELEASE`, `GGLIB_SD_RELEASE`, the platform table    |
 | `pipeline.rs`  | the pre-built install, and the source build of the `sd-server` target  |
 | `status.rs`    | `SdStatus`, from the record and the binary's own `--version`           |
 

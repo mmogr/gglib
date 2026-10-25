@@ -286,11 +286,11 @@ fn the_pin_is_a_well_formed_master_tag() {
 fn the_override_is_blank_latest_or_a_tag() {
     assert_eq!(
         selector_from_override(&SD_RELEASE, ""),
-        ReleaseSelector::Tag("master-948-228c707".to_owned())
+        ReleaseSelector::Tag(PINNED_SD_RELEASE.to_owned())
     );
     assert_eq!(
         selector_from_override(&SD_RELEASE, "  "),
-        ReleaseSelector::Tag("master-948-228c707".to_owned())
+        ReleaseSelector::Tag(PINNED_SD_RELEASE.to_owned())
     );
     assert_eq!(
         selector_from_override(&SD_RELEASE, "LATEST"),
