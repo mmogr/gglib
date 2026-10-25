@@ -64,6 +64,9 @@ pub async fn handle_status() -> Result<()> {
 
     println!("Status: Installed");
     println!("Binary: {}", status.binary_path);
+    if let Some(line) = crate::engine::standing_line(&status.pin) {
+        println!("{line}");
+    }
 
     match &status.health_error {
         None => println!("Health: ✓ Functional"),

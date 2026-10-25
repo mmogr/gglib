@@ -20,10 +20,16 @@ A product built from source starts from its checkout instead:
 reusing a checkout already at it and cloning any other beside the old one,
 which `Checkout::settle` replaces once the build is installed.
 
+Whether an install has anything to do is `pin::standing`'s to say: the
+release installed against the one the pin (or its override) selects,
+compared by the build number both products put in their tags, and by name
+alone for a target that has none.
+
 | File          | What it holds                                                             |
 |---------------|---------------------------------------------------------------------------|
 | `release.rs`  | `ReleaseSpec`, the pin and its override, `AssetMatcher`, `release_number` |
 | `checkout.rs` | `SourceRepo`, `prepare_checkout`, `Checkout`                              |
+| `pin.rs`      | `PinStanding`, where an installed release stands against the pin          |
 | `fetch.rs`    | the release listing, the archive stream, the CUDA runtime package         |
 | `extract.rs`  | unpacking a zip or tar.gz into the bin directory                          |
 | `record.rs`   | `PrebuiltRecord`, the four keys a download writes                         |

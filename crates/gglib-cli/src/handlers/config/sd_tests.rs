@@ -33,6 +33,16 @@ fn status(install_type: Option<&str>) -> SdStatus {
         version_line: install_type
             .map(|_| "stable-diffusion.cpp version unknown, commit 228c707".to_owned()),
         commit: install_type.map(|_| "228c707".to_owned()),
+        pin: gglib_runtime::engine::PinState {
+            standing: if installed {
+                gglib_runtime::engine::PinStanding::AtPin
+            } else {
+                gglib_runtime::engine::PinStanding::Missing
+            },
+            installed_release: install_type.map(|_| "master-948-228c707".to_owned()),
+            target_release: Some("master-948-228c707".to_owned()),
+            built: install_type.map(|kind| kind == "source"),
+        },
     }
 }
 
@@ -43,12 +53,12 @@ fn status_of_a_download_names_its_release_platform_commit_and_path() {
         [
             "Status: Installed",
             "Binary: /data/.sd/bin/sd-server",
+            "Pinned release: master-948-228c707, which is the one installed.",
             "",
             "Pre-built download:",
             "  Release: master-948-228c707",
             "  Platform: macOS (Metal)",
             "  Installed: 2026-10-10 01:02:03 UTC",
-            "  Pinned release: master-948-228c707",
             "",
             "Binary version: stable-diffusion.cpp version unknown, commit 228c707",
             "  Commit: 228c707",
@@ -63,12 +73,12 @@ fn status_of_a_source_build_says_it_was_built() {
         [
             "Status: Installed",
             "Binary: /data/.sd/bin/sd-server",
+            "Pinned release: master-948-228c707, which is the one installed.",
             "",
             "Built from source:",
             "  Release: master-948-228c707",
             "  Acceleration: Metal",
             "  Built: 2026-10-10 01:02:03 UTC",
-            "  Pinned release: master-948-228c707",
             "",
             "Binary version: stable-diffusion.cpp version unknown, commit 228c707",
             "  Commit: 228c707",

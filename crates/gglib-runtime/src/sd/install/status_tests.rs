@@ -6,8 +6,15 @@ use std::path::Path;
 use super::record::{SdBuildRecord, SdInstallRecord};
 use super::status::{commit_of, sd_status_at};
 use super::uninstall::uninstall_sd_at;
-use crate::binary_install::PrebuiltRecord;
+use crate::binary_install::{PrebuiltRecord, ReleaseSelector};
+#[cfg(unix)]
+use crate::engine::{PinStanding, PinState};
 use crate::llama::Acceleration;
+
+/// The selector of a test: the pin as it stands today.
+fn pin() -> ReleaseSelector {
+    ReleaseSelector::Tag("master-948-228c707".to_owned())
+}
 
 /// The two shapes of `sd-config.json` read back as what was written, each
 /// as its own kind, with the keys each has.
@@ -61,6 +68,8 @@ fn nothing_installed_is_a_status_not_an_error() {
     let status = sd_status_at(
         &tmp.path().join("sd-server"),
         &tmp.path().join("sd-config.json"),
+        &tmp.path().join("stable-diffusion.cpp"),
+        &pin(),
     );
     assert!(!status.installed);
     assert_eq!(status.pinned_release, "master-948-228c707");
@@ -97,7 +106,12 @@ fn the_status_reads_the_record_and_the_binarys_own_version() {
     .save(&config)
     .unwrap();
 
-    let status = sd_status_at(&binary, &config);
+    let status = sd_status_at(
+        &binary,
+        &config,
+        &tmp.path().join("stable-diffusion.cpp"),
+        &pin(),
+    );
 
     assert!(status.installed);
     assert_eq!(status.install_type.as_deref(), Some("prebuilt"));
@@ -108,6 +122,15 @@ fn the_status_reads_the_record_and_the_binarys_own_version() {
         Some("stable-diffusion.cpp version master-948-228c707, commit 228c707")
     );
     assert_eq!(status.commit.as_deref(), Some("228c707"));
+    assert_eq!(
+        status.pin,
+        PinState {
+            standing: PinStanding::AtPin,
+            installed_release: Some("master-948-228c707".to_owned()),
+            target_release: Some("master-948-228c707".to_owned()),
+            built: Some(false),
+        }
+    );
 }
 
 #[test]
@@ -115,7 +138,12 @@ fn an_unreadable_record_is_reported_not_raised() {
     let tmp = tempfile::tempdir().expect("a temp dir");
     let config = tmp.path().join("sd-config.json");
     std::fs::write(&config, "{").unwrap();
-    let status = sd_status_at(&tmp.path().join("sd-server"), &config);
+    let status = sd_status_at(
+        &tmp.path().join("sd-server"),
+        &config,
+        &tmp.path().join("stable-diffusion.cpp"),
+        &pin(),
+    );
     assert_eq!(
         status.record_error.as_deref(),
         Some("Failed to parse config file")

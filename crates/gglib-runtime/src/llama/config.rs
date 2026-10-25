@@ -9,6 +9,7 @@ use std::path::Path;
 
 /// A download's record is every product's; it lives with the installer.
 pub(super) use crate::binary_install::PrebuiltRecord;
+use crate::binary_install::Recorded;
 
 /// What `llama-config.json` holds.
 ///
@@ -60,6 +61,21 @@ pub(super) fn recorded_build(path: &Path) -> Result<Option<BuildConfig>> {
         return Ok(None);
     }
     Ok(InstallRecord::load(path)?.into_build())
+}
+
+/// What the record at `path` says was installed, for comparing with the
+/// pin; `None` with no record or one that cannot be read.
+pub(crate) fn recorded_install(path: &Path) -> Option<Recorded> {
+    Some(match InstallRecord::load(path).ok()? {
+        InstallRecord::Built(config) => Recorded {
+            release: config.version,
+            commit_sha: Some(config.commit_sha),
+        },
+        InstallRecord::Prebuilt(record) => Recorded {
+            release: record.version,
+            commit_sha: None,
+        },
+    })
 }
 
 /// The acceleration the installed llama.cpp was built for, when a source

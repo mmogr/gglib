@@ -8,9 +8,11 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
+use gglib_core::domain::RuntimeKind;
 use gglib_core::ports::SystemProbePort;
 use gglib_core::services::AppCore;
 use gglib_core::utils::system::SystemMemoryInfo;
+use gglib_runtime::engine::{PinStanding, pin_state};
 
 use crate::error::GuiError;
 use crate::settings::{models_directory_info, system_memory};
@@ -26,6 +28,9 @@ pub struct SetupStatus {
     pub setup_completed: bool,
     /// Whether llama-server binary is installed.
     pub llama_installed: bool,
+    /// Where the installed llama.cpp stands against its pinned release:
+    /// whether an install has anything to do.
+    pub llama_standing: PinStanding,
     /// Whether pre-built binaries can be downloaded for this platform.
     pub llama_can_download: bool,
     /// Platform description for pre-built binaries (e.g., "macOS ARM64 (Metal)").
@@ -80,6 +85,15 @@ impl SetupOps {
 
         // Check llama installation
         let llama_installed = gglib_runtime::llama::check_llama_installed();
+        // Paths that cannot be resolved leave nothing to compare.
+        let llama_standing = pin_state(RuntimeKind::Llama).map_or(
+            if llama_installed {
+                PinStanding::Unknown
+            } else {
+                PinStanding::Missing
+            },
+            |state| state.standing,
+        );
 
         // Check prebuilt availability
         let (llama_can_download, llama_platform_description) = {
@@ -141,6 +155,7 @@ impl SetupOps {
         Ok(SetupStatus {
             setup_completed,
             llama_installed,
+            llama_standing,
             llama_can_download,
             llama_platform_description,
             gpu_info,

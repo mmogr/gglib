@@ -10,7 +10,8 @@ pub use release::{PINNED_SD_RELEASE, SD_RELEASE_ENV, SdAsset, check_sd_prebuilt_
 pub use status::{SdStatus, sd_status};
 pub use uninstall::{sd_files_present, uninstall_sd};
 
-pub(crate) use record::recorded_release;
+pub(crate) use record::{recorded_install, recorded_release};
+pub(crate) use release::SD_RELEASE;
 
 #[cfg(test)]
 #[path = "release_tests.rs"]

@@ -6,6 +6,8 @@
 import type { DependencyDto } from './generated/DependencyDto';
 import type { DiagnosticsDto } from './generated/DiagnosticsDto';
 import type { ModelsDirectoryInfo } from './generated/ModelsDirectoryInfo';
+import type { PinStanding } from './generated/PinStanding';
+import type { PinState } from './generated/PinState';
 import type { RecommendationDto } from './generated/RecommendationDto';
 import type { ResolvedPathsDto } from './generated/ResolvedPathsDto';
 import type { SystemMemoryInfo } from './generated/SystemMemoryInfo';
@@ -30,6 +32,8 @@ export interface GpuInfo {
 export interface SetupStatus {
   setupCompleted: boolean;
   llamaInstalled: boolean;
+  /** Where the installed llama.cpp stands against its pinned release. */
+  llamaStanding: PinStanding;
   llamaCanDownload: boolean;
   llamaPlatformDescription?: string | null;
   gpuInfo: GpuInfo;
@@ -97,6 +101,7 @@ export function installPhaseLabel(phase: InstallPhase, product = 'llama.cpp'): s
  */
 export type { ImageRuntimeStatus } from './generated/ImageRuntimeStatus';
 export type { SdStatus } from './generated/SdStatus';
+export type { PinStanding, PinState };
 
 
 /** What gglib recorded when it built the binary. Absent for a prebuilt install. */
@@ -138,6 +143,8 @@ export interface LlamaStatus {
   /** The download's record, for an install that was not built on this machine. */
   prebuilt?: { version: string; platform: string; installedAt: string } | null;
   runtime?: LlamaRuntimeCapabilities | null;
+  /** Where the install stands against the pinned release. */
+  pin: PinState;
 }
 
 /** How far behind upstream the llama.cpp source checkout is. */

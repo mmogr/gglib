@@ -23,7 +23,7 @@ crates/gglib-app-services/src/servers.rs 820
 crates/gglib-app-services/src/servers_events_tests.rs 415
 crates/gglib-app-services/src/service_graph.rs 314
 crates/gglib-app-services/src/settings_tests.rs 327
-crates/gglib-app-services/src/setup.rs 306
+crates/gglib-app-services/src/setup.rs 321
 crates/gglib-app-services/src/test_support.rs 394
 crates/gglib-app-services/src/types.rs 556
 crates/gglib-app-services/src/types_model_dto_tests.rs 311
@@ -216,7 +216,7 @@ crates/gglib-proxy/tests/integration_mcp_gateway.rs 469
 crates/gglib-proxy/tests/integration_proxy_pipeline.rs 644
 crates/gglib-proxy/tests/integration_slot_roundtrip.rs 584
 crates/gglib-proxy/tests/integration_turns.rs 427
-crates/gglib-runtime/src/binary_install/checkout.rs 372
+crates/gglib-runtime/src/binary_install/checkout.rs 378
 crates/gglib-runtime/src/binary_install/checkout_tests.rs 422
 crates/gglib-runtime/src/binary_install/install_tests.rs 438
 crates/gglib-runtime/src/command.rs 692

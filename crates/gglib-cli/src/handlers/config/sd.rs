@@ -205,8 +205,9 @@ fn status_lines(status: &SdStatus) -> Vec<String> {
     let mut lines = vec![
         "Status: Installed".to_owned(),
         format!("Binary: {}", status.binary_path),
-        String::new(),
     ];
+    lines.extend(gglib_runtime::engine::standing_line(&status.pin));
+    lines.push(String::new());
     let release = status.release.as_deref().unwrap_or("unknown");
     let platform = status.platform.as_deref().unwrap_or("unknown");
     let when = status.installed_at.as_deref().map(human_time);
@@ -226,7 +227,6 @@ fn status_lines(status: &SdStatus) -> Vec<String> {
         (None, Some(e)) => lines.push(format!("Warning: Could not load sd-config.json: {e}")),
         (None, None) => lines.push("Warning: sd-config.json not found".to_owned()),
     }
-    lines.push(format!("  Pinned release: {}", status.pinned_release));
 
     lines.push(String::new());
     match &status.version_line {

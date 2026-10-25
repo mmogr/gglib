@@ -49,6 +49,12 @@ function status(overrides: Partial<ImageRuntimeStatus> = {}, installed = false):
       recordError: null,
       versionLine: installed ? 'stable-diffusion.cpp version unknown, commit 228c707' : null,
       commit: installed ? '228c707' : null,
+      pin: {
+        standing: installed ? 'atPin' : 'missing',
+        installedRelease: installed ? 'master-948-228c707' : null,
+        targetRelease: 'master-948-228c707',
+        built: installed ? false : null,
+      },
     },
     prebuilt: 'macOS universal (Metal)',
     prebuiltUnavailable: null,

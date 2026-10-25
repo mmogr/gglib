@@ -75,3 +75,19 @@ async fn the_setup_status_sends_the_directory_and_the_memory_the_settings_routes
         assert!(status["systemMemory"].get(key).is_some(), "{key}");
     }
 }
+
+/// The wizard reads llama.cpp's standing against its pin from the same place
+/// `gglib config llama status` and the Settings card do.
+#[tokio::test]
+async fn the_setup_status_says_where_llama_stands_as_the_engine_does() {
+    let (setup, _) = both_surfaces(MockSystemProbePort::default().total_ram_bytes).await;
+
+    let status = serde_json::to_value(setup.get_status().await.expect("status")).expect("json");
+    let engine = gglib_runtime::engine::pin_state(gglib_core::domain::RuntimeKind::Llama)
+        .expect("paths resolve");
+
+    assert_eq!(
+        status["llamaStanding"],
+        serde_json::to_value(engine.standing).expect("json")
+    );
+}

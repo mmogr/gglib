@@ -70,7 +70,7 @@ fn wanted(file_name: &str) -> bool {
 /// llama.cpp as a GitHub release: `ggml-org/llama.cpp`, tar.gz archives one
 /// directory deep on macOS and Linux and flat zips on Windows, the first
 /// asset whose name holds the platform's pattern.
-pub(super) static LLAMA_RELEASE: ReleaseSpec = ReleaseSpec {
+pub(crate) static LLAMA_RELEASE: ReleaseSpec = ReleaseSpec {
     product: "llama.cpp",
     repo: "ggml-org/llama.cpp",
     pinned: PINNED_LLAMA_RELEASE,

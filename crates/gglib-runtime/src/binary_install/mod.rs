@@ -3,6 +3,7 @@ mod checkout;
 mod extract;
 mod fetch;
 mod install;
+mod pin;
 mod record;
 mod release;
 
@@ -17,12 +18,15 @@ pub(crate) use extract::extract_binaries;
 #[cfg(test)]
 pub(crate) use install::install_prebuilt_from;
 pub(crate) use install::{PrebuiltTarget, completed, install_prebuilt, started};
+pub use pin::PinStanding;
+pub(crate) use pin::{Recorded, installed_release, standing};
 pub(crate) use record::PrebuiltRecord;
 pub(crate) use release::{
-    ArchiveLayout, AssetChoice, AssetMatcher, ReleaseSpec, release_number, resolve_selector,
+    ArchiveLayout, AssetChoice, AssetMatcher, ReleaseSelector, ReleaseSpec, release_number,
+    resolve_selector,
 };
 #[cfg(test)]
-pub(crate) use release::{GITHUB_API, ReleaseSelector, selector_from_override};
+pub(crate) use release::{GITHUB_API, selector_from_override};
 
 #[cfg(test)]
 #[path = "install_tests.rs"]

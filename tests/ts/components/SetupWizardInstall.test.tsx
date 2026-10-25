@@ -26,6 +26,7 @@ const encoder = new TextEncoder();
 const STATUS: SetupStatus = {
   setupCompleted: false,
   llamaInstalled: false,
+  llamaStanding: 'missing',
   llamaCanDownload: true,
   llamaPlatformDescription: 'macOS ARM64 (Metal)',
   gpuInfo: {

@@ -1,6 +1,21 @@
 //! What the status says of an install, and how it is spelled on the wire.
 
 use super::*;
+use crate::engine::PinStanding;
+
+/// The selector of a test: the pin as it stands today.
+fn pin() -> ReleaseSelector {
+    ReleaseSelector::Tag("b11429".to_owned())
+}
+
+fn not_installed() -> PinState {
+    PinState {
+        standing: PinStanding::Missing,
+        installed_release: None,
+        target_release: Some("b11429".to_owned()),
+        built: None,
+    }
+}
 
 /// The GUI's `LlamaStatus` in `types/setup.ts` is hand-mirrored, so the
 /// casing is a contract rather than an implementation detail.
@@ -16,10 +31,12 @@ fn status_serialises_as_camel_case() {
         build_error: None,
         prebuilt: None,
         runtime: None,
+        pin: not_installed(),
     };
 
     let json = serde_json::to_value(&status).unwrap();
     assert_eq!(json["binaryPath"], "/tmp/llama-server");
+    assert_eq!(json["pin"]["targetRelease"], "b11429");
     assert_eq!(json["configPath"], "/tmp/llama-config.json");
     assert_eq!(json["healthError"], "not executable");
     assert!(json.get("binary_path").is_none());
@@ -90,7 +107,7 @@ fn status_beside(record: &str) -> LlamaStatus {
         .set_modified(written)
         .unwrap();
 
-    let status = status_at(&binary, &config);
+    let status = status_at(&binary, &config, &dir.path().join("llama.cpp"), &pin());
 
     assert_eq!(std::fs::read_to_string(&config).unwrap(), record);
     assert_eq!(
@@ -160,4 +177,29 @@ fn build_info_carries_both_notions_of_version() {
     assert_eq!(json["cmakeFlags"][0], "-DGGML_METAL=ON");
     // RFC 3339 rather than a locale-formatted string: the GUI parses it.
     assert!(json["buildDate"].as_str().unwrap().contains('T'));
+}
+
+/// The status says where the install stands against the pin, read from the
+/// same record it reports.
+#[test]
+fn the_status_compares_the_recorded_release_with_the_pin() {
+    let dir = tempfile::tempdir().unwrap();
+    let binary = dir.path().join("llama-server");
+    std::fs::write(&binary, "not a program").unwrap();
+    let config = dir.path().join("llama-config.json");
+    InstallRecord::Prebuilt(PrebuiltRecord::new("b10327", "macOS ARM64 (Metal)"))
+        .save(&config)
+        .unwrap();
+
+    let status = status_at(&binary, &config, &dir.path().join("llama.cpp"), &pin());
+
+    assert_eq!(
+        status.pin,
+        PinState {
+            standing: PinStanding::Older,
+            installed_release: Some("b10327".to_owned()),
+            target_release: Some("b11429".to_owned()),
+            built: Some(false),
+        }
+    );
 }

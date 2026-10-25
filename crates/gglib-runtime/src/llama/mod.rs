@@ -54,9 +54,11 @@ pub use install_events::{InstallPhase, LlamaProgressEvent};
 pub use deps::{BuildTool, build_tool_install_lines, build_tools, missing_build_tools};
 
 // Core functionality
+pub(crate) use config::recorded_install;
 pub use detect::{
     Acceleration, MissingPackage, VulkanStatus, detect_optimal_acceleration, vulkan_status,
 };
+pub(crate) use download::LLAMA_RELEASE;
 pub use download::check_llama_installed;
 pub use status::{LlamaBuildInfo, LlamaPrebuiltInfo, LlamaStatus, llama_status};
 pub use validate::{handle_status, validate_llama_binary};

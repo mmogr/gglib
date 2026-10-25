@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use gglib_core::ports::{
     Admission, LaunchOverrides, ModelRuntimeError, ProcessHandle, RunningTarget,
 };
+use gglib_runtime::engine::{PinStanding, PinState};
 use gglib_runtime::sd::PINNED_SD_RELEASE;
 
 use super::*;
@@ -68,6 +69,12 @@ fn nothing_installed() -> SdStatus {
         record_error: None,
         version_line: None,
         commit: None,
+        pin: PinState {
+            standing: PinStanding::Missing,
+            installed_release: None,
+            target_release: Some(PINNED_SD_RELEASE.to_owned()),
+            built: None,
+        },
     }
 }
 

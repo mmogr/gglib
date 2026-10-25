@@ -327,10 +327,16 @@ fn is_repository(dir: &Path) -> bool {
 /// More than one can: llama.cpp's `v*` releases point at the commit of the
 /// `b<n>` build they name.
 pub(crate) fn tags_at_head(dir: &Path) -> Result<Vec<String>> {
+    tags_at(dir, "HEAD")
+}
+
+/// Every tag that points at `commit` in the checkout at `dir`; none for a
+/// folder that is not a repository, or a full commit it does not hold.
+pub(crate) fn tags_at(dir: &Path, commit: &str) -> Result<Vec<String>> {
     if !is_repository(dir) {
         return Ok(Vec::new());
     }
-    Ok(git(dir, &["tag", "--points-at", "HEAD"])?
+    Ok(git(dir, &["tag", "--points-at", commit])?
         .lines()
         .map(str::to_owned)
         .collect())
