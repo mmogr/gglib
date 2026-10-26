@@ -29,13 +29,13 @@ pub use cors::CorsConfig;
 pub use domain::{
     AGENT_EVENT_CHANNEL_CAPACITY, AgentConfig, AgentEvent, AgentMessage, AssistantContent,
     ChatMessage, Conversation, ConversationUpdate, DEFAULT_MAX_ITERATIONS,
-    DEFAULT_MAX_STAGNATION_STEPS, LlmStreamEvent, LoopDetector, MAX_ITERATIONS_CEILING,
-    MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING, McpEnvEntry, McpLifecycle, McpServer,
-    McpServerConfig, McpServerStatus, McpServerType, McpTool, McpToolResult, Message,
-    MessageContent, MessageRole, Model, ModelCapabilities, ModelFilterOptions, NameSource,
-    NewConversation, NewMcpServer, NewMessage, NewModel, StagnationDetector, ToolCall,
-    ToolDefinition, ToolIndex, ToolResult, repo_short_name, resolve_model_name, strip_gguf_suffix,
-    transform_messages_for_capabilities,
+    DEFAULT_MAX_STAGNATION_STEPS, DeviceServers, LlmStreamEvent, LoopDetector,
+    MAX_ITERATIONS_CEILING, MAX_PARALLEL_TOOLS_CEILING, MAX_TOOL_TIMEOUT_MS_CEILING, McpEnvEntry,
+    McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
+    McpToolResult, Message, MessageContent, MessageRole, Model, ModelCapabilities,
+    ModelFilterOptions, NameSource, NewConversation, NewMcpServer, NewMessage, NewModel,
+    StagnationDetector, ToolCall, ToolDefinition, ToolIndex, ToolResult, repo_short_name,
+    resolve_model_name, strip_gguf_suffix, transform_messages_for_capabilities,
 };
 pub use download::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, DownloadError, DownloadEvent,
