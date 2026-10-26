@@ -50,9 +50,10 @@ function AppContent() {
     selectModel: (modelId: number, view?: 'chat' | 'console') => void;
   } | null>(null);
 
-  // Show the llama install modal when the daemon's machine has no llama.cpp
+  // Show the llama install modal when the daemon's machine has no llama.cpp,
+  // or one older than the pinned release, offered as an update
   useEffect(() => {
-    if (!llamaLoading && llamaStatus && !llamaStatus.installed) {
+    if (!llamaLoading && llamaStatus && (!llamaStatus.installed || llamaStatus.update)) {
       setShowLlamaModal(true);
     }
   }, [llamaLoading, llamaStatus]);
@@ -189,6 +190,7 @@ function AppContent() {
         {showLlamaModal && (
           <LlamaInstallModal
             canDownload={llamaStatus?.canDownload ?? false}
+            update={llamaStatus?.installed ? llamaStatus.update : null}
             error={llamaError}
             onSkip={() => setShowLlamaModal(false)}
             onInstalled={handleLlamaInstalled}

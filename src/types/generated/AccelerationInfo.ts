@@ -3,8 +3,9 @@
 /**
  * What acceleration a build would use.
  *
- * Detection is deliberately fallible — it refuses to fall back to CPU so
- * callers can surface install hints — so the failure is carried as data
- * rather than failing the whole diagnostics request.
+ * Detection is deliberately fallible — it refuses a Vulkan GPU whose build
+ * packages are missing, so callers can surface install hints — so the
+ * failure is carried as data rather than failing the whole diagnostics
+ * request.
  */
 export type AccelerationInfo = { detected: string | null, detectionError: string | null, };

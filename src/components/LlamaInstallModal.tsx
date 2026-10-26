@@ -3,6 +3,7 @@ import { AlertCircle, AlertTriangle, CheckCircle2, Download, Loader2, XCircle } 
 import { appLogger } from '../services/platform';
 import { streamLlamaInstall } from '../services/transport/api/setup';
 import type { LlamaProgressEvent } from '../types/setup';
+import type { LlamaUpdate } from '../hooks/useLlamaStatus';
 import { InstallProgress } from './SetupWizard/InstallProgress';
 import { Button } from './ui/Button';
 import { Banner } from './ui/Banner';
@@ -11,6 +12,11 @@ import { Modal } from './ui/Modal';
 
 interface LlamaInstallModalProps {
   canDownload?: boolean;
+  /**
+   * The update to offer instead of a first install: what is installed, and
+   * the pinned release the download puts in its place.
+   */
+  update?: LlamaUpdate | null;
   /** Why the install state could not be read. An install's own failure replaces it. */
   error?: string | null;
   onSkip?: () => void;
@@ -25,7 +31,8 @@ interface LlamaInstallModalProps {
 }
 
 /**
- * Offers to install llama.cpp, and runs the install.
+ * Offers to install llama.cpp, or to update it to the pinned release, and
+ * runs the install, which is the update too.
  *
  * The install is the daemon's: the stream the setup wizard reads, drawn by the
  * wizard's `InstallProgress`. So the desktop app and a browser tab install the
@@ -34,6 +41,7 @@ interface LlamaInstallModalProps {
  */
 export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
   canDownload = true,
+  update = null,
   error: statusError = null,
   onSkip,
   metadata,
@@ -105,11 +113,11 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
       return (
         <>
           <Button onClick={handleInstall} disabled={installing} leftIcon={<Icon icon={Download} size={16} />}>
-            Install llama.cpp
+            {update ? `Update to ${update.target}` : 'Install llama.cpp'}
           </Button>
           {onSkip ? (
             <Button variant="ghost" onClick={onSkip} disabled={installing}>
-              Skip for now
+              {update ? 'Not now' : 'Skip for now'}
             </Button>
           ) : null}
         </>
@@ -158,12 +166,16 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
           />
         </div>
         <div>
-          <h2 className="m-0 text-lg font-semibold text-text">{isCompleted ? 'Installation complete' : 'llama.cpp required'}</h2>
+          <h2 className="m-0 text-lg font-semibold text-text">
+            {isCompleted ? 'Installation complete' : update ? 'llama.cpp update' : 'llama.cpp required'}
+          </h2>
           {!installing && !isCompleted && (
             <p className="mt-1 mb-0 text-text-secondary text-base">
-              {canDownload
-                ? 'We will download a prebuilt binary for your platform (~15 MB).'
-                : 'Please build llama.cpp via the CLI: gglib config llama install'}
+              {update
+                ? `llama.cpp ${update.installed} is installed; gglib now uses ${update.target}. The update downloads it.`
+                : canDownload
+                  ? 'We will download a prebuilt binary for your platform (~15 MB).'
+                  : 'Please build llama.cpp via the CLI: gglib config llama install'}
             </p>
           )}
         </div>

@@ -219,7 +219,7 @@ pub(crate) fn validate_cuda_gcc_compatibility() -> Result<()> {
             Some(v) => v,
             None => {
                 anyhow::bail!(
-                    "CUDA toolkit not detected. Please install CUDA or build without --cuda flag."
+                    "CUDA toolkit not detected. Please install CUDA, or install the download with 'gglib config llama install --force'."
                 );
             }
         };
@@ -259,26 +259,26 @@ pub(crate) fn validate_cuda_gcc_compatibility() -> Result<()> {
                      \x20    sudo apt install gcc-12 g++-12\n\
                      \x20    export CC=gcc-12\n\
                      \x20    export CXX=g++-12\n\
-                     \x20    gglib config llama install --cuda\n\n\
+                     \x20    gglib config llama install --build --force\n\n\
                      \x20 2. Upgrade to CUDA 12.x (supports GCC 13.x):\n\n\
                      \x20    https://developer.nvidia.com/cuda-downloads\n\n\
                      \x20 3. Use Clang (if compatible with your CUDA version):\n\n\
                      \x20    sudo apt install clang\n\
-                     \x20    gglib config llama install --cuda\n",
+                     \x20    gglib config llama install --build --force\n",
                 ),
                 12 => msg.push_str(
                     "  1. Install GCC 13 or earlier:\n\n\
                      \x20    sudo apt install gcc-13 g++-13\n\
                      \x20    export CC=gcc-13\n\
                      \x20    export CXX=g++-13\n\
-                     \x20    gglib config llama install --cuda\n",
+                     \x20    gglib config llama install --build --force\n",
                 ),
                 11 => msg.push_str(
                     "  1. Install GCC 11 (required for CUDA 11.x):\n\n\
                      \x20    sudo apt install gcc-11 g++-11\n\
                      \x20    export CC=gcc-11\n\
                      \x20    export CXX=g++-11\n\
-                     \x20    gglib config llama install --cuda\n\n\
+                     \x20    gglib config llama install --build --force\n\n\
                      \x20 2. Upgrade to CUDA 12.x or newer (recommended)\n",
                 ),
                 _ => msg.push_str(

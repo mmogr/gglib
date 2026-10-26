@@ -10,6 +10,7 @@ mod command;
 // `health_monitor` and `server_config` are reached through the re-exports
 // below, and nothing outside this crate touches `launch_narration` at all.
 pub(crate) mod compose;
+pub mod engine;
 mod health;
 pub(crate) mod health_monitor;
 #[allow(

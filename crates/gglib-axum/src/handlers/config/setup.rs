@@ -1,71 +1,51 @@
 //! Setup handlers - first-run wizard system status and provisioning.
 
 use std::convert::Infallible;
+use std::sync::atomic::AtomicBool;
 
 use axum::Json;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
-use futures_util::StreamExt;
 use futures_util::stream::Stream;
 use serde::Serialize;
 
+use super::install_slot::{holding_install_slot, install_stream};
 use crate::dto::diagnostics::{DiagnosticsDto, RecommendationDto, ResolvedPathsDto};
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::setup::SetupStatus;
-use gglib_runtime::llama::{
-    BuildEvent, LlamaProgressEvent, LlamaStatus, LlamaUpdateCheck, UninstallOutcome, UpdatePlan,
-    llama_status, llama_update_check, run_llama_update, uninstall_llama, update_preflight,
-};
-use tokio::sync::mpsc;
+use gglib_core::domain::RuntimeKind;
+use gglib_runtime::llama::{LlamaStatus, UninstallOutcome, llama_status};
 
-/// Get the full system setup status for the first-run wizard.
+/// One llama.cpp install or removal at a time, process-wide, as the image
+/// runtime has: two installs would unpack into one download directory, and
+/// a removal during an install would delete what it is writing.
+static LLAMA_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+
+/// The product the slot's refusals name.
+const PRODUCT: &str = RuntimeKind::Llama.label();
+
+/// Get the full system setup status for the first-run wizard, with the chat
+/// model llama-server serves, if any, under which no update is offered.
 pub(crate) async fn status(State(state): State<AppState>) -> Result<Json<SetupStatus>, HttpError> {
-    Ok(Json(state.setup.get_status().await?))
+    let mut status = state.setup.get_status().await?;
+    status.llama_serving = state
+        .setup
+        .serving(state.runtime.as_ref(), RuntimeKind::Llama)
+        .await;
+    Ok(Json(status))
 }
 
-/// Install llama.cpp pre-built binaries with SSE progress streaming.
-///
-/// Streams [`LlamaProgressEvent`] verbatim — one SSE event name per variant,
-/// the payload its JSON — exactly as [`update_llama`] streams [`BuildEvent`].
-/// The browser reads the payload's `type`; the event name is a convenience.
+/// Install llama.cpp's pinned pre-built binaries with SSE progress
+/// streaming. Refused while a chat model runs on llama-server, and while
+/// another install or a removal holds the slot.
 pub(crate) async fn install_llama(
     State(state): State<AppState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
-    let (tx, rx) = tokio::sync::mpsc::channel::<LlamaProgressEvent>(64);
-    let setup = state.setup.clone();
-
-    tokio::spawn(async move {
-        // The pipeline reports failure by returning, leaving the wording to
-        // whoever owns the channel. This is that owner.
-        if let Err(e) = setup.install_llama(tx.clone()).await {
-            let _ = tx
-                .send(LlamaProgressEvent::Failed {
-                    message: e.to_string(),
-                })
-                .await;
-        }
-    });
-
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(install_event_to_sse);
-
-    Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(std::time::Duration::from_secs(30))
-            .text("ping"),
-    )
-}
-
-pub(super) fn install_event_to_sse(event: LlamaProgressEvent) -> Result<Event, Infallible> {
-    let event_type = match &event {
-        LlamaProgressEvent::PhaseStarted { .. } => "phase_started",
-        LlamaProgressEvent::Progress { .. } => "progress",
-        LlamaProgressEvent::PhaseCompleted { .. } => "phase_completed",
-        LlamaProgressEvent::Completed { .. } => "completed",
-        LlamaProgressEvent::Failed { .. } => "failed",
-    };
-    let data = serde_json::to_string(&event).unwrap_or_default();
-    Ok(Event::default().event(event_type).data(data))
+    let (setup, runtime) = (state.setup.clone(), state.runtime.clone());
+    install_stream(&LLAMA_IN_FLIGHT, PRODUCT, move |tx| async move {
+        setup.install_llama(runtime.as_ref(), tx).await
+    })
 }
 
 /// Set up the Python fast-download helper environment.
@@ -110,159 +90,37 @@ pub(crate) async fn diagnostics(
 }
 
 /// What llama.cpp install is present, if any — the GUI face of
-/// `gglib config llama status`.
-///
-/// Local and cheap (no network), unlike [`check_llama_updates`].
-pub(crate) async fn llama_status_handler() -> Result<Json<LlamaStatus>, HttpError> {
+/// `gglib config llama status` — with the chat model running on it, under
+/// which no update is offered. Local and cheap: no network.
+pub(crate) async fn llama_status_handler(
+    State(state): State<AppState>,
+) -> Result<Json<LlamaStatus>, HttpError> {
     // Probing spawns `llama-server --version` on a cold cache — blocking work
     // that does not belong on an async worker.
-    tokio::task::spawn_blocking(llama_status)
+    let mut status = tokio::task::spawn_blocking(llama_status)
         .await
         .map_err(|e| HttpError::Internal(format!("Status task panicked: {e}")))?
-        .map(Json)
-        .map_err(|e| HttpError::Internal(e.to_string()))
-}
-
-/// How far behind upstream the llama.cpp checkout is — the GUI face of
-/// `gglib config llama check-updates`.
-///
-/// POST rather than GET because it runs `git fetch`: it mutates the local
-/// checkout's remote refs and takes network time, so it belongs behind an
-/// explicit action rather than something a page can issue on load.
-pub(crate) async fn check_llama_updates() -> Result<Json<LlamaUpdateCheck>, HttpError> {
-    llama_update_check()
-        .await
-        .map(Json)
-        .map_err(|e| HttpError::Internal(e.to_string()))
+        .map_err(|e| HttpError::Internal(e.to_string()))?;
+    status.serving = state
+        .setup
+        .serving(state.runtime.as_ref(), RuntimeKind::Llama)
+        .await;
+    Ok(Json(status))
 }
 
 /// Remove the llama.cpp installation — the GUI face of
-/// `gglib config llama uninstall --force`.
+/// `gglib config llama uninstall --force`. 409 while a chat model runs on
+/// it, or while an install or another removal holds the slot.
 ///
 /// The confirmation is the GUI's to run; by the time this is called the
 /// decision is made.
-pub(crate) async fn uninstall_llama_handler() -> Result<Json<UninstallOutcome>, HttpError> {
-    if UPDATE_IN_FLIGHT.load(std::sync::atomic::Ordering::SeqCst) {
-        return Err(HttpError::Conflict(
-            "A llama.cpp build is running — uninstalling now would delete the checkout out \
-             from under it. Wait for it to finish."
-                .into(),
-        ));
-    }
-
-    uninstall_llama()
-        .await
-        .map(Json)
-        .map_err(|e| HttpError::Internal(e.to_string()))
-}
-
-/// One llama.cpp build at a time, process-wide.
-///
-/// Two concurrent builds share a source checkout and a binary destination, so
-/// the second corrupts the first. The GUI disables its own button, which does
-/// nothing about a second browser tab or a second client.
-static UPDATE_IN_FLIGHT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// Pull upstream and rebuild llama.cpp, streaming [`BuildEvent`]s over SSE —
-/// the GUI face of `gglib config llama update`.
-///
-/// Whether it may start is `update_preflight`'s to say, as it is for the
-/// command: one install gets one verdict and one remedy from both. A refusal
-/// is reported as a `failed` event rather than an HTTP status: by the time it
-/// is known the response has already committed to being a stream.
-pub(crate) async fn update_llama()
--> Sse<impl Stream<Item = Result<Event, Infallible>> + Send + 'static> {
-    let (tx, rx) = tokio::sync::mpsc::channel::<BuildEvent>(64);
-
-    // Claim the slot before spawning; release it when the task ends whatever
-    // way it ends.
-    let claimed = UPDATE_IN_FLIGHT
-        .compare_exchange(
-            false,
-            true,
-            std::sync::atomic::Ordering::SeqCst,
-            std::sync::atomic::Ordering::SeqCst,
-        )
-        .is_ok();
-
-    if !claimed {
-        let _ = tx.try_send(BuildEvent::Failed {
-            message: "A llama.cpp build is already running.".to_string(),
-        });
-        let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(build_event_to_sse);
-        return Sse::new(stream).keep_alive(
-            axum::response::sse::KeepAlive::new()
-                .interval(std::time::Duration::from_secs(30))
-                .text("ping"),
-        );
-    }
-
-    tokio::spawn(async move {
-        struct Guard;
-        impl Drop for Guard {
-            fn drop(&mut self) {
-                UPDATE_IN_FLIGHT.store(false, std::sync::atomic::Ordering::SeqCst);
-            }
-        }
-        let _guard = Guard;
-
-        let update = preflight_then_update(
-            update_preflight,
-            |plan, tx| run_llama_update(plan.acceleration, plan.llama_dir, plan.server_path, tx),
-            tx.clone(),
-        );
-
-        if let Err(e) = update.await {
-            let _ = tx
-                .send(BuildEvent::Failed {
-                    message: e.to_string(),
-                })
-                .await;
-        }
-    });
-
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(build_event_to_sse);
-
-    Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(std::time::Duration::from_secs(30))
-            .text("ping"),
-    )
-}
-
-/// Ask `preflight` whether the update may start, pass on what it wants said,
-/// and run `update` on the plan it made.
-///
-/// A caution is the stream's first event, a `log` in the preflight's own
-/// words, which are the ones the command prints before it asks. A refusal is
-/// the error, and `update` is not run. The preflight runs the build tools and
-/// git to see that they are there, which is blocking work.
-async fn preflight_then_update<Running>(
-    preflight: impl FnOnce() -> anyhow::Result<UpdatePlan> + Send + 'static,
-    update: impl FnOnce(UpdatePlan, mpsc::Sender<BuildEvent>) -> Running,
-    tx: mpsc::Sender<BuildEvent>,
-) -> anyhow::Result<()>
-where
-    Running: Future<Output = anyhow::Result<()>>,
-{
-    let plan = tokio::task::spawn_blocking(preflight).await??;
-    if let Some(message) = plan.caution.clone() {
-        let _ = tx.send(BuildEvent::Log { message }).await;
-    }
-    update(plan, tx).await
-}
-
-fn build_event_to_sse(event: BuildEvent) -> Result<Event, Infallible> {
-    let event_type = match &event {
-        BuildEvent::PhaseStarted { .. } => "phase_started",
-        BuildEvent::Log { .. } => "log",
-        BuildEvent::Progress { .. } => "progress",
-        BuildEvent::PhaseCompleted { .. } => "phase_completed",
-        BuildEvent::Completed { .. } => "completed",
-        BuildEvent::Failed { .. } => "failed",
-    };
-    let data = serde_json::to_string(&event).unwrap_or_default();
-    Ok(Event::default().event(event_type).data(data))
+pub(crate) async fn uninstall_llama_handler(
+    State(state): State<AppState>,
+) -> Result<Json<UninstallOutcome>, HttpError> {
+    let removal = state.setup.uninstall_llama(state.runtime.as_ref());
+    Ok(Json(
+        holding_install_slot(&LLAMA_IN_FLIGHT, PRODUCT, removal).await?,
+    ))
 }
 
 /// A hardware-sized model suggestion — the shortlist `gglib up` picks from,
@@ -276,7 +134,3 @@ pub(crate) async fn recommend_model(
 ) -> Result<Json<Option<RecommendationDto>>, HttpError> {
     Ok(Json(state.setup.recommend_model().map(Into::into)))
 }
-
-#[cfg(test)]
-#[path = "setup_tests.rs"]
-mod tests;

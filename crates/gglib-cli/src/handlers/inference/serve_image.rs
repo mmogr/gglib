@@ -94,7 +94,12 @@ pub(super) async fn serve_image(
     if !typed.is_empty() {
         bail!(chat_flags_refusal(&model.name, &typed));
     }
-    crate::handlers::config::sd_ensure::ensure_installed().await?;
+    crate::handlers::config::engine::ensure_installed(
+        ctx,
+        gglib_core::domain::RuntimeKind::StableDiffusion,
+        false,
+    )
+    .await?;
 
     crate::presentation::style::print_info_banner("Info", "\u{2139}\u{fe0f}");
     for line in banner_lines(model) {

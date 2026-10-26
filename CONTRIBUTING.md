@@ -85,7 +85,7 @@ Concrete examples of established patterns:
 | Agent loop | `AgentEvent` | spinner + streaming print | SSE at `POST /api/agent/chat` | same SSE stream — no Tauri event |
 | llama install | `LlamaProgressEvent` | spinner + progress bar via `render_install_events` | SSE at `POST /api/config/system/install-llama` | same SSE stream — no Tauri event |
 | image runtime install | `LlamaProgressEvent` (the same events, the download phase labelled by `InstallPhase::label_for`) | spinner + progress bar via `render_install_events` (`gglib config sd install`) | SSE at `POST /api/config/system/install-sd`, the same event names | same SSE stream — no Tauri event |
-| llama build | `BuildEvent` | spinner + progress bar via `render_build_events`, for an install and an update alike | SSE at `POST /api/config/system/update-llama` | same SSE stream — no Tauri event |
+| llama build | `BuildEvent` | spinner + progress bar via `render_build_events`, for an install and an update alike, and for stable-diffusion.cpp's build | none: a source build is the command line's, and the daemon installs downloads | none |
 
 Every row is a claim about code that exists. The `llama install` row was not
 one for a long time: the event type was declared private inside `gglib-axum`,
@@ -680,12 +680,16 @@ Dependabot (`.github/dependabot.yml`) checks every day at 06:00 (Australia/Brisb
 - **`brace-expansion` is held by `overrides` in `package.json`**, not by a range Dependabot edits. A fix that needs a version outside `^5.0.8`, or outside `^1.1.17` under `minimatch@3`, is made there by hand; `//overrides` says why the carve-out stays.
 - **To update without waiting for Dependabot, run Update dependencies.** Actions → Update dependencies → Run workflow, or `gh workflow run update-deps.yml -R mmogr/gglib [-f ecosystem=npm|both] [-f package=<name>]`, opens one PR with the newest versions the ranges allow, even ones under three days old, listing every package that moved, or opens nothing when nothing is newer. It takes Tauri minors too, and its PR says when Tauri moved.
 
-### The llama.cpp pin
+### The engine pins
 
-gglib installs the llama.cpp release `PINNED_LLAMA_RELEASE` names (`crates/gglib-runtime/src/llama/download/mod.rs`), and [ADR 0001](docs/adr/0001-runtime-capability-tiers.md) makes moving it a deliberate event: bump the constant, run the suite, ship the bump in a PR of its own whose message says what was observed. llama.cpp tags a release on nearly every merge, and the pin is always one of those `b<n>` tags: since about `b10566` (2026-08-21) they are marked prereleases, and the `v*` releases (`releases/latest`) carry no binaries, only a `nightly-tag.txt` naming the `b<n>` tag they point at.
+gglib installs one release of each engine: llama.cpp's `PINNED_LLAMA_RELEASE` (`crates/gglib-runtime/src/llama/download/mod.rs`) and stable-diffusion.cpp's `PINNED_SD_RELEASE` (`crates/gglib-runtime/src/sd/install/release.rs`). Every install takes the pin, whether it is a download or a source build, which clones the pinned tag; an update is an install of the pin over an older one. [ADR 0001](docs/adr/0001-runtime-capability-tiers.md) makes moving a pin a deliberate event: bump the constant, run the suite, and ship the bump in a PR of its own whose message says what was observed.
 
-- **Try a release before the constant moves.** `GGLIB_LLAMA_RELEASE=<tag> gglib config llama install`, then `gglib config llama status`, installs it without a rebuild.
-- **Check what the bump meets.** Every flag `command.rs` emits must still be in the new `llama-server --help`, and each reading an ADR says is due at a pin bump is taken before merging. A launch proves the flags parse, not what a real model does.
+- llama.cpp tags a `b<n>` release on nearly every merge. Since about `b10566` (2026-08-21) they are marked prereleases. The `v*` releases (`releases/latest`) carry no binaries, only a `nightly-tag.txt` naming the `b<n>` they point at. Take that `b<n>` when moving the pin.
+- stable-diffusion.cpp tags `master-<n>-<commit>`. Take the newest by `n`, never `releases/latest`, which can lag.
+
+- **Try a release before the constant moves.** `GGLIB_LLAMA_RELEASE=<tag> gglib config llama install --force` (or `GGLIB_SD_RELEASE` and `config sd`), then `status`; `--force` installs the tag whatever is there. Without the variable, a later release reads as newer than the pin and is kept; an earlier one reads as older, and `gglib serve` (and `gglib up`, for llama.cpp) and the app offer the pin in its place.
+- **Check what the bump meets.** Every flag gglib passes must still be in the new server's `--help` (`command.rs` for llama-server, `sd/server/args.rs` for sd-server). A launch proves the flags parse, not what a real model does.
+- **Take one real chat and one real picture on the new pins.** The chat includes the readings ADRs 0012, 0015 and 0016 say are due at a llama.cpp bump: the `--help` diff for 0012, `/props` of a model that has a projector, started without `--mmproj`, for 0015, and a tool message with an image for 0016. Two more are due at a bump: ADR 0022's, the two `cache_prompt` defaults it names, read at every llama.cpp bump, and ADR 0018's render-beside-a-chat pair, taken again on a later stable-diffusion.cpp, with the real picture. Put the readings in the bump commit's message, which is what a squash merge keeps here, as well as in the PR body, and one line in each ADR's log in a commit of its own.
 
 ### Stacked pull requests
 

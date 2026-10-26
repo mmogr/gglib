@@ -96,7 +96,11 @@ fn print_human(accel: &Result<Acceleration>, vk: &gglib_runtime::llama::VulkanSt
         Ok(a) => {
             println!("  Detected: {}", a.display_name());
             println!();
-            if *a != Acceleration::Vulkan {
+            if *a == Acceleration::Cpu {
+                println!(
+                    "  ○ No GPU found: a build here is for the CPU, and replies will be slow."
+                );
+            } else if *a != Acceleration::Vulkan {
                 println!("  ✓ Ready to build with {}", a.display_name());
             }
         }
@@ -107,11 +111,12 @@ fn print_human(accel: &Result<Acceleration>, vk: &gglib_runtime::llama::VulkanSt
         }
     }
 
-    // Always surface the Vulkan probe when the loader is present, even
-    // if the strict detector rejected Vulkan because of a missing
-    // build-time dep like SPIR-V headers. Without this the user only
-    // sees "no GPU" and not *what* is missing.
-    if vk.has_loader {
+    // Surface the Vulkan probe when the loader is present, even if the
+    // strict detector rejected Vulkan because of a missing build-time dep
+    // like SPIR-V headers: without this the user only sees "no GPU" and not
+    // *what* is missing. Not when detection found no GPU device for it:
+    // installing packages would change nothing there.
+    if vk.has_loader && !matches!(accel, Ok(Acceleration::Cpu)) {
         println!("Vulkan Build Readiness");
         println!("----------------------");
         let check = |ok: bool| if ok { "✓" } else { "✗" };

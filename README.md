@@ -86,9 +86,10 @@ make setup   # checks deps, builds everything, installs the gglib CLI
 gglib up
 ```
 
-`make setup` also offers two optional extras, and goes on without either:
-faster downloads, and the image runtime that draws pictures with an image
-model.
+`make setup` installs both engines at their pinned releases, llama.cpp for
+chat and the image runtime that draws pictures, and offers faster downloads
+as an optional extra. It goes on without the image runtime if that install
+fails: chat models need only llama.cpp.
 
 A build from source keeps its library in the same per-user folder as an
 installed gglib, so the two share models, settings and llama.cpp;

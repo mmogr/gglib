@@ -111,7 +111,8 @@ endpoint; the daemon allocates the upstream llama-server port behind it, from
 `config settings set --llama-base-port`.
 
 An image model is served by stable-diffusion.cpp's `sd-server` instead.
-`serve` offers to install it if it is missing (`config sd install`), prints
+`serve` offers to install it if it is missing, or older than its pinned
+release (`config sd install`), prints
 the model's family and each component linked or missing, starts the same
 pinned proxy, and loads the model once (`POST /v1/models/{name}/load`), so a
 refusal, the runtime not installed, a component missing or no room beside a
@@ -383,21 +384,24 @@ no restart. An SSE server and `builtin` are never opened
   `set <PATH>`. A running daemon's next download goes to the new directory;
   a download already running finishes where it started. `GGLIB_MODELS_DIR`
   in the daemon's own environment outranks the stored directory.
-- **`llama`** — install, status, check-updates, update, rebuild, uninstall.
-  gglib manages llama.cpp itself; see [Llama Management](../crates/gglib-runtime/src/llama/README.md).
-- **`sd`** — install, status, uninstall, prompt for stable-diffusion.cpp's
-  `sd-server`, the runtime that serves image models. `install` takes the
-  pinned pre-built release for this platform, warning first when that is a
-  CPU-only build, or builds from source with `--build` or where no release
-  fits; `--force` reinstalls. `uninstall` removes `.sd/` whole, and refuses
-  while the daemon that serves this data root runs an image model, as
-  Settings does; with no such daemon running nothing serves one, since only
-  a daemon launches them, so it is not refused. `prompt` is the offer
-  `make setup` makes: at a terminal with no `sd-server` installed it asks
-  whether to install now, No by default, and a yes runs `install`; an
-  install that fails is reported as a skipped step. Installed already, or
-  with no terminal, it says so in a line and asks nothing. It exits 0 in
-  each of those cases. See
+- **`llama`** and **`sd`** — install (also spelled `update`), status and
+  uninstall for llama.cpp's `llama-server` and stable-diffusion.cpp's
+  `sd-server`, the runtime that serves image models; `llama` adds `detect`.
+  Each engine is pinned to a release. `install` does nothing when that
+  release, or a later one, is installed, and otherwise installs the pin:
+  this platform's pre-built release, warning first when that is a CPU-only
+  build, or a source build of the pinned tag with `--build`, where no
+  release fits, or over a source build of a release. `--force` installs the
+  pin whatever is there, taking the download over a source build unless
+  `--build` is given too. `status` says where the install stands against
+  the pin. Neither engine is installed or removed while the daemon that
+  serves this data root runs a model on it, as Settings refuses; with no
+  such daemon running nothing serves one, since only a daemon launches
+  them. `gglib serve` and `gglib up` offer the install when an engine is
+  missing, and the pin when what is installed is older. `make setup`
+  installs both without asking first, the image runtime after llama.cpp
+  and skipped with a line if it fails; a source build, where one is
+  needed, still asks before it starts at a terminal. See
   [Stable Diffusion](../crates/gglib-runtime/src/sd/README.md).
 - **`check-deps`** — report what is missing and print your platform's exact
   install commands. Reporting only; it installs nothing.

@@ -5,48 +5,26 @@
 use clap::Subcommand;
 
 /// llama.cpp management commands.
+///
+/// The same verbs as stable-diffusion.cpp's (`SdCommand`), plus `detect`:
+/// `install` installs the pinned release when what is there is missing or
+/// older, which is also what `update` does.
 #[derive(Subcommand)]
 pub enum LlamaCommand {
-    /// Install llama.cpp and build llama-server
+    /// Install the pinned llama.cpp release, or update to it
+    #[command(visible_alias = "update")]
     Install {
-        /// Build with CUDA support
-        #[arg(long)]
-        cuda: bool,
-        /// Build with Metal support (macOS only)
-        #[arg(long)]
-        metal: bool,
-        /// Build with Vulkan support (AMD/Intel GPUs)
-        #[arg(long)]
-        vulkan: bool,
-        /// Force rebuild even if already installed
+        /// Reinstall even when the pinned release is installed. Over a source
+        /// build, takes the download where one fits
         #[arg(short, long)]
         force: bool,
-        /// Force building from source instead of downloading pre-built binaries
+        /// Build from source instead of downloading pre-built binaries
         #[arg(long)]
         build: bool,
     },
 
-    /// Check for llama.cpp updates
-    CheckUpdates,
-
-    /// Update llama.cpp to latest version
-    Update,
-
-    /// Show llama.cpp build information and status
+    /// Show what is installed, and where it stands against the pinned release
     Status,
-
-    /// Rebuild llama-server with different options
-    Rebuild {
-        /// Build with CUDA support
-        #[arg(long)]
-        cuda: bool,
-        /// Build with Metal support (macOS only)
-        #[arg(long)]
-        metal: bool,
-        /// Build with Vulkan support (AMD/Intel GPUs)
-        #[arg(long)]
-        vulkan: bool,
-    },
 
     /// Remove llama.cpp installation
     Uninstall {
@@ -87,5 +65,51 @@ mod tests {
                 }
             })
         ));
+    }
+
+    fn parsed(argv: &[&str]) -> LlamaCommand {
+        let cli = crate::Cli::try_parse_from(argv)
+            .unwrap_or_else(|e| panic!("{argv:?} should parse: {e}"));
+        match cli.command {
+            Some(Commands::Config {
+                command: ConfigCommand::Llama { command },
+            }) => command,
+            _ => panic!("{argv:?} is not a `config llama` command"),
+        }
+    }
+
+    /// `update` is `install`: both install the pinned release when what is
+    /// there is missing or older.
+    #[test]
+    fn update_is_install_with_the_same_flags() {
+        assert!(matches!(
+            parsed(&["gglib", "config", "llama", "update"]),
+            LlamaCommand::Install {
+                force: false,
+                build: false
+            }
+        ));
+        assert!(matches!(
+            parsed(&["gglib", "config", "llama", "update", "--force", "--build"]),
+            LlamaCommand::Install {
+                force: true,
+                build: true
+            }
+        ));
+    }
+
+    /// The acceleration is detected, never chosen, and the verbs the pin made
+    /// redundant are gone.
+    #[test]
+    fn the_flags_and_verbs_the_pin_replaced_are_refused() {
+        for argv in [
+            &["gglib", "config", "llama", "install", "--cuda"][..],
+            &["gglib", "config", "llama", "install", "--metal"],
+            &["gglib", "config", "llama", "install", "--vulkan"],
+            &["gglib", "config", "llama", "rebuild"],
+            &["gglib", "config", "llama", "check-updates"],
+        ] {
+            assert!(crate::Cli::try_parse_from(argv).is_err(), "{argv:?}");
+        }
     }
 }

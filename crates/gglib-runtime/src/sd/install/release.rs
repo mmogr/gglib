@@ -163,18 +163,6 @@ pub(crate) fn sd_platform_asset(
 /// The pre-built asset for this machine, probing its GPU where the choice
 /// depends on one.
 pub fn check_sd_prebuilt_availability() -> std::result::Result<SdAsset, String> {
-    let gpu = if cfg!(any(target_os = "linux", target_os = "windows")) {
-        crate::system::gpu::detect_gpu_info()
-    } else {
-        GpuInfo {
-            has_nvidia_gpu: false,
-            cuda_version: None,
-            has_metal: cfg!(target_os = "macos"),
-            has_vulkan: false,
-            vulkan_headers: false,
-            vulkan_glslc: false,
-            vulkan_spirv_headers: false,
-        }
-    };
+    let gpu = crate::system::gpu::gpu_for_downloads();
     sd_platform_asset(std::env::consts::OS, std::env::consts::ARCH, &gpu)
 }

@@ -3,13 +3,14 @@ use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 
-use gglib_core::paths::{data_root, llama_config_path, llama_server_path};
+use gglib_core::paths::{data_root, llama_config_path, llama_cpp_dir, llama_server_path};
+use gglib_core::utils::system::GpuInfo;
 
 use super::config::InstallRecord;
 use super::install_events::{InstallPhase, LlamaProgressEvent};
 use crate::binary_install::{
     ArchiveLayout, AssetChoice, AssetMatcher, PrebuiltTarget, ReleaseSpec, completed,
-    install_prebuilt, started,
+    install_prebuilt, retire_checkout, started,
 };
 
 /// Check if llama.cpp binaries are installed.
@@ -37,7 +38,7 @@ pub fn check_llama_installed() -> bool {
 /// Pinning does not stop gglib tracking upstream. It makes tracking a
 /// deliberate, reviewable event: bump this constant, run the suite, ship the
 /// bump as its own commit with the observed differences in the message.
-/// CONTRIBUTING's "The llama.cpp pin" has the routine.
+/// CONTRIBUTING's "The engine pins" has the routine.
 pub(super) const PINNED_LLAMA_RELEASE: &str = "b11429";
 
 /// Environment override for [`PINNED_LLAMA_RELEASE`].
@@ -70,7 +71,7 @@ fn wanted(file_name: &str) -> bool {
 /// llama.cpp as a GitHub release: `ggml-org/llama.cpp`, tar.gz archives one
 /// directory deep on macOS and Linux and flat zips on Windows, the first
 /// asset whose name holds the platform's pattern.
-static LLAMA_RELEASE: ReleaseSpec = ReleaseSpec {
+pub(crate) static LLAMA_RELEASE: ReleaseSpec = ReleaseSpec {
     product: "llama.cpp",
     repo: "ggml-org/llama.cpp",
     pinned: PINNED_LLAMA_RELEASE,
@@ -87,6 +88,10 @@ const LLAMA_REQUIRED: &[&str] = &["llama-server.exe"];
 /// The archive members a llama.cpp install must find.
 #[cfg(not(target_os = "windows"))]
 const LLAMA_REQUIRED: &[&str] = &["llama-server"];
+
+/// Said when the build installed runs on the CPU alone.
+pub(crate) const LLAMA_CPU_WARNING: &str = "No GPU runtime gglib can use was found, so the CPU \
+     build of llama.cpp is installed. Replies will be slow.";
 
 /// The name the release's CUDA runtime package holds.
 const CUDART_PATTERN: &str = "cudart-llama-bin-win-cuda";
@@ -114,6 +119,9 @@ pub enum PrebuiltAvailability {
         asset_pattern: String,
         /// Description for user-facing messages
         description: String,
+        /// What to tell the user before installing it: set for a build that
+        /// runs on the CPU alone.
+        warning: Option<&'static str>,
     },
     /// Pre-built binaries are not available (must build from source)
     NotAvailable {
@@ -122,104 +130,67 @@ pub enum PrebuiltAvailability {
     },
 }
 
-/// Map a detected [`GpuInfo`](gglib_core::utils::system::GpuInfo) to the
-/// appropriate Windows x64 pre-built variant.
-///
-/// Extracted as a standalone function so it can be unit-tested with
-/// arbitrary [`GpuInfo`](gglib_core::utils::system::GpuInfo) values without
-/// triggering real hardware probes.
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-fn windows_availability_for_gpu(gpu: &gglib_core::utils::system::GpuInfo) -> PrebuiltAvailability {
-    if gpu.has_nvidia_gpu && gpu.cuda_version.is_some() {
-        PrebuiltAvailability::Available {
-            asset_pattern: "bin-win-cuda-12.4-x64.zip".to_string(),
-            description: "Windows x64 (CUDA 12.4)".to_string(),
-        }
-    } else if gpu.has_vulkan {
-        PrebuiltAvailability::Available {
-            asset_pattern: "bin-win-vulkan-x64.zip".to_string(),
-            description: "Windows x64 (Vulkan)".to_string(),
-        }
-    } else {
-        PrebuiltAvailability::NotAvailable {
-            reason: "No supported GPU backend detected (requires CUDA or Vulkan)".to_string(),
-        }
-    }
-}
-
-/// Check if pre-built llama.cpp binaries are available for the current platform.
-///
-/// On Windows x64 the GPU is probed at runtime:
-/// - NVIDIA + CUDA → CUDA 12.4 binary
-/// - Vulkan runtime present → Vulkan binary
-/// - Neither → `NotAvailable`
-///
-/// Returns `Available` with asset pattern for macOS (Metal), Windows (CUDA/Vulkan),
-/// and Linux (CPU).
+/// This machine's pre-built llama.cpp: its platform, with the GPU detected
+/// where a platform has more than one build.
 pub fn check_prebuilt_availability() -> PrebuiltAvailability {
-    #[cfg(target_os = "macos")]
-    {
-        #[cfg(target_arch = "aarch64")]
-        {
-            PrebuiltAvailability::Available {
-                asset_pattern: "bin-macos-arm64.tar.gz".to_string(),
-                description: "macOS ARM64 (Metal)".to_string(),
-            }
-        }
-        #[cfg(target_arch = "x86_64")]
-        {
-            PrebuiltAvailability::Available {
-                asset_pattern: "bin-macos-x64.tar.gz".to_string(),
-                description: "macOS x64 (Metal)".to_string(),
-            }
-        }
-        #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
-        {
-            PrebuiltAvailability::NotAvailable {
-                reason: "Unsupported macOS architecture".to_string(),
-            }
-        }
-    }
+    llama_platform_asset(
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        &crate::system::gpu::gpu_for_downloads(),
+    )
+}
 
-    #[cfg(target_os = "windows")]
-    {
-        #[cfg(target_arch = "x86_64")]
-        {
-            let gpu = crate::system::gpu::detect_gpu_info();
-            windows_availability_for_gpu(&gpu)
+/// The pre-built llama.cpp for `os` and `arch` (`std::env::consts`
+/// spellings), with `gpu` deciding between a platform's builds.
+///
+/// - macOS: the Metal build for the architecture.
+/// - Linux `x86_64` and `aarch64`: the Vulkan build when a Vulkan GPU is there,
+///   else the CPU build, with a warning. NVIDIA's CUDA builds come with a
+///   440 MB runtime for one CUDA version; a CUDA build is made from source
+///   with `--build`.
+/// - Windows `x86_64`: CUDA 12.4 for an NVIDIA GPU with CUDA, else Vulkan,
+///   else the CPU build, with a warning. Windows `aarch64`: Vulkan, else the
+///   CPU build, with a warning.
+/// - Anything else: none, and a source build is the way to install.
+pub(crate) fn llama_platform_asset(os: &str, arch: &str, gpu: &GpuInfo) -> PrebuiltAvailability {
+    let build = |asset_pattern: &str, description: &str| PrebuiltAvailability::Available {
+        asset_pattern: asset_pattern.to_owned(),
+        description: description.to_owned(),
+        warning: None,
+    };
+    let cpu = |asset_pattern: &str, description: &str| PrebuiltAvailability::Available {
+        asset_pattern: asset_pattern.to_owned(),
+        description: description.to_owned(),
+        warning: Some(LLAMA_CPU_WARNING),
+    };
+    match (os, arch) {
+        ("macos", "aarch64") => build("bin-macos-arm64.tar.gz", "macOS ARM64 (Metal)"),
+        ("macos", "x86_64") => build("bin-macos-x64.tar.gz", "macOS x64 (Metal)"),
+        ("linux", "x86_64") if gpu.has_vulkan => {
+            build("bin-ubuntu-vulkan-x64.tar.gz", "Linux x64 (Vulkan)")
         }
-        #[cfg(not(target_arch = "x86_64"))]
-        {
-            PrebuiltAvailability::NotAvailable {
-                reason: "Unsupported Windows architecture".to_string(),
-            }
+        ("linux", "x86_64") => cpu("bin-ubuntu-x64.tar.gz", "Linux x64 (CPU)"),
+        ("linux", "aarch64") if gpu.has_vulkan => {
+            build("bin-ubuntu-vulkan-arm64.tar.gz", "Linux ARM64 (Vulkan)")
         }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        #[cfg(target_arch = "x86_64")]
-        {
-            PrebuiltAvailability::Available {
-                asset_pattern: "bin-ubuntu-x64.tar.gz".to_string(),
-                description: "Linux x64 (CPU)".to_string(),
-            }
+        ("linux", "aarch64") => cpu("bin-ubuntu-arm64.tar.gz", "Linux ARM64 (CPU)"),
+        ("windows", "x86_64") if gpu.has_nvidia_gpu && gpu.cuda_version.is_some() => {
+            build("bin-win-cuda-12.4-x64.zip", "Windows x64 (CUDA 12.4)")
         }
-        #[cfg(not(target_arch = "x86_64"))]
-        {
-            PrebuiltAvailability::NotAvailable {
-                reason: "Unsupported Linux architecture. Pre-built binaries are only available for x86_64.".to_string(),
-            }
+        ("windows", "x86_64") if gpu.has_vulkan => {
+            build("bin-win-vulkan-x64.zip", "Windows x64 (Vulkan)")
         }
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    {
-        PrebuiltAvailability::NotAvailable {
-            reason: "Unsupported operating system".to_string(),
+        ("windows", "x86_64") => cpu("bin-win-cpu-x64.zip", "Windows x64 (CPU)"),
+        ("windows", "aarch64") if gpu.has_vulkan => {
+            build("bin-win-vulkan-arm64.zip", "Windows ARM64 (Vulkan)")
         }
+        ("windows", "aarch64") => cpu("bin-win-cpu-arm64.zip", "Windows ARM64 (CPU)"),
+        _ => PrebuiltAvailability::NotAvailable {
+            reason: format!("llama.cpp publishes no pre-built build for {os} on {arch}"),
+        },
     }
 }
+
 /// Download and install pre-built llama.cpp binaries, streaming progress.
 ///
 /// Resolves the pinned llama.cpp release, downloads this platform's archive,
@@ -243,6 +214,7 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
         PrebuiltAvailability::Available {
             asset_pattern,
             description,
+            ..
         } => (asset_pattern, description),
         PrebuiltAvailability::NotAvailable { reason } => {
             bail!("Pre-built binaries not available: {reason}");
@@ -272,7 +244,12 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
         |record| InstallRecord::Prebuilt(record).save(&llama_config_path()?),
         &tx,
     )
-    .await
+    .await?;
+    // A source build this download replaced leaves its checkout behind.
+    if let Err(e) = retire_checkout(&llama_cpp_dir()?) {
+        tracing::debug!("the old llama.cpp checkout was not removed: {e:#}");
+    }
+    Ok(())
 }
 
 #[cfg(all(test, unix))]
@@ -280,7 +257,11 @@ pub async fn download_prebuilt_binaries(tx: mpsc::Sender<LlamaProgressEvent>) ->
 mod extract_tests;
 
 #[cfg(test)]
-mod tests {
+#[path = "platform_tests.rs"]
+mod platform_tests;
+
+#[cfg(test)]
+pub(super) mod tests {
     use super::*;
     use crate::binary_install::{ReleaseSelector, selector_from_override};
 
@@ -290,6 +271,15 @@ mod tests {
         bin_dir: &std::path::Path,
     ) -> Result<()> {
         crate::binary_install::extract_binaries(&LLAMA_RELEASE, LLAMA_REQUIRED, archive, bin_dir)
+    }
+
+    /// A source build clones the repository the downloads come from.
+    #[test]
+    fn the_source_is_cloned_from_the_release_repository() {
+        assert_eq!(
+            crate::llama::install::LLAMA_SOURCE.url,
+            format!("https://github.com/{}", LLAMA_RELEASE.repo)
+        );
     }
 
     /// The case the pin exists for: no override installs the pin, not
@@ -388,7 +378,7 @@ mod tests {
 
     /// Every asset of llama.cpp's b11429 release, in the order GitHub lists
     /// them.
-    const B11429_ASSETS: &[&str] = &[
+    pub(super) const B11429_ASSETS: &[&str] = &[
         "cudart-llama-b11429-bin-ubuntu-cuda-12.8-x64.tar.gz",
         "cudart-llama-b11429-bin-ubuntu-cuda-13.4-arm64.tar.gz",
         "cudart-llama-b11429-bin-ubuntu-cuda-13.4-x64.tar.gz",
@@ -427,40 +417,6 @@ mod tests {
         "llama-b11429-xcframework.zip",
     ];
 
-    /// Each platform's pattern matches its archive and nothing else in a
-    /// real release, the Windows CUDA one included: the CUDA runtime package
-    /// listed before it ends in the same pattern.
-    #[test]
-    fn each_platform_takes_its_own_archive_from_a_real_release() {
-        for (pattern, archive) in [
-            (
-                "bin-macos-arm64.tar.gz",
-                "llama-b11429-bin-macos-arm64.tar.gz",
-            ),
-            ("bin-macos-x64.tar.gz", "llama-b11429-bin-macos-x64.tar.gz"),
-            (
-                "bin-ubuntu-x64.tar.gz",
-                "llama-b11429-bin-ubuntu-x64.tar.gz",
-            ),
-            (
-                "bin-win-cuda-12.4-x64.zip",
-                "llama-b11429-bin-win-cuda-12.4-x64.zip",
-            ),
-            (
-                "bin-win-vulkan-x64.zip",
-                "llama-b11429-bin-win-vulkan-x64.zip",
-            ),
-        ] {
-            let matcher = llama_matcher(pattern);
-            let matching: Vec<&str> = B11429_ASSETS
-                .iter()
-                .copied()
-                .filter(|name| matcher.matches(name))
-                .collect();
-            assert_eq!(matching, [archive], "pattern {pattern}");
-        }
-    }
-
     /// The pin has to be a real tag shape; a stray `v` prefix or a bare
     /// number would 404 at install time on a user's machine, not here.
     #[test]
@@ -482,122 +438,6 @@ mod tests {
             PrebuiltAvailability::Available { .. } => {}
             PrebuiltAvailability::NotAvailable { .. } => {}
         }
-    }
-
-    // ---- windows_availability_for_gpu unit tests ----
-    // These run on all platforms because windows_availability_for_gpu is a pure
-    // function that takes a GpuInfo value — no Windows-only cfg guard needed.
-
-    #[test]
-    fn test_windows_gpu_cuda_selects_cuda_binary() {
-        use gglib_core::utils::system::GpuInfo;
-        let gpu = GpuInfo {
-            has_nvidia_gpu: true,
-            cuda_version: Some("12.4".to_string()),
-            has_metal: false,
-            has_vulkan: false,
-            vulkan_headers: false,
-            vulkan_glslc: false,
-            vulkan_spirv_headers: false,
-        };
-        let result = windows_availability_for_gpu(&gpu);
-        match result {
-            PrebuiltAvailability::Available {
-                asset_pattern,
-                description,
-            } => {
-                assert!(
-                    asset_pattern.contains("cuda"),
-                    "Expected CUDA asset, got: {asset_pattern}"
-                );
-                assert!(
-                    description.contains("CUDA"),
-                    "Expected CUDA description, got: {description}"
-                );
-            }
-            PrebuiltAvailability::NotAvailable { reason } => {
-                panic!("Expected Available for CUDA GPU, got NotAvailable: {reason}");
-            }
-        }
-    }
-
-    #[test]
-    fn test_windows_gpu_vulkan_only_selects_vulkan_binary() {
-        use gglib_core::utils::system::GpuInfo;
-        let gpu = GpuInfo {
-            has_nvidia_gpu: false,
-            cuda_version: None,
-            has_metal: false,
-            has_vulkan: true,
-            vulkan_headers: false,
-            vulkan_glslc: false,
-            vulkan_spirv_headers: false,
-        };
-        let result = windows_availability_for_gpu(&gpu);
-        match result {
-            PrebuiltAvailability::Available {
-                asset_pattern,
-                description,
-            } => {
-                assert!(
-                    asset_pattern.contains("vulkan"),
-                    "Expected Vulkan asset, got: {asset_pattern}"
-                );
-                assert!(
-                    description.contains("Vulkan"),
-                    "Expected Vulkan description, got: {description}"
-                );
-            }
-            PrebuiltAvailability::NotAvailable { reason } => {
-                panic!("Expected Available for Vulkan GPU, got NotAvailable: {reason}");
-            }
-        }
-    }
-
-    #[test]
-    fn test_windows_gpu_nvidia_without_cuda_falls_back_to_vulkan() {
-        use gglib_core::utils::system::GpuInfo;
-        // NVIDIA hardware present but CUDA toolkit not installed; Vulkan is available.
-        let gpu = GpuInfo {
-            has_nvidia_gpu: true,
-            cuda_version: None,
-            has_metal: false,
-            has_vulkan: true,
-            vulkan_headers: false,
-            vulkan_glslc: false,
-            vulkan_spirv_headers: false,
-        };
-        let result = windows_availability_for_gpu(&gpu);
-        match result {
-            PrebuiltAvailability::Available { asset_pattern, .. } => {
-                assert!(
-                    asset_pattern.contains("vulkan"),
-                    "Should prefer Vulkan when CUDA toolkit absent, got: {asset_pattern}"
-                );
-            }
-            PrebuiltAvailability::NotAvailable { reason } => {
-                panic!("Expected Available (Vulkan fallback), got NotAvailable: {reason}");
-            }
-        }
-    }
-
-    #[test]
-    fn test_windows_gpu_no_gpu_returns_not_available() {
-        use gglib_core::utils::system::GpuInfo;
-        let gpu = GpuInfo {
-            has_nvidia_gpu: false,
-            cuda_version: None,
-            has_metal: false,
-            has_vulkan: false,
-            vulkan_headers: false,
-            vulkan_glslc: false,
-            vulkan_spirv_headers: false,
-        };
-        let result = windows_availability_for_gpu(&gpu);
-        assert!(
-            matches!(result, PrebuiltAvailability::NotAvailable { .. }),
-            "Expected NotAvailable when no GPU backends present"
-        );
     }
 
     /// Verify that `extract_binaries_tar_gz` correctly handles modern llama.cpp

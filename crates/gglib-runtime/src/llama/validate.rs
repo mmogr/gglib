@@ -39,7 +39,7 @@ fn validate_binary(path: &Path, binary_name: &str) -> Result<()> {
 
     if !output.status.success() {
         bail!(
-            "{} binary appears corrupted: {}\n\nRun 'gglib config llama rebuild' to fix.",
+            "{} binary appears corrupted: {}\n\nRun 'gglib config llama install --force' to reinstall it.",
             binary_name,
             path.display()
         );
@@ -64,6 +64,9 @@ pub async fn handle_status() -> Result<()> {
 
     println!("Status: Installed");
     println!("Binary: {}", status.binary_path);
+    if let Some(line) = crate::engine::standing_line(&status.pin) {
+        println!("{line}");
+    }
 
     match &status.health_error {
         None => println!("Health: ✓ Functional"),

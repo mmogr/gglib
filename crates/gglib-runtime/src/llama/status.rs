@@ -5,9 +5,14 @@
 //! Axum `system/llama-status` route serialises it directly, so the two
 //! surfaces cannot drift.
 
+use super::config::recorded_install;
 use super::config::{BuildConfig, InstallRecord, PrebuiltRecord};
+use super::download::LLAMA_RELEASE;
+use crate::binary_install::{ReleaseSelector, resolve_selector};
+use crate::engine::{PinState, pin_state_at, update_downloads};
 use gglib_core::domain::RuntimeCapabilities;
-use gglib_core::paths::{llama_config_path, llama_server_path};
+use gglib_core::domain::RuntimeKind;
+use gglib_core::paths::{llama_config_path, llama_cpp_dir, llama_server_path};
 use serde::Serialize;
 use std::path::Path;
 
@@ -127,6 +132,11 @@ pub struct LlamaStatus {
     /// What the binary says it is. Absent when nothing is installed to probe;
     /// present-but-unidentified when the probe could not parse a build number.
     pub runtime: Option<LlamaRuntimeInfo>,
+    /// Where the install stands against the pinned release.
+    pub pin: PinState,
+    /// The chat model running on llama-server, when one is: an update is not
+    /// offered under it. Filled by the daemon, which knows what runs.
+    pub serving: Option<String>,
 }
 
 /// Inspect the installed llama.cpp, if any.
@@ -136,11 +146,24 @@ pub struct LlamaStatus {
 /// in the returned struct. Only a failure to resolve the data directory
 /// itself is an `Err`.
 pub fn llama_status() -> anyhow::Result<LlamaStatus> {
-    Ok(status_at(&llama_server_path()?, &llama_config_path()?))
+    let mut status = status_at(
+        &llama_server_path()?,
+        &llama_config_path()?,
+        &llama_cpp_dir()?,
+        &resolve_selector(&LLAMA_RELEASE),
+    );
+    status.pin.update_downloads = update_downloads(RuntimeKind::Llama, &status.pin);
+    Ok(status)
 }
 
-/// [`llama_status`] for a binary and a record at the paths given.
-fn status_at(binary_path: &Path, config_path: &Path) -> LlamaStatus {
+/// [`llama_status`] for a binary, a record and a source checkout at the
+/// paths given, and the release `selector` would install.
+fn status_at(
+    binary_path: &Path,
+    config_path: &Path,
+    checkout: &Path,
+    selector: &ReleaseSelector,
+) -> LlamaStatus {
     let mut status = LlamaStatus {
         installed: binary_path.exists(),
         binary_path: binary_path.display().to_string(),
@@ -151,6 +174,13 @@ fn status_at(binary_path: &Path, config_path: &Path) -> LlamaStatus {
         build_error: None,
         prebuilt: None,
         runtime: None,
+        pin: pin_state_at(
+            binary_path,
+            recorded_install(config_path).as_ref(),
+            checkout,
+            selector,
+        ),
+        serving: None,
     };
 
     if !status.installed {

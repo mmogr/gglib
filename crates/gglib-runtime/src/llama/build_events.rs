@@ -1,12 +1,9 @@
 //! Observable events for the llama.cpp source-build pipeline.
 //!
-//! [`BuildEvent`] is produced by the build-from-source pipeline and consumed by
-//! two surfaces, each adapting the event stream to its own output medium:
-//!
-//! | Consumer    | Crate        | Output                                                                    |
-//! |-------------|--------------|--------------------------------------------------------------------------|
-//! | CLI         | `gglib-cli`  | `indicatif` spinner + progress bar via `render_build_events`              |
-//! | Axum        | `gglib-axum` | SSE stream at `POST /api/config/system/update-llama`                      |
+//! [`BuildEvent`] is produced by the build-from-source pipeline, for both
+//! engines, and drawn by the CLI (`render_build_events`, an `indicatif`
+//! spinner and progress bar). A source build is the command line's alone:
+//! the daemon and the app install downloads.
 //!
 //! The sender end is a `tokio::sync::mpsc::Sender<BuildEvent>` with capacity 64.
 //! When the sender is dropped the consumer loop terminates naturally.

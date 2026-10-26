@@ -50,6 +50,13 @@ function sdStatus(installed: boolean) {
       recordError: null,
       versionLine: null,
       commit: null,
+      pin: {
+        standing: installed ? 'unknown' : 'missing',
+        installedRelease: null,
+        targetRelease: 'master-948-228c707',
+        built: null,
+        rebuilds: false,updateDownloads: false,
+      },
     },
     prebuilt: 'macOS universal (Metal)',
     prebuiltUnavailable: null,

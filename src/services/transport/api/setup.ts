@@ -9,9 +9,7 @@ import type {
   SetupStatus,
   LlamaProgressEvent,
   LlamaStatus,
-  LlamaUpdateCheck,
   LlamaUninstallOutcome,
-  BuildEvent,
   Diagnostics,
   ModelRecommendation,
   ImageRuntimeStatus,
@@ -26,11 +24,12 @@ export async function getSetupStatus(): Promise<SetupStatus> {
 
 
 /**
- * Install llama.cpp pre-built binaries, streaming install progress.
+ * Install llama.cpp's pinned pre-built binaries, streaming install progress.
+ * It is also the update: an install over an older llama.cpp replaces it.
+ * Refused while a chat model runs on llama-server.
  *
- * Same arrangement as `streamLlamaUpdate`: every payload carries its own
- * `type`, so the SSE event name is redundant and the parsed object is the
- * single source of truth.
+ * Every payload carries its own `type`, so the SSE event name is redundant
+ * and the parsed object is the single source of truth.
  *
  * @param onEvent Called for every install event, in arrival order
  * @param onError Called when the transport itself fails
@@ -60,18 +59,7 @@ export async function getLlamaStatus(): Promise<LlamaStatus> {
   return get<LlamaStatus>('/api/config/system/llama-status');
 }
 
-/**
- * How far behind upstream the llama.cpp checkout is.
- *
- * POST because it runs `git fetch` — seconds of network, not a page-load
- * request. Only meaningful for a source install; a prebuilt one has no
- * repository to compare (`repoPresent: false`).
- */
-export async function checkLlamaUpdates(): Promise<LlamaUpdateCheck> {
-  return post<LlamaUpdateCheck>('/api/config/system/llama-check-updates');
-}
-
-/** Remove llama.cpp: source checkout, binaries and build config. */
+/** Remove llama.cpp: source checkout, binaries and build config. Refused (409) while a chat model runs. */
 export async function uninstallLlama(): Promise<LlamaUninstallOutcome> {
   return post<LlamaUninstallOutcome>('/api/config/system/uninstall-llama');
 }
@@ -109,30 +97,6 @@ export async function getSdStatus(): Promise<ImageRuntimeStatus> {
 /** Remove the image runtime, `.sd/` whole. Refused (409) while an image model runs. */
 export async function uninstallSd(): Promise<LlamaUninstallOutcome> {
   return post<LlamaUninstallOutcome>('/api/config/system/uninstall-sd');
-}
-
-/**
- * Pull upstream and rebuild llama.cpp, streaming build progress.
- *
- * Same event vocabulary as building from source. Aborting stops the stream,
- * not the build — the compile continues on the daemon.
- */
-export function streamLlamaUpdate(
-  onEvent: (event: BuildEvent) => void,
-  onError: (error: string) => void,
-  /** Called when the stream closes cleanly, whether or not it reported a result. */
-  onClose?: () => void,
-): () => void {
-  return streamSse('/api/config/system/update-llama', {
-    onFrame: (frame) => {
-      // Every payload carries its own `type`, so the SSE event name is
-      // redundant here and the parsed object is the single source of truth.
-      const event = parseFrame<BuildEvent>(frame);
-      if (event) onEvent(event);
-    },
-    onClose,
-    onError,
-  });
 }
 
 /**

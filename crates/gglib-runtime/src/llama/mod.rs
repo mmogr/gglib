@@ -27,13 +27,11 @@ pub mod runtime_probe;
 mod server_availability;
 mod status;
 mod uninstall;
-mod update;
-mod update_preflight;
 mod validate;
 
 // === Public API (facade) ===
 
-// The build an update replaces, as its record names it, and the one question
+// A source build's record, and the one question
 // a launch asks of that record: which acceleration the binary it is about to
 // spawn was compiled for.
 pub use config::BuildConfig;
@@ -54,9 +52,11 @@ pub use install_events::{InstallPhase, LlamaProgressEvent};
 pub use deps::{BuildTool, build_tool_install_lines, build_tools, missing_build_tools};
 
 // Core functionality
+pub(crate) use config::recorded_install;
 pub use detect::{
     Acceleration, MissingPackage, VulkanStatus, detect_optimal_acceleration, vulkan_status,
 };
+pub(crate) use download::LLAMA_RELEASE;
 pub use download::check_llama_installed;
 pub use status::{LlamaBuildInfo, LlamaPrebuiltInfo, LlamaStatus, llama_status};
 pub use validate::{handle_status, validate_llama_binary};
@@ -64,8 +64,6 @@ pub use validate::{handle_status, validate_llama_binary};
 // Installation
 pub use install::run_llama_source_build;
 pub use uninstall::{UninstallOutcome, llama_files_present, uninstall_llama};
-pub use update::{LlamaUpdateCheck, handle_check_updates, llama_update_check, run_llama_update};
-pub use update_preflight::{LOCAL_CHANGES_CAUTION, UpdatePlan, UpdateRefusal, update_preflight};
 
 // Args resolution
 pub use args::{

@@ -127,7 +127,12 @@ async fn serve_here(
     }
 
     // Ensure llama.cpp is installed before the daemon needs it.
-    crate::handlers::config::llama_ensure::ensure_installed(false).await?;
+    crate::handlers::config::engine::ensure_installed(
+        ctx,
+        gglib_core::domain::RuntimeKind::Llama,
+        false,
+    )
+    .await?;
     let model = found?;
 
     // The raw `--ctx-size` flag is shape-validated at parse time, before the

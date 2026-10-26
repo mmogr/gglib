@@ -3,7 +3,6 @@
 use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::Path;
-use std::process::Stdio;
 use tokio::sync::mpsc;
 use tracing::debug;
 
@@ -13,17 +12,23 @@ use gglib_core::utils::process::cmd;
 use super::record::{SdBuildRecord, SdInstallRecord};
 use super::release::{SD_RELEASE, check_sd_prebuilt_availability};
 use crate::binary_install::{
-    PrebuiltTarget, ReleaseSelector, completed, install_prebuilt, resolve_selector, started,
+    PrebuiltTarget, SourceRepo, completed, install_prebuilt, prepare_checkout, resolve_selector,
+    retire_checkout, settle, started,
 };
 use crate::llama::build::{build_parallelism, run_compile, run_configure};
-use crate::llama::install::{forward_git_progress, get_repo_info, install_binary};
+use crate::llama::install::install_binary;
 use crate::llama::{
     Acceleration, BuildEvent, BuildPhase, InstallPhase, LlamaProgressEvent, build_tools,
     missing_build_tools,
 };
 
-/// Where stable-diffusion.cpp's source is cloned from.
-const SD_REPO_URL: &str = "https://github.com/leejet/stable-diffusion.cpp";
+/// Where stable-diffusion.cpp's source is cloned from, with the submodules
+/// its build needs.
+pub(crate) const SD_SOURCE: SourceRepo<'static> = SourceRepo {
+    product: "stable-diffusion.cpp",
+    url: "https://github.com/leejet/stable-diffusion.cpp",
+    submodules: true,
+};
 
 /// Download and install the pinned pre-built `sd-server`, streaming progress
 /// on `tx` exactly as llama.cpp's install does.
@@ -64,7 +69,12 @@ pub async fn install_sd_prebuilt(tx: mpsc::Sender<LlamaProgressEvent>) -> Result
         |record| SdInstallRecord::Prebuilt(record).save(&sd_config_path()?),
         &tx,
     )
-    .await
+    .await?;
+    // A source build this download replaced leaves its checkout behind.
+    if let Err(e) = retire_checkout(&sd_cpp_dir()?) {
+        debug!("the old stable-diffusion.cpp checkout was not removed: {e:#}");
+    }
+    Ok(())
 }
 
 /// The `CMake` flag that turns `acceleration` on in stable-diffusion.cpp, which
@@ -76,23 +86,6 @@ pub(crate) const fn sd_cmake_flag(acceleration: Acceleration) -> Option<&'static
         Acceleration::Vulkan => Some("-DSD_VULKAN=ON"),
         Acceleration::Cpu => None,
     }
-}
-
-/// `git clone`'s arguments for `selector` into `dir`: shallow, with the four
-/// submodules the build needs, at the release's tag unless following
-/// upstream's newest.
-pub(crate) fn sd_clone_args(selector: &ReleaseSelector, dir: &Path) -> Vec<String> {
-    let mut args = vec!["clone".to_owned(), "--depth".to_owned(), "1".to_owned()];
-    if let ReleaseSelector::Tag(tag) = selector {
-        args.extend(["--branch".to_owned(), tag.clone()]);
-    }
-    args.extend([
-        "--recurse-submodules".to_owned(),
-        "--shallow-submodules".to_owned(),
-        SD_REPO_URL.to_owned(),
-        dir.display().to_string(),
-    ]);
-    args
 }
 
 /// The configure step's arguments: a Release build of the checkout at `src`
@@ -133,8 +126,9 @@ pub(crate) fn sd_build_args(build: &Path, jobs: usize) -> Vec<String> {
 /// Build `sd-server` from source for `acceleration` and install it,
 /// streaming [`BuildEvent`]s on `tx`.
 ///
-/// Clones the pinned release (or the override's) into `.sd/stable-diffusion.cpp`
-/// unless a checkout is already there, configures and compiles only the
+/// Checks out the pinned release (or the override's) in
+/// `.sd/stable-diffusion.cpp`, reusing a checkout already at it and replacing
+/// any other (see [`prepare_checkout`]), configures and compiles only the
 /// `sd-server` target, copies the binary to `.sd/bin` and records the build.
 /// The build links stable-diffusion.cpp statically, so the one binary is the
 /// whole install. The way in when no pre-built asset fits the platform, or
@@ -155,29 +149,19 @@ pub async fn run_sd_source_build(
     let server_path = sd_server_path()?;
     let selector = resolve_selector(&SD_RELEASE);
 
-    let (short, commit_sha) = if src.exists() {
-        let _ = tx
-            .send(BuildEvent::Log {
-                message: "Using existing stable-diffusion.cpp checkout.".to_string(),
-            })
-            .await;
-        get_repo_info(&src)?
-    } else {
-        let (tx, src, selector) = (tx.clone(), src.clone(), selector.clone());
-        tokio::task::spawn_blocking(move || clone_sd(&selector, &src, &tx)).await??
-    };
-    let version = match &selector {
-        ReleaseSelector::Tag(tag) => tag.clone(),
-        ReleaseSelector::Latest => short,
+    let checkout = {
+        let tx = tx.clone();
+        tokio::task::spawn_blocking(move || prepare_checkout(&SD_SOURCE, &selector, &src, &tx))
+            .await??
     };
 
     {
-        let (tx, src) = (tx.clone(), src.clone());
+        let (tx, src) = (tx.clone(), checkout.dir.clone());
         tokio::task::spawn_blocking(move || build_sd(&src, acceleration, &tx)).await??;
     }
 
     {
-        let (tx, src, dest) = (tx.clone(), src.clone(), server_path.clone());
+        let (tx, src, dest) = (tx.clone(), checkout.dir.clone(), server_path.clone());
         tokio::task::spawn_blocking(move || -> Result<()> {
             let _ = tx.blocking_send(BuildEvent::PhaseStarted {
                 phase: BuildPhase::InstallBinaries,
@@ -195,13 +179,15 @@ pub async fn run_sd_source_build(
         .map(str::to_owned)
         .into_iter()
         .collect();
+    let version = checkout.version.clone();
     SdInstallRecord::Built(SdBuildRecord::new(
         version.clone(),
-        commit_sha,
+        checkout.commit_sha.clone(),
         acceleration,
         flags,
     ))
     .save(&sd_config_path()?)?;
+    settle(checkout, &tx).await;
 
     let _ = tx
         .send(BuildEvent::Completed {
@@ -211,39 +197,6 @@ pub async fn run_sd_source_build(
         .await;
 
     Ok(())
-}
-
-/// Clone stable-diffusion.cpp for `selector` into `dir`; blocking.
-fn clone_sd(
-    selector: &ReleaseSelector,
-    dir: &Path,
-    tx: &mpsc::Sender<BuildEvent>,
-) -> Result<(String, String)> {
-    let _ = tx.blocking_send(BuildEvent::PhaseStarted {
-        phase: BuildPhase::CloneOrUpdateRepo,
-    });
-    if let Some(parent) = dir.parent() {
-        fs::create_dir_all(parent).context("Failed to create parent directory")?;
-    }
-
-    let mut child = cmd("git")
-        .args(sd_clone_args(selector, dir))
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("Failed to run git clone")?;
-    if let Some(stderr) = child.stderr.take() {
-        forward_git_progress(stderr, tx);
-    }
-    let status = child.wait().context("Failed to wait for git clone")?;
-    if !status.success() {
-        bail!("Failed to clone the stable-diffusion.cpp repository");
-    }
-
-    let _ = tx.blocking_send(BuildEvent::PhaseCompleted {
-        phase: BuildPhase::CloneOrUpdateRepo,
-    });
-    get_repo_info(dir)
 }
 
 /// Configure and compile the `sd-server` target; blocking.

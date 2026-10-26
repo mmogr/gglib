@@ -8,7 +8,7 @@ pub use install::{
 };
 pub use server::{IMAGE_JOB_DEADLINE, IMAGE_STALL, POLL, SdImageDriver, SdServerConfig};
 
-pub(crate) use install::recorded_release;
+pub(crate) use install::{SD_RELEASE, recorded_install, recorded_release};
 pub(crate) use server::build_and_spawn_sd;
 #[cfg(test)]
 pub(crate) use server::fake_server;

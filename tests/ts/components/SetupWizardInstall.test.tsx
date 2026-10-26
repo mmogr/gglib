@@ -26,6 +26,7 @@ const encoder = new TextEncoder();
 const STATUS: SetupStatus = {
   setupCompleted: false,
   llamaInstalled: false,
+  llamaPin: { standing: 'missing', installedRelease: null, targetRelease: 'b11429', built: null, rebuilds: false, updateDownloads: false },
   llamaCanDownload: true,
   llamaPlatformDescription: 'macOS ARM64 (Metal)',
   gpuInfo: {
@@ -47,7 +48,7 @@ describe('the setup wizard\'s llama.cpp step', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   let body: ReadableStreamDefaultController<Uint8Array>;
 
-  /** One frame of the install stream, as `install_event_to_sse` writes it. */
+  /** One frame of the install stream, as `install_slot::sse_frame` writes it. */
   const send = (event: LlamaProgressEvent) =>
     body.enqueue(encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`));
 

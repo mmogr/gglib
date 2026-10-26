@@ -33,19 +33,34 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::SystemTime;
 
 use gglib_core::domain::RuntimeCapabilities;
 use gglib_core::utils::process::cmd;
 use tracing::{debug, warn};
 
-/// Memoized probe results, keyed by binary path.
+/// Memoized probe results, keyed by binary path, each with the
+/// [`Fingerprint`] of the file it was taken from.
 ///
 /// `std::sync::Mutex` around a small map, matching the lock discipline used
 /// elsewhere for this shape of cache: every critical section is a couple of
 /// map operations with no `.await` inside.
-static PROBE_CACHE: Mutex<Option<HashMap<PathBuf, RuntimeCapabilities>>> = Mutex::new(None);
+static PROBE_CACHE: Mutex<Option<HashMap<PathBuf, (Fingerprint, RuntimeCapabilities)>>> =
+    Mutex::new(None);
 
-/// Probe `binary` for its version, memoizing the result per path.
+/// What a binary was when it was probed: its modification time and length,
+/// `None` for a file that could not be read. An install that replaces the
+/// binary changes it, so the next probe runs the new one instead of
+/// answering for the old.
+type Fingerprint = Option<(SystemTime, u64)>;
+
+fn fingerprint(binary: &Path) -> Fingerprint {
+    let metadata = std::fs::metadata(binary).ok()?;
+    Some((metadata.modified().ok()?, metadata.len()))
+}
+
+/// Probe `binary` for its version, memoizing the result per path for as
+/// long as the file there stays the same.
 ///
 /// Never fails: an unprobeable binary yields [`RuntimeCapabilities::unknown`],
 /// which claims no capabilities and therefore leaves every compensation on.
@@ -54,6 +69,10 @@ pub fn probe(binary: &Path) -> RuntimeCapabilities {
         return hit;
     }
 
+    // Taken before the probe: a binary replaced while it answers is then
+    // probed again next time, instead of its old answer being kept for the
+    // new file.
+    let before = fingerprint(binary);
     let caps = probe_uncached(binary);
 
     if caps.is_identified() {
@@ -80,7 +99,7 @@ pub fn probe(binary: &Path) -> RuntimeCapabilities {
         );
     }
 
-    store(binary, &caps);
+    store(binary, before, &caps);
     caps
 }
 
@@ -123,17 +142,19 @@ fn probe_uncached(binary: &Path) -> RuntimeCapabilities {
     }
 }
 
-/// The cached result for `binary`, if one has been taken.
+/// The cached result for `binary`, if one was taken of the file there now.
 fn cached(binary: &Path) -> Option<RuntimeCapabilities> {
-    PROBE_CACHE.lock().ok()?.as_ref()?.get(binary).cloned()
+    let now = fingerprint(binary);
+    let (then, caps) = PROBE_CACHE.lock().ok()?.as_ref()?.get(binary).cloned()?;
+    (then == now).then_some(caps)
 }
 
-/// Memoize `caps` for `binary`.
-fn store(binary: &Path, caps: &RuntimeCapabilities) {
+/// Memoize `caps` for `binary` as it was when the probe began.
+fn store(binary: &Path, probed: Fingerprint, caps: &RuntimeCapabilities) {
     if let Ok(mut guard) = PROBE_CACHE.lock() {
         guard
             .get_or_insert_with(HashMap::new)
-            .insert(binary.to_path_buf(), caps.clone());
+            .insert(binary.to_path_buf(), (probed, caps.clone()));
     }
 }
 
@@ -161,6 +182,28 @@ mod tests {
         let caps = probe_uncached(dir.path());
 
         assert!(!caps.is_identified());
+    }
+
+    /// An install that replaces the binary is probed again: the cache holds
+    /// what the file was, not only where it is.
+    #[cfg(unix)]
+    #[test]
+    fn a_replaced_binary_is_probed_again() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("llama-server");
+        let write = |script: &str| {
+            std::fs::write(&path, script).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        write("#!/bin/sh\necho 'version: 11429 (d812350)' >&2\n");
+        assert_eq!(probe(&path).build, Some(11429));
+
+        // A longer script, so the length differs whatever the clock's grain.
+        write("#!/bin/sh\n# the next release\necho 'version: 11870 (74bca39)' >&2\n");
+
+        assert_eq!(probe(&path).build, Some(11870));
     }
 
     /// Caching must round-trip through the real `probe` entry point, and a

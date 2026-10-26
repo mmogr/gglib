@@ -36,9 +36,21 @@ fn with_real(machine: Machine, name: &str) -> Machine {
 
 /// Run `script` on `machine`, in an empty directory, with no terminal.
 fn run(script: &str, machine: &Machine) -> Output {
+    run_with(script, &[], machine)
+}
+
+/// Run `install-engine.sh` for `engine` on `machine`.
+fn run_engine(engine: &str, machine: &Machine) -> Output {
+    run_with("install-engine.sh", &[engine], machine)
+}
+
+/// Run `script` with `args` on `machine`, in an empty directory, with no
+/// terminal.
+fn run_with(script: &str, args: &[&str], machine: &Machine) -> Output {
     let cwd = tempfile::tempdir().expect("an empty directory to run in");
     Command::new("/bin/bash")
         .arg(scripts_dir().join(script))
+        .args(args)
         .current_dir(cwd.path())
         .env_clear()
         .env("PATH", machine.path())
@@ -71,7 +83,7 @@ fn with_no_gpu_and_no_terminal_the_install_script_runs_an_install_the_command_ac
     let _guard = one_at_a_time();
     let machine = Machine::bare().with("gglib", GGLIB_THAT_ASKS);
 
-    let out = run("install-llama.sh", &machine);
+    let out = run_engine("llama", &machine);
 
     assert!(out.status.success(), "{}", text(&out));
     assert_eq!(
@@ -84,6 +96,38 @@ fn with_no_gpu_and_no_terminal_the_install_script_runs_an_install_the_command_ac
         .unwrap_or_else(|e| panic!("the command the script runs is one gglib has: {e}"));
 }
 
+/// The image runtime goes through the same script, with the same answer.
+#[test]
+fn the_install_script_installs_the_image_runtime_the_same_way() {
+    let _guard = one_at_a_time();
+    let machine = Machine::bare().with("gglib", GGLIB_THAT_ASKS);
+
+    let out = run_engine("sd", &machine);
+
+    assert!(out.status.success(), "{}", text(&out));
+    assert_eq!(machine.calls(), ["gglib config sd install", "typed y"]);
+    gglib_cli::Cli::try_parse_from(["gglib", "config", "sd", "install"])
+        .unwrap_or_else(|e| panic!("the command the script runs is one gglib has: {e}"));
+}
+
+/// Told no engine, or one it does not know, the script installs nothing.
+#[test]
+fn the_install_script_needs_an_engine_it_knows() {
+    let _guard = one_at_a_time();
+    let machine = Machine::bare().with("gglib", GGLIB_THAT_ASKS);
+
+    for args in [&[][..], &["whisper"]] {
+        let out = run_with("install-engine.sh", args, &machine);
+        assert_eq!(out.status.code(), Some(2), "{args:?}: {}", text(&out));
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains("llama|sd"),
+            "{}",
+            text(&out)
+        );
+    }
+    assert!(machine.calls().is_empty(), "gglib was never run");
+}
+
 /// What the command says is what the script says: its failure is the
 /// script's, so `make setup` stops where the install was refused.
 #[test]
@@ -91,7 +135,7 @@ fn the_install_script_fails_when_the_command_does() {
     let _guard = one_at_a_time();
     let machine = Machine::bare().with("gglib", "exit 3");
 
-    let out = run("install-llama.sh", &machine);
+    let out = run_engine("llama", &machine);
 
     assert_eq!(out.status.code(), Some(3), "{}", text(&out));
 }
@@ -101,7 +145,7 @@ fn the_install_script_stops_when_there_is_no_gglib_to_run() {
     let _guard = one_at_a_time();
     let machine = Machine::bare();
 
-    let out = run("install-llama.sh", &machine);
+    let out = run_engine("llama", &machine);
 
     assert_eq!(out.status.code(), Some(1), "{}", text(&out));
     assert!(
@@ -280,9 +324,10 @@ fn a_build_installs_with_npm_ci() {
     }
 }
 
-/// `make setup` is the same steps in the same order.
+/// `make setup` is the same steps in the same order: both engines, without
+/// an offer to decline, llama.cpp first.
 #[test]
-fn make_setup_runs_its_steps_in_the_order_it_always_has() {
+fn make_setup_runs_its_steps_in_order() {
     let listed = dry_run("setup");
 
     // A step, and how often it is printed: bundling prints both its arms.
@@ -295,10 +340,10 @@ fn make_setup_runs_its_steps_in_the_order_it_always_has() {
         ("cp target/release/gglib", 1),
         ("./target/release/gglib config models-dir prompt", 1),
         ("./target/release/gglib config fast-downloads prompt", 1),
-        ("./target/release/gglib config sd prompt", 1),
         ("Core setup complete", 1),
         ("llama-install-auto", 1),
-        ("scripts/install-llama.sh", 1),
+        ("scripts/install-engine.sh llama", 1),
+        ("scripts/install-engine.sh sd", 1),
     ];
     let mut from = 0;
     for (step, times) in steps {
@@ -312,4 +357,10 @@ fn make_setup_runs_its_steps_in_the_order_it_always_has() {
             .unwrap_or_else(|| panic!("{step:?} comes next in:\n{listed}"));
         from += at + step.len();
     }
+    // The image runtime is not needed for chat: its failure is said, and
+    // setup goes on.
+    assert!(
+        listed.contains("scripts/install-engine.sh sd || echo"),
+        "{listed}"
+    );
 }

@@ -258,3 +258,12 @@ fn the_licences_and_the_cli_stay_in_the_archive() {
         assert!(sd_wanted(kept), "{kept}");
     }
 }
+
+/// A source build clones the repository the downloads come from.
+#[test]
+fn the_source_is_cloned_from_the_release_repository() {
+    assert_eq!(
+        super::pipeline::SD_SOURCE.url,
+        format!("https://github.com/{}", SD_RELEASE.repo)
+    );
+}

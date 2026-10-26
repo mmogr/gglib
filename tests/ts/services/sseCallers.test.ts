@@ -20,7 +20,7 @@ import { startCompareRun } from '../../../src/services/clients/benchmark';
 import { subscribeProxyDashboard } from '../../../src/services/clients/proxyDashboard';
 import { listenToServerLogs } from '../../../src/services/platform/serverLogs';
 import { readRunEvents } from '../../../src/services/transport/api/runs';
-import { streamLlamaInstall, streamLlamaUpdate } from '../../../src/services/transport/api/setup';
+import { streamLlamaInstall } from '../../../src/services/transport/api/setup';
 import { SSEConnectionManager } from '../../../src/services/transport/events/sse';
 
 const encoder = new TextEncoder();
@@ -69,7 +69,6 @@ const CALLERS: [name: string, start: (seen: Seen, signal: AbortSignal) => unknow
     },
   ],
   ['the llama install stream', (seen) => streamLlamaInstall(seen, () => {})],
-  ['the llama update stream', (seen) => streamLlamaUpdate(seen, () => {})],
   ['a benchmark stream', (seen, signal) => void startCompareRun({} as never, seen, signal).catch(() => {})],
 ];
 

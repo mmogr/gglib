@@ -1005,23 +1005,3 @@ async fn llama_status_route_returns_json() {
     assert!(json["installed"].is_boolean());
     assert!(json["binaryPath"].is_string());
 }
-
-/// `git fetch` is a mutation of local refs and takes network time, so this
-/// route is POST. A GET must not quietly work.
-#[tokio::test]
-async fn llama_check_updates_route_rejects_get() {
-    let app = test_app(CorsConfig::AllowAll).await;
-
-    let response = app
-        .oneshot(
-            authed()
-                .header("Host", "127.0.0.1:9887")
-                .uri("/api/config/system/llama-check-updates")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
-}

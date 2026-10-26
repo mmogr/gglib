@@ -72,6 +72,7 @@ fn check_vulkan_loader() -> bool {
     #[cfg(target_os = "linux")]
     {
         if Path::new("/usr/lib/x86_64-linux-gnu/libvulkan.so.1").exists()
+            || Path::new("/usr/lib/aarch64-linux-gnu/libvulkan.so.1").exists()
             || Path::new("/usr/lib64/libvulkan.so.1").exists()
             || Path::new("/usr/lib/libvulkan.so.1").exists()
         {

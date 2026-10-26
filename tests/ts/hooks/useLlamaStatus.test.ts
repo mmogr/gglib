@@ -19,12 +19,25 @@ import { useLlamaStatus } from '../../../src/hooks/useLlamaStatus';
 import { resetClientCache, setApiSession } from '../../../src/services/transport/api/client';
 import { mockInvoke } from '../setup';
 
-/** A setup-status reply carrying the two fields the shell reads. */
-const setupStatus = (llamaInstalled: boolean, llamaCanDownload: boolean) =>
-  new Response(JSON.stringify({ setupCompleted: true, llamaInstalled, llamaCanDownload }), {
+/** A setup-status reply carrying the fields the shell reads. */
+const setupStatus = (llamaInstalled: boolean, llamaCanDownload: boolean, extra: object = {}) =>
+  new Response(JSON.stringify({ setupCompleted: true, llamaInstalled, llamaCanDownload, ...extra }), {
     status: 200,
     headers: { 'content-type': 'application/json' },
   });
+
+/** llama.cpp's pin state with `standing`, over b10327 against b11429. */
+const pin = (standing: string, rebuilds = false) => ({
+  llamaPin: {
+    standing,
+    installedRelease: 'b10327',
+    targetRelease: 'b11429',
+    built: rebuilds,
+    rebuilds,
+    // The daemon's verdict: an update over a source build of a release is a build.
+    updateDownloads: standing === 'older' && !rebuilds,
+  },
+});
 
 describe.each([
   ['the desktop app', 'http://127.0.0.1:9887'],
@@ -54,7 +67,7 @@ describe.each([
     expect(result.current.loading).toBe(true);
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.status).toEqual({ installed: false, canDownload: true });
+    expect(result.current.status).toEqual({ installed: false, canDownload: true, update: null });
     expect(result.current.error).toBeNull();
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([`${daemon}/api/config/system/setup-status`]);
     // The desktop app asks its shell where the daemon is, and nothing else.
@@ -68,7 +81,7 @@ describe.each([
     const { result } = renderHook(() => useLlamaStatus());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.status).toEqual({ installed: true, canDownload: false });
+    expect(result.current.status).toEqual({ installed: true, canDownload: false, update: null });
   });
 
   it('assumes llama.cpp is installed, and keeps the daemon\'s reason, when the status cannot be read', async () => {
@@ -82,7 +95,7 @@ describe.each([
     const { result } = renderHook(() => useLlamaStatus());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.status).toEqual({ installed: true, canDownload: false });
+    expect(result.current.status).toEqual({ installed: true, canDownload: false, update: null });
     expect(result.current.error).toBe('Failed to check llama status: settings are locked');
   });
 
@@ -90,11 +103,28 @@ describe.each([
     fetchMock.mockResolvedValueOnce(setupStatus(false, true)).mockResolvedValueOnce(setupStatus(true, true));
 
     const { result } = renderHook(() => useLlamaStatus());
-    await waitFor(() => expect(result.current.status).toEqual({ installed: false, canDownload: true }));
+    await waitFor(() => expect(result.current.status).toEqual({ installed: false, canDownload: true, update: null }));
 
     await act(() => result.current.checkStatus());
 
-    expect(result.current.status).toEqual({ installed: true, canDownload: true });
+    expect(result.current.status).toEqual({ installed: true, canDownload: true, update: null });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers the pinned release over an older llama.cpp, unless a chat model runs or it was built from source', async () => {
+    fetchMock
+      .mockResolvedValueOnce(setupStatus(true, true, pin('older')))
+      .mockResolvedValueOnce(setupStatus(true, true, { ...pin('older'), llamaServing: 'qwen' }))
+      .mockResolvedValueOnce(setupStatus(true, true, pin('older', true)))
+      .mockResolvedValueOnce(setupStatus(true, true, pin('atPin')));
+
+    const { result } = renderHook(() => useLlamaStatus());
+    await waitFor(() =>
+      expect(result.current.status?.update).toEqual({ installed: 'b10327', target: 'b11429' }),
+    );
+    for (let read = 0; read < 3; read += 1) {
+      await act(() => result.current.checkStatus());
+      expect(result.current.status?.update).toBeNull();
+    }
   });
 });

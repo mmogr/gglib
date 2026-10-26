@@ -74,15 +74,13 @@ async fn every_change_the_cli_can_make_is_refused_to_another_site() {
 /// on the machine running the test.
 #[tokio::test]
 async fn the_routes_that_act_on_this_machine_are_refused_to_another_site() {
-    const ISSUE_1118: [&str; 16] = [
+    const ISSUE_1118: [&str; 14] = [
         "/api/config/system/install-llama",
-        "/api/config/system/update-llama",
         "/api/config/system/uninstall-llama",
         "/api/config/system/install-sd",
         "/api/config/system/uninstall-sd",
         "/api/config/system/setup-python",
         "/api/config/system/disable-fast-downloads",
-        "/api/config/system/llama-check-updates",
         "/api/mcp/servers/1/start",
         "/api/mcp/servers/1/stop",
         "/api/mcp/servers/1/test",

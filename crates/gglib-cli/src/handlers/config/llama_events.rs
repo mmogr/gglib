@@ -2,14 +2,12 @@
 //!
 //! One renderer for a source build's [`BuildEvent`]s and one for a download's
 //! [`LlamaProgressEvent`]s. Every command that builds or downloads llama.cpp
-//! hands its channel to one of them: `config llama install`, `rebuild` and
-//! `update`, and the install a first `gglib serve` or `gglib up` offers; so
-//! does `config sd install`, whose stable-diffusion.cpp reports the same
-//! events, with its product's name on the download's bar. A
-//! command differs from the next in what it says once the work is done, which
-//! is the ending it passes, and in what is drawn while git fetches the
-//! checkout: a clone and a pull are one phase, and only the command knows
-//! which of them it started.
+//! hands its channel to one of them: `config llama install` (and `update`),
+//! and the install `gglib serve` or `gglib up` offers; so does `config sd
+//! install`, whose stable-diffusion.cpp reports the same events, with its
+//! product's name on the download's bar. A command differs from the next in
+//! what it says once the work is done, which is the ending it passes, and in
+//! the spinner drawn while git clones the checkout.
 //!
 //! A phase that is drawn is a spinner or a bar, which `indicatif` draws on
 //! stderr and takes away again. What is left behind is written to `out`.
@@ -37,13 +35,9 @@ pub(super) type DownloadEnding = fn(version: &str) -> Vec<String>;
 /// log lines, so nothing else on the terminal shows that it is running.
 pub(super) const CLONING: Option<&str> = Some("Cloning llama.cpp repository...");
 
-/// No spinner over a pull. git has the terminal for a pull and reports its
-/// progress there, where a spinner would be drawn across it.
-pub(super) const GIT_REPORTS_THE_PULL: Option<&str> = None;
-
 const NOW_USABLE: &str = "You can now use 'gglib serve', 'gglib proxy', and 'gglib chat'.";
 
-/// The ending of `config llama install` and `rebuild`, built from source.
+/// The ending of `config llama install` (and `update`), built from source.
 pub(super) fn built_and_installed(version: &str, acceleration: &str) -> Vec<String> {
     vec![
         String::new(),
@@ -51,16 +45,6 @@ pub(super) fn built_and_installed(version: &str, acceleration: &str) -> Vec<Stri
         format!("  Version:       {version}"),
         format!("  Acceleration:  {acceleration}"),
         NOW_USABLE.to_owned(),
-    ]
-}
-
-/// The ending of `config llama update`.
-pub(super) fn updated(version: &str, acceleration: &str) -> Vec<String> {
-    vec![
-        String::new(),
-        "✓ llama.cpp updated successfully!".to_owned(),
-        format!("  New version: {version}"),
-        format!("  Acceleration: {acceleration}"),
     ]
 }
 
@@ -153,8 +137,8 @@ fn write_lines(out: &mut impl Write, lines: &[String]) {
 /// A single `Option<ProgressBar>` tracks the active indicator. Phases are
 /// strictly sequential so there is never more than one active bar at a time.
 /// A log line that arrives while an indicator is drawn is printed above it,
-/// and any other goes to `out`. `fetching` is [`CLONING`] or
-/// [`GIT_REPORTS_THE_PULL`].
+/// and any other goes to `out`. `fetching` is the spinner over the clone,
+/// such as [`CLONING`].
 pub(super) async fn render_build_events(
     mut rx: mpsc::Receiver<BuildEvent>,
     fetching: Option<&'static str>,

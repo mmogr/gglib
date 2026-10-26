@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-use crate::binary_install::PrebuiltRecord;
+use crate::binary_install::{PrebuiltRecord, Recorded};
 use crate::llama::Acceleration;
 
 /// What `sd-config.json` holds: one of two shapes, told apart by their keys,
@@ -42,6 +42,21 @@ impl SdInstallRecord {
             Self::Prebuilt(record) => &record.version,
         }
     }
+}
+
+/// What the record at `path` says was installed, for comparing with the
+/// pin; `None` with no record or one that cannot be read.
+pub(crate) fn recorded_install(path: &Path) -> Option<Recorded> {
+    Some(match SdInstallRecord::load(path).ok()? {
+        SdInstallRecord::Built(build) => Recorded {
+            release: build.version,
+            commit_sha: Some(build.commit_sha),
+        },
+        SdInstallRecord::Prebuilt(record) => Recorded {
+            release: record.version,
+            commit_sha: None,
+        },
+    })
 }
 
 /// The release the installed `sd-server`'s record names, when there is a

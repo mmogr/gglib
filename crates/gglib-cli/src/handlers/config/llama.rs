@@ -1,51 +1,31 @@
 //! llama.cpp management command handler.
 //!
-//! Routes each `LlamaCommand` variant to what carries it out. Installing and
-//! updating have adapters of their own beside this file, because they ask a
-//! question and draw progress; `status` and `check-updates` are printed by
-//! `gglib_runtime::llama`; and uninstalling is short enough to live here.
+//! Routes each `LlamaCommand` variant to what carries it out. Installing,
+//! which is also updating, is `engine`'s, shared with stable-diffusion.cpp;
+//! `status` is printed by `gglib_runtime::llama`; and uninstalling is short
+//! enough to live here.
 
 use anyhow::Result;
 
+use crate::bootstrap::CliContext;
 use crate::llama_commands::LlamaCommand;
 use crate::utils::input;
+use gglib_core::domain::RuntimeKind;
 
+use super::engine;
 use super::llama_detect;
-use super::llama_install;
-use super::llama_update;
 
 /// Dispatch a `llama` sub-command to its handler.
-pub(crate) async fn dispatch(command: LlamaCommand) -> Result<()> {
-    use gglib_runtime::llama::{handle_check_updates, handle_status};
-
+pub(crate) async fn dispatch(ctx: &CliContext, command: LlamaCommand) -> Result<()> {
     match command {
-        LlamaCommand::Install {
-            cuda,
-            metal,
-            vulkan,
-            force,
-            build,
-        } => {
-            llama_install::handle_install(cuda, metal, vulkan, force, build).await?;
-        }
-        LlamaCommand::CheckUpdates => {
-            handle_check_updates().await?;
-        }
-        LlamaCommand::Update => {
-            llama_update::handle_update().await?;
+        LlamaCommand::Install { force, build } => {
+            engine::install(ctx, RuntimeKind::Llama, force, build).await?;
         }
         LlamaCommand::Status => {
-            handle_status().await?;
-        }
-        LlamaCommand::Rebuild {
-            cuda,
-            metal,
-            vulkan,
-        } => {
-            llama_install::handle_install(cuda, metal, vulkan, true, true).await?;
+            gglib_runtime::llama::handle_status().await?;
         }
         LlamaCommand::Uninstall { force } => {
-            uninstall(force).await?;
+            uninstall(ctx, force).await?;
         }
         LlamaCommand::Detect { json } => {
             llama_detect::execute(json)?;
@@ -55,13 +35,17 @@ pub(crate) async fn dispatch(command: LlamaCommand) -> Result<()> {
 }
 
 /// Remove the llama.cpp installation, asking first unless `force`, and print
-/// what was removed.
-async fn uninstall(force: bool) -> Result<()> {
+/// what was removed. Refused while the daemon runs a chat model on it, as
+/// stable-diffusion.cpp's removal is while it draws.
+async fn uninstall(ctx: &CliContext, force: bool) -> Result<()> {
     use gglib_runtime::llama::{llama_files_present, uninstall_llama};
 
     if !llama_files_present()? {
         println!("llama.cpp is not installed.");
         return Ok(());
+    }
+    if let Some(model) = engine::serving_on_the_daemon(ctx, RuntimeKind::Llama).await? {
+        anyhow::bail!(engine::removal_refusal(RuntimeKind::Llama, &model));
     }
 
     if !force

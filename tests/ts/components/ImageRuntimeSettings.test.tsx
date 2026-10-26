@@ -49,6 +49,14 @@ function status(overrides: Partial<ImageRuntimeStatus> = {}, installed = false):
       recordError: null,
       versionLine: installed ? 'stable-diffusion.cpp version unknown, commit 228c707' : null,
       commit: installed ? '228c707' : null,
+      pin: {
+        standing: installed ? 'atPin' : 'missing',
+        installedRelease: installed ? 'master-948-228c707' : null,
+        targetRelease: 'master-948-228c707',
+        built: installed ? false : null,
+        rebuilds: false,
+        updateDownloads: false,
+      },
     },
     prebuilt: 'macOS universal (Metal)',
     prebuiltUnavailable: null,
@@ -175,6 +183,64 @@ describe('the image runtime section', () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(calls('/uninstall-sd')).toHaveLength(0);
     expect(screen.getByText('Installed')).toBeInTheDocument();
+  });
+
+  /** An install of an earlier release than the pin, as an update leaves one to fix. */
+  function older(overrides: Partial<ImageRuntimeStatus> = {}): ImageRuntimeStatus {
+    const base = status(overrides, true);
+    return {
+      ...base,
+      install: {
+        ...base.install,
+        release: 'master-900-aaaaaaa',
+        pin: {
+          standing: 'older',
+          installedRelease: 'master-900-aaaaaaa',
+          targetRelease: 'master-948-228c707',
+          built: false,
+          rebuilds: false,
+          updateDownloads: true,
+        },
+      },
+    };
+  }
+
+  it('says where the install stands, and offers no update at the pin', async () => {
+    statuses = [status({}, true)];
+    render(<ImageRuntimeSettings />);
+
+    expect(
+      await screen.findByText('Pinned to master-948-228c707, which is the one installed.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
+  });
+
+  it('offers the pinned release over an older one, and installs it', async () => {
+    statuses = [older()];
+    render(<ImageRuntimeSettings />);
+
+    expect(
+      await screen.findByText('Pinned to master-948-228c707. The one installed, master-900-aaaaaaa, is older.'),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Update to master-948-228c707' }));
+
+    await vi.waitFor(() => expect(calls('/install-sd')).toHaveLength(1));
+  });
+
+  it('does not offer the update while an image model runs on it', async () => {
+    statuses = [older({ runningModel: 'flux-schnell' })];
+    render(<ImageRuntimeSettings />);
+
+    expect(await screen.findByRole('button', { name: 'Update to master-948-228c707' })).toBeDisabled();
+  });
+
+  it('sends an update the command line builds to the terminal', async () => {
+    const base = older();
+    statuses = [{ ...base, install: { ...base.install, pin: { ...base.install.pin, built: true, rebuilds: true, updateDownloads: false } } }];
+    render(<ImageRuntimeSettings />);
+
+    expect(await screen.findByText(/run from a terminal: gglib config sd update/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
   });
 
   it('does not offer the removal while an image model runs on it', async () => {

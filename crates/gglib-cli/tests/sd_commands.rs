@@ -1,11 +1,10 @@
-//! `gglib config sd status`, `uninstall`, `prompt` and a source `install`
-//! told no, run as the binary over a data root the test laid out.
+//! `gglib config sd status`, `uninstall` and a source `install` told no,
+//! run as the binary over a data root the test laid out.
 //!
 //! Each run has nothing on its `PATH`, or only stand-in tools, and its own
 //! `GGLIB_DATA_DIR` and `GGLIB_RESOURCE_DIR`, so `.sd/` is the test's and
 //! nothing is downloaded or built. The end of input is a no; an uninstall
-//! told yes removes what the test laid out. `prompt` is run only with no
-//! terminal, where it asks nothing.
+//! told yes removes what the test laid out.
 
 #[cfg(unix)]
 #[path = "support/stub_tools.rs"]
@@ -200,41 +199,4 @@ fn a_source_install_told_no_is_cancelled_with_an_error_and_clones_nothing() {
         machine.calls()
     );
     assert!(!root.path().join(".sd").exists(), "{}", text(&out));
-}
-
-/// `make setup` from a script or CI: the offer is skipped in one line that
-/// names the command, nothing is installed, and setup goes on.
-#[test]
-fn prompt_with_no_terminal_skips_in_one_line_and_exits_zero() {
-    let root = tempfile::tempdir().unwrap();
-
-    let out = gglib(root.path(), &["config", "sd", "prompt"], None);
-
-    assert_eq!(out.status.code(), Some(0), "{}", text(&out));
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert_eq!(stdout.lines().count(), 1, "{}", text(&out));
-    assert!(
-        stdout.contains("The image runtime is not installed.")
-            && stdout.trim_end().ends_with("gglib config sd install"),
-        "{}",
-        text(&out)
-    );
-    assert!(!root.path().join(".sd").exists());
-}
-
-#[test]
-fn prompt_with_sd_installed_says_so_and_exits_zero() {
-    let root = tempfile::tempdir().unwrap();
-    install(root.path());
-
-    let out = gglib(root.path(), &["config", "sd", "prompt"], None);
-
-    assert_eq!(out.status.code(), Some(0), "{}", text(&out));
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert_eq!(stdout.lines().count(), 1, "{}", text(&out));
-    assert!(
-        stdout.contains("The image runtime is already installed"),
-        "{}",
-        text(&out)
-    );
 }

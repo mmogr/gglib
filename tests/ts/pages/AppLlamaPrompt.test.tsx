@@ -14,6 +14,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 
 interface PromptProps {
   canDownload?: boolean;
+  update?: { installed: string; target: string } | null;
   error?: string | null;
   onSkip?: () => void;
   onInstalled?: () => void;
@@ -24,8 +25,13 @@ vi.mock('../../../src/components/Header', () => ({ default: () => null }));
 vi.mock('../../../src/components/SettingsModal', () => ({ default: () => null }));
 vi.mock('../../../src/components/SetupWizard', () => ({ default: () => null }));
 vi.mock('../../../src/components/LlamaInstallModal', () => ({
-  default: ({ canDownload, error, onSkip, onInstalled }: PromptProps) => (
-    <div role="dialog" aria-label="Install llama.cpp" data-can-download={String(canDownload)}>
+  default: ({ canDownload, update, error, onSkip, onInstalled }: PromptProps) => (
+    <div
+      role="dialog"
+      aria-label="Install llama.cpp"
+      data-can-download={String(canDownload)}
+      data-update={update ? `${update.installed}->${update.target}` : ''}
+    >
       {error}
       <button onClick={onInstalled}>finish the install</button>
       <button onClick={onSkip}>skip</button>
@@ -55,8 +61,12 @@ import { getSetupStatus } from '../../../src/services/transport/api/setup';
 import type { SetupStatus } from '../../../src/types/setup';
 
 const getStatus = vi.mocked(getSetupStatus);
-const status = (llamaInstalled: boolean, llamaCanDownload: boolean) =>
-  ({ setupCompleted: true, llamaInstalled, llamaCanDownload }) as SetupStatus;
+const status = (llamaInstalled: boolean, llamaCanDownload: boolean, extra: Partial<SetupStatus> = {}) =>
+  ({ setupCompleted: true, llamaInstalled, llamaCanDownload, ...extra }) as SetupStatus;
+
+const older: Partial<SetupStatus> = {
+  llamaPin: { standing: 'older', installedRelease: 'b10327', targetRelease: 'b11429', built: false, rebuilds: false, updateDownloads: true },
+};
 
 /** Let the status read land and the shell act on it: a full turn of the event loop. */
 const settled = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
@@ -82,6 +92,21 @@ describe('the app shell\'s llama.cpp install prompt', () => {
 
   it('stays closed when llama.cpp is installed', async () => {
     getStatus.mockResolvedValue(status(true, true));
+    await renderShell();
+    await settled();
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('opens as an update when llama.cpp is older than the pinned release', async () => {
+    getStatus.mockResolvedValue(status(true, true, older));
+    await renderShell();
+
+    expect(await screen.findByRole('dialog')).toHaveAttribute('data-update', 'b10327->b11429');
+  });
+
+  it('stays closed over an older llama.cpp while a chat model runs on it', async () => {
+    getStatus.mockResolvedValue(status(true, true, { ...older, llamaServing: 'qwen' }));
     await renderShell();
     await settled();
 

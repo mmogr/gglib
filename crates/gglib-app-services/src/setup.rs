@@ -8,9 +8,11 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
-use gglib_core::ports::SystemProbePort;
+use gglib_core::domain::RuntimeKind;
+use gglib_core::ports::{ModelRuntimePort, SystemProbePort};
 use gglib_core::services::AppCore;
 use gglib_core::utils::system::SystemMemoryInfo;
+use gglib_runtime::engine::{PinStanding, PinState, pin_state};
 
 use crate::error::GuiError;
 use crate::settings::{models_directory_info, system_memory};
@@ -26,6 +28,13 @@ pub struct SetupStatus {
     pub setup_completed: bool,
     /// Whether llama-server binary is installed.
     pub llama_installed: bool,
+    /// Where the installed llama.cpp stands against its pinned release:
+    /// whether an install has anything to do, and the two releases.
+    pub llama_pin: PinState,
+    /// The chat model running on llama-server, when one is: an update is not
+    /// offered under it. Filled by the daemon, which knows what runs; null
+    /// from [`SetupOps::get_status`] itself.
+    pub llama_serving: Option<String>,
     /// Whether pre-built binaries can be downloaded for this platform.
     pub llama_can_download: bool,
     /// Platform description for pre-built binaries (e.g., "macOS ARM64 (Metal)").
@@ -80,6 +89,19 @@ impl SetupOps {
 
         // Check llama installation
         let llama_installed = gglib_runtime::llama::check_llama_installed();
+        // Paths that cannot be resolved leave nothing to compare.
+        let llama_pin = pin_state(RuntimeKind::Llama).unwrap_or(PinState {
+            standing: if llama_installed {
+                PinStanding::Unknown
+            } else {
+                PinStanding::Missing
+            },
+            installed_release: None,
+            target_release: None,
+            built: None,
+            rebuilds: false,
+            update_downloads: false,
+        });
 
         // Check prebuilt availability
         let (llama_can_download, llama_platform_description) = {
@@ -141,6 +163,8 @@ impl SetupOps {
         Ok(SetupStatus {
             setup_completed,
             llama_installed,
+            llama_pin,
+            llama_serving: None,
             llama_can_download,
             llama_platform_description,
             gpu_info,
@@ -151,16 +175,40 @@ impl SetupOps {
         })
     }
 
-    /// Install llama.cpp pre-built binaries, streaming progress on `tx`.
+    /// Install llama.cpp's pinned pre-built binaries, streaming progress on
+    /// `tx`, unless a chat model runs on llama-server.
     ///
     /// Returns an error if pre-built binaries are not available for this platform.
     pub async fn install_llama(
         &self,
+        runtime: &dyn ModelRuntimePort,
         tx: tokio::sync::mpsc::Sender<gglib_runtime::llama::LlamaProgressEvent>,
     ) -> Result<(), GuiError> {
+        refuse_while_serving(runtime, RuntimeKind::Llama, "installing").await?;
+        refuse_a_source_build(RuntimeKind::Llama)?;
         gglib_runtime::llama::download_prebuilt_binaries(tx)
             .await
             .map_err(|e| GuiError::Internal(format!("Failed to install llama.cpp: {e}")))
+    }
+
+    /// Remove the llama.cpp installation, unless a chat model runs on it.
+    pub async fn uninstall_llama(
+        &self,
+        runtime: &dyn ModelRuntimePort,
+    ) -> Result<gglib_runtime::llama::UninstallOutcome, GuiError> {
+        refuse_while_serving(runtime, RuntimeKind::Llama, "removing").await?;
+        gglib_runtime::llama::uninstall_llama()
+            .await
+            .map_err(|e| GuiError::Internal(e.to_string()))
+    }
+
+    /// The model running on `kind`'s server, if one is.
+    pub async fn serving(
+        &self,
+        runtime: &dyn ModelRuntimePort,
+        kind: RuntimeKind,
+    ) -> Option<String> {
+        running_model(runtime, kind).await
     }
 
     /// Provision the optional `hf_xet` download accelerator.
@@ -214,8 +262,9 @@ impl SetupOps {
         let paths = gglib_core::paths::ResolvedPaths::resolve()
             .map_err(|e| GuiError::Internal(format!("Failed to resolve paths: {e}")))?;
 
-        // Detection refuses to fall back to CPU so callers can surface install
-        // hints. That refusal is an answer here, not a failed request.
+        // Detection refuses a Vulkan GPU whose build packages are missing, so
+        // callers can surface install hints. That refusal is an answer here,
+        // not a failed request.
         let acceleration = match gglib_runtime::llama::detect_optimal_acceleration() {
             Ok(accel) => AccelerationInfo {
                 detected: Some(accel.display_name().to_string()),
@@ -257,9 +306,10 @@ impl SetupOps {
 
 /// What acceleration a build would use.
 ///
-/// Detection is deliberately fallible — it refuses to fall back to CPU so
-/// callers can surface install hints — so the failure is carried as data
-/// rather than failing the whole diagnostics request.
+/// Detection is deliberately fallible — it refuses a Vulkan GPU whose build
+/// packages are missing, so callers can surface install hints — so the
+/// failure is carried as data rather than failing the whole diagnostics
+/// request.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
@@ -296,6 +346,10 @@ pub struct Diagnostics {
     pub acceleration: AccelerationInfo,
     pub fast_downloads: FastDownloadsInfo,
 }
+
+#[path = "setup_engines.rs"]
+mod engines;
+pub(crate) use engines::{refuse_a_source_build, refuse_while_serving, running_model};
 
 #[path = "setup_image_runtime.rs"]
 mod image_runtime;

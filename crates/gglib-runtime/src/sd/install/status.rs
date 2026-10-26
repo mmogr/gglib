@@ -1,12 +1,15 @@
 //! What is installed for image generation, as data.
 
-use gglib_core::paths::{sd_config_path, sd_server_path};
+use gglib_core::paths::{sd_config_path, sd_cpp_dir, sd_server_path};
 use gglib_core::utils::process::cmd;
 use serde::Serialize;
 use std::path::Path;
 
-use super::record::SdInstallRecord;
-use super::release::PINNED_SD_RELEASE;
+use super::record::{SdInstallRecord, recorded_install};
+use super::release::{PINNED_SD_RELEASE, SD_RELEASE};
+use crate::binary_install::{ReleaseSelector, resolve_selector};
+use crate::engine::{PinState, pin_state_at, update_downloads};
+use gglib_core::domain::RuntimeKind;
 
 /// Everything a status report says about the installed `sd-server`.
 ///
@@ -40,16 +43,31 @@ pub struct SdStatus {
     pub version_line: Option<String>,
     /// The commit that line names.
     pub commit: Option<String>,
+    /// Where the install stands against the pinned release.
+    pub pin: PinState,
 }
 
 /// Inspect the installed `sd-server`, if any. Degraded states are values;
 /// only a data directory that cannot be resolved is an `Err`.
 pub fn sd_status() -> anyhow::Result<SdStatus> {
-    Ok(sd_status_at(&sd_server_path()?, &sd_config_path()?))
+    let mut status = sd_status_at(
+        &sd_server_path()?,
+        &sd_config_path()?,
+        &sd_cpp_dir()?,
+        &resolve_selector(&SD_RELEASE),
+    );
+    status.pin.update_downloads = update_downloads(RuntimeKind::StableDiffusion, &status.pin);
+    Ok(status)
 }
 
-/// [`sd_status`] for a binary and a record at the paths given.
-pub(crate) fn sd_status_at(binary_path: &Path, config_path: &Path) -> SdStatus {
+/// [`sd_status`] for a binary, a record and a source checkout at the paths
+/// given, and the release `selector` would install.
+pub(crate) fn sd_status_at(
+    binary_path: &Path,
+    config_path: &Path,
+    checkout: &Path,
+    selector: &ReleaseSelector,
+) -> SdStatus {
     let mut status = SdStatus {
         installed: binary_path.is_file(),
         binary_path: binary_path.display().to_string(),
@@ -62,6 +80,12 @@ pub(crate) fn sd_status_at(binary_path: &Path, config_path: &Path) -> SdStatus {
         record_error: None,
         version_line: None,
         commit: None,
+        pin: pin_state_at(
+            binary_path,
+            recorded_install(config_path).as_ref(),
+            checkout,
+            selector,
+        ),
     };
 
     // The record is read even with no binary: provenance is what someone
