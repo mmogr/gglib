@@ -44,7 +44,6 @@ vi.mock('../../../src/hooks/useServers', () => {
 });
 vi.mock('../../../src/services/platform', () => ({
   appLogger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), info: vi.fn() },
-  syncMenuStateSilent: vi.fn(),
   listenToMenuEvents: vi.fn(async () => () => {}),
   MENU_EVENTS: {},
 }));
@@ -56,7 +55,6 @@ vi.mock('../../../src/services/transport/api/setup', () => ({ getSetupStatus: vi
 vi.mock('../../../src/services/tools', () => ({ syncBuiltinTools: async () => {} }));
 
 import App from '../../../src/App';
-import { syncMenuStateSilent } from '../../../src/services/platform';
 import { getSetupStatus } from '../../../src/services/transport/api/setup';
 import type { SetupStatus } from '../../../src/types/setup';
 
@@ -131,7 +129,7 @@ describe('the app shell\'s llama.cpp install prompt', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('after an install, reads the status again at once, and two seconds later closes and syncs the menu', async () => {
+  it('after an install, reads the status again at once, and two seconds later closes', async () => {
     getStatus.mockResolvedValue(status(false, true));
     await renderShell();
     const finish = await screen.findByRole('button', { name: 'finish the install' });
@@ -143,10 +141,8 @@ describe('the app shell\'s llama.cpp install prompt', () => {
 
     await act(() => vi.advanceTimersByTimeAsync(1999));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(syncMenuStateSilent).not.toHaveBeenCalled();
 
     await act(() => vi.advanceTimersByTimeAsync(1));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(syncMenuStateSilent).toHaveBeenCalledTimes(1);
   });
 });

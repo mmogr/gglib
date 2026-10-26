@@ -4,7 +4,7 @@
  * A full-screen wizard that guides users through:
  * 1. Welcome & system overview
  * 2. Models directory configuration
- * 3. llama.cpp installation
+ * 3. Both engines' installation (`EnginesStep`)
  * 4. Python fast-download helper setup
  * 5. Completion
  */
@@ -30,23 +30,20 @@ import { Banner } from '../ui/Banner';
 import { Icon } from '../ui/Icon';
 import { cn } from '../../utils/cn';
 import { formatBytes } from '../../utils/format';
-import type { SetupStatus, LlamaProgressEvent } from '../../types/setup';
-import { InstallProgress } from './InstallProgress';
-import {
-  getSetupStatus,
-  streamEngineInstall,
-  enableFastDownloads,
-} from '../../services/transport/api/setup';
+import type { SetupStatus } from '../../types/setup';
+import { ENGINE_PRODUCT } from '../../types/setup';
+import { EnginesStep, type EngineStatuses } from './EnginesStep';
+import { getSetupStatus, enableFastDownloads } from '../../services/transport/api/setup';
 import { updateSettings } from '../../services/transport/api/settings';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-type WizardStep = 'welcome' | 'models' | 'llama' | 'python' | 'complete';
+type WizardStep = 'welcome' | 'models' | 'engines' | 'python' | 'complete';
 
 /** Ordered wizard steps. Module-level so hook dependencies stay stable. */
-const WIZARD_STEPS: readonly WizardStep[] = ['welcome', 'models', 'llama', 'python', 'complete'];
+const WIZARD_STEPS: readonly WizardStep[] = ['welcome', 'models', 'engines', 'python', 'complete'];
 
 interface SetupWizardProps {
   /** Called when the wizard completes setup. */
@@ -62,6 +59,7 @@ export const SetupWizard: FC<SetupWizardProps> = ({ onComplete }) => {
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [engines, setEngines] = useState<EngineStatuses>({});
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -158,10 +156,9 @@ export const SetupWizard: FC<SetupWizardProps> = ({ onComplete }) => {
         {step === 'models' && (
           <ModelsDirectoryStep status={status} onNext={goNext} onBack={goBack} />
         )}
-        {step === 'llama' && (
-          <LlamaInstallStep
-            status={status}
-            onNext={() => { refreshStatus(); goNext(); }}
+        {step === 'engines' && (
+          <EnginesStep
+            onNext={(read) => { setEngines(read); refreshStatus(); goNext(); }}
             onBack={goBack}
           />
         )}
@@ -175,6 +172,7 @@ export const SetupWizard: FC<SetupWizardProps> = ({ onComplete }) => {
         {step === 'complete' && (
           <CompleteStep
             status={status}
+            engines={engines}
             onFinish={handleComplete}
           />
         )}
@@ -214,7 +212,7 @@ const WizardShell: FC<{ children: React.ReactNode }> = ({ children }) => (
 const stepLabels: Record<WizardStep, string> = {
   welcome: 'Welcome',
   models: 'Models',
-  llama: 'Engine',
+  engines: 'Engines',
   python: 'Downloads',
   complete: 'Done',
 };
@@ -369,124 +367,6 @@ const ModelsDirectoryStep: FC<{
 };
 
 // ============================================================================
-// Step: Llama Install
-// ============================================================================
-
-const LlamaInstallStep: FC<{
-  status: SetupStatus;
-  onNext: () => void;
-  onBack: () => void;
-}> = ({ status, onNext, onBack }) => {
-  const [installing, setInstalling] = useState(false);
-  const [progress, setProgress] = useState<LlamaProgressEvent | null>(null);
-  const [installError, setInstallError] = useState<string | null>(null);
-  const [installed, setInstalled] = useState(status.llamaInstalled);
-
-  const handleInstall = useCallback(() => {
-    setInstalling(true);
-    setInstallError(null);
-    setProgress(null);
-
-    const abort = streamEngineInstall(
-      'llama',
-      (event) => {
-        setProgress(event);
-        if (event.type === 'completed') {
-          setInstalling(false);
-          setInstalled(true);
-        } else if (event.type === 'failed') {
-          setInstalling(false);
-          setInstallError(event.message);
-        }
-      },
-      (err) => {
-        setInstalling(false);
-        setInstallError(err);
-      },
-    );
-
-    // Cleanup on unmount
-    return () => abort();
-  }, []);
-
-  if (installed) {
-    return (
-      <div className="flex flex-col gap-6">
-        <div>
-          <h2 className="text-xl font-semibold text-text mb-2">Inference Engine</h2>
-          <p className="text-text-secondary leading-relaxed">
-            llama.cpp is already installed and ready to use.
-          </p>
-        </div>
-        <Banner variant="success">llama.cpp binaries are installed</Banner>
-        <StepNavigation onBack={onBack} onNext={onNext} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-xl font-semibold text-text mb-2">Inference Engine</h2>
-        <p className="text-text-secondary leading-relaxed">
-          gglib uses{' '}
-          <span className="text-text font-medium">llama.cpp</span>{' '}
-          to run AI models locally. We need to install its binaries.
-        </p>
-      </div>
-
-      {status.llamaCanDownload && status.llamaPlatformDescription && (
-        <p className="text-xs text-text-muted">
-          Platform detected: <span className="text-text-secondary">{status.llamaPlatformDescription}</span>
-        </p>
-      )}
-
-      {/* Install error */}
-      {installError && (
-        <Banner variant="danger" title="Installation failed">
-          <span className="break-all">{installError}</span>
-        </Banner>
-      )}
-
-      {installing && <InstallProgress progress={progress} />}
-
-      <div className="flex items-center justify-between pt-2">
-        <div className="flex items-center gap-2">
-          {!installing && (
-            <Button variant="ghost" onClick={onBack} size="sm">
-              Back
-            </Button>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {!installing && (
-            <>
-              <Button
-                variant="ghost"
-                onClick={onNext}
-                size="sm"
-                leftIcon={<Icon icon={SkipForward} size={14} />}
-              >
-                Skip
-              </Button>
-              {status.llamaCanDownload && (
-                <Button
-                  variant="primary"
-                  onClick={handleInstall}
-                  leftIcon={<Icon icon={Download} size={16} />}
-                >
-                  {installError ? 'Retry' : 'Install'}
-                </Button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ============================================================================
 // Step: Python Setup
 // ============================================================================
 
@@ -611,8 +491,10 @@ const PythonSetupStep: FC<{
 
 const CompleteStep: FC<{
   status: SetupStatus;
+  /** Each engine as the engines step last read it. */
+  engines: EngineStatuses;
   onFinish: () => void;
-}> = ({ status, onFinish }) => (
+}> = ({ status, engines, onFinish }) => (
   <div className="flex flex-col gap-6">
     <div className="text-center py-4">
       <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-success-subtle mb-4">
@@ -629,6 +511,13 @@ const CompleteStep: FC<{
     <div className="grid grid-cols-1 gap-2">
       <SummaryRow label="Models directory" ok={status.modelsDirectory.exists} value={status.modelsDirectory.path} />
       <SummaryRow label="llama.cpp" ok={status.llamaInstalled} value={status.llamaInstalled ? 'Installed' : 'Not installed'} />
+      {engines.stable_diffusion && (
+        <SummaryRow
+          label={ENGINE_PRODUCT.stable_diffusion}
+          ok={engines.stable_diffusion.installed}
+          value={engines.stable_diffusion.installed ? 'Installed' : 'Not installed'}
+        />
+      )}
       {/* Always ok: downloads work either way, so an absent accelerator is a
           choice of transport, not a failure to flag. */}
       <SummaryRow label="Downloads" ok value={status.fastDownloadReady ? 'Accelerated (hf_xet)' : 'Direct'} />

@@ -55,12 +55,6 @@ pub(crate) fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) 
         }
 
         // Help menu
-        ids::INSTALL_LLAMA => {
-            emit_or_log(app, names::MENU_INSTALL_LLAMA, ());
-        }
-        ids::CHECK_LLAMA_STATUS => {
-            emit_or_log(app, names::MENU_CHECK_LLAMA_STATUS, ());
-        }
         ids::OPEN_DOCS => {
             // Open documentation URL
             let _ = open::that("https://github.com/mmogr/gglib");

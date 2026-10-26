@@ -11,7 +11,7 @@ import { useFileDropGuard } from "./hooks/useFileDropGuard";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 import { ConfirmProvider } from "./contexts/ConfirmContext";
-import { syncMenuStateSilent, listenToMenuEvents, MENU_EVENTS, appLogger } from "./services/platform";
+import { listenToMenuEvents, MENU_EVENTS, appLogger } from "./services/platform";
 import { initServerEvents, cleanupServerEvents } from "./services/serverEvents";
 import { initProxyEvents, cleanupProxyEvents } from "./services/proxyEvents";
 import { initRemoteEvents, cleanupRemoteEvents } from "./services/remoteEvents";
@@ -82,11 +82,7 @@ function AppContent() {
   // last line has had time to be read
   const handleLlamaInstalled = useCallback(() => {
     checkLlamaStatus();
-    setTimeout(() => {
-      setShowLlamaModal(false);
-      // Sync menu state after llama installation
-      syncMenuStateSilent();
-    }, 2000);
+    setTimeout(() => setShowLlamaModal(false), 2000);
   }, [checkLlamaStatus]);
 
   // Menu event listeners (desktop only - via platform helper)
@@ -102,8 +98,6 @@ function AppContent() {
       [MENU_EVENTS.START_SERVER]: () => menuActionsRef.current?.startServer?.(),
       [MENU_EVENTS.STOP_SERVER]: () => menuActionsRef.current?.stopServer?.(),
       [MENU_EVENTS.REMOVE_MODEL]: () => menuActionsRef.current?.removeModel?.(),
-      [MENU_EVENTS.INSTALL_LLAMA]: () => setShowLlamaModal(true),
-      [MENU_EVENTS.CHECK_LLAMA_STATUS]: () => checkLlamaStatus(),
       [MENU_EVENTS.COPY_TO_CLIPBOARD]: (payload) => {
         if (payload) {
           navigator.clipboard.writeText(payload).catch((error) => 
@@ -136,7 +130,7 @@ function AppContent() {
     return () => {
       cleanup?.();
     };
-  }, [checkLlamaStatus, showToast]);
+  }, [showToast]);
 
   // Handler for selecting a model from the header popover
   const handleSelectModelFromHeader = useCallback((modelId: number, view?: 'chat' | 'console') => {

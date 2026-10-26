@@ -37,20 +37,12 @@ pub(crate) struct AppMenu {
     pub start_proxy: MenuItem<Wry>,
     pub stop_proxy: MenuItem<Wry>,
     pub copy_proxy_url: MenuItem<Wry>,
-
-    // Help menu items
-    pub install_llama: MenuItem<Wry>,
 }
 
 /// State used to synchronize menu item enabled/checked status
 #[cfg(target_os = "macos")]
 #[derive(Debug, Clone, Default)]
-#[allow(
-    clippy::struct_excessive_bools,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) struct MenuState {
-    pub llama_installed: bool,
     pub proxy_running: bool,
     pub model_selected: bool,
     pub selected_model_server_active: bool,
@@ -64,7 +56,6 @@ impl AppMenu {
     /// - Model selection changes
     /// - Server starts/stops
     /// - Proxy starts/stops
-    /// - llama.cpp is installed
     pub(crate) fn sync_state(&self, state: &MenuState) -> Result<(), tauri::Error> {
         // Model menu items
         // Start Server: enabled if model selected AND not already running
@@ -83,10 +74,6 @@ impl AppMenu {
         self.start_proxy.set_enabled(!state.proxy_running)?;
         self.stop_proxy.set_enabled(state.proxy_running)?;
         self.copy_proxy_url.set_enabled(state.proxy_running)?;
-
-        // Help menu items
-        // Install llama.cpp: disabled if already installed
-        self.install_llama.set_enabled(!state.llama_installed)?;
 
         Ok(())
     }

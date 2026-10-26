@@ -19,8 +19,6 @@ pub(crate) const COPY_PROXY_URL: &str = "copy_proxy_url";
 pub(crate) const SHOW_CHAT: &str = "show_chat";
 
 // Help menu
-pub(crate) const INSTALL_LLAMA: &str = "install_llama";
-pub(crate) const CHECK_LLAMA_STATUS: &str = "check_llama_status";
 pub(crate) const OPEN_DOCS: &str = "open_docs";
 
 // App menu
