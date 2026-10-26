@@ -40,7 +40,10 @@ async fn the_status_reads_the_install_and_the_removal_takes_what_was_installed()
     let (status, json) = call(Method::GET, "/api/config/system/sd-status").await;
     assert_eq!(status, StatusCode::OK, "{json}");
     assert_eq!(json["install"]["installed"], false, "{json}");
-    assert_eq!(json["install"]["pinnedRelease"], "master-948-228c707");
+    assert_eq!(
+        json["install"]["pinnedRelease"],
+        gglib_runtime::sd::PINNED_SD_RELEASE
+    );
     assert_eq!(json["installCommand"], "gglib config sd install");
     assert_eq!(json["runningModel"], serde_json::Value::Null);
     assert!(

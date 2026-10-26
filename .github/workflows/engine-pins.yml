@@ -1,0 +1,180 @@
+name: Engine pins
+
+# Once a week, propose moving each engine's pin to upstream's newest release
+# that is at least three days old, as a pull request for a person to check
+# and merge (CONTRIBUTING.md, "The engine pins"). The job picks the tag,
+# edits the pin's one line and opens the pull request; CI's CLI Check then
+# installs the release and checks every launch flag gglib passes against it.
+#
+# It never edits or force-pushes a branch, and proposes a candidate once: a
+# pull request from the candidate's branch, open or closed, means it has been
+# proposed. It proposes one at a time: while a pin pull request for an engine
+# is open, nothing newer is proposed for it, so they never pile up. It asks no
+# model and writes to no issue.
+#
+# llama.cpp's candidate is the `b<n>` its newest `v*` release names in
+# `nightly-tag.txt`; stable-diffusion.cpp's is its newest `master-<n>-<sha>`
+# release by `n`. Both are taken only once three days old.
+
+on:
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: engine-pins
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  propose:
+    name: Propose a new ${{ matrix.product }} pin
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: llama
+            product: llama.cpp
+            repo: ggml-org/llama.cpp
+            file: crates/gglib-runtime/src/llama/download/mod.rs
+            constant: PINNED_LLAMA_RELEASE
+          - engine: sd
+            product: stable-diffusion.cpp
+            repo: leejet/stable-diffusion.cpp
+            file: crates/gglib-runtime/src/sd/install/release.rs
+            constant: PINNED_SD_RELEASE
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch || github.ref_name }}
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Pick the candidate
+        id: pick
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ENGINE: ${{ matrix.engine }}
+          REPO: ${{ matrix.repo }}
+          FILE: ${{ matrix.file }}
+          CONSTANT: ${{ matrix.constant }}
+        run: |
+          cutoff=$(date -u -d '3 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          current=$(sed -nE "s/.*$CONSTANT: &str = \"([^\"]+)\".*/\1/p" "$FILE")
+          [[ -n $current ]] || { echo "::error::$CONSTANT is not in $FILE"; exit 1; }
+
+          candidate=""
+          if [[ $ENGINE == llama ]]; then
+            # The newest v* release from before the cutoff, not a prerelease,
+            # and the b<n> it names. A v* tag with no release is passed over;
+            # any other failure to read one stops the step.
+            for tag in $(git ls-remote --tags "https://github.com/$REPO" 'refs/tags/v*' \
+                | sed -nE 's|.*refs/tags/(v[0-9.]+)$|\1|p' | sort -rV); do
+              if ! release=$(gh release view "$tag" -R "$REPO" --json publishedAt,isPrerelease \
+                  -q '"\(.isPrerelease) \(.publishedAt)"' 2> "$RUNNER_TEMP/release.err"); then
+                grep -qx 'release not found' "$RUNNER_TEMP/release.err" && continue
+                cat "$RUNNER_TEMP/release.err"
+                exit 1
+              fi
+              [[ $release == "false "* ]] || continue
+              published=${release#false }
+              [[ -n $published && $published < $cutoff ]] || continue
+              gh release download "$tag" -R "$REPO" -p nightly-tag.txt \
+                -O "$RUNNER_TEMP/nightly-tag.txt" --clobber
+              candidate=$(tr -d '[:space:]' < "$RUNNER_TEMP/nightly-tag.txt")
+              break
+            done
+            pattern='^b([0-9]+)$'
+          else
+            # The newest master-<n>-<sha> release from before the cutoff, by n.
+            candidate=$(gh release list -R "$REPO" --limit 100 --exclude-pre-releases \
+              --json tagName,publishedAt \
+              -q "[.[] | select(.publishedAt < \"$cutoff\")
+                       | select(.tagName | test(\"^master-[0-9]+-[0-9a-f]+$\"))]
+                  | max_by(.tagName | split(\"-\")[1] | tonumber) | .tagName // empty")
+            pattern='^master-([0-9]+)-[0-9a-f]+$'
+          fi
+          [[ $current =~ $pattern ]] || { echo "::error::the pin $current is not a numbered release"; exit 1; }
+          current_n=${BASH_REMATCH[1]}
+          [[ -n $candidate && $candidate =~ $pattern ]] \
+            || { echo "::error::no numbered candidate found (got '$candidate')"; exit 1; }
+          candidate_n=${BASH_REMATCH[1]}
+
+          branch="chore(deps)/$ENGINE-$candidate"
+          # An assignment, so a failed lookup stops the step rather than
+          # reading as a pull request that exists.
+          proposed=$(gh pr list -R "$GITHUB_REPOSITORY" --state all --head "$branch" --json number -q length)
+          waiting=$(gh pr list -R "$GITHUB_REPOSITORY" --state open --limit 200 --json headRefName \
+            -q "[.[] | select(.headRefName | startswith(\"chore(deps)/$ENGINE-\"))] | .[0].headRefName // empty")
+          if [[ $proposed == 0 ]] && git ls-remote --exit-code --heads origin "refs/heads/$branch" > /dev/null; then
+            echo "::error::$branch exists with no pull request, from a run that stopped before opening one. Delete the branch, or open its pull request by hand."
+            exit 1
+          fi
+          {
+            echo "current=$current"
+            echo "candidate=$candidate"
+            echo "branch=$branch"
+          } >> "$GITHUB_OUTPUT"
+          if (( candidate_n <= current_n )); then
+            echo "$CONSTANT is $current; upstream's newest release three days old is $candidate. Nothing to propose." >> "$GITHUB_STEP_SUMMARY"
+            echo "propose=false" >> "$GITHUB_OUTPUT"
+          elif [[ $proposed != 0 ]]; then
+            echo "$candidate was proposed already, from $branch." >> "$GITHUB_STEP_SUMMARY"
+            echo "propose=false" >> "$GITHUB_OUTPUT"
+          elif [[ -n $waiting ]]; then
+            echo "$waiting is still open; nothing newer is proposed until it is merged or closed." >> "$GITHUB_STEP_SUMMARY"
+            echo "propose=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "propose=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Move the pin and open a pull request
+        if: steps.pick.outputs.propose == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PRODUCT: ${{ matrix.product }}
+          REPO: ${{ matrix.repo }}
+          FILE: ${{ matrix.file }}
+          CONSTANT: ${{ matrix.constant }}
+          CURRENT: ${{ steps.pick.outputs.current }}
+          CANDIDATE: ${{ steps.pick.outputs.candidate }}
+          BRANCH: ${{ steps.pick.outputs.branch }}
+          BASE: ${{ github.event.repository.default_branch || github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          sed -i -E "s/($CONSTANT: &str = )\"$CURRENT\"/\1\"$CANDIDATE\"/" "$FILE"
+          changed=$(git diff --numstat | awk '{ n += $1 + $2 } END { print n + 0 }')
+          [[ $changed == 2 && $(git diff --name-only) == "$FILE" ]] \
+            || { git diff; echo "::error::moving the pin should change one line of $FILE"; exit 1; }
+
+          subject="chore(deps): move $PRODUCT's pin from $CURRENT to $CANDIDATE"
+          git switch -c "$BRANCH"
+          git add "$FILE"
+          git -c user.name=mmogr -c user.email=172192206+mmogr@users.noreply.github.com \
+            commit -m "$subject"
+          git push origin "$BRANCH"
+
+          tick='`'
+          {
+            printf 'Moves %s from %s to %s: https://github.com/%s/compare/%s...%s\n\n' \
+              "$tick$CONSTANT$tick" "$tick$CURRENT$tick" "$tick$CANDIDATE$tick" "$REPO" "$CURRENT" "$CANDIDATE"
+            printf '%s\n\n' "CI's CLI Check installs $CANDIDATE on Linux and macOS and checks every launch flag gglib passes against its ${tick}--help${tick}, and every platform row against its assets. Before merging, take one real chat and one real picture on the new pin, with the readings CONTRIBUTING.md's \"The engine pins\" lists, and put them in the squash message."
+            printf 'Opened by the Engine pins workflow: %s\n' "$RUN_URL"
+          } > "$RUNNER_TEMP/body.md"
+          url=$(gh pr create --base "$BASE" --head "$BRANCH" --title "$subject" \
+            --body-file "$RUNNER_TEMP/body.md" \
+            --label dependencies --label "type: chore" --label automated)
+          echo "Opened $url" >> "$GITHUB_STEP_SUMMARY"

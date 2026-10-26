@@ -73,8 +73,11 @@ fn status_with_nothing_installed_says_how_to_install() {
     assert!(out.status.success(), "{}", text(&out));
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
-        "Status: Not installed\n\n\
-         Run 'gglib config sd install' to install stable-diffusion.cpp (master-948-228c707).\n"
+        format!(
+            "Status: Not installed\n\n\
+             Run 'gglib config sd install' to install stable-diffusion.cpp ({}).\n",
+            gglib_runtime::sd::PINNED_SD_RELEASE
+        )
     );
 }
 
