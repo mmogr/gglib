@@ -17,7 +17,7 @@ use crate::binary_install::{ArchiveLayout, AssetChoice, AssetMatcher, ReleaseSpe
 /// it renders — unfalsifiable, and two users who installed a day apart run
 /// different engines. Moving the pin is a deliberate commit with what changed
 /// in its message. Upstream tags `master-<build>-<short commit>`.
-pub const PINNED_SD_RELEASE: &str = "master-948-228c707";
+pub const PINNED_SD_RELEASE: &str = "master-995-fd21ecf";
 
 /// Environment override for [`PINNED_SD_RELEASE`]: a release tag, or
 /// `latest` for upstream's newest. Unset or blank installs the pin.
