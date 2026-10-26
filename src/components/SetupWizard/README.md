@@ -9,7 +9,7 @@ Multi-step first-run setup wizard: welcome, models directory configuration, llam
 | File | Role |
 |------|------|
 | `SetupWizard.tsx` | Step state machine; streams llama install output; calls settings/setup APIs |
-| `InstallProgress.tsx` | Renders one pre-built install event — a bar for the download phase, a labelled spinner for every other, the download named for its `product`. `LlamaInstallModal` and the image runtime section of Settings draw their installs with it too |
+| `InstallProgress.tsx` | Renders one pre-built install event — a bar for the download phase, a labelled spinner for every other, the download named for its `product`. `LlamaInstallModal` and the Settings engine card draw their installs with it too |
 
 ## Step Flow
 
@@ -17,6 +17,6 @@ Multi-step first-run setup wizard: welcome, models directory configuration, llam
 welcome → models-dir → llama-install → python-setup → complete
 ```
 
-`streamLlamaInstall()` produces a live text stream displayed in a terminal-style output area within the wizard step.
+`streamEngineInstall('llama', …)` streams the install's events, drawn by `InstallProgress` within the wizard step.
 
 <!-- module-docs:end -->

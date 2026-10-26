@@ -98,7 +98,7 @@ export const ServeModal: FC<ServeModalProps> = ({
   const isImage = model.imageFamily != null;
   const sd = useSdStatus(isImage);
   const imageBlocked =
-    isImage && (model.missingComponents.length > 0 || sd.status?.install.installed !== true);
+    isImage && (model.missingComponents.length > 0 || sd.status?.installed !== true);
   // MTP: auto-enabled when tag present and no explicit override
   const effectiveMtpEnabled = mtpNMaxOverride !== null ? mtpNMaxOverride > 0 : hasMtpTag;
   const isAutoMtp = mtpNMaxOverride === null && hasMtpTag;

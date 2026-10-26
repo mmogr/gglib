@@ -22,10 +22,10 @@ the `ReleaseSpec` the shared installer in `binary_install` runs.
 `download_prebuilt_binaries` emits [`LlamaProgressEvent`](super::install_events::LlamaProgressEvent)
 on a `tokio::sync::mpsc::Sender` and is consumed by:
 
-| Consumer | Output                                                 |
-|----------|--------------------------------------------------------|
-| CLI      | `indicatif` progress bar                               |
-| Axum     | SSE stream at `POST /api/config/system/install-llama`  |
+| Consumer | Output                                                        |
+|----------|---------------------------------------------------------------|
+| CLI      | `indicatif` progress bar                                      |
+| Axum     | SSE stream at `POST /api/config/system/engines/llama/install` |
 
 The desktop app reads the Axum stream; it has no consumer of its own.
 

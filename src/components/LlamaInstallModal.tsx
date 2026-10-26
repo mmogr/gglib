@@ -1,7 +1,7 @@
 import { FC, useEffect, useRef, useState } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Download, Loader2, XCircle } from 'lucide-react';
 import { appLogger } from '../services/platform';
-import { streamLlamaInstall } from '../services/transport/api/setup';
+import { streamEngineInstall } from '../services/transport/api/setup';
 import type { LlamaProgressEvent } from '../types/setup';
 import type { LlamaUpdate } from '../hooks/useLlamaStatus';
 import { InstallProgress } from './SetupWizard/InstallProgress';
@@ -77,7 +77,8 @@ export const LlamaInstallModal: FC<LlamaInstallModalProps> = ({
     setInstallError(null);
     setProgress(null);
 
-    stopReading.current = streamLlamaInstall(
+    stopReading.current = streamEngineInstall(
+      'llama',
       (event) => {
         if (settled) return;
         setProgress(event);

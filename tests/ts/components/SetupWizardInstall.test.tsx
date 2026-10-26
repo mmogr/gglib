@@ -81,7 +81,7 @@ describe('the setup wizard\'s llama.cpp step', () => {
     await pressInstall();
 
     const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
-    expect(url).toBe('/api/config/system/install-llama');
+    expect(url).toBe('/api/config/system/engines/llama/install');
     expect(init.method).toBe('POST');
 
     send({ type: 'phase_started', phase: 'fetch_release' });

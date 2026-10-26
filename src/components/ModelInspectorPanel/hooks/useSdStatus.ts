@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { getSdStatus } from '../../../services/transport/api/setup';
-import type { ImageRuntimeStatus } from '../../../types/setup';
+import { getEngineStatus } from '../../../services/transport/api/setup';
+import type { EngineStatus } from '../../../types/setup';
 import { formatError } from '../../../utils/errors';
 
 export interface SdStatusState {
   /** `null` while it is read, and when it is not asked for. */
-  status: ImageRuntimeStatus | null;
+  status: EngineStatus | null;
   error: string | null;
 }
 
@@ -19,7 +19,7 @@ export function useSdStatus(enabled: boolean): SdStatusState {
   useEffect(() => {
     if (!enabled) return;
     let live = true;
-    getSdStatus()
+    getEngineStatus('stable_diffusion')
       .then((status) => live && setState({ status, error: null }))
       .catch((err: unknown) => live && setState({ status: null, error: formatError(err) }));
     return () => {

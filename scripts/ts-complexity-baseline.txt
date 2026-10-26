@@ -10,8 +10,7 @@ src/components/ModelInspectorPanel/components/ServeModal.tsx 375
 src/components/ProxyControl.tsx 345
 src/components/ProxySamplingPanel.tsx 403
 src/components/SettingsModal.tsx 346
-src/components/SettingsModal/SystemSettings.tsx 304
-src/components/SetupWizard/SetupWizard.tsx 704
+src/components/SetupWizard/SetupWizard.tsx 705
 src/components/VerificationModal.tsx 472
 src/hooks/useGglibRuntime/agentMessageState.ts 340
 src/hooks/useGglibRuntime/useGglibRuntime.ts 326

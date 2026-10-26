@@ -8,11 +8,11 @@ import { parseFrame, streamSse } from './sse';
 import type {
   SetupStatus,
   LlamaProgressEvent,
-  LlamaStatus,
-  LlamaUninstallOutcome,
   Diagnostics,
+  EngineStatus,
   ModelRecommendation,
-  ImageRuntimeStatus,
+  RuntimeKind,
+  UninstallOutcome,
 } from '../../../types/setup';
 
 /**
@@ -24,24 +24,27 @@ export async function getSetupStatus(): Promise<SetupStatus> {
 
 
 /**
- * Install llama.cpp's pinned pre-built binaries, streaming install progress.
- * It is also the update: an install over an older llama.cpp replaces it.
- * Refused while a chat model runs on llama-server.
+ * Install `kind`'s pinned download, streaming install progress. It is also
+ * the update: an install over an older engine replaces it. Refused while a
+ * model runs on that engine, and where the install would be a source build,
+ * which is the command line's.
  *
- * Every payload carries its own `type`, so the SSE event name is redundant
- * and the parsed object is the single source of truth.
+ * Both engines stream the same events under the same SSE names. Every payload
+ * carries its own `type`, so the SSE event name is redundant and the parsed
+ * object is the single source of truth.
  *
  * @param onEvent Called for every install event, in arrival order
  * @param onError Called when the transport itself fails
  * @param onClose Called when the stream closes cleanly, whether or not it reported a result
  * @returns A function that stops reading. The install continues on the daemon.
  */
-export function streamLlamaInstall(
+export function streamEngineInstall(
+  kind: RuntimeKind,
   onEvent: (event: LlamaProgressEvent) => void,
   onError: (error: string) => void,
   onClose?: () => void,
 ): () => void {
-  return streamSse('/api/config/system/install-llama', {
+  return streamSse(`/api/config/system/engines/${kind}/install`, {
     onFrame: (frame) => {
       const event = parseFrame<LlamaProgressEvent>(frame);
       if (event) onEvent(event);
@@ -52,51 +55,17 @@ export function streamLlamaInstall(
 }
 
 /**
- * What llama.cpp install is present — version, health, acceleration, and what
- * the binary reports about itself. Local and cheap; safe on mount.
+ * What `kind` has installed and how, where it stands against its pin, what
+ * an install would download and what to say about it, and the model running
+ * on it. Local and cheap; safe on mount.
  */
-export async function getLlamaStatus(): Promise<LlamaStatus> {
-  return get<LlamaStatus>('/api/config/system/llama-status');
+export async function getEngineStatus(kind: RuntimeKind): Promise<EngineStatus> {
+  return get<EngineStatus>(`/api/config/system/engines/${kind}`);
 }
 
-/** Remove llama.cpp: source checkout, binaries and build config. Refused (409) while a chat model runs. */
-export async function uninstallLlama(): Promise<LlamaUninstallOutcome> {
-  return post<LlamaUninstallOutcome>('/api/config/system/uninstall-llama');
-}
-
-/**
- * Install stable-diffusion.cpp's pre-built `sd-server`, streaming install
- * progress: the same events, under the same SSE names, as
- * `streamLlamaInstall`, so `InstallProgress` draws both.
- *
- * @returns A function that stops reading. The install continues on the daemon.
- */
-export function streamSdInstall(
-  onEvent: (event: LlamaProgressEvent) => void,
-  onError: (error: string) => void,
-  onClose?: () => void,
-): () => void {
-  return streamSse('/api/config/system/install-sd', {
-    onFrame: (frame) => {
-      const event = parseFrame<LlamaProgressEvent>(frame);
-      if (event) onEvent(event);
-    },
-    onClose,
-    onError,
-  });
-}
-
-/**
- * What image runtime is installed, what an install would download and what
- * to say about it, and the image model running on it. Local; safe on mount.
- */
-export async function getSdStatus(): Promise<ImageRuntimeStatus> {
-  return get<ImageRuntimeStatus>('/api/config/system/sd-status');
-}
-
-/** Remove what the image runtime installed in `.sd/`. Refused (409) while an image model runs. */
-export async function uninstallSd(): Promise<LlamaUninstallOutcome> {
-  return post<LlamaUninstallOutcome>('/api/config/system/uninstall-sd');
+/** Remove what `kind`'s install put there. Refused (409) while a model runs on it. */
+export async function uninstallEngine(kind: RuntimeKind): Promise<UninstallOutcome> {
+  return post<UninstallOutcome>(`/api/config/system/engines/${kind}/uninstall`);
 }
 
 /**

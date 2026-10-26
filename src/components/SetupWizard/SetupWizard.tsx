@@ -34,7 +34,7 @@ import type { SetupStatus, LlamaProgressEvent } from '../../types/setup';
 import { InstallProgress } from './InstallProgress';
 import {
   getSetupStatus,
-  streamLlamaInstall,
+  streamEngineInstall,
   enableFastDownloads,
 } from '../../services/transport/api/setup';
 import { updateSettings } from '../../services/transport/api/settings';
@@ -387,7 +387,8 @@ const LlamaInstallStep: FC<{
     setInstallError(null);
     setProgress(null);
 
-    const abort = streamLlamaInstall(
+    const abort = streamEngineInstall(
+      'llama',
       (event) => {
         setProgress(event);
         if (event.type === 'completed') {

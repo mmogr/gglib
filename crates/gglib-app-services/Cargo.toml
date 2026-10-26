@@ -72,7 +72,7 @@ test-support = []
 # `DefaultsOrigin`, …), and ts-rs needs `TS` on the whole reachable graph, not
 # just the outermost struct. Forwards to `gglib-proxy` for the same reason:
 # `PairedModels` embeds the proxy's `ModelInfo`; and to `gglib-runtime`:
-# `ImageRuntimeStatus` embeds its `SdStatus`.
+# `EngineStatus` embeds its `PinState`.
 ts-bindings = [
     "dep:ts-rs",
     "gglib-core/ts-bindings",

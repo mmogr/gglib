@@ -1,6 +1,6 @@
 /**
  * Where an engine's install stands against its pinned release, in the words
- * both Settings cards use: llama.cpp's and the image runtime's.
+ * the Settings engine card uses, for llama.cpp and stable-diffusion.cpp alike.
  *
  * The standing is the daemon's (`PinState`), the same one
  * `gglib config llama status` and `gglib config sd status` print in their

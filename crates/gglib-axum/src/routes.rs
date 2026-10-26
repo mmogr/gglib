@@ -280,30 +280,19 @@ fn config_routes() -> Router<AppState> {
                 .put(handlers::config::settings::update_models_directory),
         )
         .route("/system/setup-status", get(handlers::config::setup::status))
+        // Either engine, `kind` `llama` or `stable_diffusion`:
+        // `gglib config llama|sd status|install|uninstall`.
         .route(
-            "/system/install-llama",
-            post(handlers::config::setup::install_llama),
+            "/system/engines/{kind}",
+            get(handlers::config::engines::status),
         )
         .route(
-            "/system/llama-status",
-            get(handlers::config::setup::llama_status_handler),
+            "/system/engines/{kind}/install",
+            post(handlers::config::engines::install),
         )
         .route(
-            "/system/uninstall-llama",
-            post(handlers::config::setup::uninstall_llama_handler),
-        )
-        // The image runtime: `gglib config sd install|status|uninstall`.
-        .route(
-            "/system/install-sd",
-            post(handlers::config::image_runtime::install_sd),
-        )
-        .route(
-            "/system/sd-status",
-            get(handlers::config::image_runtime::sd_status),
-        )
-        .route(
-            "/system/uninstall-sd",
-            post(handlers::config::image_runtime::uninstall_sd),
+            "/system/engines/{kind}/uninstall",
+            post(handlers::config::engines::uninstall),
         )
         .route(
             "/system/setup-python",

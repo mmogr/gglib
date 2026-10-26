@@ -1,26 +1,29 @@
 /**
- * State for the System settings tab: what llama.cpp is installed, where it
- * stands against its pinned release, and the update and uninstall actions.
+ * State for one engine's card in System settings: what is installed, where
+ * it stands against its pinned release, and the install, update and removal.
  *
- * Status is local and loads on mount. The update is the daemon's install of
- * the pinned release, the download `gglib config llama update` takes, and
- * streams its progress, so the tab can show it instead of a spinner.
+ * Status is local and loads on mount. The install is the daemon's install
+ * of the pinned download, the one `gglib config llama|sd install` takes, and
+ * is the update too. It streams its progress, so the card can show it
+ * instead of a spinner.
  */
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import { getLlamaStatus, streamLlamaInstall, uninstallLlama } from '../../services/transport/api/setup';
-import type { LlamaProgressEvent, LlamaStatus } from '../../types/setup';
+import { getEngineStatus, streamEngineInstall, uninstallEngine } from '../../services/transport/api/setup';
+import { ENGINE_PRODUCT } from '../../types/setup';
+import type { EngineStatus, LlamaProgressEvent, RuntimeKind } from '../../types/setup';
 import { appLogger } from '../../services/platform';
 import { formatError } from '../../utils/errors';
 
 /**
- * Install state lives outside React.
+ * Install state lives outside React, one per engine.
  *
  * An install keeps running on the daemon whatever the UI does. If this lived
  * in component state, switching tabs or closing Settings would discard it,
- * and the user would come back to a panel claiming nothing is happening
- * while a download runs, and could start a second one. Module scope means a
- * remount re-attaches to the install in progress.
+ * and the user would come back to a card claiming nothing is happening while
+ * a download runs, and could start a second one. Module scope means a
+ * remount re-attaches to the install in progress. Each engine has its own,
+ * so one engine's install never shows on the other's card.
  */
 interface InstallState {
   installing: boolean;
@@ -31,11 +34,13 @@ interface InstallState {
   installedVersion: string | null;
 }
 
-let installState: InstallState = { installing: false, progress: null, error: null, installedVersion: null };
+const IDLE: InstallState = { installing: false, progress: null, error: null, installedVersion: null };
+
+const installs: Record<RuntimeKind, InstallState> = { llama: IDLE, stable_diffusion: IDLE };
 const installListeners = new Set<() => void>();
 
-function setInstallState(patch: Partial<InstallState>) {
-  installState = { ...installState, ...patch };
+function setInstallState(kind: RuntimeKind, patch: Partial<InstallState>) {
+  installs[kind] = { ...installs[kind], ...patch };
   installListeners.forEach((l) => l());
 }
 
@@ -46,44 +51,48 @@ function subscribeInstall(listener: () => void) {
   };
 }
 
-export interface SystemSettingsState {
-  status: LlamaStatus | null;
+export interface EngineState {
+  status: EngineStatus | null;
   statusError: string | null;
   loadingStatus: boolean;
-  reloadStatus: () => void;
 
   installing: boolean;
   progress: LlamaProgressEvent | null;
   installError: string | null;
   installedVersion: string | null;
-  /** Install the pinned release over what is there. */
+  /** Install the pinned release, over what is there if anything is. */
   runInstall: () => void;
 
   uninstalling: boolean;
   uninstallResult: string | null;
+  uninstallError: string | null;
   runUninstall: () => Promise<void>;
 }
 
-export function useSystemSettings(): SystemSettingsState {
-  const [status, setStatus] = useState<LlamaStatus | null>(null);
+export function useEngine(kind: RuntimeKind): EngineState {
+  const product = ENGINE_PRODUCT[kind];
+  const [status, setStatus] = useState<EngineStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
 
-  const install = useSyncExternalStore(subscribeInstall, () => installState);
+  const install = useSyncExternalStore(subscribeInstall, () => installs[kind]);
 
   const [uninstalling, setUninstalling] = useState(false);
   const [uninstallResult, setUninstallResult] = useState<string | null>(null);
+  const [uninstallError, setUninstallError] = useState<string | null>(null);
 
   const reloadStatus = useCallback(() => {
     setLoadingStatus(true);
-    setStatusError(null);
-    void getLlamaStatus()
-      .then(setStatus)
+    void getEngineStatus(kind)
+      .then((next) => {
+        setStatus(next);
+        setStatusError(null);
+      })
       .catch((err: unknown) => {
         setStatusError(formatError(err));
       })
       .finally(() => setLoadingStatus(false));
-  }, []);
+  }, [kind]);
 
   useEffect(() => {
     reloadStatus();
@@ -99,65 +108,67 @@ export function useSystemSettings(): SystemSettingsState {
   }, [install.installedVersion, reloadStatus]);
 
   const runInstall = useCallback(() => {
-    if (installState.installing) return;
+    if (installs[kind].installing) return;
     // A stream ends once: `completed`, `failed`, a transport error, or a
     // close that said neither. The first of them is the result.
     let settled = false;
     const fail = (message: string) => {
       if (settled) return;
       settled = true;
-      appLogger.error('component.settings', 'llama.cpp install failed', { message });
-      setInstallState({ installing: false, error: message });
+      appLogger.error('component.settings', `${product} install failed`, { message });
+      setInstallState(kind, { installing: false, error: message });
     };
 
-    setInstallState({ installing: true, progress: null, error: null, installedVersion: null });
+    setInstallState(kind, { installing: true, progress: null, error: null, installedVersion: null });
     setUninstallResult(null);
+    setUninstallError(null);
 
-    streamLlamaInstall(
+    streamEngineInstall(
+      kind,
       (event) => {
         if (settled) return;
-        setInstallState({ progress: event });
+        setInstallState(kind, { progress: event });
         if (event.type === 'completed') {
           settled = true;
-          setInstallState({ installing: false, installedVersion: event.version });
+          setInstallState(kind, { installing: false, installedVersion: event.version });
         } else if (event.type === 'failed') {
           fail(event.message);
         }
       },
       fail,
       // A stream that ends without `completed` or `failed` — daemon restart,
-      // network drop — must not leave the panel spinning forever.
+      // network drop — must not leave the card spinning forever.
       () =>
         fail(
           'The connection to the install ended before it reported a result. It may still be running — reopen this tab to check.',
         ),
     );
-  }, []);
+  }, [kind, product]);
 
   const runUninstall = useCallback(async () => {
     setUninstalling(true);
     setUninstallResult(null);
-    setInstallState({ installedVersion: null, error: null });
+    setUninstallError(null);
+    setInstallState(kind, { installedVersion: null, error: null });
     try {
-      const outcome = await uninstallLlama();
+      const outcome = await uninstallEngine(kind);
       setUninstallResult(
         outcome.wasInstalled
-          ? `Removed ${outcome.removedPaths.length} path(s)`
-          : 'Nothing was installed',
+          ? `Removed ${outcome.removedPaths.join(', ')}.`
+          : `Nothing to remove: ${product} was not installed.`,
       );
-      reloadStatus();
     } catch (err) {
-      setStatusError(formatError(err));
+      setUninstallError(formatError(err));
     } finally {
       setUninstalling(false);
+      reloadStatus();
     }
-  }, [reloadStatus]);
+  }, [kind, product, reloadStatus]);
 
   return {
     status,
     statusError,
     loadingStatus,
-    reloadStatus,
     installing: install.installing,
     progress: install.progress,
     installError: install.error,
@@ -165,6 +176,7 @@ export function useSystemSettings(): SystemSettingsState {
     runInstall,
     uninstalling,
     uninstallResult,
+    uninstallError,
     runUninstall,
   };
 }
