@@ -165,7 +165,11 @@ pub(crate) fn build_and_spawn(
 /// flag-emission logic can be tested directly against the resulting
 /// [`std::process::Command`]'s `get_args()` without needing a real or fake
 /// binary on disk.
-fn build_command(validated_path: &Path, config: &ServerConfig, port: u16) -> std::process::Command {
+pub(crate) fn build_command(
+    validated_path: &Path,
+    config: &ServerConfig,
+    port: u16,
+) -> std::process::Command {
     let mut cmd = cmd(validated_path);
     cmd.arg("-m")
         .arg(&config.model_path)

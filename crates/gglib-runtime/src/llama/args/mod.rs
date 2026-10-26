@@ -17,8 +17,8 @@ pub use mtp::{
     DEFAULT_DRAFT_N_MAX, DEFAULT_DRAFT_P_MIN, MtpResolution, MtpResolutionSource, resolve_mtp_args,
 };
 pub use reasoning::{
-    ReasoningDetection, ReasoningFormatResolution, ReasoningFormatSource, resolve_reasoning_format,
-    resolve_reasoning_format_with_detection,
+    REASONING_FORMATS, ReasoningDetection, ReasoningFormatResolution, ReasoningFormatSource,
+    resolve_reasoning_format, resolve_reasoning_format_with_detection,
 };
 pub use sampling::{SAMPLING_SOURCE, SAMPLING_VALUE, sampler_flags};
 pub use slot_restore::{SlotRestoreResolution, SlotRestoreSource, resolve_slot_restore};

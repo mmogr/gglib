@@ -114,7 +114,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `config profile install-templates` | Install the starter profiles: three sampling (coding, chat, creative) and six reasoning rungs (minimal…max) |
 | `config sd install [--build] [--force]` (also `update`) | Install stable-diffusion.cpp's pinned `sd-server`, which serves image models, when it is missing or older than the pin: the pre-built release for this platform (a CPU-only build is warned about before it starts), or a source build with `--build`, where no release fits, or over a source build of a release |
 | `config sd status` | Show whether `sd-server` is installed, as a download or a source build, with its release, platform, commit and path, and where it stands against the pinned release |
-| `config sd uninstall [--force]` | Remove `.sd/`, the image runtime's whole install, and say what was removed; refused while the daemon runs an image model |
+| `config sd uninstall [--force]` | Remove what the image runtime's install put in `.sd/`, and say what was removed; refused while the daemon runs an image model |
 | `verify <id\|name>` | Verify model integrity via SHA256 hash comparison |
 | `repair <id\|name>` | Re-download corrupt shards for a model |
 | `completions <shell>` | Print a shell completion script to stdout |

@@ -198,7 +198,10 @@ async fn uninstall_refuses_while_an_image_model_runs_and_removes_nothing() {
         ("flux", RuntimeKind::StableDiffusion),
     ]);
 
-    let refused = setup.uninstall_sd(&drawing).await.unwrap_err();
+    let refused = setup
+        .uninstall(&drawing, RuntimeKind::StableDiffusion)
+        .await
+        .unwrap_err();
 
     assert!(
         matches!(&refused, GuiError::Conflict(message) if message.contains("flux")),
@@ -249,7 +252,10 @@ async fn llama_uninstall_refuses_while_a_chat_model_runs() {
     });
 
     let refused = setup
-        .uninstall_llama(&Serving(vec![("qwen", RuntimeKind::Llama)]))
+        .uninstall(
+            &Serving(vec![("qwen", RuntimeKind::Llama)]),
+            RuntimeKind::Llama,
+        )
         .await
         .unwrap_err();
 

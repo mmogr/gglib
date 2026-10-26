@@ -104,6 +104,87 @@ fn each_platform_matches_exactly_its_own_asset() {
     }
 }
 
+/// Each platform with a download, and what it matches in `assets` when that
+/// is not exactly one asset; and each CUDA runtime package a platform fetches
+/// that `assets` holds other than once. The platforms are each os and arch
+/// listed here with every combination of the GPU fields the table reads
+/// today.
+fn not_matched_once<'a>(assets: &[&'a str]) -> Vec<(String, Vec<&'a str>)> {
+    let gpus = [
+        gpu(false, false),
+        gpu(false, true),
+        gpu(true, false),
+        gpu(true, true),
+    ];
+    let mut problems = Vec::new();
+    for os in ["macos", "linux", "windows"] {
+        for arch in ["aarch64", "x86_64"] {
+            for gpu in &gpus {
+                let Ok(asset) = sd_platform_asset(os, arch, gpu) else {
+                    continue;
+                };
+                let platform = format!("{os}/{arch} {gpu:?}");
+                let found: Vec<&str> = assets
+                    .iter()
+                    .copied()
+                    .filter(|name| asset.matcher.matches(name))
+                    .collect();
+                if found.len() != 1 {
+                    problems.push((platform.clone(), found));
+                }
+                if let Some(runtime) = asset.cuda_runtime
+                    && assets.iter().filter(|name| name.contains(runtime)).count() != 1
+                {
+                    problems.push((format!("{platform}: {runtime}"), Vec::new()));
+                }
+            }
+        }
+    }
+    problems
+}
+
+/// A second build that also matches is caught, as a missing one is.
+#[test]
+fn a_platform_matching_two_assets_or_none_is_named() {
+    assert_eq!(not_matched_once(&ASSETS), []);
+    let mut doubled = ASSETS.to_vec();
+    doubled.push("sd-master-228c707-bin-Linux-Ubuntu-26.04-x86_64.zip");
+    let named: Vec<String> = not_matched_once(&doubled)
+        .into_iter()
+        .map(|(p, _)| p)
+        .collect();
+    assert!(!named.is_empty(), "{named:?}");
+    assert!(
+        named.iter().all(|p| p.starts_with("linux/x86_64")),
+        "{named:?}"
+    );
+    let without_windows: Vec<&str> = ASSETS
+        .into_iter()
+        .filter(|name| !name.contains("-win-"))
+        .collect();
+    let named: Vec<String> = not_matched_once(&without_windows)
+        .into_iter()
+        .map(|(p, _)| p)
+        .collect();
+    assert!(!named.is_empty(), "{named:?}");
+    assert!(named.iter().all(|p| p.starts_with("windows/")), "{named:?}");
+    assert!(
+        named.iter().any(|p| p.contains("cudart-sd-bin-win")),
+        "{named:?}"
+    );
+}
+
+/// The same of the release pinned now, as published: CI lists its assets.
+/// The names carry the build machine's OS version, so each platform is held
+/// to exactly one match rather than to a name.
+#[test]
+#[ignore = "reads the pinned release's asset list; CI sets GGLIB_ENGINE_ASSETS_DIR"]
+fn each_platform_matches_exactly_one_asset_of_the_pinned_release() {
+    let assets = crate::pinned_engines_tests::pinned_release_assets("sd.txt");
+    let assets: Vec<&str> = assets.iter().map(String::as_str).collect();
+    assert_eq!(not_matched_once(&assets), []);
+}
+
 #[test]
 fn the_release_refuses_a_second_match_rather_than_taking_the_first() {
     assert_eq!(SD_RELEASE.choice, AssetChoice::ExactlyOne);

@@ -79,10 +79,10 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`server_config.rs`** / **`unified_server_config.rs`** — Launch argument resolution
 - **`pidfile/`** — PID file writing and cleanup for spawned servers
 - **`binary_install/`** — Installing a server binary from a pinned GitHub release, for any product, and the source checkout a build starts from
-- **`engine.rs`** — The questions asked of llama.cpp and stable-diffusion.cpp alike, by their `RuntimeKind`: where an install stands against its pin
+- **`engine.rs`** — The questions asked of llama.cpp and stable-diffusion.cpp alike, by their `RuntimeKind`: where an install stands against its pin, and removing what an install put there
 - **`llama/`** — llama-server and llama-cli process management
 - **`proxy/`** — Proxy supervisor and routing logic
-- **`sd/`** — stable-diffusion.cpp's `sd-server`: install, status, uninstall, its command line and its launch
+- **`sd/`** — stable-diffusion.cpp's `sd-server`: install, status, its command line and its launch
 - **`process/`** — Generic process lifecycle (start, stop, signal)
 - **`system/`** — System probes (GPU detection, memory info)
 - **`ports_impl/`** — Port trait implementations for runtime

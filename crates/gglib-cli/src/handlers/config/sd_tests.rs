@@ -1,7 +1,6 @@
-//! What `config sd` says: status for each kind of install, the warning a
-//! CPU-only download is given before it starts, and what an uninstall
-//! removed. One test refuses an uninstall while the daemon runs an image
-//! model, with `.sd/` under this binary's own data root and a stand-in on a
+//! What `config sd` says: status for each kind of install, and the warning
+//! a CPU-only download is given before it starts. One test refuses an
+//! uninstall while the daemon runs an image model, with `.sd/` under this binary's own data root and a stand-in on a
 //! loopback port in the daemon's place; the rest read values.
 
 use super::*;
@@ -128,33 +127,6 @@ fn status_of_a_binary_with_no_record_and_no_version_says_so() {
 }
 
 #[test]
-fn uninstall_says_each_path_it_removed() {
-    let outcome = UninstallOutcome {
-        was_installed: true,
-        removed_paths: vec!["/data/.sd".to_owned()],
-    };
-    assert_eq!(
-        uninstall_lines(&outcome),
-        [
-            "\u{2713} Removed /data/.sd",
-            "stable-diffusion.cpp uninstalled successfully."
-        ]
-    );
-}
-
-#[test]
-fn uninstall_with_nothing_removed_says_nothing_was_there() {
-    let outcome = UninstallOutcome {
-        was_installed: false,
-        removed_paths: Vec::new(),
-    };
-    assert_eq!(
-        uninstall_lines(&outcome),
-        ["stable-diffusion.cpp is not installed."]
-    );
-}
-
-#[test]
 fn the_endings_name_the_product_and_what_to_do_next() {
     let built = built("master-948-228c707", "Metal");
     assert_eq!(
@@ -218,7 +190,12 @@ async fn an_uninstall_is_refused_while_the_daemon_runs_an_image_model() {
     ]);
     let (port, asked) = answering(daemon_health(), listing);
 
-    let refused = beside(port, Some(TOKEN), uninstall(&ctx, true)).await;
+    let refused = beside(
+        port,
+        Some(TOKEN),
+        engine::uninstall(&ctx, RuntimeKind::StableDiffusion, true),
+    )
+    .await;
 
     assert_eq!(
         refused.expect_err("an image model runs").to_string(),

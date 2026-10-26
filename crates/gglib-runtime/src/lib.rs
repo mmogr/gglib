@@ -20,6 +20,8 @@ pub(crate) mod health_monitor;
 pub(crate) mod launch_narration;
 pub mod llama;
 pub mod pidfile;
+#[cfg(test)]
+mod pinned_engines_tests;
 pub mod ports_impl;
 pub mod process;
 pub mod proxy;

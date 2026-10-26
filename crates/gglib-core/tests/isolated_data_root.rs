@@ -45,7 +45,7 @@ fn every_resolver_answers_under_the_test_root() {
         Some(root.join(".llama").join("bin").as_path())
     );
     // stable-diffusion.cpp's install, through the same root, under a
-    // directory of its own that an uninstall removes whole.
+    // directory of its own.
     let sd = root.join(".sd");
     assert_eq!(
         sd_server_path().unwrap().parent(),

@@ -12,8 +12,8 @@ use serde::Serialize;
 use gglib_core::domain::RuntimeKind;
 use gglib_core::paths::SD_INSTALL_COMMAND;
 use gglib_core::ports::ModelRuntimePort;
-use gglib_runtime::llama::{LlamaProgressEvent, UninstallOutcome};
-use gglib_runtime::sd::{SdStatus, check_sd_prebuilt_availability, sd_status, uninstall_sd};
+use gglib_runtime::llama::LlamaProgressEvent;
+use gglib_runtime::sd::{SdStatus, check_sd_prebuilt_availability, sd_status};
 
 use super::{SetupOps, refuse_a_source_build, refuse_while_serving, running_model};
 use crate::error::GuiError;
@@ -74,18 +74,6 @@ impl SetupOps {
         let install = install.map_err(|e| GuiError::Internal(e.to_string()))?;
         let prebuilt = prebuilt.map(|asset| (asset.description, asset.warning));
         Ok(status_of(install, prebuilt, running_model))
-    }
-
-    /// Remove `.sd/` whole, unless an image model is running on it.
-    pub async fn uninstall_sd(
-        &self,
-        runtime: &dyn ModelRuntimePort,
-    ) -> Result<UninstallOutcome, GuiError> {
-        refuse_while_serving(runtime, RuntimeKind::StableDiffusion, "removing").await?;
-        tokio::task::spawn_blocking(uninstall_sd)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Uninstall task panicked: {e}")))?
-            .map_err(|e| GuiError::Internal(e.to_string()))
     }
 }
 

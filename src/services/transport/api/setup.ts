@@ -94,7 +94,7 @@ export async function getSdStatus(): Promise<ImageRuntimeStatus> {
   return get<ImageRuntimeStatus>('/api/config/system/sd-status');
 }
 
-/** Remove the image runtime, `.sd/` whole. Refused (409) while an image model runs. */
+/** Remove what the image runtime installed in `.sd/`. Refused (409) while an image model runs. */
 export async function uninstallSd(): Promise<LlamaUninstallOutcome> {
   return post<LlamaUninstallOutcome>('/api/config/system/uninstall-sd');
 }

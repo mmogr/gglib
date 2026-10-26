@@ -5,8 +5,8 @@ use gglib_core::utils::process::cmd;
 use serde::Serialize;
 use std::path::Path;
 
-use super::record::{SdInstallRecord, recorded_install};
 use super::release::{PINNED_SD_RELEASE, SD_RELEASE};
+use crate::binary_install::{InstallRecord, recorded_install};
 use crate::binary_install::{ReleaseSelector, resolve_selector};
 use crate::engine::{PinState, pin_state_at, update_downloads};
 use gglib_core::domain::RuntimeKind;
@@ -91,14 +91,14 @@ pub(crate) fn sd_status_at(
     // The record is read even with no binary: provenance is what someone
     // looking at a half-removed install needs.
     if config_path.exists() {
-        match SdInstallRecord::load(config_path) {
-            Ok(SdInstallRecord::Built(build)) => {
+        match InstallRecord::load(config_path) {
+            Ok(InstallRecord::Built(build)) => {
                 status.install_type = Some("source".to_owned());
                 status.release = Some(build.version);
                 status.platform = Some(build.acceleration);
                 status.installed_at = Some(build.build_date.to_rfc3339());
             }
-            Ok(SdInstallRecord::Prebuilt(record)) => {
+            Ok(InstallRecord::Prebuilt(record)) => {
                 status.install_type = Some(record.install_type);
                 status.release = Some(record.version);
                 status.platform = Some(record.platform);

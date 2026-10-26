@@ -561,6 +561,71 @@ jobs:
       - name: Check gglib-cli compilation
         run: cargo test -p gglib-cli --no-run
 
+      # The pinned engines themselves, on the two platforms whose builds a
+      # runner can run. The `gglib` just built installs each one as a user's
+      # machine would, into a folder of the job's own. Each engine's `--help`
+      # and each pinned release's asset list then go to `gglib-runtime`'s
+      # ignored tests: every flag and fixed value gglib starts an engine with
+      # must be one its `--help` lists, and every row of the two download
+      # tables must match exactly one asset. `--version`, which gglib also
+      # runs both servers with, is run here directly: sd-server's `--help`
+      # does not list it. A passing run caches the installs by the two pins,
+      # so later runs of the same pull request skip the downloads; this job
+      # never runs on main, so each new pull request installs once.
+      - name: Read the engine pins
+        if: runner.os != 'Windows'
+        id: pins
+        shell: bash
+        run: |
+          llama=$(sed -nE 's/.*PINNED_LLAMA_RELEASE: &str = "([^"]+)".*/\1/p' crates/gglib-runtime/src/llama/download/mod.rs)
+          sd=$(sed -nE 's/.*PINNED_SD_RELEASE: &str = "([^"]+)".*/\1/p' crates/gglib-runtime/src/sd/install/release.rs)
+          [[ -n $llama && -n $sd ]] || exit 1
+          echo "llama=$llama" >> "$GITHUB_OUTPUT"
+          echo "sd=$sd" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the pinned engines
+        if: runner.os != 'Windows'
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/engines
+          key: pinned-engines-${{ matrix.target }}-${{ steps.pins.outputs.llama }}-${{ steps.pins.outputs.sd }}
+
+      - name: Install the pinned engines
+        if: runner.os != 'Windows'
+        env:
+          GGLIB_DATA_DIR: ${{ runner.temp }}/engines
+          GGLIB_RESOURCE_DIR: ${{ runner.temp }}/engines
+        run: |
+          target/debug/gglib config llama install
+          target/debug/gglib config sd install
+
+      - name: Save the engines' help and the releases' assets
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENGINES: ${{ runner.temp }}/engines
+        run: |
+          help="$RUNNER_TEMP/engine-help"
+          assets="$RUNNER_TEMP/engine-assets"
+          mkdir -p "$help" "$assets"
+          "$ENGINES/.llama/bin/llama-server" --help > "$help/llama-server.txt" 2>&1
+          "$ENGINES/.llama/bin/llama-bench" --help > "$help/llama-bench.txt" 2>&1
+          "$ENGINES/.sd/bin/sd-server" --help > "$help/sd-server.txt" 2>&1
+          "$ENGINES/.llama/bin/llama-server" --version
+          "$ENGINES/.sd/bin/sd-server" --version
+          gh release view "${{ steps.pins.outputs.llama }}" -R ggml-org/llama.cpp \
+            --json assets -q '.assets[].name' > "$assets/llama.txt"
+          gh release view "${{ steps.pins.outputs.sd }}" -R leejet/stable-diffusion.cpp \
+            --json assets -q '.assets[].name' > "$assets/sd.txt"
+
+      - name: Check every flag gglib passes is one the pinned engines take
+        if: runner.os != 'Windows'
+        env:
+          GGLIB_ENGINE_HELP_DIR: ${{ runner.temp }}/engine-help
+          GGLIB_ENGINE_ASSETS_DIR: ${{ runner.temp }}/engine-assets
+        run: cargo test -p gglib-runtime --lib -- --ignored
+
   # The `clippy` job above runs on ubuntu only, so until now no lint had ever
   # seen the inside of a `#[cfg(windows)]` block. `cli-cross-os` visits all
   # three platforms but only compiles — `cargo test --no-run` does not lint.

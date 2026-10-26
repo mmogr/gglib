@@ -1,10 +1,11 @@
 #![doc = include_str!("README.md")]
 use super::build::{BuildInfo, build_llama_cpp};
 use super::build_events::{BuildEvent, BuildPhase};
-use super::config::{BuildConfig, InstallRecord};
 use super::detect::Acceleration;
 use super::download::LLAMA_RELEASE;
-use crate::binary_install::{SourceRepo, prepare_checkout, resolve_selector, settle};
+use crate::binary_install::{
+    BuildRecord, InstallRecord, SourceRepo, prepare_checkout, resolve_selector, settle,
+};
 use anyhow::{Context, Result, bail};
 use gglib_core::paths::{llama_bench_path, llama_config_path};
 use std::fs;
@@ -87,8 +88,8 @@ pub async fn run_llama_source_build(
     // one. The install is done either way, so a checkout that cannot be
     // moved is said, not failed.
     let version = checkout.version.clone();
-    let config = BuildConfig::new(version.clone(), checkout.commit_sha.clone(), acceleration);
-    InstallRecord::Built(config).save(&llama_config_path()?)?;
+    let build = build_record(version.clone(), checkout.commit_sha.clone(), acceleration);
+    InstallRecord::Built(build).save(&llama_config_path()?)?;
     settle(checkout, &tx).await;
 
     // Step 5: Signal successful completion.
@@ -100,6 +101,18 @@ pub async fn run_llama_source_build(
         .await;
 
     Ok(())
+}
+
+/// The record of a llama.cpp build made now: the release and commit it is
+/// of, and the acceleration it was configured for with that acceleration's
+/// flag.
+fn build_record(version: String, commit_sha: String, acceleration: Acceleration) -> BuildRecord {
+    let flags = acceleration
+        .cmake_flags()
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    BuildRecord::new(version, commit_sha, acceleration.display_name(), flags)
 }
 
 /// Install the binary `binary_name` from the checkout's `build/` directory
@@ -139,3 +152,7 @@ pub(crate) fn install_binary(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "install_tests.rs"]
+mod tests;

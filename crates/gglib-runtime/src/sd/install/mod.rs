@@ -1,17 +1,13 @@
 #![doc = include_str!("README.md")]
 mod pipeline;
-mod record;
 mod release;
 mod status;
-mod uninstall;
 
 pub use pipeline::{install_sd_prebuilt, run_sd_source_build};
 pub use release::{PINNED_SD_RELEASE, SD_RELEASE_ENV, SdAsset, check_sd_prebuilt_availability};
 pub use status::{SdStatus, sd_status};
-pub use uninstall::{sd_files_present, uninstall_sd};
 
-pub(crate) use record::{recorded_install, recorded_release};
-pub(crate) use release::SD_RELEASE;
+pub(crate) use release::{SD_RELEASE, sd_download_dir};
 
 #[cfg(test)]
 #[path = "release_tests.rs"]

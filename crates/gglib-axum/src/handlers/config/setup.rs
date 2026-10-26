@@ -15,7 +15,8 @@ use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_app_services::setup::SetupStatus;
 use gglib_core::domain::RuntimeKind;
-use gglib_runtime::llama::{LlamaStatus, UninstallOutcome, llama_status};
+use gglib_runtime::engine::UninstallOutcome;
+use gglib_runtime::llama::{LlamaStatus, llama_status};
 
 /// One llama.cpp install or removal at a time, process-wide, as the image
 /// runtime has: two installs would unpack into one download directory, and
@@ -117,7 +118,9 @@ pub(crate) async fn llama_status_handler(
 pub(crate) async fn uninstall_llama_handler(
     State(state): State<AppState>,
 ) -> Result<Json<UninstallOutcome>, HttpError> {
-    let removal = state.setup.uninstall_llama(state.runtime.as_ref());
+    let removal = state
+        .setup
+        .uninstall(state.runtime.as_ref(), RuntimeKind::Llama);
     Ok(Json(
         holding_install_slot(&LLAMA_IN_FLIGHT, PRODUCT, removal).await?,
     ))

@@ -1,6 +1,6 @@
 //! The image runtime's routes over the router: the status reports what is
 //! installed under this binary's own root and what an install would do, and
-//! the removal takes `.sd/` away whole. No release is fetched; the install
+//! the removal takes what was installed and the `.sd/` it empties. No release is fetched; the install
 //! stream itself is pinned beside its handler.
 
 mod common;
@@ -36,7 +36,7 @@ async fn call(method: Method, path: &str) -> (StatusCode, serde_json::Value) {
 /// One test, in order, because both halves read and change the one `.sd/`
 /// under this binary's root.
 #[tokio::test]
-async fn the_status_reads_the_install_and_the_removal_takes_sd_away_whole() {
+async fn the_status_reads_the_install_and_the_removal_takes_what_was_installed() {
     let (status, json) = call(Method::GET, "/api/config/system/sd-status").await;
     assert_eq!(status, StatusCode::OK, "{json}");
     assert_eq!(json["install"]["installed"], false, "{json}");
