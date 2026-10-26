@@ -26,7 +26,7 @@ device keeps itself, run through the agent loop with gglib's builtins: the
 body is the device's unchanged `OpenAI` chat request, handed to the same
 starter (`start_chat`), and `&draw=true` offers the image tool for that
 message. `tools=none` in place of `tools=builtin` is such a chat with its
-tools off: the starter is told `no_tools`, and the run is offered none of
+tools off: the starter is told it may use no server, and the run is offered none of
 the opened servers' tools, only the image tool with `&draw=true`, and
 without it no tool at all. Any other word for `tools` is
 `400 invalid_request`, so a gglib that predates a word refuses it rather

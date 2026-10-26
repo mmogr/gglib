@@ -17,6 +17,7 @@ use async_trait::async_trait;
 
 use super::attachment_store::AttachmentError;
 use super::runs::Created;
+use crate::domain::DeviceServers;
 use crate::domain::attachment::{AttachmentBlob, AttachmentId, AttachmentInfo, AttachmentUpload};
 use crate::domain::branching::{ChatChange, ChatChanged, Refused};
 use crate::domain::hub_chats::{HubChatList, HubChatOpen, HubTurn};
@@ -163,10 +164,11 @@ pub trait AgentRunStarter: Send + Sync + std::fmt::Debug {
     /// included, run through the agent loop on the model it names. The
     /// image tool is offered only with `draw`, and draws with
     /// `image_model` when the person chose one. The tools of the MCP
-    /// servers open to paired devices are offered unless `no_tools`, the chat's
-    /// tools turned off, which keeps them out and leaves the image tool to
-    /// `draw`. Nothing is saved to any chat here, and the run's events are
-    /// the agent loop's.
+    /// servers open to paired devices are offered of those `servers` admits,
+    /// which may be none, leaving the image tool to `draw`; an id it names
+    /// that is not open is dropped where the servers start, and never
+    /// widens what is open. Nothing is saved to any chat here, and the run's
+    /// events are the agent loop's.
     ///
     /// # Errors
     ///
@@ -182,6 +184,6 @@ pub trait AgentRunStarter: Send + Sync + std::fmt::Debug {
         body: serde_json::Value,
         draw: bool,
         image_model: Option<u32>,
-        no_tools: bool,
+        servers: DeviceServers,
     ) -> Result<Created, TurnRefused>;
 }

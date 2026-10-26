@@ -27,6 +27,7 @@ use async_trait::async_trait;
 use axum::http::StatusCode;
 use axum::response::IntoResponse as _;
 
+use gglib_core::DeviceServers;
 use gglib_core::domain::agent::{AgentMessage, saved_history};
 use gglib_core::domain::branching;
 use gglib_core::domain::chat::ConversationSettings;
@@ -38,6 +39,7 @@ use gglib_core::services::ChangeError;
 use tokio::sync::OwnedSemaphorePermit;
 
 use super::AgentChatRequest;
+use super::chat_turn::{ChatQuery, Drawing};
 use super::compose::{Prepared, held_over, refuse_unavailable_drawing, take_permit};
 use super::device_tools::{self, Asked};
 use super::dto::AgentRequestConfig;
@@ -91,17 +93,16 @@ impl AgentRunStarter for HubTurns {
         body: serde_json::Value,
         draw: bool,
         image_model: Option<u32>,
-        no_tools: bool,
+        servers: DeviceServers,
     ) -> Result<Created, TurnRefused> {
         let Some(state) = self.0.upgrade() else {
             return Err(refusal(RunsError::ShuttingDown.into()));
         };
-        let drawing = super::chat_turn::Drawing {
-            draw,
-            image_model,
-            no_tools,
+        let query = ChatQuery {
+            drawing: Drawing { draw, image_model },
+            servers,
         };
-        super::chat_turn::start(&state, device, id, body, drawing)
+        super::chat_turn::start(&state, device, id, body, query)
             .await
             .map_err(refusal)
     }

@@ -2,6 +2,7 @@
 //! servers' tools narrowed by a Mac-kept chat's own list, and nothing while
 //! no tunnel session is live.
 
+use gglib_core::DeviceServers;
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::chat::ConversationSettings;
 use serde_json::json;
@@ -33,7 +34,10 @@ fn with_nothing_opened_only_draw_draws() {
         Vec::<String>::new()
     );
     assert_eq!(
-        offered(&[], &Asked::of_phone(false, false)),
+        offered(
+            &[],
+            &Asked::of_phone(false, DeviceServers::Only([3].into()))
+        ),
         Vec::<String>::new()
     );
 }
@@ -43,7 +47,13 @@ fn with_nothing_opened_only_draw_draws() {
 #[test]
 fn every_tool_of_an_opened_server_is_offered_qualified() {
     let opened = strings(&["3:search", "3:extract", "4:crawl"]);
-    assert_eq!(offered(&opened, &Asked::of_phone(false, false)), opened);
+    assert_eq!(
+        offered(
+            &opened,
+            &Asked::of_phone(false, DeviceServers::Only([3, 4].into()))
+        ),
+        opened
+    );
     let chat = ConversationSettings::default();
     assert_eq!(
         offered(&opened, &Asked::of_chat(&chat, true)),
@@ -101,13 +111,19 @@ fn tools_off_offers_no_mcp_tool_but_draw_still_draws() {
 #[test]
 fn a_phone_chat_with_its_tools_off_gets_only_the_floor() {
     let opened = strings(&["3:search", "4:crawl"]);
-    assert_eq!(offered(&opened, &Asked::of_phone(true, true)), [DRAW]);
     assert_eq!(
-        offered(&opened, &Asked::of_phone(false, true)),
+        offered(&opened, &Asked::of_phone(true, DeviceServers::none())),
+        [DRAW]
+    );
+    assert_eq!(
+        offered(&opened, &Asked::of_phone(false, DeviceServers::none())),
         Vec::<String>::new()
     );
     assert_eq!(
-        offered(&opened, &Asked::of_phone(true, false)),
+        offered(
+            &opened,
+            &Asked::of_phone(true, DeviceServers::Only([3, 4].into()))
+        ),
         [DRAW, "3:search", "4:crawl"]
     );
 }
@@ -151,7 +167,11 @@ async fn resolve_offers_the_floor_while_no_session_is_live() {
 
     let echo = format!("{}:echo", server.id);
     assert_eq!(
-        resolve(&state, &Asked::of_phone(false, false)).await,
+        resolve(
+            &state,
+            &Asked::of_phone(false, DeviceServers::Only([server.id].into()))
+        )
+        .await,
         Vec::<String>::new()
     );
     let chat = named(&[echo.as_str(), "echo"]);

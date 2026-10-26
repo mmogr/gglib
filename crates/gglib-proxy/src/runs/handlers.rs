@@ -11,6 +11,7 @@ use axum::extract::rejection::{JsonRejection, QueryRejection};
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use gglib_core::DeviceServers;
 use gglib_core::domain::runs::RunKind;
 use gglib_core::ports::{RunsError, RunsPort};
 use serde::Deserialize;
@@ -96,7 +97,7 @@ pub(crate) struct PutQuery {
 /// What `?tools=` may say. Any other word is refused, so a gglib that
 /// predates a word refuses it rather than running the tools it would keep
 /// out.
-#[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Deserialize, Clone, Copy)]
 #[serde(rename_all = "snake_case")]
 enum Tools {
     /// Through the agent loop, offered the opened servers' tools.
@@ -151,8 +152,11 @@ pub(crate) async fn put_run(
         // An `image_model` without `draw` is the starter's to refuse, with
         // every other door's.
         let drawing = (query.draw, query.image_model);
-        let no_tools = tools == Tools::None;
-        return super::turn::put_chat(&state, scope, &id, body, drawing, no_tools).await;
+        let servers = match tools {
+            Tools::Builtin => DeviceServers::All,
+            Tools::None => DeviceServers::none(),
+        };
+        return super::turn::put_chat(&state, scope, &id, body, drawing, servers).await;
     }
     if query.draw || query.image_model.is_some() {
         return Err(invalid(

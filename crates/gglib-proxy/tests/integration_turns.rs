@@ -7,6 +7,7 @@
 
 use std::sync::Arc;
 
+use gglib_core::DeviceServers;
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::ports::TurnRefused;
 use reqwest::{Client, RequestBuilder, StatusCode};
@@ -202,20 +203,29 @@ fn chat_request() -> serde_json::Value {
 
 /// `?kind=chat&tools=builtin` hands the device's unchanged `OpenAI` request
 /// to the daemon's starter, with `draw` as the query said it, and the run
-/// it answers says its events are the agent loop's. `tools=none` does the
-/// same with `no_tools`, Draw or not. No chat run is made.
+/// it answers says its events are the agent loop's, and every open server.
+/// `tools=none` does the same with no server, Draw or not. No chat run is
+/// made.
 #[tokio::test]
 async fn a_chat_run_with_builtins_reaches_the_starter_with_its_body_and_draw() {
     let turns = Arc::new(FakeTurns::default());
     let runs = Arc::new(FakeRuns::default());
     let (base, cancel) = serve(Some(Arc::clone(&turns)), Arc::clone(&runs)).await;
 
-    for (query, draw, no_tools) in [
-        ("?kind=chat&tools=builtin&draw=true", true, false),
-        ("?kind=chat&tools=builtin", false, false),
-        ("?tools=builtin&draw=false", false, false),
-        ("?kind=chat&tools=none&draw=true", true, true),
-        ("?kind=chat&tools=none", false, true),
+    for (query, draw, servers) in [
+        (
+            "?kind=chat&tools=builtin&draw=true",
+            true,
+            DeviceServers::All,
+        ),
+        ("?kind=chat&tools=builtin", false, DeviceServers::All),
+        ("?tools=builtin&draw=false", false, DeviceServers::All),
+        (
+            "?kind=chat&tools=none&draw=true",
+            true,
+            DeviceServers::none(),
+        ),
+        ("?kind=chat&tools=none", false, DeviceServers::none()),
     ] {
         let sent = from_device(put_chat(&base, query, &chat_request()));
         let (status, run) = json(sent.send().await.unwrap()).await;
@@ -233,7 +243,7 @@ async fn a_chat_run_with_builtins_reaches_the_starter_with_its_body_and_draw() {
                 "p1".to_owned(),
                 chat_request(),
                 draw,
-                no_tools
+                servers
             ),
             "{query}"
         );

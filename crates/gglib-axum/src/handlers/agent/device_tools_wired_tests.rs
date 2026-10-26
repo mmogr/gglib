@@ -20,12 +20,13 @@ use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::{
     Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, RunScope, RunningTarget,
 };
-use gglib_core::{McpServerStatus, NewMcpServer};
+use gglib_core::{DeviceServers, McpServerStatus, NewMcpServer};
 use serde_json::json;
 use tokio::sync::Notify;
 
 use super::tests::STAND_IN_SERVER;
 use super::{Asked, resolve, settle};
+use crate::handlers::agent::chat_turn::ChatQuery;
 use crate::handlers::agent::run_fixture::{drawing_state, settled};
 use crate::handlers::agent::turn_fixture::hi;
 use crate::handlers::agent::{chat_turn, hub_turn, turn_fixture};
@@ -252,8 +253,9 @@ async fn a_mac_chats_list_narrows_the_opened_tools_and_never_adds_one() {
     o.state.mcp.shutdown().await;
 }
 
-/// A chat the phone keeps, run with builtins, starts the opened server in
-/// its late step and not in its `PUT`, and is offered every tool of it.
+/// A chat the phone keeps, run with builtins and naming the opened server,
+/// starts it in its late step and not in its `PUT`, and is offered every
+/// tool of it.
 #[tokio::test]
 async fn a_phone_kept_chat_run_starts_the_opened_server_in_its_late_step() {
     let o = opened().await;
@@ -262,13 +264,18 @@ async fn a_phone_kept_chat_run_starts_the_opened_server_in_its_late_step() {
         "messages": [{ "role": "user", "content": "what is new?" }],
     });
 
-    let created = chat_turn::start(&o.state, "phone", "p1", body, false.into()).await;
+    let named = DeviceServers::Only([o.server].into());
+    let query = ChatQuery {
+        servers: named.clone(),
+        ..false.into()
+    };
+    let created = chat_turn::start(&o.state, "phone", "p1", body, query).await;
     assert!(created.unwrap().created);
     assert!(!o.running().await, "the PUT started nothing");
 
     o.loaded_and_ended("phone", "p1").await;
     assert!(o.running().await, "the late step started it");
-    let phone = Asked::of_phone(false, false);
+    let phone = Asked::of_phone(false, named);
     assert_eq!(resolve(&o.state, &phone).await, [o.echo()]);
     o.state.mcp.shutdown().await;
 }
@@ -288,18 +295,25 @@ async fn a_phone_kept_chat_with_its_tools_off_starts_no_server_and_gets_only_the
         "messages": [{ "role": "user", "content": "what is new?" }],
     });
 
-    let created = starter.start_chat("phone", "p1", body.clone(), false, None, true);
+    let created = starter.start_chat(
+        "phone",
+        "p1",
+        body.clone(),
+        false,
+        None,
+        DeviceServers::none(),
+    );
     assert!(created.await.unwrap().created);
     o.loaded_and_ended("phone", "p1").await;
     assert!(!o.running().await, "a chat with its tools off starts none");
-    let phone = Asked::of_phone(false, true);
+    let phone = Asked::of_phone(false, DeviceServers::none());
     assert_eq!(resolve(&o.state, &phone).await, Vec::<String>::new());
 
-    let created = starter.start_chat("phone", "p2", body, true, None, true);
+    let created = starter.start_chat("phone", "p2", body, true, None, DeviceServers::none());
     assert!(created.await.unwrap().created);
     o.loaded_and_ended("phone", "p2").await;
     assert!(!o.running().await, "nor with Draw");
-    let phone = Asked::of_phone(true, true);
+    let phone = Asked::of_phone(true, DeviceServers::none());
     assert_eq!(resolve(&o.state, &phone).await, [DRAW]);
     o.state.mcp.shutdown().await;
 }

@@ -22,6 +22,7 @@
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use gglib_core::DeviceServers;
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::ports::{RunScope, TurnRefused};
 use serde_json::Value;
@@ -71,9 +72,10 @@ pub(super) async fn put(state: &AppState, scope: RunScope, id: &str, body: Value
 
 /// `PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`: a chat the
 /// device keeps itself, run through the agent loop with the tools of the
-/// MCP servers open to paired devices, and the image tool with `draw`. With
-/// `tools=none` instead (`no_tools`), none of those servers' tools: the
-/// image tool alone with `draw`, and without it a run that calls no tool.
+/// MCP servers open to paired devices that `servers` admits, and the image
+/// tool with `draw`. With `tools=none` (no server), none of those servers'
+/// tools: the image tool alone with `draw`, and without it a run that calls
+/// no tool.
 /// The body is the device's unchanged `OpenAI` chat request. Only a named
 /// device may, as for a turn: the loop's slot, its model's hold, the MCP
 /// servers and the image tool are the daemon's, reached through the same
@@ -84,14 +86,14 @@ pub(super) async fn put_chat(
     id: &str,
     body: Value,
     (draw, image_model): (bool, Option<u32>),
-    no_tools: bool,
+    servers: DeviceServers,
 ) -> Answer {
     let Some(device) = scope.device() else {
         return Err(not_a_device());
     };
     let turns = state.turns.clone().ok_or_else(unavailable)?;
     let started = turns
-        .start_chat(device, id, body, draw, image_model, no_tools)
+        .start_chat(device, id, body, draw, image_model, servers)
         .await;
     started.map(made).map_err(refused)
 }
