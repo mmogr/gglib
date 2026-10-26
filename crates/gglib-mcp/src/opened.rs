@@ -7,15 +7,22 @@
 //! the grant is the row's.
 //!
 //! When a paired device's run starts, [`McpService::opened_tools`] turns the
-//! open servers into the tools that run is offered, by the id each tool is
-//! called by, starting an open server that is not running. That is the run's
-//! own work, done once its model is ready, not the `PUT` that made it.
+//! open servers the run may use ([`DeviceServers`]) into the tools that run
+//! is offered, by the id each tool is called by, starting an open server
+//! that is not running. That is the run's own work, done once its model is
+//! ready, not the `PUT` that made it, and the one place a device's run
+//! starts a server: an id the run names that is not open is dropped there,
+//! so what the run names only ever narrows what is open.
 
-use gglib_core::{McpServer, McpServerStatus, McpServerType, McpServiceError};
+use gglib_core::{DeviceServers, McpServer, McpServerStatus, McpServerType, McpServiceError};
 use tracing::warn;
 
 use crate::service::{McpService, RESERVED_SERVER_NAME};
 use crate::tool_executor::qualified;
+
+/// How many of the ids a device's run named and that are not open one
+/// warning names: a run may name any number.
+const LEFT_OUT_SHOWN: usize = 5;
 
 impl McpService {
     /// Open the server `id` to paired devices, or close it, and return the
@@ -103,9 +110,14 @@ impl McpService {
         }
     }
 
-    /// The tools of the servers open to devices ([`Self::open_to_devices`]),
-    /// as the agent loop names them (`{id}:{tool}`), each one started first
-    /// when it is not running.
+    /// The tools of the servers open to devices ([`Self::open_to_devices`])
+    /// that `chosen` admits, as the agent loop names them (`{id}:{tool}`),
+    /// each one started first when it is not running.
+    ///
+    /// An id `chosen` names that is not open, closed since the device last
+    /// asked or never a server's, is dropped with one warning that counts
+    /// them and names the first few ids, and nothing else, and the rest are started: what a device names
+    /// only narrows what is open, and never starts a server that is not.
     ///
     /// A server that is invalid, manual and stopped, or that cannot be
     /// started is skipped with one warning that names it and says why, and
@@ -113,14 +125,29 @@ impl McpService {
     /// start printed on stderr, as the daemon's own start warning does;
     /// never a tool's arguments or results. Nothing here fails the run: a run
     /// offered fewer tools still answers.
-    pub async fn opened_tools(&self) -> Vec<String> {
-        let servers = match self.open_to_devices().await {
+    pub async fn opened_tools(&self, chosen: &DeviceServers) -> Vec<String> {
+        let mut servers = match self.open_to_devices().await {
             Ok(servers) => servers,
             Err(e) => {
                 warn!(error = %e, "could not read the MCP servers a paired device's run is offered");
                 return Vec::new();
             }
         };
+        if let DeviceServers::Only(ids) = chosen {
+            let left_out: Vec<i64> = ids
+                .iter()
+                .copied()
+                .filter(|id| !servers.iter().any(|server| server.id == *id))
+                .collect();
+            if !left_out.is_empty() {
+                warn!(
+                    count = left_out.len(),
+                    ids = ?&left_out[..left_out.len().min(LEFT_OUT_SHOWN)],
+                    "a paired device's run named MCP servers that are not open to paired devices; they were not started"
+                );
+            }
+        }
+        servers.retain(|server| chosen.admits(server.id));
         let mut offered = Vec::new();
         for server in &servers {
             let name = &server.name;

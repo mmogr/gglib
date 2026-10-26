@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use gglib_core::ports::{McpRepositoryError, McpServerRepository};
-use gglib_core::{McpServer, McpServiceError, NewMcpServer};
+use gglib_core::{DeviceServers, McpServer, McpServiceError, NewMcpServer};
 
 use crate::service::McpService;
 use crate::service::tests::{service, stdio};
@@ -79,7 +79,7 @@ async fn an_open_lazy_server_is_started_and_its_tools_named_by_its_id() {
     let tavily = opened(&service, stand_in("tavily")).await;
     assert!(!running(&service, tavily.id).await);
 
-    let offered = service.opened_tools().await;
+    let offered = service.opened_tools(&DeviceServers::All).await;
 
     assert_eq!(offered, [format!("{}:echo", tavily.id)]);
     assert!(running(&service, tavily.id).await, "started for the run");
@@ -96,7 +96,7 @@ async fn a_running_server_not_open_is_not_offered() {
     let shell = service.add_server(stand_in("shell")).await.unwrap();
     service.start_server(shell.id).await.unwrap();
 
-    let offered = service.opened_tools().await;
+    let offered = service.opened_tools(&DeviceServers::All).await;
 
     assert_eq!(offered, [format!("{}:echo", tavily.id)]);
     service.shutdown().await;
@@ -115,7 +115,7 @@ async fn a_disabled_and_a_manual_server_are_skipped() {
     let manual = opened(&service, manual).await;
     let tavily = opened(&service, stand_in("tavily")).await;
 
-    let offered = service.opened_tools().await;
+    let offered = service.opened_tools(&DeviceServers::All).await;
 
     assert_eq!(offered, [format!("{}:echo", tavily.id)]);
     assert!(
@@ -142,7 +142,7 @@ async fn a_server_that_fails_to_start_is_skipped_and_the_rest_offered() {
     opened(&service, exits).await;
     let tavily = opened(&service, stand_in("tavily")).await;
 
-    let offered = service.opened_tools().await;
+    let offered = service.opened_tools(&DeviceServers::All).await;
 
     assert_eq!(offered, [format!("{}:echo", tavily.id)]);
     service.shutdown().await;
@@ -164,7 +164,7 @@ async fn a_server_stamped_invalid_is_skipped_though_it_would_start_now() {
     std::fs::create_dir(&later).unwrap();
     let tavily = opened(&service, stand_in("tavily")).await;
 
-    let offered = service.opened_tools().await;
+    let offered = service.opened_tools(&DeviceServers::All).await;
 
     assert_eq!(offered, [format!("{}:echo", tavily.id)]);
     assert!(
@@ -188,13 +188,93 @@ async fn two_servers_of_one_name_are_each_offered_when_open() {
         service.set_allow_remote(id, true).await.unwrap();
     }
 
-    let mut offered = service.opened_tools().await;
+    let mut offered = service.opened_tools(&DeviceServers::All).await;
     offered.sort();
 
     let mut both = vec![format!("{}:echo", first.id), format!("{}:echo", second.id)];
     both.sort();
     assert_eq!(offered, both);
     assert!(running(&service, first.id).await && running(&service, second.id).await);
+    service.shutdown().await;
+}
+
+/// Of the open servers, only those a device's run chose are started and
+/// offered; another open one stays stopped.
+#[cfg(unix)]
+#[tokio::test]
+async fn only_the_chosen_open_servers_are_started_and_offered() {
+    let (service, _) = service();
+    let tavily = opened(&service, stand_in("tavily")).await;
+    let shell = opened(&service, stand_in("shell")).await;
+
+    let offered = service
+        .opened_tools(&DeviceServers::Only([tavily.id].into()))
+        .await;
+
+    assert_eq!(offered, [format!("{}:echo", tavily.id)]);
+    assert!(running(&service, tavily.id).await);
+    assert!(
+        !running(&service, shell.id).await,
+        "not chosen, not started"
+    );
+    service.shutdown().await;
+}
+
+/// An id a device's run chose that is not open, a server here but closed or
+/// no server at all, is never started or offered; the open one chosen
+/// beside it still is.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_chosen_id_that_is_not_open_is_never_started_or_offered() {
+    let (service, _) = service();
+    let tavily = opened(&service, stand_in("tavily")).await;
+    let shell = service.add_server(stand_in("shell")).await.unwrap();
+    let nowhere = shell.id + 100;
+
+    let chosen = DeviceServers::Only([tavily.id, shell.id, nowhere].into());
+    let offered = service.opened_tools(&chosen).await;
+
+    assert_eq!(offered, [format!("{}:echo", tavily.id)]);
+    assert!(!running(&service, shell.id).await, "closed, never started");
+    service.shutdown().await;
+}
+
+/// A device's run that chose no server starts none and is offered nothing,
+/// though one is open.
+#[cfg(unix)]
+#[tokio::test]
+async fn choosing_none_starts_nothing() {
+    let (service, _) = service();
+    let tavily = opened(&service, stand_in("tavily")).await;
+
+    let offered = service.opened_tools(&DeviceServers::none()).await;
+
+    assert_eq!(offered, Vec::<String>::new());
+    assert!(!running(&service, tavily.id).await);
+    service.shutdown().await;
+}
+
+/// Two open servers sharing a name are chosen apart by their ids: the one
+/// named is started and offered, the other is not.
+#[cfg(unix)]
+#[tokio::test]
+async fn two_servers_sharing_a_name_are_chosen_apart_by_id() {
+    let (service, repo) = service();
+    // An older database can hold two of one name; the service refuses it now.
+    let first = repo.insert(stand_in("tavily")).await.unwrap();
+    let second = repo.insert(stand_in("tavily")).await.unwrap();
+    service.initialize().await.unwrap();
+    for id in [first.id, second.id] {
+        service.set_allow_remote(id, true).await.unwrap();
+    }
+
+    let offered = service
+        .opened_tools(&DeviceServers::Only([second.id].into()))
+        .await;
+
+    assert_eq!(offered, [format!("{}:echo", second.id)]);
+    assert!(running(&service, second.id).await);
+    assert!(!running(&service, first.id).await, "the other of the name");
     service.shutdown().await;
 }
 
@@ -210,7 +290,7 @@ async fn qualified_is_what_the_executor_lists() {
     opened(&service, stand_in("tavily")).await;
     let service = std::sync::Arc::new(service);
 
-    let offered = service.opened_tools().await;
+    let offered = service.opened_tools(&DeviceServers::All).await;
     let (images, _) = crate::tool_images::tool_images_tests::images();
     let executor =
         crate::tool_executor::McpToolExecutorAdapter::new(std::sync::Arc::clone(&service), images);
@@ -365,5 +445,8 @@ async fn unreadable_servers_open_none_to_devices() {
 
     assert!(service.open_to_devices().await.is_err());
     assert_eq!(service.device_server_names().await, Vec::<String>::new());
-    assert_eq!(service.opened_tools().await, Vec::<String>::new());
+    assert_eq!(
+        service.opened_tools(&DeviceServers::All).await,
+        Vec::<String>::new()
+    );
 }

@@ -18,6 +18,7 @@ infrastructure concerns (database, process management, etc.).
 - `McpEnvEntry` - Environment variable entry
 - `McpTool` - Tool exposed by an MCP server
 - `McpToolResult` - Result of a tool invocation
+- `DeviceServers` - Which of the servers open to paired devices a device's run may use: all, or only those it names by id; none by default
 - `ToolIndex` / `ToolSummary` - Progressive-disclosure tool registry index
 
 <!-- module-docs:end -->

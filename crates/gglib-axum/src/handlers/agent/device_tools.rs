@@ -11,6 +11,7 @@
 //! is live, and a lazy one is started then, in the run's own work and never
 //! in the `PUT` that made it. The decisions are ADR 0024 and ADR 0025.
 
+use gglib_core::DeviceServers;
 use gglib_core::domain::chat::ConversationSettings;
 use gglib_core::ports::RemoteGatewayPort as _;
 
@@ -97,7 +98,7 @@ pub(super) async fn resolve(state: &AppState, asked: &Asked) -> Vec<String> {
     if !state.remote.gateway().serving() || asked.no_tools {
         return asked.floor();
     }
-    offered(&state.mcp.opened_tools().await, asked)
+    offered(&state.mcp.opened_tools(&DeviceServers::All).await, asked)
 }
 
 /// `chat` with its tool filter set to what a run that `asked` is offered on
