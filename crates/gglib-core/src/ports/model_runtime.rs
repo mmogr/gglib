@@ -403,7 +403,7 @@ pub enum ModelRuntimeError {
     /// fix, and the message names the command.
     #[error(
         "The image runtime, stable-diffusion.cpp's sd-server, is not installed. Install it \
-         with `{cmd}`, or from Settings → Image runtime.",
+         with `{cmd}`, or from Settings → System.",
         cmd = crate::paths::SD_INSTALL_COMMAND
     )]
     ImageRuntimeNotInstalled,

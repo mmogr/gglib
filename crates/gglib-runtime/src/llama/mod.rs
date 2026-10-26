@@ -52,7 +52,7 @@ pub use detect::{
 };
 pub(crate) use download::LLAMA_RELEASE;
 pub use download::check_llama_installed;
-pub use status::{LlamaBuildInfo, LlamaPrebuiltInfo, LlamaStatus, llama_status};
+pub use status::{LlamaBuildInfo, LlamaPrebuiltInfo, LlamaRuntimeInfo, LlamaStatus, llama_status};
 pub use validate::{handle_status, validate_llama_binary};
 
 // Installation

@@ -37,7 +37,7 @@ pub(crate) async fn sync_all_state(
 
 /// Apply state to the macOS application menu.
 ///
-/// Gathers the model and llama.cpp state the menu needs but the tray does not,
+/// Gathers the model state the menu needs but the tray does not,
 /// so those reads do not happen on platforms with no menu to show them in.
 #[cfg(target_os = "macos")]
 #[allow(
@@ -49,7 +49,6 @@ async fn sync_app_menu(
     snapshot: &DaemonSnapshot,
 ) -> Result<(), String> {
     use crate::menu::MenuState;
-    use gglib_runtime::llama::check_llama_installed;
 
     let menu_guard = state.menu.read().await;
     let Some(menu) = menu_guard.as_ref() else {
@@ -60,7 +59,6 @@ async fn sync_app_menu(
     let selected_id = *state.selected_model_id.read().await;
 
     menu.sync_state(&MenuState {
-        llama_installed: check_llama_installed(),
         proxy_running: snapshot.proxy_running,
         model_selected: selected_id.is_some(),
         // A selected model with a running server enables Stop rather than

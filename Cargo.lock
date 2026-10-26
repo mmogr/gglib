@@ -2298,7 +2298,6 @@ dependencies = [
  "gglib-build-info",
  "gglib-core",
  "gglib-proxy",
- "gglib-runtime",
  "gglib-tauri",
  "gtk",
  "ksni",

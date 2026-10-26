@@ -2,8 +2,8 @@
 //!
 //! This module answers "what is installed" as a value:
 //! [`super::handle_status`] prints it for `gglib config llama status`, and the
-//! Axum `system/llama-status` route serialises it directly, so the two
-//! surfaces cannot drift.
+//! daemon's `system/engines/llama` route reads its `EngineStatus` from it, so
+//! the two surfaces cannot drift.
 
 use super::download::LLAMA_RELEASE;
 use crate::binary_install::{BuildRecord, InstallRecord, PrebuiltRecord, recorded_install};
@@ -133,9 +133,6 @@ pub struct LlamaStatus {
     pub runtime: Option<LlamaRuntimeInfo>,
     /// Where the install stands against the pinned release.
     pub pin: PinState,
-    /// The chat model running on llama-server, when one is: an update is not
-    /// offered under it. Filled by the daemon, which knows what runs.
-    pub serving: Option<String>,
 }
 
 /// Inspect the installed llama.cpp, if any.
@@ -179,7 +176,6 @@ fn status_at(
             checkout,
             selector,
         ),
-        serving: None,
     };
 
     if !status.installed {

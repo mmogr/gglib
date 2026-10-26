@@ -57,29 +57,17 @@ pub(crate) async fn set_selected_model(
 
 /// Sync menu state after the frontend has changed something.
 ///
-/// Every caller is a fire-and-forget `syncMenuStateSilent()` after an action
-/// that changed something the menu shows: a server stopped, a model removed,
-/// llama.cpp installed. Two kinds of state are involved and they need
-/// different treatment, which is why this does both things.
-///
-/// **Ask for a poll**, because `sync_all_state` paints from
-/// `AppState::snapshot` and only `daemon::watch` writes it. Painting without
-/// asking redraws from what was true *before* the action, and it stays wrong
-/// until the next tick. This is the frontend's equivalent of the Rust-side
-/// callers' `Refresh::now`.
-///
-/// **Then paint anyway**, because not everything the menu reads is in that
-/// snapshot — `llama_installed` is a filesystem check, and an install changes
-/// it without changing anything the daemon would report. The watcher would see
-/// no difference and skip the repaint.
-///
-/// So: the immediate paint catches the local state, and the poll it just asked
-/// for catches the daemon's, a moment later.
+/// Every caller is a fire-and-forget `syncMenuStateSilent()` after a server
+/// was stopped or a model removed. The menu paints from
+/// `AppState::snapshot`, which only `daemon::watch` writes, so this asks for
+/// a poll rather than painting: a paint now would redraw what was true
+/// *before* the action, and it would stay wrong until the next tick. The
+/// poll repaints once it sees the change. This is the frontend's equivalent
+/// of the Rust-side callers' `Refresh::now`. The one thing the menu reads
+/// that the daemon does not report, the selected model, is painted by
+/// `set_selected_model` as it is written.
 #[tauri::command]
-pub(crate) async fn sync_menu_state(
-    app: AppHandle,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
+pub(crate) async fn sync_menu_state(state: tauri::State<'_, AppState>) -> Result<(), String> {
     state.refresh.now();
-    state_sync::sync_all_state(&app, &state).await
+    Ok(())
 }

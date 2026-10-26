@@ -35,7 +35,7 @@ export const ImageServeDetails: FC<ImageServeDetailsProps> = ({
   onOpenSystemSettings,
 }) => {
   const linked = (components ?? []).filter((c) => c.path);
-  const installed = runtime.status?.install.installed;
+  const installed = runtime.status?.installed;
 
   return (
     <div className="flex flex-col gap-md mb-lg">
@@ -79,13 +79,13 @@ export const ImageServeDetails: FC<ImageServeDetailsProps> = ({
             )
           }
         >
-          The image runtime is not installed. Install it in Settings → System → Image runtime, or
+          stable-diffusion.cpp is not installed. Install it in Settings → System, or
           run <code className="font-mono">{runtime.status.installCommand}</code>.
         </Banner>
       )}
       {installed && (
         <p className="m-0 text-sm text-text-secondary">
-          Loads on stable-diffusion.cpp {runtime.status?.install.release ?? ''}, beside the chat
+          Loads on stable-diffusion.cpp {runtime.status?.install?.release ?? ''}, beside the chat
           model when memory allows. Drawing with it is not available yet.
         </p>
       )}

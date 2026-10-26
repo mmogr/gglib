@@ -42,11 +42,11 @@ pub struct PinState {
     /// the download where one fits. A source build recorded by commit, from
     /// before builds were of a release, takes the default.
     pub rebuilds: bool,
-    /// Whether the update an older install calls for is a download, which
-    /// the daemon and the app can run. When it is a source build (one of a
-    /// release is there, a GPU build would otherwise become a CPU one, or
-    /// this machine has no download), it is the command line's to run.
-    /// False whenever there is no update to make.
+    /// Whether the install a missing engine calls for, or the update an older
+    /// one does, is a download, which the daemon and the app can run. When it
+    /// is a source build (one of a release was there, a GPU build would
+    /// otherwise become a CPU one, or this machine has no download), it is
+    /// the command line's to run. False whenever there is nothing to install.
     pub update_downloads: bool,
 }
 
@@ -75,7 +75,7 @@ pub enum InstallPlan {
 /// otherwise turn into a slow one on an update nobody chose.
 #[must_use]
 pub fn plan_install(kind: RuntimeKind, state: &PinState, force: bool, build: bool) -> InstallPlan {
-    plan_with(state, force, build, || prebuilt(kind))
+    plan_with(state, force, build, || download(kind))
 }
 
 /// [`plan_install`] with this machine's download asked of `prebuilt`, which
@@ -105,7 +105,7 @@ pub(crate) fn plan_with(
 
 /// This machine's download of `kind`, as its description and the warning it
 /// comes with, or why there is none.
-fn prebuilt(kind: RuntimeKind) -> Result<(String, Option<String>), String> {
+pub fn download(kind: RuntimeKind) -> Result<(String, Option<String>), String> {
     match kind {
         RuntimeKind::Llama => match crate::llama::check_prebuilt_availability() {
             crate::llama::PrebuiltAvailability::Available {
@@ -139,12 +139,20 @@ pub fn pin_state(kind: RuntimeKind) -> anyhow::Result<PinState> {
     Ok(state)
 }
 
-/// Whether the update `state` calls for is a download on this machine:
-/// [`PinState::update_downloads`].
+/// Whether the install or update `state` calls for is a download on this
+/// machine: [`PinState::update_downloads`].
 pub(crate) fn update_downloads(kind: RuntimeKind, state: &PinState) -> bool {
-    state.standing == PinStanding::Older
+    calls_for_download(state, || download(kind))
+}
+
+/// [`update_downloads`] with this machine's download asked of `prebuilt`.
+pub(crate) fn calls_for_download(
+    state: &PinState,
+    prebuilt: impl FnOnce() -> Result<(String, Option<String>), String>,
+) -> bool {
+    matches!(state.standing, PinStanding::Missing | PinStanding::Older)
         && matches!(
-            plan_install(kind, state, false, false),
+            plan_with(state, false, false, prebuilt),
             InstallPlan::Download { .. }
         )
 }
@@ -205,6 +213,7 @@ pub fn standing_line(state: &PinState) -> Option<String> {
 
 /// What an uninstall removed.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct UninstallOutcome {
     /// False when there was nothing to remove; `removedPaths` is then empty.

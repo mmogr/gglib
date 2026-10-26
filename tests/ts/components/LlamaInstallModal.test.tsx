@@ -89,7 +89,7 @@ describe.each([
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(`${daemon}/api/config/system/install-llama`);
+    expect(url).toBe(`${daemon}/api/config/system/engines/llama/install`);
     expect(init.method).toBe('POST');
     // The desktop app asks its shell where the daemon is, and nothing else.
     expect(bridge.mock.calls).toEqual(daemon ? [['get_embedded_api_info']] : []);
@@ -214,7 +214,7 @@ describe.each([
     await userEvent.click(screen.getByRole('button', { name: 'Update to b11429' }));
 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(`${daemon}/api/config/system/install-llama`);
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe(`${daemon}/api/config/system/engines/llama/install`);
   });
 
   it('offers no install where no prebuilt binary exists, only the way to build one', () => {
@@ -235,7 +235,7 @@ describe.each([
 
       await userEvent.click(screen.getByRole('button', { name: 'Install now' }));
       await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-      expect((fetchMock.mock.calls[0] as [string])[0]).toBe(`${daemon}/api/config/system/install-llama`);
+      expect((fetchMock.mock.calls[0] as [string])[0]).toBe(`${daemon}/api/config/system/engines/llama/install`);
 
       stream.send({ type: 'phase_started', phase: 'extract' });
       expect(await screen.findByText(INSTALL_PHASE_LABELS.extract)).toBeInTheDocument();

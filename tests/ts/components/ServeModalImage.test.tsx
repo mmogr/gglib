@@ -21,6 +21,7 @@ vi.mock('../../../src/services/platform', async (original) => ({
 import { ServeModal } from '../../../src/components/ModelInspectorPanel/components/ServeModal';
 import { resetClientCache, setApiSession } from '../../../src/services/transport/api/client';
 import type { ComponentLinkDto, GgufModel } from '../../../src/types';
+import type { EngineStatus } from '../../../src/types/setup';
 import { guiModel } from '../fixtures/model';
 
 const flux = (overrides: Partial<GgufModel> = {}) =>
@@ -35,34 +36,32 @@ const LINKED: ComponentLinkDto[] = [
 const json = (body: unknown) =>
   new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 
-/** What `GET /api/config/system/sd-status` answers. */
-function sdStatus(installed: boolean) {
+/** What `GET /api/config/system/engines/stable_diffusion` answers. */
+function sdStatus(installed: boolean): EngineStatus {
   return {
-    install: {
-      installed,
-      binaryPath: '/data/.sd/bin/sd-server',
-      configPath: '/data/.sd/sd-config.json',
-      pinnedRelease: 'master-948-228c707',
-      installType: null,
-      release: installed ? 'master-948-228c707' : null,
-      platform: null,
-      installedAt: null,
-      recordError: null,
-      versionLine: null,
-      commit: null,
-      pin: {
-        standing: installed ? 'unknown' : 'missing',
-        installedRelease: null,
-        targetRelease: 'master-948-228c707',
-        built: null,
-        rebuilds: false,updateDownloads: false,
-      },
+    kind: 'stable_diffusion',
+    installed,
+    broken: null,
+    binaryPath: '/data/.sd/bin/sd-server',
+    install: installed
+      ? { built: false, release: 'master-948-228c707', platform: 'macOS universal (Metal)', date: '2026-10-01T00:00:00Z' }
+      : null,
+    recordError: null,
+    reports: null,
+    pin: {
+      standing: installed ? 'atPin' : 'missing',
+      installedRelease: installed ? 'master-948-228c707' : null,
+      targetRelease: 'master-948-228c707',
+      built: installed ? false : null,
+      rebuilds: false,
+      updateDownloads: false,
     },
-    prebuilt: 'macOS universal (Metal)',
-    prebuiltUnavailable: null,
+    download: 'macOS universal (Metal)',
+    downloadUnavailable: null,
     warning: null,
-    runningModel: null,
+    serving: null,
     installCommand: 'gglib config sd install',
+    updateCommand: 'gglib config sd update',
   };
 }
 
@@ -106,7 +105,7 @@ describe('the serve modal for an image model', () => {
   beforeEach(() => {
     installed = true;
     fetchMock = vi.fn(async (url: string) =>
-      url.endsWith('/api/config/system/sd-status')
+      url.endsWith('/api/config/system/engines/stable_diffusion')
         ? json(sdStatus(installed))
         : new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } }),
     );
@@ -148,7 +147,7 @@ describe('the serve modal for an image model', () => {
     const onOpenSystemSettings = vi.fn();
     renderModal(flux(), onOpenSystemSettings);
 
-    expect(await screen.findByText(/The image runtime is not installed/)).toBeInTheDocument();
+    expect(await screen.findByText(/stable-diffusion\.cpp is not installed/)).toBeInTheDocument();
     expect(screen.getByText('gglib config sd install')).toBeInTheDocument();
     expect(startButton()).toBeDisabled();
     await userEvent.click(screen.getByRole('button', { name: 'Open Settings' }));
@@ -166,6 +165,6 @@ describe('the serve modal for an image model', () => {
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
     const urls = (fetchMock.mock.calls as [string][]).map(([url]) => url);
-    expect(urls.some((url) => url.endsWith('/sd-status')), urls.join(', ')).toBe(false);
+    expect(urls.some((url) => url.endsWith('/engines/stable_diffusion')), urls.join(', ')).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-//! What the status says of an install, and how it is spelled on the wire.
+//! What the status says of an install, and how it is spelled in JSON.
 
 use super::*;
 use crate::engine::PinStanding;
@@ -19,8 +19,7 @@ fn not_installed() -> PinState {
     }
 }
 
-/// The GUI's `LlamaStatus` in `types/setup.ts` is hand-mirrored, so the
-/// casing is a contract rather than an implementation detail.
+/// The status serialises in camelCase, as `EngineStatus` does.
 #[test]
 fn status_serialises_as_camel_case() {
     let status = LlamaStatus {
@@ -34,7 +33,6 @@ fn status_serialises_as_camel_case() {
         prebuilt: None,
         runtime: None,
         pin: not_installed(),
-        serving: None,
     };
 
     let json = serde_json::to_value(&status).unwrap();

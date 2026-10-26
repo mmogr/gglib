@@ -3,8 +3,7 @@
 Native application menu for `GGLib` GUI.
 
 Provides a cross-platform menu bar with stateful items that reflect
-the current application state (llama.cpp installation, proxy status,
-selected model, etc.).
+the current application state (proxy status, selected model, etc.).
 
 # Module Structure
 

@@ -83,8 +83,8 @@ Concrete examples of established patterns:
 | Domain | Event type | CLI consumer | Axum consumer | Tauri consumer |
 |---|---|---|---|---|
 | Agent loop | `AgentEvent` | spinner + streaming print | SSE at `POST /api/agent/chat` | same SSE stream — no Tauri event |
-| llama install | `LlamaProgressEvent` | spinner + progress bar via `render_install_events` | SSE at `POST /api/config/system/install-llama` | same SSE stream — no Tauri event |
-| image runtime install | `LlamaProgressEvent` (the same events, the download phase labelled by `InstallPhase::label_for`) | spinner + progress bar via `render_install_events` (`gglib config sd install`) | SSE at `POST /api/config/system/install-sd`, the same event names | same SSE stream — no Tauri event |
+| llama install | `LlamaProgressEvent` | spinner + progress bar via `render_install_events` | SSE at `POST /api/config/system/engines/llama/install` | same SSE stream — no Tauri event |
+| image runtime install | `LlamaProgressEvent` (the same events, the download phase labelled by `InstallPhase::label_for`) | spinner + progress bar via `render_install_events` (`gglib config sd install`) | SSE at `POST /api/config/system/engines/stable_diffusion/install`, the same event names | same SSE stream — no Tauri event |
 | llama build | `BuildEvent` | spinner + progress bar via `render_build_events`, for an install and an update alike, and for stable-diffusion.cpp's build | none: a source build is the command line's, and the daemon installs downloads | none |
 
 Every row is a claim about code that exists. The `llama install` row was not
@@ -362,7 +362,7 @@ If part of a streaming pipeline, a table of consumers.
 <!-- module-docs:end -->
 ```
 
-**Example** (`crates/gglib-runtime/src/llama/download/README.md`):
+**Example**, abridged from `crates/gglib-runtime/src/llama/download/README.md`:
 
 ```markdown
 # download
@@ -374,10 +374,10 @@ Pre-built llama.cpp binary download support.
 `download_prebuilt_binaries` emits [`LlamaProgressEvent`] on a
 `tokio::sync::mpsc::Sender` and is consumed by:
 
-| Consumer | Output                                                 |
-|----------|--------------------------------------------------------|
-| CLI      | `indicatif` progress bar                               |
-| Axum     | SSE stream at `POST /api/config/system/install-llama`  |
+| Consumer | Output                                                        |
+|----------|---------------------------------------------------------------|
+| CLI      | `indicatif` progress bar                                      |
+| Axum     | SSE stream at `POST /api/config/system/engines/llama/install` |
 
 The desktop app reads the Axum stream; it has no consumer of its own.
 

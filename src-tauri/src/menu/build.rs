@@ -232,22 +232,6 @@ pub(crate) fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), ta
     // =========================================================================
     // Help Menu
     // =========================================================================
-    let install_llama_item = MenuItem::with_id(
-        app,
-        ids::INSTALL_LLAMA,
-        "Install llama.cpp...",
-        true, // Will be disabled if already installed
-        None::<&str>,
-    )?;
-
-    let check_status_item = MenuItem::with_id(
-        app,
-        ids::CHECK_LLAMA_STATUS,
-        "Check llama.cpp Status",
-        true,
-        None::<&str>,
-    )?;
-
     let open_docs_item = MenuItem::with_id(
         app,
         ids::OPEN_DOCS,
@@ -256,17 +240,7 @@ pub(crate) fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), ta
         None::<&str>,
     )?;
 
-    let help_submenu = Submenu::with_items(
-        app,
-        "Help",
-        true,
-        &[
-            &install_llama_item,
-            &check_status_item,
-            &PredefinedMenuItem::separator(app)?,
-            &open_docs_item,
-        ],
-    )?;
+    let help_submenu = Submenu::with_items(app, "Help", true, &[&open_docs_item])?;
 
     // =========================================================================
     // Build Complete Menu
@@ -293,7 +267,6 @@ pub(crate) fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), ta
         start_proxy: start_proxy_item,
         stop_proxy: stop_proxy_item,
         copy_proxy_url: copy_proxy_url_item,
-        install_llama: install_llama_item,
     };
 
     Ok((menu, app_menu))

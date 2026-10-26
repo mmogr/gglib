@@ -8,6 +8,7 @@ import type { DiagnosticsDto } from './generated/DiagnosticsDto';
 import type { ModelsDirectoryInfo } from './generated/ModelsDirectoryInfo';
 import type { PinStanding } from './generated/PinStanding';
 import type { PinState } from './generated/PinState';
+import type { RuntimeKind } from './generated/RuntimeKind';
 import type { RecommendationDto } from './generated/RecommendationDto';
 import type { ResolvedPathsDto } from './generated/ResolvedPathsDto';
 import type { SystemMemoryInfo } from './generated/SystemMemoryInfo';
@@ -96,66 +97,22 @@ export function installPhaseLabel(phase: InstallPhase, product = 'llama.cpp'): s
   return phase === 'download' ? `Downloading ${product} binaries…` : INSTALL_PHASE_LABELS[phase];
 }
 
-/**
- * The image runtime (stable-diffusion.cpp's `sd-server`) as Settings shows
- * it: what is installed, the pre-built build an install would download and
- * what to say about it, and the image model running on it.
- */
-export type { ImageRuntimeStatus } from './generated/ImageRuntimeStatus';
-export type { SdStatus } from './generated/SdStatus';
-export type { PinStanding, PinState };
-
-
-/** What gglib recorded when it built the binary. Absent for a prebuilt install. */
-export interface LlamaBuildInfo {
-  version: string;
-  commitSha: string;
-  /** RFC 3339. */
-  buildDate: string;
-  acceleration: string;
-  cmakeFlags: string[];
-}
-
-/** Native capabilities the binary reports for itself when probed. */
-export interface LlamaRuntimeCapabilities {
-  /** llama.cpp build number, absent when the binary could not be identified. */
-  build?: number | null;
-  commit?: string | null;
-  versionLine: string;
-  /** Capability flags, pre-rendered for display — do not parse. */
-  flags: string;
-}
+/** What each engine is called: the name an install's labels and its messages use. */
+export const ENGINE_PRODUCT: Record<RuntimeKind, string> = {
+  llama: 'llama.cpp',
+  stable_diffusion: 'stable-diffusion.cpp',
+};
 
 /**
- * The installed llama.cpp, as reported by `gglib config llama status`.
- *
- * `build` and `runtime` are two different notions of version and can legitimately
- * disagree: the first is what gglib recorded at build time, the second is what
- * the binary says about itself. A hand-installed or prebuilt binary has no
- * `build` at all.
+ * Either engine as Settings shows it: what is installed and how, where it
+ * stands against its pin, the download an install would take and what to
+ * say about it, and the model running on it.
  */
-export interface LlamaStatus {
-  installed: boolean;
-  binaryPath: string;
-  configPath: string;
-  healthy: boolean;
-  healthError?: string | null;
-  build?: LlamaBuildInfo | null;
-  buildError?: string | null;
-  /** The download's record, for an install that was not built on this machine. */
-  prebuilt?: { version: string; platform: string; installedAt: string } | null;
-  runtime?: LlamaRuntimeCapabilities | null;
-  /** Where the install stands against the pinned release. */
-  pin: PinState;
-  /** The chat model running on llama-server, when one is: no update is offered under it. */
-  serving?: string | null;
-}
-
-/** What an uninstall removed. */
-export interface LlamaUninstallOutcome {
-  wasInstalled: boolean;
-  removedPaths: string[];
-}
+export type { EngineStatus } from './generated/EngineStatus';
+export type { EngineInstall } from './generated/EngineInstall';
+/** What an engine's removal took. */
+export type { UninstallOutcome } from './generated/UninstallOutcome';
+export type { PinStanding, PinState, RuntimeKind };
 
 /*
  * The diagnostics bundle behind the System tab, and the recommendation `gglib

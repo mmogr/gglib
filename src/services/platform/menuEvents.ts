@@ -19,8 +19,6 @@ export const MENU_EVENTS = {
   STOP_SERVER: 'menu:stop-server',
   REMOVE_MODEL: 'menu:remove-model',
   SHOW_CHAT: 'menu:show-chat',
-  INSTALL_LLAMA: 'menu:install-llama',
-  CHECK_LLAMA_STATUS: 'menu:check-llama-status',
   COPY_TO_CLIPBOARD: 'menu:copy-to-clipboard',
   PROXY_STOPPED: 'menu:proxy-stopped',
   START_PROXY: 'menu:start-proxy',
@@ -36,8 +34,6 @@ export interface MenuEventHandlers {
   [MENU_EVENTS.STOP_SERVER]?: () => void;
   [MENU_EVENTS.REMOVE_MODEL]?: () => void;
   [MENU_EVENTS.SHOW_CHAT]?: () => void;
-  [MENU_EVENTS.INSTALL_LLAMA]?: () => void;
-  [MENU_EVENTS.CHECK_LLAMA_STATUS]?: () => void;
   [MENU_EVENTS.COPY_TO_CLIPBOARD]?: (payload: string) => void;
   [MENU_EVENTS.PROXY_STOPPED]?: () => void;
   [MENU_EVENTS.START_PROXY]?: () => void;

@@ -980,14 +980,14 @@ async fn model_upgrade_routes_are_wired_and_404_on_unknown_id() {
 /// The System settings tab loads this on mount, so a missing registration
 /// would surface as an empty panel rather than a loud failure.
 #[tokio::test]
-async fn llama_status_route_returns_json() {
+async fn an_engine_status_route_returns_json() {
     let app = test_app(CorsConfig::AllowAll).await;
 
     let response = app
         .oneshot(
             authed()
                 .header("Host", "127.0.0.1:9887")
-                .uri("/api/config/system/llama-status")
+                .uri("/api/config/system/engines/llama")
                 .body(Body::empty())
                 .unwrap(),
         )

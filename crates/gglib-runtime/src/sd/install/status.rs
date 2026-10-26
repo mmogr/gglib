@@ -18,7 +18,6 @@ use gglib_core::domain::RuntimeKind;
 /// what the binary says when asked. They disagree for a binary put there by
 /// hand, which is what someone debugging a launch needs to see.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct SdStatus {
     /// Whether the binary is there.

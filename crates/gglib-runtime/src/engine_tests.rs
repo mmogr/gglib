@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use gglib_core::domain::RuntimeKind;
 
 use super::{
-    EnginePaths, InstallPlan, PinStanding, PinState, pin_state_at, plan_with, standing_line,
-    uninstall_from,
+    EnginePaths, InstallPlan, PinStanding, PinState, calls_for_download, pin_state_at, plan_with,
+    standing_line, uninstall_from,
 };
 use crate::binary_install::{Recorded, ReleaseSelector};
 
@@ -270,6 +270,33 @@ fn a_source_build_is_never_traded_for_a_cpu_only_download_unasked() {
             warning: Some("slow".to_owned()),
         }
     );
+}
+
+/// The flag answers for a missing engine's install and an older one's
+/// update, and the plan decides whether that is a download: not where there
+/// is none, nor for a source build left behind with no binary.
+#[test]
+fn a_missing_or_older_engine_calls_for_a_download_where_the_plan_takes_one() {
+    let missing = PinState {
+        built: None,
+        ..state(PinStanding::Missing, None, Some("b11429"))
+    };
+    assert!(calls_for_download(&missing, || Ok(macos())));
+    assert!(!calls_for_download(&missing, || Err("none".to_owned())));
+    let left_behind = PinState {
+        standing: PinStanding::Missing,
+        ..built_by_commit()
+    };
+    assert!(!calls_for_download(&left_behind, || Ok(cpu_only())));
+    let older = state(PinStanding::Older, Some("b10327"), Some("b11429"));
+    assert!(calls_for_download(&older, || Ok(macos())));
+    for standing in [PinStanding::AtPin, PinStanding::Newer, PinStanding::Unknown] {
+        let installed = state(standing, Some("b11429"), Some("b11429"));
+        assert!(
+            !calls_for_download(&installed, || Ok(macos())),
+            "{standing:?}"
+        );
+    }
 }
 
 /// An engine's folder as an install leaves it: the binary, the record, a

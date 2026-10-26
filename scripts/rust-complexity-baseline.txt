@@ -24,7 +24,7 @@ crates/gglib-app-services/src/servers_events_tests.rs 415
 crates/gglib-app-services/src/service_graph.rs 314
 crates/gglib-app-services/src/settings_tests.rs 327
 crates/gglib-app-services/src/setup.rs 363
-crates/gglib-app-services/src/setup_image_runtime_tests.rs 301
+crates/gglib-app-services/src/setup_engines_tests.rs 529
 crates/gglib-app-services/src/test_support.rs 394
 crates/gglib-app-services/src/types.rs 556
 crates/gglib-app-services/src/types_model_dto_tests.rs 311
@@ -224,8 +224,8 @@ crates/gglib-runtime/src/binary_install/checkout.rs 398
 crates/gglib-runtime/src/binary_install/checkout_tests.rs 457
 crates/gglib-runtime/src/binary_install/install_tests.rs 438
 crates/gglib-runtime/src/command.rs 696
-crates/gglib-runtime/src/engine.rs 330
-crates/gglib-runtime/src/engine_tests.rs 415
+crates/gglib-runtime/src/engine.rs 339
+crates/gglib-runtime/src/engine_tests.rs 442
 crates/gglib-runtime/src/launch_narration.rs 803
 crates/gglib-runtime/src/llama/args/cache_ram.rs 328
 crates/gglib-runtime/src/llama/build/mod.rs 541

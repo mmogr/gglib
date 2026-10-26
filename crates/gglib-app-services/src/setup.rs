@@ -1,8 +1,8 @@
 //! Setup wizard operations for GUI backend.
 //!
-//! Handles first-run system status checks, llama.cpp installation, the
-//! image runtime's (`setup_image_runtime.rs`), and provisioning of the
-//! optional `hf_xet` download accelerator.
+//! Handles first-run system status checks, both engines' status and install
+//! (`setup_engines.rs`) and their removal, and provisioning of the optional
+//! `hf_xet` download accelerator.
 
 use std::sync::Arc;
 
@@ -175,22 +175,6 @@ impl SetupOps {
         })
     }
 
-    /// Install llama.cpp's pinned pre-built binaries, streaming progress on
-    /// `tx`, unless a chat model runs on llama-server.
-    ///
-    /// Returns an error if pre-built binaries are not available for this platform.
-    pub async fn install_llama(
-        &self,
-        runtime: &dyn ModelRuntimePort,
-        tx: tokio::sync::mpsc::Sender<gglib_runtime::llama::LlamaProgressEvent>,
-    ) -> Result<(), GuiError> {
-        refuse_while_serving(runtime, RuntimeKind::Llama, "installing").await?;
-        refuse_a_source_build(RuntimeKind::Llama)?;
-        gglib_runtime::llama::download_prebuilt_binaries(tx)
-            .await
-            .map_err(|e| GuiError::Internal(format!("Failed to install llama.cpp: {e}")))
-    }
-
     /// Remove what `kind`'s install put in its folder, unless a model runs on
     /// its server.
     pub async fn uninstall(
@@ -352,11 +336,8 @@ pub struct Diagnostics {
 
 #[path = "setup_engines.rs"]
 mod engines;
-pub(crate) use engines::{refuse_a_source_build, refuse_while_serving, running_model};
-
-#[path = "setup_image_runtime.rs"]
-mod image_runtime;
-pub use image_runtime::ImageRuntimeStatus;
+pub use engines::{EngineInstall, EngineStatus};
+pub(crate) use engines::{refuse_while_serving, running_model};
 
 #[cfg(test)]
 #[path = "setup_tests.rs"]

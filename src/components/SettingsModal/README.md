@@ -12,15 +12,14 @@ Application settings modal: models directory path, base port configuration, per-
 | `InferenceProfiles.tsx` | Profiles tab: lists named sampling profiles with add/edit/delete, and asks the daemon to install the starter profiles. Self-contained — loads and saves settings itself rather than threading state through `SettingsModal`, matching `McpServersPanel` |
 | `useDesktopSettings.ts` | State for the three always-on proxy toggles, kept out of `SettingsModal` so the group owns its own state and update payload |
 | `InferenceProfileEditor.tsx` | Form for one profile. A blank parameter field is omitted from the payload rather than sent as `0`, so it falls through to the model's own default |
-| `SystemSettings.tsx` | System tab — the GUI face of `gglib config llama`, with the image runtime section below it |
-| `ImageRuntimeSettings.tsx` | The image runtime section — the GUI face of `gglib config sd install\|status\|uninstall`: status, where it stands against its pinned release, the pre-built install with the wizard's `InstallProgress` (also as the update over an older one), the CPU build's warning, the command where no pre-built build fits, and a removal that waits for a running image model |
-| `pinStanding.ts` | Where an engine's install stands against its pinned release, in the words both engine sections use, and whether to offer the update or send a source build to the terminal |
-| `useImageRuntime.ts` | State for the image runtime section: its status, the install stream and the removal |
+| `SystemSettings.tsx` | System tab: one `EngineCard` per engine, then diagnostics, the build and the daemon |
+| `EngineCard.tsx` | One engine's card, the same for llama.cpp and stable-diffusion.cpp — the GUI face of `gglib config llama\|sd install\|status\|uninstall`: what is installed and how, where it stands against its pinned release, the download with the wizard's `InstallProgress` (also as the update over an older one), the CPU build's warning, the command where the install or update is a source build, and a removal that waits for a running model |
+| `useEngine.ts` | State for one engine's card: its status, the install (kept across remounts, one per engine) and the removal |
+| `pinStanding.ts` | Where an engine's install stands against its pinned release, in the words the engine card uses for both engines, and whether to offer the update or send a source build to the terminal |
 | `DiagnosticsPanel.tsx` | `gglib config check-deps`, `paths` and `fast-downloads status` as one panel in the System tab |
 | `LoopGuardTripsPanel.tsx` | `gglib proxy trips` under the loop guard's setting: per day and model, what the guard scanned and what it acted on |
 | `LabelledValue.tsx` | A label and its value, for the read-only rows those two panels are mostly made of |
 | `BuildInfo.tsx` | The daemon's own build — version and commit — read from `/api/version` |
-| `useSystemSettings.ts` | State for the System tab: what llama.cpp is installed, where it stands against its pinned release, and the update (an install of the pin, kept across remounts) and uninstall actions |
 | `useDiagnostics.ts` | State for the diagnostics half of the System tab |
 | `useLoopGuardTrips.ts` | State for the loop guard's log panel: one read when the Advanced section opens, and a reload |
 | `useNetworkSettings.ts` | State for the network-binding settings (bind host, LAN sharing) |
