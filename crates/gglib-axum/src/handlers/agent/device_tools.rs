@@ -11,10 +11,12 @@
 //! is live, and a lazy one is started then, in the run's own work and never
 //! in the `PUT` that made it. Which of them the run may use is its
 //! [`DeviceServers`]: all of them for a Mac-kept chat, and for a phone-kept
-//! one those its query names. Those ids are filtered against the servers
+//! one only those whose ids its query names. Those ids are filtered against the servers
 //! open to devices in `McpService::opened_tools`, and only there, before any
 //! server starts; [`offered`] trusts the list it is handed. The decisions
 //! are ADR 0024 and ADR 0025.
+
+use std::collections::BTreeSet;
 
 use gglib_core::DeviceServers;
 use gglib_core::domain::chat::ConversationSettings;
@@ -53,10 +55,11 @@ impl Asked {
     }
 
     /// A chat the phone keeps itself, which names no tool of its own, only
-    /// the open servers it may use (`servers`, from its query's `tools`).
-    pub(super) fn of_phone(draw: bool, servers: DeviceServers) -> Self {
+    /// the ids of the open servers it may use (`servers`, from its query's
+    /// `tools`): never every open server, which only a Mac-kept chat is.
+    pub(super) fn of_phone(draw: bool, servers: BTreeSet<i64>) -> Self {
         Self {
-            servers,
+            servers: DeviceServers::Only(servers),
             draw,
             ..Self::default()
         }

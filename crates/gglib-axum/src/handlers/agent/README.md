@@ -261,11 +261,13 @@ request and judged there. Beyond the floor are the tools of the MCP
 servers open to paired devices (`gglib mcp allow-remote <server>`, a flag
 on each), read only while the tunnel's gateway says a session is live,
 each by its qualified
-`{id}:{tool}`: every one for a phone's chat or a chat that names
-no tool, only those a chat's own list names exactly or by bare name
-otherwise, none when the chat turned its tools off (a phone's chat says so
-with `tools=none`), and never a tool the
-list names that no opened server has. A turn is planned with the floor
+`{id}:{tool}`: for a phone's chat, those of the servers its query names by
+id, never every one, and none for `tools=none`; for a Mac's chat, every one
+when it names no tool, only those its own list names exactly or by bare
+name otherwise, and none when it turned its tools off; and never a tool the
+list names that no opened server has. An id a phone names that is not open
+is dropped where the servers start, with one warning naming the ids, and
+starts nothing. A turn is planned with the floor
 alone; the rest is settled in the run's late step (`hub_turn::late_on`,
 through `device_tools::settle`), once the model is found or loaded, where
 an open server that is not running is started (`McpService::opened_tools`).
@@ -274,11 +276,13 @@ A `PUT` that is refused starts nothing. The decisions are
 and [ADR 0025](../../../../../docs/adr/0025-a-server-is-opened-to-paired-devices-by-a-flag-on-it.md).
 
 `chat_turn` is the starter's other door, the proxy's
-`PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`: a chat a paired
+`PUT /v1/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`: a chat a paired
 phone keeps itself, sent whole as an `OpenAI` request and run through the
-loop so that it can draw. `tools=none` in place of `tools=builtin` is such
-a chat with its tools off: offered no MCP tool and starting no server, the
-image tool alone with `draw`, and no tool at all without it. Its history is read by core's
+loop so that it can use the servers it names and draw, its query read as a
+`ChatQuery`. `tools=none` is such a chat with no server: offered no MCP
+tool and starting no server, the image tool alone with `draw`, and no tool
+at all without it. A `PUT` under the id of a run already started answers
+with that run, so the run keeps the servers it started with. Its history is read by core's
 `parse_openai_messages`, each inline image stored once as an attachment no
 chat links (swept at the first daemon start a day or more later), its model resolved and loaded as a turn's
 is, its tools those `device_tools` offers a phone's run, the image tool only with `draw` (drawn with the query's `image_model` when it names one), the request's

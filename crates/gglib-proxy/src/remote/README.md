@@ -75,8 +75,8 @@ as `{id, name}`, by name and then by id, a name two servers share listed
 under each, read from the MCP service while the tunnel's owner says a
 session is live (`[]` with none open, with no session, or with no tunnel
 owner), whether or not it can draw. It is the answer a device already reads
-before it sends a run, so a phone learns there whether its runs are offered
-tools
+before it sends a run, so a phone learns there which servers its runs may
+name, by id, in `tools`
 ([ADR 0024](../../../../docs/adr/0024-the-tunnel-opens-mcp-servers-by-name.md),
 [ADR 0025](../../../../docs/adr/0025-a-server-is-opened-to-paired-devices-by-a-flag-on-it.md)).
 The daemon's `GET /api/images/drawing` does not carry it.

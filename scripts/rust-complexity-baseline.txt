@@ -32,7 +32,7 @@ crates/gglib-axum/src/error.rs 326
 crates/gglib-axum/src/handlers/agent/compose.rs 375
 crates/gglib-axum/src/handlers/agent/compose_context_tests.rs 312
 crates/gglib-axum/src/handlers/agent/compose_draw_tests.rs 328
-crates/gglib-axum/src/handlers/agent/device_tools_wired_tests.rs 319
+crates/gglib-axum/src/handlers/agent/device_tools_wired_tests.rs 376
 crates/gglib-axum/src/handlers/agent/dto.rs 321
 crates/gglib-axum/src/handlers/agent/hub_turn.rs 402
 crates/gglib-axum/src/handlers/agent/hub_turn_plan_tests.rs 317
@@ -219,7 +219,7 @@ crates/gglib-proxy/tests/integration_mcp_drawing.rs 458
 crates/gglib-proxy/tests/integration_mcp_gateway.rs 469
 crates/gglib-proxy/tests/integration_proxy_pipeline.rs 644
 crates/gglib-proxy/tests/integration_slot_roundtrip.rs 584
-crates/gglib-proxy/tests/integration_turns.rs 437
+crates/gglib-proxy/tests/integration_turns.rs 463
 crates/gglib-runtime/src/binary_install/checkout.rs 398
 crates/gglib-runtime/src/binary_install/checkout_tests.rs 457
 crates/gglib-runtime/src/binary_install/install_tests.rs 438

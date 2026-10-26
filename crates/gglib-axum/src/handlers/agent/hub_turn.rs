@@ -21,13 +21,13 @@
 //!
 //! Nothing here logs or returns the message, a row or a title: only ids.
 
+use std::collections::BTreeSet;
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use axum::response::IntoResponse as _;
 
-use gglib_core::DeviceServers;
 use gglib_core::domain::agent::{AgentMessage, saved_history};
 use gglib_core::domain::branching;
 use gglib_core::domain::chat::ConversationSettings;
@@ -93,7 +93,7 @@ impl AgentRunStarter for HubTurns {
         body: serde_json::Value,
         draw: bool,
         image_model: Option<u32>,
-        servers: DeviceServers,
+        servers: BTreeSet<i64>,
     ) -> Result<Created, TurnRefused> {
         let Some(state) = self.0.upgrade() else {
             return Err(refusal(RunsError::ShuttingDown.into()));

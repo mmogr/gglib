@@ -2,7 +2,8 @@
 //! servers' tools narrowed by a Mac-kept chat's own list, and nothing while
 //! no tunnel session is live.
 
-use gglib_core::DeviceServers;
+use std::collections::BTreeSet;
+
 use gglib_core::domain::agent::AgentMessage;
 use gglib_core::domain::chat::ConversationSettings;
 use serde_json::json;
@@ -34,10 +35,7 @@ fn with_nothing_opened_only_draw_draws() {
         Vec::<String>::new()
     );
     assert_eq!(
-        offered(
-            &[],
-            &Asked::of_phone(false, DeviceServers::Only([3].into()))
-        ),
+        offered(&[], &Asked::of_phone(false, BTreeSet::from([3]))),
         Vec::<String>::new()
     );
 }
@@ -48,10 +46,7 @@ fn with_nothing_opened_only_draw_draws() {
 fn every_tool_of_an_opened_server_is_offered_qualified() {
     let opened = strings(&["3:search", "3:extract", "4:crawl"]);
     assert_eq!(
-        offered(
-            &opened,
-            &Asked::of_phone(false, DeviceServers::Only([3, 4].into()))
-        ),
+        offered(&opened, &Asked::of_phone(false, BTreeSet::from([3, 4]))),
         opened
     );
     let chat = ConversationSettings::default();
@@ -112,18 +107,15 @@ fn tools_off_offers_no_mcp_tool_but_draw_still_draws() {
 fn a_phone_chat_with_its_tools_off_gets_only_the_floor() {
     let opened = strings(&["3:search", "4:crawl"]);
     assert_eq!(
-        offered(&opened, &Asked::of_phone(true, DeviceServers::none())),
+        offered(&opened, &Asked::of_phone(true, BTreeSet::new())),
         [DRAW]
     );
     assert_eq!(
-        offered(&opened, &Asked::of_phone(false, DeviceServers::none())),
+        offered(&opened, &Asked::of_phone(false, BTreeSet::new())),
         Vec::<String>::new()
     );
     assert_eq!(
-        offered(
-            &opened,
-            &Asked::of_phone(true, DeviceServers::Only([3, 4].into()))
-        ),
+        offered(&opened, &Asked::of_phone(true, BTreeSet::from([3, 4]))),
         [DRAW, "3:search", "4:crawl"]
     );
 }
@@ -167,11 +159,7 @@ async fn resolve_offers_the_floor_while_no_session_is_live() {
 
     let echo = format!("{}:echo", server.id);
     assert_eq!(
-        resolve(
-            &state,
-            &Asked::of_phone(false, DeviceServers::Only([server.id].into()))
-        )
-        .await,
+        resolve(&state, &Asked::of_phone(false, BTreeSet::from([server.id]))).await,
         Vec::<String>::new()
     );
     let chat = named(&[echo.as_str(), "echo"]);

@@ -10,6 +10,7 @@
 //! run is offered is `settle` of the run's own chat and `Asked`, read as the
 //! late step reads it.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -20,7 +21,7 @@ use gglib_core::domain::{Machine, ModelRef};
 use gglib_core::ports::{
     Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, RunScope, RunningTarget,
 };
-use gglib_core::{DeviceServers, McpServerStatus, NewMcpServer};
+use gglib_core::{McpServerStatus, NewMcpServer};
 use serde_json::json;
 use tokio::sync::Notify;
 
@@ -106,7 +107,21 @@ async fn opened() -> Opened {
 
 impl Opened {
     async fn running(&self) -> bool {
-        self.state.mcp.get_server_status(self.server).await == McpServerStatus::Running
+        self.is_running(self.server).await
+    }
+
+    /// Another stand-in server under `name`, open to paired devices and not
+    /// running: its id.
+    async fn open_another(&self, name: &str) -> i64 {
+        let args = vec!["-c".to_owned(), STAND_IN_SERVER.to_owned()];
+        let server = NewMcpServer::new_stdio(name, "sh", args, None);
+        let id = self.state.mcp.add_server(server).await.unwrap().id;
+        self.state.mcp.set_allow_remote(id, true).await.unwrap();
+        id
+    }
+
+    async fn is_running(&self, id: i64) -> bool {
+        self.state.mcp.get_server_status(id).await == McpServerStatus::Running
     }
 
     /// The stand-in's one tool, as the agent loop names it.
@@ -253,28 +268,26 @@ async fn a_mac_chats_list_narrows_the_opened_tools_and_never_adds_one() {
     o.state.mcp.shutdown().await;
 }
 
-/// A chat the phone keeps, run with builtins and naming the opened server,
-/// starts it in its late step and not in its `PUT`, and is offered every
-/// tool of it.
+/// A chat the phone keeps, run with builtins and naming one of two opened
+/// servers, starts that one in its late step and not in its `PUT`, leaves
+/// the other stopped, and is offered every tool of the one it named.
 #[tokio::test]
 async fn a_phone_kept_chat_run_starts_the_opened_server_in_its_late_step() {
     let o = opened().await;
-    let body = json!({
-        "model": "catalogue-name",
-        "messages": [{ "role": "user", "content": "what is new?" }],
-    });
+    let other = o.open_another("fs").await;
 
-    let named = DeviceServers::Only([o.server].into());
+    let named = BTreeSet::from([o.server]);
     let query = ChatQuery {
         servers: named.clone(),
         ..false.into()
     };
-    let created = chat_turn::start(&o.state, "phone", "p1", body, query).await;
+    let created = chat_turn::start(&o.state, "phone", "p1", question(), query).await;
     assert!(created.unwrap().created);
     assert!(!o.running().await, "the PUT started nothing");
 
     o.loaded_and_ended("phone", "p1").await;
     assert!(o.running().await, "the late step started it");
+    assert!(!o.is_running(other).await, "the one it did not name");
     let phone = Asked::of_phone(false, named);
     assert_eq!(resolve(&o.state, &phone).await, [o.echo()]);
     o.state.mcp.shutdown().await;
@@ -295,25 +308,69 @@ async fn a_phone_kept_chat_with_its_tools_off_starts_no_server_and_gets_only_the
         "messages": [{ "role": "user", "content": "what is new?" }],
     });
 
-    let created = starter.start_chat(
-        "phone",
-        "p1",
-        body.clone(),
-        false,
-        None,
-        DeviceServers::none(),
-    );
+    let created = starter.start_chat("phone", "p1", body.clone(), false, None, BTreeSet::new());
     assert!(created.await.unwrap().created);
     o.loaded_and_ended("phone", "p1").await;
     assert!(!o.running().await, "a chat with its tools off starts none");
-    let phone = Asked::of_phone(false, DeviceServers::none());
+    let phone = Asked::of_phone(false, BTreeSet::new());
     assert_eq!(resolve(&o.state, &phone).await, Vec::<String>::new());
 
-    let created = starter.start_chat("phone", "p2", body, true, None, DeviceServers::none());
+    let created = starter.start_chat("phone", "p2", body, true, None, BTreeSet::new());
     assert!(created.await.unwrap().created);
     o.loaded_and_ended("phone", "p2").await;
     assert!(!o.running().await, "nor with Draw");
-    let phone = Asked::of_phone(true, DeviceServers::none());
+    let phone = Asked::of_phone(true, BTreeSet::new());
     assert_eq!(resolve(&o.state, &phone).await, [DRAW]);
+    o.state.mcp.shutdown().await;
+}
+
+fn question() -> serde_json::Value {
+    json!({
+        "model": "catalogue-name",
+        "messages": [{ "role": "user", "content": "what is new?" }],
+    })
+}
+
+/// A chat the phone keeps that names only a server closed since it asked
+/// starts none, and with Draw is offered the image tool alone.
+#[tokio::test]
+async fn a_phone_kept_chat_naming_a_closed_server_starts_none_and_gets_only_the_floor() {
+    let o = opened().await;
+    let closed = o.open_another("fs").await;
+    o.state.mcp.set_allow_remote(closed, false).await.unwrap();
+    let only = BTreeSet::from([closed]);
+
+    let query = ChatQuery {
+        servers: only.clone(),
+        ..true.into()
+    };
+    let created = chat_turn::start(&o.state, "phone", "p1", question(), query).await;
+    assert!(created.unwrap().created);
+    o.loaded_and_ended("phone", "p1").await;
+
+    assert!(!o.is_running(closed).await, "closed, never started");
+    assert!(!o.running().await, "open, but not named");
+    let phone = Asked::of_phone(true, only);
+    assert_eq!(resolve(&o.state, &phone).await, [DRAW]);
+    o.state.mcp.shutdown().await;
+}
+
+/// A `PUT` under the id of a phone-kept chat run already started answers
+/// with that run, whatever servers it names now, and starts none of them.
+#[tokio::test]
+async fn a_re_put_under_a_started_id_with_other_servers_starts_nothing_new() {
+    let o = opened().await;
+    let created = chat_turn::start(&o.state, "phone", "p1", question(), false.into()).await;
+    assert!(created.unwrap().created);
+    o.loaded_and_ended("phone", "p1").await;
+
+    let query = ChatQuery {
+        servers: BTreeSet::from([o.server]),
+        ..false.into()
+    };
+    let again = chat_turn::start(&o.state, "phone", "p1", question(), query).await;
+    assert!(!again.unwrap().created, "the run it already has");
+    settled(&o.state).await;
+    assert!(!o.running().await, "nothing new started");
     o.state.mcp.shutdown().await;
 }

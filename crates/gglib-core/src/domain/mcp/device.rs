@@ -15,7 +15,7 @@ pub enum DeviceServers {
     /// keeps, whose own settings narrow the tools.
     All,
     /// Only the open servers with these ids: a chat a phone keeps, which
-    /// names them. Empty, none.
+    /// names them (`tools=<id>,<id>`). Empty, none (`tools=none`).
     Only(BTreeSet<i64>),
 }
 

@@ -4,6 +4,7 @@
 //! Every error message here is fixed text or a [`RunsError`]'s, which is
 //! fixed text too: nothing echoes a request body or a frame.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use axum::Json;
@@ -11,7 +12,6 @@ use axum::extract::rejection::{JsonRejection, QueryRejection};
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use gglib_core::DeviceServers;
 use gglib_core::domain::runs::RunKind;
 use gglib_core::ports::{RunsError, RunsPort};
 use serde::Deserialize;
@@ -73,45 +73,67 @@ pub(crate) struct PutQuery {
     /// `agent` adds a turn to a hub chat; absent, a chat run.
     #[serde(default)]
     kind: Option<RunKind>,
-    /// `builtin` runs a chat run through the agent loop, for a chat the
-    /// device keeps itself, offered the tools of the MCP servers open to
-    /// paired devices (`gglib mcp allow-remote <server>`); `none` runs it
-    /// the same way offered none of them, for such a chat with its tools
-    /// off; absent, a plain chat run, recorded as it always was.
+    /// `none`, or the ids of servers in the drawing answer's `mcp_servers`
+    /// joined by commas (`3,7`): a chat run through the agent loop, for a
+    /// chat the device keeps itself, offered the tools of those of the
+    /// named servers that are open to paired devices (`gglib mcp
+    /// allow-remote <server>`), or none of them; absent, a plain chat run,
+    /// recorded as it always was.
     #[serde(default)]
-    tools: Option<Tools>,
-    /// With `tools=builtin` or `tools=none`: the message was sent with Draw
-    /// pressed, so the image tool is offered. Absent or `false`, it is not.
-    /// Refused with `kind=agent`, whose turn says `draw` in its body.
+    tools: Option<ToolsWord>,
+    /// With `tools`: the message was sent with Draw pressed, so the image
+    /// tool is offered, whichever servers `tools` names. Absent or `false`,
+    /// it is not. Refused with `kind=agent`, whose turn says `draw` in its
+    /// body.
     #[serde(default)]
     draw: bool,
-    /// With `draw=true` beside `tools=builtin` or `tools=none`: the image
-    /// model the person chose for the picture, by its id in
-    /// `GET /v1/images/drawing`'s `models`. Absent, the default rule draws.
-    /// Refused with `kind=agent`, whose turn says `image_model` in its
-    /// body, and on a plain chat run.
+    /// With `draw=true` beside `tools`: the image model the person chose for
+    /// the picture, by its id in `GET /v1/images/drawing`'s `models`.
+    /// Absent, the default rule draws. Refused with `kind=agent`, whose turn
+    /// says `image_model` in its body, and on a plain chat run.
     #[serde(default)]
     image_model: Option<u32>,
 }
 
-/// What `?tools=` may say. Any other word is refused, so a gglib that
-/// predates a word refuses it rather than running the tools it would keep
-/// out.
-#[derive(Deserialize, Clone, Copy)]
-#[serde(rename_all = "snake_case")]
-enum Tools {
-    /// Through the agent loop, offered the opened servers' tools.
-    Builtin,
-    /// Through the agent loop, offered no MCP tool: only the image tool
-    /// with `draw`, and no tool at all without it.
-    None,
+/// What `?tools=` says: `none`, or server ids joined by commas, each in
+/// canonical decimal (`^[1-9][0-9]*$`), read into a set, so `7,3,7` is
+/// `{3, 7}`. Any other value is refused: an empty one, an empty id
+/// (`3,,7`), a sign, a leading zero, `0`, `none` beside an id, and any word,
+/// `builtin` among them. A gglib that does not know a value so refuses it
+/// rather than running tools the device keeps out. No value says every
+/// open server: a device names each one it may use.
+#[derive(Deserialize)]
+#[serde(try_from = "String")]
+struct ToolsWord(BTreeSet<i64>);
+
+impl TryFrom<String> for ToolsWord {
+    type Error = &'static str;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if value == "none" {
+            return Ok(Self(BTreeSet::new()));
+        }
+        value
+            .split(',')
+            .map(server_id)
+            .collect::<Option<_>>()
+            .map(Self)
+            .ok_or("`tools` is `none` or the ids of servers joined by commas")
+    }
+}
+
+/// One server id as `tools` spells it: digits alone, the first not `0`.
+fn server_id(token: &str) -> Option<i64> {
+    let canonical = token.bytes().all(|b| b.is_ascii_digit()) && !token.starts_with('0');
+    canonical.then(|| token.parse().ok()).flatten()
 }
 
 /// `PUT /v1/runs/{id}`: start a chat run with the body as its request, or
 /// answer with the caller's run that already has the id. 201 new, 200
 /// existing. With `?kind=agent`, a device's turn on a hub chat, and with
-/// `?tools=builtin` a chat run through the agent loop with this machine's
-/// tools, or `?tools=none` one without its MCP tools: see [`super::turn`].
+/// `?tools=3,7` a chat run through the agent loop with the tools of those
+/// of this machine's servers, or `?tools=none` one without its MCP tools:
+/// see [`super::turn`].
 pub(crate) async fn put_run(
     State(state): State<AppState>,
     Caller(scope): Caller,
@@ -121,8 +143,9 @@ pub(crate) async fn put_run(
 ) -> Answer {
     let Ok(Query(query)) = query else {
         return Err(invalid(
-            "`kind` is `chat` or `agent`, `tools` is `builtin` or `none`, `draw` is `true` or \
-             `false`, and `image_model` is an image model's id",
+            "`kind` is `chat` or `agent`, `tools` is `none` or the ids of servers in \
+             `mcp_servers` joined by commas, `draw` is `true` or `false`, and `image_model` is \
+             an image model's id",
         ));
     };
     let body = match body {
@@ -152,16 +175,11 @@ pub(crate) async fn put_run(
         // An `image_model` without `draw` is the starter's to refuse, with
         // every other door's.
         let drawing = (query.draw, query.image_model);
-        let servers = match tools {
-            Tools::Builtin => DeviceServers::All,
-            Tools::None => DeviceServers::none(),
-        };
-        return super::turn::put_chat(&state, scope, &id, body, drawing, servers).await;
+        return super::turn::put_chat(&state, scope, &id, body, drawing, tools.0).await;
     }
     if query.draw || query.image_model.is_some() {
         return Err(invalid(
-            "`draw` and `image_model` go with `tools=builtin` or `tools=none`: a plain chat run \
-             calls no tool",
+            "`draw` and `image_model` go with `tools`: a plain chat run calls no tool",
         ));
     }
     let runs = runs(&state).ok_or_else(unavailable)?;
@@ -231,3 +249,7 @@ pub(crate) async fn run_events(
         .map_err(|e| refused(&e))?;
     Ok(sse::stream(events, Some(state.shutdown.clone())).into_response())
 }
+
+#[cfg(test)]
+#[path = "handlers_tests.rs"]
+mod handlers_tests;

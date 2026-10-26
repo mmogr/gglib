@@ -21,26 +21,29 @@ is `409 nothing_to_answer`. `draw` is the device's Draw button, sent only
 when pressed, and `image_model` the id of the image model the person chose
 for that picture, sent only when one was.
 
-`PUT /v1/runs/{id}?kind=chat&tools=builtin` is a chat run for a chat the
+`PUT /v1/runs/{id}?kind=chat&tools=3,7` is a chat run for a chat the
 device keeps itself, run through the agent loop with gglib's builtins: the
 body is the device's unchanged `OpenAI` chat request, handed to the same
-starter (`start_chat`), and `&draw=true` offers the image tool for that
-message. `tools=none` in place of `tools=builtin` is such a chat with its
-tools off: the starter is told it may use no server, and the run is offered none of
-the opened servers' tools, only the image tool with `&draw=true`, and
-without it no tool at all. Any other word for `tools` is
-`400 invalid_request`, so a gglib that predates a word refuses it rather
-than running the tools it would keep out. Only a named device may. The run
-it answers says `frames: "agent"`:
-its events are the agent loop's, not `OpenAI` chunks, and a reader picks its
-decoder by that key. Without `tools` a chat run is what it always was, its
-answer carries no `frames` key, and `draw` alone is `400 invalid_request`.
-`&image_model=<id>` beside `&draw=true` is the chosen image model, handed to
-the starter as the query said it, beside either `tools` word; on a plain chat run, or beside
-`kind=agent` (whose turn says it in its body), it is `400 invalid_request`,
-and without `draw` the starter refuses it the same. `tools` beside
-`kind=agent` is `400 invalid_request` too: a hub turn takes its tools from
-the chat's settings.
+starter (`start_chat`) with the servers it may use, and `&draw=true` offers
+the image tool for that message. `tools` is `none` or the ids of servers in
+the drawing answer's `mcp_servers`, in canonical decimal joined by commas,
+read into a set (`ToolsWord`), so `7,3,7` is `{3, 7}`; `none` is such a
+chat with no server, offered none of the opened servers' tools, only the
+image tool with `&draw=true`, and without it no tool at all. Any other
+value, `builtin` among them, is `400 invalid_request`, so a gglib that does
+not know a value refuses it rather than running the tools it would keep
+out. An id that is well formed and not open is the daemon's to drop, where
+the servers start (`McpService::opened_tools`): it is never refused, and
+never starts a server. Only a named device may. The run it answers says
+`frames: "agent"`: its events are the agent loop's, not `OpenAI` chunks,
+and a reader picks its decoder by that key. Without `tools` a chat run is
+what it always was, its answer carries no `frames` key, and `draw` alone is
+`400 invalid_request`. `&image_model=<id>` beside `&draw=true` is the
+chosen image model, handed to the starter as the query said it, beside any
+`tools`; on a plain chat run, or beside `kind=agent` (whose turn says it in
+its body), it is `400 invalid_request`, and without `draw` the starter
+refuses it the same. `tools` beside `kind=agent` is `400 invalid_request`
+too: a hub turn takes its tools from the chat's settings.
 
 A request the tunnel edge marked is served in the scope of the device it
 named, and sees that device's runs and every run on one of the hub's

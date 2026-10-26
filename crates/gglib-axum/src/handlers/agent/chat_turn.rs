@@ -1,9 +1,9 @@
 //! A chat run with builtins: the proxy's
-//! `PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`,
+//! `PUT /v1/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`,
 //! or `tools=none`, for a chat a paired phone keeps itself, run here because
 //! the agent loop, its slot and the image tool are the daemon's. Its query
 //! is a [`ChatQuery`]: whether it draws, and which of the servers open to
-//! paired devices it may use, every one for `builtin` and none for `none`.
+//! paired devices it may use, those whose ids it names, or none.
 //!
 //! The body is the phone's unchanged `OpenAI` chat request. Its `messages`
 //! are the whole history (`gglib_core`'s `parse_openai_messages`), and each
@@ -33,12 +33,12 @@
 //! Nothing here logs or returns a message: a history that cannot be read
 //! is refused by the index of the message, never its text.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use axum::http::StatusCode;
 use serde_json::Value;
 
-use gglib_core::DeviceServers;
 use gglib_core::domain::AttachmentId;
 use gglib_core::domain::agent::{inline_images, into_agent_messages, parse_openai_messages};
 use gglib_core::domain::runs::RunKind;
@@ -83,9 +83,10 @@ impl From<bool> for Drawing {
 pub(super) struct ChatQuery {
     /// Draw, and the image model chosen for it.
     pub(super) drawing: Drawing,
-    /// The servers open to paired devices the run may use. Draw offers the
-    /// image tool whichever they are.
-    pub(super) servers: DeviceServers,
+    /// The ids of the servers open to paired devices the run may use, of
+    /// those the query names; empty, none. Draw offers the image tool
+    /// whichever they are.
+    pub(super) servers: BTreeSet<i64>,
 }
 
 #[cfg(test)]
@@ -94,7 +95,7 @@ impl From<bool> for ChatQuery {
     fn from(draw: bool) -> Self {
         Self {
             drawing: draw.into(),
-            servers: DeviceServers::none(),
+            servers: BTreeSet::new(),
         }
     }
 }
@@ -187,7 +188,7 @@ pub(super) async fn read(
         config: None,
         // The floor: the image tool with Draw. The servers open to devices
         // are read when the run starts, not for a request that is refused.
-        tool_filter: Some(Asked::of_phone(draw, DeviceServers::none()).floor()),
+        tool_filter: Some(Asked::of_phone(draw, BTreeSet::new()).floor()),
         model: None,
         // The request's own sampling is not read: the model's, as on a hub
         // turn. Its Thinking choice is: off, or the model's default.

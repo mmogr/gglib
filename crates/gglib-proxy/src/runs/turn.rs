@@ -10,19 +10,20 @@
 //! Draw pressed: the hub rebuilds the history from its own record. A turn
 //! that says `answer_saved: true` has empty `content` and no image, and
 //! answers the question the chat already ends in (ADR 0017).
-//! `?kind=chat&tools=builtin` is the other thing the starter runs: a chat
-//! the device keeps itself, through the agent loop, offered the tools of the
-//! MCP servers open to paired devices and, with `draw`, the image tool;
-//! `?kind=chat&tools=none` runs it offered none of those servers' tools,
-//! for a chat with its tools off, and with `draw` the image tool alone.
+//! `?kind=chat&tools=3,7` is the other thing the starter runs: a chat the
+//! device keeps itself, through the agent loop, offered the tools of those
+//! of the named MCP servers that are open to paired devices and, with
+//! `draw`, the image tool; `?kind=chat&tools=none` runs it offered none of
+//! those servers' tools, and with `draw` the image tool alone.
 //! Only a named device may: a local client writes to its chats at
 //! `/api`. Every error message is fixed text or the starter's, which is
 //! fixed text too.
 
+use std::collections::BTreeSet;
+
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use gglib_core::DeviceServers;
 use gglib_core::domain::hub_chats::HubTurn;
 use gglib_core::ports::{RunScope, TurnRefused};
 use serde_json::Value;
@@ -70,9 +71,9 @@ pub(super) async fn put(state: &AppState, scope: RunScope, id: &str, body: Value
     started.map(made).map_err(refused)
 }
 
-/// `PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`: a chat the
+/// `PUT /v1/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`: a chat the
 /// device keeps itself, run through the agent loop with the tools of the
-/// MCP servers open to paired devices that `servers` admits, and the image
+/// MCP servers open to paired devices whose ids `servers` holds, and the image
 /// tool with `draw`. With `tools=none` (no server), none of those servers'
 /// tools: the image tool alone with `draw`, and without it a run that calls
 /// no tool.
@@ -86,7 +87,7 @@ pub(super) async fn put_chat(
     id: &str,
     body: Value,
     (draw, image_model): (bool, Option<u32>),
-    servers: DeviceServers,
+    servers: BTreeSet<i64>,
 ) -> Answer {
     let Some(device) = scope.device() else {
         return Err(not_a_device());
