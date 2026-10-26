@@ -51,7 +51,7 @@ use crate::server::{AppState, handle_runtime_error};
 /// `GET /v1/images/drawing`: whether a turn sent with Draw pressed can draw
 /// here, and why not, by the same rule as the daemon's
 /// `GET /api/images/drawing`. A paired device asks before it sends `draw`.
-/// Beside it, `mcp_servers`: the MCP servers a device's run is offered.
+/// Beside it, `mcp_servers`: the servers a device's run may use, by id.
 ///
 /// Always 200. When it cannot, `code` is `drawing_unavailable`: not an
 /// error of this request, but the code a request to draw would be refused

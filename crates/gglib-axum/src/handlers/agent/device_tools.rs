@@ -9,8 +9,16 @@
 //! a device's run has no folder for. With Draw, the image tool beside them.
 //! The servers are read when the run starts, and only while a tunnel session
 //! is live, and a lazy one is started then, in the run's own work and never
-//! in the `PUT` that made it. The decisions are ADR 0024 and ADR 0025.
+//! in the `PUT` that made it. Which of them the run may use is its
+//! [`DeviceServers`]: all of them for a Mac-kept chat, and for a phone-kept
+//! one only those whose ids its query names. Those ids are filtered against the servers
+//! open to devices in `McpService::opened_tools`, and only there, before any
+//! server starts; [`offered`] trusts the list it is handed. The decisions
+//! are ADR 0024, ADR 0025 and ADR 0026.
 
+use std::collections::BTreeSet;
+
+use gglib_core::DeviceServers;
 use gglib_core::domain::chat::ConversationSettings;
 use gglib_core::ports::RemoteGatewayPort as _;
 
@@ -25,8 +33,9 @@ pub(super) struct Asked {
     /// The chat's own tool list: empty for all, else the opened tools it
     /// names exactly or by their bare name.
     narrow: Vec<String>,
-    /// The chat turned its tools off: no MCP tool.
-    no_tools: bool,
+    /// Which of the servers open to devices the run may use: none when the
+    /// chat turned its tools off, and none unless something says otherwise.
+    servers: DeviceServers,
     /// The message was sent with Draw pressed: the image tool.
     draw: bool,
 }
@@ -36,16 +45,21 @@ impl Asked {
     pub(super) fn of_chat(settings: &ConversationSettings, draw: bool) -> Self {
         Self {
             narrow: settings.tools.clone(),
-            no_tools: settings.no_tools == Some(true),
+            servers: if settings.no_tools == Some(true) {
+                DeviceServers::none()
+            } else {
+                DeviceServers::All
+            },
             draw,
         }
     }
 
-    /// A chat the phone keeps itself, which names no tool of its own and
-    /// turns them all off with `no_tools` (`tools=none`).
-    pub(super) fn of_phone(draw: bool, no_tools: bool) -> Self {
+    /// A chat the phone keeps itself, which names no tool of its own, only
+    /// the ids of the open servers it may use (`servers`, from its query's
+    /// `tools`): never every open server, which only a Mac-kept chat is.
+    pub(super) fn of_phone(draw: bool, servers: BTreeSet<i64>) -> Self {
         Self {
-            no_tools,
+            servers: DeviceServers::Only(servers),
             draw,
             ..Self::default()
         }
@@ -53,8 +67,9 @@ impl Asked {
 
     /// What the run is offered whatever servers are open: the image tool
     /// with Draw, by its qualified name and never its bare one, else
-    /// nothing. Draw overrides the chat's `no_tools`: the button is the
-    /// person's choice for that message.
+    /// nothing. Draw overrides the chat's tools being off, and its servers
+    /// whichever they are: the button is the person's choice for that
+    /// message.
     pub(super) fn floor(&self) -> Vec<String> {
         self.draw
             .then(|| DRAW_TOOL.to_owned())
@@ -74,12 +89,13 @@ impl Asked {
 }
 
 /// The tools a run that `asked` is offered, of the `opened` servers' tools
-/// (qualified): the floor, then every opened tool the chat's list names,
-/// all of them when it names none, none when its tools are off. Never a
-/// tool that is not opened, whatever the chat names.
+/// (qualified), already only those of the servers it may use: the floor,
+/// then every opened tool the chat's list names, all of them when it names
+/// none, none when it may use no server. Never a tool that is not opened,
+/// whatever the chat names.
 pub(super) fn offered(opened: &[String], asked: &Asked) -> Vec<String> {
     let mut tools = asked.floor();
-    if !asked.no_tools {
+    if !asked.servers.is_none() {
         tools.extend(
             opened
                 .iter()
@@ -91,13 +107,14 @@ pub(super) fn offered(opened: &[String], asked: &Asked) -> Vec<String> {
 }
 
 /// The tools a run that `asked` is offered on this machine now: the
-/// floor, unless a tunnel session is live and the chat's tools are on, when
-/// the servers open to devices are started as needed and their tools read.
+/// floor, unless a tunnel session is live and the run may use some server,
+/// when the servers open to devices that it may use are started as needed
+/// and their tools read.
 pub(super) async fn resolve(state: &AppState, asked: &Asked) -> Vec<String> {
-    if !state.remote.gateway().serving() || asked.no_tools {
+    if !state.remote.gateway().serving() || asked.servers.is_none() {
         return asked.floor();
     }
-    offered(&state.mcp.opened_tools().await, asked)
+    offered(&state.mcp.opened_tools(&asked.servers).await, asked)
 }
 
 /// `chat` with its tool filter set to what a run that `asked` is offered on

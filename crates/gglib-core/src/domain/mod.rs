@@ -129,8 +129,8 @@ pub use slot_eviction::{SlotFileMeta, compute_auto_disk_budget_bytes, select_evi
 
 // Re-export MCP types at the domain level for convenience
 pub use mcp::{
-    McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus, McpServerType, McpTool,
-    McpToolResult, NewMcpServer, ToolIndex,
+    DeviceServers, McpEnvEntry, McpLifecycle, McpServer, McpServerConfig, McpServerStatus,
+    McpServerType, McpTool, McpToolResult, NewMcpServer, ToolIndex,
 };
 
 // Re-export attachment types at the domain level for convenience
