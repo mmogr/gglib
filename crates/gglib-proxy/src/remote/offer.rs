@@ -13,16 +13,24 @@ use serde::Serialize;
 
 use crate::server::AppState;
 
-/// [`DrawingAvailability`]'s fields, flattened, and `mcp_servers`: the
-/// names of the servers open to paired devices (`gglib mcp allow-remote
-/// <server>`) while a tunnel session is live; `[]` with none open, with no
-/// session, or on a proxy with no tunnel owner. There whether or not it can
-/// draw.
+/// [`DrawingAvailability`]'s fields, flattened, and `mcp_servers`: each
+/// server open to paired devices (`gglib mcp allow-remote <server>`) while a
+/// tunnel session is live, by its id and name, by name and then by id, and
+/// a name two share listed under each; `[]` with none open, with no session,
+/// or on a proxy with no tunnel owner. There whether or not it can draw.
 #[derive(Debug, Serialize)]
 pub(crate) struct DeviceDrawing {
     #[serde(flatten)]
     answer: DrawingAvailability,
-    mcp_servers: Vec<String>,
+    mcp_servers: Vec<OfferedServer>,
+}
+
+/// A server open to paired devices, as a device names it in a run's `tools`
+/// (its id) and shows it to the person (its name).
+#[derive(Debug, Serialize)]
+struct OfferedServer {
+    id: i64,
+    name: String,
 }
 
 impl DeviceDrawing {
@@ -33,7 +41,16 @@ impl DeviceDrawing {
             .remote_gateway()
             .is_some_and(|gateway| gateway.serving());
         let mcp_servers = if serving {
-            state.mcp.device_server_names().await
+            state
+                .mcp
+                .device_servers()
+                .await
+                .into_iter()
+                .map(|server| OfferedServer {
+                    id: server.id,
+                    name: server.name,
+                })
+                .collect()
         } else {
             Vec::new()
         };

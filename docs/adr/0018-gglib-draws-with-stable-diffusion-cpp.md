@@ -1,11 +1,13 @@
 # ADR 0018 — gglib draws with stable-diffusion.cpp: one image runtime beside llama.cpp, the GPU given in turns, and a picture only for a message sent with Draw
 
-- **Status:** Accepted
+- **Status:** Accepted; superseded in part by
+  [ADR 0026](0026-a-paired-devices-chat-run-names-the-open-servers-it-may-use-by-id.md)
 - **Date:** 2026-10-10
 - **Depends on:** [ADR 0016](0016-a-tools-image-is-an-attachment-on-its-tool-row.md),
   [ADR 0015](0015-a-model-reads-images-through-its-projector.md)
 - **Supersedes:** nothing
-- **Superseded by:** nothing
+- **Superseded by:** [ADR 0026](0026-a-paired-devices-chat-run-names-the-open-servers-it-may-use-by-id.md),
+  in part: the `tools=builtin` word of decisions 9 and 13
 - **Log:** [log-0018](log-0018.md)
 
 ## Context

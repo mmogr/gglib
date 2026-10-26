@@ -5,6 +5,7 @@
 //! handed, because what is under test is the door: who may, the body, and
 //! the refusal's shape. The run itself is the daemon's, tested there.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use gglib_core::domain::hub_chats::HubTurn;
@@ -200,22 +201,24 @@ fn chat_request() -> serde_json::Value {
     json!({ "model": "qwen", "messages": [{ "role": "user", "content": "a red fox" }] })
 }
 
-/// `?kind=chat&tools=builtin` hands the device's unchanged `OpenAI` request
-/// to the daemon's starter, with `draw` as the query said it, and the run
-/// it answers says its events are the agent loop's. `tools=none` does the
-/// same with `no_tools`, Draw or not. No chat run is made.
+/// `?kind=chat&tools=3` hands the device's unchanged `OpenAI` request to
+/// the daemon's starter, with `draw` as the query said it and the server it
+/// named, and the run it answers says its events are the agent loop's.
+/// `tools=none` does the same with no server, Draw or not. No chat run is
+/// made.
 #[tokio::test]
 async fn a_chat_run_with_builtins_reaches_the_starter_with_its_body_and_draw() {
     let turns = Arc::new(FakeTurns::default());
     let runs = Arc::new(FakeRuns::default());
     let (base, cancel) = serve(Some(Arc::clone(&turns)), Arc::clone(&runs)).await;
 
-    for (query, draw, no_tools) in [
-        ("?kind=chat&tools=builtin&draw=true", true, false),
-        ("?kind=chat&tools=builtin", false, false),
-        ("?tools=builtin&draw=false", false, false),
-        ("?kind=chat&tools=none&draw=true", true, true),
-        ("?kind=chat&tools=none", false, true),
+    let three = || BTreeSet::from([3]);
+    for (query, draw, servers) in [
+        ("?kind=chat&tools=3&draw=true", true, three()),
+        ("?kind=chat&tools=3", false, three()),
+        ("?tools=3&draw=false", false, three()),
+        ("?kind=chat&tools=none&draw=true", true, BTreeSet::new()),
+        ("?kind=chat&tools=none", false, BTreeSet::new()),
     ] {
         let sent = from_device(put_chat(&base, query, &chat_request()));
         let (status, run) = json(sent.send().await.unwrap()).await;
@@ -233,12 +236,37 @@ async fn a_chat_run_with_builtins_reaches_the_starter_with_its_body_and_draw() {
                 "p1".to_owned(),
                 chat_request(),
                 draw,
-                no_tools
+                servers
             ),
             "{query}"
         );
     }
     assert!(turns.started.lock().unwrap().is_empty(), "no hub turn");
+    assert!(runs.scopes().is_empty(), "no chat run was made");
+    cancel.cancel();
+}
+
+/// The servers a chat run names reach the starter as a set, in order and
+/// each once, however the query lists them, and beside Draw.
+#[tokio::test]
+async fn a_chat_run_naming_servers_reaches_the_starter_with_them_sorted_and_once() {
+    let turns = Arc::new(FakeTurns::default());
+    let runs = Arc::new(FakeRuns::default());
+    let (base, cancel) = serve(Some(Arc::clone(&turns)), Arc::clone(&runs)).await;
+
+    let three_seven = BTreeSet::from([3, 7]);
+    for (query, draw, servers) in [
+        ("?kind=chat&tools=3,7", false, three_seven.clone()),
+        ("?kind=chat&tools=7,3,7", false, three_seven.clone()),
+        ("?kind=chat&tools=3%2C7", false, three_seven),
+        ("?tools=3&draw=true", true, BTreeSet::from([3])),
+    ] {
+        let sent = from_device(put_chat(&base, query, &chat_request()));
+        let (status, run) = json(sent.send().await.unwrap()).await;
+        assert_eq!(status, StatusCode::CREATED, "{query}: {run}");
+        let started = turns.chats.lock().unwrap().last().cloned().unwrap();
+        assert_eq!((started.3, started.4), (draw, servers), "{query}");
+    }
     assert!(runs.scopes().is_empty(), "no chat run was made");
     cancel.cancel();
 }
@@ -253,13 +281,9 @@ async fn a_chat_run_with_builtins_hands_the_starter_its_image_model() {
     let (base, cancel) = serve(Some(Arc::clone(&turns)), Arc::clone(&runs)).await;
 
     for (query, draw, image_model) in [
-        (
-            "?kind=chat&tools=builtin&draw=true&image_model=7",
-            true,
-            Some(7),
-        ),
-        ("?kind=chat&tools=builtin&draw=true", true, None),
-        ("?tools=builtin&image_model=7", false, Some(7)),
+        ("?kind=chat&tools=3&draw=true&image_model=7", true, Some(7)),
+        ("?kind=chat&tools=3&draw=true", true, None),
+        ("?tools=3&image_model=7", false, Some(7)),
         (
             "?kind=chat&tools=none&draw=true&image_model=7",
             true,
@@ -291,7 +315,7 @@ async fn a_chat_run_with_builtins_hands_the_starter_its_image_model() {
             code: refused.to_owned(),
             message: "why".to_owned(),
         });
-        let query = "?tools=builtin&draw=true&image_model=7";
+        let query = "?tools=3&draw=true&image_model=7";
         let sent = from_device(put_chat(&base, query, &chat_request()));
         let (status, answer) = json(sent.send().await.unwrap()).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
@@ -312,8 +336,8 @@ async fn an_image_model_in_the_query_is_refused_where_it_means_nothing() {
     for query in [
         "?image_model=7",
         "?kind=chat&image_model=7",
-        "?tools=builtin&draw=true&image_model=default",
-        "?tools=builtin&draw=true&image_model=-1",
+        "?tools=3&draw=true&image_model=default",
+        "?tools=3&draw=true&image_model=-1",
     ] {
         let sent = from_device(put_chat(&base, query, &chat_request()));
         let (status, answer) = json(sent.send().await.unwrap()).await;
@@ -366,15 +390,16 @@ async fn a_chat_run_without_tools_is_a_plain_chat_run() {
 }
 
 /// Only a named device may, `draw` means nothing without `tools` and is
-/// refused beside `kind=agent`, `tools` says only `builtin` or `none`, and
-/// the starter's refusal comes back as it was given.
+/// refused beside `kind=agent`, `tools` says only `none` or server ids in
+/// canonical decimal joined by commas, and the starter's refusal comes back
+/// as it was given.
 #[tokio::test]
 async fn a_chat_run_with_builtins_is_refused_as_a_turn_is() {
     let turns = Arc::new(FakeTurns::default());
     let runs = Arc::new(FakeRuns::default());
     let (base, cancel) = serve(Some(Arc::clone(&turns)), Arc::clone(&runs)).await;
 
-    for query in ["?tools=builtin", "?tools=none&draw=true"] {
+    for query in ["?tools=3", "?tools=none&draw=true"] {
         let local = put_chat(&base, query, &chat_request());
         let (status, answer) = json(local.send().await.unwrap()).await;
         assert_eq!(status, StatusCode::FORBIDDEN, "{query}: {answer}");
@@ -386,7 +411,18 @@ async fn a_chat_run_with_builtins_is_refused_as_a_turn_is() {
         "?kind=chat&draw=true",
         "?tools=mcp",
         "?tools=off",
-        "?tools=builtin&draw=yes",
+        "?tools=builtin",
+        "?tools=builtin&draw=true",
+        "?tools=",
+        "?tools=3,,7",
+        "?tools=0",
+        "?tools=-1",
+        "?tools=%2B3",
+        "?tools=03",
+        "?tools=a",
+        "?tools=none,3",
+        "?tools=1&tools=2",
+        "?tools=3&draw=yes",
         "?tools=none&draw=yes",
     ] {
         let sent = from_device(put_chat(&base, query, &chat_request()));
@@ -406,7 +442,7 @@ async fn a_chat_run_with_builtins_is_refused_as_a_turn_is() {
     assert_eq!(code(&answer), "invalid_request");
     let message = answer["error"]["message"].as_str().unwrap();
     assert!(message.contains("in its body"), "{message}");
-    for query in ["?kind=agent&tools=none", "?kind=agent&tools=builtin"] {
+    for query in ["?kind=agent&tools=none", "?kind=agent&tools=3"] {
         let sent = from_device(put_chat(&base, query, &turn));
         let (status, answer) = json(sent.send().await.unwrap()).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{query}: {answer}");
@@ -419,7 +455,7 @@ async fn a_chat_run_with_builtins_is_refused_as_a_turn_is() {
         code: "drawing_unavailable".to_owned(),
         message: "there is no image model on this machine".to_owned(),
     });
-    let sent = from_device(put_chat(&base, "?tools=builtin&draw=true", &chat_request()));
+    let sent = from_device(put_chat(&base, "?tools=3&draw=true", &chat_request()));
     let (status, answer) = json(sent.send().await.unwrap()).await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{answer}");
     assert_eq!(code(&answer), "drawing_unavailable");

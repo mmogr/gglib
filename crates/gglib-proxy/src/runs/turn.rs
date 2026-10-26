@@ -10,14 +10,16 @@
 //! Draw pressed: the hub rebuilds the history from its own record. A turn
 //! that says `answer_saved: true` has empty `content` and no image, and
 //! answers the question the chat already ends in (ADR 0017).
-//! `?kind=chat&tools=builtin` is the other thing the starter runs: a chat
-//! the device keeps itself, through the agent loop, offered the tools of the
-//! MCP servers open to paired devices and, with `draw`, the image tool;
-//! `?kind=chat&tools=none` runs it offered none of those servers' tools,
-//! for a chat with its tools off, and with `draw` the image tool alone.
+//! `?kind=chat&tools=3,7` is the other thing the starter runs: a chat the
+//! device keeps itself, through the agent loop, offered the tools of those
+//! of the named MCP servers that are open to paired devices and, with
+//! `draw`, the image tool; `?kind=chat&tools=none` runs it offered none of
+//! those servers' tools, and with `draw` the image tool alone.
 //! Only a named device may: a local client writes to its chats at
 //! `/api`. Every error message is fixed text or the starter's, which is
 //! fixed text too.
+
+use std::collections::BTreeSet;
 
 use axum::Json;
 use axum::http::StatusCode;
@@ -69,11 +71,12 @@ pub(super) async fn put(state: &AppState, scope: RunScope, id: &str, body: Value
     started.map(made).map_err(refused)
 }
 
-/// `PUT /v1/runs/{id}?kind=chat&tools=builtin[&draw=true[&image_model=<id>]]`: a chat the
+/// `PUT /v1/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`: a chat the
 /// device keeps itself, run through the agent loop with the tools of the
-/// MCP servers open to paired devices, and the image tool with `draw`. With
-/// `tools=none` instead (`no_tools`), none of those servers' tools: the
-/// image tool alone with `draw`, and without it a run that calls no tool.
+/// MCP servers open to paired devices whose ids `servers` holds, and the image
+/// tool with `draw`. With `tools=none` (no server), none of those servers'
+/// tools: the image tool alone with `draw`, and without it a run that calls
+/// no tool.
 /// The body is the device's unchanged `OpenAI` chat request. Only a named
 /// device may, as for a turn: the loop's slot, its model's hold, the MCP
 /// servers and the image tool are the daemon's, reached through the same
@@ -84,14 +87,14 @@ pub(super) async fn put_chat(
     id: &str,
     body: Value,
     (draw, image_model): (bool, Option<u32>),
-    no_tools: bool,
+    servers: BTreeSet<i64>,
 ) -> Answer {
     let Some(device) = scope.device() else {
         return Err(not_a_device());
     };
     let turns = state.turns.clone().ok_or_else(unavailable)?;
     let started = turns
-        .start_chat(device, id, body, draw, image_model, no_tools)
+        .start_chat(device, id, body, draw, image_model, servers)
         .await;
     started.map(made).map_err(refused)
 }

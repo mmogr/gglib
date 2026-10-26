@@ -816,13 +816,17 @@ button, and a desktop too old to have the route answers 404, which means it
 cannot.
 
 The proxy's answer also says which MCP servers a device's runs are offered:
-`mcp_servers`, the names of the servers open to paired devices while a
-session is live, read at each ask, `[]` when none is open, and there whether
-or not the desktop can draw (a desktop with no image model can still search). A device that reads
-a name there sends its questions with `tools=builtin` (below), and those of
-a chat whose tools the person turned off as plain chat runs, or with
-`tools=none` when they draw; a desktop from before the list sends no such
-key, and a device sends it nothing new.
+`mcp_servers`, each server open to paired devices while a session is live,
+as `{"id": 3, "name": "tavily"}`, read at each ask, `[]` when none is open,
+and there whether or not the desktop can draw (a desktop with no image model
+can still search). The list is in order of name and then id, and two servers
+that share a name are each listed, with their own ids: a device tells them
+apart by id, which a rename keeps and a server deleted and added again does
+not. A device that reads a server there sends each question with the ids
+of the servers the person picked for that chat in `tools`, `tools=3,7`
+(below); a chat that picked none, or turned its tools off, sends a plain
+chat run, or `tools=none` when the person draws. A desktop from before the
+list sends no such key, and a device sends it nothing new.
 The daemon's own `GET /api/images/drawing` does not carry it.
 
 `models` lists the desktop's image models, so a device can let a person pick
@@ -867,9 +871,9 @@ when the run starts, after its model is ready, and one that is disabled,
 manual and not started, or fails to start is left out, with a warning in the desktop's log
 that names it and why (for one that failed to start, what it printed on stderr, as the
 desktop's own start warning does; never a tool's arguments or results), and the reply
-runs without it. The grant is the name, read when each run
-starts: a server deleted and added again under the same name is open again,
-and one renamed is not. A saved reply's row says how it was made in its
+runs without it. The grant is the server's own flag, read when each run
+starts: a server renamed keeps it, and one deleted and added again under the
+same name starts closed. A saved reply's row says how it was made in its
 `metadata`: beside its token counts, the context its model was launched with
 (`contextSize`), how many earlier messages the run left out to fit
 (`trimmedMessages`) and why the model stopped (`finishReason`), each only
@@ -953,20 +957,29 @@ The chat model is not told of it and cannot fill it. A device sends the key
 only to a desktop whose availability answer carried `models`: an older one
 refuses a body with a key it does not know.
 
-A chat the device keeps itself can draw too. `PUT
-/v1/runs/{id}?kind=chat&tools=builtin&draw=true` takes the device's
-unchanged OpenAI chat request, whole history included, and runs it through
-the desktop's agent loop on the model it names, with the image tool offered
-for that message, whose first step must be the call for the picture as on a
-desktop chat. Such a run is also offered the tools of the MCP servers the
-desktop has open to paired devices, as a turn on a chat that names no tool
-is, and without `draw=true` those are its only tools; a desktop with none
-open runs it with no tool. A chat the device keeps with its tools off sends
-`tools=none` in place of `tools=builtin`: the run is offered none of those
-servers' tools and starts none of them, so `draw=true` offers the image tool
-alone, and without it the run calls no tool. Any other word for `tools` is
-`400 invalid_request`, and so is `tools=none` on a desktop from before it,
-which refuses the word rather than running the tools. The chosen
+A chat the device keeps itself can use the desktop's tools and draw too.
+`PUT /v1/runs/{id}?kind=chat&tools=3,7` takes the device's unchanged OpenAI
+chat request, whole history included, and runs it through the desktop's
+agent loop on the model it names, offered the tools of the servers it names
+by id, of those the desktop has open to paired devices (the ids in the
+drawing answer's `mcp_servers`). With `&draw=true` it is also offered the
+image tool for that message, whose first step must be the call for the
+picture as on a desktop chat, whichever servers it names. `tools=none`
+names no server: the run is offered none of those servers' tools and starts
+none of them, so `draw=true` offers the image tool alone, and without it the
+run calls no tool. `tools` is `none` or ids in canonical decimal joined by
+commas, `7,3,7` read as `{3, 7}`; anything else is `400 invalid_request`: an
+empty value, an empty id (`3,,7`), `0`, a sign, a leading zero, `none`
+beside an id, the key twice, and any word, `builtin` among them; no value
+names every open server. A desktop that does not know a value so refuses it
+rather than running tools the device keeps out. An id that is well formed
+but not open, closed since the device last asked or never a server's, is
+dropped when the run starts, never started and never refused: the run gets
+the named servers that are open, and the image tool with Draw, and the
+desktop's log has one warning naming the ids it dropped. A `PUT` under the
+id of a run already started answers with that run, and the run keeps the
+servers it started with whatever the query names now
+([ADR 0026](adr/0026-a-paired-devices-chat-run-names-the-open-servers-it-may-use-by-id.md)). The chosen
 image model goes in the query beside it, `&image_model=<id>`, with the same
 rules and refusals as a turn's; `image_model` without `tools`, or
 beside `kind=agent`, is `400 invalid_request`, and so is `tools` beside
@@ -1112,7 +1125,8 @@ here is one the desktop can retire on its own.
 | `invalid or missing bearer token` | The same refusal, unrendered — what a third-party OpenAI client pointed at the loopback port sees, since gglib is not in that request's path to translate it. |
 | `403 ORIGIN_NOT_ALLOWED` from `:9887`, or `origin_not_allowed` from the proxy | A page on another site asked to change something. A page of your own gets this behind a reverse proxy that rewrites `Host`: pass `Host` through, and name it with `--allowed-host`. A browser extension gets it from the proxy on every change: its `chrome-extension://` or `moz-extension://` origin is not a local page, and no setting admits one. |
 | `this route needs the daemon's token` | The daemon was asked for something without its token, or with one from before its last start. Run the command from `gglib` on this machine, as the account that runs the daemon, or open the dashboard from the link `gglib web` prints again. |
-| `403 mcp_not_allowed_over_tunnel` | `/mcp` is never reachable through the tunnel, and no flag opens it. A device's chats reach the MCP servers the desktop's `gglib mcp allow-remote <server>` opens to them, through their runs. |
+| `403 mcp_not_allowed_over_tunnel` | `/mcp` is never reachable through the tunnel, and no flag opens it. A device's chats reach the MCP servers the desktop's `gglib mcp allow-remote <server>` opens to them, those each chat names by id, through their runs. |
+| `400 invalid_request`, ``` `tools` is `none` or the ids of servers in `mcp_servers` joined by commas ``` | A device sent a run whose `tools` is neither `none` nor server ids joined by commas. An app that predates naming servers by id (ggchat 0.11.0 and older) mostly fails before this: it cannot read a drawing answer that lists a server, so it shows Draw as unknown and sends plain chat runs while any server is open. It sends `tools=builtin`, and gets this, only from an answer it read before the desktop was updated. Update the app on the device. |
 | A local client on the desktop starts getting `401` | Enabling put the key on the local proxy (`:8080`; the daemon on `:9887` is unaffected). Add the key to that client; it stays on after `disable`. |
 | `gglib remote enable` says it is already enabled | The switch is already on, and nothing needs re-running to keep it that way. To pair another device, `gglib remote invite` — it offers a code against the tunnel that is up rather than refusing. To change the flags it was enabled with, `disable` first; the ticket is the same one afterwards. |
 | `remote access is already being enabled` | Another `enable` is arming the tunnel; a daemon that has just started is still putting its own back after the twenty seconds commands wait for it; or the daemon is putting the tunnel back after the proxy was started again, which commands do not wait for. `gglib remote status` shows when the ticket is up; run the command again then, or `gglib remote disable` to give up on it. |
