@@ -78,7 +78,8 @@ owner), whether or not it can draw. It is the answer a device already reads
 before it sends a run, so a phone learns there which servers its runs may
 name, by id, in `tools`
 ([ADR 0024](../../../../docs/adr/0024-the-tunnel-opens-mcp-servers-by-name.md),
-[ADR 0025](../../../../docs/adr/0025-a-server-is-opened-to-paired-devices-by-a-flag-on-it.md)).
+[ADR 0025](../../../../docs/adr/0025-a-server-is-opened-to-paired-devices-by-a-flag-on-it.md),
+[ADR 0026](../../../../docs/adr/0026-a-paired-devices-chat-run-names-the-open-servers-it-may-use-by-id.md)).
 The daemon's `GET /api/images/drawing` does not carry it.
 
 <!-- module-docs:end -->

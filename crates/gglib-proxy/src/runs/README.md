@@ -43,7 +43,8 @@ chosen image model, handed to the starter as the query said it, beside any
 `tools`; on a plain chat run, or beside `kind=agent` (whose turn says it in
 its body), it is `400 invalid_request`, and without `draw` the starter
 refuses it the same. `tools` beside `kind=agent` is `400 invalid_request`
-too: a hub turn takes its tools from the chat's settings.
+too: a hub turn takes its tools from the chat's settings. The decision is
+[ADR 0026](../../../../docs/adr/0026-a-paired-devices-chat-run-names-the-open-servers-it-may-use-by-id.md).
 
 A request the tunnel edge marked is served in the scope of the device it
 named, and sees that device's runs and every run on one of the hub's

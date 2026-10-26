@@ -95,9 +95,9 @@ pub(crate) struct PutQuery {
     image_model: Option<u32>,
 }
 
-/// What `?tools=` says: `none`, or server ids joined by commas, each in
-/// canonical decimal (`^[1-9][0-9]*$`), read into a set, so `7,3,7` is
-/// `{3, 7}`. Any other value is refused: an empty one, an empty id
+/// What `?tools=` says (ADR 0026): `none`, or server ids joined by commas,
+/// each in canonical decimal (`^[1-9][0-9]*$`), read into a set, so `7,3,7`
+/// is `{3, 7}`. Any other value is refused: an empty one, an empty id
 /// (`3,,7`), a sign, a leading zero, `0`, `none` beside an id, and any word,
 /// `builtin` among them. A gglib that does not know a value so refuses it
 /// rather than running tools the device keeps out. No value says every

@@ -272,8 +272,9 @@ alone; the rest is settled in the run's late step (`hub_turn::late_on`,
 through `device_tools::settle`), once the model is found or loaded, where
 an open server that is not running is started (`McpService::opened_tools`).
 A `PUT` that is refused starts nothing. The decisions are
-[ADR 0024](../../../../../docs/adr/0024-the-tunnel-opens-mcp-servers-by-name.md)
-and [ADR 0025](../../../../../docs/adr/0025-a-server-is-opened-to-paired-devices-by-a-flag-on-it.md).
+[ADR 0024](../../../../../docs/adr/0024-the-tunnel-opens-mcp-servers-by-name.md),
+[ADR 0025](../../../../../docs/adr/0025-a-server-is-opened-to-paired-devices-by-a-flag-on-it.md)
+and [ADR 0026](../../../../../docs/adr/0026-a-paired-devices-chat-run-names-the-open-servers-it-may-use-by-id.md).
 
 `chat_turn` is the starter's other door, the proxy's
 `PUT /v1/runs/{id}?kind=chat&tools=<id>,<id>[&draw=true[&image_model=<id>]]`: a chat a paired

@@ -3,7 +3,7 @@
 //! or `tools=none`, for a chat a paired phone keeps itself, run here because
 //! the agent loop, its slot and the image tool are the daemon's. Its query
 //! is a [`ChatQuery`]: whether it draws, and which of the servers open to
-//! paired devices it may use, those whose ids it names, or none.
+//! paired devices it may use, those whose ids it names, or none (ADR 0026).
 //!
 //! The body is the phone's unchanged `OpenAI` chat request. Its `messages`
 //! are the whole history (`gglib_core`'s `parse_openai_messages`), and each

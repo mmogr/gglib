@@ -12,7 +12,7 @@
 //! that is not running. That is the run's own work, done once its model is
 //! ready, not the `PUT` that made it, and the one place a device's run
 //! starts a server: an id the run names that is not open is dropped there,
-//! so what the run names only ever narrows what is open.
+//! so what the run names only ever narrows what is open (ADR 0026).
 
 use gglib_core::{DeviceServers, McpServer, McpServerStatus, McpServerType, McpServiceError};
 use tracing::warn;

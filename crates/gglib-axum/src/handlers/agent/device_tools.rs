@@ -14,7 +14,7 @@
 //! one only those whose ids its query names. Those ids are filtered against the servers
 //! open to devices in `McpService::opened_tools`, and only there, before any
 //! server starts; [`offered`] trusts the list it is handed. The decisions
-//! are ADR 0024 and ADR 0025.
+//! are ADR 0024, ADR 0025 and ADR 0026.
 
 use std::collections::BTreeSet;
 

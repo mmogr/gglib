@@ -978,7 +978,8 @@ dropped when the run starts, never started and never refused: the run gets
 the named servers that are open, and the image tool with Draw, and the
 desktop's log has one warning naming the ids it dropped. A `PUT` under the
 id of a run already started answers with that run, and the run keeps the
-servers it started with whatever the query names now. The chosen
+servers it started with whatever the query names now
+([ADR 0026](adr/0026-a-paired-devices-chat-run-names-the-open-servers-it-may-use-by-id.md)). The chosen
 image model goes in the query beside it, `&image_model=<id>`, with the same
 rules and refusals as a turn's; `image_model` without `tools`, or
 beside `kind=agent`, is `400 invalid_request`, and so is `tools` beside
