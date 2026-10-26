@@ -816,10 +816,13 @@ button, and a desktop too old to have the route answers 404, which means it
 cannot.
 
 The proxy's answer also says which MCP servers a device's runs are offered:
-`mcp_servers`, the names of the servers open to paired devices while a
-session is live, read at each ask, `[]` when none is open, and there whether
-or not the desktop can draw (a desktop with no image model can still search). A device that reads
-a name there sends its questions with `tools=builtin` (below), and those of
+`mcp_servers`, each server open to paired devices while a session is live,
+as `{"id": 3, "name": "tavily"}`, read at each ask, `[]` when none is open,
+and there whether or not the desktop can draw (a desktop with no image model
+can still search). The list is in order of name and then id, and two servers
+that share a name are each listed, with their own ids: a device tells them
+apart by id, which a rename keeps and a server deleted and added again does
+not. A device that reads a server there sends its questions with `tools=builtin` (below), and those of
 a chat whose tools the person turned off as plain chat runs, or with
 `tools=none` when they draw; a desktop from before the list sends no such
 key, and a device sends it nothing new.

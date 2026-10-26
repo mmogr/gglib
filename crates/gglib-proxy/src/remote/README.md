@@ -70,8 +70,9 @@ through its runs instead.
 # The drawing answer's servers
 
 `GET /v1/images/drawing` answers [`DeviceDrawing`]: the drawing answer's own
-fields, flattened, and `mcp_servers`, the names of the servers open to
-paired devices, read from the MCP service while the tunnel's owner says a
+fields, flattened, and `mcp_servers`, each server open to paired devices
+as `{id, name}`, by name and then by id, a name two servers share listed
+under each, read from the MCP service while the tunnel's owner says a
 session is live (`[]` with none open, with no session, or with no tunnel
 owner), whether or not it can draw. It is the answer a device already reads
 before it sends a run, so a phone learns there whether its runs are offered

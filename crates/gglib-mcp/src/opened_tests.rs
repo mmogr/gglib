@@ -437,13 +437,49 @@ async fn a_name_two_open_servers_share_is_listed_once() {
     assert_eq!(service.device_server_names().await, ["fs", "tavily"]);
 }
 
-/// Servers that cannot be read open none: the read says so, and the names
-/// a status shows and the tools a run is offered are none.
+/// The servers a device chooses from are each open server, by name and then
+/// by id, a name two share listed under each: the order is not the order
+/// they were added in.
+#[tokio::test]
+async fn device_servers_lists_each_open_server_by_id_in_name_then_id_order() {
+    let (service, repo) = service();
+    // An older database can hold two of one name; the service refuses it now.
+    let first = repo.insert(stdio("tavily", "npx")).await.unwrap();
+    let fs = repo.insert(stdio("fs", "npx")).await.unwrap();
+    let closed = repo.insert(stdio("closed", "npx")).await.unwrap();
+    let second = repo.insert(stdio("tavily", "uvx")).await.unwrap();
+    for id in [second.id, first.id, fs.id] {
+        service.set_allow_remote(id, true).await.unwrap();
+    }
+
+    let listed: Vec<(i64, String)> = service
+        .device_servers()
+        .await
+        .into_iter()
+        .map(|server| (server.id, server.name))
+        .collect();
+
+    let tavily = "tavily".to_owned();
+    assert_eq!(
+        listed,
+        [
+            (fs.id, "fs".to_owned()),
+            (first.id, tavily.clone()),
+            (second.id, tavily)
+        ]
+    );
+    assert!(!listed.iter().any(|(id, _)| *id == closed.id));
+}
+
+/// Servers that cannot be read open none: the read says so, and the servers
+/// a device chooses from, the names a status shows and the tools a run is
+/// offered are none.
 #[tokio::test]
 async fn unreadable_servers_open_none_to_devices() {
     let service = McpService::new(Arc::new(Unreadable));
 
     assert!(service.open_to_devices().await.is_err());
+    assert!(service.device_servers().await.is_empty());
     assert_eq!(service.device_server_names().await, Vec::<String>::new());
     assert_eq!(
         service.opened_tools(&DeviceServers::All).await,

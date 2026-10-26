@@ -91,23 +91,35 @@ impl McpService {
         Ok(servers)
     }
 
-    /// The names of [`Self::open_to_devices`], sorted and each once, for a
-    /// status to show. None, with a warning, when the servers cannot be
-    /// read: a status that cannot say is not a failure of the tunnel.
-    pub async fn device_server_names(&self) -> Vec<String> {
+    /// [`Self::open_to_devices`] for a paired device to choose from: each
+    /// one, by name and then by id, a name two servers share listed under
+    /// each, since a device names a server by its id. None, with a warning,
+    /// when the servers cannot be read: an answer that cannot say is not a
+    /// failure of the tunnel.
+    pub async fn device_servers(&self) -> Vec<McpServer> {
         match self.open_to_devices().await {
-            Ok(servers) => {
-                let mut names: Vec<String> =
-                    servers.into_iter().map(|server| server.name).collect();
-                names.sort_unstable();
-                names.dedup();
-                names
+            Ok(mut servers) => {
+                servers.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
+                servers
             }
             Err(e) => {
                 warn!(error = %e, "could not read the MCP servers open to paired devices");
                 Vec::new()
             }
         }
+    }
+
+    /// The names of [`Self::device_servers`], sorted and each once, for a
+    /// status to show. None when the servers cannot be read.
+    pub async fn device_server_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .device_servers()
+            .await
+            .into_iter()
+            .map(|server| server.name)
+            .collect();
+        names.dedup();
+        names
     }
 
     /// The tools of the servers open to devices ([`Self::open_to_devices`])
