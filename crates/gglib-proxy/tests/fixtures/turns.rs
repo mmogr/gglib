@@ -2,6 +2,7 @@
 //! `PUT /v1/runs/{id}?kind=agent` tests. Records every turn it is handed and
 //! answers from a script.
 
+use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -13,8 +14,8 @@ use gglib_core::{CorsConfig, DevicePorts, ProxyAccessConfig};
 use super::runs::{FakeRuns, info};
 
 /// A chat run with builtins as the stub was handed it: `(device, id, body,
-/// draw, no_tools)`.
-pub(crate) type ChatStarted = (String, String, serde_json::Value, bool, bool);
+/// draw, servers)`.
+pub(crate) type ChatStarted = (String, String, serde_json::Value, bool, BTreeSet<i64>);
 
 /// The stub.
 #[derive(Debug, Default)]
@@ -57,13 +58,13 @@ impl AgentRunStarter for FakeTurns {
         body: serde_json::Value,
         draw: bool,
         image_model: Option<u32>,
-        no_tools: bool,
+        servers: BTreeSet<i64>,
     ) -> Result<Created, TurnRefused> {
         self.chose.lock().unwrap().push(image_model);
         self.chats
             .lock()
             .unwrap()
-            .push((device.to_owned(), id.to_owned(), body, draw, no_tools));
+            .push((device.to_owned(), id.to_owned(), body, draw, servers));
         let fail = self.fail.lock().unwrap().clone();
         if let Some(refusal) = fail {
             return Err(refusal);
