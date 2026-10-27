@@ -24,6 +24,10 @@ pub enum HttpError {
     #[error("Bad request: {0}")]
     BadRequest(String),
 
+    /// Refused whoever asks (403).
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
     /// Conflict (resource already exists).
     #[error("Conflict: {0}")]
     Conflict(String),
@@ -82,6 +86,7 @@ impl IntoResponse for HttpError {
         let (status, message, error_type, metadata) = match &self {
             Self::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone(), None, None),
             Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone(), None, None),
+            Self::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone(), None, None),
             Self::Conflict(msg) => (StatusCode::CONFLICT, msg.clone(), None, None),
             Self::ServiceUnavailable(msg) => {
                 (StatusCode::SERVICE_UNAVAILABLE, msg.clone(), None, None)

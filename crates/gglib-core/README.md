@@ -66,6 +66,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`normalize/`** — Universal normalization layer. The `ToolCallParser` trait plus dialect parsers (`StandardJsonParser` identity and the spec-driven `DelimitedToolCallParser` for marker-delimited tool calls) rewrite model-specific output into strict `OpenAI` events. Selected per-request from the model's persisted `DialectSpec` (with a `format:*` tag fallback) via `normalize::registry::get_parser`.
 - **`utils/`** — Shared utility functions and helpers
 - **`settings.rs`** — Application settings and configuration types
+- **`secret.rs`** — The secrets gglib stores (`SettingSecret`, `SecretRef`), what a held one is shown as (`SHOWN_AS`), and the blank rule (`held`). `services::SecretsService::reveal` is the one way a stored value comes back (ADR 0027)
 - **`hf_token.rs`** — The `HuggingFace` token: `from_env`, the one read of `HF_TOKEN`. `AppCore` holds what the bootstrap read and hands it out
 
 ## Design Principles

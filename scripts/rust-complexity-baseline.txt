@@ -28,7 +28,7 @@ crates/gglib-app-services/src/setup_engines_tests.rs 529
 crates/gglib-app-services/src/test_support.rs 394
 crates/gglib-app-services/src/types.rs 556
 crates/gglib-app-services/src/types_model_dto_tests.rs 311
-crates/gglib-axum/src/error.rs 326
+crates/gglib-axum/src/error.rs 331
 crates/gglib-axum/src/handlers/agent/compose.rs 375
 crates/gglib-axum/src/handlers/agent/compose_context_tests.rs 312
 crates/gglib-axum/src/handlers/agent/compose_draw_tests.rs 328
@@ -127,7 +127,7 @@ crates/gglib-core/src/request_pipeline/truncation.rs 329
 crates/gglib-core/src/request_pipeline/truncation_tests.rs 470
 crates/gglib-core/src/request_pipeline/validate.rs 497
 crates/gglib-core/src/server_config.rs 715
-crates/gglib-core/src/services/app_core.rs 335
+crates/gglib-core/src/services/app_core.rs 342
 crates/gglib-core/src/services/chat_history.rs 342
 crates/gglib-core/src/services/drawing.rs 349
 crates/gglib-core/src/services/drawing_tests.rs 347

@@ -11,6 +11,7 @@
 use gglib_core::ApiKeySource;
 use gglib_core::SettingsUpdate;
 use gglib_core::access::generate_api_key;
+use gglib_core::secret::held;
 use gglib_core::services::{AppCore, SETTINGS_CACHE_TTL};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
@@ -69,10 +70,7 @@ pub(crate) fn enforced(
     if let Some((key, source)) = effective {
         return Some((key, source == ApiKeySource::Flag));
     }
-    stored
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|stored| (stored.to_owned(), false))
+    held(stored).map(|stored| (stored.trim().to_owned(), false))
 }
 
 /// The key this tunnel will enforce, and the write it may still owe.

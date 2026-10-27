@@ -8,7 +8,7 @@
  * `del`, for a JSON call, and `apiFetch` for what that cannot carry.
  */
 
-import { readData } from '../errors';
+import { readData, type ReadOptions } from '../errors';
 import { appLogger } from '../../platform';
 import { isDesktop } from '../../platform/detect';
 import { isDaemonTokenRefusal, serviceRestarted, takeDaemonToken } from './daemonToken';
@@ -61,7 +61,7 @@ export interface HttpClient {
 /**
  * Request options for HTTP client.
  */
-interface RequestOptions {
+interface RequestOptions extends ReadOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
 }
@@ -175,7 +175,7 @@ function buildClient(config: HttpClientConfig): HttpClient {
     options?: RequestOptions,
     isRetry = false
   ): Promise<T> {
-    const { method = 'GET', body } = options || {};
+    const { method = 'GET', body, sensitive } = options || {};
     const hasBody = body !== undefined;
     // Include Content-Type header for POST/PUT/DELETE requests (even if body is undefined)
     // Backend may expect application/json header to parse Json<Option<T>> types
@@ -205,7 +205,7 @@ function buildClient(config: HttpClientConfig): HttpClient {
         return newClient.request<T>(path, options, true);
       }
       
-      return await readData<T>(response);
+      return await readData<T>(response, { sensitive });
     } catch (error) {
       // On network error (ECONNREFUSED, etc), clear cache and retry once
       if (!isRetry && isDesktop() && error instanceof TypeError) {
@@ -274,13 +274,13 @@ export async function get<T>(path: string): Promise<T> {
 }
 
 /**
- * Helper for POST requests.
+ * Helper for POST requests; `read` marks an answer that is a secret.
  */
-export async function post<T>(path: string, body?: unknown): Promise<T> {
+export async function post<T>(path: string, body?: unknown, read?: ReadOptions): Promise<T> {
   const client = await getClient();
   // Some backend handlers use Json<Option<T>>; they require valid JSON even when
   // "no body" is intended. Sending `null` is valid JSON and deserializes to None.
-  return client.request<T>(path, { method: 'POST', body: body === undefined ? null : body });
+  return client.request<T>(path, { method: 'POST', body: body === undefined ? null : body, ...read });
 }
 
 /**

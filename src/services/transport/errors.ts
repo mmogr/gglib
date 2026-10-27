@@ -125,11 +125,20 @@ interface ErrorApiResponse {
   metadata?: Record<string, unknown>;
 }
 
+/** How `readData` treats what it reads. */
+export interface ReadOptions {
+  /**
+   * The body is a secret (a reveal's answer, ADR 0027): never written to a
+   * log, here or by anything the debug log reaches.
+   */
+  sensitive?: boolean;
+}
+
 /**
  * Read and unwrap response data from a fetch Response.
  * Throws TransportError on failure.
  */
-export async function readData<T>(response: Response): Promise<T> {
+export async function readData<T>(response: Response, { sensitive = false }: ReadOptions = {}): Promise<T> {
   appLogger.debug('transport.error', '[readData] called', { status: response.status, ok: response.ok, contentType: response.headers.get('content-type') });
   
   if (!response.ok) {
@@ -172,7 +181,7 @@ export async function readData<T>(response: Response): Promise<T> {
   try {
     // Check if there's actually content to parse
     const text = await response.text();
-    appLogger.debug('transport.error', '[readData] response text', { textPreview: text.slice(0, 200) });
+    appLogger.debug('transport.error', '[readData] response text', sensitive ? { withheld: true } : { textPreview: text.slice(0, 200) });
     
     if (!text || text.trim() === '') {
       appLogger.debug('transport.error', '[readData] empty text body, returning undefined');
@@ -180,7 +189,7 @@ export async function readData<T>(response: Response): Promise<T> {
     }
     
     const body = JSON.parse(text) as ApiResponse<T>;
-    appLogger.debug('transport.error', '[readData] parsed body', { body });
+    appLogger.debug('transport.error', '[readData] parsed body', sensitive ? { withheld: true } : { body });
 
     // Guard against endpoints that return JSON `null` (unit responses serialised
     // by Axum's Json(()) before 204 migration). Treat as a successful void.

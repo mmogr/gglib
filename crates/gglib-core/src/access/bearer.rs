@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use super::constant_time_eq;
+use crate::secret::held;
 use crate::services::SettingsCache;
 
 /// The auth scheme this endpoint speaks, compared case-insensitively.
@@ -153,13 +154,7 @@ impl BearerPolicy {
             return Some(Arc::clone(pinned));
         }
         let stored = match &self.settings {
-            Some(cache) => cache
-                .get()
-                .await
-                .proxy_api_key
-                .as_deref()
-                .filter(|key| !key.trim().is_empty())
-                .map(Arc::from),
+            Some(cache) => held(cache.get().await.proxy_api_key.as_deref()).map(Arc::from),
             None => None,
         };
         stored.or_else(|| self.floor.clone())

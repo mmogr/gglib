@@ -29,6 +29,10 @@ one as a request naming it would be; `generate_image`
 is never in `/api/builtin/tools`, whose list the page lets a person switch
 tools on from, and neither are the file tools, which need the run's folder.
 
+`secrets.rs` is `POST /api/secrets/reveal`: a stored secret, for the page's
+Show and Copy, from core's `SecretsService::reveal` (ADR 0027). It refuses
+the pairing key, which only the CLI prints on this machine.
+
 `chat_title.rs` is `POST /api/chat`: a chat's title, asked of the
 llama-server the chat runs on. The body names the port, the messages, a
 temperature and a token cap, and any other key is refused. The request runs

@@ -15,5 +15,6 @@ pub(crate) mod port_utils;
 pub(crate) mod proxy;
 pub(crate) mod remote;
 pub(crate) mod runs;
+pub(crate) mod secrets;
 pub(crate) mod servers;
 pub(crate) mod version;

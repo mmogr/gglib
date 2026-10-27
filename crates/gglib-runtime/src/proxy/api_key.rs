@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use gglib_core::ApiKeySource;
 use gglib_core::ports::SettingsRepository;
+use gglib_core::secret::held;
 use tracing::{info, warn};
 
 /// Settle the bearer token for a proxy about to bind `host`.
@@ -41,10 +42,9 @@ pub async fn resolve_api_key(
 
     if let Some(key) = stored
         .as_ref()
-        .and_then(|s| s.proxy_api_key.clone())
-        .filter(|key| !key.trim().is_empty())
+        .and_then(|s| held(s.proxy_api_key.as_deref()))
     {
-        return (Some(key), ApiKeySource::Settings);
+        return (Some(key.to_owned()), ApiKeySource::Settings);
     }
 
     if gglib_core::access::is_loopback_host(host) {

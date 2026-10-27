@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{InferenceConfig, InferenceProfile};
+use crate::secret::held;
 
 #[path = "settings_bounds.rs"]
 mod settings_bounds;
@@ -538,11 +539,7 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
 
     // A stored blank would read as "authentication is on" while accepting
     // `Bearer ` from anyone. Clearing the field is the way to turn it off.
-    if settings
-        .proxy_api_key
-        .as_ref()
-        .is_some_and(|key| key.trim().is_empty())
-    {
+    if settings.proxy_api_key.is_some() && held(settings.proxy_api_key.as_deref()).is_none() {
         return Err(SettingsError::BlankProxyApiKey);
     }
 

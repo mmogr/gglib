@@ -90,6 +90,9 @@ pub(crate) fn api_routes() -> Router<AppState> {
             "/mcp/servers/{id}/test",
             post(handlers::mcp::test_connection),
         )
+        // A stored secret, for the page's Show and Copy (ADR 0027). POST,
+        // so the origin guard stands in front of it.
+        .route("/secrets/reveal", post(handlers::secrets::reveal))
         // Proxy API
         .route("/proxy/status", get(handlers::proxy::status))
         .route("/proxy/start", post(handlers::proxy::start))

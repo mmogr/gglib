@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 
 use gglib_core::access::{daemon_token_path, read_daemon_token};
 use gglib_core::contracts::http::daemon::DAEMON_TOKEN_REQUIRED_TYPE;
+use gglib_core::secret::held;
 
 use crate::bootstrap::CliContext;
 
@@ -54,9 +55,7 @@ impl Local {
     /// This process's environment and this machine's data root.
     pub(crate) fn here() -> Self {
         Self {
-            env: std::env::var(API_KEY_ENV)
-                .ok()
-                .filter(|key| !key.trim().is_empty()),
+            env: held(std::env::var(API_KEY_ENV).ok().as_deref()).map(str::to_owned),
             token_path: daemon_token_path().ok(),
         }
     }
@@ -113,13 +112,8 @@ pub(crate) async fn proxy_key(ctx: &CliContext, flag: Option<String>) -> Option<
     if flag.is_some() {
         return flag;
     }
-    ctx.app
-        .settings()
-        .get()
-        .await
-        .ok()
-        .and_then(|settings| settings.proxy_api_key)
-        .filter(|key| !key.trim().is_empty())
+    let settings = ctx.app.settings().get().await.ok()?;
+    held(settings.proxy_api_key.as_deref()).map(str::to_owned)
 }
 
 /// What to tell someone whose daemon call came back 401.
