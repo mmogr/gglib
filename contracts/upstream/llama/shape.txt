@@ -1,0 +1,286 @@
+/apply-template	prompt	string
+/health	status	string
+/props	bos_token	string
+/props	build_info	string
+/props	chat_template	string
+/props	chat_template_caps	object
+/props	chat_template_caps.supports_object_arguments	bool
+/props	chat_template_caps.supports_parallel_tool_calls	bool
+/props	chat_template_caps.supports_preserve_reasoning	bool
+/props	chat_template_caps.supports_reasoning_effort	bool
+/props	chat_template_caps.supports_string_content	bool
+/props	chat_template_caps.supports_system_role	bool
+/props	chat_template_caps.supports_tool_calls	bool
+/props	chat_template_caps.supports_tools	bool
+/props	chat_template_caps.supports_typed_content	bool
+/props	cors_proxy_enabled	bool
+/props	default_generation_settings	object
+/props	default_generation_settings.n_ctx	number
+/props	default_generation_settings.params	object
+/props	default_generation_settings.params.adaptive_decay	number
+/props	default_generation_settings.params.adaptive_target	number
+/props	default_generation_settings.params.backend_sampling	bool
+/props	default_generation_settings.params.chat_format	string
+/props	default_generation_settings.params.dry_allowed_length	number
+/props	default_generation_settings.params.dry_base	number
+/props	default_generation_settings.params.dry_multiplier	number
+/props	default_generation_settings.params.dry_penalty_last_n	number
+/props	default_generation_settings.params.dynatemp_exponent	number
+/props	default_generation_settings.params.dynatemp_range	number
+/props	default_generation_settings.params.frequency_penalty	number
+/props	default_generation_settings.params.generation_prompt	string
+/props	default_generation_settings.params.ignore_eos	bool
+/props	default_generation_settings.params.lora	array
+/props	default_generation_settings.params.max_tokens	number
+/props	default_generation_settings.params.min_keep	number
+/props	default_generation_settings.params.min_p	number
+/props	default_generation_settings.params.mirostat	number
+/props	default_generation_settings.params.mirostat_eta	number
+/props	default_generation_settings.params.mirostat_tau	number
+/props	default_generation_settings.params.n_discard	number
+/props	default_generation_settings.params.n_keep	number
+/props	default_generation_settings.params.n_predict	number
+/props	default_generation_settings.params.n_probs	number
+/props	default_generation_settings.params.post_sampling_probs	bool
+/props	default_generation_settings.params.presence_penalty	number
+/props	default_generation_settings.params.reasoning_format	string
+/props	default_generation_settings.params.reasoning_in_content	bool
+/props	default_generation_settings.params.repeat_last_n	number
+/props	default_generation_settings.params.repeat_penalty	number
+/props	default_generation_settings.params.samplers	array
+/props	default_generation_settings.params.samplers[]	string
+/props	default_generation_settings.params.seed	number
+/props	default_generation_settings.params.speculative.types	string
+/props	default_generation_settings.params.stream	bool
+/props	default_generation_settings.params.temperature	number
+/props	default_generation_settings.params.timings_per_token	bool
+/props	default_generation_settings.params.top_k	number
+/props	default_generation_settings.params.top_n_sigma	number
+/props	default_generation_settings.params.top_p	number
+/props	default_generation_settings.params.typical_p	number
+/props	default_generation_settings.params.xtc_probability	number
+/props	default_generation_settings.params.xtc_threshold	number
+/props	endpoint_metrics	bool
+/props	endpoint_props	bool
+/props	endpoint_slots	bool
+/props	eos_token	string
+/props	is_sleeping	bool
+/props	media_marker	string
+/props	modalities	object
+/props	modalities.audio	bool
+/props	modalities.video	bool
+/props	modalities.vision	bool
+/props	model_alias	string
+/props	model_ftype	string
+/props	model_path	string
+/props	total_slots	number
+/props	ui	bool
+/props	ui_settings	object
+/slots	[]	object
+/slots	[].id	number
+/slots	[].id_task	number
+/slots	[].is_processing	bool
+/slots	[].n_ctx	number
+/slots	[].n_prompt_tokens	number
+/slots	[].n_prompt_tokens_cache	number
+/slots	[].n_prompt_tokens_processed	number
+/slots	[].next_token	array
+/slots	[].next_token[]	object
+/slots	[].next_token[].has_new_line	bool
+/slots	[].next_token[].has_next_token	bool
+/slots	[].next_token[].n_decoded	number
+/slots	[].next_token[].n_remain	number
+/slots	[].params	object
+/slots	[].params.adaptive_decay	number
+/slots	[].params.adaptive_target	number
+/slots	[].params.backend_sampling	bool
+/slots	[].params.chat_format	string
+/slots	[].params.dry_allowed_length	number
+/slots	[].params.dry_base	number
+/slots	[].params.dry_multiplier	number
+/slots	[].params.dry_penalty_last_n	number
+/slots	[].params.dynatemp_exponent	number
+/slots	[].params.dynatemp_range	number
+/slots	[].params.frequency_penalty	number
+/slots	[].params.generation_prompt	string
+/slots	[].params.ignore_eos	bool
+/slots	[].params.lora	array
+/slots	[].params.max_tokens	number
+/slots	[].params.min_keep	number
+/slots	[].params.min_p	number
+/slots	[].params.mirostat	number
+/slots	[].params.mirostat_eta	number
+/slots	[].params.mirostat_tau	number
+/slots	[].params.n_discard	number
+/slots	[].params.n_keep	number
+/slots	[].params.n_predict	number
+/slots	[].params.n_probs	number
+/slots	[].params.post_sampling_probs	bool
+/slots	[].params.presence_penalty	number
+/slots	[].params.reasoning_format	string
+/slots	[].params.reasoning_in_content	bool
+/slots	[].params.repeat_last_n	number
+/slots	[].params.repeat_penalty	number
+/slots	[].params.samplers	array
+/slots	[].params.samplers[]	string
+/slots	[].params.seed	number
+/slots	[].params.speculative.types	string
+/slots	[].params.stream	bool
+/slots	[].params.temperature	number
+/slots	[].params.timings_per_token	bool
+/slots	[].params.top_k	number
+/slots	[].params.top_n_sigma	number
+/slots	[].params.top_p	number
+/slots	[].params.typical_p	number
+/slots	[].params.xtc_probability	number
+/slots	[].params.xtc_threshold	number
+/slots	[].speculative	bool
+/slots (debug)	[]	object
+/slots (debug)	[].generated	string
+/slots (debug)	[].id	number
+/slots (debug)	[].id_task	number
+/slots (debug)	[].is_processing	bool
+/slots (debug)	[].n_ctx	number
+/slots (debug)	[].n_prompt_tokens	number
+/slots (debug)	[].n_prompt_tokens_cache	number
+/slots (debug)	[].n_prompt_tokens_processed	number
+/slots (debug)	[].next_token	array
+/slots (debug)	[].next_token[]	object
+/slots (debug)	[].next_token[].has_new_line	bool
+/slots (debug)	[].next_token[].has_next_token	bool
+/slots (debug)	[].next_token[].n_decoded	number
+/slots (debug)	[].next_token[].n_remain	number
+/slots (debug)	[].params	object
+/slots (debug)	[].params.adaptive_decay	number
+/slots (debug)	[].params.adaptive_target	number
+/slots (debug)	[].params.backend_sampling	bool
+/slots (debug)	[].params.chat_format	string
+/slots (debug)	[].params.dry_allowed_length	number
+/slots (debug)	[].params.dry_base	number
+/slots (debug)	[].params.dry_multiplier	number
+/slots (debug)	[].params.dry_penalty_last_n	number
+/slots (debug)	[].params.dry_sequence_breakers	array
+/slots (debug)	[].params.dry_sequence_breakers[]	string
+/slots (debug)	[].params.dynatemp_exponent	number
+/slots (debug)	[].params.dynatemp_range	number
+/slots (debug)	[].params.frequency_penalty	number
+/slots (debug)	[].params.generation_prompt	string
+/slots (debug)	[].params.grammar	string
+/slots (debug)	[].params.grammar_lazy	bool
+/slots (debug)	[].params.grammar_triggers	array
+/slots (debug)	[].params.grammar_triggers[]	object
+/slots (debug)	[].params.grammar_triggers[].type	number
+/slots (debug)	[].params.grammar_triggers[].value	string
+/slots (debug)	[].params.ignore_eos	bool
+/slots (debug)	[].params.logit_bias	array
+/slots (debug)	[].params.logit_bias[]	object
+/slots (debug)	[].params.logit_bias[].bias	null
+/slots (debug)	[].params.logit_bias[].token	number
+/slots (debug)	[].params.lora	array
+/slots (debug)	[].params.max_tokens	number
+/slots (debug)	[].params.min_keep	number
+/slots (debug)	[].params.min_p	number
+/slots (debug)	[].params.mirostat	number
+/slots (debug)	[].params.mirostat_eta	number
+/slots (debug)	[].params.mirostat_tau	number
+/slots (debug)	[].params.n_discard	number
+/slots (debug)	[].params.n_keep	number
+/slots (debug)	[].params.n_predict	number
+/slots (debug)	[].params.n_probs	number
+/slots (debug)	[].params.post_sampling_probs	bool
+/slots (debug)	[].params.presence_penalty	number
+/slots (debug)	[].params.preserved_tokens	array
+/slots (debug)	[].params.reasoning_format	string
+/slots (debug)	[].params.reasoning_in_content	bool
+/slots (debug)	[].params.repeat_last_n	number
+/slots (debug)	[].params.repeat_penalty	number
+/slots (debug)	[].params.samplers	array
+/slots (debug)	[].params.samplers[]	string
+/slots (debug)	[].params.seed	number
+/slots (debug)	[].params.speculative.types	string
+/slots (debug)	[].params.stop	array
+/slots (debug)	[].params.stream	bool
+/slots (debug)	[].params.temperature	number
+/slots (debug)	[].params.timings_per_token	bool
+/slots (debug)	[].params.top_k	number
+/slots (debug)	[].params.top_n_sigma	number
+/slots (debug)	[].params.top_p	number
+/slots (debug)	[].params.typical_p	number
+/slots (debug)	[].params.xtc_probability	number
+/slots (debug)	[].params.xtc_threshold	number
+/slots (debug)	[].prompt	string
+/slots (debug)	[].speculative	bool
+/tokenize	tokens	array
+/tokenize	tokens[]	number
+/v1/chat/completions/input_tokens	input_tokens	number
+/v1/chat/completions/input_tokens	object	string
+chat completion	choices	array
+chat completion	choices[]	object
+chat completion	choices[].finish_reason	string
+chat completion	choices[].index	number
+chat completion	choices[].message	object
+chat completion	choices[].message.content	string
+chat completion	choices[].message.reasoning_content	string
+chat completion	choices[].message.role	string
+chat completion	created	number
+chat completion	id	string
+chat completion	model	string
+chat completion	object	string
+chat completion	system_fingerprint	string
+chat completion	timings	object
+chat completion	timings.cache_n	number
+chat completion	timings.predicted_ms	number
+chat completion	timings.predicted_n	number
+chat completion	timings.predicted_per_second	number
+chat completion	timings.predicted_per_token_ms	number
+chat completion	timings.prompt_ms	number
+chat completion	timings.prompt_n	number
+chat completion	timings.prompt_per_second	number
+chat completion	timings.prompt_per_token_ms	number
+chat completion	usage	object
+chat completion	usage.completion_tokens	number
+chat completion	usage.prompt_tokens	number
+chat completion	usage.prompt_tokens_details	object
+chat completion	usage.prompt_tokens_details.cached_tokens	number
+chat completion	usage.total_tokens	number
+error (over context)	error	object
+error (over context)	error.code	number
+error (over context)	error.message	string
+error (over context)	error.n_ctx	number
+error (over context)	error.n_prompt_tokens	number
+error (over context)	error.type	string
+stream chunk	choices	array
+stream chunk	choices[]	object
+stream chunk	choices[].delta	object
+stream chunk	choices[].delta.content	null
+stream chunk	choices[].delta.reasoning_content	string
+stream chunk	choices[].delta.role	string
+stream chunk	choices[].finish_reason	null
+stream chunk	choices[].finish_reason	string
+stream chunk	choices[].index	number
+stream chunk	created	number
+stream chunk	id	string
+stream chunk	model	string
+stream chunk	object	string
+stream chunk	prompt_progress	object
+stream chunk	prompt_progress.cache	number
+stream chunk	prompt_progress.processed	number
+stream chunk	prompt_progress.time_ms	number
+stream chunk	prompt_progress.total	number
+stream chunk	system_fingerprint	string
+stream chunk	timings	object
+stream chunk	timings.cache_n	number
+stream chunk	timings.predicted_ms	number
+stream chunk	timings.predicted_n	number
+stream chunk	timings.predicted_per_second	number
+stream chunk	timings.predicted_per_token_ms	number
+stream chunk	timings.prompt_ms	number
+stream chunk	timings.prompt_n	number
+stream chunk	timings.prompt_per_second	number
+stream chunk	timings.prompt_per_token_ms	number
+stream chunk	usage	object
+stream chunk	usage.completion_tokens	number
+stream chunk	usage.prompt_tokens	number
+stream chunk	usage.prompt_tokens_details	object
+stream chunk	usage.prompt_tokens_details.cached_tokens	number
+stream chunk	usage.total_tokens	number

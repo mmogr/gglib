@@ -114,6 +114,20 @@ jobs:
       - name: Run the architecture checks
         run: make enforce
 
+  # Each reading an ADR's criterion names, in contracts/upstream/llama's
+  # observed.json, against its hand-kept approval. It reads two committed
+  # files and never starts an engine, so a recorder that fails cannot turn it
+  # red; a reading that moved, or one nobody has approved, does.
+  adr-readings:
+    name: ADR criterion moved
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Check each ADR reading against its approval
+        run: make adr-readings
+
   test:
     name: Test (Rust)
     runs-on: ubuntu-24.04
@@ -563,48 +577,27 @@ jobs:
 
       # The pinned engines themselves, on the two platforms whose builds a
       # runner can run. The `gglib` just built installs each one as a user's
-      # machine would, into a folder of the job's own. Each engine's `--help`
+      # machine would, into a folder of the job's own, and the action fetches
+      # the recorder's tiny models; both are cached. Each engine's `--help`
       # and each pinned release's asset list then go to `gglib-runtime`'s
       # ignored tests: every flag and fixed value gglib starts an engine with
       # must be one its `--help` lists, and every row of the two download
       # tables must match exactly one asset. `--version`, which gglib also
       # runs both servers with, is run here directly: sd-server's `--help`
-      # does not list it. A passing run caches the installs by the two pins,
-      # so later runs of the same pull request skip the downloads; this job
-      # never runs on main, so each new pull request installs once.
-      - name: Read the engine pins
+      # does not list it.
+      - name: Install the pinned engines and the test models
         if: runner.os != 'Windows'
-        id: pins
-        shell: bash
-        run: |
-          llama=$(sed -nE 's/.*PINNED_LLAMA_RELEASE: &str = "([^"]+)".*/\1/p' crates/gglib-runtime/src/llama/download/mod.rs)
-          sd=$(sed -nE 's/.*PINNED_SD_RELEASE: &str = "([^"]+)".*/\1/p' crates/gglib-runtime/src/sd/install/release.rs)
-          [[ -n $llama && -n $sd ]] || exit 1
-          echo "llama=$llama" >> "$GITHUB_OUTPUT"
-          echo "sd=$sd" >> "$GITHUB_OUTPUT"
-
-      - name: Cache the pinned engines
-        if: runner.os != 'Windows'
-        uses: actions/cache@v6
+        id: engines
+        uses: ./.github/actions/pinned-engines
         with:
-          path: ${{ runner.temp }}/engines
-          key: pinned-engines-${{ matrix.target }}-${{ steps.pins.outputs.llama }}-${{ steps.pins.outputs.sd }}
-
-      - name: Install the pinned engines
-        if: runner.os != 'Windows'
-        env:
-          GGLIB_DATA_DIR: ${{ runner.temp }}/engines
-          GGLIB_RESOURCE_DIR: ${{ runner.temp }}/engines
-        run: |
-          target/debug/gglib config llama install
-          target/debug/gglib config sd install
+          target: ${{ matrix.target }}
 
       - name: Save the engines' help and the releases' assets
         if: runner.os != 'Windows'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          ENGINES: ${{ runner.temp }}/engines
+          ENGINES: ${{ steps.engines.outputs.engines }}
         run: |
           help="$RUNNER_TEMP/engine-help"
           assets="$RUNNER_TEMP/engine-assets"
@@ -614,9 +607,9 @@ jobs:
           "$ENGINES/.sd/bin/sd-server" --help > "$help/sd-server.txt" 2>&1
           "$ENGINES/.llama/bin/llama-server" --version
           "$ENGINES/.sd/bin/sd-server" --version
-          gh release view "${{ steps.pins.outputs.llama }}" -R ggml-org/llama.cpp \
+          gh release view "${{ steps.engines.outputs.llama }}" -R ggml-org/llama.cpp \
             --json assets -q '.assets[].name' > "$assets/llama.txt"
-          gh release view "${{ steps.pins.outputs.sd }}" -R leejet/stable-diffusion.cpp \
+          gh release view "${{ steps.engines.outputs.sd }}" -R leejet/stable-diffusion.cpp \
             --json assets -q '.assets[].name' > "$assets/sd.txt"
 
       - name: Check every flag gglib passes is one the pinned engines take
@@ -625,6 +618,77 @@ jobs:
           GGLIB_ENGINE_HELP_DIR: ${{ runner.temp }}/engine-help
           GGLIB_ENGINE_ASSETS_DIR: ${{ runner.temp }}/engine-assets
         run: cargo test -p gglib-runtime --lib -- --ignored
+
+      # The pinned llama-server, started through gglib's own launch path on
+      # the tiny models, writes what it answered into contracts/upstream
+      # (engine_contract_tests.rs says what is kept). Report-only for now, as
+      # is the comparison below: a recorder or a reading that is not yet
+      # stable on a runner shows in the step summary without blocking a merge.
+      # The models variable is set on this step alone, so the ignored tests
+      # above skip the recorder.
+      - name: Record the pinned llama-server
+        if: runner.os != 'Windows'
+        id: record
+        continue-on-error: true
+        env:
+          GGLIB_ENGINES_DIR: ${{ steps.engines.outputs.engines }}
+          GGLIB_ENGINE_MODELS_DIR: ${{ steps.engines.outputs.models }}
+          GGLIB_ENGINE_BODIES_DIR: ${{ runner.temp }}/upstream-bodies
+          GGLIB_RECORD_CONTRACTS: "1"
+        run: cargo test -p gglib-runtime --lib engine_contract -- --ignored --nocapture
+
+      - name: Compare with contracts/upstream
+        if: runner.os != 'Windows'
+        continue-on-error: true
+        shell: bash
+        env:
+          PIN: ${{ steps.engines.outputs.llama }}
+          ARTIFACT: ${{ runner.os == 'Linux' && 'upstream-recordings' || format('upstream-recordings-{0}', matrix.target) }}
+          RECORDED: ${{ steps.record.outcome }}
+        run: |
+          if [[ $RECORDED != success ]]; then
+            echo "::error title=the recorder did not finish::Read the \"Record the pinned llama-server\" step on ${{ matrix.target }}; contracts/upstream was not checked."
+            echo "The recorder did not finish on ${{ matrix.target }}, so contracts/upstream was not checked." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          changed=$(git status --porcelain -- contracts/upstream | awk '{print $2}')
+          if [[ -z $changed ]]; then
+            echo "contracts/upstream matches what $PIN answered on ${{ matrix.target }}." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          names=$(xargs -n1 basename <<<"$changed" | paste -sd, - | sed 's/,/, /g')
+          count=$(wc -l <<<"$changed" | tr -d ' ')
+          echo "::error title=contracts/upstream is stale::$count files differ from what $PIN answered on this tree: $names. Run \`make record-upstream\` on this branch, or download artifact \`$ARTIFACT\` from this run and commit it."
+          {
+            echo "### contracts/upstream on ${{ matrix.target }}: $count files differ from what $PIN answered"
+            echo
+            echo '```diff'
+            git diff -- contracts/upstream | head -c 60000
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      - name: Gather the recordings
+        if: runner.os != 'Windows' && always()
+        shell: bash
+        run: |
+          out="$RUNNER_TEMP/upstream-recordings"
+          mkdir -p "$out"
+          cp -R contracts/upstream/. "$out/"
+          if [[ -d $RUNNER_TEMP/upstream-bodies ]]; then
+            rm -rf "$out/llama/bodies"
+            cp -R "$RUNNER_TEMP/upstream-bodies" "$out/llama/bodies"
+          fi
+
+      # The artifact is laid out as contracts/upstream is, with the redacted
+      # bodies in llama/bodies/, so committing it is unpacking it there.
+      - name: Upload the recordings
+        if: runner.os != 'Windows' && always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ runner.os == 'Linux' && 'upstream-recordings' || format('upstream-recordings-{0}', matrix.target) }}
+          path: ${{ runner.temp }}/upstream-recordings
+          if-no-files-found: ignore
 
   # The `clippy` job above runs on ubuntu only, so until now no lint had ever
   # seen the inside of a `#[cfg(windows)]` block. `cli-cross-os` visits all
@@ -698,7 +762,7 @@ jobs:
     name: CI Success
     runs-on: ubuntu-24.04
     if: always()
-    needs: [boundaries, bindings, enforcement, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os]
+    needs: [boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os]
     steps:
       - name: Check all jobs succeeded
         run: |

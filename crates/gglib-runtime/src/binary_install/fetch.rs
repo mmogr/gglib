@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 
 use gglib_core::download::{ProgressThrottle, RateEstimator};
 
-use super::release::{ReleaseSelector, ReleaseSpec};
+use super::release::{GITHUB_API, ReleaseSelector, ReleaseSpec};
 use crate::llama::LlamaProgressEvent;
 
 /// GitHub API response for a release
@@ -90,6 +90,14 @@ pub(crate) async fn fetch_release(
     .await
 }
 
+/// The token sent with a release listing: `GITHUB_TOKEN`, when set, and only
+/// to GitHub's own API. An unauthenticated listing shares a runner's
+/// 60-an-hour limit with every other job on it; a test's fake API never sees
+/// the token.
+fn api_token(api_base: &str, env: Option<String>) -> Option<String> {
+    env.filter(|token| api_base == GITHUB_API && !token.is_empty())
+}
+
 /// One release listing, as GitHub answers it for `selector`.
 async fn fetch_one_release(
     client: &Client,
@@ -97,10 +105,14 @@ async fn fetch_one_release(
     spec: &ReleaseSpec,
     selector: &ReleaseSelector,
 ) -> Result<GitHubRelease> {
-    let response = client
+    let mut request = client
         .get(selector.api_url(api_base, spec.repo))
         .header("User-Agent", "gglib")
-        .header("Accept", "application/vnd.github.v3+json")
+        .header("Accept", "application/vnd.github.v3+json");
+    if let Some(token) = api_token(api_base, std::env::var("GITHUB_TOKEN").ok()) {
+        request = request.bearer_auth(token);
+    }
+    let response = request
         .send()
         .await
         .with_context(|| format!("Failed to fetch {} releases from GitHub", spec.product))?;
@@ -269,4 +281,18 @@ pub(crate) async fn download_cuda_runtime(
     let _ = fs::remove_file(&cudart_zip_path);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_token_goes_only_to_githubs_own_api() {
+        let token = || Some("t0k".to_owned());
+        assert_eq!(api_token(GITHUB_API, token()).as_deref(), Some("t0k"));
+        assert_eq!(api_token("http://127.0.0.1:9", token()), None);
+        assert_eq!(api_token(GITHUB_API, Some(String::new())), None);
+        assert_eq!(api_token(GITHUB_API, None), None);
+    }
 }

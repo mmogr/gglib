@@ -149,3 +149,93 @@ fn an_empty_caps_object_reads_as_all_none_and_resolves_unknown() {
         "an absent field licenses no conclusion in either direction"
     );
 }
+
+// ── What the pinned llama-server answers (contracts/upstream) ─────────────
+
+/// Its `/props` for each dateless template, as the recorder kept them.
+const RECORDED_PROPS: [(&str, &str); 3] = [
+    (
+        "Qwen3.5-4B",
+        include_str!("../../../contracts/upstream/llama/bodies/props.Qwen3.5-4B.json"),
+    ),
+    (
+        "Qwen-Qwen3-0.6B",
+        include_str!("../../../contracts/upstream/llama/bodies/props.Qwen-Qwen3-0.6B.json"),
+    ),
+    (
+        "ibm-granite-granite-4.0",
+        include_str!("../../../contracts/upstream/llama/bodies/props.ibm-granite-granite-4.0.json"),
+    ),
+];
+
+/// Both halves read, and the caps the build reports are exactly the nine
+/// `TemplateCaps` names, every one of them a yes or a no.
+#[test]
+fn the_pinned_servers_props_read_both_halves_for_every_template() {
+    for (template, body) in RECORDED_PROPS {
+        let r = parse_props(StatusCode::OK, body);
+        assert!(
+            matches!(r.params, PropsResult::Available(_)),
+            "{template}: {r:?}"
+        );
+        let caps = r.caps.caps().unwrap_or_else(|| panic!("{template}: {r:?}"));
+        let read = serde_json::to_value(caps).unwrap();
+        let read = read.as_object().unwrap();
+        let sent: serde_json::Value = serde_json::from_str(body).unwrap();
+        let sent = sent["chat_template_caps"].as_object().unwrap();
+        let names = |m: &serde_json::Map<String, serde_json::Value>| {
+            m.keys().cloned().collect::<std::collections::BTreeSet<_>>()
+        };
+        assert_eq!(names(read), names(sent), "{template}");
+        assert!(
+            read.values().all(serde_json::Value::is_boolean),
+            "{template}: {read:?}"
+        );
+    }
+}
+
+/// The pinned build's own sampler table, read through the baseline check
+/// a launch runs, agrees with ADR 0003's on every field. (gglib passes no
+/// sampler flag, `SAMPLER_LAUNCH_FLAGS_PASSED`, or nothing could match.)
+#[test]
+fn the_pinned_servers_bare_props_agree_with_the_baseline() {
+    let PropsResult::Available(params) = parse_props(StatusCode::OK, RECORDED_PROPS[0].1).params
+    else {
+        panic!("the recorded /props carries params");
+    };
+    let report = BaselineReport::from_params(&params, Some(&ModelSamplingDefaults::default()));
+    assert_eq!(report.coverage, BaselineCoverage::Complete, "{report:?}");
+    assert!(report.drifted().is_empty(), "{report:?}");
+}
+
+/// `UPSTREAM_DEFAULTS` is a constant, so a redaction can never become a
+/// proxy bug. This holds it to what the recorder read at the pin; a moved
+/// default also fails `make adr-readings` until it is approved.
+#[test]
+fn upstream_defaults_are_what_the_pinned_llama_server_reports() {
+    let observed: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../contracts/upstream/llama/observed.json"
+    ))
+    .unwrap();
+    let recorded: std::collections::BTreeSet<&str> = observed
+        .as_object()
+        .unwrap()
+        .keys()
+        .filter_map(|key| key.strip_prefix("sampler_defaults."))
+        .collect();
+    let table: std::collections::BTreeSet<&str> =
+        UPSTREAM_DEFAULTS.iter().map(|(f, _)| *f).collect();
+    assert_eq!(
+        recorded, table,
+        "observed.json and UPSTREAM_DEFAULTS name different fields"
+    );
+    for &(field, expected) in &UPSTREAM_DEFAULTS {
+        let key = format!("sampler_defaults.{field}");
+        let value = observed[&key]["value"].as_f64().unwrap();
+        assert!(
+            (value - expected).abs() <= FLOAT_EPSILON,
+            "UPSTREAM_DEFAULTS has {field} = {expected}; contracts/upstream/llama/observed.json \
+             has {key} = {value}. Approve the move in approvals.json and change the table with it."
+        );
+    }
+}

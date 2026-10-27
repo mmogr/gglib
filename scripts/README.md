@@ -8,15 +8,17 @@ here.
 
 ## Architecture checks
 
-CI runs these through `make boundaries` and `make enforce`, the targets
-`make pre-commit` runs. The `enforce` recipe in the [Makefile](../Makefile)
-lists every check it runs, and this file keeps no second list.
+CI runs these through `make boundaries`, `make enforce` and
+`make adr-readings`, the targets `make pre-commit` runs. The `enforce` recipe
+in the [Makefile](../Makefile) lists every check it runs, and this file keeps
+no second list.
 
 | Script | Purpose | Run by |
 |--------|---------|--------|
 | `check_boundaries.sh` | The crate dependency rules of CONTRIBUTING's [Crate Boundaries](../CONTRIBUTING.md#crate-boundaries) that a crate's direct dependencies show, the `gglib-bootstrap` source guard, and `check_readmes.sh --strict` | `make boundaries`, in `ci.yml`'s `boundaries` job |
 | `check_readmes.sh` | README coverage: each directory below a crate's `src/`, below `src-tauri/src/` and below the TypeScript `src/` (`src/types/generated/` excepted) has a README with its `module-docs` markers | `check_boundaries.sh`, with `--strict` |
 | The checks in the `enforce` recipe | The repository rules that neither the compiler nor a linter checks | `make enforce`, in `ci.yml`'s `enforcement` job |
+| `check_adr_readings.sh` | Each reading an ADR's criterion names, in `contracts/upstream/llama/observed.json`, against its hand-kept approval in `approvals.json`, and each quoted criterion against its ADR | `make adr-readings`, in `ci.yml`'s `adr-readings` job (`ADR criterion moved`) |
 
 ### `check_file_size.sh`
 

@@ -1,0 +1,20 @@
+data: {"choices":[{"delta":{"content":null,"role":"assistant"},"finish_reason":null,"index":0}],"created":0,"id":"<redacted>","model":"<redacted>","object":"chat.completion.chunk","prompt_progress":{"cache":61,"processed":61,"time_ms":0,"total":62},"system_fingerprint":"<redacted>"}
+
+data: {"choices":[{"delta":{"content":null,"role":"assistant"},"finish_reason":null,"index":0}],"created":0,"id":"<redacted>","model":"<redacted>","object":"chat.completion.chunk","prompt_progress":{"cache":61,"processed":62,"time_ms":0,"total":62},"system_fingerprint":"<redacted>"}
+
+data: {"choices":[{"delta":{"content":null,"role":"assistant"},"finish_reason":null,"index":0}],"created":0,"id":"<redacted>","model":"<redacted>","object":"chat.completion.chunk","system_fingerprint":"<redacted>"}
+
+data: {"choices":[{"delta":{"reasoning_content":"<redacted>"},"finish_reason":null,"index":0}],"created":0,"id":"<redacted>","model":"<redacted>","object":"chat.completion.chunk","system_fingerprint":"<redacted>"}
+
+data: {"choices":[{"delta":{"reasoning_content":"<redacted>"},"finish_reason":null,"index":0}],"created":0,"id":"<redacted>","model":"<redacted>","object":"chat.completion.chunk","system_fingerprint":"<redacted>"}
+
+data: {"choices":[{"delta":{"reasoning_content":"<redacted>"},"finish_reason":null,"index":0}],"created":0,"id":"<redacted>","model":"<redacted>","object":"chat.completion.chunk","system_fingerprint":"<redacted>"}
+
+data: {"choices":[{"delta":{"reasoning_content":"<redacted>"},"finish_reason":null,"index":0}],"created":0,"id":"<redacted>","model":"<redacted>","object":"chat.completion.chunk","system_fingerprint":"<redacted>"}
+
+data: {"choices":[{"delta":{},"finish_reason":"length","index":0}],"created":0,"id":"<redacted>","model":"<redacted>","object":"chat.completion.chunk","system_fingerprint":"<redacted>"}
+
+data: {"choices":[],"created":0,"id":"<redacted>","model":"<redacted>","object":"chat.completion.chunk","system_fingerprint":"<redacted>","timings":{},"usage":{"completion_tokens":4,"prompt_tokens":62,"prompt_tokens_details":{"cached_tokens":61},"total_tokens":66}}
+
+data: [DONE]
+

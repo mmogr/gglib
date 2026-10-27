@@ -1,0 +1,118 @@
+{
+  "auto_grammar.Qwen-Qwen3-0.6B.grammar": {
+    "approved": true,
+    "note": "first reading, b11669"
+  },
+  "auto_grammar.Qwen-Qwen3-0.6B.lazy": {
+    "approved": true,
+    "note": "first reading, b11669"
+  },
+  "auto_grammar.Qwen-Qwen3-0.6B.triggers_present": {
+    "approved": true,
+    "note": "first reading, b11669"
+  },
+  "auto_grammar.Qwen3.5-4B.grammar": {
+    "approved": true,
+    "note": "first reading, b11669"
+  },
+  "auto_grammar.Qwen3.5-4B.lazy": {
+    "approved": true,
+    "note": "first reading, b11669"
+  },
+  "auto_grammar.Qwen3.5-4B.triggers_present": {
+    "approved": true,
+    "note": "first reading, b11669"
+  },
+  "auto_grammar.ibm-granite-granite-4.0.grammar": {
+    "approved": true,
+    "note": "first reading, b11669"
+  },
+  "auto_grammar.ibm-granite-granite-4.0.lazy": {
+    "approved": true,
+    "note": "first reading, b11669"
+  },
+  "auto_grammar.ibm-granite-granite-4.0.triggers_present": {
+    "approved": true,
+    "note": "first reading, b11669"
+  },
+  "cache_prompt_default": {
+    "approved": true,
+    "note": "first reading, b11669"
+  },
+  "help_diff.options": {
+    "approved": 258,
+    "note": "first reading, b11669"
+  },
+  "image_token_delta": {
+    "approved": 258,
+    "note": "first reading, b11669"
+  },
+  "required_grammar.Qwen-Qwen3-0.6B.grammar": {
+    "approved": true,
+    "note": "first reading, b11669"
+  },
+  "required_grammar.Qwen-Qwen3-0.6B.lazy": {
+    "approved": false,
+    "note": "first reading, b11669"
+  },
+  "required_grammar.Qwen-Qwen3-0.6B.triggers_present": {
+    "approved": false,
+    "note": "first reading, b11669"
+  },
+  "required_grammar.Qwen3.5-4B.grammar": {
+    "approved": true,
+    "note": "first reading, b11669"
+  },
+  "required_grammar.Qwen3.5-4B.lazy": {
+    "approved": false,
+    "note": "first reading, b11669"
+  },
+  "required_grammar.Qwen3.5-4B.triggers_present": {
+    "approved": false,
+    "note": "first reading, b11669"
+  },
+  "required_grammar.ibm-granite-granite-4.0.grammar": {
+    "approved": true,
+    "note": "first reading, b11669"
+  },
+  "required_grammar.ibm-granite-granite-4.0.lazy": {
+    "approved": false,
+    "note": "first reading, b11669"
+  },
+  "required_grammar.ibm-granite-granite-4.0.triggers_present": {
+    "approved": false,
+    "note": "first reading, b11669"
+  },
+  "sampler_defaults.dry_multiplier": {
+    "approved": 0.0,
+    "note": "first reading, b11669"
+  },
+  "sampler_defaults.min_p": {
+    "approved": 0.05,
+    "note": "first reading, b11669"
+  },
+  "sampler_defaults.presence_penalty": {
+    "approved": 0.0,
+    "note": "first reading, b11669"
+  },
+  "sampler_defaults.repeat_penalty": {
+    "approved": 1.0,
+    "note": "first reading, b11669"
+  },
+  "sampler_defaults.temperature": {
+    "approved": 0.8,
+    "note": "first reading, b11669"
+  },
+  "sampler_defaults.top_k": {
+    "approved": 40.0,
+    "note": "first reading, b11669"
+  },
+  "sampler_defaults.top_p": {
+    "approved": 0.95,
+    "note": "first reading, b11669"
+  },
+  "vision_without_mmproj": {
+    "approved": false,
+    "note": "first reading, b11669"
+  }
+}

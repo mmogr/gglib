@@ -414,6 +414,57 @@ mod tests {
         assert_eq!(slots[1].tokens_in_use(), Some(136));
     }
 
+    /// The pinned llama-server's own `/slots`, idle after a request, as
+    /// `contracts/upstream/llama/bodies/slots.json` keeps it: `next_token` is
+    /// an array on a build without MTP too, and the params parse.
+    #[test]
+    fn parses_what_the_pinned_llama_server_answers() {
+        let body = include_str!("../../../contracts/upstream/llama/bodies/slots.json");
+        let result = parse_slots_response(StatusCode::OK, body);
+        let SlotsPollResult::Available(slots) = result else {
+            panic!("expected Available, got {result:?}");
+        };
+        assert_eq!(slots.len(), 1);
+        assert_eq!(
+            slots[0].n_ctx,
+            Some(2048),
+            "the -c the recorder launched with"
+        );
+        assert!(!slots[0].is_processing);
+        // Every field `tokens_in_use` reads, as the committed body's own JSON
+        // has it: present, and parsed to the same value.
+        let raw: serde_json::Value = serde_json::from_str(body).expect("JSON");
+        let raw = &raw[0];
+        let number = |value: &serde_json::Value, name: &str| {
+            value
+                .as_u64()
+                .unwrap_or_else(|| panic!("the recorded slot has no {name}"))
+        };
+        let slot = &slots[0];
+        let id_task = raw["id_task"]
+            .as_i64()
+            .expect("the recorded slot has no id_task");
+        assert_eq!(slot.id_task, Some(id_task));
+        for (name, parsed) in [
+            ("n_prompt_tokens", slot.n_prompt_tokens),
+            ("n_prompt_tokens_processed", slot.n_prompt_tokens_processed),
+            ("n_prompt_tokens_cache", slot.n_prompt_tokens_cache),
+        ] {
+            assert_eq!(parsed, Some(number(&raw[name], name)), "{name}");
+        }
+        let next = &slot.next_token;
+        assert!(matches!(next, Some(NextTokenField::Many(_))), "{next:?}");
+        let decoded = next.as_ref().and_then(NextTokenField::primary);
+        let n_decoded = number(
+            &raw["next_token"][0]["n_decoded"],
+            "next_token[0].n_decoded",
+        );
+        assert_eq!(decoded.and_then(|n| n.n_decoded), Some(n_decoded));
+        let params = slot.params.as_ref().expect("the slot's params parse");
+        assert_eq!(params.top_k, raw["params"]["top_k"].as_f64());
+        assert!(params.top_k.is_some());
+    }
+
     #[test]
     fn parses_legacy_schema_with_n_past() {
         let result = parse_slots_response(StatusCode::OK, LEGACY_SCHEMA_FIXTURE);

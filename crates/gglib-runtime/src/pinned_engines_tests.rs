@@ -199,16 +199,16 @@ fn assert_the_sd_server_builder_is_gathered(gathered: &Uses) {
 
 /// One option a `--help` lists: its flags, and everything said of it.
 #[derive(Debug)]
-struct HelpOption {
-    flags: Vec<String>,
-    text: String,
+pub(crate) struct HelpOption {
+    pub(crate) flags: Vec<String>,
+    pub(crate) text: String,
 }
 
 /// The options a `--help` lists. An option's line starts, after an indent of
 /// at most eight spaces, with a flag. Its flags are the line's leading flag
 /// tokens (`-ctk,  --cache-type-k TYPE` gives `-ctk` and `--cache-type-k`).
 /// The line and every deeper line after it are what it says of itself.
-fn help_options(help: &str) -> Vec<HelpOption> {
+pub(crate) fn help_options(help: &str) -> Vec<HelpOption> {
     let mut options: Vec<HelpOption> = Vec::new();
     for line in help.lines() {
         let body = line.trim_start();
