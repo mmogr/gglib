@@ -41,28 +41,13 @@ runs:
           echo "models=$RUNNER_TEMP/test-models"
         } >> "$GITHUB_OUTPUT"
 
-    # A passing run caches the installs by the two pins, so later runs of the
-    # same pull request skip the downloads.
-    - name: Cache the pinned engines
-      uses: actions/cache@v6
-      with:
-        path: ${{ steps.pins.outputs.engines }}
-        key: pinned-engines-${{ inputs.target }}-${{ steps.pins.outputs.llama }}-${{ steps.pins.outputs.sd }}
-
-    - name: Install the pinned engines
-      shell: bash
-      env:
-        GGLIB_DATA_DIR: ${{ steps.pins.outputs.engines }}
-        GGLIB_RESOURCE_DIR: ${{ steps.pins.outputs.engines }}
-        GITHUB_TOKEN: ${{ github.token }}
-      run: |
-        target/debug/gglib config llama install
-        target/debug/gglib config sd install
-
     # The models are the same on every platform and for every pin, so they
-    # have an entry of their own, keyed by the list.
-    - name: Cache the test models
-      uses: actions/cache@v6
+    # have an entry of their own, keyed by the list. They are fetched and
+    # saved before any engine is installed or run, so nothing a candidate
+    # engine does can reach the entry a later run restores.
+    - name: Restore the test models
+      id: models-cache
+      uses: actions/cache/restore@v6
       with:
         path: ${{ steps.pins.outputs.models }}
         key: test-models-${{ hashFiles('.github/actions/pinned-engines/models.txt') }}
@@ -85,3 +70,37 @@ runs:
           curl -fsSL --retry 3 -o "$MODELS/templates/$template.jinja" \
             "https://raw.githubusercontent.com/ggml-org/llama.cpp/$PIN/models/templates/$template.jinja"
         done
+
+    - name: Save the test models
+      if: steps.models-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ steps.pins.outputs.models }}
+        key: ${{ steps.models-cache.outputs.cache-primary-key }}
+
+    # The installs are cached by the two pins, so later runs skip the
+    # downloads. The entry is saved as soon as both installs pass, never after
+    # one fails: the Engine pins workflow continues past a failed install.
+    - name: Restore the pinned engines
+      id: engines-cache
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.pins.outputs.engines }}
+        key: pinned-engines-${{ inputs.target }}-${{ steps.pins.outputs.llama }}-${{ steps.pins.outputs.sd }}
+
+    - name: Install the pinned engines
+      shell: bash
+      env:
+        GGLIB_DATA_DIR: ${{ steps.pins.outputs.engines }}
+        GGLIB_RESOURCE_DIR: ${{ steps.pins.outputs.engines }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        target/debug/gglib config llama install
+        target/debug/gglib config sd install
+
+    - name: Save the pinned engines
+      if: steps.engines-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ steps.pins.outputs.engines }}
+        key: ${{ steps.engines-cache.outputs.cache-primary-key }}
