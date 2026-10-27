@@ -45,7 +45,13 @@ pub(super) struct Inputs {
 impl Inputs {
     /// `None` when `GGLIB_ENGINE_MODELS_DIR` is unset; the recorder then skips.
     pub(super) fn from_env(scratch: &Path) -> Option<Self> {
-        let models = PathBuf::from(std::env::var_os("GGLIB_ENGINE_MODELS_DIR")?);
+        Self::with_models("GGLIB_ENGINE_MODELS_DIR", scratch)
+    }
+
+    /// The installed engines, with the models from the folder `variable`
+    /// names; `None` when it is unset.
+    pub(super) fn with_models(variable: &str, scratch: &Path) -> Option<Self> {
+        let models = PathBuf::from(std::env::var_os(variable)?);
         let engines = std::env::var_os("GGLIB_ENGINES_DIR")
             .map(PathBuf::from)
             .expect("GGLIB_ENGINES_DIR names the folder gglib installed the engines into");
@@ -100,12 +106,14 @@ impl Inputs {
     }
 }
 
-/// One launch: which model, with which template or projector, and whether
-/// `/slots` shows the last task's grammar.
+/// One launch: which model, with which catalog tags, template or projector
+/// (a file beside the model), and whether `/slots` shows the last task's
+/// grammar.
 pub(super) struct Launch<'a> {
     pub(super) model: &'a str,
+    pub(super) tags: &'a [&'a str],
     pub(super) template: Option<&'a str>,
-    pub(super) projector: bool,
+    pub(super) projector: Option<&'a str>,
     pub(super) slots_debug: bool,
 }
 
@@ -152,10 +160,9 @@ impl Server {
             ..ServerConfigOptions::default()
         };
         let model = inputs.models.join(launch.model);
-        let projector = launch
-            .projector
-            .then(|| inputs.models.join(GEMMA_PROJECTOR));
-        let config = build_server_config(1, "contract".to_owned(), model, 0, &[], options)
+        let projector = launch.projector.map(|file| inputs.models.join(file));
+        let tags: Vec<String> = launch.tags.iter().map(|&t| t.to_owned()).collect();
+        let config = build_server_config(1, "contract".to_owned(), model, 0, &tags, options)
             .with_mmproj(projector);
         let port = free_port();
         let mut cmd = inputs.clean(build_command(&inputs.llama_server, &config, port));
@@ -235,19 +242,27 @@ impl Server {
 
     /// `POST path` with a JSON body: its status and body.
     pub(super) async fn post(&self, path: &str, body: &Value) -> (u16, String) {
+        self.try_post(path, body, Duration::from_mins(1))
+            .await
+            .unwrap_or_else(|e| panic!("POST {path}: {e}"))
+    }
+
+    /// `POST path` with a JSON body, waiting at most `timeout`.
+    pub(super) async fn try_post(
+        &self,
+        path: &str,
+        body: &Value,
+        timeout: Duration,
+    ) -> reqwest::Result<(u16, String)> {
         let response = self
             .client
             .post(format!("{}{path}", self.base))
             .json(body)
+            .timeout(timeout)
             .send()
-            .await
-            .unwrap_or_else(|e| panic!("POST {path}: {e}"));
+            .await?;
         let status = response.status().as_u16();
-        let text = response
-            .text()
-            .await
-            .unwrap_or_else(|e| panic!("POST {path}: {e}"));
-        (status, text)
+        Ok((status, response.text().await?))
     }
 
     /// `/slots` once no slot is processing. A slot answers before it is

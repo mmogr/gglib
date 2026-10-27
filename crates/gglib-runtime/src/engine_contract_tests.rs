@@ -27,6 +27,8 @@ mod launch;
 mod project;
 #[path = "engine_contract_readings.rs"]
 mod readings;
+#[path = "engine_contract_tier3.rs"]
+mod tier3;
 
 use launch::Inputs;
 use project::{

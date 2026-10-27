@@ -1,0 +1,5 @@
+# Tier 3's real small model and its projector, which only the Engine pins
+# workflow fetches, on a llama.cpp bump, and never caches: a file name, its
+# SHA-256, then where it comes from, pinned to a Hugging Face commit.
+Qwen3.5-0.8B-Q8_0.gguf 0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/Qwen3.5-0.8B-Q8_0.gguf
+mmproj-F16.gguf 56e4c6cfe73b0c82e3e82bc518d7591997e61d81f723fc41a586f4fa69ea2453 https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/mmproj-F16.gguf
