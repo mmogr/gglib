@@ -206,7 +206,7 @@ crates/gglib-proxy/src/repair.rs 422
 crates/gglib-proxy/src/sampling_audit.rs 1153
 crates/gglib-proxy/src/sampling_audit_tests.rs 1016
 crates/gglib-proxy/src/server.rs 1006
-crates/gglib-proxy/src/slots.rs 1213
+crates/gglib-proxy/src/slots.rs 1264
 crates/gglib-proxy/src/slots_poller.rs 830
 crates/gglib-proxy/src/sse_stream.rs 387
 crates/gglib-proxy/tests/fixtures/common.rs 995

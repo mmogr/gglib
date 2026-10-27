@@ -185,3 +185,94 @@ fn partial_line_buffered_until_newline_arrives() {
         "TextDelta should be emitted once the newline arrives"
     );
 }
+
+/// A stream the pinned llama-server sent for gglib's own request body
+/// (`return_progress`, `include_usage`), as the recorder kept it in
+/// `contracts/upstream/llama/bodies/`: progress first, then deltas, one
+/// finish reason, usage with the cached count, and the sentinel.
+#[test]
+fn a_recorded_llama_server_stream_decodes_end_to_end() {
+    let body = include_str!("../../../../contracts/upstream/llama/bodies/stream.sse");
+    let mut dec = SseStreamDecoder::default();
+    let (events, stop) = collect_all(&mut dec, body);
+    assert!(stop, "[DONE] ends it");
+    let progress: Vec<(u32, u32, u32)> = events
+        .iter()
+        .filter_map(|e| match e {
+            LlmStreamEvent::PromptProgress {
+                processed,
+                total,
+                cached,
+                ..
+            } => Some((*processed, *total, *cached)),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        matches!(events.first(), Some(LlmStreamEvent::PromptProgress { .. })),
+        "{events:?}"
+    );
+    // The same frames as the committed body's own JSON has them, read
+    // without the parser: every field present, and the last frame has the
+    // whole prompt in.
+    let frames: Vec<serde_json::Value> = body
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .filter(|data| data.starts_with('{'))
+        .map(|data| serde_json::from_str(data).expect("a JSON frame"))
+        .collect();
+    let number = |value: &serde_json::Value| {
+        u32::try_from(value.as_u64().expect("a recorded count")).expect("fits")
+    };
+    let raw_progress: Vec<(u32, u32, u32)> = frames
+        .iter()
+        .filter_map(|frame| frame.get("prompt_progress"))
+        .map(|p| {
+            (
+                number(&p["processed"]),
+                number(&p["total"]),
+                number(&p["cache"]),
+            )
+        })
+        .collect();
+    assert_eq!(progress, raw_progress);
+    let last = raw_progress.last().expect("a progress frame");
+    assert!(last.1 > 0 && last.0 == last.1, "{raw_progress:?}");
+    assert!(events.iter().any(|e| matches!(
+        e,
+        LlmStreamEvent::TextDelta { .. } | LlmStreamEvent::ReasoningDelta { .. }
+    )));
+    let done: Vec<_> = events
+        .iter()
+        .filter_map(|e| match e {
+            LlmStreamEvent::Done { finish_reason } => Some(finish_reason),
+            _ => None,
+        })
+        .collect();
+    assert!(matches!(done[..], [Some(_)]), "{events:?}");
+    let usage = events.iter().find_map(|e| match e {
+        LlmStreamEvent::Usage {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+            cached_tokens,
+        } => Some((
+            *prompt_tokens,
+            *completion_tokens,
+            *total_tokens,
+            *cached_tokens,
+        )),
+        _ => None,
+    });
+    let raw = frames
+        .iter()
+        .find_map(|frame| frame.get("usage"))
+        .expect("a usage frame");
+    let raw_usage = (
+        number(&raw["prompt_tokens"]),
+        number(&raw["completion_tokens"]),
+        number(&raw["total_tokens"]),
+        Some(number(&raw["prompt_tokens_details"]["cached_tokens"])),
+    );
+    assert_eq!(usage, Some(raw_usage), "{events:?}");
+}

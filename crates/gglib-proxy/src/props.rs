@@ -132,14 +132,14 @@ const FLOAT_EPSILON: f64 = 1e-6;
 /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
 pub const SAMPLER_LAUNCH_FLAGS_PASSED: bool = false;
 
-/// llama.cpp's own sampler defaults on the pinned build (`b1-69bf643`).
+/// llama.cpp's own sampler defaults, first measured on `b1-69bf643`.
 ///
 /// Measured, not transcribed from documentation — [ADR 0003] finding 1, taken
 /// against a bare `llama-server` with no sampler flags, on two models, with a
 /// positive control confirming the table moves when something moves it.
 ///
-/// This is the baseline a pin bump would move, and moving it is exactly what
-/// re-opens ADR 0003's decision for that parameter.
+/// Held to the pin's `sampler_defaults.*` in `contracts/upstream/llama/observed.json`:
+/// a bump that moves one re-opens ADR 0003's decision for that parameter.
 ///
 /// [ADR 0003]: https://github.com/mmogr/gglib/blob/main/docs/adr/0003-defer-sampler-defaults-to-llama-cpp.md
 pub const UPSTREAM_DEFAULTS: [(&str, f64); 7] = [
