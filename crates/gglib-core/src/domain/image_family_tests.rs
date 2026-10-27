@@ -808,9 +808,9 @@ fn the_recipes_are_the_measured_ones() {
     assert!(sdxl.components.is_empty());
     assert_eq!((sdxl.steps, sdxl.sampler), (20, "euler_a"));
     assert_eq!(sdxl.flash_attention, FlashAttention::Off);
-    assert_eq!(FlashAttention::Off.flag(), None);
-    assert_eq!(FlashAttention::Everywhere.flag(), Some("--fa"));
-    assert_eq!(FlashAttention::DiffusionOnly.flag(), Some("--diffusion-fa"));
+    assert_eq!(FlashAttention::Off.mode(), "off");
+    assert_eq!(FlashAttention::Everywhere.mode(), "on");
+    assert_eq!(FlashAttention::DiffusionOnly.mode(), "off,diffusion=on");
     let qwen = ImageFamily::QwenImage21.recipe();
     assert_eq!(
         (qwen.steps, qwen.sampler, qwen.flash_attention),

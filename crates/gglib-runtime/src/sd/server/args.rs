@@ -17,8 +17,9 @@ use super::config::SdServerConfig;
 /// checkpoint), each component in role order (`--vae`, `--clip_l`,
 /// `--t5xxl`, `--llm`) whatever order it was given in, the loopback address
 /// and `port`, then the recipe's steps, guidance scale and sampler, and
-/// the recipe's flash attention flag, `--fa` or `--diffusion-fa`, when it has
-/// one.
+/// `--flash-attn` with the recipe's mode, and `--conv-direct off`. Both are
+/// given though stable-diffusion.cpp defaults them to `auto`: that default
+/// came with master-995, and no recipe has drawn with it.
 pub(crate) fn sd_server_args(config: &SdServerConfig, port: u16) -> Vec<OsString> {
     let recipe = config.family.recipe();
     let mut args: Vec<OsString> = Vec::new();
@@ -47,9 +48,7 @@ pub(crate) fn sd_server_args(config: &SdServerConfig, port: u16) -> Vec<OsString
     flag("--steps", recipe.steps.to_string().into());
     flag("--cfg-scale", recipe.cfg.to_string().into());
     flag("--sampling-method", recipe.sampler.into());
-
-    if let Some(flash_attention) = recipe.flash_attention.flag() {
-        args.push(flash_attention.into());
-    }
+    flag("--flash-attn", recipe.flash_attention.mode().into());
+    flag("--conv-direct", "off".into());
     args
 }
