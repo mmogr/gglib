@@ -1,0 +1,6 @@
+# The recorder's tiny models, each pinned to a Hugging Face commit: a file
+# name, then where it comes from. A change here is a new cache entry.
+stories260K-f32.gguf https://huggingface.co/ggml-org/test-model-stories260K/resolve/479896ec924af6d40fd419ab8f4d1eb2101de00d/stories260K-f32.gguf
+tinygemma3-Q8_0.gguf https://huggingface.co/ggml-org/tinygemma3-GGUF/resolve/c287502cd9e278dac8eed805c112cce5d0081e0b/tinygemma3-Q8_0.gguf
+mmproj-tinygemma3.gguf https://huggingface.co/ggml-org/tinygemma3-GGUF/resolve/c287502cd9e278dac8eed805c112cce5d0081e0b/mmproj-tinygemma3.gguf
+0_cat.png https://huggingface.co/ggml-org/tinygemma3-GGUF/resolve/c287502cd9e278dac8eed805c112cce5d0081e0b/test/0_cat.png

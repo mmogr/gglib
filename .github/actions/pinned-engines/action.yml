@@ -1,0 +1,87 @@
+name: Pinned engines
+description: >-
+  Installs the pinned llama.cpp and stable-diffusion.cpp with the gglib just
+  built (target/debug/gglib), as a user's machine would, and fetches the
+  recorder's tiny models and the pin's chat templates. Shared by ci.yml's
+  CLI Check legs and the engine-pins workflow.
+
+inputs:
+  target:
+    description: The Rust target triple, which keys the engine cache.
+    required: true
+
+outputs:
+  llama:
+    description: PINNED_LLAMA_RELEASE.
+    value: ${{ steps.pins.outputs.llama }}
+  sd:
+    description: PINNED_SD_RELEASE.
+    value: ${{ steps.pins.outputs.sd }}
+  engines:
+    description: The folder the engines are installed into (GGLIB_ENGINES_DIR).
+    value: ${{ steps.pins.outputs.engines }}
+  models:
+    description: The models and templates/ (GGLIB_ENGINE_MODELS_DIR).
+    value: ${{ steps.pins.outputs.models }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read the engine pins
+      id: pins
+      shell: bash
+      run: |
+        llama=$(sed -nE 's/.*PINNED_LLAMA_RELEASE: &str = "([^"]+)".*/\1/p' crates/gglib-runtime/src/llama/download/mod.rs)
+        sd=$(sed -nE 's/.*PINNED_SD_RELEASE: &str = "([^"]+)".*/\1/p' crates/gglib-runtime/src/sd/install/release.rs)
+        [[ -n $llama && -n $sd ]] || exit 1
+        {
+          echo "llama=$llama"
+          echo "sd=$sd"
+          echo "engines=$RUNNER_TEMP/engines"
+          echo "models=$RUNNER_TEMP/test-models"
+        } >> "$GITHUB_OUTPUT"
+
+    # A passing run caches the installs by the two pins, so later runs of the
+    # same pull request skip the downloads.
+    - name: Cache the pinned engines
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.pins.outputs.engines }}
+        key: pinned-engines-${{ inputs.target }}-${{ steps.pins.outputs.llama }}-${{ steps.pins.outputs.sd }}
+
+    - name: Install the pinned engines
+      shell: bash
+      env:
+        GGLIB_DATA_DIR: ${{ steps.pins.outputs.engines }}
+        GGLIB_RESOURCE_DIR: ${{ steps.pins.outputs.engines }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        target/debug/gglib config llama install
+        target/debug/gglib config sd install
+
+    # The models are the same on every platform and for every pin, so they
+    # have an entry of their own, keyed by the list.
+    - name: Cache the test models
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.pins.outputs.models }}
+        key: test-models-${{ hashFiles('.github/actions/pinned-engines/models.txt') }}
+
+    # The templates are fetched at the pin on every run: they move with it.
+    - name: Fetch the test models and the pin's chat templates
+      shell: bash
+      env:
+        MODELS: ${{ steps.pins.outputs.models }}
+        LIST: ${{ github.action_path }}/models.txt
+        PIN: ${{ steps.pins.outputs.llama }}
+      run: |
+        mkdir -p "$MODELS/templates"
+        grep -v '^#' "$LIST" | while read -r name url; do
+          [[ -z $name || -s $MODELS/$name ]] && continue
+          curl -fsSL --retry 3 -o "$MODELS/$name.part" "$url"
+          mv "$MODELS/$name.part" "$MODELS/$name"
+        done
+        for template in Qwen3.5-4B Qwen-Qwen3-0.6B ibm-granite-granite-4.0; do
+          curl -fsSL --retry 3 -o "$MODELS/templates/$template.jinja" \
+            "https://raw.githubusercontent.com/ggml-org/llama.cpp/$PIN/models/templates/$template.jinja"
+        done

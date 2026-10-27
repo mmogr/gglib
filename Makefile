@@ -321,8 +321,9 @@ adr-readings: ## Check each ADR reading in contracts/upstream against its approv
 # Record contracts/upstream again from the pinned engines, as CI does.
 # GGLIB_ENGINES_DIR is a folder `gglib config llama install` and `config sd
 # install` installed into (with GGLIB_DATA_DIR set to it), and
-# GGLIB_ENGINE_MODELS_DIR holds the tiny models CI downloads, with the pin's
-# chat templates in templates/.
+# GGLIB_ENGINE_MODELS_DIR holds the models in
+# .github/actions/pinned-engines/models.txt, with the pin's chat templates in
+# templates/ (that action fetches both).
 record-upstream: export GGLIB_RECORD_CONTRACTS := 1
 record-upstream: ## Record contracts/upstream again from the pinned engines
 	@[ -n "$$GGLIB_ENGINES_DIR" ] && [ -n "$$GGLIB_ENGINE_MODELS_DIR" ] || { \
