@@ -1,4 +1,4 @@
-stable-diffusion.cpp version unknown, commit 228c707
+stable-diffusion.cpp version unknown, commit fd21ecf
 Usage: sd-server [options]
 
 Svr Options:
@@ -7,6 +7,7 @@ Svr Options:
   --listen-port <int>           server listen port (default: 1234)
   --color                       colors the logging tags according to level
   -h, --help                    show this help message and exit
+  --model-dir                   model root; repeat to search multiple directories (default: models)
   --log-level                   minimum log level, one of [debug, verbose, info, warn, error] (default: info)
   -v, --verbose                 equivalent to --log-level verbose
 
@@ -65,6 +66,9 @@ Context Options:
                                            then threads will be set to the number of CPU physical cores
   --conditioning-cache-size <int>          maximum number of conditioning results cached per model context (default: 4,
                                            0 disables caching)
+  --list-devices                           list available ggml backend devices, including --rpc-servers (one
+                                           'name<TAB>description' per line), and exit; the names are the device names
+                                           accepted by --backend and --params-backend
   --disable-prefetch                       disable asynchronous next-segment weight prefetch (defaults to false)
   --disable-segmented-compute              force monolithic graph execution even when automatic graph cutting is needed
                                            (defaults to false)
@@ -77,20 +81,28 @@ Context Options:
   --control-net-cpu                        deprecated; use --backend controlnet=cpu
   --clip-on-cpu                            deprecated; use --backend te=cpu
   --vae-on-cpu                             deprecated; use --backend vae=cpu
-  --fa                                     use flash attention
-  --diffusion-fa                           use flash attention in the diffusion model only
   --sage-attn                              use native CUDA SageAttention in the diffusion model, with flash/default
                                            attention fallback
-  --diffusion-conv-direct                  use ggml_conv2d_direct in the diffusion model
-  --vae-conv-direct                        use direct 2D and 3D convolutions in the vae model
+  --taesd-preview-only                     prevents usage of taesd for decoding the final image; the VAE keeps encoding
+                                           / decoding and taesd is only used for step previews
   --linear-scale                           linear input scale override (float, default: 0 = model default, 1 = no
                                            scaling)
   --attn-scale                             flash-attention K/V scale override (float, default: 0 = model default, 1 = no
-                                           scaling); requires --fa or --diffusion-fa
+                                           scaling); applies when flash attention is selected
+  --diffusion-conv-direct                  deprecated; use --conv-direct auto,diffusion=on,controlnet=on
+  --vae-conv-direct                        deprecated; use --conv-direct auto,vae=on
+  --conv-direct                            on|off|auto or diffusion/vae/controlnet assignments (default: auto), e.g.
+                                           auto,vae=off. Overrides legacy convolution flags
+  --flash-attn                             on|off|auto or module assignments (default: auto), e.g. auto,te=off,vae=on.
+                                           Last repeated option wins
+  --fa                                     deprecated; use --flash-attn on
+  --diffusion-fa                           deprecated; use --flash-attn off,diffusion=on
   --auto-fit                               on|off (default: on). Preserve --backend (otherwise select one GPU) and place
                                            weights on the compute GPU, RAM, another GPU, or disk in that order,
                                            according to available memory (--max-vram limits GPU budgets). Disabled by
                                            explicit --params-backend; uses automatic graph segmentation when needed
+  --batched-cfg                            on|off (default: on). Run the conditional and unconditional CFG branches in
+                                           one batched UNet forward when supported
   --type                                   weight type (examples: f32, f16, q4_0, q4_1, q5_0, q5_1, q8_0, q2_K, q3_K,
                                            q4_K). If not specified, the default is the type of the weight file
   --rng                                    RNG, one of [std_default, cuda, cpu], default: cuda(sd-webui), cpu(comfyui)
@@ -104,9 +116,6 @@ Context Options:
                                            parameters, but it usually offers faster inference speed and, in some cases,
                                            lower memory usage. The at_runtime mode, on the other hand, is exactly the
                                            opposite.
-  --list-devices                           list available ggml backend devices (one 'name<TAB>description' per line) and
-                                           exit; the names are the device names accepted by --backend and
-                                           --params-backend
 
 Default Generation Options:
   -p, --prompt <string>                    the prompt to render
@@ -237,9 +246,9 @@ Default Generation Options:
                                            logit_normal, flux2, flux, beta, llada_image], alias: normal=discrete,
                                            default: model-specific
   --sigmas                                 custom sigma values for the sampler, comma-separated (e.g.,
-                                           "14.61,7.8,3.5,0.0").
+                                           "14.61,7.8,3.5,0.0") or preset: qwen-image-2.1-turbo.
   --hires-sigmas                           custom sigma values for the highres fix second pass, comma-separated (e.g.,
-                                           "0.85,0.725,0.421875,0.0").
+                                           "0.85,0.725,0.421875,0.0") or preset: qwen-image-2.1-turbo.
   --skip-layers                            layers to skip for SLG steps (default: [7,8,9])
   --high-noise-skip-layers                 (high noise) layers to skip for SLG steps (default: [7,8,9])
   -r, --ref-image                          reference image for Flux Kontext or MiniMax-H3 Ref2VA (can be used multiple
