@@ -3,14 +3,18 @@ name: Engine pins
 # Once a week, propose moving each engine's pin to upstream's newest release
 # that is at least three days old, as a pull request for a person to check
 # and merge (CONTRIBUTING.md, "The engine pins"). The job picks the tag,
-# edits the pin's one line and opens the pull request; CI's CLI Check then
-# installs the release and checks every launch flag gglib passes against it.
+# edits the pin's one line, builds gglib, installs the candidate and records
+# what it answers into contracts/upstream/ (on a llama.cpp bump, with tier 3's
+# real small model too), and opens the pull request with both in one commit.
+# Its body, from scripts/engine_pin_body.sh, leads with the ADR readings that
+# moved. CI's CLI Check then checks every launch flag gglib passes against the
+# release, and `ADR criterion moved` holds the readings to their approvals.
 #
 # It never edits or force-pushes a branch, and proposes a candidate once: a
 # pull request from the candidate's branch, open or closed, means it has been
 # proposed. It proposes one at a time: while a pin pull request for an engine
-# is open, nothing newer is proposed for it, so they never pile up. It asks no
-# model and writes to no issue.
+# is open, nothing newer is proposed for it, so they never pile up. It writes
+# to no issue.
 #
 # llama.cpp's candidate is the `b<n>` its newest `v*` release names in
 # `nightly-tag.txt`; stable-diffusion.cpp's is its newest `master-<n>-<sha>`
@@ -31,10 +35,31 @@ defaults:
   run:
     shell: bash
 
+# Two jobs, so the write token is never on a machine that has run untrusted
+# code. `record` picks the candidate, builds gglib, installs the candidate and
+# runs it and tier 3's model; it has no secret and reads only. It hands over
+# the pin file, contracts/upstream/ and the recorder's outcome as an artifact.
+# `propose`, on a fresh runner, takes that handover as data
+# (scripts/engine_pin_take.sh), writes the body from its own checkout, and
+# only then mints the app token to push and open the pull request.
+
 jobs:
-  propose:
-    name: Propose a new ${{ matrix.product }} pin
+  record:
+    name: Record a new ${{ matrix.product }} pin
     runs-on: ubuntu-24.04
+    # A mostly cold build (below), the 20-minute recorder and tier 3's
+    # 30 minutes fit inside this.
+    timeout-minutes: 120
+    # Reads only: the pick step's release and pull request lookups, and the
+    # engine installer's release listings.
+    permissions:
+      contents: read
+      pull-requests: read
+    # As ci.yml sets them: other flags would rebuild even what the cache
+    # restored below has.
+    env:
+      CARGO_TERM_COLOR: always
+      RUSTFLAGS: "-C relocation-model=dynamic-no-pic"
     strategy:
       fail-fast: false
       matrix:
@@ -50,23 +75,17 @@ jobs:
             file: crates/gglib-runtime/src/sd/install/release.rs
             constant: PINNED_SD_RELEASE
     steps:
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
+      # This job has no write token; no credential stays on disk either.
       - name: Checkout the default branch
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch || github.ref_name }}
-          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
 
       - name: Pick the candidate
         id: pick
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           ENGINE: ${{ matrix.engine }}
           REPO: ${{ matrix.repo }}
           FILE: ${{ matrix.file }}
@@ -141,39 +160,310 @@ jobs:
             echo "propose=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Move the pin and open a pull request
+      # Before the build: gglib installs the pin it was built with, and the
+      # engines action reads the pin from this file.
+      - name: Move the pin
         if: steps.pick.outputs.propose == 'true'
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          PRODUCT: ${{ matrix.product }}
-          REPO: ${{ matrix.repo }}
           FILE: ${{ matrix.file }}
           CONSTANT: ${{ matrix.constant }}
           CURRENT: ${{ steps.pick.outputs.current }}
           CANDIDATE: ${{ steps.pick.outputs.candidate }}
-          BRANCH: ${{ steps.pick.outputs.branch }}
-          BASE: ${{ github.event.repository.default_branch || github.ref_name }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           sed -i -E "s/($CONSTANT: &str = )\"$CURRENT\"/\1\"$CANDIDATE\"/" "$FILE"
           changed=$(git diff --numstat | awk '{ n += $1 + $2 } END { print n + 0 }')
           [[ $changed == 2 && $(git diff --name-only) == "$FILE" ]] \
             || { git diff; echo "::error::moving the pin should change one line of $FILE"; exit 1; }
 
+      # The rest records what the candidate answers, as ci.yml's CLI Check
+      # does on Linux, so the pull request carries its recordings. The build
+      # restores the `test` job's cache, which only main saves, but that job
+      # builds the whole workspace and `-p` here unifies features differently,
+      # so most of the graph still builds cold.
+      - name: Free disk space
+        if: steps.pick.outputs.propose == 'true'
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: true
+
+      - name: Install system dependencies
+        if: steps.pick.outputs.propose == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+
+      - name: Install Rust toolchain
+        if: steps.pick.outputs.propose == 'true'
+        run: rustup show
+
+      - name: Restore the test job's Rust cache
+        if: steps.pick.outputs.propose == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci-test"
+          save-if: false
+
+      - name: Build gglib and the recorder
+        if: steps.pick.outputs.propose == 'true'
+        run: |
+          cargo build --locked -p gglib-cli --bin gglib
+          cargo test --locked -p gglib-runtime --lib --no-run
+
+      # A candidate that does not install still gets its pull request, which
+      # says so, and is red there too.
+      - name: Install the candidate engines and the test models
+        if: steps.pick.outputs.propose == 'true'
+        id: engines
+        continue-on-error: true
+        uses: ./.github/actions/pinned-engines
+        with:
+          target: x86_64-unknown-linux-gnu
+
+      # A recorder that fails still opens the pull request, which says so.
+      - name: Record the candidate
+        if: steps.pick.outputs.propose == 'true' && steps.engines.outcome == 'success'
+        id: record
+        continue-on-error: true
+        timeout-minutes: 20
+        env:
+          GGLIB_ENGINES_DIR: ${{ steps.engines.outputs.engines }}
+          GGLIB_ENGINE_MODELS_DIR: ${{ steps.engines.outputs.models }}
+          GGLIB_ENGINE_BODIES_DIR: ${{ github.workspace }}/contracts/upstream/llama/bodies
+          GGLIB_RECORD_CONTRACTS: "1"
+        run: |
+          cargo test --locked -p gglib-runtime --lib -- --ignored --nocapture --exact \
+            engine_contract_tests::the_pinned_llama_server_answers_as_contracts_upstream_records \
+            2>&1 | tee "$RUNNER_TEMP/record.log"
+
+      # Tier 3, on a llama.cpp bump only: a real small model, uncached, and
+      # four booleans into contracts/upstream/llama/tier3/, which no check
+      # reads. Nothing here fails the job; a probe that cannot run says why,
+      # a candidate that did not install included.
+      - name: Probe a real small model
+        if: steps.pick.outputs.propose == 'true' && matrix.engine == 'llama'
+        continue-on-error: true
+        timeout-minutes: 30
+        env:
+          INSTALLED: ${{ steps.engines.outcome }}
+          LIST: .github/actions/pinned-engines/tier3-models.txt
+          MODELS: ${{ steps.engines.outputs.models }}
+          GGLIB_ENGINES_DIR: ${{ steps.engines.outputs.engines }}
+          GGLIB_TIER3_MODEL_DIR: ${{ runner.temp }}/tier3-models
+          GGLIB_ENGINE_BODIES_DIR: ${{ runner.temp }}/engine-pin/bodies
+        run: |
+          out=contracts/upstream/llama/tier3/readings.json
+          unread() {
+            mkdir -p "${out%/*}"
+            jq -n --arg why "$1" '{value: null, reason: $why} as $p
+              | {model: "Qwen3.5-0.8B-Q8_0.gguf", projector: "mmproj-F16.gguf",
+                 tool_call_native: $p, tool_call_parsed: $p, reasoning_split: $p,
+                 image_in_tool_message_answered: $p}' > "$out"
+          }
+          if [[ $INSTALLED != success ]]; then
+            unread "the candidate did not install"
+            exit 0
+          fi
+          # The test replaces it; it is what is left if the step stops part-way.
+          unread "the probe step did not finish"
+          mkdir -p "$GGLIB_TIER3_MODEL_DIR"
+          if ! grep -v '^#' "$LIST" | while read -r name sum url; do
+                [[ -z $name ]] && continue
+                curl -fsSL --retry 3 --max-time 600 -o "$GGLIB_TIER3_MODEL_DIR/$name" "$url" \
+                  && echo "$sum  $GGLIB_TIER3_MODEL_DIR/$name" | sha256sum -c --quiet - \
+                  || exit 1
+              done; then
+            unread "the model download failed"
+            exit 0
+          fi
+          cp "$MODELS/0_cat.png" "$GGLIB_TIER3_MODEL_DIR/"
+          if ! timeout 20m cargo test --locked -p gglib-runtime --lib -- --ignored --nocapture --exact \
+              engine_contract_tests::tier3::a_small_real_model_through_the_pinned_llama_server; then
+            unread "the probe test did not finish"
+          fi
+
+      # The model's answers, the recordings and the recorder's log, for
+      # whoever reads the pull request.
+      - name: Gather what was recorded
+        if: always() && steps.pick.outputs.propose == 'true'
+        continue-on-error: true
+        run: |
+          out="$RUNNER_TEMP/engine-pin"
+          mkdir -p "$out"
+          cp -R contracts/upstream "$out/upstream"
+          if [[ -f $RUNNER_TEMP/record.log ]]; then cp "$RUNNER_TEMP/record.log" "$out/"; fi
+
+      - name: Upload what was recorded
+        if: always() && steps.pick.outputs.propose == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: engine-pin-${{ matrix.engine }}-${{ steps.pick.outputs.candidate }}
+          path: ${{ runner.temp }}/engine-pin
+          if-no-files-found: ignore
+
+      # What `propose` takes: the pin file and contracts/upstream/ at their
+      # paths, and one line for the recorder, `ok` or why it did not run.
+      - name: Hand over the pin and its recordings
+        if: steps.pick.outputs.propose == 'true'
+        env:
+          FILE: ${{ matrix.file }}
+          INSTALLED: ${{ steps.engines.outcome }}
+          RECORDED: ${{ steps.record.outcome }}
+        run: |
+          out="$RUNNER_TEMP/handover"
+          mkdir -p "$out/files/${FILE%/*}"
+          cp "$FILE" "$out/files/$FILE"
+          mkdir -p "$out/files/contracts"
+          cp -R contracts/upstream "$out/files/contracts/"
+          if [[ $INSTALLED != success ]]; then
+            recorder="the candidate did not install"
+          elif [[ $RECORDED == success ]]; then
+            recorder=ok
+          else
+            log="$RUNNER_TEMP/record.log"
+            recorder=$(awk '/panicked at/ { getline; print; exit }' "$log" 2>/dev/null || true)
+            [[ -n $recorder ]] || recorder=$(grep -m1 '^error' "$log" 2>/dev/null || true)
+            [[ -n $recorder ]] || recorder="the record step ended in $RECORDED"
+          fi
+          printf '%s\n' "${recorder:0:200}" > "$out/recorder.txt"
+
+      - name: Upload the handover
+        if: steps.pick.outputs.propose == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: engine-pin-handover-${{ matrix.engine }}
+          path: ${{ runner.temp }}/handover
+          retention-days: 1
+
+  propose:
+    name: Propose a new ${{ matrix.product }} pin
+    needs: record
+    # After each leg of `record`, whatever it concluded: a leg with nothing
+    # to propose, or that stopped before its handover, leaves no artifact,
+    # and this leg then ends without proposing.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: llama
+            product: llama.cpp
+            repo: ggml-org/llama.cpp
+            file: crates/gglib-runtime/src/llama/download/mod.rs
+            constant: PINNED_LLAMA_RELEASE
+            tag: '^b[0-9]+$'
+          - engine: sd
+            product: stable-diffusion.cpp
+            repo: leejet/stable-diffusion.cpp
+            file: crates/gglib-runtime/src/sd/install/release.rs
+            constant: PINNED_SD_RELEASE
+            tag: '^master-[0-9]+-[0-9a-f]+$'
+    steps:
+      - name: Checkout the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch || github.ref_name }}
+          persist-credentials: false
+
+      - name: Download the handover
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: engine-pin-handover-${{ matrix.engine }}
+          path: ${{ runner.temp }}/handover
+
+      # The handover is data from a machine that ran untrusted code: only
+      # regular files at the pin's path and under contracts/upstream/ are
+      # taken, approvals.json stays as main has it, and the pin may move by
+      # its one line to a tag of the engine's own form.
+      - name: Take the pin and its recordings
+        if: steps.download.outcome == 'success'
+        id: take
+        env:
+          FILE: ${{ matrix.file }}
+          CONSTANT: ${{ matrix.constant }}
+          TAG: ${{ matrix.tag }}
+          ENGINE: ${{ matrix.engine }}
+        run: |
+          current=$(sed -nE "s/.*$CONSTANT: &str = \"([^\"]+)\".*/\1/p" "$FILE")
+          cp -R contracts/upstream "$RUNNER_TEMP/upstream-before"
+          recorder=$(scripts/engine_pin_take.sh "$RUNNER_TEMP/handover" "$FILE")
+          candidate=$(sed -nE "s/.*$CONSTANT: &str = \"([^\"]+)\".*/\1/p" "$FILE")
+          [[ $candidate =~ $TAG && $candidate != "$current" ]] \
+            || { echo "::error::the handover's pin is not a new $ENGINE release"; exit 1; }
+          git add -- "$FILE" contracts/upstream
+          stray=$(git status --porcelain --untracked-files=all --no-renames | cut -c4- \
+            | grep -vxF "$FILE" | grep -v '^contracts/upstream/' || true)
+          [[ -z $stray ]] \
+            || { echo "::error::a pin pull request changes the pin's line and contracts/upstream/ only, not: $stray"; exit 1; }
+          [[ $(git diff --cached --numstat -- "$FILE") == $'1\t1\t'"$FILE" ]] \
+            || { git diff --cached -- "$FILE"; echo "::error::moving the pin should change one line of $FILE"; exit 1; }
+          {
+            echo "current=$current"
+            echo "candidate=$candidate"
+            echo "branch=chore(deps)/$ENGINE-$candidate"
+          } >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$recorder" > "$RUNNER_TEMP/recorder.txt"
+
+      - name: Write the body
+        if: steps.take.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENGINE: ${{ matrix.engine }}
+          FILE: ${{ matrix.file }}
+          CURRENT: ${{ steps.take.outputs.current }}
+          CANDIDATE: ${{ steps.take.outputs.candidate }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          recorder=$(cat "$RUNNER_TEMP/recorder.txt")
+          if ! scripts/engine_pin_body.sh "$ENGINE" "$CURRENT" "$CANDIDATE" \
+              "$RUNNER_TEMP/upstream-before" contracts/upstream "$recorder" "$RUN_URL" > "$RUNNER_TEMP/body.md"; then
+            printf 'Moves %s from %s to %s. The body could not be written; read the run: %s\n' \
+              "$FILE" "$CURRENT" "$CANDIDATE" "$RUN_URL" > "$RUNNER_TEMP/body.md"
+          fi
+
+      # Minted last, on a runner that has run nothing from the handover or
+      # upstream: no build, engine or model is ever in reach of it.
+      - name: Generate GitHub App token
+        if: steps.take.outcome == 'success'
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Commit the pin and its recordings, and open a pull request
+        if: steps.take.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PRODUCT: ${{ matrix.product }}
+          CURRENT: ${{ steps.take.outputs.current }}
+          CANDIDATE: ${{ steps.take.outputs.candidate }}
+          BRANCH: ${{ steps.take.outputs.branch }}
+          BASE: ${{ github.event.repository.default_branch || github.ref_name }}
+        run: |
           subject="chore(deps): move $PRODUCT's pin from $CURRENT to $CANDIDATE"
           git switch -c "$BRANCH"
-          git add "$FILE"
           git -c user.name=mmogr -c user.email=172192206+mmogr@users.noreply.github.com \
             commit -m "$subject"
-          git push origin "$BRANCH"
-
-          tick='`'
-          {
-            printf 'Moves %s from %s to %s: https://github.com/%s/compare/%s...%s\n\n' \
-              "$tick$CONSTANT$tick" "$tick$CURRENT$tick" "$tick$CANDIDATE$tick" "$REPO" "$CURRENT" "$CANDIDATE"
-            printf '%s\n\n' "CI's CLI Check installs $CANDIDATE on Linux and macOS and checks every launch flag gglib passes against its ${tick}--help${tick}, and every platform row against its assets. Before merging, take one real chat and one real picture on the new pin, with the readings CONTRIBUTING.md's \"The engine pins\" lists, and put them in the squash message."
-            printf 'Opened by the Engine pins workflow: %s\n' "$RUN_URL"
-          } > "$RUNNER_TEMP/body.md"
+          # The token goes to this one push through the environment, never
+          # into the checkout's config or a command line.
+          basic=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$basic"
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $basic" \
+            git push origin "$BRANCH"
           url=$(gh pr create --base "$BASE" --head "$BRANCH" --title "$subject" \
             --body-file "$RUNNER_TEMP/body.md" \
             --label dependencies --label "type: chore" --label automated)

@@ -9,7 +9,7 @@
 
 use serde_json::{Value, json};
 
-use super::launch::{CAT, CONTEXT, GEMMA, Inputs, Launch, STORIES, Server};
+use super::launch::{CAT, CONTEXT, GEMMA, GEMMA_PROJECTOR, Inputs, Launch, STORIES, Server};
 use super::project::{Criterion, Recording, as_f32, help_default, redact_stream};
 use crate::pinned_engines_tests::help_options;
 
@@ -235,8 +235,9 @@ pub(super) async fn record(inputs: &Inputs) -> Recording {
     engines_said(inputs, &mut r);
     let stories = |template, slots_debug| Launch {
         model: STORIES,
+        tags: &[],
         template: Some(template),
-        projector: false,
+        projector: None,
         slots_debug,
     };
     for (n, template) in TEMPLATES.into_iter().enumerate() {
@@ -265,8 +266,9 @@ pub(super) async fn record(inputs: &Inputs) -> Recording {
     for projector in [false, true] {
         let gemma = Launch {
             model: GEMMA,
+            tags: &[],
             template: None,
-            projector,
+            projector: projector.then_some(GEMMA_PROJECTOR),
             slots_debug: false,
         };
         let server = Server::start(inputs, &gemma, 4 + usize::from(projector)).await;

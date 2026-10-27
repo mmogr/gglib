@@ -71,6 +71,8 @@ deliberate growth is one row edited by hand.
 | `render_aur.sh` | Fills the `packaging/aur` PKGBUILD templates with a release's version and checksums | `release.yml` |
 | `render_homebrew.sh` | Fills the `packaging/homebrew` formula and cask with a release's version and checksums | `release.yml` |
 | `lock_changes.py` | Lists what moved between two copies of a lockfile | `update-deps.yml` |
+| `engine_pin_take.sh` | Takes the Engine pins `record` job's handover into the `propose` job's checkout as data: only regular files at the pin's path and under `contracts/upstream/`, with `approvals.json` kept from the checkout | `engine-pins.yml` |
+| `engine_pin_body.sh` | Writes an engine pin pull request's body: the ADR readings the new `contracts/upstream` recording moved against `approvals.json`, what else it saw, tier 3's probes, and the upstream commits that touch a file an ADR cites | `engine-pins.yml` |
 | `backtest_label_heuristics.sh` | Measures the pull-request labelling heuristics against merged pull requests | By hand |
 | `macos-install.command`, `MACOS-README.txt` | The double-click installer in the macOS release bundle and its instructions: it clears the quarantine attribute and offers to move the app to `/Applications` | `release.yml` copies both into the bundle |
 | `experiments/` | The measurements that ADRs, `docs/sampling.md` and doc comments cite, kept so that they can be run again | By hand |
