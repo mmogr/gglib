@@ -9,7 +9,7 @@ use gglib_mcp::{
 
 use crate::error::GuiError;
 use crate::types::{
-    CreateMcpServerRequest, McpEnvEntryDto, McpServerConfigDto, McpServerDto, McpServerInfo,
+    CreateMcpServerRequest, McpEnvUpdateDto, McpServerConfigDto, McpServerDto, McpServerInfo,
     McpServerStatusDto, McpTestResult, McpToolInfo, UpdateMcpServerRequest,
 };
 
@@ -55,14 +55,9 @@ impl McpOps {
             enabled: server.enabled,
             allow_remote: server.allow_remote,
             lifecycle: server.lifecycle,
-            env: server
-                .env
-                .iter()
-                .map(|e| McpEnvEntryDto {
-                    key: e.key.clone(),
-                    value: e.value.clone(),
-                })
-                .collect(),
+            // The names alone: this is every response's one builder, and no
+            // response carries a value (ADR 0027).
+            env_keys: server.env.iter().map(|e| e.key.clone()).collect(),
             created_at: server.created_at.to_rfc3339(),
             last_connected_at: server.last_connected_at.map(|dt| dt.to_rfc3339()),
             is_valid: server.is_valid,
@@ -119,13 +114,11 @@ impl McpOps {
             name: req.name,
             server_type,
             config,
+            // A blank value is the service's to refuse, for every add.
             env: req
                 .env
                 .into_iter()
-                .map(|e| McpEnvEntry {
-                    key: e.key,
-                    value: e.value,
-                })
+                .map(|e| McpEnvEntry::new(e.key, e.value))
                 .collect(),
             enabled: true,
             lifecycle: req.lifecycle,
@@ -177,13 +170,7 @@ impl McpOps {
             server.config.url = Some(url);
         }
         if let Some(env) = req.env {
-            server.env = env
-                .into_iter()
-                .map(|e| McpEnvEntry {
-                    key: e.key,
-                    value: e.value,
-                })
-                .collect();
+            server.env = updated_env(&server.env, env)?;
         }
         if let Some(enabled) = req.enabled {
             server.enabled = enabled;
@@ -297,6 +284,42 @@ impl McpOps {
     }
 }
 
+/// The variables an update leaves: each sent entry with its new value, or
+/// with none the value `stored` holds under its key. An entry left out is
+/// deleted.
+///
+/// A value is never sent back, so keeping one is leaving it out; a key with
+/// nothing stored has no value to keep, and is refused. A value sent is held
+/// to the service's blank rule; a value kept is stored as it was.
+fn updated_env(
+    stored: &[McpEnvEntry],
+    sent: Vec<McpEnvUpdateDto>,
+) -> Result<Vec<McpEnvEntry>, GuiError> {
+    sent.into_iter()
+        .map(|entry| match entry.value {
+            Some(value) => {
+                let entry = McpEnvEntry::new(entry.key, value);
+                McpService::refuse_blank_env(&entry)?;
+                Ok(entry)
+            }
+            None => stored
+                .iter()
+                .find(|kept| kept.key == entry.key)
+                .cloned()
+                .ok_or_else(|| {
+                    GuiError::ValidationFailed(format!(
+                        "{} has no stored value to keep: enter a value or remove the variable",
+                        entry.key
+                    ))
+                }),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 #[path = "mcp_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "mcp_env_tests.rs"]
+mod env_tests;

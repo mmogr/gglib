@@ -16,10 +16,17 @@ import type { McpServerStatusDto as McpServerStatus } from '../../../types/gener
 export type { McpServerStatus };
 
 /**
- * Environment variable entry for MCP server.
+ * An environment variable a new server is created with, its value included.
  */
 import type { McpEnvEntryDto as McpEnvEntry } from '../../../types/generated/McpEnvEntryDto';
 export type { McpEnvEntry };
+
+/**
+ * An environment variable as an edit sends it. With no `value` it keeps the
+ * value stored under its key, which the page never holds (ADR 0027).
+ */
+import type { McpEnvUpdateDto as McpEnvUpdate } from '../../../types/generated/McpEnvUpdateDto';
+export type { McpEnvUpdate };
 
 /**
  * MCP server configuration.
@@ -50,7 +57,12 @@ export interface NewMcpServer {
   config: McpServerConfig;
   enabled: boolean;
   lifecycle: McpLifecycle;
-  env: McpEnvEntry[];
+  /**
+   * The variables, as the editor saves them for an add and an edit alike. A
+   * new server has no stored value to keep, so a variable here without one
+   * is sent blank, and the daemon refuses it with its reason.
+   */
+  env: McpEnvUpdate[];
 }
 
 /**
@@ -63,7 +75,8 @@ export interface UpdateMcpServer {
   config?: McpServerConfig;
   enabled?: boolean;
   lifecycle?: McpLifecycle;
-  env?: McpEnvEntry[];
+  /** The whole list the server keeps; one left out is deleted. */
+  env?: McpEnvUpdate[];
 }
 
 /**

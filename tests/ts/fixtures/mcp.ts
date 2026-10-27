@@ -18,7 +18,7 @@ const BASE: McpServer = {
   enabled: true,
   allow_remote: false,
   lifecycle: 'lazy',
-  env: [],
+  env_keys: [],
   created_at: '2024-01-01T00:00:00Z',
   is_valid: true,
 };

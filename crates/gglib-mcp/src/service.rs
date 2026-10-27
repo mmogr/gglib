@@ -5,8 +5,9 @@
 
 use crate::manager::McpManager;
 use gglib_core::ports::{ResolutionAttempt, ResolutionStatus};
+use gglib_core::secret::held;
 use gglib_core::{
-    McpLifecycle, McpRepositoryError, McpServer, McpServerRepository, McpServerStatus,
+    McpEnvEntry, McpLifecycle, McpRepositoryError, McpServer, McpServerRepository, McpServerStatus,
     McpServerType, McpServiceError, McpTool, McpToolResult, NewMcpServer,
 };
 use std::collections::HashMap;
@@ -64,6 +65,21 @@ impl McpService {
             McpServerType::Stdio => Ok(()),
             McpServerType::Sse => Err(McpServiceError::SseNotSupported),
         }
+    }
+
+    /// Refuse a variable whose value is blank ([`held`]): a blank is no
+    /// secret, and storing one would delete the value an emptied field stood
+    /// for (ADR 0027).
+    ///
+    /// The one blank rule for an env value. Every add asks it of each
+    /// variable, `gglib mcp add --env` and `POST /api/mcp/servers` alike; an
+    /// update asks it of the values it was sent, and a value it keeps is
+    /// stored as it was.
+    pub fn refuse_blank_env(entry: &McpEnvEntry) -> Result<(), McpServiceError> {
+        if held(Some(&entry.value)).is_none() {
+            return Err(McpServiceError::BlankEnvValue(entry.key.clone()));
+        }
+        Ok(())
     }
 
     /// The stored servers of a kind gglib can run: the ones a start-up pass
@@ -492,11 +508,13 @@ impl McpService {
     ///
     /// Refused with [`McpServiceError::SseNotSupported`] when it is an SSE
     /// server, with [`McpServiceError::NameReserved`] when it is named
-    /// `builtin`, and with [`McpServiceError::NameTaken`] when a server
+    /// `builtin`, with [`McpServiceError::BlankEnvValue`] when a variable's
+    /// value is blank, and with [`McpServiceError::NameTaken`] when a server
     /// already has the name.
     pub async fn add_server(&self, new_server: NewMcpServer) -> Result<McpServer, McpServiceError> {
         Self::refuse_unsupported(new_server.server_type)?;
         Self::refuse_reserved_name(&new_server.name)?;
+        new_server.env.iter().try_for_each(Self::refuse_blank_env)?;
 
         let _naming = self.naming.lock().await;
         self.refuse_taken_name(&new_server.name).await?;

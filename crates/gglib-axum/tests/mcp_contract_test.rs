@@ -174,3 +174,51 @@ async fn a_taken_name_is_a_conflict_on_add_and_on_rename() {
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body, taken);
 }
+
+/// A server's env goes out as its keys alone, on every route, and an update
+/// that sends a key without its value keeps the stored one, which only the
+/// reveal hands back (ADR 0027).
+#[tokio::test]
+async fn env_values_are_never_sent_back_and_an_update_keeps_what_it_leaves_out() {
+    let app = test_app(CorsConfig::AllowAll).await;
+    let mut body = new_server("Keyed");
+    body["env"] = json!([{ "key": "TOKEN", "value": "t0k-81d0e4" }]);
+
+    let (status, added) = send(&app, "POST", "/api/mcp/servers", &body).await;
+    assert_eq!(status, StatusCode::OK, "{added}");
+    let id = added
+        .pointer("/server/id")
+        .expect("the server's id")
+        .clone();
+    let path = format!("/api/mcp/servers/{id}");
+    let keep = json!({ "env": [{ "key": "TOKEN" }] });
+    let (status, updated) = send(&app, "PUT", &path, &keep).await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    let (_, listed) = send(&app, "GET", "/api/mcp/servers", &Value::Null).await;
+
+    for (route, answer) in [("add", &added), ("update", &updated), ("list", &listed)] {
+        let text = answer.to_string();
+        assert!(
+            !text.contains("t0k-81d0e4"),
+            "{route} sent the value: {text}"
+        );
+        assert!(
+            !text.contains("\"env\""),
+            "{route} sent an env list: {text}"
+        );
+        assert!(text.contains(r#""env_keys":["TOKEN"]"#), "{route}: {text}");
+    }
+
+    let reveal = json!({ "kind": "mcp_env", "server_id": id, "key": "TOKEN" });
+    let (status, revealed) = send(&app, "POST", "/api/secrets/reveal", &reveal).await;
+    assert_eq!(status, StatusCode::OK, "{revealed}");
+    assert_eq!(
+        revealed,
+        json!({ "value": "t0k-81d0e4" }),
+        "the update kept it"
+    );
+
+    let blank = json!({ "env": [{ "key": "TOKEN", "value": " " }] });
+    let (status, refused) = send(&app, "PUT", &path, &blank).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{refused}");
+}

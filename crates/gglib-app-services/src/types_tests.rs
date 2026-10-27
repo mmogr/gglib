@@ -182,7 +182,7 @@ mod mcp_server_info_shape_tests {
                 "config": {},
                 "enabled": true,
                 "lifecycle": "lazy",
-                "env": [],
+                "env_keys": [],
                 "created_at": "2024-01-01T00:00:00Z",
                 "is_valid": true,
             },
