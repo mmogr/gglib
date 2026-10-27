@@ -1,4 +1,4 @@
-stable-diffusion.cpp version unknown, commit fd21ecf
+stable-diffusion.cpp version unknown, commit 95ff762
 Usage: sd-server [options]
 
 Svr Options:
@@ -108,7 +108,8 @@ Context Options:
   --rng                                    RNG, one of [std_default, cuda, cpu], default: cuda(sd-webui), cpu(comfyui)
   --sampler-rng                            sampler RNG, one of [std_default, cuda, cpu]. If not specified, use --rng
   --prediction                             prediction type override, one of [eps, v, edm_v, sd3_flow, flux_flow,
-                                           sefi_flow]
+                                           sefi_flow, minit2i_flow, sensenova_u1_flow, flux3_flow, h3_av_flow,
+                                           ming_image_flow]
   --lora-apply-mode                        the way to apply LoRA, one of [auto, immediately, at_runtime], default is
                                            auto. In auto mode, if the model weights contain any quantized parameters,
                                            the at_runtime mode will be used; otherwise, immediately will be used.The
@@ -158,7 +159,7 @@ Default Generation Options:
                                            (default), cuda, std_default or sampler_rng
   --extra-tiling-args <string>             extra VAE tiling args, key=value list. Supported video VAEs accept
                                            temporal_tile_frames/temporal_tile_size (default: 4), temporal_tile_overlap
-                                           (default: 1)
+                                           (default: 1); Wan2.2 TI2V 5B accepts temporal_decode_frames (default: 1)
   --ref-image-args <string>                Key-value list to set up the way the reference images are processed (empty =
                                            auto-detect from model weigths)
   --image-preprocess <string>              Image preprocessing rule:
