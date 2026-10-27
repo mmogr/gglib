@@ -66,26 +66,28 @@ pub enum Placement {
     DiffusionOnly,
 }
 
-/// Where a recipe turns flash attention on, by the stable-diffusion.cpp flag
-/// that does it.
+/// Where a recipe turns flash attention on, by the `--flash-attn` mode
+/// stable-diffusion.cpp is given for it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlashAttention {
-    /// Nowhere: no flag.
+    /// Nowhere (`off`).
     Off,
-    /// In the diffusion model, the text encoders and the VAE (`--fa`).
+    /// In the diffusion model, the text encoders and the VAE (`on`).
     Everywhere,
-    /// In the diffusion model alone (`--diffusion-fa`).
+    /// In the diffusion model alone (`off,diffusion=on`).
     DiffusionOnly,
 }
 
 impl FlashAttention {
-    /// The flag `sd-server` is given, or none.
+    /// The mode `sd-server` is given with `--flash-attn`. `Off` is given
+    /// too: left out, the pinned release picks per module (`auto`), and no
+    /// recipe has been run that way.
     #[must_use]
-    pub const fn flag(self) -> Option<&'static str> {
+    pub const fn mode(self) -> &'static str {
         match self {
-            Self::Off => None,
-            Self::Everywhere => Some("--fa"),
-            Self::DiffusionOnly => Some("--diffusion-fa"),
+            Self::Off => "off",
+            Self::Everywhere => "on",
+            Self::DiffusionOnly => "off,diffusion=on",
         }
     }
 }
@@ -259,8 +261,9 @@ const QWEN_IMAGE_21: Recipe = Recipe {
 /// (`docs/z_image.md`) runs it; a base Z-Image file is refused
 /// ([`ImageFamily::refusal`]). `euler` is stable-diffusion.cpp's default
 /// sampler for a diffusion transformer; the guide names none. Flash attention is on in the diffusion model alone
-/// (`--diffusion-fa`), as the guide runs it: `--fa` would turn it on in the
-/// Flux.1 VAE too, where it has never run. Sizes step by 16: the VAE's 8
+/// (`--flash-attn off,diffusion=on`), as `--diffusion-fa` did, which the
+/// guide passed until master-995: `on` would turn it on in the Flux.1 VAE
+/// too, where it has never run. Sizes step by 16: the VAE's 8
 /// times the model's patch of 2.
 /// The text encoder is Qwen3 4B, sizes checked against the Hub on
 /// 2026-10-11. Nothing here has drawn a picture yet.

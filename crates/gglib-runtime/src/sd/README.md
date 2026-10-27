@@ -39,9 +39,9 @@ has no asset and builds from source.
 2.1, Z-Image) or `-m <file>` for an all-in-one checkpoint (SDXL); each component in
 role order, `--vae`, `--clip_l`, `--t5xxl`, `--llm`, whatever order the
 model lists them in; `--listen-ip 127.0.0.1 --listen-port <port>`; then the
-recipe's `--steps`, `--cfg-scale` and `--sampling-method`, and the recipe's
-flash attention flag where it has one (`--fa` for Qwen-Image 2.1,
-`--diffusion-fa` for Z-Image). Flags given at launch
+recipe's `--steps`, `--cfg-scale` and `--sampling-method`, and its
+`--flash-attn` mode (`on` for Qwen-Image 2.1, `off,diffusion=on` for
+Z-Image, `off` for the rest), and `--conv-direct off`. Flags given at launch
 are the defaults for every request. `server/args_tests.rs` pins one whole argv per
 family.
 

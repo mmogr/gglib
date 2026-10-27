@@ -59,7 +59,7 @@ fn flux_loads_a_diffusion_model_with_its_vae_and_both_text_encoders() {
         words(
             "--diffusion-model M --vae V --clip_l C --t5xxl T \
              --listen-ip 127.0.0.1 --listen-port 9123 \
-             --steps 4 --cfg-scale 1 --sampling-method euler"
+             --steps 4 --cfg-scale 1 --sampling-method euler --flash-attn off --conv-direct off"
         )
     );
 }
@@ -71,7 +71,7 @@ fn sdxl_loads_one_checkpoint_with_m() {
         argv(&sdxl),
         words(
             "-m M --listen-ip 127.0.0.1 --listen-port 9123 \
-             --steps 20 --cfg-scale 7 --sampling-method euler_a"
+             --steps 20 --cfg-scale 7 --sampling-method euler_a --flash-attn off --conv-direct off"
         )
     );
 }
@@ -90,7 +90,7 @@ fn qwen_image_loads_its_vae_and_language_model_with_flash_attention() {
         words(
             "--diffusion-model M --vae V --llm L \
              --listen-ip 127.0.0.1 --listen-port 9123 \
-             --steps 20 --cfg-scale 6 --sampling-method euler --fa"
+             --steps 20 --cfg-scale 6 --sampling-method euler --flash-attn on --conv-direct off"
         )
     );
 }
@@ -112,7 +112,7 @@ fn z_image_loads_its_vae_and_language_model_at_turbos_steps() {
         words(
             "--diffusion-model M --vae V --llm L \
              --listen-ip 127.0.0.1 --listen-port 9123 \
-             --steps 8 --cfg-scale 1 --sampling-method euler --diffusion-fa"
+             --steps 8 --cfg-scale 1 --sampling-method euler --flash-attn off,diffusion=on --conv-direct off"
         )
     );
 }

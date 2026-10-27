@@ -120,6 +120,10 @@ async fn each_runtime_runs_its_own_binary() {
         "1",
         "--sampling-method",
         "euler",
+        "--flash-attn",
+        "off",
+        "--conv-direct",
+        "off",
     ]
     .iter()
     .map(|s| (*s).to_owned())
