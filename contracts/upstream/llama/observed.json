@@ -1,0 +1,343 @@
+{
+  "auto_grammar.Qwen-Qwen3-0.6B.grammar": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": true
+  },
+  "auto_grammar.Qwen-Qwen3-0.6B.lazy": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": true
+  },
+  "auto_grammar.Qwen-Qwen3-0.6B.triggers_present": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": true
+  },
+  "auto_grammar.Qwen3.5-4B.grammar": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": true
+  },
+  "auto_grammar.Qwen3.5-4B.lazy": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": true
+  },
+  "auto_grammar.Qwen3.5-4B.triggers_present": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": true
+  },
+  "auto_grammar.ibm-granite-granite-4.0.grammar": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": true
+  },
+  "auto_grammar.ibm-granite-granite-4.0.lazy": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": true
+  },
+  "auto_grammar.ibm-granite-granite-4.0.triggers_present": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": true
+  },
+  "cache_prompt_default": {
+    "adr": "0022",
+    "criterion": "A pin bump that changes either default named in the context (`server-task.h:54`, `common/common.h:635`) away from `true`",
+    "how_read": "stories260K, one request sent twice with no cache_prompt: the second's prompt_tokens_details.cached_tokens > 0",
+    "if_moved": "decision 1 is reversed: gglib sends cache_prompt itself",
+    "value": true
+  },
+  "caps.Qwen-Qwen3-0.6B.supports_object_arguments": {
+    "value": true
+  },
+  "caps.Qwen-Qwen3-0.6B.supports_parallel_tool_calls": {
+    "value": true
+  },
+  "caps.Qwen-Qwen3-0.6B.supports_preserve_reasoning": {
+    "value": false
+  },
+  "caps.Qwen-Qwen3-0.6B.supports_reasoning_effort": {
+    "value": false
+  },
+  "caps.Qwen-Qwen3-0.6B.supports_string_content": {
+    "value": true
+  },
+  "caps.Qwen-Qwen3-0.6B.supports_system_role": {
+    "value": true
+  },
+  "caps.Qwen-Qwen3-0.6B.supports_tool_calls": {
+    "value": true
+  },
+  "caps.Qwen-Qwen3-0.6B.supports_tools": {
+    "value": true
+  },
+  "caps.Qwen-Qwen3-0.6B.supports_typed_content": {
+    "value": false
+  },
+  "caps.Qwen3.5-4B.supports_object_arguments": {
+    "value": true
+  },
+  "caps.Qwen3.5-4B.supports_parallel_tool_calls": {
+    "value": true
+  },
+  "caps.Qwen3.5-4B.supports_preserve_reasoning": {
+    "value": false
+  },
+  "caps.Qwen3.5-4B.supports_reasoning_effort": {
+    "value": false
+  },
+  "caps.Qwen3.5-4B.supports_string_content": {
+    "value": true
+  },
+  "caps.Qwen3.5-4B.supports_system_role": {
+    "value": true
+  },
+  "caps.Qwen3.5-4B.supports_tool_calls": {
+    "value": true
+  },
+  "caps.Qwen3.5-4B.supports_tools": {
+    "value": true
+  },
+  "caps.Qwen3.5-4B.supports_typed_content": {
+    "value": true
+  },
+  "caps.ibm-granite-granite-4.0.supports_object_arguments": {
+    "value": true
+  },
+  "caps.ibm-granite-granite-4.0.supports_parallel_tool_calls": {
+    "value": true
+  },
+  "caps.ibm-granite-granite-4.0.supports_preserve_reasoning": {
+    "value": false
+  },
+  "caps.ibm-granite-granite-4.0.supports_reasoning_effort": {
+    "value": false
+  },
+  "caps.ibm-granite-granite-4.0.supports_string_content": {
+    "value": true
+  },
+  "caps.ibm-granite-granite-4.0.supports_system_role": {
+    "value": true
+  },
+  "caps.ibm-granite-granite-4.0.supports_tool_calls": {
+    "value": true
+  },
+  "caps.ibm-granite-granite-4.0.supports_tools": {
+    "value": true
+  },
+  "caps.ibm-granite-granite-4.0.supports_typed_content": {
+    "value": true
+  },
+  "effort_validated": {
+    "value": false
+  },
+  "endpoints_present.apply-template": {
+    "value": true
+  },
+  "endpoints_present.input_tokens": {
+    "value": true
+  },
+  "endpoints_present.tokenize": {
+    "value": true
+  },
+  "help_defaults.batch": {
+    "value": "2048"
+  },
+  "help_defaults.fit": {
+    "value": "on"
+  },
+  "help_defaults.jinja": {
+    "value": "enabled"
+  },
+  "help_defaults.parallel": {
+    "value": "-1"
+  },
+  "help_diff.options": {
+    "adr": "0012",
+    "criterion": "If `llama-server` — or another dependency gglib fundamentally relies on — ships a first-party remote transport, this defers to it and the tunnel is deleted rather than carried beside it.",
+    "how_read": "the number of options llama-server --help lists; read help.txt's diff for a transport",
+    "if_moved": "read the help.txt diff for a remote transport",
+    "value": 258
+  },
+  "image_token_delta": {
+    "adr": "0015",
+    "criterion": "If the estimate is more than a tenth off what llama-server counts, decision 2 is reopened.",
+    "how_read": "tinygemma3 with its projector: usage.prompt_tokens with 0_cat.png less the same request without it",
+    "if_moved": "compare gglib's image_tokens estimate with the new count",
+    "value": 258
+  },
+  "none_grammar.Qwen-Qwen3-0.6B.grammar": {
+    "value": false
+  },
+  "none_grammar.Qwen3.5-4B.grammar": {
+    "value": false
+  },
+  "none_grammar.ibm-granite-granite-4.0.grammar": {
+    "value": false
+  },
+  "over_context.status": {
+    "value": 400
+  },
+  "required_grammar.Qwen-Qwen3-0.6B.grammar": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": true
+  },
+  "required_grammar.Qwen-Qwen3-0.6B.lazy": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": false
+  },
+  "required_grammar.Qwen-Qwen3-0.6B.triggers_present": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": false
+  },
+  "required_grammar.Qwen3.5-4B.grammar": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": true
+  },
+  "required_grammar.Qwen3.5-4B.lazy": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": false
+  },
+  "required_grammar.Qwen3.5-4B.triggers_present": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": false
+  },
+  "required_grammar.ibm-granite-granite-4.0.grammar": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": true
+  },
+  "required_grammar.ibm-granite-granite-4.0.lazy": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": false
+  },
+  "required_grammar.ibm-granite-granite-4.0.triggers_present": {
+    "adr": "0002",
+    "criterion": "upstream constrains dialect tool calls under both `tool_choice: \"required\"` and `\"auto\"`, with arguments conforming to the tool's own JSON Schema rather than merely being well-formed JSON",
+    "how_read": "stories260K under the template, one tool, tool_choice as named; /slots with LLAMA_SERVER_SLOTS_DEBUG=1 once idle: grammar non-empty, grammar_lazy, grammar_triggers non-empty",
+    "if_moved": "the decision on constrain.rs is re-taken",
+    "value": false
+  },
+  "sampler_defaults.dry_multiplier": {
+    "adr": "0003",
+    "criterion": "If a pin bump moves an upstream default that gglib now defers to, the readback flags the divergence and this decision is re-taken for that parameter.",
+    "how_read": "/props default_generation_settings.params, bare launch, as the f32 llama.cpp holds",
+    "if_moved": "UPSTREAM_DEFAULTS in gglib-proxy's props.rs moves with it, and the deferral is re-taken",
+    "value": 0.0
+  },
+  "sampler_defaults.min_p": {
+    "adr": "0003",
+    "criterion": "If a pin bump moves an upstream default that gglib now defers to, the readback flags the divergence and this decision is re-taken for that parameter.",
+    "how_read": "/props default_generation_settings.params, bare launch, as the f32 llama.cpp holds",
+    "if_moved": "UPSTREAM_DEFAULTS in gglib-proxy's props.rs moves with it, and the deferral is re-taken",
+    "value": 0.05
+  },
+  "sampler_defaults.presence_penalty": {
+    "adr": "0003",
+    "criterion": "If a pin bump moves an upstream default that gglib now defers to, the readback flags the divergence and this decision is re-taken for that parameter.",
+    "how_read": "/props default_generation_settings.params, bare launch, as the f32 llama.cpp holds",
+    "if_moved": "UPSTREAM_DEFAULTS in gglib-proxy's props.rs moves with it, and the deferral is re-taken",
+    "value": 0.0
+  },
+  "sampler_defaults.repeat_penalty": {
+    "adr": "0003",
+    "criterion": "If a pin bump moves an upstream default that gglib now defers to, the readback flags the divergence and this decision is re-taken for that parameter.",
+    "how_read": "/props default_generation_settings.params, bare launch, as the f32 llama.cpp holds",
+    "if_moved": "UPSTREAM_DEFAULTS in gglib-proxy's props.rs moves with it, and the deferral is re-taken",
+    "value": 1.0
+  },
+  "sampler_defaults.temperature": {
+    "adr": "0003",
+    "criterion": "If a pin bump moves an upstream default that gglib now defers to, the readback flags the divergence and this decision is re-taken for that parameter.",
+    "how_read": "/props default_generation_settings.params, bare launch, as the f32 llama.cpp holds",
+    "if_moved": "UPSTREAM_DEFAULTS in gglib-proxy's props.rs moves with it, and the deferral is re-taken",
+    "value": 0.8
+  },
+  "sampler_defaults.top_k": {
+    "adr": "0003",
+    "criterion": "If a pin bump moves an upstream default that gglib now defers to, the readback flags the divergence and this decision is re-taken for that parameter.",
+    "how_read": "/props default_generation_settings.params, bare launch, as the f32 llama.cpp holds",
+    "if_moved": "UPSTREAM_DEFAULTS in gglib-proxy's props.rs moves with it, and the deferral is re-taken",
+    "value": 40.0
+  },
+  "sampler_defaults.top_p": {
+    "adr": "0003",
+    "criterion": "If a pin bump moves an upstream default that gglib now defers to, the readback flags the divergence and this decision is re-taken for that parameter.",
+    "how_read": "/props default_generation_settings.params, bare launch, as the f32 llama.cpp holds",
+    "if_moved": "UPSTREAM_DEFAULTS in gglib-proxy's props.rs moves with it, and the deferral is re-taken",
+    "value": 0.95
+  },
+  "slots_chat_format.Qwen-Qwen3-0.6B": {
+    "value": "peg-native"
+  },
+  "slots_chat_format.Qwen3.5-4B": {
+    "value": "peg-native"
+  },
+  "slots_chat_format.ibm-granite-granite-4.0": {
+    "value": "peg-native"
+  },
+  "tools_rendered_under_none.Qwen-Qwen3-0.6B": {
+    "value": true
+  },
+  "tools_rendered_under_none.Qwen3.5-4B": {
+    "value": true
+  },
+  "tools_rendered_under_none.ibm-granite-granite-4.0": {
+    "value": true
+  },
+  "vision_with_mmproj": {
+    "value": true
+  },
+  "vision_without_mmproj": {
+    "adr": "0015",
+    "criterion": "If llama-server reads images without a projector, decision 1 is reopened.",
+    "how_read": "tinygemma3 started without --mmproj: /props modalities.vision",
+    "if_moved": "the server's own /props answer is read in place of the projector column",
+    "value": false
+  }
+}

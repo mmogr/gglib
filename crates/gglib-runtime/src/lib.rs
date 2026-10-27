@@ -11,6 +11,8 @@ mod command;
 // below, and nothing outside this crate touches `launch_narration` at all.
 pub(crate) mod compose;
 pub mod engine;
+#[cfg(test)]
+mod engine_contract_tests;
 mod health;
 pub(crate) mod health_monitor;
 #[allow(

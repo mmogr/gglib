@@ -4,7 +4,7 @@
 .PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri \
         test test-helper check fmt lint doc doc-check dev pre-commit release \
         lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
-        bindings bindings-check \
+        adr-readings record-upstream bindings bindings-check \
         clean clean-gui clean-llama clean-all path-check \
         check-deps check-deps-bootstrap check-rust \
         llama-install llama-install-auto llama-update llama-status llama-rebuild \
@@ -312,6 +312,25 @@ enforce: ## Run the architecture enforcement checks
 	@# rustdoc does not follow a URL.
 	@./scripts/check_adrs.py --check
 
+# The ADR readings in contracts/upstream against their hand-kept approvals. Not
+# in `enforce`: CI runs it as a job of its own, `ADR criterion moved`, so one
+# moved reading is one red row.
+adr-readings: ## Check each ADR reading in contracts/upstream against its approval
+	@./scripts/check_adr_readings.sh
+
+# Record contracts/upstream again from the pinned engines, as CI does.
+# GGLIB_ENGINES_DIR is a folder `gglib config llama install` and `config sd
+# install` installed into (with GGLIB_DATA_DIR set to it), and
+# GGLIB_ENGINE_MODELS_DIR holds the tiny models CI downloads, with the pin's
+# chat templates in templates/.
+record-upstream: export GGLIB_RECORD_CONTRACTS := 1
+record-upstream: ## Record contracts/upstream again from the pinned engines
+	@[ -n "$$GGLIB_ENGINES_DIR" ] && [ -n "$$GGLIB_ENGINE_MODELS_DIR" ] || { \
+		echo "✗ set GGLIB_ENGINES_DIR and GGLIB_ENGINE_MODELS_DIR first"; \
+		exit 1; \
+	}
+	$(CARGO) test -p gglib-runtime --lib engine_contract -- --ignored
+
 ##@ Bindings
 
 BINDINGS_DIR := src/types/generated
@@ -591,7 +610,7 @@ dev: fmt lint test ## Format, lint and test
 # Without it, adding a Rust wire field and forgetting `make bindings` passed
 # a target whose help text reads "everything CI requires" and then cost a
 # full Rust CI leg to discover.
-pre-commit: fmt lint test lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce bindings-check doc-check ## Run everything CI requires
+pre-commit: fmt lint test lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce adr-readings bindings-check doc-check ## Run everything CI requires
 	@echo "✓ All pre-commit checks passed"
 
 # Release workflow

@@ -114,6 +114,20 @@ jobs:
       - name: Run the architecture checks
         run: make enforce
 
+  # Each reading an ADR's criterion names, in contracts/upstream/llama's
+  # observed.json, against its hand-kept approval. It reads two committed
+  # files and never starts an engine, so a recorder that fails cannot turn it
+  # red; a reading that moved, or one nobody has approved, does.
+  adr-readings:
+    name: ADR criterion moved
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Check each ADR reading against its approval
+        run: make adr-readings
+
   test:
     name: Test (Rust)
     runs-on: ubuntu-24.04
@@ -698,7 +712,7 @@ jobs:
     name: CI Success
     runs-on: ubuntu-24.04
     if: always()
-    needs: [boundaries, bindings, enforcement, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os]
+    needs: [boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os]
     steps:
       - name: Check all jobs succeeded
         run: |
