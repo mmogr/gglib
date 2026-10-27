@@ -2,7 +2,7 @@
 
 <!-- module-docs:start -->
 
-High-level interactive UI primitives: `Button`, `IconButton`, `Tabs`, `Chip`, `Banner`, `Checkbox`, `Input`, `Modal`, `Select`, `Textarea`, `Icon`, and `ConfirmDialog`. Built on Radix UI primitives and styled with Tailwind design tokens. Every clickable or form-input element in the app uses components from here — enforced by ESLint (`no-restricted-syntax` bans raw `<button>`/checkbox inputs outside this directory).
+High-level interactive UI primitives: `Button`, `IconButton`, `Tabs`, `Chip`, `Banner`, `Checkbox`, `Input`, `SecretInput`, `SecretField`, `Modal`, `Select`, `Textarea`, `Icon`, and `ConfirmDialog`. Built on Radix UI primitives and styled with Tailwind design tokens. Every clickable or form-input element in the app uses components from here — enforced by ESLint (`no-restricted-syntax` bans raw `<button>`/checkbox inputs outside this directory).
 
 ## Key Files
 
@@ -15,6 +15,8 @@ High-level interactive UI primitives: `Button`, `IconButton`, `Tabs`, `Chip`, `B
 | `Banner.tsx` | Borderless tinted status callout (`info`/`success`/`warning`/`danger`) with icon, optional `action`/`onDismiss` |
 | `Checkbox.tsx` | sr-only input + styled peer box; `label`/`description` slots |
 | `Input.tsx` | Text input with optional icon slots; variants: `default`, `error` |
+| `SecretInput.tsx` | The one input a secret is typed into: masked, with an eye button beside it that shows what was typed |
+| `SecretField.tsx` | A stored secret in a form (ADR 0027): `MASK` while held, Show and Copy through the daemon's one reveal, Replace, and Clear where allowed; the `SecretEdit` it hands back is keep, replace or clear, and `editedValue` is what a request sends for it |
 | `Modal.tsx` | Radix `Dialog` wrapper; sizes: `sm`, `md`, `lg`; `height="fixed"`; `preventClose`; typed `subHeader`/`footer` slots |
 | `Select.tsx` | Native `<select>` with token-styled chevron overlay |
 | `Textarea.tsx` | Multi-line input with same variant/size system as `Input` |

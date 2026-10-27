@@ -105,7 +105,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `proxy trips [--since DAYS]` | The loop guard's log from this machine's database, daemon or not: requests scanned per UTC day, model, version and mode, and the ones it noted or refused |
 | `download <repo>` | Download a model from `HuggingFace`; an image model's companions come too, named with their sizes before it is queued |
 | `search <query>` | Search `HuggingFace` Hub for models; `--images` for image models |
-| `config settings show` | Show current configuration |
+| `config settings show` | Show current configuration; a stored secret is shown as `(set, not shown)` with the command that prints it |
+| `config settings reveal <key>` | Print a stored secret, `proxy-api-key` or `remote-pairing.api-key`, alone on stdout, so `$(gglib config settings reveal proxy-api-key)` is exactly the key |
 | `config default <id\|name>` | Set/show/clear the default model |
 | `config profile list` | List named sampling profiles |
 | `config profile show <name>` | Show one profile's parameters |

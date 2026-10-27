@@ -20,7 +20,7 @@ export interface UseProxyDashboardOptions {
   /** Proxy port. Pass `null` to stay idle (e.g. proxy not running yet). */
   port: number | null;
   /**
-   * The proxy's API key (the `proxyApiKey` setting), when it requires one.
+   * The proxy's API key, from `useProxyKey`, when it requires one.
    *
    * `/v1/proxy/status/stream` sits behind the same bearer check as the rest
    * of `/v1/*`, so without this a key-protected proxy answers 401 and the

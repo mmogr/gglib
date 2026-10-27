@@ -2,8 +2,10 @@
 
 use clap::Subcommand;
 
+mod secret_arg;
 mod settings_args;
 
+pub(crate) use secret_arg::SecretArg;
 pub(crate) use settings_args::SettingsSetArgs;
 
 use crate::llama_commands::LlamaCommand;
@@ -237,5 +239,14 @@ pub enum SettingsCommand {
         /// Skip confirmation prompt
         #[arg(short, long)]
         force: bool,
+    },
+    /// Print a stored secret, alone on stdout
+    ///
+    /// The one place a stored secret is printed: `settings show` says only
+    /// whether it is held. Stdout carries the value and nothing else, so
+    /// `$(gglib config settings reveal proxy-api-key)` is exactly the key.
+    Reveal {
+        /// The secret, as `settings show` names it
+        key: SecretArg,
     },
 }

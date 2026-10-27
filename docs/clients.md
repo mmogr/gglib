@@ -55,8 +55,8 @@ by `gglib remote status`. Every recipe above should work against it with
 two changes: that port instead of `8080`, and this machine's device key
 instead of a placeholder. None of these clients has been tried over the
 port yet ([#1044](https://github.com/mmogr/gglib/issues/1044)). The device key is the one this machine was given when it
-paired, not the other machine's `proxy_api_key`; `gglib remote key --show`
-prints it. The port does not add it for you, on purpose — see
+paired, not the other machine's `proxy_api_key`;
+`gglib config settings reveal remote-pairing.api-key` prints it. The port does not add it for you, on purpose — see
 [Why the port does not inject the key](remote.md#why-the-port-does-not-inject-the-key).
 
 `gglib q --remote` and `gglib chat --remote` need neither: they attach the

@@ -30,7 +30,7 @@ const UNSET: AppSettings = {
   titleGenerationPrompt: null,
   bindHost: null,
   shareLan: null,
-  proxyApiKey: null,
+  hasProxyApiKey: false,
   trustClientSampling: null,
   loopGuardMode: null,
   toolCallRepair: null,

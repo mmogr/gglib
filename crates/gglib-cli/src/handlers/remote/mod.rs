@@ -5,7 +5,6 @@ mod disable;
 mod enable;
 mod invite;
 mod join;
-mod key;
 mod pairing_layout;
 mod pairing_tui;
 
@@ -15,7 +14,6 @@ use enable::{EnableArgs, enable};
 use invite::invite;
 pub(crate) use join::for_how_long;
 use join::{JoinArgs, disconnect, join};
-use key::key;
 
 use anyhow::Result;
 use gglib_app_services::RemoteStatus;
@@ -70,7 +68,6 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: RemoteCommand) -> Result
             .await
         }
         RemoteCommand::Disconnect => disconnect(ctx).await,
-        RemoteCommand::Key { show } => key(ctx, show).await,
     }
 }
 

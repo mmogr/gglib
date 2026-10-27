@@ -165,7 +165,7 @@ fn profiles_use_camel_case_on_the_wire() {
         title_generation_prompt: None,
         bind_host: None,
         share_lan: None,
-        proxy_api_key: None,
+        has_proxy_api_key: false,
         trust_client_sampling: None,
         loop_guard_mode: None,
         tool_call_repair: None,

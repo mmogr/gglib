@@ -5,6 +5,7 @@
 //! the `double_option` guard.
 
 use gglib_core::LoopGuardMode;
+use gglib_core::secret::held;
 use serde::{Deserialize, Serialize};
 
 /// Application settings for the settings UI.
@@ -42,7 +43,12 @@ pub struct AppSettings {
     // Network binding (see `gglib_core::Settings`)
     pub bind_host: Option<String>,
     pub share_lan: Option<bool>,
-    pub proxy_api_key: Option<String>,
+    /// Whether a proxy key is stored. Never the key: a read says whether a
+    /// secret is held, and `POST /api/secrets/reveal` is where its value
+    /// comes from (ADR 0027). A blank stored key is no key. Defaults to
+    /// `false` when absent, so a reader on another version still parses.
+    #[serde(default)]
+    pub has_proxy_api_key: bool,
     // Sampling authority (see `gglib_core::Settings`)
     pub trust_client_sampling: Option<bool>,
     // Proxy loop guard; `None` means the default, `note` (see
@@ -98,7 +104,7 @@ impl From<gglib_core::Settings> for AppSettings {
             title_generation_prompt: settings.title_generation_prompt,
             bind_host: settings.bind_host,
             share_lan: settings.share_lan,
-            proxy_api_key: settings.proxy_api_key,
+            has_proxy_api_key: held(settings.proxy_api_key.as_deref()).is_some(),
             trust_client_sampling: settings.trust_client_sampling,
             loop_guard_mode: settings.loop_guard_mode,
             tool_call_repair: settings.tool_call_repair,

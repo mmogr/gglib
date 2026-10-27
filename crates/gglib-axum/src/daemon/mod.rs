@@ -11,6 +11,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use gglib_core::ports::SettingsRepository;
+use gglib_core::secret::{SettingSecret, held_line};
 use gglib_core::{ApiKeySource, CorsConfig, daemon_port, paths::data_root};
 use gglib_runtime::proxy::resolve_api_key;
 
@@ -217,10 +218,8 @@ pub async fn run_daemon(opts: DaemonOptions) -> Result<()> {
 /// no gain. That question comes first here, where the proxy asks it last.
 /// Anything else takes the proxy's own answer, [`resolve_api_key`]: the
 /// stored `proxy_api_key` — one machine key across both surfaces — or a
-/// fresh one, minted and stored, when the setting is empty or blank. The key
-/// is printed so a `--share-lan` operator can copy it; the eprintln lands in
-/// `daemon.log` for detached daemons, which cannot bind non-loopback today
-/// anyway.
+/// fresh one, minted and stored, when the setting is empty or blank. The
+/// banner, [`api_key_banner`], says so once at startup.
 async fn resolve_daemon_api_key(
     bind_host: &str,
     settings: &Arc<dyn SettingsRepository>,
@@ -231,22 +230,42 @@ async fn resolve_daemon_api_key(
 
     let (key, source) = resolve_api_key(None, bind_host, settings).await;
     if let Some(key) = &key {
-        let source = if source == ApiKeySource::Settings {
-            "from settings"
-        } else {
-            "generated"
-        };
-        announce_api_key(key, source);
+        info!("management API requires a bearer token ({source:?})");
+        for line in api_key_banner(key, source) {
+            eprintln!("{line}");
+        }
     }
     key
 }
 
-/// Print the management-API key at startup, once, where the operator who
+/// What the daemon prints about its key at startup, where the operator who
 /// chose a non-loopback bind will see it.
-fn announce_api_key(key: &str, source: &str) {
-    info!("management API requires a bearer token ({source})");
-    eprintln!("  \u{1f511} Management API key ({source}): {key}");
-    eprintln!("     Clients on the network must send: Authorization: Bearer {key}");
+///
+/// The key itself only when it was minted and could not be stored: the
+/// banner is then its only copy. A stored key is named and never printed
+/// (ADR 0027): this banner is in the terminal a `--share-lan` daemon was
+/// started from, and terminal output is what gets pasted into issues.
+fn api_key_banner(key: &str, source: ApiKeySource) -> Vec<String> {
+    if source == ApiKeySource::GeneratedUnsaved {
+        return vec![
+            format!(
+                "  \u{1f511} Management API key (generated, and NOT saved: copy it now): {key}"
+            ),
+            format!("     Clients on the network must send: Authorization: Bearer {key}"),
+        ];
+    }
+    let from = if source == ApiKeySource::Settings {
+        "from settings"
+    } else {
+        "generated and saved"
+    };
+    vec![
+        format!(
+            "  \u{1f511} Management API key ({from}): {}",
+            held_line(SettingSecret::ProxyApiKey)
+        ),
+        "     Clients on the network send it as: Authorization: Bearer <key>".to_owned(),
+    ]
 }
 
 #[cfg(test)]

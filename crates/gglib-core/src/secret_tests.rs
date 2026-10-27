@@ -59,3 +59,11 @@ fn a_reference_round_trips_through_its_wire_shape() {
         );
     }
 }
+
+#[test]
+fn a_held_secret_reads_as_held_and_names_its_reveal() {
+    assert_eq!(
+        held_line(SettingSecret::ProxyApiKey),
+        "(set, not shown)  `gglib config settings reveal proxy-api-key` prints it"
+    );
+}

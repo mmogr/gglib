@@ -145,9 +145,12 @@ fn print_share_lan_warning() {
     eprintln!();
     eprintln!("  \u{26a0}\u{fe0f}  LAN SHARING ENABLED (--share-lan)");
     eprintln!("     The daemon is reachable by every device on your network.");
-    eprintln!("     Its management API requires the API key printed below \u{2014} anyone");
-    eprintln!("     holding it can download models and start or stop inference on");
-    eprintln!("     this machine. Only use this on networks you trust.");
+    eprintln!("     Its management API requires the proxy's API key \u{2014} anyone holding");
+    eprintln!("     it can download models and start or stop inference on this machine.");
+    eprintln!(
+        "     `{}` prints it. Only use this on networks you trust.",
+        gglib_core::secret::SettingSecret::ProxyApiKey.reveal_command()
+    );
     eprintln!();
 }
 

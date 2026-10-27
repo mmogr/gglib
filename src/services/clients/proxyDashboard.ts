@@ -5,14 +5,14 @@
  * origin: an already-running proxy's own HTTP port, rather than the app's
  * backend. `benchmark.ts` still reaches the backend, through
  * `transport/api/client`'s authenticated fetch; this one cannot,
- * because the proxy carries its own credential (the `proxyApiKey` setting)
+ * because the proxy carries its own credential (its API key)
  * and serves its dashboard stream on its own port — the same relationship
  * the CLI's `gglib proxy dashboard` command has to it
  * (`crates/gglib-cli/src/handlers/proxy_dashboard.rs`).
  *
  * Because the port is the proxy's, so is the credential: the `apiKey`
- * parameter is the `proxyApiKey` setting, passed down from callers exactly
- * as `host`/`port` already are. That is deliberately not read from the
+ * parameter is the proxy's key, which callers reveal with `useProxyKey` and
+ * pass down exactly as `host`/`port` already are. That is deliberately not read from the
  * transport layer's session — that token belongs to the app's own backend,
  * which is a different server on a different port.
  *
@@ -55,7 +55,7 @@ function proxyAuthHeaders(apiKey?: string | null): Record<string, string> {
  *
  * @param host   Proxy host (typically `127.0.0.1`).
  * @param port   Proxy port.
- * @param apiKey The proxy's API key (the `proxyApiKey` setting), or null/undefined
+ * @param apiKey The proxy's API key (see `hooks/useProxyKey`), or null/undefined
  *               when it runs unauthenticated.
  * @param onSnapshot Called with each decoded snapshot (hydration + every tick).
  * @param onError    Called when the stream drops or is refused. Reconnection

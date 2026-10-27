@@ -26,7 +26,11 @@ fn a_pinned_flag_key_wins_and_is_marked_pinned() {
 
 #[test]
 fn a_key_the_proxy_resolved_from_settings_is_used_and_tracks() {
-    for source in [ApiKeySource::Settings, ApiKeySource::Generated] {
+    for source in [
+        ApiKeySource::Settings,
+        ApiKeySource::Generated,
+        ApiKeySource::GeneratedUnsaved,
+    ] {
         let decision = decide(Some(("running".to_owned(), source)), Some("stored"));
         assert_eq!(
             decision,

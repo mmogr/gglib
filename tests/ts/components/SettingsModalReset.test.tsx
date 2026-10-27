@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SettingsModal } from '../../../src/components/SettingsModal';
+import { ToastProvider } from '../../../src/contexts/ToastContext';
 
 const info = {
   path: '/custom/models',
@@ -30,7 +31,7 @@ const settings = {
   llamaBasePort: 9100,
   maxDownloadQueueSize: 5,
   defaultContextSize: 8192,
-  proxyApiKey: 'sk-kept',
+  hasProxyApiKey: true,
   bindHost: '0.0.0.0',
   shareLan: true,
   proxyAutostart: true,
@@ -87,7 +88,11 @@ describe('SettingsModal — reset to default', () => {
 
   it('resets the models directory and leaves every other field alone', async () => {
     const user = userEvent.setup();
-    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    render(
+      <ToastProvider>
+        <SettingsModal isOpen onClose={vi.fn()} />
+      </ToastProvider>,
+    );
 
     const modelsDir = document.querySelector<HTMLInputElement>('#models-dir-input');
     const bindHost = document.querySelector<HTMLInputElement>('#bind-host-input');

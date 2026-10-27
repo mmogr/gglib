@@ -12,6 +12,7 @@ import { readData, type ReadOptions } from '../errors';
 import { appLogger } from '../../platform';
 import { isDesktop } from '../../platform/detect';
 import { isDaemonTokenRefusal, serviceRestarted, takeDaemonToken } from './daemonToken';
+import { REVEAL_COMMAND } from '../../../constants/secrets';
 
 /**
  * Module-level API session context: where the daemon is and the token that
@@ -111,7 +112,8 @@ function readStoredApiKey(): string | undefined {
  */
 function promptForApiKey(): boolean {
   const entered = window.prompt(
-    'This gglib daemon requires an API key (it was printed when the daemon started).\n' +
+    'This gglib daemon requires an API key. On the machine it runs on, ' +
+      `\`${REVEAL_COMMAND.proxy_api_key}\` prints it.\n` +
       'Enter it to continue:'
   );
   if (!entered || !entered.trim()) {

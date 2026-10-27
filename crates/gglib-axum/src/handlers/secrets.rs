@@ -1,5 +1,5 @@
-//! `POST /api/secrets/reveal`: a stored secret, for the page's Show and Copy
-//! (ADR 0027).
+//! `POST /api/secrets/reveal`: a stored secret, for the page's Show and Copy,
+//! and the proxy key its dashboard, tray and Clear Cache present (ADR 0027).
 
 use axum::Json;
 use axum::extract::State;

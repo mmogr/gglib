@@ -101,6 +101,6 @@ in a `0600` file beside the device keys ([`daemon_token_path`]), minted anew
 at every daemon start, so a token something captured while the daemon was down
 dies with the next start. Every `/api` route asks for it on loopback too,
 where the socket is the machine's boundary but not the owner's;
-`proxy_api_key` cannot stand in, because the settings route returns it.
+`proxy_api_key` cannot stand in, because it is handed to the proxy's clients.
 
 <!-- module-docs:end -->

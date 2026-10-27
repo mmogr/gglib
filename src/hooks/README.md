@@ -68,6 +68,7 @@ Custom React hooks for gglib GUI functionality.
 | [`useToolSupportCache.ts`](useToolSupportCache.ts) | MCP tool support caching |
 | [`useDaemonReachable.ts`](useDaemonReachable.ts) | Whether the daemon answers at all — the state the tray popover used to confuse with a stopped proxy |
 | [`useProxyDashboard.ts`](useProxyDashboard.ts) | Subscribes to a running proxy's live dashboard stream, on the proxy's own host, port and credential |
+| [`useProxyKey.ts`](useProxyKey.ts) | The proxy's API key, revealed each time a surface that presents it opens (ADR 0027): the dashboard stream, the tray panel's stream and Clear Cache |
 
 ### Utility Hooks
 

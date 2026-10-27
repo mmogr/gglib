@@ -14,8 +14,8 @@
 //! half — id, label, when it joined, when it was last seen — is in settings,
 //! which is what the device list renders and what a person changes their mind
 //! about; `roster.rs` reads and writes it. The keys are in a `0600` file
-//! beside the endpoint identity, because `gglib config settings show` prints
-//! settings unmasked by design and that output gets pasted into bug reports;
+//! beside the endpoint identity, because settings are what every surface
+//! reads and what gets pasted into bug reports (ADR 0027);
 //! `device_keys.rs` reads and writes that, and seeds a listener from it.
 
 use std::sync::Arc;

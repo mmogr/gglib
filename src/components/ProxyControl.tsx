@@ -6,9 +6,11 @@ import { useClickOutside } from "../hooks/useClickOutside";
 import { formatError } from "../utils/errors";
 import { useProxyState } from "../services/proxyRegistry";
 import { useSettings } from "../hooks/useSettings";
+import { useProxyKey } from "../hooks/useProxyKey";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
+import { SecretInput } from "./ui/SecretInput";
 import { Checkbox } from "./ui/Checkbox";
 import { cn } from '../utils/cn';
 import { Stack, Label } from './primitives';
@@ -65,6 +67,8 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const [clearing, setClearing] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToastContext();
+  // Clear Cache presents the proxy's key; revealed while the popover is open.
+  const proxyKey = useProxyKey(isOpen && proxyState.running, settings);
 
   // Close dropdown when clicking outside
   useClickOutside(dropdownRef, () => setIsOpen(false), isOpen);
@@ -194,11 +198,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
                 onClick={async () => {
                   setClearing(true);
                   try {
-                    const result = await clearProxyCache(
-                      config.host,
-                      activePort,
-                      settings?.proxyApiKey
-                    );
+                    const result = await clearProxyCache(config.host, activePort, proxyKey);
                     showToast(result.message || 'Cache cleared', 'success');
                   } catch (err) {
                     showToast(`Failed to clear cache: ${formatError(err)}`, 'error');
@@ -206,7 +206,9 @@ const ProxyControl: FC<ProxyControlProps> = ({
                     setClearing(false);
                   }
                 }}
-                disabled={clearing}
+                // Waits for the reveal, as the dashboard does: sent before it
+                // answers, no key goes, and a keyed proxy refuses.
+                disabled={clearing || proxyKey === undefined}
                 leftIcon={<Icon icon={Trash2} size={14} />}
               >
                 {clearing ? 'Clearing...' : 'Clear Cache'}
@@ -283,12 +285,12 @@ const ProxyControl: FC<ProxyControlProps> = ({
                   </div>
                   <div className="mb-md">
                     <Label size="xs" muted className="mb-xs" htmlFor="proxy-api-key">API key</Label>
-                    <Input
+                    <SecretInput
                       id="proxy-api-key"
-                      type="text"
+                      label="API key for this run"
                       value={apiKey}
                       placeholder="None — endpoint is open on this host"
-                      onChange={(e) => setApiKey(e.target.value)}
+                      onChange={setApiKey}
                     />
                   </div>
                   <div>
@@ -336,7 +338,6 @@ const ProxyControl: FC<ProxyControlProps> = ({
         onClose={() => setShowDashboard(false)}
         host={config.host}
         port={activePort}
-        apiKey={settings?.proxyApiKey}
       />
     </div>
   );

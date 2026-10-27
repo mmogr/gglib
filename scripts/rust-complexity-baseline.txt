@@ -138,7 +138,7 @@ crates/gglib-core/src/services/model_registrar_components_tests.rs 341
 crates/gglib-core/src/services/model_service.rs 1477
 crates/gglib-core/src/services/model_verification.rs 656
 crates/gglib-core/src/services/model_verification_remote.rs 399
-crates/gglib-core/src/settings.rs 579
+crates/gglib-core/src/settings.rs 580
 crates/gglib-core/src/settings_remote.rs 303
 crates/gglib-core/src/settings_remote_tests.rs 321
 crates/gglib-core/src/settings_tests.rs 474

@@ -13,6 +13,7 @@
  */
 
 import type { AppSettings, SparseInferenceConfig, UpdateSettingsRequest } from '../../types';
+import { KEEP, editedValue, type SecretEdit } from '../ui/SecretField';
 
 /** Whether two request values say the same thing; objects are compared by their defined keys. */
 function sameValue(a: unknown, b: unknown): boolean {
@@ -38,7 +39,8 @@ export interface GeneralInputs {
   proxyPort: string;
   serverPort: string;
   maxQueueSize: string;
-  proxyApiKey: string;
+  /** What Save does with the stored proxy key, which the form never holds. */
+  proxyApiKey: SecretEdit;
   downloadPath: string;
   titlePrompt: string;
   maxToolIterations: string;
@@ -55,7 +57,7 @@ export function generalInputs(settings: AppSettings): GeneralInputs {
     proxyPort: settings.proxyPort?.toString() || '',
     serverPort: settings.llamaBasePort?.toString() || '',
     maxQueueSize: settings.maxDownloadQueueSize?.toString() || '',
-    proxyApiKey: settings.proxyApiKey || '',
+    proxyApiKey: KEEP,
     downloadPath: settings.defaultDownloadPath || '',
     titlePrompt: settings.titleGenerationPrompt || '',
     maxToolIterations: settings.maxToolIterations?.toString() || '',
@@ -74,15 +76,16 @@ const parseNumericInput = (input: string): number | null => {
 
 /** Every field the inputs stand for, whether or not it changed. */
 export function generalRequest(inputs: GeneralInputs): UpdateSettingsRequest {
+  // Kept, the key is left out, so the stored one stays; a new one is sent,
+  // and a clear is a `null`, which turns authentication off — never a blank
+  // string, which the backend refuses so it cannot mean both.
+  const proxyApiKey = editedValue(inputs.proxyApiKey);
   return {
+    ...(proxyApiKey === undefined ? {} : { proxyApiKey: proxyApiKey?.trim() ?? null }),
     defaultContextSize: parseNumericInput(inputs.contextSize),
     proxyPort: parseNumericInput(inputs.proxyPort),
     llamaBasePort: parseNumericInput(inputs.serverPort),
     maxDownloadQueueSize: parseNumericInput(inputs.maxQueueSize),
-    // An emptied field means "turn authentication off", which is a `null`
-    // (clear the row) rather than a blank string — the backend rejects a
-    // blank key precisely so it cannot mean both.
-    proxyApiKey: inputs.proxyApiKey.trim() || null,
     titleGenerationPrompt: inputs.titlePrompt.trim() || null,
     maxToolIterations: parseNumericInput(inputs.maxToolIterations),
     showMemoryFitIndicators: inputs.showFitIndicators,

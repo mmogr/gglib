@@ -14,4 +14,8 @@ enumerates every config subcommand. It is also the list
 `scripts/check_settings_surfaces.sh` reads to prove no `Settings` field is
 stranded without a way to set it.
 
+`SecretArg` is the key `settings reveal` takes: core's `SettingSecret`, named
+on the command line by `SettingSecret::name`, so `--help`, completions and the
+refusal of an unknown key read the one spelling of each name.
+
 <!-- module-docs:end -->

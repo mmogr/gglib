@@ -1,8 +1,9 @@
 //! What `gglib config settings show` prints of the device roster.
 
+use gglib_core::secret::SHOWN_AS;
 use gglib_core::{Device, Settings};
 
-use super::{MASKED_VALUE, settings_display_rows};
+use super::settings_display_rows;
 
 /// A whole endpoint id, sixty-four hex characters.
 const ENDPOINT: &str = "3ca82708b9953ca82708b9953ca82708b9953ca82708b9953ca82708b9953ca8";
@@ -44,6 +45,6 @@ fn settings_show_prints_no_whole_endpoint_id() {
         .iter()
         .find(|(k, _)| k == "remote-devices")
         .expect("the roster is listed");
-    assert!(devices.contains(MASKED_VALUE), "{devices}");
+    assert!(devices.contains(SHOWN_AS), "{devices}");
     assert!(devices.contains(&ENDPOINT[..12]), "{devices}");
 }

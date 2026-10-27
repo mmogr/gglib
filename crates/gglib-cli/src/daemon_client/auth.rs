@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 
 use gglib_core::access::{daemon_token_path, read_daemon_token};
 use gglib_core::contracts::http::daemon::DAEMON_TOKEN_REQUIRED_TYPE;
-use gglib_core::secret::held;
+use gglib_core::secret::{SettingSecret, held};
 
 use crate::bootstrap::CliContext;
 
@@ -122,9 +122,12 @@ pub(crate) async fn proxy_key(ctx: &CliContext, flag: Option<String>) -> Option<
 /// `/health` sits outside the bearer layer, so the daemon is found and looks
 /// healthy, and only the call after it fails.
 pub(crate) fn unauthorized_hint() -> String {
+    let proxy_key = SettingSecret::ProxyApiKey;
     format!(
-        "the daemon requires an API key. It is stored as `proxy-api-key` \
-         (`gglib config settings show`); set {API_KEY_ENV} to override it for one run."
+        "the daemon requires an API key. It is stored as `{}` (`{}` prints it); \
+         set {API_KEY_ENV} to override it for one run.",
+        proxy_key.name(),
+        proxy_key.reveal_command()
     )
 }
 

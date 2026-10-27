@@ -11,6 +11,14 @@ use serde::{Deserialize, Serialize};
 /// What a held secret is shown as wherever gglib would otherwise print it.
 pub const SHOWN_AS: &str = "(set, not shown)";
 
+/// How the command line shows `secret` held: [`SHOWN_AS`] and the command
+/// that prints it. `settings show`, `up` and the daemon's banner all print
+/// this, so the three read the same.
+#[must_use]
+pub fn held_line(secret: SettingSecret) -> String {
+    format!("{SHOWN_AS}  `{}` prints it", secret.reveal_command())
+}
+
 /// `value` when it holds a secret: `None` when it is absent or blank.
 ///
 /// A blank is no secret. Settings validation refuses a blank proxy key, so

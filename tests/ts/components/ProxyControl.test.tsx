@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { ReactNode } from 'react';
@@ -25,6 +25,10 @@ import type { AppSettings } from '../../../src/types';
 
 const settingsRef: { current: AppSettings | null } = { current: null };
 const proxyStateRef = { current: { running: false, port: null as number | null } };
+const { revealSecret, clearProxyCache } = vi.hoisted(() => ({
+  revealSecret: vi.fn(),
+  clearProxyCache: vi.fn(),
+}));
 
 vi.mock('../../../src/hooks/useSettings', () => ({
   useSettings: () => ({ settings: settingsRef.current }),
@@ -33,10 +37,13 @@ vi.mock('../../../src/services/proxyRegistry', () => ({
   useProxyState: () => proxyStateRef.current,
 }));
 vi.mock('../../../src/services/transport', () => ({
-  getTransport: () => ({ getProxyStatus: () => Promise.resolve({ pinned_model: null }) }),
+  getTransport: () => ({
+    getProxyStatus: () => Promise.resolve({ pinned_model: null }),
+    revealSecret,
+  }),
 }));
 vi.mock('../../../src/services/clients/proxyDashboard', () => ({
-  clearProxyCache: vi.fn(),
+  clearProxyCache,
 }));
 vi.mock('../../../src/components/ProxyDashboardModal', () => ({
   ProxyDashboardModal: () => null,
@@ -79,6 +86,7 @@ describe('ProxyControl — the Default context placeholder', () => {
 describe('ProxyControl — View Dashboard', () => {
   beforeEach(() => {
     proxyStateRef.current = { running: false, port: null };
+    revealSecret.mockResolvedValue(null);
   });
 
   it('closes the popover it opens over', async () => {
@@ -94,5 +102,69 @@ describe('ProxyControl — View Dashboard', () => {
 
     await user.click(screen.getByRole('button', { name: /view dashboard/i }));
     expect(screen.queryByRole('heading', { name: 'OpenAI Proxy' })).not.toBeInTheDocument();
+  });
+});
+
+/** Settings carry no key, so Clear Cache presents the one revealed for it. */
+describe('ProxyControl — Clear Cache', () => {
+  it('sends the revealed proxy key', async () => {
+    revealSecret.mockResolvedValue('k3y-5f3a');
+    clearProxyCache.mockResolvedValue({ message: 'cleared' });
+    proxyStateRef.current = { running: true, port: 8080 };
+    settingsRef.current = appSettings({ hasProxyApiKey: true });
+    render(<ProxyControl />, { wrapper });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    expect(revealSecret).toHaveBeenCalledWith({ kind: 'setting', secret: 'proxy_api_key' });
+    const clear = screen.getByRole('button', { name: /clear cache/i });
+    await waitFor(() => expect(clear).toBeEnabled());
+
+    await user.click(clear);
+
+    expect(clearProxyCache).toHaveBeenCalledWith('127.0.0.1', 8080, 'k3y-5f3a');
+  });
+
+  /** Sent before the reveal answers, it would carry no key and be refused. */
+  it('waits for the reveal before it can be pressed', async () => {
+    revealSecret.mockReturnValue(new Promise(() => {}));
+    proxyStateRef.current = { running: true, port: 8080 };
+    settingsRef.current = appSettings({ hasProxyApiKey: true });
+    render(<ProxyControl />, { wrapper });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /proxy/i }));
+
+    expect(screen.getByRole('button', { name: /clear cache/i })).toBeDisabled();
+  });
+
+  /** A proxy with no key, or a reveal that failed, still clears: with no key. */
+  it.each([
+    ['no key is stored', () => revealSecret.mockResolvedValue(null)],
+    ['the reveal fails', () => revealSecret.mockRejectedValue(new Error('daemon gone'))],
+  ])('can be pressed when %s, and sends no key', async (_, answer) => {
+    answer();
+    clearProxyCache.mockResolvedValue({ message: 'cleared' });
+    proxyStateRef.current = { running: true, port: 8080 };
+    settingsRef.current = appSettings();
+    render(<ProxyControl />, { wrapper });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    const clear = screen.getByRole('button', { name: /clear cache/i });
+    await waitFor(() => expect(clear).toBeEnabled());
+
+    await user.click(clear);
+
+    expect(clearProxyCache).toHaveBeenCalledWith('127.0.0.1', 8080, null);
+  });
+
+  it('types the run’s own key into a masked input', async () => {
+    revealSecret.mockResolvedValue(null);
+    proxyStateRef.current = { running: false, port: null };
+    settingsRef.current = appSettings();
+    render(<ProxyControl />, { wrapper });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    await user.click(screen.getByRole('button', { name: /connection options/i }));
+
+    expect(screen.getByLabelText('API key for this run')).toHaveAttribute('type', 'password');
   });
 });

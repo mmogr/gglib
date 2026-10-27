@@ -5,32 +5,28 @@
 //! column alignment — live here.
 
 use gglib_core::Settings;
+use gglib_core::secret::{SHOWN_AS, SettingSecret, held, held_line};
 
 /// Keys that are purely internal bookkeeping and must not appear in
 /// user-facing output.
 const HIDDEN_KEYS: &[&str] = &["setup-completed"];
 
-/// Keys whose value is shown as set-or-unset rather than printed.
+/// The secret a row's key names, when it names one. Such a row says whether
+/// the secret is held and which command prints it, never what it is
+/// (ADR 0027): this output is what people paste into bug reports, and
+/// `gglib config settings reveal` is the one place a stored secret is
+/// printed.
 ///
 /// Matched on the full dotted key, so a leaf inside a nested value can be
 /// masked while its siblings print — which is what the stored pairing needs,
-/// since its key and its ticket are one record.
-///
-/// Only the pairing's key, and deliberately not `proxy-api-key`: the two are
-/// credentials with opposite recovery stories. The proxy generates its own key
-/// and `settings show` is the only place left to read it, which is why
-/// `the_proxy_api_key_is_shown_rather_than_masked` defends printing it. This
-/// one is *received* from the other machine by `gglib remote join`, re-pairing
-/// replaces it, and `gglib remote key --show` prints it, alone and only when
-/// asked — so printing it here as well costs a credential's confidentiality on
-/// a surface people paste into bug reports and buys back nothing.
-///
-/// The pairing's ticket stays printed: its own doc calls it an address rather
-/// than a credential, and it is useless without the key beside it.
-const MASKED_KEYS: &[&str] = &["remote-pairing.api-key"];
-
-/// What a masked key renders as when it holds a value.
-const MASKED_VALUE: &str = "(set, not shown)";
+/// since its key and its ticket are one record. The pairing's ticket stays
+/// printed: its own doc calls it an address rather than a credential, and it
+/// is useless without the key beside it.
+fn secret_named(key: &str) -> Option<SettingSecret> {
+    SettingSecret::ALL
+        .into_iter()
+        .find(|secret| secret.name() == key)
+}
 
 /// Fields of each `remote-devices` row shown as set-or-unset: the whole id of
 /// the endpoint a device's key is pinned to. The row's `peer` fingerprint is
@@ -96,7 +92,7 @@ fn format_leaf(val: serde_json::Value) -> String {
 ///   kebab-case and prefixed with `{parent_key}.`.
 /// - **Arrays** are formatted as their JSON string representation.
 ///
-/// A leaf named by [`MASKED_KEYS`] is reported as held rather than printed,
+/// A leaf [`secret_named`] names is reported as held rather than printed,
 /// at whatever depth it sits: masking only the top level would have shown
 /// the remote's key in full the moment it moved inside the pairing record.
 fn collect_rows(parent_key: &str, val: serde_json::Value, rows: &mut Vec<(String, String)>) {
@@ -113,28 +109,33 @@ fn collect_rows(parent_key: &str, val: serde_json::Value, rows: &mut Vec<(String
 }
 
 /// The roster array with [`MASKED_DEVICE_FIELDS`] rewritten, since an array
-/// is printed whole as JSON and [`MASKED_KEYS`] never reaches inside one.
+/// is printed whole as JSON and [`secret_named`] never reaches inside one.
 fn mask_devices(mut val: serde_json::Value) -> serde_json::Value {
     let rows = val.as_array_mut().into_iter().flatten();
     for row in rows.filter_map(serde_json::Value::as_object_mut) {
         for field in MASKED_DEVICE_FIELDS {
             if let Some(held) = row.get_mut(*field).filter(|v| !v.is_null()) {
-                *held = MASKED_VALUE.into();
+                *held = SHOWN_AS.into();
             }
         }
     }
     val
 }
 
-/// A leaf as it should be shown: masked when [`MASKED_KEYS`] names it.
+/// A leaf as it should be shown: masked, with the command that prints it,
+/// when [`secret_named`] names it.
 ///
-/// Null still renders as "None": whether a key is held at all is the thing a
-/// person runs this to find out, and it is not the secret.
+/// An absent or blank secret still renders as "None": whether a key is held
+/// at all is the thing a person runs this to find out, and it is not the
+/// secret.
 fn mask_or_show(key: &str, leaf: serde_json::Value) -> String {
-    if MASKED_KEYS.contains(&key) && !leaf.is_null() {
-        return MASKED_VALUE.to_owned();
+    let Some(secret) = secret_named(key) else {
+        return format_leaf(leaf);
+    };
+    if held(leaf.as_str()).is_none() {
+        return "None".to_owned();
     }
-    format_leaf(leaf)
+    held_line(secret)
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
