@@ -16,8 +16,9 @@
 import { createEventStore } from './createEventStore';
 import type { Machine } from '../types/generated/Machine';
 import type { RemoteEvent } from './transport/types/events';
-import type { RemoteStatus } from './transport/types/remote';
+import type { RemoteEnableResponse, RemoteStatus } from './transport/types/remote';
 import { IDLE_STATUS, INITIAL, UNNAMED_PAIRED, pairedName, type RemoteState } from './remoteRegistryState';
+import { offerFrom, settleOffer, type OfferEnd } from './remoteOffer';
 
 // The shape lives in `remoteRegistryState.ts`; the registry stays the seam
 // every caller imports from, so it hands the shape, the idle status and the
@@ -26,6 +27,63 @@ import { IDLE_STATUS, INITIAL, UNNAMED_PAIRED, pairedName, type RemoteState } fr
 export { IDLE_STATUS, UNNAMED_PAIRED, pairedName, type RemoteState };
 
 const store = createEventStore<RemoteState>(INITIAL);
+
+/** The one timer that ends the offer as expired; cancelled by any other end. */
+let expiry: ReturnType<typeof setTimeout> | null = null;
+/** Numbers each ending, so a listener can tell a new one from one it saw. */
+let endings = 0;
+
+function stopExpiry(): void {
+  if (expiry !== null) clearTimeout(expiry);
+  expiry = null;
+}
+
+/** `state` with its offer ended as `reason`; unchanged when none is live. */
+function endOffer(state: RemoteState, reason: OfferEnd): RemoteState {
+  if (state.offer === null) return state;
+  stopExpiry();
+  endings += 1;
+  return { ...state, offer: null, ended: { reason, device: state.offer.device, seq: endings } };
+}
+
+/** `state` with its offer settled against the move from `prev` to its status. */
+function settle(state: RemoteState, prev: RemoteStatus | null): RemoteState {
+  if (state.status === null) return state;
+  const { offer, ended } = settleOffer(state.offer, prev, state.status);
+  return ended ? endOffer(state, ended) : { ...state, offer };
+}
+
+/**
+ * Hold the code an `enable` or `invite` answered with, until it is spent,
+ * expires, or is withdrawn. An answer without one clears any offer held.
+ *
+ * Held here and nowhere else, in memory only: it is a credential for its
+ * lifetime, and the daemon will not hand it out again.
+ */
+export function showOffer(answer: RemoteEnableResponse): void {
+  stopExpiry();
+  const prev = store.getState();
+  const offer = offerFrom(answer, Date.now());
+  // Settled at once against the status held, so a read that already lists
+  // the new row counts as having seen it.
+  store.setState(settle({ ...prev, offer }, prev.status));
+  if (offer !== null && store.getState().offer !== null) {
+    expiry = setTimeout(() => {
+      expiry = null;
+      store.setState(endOffer(store.getState(), 'expired'));
+    }, Math.max(0, offer.expiresAt - Date.now()));
+  }
+}
+
+/**
+ * Drop the offer without calling it ended: Disable from this app, which says
+ * so itself. Without it, a `remote_disabled` that never arrived would leave
+ * the code to be announced as expired later.
+ */
+export function clearOffer(): void {
+  stopExpiry();
+  store.setState({ ...store.getState(), offer: null });
+}
 
 /**
  * The peer a status read reports, or `null` for nobody knowable.
@@ -64,7 +122,8 @@ export function stillPaired(machine: Machine, status: RemoteStatus | null): bool
 
 /** Replace the status with what the daemon just said. */
 export function applyRemoteStatus(status: RemoteStatus): void {
-  store.setState({ ...store.getState(), status });
+  const prev = store.getState();
+  store.setState(settle({ ...prev, status }, prev.status));
 }
 
 /**
@@ -83,9 +142,13 @@ export function applyRemoteStatus(status: RemoteStatus): void {
 export function ingestRemoteEvent(evt: RemoteEvent): void {
   const prev = store.getState();
   const status = prev.status ?? IDLE_STATUS;
+  // Every arm settles the offer too. `remote_paired` ends it as paired
+  // outright: the event is the redemption, whatever `paired` read before.
+  const set = (next: RemoteState) =>
+    store.setState(evt.type === 'remote_paired' ? endOffer(next, 'paired') : settle(next, prev.status));
   switch (evt.type) {
     case 'remote_enabled':
-      store.setState({
+      set({
         ...prev,
         status: {
           ...status,
@@ -102,7 +165,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
       });
       break;
     case 'remote_disabled':
-      store.setState({
+      set({
         ...prev,
         status: {
           ...status,
@@ -116,13 +179,13 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
       });
       break;
     case 'remote_paired':
-      store.setState({
+      set({
         ...prev,
         status: { ...status, pairing_active: false, paired: true, last_peer: evt.peer },
       });
       break;
     case 'remote_joined':
-      store.setState({
+      set({
         ...prev,
         status: {
           ...status,
@@ -141,7 +204,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
       });
       break;
     case 'remote_disconnected':
-      store.setState({
+      set({
         ...prev,
         status: { ...status, connected: null },
       });
@@ -151,7 +214,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
     // exact figure; `0` here is "just now".
     case 'remote_away':
       if (status.connected) {
-        store.setState({
+        set({
           ...prev,
           status: { ...status, connected: { ...status.connected, away_for_s: 0 } },
         });
@@ -159,7 +222,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
       break;
     case 'remote_back':
       if (status.connected) {
-        store.setState({
+        set({
           ...prev,
           status: { ...status, connected: { ...status.connected, away_for_s: null } },
         });
@@ -170,6 +233,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
 
 /** Reset (used during cleanup / hot-reload). */
 export function resetRemoteState(): void {
+  stopExpiry();
   store.setState(INITIAL);
 }
 

@@ -9,10 +9,15 @@
  */
 
 import type { RemoteStatus } from './transport/types/remote';
+import type { OfferEnd, PairingOffer } from './remoteOffer';
 
 export interface RemoteState {
   /** The last status the daemon reported, or `null` before hydration. */
   status: RemoteStatus | null;
+  /** The pairing code on offer, from the answer that offered it. */
+  offer: PairingOffer | null;
+  /** How the last offer ended; `seq` grows by one with each ending. */
+  ended: { reason: OfferEnd; device?: string; seq: number } | null;
 }
 
 /** A status with nothing on: what a fresh daemon reports. */
@@ -48,4 +53,4 @@ export function pairedName(status: RemoteStatus | null): string {
   return status?.paired_name || UNNAMED_PAIRED;
 }
 
-export const INITIAL: RemoteState = { status: null };
+export const INITIAL: RemoteState = { status: null, offer: null, ended: null };
