@@ -9,7 +9,7 @@ import { syncAllMcpTools } from "../services/tools";
 import { getTransport } from '../services/transport';
 import type { NewMcpServer, McpServerInfo, McpTool, UpdateMcpServer, McpServerId } from '../services/transport';
 
-interface UseMcpServersResult {
+export interface UseMcpServersResult {
   /** List of all MCP servers with their status */
   servers: McpServerInfo[];
   /** Whether the initial load is in progress */

@@ -4,12 +4,12 @@ src/components/ChatMessagesPanel/components/MessageBubbles.tsx 301
 src/components/ChatMessagesPanel/components/PictureEditor.tsx 318
 src/components/FilterPopover/FilterPopover.tsx 340
 src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 354
-src/components/McpServersPanel.tsx 474
+src/components/McpServersPanel.tsx 482
 src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 346
 src/components/ModelInspectorPanel/components/ServeModal.tsx 375
 src/components/ProxyControl.tsx 346
 src/components/ProxySamplingPanel.tsx 403
-src/components/SettingsModal.tsx 352
+src/components/SettingsModal.tsx 361
 src/components/SetupWizard/SetupWizard.tsx 705
 src/components/VerificationModal.tsx 472
 src/hooks/useGglibRuntime/agentMessageState.ts 340

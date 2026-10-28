@@ -13,24 +13,25 @@ import '@testing-library/jest-dom';
 
 import { McpServersPanel } from '../../../src/components/McpServersPanel';
 import type { McpServerInfo } from '../../../src/services/transport/types/mcp';
+import type { UseMcpServersResult } from '../../../src/hooks/useMcpServers';
 import { mcpServer, mcpServerInfo } from '../fixtures/mcp';
 
-let servers: McpServerInfo[] = [];
 const removeServer = vi.fn();
 const setAllowRemote = vi.fn();
 
-vi.mock('../../../src/hooks/useMcpServers', () => ({
-  useMcpServers: () => ({
-    servers,
-    loading: false,
-    error: null,
-    refresh: vi.fn(),
-    removeServer,
-    startServer: vi.fn(),
-    stopServer: vi.fn(),
-    setAllowRemote,
-  }),
-}));
+/** The list the dialog hands the panel, holding `servers`. */
+const mcpList = (servers: McpServerInfo[]): UseMcpServersResult => ({
+  servers,
+  loading: false,
+  error: null,
+  refresh: vi.fn(),
+  addServer: vi.fn(),
+  updateServer: vi.fn(),
+  removeServer,
+  startServer: vi.fn(),
+  stopServer: vi.fn(),
+  setAllowRemote,
+});
 
 vi.mock('../../../src/contexts/ConfirmContext', () => ({
   useConfirmContext: () => ({ confirm: () => Promise.resolve(true) }),
@@ -41,8 +42,7 @@ vi.mock('../../../src/contexts/ToastContext', () => ({
 }));
 
 function renderPanel(...listed: McpServerInfo[]) {
-  servers = listed;
-  render(<McpServersPanel onAddServer={vi.fn()} onEditServer={vi.fn()} />);
+  render(<McpServersPanel mcp={mcpList(listed)} onAddServer={vi.fn()} onEditServer={vi.fn()} />);
 }
 
 const button = (name: string) => screen.queryByRole('button', { name });

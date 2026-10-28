@@ -3,7 +3,7 @@
  *
  * Lists the configured sampling profiles and provides add / edit / delete.
  * Self-contained — it loads and saves settings itself rather than threading
- * state through `SettingsModal`, matching the `McpServersPanel` pattern.
+ * state through `SettingsModal`.
  *
  * Every mutation writes the whole list back, which is what the API expects:
  * `inferenceProfiles` replaces the stored list, while omitting the key leaves
