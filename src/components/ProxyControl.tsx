@@ -20,7 +20,13 @@ import { EndpointCopyBar, ProxyStatusPill, ProxyToggleButton } from './proxy';
 
 interface ProxyConfig {
   host: string;
-  port: number;
+  /**
+   * Explicit per-run port. `undefined` means "the daemon's": the backend
+   * resolves it from settings, or its built-in default. Seeded from settings
+   * here, it could be read before they loaded and stick at 8080 whatever
+   * `proxy_port` said. Only ever set when the user edits the field.
+   */
+  port?: number;
   /**
    * Explicit per-run context override. `undefined` means "no override" —
    * the backend is the single source of truth and resolves the default
@@ -50,7 +56,6 @@ const ProxyControl: FC<ProxyControlProps> = ({
   const { settings } = useSettings();
   const [config, setConfig] = useState<ProxyConfig>({
     host: "127.0.0.1",
-    port: settings?.proxyPort ?? 8080,
     // Intentionally no default_context: the backend resolves the default
     // from settings. Seeding it here would send an accidental explicit
     // override (and could freeze a stale value captured before settings
@@ -97,7 +102,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
       setLoading(true);
       // Only include fields the user explicitly set — omitting them lets
       // the backend resolve defaults from settings.
-      const { default_context, ...rest } = config;
+      const { default_context, port, ...rest } = config;
       const hosts = allowedHosts
         .split(',')
         .map((h) => h.trim())
@@ -106,6 +111,7 @@ const ProxyControl: FC<ProxyControlProps> = ({
       await getTransport().startProxy({
         ...rest,
         ...(default_context !== undefined ? { default_context } : {}),
+        ...(port !== undefined ? { port } : {}),
         ...(cache ? { cache: true } : {}),
         ...(cache && Number.isFinite(diskGb) && diskGb > 0 ? { cache_disk_gb: diskGb } : {}),
         ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
@@ -129,7 +135,9 @@ const ProxyControl: FC<ProxyControlProps> = ({
     }
   };
 
-  const activePort = proxyState.port ?? config.port;
+  // The port a start without one gets: the stored one, else the default.
+  const daemonPort = settings?.proxyPort ?? 8080;
+  const activePort = proxyState.port ?? config.port ?? daemonPort;
 
   const handleCopied = () => showToast('Proxy URL copied to clipboard!', 'success');
 
@@ -240,8 +248,12 @@ const ProxyControl: FC<ProxyControlProps> = ({
                       id="proxy-port"
                       type="number"
                       className="font-mono tabular-nums"
-                      value={config.port}
-                      onChange={(e) => setConfig({ ...config, port: parseInt(e.target.value) })}
+                      value={config.port ?? ''}
+                      placeholder={settings?.proxyPort != null ? `${settings.proxyPort} (from settings)` : `${daemonPort} (default)`}
+                      onChange={(e) => {
+                        const parsed = parseInt(e.target.value);
+                        setConfig({ ...config, port: Number.isNaN(parsed) ? undefined : parsed });
+                      }}
                     />
                   </div>
                   <div className="mb-md">
