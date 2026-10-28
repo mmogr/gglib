@@ -3,11 +3,16 @@
  *
  * Displays a list of configured MCP servers with controls to
  * start/stop, add, edit, and remove servers.
+ *
+ * The list is the one `SettingsModal` adds and edits through, handed in as
+ * `mcp`, never a second `useMcpServers()`: two copies meant a save refreshed
+ * the dialog's and left this one stale, and an Edit from it then sent a
+ * variable the server no longer kept.
  */
 
 import { FC, useState, useCallback } from "react";
 import { AlertTriangle } from "lucide-react";
-import { useMcpServers } from "../hooks/useMcpServers";
+import type { UseMcpServersResult } from "../hooks/useMcpServers";
 import { Icon } from "./ui/Icon";
 import { Banner } from './ui/Banner';
 import { Button } from "./ui/Button";
@@ -31,11 +36,14 @@ const statusDot = "w-1.5 h-1.5 rounded-full";
 
 
 interface McpServersPanelProps {
+  /** The servers, and what changes them: the dialog's own list. */
+  mcp: UseMcpServersResult;
   onAddServer?: () => void;
   onEditServer?: (server: McpServerInfo) => void;
 }
 
 export const McpServersPanel: FC<McpServersPanelProps> = ({
+  mcp,
   onAddServer,
   onEditServer,
 }) => {
@@ -48,7 +56,7 @@ export const McpServersPanel: FC<McpServersPanelProps> = ({
     startServer,
     stopServer,
     setAllowRemote,
-  } = useMcpServers();
+  } = mcp;
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<number | null>(null);

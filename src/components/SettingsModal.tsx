@@ -79,7 +79,15 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose, initial
   // MCP Server modal state
   const [showAddMcpModal, setShowAddMcpModal] = useState(false);
   const [editingMcpServer, setEditingMcpServer] = useState<McpServerInfo | null>(null);
-  const { addServer: addMcpServer, updateServer: updateMcpServer } = useMcpServers();
+  // One list for the panel and for the add and edit it opens, so a save
+  // refreshes what the panel shows.
+  const mcp = useMcpServers();
+  const { addServer: addMcpServer, updateServer: updateMcpServer, refresh: refreshMcp } = mcp;
+  // Opening the tab asks again, as the panel did when it held its own list,
+  // for what changed outside the dialog since it opened.
+  useEffect(() => {
+    if (activeTab === "mcp") void refreshMcp();
+  }, [activeTab, refreshMcp]);
 
   const loading = loadingDir || loadingSettings;
   const saving = savingDir || savingSettings;
@@ -313,6 +321,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose, initial
         {activeTab === "mcp" && (
           <>
             <McpServersPanel
+              mcp={mcp}
               onAddServer={() => {
                 setEditingMcpServer(null);
                 setShowAddMcpModal(true);
