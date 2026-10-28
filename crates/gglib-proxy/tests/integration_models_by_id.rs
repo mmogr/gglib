@@ -4,12 +4,13 @@
 //! A name can belong to more than one model, so the running model's live
 //! context window and the pinned filter are both matched by id: two models
 //! named `qwen` stay two entries, and only the one that is running, or
-//! pinned, is treated as such. The list also names this machine, which
-//! `/health` never does.
+//! pinned, is treated as such. The list also names this machine, when the
+//! serve's `HostFacts` can, which `/health` never does.
 
 mod fixtures;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
 use reqwest::Client;
@@ -18,9 +19,11 @@ use serde_json::Value;
 use gglib_core::ports::{
     Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, PinnedSpec, RunningTarget,
 };
+use gglib_proxy::{HostFacts, ServeConfig};
 
 use fixtures::common::{settings_listing, spawn_proxy_with_catalog, spawn_proxy_with_settings};
 use fixtures::pinned::{StaticCatalog, pin};
+use fixtures::spawn::{Spawned, defaults, spawn};
 
 /// The context the running model was launched with.
 const LIVE_CTX: u64 = 16_384;
@@ -159,38 +162,81 @@ async fn each_entry_carries_its_catalog_id_and_variants_share_it() {
     );
 }
 
-/// The list names this machine, sanitised by `machine_name`; `/health`,
-/// which answers without credentials, says only that it is up.
+/// A proxy over one model, `qwen`, told what `host` can read.
+async fn spawn_with_host(host: HostFacts) -> Spawned {
+    spawn(ServeConfig {
+        runtime_port: Arc::new(Running {
+            id: 1,
+            pinned: false,
+        }),
+        catalog_port: Arc::new(StaticCatalog::new(&["qwen"])),
+        host,
+        ..defaults().await
+    })
+    .await
+}
+
+/// `GET {base}{path}`, as JSON.
+async fn get_json(base: &str, path: &str) -> Value {
+    Client::new()
+        .get(format!("{base}{path}"))
+        .send()
+        .await
+        .expect("the proxy answers")
+        .json()
+        .await
+        .expect("json")
+}
+
+/// A host whose name reader answers `name`.
+fn named(name: &'static str) -> HostFacts {
+    HostFacts {
+        machine_name: Some(Arc::new(move || Some(name.to_owned()))),
+        ..HostFacts::none()
+    }
+}
+
+/// The list names this machine, cut by `machine_name` to its first label;
+/// `/health`, which answers without credentials, says only that it is up.
 #[tokio::test]
 async fn the_list_names_the_machine_and_health_does_not() {
-    let runtime = Arc::new(Running {
-        id: 1,
-        pinned: false,
-    });
-    let (base, cancel) =
-        spawn_proxy_with_catalog(runtime, Arc::new(StaticCatalog::new(&["qwen"]))).await;
-    let client = Client::new();
-    let list: Value = client
-        .get(format!("{base}/v1/models"))
-        .send()
-        .await
-        .expect("the proxy answers")
-        .json()
-        .await
-        .expect("json");
-    let health: Value = client
-        .get(format!("{base}/health"))
-        .send()
-        .await
-        .expect("the proxy answers")
-        .json()
-        .await
-        .expect("json");
-    cancel.cancel();
+    let proxy = spawn_with_host(named("Desk.local")).await;
+    let list = get_json(&proxy.base, "/v1/models").await;
+    let health = get_json(&proxy.base, "/health").await;
+    proxy.cancel.cancel();
 
-    let expected = sysinfo::System::host_name()
-        .as_deref()
-        .and_then(gglib_core::domain::machine_name);
-    assert_eq!(list["machine_name"].as_str(), expected.as_deref(), "{list}");
+    assert_eq!(list["machine_name"], "Desk", "{list}");
     assert_eq!(health, serde_json::json!({ "status": "ok" }));
+}
+
+/// A host that cannot name itself leaves the field out of the list, which
+/// still lists its models.
+#[tokio::test]
+async fn a_host_with_no_name_leaves_it_out_of_the_list() {
+    let proxy = spawn_with_host(HostFacts::none()).await;
+    let list = get_json(&proxy.base, "/v1/models").await;
+    proxy.cancel.cancel();
+
+    assert!(list.get("machine_name").is_none(), "{list}");
+    assert_eq!(list["data"][0]["id"], "qwen", "{list}");
+}
+
+/// The name is read on every listing, so a rename shows on the next one.
+#[tokio::test]
+async fn the_name_is_read_on_every_listing() {
+    let reads = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&reads);
+    let proxy = spawn_with_host(HostFacts {
+        machine_name: Some(Arc::new(move || {
+            Some(format!("desk-{}", counted.fetch_add(1, Ordering::SeqCst)))
+        })),
+        ..HostFacts::none()
+    })
+    .await;
+    let first = get_json(&proxy.base, "/v1/models").await;
+    let second = get_json(&proxy.base, "/v1/models").await;
+    proxy.cancel.cancel();
+
+    assert_eq!(first["machine_name"], "desk-0", "{first}");
+    assert_eq!(second["machine_name"], "desk-1", "{second}");
 }

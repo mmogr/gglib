@@ -63,6 +63,7 @@ mod error_codes;
 pub(crate) mod forward;
 pub(crate) mod forward_unary;
 pub(crate) mod generation;
+pub(crate) mod host_facts;
 pub(crate) mod image_refusal;
 // Public: the daemon mounts the same handler at `/api/images/generations`.
 pub mod images;
@@ -168,6 +169,7 @@ pub(crate) mod upstream_read;
 pub(crate) mod usage_reading;
 
 // What `POST /v1/models/{name}/load` answers, for a paired machine that reads it.
+pub use host_facts::{FreeDiskReader, HostFacts, MachineNameReader};
 pub use load_endpoint::LoadResponse;
 pub use observers::ProxyObservers;
 pub use serve_config::ServeConfig;

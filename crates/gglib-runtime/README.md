@@ -84,7 +84,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`proxy/`** — Proxy supervisor and routing logic
 - **`sd/`** — stable-diffusion.cpp's `sd-server`: install, status, its command line and its launch
 - **`process/`** — Generic process lifecycle (start, stop, signal)
-- **`system/`** — System probes (GPU detection, memory info)
+- **`system/`** — System probes (GPU detection, memory info), and the host name and free-disk readers the proxy is served with
 - **`ports_impl/`** — Port trait implementations for runtime
 
 ## Features

@@ -12,7 +12,7 @@ use gglib_core::ProxyAccessConfig;
 use gglib_core::cache_metrics::CacheMetricsStore;
 use gglib_core::ports::InMemorySettings;
 use gglib_proxy::slot_eviction::DiskBudget;
-use gglib_proxy::{ProxyObservers, ServeConfig, StreamBounds, TEST_STREAM_BOUNDS};
+use gglib_proxy::{HostFacts, ProxyObservers, ServeConfig, StreamBounds, TEST_STREAM_BOUNDS};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -33,7 +33,8 @@ pub(crate) struct Spawned {
 
 /// What a proxy is served with unless the test says otherwise: a fresh
 /// loopback listener and cancel token, a runtime that launches nothing, an
-/// empty catalog, and neither a key, a daemon nor a cache.
+/// empty catalog, a host that answers nothing, the dashboard publisher
+/// running, and neither a key, a daemon nor a cache.
 pub(crate) async fn defaults() -> ServeConfig {
     ServeConfig {
         listener: TcpListener::bind("127.0.0.1:0").await.unwrap(),
@@ -51,6 +52,8 @@ pub(crate) async fn defaults() -> ServeConfig {
         cache_enabled: false,
         slot_dir: None,
         disk_budget: DiskBudget::Auto,
+        host: HostFacts::none(),
+        dashboard: true,
         agent_metrics: Arc::new(CacheMetricsStore::new()),
         observers: ProxyObservers::default(),
         access: ProxyAccessConfig::default(),

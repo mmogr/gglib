@@ -286,7 +286,7 @@ async fn a_join_names_the_machine_it_joined_and_the_one_it_replaced() {
     );
     // Unnamed, the proxy gives no name and the comparisons below would pass
     // whether or not the read happened.
-    let named = gglib_proxy::models::this_machine_name()
+    let named = gglib_runtime::system::this_machine_name()
         .expect("this host's name is not a plain label, so the proxy gives none to read");
     assert_eq!(
         answer.name.as_deref(),

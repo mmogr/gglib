@@ -15,6 +15,7 @@ use gglib_mcp::McpService;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
+use crate::host_facts::HostFacts;
 use crate::observers::ProxyObservers;
 use crate::slot_eviction::DiskBudget;
 
@@ -58,6 +59,15 @@ pub struct ServeConfig {
     /// Byte budget for the on-disk slot cache eviction sweep. Only consulted
     /// when `slot_dir` is `Some`.
     pub disk_budget: DiskBudget,
+    /// What the caller can read of this machine: its name, which
+    /// `/v1/models` publishes, and its free disk, which the `Auto` disk
+    /// budget is sized from. This crate has no probe of its own.
+    pub host: HostFacts,
+    /// Whether the dashboard publisher runs, pushing a fresh snapshot to
+    /// `/v1/proxy/status/stream` subscribers once a second. With it off,
+    /// `/v1/proxy/status` still answers and the stream still opens with the
+    /// current snapshot, but nothing follows it.
+    pub dashboard: bool,
     /// Agent-path prompt-cache reuse store, owned by the supervisor so it can
     /// also be shared with the embedded axum server (GUI chat) and outlives a
     /// single proxy run. Exposed on the dashboard as `agent_usage`, alongside

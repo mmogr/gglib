@@ -61,7 +61,9 @@ fn advertised_context_window(raw_ctx: u64) -> u64 {
 /// tokens that a client's own char→token budget does not account for.
 ///
 /// The list also names this machine (`machine_name`), for a paired machine
-/// that shows these models beside its own.
+/// that shows these models beside its own, when the serve's
+/// [`HostFacts`](crate::HostFacts) can read the name; otherwise it leaves the
+/// field out.
 pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     debug!("GET /v1/models");
 
@@ -125,7 +127,7 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
 
             // Read per request, so a rename shows on the next listing. Here and
             // never on `/health`, which answers before any credential does.
-            response.machine_name = crate::models::this_machine_name();
+            response.machine_name = state.host.read_machine_name();
 
             Json(response).into_response()
         }

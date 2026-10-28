@@ -73,9 +73,6 @@ sha2 = { workspace = true }
 # Session ID generation
 uuid = { workspace = true, features = ["v4"] }
 
-# Free-disk-space probing for auto-sized slot cache eviction
-sysinfo = { workspace = true }
-
 [dev-dependencies]
 # Self-dependency purely to enable `test-support` for `tests/`; the
 # feature stays off for anyone who depends on this crate normally.
