@@ -31,7 +31,7 @@ runs:
       id: pins
       shell: bash
       run: |
-        llama=$(sed -nE 's/.*PINNED_LLAMA_RELEASE: &str = "([^"]+)".*/\1/p' crates/gglib-runtime/src/llama/download/mod.rs)
+        llama=$(scripts/llama_pin.sh)
         sd=$(sed -nE 's/.*PINNED_SD_RELEASE: &str = "([^"]+)".*/\1/p' crates/gglib-runtime/src/sd/install/release.rs)
         [[ -n $llama && -n $sd ]] || exit 1
         {

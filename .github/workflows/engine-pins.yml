@@ -67,7 +67,7 @@ jobs:
           - engine: llama
             product: llama.cpp
             repo: ggml-org/llama.cpp
-            file: crates/gglib-runtime/src/llama/download/mod.rs
+            file: crates/gglib-core/src/domain/engine_pins.rs
             constant: PINNED_LLAMA_RELEASE
           - engine: sd
             product: stable-diffusion.cpp
@@ -359,7 +359,7 @@ jobs:
           - engine: llama
             product: llama.cpp
             repo: ggml-org/llama.cpp
-            file: crates/gglib-runtime/src/llama/download/mod.rs
+            file: crates/gglib-core/src/domain/engine_pins.rs
             constant: PINNED_LLAMA_RELEASE
             tag: '^b[0-9]+$'
           - engine: sd

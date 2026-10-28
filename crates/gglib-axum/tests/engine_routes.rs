@@ -96,7 +96,7 @@ async fn llama_s_status_reads_its_install_and_its_removal_takes_it() {
     status_then_removal(
         "llama",
         || gglib_core::paths::llama_server_path().unwrap(),
-        gglib_runtime::llama::PINNED_LLAMA_RELEASE,
+        gglib_core::domain::engine_pins::PINNED_LLAMA_RELEASE,
         "llama",
     )
     .await;

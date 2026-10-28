@@ -45,6 +45,8 @@ infrastructure concerns (database, filesystem, etc.).
   (`ComponentRole`) and whether a file fits one; and each family's `Recipe`,
   the one table of its components' default sources and its drawing defaults.
   Its tests read the measured files' tables in `testdata/image_families/`
+- `engine_pins` - The llama.cpp release gglib installs (`PINNED_LLAMA_RELEASE`),
+  in this crate so that code which builds for iOS reads the pin the installer does
 - `runtime_kind` - Which program serves a model (`RuntimeKind`: llama.cpp's
   `llama-server` or stable-diffusion.cpp's `sd-server`), derived from its image
   family and never stored

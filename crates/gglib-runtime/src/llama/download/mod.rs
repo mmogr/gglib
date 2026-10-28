@@ -3,6 +3,7 @@ use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 
+use gglib_core::domain::engine_pins::PINNED_LLAMA_RELEASE;
 use gglib_core::paths::{data_root, llama_config_path, llama_cpp_dir, llama_server_path};
 use gglib_core::utils::system::GpuInfo;
 
@@ -22,24 +23,6 @@ pub fn check_llama_installed() -> bool {
     };
     server_path.exists()
 }
-
-/// The llama.cpp release gglib installs unless told otherwise.
-///
-/// # Why a pin rather than `latest`
-///
-/// Resolving `releases/latest` would change the inference engine underneath
-/// gglib whenever upstream cut a release — silently, and differently for two
-/// users who installed a day apart. Every compensation gglib applies (dialect
-/// normalization, grammar origination, capability detection) is a bet about
-/// what that engine does, and an unpinned engine makes those bets
-/// unfalsifiable: when behaviour changes, there is no way to tell a gglib
-/// regression from an upstream one.
-///
-/// Pinning does not stop gglib tracking upstream. It makes tracking a
-/// deliberate, reviewable event: bump this constant, run the suite, ship the
-/// bump as its own commit with the observed differences in the message.
-/// CONTRIBUTING's "The engine pins" has the routine.
-pub const PINNED_LLAMA_RELEASE: &str = "b11669";
 
 /// Environment override for [`PINNED_LLAMA_RELEASE`].
 ///
@@ -416,19 +399,6 @@ pub(super) mod tests {
         "llama-b11429-ui.tar.gz",
         "llama-b11429-xcframework.zip",
     ];
-
-    /// The pin has to be a real tag shape; a stray `v` prefix or a bare
-    /// number would 404 at install time on a user's machine, not here.
-    #[test]
-    fn the_pin_is_a_well_formed_build_tag() {
-        let rest = PINNED_LLAMA_RELEASE
-            .strip_prefix('b')
-            .expect("pin must be a b-prefixed build tag");
-        assert!(
-            !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()),
-            "pin must be b<digits>, got {PINNED_LLAMA_RELEASE}"
-        );
-    }
 
     #[test]
     fn test_check_prebuilt_availability() {

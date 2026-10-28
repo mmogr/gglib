@@ -111,7 +111,7 @@ fn the_recording_is_of_the_pinned_llama_server() {
     let build = gglib_core::domain::RuntimeCapabilities::from_version_output(version).build;
     assert_eq!(
         build.map(|b| format!("b{b}")).as_deref(),
-        Some(crate::llama::PINNED_LLAMA_RELEASE),
+        Some(gglib_core::domain::engine_pins::PINNED_LLAMA_RELEASE),
         "contracts/upstream/llama/version.txt is {version:?}; record it again at the pin"
     );
 }

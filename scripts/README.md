@@ -71,6 +71,7 @@ deliberate growth is one row edited by hand.
 | `render_aur.sh` | Fills the `packaging/aur` PKGBUILD templates with a release's version and checksums | `release.yml` |
 | `render_homebrew.sh` | Fills the `packaging/homebrew` formula and cask with a release's version and checksums | `release.yml` |
 | `lock_changes.py` | Lists what moved between two copies of a lockfile | `update-deps.yml` |
+| `llama_pin.sh` | Prints llama.cpp's pin, the tag `PINNED_LLAMA_RELEASE` names in `crates/gglib-core/src/domain/engine_pins.rs`, by the sed the Engine pins workflow reads it with | The `pinned-engines` action, which `ci.yml`'s CLI Check legs and `engine-pins.yml` run |
 | `engine_pin_take.sh` | Takes the Engine pins `record` job's handover into the `propose` job's checkout as data: only regular files at the pin's path and under `contracts/upstream/`, with `approvals.json` kept from the checkout | `engine-pins.yml` |
 | `engine_pin_body.sh` | Writes an engine pin pull request's body: the ADR readings the new `contracts/upstream` recording moved against `approvals.json`, what else it saw, tier 3's probes, and the upstream commits that touch a file an ADR cites | `engine-pins.yml` |
 | `backtest_label_heuristics.sh` | Measures the pull-request labelling heuristics against merged pull requests | By hand |
