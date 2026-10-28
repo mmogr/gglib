@@ -360,3 +360,8 @@ commercially or not, under its terms: distributing it, or letting users reach
 a modified copy over a network, means offering them the corresponding source
 under AGPL-3.0. If you cannot meet those terms,
 [@mmogr](https://github.com/mmogr) may offer a separate commercial license; ask.
+
+As gglib's copyright holder, [@mmogr](https://github.com/mmogr) also ships
+gglib's code inside their own apps under separate terms:
+[ggchat](https://github.com/mmogr/ggchat) will link gglib's Rust code to run
+models on an iPhone. AGPL-3.0 governs everyone else's use.
