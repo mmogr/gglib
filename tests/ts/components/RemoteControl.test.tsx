@@ -17,8 +17,11 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { FC, ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { QRCodeSVG } from 'qrcode.react';
 
 import RemoteControl from '../../../src/components/RemoteControl';
+import { qrPayload } from '../../../src/components/remote/PairingReveal';
 import type {
   RemoteConnection,
   RemoteDevice,
@@ -228,8 +231,47 @@ describe('RemoteControl', () => {
     const user = await open();
     await user.click(screen.getByRole('button', { name: /enable remote access/i }));
 
-    expect(screen.queryByText(/On the other machine/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/on another computer/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Pairing QR code' })).not.toBeInTheDocument();
     expect(screen.queryByText(/expires in/i)).not.toBeInTheDocument();
+  });
+
+  it('the QR payload is the pairing string uppercased, all of it QR alphanumeric', () => {
+    // Uppercase is what puts the payload in alphanumeric mode, the smaller
+    // code the CLI's screen draws; a lowercase letter anywhere drops the
+    // whole string to byte mode.
+    const payload = qrPayload(`${TICKET}-483920`);
+    expect(payload).toBe(`${TICKET.toUpperCase()}-483920`);
+    expect(payload).toMatch(/^[A-Z0-9 $%*+./:-]+$/);
+  });
+
+  it('a reveal draws the pairing as a QR: uppercased, level M, with a quiet zone', async () => {
+    enableRemote.mockResolvedValue({
+      ticket: TICKET,
+      code: '483920',
+      pairing: `${TICKET}-483920`,
+      expires_in_s: 120,
+    });
+    const user = await open();
+    await user.click(screen.getByRole('button', { name: /enable remote access/i }));
+
+    const qr = await screen.findByRole('img', { name: 'Pairing QR code' });
+    // The modules drawn, compared with a code built from the uppercased
+    // payload at level M with a four-module quiet zone. A lowercase payload,
+    // another level or no quiet zone is a different set of modules.
+    const expected = document.createElement('div');
+    expected.innerHTML = renderToStaticMarkup(
+      <QRCodeSVG value={`${TICKET.toUpperCase()}-483920`} level="M" marginSize={4} />,
+    );
+    const modules = (svg: Element) => svg.querySelectorAll('path')[1]?.getAttribute('d');
+    expect(modules(qr)).toBeTruthy();
+    expect(modules(qr)).toBe(modules(expected.querySelector('svg')!));
+    // Black modules on white whatever the theme: an inverted code is one many
+    // scanners refuse.
+    const [background, foreground] = qr.querySelectorAll('path');
+    expect(background.getAttribute('fill')).toBe('#ffffff');
+    expect(foreground.getAttribute('fill')).toBe('#000000');
+    expect(screen.getByText(/Scan with ggchat/)).toBeInTheDocument();
   });
 
   it('a switch that is on with nothing bound says so, and Enable is still there to press', async () => {
