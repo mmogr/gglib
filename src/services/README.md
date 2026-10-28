@@ -66,9 +66,9 @@ not because it belongs here.
 | `serverEvents.normalize.ts` | Two named readers, one per producer: `normalizeServerEventFromAppEvent` for the camelCase `AppEvent` frames on `/api/events`, `normalizeServerSnapshotFromList` for the snake_case `GET /api/servers` list. Neither accepts the other's spelling |
 | `proxyRegistry.ts` | External store for proxy state, the `serverRegistry.ts` analogue |
 | `proxyEvents.ts` | Subscribes to proxy lifecycle events and ingests them into `proxyRegistry` |
-| `remoteRegistry.ts` | External store for the remote tunnel (ADR 0012): the daemon's status, both sides, and the pairing code on offer with the timer that expires it; and `stillPaired`, whether a far row, pick or chat held for the paired machine still holds once that status names another |
+| `remoteRegistry.ts` | External store for the remote tunnel (ADR 0012): the daemon's status, both sides, and the pairing code on offer with the timers that expire it, or lapse it once the daemon has let it go; and `stillPaired`, whether a far row, pick or chat held for the paired machine still holds once that status names another |
 | `remoteRegistryState.ts` | What that store holds and what an empty tunnel looks like: the `RemoteState` shape and `IDLE_STATUS`, split out so the registry file stays under budget; and `pairedName`, the name the paired machine is shown by, never its fingerprint |
-| `remoteOffer.ts` | The pairing code on offer, held by `remoteRegistry` so closing the popover cannot lose it, and the pure rules for when a status read ends it: paired, tunnel down, or withdrawn |
+| `remoteOffer.ts` | The pairing code on offer, held by `remoteRegistry` so closing the popover cannot lose it, and the pure rules for when a status read ends it (paired, tunnel down, or withdrawn) or marks it gone |
 | `remoteEvents.ts` | Subscribes to `remote_*` events, ingests them into `remoteRegistry`, and re-reads the status after each |
 | `createEventStore.ts` | Shared store factory behind the three registries: one value, replaced whole on each write, with a `useSyncExternalStore` hook over it |
 | `bridgeEvents.ts` | Shared bridge behind the three `*Events.ts` files: subscribe before the hydrating fetch, and drop a fetch that an event or a cleanup overtook |

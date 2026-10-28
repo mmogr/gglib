@@ -30,20 +30,57 @@ const store = createEventStore<RemoteState>(INITIAL);
 
 /** The one timer that ends the offer as expired; cancelled by any other end. */
 let expiry: ReturnType<typeof setTimeout> | null = null;
+/** The timer that gives a gone code its few seconds; see `settleOffer`. */
+let grace: ReturnType<typeof setTimeout> | null = null;
 /** Numbers each ending, so a listener can tell a new one from one it saw. */
 let endings = 0;
+
+/**
+ * How long a code the daemon let go is given for the `remote_paired` that
+ * follows a redemption, or for the expiry timer. The daemon's gap before the
+ * event is milliseconds (it swaps the device's key under the roster lock
+ * first), and its clock leads this side's by about the time it took to
+ * answer; this covers both, and the event's trip to the page.
+ */
+const GONE_GRACE_MS = 3_000;
 
 function stopExpiry(): void {
   if (expiry !== null) clearTimeout(expiry);
   expiry = null;
 }
 
-/** `state` with its offer ended as `reason`; unchanged when none is live. */
+function stopGrace(): void {
+  if (grace !== null) clearTimeout(grace);
+  grace = null;
+}
+
+/**
+ * `state` with its offer ended as `reason`; unchanged when none is live. The
+ * grace timer stops when the result is committed, as every result is.
+ */
 function endOffer(state: RemoteState, reason: OfferEnd): RemoteState {
   if (state.offer === null) return state;
   stopExpiry();
   endings += 1;
   return { ...state, offer: null, ended: { reason, device: state.offer.device, seq: endings } };
+}
+
+/**
+ * Set the state, and start or stop the grace timer to match its offer: a
+ * code still gone when the timer fires lapsed.
+ */
+function commit(next: RemoteState): void {
+  store.setState(next);
+  if (!next.offer?.codeGone) {
+    stopGrace();
+    return;
+  }
+  if (grace !== null) return;
+  grace = setTimeout(() => {
+    grace = null;
+    const state = store.getState();
+    if (state.offer?.codeGone) commit(endOffer(state, 'lapsed'));
+  }, GONE_GRACE_MS);
 }
 
 /** `state` with its offer settled against the move from `prev` to its status. */
@@ -66,23 +103,23 @@ export function showOffer(answer: RemoteEnableResponse): void {
   const offer = offerFrom(answer, Date.now());
   // Settled at once against the status held, so a read that already lists
   // the new row counts as having seen it.
-  store.setState(settle({ ...prev, offer }, prev.status));
+  commit(settle({ ...prev, offer }, prev.status));
   if (offer !== null && store.getState().offer !== null) {
     expiry = setTimeout(() => {
       expiry = null;
-      store.setState(endOffer(store.getState(), 'expired'));
+      commit(endOffer(store.getState(), 'expired'));
     }, Math.max(0, offer.expiresAt - Date.now()));
   }
 }
 
 /**
  * Drop the offer without calling it ended: Disable from this app, which says
- * so itself. Without it, a `remote_disabled` that never arrived would leave
- * the code to be announced as expired later.
+ * so itself. Called before the request, so the `remote_disabled` it causes
+ * finds no offer to end and nothing is said twice.
  */
 export function clearOffer(): void {
   stopExpiry();
-  store.setState({ ...store.getState(), offer: null });
+  commit({ ...store.getState(), offer: null });
 }
 
 /**
@@ -123,7 +160,7 @@ export function stillPaired(machine: Machine, status: RemoteStatus | null): bool
 /** Replace the status with what the daemon just said. */
 export function applyRemoteStatus(status: RemoteStatus): void {
   const prev = store.getState();
-  store.setState(settle({ ...prev, status }, prev.status));
+  commit(settle({ ...prev, status }, prev.status));
 }
 
 /**
@@ -145,7 +182,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
   // Every arm settles the offer too. `remote_paired` ends it as paired
   // outright: the event is the redemption, whatever `paired` read before.
   const set = (next: RemoteState) =>
-    store.setState(evt.type === 'remote_paired' ? endOffer(next, 'paired') : settle(next, prev.status));
+    commit(evt.type === 'remote_paired' ? endOffer(next, 'paired') : settle(next, prev.status));
   switch (evt.type) {
     case 'remote_enabled':
       set({
@@ -234,6 +271,7 @@ export function ingestRemoteEvent(evt: RemoteEvent): void {
 /** Reset (used during cleanup / hot-reload). */
 export function resetRemoteState(): void {
   stopExpiry();
+  stopGrace();
   store.setState(INITIAL);
 }
 

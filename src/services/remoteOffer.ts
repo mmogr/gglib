@@ -23,10 +23,17 @@ export interface PairingOffer {
   expiresAt: number;
   /** A status read has listed `device`'s row since the offer was made. */
   rowSeen: boolean;
+  /** A status read has said a code is live since the offer was made. */
+  liveSeen: boolean;
+  /** The last read said no code is live, after one said it was. */
+  codeGone: boolean;
 }
 
-/** How an offer ended. */
-export type OfferEnd = 'paired' | 'expired' | 'withdrawn' | 'tunnel_down';
+/**
+ * How an offer ended. `lapsed` is a code the daemon stopped holding early
+ * with nobody pairing: burned by wrong guesses, or dropped by a restart.
+ */
+export type OfferEnd = 'paired' | 'expired' | 'lapsed' | 'withdrawn' | 'tunnel_down';
 
 /**
  * The offer in `answer`, or `null` when it carries none.
@@ -44,6 +51,8 @@ export function offerFrom(answer: RemoteEnableResponse, now: number): PairingOff
     device: answer.device,
     expiresAt: now + answer.expires_in_s * 1000,
     rowSeen: false,
+    liveSeen: false,
+    codeGone: false,
   };
 }
 
@@ -58,18 +67,18 @@ export function offerFrom(answer: RemoteEnableResponse, now: number): PairingOff
  * 3. Withdrawn: the offered device's row was listed and is gone, which is
  *    what forgetting it does.
  *
- * Nothing else ends it. A code the daemon no longer holds while its row is
- * still there, unjoined, is usually a gap: a redemption frees the code before
- * it sets `paired` and sends `remote_paired`, and the daemon lets an expired
- * code go a moment before this side's clock does. Ending the offer there
- * would call a pairing or an expiry a withdrawal; the event, or the
- * registry's own expiry timer, settles it instead. The cost: a code burned
- * by wrong guesses reads the same, as can one dropped by a restart whose
- * `remote_disabled` this side missed, and stays on screen until its
- * deadline, then is called expired.
+ * Nothing else ends it here. A code the daemon no longer holds while its row
+ * is still there, unjoined, is marked `codeGone` and kept. That is usually a
+ * gap: a redemption frees the code before it sets `paired` and sends
+ * `remote_paired`, and the daemon lets an expired code go a moment before
+ * this side's clock does. Ending the offer at once would call a pairing or
+ * an expiry something else. The registry gives a gone code a few seconds for
+ * the event or the clock, and only then calls it lapsed.
  *
  * The row has to have been seen first: a read from before the answer cannot
- * list the device the answer names, and that absence is not a forget.
+ * list the device the answer names, and that absence is not a forget. So
+ * does a live code: one gone before any read said it was live is a read from
+ * before the answer.
  */
 export function settleOffer(
   offer: PairingOffer | null,
@@ -88,8 +97,11 @@ export function settleOffer(
   if (offer.rowSeen && !row) {
     return { offer: null, ended: 'withdrawn' };
   }
-  if (row && !offer.rowSeen) {
-    return { offer: { ...offer, rowSeen: true } };
+  const rowSeen = offer.rowSeen || row !== undefined;
+  const liveSeen = offer.liveSeen || next.pairing_active;
+  const codeGone = liveSeen && !next.pairing_active;
+  if (rowSeen === offer.rowSeen && liveSeen === offer.liveSeen && codeGone === offer.codeGone) {
+    return { offer };
   }
-  return { offer };
+  return { offer: { ...offer, rowSeen, liveSeen, codeGone } };
 }

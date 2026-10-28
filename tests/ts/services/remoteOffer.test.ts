@@ -36,8 +36,11 @@ const offer: PairingOffer = {
   device: DEVICE,
   expiresAt: 120_000,
   rowSeen: false,
+  liveSeen: false,
+  codeGone: false,
 };
-const seen: PairingOffer = { ...offer, rowSeen: true };
+/** Its row listed and its code read live: an offer the status has caught up with. */
+const seen: PairingOffer = { ...offer, rowSeen: true, liveSeen: true };
 
 /** A serving status, with `patch` applied. */
 function up(patch: Partial<RemoteStatus> = {}): RemoteStatus {
@@ -50,7 +53,7 @@ describe('offerFrom', () => {
       { ticket: 't', pairing: 't-119284', code: '119284', expires_in_s: 120, device: DEVICE, mcp_servers: [], already_up: false },
       1_000,
     );
-    expect(held).toEqual({ pairing: 't-119284', code: '119284', device: DEVICE, expiresAt: 121_000, rowSeen: false });
+    expect(held).toEqual({ pairing: 't-119284', code: '119284', device: DEVICE, expiresAt: 121_000, rowSeen: false, liveSeen: false, codeGone: false });
   });
 
   it('holds nothing when the answer carries no code', () => {
@@ -96,20 +99,36 @@ describe('settleOffer', () => {
     expect(settleOffer(offer, up(), up())).toEqual({ offer });
   });
 
-  it('the first read that lists the row marks it seen', () => {
+  it('the first read that lists the row and the live code marks both seen', () => {
     expect(settleOffer(offer, up(), up({ pairing_active: true, devices: [row(false)] }))).toEqual({ offer: seen });
   });
 
-  it('a code gone with its row still there, unjoined, is kept for the event or the clock', () => {
-    // The redemption gap, and the expiry gap: the daemon no longer holds
-    // the code, nothing says paired, and the row has not been forgotten.
+  it('a code gone with its row still there, unjoined, is kept and marked gone', () => {
+    // The redemption gap, the expiry gap, or a burned code: the daemon no
+    // longer holds the code, nothing says paired, and the row is still
+    // there. The registry's grace timer tells them apart.
     const before = up({ pairing_active: true, devices: [row(false)] });
-    expect(settleOffer(seen, before, up({ devices: [row(false)] }))).toEqual({ offer: seen });
+    expect(settleOffer(seen, before, up({ devices: [row(false)] }))).toEqual({
+      offer: { ...seen, codeGone: true },
+    });
   });
 
-  it('an offer naming no device ends only by pairing or the tunnel going', () => {
-    const anonymous: PairingOffer = { ...offer, device: undefined, rowSeen: false };
-    expect(settleOffer(anonymous, up({ pairing_active: true }), up()).ended).toBeUndefined();
+  it('a code read live again is no longer gone', () => {
+    const gone = { ...seen, codeGone: true };
+    expect(settleOffer(gone, up(), up({ pairing_active: true, devices: [row(false)] }))).toEqual({
+      offer: seen,
+    });
+  });
+
+  it('a code never read live is not gone: the read came before the answer', () => {
+    expect(settleOffer(offer, up(), up({ devices: [row(false)] })).offer?.codeGone).toBe(false);
+  });
+
+  it('an offer naming no device is marked gone the same way, and ends only by pairing or the tunnel', () => {
+    const anonymous: PairingOffer = { ...offer, device: undefined, liveSeen: true };
+    const settled = settleOffer(anonymous, up({ pairing_active: true }), up());
+    expect(settled.ended).toBeUndefined();
+    expect(settled.offer?.codeGone).toBe(true);
     expect(settleOffer(anonymous, up(), up({ paired: true })).ended).toBe('paired');
   });
 

@@ -9,16 +9,18 @@ import { useToastContext } from '../../contexts/ToastContext';
  * Mounted once at the app's root rather than in the popover: a code is often
  * spent or lapses while the popover is closed, or while a chat has taken the
  * page, and the person is looking at their phone either way. The CLI's
- * pairing screen says both when it leaves.
+ * pairing screen says the same when it leaves.
  *
- * Only a pairing and an expiry are said. A withdrawal or a tunnel taken down
- * comes from the app's own Forget or Disable, which say so themselves; from a
- * terminal, where the person who typed it already knows; or from the proxy
- * stopping or the daemon shutting down, which take the tunnel with them.
+ * Every ending is said but a withdrawal, which is a Forget: the app's own
+ * says so itself, and a terminal's was typed by the person who knows. A
+ * tunnel taken down by the app's own Disable is not an ending at all
+ * (`clearOffer`), so what is said of one is the proxy stopping, the daemon
+ * shutting down, or a terminal's disable.
  *
  * An expiry also asks the daemon again. It lets go of a code with no event,
  * so without the read the status keeps saying one is live, and Invite, which
- * is disabled while one is, stays dead.
+ * is disabled while one is, stays dead. A lapse needs no read: a read is how
+ * it was found.
  */
 export function useOfferOutcomes(): void {
   const { ended } = useRemoteState();
@@ -37,6 +39,13 @@ export function useOfferOutcomes(): void {
     } else if (ended.reason === 'expired') {
       showToast('The pairing code expired and nobody paired. Invite again for a fresh one.', 'info');
       void refreshRemoteStatus();
+    } else if (ended.reason === 'lapsed') {
+      showToast(
+        'The pairing code stopped working before anyone paired. Invite again for a fresh one.',
+        'info',
+      );
+    } else if (ended.reason === 'tunnel_down') {
+      showToast('Remote access went off, and the pairing code with it. Nobody paired.', 'info');
     }
   }, [ended, showToast]);
 }

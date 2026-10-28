@@ -129,9 +129,12 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
 
   const handleDisable = async () => {
     setBusy('disable');
+    // Before the request: its `remote_disabled` can arrive before the answer,
+    // and must find no code to announce as ended. Stopping is what was asked
+    // for, so a refusal below leaves the code off screen too.
+    clearOffer();
     try {
       await getTransport().disableRemote();
-      clearOffer();
       onNotice('Remote access is off. Enabling again brings the same ticket back.', 'success');
     } catch (err) {
       onNotice(`Could not disable remote access: ${formatError(err)}`, 'error');
