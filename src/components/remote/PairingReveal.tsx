@@ -1,8 +1,23 @@
 import { FC, useCallback, useEffect, useState } from 'react';
 import { ClipboardCopy } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { Label, Stack } from '../primitives';
+
+/**
+ * What the QR carries: the pairing string, uppercased, as the CLI's
+ * `pairing_tui::qr` draws it.
+ *
+ * Not cosmetic: QR alphanumeric mode encodes only uppercase, and a payload in
+ * it is a smaller code than the same text in byte mode, so easier
+ * for a phone to read. The ticket parses case-insensitively for exactly this
+ * reason, in gglib and in ggchat, and the six-digit code has no case.
+ */
+export function qrPayload(pairing: string): string {
+  return pairing.toUpperCase();
+}
+
 /**
  * The three fields this needs, all present, and the device the code is for.
  *
@@ -68,7 +83,26 @@ export const PairingReveal: FC<PairingRevealProps> = ({ reveal, onExpired, onCop
 
   return (
     <Stack gap="sm" className="mb-md">
-      <Label size="xs" muted>On the other machine</Label>
+      {/* The QR first: a phone has no other way in, and a computer has the
+          command below. Black on white whatever the theme, since an inverted
+          code is one many scanners refuse; level M, the CLI's, or higher where
+          that costs no size, and the four-module quiet zone its screen draws. */}
+      <div className="flex flex-col items-center gap-xs">
+        <QRCodeSVG
+          value={qrPayload(reveal.pairing)}
+          level="M"
+          marginSize={4}
+          size={192}
+          bgColor="#ffffff"
+          fgColor="#000000"
+          title="Pairing QR code"
+          className="rounded-base"
+        />
+        <span className="text-xs text-text-muted">
+          Scan with ggchat: Add provider, then Scan ticket.
+        </span>
+      </div>
+      <Label size="xs" muted>Or on another computer</Label>
       <div className="flex gap-sm items-center">
         <code className="flex-1 bg-surface-elevated p-sm rounded-base text-xs font-mono break-all">
           gglib remote join {reveal.pairing}
