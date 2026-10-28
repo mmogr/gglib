@@ -14,10 +14,9 @@ use gglib_core::ports::{
     AppEventEmitter, DownloadManagerPort, GgufParserPort, HfClientPort, ModelCatalogPort,
     NoopEmitter, SettingsRepository,
 };
-use gglib_core::services::AppCore;
+use gglib_core::services::{AppCore, CatalogPortImpl};
 use gglib_db::{SqliteBenchmarkRepository, SqliteLoopGuardTripLog};
 use gglib_mcp::McpService;
-use gglib_runtime::CatalogPortImpl;
 
 use crate::console::CliConsole;
 use crate::daemon_client::LibraryChanges;

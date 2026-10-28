@@ -50,9 +50,7 @@ pub use process::{
 };
 
 // Re-export port implementations for runtime adapters
-pub use ports_impl::{
-    CatalogPortImpl, FarMachine, LlmCompletionAdapter, RuntimePortImpl, SamplingObserver,
-};
+pub use ports_impl::{FarMachine, LlmCompletionAdapter, RuntimePortImpl, SamplingObserver};
 
 // Re-export composition root factory
 pub use compose::{LoopGeneration, compose_agent_loop, compose_agent_loop_with_sampling};

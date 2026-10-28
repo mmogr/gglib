@@ -251,7 +251,7 @@ fn the_fit_is_sized_by_the_weights_and_the_projector_as_a_launch_is() {
     let (_, inputs) = context_fit(&linked);
 
     assert_eq!(inputs.weights_bytes, Some(4608));
-    let launch = gglib_runtime::ports_impl::model_catalog::model_to_launch_spec(linked);
+    let launch = gglib_core::services::model_to_launch_spec(linked);
     assert_eq!(inputs.weights_bytes, Some(launch.file_size_bytes));
 }
 

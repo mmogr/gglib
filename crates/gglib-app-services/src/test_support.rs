@@ -339,7 +339,8 @@ pub(crate) fn test_core_and_proxy_over(
     use gglib_core::cache_config::CacheRamSetting;
     use gglib_core::ports::ModelCatalogPort;
     use gglib_core::server_config::ServerConfigOptions;
-    use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
+    use gglib_core::services::CatalogPortImpl;
+    use gglib_runtime::ports_impl::RuntimePortImpl;
     use gglib_runtime::process::{ProcessManager, RuntimeBinaries};
 
     gglib_core::paths::isolate_data_root();

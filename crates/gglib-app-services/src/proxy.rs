@@ -17,9 +17,8 @@ use gglib_core::ports::{
     AgentRunStarter, HubChatsPort, ImageGenerationPort, ModelCatalogPort, ModelRepository,
     ModelRuntimePort, RemoteGatewayPort, RunsPort, UsageSink,
 };
-use gglib_core::services::AppCore;
+use gglib_core::services::{AppCore, CatalogPortImpl};
 use gglib_mcp::McpService;
-use gglib_runtime::ports_impl::CatalogPortImpl;
 use gglib_runtime::proxy::{ProxyConfig, ProxyStatus, ProxySupervisor, SupervisorError};
 use tokio_util::sync::CancellationToken;
 

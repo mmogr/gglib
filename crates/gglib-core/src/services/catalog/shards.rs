@@ -1,6 +1,6 @@
 //! Multi-part GGUF shard naming and the on-disk size of what a launch loads.
 //!
-//! Split out from [`super::model_catalog`] so that module stays a pure
+//! Split out from [`super::port`] so that module stays a pure
 //! repository→port mapping adapter: this is filesystem arithmetic, and it has
 //! consumers (cache-RAM auto-sizing) that have nothing to do with the catalog.
 
@@ -60,7 +60,7 @@ pub fn total_model_bytes(file_path: &std::path::Path) -> u64 {
 /// the two cannot disagree about a model that has a projector or components.
 /// A projector or component that cannot be read adds `0`, as an unreadable
 /// shard does.
-pub fn resident_bytes(model: &gglib_core::domain::Model) -> u64 {
+pub fn resident_bytes(model: &crate::domain::Model) -> u64 {
     let size_of = |path: &std::path::Path| path.metadata().map_or(0, |md| md.len());
     let projector = model.projector_path.as_deref().map_or(0, size_of);
     let components: u64 = model.components.iter().map(|c| size_of(&c.path)).sum();
@@ -161,15 +161,15 @@ mod tests {
 
     // ── Weights plus projector ───────────────────────────────────────────
 
-    fn model(weights: &std::path::Path, projector: Option<&std::path::Path>) -> gglib_core::Model {
-        let mut new = gglib_core::NewModel::new(
+    fn model(weights: &std::path::Path, projector: Option<&std::path::Path>) -> crate::Model {
+        let mut new = crate::NewModel::new(
             "m".to_owned(),
             weights.to_path_buf(),
             7.0,
             chrono::Utc::now(),
         );
         new.projector_path = projector.map(std::path::Path::to_path_buf);
-        gglib_core::Model::stored(1, &new)
+        crate::Model::stored(1, &new)
     }
 
     #[test]
@@ -219,7 +219,7 @@ mod tests {
     /// nothing, as a missing projector does.
     #[test]
     fn resident_bytes_adds_each_component() {
-        use gglib_core::domain::{ComponentRole, ImageFamily, ModelComponent};
+        use crate::domain::{ComponentRole, ImageFamily, ModelComponent};
 
         let dir = tempfile::tempdir().unwrap();
         let weights = dir.path().join("flux.gguf");
