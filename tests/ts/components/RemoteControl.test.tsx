@@ -33,13 +33,16 @@ import { ConfirmProvider } from '../../../src/contexts/ConfirmContext';
 import {
   IDLE_STATUS,
   applyRemoteStatus,
+  ingestRemoteEvent,
   resetRemoteState,
 } from '../../../src/services/remoteRegistry';
+import { useOfferOutcomes } from '../../../src/components/remote/useOfferOutcomes';
 
 const enableRemote = vi.fn();
 const joinRemote = vi.fn();
 const inviteRemote = vi.fn();
 const forgetDevice = vi.fn();
+const disableRemote = vi.fn();
 const listMcpServers = vi.fn();
 const setMcpServerRemote = vi.fn();
 
@@ -49,6 +52,7 @@ vi.mock('../../../src/services/transport', () => ({
     joinRemote,
     inviteRemote,
     forgetDevice,
+    disableRemote,
     listMcpServers,
     setMcpServerRemote,
   }),
@@ -79,6 +83,9 @@ vi.mock('../../../src/services/remoteEvents', () => ({
  */
 const Toasts: FC = () => {
   const { toasts, dismissToast } = useToastContext();
+  // The app root's hook, mounted where `AppContent` mounts it: outside the
+  // popover, so what it says does not depend on the popover being open.
+  useOfferOutcomes();
   return <ToastContainer toasts={toasts} onDismiss={dismissToast} />;
 };
 
@@ -154,6 +161,7 @@ describe('RemoteControl', () => {
     joinRemote.mockReset();
     inviteRemote.mockReset();
     forgetDevice.mockReset();
+    disableRemote.mockReset();
     listMcpServers.mockReset().mockResolvedValue([mcpServer('tavily')]);
     setMcpServerRemote.mockReset().mockResolvedValue(undefined);
     refreshRemoteStatus.mockReset().mockResolvedValue(true);
@@ -727,6 +735,230 @@ describe('RemoteControl', () => {
     );
     expect(screen.queryByText('119284')).not.toBeInTheDocument();
     expect(screen.getByText('no code live')).toBeInTheDocument();
+    // Said, as the CLI says it: a code that vanished in silence reads the
+    // same as one a device took.
+    expect(screen.getByText(/The pairing code expired and nobody paired/)).toBeInTheDocument();
+  });
+
+  it('closing the popover keeps the code, still counting down to its own deadline', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      applyRemoteStatus({ ...IDLE_STATUS, enabled: true });
+      inviteRemote.mockResolvedValue({
+        ticket: TICKET,
+        code: '119284',
+        pairing: `${TICKET}-119284`,
+        expires_in_s: 120,
+        device: 'dev-99887766',
+      });
+      render(<RemoteControl />, { wrapper });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const trigger = screen.getByRole('button', { name: /remote/i });
+      await user.click(trigger);
+      await user.click(screen.getByRole('button', { name: /invite a device/i }));
+      await screen.findByText('119284');
+
+      // Closed, as a click anywhere outside it closes it; the closed trigger
+      // says a code is waiting.
+      await user.click(trigger);
+      expect(screen.queryByText('119284')).not.toBeInTheDocument();
+      expect(trigger).toHaveAttribute('title', 'Remote: a pairing code is waiting');
+
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      await user.click(trigger);
+      expect(screen.getByText('119284')).toBeInTheDocument();
+      // 90 left, not 120 again: the deadline is the code's, not the panel's.
+      expect(screen.getByText(/^(89|90)s$/)).toBeInTheDocument();
+      // And Invite stays dead while it is on offer, though no read has said
+      // a code is live: a second offer is a guaranteed refusal.
+      expect(screen.getByRole('button', { name: /invite a device/i })).toBeDisabled();
+      // And it keeps counting while it is on screen.
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      expect(screen.getByText(/^(84|85)s$/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a tunnel that goes down from elsewhere takes the code, and says so', async () => {
+    // A terminal's disable, the proxy stopping, the daemon shutting down.
+    applyRemoteStatus({ ...IDLE_STATUS, enabled: true });
+    inviteRemote.mockResolvedValue({
+      ticket: TICKET,
+      code: '119284',
+      pairing: `${TICKET}-119284`,
+      expires_in_s: 120,
+      device: 'dev-99887766',
+    });
+    const user = await open();
+    await user.click(screen.getByRole('button', { name: /invite a device/i }));
+    await screen.findByText('119284');
+
+    act(() => ingestRemoteEvent({ type: 'remote_disabled' }));
+
+    expect(screen.queryByText('119284')).not.toBeInTheDocument();
+    expect(await screen.findByText(/Remote access went off, and the pairing code with it/)).toBeInTheDocument();
+    expect(screen.queryByText(/expired|Paired/)).not.toBeInTheDocument();
+  });
+
+  it("this app's own Disable is not announced as the code ending, whenever its event lands", async () => {
+    applyRemoteStatus({ ...IDLE_STATUS, enabled: true });
+    inviteRemote.mockResolvedValue({
+      ticket: TICKET,
+      code: '119284',
+      pairing: `${TICKET}-119284`,
+      expires_in_s: 120,
+      device: 'dev-99887766',
+    });
+    // The daemon's event arrives before its answer does.
+    disableRemote.mockImplementation(() => {
+      ingestRemoteEvent({ type: 'remote_disabled' });
+      return Promise.resolve({ ...IDLE_STATUS });
+    });
+    const user = await open();
+    await user.click(screen.getByRole('button', { name: /invite a device/i }));
+    await screen.findByText('119284');
+    await user.click(screen.getByRole('button', { name: /disable remote access/i }));
+
+    expect(await screen.findByText(/Remote access is off/)).toBeInTheDocument();
+    expect(screen.queryByText(/went off|expired|Paired/)).not.toBeInTheDocument();
+  });
+
+  it('a code that stops working early is said, and Invite comes back', async () => {
+    // Burned by wrong guesses: the daemon drops it, keeps the row, and sends
+    // nothing. Only the reads show it, and no pairing follows.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const row: RemoteDevice = {
+        id: 'dev-99887766',
+        joined_at: Date.now(),
+        redeemed_at: null,
+        last_seen: null,
+        admitted: true,
+        peer: null,
+        recorded: true,
+        description: 'invited just now, never joined',
+        joined: false,
+      };
+      applyRemoteStatus({ ...IDLE_STATUS, enabled: true });
+      inviteRemote.mockResolvedValue({
+        ticket: TICKET,
+        code: '119284',
+        pairing: `${TICKET}-119284`,
+        expires_in_s: 120,
+        device: row.id,
+      });
+      render(<RemoteControl />, { wrapper });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(screen.getByRole('button', { name: /remote/i }));
+      await user.click(screen.getByRole('button', { name: /invite a device/i }));
+      await screen.findByText('119284');
+
+      act(() =>
+        applyRemoteStatus({ ...IDLE_STATUS, enabled: true, pairing_active: true, devices: [row] }),
+      );
+      act(() => applyRemoteStatus({ ...IDLE_STATUS, enabled: true, devices: [row] }));
+      // Still up for the moment: this read could be the gap before a pairing.
+      expect(screen.getByText('119284')).toBeInTheDocument();
+
+      await act(() => vi.advanceTimersByTimeAsync(3_000));
+      expect(screen.queryByText('119284')).not.toBeInTheDocument();
+      expect(screen.getByText(/stopped working before anyone paired/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /invite a device/i })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a device that pairs while the popover is closed is said, and its code is gone', async () => {
+    applyRemoteStatus({ ...IDLE_STATUS, enabled: true });
+    inviteRemote.mockResolvedValue({
+      ticket: TICKET,
+      code: '119284',
+      pairing: `${TICKET}-119284`,
+      expires_in_s: 120,
+      device: 'dev-99887766',
+    });
+    render(<RemoteControl />, { wrapper });
+    const user = userEvent.setup();
+    const trigger = screen.getByRole('button', { name: /remote/i });
+    await user.click(trigger);
+    await user.click(screen.getByRole('button', { name: /invite a device/i }));
+    await screen.findByText('119284');
+    await user.click(trigger);
+
+    act(() => ingestRemoteEvent({ type: 'remote_paired', peer: '0123456789ab' }));
+
+    expect(await screen.findByText(/Paired dev-99887766/)).toBeInTheDocument();
+    await user.click(trigger);
+    expect(screen.queryByText('119284')).not.toBeInTheDocument();
+    expect(trigger).not.toHaveAttribute('title');
+  });
+
+  it('a read between the code being spent and the pairing being recorded keeps the code', async () => {
+    // The daemon frees the code, then sets `paired`, then sends the event. A
+    // read in between sees the row unjoined and no code live; ending there
+    // would call a pairing a withdrawal and say nothing.
+    const row: RemoteDevice = {
+      id: 'dev-99887766',
+      joined_at: Date.now(),
+      redeemed_at: null,
+      last_seen: null,
+      admitted: true,
+      peer: null,
+      recorded: true,
+      description: 'invited just now, never joined',
+      joined: false,
+    };
+    applyRemoteStatus({ ...IDLE_STATUS, enabled: true });
+    inviteRemote.mockResolvedValue({
+      ticket: TICKET,
+      code: '119284',
+      pairing: `${TICKET}-119284`,
+      expires_in_s: 120,
+      device: row.id,
+    });
+    const user = await open();
+    await user.click(screen.getByRole('button', { name: /invite a device/i }));
+    await screen.findByText('119284');
+
+    act(() =>
+      applyRemoteStatus({ ...IDLE_STATUS, enabled: true, pairing_active: true, devices: [row] }),
+    );
+    act(() => applyRemoteStatus({ ...IDLE_STATUS, enabled: true, devices: [row] }));
+    expect(screen.getByText('119284')).toBeInTheDocument();
+
+    act(() => ingestRemoteEvent({ type: 'remote_paired', peer: '0123456789ab' }));
+    expect(await screen.findByText(/Paired dev-99887766/)).toBeInTheDocument();
+    expect(screen.queryByText('119284')).not.toBeInTheDocument();
+  });
+
+  it('disable drops the code, and no expiry is said for it later', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      applyRemoteStatus({ ...IDLE_STATUS, enabled: true });
+      inviteRemote.mockResolvedValue({
+        ticket: TICKET,
+        code: '119284',
+        pairing: `${TICKET}-119284`,
+        expires_in_s: 120,
+        device: 'dev-99887766',
+      });
+      disableRemote.mockResolvedValue({ ...IDLE_STATUS });
+      render(<RemoteControl />, { wrapper });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(screen.getByRole('button', { name: /remote/i }));
+      await user.click(screen.getByRole('button', { name: /invite a device/i }));
+      await screen.findByText('119284');
+
+      // No `remote_disabled` arrives: the drop is the click's own.
+      await user.click(screen.getByRole('button', { name: /disable remote access/i }));
+      expect(screen.queryByText('119284')).not.toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(130_000));
+      expect(screen.queryByText(/expired/)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('forgetting the invited device takes its code off screen and gives Invite back', async () => {
@@ -747,11 +979,14 @@ describe('RemoteControl', () => {
       joined: false,
     };
     applyRemoteStatus({ ...IDLE_STATUS, enabled: true });
+    // The answer names the row it wrote, as the daemon's does: a forget of
+    // that row is what withdraws this code.
     inviteRemote.mockResolvedValue({
       ticket: TICKET,
       code: '119284',
       pairing: `${TICKET}-119284`,
       expires_in_s: 120,
+      device: invited.id,
     });
     forgetDevice.mockResolvedValue({ forgotten: true });
     const user = await open();
@@ -779,6 +1014,9 @@ describe('RemoteControl', () => {
 
     await waitFor(() => expect(screen.queryByText('119284')).not.toBeInTheDocument());
     expect(screen.getByRole('button', { name: /invite a device/i })).toBeEnabled();
+    // A withdrawal is the person's own doing, and the forget says so itself:
+    // it is never announced as a pairing or an expiry.
+    expect(screen.queryByText(/expired|Paired/)).not.toBeInTheDocument();
   });
 
   it('a fresh code is not dropped because the status has not caught up with it', async () => {
