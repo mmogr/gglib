@@ -48,6 +48,11 @@ The binaries are not code-signed yet, so macOS and Windows warn about them:
 - **Windows** SmartScreen stops the desktop app's installer with "Windows
   protected your PC". Choose **More info**, then **Run anyway**.
 
+Each release also carries gglib for an iOS or macOS app to link,
+`GglibFFI-<version>.xcframework.zip`, with its Swift binding in
+`GglibFFI-swift-<version>.zip`; [gglib-ffi](crates/gglib-ffi/README.md#release-assets)
+says what they hold.
+
 ### apt (Ubuntu 24.04+, Debian 13+)
 
 ```bash
