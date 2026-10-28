@@ -392,7 +392,10 @@ pub struct McpServerDto {
     #[serde(default)]
     pub allow_remote: bool,
     pub lifecycle: McpLifecycle,
-    pub env: Vec<McpEnvEntryDto>,
+    /// The names of the server's environment variables. Never their values:
+    /// a read says which are held, and `POST /api/secrets/reveal` is where a
+    /// value comes from (ADR 0027).
+    pub env_keys: Vec<String>,
     pub created_at: String,
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -434,12 +437,25 @@ pub struct McpServerConfigDto {
     pub url: Option<String>,
 }
 
-/// MCP environment variable DTO.
+/// An environment variable a new server is created with. Requests only:
+/// no response carries a value.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct McpEnvEntryDto {
     pub key: String,
     pub value: String,
+}
+
+/// An environment variable in an update. With no `value` it keeps the value
+/// stored under `key`, which a client never holds; an entry the update
+/// leaves out is deleted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
+pub struct McpEnvUpdateDto {
+    pub key: String,
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
 }
 
 /// MCP server status DTO.
@@ -493,7 +509,8 @@ pub struct UpdateMcpServerRequest {
     pub working_dir: Option<String>,
     pub path_extra: Option<String>,
     pub url: Option<String>,
-    pub env: Option<Vec<McpEnvEntryDto>>,
+    /// The whole list of variables the server keeps, when sent.
+    pub env: Option<Vec<McpEnvUpdateDto>>,
     pub enabled: Option<bool>,
     pub lifecycle: Option<McpLifecycle>,
 }

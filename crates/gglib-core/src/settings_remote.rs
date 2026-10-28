@@ -140,10 +140,10 @@ pub struct RemoteServe {
 ///
 /// The roster, and only the roster: **no key field**. A device's key is a
 /// secret and lives in the `0600` file beside the endpoint identity, not
-/// here — `gglib config settings show` prints `proxy_api_key` unmasked by
-/// design, and that output gets pasted into bug reports. One shared key
-/// there was a known cost; every device key there would quietly undo what
-/// per-device revocation is for.
+/// here. Settings are what every surface reads, and what gets pasted into bug
+/// reports; the two keys they do hold are kept back on each surface by name
+/// (ADR 0027), and a device key each would be one more secret for every one
+/// of them to keep back.
 ///
 /// `id` is what modelpipe is told, and it travels to the backend as
 /// `X-Modelpipe-Device` on every request that device makes, so it is

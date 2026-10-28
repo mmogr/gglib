@@ -30,6 +30,7 @@ Axum backend (HTTP response) → typed result
 | `downloads.ts` | Download queue management |
 | `mcp.ts` | MCP server config, lifecycle and config test |
 | `settings.ts` | Application settings, and the starter-profile install the daemon runs |
+| `secrets.ts` | The one reveal of a stored secret (`POST /api/secrets/reveal`): the proxy key or an MCP server's env value, for Show and Copy, and the proxy key `useProxyKey` hands the dashboard, the tray and Clear Cache; the pairing key is refused, and the answer is never logged |
 | `tags.ts` | Model tags |
 | `builtin.ts` | Built-in tool listing |
 | `verification.ts` | Model verification |

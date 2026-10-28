@@ -242,7 +242,8 @@ pub struct AccessArgs {
     ///
     /// `/health` stays open so a supervisor can poll it. Omit to fall back to
     /// the stored `proxy_api_key` setting; with neither, a loopback bind runs
-    /// unauthenticated and a non-loopback bind generates a key and prints it.
+    /// unauthenticated and a non-loopback bind generates a key and stores it,
+    /// which `gglib config settings reveal proxy-api-key` prints.
     ///
     /// Prefer `GGLIB_API_KEY` (e.g. in a `.env` file) over the flag — a key on
     /// the command line is visible to every process on the machine via the

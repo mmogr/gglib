@@ -5,6 +5,7 @@
 )]
 mod profiles;
 mod reset;
+mod reveal;
 mod set;
 mod settings_display;
 mod unset;
@@ -158,6 +159,7 @@ pub(crate) async fn handle_settings(ctx: &CliContext, command: SettingsCommand) 
         SettingsCommand::Set(args) => set::handle_set(ctx, *args).await,
         SettingsCommand::Unset { key } => unset::handle_unset(ctx, &key).await,
         SettingsCommand::Reset { force } => reset::handle_reset(ctx, force).await,
+        SettingsCommand::Reveal { key } => reveal::handle_reveal(ctx, key.0).await,
     }
 }
 

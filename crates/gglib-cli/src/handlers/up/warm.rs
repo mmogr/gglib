@@ -12,6 +12,7 @@
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
+use gglib_core::secret::{SettingSecret, held_line};
 use serde_json::json;
 
 use super::{sgr, use_color};
@@ -71,7 +72,7 @@ pub(super) async fn run(port: u16, model: String, api_key: Option<String>) {
         }
     }
 
-    for line in render_client_config(addr, &model, api_key.as_deref(), use_color()) {
+    for line in render_client_config(addr, &model, api_key.is_some(), use_color()) {
         println!("{line}");
     }
 }
@@ -146,16 +147,11 @@ async fn warm_request(
 /// through `/v1/models`, which is precisely what `gglib serve` exists for.
 /// Sending someone there with the unpinned base URL would fail in a way that
 /// looks like gglib being broken.
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-fn render_client_config(
-    addr: SocketAddr,
-    model: &str,
-    api_key: Option<&str>,
-    color: bool,
-) -> Vec<String> {
+///
+/// Told whether the endpoint has a key, never the key, so it cannot print
+/// one (ADR 0027): this block is the one most likely to be pasted into a chat
+/// or an issue. The `curl` line reads the key through the reveal command.
+fn render_client_config(addr: SocketAddr, model: &str, has_key: bool, color: bool) -> Vec<String> {
     let (bold, dim, reset) = if color {
         (BOLD, DIM, RESET)
     } else {
@@ -163,20 +159,24 @@ fn render_client_config(
     };
     let base = format!("http://{addr}/v1");
 
-    // These are values a user retypes into another program, so the key has to
-    // be the real one when there is one. "not-needed" is the honest answer
-    // only for an unauthenticated endpoint.
-    let (key_line, curl_line) = match api_key {
-        Some(key) => (
-            format!("      API Key    {key}"),
-            format!("      curl -H \"Authorization: Bearer {key}\" {base}/models"),
-        ),
-        None => (
+    // "not-needed" is the honest answer only for an unauthenticated
+    // endpoint. A key is named, with the command that prints it.
+    let secret = SettingSecret::ProxyApiKey;
+    let (key_line, curl_line) = if has_key {
+        (
+            format!("      API Key    {}", held_line(secret)),
+            format!(
+                "      curl -H \"Authorization: Bearer $({})\" {base}/models",
+                secret.reveal_command()
+            ),
+        )
+    } else {
+        (
             format!(
                 "      API Key    not-needed  {dim}(unused, but most clients demand one){reset}"
             ),
             format!("      curl {base}/models"),
-        ),
+        )
     };
 
     vec![
@@ -216,7 +216,7 @@ mod tests {
     /// command has failed at its whole purpose.
     #[test]
     fn the_pasteable_values_are_all_present() {
-        let lines = render_client_config(addr(), "qwen3-30b-a3b", None, false);
+        let lines = render_client_config(addr(), "qwen3-30b-a3b", false, false);
         let text = lines.join("\n");
         assert!(text.contains(&format!("http://127.0.0.1:{DEFAULT_PROXY_PORT}/v1")));
         assert!(text.contains("qwen3-30b-a3b"));
@@ -227,7 +227,7 @@ mod tests {
     /// be spelled out with the model already filled in.
     #[test]
     fn copilot_is_pointed_at_the_pinned_command() {
-        let lines = render_client_config(addr(), "qwen3-30b-a3b", None, false);
+        let lines = render_client_config(addr(), "qwen3-30b-a3b", false, false);
         assert!(
             lines
                 .iter()
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn a_verification_command_is_offered() {
-        let lines = render_client_config(addr(), "m", None, false);
+        let lines = render_client_config(addr(), "m", false, false);
         assert!(
             lines
                 .iter()
@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn the_dashboard_url_is_included() {
-        let lines = render_client_config(addr(), "m", None, false);
+        let lines = render_client_config(addr(), "m", false, false);
         assert!(lines.iter().any(|l| l.contains("/v1/proxy/status")));
     }
 
@@ -255,13 +255,13 @@ mod tests {
     /// likely to be copied out of a terminal into a chat or an issue.
     #[test]
     fn no_ansi_escapes_when_color_is_off() {
-        let lines = render_client_config(addr(), "m", None, false);
+        let lines = render_client_config(addr(), "m", false, false);
         assert!(lines.iter().all(|l| !l.contains('\u{1b}')));
     }
 
     #[test]
     fn ansi_escapes_appear_only_when_color_is_on() {
-        let lines = render_client_config(addr(), "m", None, true);
+        let lines = render_client_config(addr(), "m", false, true);
         assert!(lines.iter().any(|l| l.contains(DIM)));
         assert!(lines.iter().any(|l| l.contains(BOLD)));
     }
@@ -269,9 +269,28 @@ mod tests {
     /// The address is not hardcoded — `--port` has to reach the printed URLs.
     #[test]
     fn a_non_default_port_reaches_every_url() {
-        let lines = render_client_config(([127, 0, 0, 1], 9999).into(), "m", None, false);
+        let lines = render_client_config(([127, 0, 0, 1], 9999).into(), "m", false, false);
         let text = lines.join("\n");
         assert!(text.contains("http://127.0.0.1:9999/v1"));
         assert!(!text.contains(&DEFAULT_PROXY_PORT.to_string()));
+    }
+
+    /// A keyed endpoint is said to have a key, and the `curl` line reads it
+    /// through the reveal, which then runs in the reader's own shell.
+    #[test]
+    fn a_key_is_named_and_read_through_the_reveal() {
+        let text = render_client_config(addr(), "m", true, false).join("\n");
+
+        assert!(
+            text.contains("API Key    (set, not shown)"),
+            "the key is said to be held: {text}"
+        );
+        assert!(
+            text.contains(
+                "curl -H \"Authorization: Bearer $(gglib config settings reveal proxy-api-key)\""
+            ),
+            "{text}"
+        );
+        assert!(!text.contains("not-needed"), "{text}");
     }
 }

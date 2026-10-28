@@ -15,6 +15,7 @@ import type { DesktopSettingsValues } from "./useDesktopSettings";
 import type { NetworkSettingsValues } from "./useNetworkSettings";
 import type { AgentGuardSettingsValues } from "./useAgentGuardSettings";
 import type { DrawingSettingsValues } from "./useDrawingSettings";
+import type { SecretEdit } from "../ui/SecretField";
 
 interface GeneralSettingsProps {
   // Directory state
@@ -34,8 +35,10 @@ interface GeneralSettingsProps {
   setServerPortInput: (value: string) => void;
   maxQueueSizeInput: string;
   setMaxQueueSizeInput: (value: string) => void;
-  proxyApiKeyInput: string;
-  setProxyApiKeyInput: (value: string) => void;
+  proxyApiKeyInput: SecretEdit;
+  setProxyApiKeyInput: (edit: SecretEdit) => void;
+  /** Whether a proxy key is stored; the form never holds the key itself. */
+  proxyApiKeySet: boolean;
   showFitIndicators: boolean;
   setShowFitIndicators: (value: boolean) => void;
 
@@ -113,6 +116,7 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
   setMaxQueueSizeInput,
   proxyApiKeyInput,
   setProxyApiKeyInput,
+  proxyApiKeySet,
   showFitIndicators,
   setShowFitIndicators,
   desktopSettings,
@@ -199,6 +203,7 @@ export const GeneralSettings: FC<GeneralSettingsProps> = ({
       <SecuritySettings
         proxyApiKeyInput={proxyApiKeyInput}
         setProxyApiKeyInput={setProxyApiKeyInput}
+        proxyApiKeySet={proxyApiKeySet}
         network={networkSettings}
         setNetworkSetting={setNetworkSetting}
         saving={saving}

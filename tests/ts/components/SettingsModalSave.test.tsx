@@ -19,9 +19,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SettingsModal } from '../../../src/components/SettingsModal';
+import { ToastProvider } from '../../../src/contexts/ToastContext';
 import type { UpdateSettingsRequest } from '../../../src/types';
 
 const { save } = vi.hoisted(() => ({ save: vi.fn() }));
+
+/** The dialog, inside the toast provider the app gives it. */
+const openDialog = () =>
+  render(
+    <ToastProvider>
+      <SettingsModal isOpen onClose={vi.fn()} />
+    </ToastProvider>,
+  );
 
 const info = {
   path: '/custom/models',
@@ -30,12 +39,12 @@ const info = {
 };
 
 /** Every field the dialog shows holds a value, so any of them could leak. */
-const settings = {
+const settings: Record<string, unknown> = {
   proxyPort: 8081,
   llamaBasePort: 9100,
   maxDownloadQueueSize: 5,
   defaultContextSize: 8192,
-  proxyApiKey: 'sk-kept',
+  hasProxyApiKey: true,
   bindHost: '0.0.0.0',
   shareLan: true,
   proxyAutostart: true,
@@ -127,6 +136,11 @@ const toggle = (id: string): Change => async (user) => {
 const choose = (id: string, value: string): Change => async (user) => {
   await user.selectOptions(field(id), value);
 };
+/** Replace the stored proxy key with `text`. */
+const replaceKey = (text: string): Change => async (user) => {
+  await user.click(screen.getByRole('button', { name: 'Replace' }));
+  await user.type(field('proxy-api-key-input'), text);
+};
 /** A change to a field the collapsed Advanced section holds. */
 const advanced = (change: Change): Change => async (user) => {
   await user.click(screen.getByRole('button', { name: /advanced settings/i }));
@@ -143,7 +157,10 @@ const changes: [string, Change, UpdateSettingsRequest][] = [
   ['proxy port', retype('proxy-port-input', '8082'), { proxyPort: 8082 }],
   ['base server port', retype('server-port-input', '9200'), { llamaBasePort: 9200 }],
   ['download queue size', retype('max-queue-size-input', '6'), { maxDownloadQueueSize: 6 }],
-  ['proxy key', retype('proxy-api-key-input', 'sk-new'), { proxyApiKey: 'sk-new' }],
+  ['proxy key', replaceKey('sk-new'), { proxyApiKey: 'sk-new' }],
+  ['proxy key cleared', async (user) => {
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+  }, { proxyApiKey: null }],
   ['download path', retype('download-path-input', '/elsewhere'), { defaultDownloadPath: '/elsewhere' }],
   ['bind host', retype('bind-host-input', '127.0.0.1'), { bindHost: '127.0.0.1' }],
   ['LAN sharing', toggle('share-lan-input'), { shareLan: false }],
@@ -170,7 +187,7 @@ describe('SettingsModal — save', () => {
 
   it.each(changes)('sends the %s alone when only it changed', async (_name, change, request) => {
     const user = userEvent.setup();
-    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    openDialog();
 
     await change(user);
     await user.click(screen.getByRole('button', { name: /save changes/i }));
@@ -181,7 +198,7 @@ describe('SettingsModal — save', () => {
 
   it('sends nothing when nothing changed', async () => {
     const user = userEvent.setup();
-    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    openDialog();
 
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -190,7 +207,7 @@ describe('SettingsModal — save', () => {
 
   it('sends a field changed and changed back as nothing', async () => {
     const user = userEvent.setup();
-    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    openDialog();
 
     await user.clear(field('proxy-port-input'));
     await user.type(field('proxy-port-input'), '8081');
@@ -202,11 +219,67 @@ describe('SettingsModal — save', () => {
   /** The form builds a new object for every edit, so this compares by value. */
   it('sends an inference default changed and changed back as nothing', async () => {
     const user = userEvent.setup();
-    render(<SettingsModal isOpen onClose={vi.fn()} />);
+    openDialog();
 
     await advanced(retype('inference-param-topK', '40'))(user);
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     expect(save).not.toHaveBeenCalled();
+  });
+
+  /** Replace opened and left blank keeps the stored key: never `""`, never `null`. */
+  it('sends nothing for a replace left blank', async () => {
+    const user = userEvent.setup();
+    openDialog();
+
+    await replaceKey('   ')(user);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  /** A save puts the key field back to the mask, whether or not it sent anything. */
+  it.each([
+    ['left blank', '   '],
+    ['given a new key', 'sk-new'],
+  ])('shows the mask again after a save with the replace %s', async (_name, text) => {
+    const user = userEvent.setup();
+    openDialog();
+
+    await replaceKey(text)(user);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(field('proxy-api-key-input').readOnly).toBe(true);
+    expect(field('proxy-api-key-input').value).toBe('••••••••');
+  });
+
+  /** A save that fails keeps what was typed, to try again. */
+  it('keeps the typed key when the save fails', async () => {
+    save.mockRejectedValueOnce(new Error('daemon down'));
+    const user = userEvent.setup();
+    openDialog();
+
+    await replaceKey('sk-new')(user);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(field('proxy-api-key-input').readOnly).toBe(false);
+    expect(field('proxy-api-key-input').value).toBe('sk-new');
+  });
+
+  /** With no key stored the field is the input, and empty means no change. */
+  it('sends nothing for an empty key field when no key is stored', async () => {
+    settings.hasProxyApiKey = false;
+    try {
+      const user = userEvent.setup();
+      openDialog();
+
+      await user.type(field('proxy-api-key-input'), 'x');
+      await user.clear(field('proxy-api-key-input'));
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+      expect(save).not.toHaveBeenCalled();
+    } finally {
+      settings.hasProxyApiKey = true;
+    }
   });
 });

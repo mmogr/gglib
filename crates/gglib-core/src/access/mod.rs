@@ -42,8 +42,13 @@ pub enum ApiKeySource {
     /// Read from the stored `proxy_api_key` setting.
     Settings,
     /// Minted by this run because the bind was not loopback and nothing else
-    /// supplied one. Printed once, then persisted to settings.
+    /// supplied one, and stored in settings.
     Generated,
+    /// Minted as [`Self::Generated`] is, but not stored: the settings could
+    /// not be read or written. The daemon's banner prints a key from this
+    /// source and no other, since it is then the only copy; a proxy prints
+    /// none (ADR 0027).
+    GeneratedUnsaved,
     /// No token configured; the endpoint is unauthenticated.
     #[default]
     None,

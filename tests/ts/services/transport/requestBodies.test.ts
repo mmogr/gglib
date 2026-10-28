@@ -271,6 +271,13 @@ describe('what a typed request body sends', () => {
     });
   });
 
+  it('updating an MCP server sends a kept variable as its key alone', async () => {
+    const changes = { env: [{ key: 'TOKEN' }, { key: 'ROOT', value: '/srv' }] };
+    expect((await sent(() => updateMcpServer(3, changes))).body).toStrictEqual({
+      env: [{ key: 'TOKEN' }, { key: 'ROOT', value: '/srv' }],
+    });
+  });
+
   it('switching an MCP server off sends `enabled` alone', async () => {
     expect((await sent(() => updateMcpServer(3, { enabled: false }))).body).toStrictEqual({ enabled: false });
   });

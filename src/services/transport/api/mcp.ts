@@ -39,7 +39,7 @@ export async function addMcpServer(server: NewMcpServer): Promise<McpServerInfo>
     working_dir: server.config.working_dir || undefined,
     path_extra: server.config.path_extra || undefined,
     url: server.config.url || undefined,
-    env: server.env.map(({ key, value }) => ({ key, value })),
+    env: server.env.map(({ key, value }) => ({ key, value: value ?? '' })),
     lifecycle: server.lifecycle,
   };
   return post<McpServerInfo>('/api/mcp/servers', request);
@@ -61,7 +61,8 @@ export async function updateMcpServer(
   if (updates.config?.path_extra !== undefined) request.path_extra = updates.config.path_extra;
   if (updates.config?.url !== undefined) request.url = updates.config.url;
   if (updates.env !== undefined) {
-    request.env = updates.env.map(({ key, value }) => ({ key, value }));
+    // A variable with no value keeps the stored one, so the key goes alone.
+    request.env = updates.env.map(({ key, value }) => (value === undefined ? { key } : { key, value }));
   }
   if (updates.enabled !== undefined) request.enabled = updates.enabled;
   if (updates.lifecycle !== undefined) request.lifecycle = updates.lifecycle;

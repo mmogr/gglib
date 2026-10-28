@@ -23,7 +23,14 @@ defaultImageModelId: number | null, inferenceDefaults: InferenceConfig | null,
 /**
  * Named sampling profiles, selectable per request as `{model}:{profile}`.
  */
-inferenceProfiles: Array<InferenceProfile> | null, setupCompleted: boolean | null, titleGenerationPrompt: string | null, bindHost: string | null, shareLan: boolean | null, proxyApiKey: string | null, trustClientSampling: boolean | null, loopGuardMode: LoopGuardMode | null, 
+inferenceProfiles: Array<InferenceProfile> | null, setupCompleted: boolean | null, titleGenerationPrompt: string | null, bindHost: string | null, shareLan: boolean | null, 
+/**
+ * Whether a proxy key is stored. Never the key: a read says whether a
+ * secret is held, and `POST /api/secrets/reveal` is where its value
+ * comes from (ADR 0027). A blank stored key is no key. Defaults to
+ * `false` when absent, so a reader on another version still parses.
+ */
+hasProxyApiKey: boolean, trustClientSampling: boolean | null, loopGuardMode: LoopGuardMode | null, 
 /**
  * Whether a tool call failing schema validation is re-issued, with
  * `tool_choice: "required"` or under gglib's grammar. Absent means on.

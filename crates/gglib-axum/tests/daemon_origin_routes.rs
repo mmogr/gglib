@@ -33,6 +33,8 @@ async fn every_change_the_cli_can_make_is_refused_to_another_site() {
         // A run's `GET` changes nothing, so only its `PUT` is walked.
         (&["PUT"] as &[&str], daemon::run_path("run-1")),
         (daemon::RUN_CANCEL_METHODS, daemon::run_cancel_path("run-1")),
+        // The one route that hands a stored secret back (ADR 0027).
+        (&["POST"] as &[&str], "/api/secrets/reveal".to_owned()),
     ] {
         changes.extend(methods.iter().map(|m| (*m, path.clone())));
     }

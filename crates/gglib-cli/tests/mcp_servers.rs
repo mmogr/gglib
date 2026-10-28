@@ -262,6 +262,63 @@ fn an_add_that_fails_on_its_env_leaves_no_server() {
     );
 }
 
+/// What was typed for a malformed `--env` may be the value itself, so the
+/// refusal does not repeat it.
+#[test]
+fn a_malformed_env_pair_is_refused_without_echoing_it() {
+    let root = tempfile::tempdir().expect("temp data dir");
+
+    let refused = mcp_err(
+        root.path(),
+        &[
+            "add",
+            "--name",
+            "x",
+            "--type",
+            "stdio",
+            "--command",
+            "one",
+            "--env",
+            "sk-5f3a9c",
+        ],
+    );
+
+    assert!(refused.contains("KEY=VALUE"), "got: {refused}");
+    assert!(!refused.contains("sk-5f3a9c"), "echoed: {refused}");
+}
+
+/// A blank value is refused here as the page's add refuses it, by the one
+/// rule the service holds, and nothing is stored.
+#[test]
+fn a_blank_env_value_is_refused_and_stores_nothing() {
+    let root = tempfile::tempdir().expect("temp data dir");
+
+    let refused = mcp_err(
+        root.path(),
+        &[
+            "add",
+            "--name",
+            "x",
+            "--type",
+            "stdio",
+            "--command",
+            "one",
+            "--env",
+            "TOKEN=",
+        ],
+    );
+
+    assert!(
+        refused.contains("TOKEN is blank: enter a value or remove the variable"),
+        "got: {refused}"
+    );
+    let listed = mcp_ok(root.path(), &["list"]);
+    assert!(
+        listed.contains("No MCP servers configured."),
+        "got: {listed}"
+    );
+}
+
 #[test]
 fn an_unknown_type_is_refused_with_the_types_there_are() {
     let root = tempfile::tempdir().expect("temp data dir");

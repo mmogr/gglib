@@ -927,7 +927,7 @@ describe('RemoteControl', () => {
       screen.getByText(
         (_, el) =>
           el?.textContent ===
-          'That key is the one this machine was given when it paired; gglib remote key --show prints it.',
+          'That key is the one this machine was given when it paired; gglib config settings reveal remote-pairing.api-key prints it.',
       ),
     ).toBeInTheDocument();
   });

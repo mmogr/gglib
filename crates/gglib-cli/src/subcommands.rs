@@ -121,8 +121,9 @@ pub enum DaemonCommand {
         /// Expose the daemon on all LAN interfaces (0.0.0.0) and advertise
         /// it over mDNS
         ///
-        /// The management API then requires a bearer token (the stored
-        /// API key, minted and printed at startup if none exists). It can
+        /// The management API then requires a bearer token: the stored API
+        /// key, minted and stored at startup if none exists, which
+        /// `gglib config settings reveal proxy-api-key` prints. It can
         /// still start and stop inference on this machine — only use on
         /// networks you trust.
         #[arg(long)]
@@ -246,18 +247,6 @@ pub enum RemoteCommand {
     },
     /// Close the local port; the far machine and the stored pairing stay
     Disconnect,
-    /// Print this device's key, for a client that is not gglib
-    ///
-    /// The key `join` stored when this device paired. The port `join` binds
-    /// does not add it, so any other OpenAI-compatible client pointed there
-    /// presents it as its API key. Without `--show` nothing is printed on
-    /// stdout; with it, stdout is the key alone, so
-    /// `$(gglib remote key --show)` is exactly the key.
-    Key {
-        /// Print the key on stdout. It is a secret
-        #[arg(long)]
-        show: bool,
-    },
 }
 
 /// The examples `gglib q --help` ends with.

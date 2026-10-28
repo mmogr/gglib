@@ -7,9 +7,9 @@ src/components/HuggingFaceBrowser/hooks/useHuggingFaceSearch.ts 354
 src/components/McpServersPanel.tsx 474
 src/components/ModelInspectorPanel/ModelInspectorPanel.tsx 346
 src/components/ModelInspectorPanel/components/ServeModal.tsx 375
-src/components/ProxyControl.tsx 345
+src/components/ProxyControl.tsx 346
 src/components/ProxySamplingPanel.tsx 403
-src/components/SettingsModal.tsx 346
+src/components/SettingsModal.tsx 352
 src/components/SetupWizard/SetupWizard.tsx 705
 src/components/VerificationModal.tsx 472
 src/hooks/useGglibRuntime/agentMessageState.ts 340
@@ -18,7 +18,7 @@ src/hooks/useGglibRuntime/useRunReader.ts 317
 src/pages/ChatPage.tsx 408
 src/pages/ModelControlCenterPage.tsx 319
 src/services/tools/registry.ts 358
-src/services/transport/api/client.ts 334
+src/services/transport/api/client.ts 336
 src/services/transport/events/sse.ts 312
 src/styles/tailwind.css 402
 src/types/index.ts 574

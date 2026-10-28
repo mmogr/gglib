@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{InferenceConfig, InferenceProfile};
+use crate::secret::held;
 
 #[path = "settings_bounds.rs"]
 mod settings_bounds;
@@ -301,8 +302,9 @@ pub struct Settings {
     /// ticket is part of the record. `gglib q --remote` and
     /// `gglib chat --remote` attach the key as the bearer. Nothing writes it
     /// by hand, and `gglib config settings show` reports the key as held or
-    /// not rather than printing it; `gglib remote key --show` prints it,
-    /// alone and only when asked, for a client that is not gglib.
+    /// not rather than printing it;
+    /// `gglib config settings reveal remote-pairing.api-key` prints it, alone
+    /// and only when asked, for a client that is not gglib.
     ///
     /// A database written before the halves were bound holds
     /// `remote_api_key` and `remote_last_ticket` as separate rows, and both
@@ -538,11 +540,7 @@ pub fn validate_settings(settings: &Settings) -> Result<(), SettingsError> {
 
     // A stored blank would read as "authentication is on" while accepting
     // `Bearer ` from anyone. Clearing the field is the way to turn it off.
-    if settings
-        .proxy_api_key
-        .as_ref()
-        .is_some_and(|key| key.trim().is_empty())
-    {
+    if settings.proxy_api_key.is_some() && held(settings.proxy_api_key.as_deref()).is_none() {
         return Err(SettingsError::BlankProxyApiKey);
     }
 

@@ -233,9 +233,8 @@ the far side of the edge, which no device ever sees.
 The desktop keeps two records, in two places, on purpose:
 
 * **The keys** are in `<data root>/data/remote_devices`, beside the endpoint
-  key and with the same `0600` posture. Not in settings: `gglib config
-  settings show` prints settings unmasked by design, so that a rotated key
-  can be recovered, and that output is what people paste into bug reports.
+  key and with the same `0600` posture, and not in settings, whose output is
+  what people paste into bug reports.
 * **Everything readable about a device** — the id the edge knows it as, what
   it called itself, when it joined, when it was last seen, and which endpoint
   redeemed its invite — is in settings, where nothing about it is secret.
@@ -350,10 +349,11 @@ through the tunnel — proxy, models, downloads — and then disconnects, and it
 asks you to type `shutdown` first, because nothing can start that daemon
 again from the laptop. `--yes` skips the question for scripts.
 
-`gglib remote key --show` prints this laptop's device key on stdout, and
-nothing else, for a client that is not gglib (see [Using it](#using-it)). The
-warning that it is a secret goes to stderr. Without `--show` it prints nothing
-on stdout and says how to ask; with no pairing stored it exits 1.
+`gglib config settings reveal remote-pairing.api-key` prints this laptop's
+device key on stdout, and nothing else, for a client that is not gglib (see
+[Using it](#using-it)). The warning that it is a secret goes to stderr; with no
+pairing stored it exits 1. `gglib config settings show` says only whether the
+key is held.
 
 ## Using it
 
@@ -528,10 +528,11 @@ deliberate; see [Why the port does not inject the key](#why-the-port-does-not-in
 The key is the one this laptop was given when it paired — its own device
 key, not the desktop's `proxy_api_key`, which never leaves the desktop.
 `gglib remote status` here says whether this machine holds one, and
-`gglib remote key --show` prints it, alone, so a script can hand it on:
+`gglib config settings reveal remote-pairing.api-key` prints it, alone, so a
+script can hand it on:
 
 ```sh
-curl -H "Authorization: Bearer $(gglib remote key --show)" http://127.0.0.1:8180/v1/models
+curl -H "Authorization: Bearer $(gglib config settings reveal remote-pairing.api-key)" http://127.0.0.1:8180/v1/models
 ```
 
 The per-client recipes in [clients.md](clients.md) apply unchanged apart from
@@ -701,8 +702,8 @@ gglib proxy stop        # then start it again on loopback — the default host
 `gglib config settings set --proxy-api-key ""` is *not* it; a blank would read
 as "authentication is on" while accepting `Bearer ` from anyone, so it is
 refused with `Proxy API key cannot be blank — clear it instead to disable
-authentication`. Emptying the API key box in the desktop app's settings does
-the same thing `unset` does.
+authentication`. In the desktop app's settings, the API key's Clear control,
+saved, does what `unset` does; a box left empty keeps the key.
 
 The order is the part that surprises people, because it is the opposite of the
 intuition. What matters is the proxy *rebinding*: the token it demands is
@@ -728,10 +729,10 @@ key back into `proxy_api_key`, so the setting you cleared is populated again,
 with a value you have never seen. The proxy comes back closed, your existing
 clients start getting `401`, and the `unset` reads as having done nothing.
 
-Read the new key with `gglib config settings show`, which prints
-`proxy_api_key` in full rather than masking it. Then either hand it to the
-clients, or set one you choose with `gglib config settings set
---proxy-api-key <key>`.
+Read the new key with `gglib config settings reveal proxy-api-key`, which
+prints it alone on stdout (`settings show` says only that one is set). Then
+either hand it to the clients, or set one you choose with `gglib config
+settings set --proxy-api-key <key>`.
 
 There is no supported way to run an unauthenticated non-loopback proxy, and
 that is the point rather than an accident of this procedure: the only path
@@ -1096,7 +1097,8 @@ the laptop an authenticated client of the desktop, which is a larger grant
 than the one you made when you paired. gglib's own commands attach the key
 because you asked them to; a third-party client supplies it as its API key,
 which is the ordinary OpenAI-compatible arrangement, and
-`gglib remote key --show` prints it for that client. The key in question is
+`gglib config settings reveal remote-pairing.api-key` prints it for that
+client. The key in question is
 this device's own, which is also what bounds the mistake: a key that leaks
 here is one the desktop can retire on its own.
 

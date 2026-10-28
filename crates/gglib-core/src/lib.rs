@@ -16,6 +16,7 @@ pub mod paths;
 pub mod ports;
 pub mod request_pipeline;
 pub mod retry;
+pub mod secret;
 pub mod server_config;
 pub mod services;
 pub mod settings;

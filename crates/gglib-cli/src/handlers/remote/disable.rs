@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use anyhow::{Context as _, Result};
 use gglib_core::SettingsUpdate;
+use gglib_core::secret::SettingSecret;
 use gglib_core::services::AppCore;
 
 use crate::bootstrap::CliContext;
@@ -45,7 +46,7 @@ pub(crate) async fn disable(ctx: &CliContext) -> Result<()> {
     if status.enabled {
         anyhow::bail!("the daemon reported remote access still enabled after disable");
     }
-    for line in DISABLE_NOTICE {
+    for line in disable_notice() {
         eprintln!("{line}");
     }
     Ok(())
@@ -89,7 +90,7 @@ const SWITCHED_OFF: &str =
 
 /// What `gglib remote disable` prints once the tunnel is down.
 ///
-/// A constant so the wording is pinned by a test rather than by nobody. The
+/// A function so the wording is pinned by a test rather than by nobody. The
 /// sentence this replaced — "authentication turns on and never off by itself"
 /// — is true of a listener that bound with a key already in settings, and
 /// false of the ordinary case this command ends: `enable` mints the key into a
@@ -103,13 +104,17 @@ const SWITCHED_OFF: &str =
 /// notice names the dependency and points at the command that shows the state,
 /// rather than asserting a rule that holds in one case only. `docs/remote.md`
 /// carries both cases in full, and ADR 0012 the reasoning.
-const DISABLE_NOTICE: [&str; 5] = [
-    "  Remote access is off. Nothing answers the ticket while it is off, and",
-    "  `enable` brings the same one back. Deleting the endpoint key retires it",
-    "  and revokes no device's key \u{2014} `gglib remote forget` does that.",
-    "  The API key stays in settings \u{2014} whether the proxy still demands it depends",
-    "  on the bind its listener came up with. `gglib config settings show` prints it.",
-];
+fn disable_notice() -> [String; 6] {
+    [
+        "  Remote access is off. Nothing answers the ticket while it is off, and".to_owned(),
+        "  `enable` brings the same one back. Deleting the endpoint key retires it".to_owned(),
+        "  and revokes no device's key \u{2014} `gglib remote forget` does that.".to_owned(),
+        "  The API key stays in settings \u{2014} whether the proxy still demands it depends"
+            .to_owned(),
+        "  on the bind its listener came up with. This prints it:".to_owned(),
+        format!("    {}", SettingSecret::ProxyApiKey.reveal_command()),
+    ]
+}
 
 #[cfg(test)]
 #[path = "disable_tests.rs"]

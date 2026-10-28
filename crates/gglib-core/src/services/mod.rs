@@ -15,6 +15,7 @@ mod model_service;
 mod model_verification;
 mod model_verification_remote;
 mod projector_choices;
+mod secrets;
 mod settings_cache;
 mod settings_service;
 
@@ -35,5 +36,6 @@ pub use model_verification::{
 };
 pub use model_verification_remote::{RepairStarted, missing_after_repair};
 pub use projector_choices::projector_choices;
+pub use secrets::SecretsService;
 pub use settings_cache::{DEFAULT_TTL as SETTINGS_CACHE_TTL, SettingsCache};
 pub use settings_service::{SettingsService, TemplateInstall};

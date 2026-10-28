@@ -4,21 +4,33 @@
  * The daemon refuses an SSE server, so the form shows the choice, keeps it
  * from being made, and says why. A stdio server is saved as it always was.
  * The quick-start templates offer no filesystem server: reading files is
- * built in, and the picker says so.
+ * built in, and the picker says so. A stored server's variables arrive as
+ * keys alone, and an edit sends a kept one back without its value (ADR 0027).
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 import { AddMcpServerModal } from '../../../src/components/AddMcpServerModal';
+import { MASK } from '../../../src/components/ui/SecretField';
+import { ToastProvider } from '../../../src/contexts/ToastContext';
 import { SERVER_TEMPLATES } from '../../../src/components/AddMcpServerModal/ServerTemplatePicker';
 import type { McpServerInfo } from '../../../src/services/transport/types/mcp';
 import { mcpServerInfo } from '../fixtures/mcp';
 
+const { revealSecret } = vi.hoisted(() => ({ revealSecret: vi.fn() }));
+
+vi.mock('../../../src/services/transport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/services/transport')>()),
+  getTransport: () => ({ revealSecret }),
+}));
+
 function renderForm(editingServer?: McpServerInfo) {
   const onSave = vi.fn().mockResolvedValue(undefined);
   render(
-    <AddMcpServerModal isOpen onClose={vi.fn()} onSave={onSave} editingServer={editingServer} />,
+    <ToastProvider>
+      <AddMcpServerModal isOpen onClose={vi.fn()} onSave={onSave} editingServer={editingServer} />
+    </ToastProvider>,
   );
   return onSave;
 }
@@ -87,5 +99,76 @@ describe('AddMcpServerModal', () => {
         path_extra: undefined,
       },
     });
+  });
+
+  /** A stored server with two variables, its values held by the daemon. */
+  const keyed = () =>
+    mcpServerInfo({
+      server: { ...mcpServerInfo().server, id: 7, env_keys: ['TOKEN', 'ROOT'] },
+    });
+
+  /** Submit the form and hand back the variables it saved. */
+  async function savedEnv(onSave: ReturnType<typeof vi.fn>) {
+    fireEvent.submit(screen.getByLabelText('Server Name *').closest('form')!);
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    return onSave.mock.calls[0][0].env;
+  }
+
+  it('shows a stored variable by its key, read-only, with its value held', () => {
+    renderForm(keyed());
+
+    const key = screen.getByLabelText('TOKEN, kept');
+    expect(key).toHaveValue('TOKEN');
+    expect(key).toHaveAttribute('readonly');
+    expect(screen.getByLabelText('TOKEN value')).toHaveValue(MASK);
+  });
+
+  it('sends a kept variable back without its value', async () => {
+    const onSave = renderForm(keyed());
+
+    expect(await savedEnv(onSave)).toEqual([{ key: 'TOKEN' }, { key: 'ROOT' }]);
+  });
+
+  it('sends a replaced value, and leaves a removed variable out', async () => {
+    const onSave = renderForm(keyed());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Replace' })[0]);
+    fireEvent.change(screen.getByLabelText('TOKEN value'), { target: { value: 'rotated' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove ROOT' }));
+
+    expect(await savedEnv(onSave)).toEqual([{ key: 'TOKEN', value: 'rotated' }]);
+  });
+
+  it('sends a variable typed here with its key and value', async () => {
+    const onSave = renderForm(keyed());
+    fireEvent.click(screen.getByRole('button', { name: /add variable/i }));
+    fireEvent.change(screen.getByLabelText('Variable name'), { target: { value: 'NEW' } });
+    fireEvent.change(screen.getByLabelText('NEW value'), { target: { value: 'v' } });
+
+    expect(await savedEnv(onSave)).toEqual([
+      { key: 'TOKEN' },
+      { key: 'ROOT' },
+      { key: 'NEW', value: 'v' },
+    ]);
+  });
+
+  /** Removing a row must not hand its field, and a value shown in it, on. */
+  it('shows the next variable masked after a revealed one is removed', async () => {
+    revealSecret.mockResolvedValue('t0k-81d0e4');
+    renderForm(keyed());
+    fireEvent.click(screen.getByRole('button', { name: 'Show the TOKEN value' }));
+    await waitFor(() => expect(screen.getByLabelText('TOKEN value')).toHaveValue('t0k-81d0e4'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove TOKEN' }));
+
+    expect(screen.getByLabelText('ROOT value')).toHaveValue(MASK);
+    expect(screen.queryByDisplayValue('t0k-81d0e4')).not.toBeInTheDocument();
+  });
+
+  it('types a new variable into a masked input with an eye', () => {
+    renderForm();
+    fireEvent.click(screen.getByRole('button', { name: /add variable/i }));
+
+    expect(screen.getByLabelText('New variable value')).toHaveAttribute('type', 'password');
+    expect(screen.getByRole('button', { name: 'Show the typed New variable value' })).toBeInTheDocument();
   });
 });

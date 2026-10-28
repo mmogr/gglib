@@ -6,8 +6,11 @@
 //! rewrite settings. So [`bearer_guard`] asks every `/api` request for the
 //! daemon token, which only the owner's account can read
 //! (`gglib_core::access::DaemonToken`), on loopback too. A daemon started
-//! `--share-lan` also takes its API key, which the LAN holds. `/health` stays
-//! outside, so a probe needs nothing.
+//! `--share-lan` also takes its API key, which the LAN holds. The guard says
+//! which of the two admitted a request ([`Admitted`]), for the one route that
+//! treats them differently: the reveal of a stored secret hands the key's
+//! holder that key and nothing else. `/health` stays outside, so a probe
+//! needs nothing.
 
 use axum::{
     Json,
@@ -23,6 +26,7 @@ use gglib_core::contracts::http::daemon::{
     DAEMON_TOKEN_REQUIRED_MESSAGE, DAEMON_TOKEN_REQUIRED_TYPE,
 };
 use serde_json::json;
+use std::sync::Arc;
 use tracing::warn;
 
 /// The credentials `/api/*` accepts: the daemon token, and the API key when
@@ -31,6 +35,21 @@ use tracing::warn;
 pub(crate) struct ApiCredentials {
     pub(crate) policy: BearerPolicy,
     pub(crate) token: Option<DaemonToken>,
+}
+
+/// Which credential let a request through [`bearer_guard`], put on the
+/// request for a route that treats them differently.
+///
+/// `POST /api/secrets/reveal` is that route (ADR 0027): a shared daemon's API
+/// key is held by clients on the network, so the route hands its holder that
+/// key, which the page on the network presents to the proxy, and no other
+/// stored secret. No `Debug`, since the key rides along.
+#[derive(Clone)]
+pub(crate) enum Admitted {
+    /// The daemon token, which only the owner's account can read.
+    Token,
+    /// A `--share-lan` daemon's API key: the one the request presented.
+    ApiKey(Arc<str>),
 }
 
 /// A new token for this start, written over the last one.
@@ -57,10 +76,10 @@ pub(crate) fn daemon_token() -> Option<DaemonToken> {
 /// the proxy's twin guard does: the two doors have to agree about which key
 /// is valid right now. The refusal names what was wanted: the key where the
 /// daemon has one, since a person may be asked for it, and otherwise the
-/// token, with how to get it.
+/// token, with how to get it. A request let through carries [`Admitted`].
 pub(crate) async fn bearer_guard(
     State(credentials): State<ApiCredentials>,
-    req: Request,
+    mut req: Request,
     next: Next,
 ) -> Response {
     let Some(token) = &credentials.token else {
@@ -76,10 +95,16 @@ pub(crate) async fn bearer_guard(
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok());
     let api_key = credentials.policy.current().await;
-    let holds_key = api_key
-        .as_deref()
-        .is_some_and(|key| bearer_matches(presented, key));
-    if token.admits(presented) || holds_key {
+    let admitted = if token.admits(presented) {
+        Some(Admitted::Token)
+    } else {
+        api_key
+            .clone()
+            .filter(|key| bearer_matches(presented, key))
+            .map(Admitted::ApiKey)
+    };
+    if let Some(admitted) = admitted {
+        req.extensions_mut().insert(admitted);
         return next.run(req).await;
     }
 

@@ -135,7 +135,7 @@ Several commands flatten the same argument groups. Learning them once covers
 | **Context** | `--ctx-size` / `-c` | A number, or `max` to take the model's own metadata. Falls back to the global default. |
 | **Sampling** | temperature, top-p, penalties, … | One layer of a five-level hierarchy — see [Sampling resolution](sampling.md). Use [`model explain`](#models) to see which layer won. |
 | **Cache** | `--cache`, `--slot-dir`, `--cache-disk-gb` | The on-disk slot cache. KV quantization and the host-RAM prompt cache are auto-sized by the daemon, not per run — see [KV cache tiering](cache.md). |
-| **Access** | `--host`, `--api-key`, `--allowed-host` | Loopback needs no key. Binding elsewhere mints one and prints it, and every host a client will reach the endpoint by must be named with `--allowed-host` (DNS-rebinding guard). |
+| **Access** | `--host`, `--api-key`, `--allowed-host` | Loopback needs no key. Binding elsewhere mints one and stores it, and `gglib config settings reveal proxy-api-key` prints it; every host a client will reach the endpoint by must be named with `--allowed-host` (DNS-rebinding guard). |
 | **MTP** | `--mtp-draft-n-max`, `--mtp-draft-p-min` | Auto-enabled for `mtp`-tagged models; set `n-max` to `0` to force it off. |
 | **Retry** | retry budget, `--no-retry` | Transient upstream failures on the completion path. |
 
@@ -375,7 +375,8 @@ no restart. An SSE server and `builtin` are never opened
 `gglib config <subcommand>`:
 
 - **`settings`** — context size, ports, download queue size, agent loop limits,
-  display preferences. `show` / `set` / `reset`.
+  display preferences. `show` / `set` / `unset` / `reset`, and `reveal`, which
+  prints a stored secret alone on stdout.
 - **`profile`** — named sampling profiles, selectable per request as
   `<model>:<profile>`. Only the flags you pass are set; the rest fall through to
   the model's own defaults.

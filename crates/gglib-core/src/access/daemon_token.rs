@@ -4,7 +4,7 @@
 //! account on it can reach `127.0.0.1:9887`, and through `/api` pair a device,
 //! run a command as an MCP server, or rewrite settings. So every `/api` route
 //! asks for this token. `proxy_api_key` cannot serve: it is the proxy's key,
-//! handed to the proxy's clients and printed by `gglib config settings show`.
+//! handed to the proxy's clients.
 //!
 //! The file is `0600` beside the device keys, written the way they are, so
 //! reading it is proof of being the owner's account on this machine (or

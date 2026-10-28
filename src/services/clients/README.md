@@ -24,7 +24,7 @@ Clients that own real request logic of their own. Each one exists because it doe
 └─────────────────────────────────────────────────────┘
 ```
 
-`benchmark.ts` reaches the backend through `transport/api/client`: `get`/`post` for its plain calls and `apiFetch`, the authenticated fetch, for its streams. Both clients read their streams with the one reader, `readSse` in `utils/sse`. `proxyDashboard.ts` bypasses the transport entirely — a running proxy serves its dashboard stream on its own port, and carries that proxy's own credential (the `proxyApiKey` setting, passed in by callers) rather than the backend session's.
+`benchmark.ts` reaches the backend through `transport/api/client`: `get`/`post` for its plain calls and `apiFetch`, the authenticated fetch, for its streams. Both clients read their streams with the one reader, `readSse` in `utils/sse`. `proxyDashboard.ts` bypasses the transport entirely — a running proxy serves its dashboard stream on its own port, and carries that proxy's own credential (its API key, revealed by `useProxyKey` and passed in by callers) rather than the backend session's.
 
 ## Key Files
 

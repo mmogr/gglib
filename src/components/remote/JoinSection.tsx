@@ -4,6 +4,7 @@ import { UNNAMED_PAIRED, pairedName, useRemoteState } from '../../services/remot
 import { refreshRemoteStatus } from '../../services/remoteEvents';
 import { useConfirmContext } from '../../contexts/ConfirmContext';
 import { formatError } from '../../utils/errors';
+import { REVEAL_COMMAND } from '../../constants/secrets';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Label, Stack } from '../primitives';
@@ -133,7 +134,7 @@ export const JoinSection: FC<JoinSectionProps> = ({ onNotice }) => {
             <Label size="xs" muted>A client pointed there supplies its API key; gglib’s own chat does.</Label>
             <Label size="xs" muted>
               That key is the one this machine was given when it paired;{' '}
-              <code className="font-mono">gglib remote key --show</code> prints it.
+              <code className="font-mono">{REVEAL_COMMAND.remote_pairing_key}</code> prints it.
             </Label>
           </Stack>
           <Label size="xs" muted>

@@ -15,6 +15,7 @@ import { useNetworkSettings } from './SettingsModal/useNetworkSettings';
 import { useAgentGuardSettings } from './SettingsModal/useAgentGuardSettings';
 import { useDrawingSettings } from './SettingsModal/useDrawingSettings';
 import { changedFields, generalInputs, generalRequest } from './SettingsModal/settingsRequest';
+import { KEEP, type SecretEdit } from './ui/SecretField';
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
 import { Tabs, type TabItem } from "./ui/Tabs";
@@ -55,7 +56,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose, initial
   const [proxyPortInput, setProxyPortInput] = useState("");
   const [serverPortInput, setServerPortInput] = useState("");
   const [maxQueueSizeInput, setMaxQueueSizeInput] = useState("");
-  const [proxyApiKeyInput, setProxyApiKeyInput] = useState("");
+  const [proxyApiKeyInput, setProxyApiKeyInput] = useState<SecretEdit>(KEEP);
   const [titlePromptInput, setTitlePromptInput] = useState("");
   const [maxToolIterationsInput, setMaxToolIterationsInput] = useState("");
   const [showFitIndicators, setShowFitIndicators] = useState(true);
@@ -146,6 +147,10 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose, initial
         if (Object.keys(updates).length > 0) {
           await saveSettings(updates);
         }
+        // The key field back to the mask. A save that sent the key reloads
+        // the settings and resets it anyway; one that sent nothing does not,
+        // and would leave a Replace box open under "updated successfully".
+        setProxyApiKeyInput(KEEP);
 
         setSuccessMessage("Settings updated successfully");
       } catch (err) {
@@ -263,6 +268,7 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose, initial
             setMaxQueueSizeInput={setMaxQueueSizeInput}
             proxyApiKeyInput={proxyApiKeyInput}
             setProxyApiKeyInput={setProxyApiKeyInput}
+            proxyApiKeySet={settings?.hasProxyApiKey ?? false}
             showFitIndicators={showFitIndicators}
             setShowFitIndicators={setShowFitIndicators}
             defaultModelInput={defaultModelInput}

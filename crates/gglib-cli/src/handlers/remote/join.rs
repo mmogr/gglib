@@ -63,7 +63,10 @@ pub(crate) async fn join(ctx: &CliContext, args: JoinArgs) -> Result<()> {
     eprintln!("  The other machine is now at:  {}", joined.base_url);
     eprintln!("  Any other OpenAI-compatible client pointed there needs this device's key as its");
     eprintln!("  API key, which this prints:");
-    eprintln!("    gglib remote key --show");
+    eprintln!(
+        "    {}",
+        gglib_core::secret::SettingSecret::RemotePairingKey.reveal_command()
+    );
     eprintln!("  gglib's own attach it themselves:");
     // The two halves do not rhyme, and cannot: `q`'s model is `-m`, `chat`'s
     // is the positional and has no short flag. Printed as `chat --remote -m`

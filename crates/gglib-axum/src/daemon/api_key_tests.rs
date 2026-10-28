@@ -5,7 +5,9 @@ use std::sync::{Arc, Mutex};
 use gglib_core::Settings;
 use gglib_core::ports::{CoreError, RepositoryError, SettingsChange, SettingsRepository};
 
-use super::resolve_daemon_api_key;
+use gglib_core::ApiKeySource;
+
+use super::{api_key_banner, resolve_daemon_api_key};
 
 /// A settings store that counts what is written to it.
 struct Recording {
@@ -99,4 +101,28 @@ async fn a_loopback_daemon_takes_no_token_whatever_is_stored() {
         );
         assert_eq!(store.persisted_key().as_deref(), stored);
     }
+}
+
+/// A stored key is named, with the command that prints it, and never
+/// printed: the banner is in a terminal, and terminal output gets pasted.
+#[test]
+fn the_banner_never_prints_a_stored_key() {
+    for source in [ApiKeySource::Settings, ApiKeySource::Generated] {
+        let text = api_key_banner("k3y-5f3a9c", source).join("\n");
+
+        assert!(!text.contains("k3y-5f3a9c"), "{source:?}: {text}");
+        assert!(
+            text.contains("`gglib config settings reveal proxy-api-key`"),
+            "{source:?} must name the reveal: {text}"
+        );
+    }
+}
+
+/// A key that could not be stored exists nowhere else, so it is printed.
+#[test]
+fn the_banner_prints_a_key_that_was_not_stored() {
+    let text = api_key_banner("k3y-5f3a9c", ApiKeySource::GeneratedUnsaved).join("\n");
+
+    assert!(text.contains("Authorization: Bearer k3y-5f3a9c"), "{text}");
+    assert!(text.contains("NOT saved"), "{text}");
 }

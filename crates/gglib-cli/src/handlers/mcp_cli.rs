@@ -154,7 +154,8 @@ async fn add(
     for pair in env_pairs {
         let (key, value) = pair
             .split_once('=')
-            .ok_or_else(|| anyhow!("--env must be KEY=VALUE, got: {pair}"))?;
+            // Not echoed: what was typed may be the value itself.
+            .ok_or_else(|| anyhow!("each --env must be KEY=VALUE"))?;
         new_server = new_server.with_env(key, value);
     }
 

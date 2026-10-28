@@ -2,13 +2,17 @@
 
 - **Status:** Accepted; superseded in part by
   [ADR 0024](0024-the-tunnel-opens-mcp-servers-by-name.md)
+  and [ADR 0027](0027-a-stored-secret-is-shown-only-when-asked-for.md)
 - **Date:** 2026-09-05 (changed in place before ADRs froze: decision 4 on
   2026-09-09 and reversed 2026-09-10, decision 2 on 2026-09-11)
 - **Depends on:** [ADR 0008](0008-two-binaries-one-daemon.md)
 - **Supersedes:** nothing
 - **Superseded by:** [ADR 0024](0024-the-tunnel-opens-mcp-servers-by-name.md),
   in part: decision 5's switch, `--allow-mcp` opening `/mcp` to tunnelled
-  requests
+  requests; [ADR 0027](0027-a-stored-secret-is-shown-only-when-asked-for.md),
+  in part: two sentences of decision 2's 2026-09-07 amendment, the recovery
+  it names (`gglib config settings show` printing the proxy key unmasked) and
+  emptying the desktop app's field clearing the key the way `unset` does
 - **Log:** [log-0012](log-0012.md)
 
 ## Context

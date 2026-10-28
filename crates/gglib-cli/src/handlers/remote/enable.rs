@@ -233,7 +233,9 @@ fn mcp_notice(servers: &[String]) -> String {
 fn print_key_notice() {
     eprintln!(
         "  The local proxy on 127.0.0.1 now requires the API key too \u{2014} gglib's own \
-         clients read it from settings; a hand-configured client needs it added once."
+         clients read it from settings; a hand-configured client needs it added once: \
+         `{}` prints it.",
+        gglib_core::secret::SettingSecret::ProxyApiKey.reveal_command()
     );
     eprintln!(
         "  The daemon's own API on 127.0.0.1:9887 is unchanged \u{2014} this cannot lock \
@@ -244,7 +246,7 @@ fn print_key_notice() {
 /// What `invite`, and `enable --invite` against a tunnel already up, say
 /// about the session.
 ///
-/// A constant so the wording is pinned by a test, as `DISABLE_NOTICE` is. It
+/// A constant so the wording is pinned by a test, as `disable_notice` is. It
 /// said "this added a device", and it is printed after the pairing screen
 /// whatever that screen saw, "expired and nobody paired" included. An invite
 /// offers a code; whether a device took it is the line above's to say.

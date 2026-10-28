@@ -6,6 +6,7 @@
 //! `wire_tests.rs` and `serve_switch.rs` were made along.
 
 use gglib_core::SettingsUpdate;
+use gglib_core::secret::SettingSecret;
 use gglib_core::services::AppCore;
 
 use super::*;
@@ -18,7 +19,7 @@ use super::*;
 /// [#1005]: https://github.com/mmogr/gglib/issues/1005
 #[test]
 fn the_disable_notice_says_the_key_stays_without_claiming_it_can_never_go() {
-    let notice = DISABLE_NOTICE.join(" ");
+    let notice = disable_notice().join(" ");
 
     assert!(
         notice.contains("The API key stays in settings"),
@@ -33,7 +34,7 @@ fn the_disable_notice_says_the_key_stays_without_claiming_it_can_never_go() {
         "what replaced it names the bind it depends on: {notice}"
     );
     assert!(
-        notice.contains("gglib config settings show"),
+        notice.contains(SettingSecret::ProxyApiKey.reveal_command()),
         "the operator is pointed at the state rather than left to infer it: {notice}"
     );
 }
@@ -44,7 +45,7 @@ fn the_disable_notice_says_the_key_stays_without_claiming_it_can_never_go() {
 /// rotate an address that does not rotate.
 #[test]
 fn the_disable_notice_does_not_promise_a_new_ticket() {
-    let notice = DISABLE_NOTICE.join(" ");
+    let notice = disable_notice().join(" ");
 
     assert!(
         !notice.contains("mints a new one"),
@@ -66,7 +67,7 @@ fn the_disable_notice_does_not_promise_a_new_ticket() {
 /// [#1036]: https://github.com/mmogr/gglib/issues/1036
 #[test]
 fn the_disable_notice_says_deleting_the_endpoint_key_revokes_no_device() {
-    let notice = DISABLE_NOTICE
+    let notice = disable_notice()
         .join(" ")
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -90,7 +91,7 @@ fn the_disable_notice_says_deleting_the_endpoint_key_revokes_no_device() {
 /// terminal would wrap into the two-space indent every other line carries.
 #[test]
 fn every_line_of_the_disable_notice_fits_a_narrow_terminal() {
-    for line in DISABLE_NOTICE {
+    for line in disable_notice() {
         assert!(
             line.starts_with("  "),
             "the banner's indent is part of the line: {line:?}"

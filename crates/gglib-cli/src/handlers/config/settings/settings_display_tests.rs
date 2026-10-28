@@ -6,9 +6,10 @@
 //! somewhere.
 
 use gglib_core::domain::InferenceConfig;
+use gglib_core::secret::SHOWN_AS;
 use gglib_core::{RemotePairing, Settings};
 
-use super::{MASKED_VALUE, camel_to_kebab, settings_display_rows};
+use super::{camel_to_kebab, settings_display_rows};
 
 // ── camel_to_kebab ────────────────────────────────────────────────────────
 
@@ -107,15 +108,11 @@ fn always_on_proxy_settings_are_listed() {
     }
 }
 
-/// The proxy API key is shown in full, deliberately.
-///
-/// Masking it would be the reflex, but the proxy *generates* this value
-/// when it binds a non-loopback host, and `settings show` is then the only
-/// way to recover it — a masked row would strand someone who lost the
-/// startup banner. It is a local credential in a local database that the
-/// reader can already read; hiding it buys nothing and costs recovery.
+/// The proxy key is held, not printed, and its row names the command that
+/// prints it. `settings set` echoes through these rows, so it does not print
+/// the key it was just given either (ADR 0027).
 #[test]
-fn the_proxy_api_key_is_shown_rather_than_masked() {
+fn the_proxy_api_key_is_masked_and_names_its_reveal() {
     let settings = Settings {
         proxy_api_key: Some("secret123".to_owned()),
         ..Default::default()
@@ -126,22 +123,36 @@ fn the_proxy_api_key_is_shown_rather_than_masked() {
         rows.iter()
             .find(|(k, _)| k == "proxy-api-key")
             .map(|(_, v)| v.as_str()),
-        Some("secret123"),
-        "the key must be recoverable from `settings show`: {rows:?}"
+        Some(
+            format!("{SHOWN_AS}  `gglib config settings reveal proxy-api-key` prints it").as_str()
+        ),
+        "{rows:?}"
+    );
+    assert!(
+        !rows.iter().any(|(_, v)| v.contains("secret123")),
+        "the key must not reach any row: {rows:?}"
     );
 }
 
-/// The received remote key is not, for the opposite reason — and it is
-/// masked *inside* the pairing record, one level down.
-///
-/// It is this device's key, received from the other machine by
-/// `gglib remote join`; re-pairing replaces it, and `gglib remote key --show`
-/// prints it alone when asked, so printing it here too buys nothing. The
-/// field's own doc said no settings surface exposed it while this one
-/// printed it in full. The depth is the part worth a test: masking was a
-/// check on the top-level key alone, and the day the key moved inside the
-/// pairing that check stopped matching anything while still reporting
-/// success.
+/// A blank left by an older database is no key, as the proxy reads it, and
+/// an absent one is "None": whether a key is held is not the secret.
+#[test]
+fn an_absent_or_blank_proxy_api_key_reads_as_none() {
+    for stored in [None, Some("   ")] {
+        let settings = Settings {
+            proxy_api_key: stored.map(str::to_owned),
+            ..Default::default()
+        };
+        let rows = settings_display_rows(&settings, None, None);
+        let row = rows.iter().find(|(k, _)| k == "proxy-api-key");
+
+        assert_eq!(row.map(|(_, v)| v.as_str()), Some("None"), "{stored:?}");
+    }
+}
+
+/// The received remote key is masked too, *inside* the pairing record, one
+/// level down: a check on the top-level key alone would match nothing there
+/// and still report success.
 #[test]
 fn the_received_remote_key_is_masked_inside_the_pairing_record() {
     let settings = Settings {
@@ -163,7 +174,11 @@ fn the_received_remote_key_is_masked_inside_the_pairing_record() {
             .to_owned()
     };
 
-    assert_eq!(value("remote-pairing.api-key"), MASKED_VALUE, "{rows:?}");
+    assert_eq!(
+        value("remote-pairing.api-key"),
+        format!("{SHOWN_AS}  `gglib config settings reveal remote-pairing.api-key` prints it"),
+        "{rows:?}"
+    );
     assert!(
         !rows.iter().any(|(_, v)| v.contains("this-devices-key")),
         "the key must not reach any row: {rows:?}"

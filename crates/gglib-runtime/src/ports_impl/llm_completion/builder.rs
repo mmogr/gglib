@@ -12,6 +12,7 @@ use gglib_core::domain::InferenceConfig;
 use gglib_core::ports::{AttachmentStore, GenerationGate, RetryObserver, UsageSink};
 use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use gglib_core::retry::RetryPolicy;
+use gglib_core::secret::held;
 use reqwest::Client;
 
 use super::{DEFAULT_SEND_TIMEOUT_SECS, FarMachine, LlmCompletionAdapter, SamplingObserver};
@@ -95,7 +96,7 @@ impl LlmCompletionAdapter {
     /// this is a floor rather than a path anything reaches.
     #[must_use]
     pub fn with_far_machine(mut self, far_machine: Option<FarMachine>) -> Self {
-        self.far_machine = far_machine.filter(|f| !f.key.trim().is_empty());
+        self.far_machine = far_machine.filter(|f| held(Some(&f.key)).is_some());
         self
     }
 

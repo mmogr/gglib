@@ -27,9 +27,6 @@ remote/
   pairing_layout.rs — what that screen shows in a window of a given size,
                     painted without scrolling or erasing it
   join.rs         — `join`: this machine as the laptop, plus `disconnect`
-  key.rs          — `gglib remote key`: this device's key, printed on
-                    stdout alone under `--show`, for a client that is not
-                    gglib
 ```
 
 # Who may use it
@@ -64,11 +61,10 @@ replaced, `status` for the connect side. Its ticket fingerprint is its
 identity and is never printed. The serving side's own ticket and the peers
 connected to it are this machine's, and are still shown by fingerprint.
 
-`key --show` is where such a client gets it. Stdout carries the key and
-nothing else, so `$(gglib remote key --show)` is exactly the key; the warning
-that it is a secret goes to stderr, where `key` never writes the key. A bare
-`key` prints nothing on stdout and says how to ask, and with no pairing stored
-both fail.
+`gglib config settings reveal remote-pairing.api-key` is where such a client
+gets it. Stdout carries the key and nothing else, so its `$(…)` is exactly the
+key; the warning that it is a secret goes to stderr, which never carries the
+key, and with no pairing stored it fails.
 
 Stopping the far machine is `gglib daemon stop --remote` (ADR 0013): a
 `daemon` command pointed at another machine, beside the local stop, asking

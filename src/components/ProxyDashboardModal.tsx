@@ -28,14 +28,14 @@ import { ProxyLaunchPanel } from './ProxyLaunchPanel';
 import { ProxySamplingPanel } from './ProxySamplingPanel';
 import { ActiveConnectionsSection, InferenceSlotsSection, ModelSignalsSection } from './proxy';
 import { useProxyDashboard } from '../hooks/useProxyDashboard';
+import { useProxyKey } from '../hooks/useProxyKey';
+import { useSettings } from '../hooks/useSettings';
 
 export interface ProxyDashboardModalProps {
   isOpen: boolean;
   onClose: () => void;
   host: string;
   port: number;
-  /** The proxy's API key, when it requires one. See `useProxyDashboard`. */
-  apiKey?: string | null;
 }
 
 export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
@@ -43,11 +43,15 @@ export const ProxyDashboardModal: FC<ProxyDashboardModalProps> = ({
   onClose,
   host,
   port,
-  apiKey,
 }) => {
+  // Revealed each time the dashboard opens, and again when the settings
+  // change, so a key saved while it is open is the one presented; the stream
+  // waits for the answer rather than open once without the key.
+  const { settings } = useSettings();
+  const apiKey = useProxyKey(isOpen, settings);
   const { snapshot, connected } = useProxyDashboard({
     host,
-    port: isOpen ? port : null,
+    port: isOpen && apiKey !== undefined ? port : null,
     apiKey,
   });
 

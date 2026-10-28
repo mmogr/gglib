@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use gglib_core::ApiKeySource;
 use gglib_core::ports::SettingsRepository;
+use gglib_core::secret::held;
 use tracing::{info, warn};
 
 /// Settle the bearer token for a proxy about to bind `host`.
@@ -41,10 +42,9 @@ pub async fn resolve_api_key(
 
     if let Some(key) = stored
         .as_ref()
-        .and_then(|s| s.proxy_api_key.clone())
-        .filter(|key| !key.trim().is_empty())
+        .and_then(|s| held(s.proxy_api_key.as_deref()))
     {
-        return (Some(key), ApiKeySource::Settings);
+        return (Some(key.to_owned()), ApiKeySource::Settings);
     }
 
     if gglib_core::access::is_loopback_host(host) {
@@ -57,25 +57,34 @@ pub async fn resolve_api_key(
     // failing. And the write is `modify`, never a save of the record that
     // read returned, which would put every field back as it was read and
     // lose a roster row or any other write landed since.
+    //
+    // A key that was not saved still guards this run. Refusing to start
+    // would be worse, and an unsaved key beats an open endpoint on a
+    // network. It is `GeneratedUnsaved`: a daemon's banner prints such a key,
+    // its only copy, and a proxy prints none, so its clients need a key set
+    // by hand.
     if stored.is_none() {
         warn!("generated an API key but settings were unreadable, so it was not saved");
-        return (Some(key), ApiKeySource::Generated);
+        return (Some(key), ApiKeySource::GeneratedUnsaved);
     }
-    match settings_repo
+    let source = match settings_repo
         .modify(&|settings: &mut gglib_core::Settings| {
             settings.proxy_api_key = Some(key.clone());
             Ok(())
         })
         .await
     {
-        Ok(_) => info!("generated an API key for the non-loopback bind and saved it"),
-        // Still guard this run. Refusing to start would be worse, and an
-        // unsaved key beats an open endpoint on a network — the banner
-        // prints it either way, so the operator can copy it.
-        Err(e) => warn!("generated an API key but could not save it: {e}"),
-    }
+        Ok(_) => {
+            info!("generated an API key for the non-loopback bind and saved it");
+            ApiKeySource::Generated
+        }
+        Err(e) => {
+            warn!("generated an API key but could not save it: {e}");
+            ApiKeySource::GeneratedUnsaved
+        }
+    };
 
-    (Some(key), ApiKeySource::Generated)
+    (Some(key), source)
 }
 
 #[cfg(test)]
@@ -248,5 +257,40 @@ mod tests {
         assert_eq!(key.as_deref(), Some("from-the-flag"));
         assert_eq!(source, ApiKeySource::Flag);
         assert_eq!(store.persisted_key().as_deref(), Some("stored"));
+    }
+
+    /// A store whose read or whose write fails.
+    struct Failing {
+        read: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl SettingsRepository for Failing {
+        async fn load(&self) -> Result<Settings, RepositoryError> {
+            if self.read {
+                return Err(RepositoryError::Storage("locked".to_owned()));
+            }
+            Ok(Settings::with_defaults())
+        }
+        async fn save(&self, _settings: &Settings) -> Result<(), RepositoryError> {
+            Err(RepositoryError::Storage("locked".to_owned()))
+        }
+        async fn modify(&self, _change: &SettingsChange<'_>) -> Result<Settings, CoreError> {
+            Err(RepositoryError::Storage("locked".to_owned()).into())
+        }
+    }
+
+    /// A key minted and then not stored, whether the read or the write
+    /// failed, still guards the bind, and says it was not saved: the banner
+    /// is then its only copy, and prints it.
+    #[tokio::test]
+    async fn a_minted_key_that_could_not_be_stored_is_generated_unsaved() {
+        for read in [true, false] {
+            let store: Arc<dyn SettingsRepository> = Arc::new(Failing { read });
+            let (key, source) = resolve_api_key(None, "0.0.0.0", &store).await;
+
+            assert!(key.is_some_and(|k| !k.trim().is_empty()), "read={read}");
+            assert_eq!(source, ApiKeySource::GeneratedUnsaved, "read={read}");
+        }
     }
 }

@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use super::{
     AttachmentService, ChatHistoryService, ModelRegistrar, ModelService, ModelVerificationService,
-    SettingsService,
+    SecretsService, SettingsService,
 };
 
 /// The core application facade.
@@ -32,6 +32,7 @@ pub struct AppCore {
     chat_history: ChatHistoryService,
     attachments: AttachmentService,
     verification: ModelVerificationService,
+    secrets: SecretsService,
     hf_token: Option<String>,
 }
 
@@ -51,6 +52,7 @@ impl AppCore {
                 hf_client,
                 downloads,
             ),
+            secrets: SecretsService::new(Arc::clone(&repos.settings), repos.mcp_servers),
             settings: SettingsService::new(repos.settings).with_models(Arc::clone(&repos.models)),
             models: ModelService::new(repos.models),
             chat_history: ChatHistoryService::new(repos.chat_history),
@@ -82,6 +84,11 @@ impl AppCore {
     /// Access the verification service.
     pub const fn verification(&self) -> &ModelVerificationService {
         &self.verification
+    }
+
+    /// The one reveal of a stored secret (ADR 0027).
+    pub const fn secrets(&self) -> &SecretsService {
+        &self.secrets
     }
 
     /// A registrar over this core's library that reads headers with

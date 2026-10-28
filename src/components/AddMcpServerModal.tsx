@@ -12,9 +12,11 @@ import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { ServerTemplatePicker, type ServerTemplate } from "./AddMcpServerModal/ServerTemplatePicker";
 import { ServerTypeConfig } from "./AddMcpServerModal/ServerTypeConfig";
-import { EnvVarManager } from "./AddMcpServerModal/EnvVarManager";
+import { EnvVarManager, envSent, typedRow, type EnvRow } from "./AddMcpServerModal/EnvVarManager";
+import { KEEP } from "./ui/SecretField";
 import { Stack } from './primitives';
-import type { NewMcpServer, McpServerInfo, McpEnvEntry } from '../services/transport';
+import { useToastContext } from '../contexts/ToastContext';
+import type { NewMcpServer, McpServerInfo } from '../services/transport';
 
 interface AddMcpServerModalProps {
   isOpen: boolean;
@@ -31,6 +33,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
   editingServer,
 }) => {
   const isEditing = !!editingServer;
+  const { showToast } = useToastContext();
 
   // Form state
   const [name, setName] = useState("");
@@ -40,7 +43,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
   const [workingDir, setWorkingDir] = useState("");
   const [pathExtra, setPathExtra] = useState("");
   const [url, setUrl] = useState("");
-  const [envVars, setEnvVars] = useState<[string, string][]>([]);
+  const [envVars, setEnvVars] = useState<EnvRow[]>([]);
   const [lifecycle, setLifecycle] = useState<'eager' | 'lazy' | 'manual'>('lazy');
   const [enabled, setEnabled] = useState(true);
 
@@ -60,7 +63,8 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         setWorkingDir(srv.config.working_dir || "");
         setPathExtra(srv.config.path_extra || "");
         setUrl(srv.config.url || "");
-        setEnvVars(srv.env.map(e => [e.key, e.value] as [string, string]));
+        // The keys alone: a stored value never reaches the page (ADR 0027).
+        setEnvVars(srv.env_keys.map((key) => ({ kept: true, serverId: srv.id, key, edit: KEEP })));
         setLifecycle(srv.lifecycle);
         setEnabled(srv.enabled);
       } else {
@@ -86,28 +90,20 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
     setCommand(template.command);
     setArgs(template.args.join(" "));
     // Pre-populate env var keys with empty values
-    setEnvVars(template.envKeys.map((key) => [key, ""]));
+    setEnvVars(template.envKeys.map((key) => typedRow(key)));
   }, []);
 
   const addEnvVar = useCallback(() => {
-    setEnvVars((prev) => [...prev, ["", ""]]);
+    setEnvVars((prev) => [...prev, typedRow()]);
   }, []);
 
   const removeEnvVar = useCallback((index: number) => {
     setEnvVars((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const updateEnvVar = useCallback(
-    (index: number, field: 0 | 1, value: string) => {
-      setEnvVars((prev) => {
-        const next = [...prev];
-        next[index] = [...next[index]] as [string, string];
-        next[index][field] = value;
-        return next;
-      });
-    },
-    []
-  );
+  const updateEnvVar = useCallback((index: number, row: EnvRow) => {
+    setEnvVars((prev) => prev.map((old, i) => (i === index ? row : old)));
+  }, []);
 
   const handleSubmit = useCallback(
     async (e: FormEvent) => {
@@ -143,9 +139,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         server_type: serverType,
         enabled,
         lifecycle,
-        env: envVars
-          .filter(([key]) => key.trim())
-          .map(([key, value]): McpEnvEntry => ({ key, value })),
+        env: envSent(envVars),
         config: {},
       };
 
@@ -245,11 +239,12 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
 
             {/* Environment Variables */}
             <EnvVarManager
-              envVars={envVars}
+              rows={envVars}
               onAdd={addEnvVar}
               onRemove={removeEnvVar}
               onUpdate={updateEnvVar}
               disabled={saving}
+              onNotice={showToast}
             />
 
             {/* Options */}

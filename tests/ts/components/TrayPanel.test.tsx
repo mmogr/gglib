@@ -17,9 +17,9 @@ const transport = vi.hoisted(() => ({
   startProxy: vi.fn().mockResolvedValue(undefined),
   stopProxy: vi.fn().mockResolvedValue(undefined),
   getProxyStatus: vi.fn().mockResolvedValue({ running: false, port: null }),
-  // The panel reads the proxy's API key on mount so its dashboard stream can
-  // authenticate. Unset is the loopback default.
-  getSettings: vi.fn().mockResolvedValue({ proxyApiKey: null }),
+  // The panel reveals the proxy's API key while the proxy runs, so its
+  // dashboard stream can authenticate. None stored is the loopback default.
+  revealSecret: vi.fn().mockResolvedValue(null),
 }));
 
 const proxyState = vi.hoisted(() => ({
@@ -28,6 +28,8 @@ const proxyState = vi.hoisted(() => ({
 
 const dashboard = vi.hoisted(() => ({
   current: { snapshot: null as DashboardSnapshot | null, connected: false },
+  /** What the panel last asked the stream for. */
+  asked: null as { port: number | null; apiKey?: string | null } | null,
 }));
 
 vi.mock('../../../src/services/transport', async (importOriginal) => ({
@@ -45,7 +47,10 @@ vi.mock('../../../src/services/proxyEvents', () => ({
 }));
 
 vi.mock('../../../src/hooks/useProxyDashboard', () => ({
-  useProxyDashboard: () => dashboard.current,
+  useProxyDashboard: (options: { port: number | null; apiKey?: string | null }) => {
+    dashboard.asked = options;
+    return dashboard.current;
+  },
 }));
 
 const snapshot = (overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot =>
@@ -55,8 +60,10 @@ describe('TrayPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     transport.getProxyStatus.mockResolvedValue({ running: false, port: null });
+    transport.revealSecret.mockResolvedValue(null);
     proxyState.current = { running: false, port: null };
     dashboard.current = { snapshot: null, connected: false };
+    dashboard.asked = null;
     Object.assign(navigator, {
       clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
@@ -88,6 +95,26 @@ describe('TrayPanel', () => {
     expect(screen.getByText('http://127.0.0.1:8080/v1')).toBeInTheDocument();
     expect(screen.getByText('Live')).toBeInTheDocument();
     expect(screen.getByText(/no active connections/i)).toBeInTheDocument();
+  });
+
+  /** Settings carry no key, so the stream's Bearer is the revealed one. */
+  it('streams the dashboard with the key revealed for it', async () => {
+    transport.revealSecret.mockResolvedValue('k3y-5f3a');
+    proxyState.current = { running: true, port: 8080 };
+
+    render(<TrayPanel />);
+
+    await waitFor(() => expect(dashboard.asked).toEqual(expect.objectContaining({ port: 8080, apiKey: 'k3y-5f3a' })));
+    expect(transport.revealSecret).toHaveBeenCalledWith({ kind: 'setting', secret: 'proxy_api_key' });
+  });
+
+  it('waits for the reveal before it opens the stream', () => {
+    transport.revealSecret.mockReturnValue(new Promise(() => {}));
+    proxyState.current = { running: true, port: 8080 };
+
+    render(<TrayPanel />);
+
+    expect(dashboard.asked?.port).toBeNull();
   });
 
   it('stops the proxy when running', async () => {

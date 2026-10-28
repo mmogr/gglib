@@ -182,7 +182,7 @@ mod mcp_server_info_shape_tests {
                 "config": {},
                 "enabled": true,
                 "lifecycle": "lazy",
-                "env": [],
+                "env_keys": [],
                 "created_at": "2024-01-01T00:00:00Z",
                 "is_valid": true,
             },
@@ -248,5 +248,44 @@ mod server_info_tests {
         let body = r#"{"model_id":1,"model_name":"m","pid":null,"port":9000,"started_at":0}"#;
         let info: ServerInfo = serde_json::from_str(body).unwrap();
         assert_eq!(info.runtime, RuntimeKind::Llama);
+    }
+}
+
+mod held_secret_tests {
+    //! The settings DTO says whether a proxy key is stored, never what it is.
+
+    use super::super::AppSettings;
+    use gglib_core::Settings;
+
+    fn wire(stored: Option<&str>) -> serde_json::Value {
+        let settings = Settings {
+            proxy_api_key: stored.map(str::to_owned),
+            ..Settings::with_defaults()
+        };
+        serde_json::to_value(AppSettings::from(settings)).expect("serializes")
+    }
+
+    #[test]
+    fn a_stored_key_is_held_and_never_sent() {
+        let json = wire(Some("k3y-81d0e4"));
+
+        assert_eq!(json["hasProxyApiKey"], true);
+        assert!(json.get("proxyApiKey").is_none(), "{json}");
+        assert!(!json.to_string().contains("k3y-81d0e4"), "{json}");
+    }
+
+    /// A blank stored by an older database is no key, as the proxy reads it.
+    #[test]
+    fn an_absent_or_blank_key_is_not_held() {
+        for stored in [None, Some(""), Some("   ")] {
+            assert_eq!(wire(stored)["hasProxyApiKey"], false, "{stored:?}");
+        }
+    }
+
+    /// A daemon on a version from before the flag answers without it.
+    #[test]
+    fn an_answer_without_the_flag_reads_as_no_key() {
+        let dto: AppSettings = serde_json::from_str("{}").expect("parses");
+        assert!(!dto.has_proxy_api_key);
     }
 }

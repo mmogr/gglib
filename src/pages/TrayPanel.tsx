@@ -28,6 +28,7 @@ import {
   ProxyToggleButton,
 } from '../components/proxy';
 import { useProxyDashboard } from '../hooks/useProxyDashboard';
+import { useProxyKey } from '../hooks/useProxyKey';
 import { useDaemonReachable } from '../hooks/useDaemonReachable';
 import { useProxyState } from '../services/proxyRegistry';
 import { initProxyEvents, cleanupProxyEvents } from '../services/proxyEvents';
@@ -67,7 +68,6 @@ export const TrayPanel: FC = () => {
   // daemon that is not answering. Only one of those is worth offering a Start
   // button for; the other needs the tray menu's Start gglib Service.
   const daemonReachable = useDaemonReachable();
-  const [proxyApiKey, setProxyApiKey] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -98,30 +98,13 @@ export const TrayPanel: FC = () => {
     return cleanupProxyEvents;
   }, []);
 
-  // Read the proxy's key straight off the transport rather than through
-  // `useSettings`: this entry point has none of `App`'s providers by design,
-  // and one string does not justify introducing one. A failure here leaves the
-  // key null, which is correct for the unauthenticated case and merely leaves
-  // the dashboard blank for the other — the panel's start/stop still work.
-  useEffect(() => {
-    let cancelled = false;
-    void getTransport()
-      .getSettings()
-      .then((settings) => {
-        if (!cancelled) setProxyApiKey(settings.proxyApiKey ?? null);
-      })
-      .catch((err) => {
-        appLogger.error('service.server', 'Tray panel could not read the proxy API key', { err });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Only stream while the proxy is up; `null` keeps the hook idle.
+  // Only stream while the proxy is up, and once its key has been revealed;
+  // `null` keeps the hook idle. A key that could not be read leaves a keyed
+  // proxy's dashboard blank, and the panel's start/stop still work.
+  const proxyApiKey = useProxyKey(proxy.running);
   const { snapshot, connected } = useProxyDashboard({
     host: PROXY_HOST,
-    port: proxy.running ? proxy.port : null,
+    port: proxy.running && proxyApiKey !== undefined ? proxy.port : null,
     apiKey: proxyApiKey,
   });
 

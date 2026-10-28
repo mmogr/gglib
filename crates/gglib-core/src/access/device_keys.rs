@@ -1,11 +1,11 @@
 //! The keys this machine issued to paired devices, on disk.
 //!
 //! Deliberately *not* in `settings_kv` beside `proxy_api_key`. That store is
-//! printed in full by `gglib config settings show` — unmasked on purpose, so a
-//! rotated key can be recovered — and that output is what people paste into
-//! bug reports. One shared key there is a known cost; a device key each would
-//! quietly undo what per-device revocation is for. The roster's readable half
-//! (ids, labels, last-seen) stays in settings; only the secrets are here.
+//! what every surface reads, and its output is what people paste into bug
+//! reports; the two keys it does hold are kept back on each surface by name
+//! (ADR 0027), and a device key each would be one more secret for every one
+//! of them to keep back. The roster's readable half (ids, labels, last-seen)
+//! stays in settings; only the secrets are here.
 //!
 //! Same directory and same posture as the endpoint identity: `0600`, under
 //! the data root's `data/`.

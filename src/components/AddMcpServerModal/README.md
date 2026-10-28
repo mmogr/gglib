@@ -10,7 +10,7 @@ Modal dialog for adding and configuring Model Context Protocol (MCP) servers. Ha
 |------|------|
 | `ServerTemplatePicker.tsx` | Predefined templates (Tavily, GitHub, Brave Search), each needing an API key, for one-click configuration; reading files is built in |
 | `ServerTypeConfig.tsx` | Stdio vs SSE radio selector, with SSE disabled and the reason beside it; command/args/workingDir inputs for stdio mode |
-| `EnvVarManager.tsx` | Dynamic key-value editor for environment variables |
+| `EnvVarManager.tsx` | Environment variables: a stored one by its key, read-only, with its value a `SecretField` that never holds it until Show or Copy asks; a new one as key and value inputs. `envSent` is what a save sends, a kept variable without its value |
 
 ## Structure
 

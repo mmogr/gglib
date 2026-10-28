@@ -49,6 +49,12 @@ pub enum McpServiceError {
     #[error("SSE servers are not supported yet; only stdio servers can be run")]
     SseNotSupported,
 
+    /// An environment variable was to be stored with a blank value. A blank
+    /// is no secret, and storing one would delete the value an emptied field
+    /// stood for (ADR 0027).
+    #[error("{0} is blank: enter a value or remove the variable")]
+    BlankEnvValue(String),
+
     /// A server stored under the name gglib keeps for its own tools was to
     /// be opened to paired devices. A device is never offered gglib's own
     /// tools by that name, so there is no other name to choose.

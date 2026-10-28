@@ -21,6 +21,7 @@ import * as farChats from './farChats';
 import * as farModels from './farModels';
 import * as attachments from './attachments';
 import * as images from './images';
+import * as secrets from './secrets';
 
 /**
  * Create unified API transport.
@@ -46,5 +47,6 @@ export function createApiTransport() {
     ...farModels,
     ...attachments,
     ...images,
+    ...secrets,
   };
 }
