@@ -70,6 +70,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`tensor_table.rs`** — A weights file's tensor table (`GgufParserPort::tensor_table` and `tensor_table_of_head`): every tensor's name and shape, outermost first, from a GGUF header or, when the first four bytes are not the GGUF magic, a safetensors header. The tensor count is held to the bytes left and a tensor of more than four dimensions refused before anything is reserved
 - **`safetensors.rs`** — A safetensors header as a tensor table; a header length over 100,000,000 bytes or over what the file holds is refused before anything is reserved
 - **`capabilities/`** — Model capability detection (context size, chat templates)
+- **`render/`** — `render_chat`: a chat rendered through its template the way the pinned llama-server renders it, held byte for byte to that server's recorded renders
+- **`template_env.rs`** — The minijinja environment `capabilities/` and `render/` both start from: Python's string methods and `raise_exception`
 
 ## Features
 
@@ -121,6 +123,20 @@ fn example() {
     println!("Context size: {}", metadata.context_length.unwrap_or(0));
     println!("Quantization: {:?}", metadata.quantization);
 }
+```
+
+A chat rendered as the pinned llama-server renders it, with the special
+tokens the loaded model's vocabulary gives:
+
+```rust
+use gglib_gguf::{ChatKwargs, ChatMessage, ChatTemplate, VocabTokens, render_chat};
+use serde_json::json;
+
+let vocab = VocabTokens { bos: "<s>".into(), eos: "</s>".into(), add_bos: true, add_eos: false };
+let template = ChatTemplate::new("", vocab).unwrap(); // no template: llama-server's ChatML
+let kwargs = ChatKwargs::from_request(&json!({"reasoning_budget_tokens": 0})).unwrap();
+let prompt = render_chat(&template, &[ChatMessage::new("user", "hi")], true, &kwargs).unwrap();
+assert_eq!(prompt, "<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\n");
 ```
 
 ## Design Decisions
