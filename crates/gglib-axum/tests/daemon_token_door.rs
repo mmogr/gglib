@@ -3,7 +3,8 @@
 //! Any account on the machine can reach `127.0.0.1:9887`. Through `/api` it
 //! could pair a device, register an MCP server whose command then runs as the
 //! owner, or rewrite settings, so the door takes the token only the owner's
-//! account can read. A daemon started `--share-lan` takes its API key as well.
+//! account can read. A daemon started `--share-lan` takes its API key as well,
+//! and its reveal hands that key back nothing but itself (ADR 0027).
 //! `/health` stays open, so a probe needs nothing.
 
 mod common;
@@ -177,6 +178,54 @@ async fn a_shared_daemon_takes_its_key_or_the_token() {
         let answer = call(&app, Method::GET, path, Some(&auth)).await;
         assert_eq!(answer.status, StatusCode::OK, "{}", answer.body);
     }
+}
+
+/// A shared daemon's key, which clients on the network hold, gets back only
+/// itself from the reveal, and is refused every other secret (ADR 0027). The
+/// token still gets what is stored, here no proxy key at all.
+#[tokio::test]
+async fn a_shared_daemons_key_reveals_only_itself() {
+    let app = shared().await;
+    let reveal = |auth: String, body: &'static str| {
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("/api/secrets/reveal")
+            .header("host", HOST)
+            .header("content-type", "application/json")
+            .header("authorization", auth)
+            .body(Body::from(body))
+            .unwrap();
+        send_request(&app, request)
+    };
+    let key = format!("Bearer {LAN_KEY}");
+    let proxy_key = r#"{"kind":"setting","secret":"proxy_api_key"}"#;
+    let mcp_env = r#"{"kind":"mcp_env","server_id":1,"key":"TOKEN"}"#;
+    let pairing = r#"{"kind":"setting","secret":"remote_pairing_key"}"#;
+
+    let answer = reveal(key.clone(), proxy_key).await;
+    assert_eq!(answer.status, StatusCode::OK, "{}", answer.body);
+    assert!(
+        answer.body.contains(&format!(r#""value":"{LAN_KEY}""#)),
+        "the key it sent: {}",
+        answer.body
+    );
+    for body in [mcp_env, pairing] {
+        let answer = reveal(key.clone(), body).await;
+        assert_eq!(
+            answer.status,
+            StatusCode::FORBIDDEN,
+            "{body}: {}",
+            answer.body
+        );
+        assert!(
+            answer.body.contains("reveals only itself"),
+            "{body}: {}",
+            answer.body
+        );
+    }
+    let answer = reveal(bearer_token(), proxy_key).await;
+    assert_eq!(answer.status, StatusCode::OK, "{}", answer.body);
+    assert!(answer.body.contains(r#""value":null"#), "{}", answer.body);
 }
 
 /// A daemon that could not make its token serves nothing on `/api`, the

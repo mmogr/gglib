@@ -53,11 +53,17 @@ an emptied field cannot delete a secret by accident.
 `SecretsService::reveal` in `gglib-core` is the only code that hands a stored
 secret back to a person or a client. Two callers use it:
 `gglib config settings reveal <key>`, which writes the value alone on stdout,
-and `POST /api/secrets/reveal`, behind the daemon's token and origin guards,
-which the GUI uses. The route refuses the pairing key: it is this device's
-credential for another machine, and a client on the network holding the
-proxy key must not be able to read it. `gglib remote key --show` is removed,
-and its stdout contract moves to `reveal`.
+and `POST /api/secrets/reveal`, which the GUI uses. The route stands behind
+the origin guard. To the daemon's token, which only the owner's account can
+read, it reveals any secret but the pairing key, which the GUI has no use
+for: it is this device's credential for another machine, and only the CLI
+prints it. A daemon started `--share-lan` also admits its API key, which
+clients on the network hold. To that key the route answers the proxy key
+with the key the request presented, and refuses everything else, so no
+stored value is read back to the network. That is all it closes: the key
+still opens every other `/api` route, and through them can run an MCP
+server's command, with its env values, as the owner. `gglib remote key
+--show` is removed, and its stdout contract moves to `reveal`.
 
 ### 4. A key the daemon minted and could not store is printed once
 
@@ -91,6 +97,10 @@ to that proxy itself, and a client has to be given a key set with
     presents that key, and again when the settings change;
   - while the tray panel shows a running proxy;
   - at each Show or Copy.
+- A page opened over the network from a `--share-lan` daemon holds the
+  daemon's API key rather than its token. Its dashboard and Clear Cache get
+  that key back, and so do Show and Copy on the proxy key; Show and Copy on
+  an MCP server's env value are refused there.
 - The values are still plain text at rest. File permissions remain their
   only protection on disk.
 

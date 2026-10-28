@@ -92,7 +92,8 @@ pub(crate) fn api_routes() -> Router<AppState> {
         )
         // A stored secret, for the page's Show and Copy and the proxy key its
         // dashboard, tray and Clear Cache present (ADR 0027). POST, so the
-        // origin guard stands in front of it.
+        // origin guard stands in front of it. A shared daemon's API key gets
+        // back only itself; the handler says why.
         .route("/secrets/reveal", post(handlers::secrets::reveal))
         // Proxy API
         .route("/proxy/status", get(handlers::proxy::status))

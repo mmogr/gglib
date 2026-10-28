@@ -31,8 +31,10 @@ tools on from, and neither are the file tools, which need the run's folder.
 
 `secrets.rs` is `POST /api/secrets/reveal`: a stored secret, for the page's
 Show and Copy and the proxy key its dashboard, tray and Clear Cache present,
-from core's `SecretsService::reveal` (ADR 0027). It refuses the pairing key,
-which only the CLI prints on this machine.
+from core's `SecretsService::reveal` (ADR 0027). The daemon token gets any
+secret but the pairing key, which only the CLI prints on this machine. A
+shared daemon's API key, which clients on the network hold, gets back only
+itself, which the page opened over the network presents to the proxy.
 
 `chat_title.rs` is `POST /api/chat`: a chat's title, asked of the
 llama-server the chat runs on. The body names the port, the messages, a
