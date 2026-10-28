@@ -1,0 +1,43 @@
+[package]
+name = "gglib-engine-llama"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "llama.cpp in-process: a decoder, and a server on loopback that answers gglib-proxy as the pinned llama-server does"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "gglib_engine_llama"
+path = "src/lib.rs"
+
+[features]
+# `ScriptedDecoder`, a decoder that replays a script, for other crates'
+# tests. They enable it from `[dev-dependencies]` only.
+test-decoder = []
+
+[dependencies]
+# The pin (`/props` build_info) and the request a chat was asked with.
+gglib-core = { workspace = true }
+# A chat rendered through its template as the pinned llama-server renders it.
+gglib-gguf = { workspace = true }
+
+# The server on loopback. No sysinfo, no gglib-runtime, no gglib-proxy: this
+# is a phone crate, and the proxy is its client, not its dependency.
+axum = { workspace = true }
+tokio = { workspace = true, features = ["net", "rt", "sync"] }
+futures-util = { workspace = true }
+
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# The tests talk to the shim over a real socket, as gglib-proxy does.
+reqwest = { workspace = true, features = ["json", "stream"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+
+[lints]
+workspace = true

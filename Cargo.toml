@@ -16,6 +16,7 @@ members = [
     "crates/gglib-proxy",
     "crates/gglib-runtime",
     "crates/gglib-agent",
+    "crates/gglib-engine-llama",
     "crates/gglib-sse",
     "crates/gglib-test-http",
     "crates/gglib-cli",

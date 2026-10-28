@@ -34,11 +34,12 @@ gglib follows **hexagonal architecture** (ports & adapters) with clear separatio
 │  │    SQLite    │   │ GGUF parsing │   │ HuggingFace  │   │   MCP SDK    │ │
 │  │ repositories │   │              │   │    client    │   │              │ │
 │  └──────────────┘   └──────────────┘   └──────────────┘   └──────────────┘ │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐                    │
-│  │gglib-runtime │   │gglib-download│   │ gglib-proxy  │                    │
-│  │  llama.cpp   │   │   download   │   │ OpenAI proxy │                    │
-│  │  management  │   │   manager    │   │              │                    │
-│  └──────────────┘   └──────────────┘   └──────────────┘                    │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐ │
+│  │gglib-runtime │   │gglib-download│   │ gglib-proxy  │   │gglib-engine- │ │
+│  │  llama.cpp   │   │   download   │   │ OpenAI proxy │   │    llama     │ │
+│  │  management  │   │   manager    │   │              │   │  in-process  │ │
+│  │              │   │              │   │              │   │  llama.cpp   │ │
+│  └──────────────┘   └──────────────┘   └──────────────┘   └──────────────┘ │
 └──────────────────────────────────────┬─────────────────────────────────────┘
                                        ▼
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -68,8 +69,9 @@ not only the next: `gglib-cli` uses several infrastructure crates directly, and
 an iPhone app embeds as a dynamic framework, depends on no other surface and
 opens its library through `gglib-bootstrap`;
 `gglib-download` depends on `gglib-hf`;
-`gglib-proxy` depends on `gglib-mcp`; and `gglib-runtime` depends on `gglib-mcp`
-and `gglib-proxy`. `gglib-build-info`, `gglib-sse` and `gglib-test-http` depend on no gglib crate.
+`gglib-proxy` depends on `gglib-mcp`; `gglib-engine-llama` depends on
+`gglib-gguf`; and `gglib-runtime` depends on `gglib-mcp` and `gglib-proxy`.
+`gglib-build-info`, `gglib-sse` and `gglib-test-http` depend on no gglib crate.
 `src-tauri` is the desktop app and lives outside `crates/`;
 `gglib-integration-tests` holds cross-crate tests and has only dev-dependencies.
 
@@ -105,6 +107,7 @@ Each row links the crate, whose own README says what it is responsible for and h
 | **[gglib-runtime](gglib-runtime/)** | llama.cpp installation and updates, launch-argument building (context size resolution included), process spawning and monitoring, health checks and port allocation. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-loc.json) |
 | **[gglib-download](gglib-download/)** | Multi-file download manager with a queue, progress tracking, resume and cancel. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-loc.json) |
 | **[gglib-proxy](gglib-proxy/)** | OpenAI-compatible proxy (`/v1/chat/completions`, `/v1/embeddings`, `/v1/models`, streaming included) with automatic model routing and swapping, and the MCP gateway at `/mcp`. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loc.json) |
+| **[gglib-engine-llama](gglib-engine-llama/)** | llama.cpp in-process, for a phone that cannot start llama-server: a decoder seam, the engine that runs one generation at a time on it, and a server on loopback that answers `gglib-proxy` in the pinned llama-server's shape. Pure Rust on every target. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-engine-llama-loc.json) |
 
 ### Facade Layer
 
