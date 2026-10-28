@@ -2,7 +2,7 @@
 # them, so `make test` and `make setup` were one stray directory away from
 # being skipped as up-to-date.
 .PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri \
-        test test-helper check fmt lint doc doc-check dev pre-commit release \
+        test test-helper check ios-check fmt lint doc doc-check dev pre-commit release \
         lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
         adr-readings record-upstream bindings bindings-check \
         clean clean-gui clean-llama clean-all path-check \
@@ -226,6 +226,22 @@ doc-check: ## Build rustdoc with warnings denied, exactly as CI does
 	@# `custom-protocol` is on); see the note above `bindings`.
 	$(CARGO) doc --workspace --no-deps --document-private-items --exclude gglib-app
 
+# The crates a phone build compiles, and the only list of them: `ios-check`
+# checks them for aarch64-apple-ios, and `boundaries` passes them to
+# scripts/check_phone_closure.sh, which keeps their closure for that target
+# clear of desktop-only packages. ci.yml's `ios-check` and `boundaries` jobs
+# run those two targets.
+PHONE_CRATES := gglib-core gglib-gguf gglib-db gglib-download gglib-hf \
+                gglib-mcp gglib-agent gglib-sse gglib-bootstrap
+
+# Needs the aarch64-apple-ios standard library (`rustup target add
+# aarch64-apple-ios`) and Xcode's iOS SDK, for the C that ring, aws-lc-sys and
+# the bundled SQLite compile in their build scripts, so it runs on macOS only
+# and is not part of `pre-commit`.
+ios-check: ## Check the phone crates compile for aarch64-apple-ios (macOS)
+	@echo "Checking the phone crates for aarch64-apple-ios..."
+	$(CARGO) check --locked --target aarch64-apple-ios $(addprefix -p ,$(PHONE_CRATES))
+
 ##@ Frontend and architecture checks
 
 lint-web: ## Run eslint over src/ (no warnings allowed)
@@ -250,8 +266,9 @@ test-web: ## Run the frontend test suite
 # `boundaries`, `unused-deps` and `enforce` are what ci.yml runs: its
 # `boundaries` job calls the first two and its `enforcement` job the third, so
 # a check added to one of these recipes runs in CI and in `pre-commit` alike.
-boundaries: ## Check crate boundaries
+boundaries: ## Check crate boundaries and the phone crates' iOS closure
 	@./scripts/check_boundaries.sh
+	@./scripts/check_phone_closure.sh $(PHONE_CRATES)
 
 # The Rust sibling of `deadcode-web`. cargo-shear is a tool of its own: CI
 # installs a prebuilt binary, and `cargo binstall cargo-shear` or

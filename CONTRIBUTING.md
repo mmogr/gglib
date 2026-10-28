@@ -305,7 +305,7 @@ let mut child = Command::new("cmake")
 
 ## Crate Boundaries
 
-CI's `boundaries` job runs `scripts/check_boundaries.sh` on every pull request into `main` and every push to it, and a violation fails the build. The script reads each checked crate's direct dependencies with `cargo tree --depth 1 --all-features --target all`: normal, build and dev dependencies, optional ones, and those declared for any platform. Of the rules below, only what a bullet says `check_boundaries.sh` rejects or allow-lists is checked, and only on those direct edges; the rest, such as `gglib-db` depending on no other `gglib-*` crate, are not.
+CI's `boundaries` job runs `scripts/check_boundaries.sh` on every pull request into `main` and every push to it, and a violation fails the build. The script reads each checked crate's direct dependencies with `cargo tree --depth 1 --all-features --target all`: normal, build and dev dependencies, optional ones, and those declared for any platform. Of the rules below, only what a bullet says `check_boundaries.sh` rejects or allow-lists is checked, and only on those direct edges, apart from the phone crates' rule, which `scripts/check_phone_closure.sh` checks over the whole dependency closure; the rest, such as `gglib-db` depending on no other `gglib-*` crate, are not.
 
 **`gglib-core`** — Domain types, port traits, error types and path utilities. May read and write local files and build the process `Command`s other crates spawn (its tokio carries the `fs` and `process` features). Must not depend on a database, HTTP, CLI or UI crate: `check_boundaries.sh` rejects `axum`, `tower`, `tower-http`, `hyper`, `reqwest`, `clap`, `tauri` and `sqlx` there.
 
@@ -318,6 +318,8 @@ CI's `boundaries` job runs `scripts/check_boundaries.sh` on every pull request i
 **Surface crates** (`gglib-cli`, `gglib-axum`, `gglib-tauri`) — May depend on anything in lower layers. Must not depend on each other, with one documented exception: `gglib-cli` may depend on `gglib-axum` to host the daemon in `gglib daemon run` (which `gglib web --share-lan` also runs) — splitting that one module into a fourth surface crate would be more churn than the exception is worth. `scripts/check_boundaries.sh` allow-lists exactly this edge; any other surface-to-surface dependency is a violation.
 
 **`src-tauri`** (package `gglib-app`) — The desktop app binary, and the one crate that depends on two surfaces: `gglib-tauri` for its Tauri event emission, and `gglib-axum` to host the daemon in-process when it cannot launch an external one. It also depends on `gglib-app-services`, `gglib-runtime`, `gglib-proxy`, `gglib-core` and `gglib-build-info`. No crate depends on it, and `check_boundaries.sh` does not check it.
+
+**The phone crates** — the crates a phone build compiles, which `PHONE_CRATES` in the `Makefile` lists; nothing else lists them. `make ios-check`, and CI's `ios-check` job, check them for `aarch64-apple-ios`. Their dependency closure for that target, every normal dependency at any depth with each crate's default features, must not reach `sysinfo`, `netdev`, `nix`, `iroh`, `modelpipe`, `gglib-runtime` or `gglib-app-services`: `scripts/check_phone_closure.sh` rejects any of them and prints the path that reaches it, and `make boundaries` runs it. It reads `cargo tree` and builds nothing, so it needs no iOS toolchain. A crate whose closure reaches one of them joins the list once that dependency is behind a port its caller fills.
 
 If your change requires adding a dependency from a lower layer to a higher layer, reconsider the design. The dependency should flow in the opposite direction via the channel/event pattern described above.
 
@@ -727,7 +729,7 @@ A change that splits into several concerns goes up as a stack: one PR per concer
 |---|---|---|
 | `fmt` | `cargo fmt --all -- --check` | Consistent code style |
 | `quality` | `npm run lint -- --max-warnings 0`, `npm run typecheck` | The ESLint rules, warnings included; TypeScript types |
-| `boundaries` | `make boundaries`, which is `check_boundaries.sh` and the `check_readmes.sh --strict` it runs; `make unused-deps`, which is `cargo shear --deny-warnings` | What [Crate Boundaries](#crate-boundaries) says `check_boundaries.sh` rejects or allow-lists; the `gglib-bootstrap` source guard; README coverage; no dependency a crate declares and none of its targets uses (see [Unused dependencies](#unused-dependencies)) |
+| `boundaries` | `make boundaries`, which is `check_boundaries.sh` and the `check_readmes.sh --strict` it runs, then `check_phone_closure.sh` over the `Makefile`'s `PHONE_CRATES`; `make unused-deps`, which is `cargo shear --deny-warnings` | What [Crate Boundaries](#crate-boundaries) says `check_boundaries.sh` and `check_phone_closure.sh` reject or allow-list; the `gglib-bootstrap` source guard; README coverage; no dependency a crate declares and none of its targets uses (see [Unused dependencies](#unused-dependencies)) |
 | `enforcement` | `make enforce` | The repository rules that neither the compiler nor a linter checks. The `enforce` recipe in the `Makefile` is the only list of them, and each script's header says what it rejects |
 | `test` | `cargo metadata --locked` (the workspace and `src-tauri`), `npm run build`, `cargo test --no-fail-fast`, `scripts/split_test_output.py` | `Cargo.lock` is current; the Rust tests and doctests pass; the per-crate test output the badges read, from a run that ran doctests |
 | `bindings` | `make bindings-check` | The committed TypeScript bindings are what the Rust types generate |
@@ -736,6 +738,7 @@ A change that splits into several concerns goes up as a stack: one PR per concer
 | `clippy` | `npm run build`, then `cargo clippy --all-targets --all-features -- -D warnings` | No Clippy warning on Linux |
 | `cli-cross-os` | `cargo test -p gglib-cli --no-run` on Linux, macOS and Windows | `gglib-cli` and its tests compile on each. Pull requests only |
 | `clippy-cross-os` | `npm run build`, then `cargo clippy --all-targets --all-features -- -D warnings` on macOS and Windows | No Clippy warning on either, including in code only that OS compiles. Pull requests only |
+| `ios-check` | `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`, then `make ios-check`, which is `cargo check --locked --target aarch64-apple-ios` over the `Makefile`'s `PHONE_CRATES`, on macOS | The crates a phone build compiles compile for iOS (see [Crate Boundaries](#crate-boundaries)) |
 
 When a CI or Coverage run on `main` completes, `badges.yml` downloads its artifacts and pushes badge JSON to the `badges` branch, where the shields.io badges in crate READMEs read it.
 
@@ -775,7 +778,7 @@ In practice: if your PR closes a fully-labelled issue, you'll rarely touch label
 
 Before requesting review, confirm each item:
 
-- [ ] `make pre-commit` passes locally: the Rust, frontend, architecture, bindings and rustdoc checks. The two cross-OS jobs run only in CI.
+- [ ] `make pre-commit` passes locally: the Rust, frontend, architecture, bindings and rustdoc checks. It leaves out three CI jobs: the two cross-OS jobs, which run only in CI, and `ios-check`, which `make ios-check` runs on macOS with Xcode and the `aarch64-apple-ios` target installed.
 - [ ] A new doc example compiles and passes as a doctest (`cargo test --doc` runs them alone).
 - [ ] Any new public type or enum has `///` doc comments on all items.
 - [ ] Any architectural change is documented with its module: in the README of a directory module, in the `//!` block of a single-file module. ASCII architecture diagrams belong in crate READMEs; prose API documentation does not.
