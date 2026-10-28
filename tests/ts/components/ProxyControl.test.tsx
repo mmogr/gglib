@@ -25,9 +25,10 @@ import type { AppSettings } from '../../../src/types';
 
 const settingsRef: { current: AppSettings | null } = { current: null };
 const proxyStateRef = { current: { running: false, port: null as number | null } };
-const { revealSecret, clearProxyCache } = vi.hoisted(() => ({
+const { revealSecret, clearProxyCache, startProxy } = vi.hoisted(() => ({
   revealSecret: vi.fn(),
   clearProxyCache: vi.fn(),
+  startProxy: vi.fn(),
 }));
 
 vi.mock('../../../src/hooks/useSettings', () => ({
@@ -40,6 +41,7 @@ vi.mock('../../../src/services/transport', () => ({
   getTransport: () => ({
     getProxyStatus: () => Promise.resolve({ pinned_model: null }),
     revealSecret,
+    startProxy,
   }),
 }));
 vi.mock('../../../src/services/clients/proxyDashboard', () => ({
@@ -80,6 +82,68 @@ describe('ProxyControl — the Default context placeholder', () => {
   it('names the stored default, separated, when there is one', async () => {
     const box = await openContextBox(appSettings({ defaultContextSize: 32768 }));
     expect(box).toHaveAttribute('placeholder', '32,768 (from settings)');
+  });
+});
+
+describe('ProxyControl — the port', () => {
+  beforeEach(() => {
+    settingsRef.current = null;
+    proxyStateRef.current = { running: false, port: null };
+    startProxy.mockReset();
+    startProxy.mockResolvedValue({});
+  });
+
+  /**
+   * Settings arrive after the first render, as they do in the app. The port
+   * used to be read then, and showed and sent 8080 whatever was stored.
+   */
+  async function openWithLateSettings(settings: AppSettings) {
+    const view = render(<ProxyControl />, { wrapper });
+    settingsRef.current = settings;
+    view.rerender(<ProxyControl />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /proxy/i }));
+    await user.click(screen.getByRole('button', { name: /connection options/i }));
+    return { user, box: screen.getByLabelText(/Proxy port/i) as HTMLInputElement };
+  }
+
+  it('shows the stored port and leaves it to the daemon', async () => {
+    const { user, box } = await openWithLateSettings(appSettings({ proxyPort: 18080 }));
+
+    expect(box).toHaveValue(null);
+    expect(box).toHaveAttribute('placeholder', '18080 (from settings)');
+    await user.click(screen.getByRole('button', { name: /start proxy/i }));
+
+    await waitFor(() => expect(startProxy).toHaveBeenCalledTimes(1));
+    expect(startProxy.mock.calls[0][0]).not.toHaveProperty('port');
+  });
+
+  /** Nothing stored: 8080 is the built-in default, not something settings say. */
+  it('calls the port the default when none is stored', async () => {
+    const { box } = await openWithLateSettings(appSettings({ proxyPort: null }));
+
+    expect(box).toHaveAttribute('placeholder', '8080 (default)');
+  });
+
+  it('leaves the port to the daemon again once a typed one is cleared', async () => {
+    const { user, box } = await openWithLateSettings(appSettings({ proxyPort: 18080 }));
+
+    await user.type(box, '18181');
+    await user.clear(box);
+    await user.click(screen.getByRole('button', { name: /start proxy/i }));
+
+    await waitFor(() => expect(startProxy).toHaveBeenCalledTimes(1));
+    expect(startProxy.mock.calls[0][0]).not.toHaveProperty('port');
+  });
+
+  it('sends a port typed for this run', async () => {
+    const { user, box } = await openWithLateSettings(appSettings({ proxyPort: 18080 }));
+
+    await user.type(box, '18181');
+    await user.click(screen.getByRole('button', { name: /start proxy/i }));
+
+    await waitFor(() => expect(startProxy).toHaveBeenCalledTimes(1));
+    expect(startProxy.mock.calls[0][0]).toMatchObject({ port: 18181 });
   });
 });
 
