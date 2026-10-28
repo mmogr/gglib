@@ -78,9 +78,7 @@ pub struct CliContext {
 /// client.
 pub async fn bootstrap() -> Result<CliContext> {
     // Resolve paths/env up-front so BootstrapConfig holds only resolved data.
-    let bootstrap_config = BootstrapConfig {
-        db_path: database_path()?,
-    };
+    let bootstrap_config = BootstrapConfig::for_db(database_path()?);
     bootstrap_with(bootstrap_config).await
 }
 
@@ -127,9 +125,7 @@ pub(crate) async fn bootstrap_with(bootstrap_config: BootstrapConfig) -> Result<
 /// [`bootstrap_with`] over a fresh database in `dir`, for a test.
 #[cfg(test)]
 pub(crate) async fn test_context(dir: &std::path::Path) -> CliContext {
-    bootstrap_with(BootstrapConfig {
-        db_path: dir.join("gglib.db"),
-    })
-    .await
-    .expect("the database opens")
+    bootstrap_with(BootstrapConfig::for_db(dir.join("gglib.db")))
+        .await
+        .expect("the database opens")
 }

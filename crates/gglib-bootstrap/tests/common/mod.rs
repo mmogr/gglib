@@ -16,9 +16,7 @@ use gglib_core::ports::{AppEventEmitter, NoopEmitter};
 /// The caller must keep the returned [`TempDir`] alive for the duration of
 /// the test; dropping it deletes the directory and will break open DB handles.
 pub(crate) fn minimal_config(dir: &TempDir) -> BootstrapConfig {
-    BootstrapConfig {
-        db_path: dir.path().join("gglib.db"),
-    }
+    BootstrapConfig::for_db(dir.path().join("gglib.db"))
 }
 
 /// Return a no-op [`AppEventEmitter`] suitable for tests.

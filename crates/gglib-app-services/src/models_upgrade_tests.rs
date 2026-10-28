@@ -150,7 +150,7 @@ async fn a_current_model_is_not_downloaded() {
 }
 
 /// The check and the download both ask the Hub with the core's token: the
-/// one the shared bootstrap read, on whichever surface runs the upgrade.
+/// one the shared bootstrap wired, on whichever surface runs the upgrade.
 #[tokio::test]
 async fn an_upgrade_asks_the_hub_with_the_cores_token() {
     for token in [Some(FAKE_TOKEN), None] {

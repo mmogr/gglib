@@ -28,9 +28,7 @@
 //! use gglib_core::ports::AppEventEmitter;
 //!
 //! let emitter: Arc<dyn AppEventEmitter> = Arc::new(MyEmitter::new());
-//! let config = BootstrapConfig {
-//!     db_path: database_path()?,
-//! };
+//! let config = BootstrapConfig::for_db(database_path()?);
 //! let core = CoreBootstrap::build(config, emitter).await?;
 //! // core.app, core.downloads, core.hf_client, … all ready
 //! ```
@@ -45,14 +43,19 @@
 //! - **Happy path / config** (`tests/build_happy_path.rs`): full
 //!   `CoreBootstrap::build()` calls that confirm wiring succeeds and the
 //!   returned [`BuiltCore`] is live.
+//! - **Config** (`src/config.rs`): `BootstrapConfig::for_db` names no models
+//!   directory and no token, and the config's `Debug` does not show a token.
 //! - **Models directory** (`src/builder.rs`): the download manager's config
-//!   names no models directory. What the manager does with none is tested in
-//!   `gglib-download`.
+//!   names the directory in the config, or none. What the manager does with
+//!   none is tested in `gglib-download`.
 //! - **Hub token** (`src/builder.rs`, `tests/hub_token.rs`): inline tests
 //!   that one token is handed to the Hub client's config, the download
-//!   manager's config and `AppCore`, or to none of them; and a test that
-//!   `build()` reads `HF_TOKEN` itself and the returned `AppCore` holds it,
-//!   which runs itself again in a process started with the variable.
+//!   manager's config and `AppCore`, or to none of them, and that it is the
+//!   config's, trimmed, with the environment unread, or, when the config
+//!   holds none or a blank one, the environment's; and tests that run
+//!   themselves again in a process started with `HF_TOKEN`: `build()` handed
+//!   no token reads the variable itself and the returned `AppCore` holds it,
+//!   and one handed a token holds that one instead.
 //! - **Error cases** (`tests/build_error_cases.rs`): failure paths such as a
 //!   missing database directory.
 //! - **Functional round-trips** (`tests/functional.rs`): data round-trips
