@@ -5,7 +5,7 @@
 
 use crate::kind::hub_filter;
 use crate::models::{HfConfig, HfRepoRef};
-use gglib_core::ports::huggingface::{HfSearchOptions, HfSortField};
+use gglib_core::ports::huggingface::{HfSearchOptions, HfSortField, hub_file_url};
 use url::Url;
 
 /// Fields to explicitly expand in API requests.
@@ -124,10 +124,10 @@ pub(crate) fn build_paths_info_url(config: &HfConfig, repo: &HfRepoRef) -> Url {
 /// Build the URL that serves the bytes of `file_path` on `main`, on the Hub
 /// the client is configured for.
 ///
-/// The address [`build_file_url`] gives the native downloader, with the
-/// Hub's root taken from the configured API base (its path less the
-/// `/api/models` the API lives under), so the default configuration gives
-/// exactly the downloader's URL.
+/// The address [`hub_file_url`] gives, which `HfClientPort::file_url`
+/// answers a download by default, with the Hub's root taken from the
+/// configured API base (its path less the `/api/models` the API lives
+/// under), so the default configuration gives exactly that address.
 pub(crate) fn build_resolve_url(config: &HfConfig, repo: &HfRepoRef, file_path: &str) -> Url {
     let mut url = config.base_url.clone();
 
@@ -139,18 +139,18 @@ pub(crate) fn build_resolve_url(config: &HfConfig, repo: &HfRepoRef, file_path: 
     url
 }
 
-/// Build the URL that serves a file's bytes, from a bare `owner/name` repo ID.
+/// Build the URL that serves a file's bytes, from a bare `owner/name` repo ID:
+/// [`hub_file_url`], with `None` for `main`.
 ///
 /// This is the resolve endpoint: `HuggingFace` answers it with a redirect to the
 /// CDN for LFS objects, and the CDN honours `Range` requests. `revision` may be
-/// a branch, tag, or commit SHA; `None` means `main`.
+/// a branch, tag, or commit SHA.
 ///
-/// Takes the repo ID as a string rather than an [`HfRepoRef`] so callers outside
-/// this crate — the native downloader in `gglib-download` — can reach it without
-/// the repo types becoming public API.
+/// Takes the repo ID as a string rather than an [`HfRepoRef`] so a caller
+/// outside this crate, the pattern fallback in `gglib-download`'s
+/// `cli_exec::api`, can reach it without the repo types becoming public API.
 pub fn build_file_url(repo_id: &str, file_path: &str, revision: Option<&str>) -> String {
-    let rev = revision.unwrap_or("main");
-    format!("https://huggingface.co/{repo_id}/resolve/{rev}/{file_path}")
+    hub_file_url(repo_id, file_path, revision.unwrap_or("main"))
 }
 
 #[cfg(test)]

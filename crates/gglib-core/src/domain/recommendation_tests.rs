@@ -50,6 +50,11 @@ fn shortlist_is_internally_consistent() {
             );
             assert!(c.context > 0, "{table} {}: context must be set", c.repo);
             assert!(
+                c.context <= c.trained_ctx,
+                "{table} {}: sized past the context it was trained for",
+                c.repo
+            );
+            assert!(
                 !c.rationale.is_empty(),
                 "{table} {}: needs a rationale",
                 c.repo

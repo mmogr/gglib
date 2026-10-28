@@ -1,5 +1,7 @@
 //! Tests of the download worker.
 
+use gglib_core::ports::huggingface::fake_hub::FakeHub;
+
 use super::*;
 
 const fn at(bytes: u64, wire: u64) -> FileProgress {
@@ -50,6 +52,7 @@ fn a_jobs_file_is_fetched_from_the_repository_it_comes_from() {
     };
     let deps = WorkerDeps {
         config: DownloadManagerConfig::default(),
+        hub: Arc::new(FakeHub::default()),
     };
 
     let plan = plan_for(

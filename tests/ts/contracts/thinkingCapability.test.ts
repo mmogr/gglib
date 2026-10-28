@@ -5,7 +5,8 @@
  * The page offers its Thinking switch for a model by two strings it does not
  * own: the `reasoning` tag this machine's catalogue gives the model
  * (`capability_tags::REASONING`), and the `"reasoning"` entry a machine's
- * `/v1/models` lists for it (`REASONING_CAPABILITY` in `gglib-proxy`). Were
+ * `/v1/models` lists for it (`capability_tags::REASONING_CAPABILITY`, which
+ * `gglib-proxy`'s list takes from `capability_tags::capabilities_of`). Were
  * either renamed in Rust, nothing here would fail to compile: the switch
  * would stop showing, on every model, and say nothing about why.
  *
@@ -46,17 +47,19 @@ describe('the words a thinking model is known by', () => {
   });
 
   it("the page's capability is the one /v1/models lists", () => {
-    expect(REASONING_CAPABILITY).toBe(strConst(MODELS_LIST_RS, 'REASONING_CAPABILITY'));
+    expect(REASONING_CAPABILITY).toBe(strConst(TAGS_RS, 'REASONING_CAPABILITY'));
   });
 
   it('the daemon lists the capability by the tag, and the page reads a local row by the same tag', () => {
     const listed = withoutComments(fnSource(MODELS_LIST_RS, 'capabilities_of'));
-    expect(listed).toContain('capability_tags::is_reasoning(&summary.tags).then_some(REASONING_CAPABILITY)');
+    expect(listed).toContain('capability_tags::capabilities_of(&summary.tags,');
+    const capabilities = withoutComments(fnSource(TAGS_RS, 'capabilities_of'));
+    expect(capabilities).toContain('is_reasoning(tags).then_some(REASONING_CAPABILITY)');
     expect(withoutComments(fnSource(TAGS_RS, 'is_reasoning'))).toContain('has(tags, REASONING)');
 
     const tag = strConst(TAGS_RS, 'REASONING');
     expect(thinks({ tags: [tag] })).toBe(true);
-    expect(thinks({ capabilities: [strConst(MODELS_LIST_RS, 'REASONING_CAPABILITY')] })).toBe(true);
+    expect(thinks({ capabilities: [strConst(TAGS_RS, 'REASONING_CAPABILITY')] })).toBe(true);
   });
 
   it('the daemon matches the tag whatever its case, and so does the page', () => {

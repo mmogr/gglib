@@ -14,7 +14,7 @@ runtime included.
 | Module | Contents |
 |--------|----------|
 | `port` | [`CatalogPortImpl`], the summary projection, [`model_to_launch_spec`] |
-| `shards` | [`total_model_bytes`] over every shard of a multi-part GGUF, [`resident_bytes`] for everything a launch loads |
+| `shards` | [`weights_paths`], every shard of a multi-part GGUF; [`total_model_bytes`] over them; [`resident_bytes`] for everything a launch loads |
 
 Every lookup by identifier goes through `ModelRepository::get_by_identifier`,
 so this port and `ModelService` resolve a given string the same way.

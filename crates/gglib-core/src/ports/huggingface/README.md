@@ -23,7 +23,9 @@ A search asks for one `HfModelKind`: models that chat (the default) or models
 that draw. `read_head` reads a file's first bytes (at most `SNIFF_HEAD_BYTES`
 are asked when a download wants to know what a weights file is before fetching
 it), and `file_at` looks one file up by its path, for a file that is no
-quantization, such as an image model's VAE.
+quantization, such as an image model's VAE. `file_url` is the address a
+download fetches a file's bytes from: the Hub's own (`hub_file_url`) unless a
+client says otherwise.
 
 `image_companions` is what an image model's download brings beside its weights:
 the head of the first weights file names the family, and each companion of the

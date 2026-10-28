@@ -14,6 +14,16 @@ use async_trait::async_trait;
 /// as an image model's.
 pub const SNIFF_HEAD_BYTES: u64 = 1 << 20;
 
+/// The address `huggingface.co` serves the bytes of the file at `path` in
+/// repository `model_id` from, at `revision` (a branch, tag or commit).
+///
+/// The resolve endpoint: it answers with a redirect to the CDN for an LFS
+/// object, and the CDN honours `Range` requests.
+#[must_use]
+pub fn hub_file_url(model_id: &str, path: &str, revision: &str) -> String {
+    format!("https://huggingface.co/{model_id}/resolve/{revision}/{path}")
+}
+
 /// Port trait for `HuggingFace` Hub operations.
 ///
 /// This trait defines the interface that the core domain uses to interact
@@ -83,6 +93,13 @@ pub trait HfClientPort: Send + Sync {
     /// a header can be read before the file is fetched. A file shorter than
     /// `max_bytes` answers all of itself.
     async fn read_head(&self, model_id: &str, path: &str, max_bytes: u64) -> HfPortResult<Vec<u8>>;
+
+    /// The address a download reads the whole of the file at `path` in
+    /// repository `model_id` from, at `revision`: by default the Hub's own,
+    /// [`hub_file_url`].
+    fn file_url(&self, model_id: &str, path: &str, revision: &str) -> String {
+        hub_file_url(model_id, path, revision)
+    }
 
     /// The file at `path` in repository `model_id`, with its size and LFS
     /// OID, or `None` when the repository holds no file there.

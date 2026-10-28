@@ -19,7 +19,7 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::download::{DownloadError, DownloadId, Quantization};
-use gglib_core::ports::DownloadManagerConfig;
+use gglib_core::ports::{DownloadManagerConfig, HfClientPort};
 
 use crate::executor::{DownloadPlan, FileProgress, download_file};
 use crate::queue::Upgrade;
@@ -35,6 +35,9 @@ pub(crate) struct WorkerDeps {
     /// Configuration: the Hub token the transfer asks with. Where the file
     /// goes is the job's `destination`.
     pub config: DownloadManagerConfig,
+    /// The Hub the download was resolved on, which says where each of its
+    /// files is fetched from ([`HfClientPort::file_url`]).
+    pub hub: Arc<dyn HfClientPort>,
 }
 
 /// A download job to be executed by the worker.
@@ -230,6 +233,7 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
     };
 
     let plan = plan_for(job, file, deps, progress_callback, notice_callback);
+    let url = deps.hub.file_url(plan.repo_id, plan.file, plan.revision);
 
     // Execute with cancellation support via select
     tokio::select! {
@@ -239,7 +243,7 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
             Err(DownloadError::Cancelled)
         }
 
-        result = download_file(&plan) => result,
+        result = download_file(&plan, &url) => result,
     }
 }
 

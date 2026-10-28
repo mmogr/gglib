@@ -5,7 +5,9 @@
 Download execution: the layer that actually moves bytes, given a plan.
 
 [`DownloadPlan`] names a repository, a revision, a destination directory and
-one file to fetch. [`download_file`] picks a backend for it:
+one file to fetch. [`download_file`] takes it with the address the file's
+bytes are read from, which the Hub the download was resolved on gives
+(`HfClientPort::file_url`), and picks a backend for it:
 
 | Backend | When | Implementation |
 |---------|------|----------------|

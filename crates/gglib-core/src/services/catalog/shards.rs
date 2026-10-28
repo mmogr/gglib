@@ -21,34 +21,42 @@ fn parse_shard_name(file_name: &str) -> Option<(&str, u32)> {
     (total > 0).then_some((prefix, total))
 }
 
+/// Every file of a model's weights, given its first: each shard of a
+/// multi-part GGUF in order, or the one file of any other model.
+///
+/// The shards are named by the upstream convention from the first's name;
+/// whether each exists is not asked.
+#[must_use]
+pub fn weights_paths(file_path: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let (Some(dir), Some(file_name)) = (
+        file_path.parent(),
+        file_path.file_name().and_then(|n| n.to_str()),
+    ) else {
+        return vec![file_path.to_path_buf()];
+    };
+    let Some((prefix, total)) = parse_shard_name(file_name) else {
+        return vec![file_path.to_path_buf()];
+    };
+    (1..=total)
+        .map(|i| dir.join(format!("{prefix}-{i:05}-of-{total:05}.gguf")))
+        .collect()
+}
+
 /// Total on-disk size of a model's weights in bytes.
 ///
-/// For a multi-part GGUF this sums every shard, since llama-server loads them
-/// all — counting only the first shard would badly under-report the memory the
-/// weights occupy and inflate any budget derived from it. Returns `0` when the
-/// size can't be read, which callers treat as "unknown".
+/// For a multi-part GGUF this sums every shard ([`weights_paths`]), since
+/// llama-server loads them all — counting only the first shard would badly
+/// under-report the memory the weights occupy and inflate any budget derived
+/// from it. Returns `0` when the size can't be read, which callers treat as
+/// "unknown"; a shard that cannot be read adds `0`.
 ///
 /// Public so other launch surfaces that need the same figure for cache-RAM
 /// auto-sizing (e.g. `gglib-app-services`' direct model-serve path) don't
 /// have to reimplement multi-shard summing.
 pub fn total_model_bytes(file_path: &std::path::Path) -> u64 {
-    let single = || file_path.metadata().map_or(0, |md| md.len());
-
-    let (Some(dir), Some(file_name)) = (
-        file_path.parent(),
-        file_path.file_name().and_then(|n| n.to_str()),
-    ) else {
-        return single();
-    };
-    let Some((prefix, total)) = parse_shard_name(file_name) else {
-        return single();
-    };
-
-    (1..=total)
-        .map(|i| {
-            let shard = dir.join(format!("{prefix}-{i:05}-of-{total:05}.gguf"));
-            shard.metadata().map_or(0, |md| md.len())
-        })
+    weights_paths(file_path)
+        .iter()
+        .map(|shard| shard.metadata().map_or(0, |md| md.len()))
         .sum()
 }
 
@@ -100,6 +108,24 @@ mod tests {
     }
 
     // ── Size summing ─────────────────────────────────────────────────────
+
+    #[test]
+    fn the_weights_of_a_multipart_model_are_every_shard_in_order() {
+        let first = std::path::Path::new("/m/o_r/X-Q8_0-00001-of-00003.gguf");
+
+        assert_eq!(
+            weights_paths(first),
+            [1, 2, 3]
+                .map(|i| std::path::PathBuf::from(format!("/m/o_r/X-Q8_0-0000{i}-of-00003.gguf")))
+        );
+    }
+
+    #[test]
+    fn the_weights_of_a_single_file_model_are_that_file() {
+        let file = std::path::Path::new("/m/o_r/X.Q8_0.gguf");
+
+        assert_eq!(weights_paths(file), [file.to_path_buf()]);
+    }
 
     #[test]
     fn total_model_bytes_reads_a_single_file() {

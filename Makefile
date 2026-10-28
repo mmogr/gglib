@@ -489,7 +489,7 @@ ffi-xcframework: ## Build target/apple/GglibFFI.xcframework, optimised (macOS, X
 ffi-xcframework-fast: ## Build target/apple/GglibFFI.xcframework unoptimised (macOS, Xcode)
 	@PROFILE=dev ./scripts/apple/build-xcframework.sh
 
-ffi-smoke: ## Call build_info() through the generated Swift on the macOS slice
+ffi-smoke: ## Call every export that needs no network through the generated Swift (macOS slice)
 	@./scripts/apple/swift-smoke.sh
 
 ##@ Cleaning

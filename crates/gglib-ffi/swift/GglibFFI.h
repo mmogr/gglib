@@ -243,10 +243,85 @@ typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureRes
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_CLONE_DOWNLOADWATCH
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_CLONE_DOWNLOADWATCH
+uint64_t uniffi_gglib_ffi_fn_clone_downloadwatch(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_FREE_DOWNLOADWATCH
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_FREE_DOWNLOADWATCH
+void uniffi_gglib_ffi_fn_free_downloadwatch(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_DOWNLOADWATCH_CANCEL
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_DOWNLOADWATCH_CANCEL
+void uniffi_gglib_ffi_fn_method_downloadwatch_cancel(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_DOWNLOADWATCH_NEXT
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_DOWNLOADWATCH_NEXT
+uint64_t uniffi_gglib_ffi_fn_method_downloadwatch_next(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_CLONE_LIBRARY
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_CLONE_LIBRARY
+uint64_t uniffi_gglib_ffi_fn_clone_library(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_FREE_LIBRARY
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_FREE_LIBRARY
+void uniffi_gglib_ffi_fn_free_library(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_DOWNLOAD
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_DOWNLOAD
+uint64_t uniffi_gglib_ffi_fn_method_library_download(uint64_t ptr, RustBuffer repo, RustBuffer quantization
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_INSTALLED
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_INSTALLED
+uint64_t uniffi_gglib_ffi_fn_method_library_installed(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_PAUSE_ALL
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_PAUSE_ALL
+uint64_t uniffi_gglib_ffi_fn_method_library_pause_all(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_QUANTIZATIONS
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_QUANTIZATIONS
+uint64_t uniffi_gglib_ffi_fn_method_library_quantizations(uint64_t ptr, RustBuffer repo, RustBuffer reading
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_REMOVE
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_REMOVE
+uint64_t uniffi_gglib_ffi_fn_method_library_remove(uint64_t ptr, int64_t id
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_RESUME_ALL
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_RESUME_ALL
+uint64_t uniffi_gglib_ffi_fn_method_library_resume_all(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_SEARCH
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_SEARCH
+uint64_t uniffi_gglib_ffi_fn_method_library_search(uint64_t ptr, RustBuffer query, RustBuffer cursor
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_SUGGESTED
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_SUGGESTED
+RustBuffer uniffi_gglib_ffi_fn_method_library_suggested(uint64_t ptr, RustBuffer reading, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_FUNC_BUILD_INFO
 #define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_FUNC_BUILD_INFO
 RustBuffer uniffi_gglib_ffi_fn_func_build_info(RustCallStatus *_Nonnull out_status
     
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_FUNC_OPEN_LIBRARY
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_FUNC_OPEN_LIBRARY
+uint64_t uniffi_gglib_ffi_fn_func_open_library(RustBuffer dirs, RustBuffer hf_token
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_GGLIB_FFI_RUSTBUFFER_ALLOC
@@ -512,6 +587,72 @@ void ffi_gglib_ffi_rust_future_complete_void(uint64_t handle, RustCallStatus *_N
 #ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_FUNC_BUILD_INFO
 #define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_FUNC_BUILD_INFO
 uint16_t uniffi_gglib_ffi_checksum_func_build_info(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_FUNC_OPEN_LIBRARY
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_FUNC_OPEN_LIBRARY
+uint16_t uniffi_gglib_ffi_checksum_func_open_library(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_DOWNLOADWATCH_CANCEL
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_DOWNLOADWATCH_CANCEL
+uint16_t uniffi_gglib_ffi_checksum_method_downloadwatch_cancel(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_DOWNLOADWATCH_NEXT
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_DOWNLOADWATCH_NEXT
+uint16_t uniffi_gglib_ffi_checksum_method_downloadwatch_next(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_DOWNLOAD
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_DOWNLOAD
+uint16_t uniffi_gglib_ffi_checksum_method_library_download(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_INSTALLED
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_INSTALLED
+uint16_t uniffi_gglib_ffi_checksum_method_library_installed(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_PAUSE_ALL
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_PAUSE_ALL
+uint16_t uniffi_gglib_ffi_checksum_method_library_pause_all(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_QUANTIZATIONS
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_QUANTIZATIONS
+uint16_t uniffi_gglib_ffi_checksum_method_library_quantizations(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_REMOVE
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_REMOVE
+uint16_t uniffi_gglib_ffi_checksum_method_library_remove(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_RESUME_ALL
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_RESUME_ALL
+uint16_t uniffi_gglib_ffi_checksum_method_library_resume_all(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_SEARCH
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_SEARCH
+uint16_t uniffi_gglib_ffi_checksum_method_library_search(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_SUGGESTED
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_SUGGESTED
+uint16_t uniffi_gglib_ffi_checksum_method_library_suggested(void
     
 );
 #endif

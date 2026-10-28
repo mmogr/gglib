@@ -1,10 +1,15 @@
 mod common;
 
+use std::sync::Arc;
+
 use chrono::Utc;
+use gglib_bootstrap::CoreBootstrap;
 use gglib_core::NewModel;
+use gglib_core::ports::HfClientPort;
+use gglib_core::ports::huggingface::fake_hub::FakeHub;
 use tempfile::TempDir;
 
-use common::build_core;
+use common::{build_core, minimal_config, noop_emitter};
 
 /// Bootstrapping with valid config must succeed.
 #[tokio::test]
@@ -41,4 +46,19 @@ async fn built_core_downloads_is_present() {
     let core = build_core(&dir).await;
     // Behind an Arc<dyn …>, cloning the Arc is a proxy for "it's there".
     let _downloads = core.downloads.clone();
+}
+
+/// A core built over a caller's Hub holds that Hub, and a live library.
+#[tokio::test]
+async fn a_core_built_with_a_hub_holds_that_hub() {
+    let dir = TempDir::new().unwrap();
+    let hub: Arc<dyn HfClientPort> = Arc::new(FakeHub::default());
+
+    let core =
+        CoreBootstrap::build_with_hub(minimal_config(&dir), noop_emitter(), Arc::clone(&hub))
+            .await
+            .expect("a core over a stand-in Hub builds");
+
+    assert!(Arc::ptr_eq(&core.hf_client, &hub));
+    assert!(core.repos.models.list().await.unwrap().is_empty());
 }

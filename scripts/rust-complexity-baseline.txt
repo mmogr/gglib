@@ -45,6 +45,7 @@ crates/gglib-axum/src/handlers/agent/run_hold_tests.rs 356
 crates/gglib-axum/src/handlers/agent/turn_fixture.rs 318
 crates/gglib-axum/src/routes.rs 467
 crates/gglib-axum/tests/integration_routes.rs 1027
+crates/gglib-bootstrap/src/builder.rs 309
 crates/gglib-cli/src/commands.rs 370
 crates/gglib-cli/src/daemon_client/images_tests.rs 387
 crates/gglib-cli/src/handlers/agent_chat/config.rs 477
@@ -103,7 +104,7 @@ crates/gglib-core/src/domain/mcp/types.rs 583
 crates/gglib-core/src/domain/model.rs 426
 crates/gglib-core/src/domain/model_sampling.rs 674
 crates/gglib-core/src/domain/query.rs 408
-crates/gglib-core/src/domain/recommendation.rs 394
+crates/gglib-core/src/domain/recommendation.rs 407
 crates/gglib-core/src/domain/residency.rs 484
 crates/gglib-core/src/domain/runs/wire_tests.rs 307
 crates/gglib-core/src/domain/runtime_capabilities.rs 532
@@ -164,7 +165,7 @@ crates/gglib-download/src/executor/native.rs 578
 crates/gglib-download/src/executor/native_tests.rs 859
 crates/gglib-download/src/manager/companion_group_tests.rs 475
 crates/gglib-download/src/manager/group_completion_tests.rs 366
-crates/gglib-download/src/manager/mod.rs 1265
+crates/gglib-download/src/manager/mod.rs 1266
 crates/gglib-download/src/quant_selector.rs 340
 crates/gglib-download/src/queue/mod.rs 1081
 crates/gglib-download/src/resolver/tests.rs 387

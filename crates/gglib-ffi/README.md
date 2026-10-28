@@ -27,13 +27,16 @@ This crate is a **surface** in the Adapter Layer, beside `gglib-cli`,
 │                GglibFFI.framework (dynamic, one per slice)                  │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │                           ►► gglib-ffi ◄◄                             │  │
-│  │    uniffi scaffolding · build_info() · the runtime async calls enter  │  │
+│  │   build_info() · open_library() → Library · DownloadWatch · runtime   │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────┬──────────────────────────────────────┘
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                                 gglib-core                                  │
-│                        domain::engine_pins (llama pin)                      │
+│     gglib-bootstrap: the database, the Hub client, the download manager     │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ gglib-core: device_budget, phone_fit, PHONE_SHORTLIST, ports, engine_pins   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -53,6 +56,43 @@ for `aarch64-apple-ios` reaches nothing desktop-only, and
 server, database or host-probe crate. CONTRIBUTING's "Crate Boundaries" has
 the list.
 
+## The model library
+
+`open_library(dirs, hf_token)` builds gglib's own core through
+`gglib-bootstrap`'s composition root, over folders the app names: the
+database (`gglib.db`) in `data_dir`, and every download in `models_dir`, a
+folder per repository. The Hub is asked with `hf_token`, or else with the
+`HF_TOKEN` the process started with, which an app on a phone has none of.
+
+- **Verdicts.** The app samples its memory as a `DeviceReading` and gglib
+  makes the budget from it (`domain::device_budget`). A verdict is
+  `domain::phone_fit::fit_verdict` over a model's shape and weights at that
+  budget: `Fits`, `Tight`, `TooBig`, or `Unknown` naming the input it lacks,
+  with a `FitWhy` holding the numbers. `suggested` judges the rows of
+  `PHONE_SHORTLIST` with no network. `quantizations` reads the first 64 KiB
+  of each quantization's first file from the Hub and parses the head
+  (`GgufParserPort::parse_head`); a key the head ends before is `cut_off`,
+  since the file may still hold it. `installed` judges each model's row. The
+  library holds the last reading handed to it, so the list of installed
+  models is judged at the reading of the browse that showed it.
+- **Downloads.** `download` asks the Hub for the quantization's files, so a
+  refusal arrives as the Hub's own error, then queues it on the core's
+  download manager, which resumes a `.part` with a ranged request, checks the
+  file against the Hub's digest, and adds the model to the library. The
+  manager reports to `DownloadFeed`, the core's event emitter, and each
+  `DownloadWatch` reads where its download stands from there. Swift cannot
+  cancel a call into Rust, so a watch is pulled with `next()` and stopped
+  with `cancel()`. The manager has no pause: `pause_all` cancels what is
+  queued, which keeps each `.part`, and waits for each to stop, and
+  `resume_all` queues it again.
+- **Removal.** `remove` deletes a model's files (every shard, and a projector
+  or companion no other model names), then its row, then each folder it
+  emptied.
+- **Errors.** One `GglibError`: the Hub's 401/403, 404 and 429 are
+  `AuthRequired`, `NotFound` and `RateLimited`, a full disk is `NoSpace`, and
+  anything else is `Network` or `Internal` in gglib's words. A download that
+  fails while it runs ends `Failed` with the download manager's words.
+
 ## Internal Structure
 
 ```text
@@ -62,10 +102,23 @@ crates/gglib-ffi/
 ├── build.rs            README for rustdoc; uniffi's version from Cargo.lock;
 │                       the install name inside the framework (Apple targets)
 ├── src/
-│   ├── lib.rs          setup_scaffolding!, the surface, the runtime decision
-│   ├── build_info.rs   BuildInfo and build_info()
-│   ├── runtime.rs      one 2-worker tokio runtime; in_runtime for async exports
-│   ├── runtime_tests.rs
+│   ├── lib.rs              setup_scaffolding!, the surface, the runtime decision
+│   ├── build_info.rs       BuildInfo and build_info()
+│   ├── runtime.rs          one 2-worker tokio runtime; in_runtime for async exports
+│   ├── library.rs          LibraryDirs, open_library, Library and its calls
+│   ├── reading.rs          DeviceReading, and the budget gglib makes of it
+│   ├── verdict.rs          FitVerdict, MissingInput, FitWhy; a model's shape judged
+│   ├── browse.rs           Suggestion, SearchHit/SearchPage, QuantOffer
+│   ├── installed.rs        InstalledModel; removing a model's files and row
+│   ├── downloads.rs        starting a download; pause_all and resume_all
+│   ├── download_feed.rs    the download manager's emitter, kept per download
+│   ├── download_watch.rs   DownloadWatch, DownloadProgress, DownloadState
+│   ├── errors.rs           GglibError, mapped from the Hub's and the manager's
+│   ├── *_tests.rs          each module's tests
+│   ├── test_library.rs     the library a test is built over (test only)
+│   ├── test_hub.rs         a Hub over gglib-hf's recordings (test only)
+│   ├── test_server.rs      a fake of the Hub's file addresses (test only)
+│   ├── test_gguf.rs        GGUF headers written in a test (test only)
 │   └── bin/
 │       └── uniffi-bindgen.rs   the generator (feature `bindgen`), not shipped
 └── swift/              generated, committed, held by `make ffi-binding-check`
@@ -74,13 +127,24 @@ crates/gglib-ffi/
     └── module.modulemap
 ```
 
-- [`src/lib.rs`](src/lib.rs) calls `uniffi::setup_scaffolding!()` and says
-  why the library owns a tokio runtime rather than taking uniffi's.
-- [`src/build_info.rs`](src/build_info.rs) is the one export: the gglib
-  version, the uniffi version and the llama.cpp pin a build was made from.
+- [`src/lib.rs`](src/lib.rs) calls `uniffi::setup_scaffolding!()`, shows the
+  surface's shape and says why the library owns a tokio runtime rather than
+  taking uniffi's.
+- [`src/build_info.rs`](src/build_info.rs) is the gglib version, the uniffi
+  version and the llama.cpp pin a build was made from.
 - [`src/runtime.rs`](src/runtime.rs) is the runtime every async export
   enters; its tests poll the adapter the way uniffi's Swift polls an export,
   on a thread with no tokio context.
+- [`src/library.rs`](src/library.rs) is the library and every call on it;
+  the modules after it in the tree each hold one concept those calls use.
+- The tests drive the exports from a thread with no tokio context, over a
+  library built by `CoreBootstrap::build_with_hub` with a stand-in Hub:
+  verdicts per quantization from gglib-hf's recorded model info and a
+  written head, a 401, and downloads from a fake file server into a
+  temporary models folder (progress, a cancel, a resume from the `.part`, a
+  pause and a resume, a digest that does not match, the model joining the
+  library, its removal). The process's gglib data root is a temporary one
+  (`paths::isolate_data_root`), so no test finds the user's own folder.
 - [`src/bin/`](src/bin/) holds the binding generator, built from this
   crate's own `uniffi` so the Swift cannot disagree with the scaffolding.
 - `swift/` is what `scripts/apple/generate-swift.sh` writes. Edit the Rust,
@@ -97,7 +161,7 @@ Swift smoke test need macOS with Xcode:
 | `make ffi-binding-check` | Fails when the committed `swift/` is not what the library generates |
 | `make ffi-xcframework-fast` | Builds `target/apple/GglibFFI.xcframework` unoptimised, with the binding beside it in `target/apple/swift/`, and checks each slice (`scripts/apple/check-slices.sh`) |
 | `make ffi-xcframework` | The same, optimised: what a release ships |
-| `make ffi-smoke` | Compiles the binding in a scratch Swift package against the macOS slice and calls `build_info()` (`scripts/apple/swift-smoke.sh`) |
+| `make ffi-smoke` | Compiles the binding in a scratch Swift package against the macOS slice and calls every export that needs no network (`scripts/apple/swift-smoke.sh`) |
 
 Both builds set `IPHONEOS_DEPLOYMENT_TARGET` and `MACOSX_DEPLOYMENT_TARGET`
 to 26.0, ggchat's floor; `scripts/apple/build-xcframework.sh` says why they

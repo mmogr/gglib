@@ -13,6 +13,10 @@
 //! Each adapter then adds its own concerns on top of the returned [`BuiltCore`]
 //! (MCP service, proxy supervisor, SSE broadcaster, 7 domain `*Ops`, etc.).
 //!
+//! [`CoreBootstrap::build_with_hub`] wires the same over a Hub client the
+//! caller made, in place of the one the config gives: a test's stand-in Hub,
+//! which also says where a download's files are fetched from.
+//!
 //! # Hexagonal boundary
 //!
 //! This crate depends **only** on pure infrastructure crates
@@ -42,7 +46,8 @@
 //!   manager runs it. The Hub is a stand-in.
 //! - **Happy path / config** (`tests/build_happy_path.rs`): full
 //!   `CoreBootstrap::build()` calls that confirm wiring succeeds and the
-//!   returned [`BuiltCore`] is live.
+//!   returned [`BuiltCore`] is live, and one over a stand-in Hub that holds
+//!   it.
 //! - **Config** (`src/config.rs`): `BootstrapConfig::for_db` names no models
 //!   directory and no token, and the config's `Debug` does not show a token.
 //! - **Models directory** (`src/builder.rs`): the download manager's config

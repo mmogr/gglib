@@ -101,6 +101,9 @@ pub struct ModelCandidate {
     pub kv_elems_per_token: KvElemsPerToken,
     /// Context this candidate is sized for.
     pub context: u64,
+    /// The context the model was trained for, its GGUF's
+    /// `{arch}.context_length`: no fit of this row serves more.
+    pub trained_ctx: u64,
     /// Why this model, in the user's terms. Printed verbatim.
     pub rationale: &'static str,
 }
@@ -194,6 +197,7 @@ static SHORTLIST: &[ModelCandidate] = &[
             v: 24_576,
         },
         context: 32_768,
+        trained_ctx: 40_960,
         rationale: "mixture-of-experts: 30B of knowledge, ~3B active per token, \
                     so it answers at roughly 3B speed",
     },
@@ -207,6 +211,7 @@ static SHORTLIST: &[ModelCandidate] = &[
             v: 49_152,
         },
         context: 32_768,
+        trained_ctx: 32_768,
         rationale: "the strongest dense coding model that still leaves room for \
                     a 32k context",
     },
@@ -220,6 +225,7 @@ static SHORTLIST: &[ModelCandidate] = &[
             v: 14_336,
         },
         context: 32_768,
+        trained_ctx: 32_768,
         rationale: "dependable tool calling on a mid-range card, with headroom \
                     to spare",
     },
@@ -230,6 +236,7 @@ static SHORTLIST: &[ModelCandidate] = &[
         // 36 layers x 2 KV heads x 128 head dim.
         kv_elems_per_token: KvElemsPerToken { k: 9_216, v: 9_216 },
         context: 32_768,
+        trained_ctx: 32_768,
         rationale: "the smallest model in the list that still calls tools \
                     reliably enough to drive an agent",
     },
@@ -253,8 +260,8 @@ static SHORTLIST: &[ModelCandidate] = &[
 /// The rows are provisional: gglib has no reading of a phone running them, so
 /// neither the memory a phone can give them nor the 8192-token column rests on
 /// a measurement. Weights are the exact size of each file on Hugging Face at
-/// the revision its row names; KV shapes are read from each file's own GGUF
-/// metadata and counted as
+/// the revision its row names; KV shapes and trained contexts are read from
+/// each file's own GGUF metadata, the shapes counted as
 /// [`estimate_kv_elems_per_token`](crate::domain::estimate_kv_elems_per_token)
 /// counts them.
 pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
@@ -263,12 +270,13 @@ pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
         quantization: "Q4_K_M",
         // Revision 22c9fc8a8c7700b76a1789366280a6a5a1ad1120.
         weights_bytes: 2_497_281_312,
-        // 36 layers x 8 KV heads x 128 head dim; trained to 40960.
+        // 36 layers x 8 KV heads x 128 head dim.
         kv_elems_per_token: KvElemsPerToken {
             k: 36_864,
             v: 36_864,
         },
         context: 8192,
+        trained_ctx: 40_960,
         rationale: "the strongest model here a phone can hold, and it thinks \
                     before it answers",
     },
@@ -277,12 +285,13 @@ pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
         quantization: "Q4_K_M",
         // Revision 5ab33fa94d1d04e903623ae72c95d1696f09f9e8.
         weights_bytes: 2_019_377_696,
-        // 28 layers x 8 KV heads x 128 head dim; trained to 131072.
+        // 28 layers x 8 KV heads x 128 head dim.
         kv_elems_per_token: KvElemsPerToken {
             k: 28_672,
             v: 28_672,
         },
         context: 8192,
+        trained_ctx: 131_072,
         rationale: "Meta's small chat model: it answers straight away, with no \
                     thinking to wait through",
     },
@@ -291,12 +300,13 @@ pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
         quantization: "Q4_K_M",
         // Revision d7f544eead698dbd1f15126ef60b45a1e1933222.
         weights_bytes: 1_107_409_472,
-        // 28 layers x 8 KV heads x 128 head dim; trained to 40960.
+        // 28 layers x 8 KV heads x 128 head dim.
         kv_elems_per_token: KvElemsPerToken {
             k: 28_672,
             v: 28_672,
         },
         context: 8192,
+        trained_ctx: 40_960,
         rationale: "Qwen3's thinking in about half the memory of the 4B",
     },
     ModelCandidate {
@@ -304,9 +314,10 @@ pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
         quantization: "Q4_K_M",
         // Revision 067b946cf014b7c697f3654f621d577a3e3afd1c.
         weights_bytes: 807_694_464,
-        // 16 layers x 8 KV heads x 64 head dim; trained to 131072.
+        // 16 layers x 8 KV heads x 64 head dim.
         kv_elems_per_token: KvElemsPerToken { k: 8192, v: 8192 },
         context: 8192,
+        trained_ctx: 131_072,
         rationale: "Meta's smallest Llama 3.2: quick, direct answers in under a \
                     gigabyte",
     },
@@ -315,12 +326,13 @@ pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
         quantization: "Q4_K_M",
         // Revision f0b45be0aac41bd6a100a4b5734cad5f67255bfb.
         weights_bytes: 806_058_272,
-        // 26 layers x 1 KV head x 256 head dim; trained to 32768. The file
-        // says `sliding_window = 512` and has no `full_attention_interval`, so
-        // every layer is counted at the full context: more than the sliding
-        // layers keep, which is the safe direction.
+        // 26 layers x 1 KV head x 256 head dim. The file says
+        // `sliding_window = 512` and has no `full_attention_interval`, so every
+        // layer is counted at the full context: more than the sliding layers
+        // keep, which is the safe direction.
         kv_elems_per_token: KvElemsPerToken { k: 6656, v: 6656 },
         context: 8192,
+        trained_ctx: 32_768,
         rationale: "Google's smallest Gemma 3: short, plain answers in under a \
                     gigabyte",
     },
@@ -329,12 +341,13 @@ pub static PHONE_SHORTLIST: &[ModelCandidate] = &[
         quantization: "Q4_K_M",
         // Revision 50968a4468ef4233ed78cd7c3de230dd1d61a56b.
         weights_bytes: 396_705_472,
-        // 28 layers x 8 KV heads x 128 head dim; trained to 40960.
+        // 28 layers x 8 KV heads x 128 head dim.
         kv_elems_per_token: KvElemsPerToken {
             k: 28_672,
             v: 28_672,
         },
         context: 8192,
+        trained_ctx: 40_960,
         rationale: "the smallest model here, and it still thinks before it \
                     answers",
     },
