@@ -238,6 +238,34 @@ describe('SettingsModal — save', () => {
     expect(save).not.toHaveBeenCalled();
   });
 
+  /** A save puts the key field back to the mask, whether or not it sent anything. */
+  it.each([
+    ['left blank', '   '],
+    ['given a new key', 'sk-new'],
+  ])('shows the mask again after a save with the replace %s', async (_name, text) => {
+    const user = userEvent.setup();
+    openDialog();
+
+    await replaceKey(text)(user);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(field('proxy-api-key-input').readOnly).toBe(true);
+    expect(field('proxy-api-key-input').value).toBe('••••••••');
+  });
+
+  /** A save that fails keeps what was typed, to try again. */
+  it('keeps the typed key when the save fails', async () => {
+    save.mockRejectedValueOnce(new Error('daemon down'));
+    const user = userEvent.setup();
+    openDialog();
+
+    await replaceKey('sk-new')(user);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(field('proxy-api-key-input').readOnly).toBe(false);
+    expect(field('proxy-api-key-input').value).toBe('sk-new');
+  });
+
   /** With no key stored the field is the input, and empty means no change. */
   it('sends nothing for an empty key field when no key is stored', async () => {
     settings.hasProxyApiKey = false;

@@ -147,6 +147,10 @@ export const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose, initial
         if (Object.keys(updates).length > 0) {
           await saveSettings(updates);
         }
+        // The key field back to the mask. A save that sent the key reloads
+        // the settings and resets it anyway; one that sent nothing does not,
+        // and would leave a Replace box open under "updated successfully".
+        setProxyApiKeyInput(KEEP);
 
         setSuccessMessage("Settings updated successfully");
       } catch (err) {
