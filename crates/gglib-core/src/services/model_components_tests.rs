@@ -21,7 +21,7 @@ use crate::domain::image_family_goldens::{self, Golden, StandIn};
 use crate::domain::{ComponentRole, ImageFamily, Model, ModelComponent, NewModel};
 use crate::download::GgufFileRole;
 use crate::ports::{
-    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, ModelRepository,
+    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata, ModelRepository,
     RepositoryError, TensorTable,
 };
 use crate::services::LinkError;
@@ -50,6 +50,10 @@ impl GgufParserPort for GoldenParser {
         Err(GgufParseError::InvalidFormat(
             "no head is read here".to_owned(),
         ))
+    }
+
+    fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        Err(GgufParseError::InvalidFormat("no head is read".to_owned()))
     }
 }
 
@@ -438,6 +442,10 @@ impl GgufParserPort for HeaderOnlyParser {
     }
     fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
         panic!("a projector's head was read");
+    }
+
+    fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        panic!("a head was parsed")
     }
 }
 

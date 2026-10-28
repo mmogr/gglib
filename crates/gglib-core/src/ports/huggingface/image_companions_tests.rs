@@ -6,7 +6,7 @@ use std::path::Path;
 use super::*;
 use crate::domain::image_family_goldens::{Golden, StandIn};
 use crate::ports::huggingface::fake_hub::{FakeHub, hub_file};
-use crate::ports::{GgufCapabilities, GgufMetadata, GgufParseError, TensorTable};
+use crate::ports::{GgufCapabilities, GgufMetadata, GgufParseError, HeadMetadata, TensorTable};
 
 /// Reads a head that is a measured file's name as that file's tensor table,
 /// the Z-Image stand-in's name as its table, and any other head as a chat
@@ -47,6 +47,10 @@ impl GgufParserPort for HeadParser {
         golden_named(head).map(Golden::table).ok_or_else(|| {
             GgufParseError::Io("failed to fill whole buffer: the head ended".to_owned())
         })
+    }
+
+    fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        unimplemented!("only tensor tables are read from heads here")
     }
 }
 

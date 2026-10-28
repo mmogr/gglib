@@ -62,6 +62,8 @@ pub(crate) fn repo_info_from_json(json: &Value) -> Option<HfRepoInfo> {
         last_modified: text(&["lastModified"]),
         chat_template: text(&["gguf", "chat_template"])
             .or_else(|| text(&["config", "chat_template"])),
+        architecture: text(&["gguf", "architecture"]),
+        context_length: at(json, &["gguf", "context_length"]).and_then(Value::as_u64),
         tags,
         model_id,
     })

@@ -1289,6 +1289,16 @@ mod tests {
                 "no tensor table".to_owned(),
             ))
         }
+
+        fn parse_head(
+            &self,
+            _head: &[u8],
+            _file_name: &str,
+        ) -> std::result::Result<crate::ports::HeadMetadata, crate::ports::GgufParseError> {
+            Err(crate::ports::GgufParseError::InvalidFormat(
+                "no head is read".to_owned(),
+            ))
+        }
     }
 
     #[tokio::test]

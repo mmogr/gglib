@@ -47,9 +47,7 @@ fn read<R: Read>(mut reader: GgufReader<R>) -> GgufResult<TensorTable> {
 /// The rest of a GGUF file after its magic: the header, the metadata, of
 /// which only `general.architecture` is kept, and the tensor-info table.
 fn read_gguf<R: Read>(reader: &mut GgufReader<R>) -> GgufResult<TensorTable> {
-    let version = reader.read_version()?;
-    let tensor_count = read_count(reader, version)?;
-    let metadata_count = read_count(reader, version)?;
+    let (tensor_count, metadata_count) = reader.read_counts()?;
     let metadata_count = reader.declared_size("metadata count", metadata_count, MIN_PAIR_BYTES)?;
     let mut architecture = None;
     for _ in 0..metadata_count {
@@ -65,15 +63,6 @@ fn read_gguf<R: Read>(reader: &mut GgufReader<R>) -> GgufResult<TensorTable> {
         architecture,
         tensors: read_tensor_infos(reader, tensor_count)?,
     })
-}
-
-/// A count in a GGUF header: a `u32` in version 1, a `u64` after.
-fn read_count<R: Read>(reader: &mut GgufReader<R>, version: u32) -> GgufResult<u64> {
-    if version >= 2 {
-        reader.read_u64()
-    } else {
-        reader.read_u32().map(u64::from)
-    }
 }
 
 /// The `declared` entries of a GGUF tensor-info table, which follows the

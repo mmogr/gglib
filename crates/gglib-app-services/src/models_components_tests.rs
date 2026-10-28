@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use gglib_core::domain::{ComponentRole, ImageFamily, ModelListQuery, TensorInfo, WeightsFormat};
 use gglib_core::ports::{
-    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopEmitter, NoopModelRuntime,
-    TensorTable,
+    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata, NoopEmitter,
+    NoopModelRuntime, TensorTable,
 };
 use gglib_core::services::ImportMode;
 use tempfile::TempDir;
@@ -67,6 +67,10 @@ impl GgufParserPort for FirstBytesParser {
         Err(GgufParseError::InvalidFormat(
             "no head is read here".to_owned(),
         ))
+    }
+
+    fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        Err(GgufParseError::InvalidFormat("no head is read".to_owned()))
     }
 }
 

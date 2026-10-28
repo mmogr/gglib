@@ -27,6 +27,12 @@ pub struct HfRepoInfo {
     pub last_modified: Option<String>,
     /// Chat template (from `gguf.chat_template`, else `config.chat_template`)
     pub chat_template: Option<String>,
+    /// The architecture the Hub read from the repository's GGUF header
+    /// (`gguf.architecture`), e.g. `qwen3`
+    pub architecture: Option<String>,
+    /// The context length the model was trained for, as the Hub read it from
+    /// the repository's GGUF header (`gguf.context_length`)
+    pub context_length: Option<u64>,
     /// Model tags
     #[serde(default)]
     pub tags: Vec<String>,

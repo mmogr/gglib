@@ -65,6 +65,14 @@ async fn a_search_page_gives_each_hit_the_fields_the_browser_showed() {
         .expect("a page");
 
     assert_eq!(found.next_cursor.as_deref(), Some("next"));
+    for item in &found.items {
+        assert_eq!(
+            (item.architecture.as_deref(), item.context_length),
+            (Some("phi3"), Some(131_072)),
+            "{}",
+            item.model_id
+        );
+    }
     let hit = |id: &str, downloads, likes, tags| Shown {
         id: id.to_string(),
         name: id.rsplit('/').next().unwrap().to_string(),
@@ -137,6 +145,10 @@ async fn a_repository_looked_up_by_its_id_shows_what_its_search_hit_shows() {
         info.chat_template.as_deref().map(str::len),
         Some(398),
         "the template tool support is detected from"
+    );
+    assert_eq!(
+        (info.architecture.as_deref(), info.context_length),
+        (Some("phi3"), Some(131_072))
     );
     assert_eq!(
         shown(info),

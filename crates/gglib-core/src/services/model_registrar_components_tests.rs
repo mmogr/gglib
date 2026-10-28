@@ -13,7 +13,9 @@ use crate::domain::image_family_goldens::Golden;
 use crate::domain::{ComponentRole, ImageFamily, Model, ModelComponent, ModelFile, NewModel};
 use crate::download::Quantization;
 use crate::paths::canonical_model_path;
-use crate::ports::{GgufCapabilities, GgufMetadata, GgufParseError, ResolvedFile, TensorTable};
+use crate::ports::{
+    GgufCapabilities, GgufMetadata, GgufParseError, HeadMetadata, ResolvedFile, TensorTable,
+};
 use crate::services::model_components::tests::{GoldenParser, write_golden};
 
 /// Reads the weights' header as a Flux.1 file's, which holds no metadata
@@ -35,6 +37,10 @@ impl GgufParserPort for FluxParser {
         GoldenParser.tensor_table(path)
     }
     fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
+        unimplemented!("a registration reads files")
+    }
+
+    fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
         unimplemented!("a registration reads files")
     }
 }

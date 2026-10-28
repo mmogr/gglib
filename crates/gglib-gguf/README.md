@@ -63,8 +63,9 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`error.rs`** — Parser error types
 - **`fixture.rs`** — `write_string_gguf`, `write_tensor_gguf` and `write_safetensors`, weights files written without a model for a test to parse; behind the `test-utils` feature
 - **`format.rs`** — GGUF format types, tensor types, and quantization enums
+- **`head.rs`** — A GGUF file's metadata from its first bytes, as far as they go (`GgufParserPort::parse_head`), so a download can be judged before it starts: the pairs the head holds whole are kept, and the head ending, or a size the file declares running past it, is no error. Only a head without the GGUF magic, or with a malformed value, is refused
 - **`parser.rs`** — High-level metadata extraction and port implementation
-- **`reader.rs`** — Low-level file I/O and GGUF header parsing; a string length, array count or metadata count the file declares is held to the bytes it has left before anything is reserved or looped over
+- **`reader.rs`** — Low-level I/O over a file or a head of one, and GGUF header parsing; a string length, array count or metadata count the file declares is held to the bytes it has left before anything is reserved or looped over
 - **`role.rs`** — Whether the header says the file is a model's weights or a projector
 - **`tensor_table.rs`** — A weights file's tensor table (`GgufParserPort::tensor_table` and `tensor_table_of_head`): every tensor's name and shape, outermost first, from a GGUF header or, when the first four bytes are not the GGUF magic, a safetensors header. The tensor count is held to the bytes left and a tensor of more than four dimensions refused before anything is reserved
 - **`safetensors.rs`** — A safetensors header as a tensor table; a header length over 100,000,000 bytes or over what the file holds is refused before anything is reserved
@@ -74,6 +75,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 
 - **GGUF v3 Support** — Parses the latest GGUF file format
 - **Metadata Extraction** — Extracts model name, architecture, context size, quantization
+- **Head Parsing** — Reads the metadata a file's first bytes hold, such as a 64 KiB range of a file on the Hub
 - **Capability Detection** — Identifies chat template, vocabulary size, embedding dimensions
 - **Efficient Parsing** — Streams metadata without loading full tensor data
 

@@ -5,6 +5,7 @@ mod error;
 #[cfg(any(test, feature = "test-utils"))]
 mod fixture;
 mod format;
+mod head;
 mod parser;
 mod reader;
 mod role;

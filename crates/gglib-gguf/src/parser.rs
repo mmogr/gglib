@@ -4,17 +4,20 @@
 //! the `GgufParserPort` trait from `gglib-core`.
 
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::Path;
 
 use gglib_core::domain::gguf::{GgufValue, RawMetadata};
 use gglib_core::domain::{ImageFamily, TensorTable, WeightsFormat};
-use gglib_core::{GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, Quantization};
+use gglib_core::{
+    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata, Quantization,
+};
 
 use crate::capabilities;
 use crate::error::GgufResult;
 use crate::format::{CONTEXT_LENGTH_KEYS, quantization};
 use crate::reader::GgufReader;
-use crate::tensor_table;
+use crate::{head, tensor_table};
 
 /// The fewest bytes a metadata pair takes in a file: the length of an empty
 /// key, the value type, and a one-byte value.
@@ -33,74 +36,61 @@ impl GgufParser {
     pub const fn new() -> Self {
         Self
     }
+}
 
-    /// Internal parse implementation that returns rich internal errors.
-    #[allow(clippy::unused_self)]
-    fn parse_internal(&self, file_path: &Path) -> GgufResult<GgufMetadata> {
-        let mut reader = GgufReader::open(file_path)?;
+/// The metadata of the GGUF file `reader` reads from its start, which
+/// `file_path` names: the name is read for the quantization and the
+/// parameter count when the header has neither.
+pub(crate) fn parse_internal<R: Read>(
+    mut reader: GgufReader<R>,
+    file_path: &Path,
+) -> GgufResult<GgufMetadata> {
+    reader.read_magic()?;
+    // The tensor count is held to the size of the file only when the
+    // tensor-info table after the metadata is read.
+    let (tensor_count, metadata_count) = reader.read_counts()?;
+    let metadata_count = reader.declared_size("metadata count", metadata_count, MIN_PAIR_BYTES)?;
 
-        // Read and validate header
-        reader.read_magic()?;
-        let version = reader.read_version()?;
-
-        // Read tensor count. It is held to the size of the file only when
-        // the tensor-info table after the metadata is read.
-        let tensor_count = if version >= 2 {
-            reader.read_u64()?
-        } else {
-            u64::from(reader.read_u32()?)
-        };
-
-        // Read metadata count
-        let metadata_count = if version >= 2 {
-            reader.read_u64()?
-        } else {
-            u64::from(reader.read_u32()?)
-        };
-        let metadata_count =
-            reader.declared_size("metadata count", metadata_count, MIN_PAIR_BYTES)?;
-
-        // Parse metadata key-value pairs
-        let mut raw_metadata = HashMap::new();
-        for _ in 0..metadata_count {
-            let key = reader.read_string()?;
-            let value_type = reader.read_u32()?;
-            let value = reader.read_value(value_type)?;
-            raw_metadata.insert(key, value);
-        }
-
-        // Read on into the tensor-info table, the only place an image
-        // model's GGUF says what it is. A table that cannot be read leaves
-        // the family unknown and never fails a parse of the metadata.
-        let image_family = match tensor_table::read_tensor_infos(&mut reader, tensor_count) {
-            Ok(tensors) => ImageFamily::sniff(&TensorTable {
-                format: WeightsFormat::Gguf,
-                architecture: raw_metadata
-                    .get("general.architecture")
-                    .and_then(GgufValue::as_str)
-                    .map(str::to_owned),
-                tensors,
-            }),
-            Err(error) => {
-                tracing::debug!(
-                    path = %file_path.display(),
-                    %error,
-                    "the tensor table could not be read; no image family"
-                );
-                None
-            }
-        };
-
-        // Extract structured metadata
-        let mut metadata = extract_metadata(&raw_metadata, file_path);
-        metadata.image_family = image_family;
-        Ok(metadata)
+    let mut raw_metadata = HashMap::new();
+    for _ in 0..metadata_count {
+        let key = reader.read_string()?;
+        let value_type = reader.read_u32()?;
+        let value = reader.read_value(value_type)?;
+        raw_metadata.insert(key, value);
     }
+
+    // Read on into the tensor-info table, the only place an image
+    // model's GGUF says what it is. A table that cannot be read leaves
+    // the family unknown and never fails a parse of the metadata.
+    let image_family = match tensor_table::read_tensor_infos(&mut reader, tensor_count) {
+        Ok(tensors) => ImageFamily::sniff(&TensorTable {
+            format: WeightsFormat::Gguf,
+            architecture: raw_metadata
+                .get("general.architecture")
+                .and_then(GgufValue::as_str)
+                .map(str::to_owned),
+            tensors,
+        }),
+        Err(error) => {
+            tracing::debug!(
+                path = %file_path.display(),
+                %error,
+                "the tensor table could not be read; no image family"
+            );
+            None
+        }
+    };
+
+    let mut metadata = extract_metadata(&raw_metadata, file_path);
+    metadata.image_family = image_family;
+    Ok(metadata)
 }
 
 impl GgufParserPort for GgufParser {
     fn parse(&self, file_path: &Path) -> Result<GgufMetadata, GgufParseError> {
-        self.parse_internal(file_path).map_err(Into::into)
+        GgufReader::open(file_path)
+            .and_then(|reader| parse_internal(reader, file_path))
+            .map_err(Into::into)
     }
 
     fn detect_capabilities(&self, metadata: &GgufMetadata) -> GgufCapabilities {
@@ -114,6 +104,10 @@ impl GgufParserPort for GgufParser {
     fn tensor_table_of_head(&self, head: &[u8]) -> Result<TensorTable, GgufParseError> {
         tensor_table::read_head(head).map_err(Into::into)
     }
+
+    fn parse_head(&self, head: &[u8], file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        head::read(head, file_name).map_err(Into::into)
+    }
 }
 
 // =============================================================================
@@ -121,7 +115,7 @@ impl GgufParserPort for GgufParser {
 // =============================================================================
 
 /// Extract structured metadata from raw GGUF key-value pairs.
-fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetadata {
+pub(crate) fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetadata {
     let mut processed = HashMap::new();
 
     // Convert metadata to string representation, skipping large arrays

@@ -110,7 +110,7 @@ mod through_a_symlink {
 
     use gglib_core::download::Quantization;
     use gglib_core::ports::{CompletedDownload, GgufParserPort, ModelRegistrarPort, TensorTable};
-    use gglib_core::{GgufCapabilities, GgufFileRole, GgufMetadata, GgufParseError};
+    use gglib_core::{GgufCapabilities, GgufFileRole, GgufMetadata, GgufParseError, HeadMetadata};
 
     use super::super::*;
     use crate::CoreFactory;
@@ -134,6 +134,14 @@ mod through_a_symlink {
         }
         fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
             Err(GgufParseError::InvalidFormat("no tensor table".to_owned()))
+        }
+
+        fn parse_head(
+            &self,
+            _head: &[u8],
+            _file_name: &str,
+        ) -> Result<HeadMetadata, GgufParseError> {
+            Err(GgufParseError::InvalidFormat("no head is read".to_owned()))
         }
     }
 

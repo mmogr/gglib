@@ -9,7 +9,8 @@ use gglib_core::domain::{ComponentRole, ImageFamily, TensorInfo, WeightsFormat};
 use gglib_core::paths::repository_dir;
 use gglib_core::ports::huggingface::fake_hub::{FakeHub, hub_file};
 use gglib_core::ports::{
-    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HfQuantInfo, TensorTable,
+    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata, HfQuantInfo,
+    TensorTable,
 };
 
 use super::*;
@@ -46,6 +47,10 @@ impl GgufParserPort for HeadParser {
                 tensor("txt_in.weight", &[3072, 4096]),
             ],
         })
+    }
+
+    fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        unimplemented!("only tensor tables are read from heads here")
     }
 }
 

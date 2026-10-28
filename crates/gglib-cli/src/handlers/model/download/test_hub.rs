@@ -53,6 +53,8 @@ fn hit(id: &str, downloads: u64, likes: u64, description: Option<&str>) -> HfRep
         description: description.map(str::to_string),
         last_modified: None,
         chat_template: None,
+        architecture: None,
+        context_length: None,
         tags: vec![],
     }
 }
