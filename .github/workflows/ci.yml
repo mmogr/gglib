@@ -889,11 +889,30 @@ jobs:
       - name: The Swift binding links and calls the macOS slice
         run: make ffi-smoke
 
+  # llama.cpp's own llama.xcframework at the pin, built by upstream's script
+  # with the runner's Xcode for the iPhone, its simulator and the Mac, and
+  # checked for the slices and the llama.h functions the phone engine links.
+  # The llama-xcframework action caches it by the pin, the Xcode version and
+  # the build script, so a run compiles llama.cpp only when one of them moves.
+  #
+  # Every push and pull request, like `ios-check`. A run that misses the
+  # cache saves its entry, so a pull request restores main's entry or one an
+  # earlier run of its own saved.
+  phone-llama:
+    name: Phone llama.xcframework
+    runs-on: macos-26
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Build or restore llama.xcframework at the pin
+        uses: ./.github/actions/llama-xcframework
+
   ci-success:
     name: CI Success
     runs-on: ubuntu-24.04
     if: always()
-    needs: [boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os, ios-check, ffi-inputs, ffi-apple]
+    needs: [boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os, ios-check, ffi-inputs, ffi-apple, phone-llama]
     steps:
       - name: Check all jobs succeeded
         run: |

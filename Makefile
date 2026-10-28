@@ -2,7 +2,7 @@
 # them, so `make test` and `make setup` were one stray directory away from
 # being skipped as up-to-date.
 .PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri \
-        test test-helper check ios-check fmt lint doc doc-check dev pre-commit release \
+        test test-helper check ios-check phone-llama fmt lint doc doc-check dev pre-commit release \
         lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
         adr-readings record-upstream bindings bindings-check \
         ffi-binding ffi-binding-check ffi-xcframework ffi-xcframework-fast ffi-smoke \
@@ -243,6 +243,16 @@ PHONE_CRATES := gglib-core gglib-gguf gglib-db gglib-download gglib-hf \
 ios-check: ## Check the phone crates compile for aarch64-apple-ios (macOS)
 	@echo "Checking the phone crates for aarch64-apple-ios..."
 	$(CARGO) check --locked --target aarch64-apple-ios $(addprefix -p ,$(PHONE_CRATES))
+
+# llama.cpp's own llama.xcframework at the pin, for the iPhone, its simulator
+# and the Mac, in target/apple/llama-<pin>/; a folder already built at the pin
+# is kept, and the check reads that folder whatever GGLIB_LLAMA_XCFRAMEWORK
+# names. A cold build compiles llama.cpp three times with CMake and Xcode,
+# so it runs on macOS only and is not part of `pre-commit`. Export the
+# GGLIB_LLAMA_XCFRAMEWORK line it prints for the phone engine's build.
+phone-llama: ## Build llama.cpp's xcframework at the pin for the phone engine (macOS)
+	@./scripts/apple/build-llama-xcframework.sh
+	@./scripts/apple/check-llama-xcframework.sh "$(CURDIR)/target/apple/llama-$$(./scripts/llama_pin.sh)/llama.xcframework"
 
 ##@ Frontend and architecture checks
 
