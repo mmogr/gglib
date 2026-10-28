@@ -8,7 +8,7 @@ use gglib_gguf::ChatTemplate;
 use tokio::sync::Semaphore;
 
 use crate::decoder::{
-    Abort, Decoder, DecoderError, Finished, LoadParams, Loaded, Sampling, Step, Token,
+    Abort, Decoder, DecoderError, FinishReason, Finished, LoadParams, Loaded, Sampling, Step, Token,
 };
 use crate::state::{EngineState, States};
 
@@ -21,9 +21,10 @@ use crate::state::{EngineState, States};
 /// generation at its next step.
 ///
 /// Each step it takes is an [`EngineState`]: a load is `Unloading` the model
-/// held, `Loading`, then `Ready` or `Failed`, `Failed` too when the decoder
-/// panics; an unload is `Unloading` then `Idle`; a generation is
-/// `Generating` then `Ready` again.
+/// held, `Loading` with each whole percent the decoder reports read, then
+/// `Ready` or `Failed`, `Failed` too when the decoder panics, and `Idle` when
+/// its abort stopped it; an unload is `Unloading` then `Idle`; a generation
+/// is `Generating` then `Ready` again.
 pub struct Engine {
     decoder: Mutex<Box<dyn Decoder>>,
     resident: RwLock<Option<Arc<Resident>>>,
@@ -99,30 +100,37 @@ impl Engine {
     /// held: the generation in flight is aborted and waited for, and the
     /// model held is freed before the new one is read.
     ///
-    /// A chat template that does not compile fails the load and leaves no
-    /// model held, as llama-server refuses to start on one. A load that
-    /// panics is `Failed` as it unwinds, and the next load frees whatever
-    /// the decoder was left holding.
+    /// Raising `abort` stops the load at the decoder's next report of its
+    /// progress, leaving no model held, and the engine `Idle`. A chat
+    /// template that does not compile fails the load and leaves no model
+    /// held, as llama-server refuses to start on one. A load that panics is
+    /// `Failed` as it unwinds, and the next load frees whatever the decoder
+    /// was left holding.
     pub fn load(
         &self,
         name: &str,
         path: &Path,
         params: &LoadParams,
+        abort: &Abort,
     ) -> Result<Loaded, DecoderError> {
         let _panicked = self.states.failed_on_panic(name);
         let failed = |e: DecoderError| {
-            self.states.set(EngineState::Failed {
-                model: name.to_owned(),
-                reason: e.to_string(),
+            self.states.set(match e {
+                DecoderError::LoadAborted => EngineState::Idle,
+                _ => EngineState::Failed {
+                    model: name.to_owned(),
+                    reason: e.to_string(),
+                },
             });
             e
         };
         let mut decoder = self.free();
-        self.states.set(EngineState::Loading {
-            model: name.to_owned(),
-            fraction: 0.0,
-        });
-        let loaded = decoder.load(path, params).map_err(&failed)?;
+        self.states.loading(name, 0.0);
+        let loaded = decoder
+            .load(path, params, abort, &mut |read| {
+                self.states.loading(name, read);
+            })
+            .map_err(&failed)?;
         let template = match ChatTemplate::new(&loaded.chat_template, loaded.vocab.clone()) {
             Ok(template) => template,
             Err(e) => {
@@ -222,7 +230,9 @@ impl Engine {
     /// [`Engine::turn`] permit.
     ///
     /// A prompt of `n_ctx` tokens or more is refused before any is read,
-    /// as llama-server refuses one.
+    /// as llama-server refuses one. An empty prompt is answered as
+    /// llama-server answers it ("empty prompt - releasing slot"): a reply of
+    /// nothing, ended at its length, which the decoder is not asked for.
     ///
     /// The model is `Generating` while it runs. Both changes are made under
     /// the decoder's lock, which a load or an unload waits for, so neither
@@ -255,7 +265,7 @@ impl Engine {
 }
 
 /// Tokenize `prompt`, refuse it if it leaves no token of `n_ctx` free, and
-/// generate from it.
+/// generate from it unless it is empty.
 fn generate(
     decoder: &mut dyn Decoder,
     n_ctx: u32,
@@ -272,6 +282,13 @@ fn generate(
     on(Progress::Started {
         prompt_tokens: n_prompt,
     });
+    if tokens.is_empty() {
+        return Ok(Finished {
+            reason: FinishReason::Length,
+            cached_tokens: 0,
+            completion_tokens: 0,
+        });
+    }
     decoder
         .generate(&tokens, sampling, abort, &mut |step| {
             on(Progress::Step(step));

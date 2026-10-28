@@ -2621,6 +2621,7 @@ version = "0.28.0-rc.1"
 dependencies = [
  "async-trait",
  "axum",
+ "cc",
  "futures-util",
  "gglib-core",
  "gglib-gguf",

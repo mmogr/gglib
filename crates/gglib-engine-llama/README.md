@@ -13,10 +13,17 @@ answers the proxy's requests as llama-server answers them at the pin.
 through: it fits one model at a time to the device's memory, loads it, and
 hands the proxy the shim as the model's server.
 
-The crate is pure Rust on every target: it holds the seam a decoder over
-llama.h plugs into, not that decoder. `ScriptedDecoder` (feature
-`test-decoder`) replays a script of pieces, so this crate's tests, and the
-tests of a crate composing it, run on any OS with no model.
+The crate is pure Rust on every target unless its `llama` feature links
+llama.cpp. [`Decoder`] is the seam a decoder plugs into. `LlamaDecoder` is the
+real one: llama.cpp's own `llama.framework` at the pin, reached through a
+small C shim (`csrc/`) whose arguments are scalars, strings and opaque
+handles, so no llama.h struct crosses into Rust. build.rs compiles the shim
+and links the framework only for an Apple target with the `llama` feature on
+and `GGLIB_LLAMA_XCFRAMEWORK` naming the framework `make phone-llama` builds;
+anywhere else the feature compiles nothing and `LlamaDecoder` does not exist.
+`ScriptedDecoder` (feature `test-decoder`) replays a script of pieces, so this
+crate's tests, and the tests of a crate composing it, run on any OS with no
+model.
 
 ## Architecture
 
@@ -41,9 +48,15 @@ it live in `gglib-integration-tests`.
   │ NormalizingSt. │  GET /slots     │       ▼                                  │
   │ usage reading  │ ◀────────────── │ Engine: one turn ──▶ decode thread       │
   └────────────────┘  llama's SSE    │                       Decoder::generate  │
-                                     │       ▼                                  │
-                                     │ reply: stop strings, reasoning split     │
-                                     └──────────────────────────────────────────┘
+                                     │       ▼                       │          │
+                                     │ reply: stop strings,          ▼          │
+                                     │   reasoning split       LlamaDecoder     │
+                                     │                         sys (unsafe)     │
+                                     └───────────────────────────────┼──────────┘
+                                                                     ▼
+                                                csrc/gglib_llama.c, flat C over llama.h
+                                                                     ▼
+                                                    llama.framework, built at the pin
 ```
 
 What the shim answers, each in llama-server's shape at the pin
@@ -82,6 +95,16 @@ What the shim answers, each in llama-server's shape at the pin
 A client that hangs up mid-reply drops its stream, which raises the
 generation's abort; the decoder checks it before every step.
 
+`LlamaDecoder` memory-maps a model's weights and offloads every layer to the
+GPU on an iPhone, none on its simulator, and none on a Mac unless told to. It
+makes a context at the size and KV cache types the fit chose, reads a prompt
+512 tokens a step, keeping the prefix the KV cache already holds, and samples
+with llama-server's own chain at the pin, built from the request's sampling
+keys. Its abort is checked before every decode step and, on the CPU, inside
+llama.cpp's decode too; a load reports its progress and is stopped by its
+abort at the next report. A load or context llama.cpp refuses fails in the
+words llama.cpp logged.
+
 [`InProcessRuntime`] admits a chat by looking its model up in the catalog,
 fitting the model's context with gglib-core's `fit_verdict` against a budget
 made once from the device's memory reading and held, and loading it at that
@@ -93,8 +116,9 @@ raises it. A model whose smallest rung does not fit is refused with
 than that rung with words that say so. One model is held: admitting another
 frees the first before the second is read, ending the reply it was
 generating. Each step is an [`EngineState`] on a tokio watch (`Idle`,
-`Loading`, `Ready`, `Generating`, `Unloading`, `Failed`, `Stopped`), and
-`shutdown` frees the model, stops the shim and ends the watch.
+`Loading` with the fraction read, `Ready`, `Generating`, `Unloading`,
+`Failed`, `Stopped`), and `shutdown` stops a load under way, frees the model,
+stops the shim and ends the watch.
 
 ## Internal Structure
 
@@ -103,17 +127,20 @@ generating. Each step is an [`EngineState`] on a tokio watch (`Idle`,
 │                         gglib-engine-llama                          │
 ├─────────────────────────────────────────────────────────────────────┤
 │  decoder/   Decoder · Loaded · Step · Finished · Abort · Sampling   │
-│             ScriptedDecoder (test-decoder)                          │
+│             LlamaDecoder (llama) · ScriptedDecoder (test-decoder)   │
 │  engine.rs  Engine: the model held, one generation at a time        │
 │  state.rs   EngineState and the watch it is published on            │
 │  render.rs  a chat request read and rendered through its template   │
 │  shim/      the axum server and llama-server's JSON                 │
 │  runtime/   InProcessRuntime: admission, fit, stops, shutdown       │
+│  sys/       the only unsafe code: handles over the C shim (llama)   │
+│  csrc/      gglib_llama.{h,c}: flat C over llama.h (llama)          │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 - [`src/decoder/`](src/decoder/): the [`Decoder`] trait and what crosses it,
-  [`Sampling`] with llama-server's defaults, and `ScriptedDecoder`.
+  [`Sampling`] with llama-server's defaults, `LlamaDecoder` and
+  `ScriptedDecoder`.
 - [`src/engine.rs`](src/engine.rs): [`Engine`], which loads and frees models
   and runs a generation on a thread of its own, one at a time, aborting the
   one in flight when the model changes, and publishes each step as an
@@ -130,6 +157,19 @@ generating. Each step is an [`EngineState`] on a tokio watch (`Idle`,
 - [`src/runtime/`](src/runtime/): [`InProcessRuntime`], the
   `ModelRuntimePort` over the engine and its shim, and the fit of a model's
   context to the device's budget.
+- [`src/sys/`](src/sys/): the crate's only unsafe code, under the `llama`
+  feature: the shim's functions as `csrc/gglib_llama.h` declares them, and
+  the handles that own the model, context and sampler it hands out. Each
+  unsafe item carries its own `#[expect(unsafe_code, reason = "...")]`.
+- [`csrc/`](csrc/): the C shim, compiled by build.rs against the pinned
+  `llama.h`. A function the pin renames, retypes or deprecates is a compile
+  error there, and `scripts/apple/check-llama-xcframework.sh` holds the
+  framework to every `llama_*` function it calls.
+
+`make engine-llama-test` runs the tests with the decoder over llama.h on the
+Mac's slice (the real-model ones read `GGLIB_ENGINE_MODELS_DIR`), and
+`make engine-llama-clippy` lints it for the Mac, the iPhone and its
+simulator; CI's `phone-llama` job runs both.
 
 ## Usage
 

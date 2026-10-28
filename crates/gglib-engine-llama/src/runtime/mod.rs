@@ -9,11 +9,13 @@ mod admit_tests;
 #[path = "lifecycle_tests.rs"]
 mod lifecycle_tests;
 #[cfg(test)]
+#[path = "load_tests.rs"]
+mod load_tests;
+#[cfg(test)]
 mod test_support;
 
 use std::fmt;
 use std::io;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use async_trait::async_trait;
@@ -24,7 +26,7 @@ use gglib_core::ports::{
 };
 use tokio::sync::watch;
 
-use crate::decoder::{Decoder, LoadParams};
+use crate::decoder::{Abort, Decoder, LoadParams};
 use crate::engine::Engine;
 use crate::shim::{self, Shim};
 use crate::state::EngineState;
@@ -41,8 +43,8 @@ use crate::state::EngineState;
 /// number, so the context a model gets does not move between requests.
 ///
 /// [`InProcessRuntime::subscribe`] watches what the engine is doing.
-/// [`InProcessRuntime::shutdown`] frees the model, stops the shim and ends
-/// that watch; a runtime that has shut down admits nothing.
+/// [`InProcessRuntime::shutdown`] stops a load under way, frees the model,
+/// stops the shim and ends that watch; a runtime shut down admits nothing.
 pub struct InProcessRuntime {
     inner: Arc<Inner>,
     shim: Mutex<Option<Shim>>,
@@ -60,7 +62,8 @@ struct Inner {
     placed: tokio::sync::Mutex<Option<Placed>>,
     /// The target of the model held, readable while a placement runs.
     current: Mutex<Option<RunningTarget>>,
-    stopping: AtomicBool,
+    /// Raised by shutdown; every load is given it, and stops when it is.
+    closing: Abort,
 }
 
 /// A model loaded by admission.
@@ -87,7 +90,7 @@ impl InProcessRuntime {
             port: shim.port(),
             placed: tokio::sync::Mutex::new(None),
             current: Mutex::new(None),
-            stopping: AtomicBool::new(false),
+            closing: Abort::new(),
         };
         Ok(Self {
             inner: Arc::new(inner),
@@ -112,14 +115,14 @@ impl InProcessRuntime {
         self.inner.engine.states().current()
     }
 
-    /// Raise the abort of the reply in flight, then free the model once the
-    /// decoder's lock is free, which a load under way and the reply's
-    /// generation each hold until they return (the decode thread itself may
-    /// still be sending its last event). Then stop the shim and end the
-    /// watch on [`EngineState::Stopped`]. Idempotent.
+    /// Stop a load under way and raise the abort of the reply in flight,
+    /// then free the model once the decoder's lock is free, which the load
+    /// and the reply's generation each hold until they return (the decode
+    /// thread itself may still be sending its last event). Then stop the
+    /// shim and end the watch on [`EngineState::Stopped`]. Idempotent.
     pub async fn shutdown(&self) -> io::Result<()> {
         let inner = &self.inner;
-        inner.stopping.store(true, Ordering::Release);
+        inner.closing.raise();
         inner.engine.abort();
         let mut placed = inner.placed.lock().await;
         *placed = None;
@@ -166,14 +169,17 @@ impl Inner {
         };
         let engine = Arc::clone(&self.engine);
         let (name, path) = (spec.name.clone(), spec.file_path.clone());
-        let loaded = tokio::task::spawn_blocking(move || engine.load(&name, &path, &params))
-            .await
-            .map_err(|e| ModelRuntimeError::Internal(format!("the load stopped: {e}")))?
-            .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?;
+        let closing = self.closing.clone();
+        let loaded =
+            tokio::task::spawn_blocking(move || engine.load(&name, &path, &params, &closing))
+                .await
+                .map_err(|e| ModelRuntimeError::Internal(format!("the load stopped: {e}")))?;
+        // A shutdown during the load stopped it, or came as it ended.
         if let Err(stopped) = self.refuse_if_stopping() {
             self.unload().await;
             return Err(stopped);
         }
+        let loaded = loaded.map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?;
         let target = RunningTarget::local(
             self.port,
             spec.id,
@@ -196,7 +202,7 @@ impl Inner {
     }
 
     fn refuse_if_stopping(&self) -> Result<(), ModelRuntimeError> {
-        if self.stopping.load(Ordering::Acquire) {
+        if self.closing.is_raised() {
             return Err(ModelRuntimeError::Internal(
                 "the in-process engine has been shut down".to_owned(),
             ));

@@ -895,11 +895,18 @@ jobs:
   # The llama-xcframework action caches it by the pin, the Xcode version and
   # the build script, so a run compiles llama.cpp only when one of them moves.
   #
-  # Every push and pull request, like `ios-check`. A run that misses the
-  # cache saves its entry, so a pull request restores main's entry or one an
+  # Then the phone engine's decoder over llama.h (gglib-engine-llama's `llama`
+  # feature) is built against that framework, the one place CI links it: its
+  # tests on the Mac's slice, on the CPU, read the tiny models the CLI Check
+  # legs record with, and fail if they are missing; clippy lints it for the
+  # Mac, the iPhone and its simulator. Every other job builds the crate as
+  # plain Rust, with no framework.
+  #
+  # Every push and pull request, like `ios-check`. A run that misses a cache
+  # saves its entry, so a pull request restores main's entry or one an
   # earlier run of its own saved.
   phone-llama:
-    name: Phone llama.xcframework
+    name: Phone Engine on llama.cpp (macOS)
     runs-on: macos-26
     steps:
       - name: Checkout repository
@@ -907,6 +914,54 @@ jobs:
 
       - name: Build or restore llama.xcframework at the pin
         uses: ./.github/actions/llama-xcframework
+
+      # rust-toolchain.toml lists the Apple targets, so this installs them.
+      - name: Install Rust toolchain
+        run: rustup show
+
+      # Its own shared-key, for the reason spelled out on the `test` job.
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci-phone-llama"
+          cache-on-failure: true
+          # Only a run on main saves; the `test` job says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # The pinned-engines action's models, fetched as it fetches them, and
+      # cached under its key and path, so each restores what the other saved.
+      - name: Restore the test models
+        id: models-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/test-models
+          key: test-models-${{ hashFiles('.github/actions/pinned-engines/models.txt') }}
+
+      - name: Fetch the test models
+        env:
+          MODELS: ${{ runner.temp }}/test-models
+          LIST: .github/actions/pinned-engines/models.txt
+        run: |
+          mkdir -p "$MODELS"
+          grep -v '^#' "$LIST" | while read -r name url; do
+            [[ -z $name || -s $MODELS/$name ]] && continue
+            curl -fsSL --retry 3 -o "$MODELS/$name.part" "$url"
+            mv "$MODELS/$name.part" "$MODELS/$name"
+          done
+          echo "GGLIB_ENGINE_MODELS_DIR=$MODELS" >> "$GITHUB_ENV"
+
+      - name: Save the test models
+        if: steps.models-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/test-models
+          key: ${{ steps.models-cache.outputs.cache-primary-key }}
+
+      - name: The decoder over llama.h, tested on the Mac's slice
+        run: make engine-llama-test
+
+      - name: The decoder over llama.h, linted for the Mac, the iPhone and its simulator
+        run: make engine-llama-clippy
 
   ci-success:
     name: CI Success

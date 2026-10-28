@@ -24,9 +24,17 @@ pub struct Script {
     pub step_delay: Duration,
     /// How long a load takes.
     pub load_delay: Duration,
+    /// How many times a load reports its progress: after each of this many
+    /// equal parts of `load_delay` it reports the fraction done and checks
+    /// its abort, as llama.cpp's loader does at each tensor.
+    pub load_steps: u32,
     /// Whether the next load panics, before it holds a model; the loads
     /// after it do not.
     pub load_panics: bool,
+    /// Whether the next load raises its own abort once past its last check,
+    /// still ending with the model held, as a shutdown that lands as the
+    /// load ends does; the loads after it do not.
+    pub load_aborted_late: bool,
     /// The model's `n_ctx_train`.
     pub n_ctx_train: u32,
     /// The model's chat template; empty is llama-server's `ChatML`.
@@ -37,15 +45,18 @@ pub struct Script {
 
 impl Script {
     /// `pieces`, read 512 prompt tokens to a step, with no delay and loaded
-    /// at once without a panic, from a model trained to 4096 tokens with no
-    /// template and a BOS of `<s>` it adds itself.
+    /// at once in one step with neither a panic nor a late abort, from a
+    /// model trained to 4096 tokens with no template and a BOS of `<s>` it
+    /// adds itself.
     pub fn new<S: Into<String>>(pieces: impl IntoIterator<Item = S>) -> Self {
         Self {
             pieces: pieces.into_iter().map(Into::into).collect(),
             batch: 512,
             step_delay: Duration::ZERO,
             load_delay: Duration::ZERO,
+            load_steps: 1,
             load_panics: false,
+            load_aborted_late: false,
             n_ctx_train: 4096,
             chat_template: String::new(),
             vocab: VocabTokens {
@@ -67,6 +78,10 @@ pub struct ScriptRecord {
     pub unloads: u32,
     /// How many loads were asked for while a model was still held.
     pub loads_over_a_model: u32,
+    /// How many loads were stopped by their abort before they held a model.
+    pub loads_aborted: u32,
+    /// The fractions each load reported, in order.
+    pub load_progress: Vec<Vec<f32>>,
     /// The text of each generation's prompt, the BOS included.
     pub prompts: Vec<String>,
     /// The sampling each generation ran under.
@@ -116,15 +131,42 @@ impl ScriptedDecoder {
 }
 
 impl Decoder for ScriptedDecoder {
-    fn load(&mut self, path: &Path, params: &LoadParams) -> Result<Loaded, DecoderError> {
+    fn load(
+        &mut self,
+        path: &Path,
+        params: &LoadParams,
+        abort: &Abort,
+        progress: &mut dyn FnMut(f32),
+    ) -> Result<Loaded, DecoderError> {
         let over = self.n_ctx.is_some();
         self.note(|r| {
             r.loads.push((path.display().to_string(), *params));
             r.loads_over_a_model += u32::from(over);
+            r.load_progress.push(Vec::new());
         });
         let panics = std::mem::take(&mut self.script.load_panics);
         assert!(!panics, "the script's load panics");
-        std::thread::sleep(self.script.load_delay);
+        // The abort is checked before the load starts and after each report.
+        let steps = self.script.load_steps.max(1);
+        for step in 0..=steps {
+            if step > 0 {
+                std::thread::sleep(self.script.load_delay / steps);
+                let fraction = fraction(step, steps);
+                self.note(|r| {
+                    if let Some(reported) = r.load_progress.last_mut() {
+                        reported.push(fraction);
+                    }
+                });
+                progress(fraction);
+            }
+            if abort.is_raised() {
+                self.note(|r| r.loads_aborted += 1);
+                return Err(DecoderError::LoadAborted);
+            }
+        }
+        if std::mem::take(&mut self.script.load_aborted_late) {
+            abort.raise();
+        }
         self.n_ctx = Some(params.n_ctx);
         self.cache.clear();
         Ok(Loaded {
@@ -157,6 +199,9 @@ impl Decoder for ScriptedDecoder {
         sink: &mut dyn FnMut(Step),
     ) -> Result<Finished, DecoderError> {
         let n_ctx = self.n_ctx.ok_or(DecoderError::NotLoaded)?;
+        if prompt.is_empty() {
+            return Err(DecoderError::EmptyPrompt);
+        }
         let text: String = prompt.iter().filter_map(|&t| token_char(t)).collect();
         self.note(|r| {
             r.prompts.push(text);
@@ -250,3 +295,16 @@ fn token_char(t: Token) -> Option<char> {
 fn len32(n: usize) -> u32 {
     u32::try_from(n).unwrap_or(u32::MAX)
 }
+
+/// `step` of `steps`, as a fraction.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "a script's load has a handful of steps, far under f32's exact integers"
+)]
+fn fraction(step: u32, steps: u32) -> f32 {
+    step as f32 / steps as f32
+}
+
+#[cfg(test)]
+#[path = "scripted_tests.rs"]
+mod scripted_tests;

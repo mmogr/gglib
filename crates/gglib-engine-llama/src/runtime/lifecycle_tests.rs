@@ -1,6 +1,6 @@
-//! The engine's states through loads, replies, swaps, stops and shutdown.
+//! The engine's states through replies, swaps, stops, failed loads and a
+//! runtime shut down.
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use futures_util::StreamExt as _;
@@ -12,40 +12,6 @@ use crate::decoder::{FinishReason, Script};
 use crate::state::EngineState;
 
 const STEP: Duration = Duration::from_millis(100);
-
-#[tokio::test]
-async fn shutdown_during_a_load_frees_the_model_and_ends_stopped() {
-    let script = slow(Duration::ZERO, Duration::from_millis(500));
-    let shelf = Shelf::new();
-    let (runtime, record) = runtime(script, vec![shelf.model(1, "small", GIB)]).await;
-    let mut states = runtime.subscribe();
-    let admitting = Arc::clone(&runtime);
-    let admission = tokio::spawn(async move {
-        admitting
-            .admit("small", None, None, LaunchOverrides::default())
-            .await
-    });
-    until(&mut states, |s| matches!(s, EngineState::Loading { .. })).await;
-
-    runtime.shutdown().await.expect("the shim stops");
-
-    let refused = admission.await.expect("the admission ends");
-    assert!(
-        matches!(refused, Err(ModelRuntimeError::Internal(_))),
-        "{refused:?}"
-    );
-    assert_eq!(runtime.state(), EngineState::Stopped);
-    let record = read(&record);
-    assert_eq!(record.loads.len(), 1);
-    assert_eq!(
-        record.unloads, 1,
-        "the model loaded under shutdown is freed"
-    );
-    assert!(runtime.current_model().await.is_none());
-    // The watch ends on Stopped.
-    until(&mut states, |s| *s == EngineState::Stopped).await;
-    assert!(states.changed().await.is_err(), "the watch has ended");
-}
 
 #[tokio::test]
 async fn a_runtime_shut_down_admits_nothing_and_its_shim_is_gone() {
