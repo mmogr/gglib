@@ -64,5 +64,7 @@ infrastructure concerns (database, filesystem, etc.).
 - `kv_estimate` - Per-token KV cache size, which takes that layer count from
   `kv_memory` rather than counting every block. The dependency runs one way
   only: `kv_memory` reads metadata and knows nothing of the estimate
+- `device_budget` - A device's memory budget for a model (`budget_from`), from
+  one reading of its memory (`DeviceReading`), read once per serve and held
 
 <!-- module-docs:end -->

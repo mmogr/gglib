@@ -439,6 +439,26 @@ pub enum ModelRuntimeError {
         free_bytes: Option<u64>,
     },
 
+    /// A chat model's weights and its smallest context need more memory than
+    /// the device's budget gives a model. Not retryable: the model is too big
+    /// for the device, not for the moment.
+    #[error(
+        "The chat model needs {needed} at its smallest context; this device gives a model \
+         {budget}. Use a smaller model, or a smaller quantization of this one.",
+        needed = crate::download::format_size(*needed_bytes),
+        budget = crate::download::format_size(*budget_bytes)
+    )]
+    ChatModelDoesNotFit {
+        /// The smallest budget the model fits in: its weights and the KV
+        /// cache of the smallest context, over
+        /// [`BUDGET_UTILISATION`](crate::domain::BUDGET_UTILISATION), so it
+        /// reads against `budget_bytes` directly.
+        needed_bytes: u64,
+        /// The device's budget for a model, from
+        /// [`budget_from`](crate::domain::device_budget::budget_from).
+        budget_bytes: u64,
+    },
+
     /// Internal error during runtime operations.
     #[error("Internal error: {0}")]
     Internal(String),
@@ -471,6 +491,8 @@ impl ModelRuntimeError {
             // The model exists; the request named the wrong kind of model,
             // or one that is missing a file it needs.
             Self::ImageModelCannotChat(_) | Self::ImageModelIncomplete { .. } => 400,
+            // Insufficient Storage: this server cannot hold the model at all.
+            Self::ChatModelDoesNotFit { .. } => 507,
             Self::SpawnFailed(_) | Self::HealthCheckFailed(_) | Self::Internal(_) => 500,
         }
     }
@@ -531,10 +553,12 @@ impl From<&ModelRuntimeError> for RuntimeErrorEnvelope {
             | ModelRuntimeError::ImageModelCannotChat(_)
             | ModelRuntimeError::ImageModelIncomplete { .. } => error_type::INVALID_REQUEST,
             // A 503 that retrying cannot fix: nothing changes until someone
-            // installs the runtime.
+            // installs the runtime. A 507 the same: no wait makes the model
+            // fit the device.
             ModelRuntimeError::SpawnFailed(_)
             | ModelRuntimeError::HealthCheckFailed(_)
             | ModelRuntimeError::ImageRuntimeNotInstalled
+            | ModelRuntimeError::ChatModelDoesNotFit { .. }
             | ModelRuntimeError::Internal(_) => error_type::SERVER_ERROR,
         };
         Self {

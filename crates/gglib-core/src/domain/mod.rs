@@ -12,6 +12,7 @@ mod context_fit;
 pub mod defect_counts;
 pub mod defects;
 mod defects_agent;
+pub mod device_budget;
 pub mod dialect;
 pub mod engine_pins;
 pub mod folder;

@@ -218,6 +218,10 @@ fn retryable_predicate_agrees_with_the_error_itself() {
         pinned_mismatch(),
         ModelRuntimeError::SpawnFailed("boom".to_string()),
         ModelRuntimeError::HealthCheckFailed("unhealthy".to_string()),
+        ModelRuntimeError::ChatModelDoesNotFit {
+            needed_bytes: 2,
+            budget_bytes: 1,
+        },
         ModelRuntimeError::Internal("internal".to_string()),
     ];
 
@@ -350,6 +354,28 @@ fn an_image_model_that_does_not_fit_is_a_retryable_503_naming_the_held_model_and
         "Image model 'flux1-schnell' needs more memory than is free; how much is free beside \
          'qwen3-27b' cannot be read, which a chat is using. Use a smaller family, stop the chat \
          model, or draw from a chat on the paired machine."
+    );
+}
+
+/// A chat model too big for the device is a 507 no retry can fix, and the
+/// words give both sizes.
+#[test]
+fn a_chat_model_that_does_not_fit_the_device_is_a_507_giving_both_sizes() {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let refused = ModelRuntimeError::ChatModelDoesNotFit {
+        needed_bytes: 3 * GIB,
+        budget_bytes: 5 * GIB / 2,
+    };
+
+    assert_eq!(refused.suggested_status_code(), 507);
+    assert!(!refused.is_retryable());
+    let envelope = RuntimeErrorEnvelope::from(&refused);
+    assert_eq!(envelope.r#type, error_type::SERVER_ERROR);
+    assert!(!envelope.retryable);
+    assert_eq!(
+        envelope.message,
+        "The chat model needs 3.00 GiB at its smallest context; this device gives a model \
+         2.50 GiB. Use a smaller model, or a smaller quantization of this one."
     );
 }
 

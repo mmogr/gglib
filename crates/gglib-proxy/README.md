@@ -723,6 +723,7 @@ curl -X POST http://localhost:8080/mcp \
 | 400 | A message carries an image and the model has no projector linked (`model_cannot_read_images`) — see [Images](#images) |
 | 413 | The body of a chat completion or a run is over 32 MiB (`request_too_large`) |
 | 500 | Internal error |
+| 507 | A chat model's weights and its smallest context need more memory than this device gives a model (`model_does_not_fit`) |
 
 Every `code` this proxy writes, its runs' included, is listed with its type,
 status and meaning in [`docs/error-codes.json`](../../docs/error-codes.json).
