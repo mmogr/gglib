@@ -5,6 +5,7 @@
         test test-helper check ios-check fmt lint doc doc-check dev pre-commit release \
         lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
         adr-readings record-upstream bindings bindings-check \
+        ffi-binding ffi-binding-check ffi-xcframework ffi-xcframework-fast ffi-smoke \
         clean clean-gui clean-llama clean-all path-check \
         check-deps check-deps-bootstrap check-rust \
         llama-install llama-install-auto llama-update llama-status llama-rebuild \
@@ -232,10 +233,11 @@ doc-check: ## Build rustdoc with warnings denied, exactly as CI does
 # clear of desktop-only packages. ci.yml's `ios-check` and `boundaries` jobs
 # run those two targets.
 PHONE_CRATES := gglib-core gglib-gguf gglib-db gglib-download gglib-hf \
-                gglib-mcp gglib-agent gglib-sse gglib-bootstrap gglib-proxy
+                gglib-mcp gglib-agent gglib-sse gglib-bootstrap gglib-proxy \
+                gglib-ffi
 
-# Needs the aarch64-apple-ios standard library (`rustup target add
-# aarch64-apple-ios`) and Xcode's iOS SDK, for the C that ring, aws-lc-sys and
+# Needs the aarch64-apple-ios standard library, which rustup installs from
+# rust-toolchain.toml, and Xcode's iOS SDK, for the C that ring, aws-lc-sys and
 # the bundled SQLite compile in their build scripts, so it runs on macOS only
 # and is not part of `pre-commit`.
 ios-check: ## Check the phone crates compile for aarch64-apple-ios (macOS)
@@ -447,6 +449,48 @@ bindings-check: bindings ## Fail if the committed bindings are stale
 		exit 1; \
 	 fi
 	@echo "✓ bindings match the Rust they are generated from"
+
+##@ Swift framework
+
+# gglib-ffi is the Swift-facing crate, shipped as GglibFFI.xcframework (a
+# dynamic framework per slice) with the Swift uniffi generates for it. The
+# scripts are in scripts/apple/; ci.yml's `ffi-apple` job runs
+# `ffi-xcframework-fast`, `ffi-binding-check` and `ffi-smoke`, in that order,
+# on macOS, and `pre-commit` runs none of them. The framework and the smoke
+# test need Xcode; `ffi-binding` and `ffi-binding-check` work on Linux too.
+FFI_SWIFT_DIR := crates/gglib-ffi/swift
+
+ffi-binding: ## Regenerate crates/gglib-ffi/swift (binding, header, modulemap)
+	@./scripts/apple/generate-swift.sh $(FFI_SWIFT_DIR)
+
+# Regenerates, then compares against HEAD, as `bindings-check` does for the
+# TypeScript. The generated Swift carries uniffi's API checksums and calls
+# fatalError() at its first call when they disagree with the framework's, so
+# a stale copy is a crash in an app, not a build error.
+ffi-binding-check: ffi-binding ## Fail if the committed Swift binding is stale
+	@git diff HEAD --exit-code -- $(FFI_SWIFT_DIR) || { \
+		echo ""; \
+		echo "✗ $(FFI_SWIFT_DIR) is not what gglib-ffi generates."; \
+		echo "  Run 'make ffi-binding' and commit the result."; \
+		exit 1; \
+	}
+	@untracked=$$(git status --porcelain -- $(FFI_SWIFT_DIR)); \
+	 if [ -n "$$untracked" ]; then \
+		echo "$$untracked"; \
+		echo ""; \
+		echo "✗ $(FFI_SWIFT_DIR) has files git does not know about. Commit or remove them."; \
+		exit 1; \
+	 fi
+	@echo "✓ the committed Swift binding is what gglib-ffi generates"
+
+ffi-xcframework: ## Build target/apple/GglibFFI.xcframework, optimised (macOS, Xcode)
+	@PROFILE=release ./scripts/apple/build-xcframework.sh
+
+ffi-xcframework-fast: ## Build target/apple/GglibFFI.xcframework unoptimised (macOS, Xcode)
+	@PROFILE=dev ./scripts/apple/build-xcframework.sh
+
+ffi-smoke: ## Call build_info() through the generated Swift on the macOS slice
+	@./scripts/apple/swift-smoke.sh
 
 ##@ Cleaning
 

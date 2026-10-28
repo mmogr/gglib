@@ -1,0 +1,11 @@
+# Read by `uniffi-bindgen` (library mode finds it through cargo metadata).
+#
+# The C module the generated Swift imports. It is the framework's own name:
+# `import GglibFFI` resolves by finding GglibFFI.framework on the framework
+# search path and reading the `framework module GglibFFI` in its
+# Modules/module.modulemap, so the module, the framework and the import are
+# one name. The default, `gglib_ffiFFI`, would name a module no framework on
+# that path declares. scripts/apple/generate-swift.sh passes the same name to
+# the generator as `--module-name`, and refuses to run if the two differ.
+[bindings.swift]
+ffi_module_name = "GglibFFI"

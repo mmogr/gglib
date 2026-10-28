@@ -6,8 +6,8 @@
 # dependencies and fails on:
 # - an external crate on that crate's forbidden list (ADAPTER_DEPS and the
 #   *_FORBIDDEN arrays in main);
-# - a surface crate (gglib-cli, gglib-axum, gglib-tauri) that depends on
-#   another, except gglib-cli on gglib-axum;
+# - a surface crate (gglib-cli, gglib-axum, gglib-tauri, gglib-ffi) that
+#   depends on another, except gglib-cli on gglib-axum;
 # - an infrastructure crate that depends on a surface crate.
 #
 # It also fails when a Rust file under crates/, outside BOOTSTRAP_ALLOWED_DIRS,
@@ -199,15 +199,27 @@ main() {
     fi
     log ""
 
+    # gglib-ffi: the Swift-facing surface, built into the dynamic framework an
+    # iPhone app embeds, and a phone crate. Nothing desktop-only: no CLI, no
+    # GUI toolkit, no host probe, none of the remote-access transport, and
+    # neither the process runner nor the desktop's backend. No HTTP server or
+    # database of its own either: it composes gglib's own crates.
+    FFI_FORBIDDEN=(clap tauri axum tower-http hyper sqlx sysinfo netdev nix iroh modelpipe gglib-runtime gglib-app-services)
+    log "📦 gglib-ffi (Swift surface - nothing desktop-only, no server or database of its own)"
+    if ! check_crate_deps "gglib-ffi" "${FFI_FORBIDDEN[@]}"; then
+        FAILED=1
+    fi
+    log ""
+
     # Surface-to-surface isolation: CLI_FORBIDDEN/AXUM_FORBIDDEN/TAURI_FORBIDDEN
     # above only match external crate names (e.g. `axum`), never sibling
     # `gglib-*` crates, so they miss a direct surface-to-surface edge like
     # `gglib-cli -> gglib-axum`. Check sibling names directly instead, with
     # the one exception CONTRIBUTING.md documents.
-    SURFACE_CRATES=(gglib-cli gglib-axum gglib-tauri)
+    SURFACE_CRATES=(gglib-cli gglib-axum gglib-tauri gglib-ffi)
     SURFACE_ALLOWED_EXCEPTIONS=("gglib-cli->gglib-axum")
 
-    log "📦 Surface-to-surface isolation (no undocumented cli/axum/tauri cross-deps)"
+    log "📦 Surface-to-surface isolation (no undocumented cli/axum/tauri/ffi cross-deps)"
     for surface_crate in "${SURFACE_CRATES[@]}"; do
         if ! check_surface_isolation "$surface_crate"; then
             FAILED=1

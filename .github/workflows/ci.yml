@@ -775,11 +775,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # rust-toolchain.toml lists the Apple targets, so this installs them.
       - name: Install Rust toolchain
         run: rustup show
-
-      - name: Add the iOS targets
-        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 
       # Its own shared-key, for the reason spelled out on the `test` job: one
       # key across four different feature sets meant every job but the first
@@ -795,11 +793,107 @@ jobs:
       - name: Check the phone crates for aarch64-apple-ios
         run: make ios-check
 
+  # Whether a change reaches what `ffi-apple` builds: the workspace crates in
+  # gglib-ffi's dependency closure, as cargo resolves it, and the files the
+  # job's builds read (scripts/apple/ffi-inputs-changed.sh names them). A pull
+  # request is compared with its base, through the merge commit GitHub checks
+  # out; a push to main always builds the framework.
+  #
+  # In `ci-success`'s needs with `ffi-apple`. A skipped job counts as passed
+  # there, as the two pull-request-only jobs above are on a push, so the
+  # skip is only as sound as this job's answer: the closure is read from
+  # cargo rather than listed, and a failure here fails the run instead of
+  # skipping the framework silently.
+  ffi-inputs:
+    name: Swift Framework Inputs
+    runs-on: ubuntu-24.04
+    outputs:
+      changed: ${{ steps.inputs.outputs.changed }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # The merge commit and its first parent, the base it is compared with.
+          fetch-depth: 2
+
+      - name: Install Rust toolchain
+        if: github.event_name == 'pull_request'
+        run: rustup show
+
+      - name: Does this change reach the Swift framework?
+        id: inputs
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            ./scripts/apple/ffi-inputs-changed.sh HEAD^1 HEAD >> "$GITHUB_OUTPUT"
+          else
+            echo "A push to main always builds the framework."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # gglib-ffi as the app links it: GglibFFI.xcframework, a dynamic framework
+  # per slice (iOS device, iOS simulator, macOS), checked slice by slice, the
+  # committed Swift binding held to what the library generates, and that
+  # binding compiled and called against the macOS slice. It boots no
+  # simulator.
+  #
+  # The runner's default Xcode, as ggchat's CI uses: the framework this
+  # builds is the one an app built with that Xcode links. Unoptimised, since
+  # nothing it answers depends on optimisation; release.yml builds the
+  # optimised one it ships.
+  #
+  # RUSTFLAGS is cleared so the framework is built with the flags release.yml
+  # builds it with, which are none. The workflow's relocation-model flag would
+  # change nothing here (aarch64 Apple code is position-independent whatever
+  # it says, and a local build with it links the same dylib), but this job
+  # should not build something the release does not.
+  ffi-apple:
+    name: Swift Framework (macOS)
+    runs-on: macos-26
+    needs: [ffi-inputs]
+    if: needs.ffi-inputs.outputs.changed == 'true'
+    # A cold build of three slices, the generator and the Swift package is a
+    # few minutes; the ceiling is for a hang, not for a slow runner.
+    timeout-minutes: 30
+    env:
+      RUSTFLAGS: ""
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # rust-toolchain.toml lists the three Apple targets, so this installs them.
+      - name: Install Rust toolchain
+        run: rustup show
+
+      # Its own shared-key, for the reason spelled out on the `test` job. A
+      # push to main always runs this job, so main keeps the cache warm for
+      # the pull requests that restore it.
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci-ffi-apple"
+          cache-on-failure: true
+          # Only a run on main saves; the `test` job says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Xcode and Swift
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build the XCFramework and check each slice
+        run: make ffi-xcframework-fast
+
+      - name: The committed Swift binding is what the library generates
+        run: make ffi-binding-check
+
+      - name: The Swift binding links and calls the macOS slice
+        run: make ffi-smoke
+
   ci-success:
     name: CI Success
     runs-on: ubuntu-24.04
     if: always()
-    needs: [boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os, ios-check]
+    needs: [boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os, ios-check, ffi-inputs, ffi-apple]
     steps:
       - name: Check all jobs succeeded
         run: |

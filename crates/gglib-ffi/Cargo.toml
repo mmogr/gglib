@@ -1,0 +1,52 @@
+[package]
+name = "gglib-ffi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The Swift-facing surface of gglib, shipped as a dynamic framework for iOS and macOS"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "gglib_ffi"
+path = "src/lib.rs"
+# cdylib is the binary inside GglibFFI.framework, and the library
+# `uniffi-bindgen` reads the scaffolding out of; lib (rlib) is what this
+# crate's own tests link. A dynamic library rather than a static one, so its
+# Rust runtime cannot clash with the static one modelpipe-ffi links into the
+# same app.
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+# The Swift generator, built from this crate's own `uniffi` so the generated
+# Swift cannot disagree with the scaffolding compiled into the library. Behind
+# `bindgen` so a build of the library for a phone never compiles the
+# generator's dependencies (clap among them).
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+# The generator and what it needs: `cli` for its command line, and
+# `cargo-metadata` because that is how library mode finds this crate's
+# uniffi.toml, which names the module the generated Swift imports.
+bindgen = ["uniffi/cli", "uniffi/cargo-metadata"]
+
+[dependencies]
+gglib-core = { workspace = true }
+# The same minor as modelpipe-ffi's: both bindings sit in one app, and their
+# generated headers share the definitions behind `UNIFFI_SHARED_H`. No
+# default features: the only one is `cargo-metadata`, which only the
+# generator uses.
+uniffi = { version = "0.32", default-features = false }
+# Multi-thread, for the runtime every async export enters (`src/runtime.rs`).
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+
+[dev-dependencies]
+# `tokio::time::sleep`, in the runtime's tests.
+tokio = { workspace = true, features = ["time"] }
+
+[lints]
+workspace = true

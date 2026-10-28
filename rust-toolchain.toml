@@ -2,3 +2,13 @@
 channel = "1.97.1"
 profile = "minimal"
 components = ["rustfmt", "clippy", "llvm-tools"]
+# The Apple triples gglib-ffi's framework is built for (and that `make
+# ios-check` checks the phone crates against), so `rustup show` installs them
+# and `make ffi-xcframework` works on a fresh clone. Each is a standard
+# library only: a machine that never builds for Apple downloads them and
+# uses none.
+targets = [
+    "aarch64-apple-ios",
+    "aarch64-apple-ios-sim",
+    "aarch64-apple-darwin",
+]
