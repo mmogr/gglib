@@ -10,7 +10,8 @@
 //!
 //! Each `observed.json` leaf an ADR's criterion names carries the quote; the
 //! hand-kept `approvals.json` beside it is what `scripts/check_adr_readings.sh`
-//! holds it to. Redacted raw bodies go to `GGLIB_ENGINE_BODIES_DIR` (CI's
+//! holds it to. Redacted raw bodies, and the prompts the dateless templates
+//! render for one fixed chat, verbatim, go to `GGLIB_ENGINE_BODIES_DIR` (CI's
 //! artifact), and are committed under `llama/bodies/` only when a pin moves.
 //!
 //! Inputs: `GGLIB_ENGINES_DIR` (where gglib installed the engines) and
@@ -46,6 +47,12 @@ fn assert_stable(first: &Recording, second: &Recording) {
              ({value} then {again:?}). Add it to the redactions in engine_contract_project.rs."
         );
     }
+    for (name, prompt) in &first.prompts {
+        assert!(
+            second.prompts.get(name) == Some(prompt),
+            "recording is not stable: {name} rendered differently between two runs"
+        );
+    }
     let (a, b) = (first.files(), second.files());
     for (rel, text) in &a {
         let diff = line_diff(text, &b[rel]);
@@ -74,12 +81,13 @@ async fn the_pinned_llama_server_answers_as_contracts_upstream_records() {
         .iter()
         .map(|(n, t)| (*n, t))
         .chain(first.bodies.iter().map(|(n, t)| (n.as_str(), t)))
+        .chain(first.prompts.iter().map(|(n, t)| (n.as_str(), t)))
     {
         assert_nothing_local(name, text);
     }
     let bodies = std::env::var_os("GGLIB_ENGINE_BODIES_DIR")
         .map_or_else(|| inputs.scratch_path("bodies"), PathBuf::from);
-    for (name, body) in &first.bodies {
+    for (name, body) in first.bodies.iter().chain(&first.prompts) {
         write_under(&bodies, name, body);
     }
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../contracts/upstream");
@@ -156,4 +164,19 @@ fn a_recorded_path_is_refused_in_any_case() {
 #[test]
 fn a_bare_binary_name_is_kept() {
     assert_nothing_local("sd/help.txt", "Usage: sd-server [options]");
+}
+
+/// Both passes must render the fixed chat alike, byte for byte.
+#[test]
+#[should_panic(expected = "rendered differently")]
+fn a_prompt_the_second_pass_renders_differently_is_refused() {
+    let pass = |prompt: &str| {
+        let mut r = Recording::default();
+        r.prompts.insert(
+            "apply-template.t.thinking.txt".to_owned(),
+            prompt.to_owned(),
+        );
+        r
+    };
+    assert_stable(&pass("<think>\n"), &pass("<think>\n\n"));
 }

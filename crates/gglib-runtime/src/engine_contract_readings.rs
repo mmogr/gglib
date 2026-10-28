@@ -2,10 +2,10 @@
 //! answer is a reading for.
 //!
 //! One pass starts every launch fresh: each dateless template on stories260K
-//! with `/slots` debug on, the first of them also for the endpoints gglib
-//! reads; stories260K again with debug off, for the `cache_prompt` pair and
-//! the `/slots` gglib's poller sees; and tinygemma3 without and with its
-//! projector.
+//! with `/slots` debug on, rendering one fixed chat with thinking on and off,
+//! the first of them also for the endpoints gglib reads; stories260K again
+//! with debug off, for the `cache_prompt` pair and the `/slots` gglib's
+//! poller sees; and tinygemma3 without and with its projector.
 
 use serde_json::{Value, json};
 
@@ -73,6 +73,22 @@ fn question(choice: Option<&str>) -> Value {
     body
 }
 
+/// The chat every template renders through `/apply-template`: a system
+/// message, a user turn, the assistant's reply and a second user turn, with
+/// the turn the model would answer opened, and thinking on or off.
+fn fixed_chat(thinking: bool) -> Value {
+    json!({
+        "messages": [
+            {"role": "system", "content": "You answer in one short sentence."},
+            {"role": "user", "content": "What is the capital of France?"},
+            {"role": "assistant", "content": "The capital of France is Paris."},
+            {"role": "user", "content": "And of Italy?"},
+        ],
+        "add_generation_prompt": true,
+        "chat_template_kwargs": {"enable_thinking": thinking},
+    })
+}
+
 /// A 200 body's `usage.prompt_tokens`.
 fn prompt_tokens((status, body): (u16, String)) -> u64 {
     assert_eq!(status, 200, "{body}");
@@ -119,7 +135,8 @@ fn engines_said(inputs: &Inputs, r: &mut Recording) {
     );
 }
 
-/// One template's `/props`, and what it does with a tool under each choice.
+/// One template's `/props`, what it does with a tool under each choice, and
+/// the prompt it renders for [`fixed_chat`].
 async fn read_template(server: &Server, template: &str, r: &mut Recording) {
     let props = server.get_json("/props").await;
     r.shape_of("/props", &props);
@@ -165,6 +182,15 @@ async fn read_template(server: &Server, template: &str, r: &mut Recording) {
         format!("tools_rendered_under_none.{template}"),
         with_tools > without,
     );
+    for (variant, thinking) in [("thinking", true), ("no-thinking", false)] {
+        let (status, body) = server.post("/apply-template", &fixed_chat(thinking)).await;
+        assert_eq!(status, 200, "{body}");
+        let prompt = json_of(&body)["prompt"].as_str().map(str::to_owned);
+        r.prompts.insert(
+            format!("apply-template.{template}.{variant}.txt"),
+            prompt.unwrap_or_else(|| panic!("no prompt: {body}")),
+        );
+    }
 }
 
 /// The first template's launch also answers for the endpoints gglib reads.
