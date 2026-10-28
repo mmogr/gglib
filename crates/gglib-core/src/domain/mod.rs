@@ -37,6 +37,7 @@ mod model_file;
 mod model_fixture;
 pub(crate) mod model_naming;
 pub(crate) mod model_sampling;
+pub mod phone_fit;
 pub(crate) mod query;
 pub(crate) mod reasoning_effort;
 pub mod recommendation;
@@ -105,7 +106,12 @@ pub use launch_narration::{LaunchDecision, LaunchNarration, format_gib, format_m
 
 // Re-export the first-run model recommendation at the domain level.
 pub use recommendation::BUDGET_UTILISATION;
-pub use recommendation::{BudgetSource, Recommendation, recommend};
+pub use recommendation::{
+    BudgetSource, PHONE_SHORTLIST, Recommendation, recommend, recommend_from,
+};
+
+// Re-export a model's fit on a phone at the domain level for convenience
+pub use phone_fit::{FitVerdict, MissingInput, fit_verdict};
 
 // Re-export admission-control telemetry at the domain level for convenience
 pub use admission::{

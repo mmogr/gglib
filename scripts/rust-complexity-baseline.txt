@@ -103,7 +103,7 @@ crates/gglib-core/src/domain/mcp/types.rs 583
 crates/gglib-core/src/domain/model.rs 426
 crates/gglib-core/src/domain/model_sampling.rs 674
 crates/gglib-core/src/domain/query.rs 408
-crates/gglib-core/src/domain/recommendation.rs 381
+crates/gglib-core/src/domain/recommendation.rs 394
 crates/gglib-core/src/domain/residency.rs 484
 crates/gglib-core/src/domain/runs/wire_tests.rs 307
 crates/gglib-core/src/domain/runtime_capabilities.rs 532
