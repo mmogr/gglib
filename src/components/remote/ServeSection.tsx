@@ -1,6 +1,6 @@
-import { FC, useCallback, useEffect, useRef, useState } from 'react';
+import { FC, useCallback, useEffect, useState } from 'react';
 import { getTransport } from '../../services/transport';
-import { useRemoteState } from '../../services/remoteRegistry';
+import { clearOffer, showOffer, useRemoteState } from '../../services/remoteRegistry';
 import { refreshRemoteStatus } from '../../services/remoteEvents';
 import { formatError } from '../../utils/errors';
 import { Button } from '../ui/Button';
@@ -8,7 +8,6 @@ import { Label, Stack } from '../primitives';
 import { ProxyStatusPill } from '../proxy';
 import { McpServerPicker } from './McpServerPicker';
 import { PairingReveal } from './PairingReveal';
-import type { Pairing } from './PairingReveal';
 
 interface ServeSectionProps {
   onNotice: (message: string, kind: 'success' | 'error' | 'info') => void;
@@ -28,18 +27,16 @@ interface ServeSectionProps {
  * off and read by a device's next run, so no enable or disable changes it
  * (ADR 0025).
  *
- * The reveal's lifecycle carries both: it drops on a `paired` transition, and
- * `paired` is per *code* rather than per session, so a second invite clears it
- * and the transition happens again for each device. It also drops when the
- * daemon stops holding the code first — forgetting the row an invite wrote
- * withdraws its code.
+ * The code on offer is the registry's, not this panel's (`remoteOffer.ts`):
+ * the daemon hands it out once, so closing the popover, or a chat taking its
+ * place, must not throw it away. The registry also says when it ended, and
+ * `useOfferOutcomes` says so wherever the person is.
  */
 export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
-  const { status } = useRemoteState();
+  const { status, offer } = useRemoteState();
   // Which action is in flight, not merely that one is: with a single
   // boolean, clicking Invite relabelled Disable as "Stopping…".
   const [busy, setBusy] = useState<'enable' | 'invite' | 'disable' | null>(null);
-  const [reveal, setReveal] = useState<Pairing | null>(null);
 
   const enabled = status?.enabled ?? false;
   const paired = status?.paired ?? false;
@@ -62,49 +59,16 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
   // the whole window down; `DevicesSection` reads the list the same way.
   const anyJoined = (status?.devices ?? []).some((d) => d.joined);
 
-  // The reveal leaves the moment a device pairs, when the tunnel goes down
-  // under it (a `gglib remote disable` in a terminal), or when the daemon
-  // stops holding its code — a forget of the invited row withdraws it, and a
-  // reveal left up would show a code nobody can redeem and hold Invite dead
-  // for the rest of the countdown.
-  //
-  // Each of those is a *transition*, not a state. `enable`'s answer arrives
-  // before the daemon's event does, and an invite's before the read that
-  // follows it, so the reveal must stay on screen through a status that has
-  // not caught up yet — one that still says no code is live. Only a read
-  // that had already shown the code live can take it away.
-  const wasEnabled = useRef(enabled);
-  const wasPairingActive = useRef(pairingActive);
+  // A code this app did not offer — offered from a terminal — still holds
+  // Invite dead while it is live, and nothing says when it lapses: no event
+  // is emitted, so only a read of the status finds `pairing_active` gone.
+  // With no offer of ours to expire, the status is read again every fifteen
+  // seconds until a read says the code is gone; a code lives two minutes.
   useEffect(() => {
-    if (paired || (wasEnabled.current && !enabled) || (wasPairingActive.current && !pairingActive)) {
-      setReveal(null);
-    }
-    wasEnabled.current = enabled;
-    wasPairingActive.current = pairingActive;
-  }, [paired, enabled, pairingActive]);
-
-  // A code this panel did not put on screen — offered from a terminal, or
-  // shown before the popover was last closed — still holds Invite dead while
-  // it is live, and nothing says when it lapses: no event is emitted, so only
-  // a read of the status finds `pairing_active` gone. With no reveal of ours
-  // to expire, the status is read again every fifteen seconds until a read
-  // says the code is gone; a code lives two minutes.
-  useEffect(() => {
-    if (!pairingActive || reveal) return;
+    if (!pairingActive || offer) return;
     const poll = window.setInterval(() => void refreshRemoteStatus(), 15_000);
     return () => window.clearInterval(poll);
-  }, [pairingActive, reveal]);
-
-  // Asks the daemon again as well as dropping the reveal. `pairing_active`
-  // goes false on the daemon when a code lapses, but no event is emitted
-  // when it does — so without this re-read the
-  // status keeps saying a code is live, and the Invite button below, which is
-  // disabled while one is, stays dead until the panel is closed and reopened.
-  // That is the one path someone takes after a code expires.
-  const dropReveal = useCallback(() => {
-    setReveal(null);
-    void refreshRemoteStatus();
-  }, []);
+  }, [pairingActive, offer]);
 
   // After a box above changes a server: the status names what is open.
   const refreshStatus = useCallback(() => void refreshRemoteStatus(), []);
@@ -124,17 +88,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
       // joined. After that, adding a device is Invite.
       const firstDevice = !anyJoined;
       const answer = await getTransport().enableRemote({ invite: firstDevice });
-      // Present together or not at all; the daemon sends all three or none.
-      setReveal(
-        answer.pairing && answer.code && answer.expires_in_s !== undefined
-          ? {
-              pairing: answer.pairing,
-              code: answer.code,
-              expires_in_s: answer.expires_in_s,
-              device: answer.device,
-            }
-          : null,
-      );
+      showOffer(answer);
       void refreshRemoteStatus();
       // `already_up` here is a session the daemon's own resume brought back
       // while this waited, since Enable is shown only when the last status
@@ -160,17 +114,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
   const handleInvite = async () => {
     setBusy('invite');
     try {
-      const answer = await getTransport().inviteRemote();
-      setReveal(
-        answer.pairing && answer.code && answer.expires_in_s !== undefined
-          ? {
-              pairing: answer.pairing,
-              code: answer.code,
-              expires_in_s: answer.expires_in_s,
-              device: answer.device,
-            }
-          : null,
-      );
+      showOffer(await getTransport().inviteRemote());
       void refreshRemoteStatus();
     } catch (err) {
       onNotice(`Could not offer a pairing code: ${formatError(err)}`, 'error');
@@ -187,7 +131,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
     setBusy('disable');
     try {
       await getTransport().disableRemote();
-      setReveal(null);
+      clearOffer();
       onNotice('Remote access is off. Enabling again brings the same ticket back.', 'success');
     } catch (err) {
       onNotice(`Could not disable remote access: ${formatError(err)}`, 'error');
@@ -205,13 +149,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
         <ProxyStatusPill running={enabled} />
       </div>
 
-      {reveal && (
-        <PairingReveal
-          reveal={reveal}
-          onExpired={dropReveal}
-          onCopied={() => onNotice('Copied.', 'success')}
-        />
-      )}
+      {offer && <PairingReveal reveal={offer} onCopied={() => onNotice('Copied.', 'success')} />}
 
       {/* Above the switch, in both of its states: a server is opened or
           closed at any time, and the status re-read says what is open now. */}
@@ -249,7 +187,7 @@ export const ServeSection: FC<ServeSectionProps> = ({ onNotice }) => {
             // guaranteed 409, and it is not a cheap one — the daemon mints a
             // key and writes both stores before it finds the slot taken, then
             // unwinds all of it.
-            disabled={busy !== null || reveal !== null || pairingActive}
+            disabled={busy !== null || offer !== null || pairingActive}
           >
             {busy === 'invite' ? 'Offering…' : 'Invite a device'}
           </Button>

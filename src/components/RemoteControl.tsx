@@ -32,7 +32,7 @@ const RemoteControl: FC<RemoteControlProps> = ({
   compact = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const { status } = useRemoteState();
+  const { status, offer } = useRemoteState();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { showToast } = useToastContext();
 
@@ -45,6 +45,9 @@ const RemoteControl: FC<RemoteControlProps> = ({
   }, [isOpen]);
 
   const active = (status?.enabled ?? false) || status?.connected != null;
+  // A code outlives the popover, so the closed trigger says one is waiting:
+  // someone who clicked away mid-pairing knows to open it again.
+  const waiting = offer !== null ? 'Remote: a pairing code is waiting' : undefined;
 
   const buttonClasses = cn(
     buttonClassName ?? 'gap-sm px-md relative',
@@ -69,7 +72,7 @@ const RemoteControl: FC<RemoteControlProps> = ({
         className={buttonClasses}
         onClick={() => setIsOpen(!isOpen)}
         type="button"
-        title={compact ? 'Remote' : undefined}
+        title={waiting ?? (compact ? 'Remote' : undefined)}
         aria-label={compact ? 'Remote' : undefined}
       >
         <span aria-hidden>

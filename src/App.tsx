@@ -8,6 +8,7 @@ import { ToastContainer } from "./components/Toast";
 import { useServers } from "./hooks/useServers";
 import { useLlamaStatus } from "./hooks/useLlamaStatus";
 import { useFileDropGuard } from "./hooks/useFileDropGuard";
+import { useOfferOutcomes } from "./components/remote/useOfferOutcomes";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToastProvider, useToastContext } from "./contexts/ToastContext";
 import { ConfirmProvider } from "./contexts/ConfirmContext";
@@ -77,6 +78,9 @@ function AppContent() {
 
   // A file dropped where nothing takes it must not open in place of the app
   useFileDropGuard();
+
+  // How a pairing code ended, said on whatever page is open
+  useOfferOutcomes();
 
   // An install completed: re-read the status, and close the modal once its
   // last line has had time to be read

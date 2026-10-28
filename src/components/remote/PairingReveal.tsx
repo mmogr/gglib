@@ -3,60 +3,37 @@ import { ClipboardCopy } from 'lucide-react';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { Label, Stack } from '../primitives';
-/**
- * The three fields this needs, all present, and the device the code is for.
- *
- * Not `RemoteEnableResponse`: on that type they are optional, because an
- * `enable` that was not asked to invite carries none of them. Narrowing here
- * is what stops the absence rendering as a pairing that has already run out —
- * an empty code under a countdown reading `0s`.
- */
-export interface Pairing {
-  /** `<ticket>-<code>`, the one string the other machine pastes. */
-  pairing: string;
-  /** The six digits, shown large and copied on their own. */
-  code: string;
-  /** Seconds the code lives unused, counted down from here. */
-  expires_in_s: number;
-  /** The device the code will issue a key to: the id Devices lists it under. */
-  device?: string;
-}
+import type { PairingOffer } from '../../services/remoteOffer';
 
 interface PairingRevealProps {
-  reveal: Pairing;
-  /** Fires once when the code's lifetime runs out; the caller drops the reveal. */
-  onExpired: () => void;
+  reveal: PairingOffer;
   /** Called after a value reaches the clipboard, for the caller's toast. */
   onCopied?: (what: 'pairing' | 'ticket' | 'code') => void;
 }
 
+/** Whole seconds from now until `expiresAt`, never below zero. */
+function secondsLeft(expiresAt: number): number {
+  return Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+}
+
 /**
- * The ticket and the pairing code, shown once.
+ * The ticket and the pairing code, while the registry holds them.
  *
  * The daemon answers with a code exactly once — to `enable --invite` or to
- * `invite` — and never hands that code out again, so this is the whole window
- * in which a person can get it to the other machine. The countdown is the
- * code's: when it reaches zero the reveal is gone, the way the CLI's pairing
- * screen leaves the terminal, and the caller also drops it the moment a
- * device pairs or the daemon stops holding the code.
+ * `invite` — and never hands that code out again, so the registry keeps it
+ * until a device pairs, the code expires or is withdrawn, and this only shows
+ * it. The countdown is read from the code's deadline, not from when this
+ * mounted, so a popover reopened a minute later shows the minute gone.
  */
-export const PairingReveal: FC<PairingRevealProps> = ({ reveal, onExpired, onCopied }) => {
-  const [left, setLeft] = useState(reveal.expires_in_s);
+export const PairingReveal: FC<PairingRevealProps> = ({ reveal, onCopied }) => {
+  const { expiresAt } = reveal;
+  const [left, setLeft] = useState(() => secondsLeft(expiresAt));
 
   useEffect(() => {
-    setLeft(reveal.expires_in_s);
-    const started = Date.now();
-    const tick = window.setInterval(() => {
-      const elapsed = Math.floor((Date.now() - started) / 1000);
-      const remaining = Math.max(0, reveal.expires_in_s - elapsed);
-      setLeft(remaining);
-      if (remaining === 0) {
-        window.clearInterval(tick);
-        onExpired();
-      }
-    }, 1000);
+    setLeft(secondsLeft(expiresAt));
+    const tick = window.setInterval(() => setLeft(secondsLeft(expiresAt)), 1000);
     return () => window.clearInterval(tick);
-  }, [reveal, onExpired]);
+  }, [expiresAt]);
 
   const copy = useCallback(
     (what: 'pairing' | 'ticket' | 'code', value: string) => {
