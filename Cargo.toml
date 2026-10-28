@@ -172,6 +172,7 @@ gglib-agent = { path = "crates/gglib-agent" }
 gglib-bootstrap = { path = "crates/gglib-bootstrap" }
 gglib-mcp = { path = "crates/gglib-mcp" }
 gglib-proxy = { path = "crates/gglib-proxy" }
+gglib-engine-llama = { path = "crates/gglib-engine-llama" }
 
 # Workspace-wide lints for consistency
 [workspace.lints.rust]

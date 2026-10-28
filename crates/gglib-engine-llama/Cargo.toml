@@ -19,7 +19,9 @@ path = "src/lib.rs"
 test-decoder = []
 
 [dependencies]
-# The pin (`/props` build_info) and the request a chat was asked with.
+# The pin (`/props` build_info), the request a chat was asked with, and the
+# runtime port, catalog, fit and device budget the in-process runtime is
+# built on.
 gglib-core = { workspace = true }
 # A chat rendered through its template as the pinned llama-server renders it.
 gglib-gguf = { workspace = true }
@@ -29,6 +31,8 @@ gglib-gguf = { workspace = true }
 axum = { workspace = true }
 tokio = { workspace = true, features = ["net", "rt", "sync"] }
 futures-util = { workspace = true }
+# `ModelRuntimePort` is an `async_trait`.
+async-trait = { workspace = true }
 
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -38,6 +42,9 @@ tracing = { workspace = true }
 # The tests talk to the shim over a real socket, as gglib-proxy does.
 reqwest = { workspace = true, features = ["json", "stream"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+# The runtime's tests put each model's weights on disk, where the fit reads
+# their size.
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

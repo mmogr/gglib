@@ -9,6 +9,9 @@ in the pinned llama-server's shape. This crate is that upstream without the
 process: a [`Decoder`] holds the model, an [`Engine`] runs one generation at
 a time on it, and the shim, an axum server on a free port of 127.0.0.1,
 answers the proxy's requests as llama-server answers them at the pin.
+[`InProcessRuntime`] is the model runtime port the proxy admits each chat
+through: it fits one model at a time to the device's memory, loads it, and
+hands the proxy the shim as the model's server.
 
 The crate is pure Rust on every target: it holds the seam a decoder over
 llama.h plugs into, not that decoder. `ScriptedDecoder` (feature
@@ -18,13 +21,20 @@ tests of a crate composing it, run on any OS with no model.
 ## Architecture
 
 An infrastructure crate and a phone crate: it depends on `gglib-core` (the
-pin and the request a chat is sent with) and `gglib-gguf` (a chat rendered
-through its template as llama-server renders it), and on axum and tokio. It
-does not depend on gglib-proxy, which is its client, nor on gglib-runtime or
-sysinfo, which a phone build cannot take (`scripts/check_boundaries.sh`).
+pin, the request a chat is sent with, and the runtime port, catalog port,
+context fit and device budget the runtime is built on) and `gglib-gguf` (a
+chat rendered through its template as llama-server renders it), and on axum
+and tokio. It does not depend on gglib-proxy, which is its client, nor on
+gglib-runtime or sysinfo, which a phone build cannot take
+(`scripts/check_boundaries.sh`). The tests of gglib-proxy served in front of
+it live in `gglib-integration-tests`.
 
 ```text
   gglib-proxy                        gglib-engine-llama
+  ┌────────────────┐  admit          ┌──────────────────────────────────────────┐
+  │ resolve model  │ ──────────────▶ │ InProcessRuntime: catalog, fit, load     │
+  │                │ ◀────────────── │   target = shim port, loaded n_ctx       │
+  └────────────────┘  RunningTarget  └──────────────────────────────────────────┘
   ┌────────────────┐  POST /v1/chat  ┌──────────────────────────────────────────┐
   │ shape request  │ ──────────────▶ │ shim: render (gglib-gguf render_chat)    │
   │ forward        │  GET /props     │       tokenize, check n_ctx              │
@@ -72,6 +82,20 @@ What the shim answers, each in llama-server's shape at the pin
 A client that hangs up mid-reply drops its stream, which raises the
 generation's abort; the decoder checks it before every step.
 
+[`InProcessRuntime`] admits a chat by looking its model up in the catalog,
+fitting the model's context with gglib-core's `fit_verdict` against a budget
+made once from the device's memory reading and held, and loading it at that
+context unless it is held so already. The fit counts the weights on disk, as
+the model browser does for an installed model, and no projector, which the
+engine never loads. A context a request asks for lowers the rung and never
+raises it. A model whose smallest rung does not fit is refused with
+`ChatModelDoesNotFit` before anything loads, and one trained for fewer tokens
+than that rung with words that say so. One model is held: admitting another
+frees the first before the second is read, ending the reply it was
+generating. Each step is an [`EngineState`] on a tokio watch (`Idle`,
+`Loading`, `Ready`, `Generating`, `Unloading`, `Failed`, `Stopped`), and
+`shutdown` frees the model, stops the shim and ends the watch.
+
 ## Internal Structure
 
 ```text
@@ -81,8 +105,10 @@ generation's abort; the decoder checks it before every step.
 │  decoder/   Decoder · Loaded · Step · Finished · Abort · Sampling   │
 │             ScriptedDecoder (test-decoder)                          │
 │  engine.rs  Engine: the model held, one generation at a time        │
+│  state.rs   EngineState and the watch it is published on            │
 │  render.rs  a chat request read and rendered through its template   │
 │  shim/      the axum server and llama-server's JSON                 │
+│  runtime/   InProcessRuntime: admission, fit, stops, shutdown       │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -90,7 +116,10 @@ generation's abort; the decoder checks it before every step.
   [`Sampling`] with llama-server's defaults, and `ScriptedDecoder`.
 - [`src/engine.rs`](src/engine.rs): [`Engine`], which loads and frees models
   and runs a generation on a thread of its own, one at a time, aborting the
-  one in flight when the model changes.
+  one in flight when the model changes, and publishes each step as an
+  [`EngineState`].
+- [`src/state.rs`](src/state.rs): [`EngineState`] and the tokio watch it is
+  published on, which ends on `Stopped`.
 - [`src/render.rs`](src/render.rs): a request's messages and template kwargs
   read as llama-server reads them, and rendered with
   `gglib_gguf::render_chat`; a reasoning budget of 0 renders with thinking
@@ -98,15 +127,19 @@ generation's abort; the decoder checks it before every step.
   llama-server finds it.
 - [`src/shim/`](src/shim/): the server, its endpoints and the JSON they
   answer.
+- [`src/runtime/`](src/runtime/): [`InProcessRuntime`], the
+  `ModelRuntimePort` over the engine and its shim, and the fit of a model's
+  context to the device's budget.
 
 ## Usage
 
 ```rust,ignore
-use gglib_engine_llama::{Engine, LoadParams, shim};
+use gglib_engine_llama::InProcessRuntime;
 
-let engine = Engine::new(decoder);
-let loaded = engine.load("qwen3-0.6b", &path, &LoadParams { n_ctx: 4096, cache_type_k, cache_type_v })?;
-let shim = shim::start(Arc::clone(&engine)).await?;
-// gglib-proxy forwards to shim.base_url() + "/v1/chat/completions".
-shim.shutdown().await?;
+// One reading of the device's memory, held for the serve.
+let runtime = Arc::new(InProcessRuntime::start(decoder, catalog, reading).await?);
+let mut states = runtime.subscribe();
+// gglib_proxy::serve(ServeConfig { runtime_port: runtime.clone(), .. }) admits
+// each chat through it and forwards to the shim it names.
+runtime.shutdown().await?;
 ```
