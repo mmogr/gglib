@@ -2619,12 +2619,14 @@ dependencies = [
 name = "gglib-engine-llama"
 version = "0.28.0-rc.1"
 dependencies = [
+ "async-trait",
  "axum",
  "futures-util",
  "gglib-core",
  "gglib-gguf",
  "reqwest",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tracing",
@@ -2684,10 +2686,15 @@ dependencies = [
  "chrono",
  "gglib-core",
  "gglib-db",
+ "gglib-engine-llama",
  "gglib-gguf",
+ "gglib-mcp",
+ "gglib-proxy",
+ "reqwest",
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

@@ -3,7 +3,9 @@
 mod decoder;
 mod engine;
 mod render;
+mod runtime;
 pub mod shim;
+mod state;
 
 pub use decoder::{
     Abort, Decoder, DecoderError, FinishReason, Finished, LoadParams, Loaded, PromptProgress,
@@ -12,3 +14,5 @@ pub use decoder::{
 #[cfg(any(test, feature = "test-decoder"))]
 pub use decoder::{Script, ScriptRecord, ScriptedDecoder};
 pub use engine::Engine;
+pub use runtime::InProcessRuntime;
+pub use state::EngineState;

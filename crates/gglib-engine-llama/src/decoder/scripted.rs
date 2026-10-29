@@ -22,6 +22,11 @@ pub struct Script {
     pub batch: u32,
     /// How long each step takes.
     pub step_delay: Duration,
+    /// How long a load takes.
+    pub load_delay: Duration,
+    /// Whether the next load panics, before it holds a model; the loads
+    /// after it do not.
+    pub load_panics: bool,
     /// The model's `n_ctx_train`.
     pub n_ctx_train: u32,
     /// The model's chat template; empty is llama-server's `ChatML`.
@@ -31,14 +36,16 @@ pub struct Script {
 }
 
 impl Script {
-    /// `pieces`, read 512 prompt tokens to a step, with no delay, from a
-    /// model trained to 4096 tokens with no template and a BOS of `<s>` it
-    /// adds itself.
+    /// `pieces`, read 512 prompt tokens to a step, with no delay and loaded
+    /// at once without a panic, from a model trained to 4096 tokens with no
+    /// template and a BOS of `<s>` it adds itself.
     pub fn new<S: Into<String>>(pieces: impl IntoIterator<Item = S>) -> Self {
         Self {
             pieces: pieces.into_iter().map(Into::into).collect(),
             batch: 512,
             step_delay: Duration::ZERO,
+            load_delay: Duration::ZERO,
+            load_panics: false,
             n_ctx_train: 4096,
             chat_template: String::new(),
             vocab: VocabTokens {
@@ -56,6 +63,10 @@ impl Script {
 pub struct ScriptRecord {
     /// Each load's path and parameters.
     pub loads: Vec<(String, LoadParams)>,
+    /// How many unloads freed a model.
+    pub unloads: u32,
+    /// How many loads were asked for while a model was still held.
+    pub loads_over_a_model: u32,
     /// The text of each generation's prompt, the BOS included.
     pub prompts: Vec<String>,
     /// The sampling each generation ran under.
@@ -106,7 +117,14 @@ impl ScriptedDecoder {
 
 impl Decoder for ScriptedDecoder {
     fn load(&mut self, path: &Path, params: &LoadParams) -> Result<Loaded, DecoderError> {
-        self.note(|r| r.loads.push((path.display().to_string(), *params)));
+        let over = self.n_ctx.is_some();
+        self.note(|r| {
+            r.loads.push((path.display().to_string(), *params));
+            r.loads_over_a_model += u32::from(over);
+        });
+        let panics = std::mem::take(&mut self.script.load_panics);
+        assert!(!panics, "the script's load panics");
+        std::thread::sleep(self.script.load_delay);
         self.n_ctx = Some(params.n_ctx);
         self.cache.clear();
         Ok(Loaded {
@@ -205,7 +223,9 @@ impl Decoder for ScriptedDecoder {
     }
 
     fn unload(&mut self) {
-        self.n_ctx = None;
+        if self.n_ctx.take().is_some() {
+            self.note(|r| r.unloads += 1);
+        }
         self.cache.clear();
     }
 }
