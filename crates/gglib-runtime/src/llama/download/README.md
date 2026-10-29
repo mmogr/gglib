@@ -15,9 +15,10 @@ Platform support (`llama_platform_asset`):
 - Windows x64: CUDA 12.4 for an NVIDIA GPU with CUDA, else Vulkan, else the
   CPU build, with a warning; Windows ARM64: Vulkan, else the CPU build
 
-This module holds what is llama.cpp's own: the pin and its override
+This module holds what is llama.cpp's own: the override of its pin
 (`GGLIB_LLAMA_RELEASE`), the platform table, the CUDA runtime package, and
-the `ReleaseSpec` the shared installer in `binary_install` runs.
+the `ReleaseSpec` the shared installer in `binary_install` runs. The pin
+itself, `PINNED_LLAMA_RELEASE`, is `gglib_core::domain::engine_pins`.
 
 `download_prebuilt_binaries` emits [`LlamaProgressEvent`](super::install_events::LlamaProgressEvent)
 on a `tokio::sync::mpsc::Sender` and is consumed by:

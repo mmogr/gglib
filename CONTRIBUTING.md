@@ -682,7 +682,7 @@ Dependabot (`.github/dependabot.yml`) checks every day at 06:00 (Australia/Brisb
 
 ### The engine pins
 
-gglib installs one release of each engine: llama.cpp's `PINNED_LLAMA_RELEASE` (`crates/gglib-runtime/src/llama/download/mod.rs`) and stable-diffusion.cpp's `PINNED_SD_RELEASE` (`crates/gglib-runtime/src/sd/install/release.rs`). Every install takes the pin, whether it is a download or a source build, which clones the pinned tag; an update is an install of the pin over an older one. [ADR 0001](docs/adr/0001-runtime-capability-tiers.md) makes moving a pin a deliberate event: bump the constant, record `contracts/upstream/` again, run the suite, and ship the bump in a PR of its own.
+gglib installs one release of each engine: llama.cpp's `PINNED_LLAMA_RELEASE` (`crates/gglib-core/src/domain/engine_pins.rs`, which `scripts/llama_pin.sh` prints) and stable-diffusion.cpp's `PINNED_SD_RELEASE` (`crates/gglib-runtime/src/sd/install/release.rs`). Every install takes the pin, whether it is a download or a source build, which clones the pinned tag; an update is an install of the pin over an older one. [ADR 0001](docs/adr/0001-runtime-capability-tiers.md) makes moving a pin a deliberate event: bump the constant, record `contracts/upstream/` again, run the suite, and ship the bump in a PR of its own.
 
 - llama.cpp tags a `b<n>` release on nearly every merge. Since about `b10566` (2026-08-21) they are marked prereleases. The `v*` releases (`releases/latest`) carry no binaries, only a `nightly-tag.txt` naming the `b<n>` they point at. Take that `b<n>` when moving the pin.
 - stable-diffusion.cpp tags `master-<n>-<commit>`. Take the newest by `n`, never `releases/latest`, which can lag.
