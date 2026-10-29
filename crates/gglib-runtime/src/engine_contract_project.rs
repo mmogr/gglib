@@ -4,7 +4,9 @@
 //! enters a projection. `/props` values, `--help` defaults, prompt-side
 //! counts on the dateless templates, same-run deltas and booleans may. Raw
 //! bodies are redacted the same way and go to a folder of their own, never
-//! into the per-PR comparison.
+//! into the per-PR comparison. The one body kept verbatim is what
+//! `/apply-template` renders for a fixed chat on a dateless template
+//! ([`Recording::prompts`]): the rendering is the reading.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -34,6 +36,9 @@ pub(super) struct Recording {
     pub(super) texts: BTreeMap<&'static str, String>,
     /// Redacted raw bodies, by file name.
     pub(super) bodies: BTreeMap<String, String>,
+    /// Rendered prompts, verbatim, by file name: bodies that are not
+    /// redacted, and that both passes must render alike.
+    pub(super) prompts: BTreeMap<String, String>,
 }
 
 impl Recording {

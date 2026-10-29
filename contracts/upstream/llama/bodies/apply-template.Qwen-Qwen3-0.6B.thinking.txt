@@ -1,0 +1,9 @@
+<|im_start|>system
+You answer in one short sentence.<|im_end|>
+<|im_start|>user
+What is the capital of France?<|im_end|>
+<|im_start|>assistant
+The capital of France is Paris.<|im_end|>
+<|im_start|>user
+And of Italy?<|im_end|>
+<|im_start|>assistant
