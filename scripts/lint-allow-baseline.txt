@@ -12,6 +12,7 @@ crates/gglib-mcp 9 9
 crates/gglib-proxy 75 8
 crates/gglib-runtime 83 17
 crates/gglib-agent 4 4
+crates/gglib-engine-llama 2 0
 crates/gglib-sse 0 0
 crates/gglib-test-http 2 0
 crates/gglib-cli 87 12

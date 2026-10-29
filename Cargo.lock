@@ -2616,6 +2616,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "gglib-engine-llama"
+version = "0.28.0-rc.1"
+dependencies = [
+ "axum",
+ "futures-util",
+ "gglib-core",
+ "gglib-gguf",
+ "reqwest",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "gglib-ffi"
 version = "0.28.0-rc.1"
 dependencies = [

@@ -41,7 +41,7 @@
 //!  SseStreamDecoder          (→ typed LlmStreamEvent)
 //!        │
 //!        ▼
-//!  NormalizingStream         (Qwen XML → ToolCallDelta, <think> → ReasoningDelta)
+//!  NormalizingStream         (Qwen XML → ToolCallDelta, <think> tags dropped from text)
 //!        │
 //!        ▼
 //!  SseEncoder                (→ pristine OpenAI `data:` frames)

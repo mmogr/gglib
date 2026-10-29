@@ -234,7 +234,7 @@ doc-check: ## Build rustdoc with warnings denied, exactly as CI does
 # run those two targets.
 PHONE_CRATES := gglib-core gglib-gguf gglib-db gglib-download gglib-hf \
                 gglib-mcp gglib-agent gglib-sse gglib-bootstrap gglib-proxy \
-                gglib-ffi
+                gglib-ffi gglib-engine-llama
 
 # Needs the aarch64-apple-ios standard library, which rustup installs from
 # rust-toolchain.toml, and Xcode's iOS SDK, for the C that ring, aws-lc-sys and

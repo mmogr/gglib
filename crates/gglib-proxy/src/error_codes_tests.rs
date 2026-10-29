@@ -19,9 +19,9 @@ use super::{CODES, Kind, PUBLISHED, render};
 
 /// Every relay the scan finds, one row a site: the file under `crates/`, the
 /// `fn`, the code's spelling there, and where the code comes from. The last
-/// four hold a `code` of another kind, which the scan cannot tell apart.
+/// five hold a `code` of another kind, which the scan cannot tell apart.
 #[rustfmt::skip]
-const RELAYS: [(&str, &str, &str, &str); 34] = [
+const RELAYS: [(&str, &str, &str, &str); 35] = [
     ("gglib-proxy/src/models.rs", "with_code", "Some(code.into())", "`with_code`'s parameter"),
     ("gglib-proxy/src/image_refusal.rs", "refuse_images", "refusal.code()", "`CannotReadImages::code`"),
     ("gglib-proxy/src/models.rs", "image_model_cannot_chat", "refusal.code()", "`DrawsImages::code`"),
@@ -56,6 +56,7 @@ const RELAYS: [(&str, &str, &str, &str); 34] = [
     ("gglib-cli/src/handlers/remote/pairing_layout.rs", "layout", r#"Line::plain(format!("  code    {}",clean(offer.code.as_deref().unwrap_or_default())))"#, "a pairing code, not an error's"),
     ("gglib-runtime/src/ports_impl/llm_completion/retry/classify.rs", "classify", "err.error.code", "an upstream body's, kept to retry by, not written"),
     ("gglib-runtime/src/ports_impl/llm_completion/retry/classify.rs", "describe", "error.code.as_deref().unwrap_or_default()", "an upstream body's, printed beside its type, not written"),
+    ("gglib-engine-llama/src/shim/frames.rs", "error_body", "status.as_u16()", "an HTTP status, the number llama-server's own error envelope carries"),
 ];
 
 /// A write, its file under `crates/`, and its line.

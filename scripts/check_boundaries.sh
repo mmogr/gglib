@@ -306,13 +306,25 @@ main() {
     fi
     log ""
 
+    # gglib-engine-llama: llama.cpp in-process, and the server on loopback
+    # gglib-proxy forwards to in its place. It depends on axum for that
+    # server, so it is checked against DOMAIN_FORBIDDEN less axum. It is a
+    # phone crate, and the proxy is its client: no host probe, no process
+    # runner, and no dependency on the proxy itself.
+    ENGINE_FORBIDDEN=(tower tower-http clap tauri hyper sqlx sysinfo gglib-runtime gglib-proxy)
+    log "📦 gglib-engine-llama (in-process engine - no process runner, no proxy, no host probe)"
+    if ! check_crate_deps "gglib-engine-llama" "${ENGINE_FORBIDDEN[@]}"; then
+        FAILED=1
+    fi
+    log ""
+
     # Every infrastructure crate, the three with no forbidden list above
     # (gglib-bootstrap, gglib-build-info and gglib-integration-tests)
     # included.
     INFRA_CRATES=(
         gglib-runtime gglib-proxy gglib-agent gglib-download gglib-hf
         gglib-mcp gglib-gguf gglib-sse gglib-bootstrap gglib-build-info
-        gglib-integration-tests gglib-test-http
+        gglib-integration-tests gglib-test-http gglib-engine-llama
     )
     log "📦 Infrastructure crates (no direct dependency on a surface crate)"
     for infra_crate in "${INFRA_CRATES[@]}"; do
