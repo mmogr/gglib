@@ -54,6 +54,21 @@ deliberate growth is one row edited by hand.
 ./scripts/check_file_size.sh ts scripts/ts-complexity-baseline.txt [--update]
 ```
 
+## The Swift framework (`apple/`)
+
+gglib-ffi's framework and its Swift binding. Each script's header says what it
+does and why; CONTRIBUTING's [The Swift framework](../CONTRIBUTING.md#the-swift-framework)
+says how they are used. All but `generate-swift.sh` and `ffi-inputs-changed.sh`
+need macOS with Xcode.
+
+| Script | Purpose | Run by |
+|--------|---------|--------|
+| `apple/generate-swift.sh` | Writes the Swift binding, the C header and the `framework module GglibFFI` modulemap out of a built gglib-ffi library, with the crate's own `uniffi-bindgen`, and refuses when `uniffi.toml` names another module | `make ffi-binding`, and `build-xcframework.sh` |
+| `apple/build-xcframework.sh` | Builds gglib-ffi for `aarch64-apple-ios`, `aarch64-apple-ios-sim` and `aarch64-apple-darwin` at a deployment floor of 26.0, wraps each as `GglibFFI.framework` (shallow on iOS, versioned on macOS) and assembles `target/apple/GglibFFI.xcframework`, then runs `check-slices.sh` | `make ffi-xcframework`, `make ffi-xcframework-fast` |
+| `apple/check-slices.sh` | Each of the three slices is an arm64 dynamic library with the install name an app finds it at, the platform and floor it claims, every function its header declares, and the bundle, modulemap and Info.plist its platform loads | `build-xcframework.sh` |
+| `apple/swift-smoke.sh` | Compiles the generated Swift in a scratch Swift package against the macOS slice and calls `build_info()` | `make ffi-smoke` |
+| `apple/ffi-inputs-changed.sh` | Whether a change reaches the files `ffi-apple` builds from: gglib-ffi's workspace dependency closure, read from `cargo tree`, and the files the build reads | `ci.yml`'s `ffi-inputs` job |
+
 ## Other scripts
 
 | Script | Purpose | Run by |

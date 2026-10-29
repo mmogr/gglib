@@ -315,7 +315,9 @@ CI's `boundaries` job runs `scripts/check_boundaries.sh` on every pull request i
 
 **`gglib-app-services`** — The backend bridge: its consumers are `gglib-axum`, `gglib-cli` and `src-tauri`. No surface-specific code. `check_boundaries.sh` rejects `axum`, `tower`, `tower-http`, `hyper`, `clap`, `tauri` and `sqlx` there.
 
-**Surface crates** (`gglib-cli`, `gglib-axum`, `gglib-tauri`) — May depend on anything in lower layers. Must not depend on each other, with one documented exception: `gglib-cli` may depend on `gglib-axum` to host the daemon in `gglib daemon run` (which `gglib web --share-lan` also runs) — splitting that one module into a fourth surface crate would be more churn than the exception is worth. `scripts/check_boundaries.sh` allow-lists exactly this edge; any other surface-to-surface dependency is a violation.
+**Surface crates** (`gglib-cli`, `gglib-axum`, `gglib-tauri`, `gglib-ffi`) — May depend on anything in lower layers. Must not depend on each other, with one documented exception: `gglib-cli` may depend on `gglib-axum` to host the daemon in `gglib daemon run` (which `gglib web --share-lan` also runs) — splitting that one module into a surface crate of its own would be more churn than the exception is worth. `scripts/check_boundaries.sh` allow-lists exactly this edge; any other surface-to-surface dependency is a violation.
+
+**`gglib-ffi`** — The Swift-facing surface, built into the dynamic framework an iPhone app embeds, and one of the phone crates below. `check_boundaries.sh` rejects `clap`, `tauri`, `axum`, `tower-http`, `hyper`, `sqlx`, `sysinfo`, `netdev`, `nix`, `iroh`, `modelpipe`, `gglib-runtime` and `gglib-app-services` there: it composes gglib's own crates, and takes no server, database or host probe of its own. Its only `unsafe` is the `extern "C"` scaffolding `uniffi` expands, which the workspace's `unsafe_code` deny does not report because it comes from another crate's macro; it carries no `allow` for it.
 
 **`src-tauri`** (package `gglib-app`) — The desktop app binary, and the one crate that depends on two surfaces: `gglib-tauri` for its Tauri event emission, and `gglib-axum` to host the daemon in-process when it cannot launch an external one. It also depends on `gglib-app-services`, `gglib-runtime`, `gglib-proxy`, `gglib-core` and `gglib-build-info`. No crate depends on it, and `check_boundaries.sh` does not check it.
 
@@ -696,6 +698,15 @@ gglib installs one release of each engine: llama.cpp's `PINNED_LLAMA_RELEASE` (`
 - **Approve each ADR reading that moved.** Every reading in `observed.json` that an ADR's criterion names carries the quote, and the `ADR criterion moved` check fails until `contracts/upstream/llama/approvals.json` agrees with it. The note says what was decided: `deleting <stage> (#<issue>)`, `keeping, because <reason>`, or `probe changed in this PR` when a gglib change moved it. `make adr-readings` runs the check and lists the readings no recording takes.
 - **Take a real picture before merging a stable-diffusion.cpp bump**, with ADR 0018's render-beside-a-chat pair. A llama.cpp bump needs no chat by hand, and neither the squash message nor the ADR logs carry readings: the recordings are the record. On a llama.cpp bump the workflow also puts Qwen3.5-0.8B through three probes (a tool call, split reasoning, an image in a tool message) into `contracts/upstream/llama/tier3/`, which no check reads.
 
+### The Swift framework
+
+`gglib-ffi` is the crate an app links, as `GglibFFI.xcframework`: a dynamic framework for iOS, the iOS simulator and macOS (`aarch64` only), with the Swift `uniffi` generates for it committed in `crates/gglib-ffi/swift/`. The crate builds and tests as plain Rust on every OS, so `make pre-commit` covers it on Linux. Its README has the layout; the scripts in `scripts/apple/` each say what they do.
+
+- **A change to its exported surface regenerates the binding.** Run `make ffi-binding` and commit `crates/gglib-ffi/swift/` with the Rust. The generated Swift carries `uniffi`'s API checksums and stops with a fatal error at its first call when they disagree with the framework's, so `ffi-apple`'s `make ffi-binding-check` fails a pull request whose committed copy is stale.
+- **On a Mac with Xcode, `make ffi-xcframework-fast ffi-smoke`** builds the framework into `target/apple/`, checks each slice, and calls it from a scratch Swift package. `make ffi-xcframework` is the optimised build a release ships. Neither boots a simulator.
+- **A local Xcode is not CI's.** `ffi-apple` builds with the runner's default Xcode, which is what ggchat's CI builds the app with. A local build with another Xcode proves the scripts; CI proves the framework.
+- **`uniffi` stays on the minor modelpipe-ffi uses.** Both bindings sit in one app and their headers share the definitions behind `UNIFFI_SHARED_H`, so a move to another minor is made in both repositories together; `build_info`'s test fails on any other.
+
 ### Stacked pull requests
 
 A change that splits into several concerns goes up as a stack: one PR per concern, one commit per PR, each PR based on the branch of the PR below it, and the bottom one on `main`. The chain is joined into a GitHub stack ([stacked pull requests](https://docs.github.com/en/pull-requests/reference/stacked-pull-requests), a public preview). In a stack, CI runs on every PR and not only on the one into `main`, a merge lands a PR together with every PR below it, and GitHub rebases the PRs that are left.
@@ -723,7 +734,7 @@ A change that splits into several concerns goes up as a stack: one PR per concer
 
 ## CI Pipeline
 
-`.github/workflows/ci.yml` runs on every pull request into `main` and every push to it. Every PR must pass the jobs below; they are not advisory. The `CI Success` job fails if any of them failed or was cancelled. They start in parallel, except the two cross-OS jobs, which wait for `clippy`. A newer push to a pull request cancels that pull request's older run, so on a commit that is no longer the pull request's head a cancelled run, with `CI Success` failed, is expected.
+`.github/workflows/ci.yml` runs on every pull request into `main` and every push to it. Every PR must pass the jobs below; they are not advisory. The `CI Success` job fails if any of them failed or was cancelled; a skipped job counts as passed. They start in parallel, except the two cross-OS jobs, which wait for `clippy`, and `ffi-apple`, which waits for `ffi-inputs`. A newer push to a pull request cancels that pull request's older run, so on a commit that is no longer the pull request's head a cancelled run, with `CI Success` failed, is expected.
 
 | Job | Runs | What it enforces |
 |---|---|---|
@@ -738,7 +749,9 @@ A change that splits into several concerns goes up as a stack: one PR per concer
 | `clippy` | `npm run build`, then `cargo clippy --all-targets --all-features -- -D warnings` | No Clippy warning on Linux |
 | `cli-cross-os` | `cargo test -p gglib-cli --no-run` on Linux, macOS and Windows | `gglib-cli` and its tests compile on each. Pull requests only |
 | `clippy-cross-os` | `npm run build`, then `cargo clippy --all-targets --all-features -- -D warnings` on macOS and Windows | No Clippy warning on either, including in code only that OS compiles. Pull requests only |
-| `ios-check` | `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`, then `make ios-check`, which is `cargo check --locked --target aarch64-apple-ios` over the `Makefile`'s `PHONE_CRATES`, on macOS | The crates a phone build compiles compile for iOS (see [Crate Boundaries](#crate-boundaries)) |
+| `ios-check` | `make ios-check`, which is `cargo check --locked --target aarch64-apple-ios` over the `Makefile`'s `PHONE_CRATES`, on macOS; `rust-toolchain.toml` installs the target | The crates a phone build compiles compile for iOS (see [Crate Boundaries](#crate-boundaries)) |
+| `ffi-inputs` | `scripts/apple/ffi-inputs-changed.sh` against the pull request's base, on Linux | Whether the change reaches `ffi-apple`'s inputs: the workspace crates in `gglib-ffi`'s dependency closure as `cargo tree` reads it, `crates/build_common.rs`, `scripts/llama_pin.sh`, the root manifests and lockfile, `rust-toolchain.toml`, the `Makefile`, `scripts/apple/` and `ci.yml`. A push to `main` always reaches them |
+| `ffi-apple` | `make ffi-xcframework-fast`, `make ffi-binding-check`, `make ffi-smoke`, on macOS with the runner's default Xcode. Only when `ffi-inputs` says the change reaches it | `GglibFFI.xcframework` builds, and each of its three slices is a dynamic framework for the platform it claims; the committed Swift binding is what the library generates; that binding compiles in Swift 6 language mode and calls the macOS slice (see [The Swift framework](#the-swift-framework)) |
 
 When a CI or Coverage run on `main` completes, `badges.yml` downloads its artifacts and pushes badge JSON to the `badges` branch, where the shields.io badges in crate READMEs read it.
 
@@ -778,7 +791,7 @@ In practice: if your PR closes a fully-labelled issue, you'll rarely touch label
 
 Before requesting review, confirm each item:
 
-- [ ] `make pre-commit` passes locally: the Rust, frontend, architecture, bindings and rustdoc checks. It leaves out three CI jobs: the two cross-OS jobs, which run only in CI, and `ios-check`, which `make ios-check` runs on macOS with Xcode and the `aarch64-apple-ios` target installed.
+- [ ] `make pre-commit` passes locally: the Rust, frontend, architecture, bindings and rustdoc checks. It leaves out four CI jobs: the two cross-OS jobs, which run only in CI; `ios-check`, which `make ios-check` runs on macOS with Xcode; and `ffi-apple`, which is `make ffi-xcframework-fast ffi-binding-check ffi-smoke` on macOS with Xcode.
 - [ ] A new doc example compiles and passes as a doctest (`cargo test --doc` runs them alone).
 - [ ] Any new public type or enum has `///` doc comments on all items.
 - [ ] Any architectural change is documented with its module: in the README of a directory module, in the `//!` block of a single-file module. ASCII architecture diagrams belong in crate READMEs; prose API documentation does not.

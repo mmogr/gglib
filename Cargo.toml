@@ -21,6 +21,7 @@ members = [
     "crates/gglib-cli",
     "crates/gglib-axum",
     "crates/gglib-tauri",
+    "crates/gglib-ffi",
     "crates/gglib-integration-tests",
     # Tauri desktop app (gglib-app binary)
     "src-tauri",
