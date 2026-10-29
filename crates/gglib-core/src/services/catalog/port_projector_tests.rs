@@ -1,8 +1,8 @@
 //! A model's projector on its launch specification.
 
 use super::*;
+use crate::domain::NewModel;
 use chrono::Utc;
-use gglib_core::domain::NewModel;
 use std::path::Path;
 
 fn model(weights: &Path, projector: Option<&Path>) -> Model {

@@ -32,9 +32,9 @@ use gglib_core::ports::{
     ModelRuntimePort, RemoteGatewayPort, Repos, RunsPort, SystemProbePort, ToolSupportDetectorPort,
 };
 use gglib_core::server_config::ServerConfigOptions;
-use gglib_core::services::AppCore;
+use gglib_core::services::{AppCore, CatalogPortImpl};
 use gglib_mcp::McpService;
-use gglib_runtime::ports_impl::{CatalogPortImpl, RuntimePortImpl};
+use gglib_runtime::ports_impl::RuntimePortImpl;
 use gglib_runtime::process::{ProcessManager, RuntimeBinaries};
 use gglib_runtime::proxy::ProxySupervisor;
 use gglib_runtime::sd::SdImageDriver;

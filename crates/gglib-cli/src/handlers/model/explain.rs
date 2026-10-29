@@ -14,8 +14,8 @@ use gglib_app_services::{GuiError, ModelOps, SamplingExplanationDto};
 use gglib_core::Settings;
 use gglib_core::domain::{FitInputs, Model};
 use gglib_core::server_config::{ServerConfigOptions, resolve_context_size_with_source};
+use gglib_core::services::resident_bytes;
 use gglib_runtime::llama::args::resolve_kv_cache_types;
-use gglib_runtime::ports_impl::model_shards::resident_bytes;
 use gglib_runtime::process::residency::explain::explain_fit;
 
 use super::resolver;

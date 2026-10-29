@@ -3,6 +3,7 @@ mod app_core;
 #[cfg(any(test, feature = "test-utils"))]
 mod app_core_fixture;
 mod attachments;
+mod catalog;
 mod chat_history;
 mod component_choices;
 mod drawing;
@@ -21,6 +22,7 @@ mod settings_service;
 
 pub use app_core::AppCore;
 pub use attachments::AttachmentService;
+pub use catalog::{CatalogPortImpl, model_to_launch_spec, resident_bytes, total_model_bytes};
 pub use chat_history::{ChangeError, ChatHistoryService};
 pub use component_choices::component_choices;
 pub use drawing::{drawing_availability, drawing_refusal, image_model_answer, resolve_image_model};

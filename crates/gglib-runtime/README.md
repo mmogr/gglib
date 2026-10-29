@@ -20,9 +20,8 @@ This crate is in the **Infrastructure Layer** — it manages external processes 
 gglib-core (ports)          gglib-runtime                       External
 ┌──────────────────────┐    ┌──────────────────────┐    ┌──────────────────┐
 │ ModelRuntimePort     │◄───│ RuntimePortImpl      │───►│  llama-server    │
-│ ModelCatalogPort     │    │ CatalogPortImpl      │    │  llama-cli       │
-│ LlmCompletionPort    │    │ LlmCompletionAdapter │    └──────────────────┘
-│ SystemProbePort      │    │ DefaultSystemProbe   │
+│ LlmCompletionPort    │    │ LlmCompletionAdapter │    │  llama-cli       │
+│ SystemProbePort      │    │ DefaultSystemProbe   │    └──────────────────┘
 │ AdmissionRelease     │    │ AdmissionQueue       │
 └──────────────────────┘    └──────────────────────┘
                                      │

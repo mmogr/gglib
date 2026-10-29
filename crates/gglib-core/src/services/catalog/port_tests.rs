@@ -3,10 +3,10 @@
 //! Split out via `#[path]` so the module itself stays inside the file budget.
 
 use super::*;
+use crate::domain::{ModelCapabilities, ModelSamplingDefaults, NewModel, TemplateCaps};
+use crate::ports::RepositoryError;
 use async_trait::async_trait;
 use chrono::Utc;
-use gglib_core::domain::{ModelCapabilities, ModelSamplingDefaults, NewModel, TemplateCaps};
-use gglib_core::ports::RepositoryError;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -153,7 +153,7 @@ fn a_launch_spec_carries_what_the_models_gguf_declares() {
 
     assert_eq!(
         spec.model_sampling.temperature,
-        gglib_core::domain::ModelSamplingDefault::Declared(0.33)
+        crate::domain::ModelSamplingDefault::Declared(0.33)
     );
 }
 
@@ -306,7 +306,7 @@ fn a_summary_carries_the_recorded_caps() {
 #[test]
 fn an_image_model_is_listed_as_drawing_and_launched_with_its_family() {
     let draws = Model {
-        image_family: Some(gglib_core::domain::ImageFamily::Flux1),
+        image_family: Some(crate::domain::ImageFamily::Flux1),
         ..base_model()
     };
 
@@ -314,7 +314,7 @@ fn an_image_model_is_listed_as_drawing_and_launched_with_its_family() {
     assert!(!model_to_summary(&base_model()).image_output);
     assert_eq!(
         model_to_launch_spec(draws).image_family,
-        Some(gglib_core::domain::ImageFamily::Flux1)
+        Some(crate::domain::ImageFamily::Flux1)
     );
     assert_eq!(model_to_launch_spec(base_model()).image_family, None);
 }
@@ -324,7 +324,7 @@ fn an_image_model_is_listed_as_drawing_and_launched_with_its_family() {
 /// runtime; a chat model's names llama.cpp and carries none.
 #[test]
 fn an_image_models_launch_carries_its_components_and_its_runtime() {
-    use gglib_core::domain::{ComponentRole, ImageFamily, ModelComponent, RuntimeKind};
+    use crate::domain::{ComponentRole, ImageFamily, ModelComponent, RuntimeKind};
 
     let components = vec![
         ModelComponent {

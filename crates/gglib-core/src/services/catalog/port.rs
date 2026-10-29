@@ -1,8 +1,8 @@
 //! `ModelCatalogPort` implementation using `ModelRepository`.
 //!
 //! This adapter wraps the `ModelRepository` to implement the `ModelCatalogPort`
-//! interface from gglib-core. It queries the database for model information
-//! and maps the results to domain types.
+//! interface. It queries the repository for model information and maps the
+//! results to domain types.
 //!
 //! Identifier resolution is **not** decided here — every lookup by identifier
 //! goes through [`ModelRepository::get_by_identifier`], the workspace's single
@@ -10,14 +10,14 @@
 //! given string means.
 
 use async_trait::async_trait;
-use gglib_core::domain::Model;
-use gglib_core::ports::{
-    CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRepository, ModelSummary,
-};
 use std::fmt;
 use std::sync::Arc;
 
-use super::model_shards::resident_bytes;
+use super::shards::resident_bytes;
+use crate::domain::Model;
+use crate::ports::{
+    CatalogError, ModelCatalogPort, ModelLaunchSpec, ModelRepository, ModelSummary,
+};
 
 /// Format param count (in billions) as a human-readable string.
 fn format_param_count(param_b: f64) -> String {
@@ -69,12 +69,12 @@ fn model_to_summary(m: &Model) -> ModelSummary {
 pub fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
     let file_size_bytes = resident_bytes(&m);
     let kv_elems_per_token =
-        gglib_core::domain::estimate_kv_elems_per_token(&m.metadata, m.architecture.as_deref());
+        crate::domain::estimate_kv_elems_per_token(&m.metadata, m.architecture.as_deref());
     let kv_memory_is_partial =
-        gglib_core::domain::kv_memory_is_partial(&m.metadata, m.architecture.as_deref());
+        crate::domain::kv_memory_is_partial(&m.metadata, m.architecture.as_deref());
     // Third fact derived from the same stored GGUF map. See
     // `ModelSamplingDefaults` for why the proxy needs it.
-    let model_sampling = gglib_core::domain::ModelSamplingDefaults::from_metadata(&m.metadata);
+    let model_sampling = crate::domain::ModelSamplingDefaults::from_metadata(&m.metadata);
 
     ModelLaunchSpec {
         id: m.id as u32,
@@ -169,7 +169,7 @@ impl ModelCatalogPort for CatalogPortImpl {
     async fn record_template_caps(
         &self,
         id: u32,
-        caps: gglib_core::domain::TemplateCaps,
+        caps: crate::domain::TemplateCaps,
     ) -> Result<(), CatalogError> {
         let mut model = self
             .repo
@@ -188,8 +188,8 @@ impl ModelCatalogPort for CatalogPortImpl {
 }
 
 #[cfg(test)]
-#[path = "model_catalog_tests.rs"]
-mod model_catalog_tests;
+#[path = "port_tests.rs"]
+mod port_tests;
 #[cfg(test)]
-#[path = "model_catalog_projector_tests.rs"]
+#[path = "port_projector_tests.rs"]
 mod projector_tests;
