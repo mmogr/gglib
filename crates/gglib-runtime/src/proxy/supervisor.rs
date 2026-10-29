@@ -330,6 +330,8 @@ impl ProxySupervisor {
                 cache_enabled,
                 slot_dir,
                 disk_budget,
+                host: crate::system::host_facts(),
+                dashboard: true,
                 agent_metrics,
                 observers,
                 access,

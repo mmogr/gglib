@@ -252,9 +252,7 @@ pub struct Usage {
 
 #[path = "models_list.rs"]
 mod models_list;
-pub use models_list::{
-    IMAGE_GENERATION_CAPABILITY, ModelInfo, ModelsResponse, VISION_CAPABILITY, this_machine_name,
-};
+pub use models_list::{IMAGE_GENERATION_CAPABILITY, ModelInfo, ModelsResponse, VISION_CAPABILITY};
 
 // =============================================================================
 // Error Response Types

@@ -77,6 +77,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 ### Key Design Decisions
 
 - **Ports-only dependency**: Depends only on `gglib-core` (no sqlx, no gglib-runtime)
+- **No host probe**: the machine's name and free disk come from the `HostFacts` readers its caller passes in `ServeConfig`, never from sysinfo, so the crate builds for iOS
 - **Bind externally**: `serve()` takes a pre-bound `TcpListener` from supervisor
 - **Router, not validator**: Inbound `/v1/chat/completions` requests are parsed into a narrow `ChatRoutingEnvelope` (just `model`, `stream`, `num_ctx`) and then forwarded as raw bytes. Unknown fields and `OpenAI` content variants (array-form `content`, bare-string `stop`, future extensions) pass through as they came, except where a request-pipeline stage rewrites message text in either shape. Schema validation is llama-server's responsibility.
 - **Domain → API mapping**: `OpenAI` types live here, domain types in gglib-core
@@ -119,6 +120,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 **Module Descriptions:**
 - **`server.rs`** — Axum application setup, routing, `/v1/chat/completions`, `/v1/proxy/status`, and `/v1/proxy/status/stream` handlers
 - **`serve_config.rs`** — `ServeConfig`: everything `serve()` is started with, one named field each
+- **`host_facts.rs`** — `HostFacts`: the readers a caller hands in for this machine's name and the free space on a disk, each optional; `HostFacts::none()` has neither
 - **`models.rs`** — OpenAI-compatible request, response and error types, and the error response factories
 - **`models_list.rs`** — The `/v1/models` list (`ModelsResponse`, `ModelInfo`), built from the catalogue's summaries; it serializes and deserializes, for a reader of the list on another machine
 - **`model_detail_endpoint.rs`** — `GET /v1/models/{name}/detail`: one model in full, resolved as a chat request would resolve it, without its file path or port
@@ -197,8 +199,11 @@ resume from prior context without re-computation.
   least-recently-used `.bin` files once the cache exceeds a byte budget — by
   default a quarter of (free disk space + the cache's own footprint),
   recomputed on every sweep; override with `--cache-disk-gb` or
-  `GGLIB_CACHE_DISK_GB`. The same sweep also reaps orphaned `.tmp` files left
-  behind by an interrupted save.
+  `GGLIB_CACHE_DISK_GB`. The free space is what `ServeConfig.host`'s
+  free-disk reader reads; a reader that cannot tell counts as none, so the
+  budget is a quarter of the cache's own footprint, and with no reader there
+  is no default budget and no slot file is evicted. The same sweep also reaps
+  orphaned `.tmp` files left behind by an interrupted save.
 - **Clear endpoint:** `POST /v1/proxy/cache/clear` (with optional `X-Gglib-Session-Id`
   header) clears cached slot files for a session or all sessions.
 
@@ -263,8 +268,9 @@ gglib adds:
 
 The list also carries `machine_name`, this machine's host name cut to its
 first label and kept only when that is 1 to 63 ASCII letters, digits, `-` or
-`_` (`gglib_core::domain::machine_name`). It is read on every request, and it
-is absent when the host name is unreadable or is not a plain label. `/health`
+`_` (`gglib_core::domain::machine_name`). It is read on every request, from
+the reader `ServeConfig.host` carries, and it is absent when there is no
+reader or the host name is unreadable or is not a plain label. `/health`
 never carries it: it answers without credentials.
 
 `GET /v1/models/{name}/detail` answers one model as a `ModelLookup`:
@@ -565,7 +571,7 @@ gglib_proxy::serve(ServeConfig {
     catalog_port,            // Arc<dyn ModelCatalogPort>
     mcp,                     // Arc<McpService>
     cancel,
-    // ...and the eleven other fields
+    // ...and the thirteen other fields
 }).await?;
 ```
 
@@ -960,7 +966,9 @@ explicitly documented as a not-yet-consumed "future" contract).
   event is always the current snapshot (hydration), followed by a fresh
   snapshot roughly once per second for as long as the client stays
   connected (via [`gglib_sse::Broadcaster::subscribe_with_hydration_until`],
-  see `crates/gglib-sse`). Keepalive comments (`: ping`) are sent every 30s
+  see `crates/gglib-sse`). A proxy served with `ServeConfig.dashboard` off
+  runs no publisher: its stream sends the hydration event and nothing after
+  it. Keepalive comments (`: ping`) are sent every 30s
   on idle connections; native `EventSource` clients (browsers, and this is
   what the web GUI uses) ignore these transparently.
 

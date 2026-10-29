@@ -283,9 +283,20 @@ main() {
     fi
     log ""
 
-    # Every infrastructure crate, the four with no forbidden list above
-    # (gglib-proxy, gglib-bootstrap, gglib-build-info and
-    # gglib-integration-tests) included.
+    # gglib-proxy: the OpenAI-compatible server. It depends on axum, so it is
+    # not checked against DOMAIN_FORBIDDEN. It is a phone crate, and reads
+    # nothing of its host itself: a caller that can read the host's name or
+    # free disk hands it a reader in `HostFacts`.
+    PROXY_FORBIDDEN=(sysinfo)
+    log "📦 gglib-proxy (server - no host probe of its own)"
+    if ! check_crate_deps "gglib-proxy" "${PROXY_FORBIDDEN[@]}"; then
+        FAILED=1
+    fi
+    log ""
+
+    # Every infrastructure crate, the three with no forbidden list above
+    # (gglib-bootstrap, gglib-build-info and gglib-integration-tests)
+    # included.
     INFRA_CRATES=(
         gglib-runtime gglib-proxy gglib-agent gglib-download gglib-hf
         gglib-mcp gglib-gguf gglib-sse gglib-bootstrap gglib-build-info

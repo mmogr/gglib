@@ -243,7 +243,7 @@ pub(super) async fn open(
     if pairing.code().is_some() {
         // This machine's name, as its own `/v1/models` publishes it, is the
         // label the far side's device roster shows this device by.
-        let label = gglib_proxy::models::this_machine_name();
+        let label = gglib_runtime::system::this_machine_name();
         let paired = modelpipe::pair(pairing, label.as_deref(), opts, REACH_WITHIN)
             .await
             .map_err(NotOpened::Pair)?;

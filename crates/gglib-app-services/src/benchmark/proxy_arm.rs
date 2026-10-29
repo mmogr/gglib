@@ -110,6 +110,8 @@ impl ProxyArm {
                 cache_enabled: false,
                 slot_dir: None,
                 disk_budget: gglib_proxy::slot_eviction::DiskBudget::Auto,
+                host: gglib_runtime::system::host_facts(),
+                dashboard: true,
                 agent_metrics: Arc::new(gglib_core::cache_metrics::CacheMetricsStore::new()),
                 observers,
                 access: ProxyAccessConfig::default(),

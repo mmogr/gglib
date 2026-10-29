@@ -35,6 +35,7 @@ use crate::cache_lifecycle::{StreamConfig, resolve_cache_triple, run_with_cache}
 use crate::connections::ActiveConnectionsRegistry;
 use crate::dashboard::{CacheStatus, CacheStatusCache, DashboardState, spawn_dashboard_publisher};
 use crate::forward::{ForwardError, ForwardRequest, forward_chat_completion};
+use crate::host_facts::HostFacts;
 use crate::mcp::session::SessionManager;
 use crate::metrics::ContextMetricsStore;
 use crate::models::{ChatRoutingEnvelope, ErrorResponse};
@@ -73,6 +74,9 @@ pub(crate) struct AppState {
     /// the built-in floor — see [`crate::models_endpoint`] for what that means
     /// for the advertisement.
     pub(crate) device_memory_readable: bool,
+    /// What the caller can read of this machine; `/v1/models` asks it for
+    /// the machine's name on every listing.
+    pub(crate) host: HostFacts,
     /// Unified proxy dashboard state: active-connections registry, llama.cpp
     /// `/slots` cache, and request metrics, plus the SSE broadcaster that
     /// pushes snapshots to `GET /v1/proxy/status/stream`.
@@ -189,6 +193,8 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
         cache_enabled,
         slot_dir,
         disk_budget,
+        host,
+        dashboard: publish_dashboard,
         agent_metrics,
         observers,
         access,
@@ -260,7 +266,12 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
     // accumulate without bound. Only runs when there's a slot_dir to sweep;
     // joined below on shutdown like the other background tasks.
     let lru_eviction = slot_dir.as_ref().map(|dir| {
-        crate::slot_eviction::spawn_eviction_task(dir.clone(), disk_budget, cancel.clone())
+        crate::slot_eviction::spawn_eviction_task(
+            dir.clone(),
+            disk_budget,
+            host.clone(),
+            cancel.clone(),
+        )
     });
 
     let dashboard = Arc::new(DashboardState::new(
@@ -276,9 +287,10 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
     ));
     // Second background task: periodically recomputes and broadcasts the
     // unified DashboardSnapshot for GET /v1/proxy/status/stream subscribers
-    // (see `dashboard` module docs). Same join-on-shutdown treatment as the
-    // slots poller above.
-    let dashboard_publisher = spawn_dashboard_publisher(Arc::clone(&dashboard), cancel.clone());
+    // (see `dashboard` module docs), when the caller asked for it. Same
+    // join-on-shutdown treatment as the slots poller above.
+    let dashboard_publisher = publish_dashboard
+        .then(|| spawn_dashboard_publisher(Arc::clone(&dashboard), cancel.clone()));
 
     let state = AppState {
         client,
@@ -288,6 +300,7 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
         sessions: SessionManager::new(),
         default_ctx,
         device_memory_readable,
+        host,
         dashboard,
         settings: Arc::new(SettingsCache::new(settings_repo)),
         shutdown: cancel.clone(),
@@ -328,7 +341,9 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
     if let Err(e) = slots_poller.await {
         warn!("proxy dashboard: /slots poller task panicked during shutdown: {e}");
     }
-    if let Err(e) = dashboard_publisher.await {
+    if let Some(handle) = dashboard_publisher
+        && let Err(e) = handle.await
+    {
         warn!("proxy dashboard: publisher task panicked during shutdown: {e}");
     }
     if let Some(handle) = lru_eviction

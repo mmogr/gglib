@@ -1,6 +1,7 @@
 #![doc = include_str!("README.md")]
 mod deps;
 pub(crate) mod gpu;
+mod host;
 
 use gglib_core::ports::SystemProbePort;
 use gglib_core::utils::system::{
@@ -16,6 +17,7 @@ use deps::{
     check_librsvg, check_libsqlite3, check_webkit2gtk,
 };
 use gpu::{detect_gpu_info, get_system_memory_info};
+pub use host::{free_disk_bytes, host_facts, this_machine_name};
 
 /// Default implementation of `SystemProbePort`.
 ///
