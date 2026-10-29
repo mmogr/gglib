@@ -25,12 +25,20 @@
 //!     Library.pause_all() / Library.resume_all()
 //!         DownloadWatch.next()    -> DownloadProgress?   None once it is over
 //!         DownloadWatch.cancel()                         returns at once
+//!     Library.serve(DeviceReading)                throws -> Server
+//!         Server.base_url()       -> String   http://127.0.0.1:<port>/v1
+//!         Server.api_key()        -> String   the bearer, new each serve
+//!         Server.status()         -> EngineWatch
+//!             EngineWatch.next()  -> EngineState?   None after Stopped
+//!         Server.shutdown()                   idempotent
 //! ```
 //!
-//! Every `Library` call but `suggested`, and `DownloadWatch.next`, is
-//! `async`; every failure is a [`GglibError`]. A verdict ([`FitVerdict`], with its [`FitWhy`]) is
+//! Every `Library` call but `suggested` is `async`, and so are
+//! `DownloadWatch.next`, `EngineWatch.next` and `Server.shutdown`; every
+//! failure is a [`GglibError`]. A verdict ([`FitVerdict`], with its [`FitWhy`]) is
 //! gglib-core's, judged against the budget gglib makes from the
-//! [`DeviceReading`] the app took.
+//! [`DeviceReading`] the app took, and the served engine admits each model
+//! against the budget of the reading it was served with.
 //!
 //! # One module name
 //!
@@ -78,11 +86,13 @@ mod build_info;
 mod download_feed;
 mod download_watch;
 mod downloads;
+mod engine_watch;
 mod errors;
 mod installed;
 mod library;
 mod reading;
 mod runtime;
+mod serve;
 mod verdict;
 
 #[cfg(test)]
@@ -97,10 +107,12 @@ mod test_server;
 pub use browse::{QuantOffer, SearchHit, SearchPage, Suggestion};
 pub use build_info::{BuildInfo, build_info};
 pub use download_watch::{DownloadProgress, DownloadState, DownloadWatch};
+pub use engine_watch::{EngineState, EngineWatch};
 pub use errors::GglibError;
 pub use installed::InstalledModel;
-pub use library::{Library, LibraryDirs, open_library};
+pub use library::{DATABASE_FILE, Library, LibraryDirs, open_library};
 pub use reading::DeviceReading;
+pub use serve::Server;
 pub use verdict::{FitVerdict, FitWhy, MissingInput};
 
 // Defines `UniFfiTag` and the `extern "C"` entry points, at the crate root

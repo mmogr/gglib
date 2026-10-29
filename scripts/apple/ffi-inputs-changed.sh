@@ -16,7 +16,11 @@
 #     with no list here to keep;
 #   - crates/build_common.rs, which those crates' build scripts include;
 #   - scripts/llama_pin.sh, which the smoke test runs for the pin it expects
-#     build_info() to report;
+#     build_info() to report, and the llama.xcframework build reads;
+#   - .github/actions/llama-xcframework, which builds or restores the
+#     llama.xcframework every slice links, and
+#     .github/actions/pinned-engines/models.txt, which names the model the
+#     smoke test serves;
 #   - the root Cargo.toml and Cargo.lock, rust-toolchain.toml, the Makefile,
 #     scripts/apple/ and .github/workflows/ci.yml.
 #
@@ -56,6 +60,8 @@ done <<<"${crates}"
 inputs+=(
     crates/build_common.rs
     scripts/llama_pin.sh
+    .github/actions/llama-xcframework
+    .github/actions/pinned-engines/models.txt
     Cargo.toml
     Cargo.lock
     rust-toolchain.toml
