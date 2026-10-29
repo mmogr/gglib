@@ -12,6 +12,12 @@
 #   - its install name is the path an app's loader finds it at:
 #     @rpath/GglibFFI.framework/GglibFFI, and on macOS, whose frameworks are
 #     versioned, @rpath/GglibFFI.framework/Versions/A/GglibFFI;
+#   - it links llama.framework at the install name llama.cpp's own build
+#     gives it (@rpath/llama.framework/llama, and on macOS
+#     @rpath/llama.framework/Versions/Current/llama), and nothing else but
+#     the system's libraries, so an app that embeds the two frameworks has
+#     everything it loads; and it carries no run path of its own, which
+#     would name a folder on the machine that built it;
 #   - its LC_BUILD_VERSION names the slice's platform and the deployment
 #     floor the build asked for;
 #   - it exports every function the framework's header declares, so the
@@ -24,7 +30,8 @@
 # The failure this exists for is a build that says it succeeded and is wrong
 # in a way only the consuming app's link or launch shows, somewhere else and
 # later: a slice compiled for the host, a framework whose install name points
-# where no app embeds it, a bundle macOS will not load.
+# where no app embeds it, a bundle macOS will not load, an engine built
+# without llama.cpp.
 #
 # The floors default to 26.0 and are read from IPHONEOS_DEPLOYMENT_TARGET and
 # MACOSX_DEPLOYMENT_TARGET, as build-xcframework.sh reads them, so a run on
@@ -77,11 +84,12 @@ plist_value() {
 #   $6 the deployment floor
 #   $7 CFBundleSupportedPlatforms' entry
 #   $8 the Info.plist's minimum-OS key
+#   $9 llama.framework's install name on the slice's platform
 check_slice() {
     local slice="$1" fw="${XCFRAMEWORK}/$1/${NAME}.framework"
     local bin="${fw}/$2" plist="${fw}/$3"
     local want_install="$4" want_platform="$5" want_min="$6"
-    local want_plist_platform="$7" min_key="$8"
+    local want_plist_platform="$7" min_key="$8" want_llama="$9"
     slice_wrongs=0
 
     if [[ ! -f "${bin}" ]]; then
@@ -113,6 +121,21 @@ check_slice() {
     minos="${minos% }"
     [[ "${minos}" == "${want_min}" ]] \
         || wrong "${slice}: minos '${minos:-none}', wanted '${want_min}'"
+
+    # What it loads: itself (the id line), llama.framework, the system's.
+    local dep links_llama=0 rpaths
+    while IFS= read -r dep; do
+        case "${dep}" in
+            "${want_install}") ;;
+            "${want_llama}") links_llama=1 ;;
+            /usr/lib/* | /System/Library/*) ;;
+            *) wrong "${slice}: links ${dep}, which neither the system nor an app embedding llama.framework provides" ;;
+        esac
+    done < <(otool -L "${bin}" | tail -n +2 | awk '{ print $1 }')
+    [[ "${links_llama}" -eq 1 ]] \
+        || wrong "${slice}: does not link llama.framework at ${want_llama}, so its engine has no llama.cpp"
+    rpaths="$(otool -l "${bin}" | awk '/cmd LC_RPATH/ { getline; getline; print $2 }' | tr '\n' ' ')"
+    [[ -z "${rpaths}" ]] || wrong "${slice}: carries run paths of its own: ${rpaths% }"
 
     # Every function the header declares, exported by the binary.
     local header="${fw}/Headers/${NAME}.h" missing declared
@@ -154,6 +177,7 @@ check_slice() {
     if [[ "${slice_wrongs}" -eq 0 ]]; then
         echo "  ok       ${slice}  [${archs}]  ${filetype}  platform ${platforms}  minos ${minos}"
         echo "           ${install}"
+        echo "           links ${want_llama}"
     fi
 }
 
@@ -171,11 +195,14 @@ slices="$(cd "${XCFRAMEWORK}" && find . -mindepth 1 -maxdepth 1 -type d | sed 's
     || wrong "the XCFramework holds '${slices% }', wanted 'ios-arm64 ios-arm64-simulator macos-arm64'"
 
 check_slice ios-arm64 "${NAME}" Info.plist \
-    "@rpath/${NAME}.framework/${NAME}" IOS "${IOS_MIN}" iPhoneOS MinimumOSVersion
+    "@rpath/${NAME}.framework/${NAME}" IOS "${IOS_MIN}" iPhoneOS MinimumOSVersion \
+    "@rpath/llama.framework/llama"
 check_slice ios-arm64-simulator "${NAME}" Info.plist \
-    "@rpath/${NAME}.framework/${NAME}" IOSSIMULATOR "${IOS_MIN}" iPhoneSimulator MinimumOSVersion
+    "@rpath/${NAME}.framework/${NAME}" IOSSIMULATOR "${IOS_MIN}" iPhoneSimulator MinimumOSVersion \
+    "@rpath/llama.framework/llama"
 check_slice macos-arm64 "Versions/A/${NAME}" Versions/A/Resources/Info.plist \
-    "@rpath/${NAME}.framework/Versions/A/${NAME}" MACOS "${MACOS_MIN}" MacOSX LSMinimumSystemVersion
+    "@rpath/${NAME}.framework/Versions/A/${NAME}" MACOS "${MACOS_MIN}" MacOSX LSMinimumSystemVersion \
+    "@rpath/llama.framework/Versions/Current/llama"
 
 # The versioned bundle's symlinks: a macOS framework is loaded through them.
 mac_fw="${XCFRAMEWORK}/macos-arm64/${NAME}.framework"
@@ -195,4 +222,4 @@ if [[ "${fail}" -ne 0 ]]; then
     exit 1
 fi
 
-echo "All three slices are dynamic frameworks for the platform they claim."
+echo "All three slices are dynamic frameworks for the platform they claim, linking llama.framework."

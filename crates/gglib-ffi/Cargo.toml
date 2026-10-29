@@ -28,11 +28,28 @@ name = "uniffi-bindgen"
 path = "src/bin/uniffi-bindgen.rs"
 required-features = ["bindgen"]
 
+[[bin]]
+# Adds a GGUF already on disk to a library, for the Swift smoke test, which
+# serves a real model through the binding and has no call to add one: a phone
+# gets its models by download. Behind `smoke` so a phone build never compiles
+# it.
+name = "gglib-ffi-add-model"
+path = "src/bin/add-model.rs"
+required-features = ["smoke"]
+
 [features]
 # The generator and what it needs: `cli` for its command line, and
 # `cargo-metadata` because that is how library mode finds this crate's
 # uniffi.toml, which names the module the generated Swift imports.
 bindgen = ["uniffi/cli", "uniffi/cargo-metadata"]
+# The engine `Library::serve` starts decodes with llama.cpp: the phone
+# engine's decoder over llama.h, linked on an Apple target when
+# GGLIB_LLAMA_XCFRAMEWORK names the framework `make phone-llama` builds
+# (scripts/apple/build-xcframework.sh sets both). Anywhere else it compiles
+# nothing, and `serve` answers `EngineUnavailable`.
+llama = ["gglib-engine-llama/llama"]
+# `gglib-ffi-add-model`, the Swift smoke test's helper.
+smoke = []
 
 [dependencies]
 gglib-core = { workspace = true }
@@ -46,12 +63,25 @@ gglib-bootstrap = { workspace = true }
 uniffi = { version = "0.32", default-features = false }
 # Multi-thread, for the runtime every async export enters (`src/runtime.rs`);
 # `sync` for the channel a download watch waits on; `time` for how long a
-# pause waits for its downloads to stop.
-tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time"] }
+# pause waits for its downloads to stop; `net` for the port a served proxy
+# listens on.
+tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time", "net"] }
 # A repository's quantization heads, read a few at a time.
 futures-util = { workspace = true }
 # `GglibError`'s words.
 thiserror = { workspace = true }
+# What `Library::serve` composes: gglib's own proxy on loopback, in front of
+# the in-process runtime that fits one model at a time to the device, with an
+# MCP service over the library's (empty) table of servers.
+gglib-proxy = { workspace = true }
+gglib-engine-llama = { workspace = true }
+gglib-mcp = { workspace = true }
+# The token that stops a served proxy.
+tokio-util = { workspace = true }
+# Each serve's bearer key, from the OS's random source.
+getrandom = "0.4"
+# What a served engine says when its proxy stops on its own.
+tracing = { workspace = true }
 
 [dev-dependencies]
 # `net` and `io-util` for the fake file server the download tests fetch
@@ -72,6 +102,10 @@ tempfile = { workspace = true }
 gglib-core = { workspace = true, features = ["test-utils"] }
 # When a model a test stores was added.
 chrono = { workspace = true }
+# A served engine in a test decodes with a script, on any OS.
+gglib-engine-llama = { workspace = true, features = ["test-decoder"] }
+# The requests a test sends a served proxy.
+reqwest = { workspace = true, features = ["json"] }
 
 [lints]
 workspace = true

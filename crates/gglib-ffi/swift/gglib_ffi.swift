@@ -773,12 +773,167 @@ public func FfiConverterTypeDownloadWatch_lower(_ value: DownloadWatch) -> UInt6
 
 
 /**
- * The models on the device and the ways to get more.
+ * A served engine's state, followed a step at a time.
+ *
+ * [`Self::next`] answers where the engine stands now, then again each time
+ * that changes, and `None` once it has answered [`EngineState::Stopped`].
+ * A watch only ever answers the latest state, so a step that came and went
+ * between two calls is not answered. An app cannot cancel a call into this
+ * library, so the watch is pulled; shutting the server down ends it.
+ */
+public protocol EngineWatchProtocol: AnyObject, Sendable {
+    
+    /**
+     * Where the engine stands, once that differs from the last answer, or
+     * `None` once [`EngineState::Stopped`] was answered. Calls answer one
+     * at a time.
+     */
+    func next() async  -> EngineState?
+    
+}
+/**
+ * A served engine's state, followed a step at a time.
+ *
+ * [`Self::next`] answers where the engine stands now, then again each time
+ * that changes, and `None` once it has answered [`EngineState::Stopped`].
+ * A watch only ever answers the latest state, so a step that came and went
+ * between two calls is not answered. An app cannot cancel a call into this
+ * library, so the watch is pulled; shutting the server down ends it.
+ */
+open class EngineWatch: EngineWatchProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_gglib_ffi_fn_clone_enginewatch(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_gglib_ffi_fn_free_enginewatch(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * Where the engine stands, once that differs from the last answer, or
+     * `None` once [`EngineState::Stopped`] was answered. Calls answer one
+     * at a time.
+     */
+open func next()async  -> EngineState?  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_gglib_ffi_fn_method_enginewatch_next(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_gglib_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_gglib_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_gglib_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeEngineState.lift,
+            errorHandler: nil
+            
+        )
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEngineWatch: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = EngineWatch
+
+    public static func lift(_ handle: UInt64) throws -> EngineWatch {
+        return EngineWatch(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: EngineWatch) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EngineWatch {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: EngineWatch, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEngineWatch_lift(_ handle: UInt64) throws -> EngineWatch {
+    return try FfiConverterTypeEngineWatch.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEngineWatch_lower(_ value: EngineWatch) -> UInt64 {
+    return FfiConverterTypeEngineWatch.lower(value)
+}
+
+
+
+
+
+
+/**
+ * The models on the device, the ways to get more, and the engine that
+ * runs them.
  *
  * The verdicts it gives are made against the [`DeviceReading`] it was last
- * handed by [`Self::suggested`] or [`Self::quantizations`]: one reading per
- * browse, held for as long as its verdicts are on screen.
- * [`Self::installed`] judges against the same one.
+ * handed by [`Self::suggested`], [`Self::quantizations`] or
+ * [`Self::serve`]: one reading per browse, held for as long as its
+ * verdicts are on screen, and one per serve, which the engine admits every
+ * model against. [`Self::installed`] judges against the same one.
  */
 public protocol LibraryProtocol: AnyObject, Sendable {
     
@@ -859,6 +1014,23 @@ public protocol LibraryProtocol: AnyObject, Sendable {
     func search(query: String, cursor: String?) async throws  -> SearchPage
     
     /**
+     * Serve the engine: gglib's proxy on a port of 127.0.0.1, in front of
+     * llama.cpp in this process, which loads the model a request names,
+     * fitted to the budget gglib makes from `reading`. The reading is held
+     * for the whole serve; an engine served before is stopped first, and
+     * its model freed.
+     *
+     * # Errors
+     *
+     * [`GglibError::EngineUnavailable`] when this build has no llama.cpp to
+     * run a model with: anything but a build of the framework for an Apple
+     * platform. [`GglibError::Internal`] for a reading with a zero in it,
+     * which no model can be fitted to and which leaves an engine served
+     * before serving, and when a port cannot be had.
+     */
+    func serve(reading: DeviceReading) async throws  -> Server
+    
+    /**
      * The models gglib suggests for a phone, each judged at `reading`,
      * largest first, with why each. Asks nothing of the network, so it is
      * the one call that answers at once.
@@ -867,12 +1039,14 @@ public protocol LibraryProtocol: AnyObject, Sendable {
     
 }
 /**
- * The models on the device and the ways to get more.
+ * The models on the device, the ways to get more, and the engine that
+ * runs them.
  *
  * The verdicts it gives are made against the [`DeviceReading`] it was last
- * handed by [`Self::suggested`] or [`Self::quantizations`]: one reading per
- * browse, held for as long as its verdicts are on screen.
- * [`Self::installed`] judges against the same one.
+ * handed by [`Self::suggested`], [`Self::quantizations`] or
+ * [`Self::serve`]: one reading per browse, held for as long as its
+ * verdicts are on screen, and one per serve, which the engine admits every
+ * model against. [`Self::installed`] judges against the same one.
  */
 open class Library: LibraryProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -1104,6 +1278,37 @@ open func search(query: String, cursor: String?)async throws  -> SearchPage  {
 }
     
     /**
+     * Serve the engine: gglib's proxy on a port of 127.0.0.1, in front of
+     * llama.cpp in this process, which loads the model a request names,
+     * fitted to the budget gglib makes from `reading`. The reading is held
+     * for the whole serve; an engine served before is stopped first, and
+     * its model freed.
+     *
+     * # Errors
+     *
+     * [`GglibError::EngineUnavailable`] when this build has no llama.cpp to
+     * run a model with: anything but a build of the framework for an Apple
+     * platform. [`GglibError::Internal`] for a reading with a zero in it,
+     * which no model can be fitted to and which leaves an engine served
+     * before serving, and when a port cannot be had.
+     */
+open func serve(reading: DeviceReading)async throws  -> Server  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_gglib_ffi_fn_method_library_serve(
+                        self.uniffiCloneHandle(),FfiConverterTypeDeviceReading_lower(reading)
+                )
+            },
+            pollFunc: ffi_gglib_ffi_rust_future_poll_u64,
+            completeFunc: ffi_gglib_ffi_rust_future_complete_u64,
+            freeFunc: ffi_gglib_ffi_rust_future_free_u64,
+            liftFunc: FfiConverterTypeServer_lift,
+            errorHandler: FfiConverterTypeGglibError_lift
+        )
+}
+    
+    /**
      * The models gglib suggests for a phone, each judged at `reading`,
      * largest first, with why each. Asks nothing of the network, so it is
      * the one call that answers at once.
@@ -1161,6 +1366,212 @@ public func FfiConverterTypeLibrary_lift(_ handle: UInt64) throws -> Library {
 #endif
 public func FfiConverterTypeLibrary_lower(_ value: Library) -> UInt64 {
     return FfiConverterTypeLibrary.lower(value)
+}
+
+
+
+
+
+
+/**
+ * A served engine: gglib's proxy at [`Self::base_url`], admitting requests
+ * that carry [`Self::api_key`] as their bearer.
+ *
+ * No model is loaded until a request names one; [`Self::status`] says how
+ * that goes. [`Self::shutdown`] stops it, and a server the app lets go of
+ * without one is stopped all the same.
+ */
+public protocol ServerProtocol: AnyObject, Sendable {
+    
+    /**
+     * The bearer every request must carry, new for each serve.
+     */
+    func apiKey()  -> String
+    
+    /**
+     * `http://127.0.0.1:<port>/v1`, where an OpenAI-compatible client
+     * sends its requests.
+     */
+    func baseUrl()  -> String
+    
+    /**
+     * Stop serving: end the reply in flight, free the model, close both
+     * ports (the proxy's and the engine's behind it), and end every watch
+     * on [`crate::EngineState::Stopped`]. Idempotent; returns once all of
+     * that is done.
+     */
+    func shutdown() async 
+    
+    /**
+     * A watch of what the engine is doing, from where it stands now.
+     */
+    func status()  -> EngineWatch
+    
+}
+/**
+ * A served engine: gglib's proxy at [`Self::base_url`], admitting requests
+ * that carry [`Self::api_key`] as their bearer.
+ *
+ * No model is loaded until a request names one; [`Self::status`] says how
+ * that goes. [`Self::shutdown`] stops it, and a server the app lets go of
+ * without one is stopped all the same.
+ */
+open class Server: ServerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_gglib_ffi_fn_clone_server(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_gglib_ffi_fn_free_server(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * The bearer every request must carry, new for each serve.
+     */
+open func apiKey() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_gglib_ffi_fn_method_server_api_key(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * `http://127.0.0.1:<port>/v1`, where an OpenAI-compatible client
+     * sends its requests.
+     */
+open func baseUrl() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_gglib_ffi_fn_method_server_base_url(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+    /**
+     * Stop serving: end the reply in flight, free the model, close both
+     * ports (the proxy's and the engine's behind it), and end every watch
+     * on [`crate::EngineState::Stopped`]. Idempotent; returns once all of
+     * that is done.
+     */
+open func shutdown()async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_gglib_ffi_fn_method_server_shutdown(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_gglib_ffi_rust_future_poll_void,
+            completeFunc: ffi_gglib_ffi_rust_future_complete_void,
+            freeFunc: ffi_gglib_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
+}
+    
+    /**
+     * A watch of what the engine is doing, from where it stands now.
+     */
+open func status() -> EngineWatch  {
+    return try!  FfiConverterTypeEngineWatch_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_gglib_ffi_fn_method_server_status(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeServer: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = Server
+
+    public static func lift(_ handle: UInt64) throws -> Server {
+        return Server(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: Server) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Server {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: Server, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeServer_lift(_ handle: UInt64) throws -> Server {
+    return try FfiConverterTypeServer.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeServer_lower(_ value: Server) -> UInt64 {
+    return FfiConverterTypeServer.lower(value)
 }
 
 
@@ -1256,9 +1667,11 @@ public func FfiConverterTypeBuildInfo_lower(_ value: BuildInfo) -> RustBuffer {
 
 
 /**
- * One reading of the device's memory, taken by the app: once each time it
- * opens a model browser, and held for as long as that browser's verdicts
- * are on screen.
+ * One reading of the device's memory, taken by the app.
+ *
+ * It is taken once each time the app opens a model browser, and held for as
+ * long as that browser's verdicts are on screen, and once each time it
+ * serves the engine, and held for the whole serve.
  */
 public struct DeviceReading: Equatable, Hashable {
     /**
@@ -2211,6 +2624,145 @@ public func FfiConverterTypeDownloadState_lower(_ value: DownloadState) -> RustB
 
 
 /**
+ * What a served engine is doing. One model is held at most.
+ */
+
+public enum EngineState: Equatable, Hashable {
+    
+    /**
+     * Serving, with no model loaded: none was asked for yet, or the one
+     * held is being freed.
+     */
+    case idle
+    /**
+     * `model` is being loaded.
+     */
+    case loading(
+        /**
+         * The name the model is served under.
+         */model: String, 
+        /**
+         * How much of it has been read, from 0 to 1.
+         */fraction: Double
+    )
+    /**
+     * `model` is loaded and served, generating a reply or not.
+     */
+    case ready(
+        /**
+         * The name the model is served under.
+         */model: String, 
+        /**
+         * The context it was loaded with, in tokens: the `context_size`
+         * each reply's usage reports.
+         */nCtx: UInt64
+    )
+    /**
+     * `model` could not be loaded. The next request naming a model tries
+     * again.
+     */
+    case failed(
+        /**
+         * The name the model is served under.
+         */model: String, 
+        /**
+         * Why, in gglib's words.
+         */reason: String
+    )
+    /**
+     * The server was shut down: no model is held, and nothing listens.
+     * Nothing follows it.
+     */
+    case stopped
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension EngineState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEngineState: FfiConverterRustBuffer {
+    typealias SwiftType = EngineState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EngineState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .idle
+        
+        case 2: return .loading(model: try FfiConverterString.read(from: &buf), fraction: try FfiConverterDouble.read(from: &buf)
+        )
+        
+        case 3: return .ready(model: try FfiConverterString.read(from: &buf), nCtx: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 4: return .failed(model: try FfiConverterString.read(from: &buf), reason: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 5: return .stopped
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: EngineState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .idle:
+            writeInt(&buf, Int32(1))
+        
+        
+        case let .loading(model,fraction):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(model, into: &buf)
+            FfiConverterDouble.write(fraction, into: &buf)
+            
+        
+        case let .ready(model,nCtx):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(model, into: &buf)
+            FfiConverterUInt64.write(nCtx, into: &buf)
+            
+        
+        case let .failed(model,reason):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(model, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case .stopped:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEngineState_lift(_ buf: RustBuffer) throws -> EngineState {
+    return try FfiConverterTypeEngineState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEngineState_lower(_ value: EngineState) -> RustBuffer {
+    return FfiConverterTypeEngineState.lower(value)
+}
+
+
+
+/**
  * Whether a model fits the device, in the words a person reads it in.
  */
 
@@ -2709,6 +3261,30 @@ fileprivate struct FfiConverterOptionTypeDownloadProgress: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeEngineState: FfiConverterRustBuffer {
+    typealias SwiftType = EngineState?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeEngineState.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeEngineState.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -2942,6 +3518,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gglib_ffi_checksum_method_downloadwatch_next() != 20593) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_gglib_ffi_checksum_method_enginewatch_next() != 14286) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gglib_ffi_checksum_method_library_download() != 4777) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2963,7 +3542,22 @@ private let initializationResult: InitializationResult = {
     if (uniffi_gglib_ffi_checksum_method_library_search() != 26080) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_gglib_ffi_checksum_method_library_serve() != 26047) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_gglib_ffi_checksum_method_library_suggested() != 5119) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_server_api_key() != 54963) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_server_base_url() != 14722) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_server_shutdown() != 6970) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_server_status() != 21164) {
         return InitializationResult.apiChecksumMismatch
     }
 

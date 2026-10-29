@@ -20,9 +20,11 @@ small C shim (`csrc/`) whose arguments are scalars, strings and opaque
 handles, so no llama.h struct crosses into Rust. build.rs compiles the shim
 and links the framework only for an Apple target with the `llama` feature on
 and `GGLIB_LLAMA_XCFRAMEWORK` naming the framework `make phone-llama` builds;
-anywhere else the feature compiles nothing and `LlamaDecoder` does not exist;
-[`linked_llama_decoder`] hands it out where it exists, for a crate that turns
-the feature on and cannot tell at compile time whether it linked.
+anywhere else the feature compiles nothing and `LlamaDecoder` does not exist.
+[`linked_llama_decoder`] is how a crate composing the engine asks for it
+without naming it: a `LlamaDecoder` where it was linked, and `None` anywhere
+else, for a crate that turns the feature on and cannot tell at compile time
+whether it linked.
 `ScriptedDecoder` (feature `test-decoder`) replays a script of pieces, so this
 crate's tests, and the tests of a crate composing it, run on any OS with no
 model.
@@ -118,9 +120,9 @@ raises it. A model whose smallest rung does not fit is refused with
 than that rung with words that say so. One model is held: admitting another
 frees the first before the second is read, ending the reply it was
 generating. Each step is an [`EngineState`] on a tokio watch (`Idle`,
-`Loading` with the fraction read, `Ready`, `Generating`, `Unloading`,
-`Failed`, `Stopped`), and `shutdown` stops a load under way, frees the model,
-stops the shim and ends the watch.
+`Loading` with the fraction read, `Ready`, `Generating` at the same context,
+`Unloading`, `Failed`, `Stopped`), and `shutdown` stops a load under way,
+frees the model, stops the shim and ends the watch.
 
 ## Internal Structure
 

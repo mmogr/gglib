@@ -263,6 +263,21 @@ void uniffi_gglib_ffi_fn_method_downloadwatch_cancel(uint64_t ptr, RustCallStatu
 uint64_t uniffi_gglib_ffi_fn_method_downloadwatch_next(uint64_t ptr
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_CLONE_ENGINEWATCH
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_CLONE_ENGINEWATCH
+uint64_t uniffi_gglib_ffi_fn_clone_enginewatch(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_FREE_ENGINEWATCH
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_FREE_ENGINEWATCH
+void uniffi_gglib_ffi_fn_free_enginewatch(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_ENGINEWATCH_NEXT
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_ENGINEWATCH_NEXT
+uint64_t uniffi_gglib_ffi_fn_method_enginewatch_next(uint64_t ptr
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_CLONE_LIBRARY
 #define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_CLONE_LIBRARY
 uint64_t uniffi_gglib_ffi_fn_clone_library(uint64_t handle, RustCallStatus *_Nonnull out_status
@@ -308,9 +323,44 @@ uint64_t uniffi_gglib_ffi_fn_method_library_resume_all(uint64_t ptr
 uint64_t uniffi_gglib_ffi_fn_method_library_search(uint64_t ptr, RustBuffer query, RustBuffer cursor
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_SERVE
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_SERVE
+uint64_t uniffi_gglib_ffi_fn_method_library_serve(uint64_t ptr, RustBuffer reading
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_SUGGESTED
 #define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_LIBRARY_SUGGESTED
 RustBuffer uniffi_gglib_ffi_fn_method_library_suggested(uint64_t ptr, RustBuffer reading, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_CLONE_SERVER
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_CLONE_SERVER
+uint64_t uniffi_gglib_ffi_fn_clone_server(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_FREE_SERVER
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_FREE_SERVER
+void uniffi_gglib_ffi_fn_free_server(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_SERVER_API_KEY
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_SERVER_API_KEY
+RustBuffer uniffi_gglib_ffi_fn_method_server_api_key(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_SERVER_BASE_URL
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_SERVER_BASE_URL
+RustBuffer uniffi_gglib_ffi_fn_method_server_base_url(uint64_t ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_SERVER_SHUTDOWN
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_SERVER_SHUTDOWN
+uint64_t uniffi_gglib_ffi_fn_method_server_shutdown(uint64_t ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_SERVER_STATUS
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_METHOD_SERVER_STATUS
+uint64_t uniffi_gglib_ffi_fn_method_server_status(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_FN_FUNC_BUILD_INFO
@@ -608,6 +658,12 @@ uint16_t uniffi_gglib_ffi_checksum_method_downloadwatch_next(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_ENGINEWATCH_NEXT
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_ENGINEWATCH_NEXT
+uint16_t uniffi_gglib_ffi_checksum_method_enginewatch_next(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_DOWNLOAD
 #define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_DOWNLOAD
 uint16_t uniffi_gglib_ffi_checksum_method_library_download(void
@@ -650,9 +706,39 @@ uint16_t uniffi_gglib_ffi_checksum_method_library_search(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_SERVE
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_SERVE
+uint16_t uniffi_gglib_ffi_checksum_method_library_serve(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_SUGGESTED
 #define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_LIBRARY_SUGGESTED
 uint16_t uniffi_gglib_ffi_checksum_method_library_suggested(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_SERVER_API_KEY
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_SERVER_API_KEY
+uint16_t uniffi_gglib_ffi_checksum_method_server_api_key(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_SERVER_BASE_URL
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_SERVER_BASE_URL
+uint16_t uniffi_gglib_ffi_checksum_method_server_base_url(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_SERVER_SHUTDOWN
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_SERVER_SHUTDOWN
+uint16_t uniffi_gglib_ffi_checksum_method_server_shutdown(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_SERVER_STATUS
+#define UNIFFI_FFIDEF_UNIFFI_GGLIB_FFI_CHECKSUM_METHOD_SERVER_STATUS
+uint16_t uniffi_gglib_ffi_checksum_method_server_status(void
     
 );
 #endif

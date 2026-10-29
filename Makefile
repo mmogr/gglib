@@ -505,7 +505,10 @@ bindings-check: bindings ## Fail if the committed bindings are stale
 # scripts are in scripts/apple/; ci.yml's `ffi-apple` job runs
 # `ffi-xcframework-fast`, `ffi-binding-check` and `ffi-smoke`, in that order,
 # on macOS, and `pre-commit` runs none of them. The framework and the smoke
-# test need Xcode; `ffi-binding` and `ffi-binding-check` work on Linux too.
+# test need Xcode and llama.cpp's llama.xcframework, which every slice links
+# (`phone-llama`, or GGLIB_LLAMA_XCFRAMEWORK), and the smoke test serves
+# tinygemma3-Q8_0.gguf from GGLIB_ENGINE_MODELS_DIR. `ffi-binding` and
+# `ffi-binding-check` work on Linux too.
 FFI_SWIFT_DIR := crates/gglib-ffi/swift
 
 ffi-binding: ## Regenerate crates/gglib-ffi/swift (binding, header, modulemap)
@@ -537,7 +540,7 @@ ffi-xcframework: ## Build target/apple/GglibFFI.xcframework, optimised (macOS, X
 ffi-xcframework-fast: ## Build target/apple/GglibFFI.xcframework unoptimised (macOS, Xcode)
 	@PROFILE=dev ./scripts/apple/build-xcframework.sh
 
-ffi-smoke: ## Call every export that needs no network through the generated Swift (macOS slice)
+ffi-smoke: ## Call every export that needs no network through the generated Swift, and stream a reply from its engine (macOS slice)
 	@./scripts/apple/swift-smoke.sh
 
 ##@ Cleaning

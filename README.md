@@ -50,7 +50,8 @@ The binaries are not code-signed yet, so macOS and Windows warn about them:
 
 Each release also carries gglib for an iOS or macOS app to link,
 `GglibFFI-<version>.xcframework.zip`, with its Swift binding in
-`GglibFFI-swift-<version>.zip`; [gglib-ffi](crates/gglib-ffi/README.md#release-assets)
+`GglibFFI-swift-<version>.zip` and the llama.cpp it runs models with in
+`llama-<version>.xcframework.zip`; [gglib-ffi](crates/gglib-ffi/README.md#release-assets)
 says what they hold.
 
 ### apt (Ubuntu 24.04+, Debian 13+)

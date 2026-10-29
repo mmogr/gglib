@@ -48,7 +48,7 @@ fn store(library: &Library, weights: &Path, projector: Option<&Path>, tags: &[&s
         ]
         .map(|(key, value)| (key.to_owned(), value.to_owned())),
     );
-    wait(library.models.insert(&model))
+    wait(library.composition.models.insert(&model))
         .expect("the model is stored")
         .id
 }

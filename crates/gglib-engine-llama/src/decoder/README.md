@@ -29,9 +29,10 @@ the desktop (ADR 0003).
 
 `LlamaDecoder` is the decoder over llama.h, compiled in only when build.rs
 linked llama.framework (the `llama` feature, on an Apple target, with
-`GGLIB_LLAMA_XCFRAMEWORK` set); [`linked_llama_decoder`] hands it out where it
-exists and `None` where it does not, for a crate that cannot tell which at
-compile time. It reaches llama.cpp through `crate::sys`
+`GGLIB_LLAMA_XCFRAMEWORK` set); [`linked_llama_decoder`] hands it out, boxed,
+where it exists and `None` where it does not, for a crate that cannot tell
+which at compile time, and a boxed decoder is a decoder. It reaches llama.cpp
+through `crate::sys`
 and holds no unsafe code itself. It reads a prompt 512 tokens a step after
 the prefix the KV cache keeps (all of it, when the cache cannot be cut or a
 sliding window no longer holds what precedes the cut), builds llama-server's
@@ -44,9 +45,9 @@ of reported steps, tokenizing a character to a token, and keeps a
 
 # Structure
 
-- `mod.rs` - the [`Decoder`] trait and what crosses it: [`LoadParams`],
-  [`Loaded`], [`Step`], [`PromptProgress`], [`Finished`], [`FinishReason`],
-  [`DecoderError`], and [`linked_llama_decoder`]
+- `mod.rs` - the [`Decoder`] trait, [`linked_llama_decoder`], and what crosses
+  the trait: [`LoadParams`], [`Loaded`], [`Step`], [`PromptProgress`],
+  [`Finished`], [`FinishReason`], [`DecoderError`]
 - `abort.rs` - [`Abort`], the flag a generation or a load is ended with
 - `sampling.rs` - [`Sampling`], its llama-server defaults and its reading of a
   request

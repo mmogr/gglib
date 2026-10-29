@@ -89,7 +89,8 @@ async fn a_reply_is_generating_until_it_ends() {
     assert_eq!(
         generating,
         EngineState::Generating {
-            model: "small".to_owned()
+            model: "small".to_owned(),
+            n_ctx: 8192
         }
     );
     let answered = reply.await.unwrap().expect("the shim answers");

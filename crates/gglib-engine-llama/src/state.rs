@@ -31,6 +31,8 @@ pub enum EngineState {
     Generating {
         /// The model generating.
         model: String,
+        /// The context it was loaded with, in tokens, as its `Ready` said.
+        n_ctx: u32,
     },
     /// A model is being freed: the reply in flight is ending, then its
     /// weights and context are released.
@@ -150,13 +152,15 @@ impl States {
         });
     }
 
-    /// `model` has started a reply: `Ready` becomes `Generating`. Any other
-    /// state is left alone, since the model is on its way out.
+    /// `model` has started a reply: `Ready` becomes `Generating`, with the
+    /// same context. Any other state is left alone, since the model is on
+    /// its way out.
     pub(crate) fn generating(&self, model: &str) {
         self.modify(|state| match state {
-            EngineState::Ready { model: held, .. } if held == model => {
+            EngineState::Ready { model: held, n_ctx } if held == model => {
                 *state = EngineState::Generating {
                     model: model.to_owned(),
+                    n_ctx: *n_ctx,
                 };
                 true
             }
@@ -167,7 +171,7 @@ impl States {
     /// `model`'s reply has ended: `Generating` becomes `Ready` again.
     pub(crate) fn generated(&self, model: &str, n_ctx: u32) {
         self.modify(|state| match state {
-            EngineState::Generating { model: held } if held == model => {
+            EngineState::Generating { model: held, .. } if held == model => {
                 *state = EngineState::Ready {
                     model: model.to_owned(),
                     n_ctx,

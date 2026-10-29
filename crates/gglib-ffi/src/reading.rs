@@ -6,9 +6,11 @@
 
 use gglib_core::domain::device_budget::{self, budget_from};
 
-/// One reading of the device's memory, taken by the app: once each time it
-/// opens a model browser, and held for as long as that browser's verdicts
-/// are on screen.
+/// One reading of the device's memory, taken by the app.
+///
+/// It is taken once each time the app opens a model browser, and held for as
+/// long as that browser's verdicts are on screen, and once each time it
+/// serves the engine, and held for the whole serve.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
 pub struct DeviceReading {
     /// The device's physical memory, in bytes.
@@ -23,11 +25,16 @@ impl DeviceReading {
     /// The budget a model may spend on this reading's device, or `None` for
     /// a reading that failed (a zero in it).
     pub(crate) fn budget(&self) -> Option<u64> {
-        budget_from(&device_budget::DeviceReading {
+        budget_from(&self.for_core())
+    }
+
+    /// The same reading as gglib-core takes it.
+    pub(crate) const fn for_core(self) -> device_budget::DeviceReading {
+        device_budget::DeviceReading {
             physical_bytes: self.physical_bytes,
             available_bytes: self.available_bytes,
             is_simulator: self.is_simulator,
-        })
+        }
     }
 }
 

@@ -203,7 +203,8 @@ main() {
     # iPhone app embeds, and a phone crate. Nothing desktop-only: no CLI, no
     # GUI toolkit, no host probe, none of the remote-access transport, and
     # neither the process runner nor the desktop's backend. No HTTP server or
-    # database of its own either: it composes gglib's own crates.
+    # database of its own either: it composes gglib's own crates, and the
+    # engine it serves is gglib-proxy in front of gglib-engine-llama.
     FFI_FORBIDDEN=(clap tauri axum tower-http hyper sqlx sysinfo netdev nix iroh modelpipe gglib-runtime gglib-app-services)
     log "📦 gglib-ffi (Swift surface - nothing desktop-only, no server or database of its own)"
     if ! check_crate_deps "gglib-ffi" "${FFI_FORBIDDEN[@]}"; then

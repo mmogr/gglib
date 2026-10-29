@@ -7,6 +7,12 @@
 #   ios-arm64-simulator    Simulator on Apple silicon
 #   macos-arm64            The Mac, where an app's `swift test` runs the binding
 #
+# Each slice links llama.framework, llama.cpp's own at the pin, which the
+# engine `Library.serve` starts decodes with (gglib-ffi's `llama` feature):
+# the framework GGLIB_LLAMA_XCFRAMEWORK names, or else the one `make
+# phone-llama` builds in target/apple/llama-<pin>/. An app embeds both
+# frameworks; each GglibFFI slice finds llama at its @rpath install name.
+#
 # Writes, under target/apple/ (or $CARGO_TARGET_DIR/apple/):
 #
 #   GglibFFI.xcframework   what an app links
@@ -56,6 +62,18 @@ fi
 export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-26.0}"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-26.0}"
 
+# The llama.cpp the engine links, which must be built before this one is.
+# Exported absolute: gglib-engine-llama's build script reads it from the
+# crate's own folder.
+GGLIB_LLAMA_XCFRAMEWORK="${GGLIB_LLAMA_XCFRAMEWORK:-${ROOT_DIR}/target/apple/llama-$("${ROOT_DIR}/scripts/llama_pin.sh")/llama.xcframework}"
+if [[ ! -d "${GGLIB_LLAMA_XCFRAMEWORK}" ]]; then
+    echo "error: no llama.xcframework at ${GGLIB_LLAMA_XCFRAMEWORK}." >&2
+    echo "       \`make phone-llama\` builds it at the pin; GGLIB_LLAMA_XCFRAMEWORK names another." >&2
+    exit 1
+fi
+GGLIB_LLAMA_XCFRAMEWORK="$(cd "${GGLIB_LLAMA_XCFRAMEWORK}" && pwd)"
+export GGLIB_LLAMA_XCFRAMEWORK
+
 FRAMEWORK_NAME="GglibFFI"
 BUNDLE_ID="com.gglib.ffi"
 LIB_NAME="libgglib_ffi.dylib"
@@ -80,13 +98,14 @@ TARGETS=(
 
 echo "==> Building gglib-ffi ${VERSION} for three slices (profile ${PROFILE})"
 echo "    iOS ${IPHONEOS_DEPLOYMENT_TARGET}, macOS ${MACOSX_DEPLOYMENT_TARGET}"
+echo "    llama.cpp from ${GGLIB_LLAMA_XCFRAMEWORK}"
 printf '    %s\n' "${TARGETS[@]}"
 # One cargo invocation with three `--target` flags, not three invocations:
 # each target's build ends in a narrow tail (the last crates, then the link)
 # that leaves most cores idle, and one build plan lets the next target's wide
 # base fill them. Concurrent invocations would only queue on cargo's lock on
 # the target directory.
-cargo build --locked -p gglib-ffi --lib --profile "${PROFILE}" "${TARGETS[@]/#/--target=}"
+cargo build --locked -p gglib-ffi --lib --features llama --profile "${PROFILE}" "${TARGETS[@]/#/--target=}"
 
 echo "==> Generating the Swift binding, header and modulemap"
 # From the macOS slice itself, so the header the frameworks carry describes

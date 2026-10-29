@@ -4,7 +4,8 @@
 //! root over the folders the app names: the database in its data folder,
 //! every download in its models folder, and the Hub asked with the token the
 //! app hands over, or else with the `HF_TOKEN` its process started with,
-//! which an app on a phone has none of.
+//! which an app on a phone has none of. The engine it serves is composed
+//! over its models, settings and MCP servers (`crate::serve`).
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -13,6 +14,7 @@ use gglib_bootstrap::{BootstrapConfig, BuiltCore, CoreBootstrap};
 use gglib_core::ports::{
     DownloadManagerPort, GgufParserPort, HfClientPort, ModelFilesRepositoryPort, ModelRepository,
 };
+use gglib_engine_llama::{Decoder, linked_llama_decoder};
 
 use crate::browse::{self, QuantOffer, SearchPage, Suggestion};
 use crate::download_feed::DownloadFeed;
@@ -22,9 +24,10 @@ use crate::errors::GglibError;
 use crate::installed::{self, InstalledModel};
 use crate::reading::DeviceReading;
 use crate::runtime::in_runtime;
+use crate::serve::{self, Composition, LastServed, Server};
 
 /// The name of the library's database in its data folder.
-const DATABASE_FILE: &str = "gglib.db";
+pub const DATABASE_FILE: &str = "gglib.db";
 
 /// The folders a library keeps its files in, which the app makes and names.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -35,20 +38,22 @@ pub struct LibraryDirs {
     pub models_dir: String,
 }
 
-/// The models on the device and the ways to get more.
+/// The models on the device, the ways to get more, and the engine that
+/// runs them.
 ///
 /// The verdicts it gives are made against the [`DeviceReading`] it was last
-/// handed by [`Self::suggested`] or [`Self::quantizations`]: one reading per
-/// browse, held for as long as its verdicts are on screen.
-/// [`Self::installed`] judges against the same one.
+/// handed by [`Self::suggested`], [`Self::quantizations`] or
+/// [`Self::serve`]: one reading per browse, held for as long as its
+/// verdicts are on screen, and one per serve, which the engine admits every
+/// model against. [`Self::installed`] judges against the same one.
 #[derive(uniffi::Object)]
 pub struct Library {
     hub: Arc<dyn HfClientPort>,
     parser: Arc<dyn GgufParserPort>,
     downloads: Arc<dyn DownloadManagerPort>,
     /// The library's rows, which a test stores a model in as a download
-    /// would.
-    pub(crate) models: Arc<dyn ModelRepository>,
+    /// would, and the settings and MCP servers a served engine reads.
+    pub(crate) composition: Composition,
     /// The rows of each model's files.
     pub(crate) model_files: Arc<dyn ModelFilesRepositoryPort>,
     /// What the download manager says, which a test reads to know a
@@ -56,6 +61,10 @@ pub struct Library {
     pub(crate) feed: Arc<DownloadFeed>,
     models_dir: PathBuf,
     reading: Mutex<Option<DeviceReading>>,
+    /// The engine served last: serving again stops it, or waits for it to
+    /// stop when its server was let go of, and its model to be freed, so the
+    /// device never holds two models.
+    last_served: tokio::sync::Mutex<LastServed>,
 }
 
 /// Open the library in `dirs`, asking Hugging Face with `hf_token`.
@@ -110,12 +119,43 @@ impl Library {
             hub: core.hf_client,
             parser: core.gguf_parser,
             downloads: core.downloads,
-            models: core.repos.models,
+            composition: Composition {
+                models: core.repos.models,
+                mcp_servers: core.repos.mcp_servers,
+                settings: core.repos.settings,
+            },
             model_files: core.repos.model_files,
             feed,
             models_dir,
             reading: Mutex::new(None),
+            last_served: tokio::sync::Mutex::default(),
         }
+    }
+
+    /// The library's rows.
+    pub(crate) fn models(&self) -> &dyn ModelRepository {
+        self.composition.models.as_ref()
+    }
+
+    /// Serve an engine over `decoder` with its budget made from `reading`,
+    /// once the engine served before has stopped and freed its model; hold
+    /// `reading` for the verdicts that follow. A reading no budget can be
+    /// made from is refused first, leaving the engine served before as it
+    /// was.
+    pub(crate) async fn serve_over(
+        &self,
+        decoder: impl Decoder + 'static,
+        reading: DeviceReading,
+    ) -> Result<Arc<Server>, GglibError> {
+        serve::check_reading(reading)?;
+        let mut last = self.last_served.lock().await;
+        last.stop().await;
+        let server = Arc::new(serve::start(decoder, &self.composition, reading).await?);
+        self.hold(reading);
+        *last = LastServed::of(&server);
+        // Held until here, so two serves at once take turns.
+        drop(last);
+        Ok(server)
     }
 
     /// Hold `reading` for the verdicts that follow; answer its budget.
@@ -188,7 +228,7 @@ impl Library {
     /// [`GglibError::Internal`] when the library cannot be read.
     pub async fn installed(self: Arc<Self>) -> Result<Vec<InstalledModel>, GglibError> {
         let budget = self.held_budget();
-        in_runtime(async move { installed::installed(self.models.as_ref(), budget).await }).await
+        in_runtime(async move { installed::installed(self.models(), budget).await }).await
     }
 
     /// Delete installed model `id`: its files, then its row.
@@ -201,7 +241,7 @@ impl Library {
     pub async fn remove(self: Arc<Self>, id: i64) -> Result<(), GglibError> {
         in_runtime(async move {
             installed::remove(
-                self.models.as_ref(),
+                self.models(),
                 self.model_files.as_ref(),
                 &self.models_dir,
                 id,
@@ -251,6 +291,27 @@ impl Library {
     /// winding down from the pause stays paused, for the next resume.
     pub async fn resume_all(self: Arc<Self>) {
         in_runtime(async move { downloads::resume_all(&self.downloads, &self.feed).await }).await;
+    }
+
+    /// Serve the engine: gglib's proxy on a port of 127.0.0.1, in front of
+    /// llama.cpp in this process, which loads the model a request names,
+    /// fitted to the budget gglib makes from `reading`. The reading is held
+    /// for the whole serve; an engine served before is stopped first, and
+    /// its model freed.
+    ///
+    /// # Errors
+    ///
+    /// [`GglibError::EngineUnavailable`] when this build has no llama.cpp to
+    /// run a model with: anything but a build of the framework for an Apple
+    /// platform. [`GglibError::Internal`] for a reading with a zero in it,
+    /// which no model can be fitted to and which leaves an engine served
+    /// before serving, and when a port cannot be had.
+    pub async fn serve(self: Arc<Self>, reading: DeviceReading) -> Result<Arc<Server>, GglibError> {
+        in_runtime(async move {
+            let decoder = linked_llama_decoder(None).ok_or(GglibError::EngineUnavailable)?;
+            self.serve_over(decoder, reading).await
+        })
+        .await
     }
 }
 

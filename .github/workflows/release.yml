@@ -992,15 +992,22 @@ jobs:
           tag_name: v${{ needs.check-version.outputs.new-version }}
           files: dist/*
 
-  # gglib-ffi as an app links it, attached to the release as two assets:
+  # gglib-ffi as an app links it, attached to the release as three assets:
   # GglibFFI-<version>.xcframework.zip, a dynamic framework per slice (iOS
-  # device, iOS simulator, macOS), and GglibFFI-swift-<version>.zip, the Swift
+  # device, iOS simulator, macOS); GglibFFI-swift-<version>.zip, the Swift
   # uniffi generates for it with the header, modulemap and a binding.json
-  # naming the gglib version, uniffi version and llama.cpp pin.
+  # naming the gglib version, uniffi version and llama.cpp pin; and
+  # llama-<version>.xcframework.zip, llama.cpp's own llama.xcframework at the
+  # pin, which every GglibFFI slice links and an app embeds beside it.
   # scripts/apple/package-release.sh says what each holds and how it is
-  # checked. An app pins the framework archive by URL and by the checksum
+  # checked. An app pins each framework archive by URL and by the checksum
   # SHA256SUMS lists for it, which is what `swift package compute-checksum`
   # reports.
+  #
+  # llama.xcframework comes from the llama-xcframework action, restored from
+  # the cache ci.yml's `phone-llama` keeps for the pin and the runner's
+  # Xcode, or built; the smoke test serves the recorder's tinygemma3, fetched
+  # as `phone-llama` fetches it.
   #
   # The runner's default Xcode, as ci.yml's `ffi-apple` and ggchat's CI use:
   # the framework shipped is the one an app built with that Xcode links.
@@ -1016,9 +1023,10 @@ jobs:
       && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       && (needs.check-version.outputs.version-changed == 'true' || inputs.test_run == true)
       && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
-    # A cold optimised build of three slices, then two Swift packages. The
-    # ceiling is for a hang, not for a slow runner.
-    timeout-minutes: 90
+    # A cold optimised build of three slices, then two Swift packages, and
+    # llama.cpp's three builds when its cache misses. The ceiling is for a
+    # hang, not for a slow runner.
+    timeout-minutes: 120
     steps:
       - name: 🧪 Test Mode Banner
         if: needs.check-version.outputs.is-test-version == 'true' || inputs.test_run == true
@@ -1029,6 +1037,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build or restore llama.xcframework at the pin
+        uses: ./.github/actions/llama-xcframework
 
       # rust-toolchain.toml lists the three Apple targets, so this installs them.
       - name: Install Rust toolchain
@@ -1049,15 +1060,36 @@ jobs:
           xcodebuild -version
           swift --version
 
+      # As ci.yml's `phone-llama` restores and fetches them, under its key.
+      # Nothing is saved from a release run.
+      - name: Restore the test models
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/test-models
+          key: test-models-${{ hashFiles('.github/actions/pinned-engines/models.txt') }}
+
+      - name: Fetch the test models
+        env:
+          MODELS: ${{ runner.temp }}/test-models
+          LIST: .github/actions/pinned-engines/models.txt
+        run: |
+          mkdir -p "$MODELS"
+          grep -v '^#' "$LIST" | while read -r name url; do
+            [[ -z $name || -s $MODELS/$name ]] && continue
+            curl -fsSL --retry 3 -o "$MODELS/$name.part" "$url"
+            mv "$MODELS/$name.part" "$MODELS/$name"
+          done
+          echo "GGLIB_ENGINE_MODELS_DIR=$MODELS" >> "$GITHUB_ENV"
+
       - name: Build the XCFramework and check each slice
         run: make ffi-xcframework
 
-      - name: The Swift binding links and calls the macOS slice
+      - name: The Swift binding links and calls the macOS slice, and its engine streams a reply
         run: make ffi-smoke
 
       # Into dist/, which holds nothing else on this runner, so the steps
-      # below hash, attest and upload exactly the two archives.
-      - name: Package the framework and its Swift binding
+      # below hash, attest and upload exactly the three archives.
+      - name: Package the frameworks and the Swift binding
         env:
           VERSION: ${{ needs.check-version.outputs.new-version }}
         run: scripts/apple/package-release.sh "$VERSION" dist

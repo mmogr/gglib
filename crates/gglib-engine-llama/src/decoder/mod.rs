@@ -167,6 +167,39 @@ pub trait Decoder: Send {
     fn unload(&mut self);
 }
 
+/// A boxed decoder is a decoder, so a caller that picks one at run time, as
+/// [`linked_llama_decoder`] hands it, starts an engine over it as over any
+/// other.
+impl<D: Decoder + ?Sized> Decoder for Box<D> {
+    fn load(
+        &mut self,
+        path: &Path,
+        params: &LoadParams,
+        abort: &Abort,
+        progress: &mut dyn FnMut(f32),
+    ) -> Result<Loaded, DecoderError> {
+        (**self).load(path, params, abort, progress)
+    }
+
+    fn tokenize(&self, text: &str) -> Result<Vec<Token>, DecoderError> {
+        (**self).tokenize(text)
+    }
+
+    fn generate(
+        &mut self,
+        prompt: &[Token],
+        sampling: &Sampling,
+        abort: &Abort,
+        sink: &mut dyn FnMut(Step),
+    ) -> Result<Finished, DecoderError> {
+        (**self).generate(prompt, sampling, abort, sink)
+    }
+
+    fn unload(&mut self) {
+        (**self).unload();
+    }
+}
+
 /// `LlamaDecoder` as a [`Decoder`], offloading `n_gpu_layers` layers when
 /// given (-1 for every one), when this build links llama.framework; `None`
 /// when it does not.

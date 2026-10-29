@@ -888,10 +888,15 @@ jobs:
           fi
 
   # gglib-ffi as the app links it: GglibFFI.xcframework, a dynamic framework
-  # per slice (iOS device, iOS simulator, macOS), checked slice by slice, the
-  # committed Swift binding held to what the library generates, and that
-  # binding compiled and called against the macOS slice. It boots no
-  # simulator.
+  # per slice (iOS device, iOS simulator, macOS) linking llama.cpp's own
+  # llama.framework at the pin, checked slice by slice, the committed Swift
+  # binding held to what the library generates, and that binding compiled and
+  # called against the macOS slice, its served engine streaming a reply from
+  # tinygemma3 on the Mac's CPU. It boots no simulator.
+  #
+  # llama.xcframework comes from the llama-xcframework action, which restores
+  # the one `phone-llama` cached for the pin and the runner's Xcode, or builds
+  # it; the model is fetched and cached as `phone-llama` fetches it.
   #
   # The runner's default Xcode, as ggchat's CI uses: the framework this
   # builds is the one an app built with that Xcode links. Unoptimised, since
@@ -909,13 +914,17 @@ jobs:
     needs: [ffi-inputs]
     if: needs.ffi-inputs.outputs.changed == 'true'
     # A cold build of three slices, the generator and the Swift package is a
-    # few minutes; the ceiling is for a hang, not for a slow runner.
-    timeout-minutes: 30
+    # few minutes, and llama.cpp's three builds half an hour more when its
+    # cache misses; the ceiling is for a hang, not for a slow runner.
+    timeout-minutes: 75
     env:
       RUSTFLAGS: ""
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      - name: Build or restore llama.xcframework at the pin
+        uses: ./.github/actions/llama-xcframework
 
       # rust-toolchain.toml lists the three Apple targets, so this installs them.
       - name: Install Rust toolchain
@@ -937,13 +946,41 @@ jobs:
           xcodebuild -version
           swift --version
 
+      # As `phone-llama` restores, fetches and saves them, under the same key.
+      - name: Restore the test models
+        id: models-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/test-models
+          key: test-models-${{ hashFiles('.github/actions/pinned-engines/models.txt') }}
+
+      - name: Fetch the test models
+        env:
+          MODELS: ${{ runner.temp }}/test-models
+          LIST: .github/actions/pinned-engines/models.txt
+        run: |
+          mkdir -p "$MODELS"
+          grep -v '^#' "$LIST" | while read -r name url; do
+            [[ -z $name || -s $MODELS/$name ]] && continue
+            curl -fsSL --retry 3 -o "$MODELS/$name.part" "$url"
+            mv "$MODELS/$name.part" "$MODELS/$name"
+          done
+          echo "GGLIB_ENGINE_MODELS_DIR=$MODELS" >> "$GITHUB_ENV"
+
+      - name: Save the test models
+        if: steps.models-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/test-models
+          key: ${{ steps.models-cache.outputs.cache-primary-key }}
+
       - name: Build the XCFramework and check each slice
         run: make ffi-xcframework-fast
 
       - name: The committed Swift binding is what the library generates
         run: make ffi-binding-check
 
-      - name: The Swift binding links and calls the macOS slice
+      - name: The Swift binding links and calls the macOS slice, and its engine streams a reply
         run: make ffi-smoke
 
   # llama.cpp's own llama.xcframework at the pin, built by upstream's script
