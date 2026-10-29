@@ -1,0 +1,75 @@
+name: llama.xcframework
+description: >-
+  Builds llama.cpp's own llama.xcframework at the pin with
+  scripts/apple/build-llama-xcframework.sh, or restores the one a run built
+  at the same pin with the same Xcode and the same script, checks it with
+  scripts/apple/check-llama-xcframework.sh, and exports its path as
+  GGLIB_LLAMA_XCFRAMEWORK. macOS runners only; a cold build compiles
+  llama.cpp for the iPhone, the simulator and the Mac in turn.
+
+outputs:
+  pin:
+    description: PINNED_LLAMA_RELEASE, the tag the framework is built from.
+    value: ${{ steps.keys.outputs.pin }}
+  xcframework:
+    description: The path of llama.xcframework (GGLIB_LLAMA_XCFRAMEWORK).
+    value: ${{ steps.keys.outputs.xcframework }}
+
+runs:
+  using: composite
+  steps:
+    # The Xcode in the key is the version and build xcodebuild prints, so a
+    # runner image with another Xcode builds the framework again.
+    - name: Read the llama.cpp pin and the Xcode version
+      id: keys
+      shell: bash
+      run: |
+        pin=$(scripts/llama_pin.sh)
+        xcode=$(xcodebuild -version | awk '/^Xcode /{v=$2} /^Build version /{b=$3} END{print v "-" b}')
+        [[ -n $pin && $xcode == ?*-?* ]] || exit 1
+        {
+          echo "pin=$pin"
+          echo "xcode=$xcode"
+          echo "dir=target/apple/llama-$pin"
+          echo "xcframework=$GITHUB_WORKSPACE/target/apple/llama-$pin/llama.xcframework"
+        } >> "$GITHUB_OUTPUT"
+
+    # The entry holds the framework and pin.txt, not the zip: the script
+    # zips a restored framework again in seconds, and the entry keeps one
+    # copy of it rather than two. The key ends with the build script's hash,
+    # so a change to how the framework is built builds it again.
+    - name: Restore llama.xcframework
+      id: cache
+      uses: actions/cache/restore@v6
+      with:
+        path: |
+          ${{ steps.keys.outputs.dir }}/llama.xcframework
+          ${{ steps.keys.outputs.dir }}/pin.txt
+        key: phone-llama-${{ steps.keys.outputs.pin }}-${{ steps.keys.outputs.xcode }}-${{ hashFiles('scripts/apple/build-llama-xcframework.sh') }}
+
+    - name: Build llama.xcframework at the pin
+      shell: bash
+      run: scripts/apple/build-llama-xcframework.sh
+
+    # Before the save, so a framework that lacks a slice or a symbol never
+    # reaches the cache.
+    - name: Check llama.xcframework
+      shell: bash
+      env:
+        XCFRAMEWORK: ${{ steps.keys.outputs.xcframework }}
+      run: scripts/apple/check-llama-xcframework.sh "$XCFRAMEWORK"
+
+    - name: Save llama.xcframework
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: |
+          ${{ steps.keys.outputs.dir }}/llama.xcframework
+          ${{ steps.keys.outputs.dir }}/pin.txt
+        key: ${{ steps.cache.outputs.cache-primary-key }}
+
+    - name: Export GGLIB_LLAMA_XCFRAMEWORK
+      shell: bash
+      env:
+        XCFRAMEWORK: ${{ steps.keys.outputs.xcframework }}
+      run: echo "GGLIB_LLAMA_XCFRAMEWORK=$XCFRAMEWORK" >> "$GITHUB_ENV"
