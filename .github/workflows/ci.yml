@@ -923,9 +923,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Build or restore llama.xcframework at the pin
-        uses: ./.github/actions/llama-xcframework
-
       # rust-toolchain.toml lists the three Apple targets, so this installs them.
       - name: Install Rust toolchain
         run: rustup show
@@ -940,6 +937,13 @@ jobs:
           cache-on-failure: true
           # Only a run on main saves; the `test` job says why.
           save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # After the Rust cache, never before it: rust-cache pre-cleans target/
+      # when it restores another Cargo.lock's entry, and that clean deletes
+      # every file under target/ outside a profile's own folders, the
+      # framework in target/apple included. A version bump is such a run.
+      - name: Build or restore llama.xcframework at the pin
+        uses: ./.github/actions/llama-xcframework
 
       - name: Xcode and Swift
         run: |
@@ -1006,9 +1010,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Build or restore llama.xcframework at the pin
-        uses: ./.github/actions/llama-xcframework
-
       # rust-toolchain.toml lists the Apple targets, so this installs them.
       - name: Install Rust toolchain
         run: rustup show
@@ -1021,6 +1022,13 @@ jobs:
           cache-on-failure: true
           # Only a run on main saves; the `test` job says why.
           save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # After the Rust cache, never before it: rust-cache pre-cleans target/
+      # when it restores another Cargo.lock's entry, and that clean deletes
+      # every file under target/ outside a profile's own folders, the
+      # framework in target/apple included. A version bump is such a run.
+      - name: Build or restore llama.xcframework at the pin
+        uses: ./.github/actions/llama-xcframework
 
       # The pinned-engines action's models, fetched as it fetches them, and
       # cached under its key and path, so each restores what the other saved.
