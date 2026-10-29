@@ -1038,9 +1038,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build or restore llama.xcframework at the pin
-        uses: ./.github/actions/llama-xcframework
-
       # rust-toolchain.toml lists the three Apple targets, so this installs them.
       - name: Install Rust toolchain
         run: rustup show
@@ -1052,6 +1049,13 @@ jobs:
           cache-on-failure: true
           # Only a run on main saves; `deploy-docs` above says why.
           save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # After the Rust cache, never before it: rust-cache pre-cleans target/
+      # when it restores another Cargo.lock's entry, and that clean deletes
+      # every file under target/ outside a profile's own folders, the
+      # framework in target/apple included. A version bump is such a run.
+      - name: Build or restore llama.xcframework at the pin
+        uses: ./.github/actions/llama-xcframework
 
       # Which Xcode built the shipped bytes, in the log of the run that
       # built them.
