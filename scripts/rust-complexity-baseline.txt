@@ -115,8 +115,8 @@ crates/gglib-core/src/normalize/stream.rs 662
 crates/gglib-core/src/ports/huggingface/image_companions_tests.rs 335
 crates/gglib-core/src/ports/image_generation.rs 370
 crates/gglib-core/src/ports/model_catalog.rs 303
-crates/gglib-core/src/ports/model_runtime.rs 784
-crates/gglib-core/src/ports/model_runtime_tests.rs 383
+crates/gglib-core/src/ports/model_runtime.rs 808
+crates/gglib-core/src/ports/model_runtime_tests.rs 409
 crates/gglib-core/src/ports/process_runner.rs 323
 crates/gglib-core/src/request_pipeline/constrain.rs 344
 crates/gglib-core/src/request_pipeline/drawn_note_tests.rs 416
@@ -199,7 +199,7 @@ crates/gglib-proxy/src/loop_guard_tests.rs 1182
 crates/gglib-proxy/src/mcp/drawing.rs 337
 crates/gglib-proxy/src/mcp/handlers.rs 531
 crates/gglib-proxy/src/metrics.rs 481
-crates/gglib-proxy/src/models.rs 557
+crates/gglib-proxy/src/models.rs 561
 crates/gglib-proxy/src/models_tests.rs 561
 crates/gglib-proxy/src/props.rs 563
 crates/gglib-proxy/src/props_baseline_tests.rs 408

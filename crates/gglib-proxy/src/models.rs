@@ -545,6 +545,10 @@ impl From<ModelRuntimeError> for ErrorResponse {
                 "service_unavailable",
                 "image_model_does_not_fit",
             ),
+            // The runtime's words, which give both sizes.
+            ModelRuntimeError::ChatModelDoesNotFit { .. } => {
+                Self::with_code(err.to_string(), "server_error", "model_does_not_fit")
+            }
             ModelRuntimeError::Internal(msg) => Self::internal_error(&msg),
         }
     }

@@ -63,6 +63,12 @@
       "meaning": "An image model needs more memory than is free, and the model it would displace is held by a run; refused at once, retry when that run ends."
     },
     {
+      "code": "model_does_not_fit",
+      "type": "server_error",
+      "status": 507,
+      "meaning": "A chat model's weights and its smallest context need more memory than this device gives a model; the message gives both sizes. Use a smaller model or quantization. Retrying will not help."
+    },
+    {
       "code": "not_an_image_model",
       "type": "invalid_request_error",
       "status": 400,
