@@ -1,21 +1,30 @@
-//! What the recorder asks the pinned llama-server, and which ADR each
-//! answer is a reading for.
+//! What the recorder asks an engine, and which ADR each answer is a reading
+//! for when the engine is the pinned llama-server.
 //!
 //! One pass starts every launch fresh: each dateless template on stories260K
 //! with `/slots` debug on, rendering one fixed chat with thinking on and off,
 //! the first of them also for the endpoints gglib reads; stories260K again
 //! with debug off, for the `cache_prompt` pair and the `/slots` gglib's
-//! poller sees; and tinygemma3 without and with its projector.
+//! poller sees; and tinygemma3 without its projector, streaming a reply at
+//! temperature 0, then with it (`engine_contract_gemma.rs`). The in-process
+//! engine is asked the same, less what it refuses or does not serve: tools,
+//! `/slots` (a 501, read as such), a projector, and `--help`.
 
 use serde_json::{Value, json};
 
-use super::launch::{CAT, CONTEXT, GEMMA, GEMMA_PROJECTOR, Inputs, Launch, STORIES, Server};
-use super::project::{Criterion, Recording, as_f32, help_default, redact_stream};
+use super::gemma;
+use super::inproc::Upstream;
+use super::launch::{CONTEXT, Inputs, Launch, STORIES, Server};
+use super::project::{Criterion, Engine, Recording, as_f32, help_default, redact_stream};
 use crate::pinned_engines_tests::help_options;
 
 /// The templates without a date in them, tried on stories260K.
-const TEMPLATES: [&str; 3] = ["Qwen3.5-4B", "Qwen-Qwen3-0.6B", "ibm-granite-granite-4.0"];
-const CHAT: &str = "/v1/chat/completions";
+pub(super) const TEMPLATES: [&str; 3] =
+    ["Qwen3.5-4B", "Qwen-Qwen3-0.6B", "ibm-granite-granite-4.0"];
+/// Each template renders [`fixed_chat`] with thinking on and off.
+pub(super) const RENDERS: [(&str, bool); 2] = [("thinking", true), ("no-thinking", false)];
+/// Where every question is asked.
+pub(super) const CHAT: &str = "/v1/chat/completions";
 
 static CONSTRAIN: Criterion = Criterion {
     adr: "0002",
@@ -35,18 +44,6 @@ static TRANSPORT: Criterion = Criterion {
     how_read: "the number of options llama-server --help lists; read help.txt's diff for a transport",
     if_moved: "read the help.txt diff for a remote transport",
 };
-static VISION: Criterion = Criterion {
-    adr: "0015",
-    quote: "If llama-server reads images without a projector, decision 1 is reopened.",
-    how_read: "tinygemma3 started without --mmproj: /props modalities.vision",
-    if_moved: "the server's own /props answer is read in place of the projector column",
-};
-static IMAGE_TOKENS: Criterion = Criterion {
-    adr: "0015",
-    quote: "If the estimate is more than a tenth off what llama-server counts, decision 2 is reopened.",
-    how_read: "tinygemma3 with its projector: usage.prompt_tokens with 0_cat.png less the same request without it",
-    if_moved: "compare gglib's image_tokens estimate with the new count",
-};
 static CACHE_PROMPT: Criterion = Criterion {
     adr: "0022",
     quote: "A pin bump that changes either default named in the context (`server-task.h:54`, `common/common.h:635`) away from `true`",
@@ -55,7 +52,7 @@ static CACHE_PROMPT: Criterion = Criterion {
 };
 
 /// A one-line question, with the weather tool under `choice` if there is one.
-fn question(choice: Option<&str>) -> Value {
+pub(super) fn question(choice: Option<&str>) -> Value {
     let mut body = json!({
         "messages": [{"role": "user", "content": "What is the weather in Paris?"}],
         "max_tokens": 4, "ignore_eos": true,
@@ -90,7 +87,7 @@ fn fixed_chat(thinking: bool) -> Value {
 }
 
 /// A 200 body's `usage.prompt_tokens`.
-fn prompt_tokens((status, body): (u16, String)) -> u64 {
+pub(super) fn prompt_tokens((status, body): (u16, String)) -> u64 {
     assert_eq!(status, 200, "{body}");
     let body: Value = serde_json::from_str(&body).expect("JSON");
     body["usage"]["prompt_tokens"]
@@ -98,7 +95,8 @@ fn prompt_tokens((status, body): (u16, String)) -> u64 {
         .expect("prompt_tokens")
 }
 
-fn json_of(body: &str) -> Value {
+/// `body` as JSON, which it must be.
+pub(super) fn json_of(body: &str) -> Value {
     serde_json::from_str(body).unwrap_or_else(|e| panic!("{e}: {body}"))
 }
 
@@ -117,26 +115,29 @@ fn engines_said(inputs: &Inputs, r: &mut Recording) {
         let default = help_default(&help, flag).unwrap_or_else(|| panic!("no default for {flag}"));
         r.plain(format!("help_defaults.{name}"), default);
     }
-    r.texts.insert("llama/help.txt", help);
+    r.texts.insert("llama/help.txt".into(), help);
     let (out, err) = inputs.run(&inputs.llama_server, "--version");
     let all = format!("{out}{err}");
     let line = all.lines().find(|l| l.starts_with("version:"));
-    r.texts
-        .insert("llama/version.txt", format!("{}\n", line.expect(&all)));
+    r.texts.insert(
+        "llama/version.txt".into(),
+        format!("{}\n", line.expect(&all)),
+    );
     let (help, _) = inputs.run(&inputs.sd_server, "--help");
     assert!(help.contains("--listen-port"), "{help}");
-    r.texts.insert("sd/help.txt", help);
+    r.texts.insert("sd/help.txt".into(), help);
     let (out, err) = inputs.run(&inputs.sd_server, "--version");
     let all = format!("{out}{err}");
     let line = all.lines().find(|l| !l.trim().is_empty());
     r.texts.insert(
-        "sd/version.txt",
+        "sd/version.txt".into(),
         format!("{}\n", line.expect("sd-server --version")),
     );
 }
 
-/// One template's `/props`, what it does with a tool under each choice, and
-/// the prompt it renders for [`fixed_chat`].
+/// One template's `/props`, the answer to a plain question, what
+/// llama-server does with a tool under each choice, and the prompt it renders
+/// for [`fixed_chat`].
 async fn read_template(server: &Server, template: &str, r: &mut Recording) {
     let props = server.get_json("/props").await;
     r.shape_of("/props", &props);
@@ -148,6 +149,34 @@ async fn read_template(server: &Server, template: &str, r: &mut Recording) {
     for (key, value) in props["chat_template_caps"].as_object().expect("caps") {
         r.plain(format!("caps.{template}.{key}"), value.clone());
     }
+    let (status, body) = server.post(CHAT, &question(None)).await;
+    assert_eq!(status, 200, "{body}");
+    let answer = json_of(&body);
+    r.shape_of("chat completion", &answer);
+    // The in-process engine refuses a tool with a 400, and has no `/slots`.
+    if r.engine == Engine::LlamaServer {
+        read_tools(server, template, r).await;
+        let without = answer["usage"]["prompt_tokens"].as_u64().expect(&body);
+        let with_tools = prompt_tokens(server.post(CHAT, &question(Some("none"))).await);
+        r.plain(
+            format!("tools_rendered_under_none.{template}"),
+            with_tools > without,
+        );
+    }
+    for (variant, thinking) in RENDERS {
+        let (status, body) = server.post("/apply-template", &fixed_chat(thinking)).await;
+        assert_eq!(status, 200, "{body}");
+        let prompt = json_of(&body)["prompt"].as_str().map(str::to_owned);
+        r.prompts.insert(
+            format!("apply-template.{template}.{variant}.txt"),
+            prompt.unwrap_or_else(|| panic!("no prompt: {body}")),
+        );
+    }
+}
+
+/// What llama-server does with a tool under each choice, as `/slots` shows
+/// the task it last ran.
+async fn read_tools(server: &Server, template: &str, r: &mut Recording) {
     for choice in ["auto", "required", "none"] {
         let (status, body) = server.post(CHAT, &question(Some(choice))).await;
         if status == 200 {
@@ -175,21 +204,6 @@ async fn read_template(server: &Server, template: &str, r: &mut Recording) {
                 params["chat_format"].clone(),
             );
         }
-    }
-    let with_tools = prompt_tokens(server.post(CHAT, &question(Some("none"))).await);
-    let without = prompt_tokens(server.post(CHAT, &question(None)).await);
-    r.plain(
-        format!("tools_rendered_under_none.{template}"),
-        with_tools > without,
-    );
-    for (variant, thinking) in [("thinking", true), ("no-thinking", false)] {
-        let (status, body) = server.post("/apply-template", &fixed_chat(thinking)).await;
-        assert_eq!(status, 200, "{body}");
-        let prompt = json_of(&body)["prompt"].as_str().map(str::to_owned);
-        r.prompts.insert(
-            format!("apply-template.{template}.{variant}.txt"),
-            prompt.unwrap_or_else(|| panic!("no prompt: {body}")),
-        );
     }
 }
 
@@ -255,10 +269,25 @@ async fn read_endpoints(server: &Server, r: &mut Recording) {
     }
 }
 
-/// One whole pass, every launch fresh.
-pub(super) async fn record(inputs: &Inputs) -> Recording {
-    let mut r = Recording::default();
-    engines_said(inputs, &mut r);
+/// `/slots` as gglib's poller reads it: llama-server's one slot, or the
+/// in-process engine's 501, which stops the poller for good.
+async fn read_slots(server: &Server, r: &mut Recording) {
+    if r.engine == Engine::InProcess {
+        r.plain("slots_status", server.get("/slots").await.0);
+        return;
+    }
+    let (slots, _) = server.idle_slots().await;
+    assert_eq!(slots[0]["n_ctx"], json!(CONTEXT));
+    r.shape_of("/slots", &slots);
+    r.body("slots.json", &slots);
+}
+
+/// One whole pass of `upstream`, every launch fresh.
+pub(super) async fn record(upstream: Upstream<'_>) -> Recording {
+    let mut r = Recording::of(upstream.engine());
+    if let Upstream::LlamaServer(inputs) = upstream {
+        engines_said(inputs, &mut r);
+    }
     let stories = |template, slots_debug| Launch {
         model: STORIES,
         tags: &[],
@@ -267,14 +296,14 @@ pub(super) async fn record(inputs: &Inputs) -> Recording {
         slots_debug,
     };
     for (n, template) in TEMPLATES.into_iter().enumerate() {
-        let server = Server::start(inputs, &stories(template, true), n).await;
+        let server = upstream.start(&stories(template, true), n).await;
         read_template(&server, template, &mut r).await;
         if n == 0 {
             read_endpoints(&server, &mut r).await;
         }
     }
     // The cache pair, and `/slots` as gglib's poller reads it: no debug.
-    let server = Server::start(inputs, &stories(TEMPLATES[0], false), 3).await;
+    let server = upstream.start(&stories(TEMPLATES[0], false), 3).await;
     let twice = question(None);
     server.post(CHAT, &twice).await;
     let (_, second) = server.post(CHAT, &twice).await;
@@ -284,45 +313,8 @@ pub(super) async fn record(inputs: &Inputs) -> Recording {
         cached.as_u64().expect(&second) > 0,
         &CACHE_PROMPT,
     );
-    let (slots, _) = server.idle_slots().await;
-    assert_eq!(slots[0]["n_ctx"], json!(CONTEXT));
-    r.shape_of("/slots", &slots);
-    r.body("slots.json", &slots);
+    read_slots(&server, &mut r).await;
     drop(server);
-    for projector in [false, true] {
-        let gemma = Launch {
-            model: GEMMA,
-            tags: &[],
-            template: None,
-            projector: projector.then_some(GEMMA_PROJECTOR),
-            slots_debug: false,
-        };
-        let server = Server::start(inputs, &gemma, 4 + usize::from(projector)).await;
-        let props = server.get_json("/props").await;
-        r.shape_of("/props", &props);
-        let vision = props["modalities"]["vision"].clone();
-        if !projector {
-            r.named("vision_without_mmproj", vision, &VISION);
-            continue;
-        }
-        r.plain("vision_with_mmproj", vision);
-        let png = std::fs::read(inputs.models.join(CAT)).expect("the cat picture");
-        let url = format!("data:image/png;base64,{}", base64_of(&png));
-        let mut seen = question(None);
-        seen["messages"][0]["content"] = json!([
-            {"type": "text", "text": "What is this?"},
-            {"type": "image_url", "image_url": {"url": url}},
-        ]);
-        let mut unseen = question(None);
-        unseen["messages"][0]["content"] = json!([{"type": "text", "text": "What is this?"}]);
-        let with = prompt_tokens(server.post(CHAT, &seen).await);
-        let without = prompt_tokens(server.post(CHAT, &unseen).await);
-        r.named("image_token_delta", with - without, &IMAGE_TOKENS);
-    }
+    gemma::read(upstream, &mut r).await;
     r
-}
-
-fn base64_of(bytes: &[u8]) -> String {
-    use base64::Engine as _;
-    base64::engine::general_purpose::STANDARD.encode(bytes)
 }

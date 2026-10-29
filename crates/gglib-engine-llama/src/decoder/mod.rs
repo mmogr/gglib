@@ -166,3 +166,33 @@ pub trait Decoder: Send {
     /// Free the model and its context. Nothing to free is not an error.
     fn unload(&mut self);
 }
+
+/// `LlamaDecoder` as a [`Decoder`], offloading `n_gpu_layers` layers when
+/// given (-1 for every one), when this build links llama.framework; `None`
+/// when it does not.
+///
+/// `LlamaDecoder` exists only when the `llama` feature compiled the C shim
+/// and linked the framework: an Apple target with `GGLIB_LLAMA_XCFRAMEWORK`
+/// set. A crate that turns the feature on for a build that may link nothing,
+/// a test built on any OS among them, asks here rather than naming the type.
+#[cfg(gglib_llama)]
+pub fn linked_llama_decoder(n_gpu_layers: Option<i32>) -> Option<Box<dyn Decoder>> {
+    let decoder = LlamaDecoder::new();
+    Some(Box::new(match n_gpu_layers {
+        Some(n) => decoder.with_gpu_layers(n),
+        None => decoder,
+    }))
+}
+
+/// `LlamaDecoder` as a [`Decoder`], offloading `n_gpu_layers` layers when
+/// given (-1 for every one), when this build links llama.framework; `None`
+/// when it does not, as here.
+///
+/// `LlamaDecoder` exists only when the `llama` feature compiled the C shim
+/// and linked the framework: an Apple target with `GGLIB_LLAMA_XCFRAMEWORK`
+/// set. A crate that turns the feature on for a build that may link nothing,
+/// a test built on any OS among them, asks here rather than naming the type.
+#[cfg(not(gglib_llama))]
+pub const fn linked_llama_decoder(_n_gpu_layers: Option<i32>) -> Option<Box<dyn Decoder>> {
+    None
+}

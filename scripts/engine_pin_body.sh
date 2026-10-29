@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Write the body of an engine pin pull request to stdout.
 #
-#   engine_pin_body.sh <llama|sd> <current> <candidate> <before> <after> <recorder> <run url>
+#   engine_pin_body.sh <llama|sd> <current> <candidate> <before> <after> <recorder> <run url> [<in-process>]
 #
 # <before> and <after> are folders laid out as contracts/upstream: the one
 # committed on the default branch, and the one the recorder just wrote at the
-# candidate. <recorder> is `ok`, or why the recorder did not run. The Engine
-# pins workflow (.github/workflows/engine-pins.yml) calls it; CONTRIBUTING.md's
-# "The engine pins" says what a reader does with the body.
+# candidate. <recorder> is `ok`, or why the recorder did not run. On a
+# llama.cpp bump <in-process> says the same of the in-process engine's
+# recording into llama-inproc/; without it the body says nothing of it. The
+# Engine pins workflow (.github/workflows/engine-pins.yml) calls it;
+# CONTRIBUTING.md's "The engine pins" says what a reader does with the body.
 #
 # A llama.cpp body leads with the ADR readings that moved: each reading in the
 # new observed.json that an ADR's criterion names and that differs from its
@@ -23,8 +25,8 @@
 
 set -euo pipefail
 
-[ $# -eq 7 ] || { sed -n '4p' "$0" | sed 's/^# *//' >&2; exit 2; }
-ENGINE=$1 CURRENT=$2 CANDIDATE=$3 BEFORE=$4 AFTER=$5 RECORDER=$6 RUN_URL=$7
+[ $# -eq 7 ] || [ $# -eq 8 ] || { sed -n '4p' "$0" | sed 's/^# *//' >&2; exit 2; }
+ENGINE=$1 CURRENT=$2 CANDIDATE=$3 BEFORE=$4 AFTER=$5 RECORDER=$6 RUN_URL=$7 INPROC=${8-}
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TICK='`'
 
@@ -202,6 +204,25 @@ tier3_line() {
   echo
 }
 
+# --- the in-process engine -------------------------------------------------
+
+# Why llama-inproc/ was not recorded, at the top of the body.
+inproc_failed() {
+  if [ -n "$INPROC" ] && [ "$INPROC" != ok ]; then
+    printf '**The in-process engine was not recorded (`%s`): `contracts/upstream/llama-inproc/` is still the last pin'"'"'s, so `Test (Rust)` is red until someone runs `make record-upstream-inproc` on a Mac.**\n\n' "${INPROC//\`/}"
+  fi
+}
+
+# What the in-process recording says of itself against llama-server's.
+inproc_line() {
+  [ "$INPROC" = ok ] || return 0
+  jq -r --arg c "$CANDIDATE" '
+    [to_entries[] | select(.key | startswith("template_parity.")) | .value.value] as $p
+    | "The in-process engine, recorded on \($c): \([$p[] | select(. == true)] | length) of \($p | length) pinned templates render as llama-server renders them, and tinygemma3 streams \(if .["greedy_parity.tinygemma3"].value == true then "the same" else "**another**" end) greedy reply."' \
+    "$AFTER/llama-inproc/observed.json" 2>/dev/null || echo 'The in-process engine wrote no readings.'
+  echo
+}
+
 # --- upstream commits that touch a file an ADR cites -----------------------
 
 commits_section() {
@@ -257,6 +278,7 @@ printf 'Moves %s from %s to %s: https://github.com/%s/compare/%s...%s\n\n' \
 if [ "$RECORDER" != ok ]; then
   printf '**The recorder did not run (`%s`); "Compare with contracts/upstream" is red until someone records.**\n\n' "${RECORDER//\`/}"
 fi
+inproc_failed
 # Every bump records llama-server again, so an sd bump reads the ADR
 # readings too, before its picture.
 if [ "$RECORDER" = ok ]; then
@@ -268,6 +290,7 @@ fi
 if [ "$RECORDER" = ok ]; then
   recorded_line
 fi
+inproc_line
 if [ "$ENGINE" = llama ]; then
   tier3_line
 fi

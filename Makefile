@@ -5,7 +5,7 @@
         test test-helper check ios-check phone-llama engine-llama-test engine-llama-clippy \
         fmt lint doc doc-check dev pre-commit release \
         lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
-        adr-readings record-upstream bindings bindings-check \
+        adr-readings record-upstream record-upstream-inproc bindings bindings-check \
         ffi-binding ffi-binding-check ffi-xcframework ffi-xcframework-fast ffi-smoke \
         clean clean-gui clean-llama clean-all path-check \
         check-deps check-deps-bootstrap check-rust \
@@ -383,6 +383,21 @@ record-upstream: ## Record contracts/upstream again from the pinned engines
 		exit 1; \
 	}
 	$(CARGO) test -p gglib-runtime --lib engine_contract -- --ignored
+
+# Record contracts/upstream/llama-inproc again: gglib-engine-llama's shim over
+# its decoder on llama.h, in the test process, asked what the pinned
+# llama-server is asked, on the models in GGLIB_ENGINE_MODELS_DIR. It builds
+# gglib-runtime's tests with `inproc-contract` against GGLIB_LLAMA_XCFRAMEWORK,
+# or else the framework `phone-llama` builds for the pin. macOS only, and not
+# part of `pre-commit`; tests on every OS hold what it records to
+# contracts/upstream/llama.
+record-upstream-inproc: export GGLIB_RECORD_CONTRACTS := 1
+record-upstream-inproc: export GGLIB_INPROC_ENGINE := 1
+record-upstream-inproc: ## Record contracts/upstream/llama-inproc again from the in-process engine (macOS)
+	@[ -n "$$GGLIB_ENGINE_MODELS_DIR" ] || { echo "✗ set GGLIB_ENGINE_MODELS_DIR first"; exit 1; }
+	@$(LLAMA_XCFRAMEWORK_AT_PIN); \
+	 $(CARGO) test --locked -p gglib-runtime --lib --features inproc-contract \
+	   engine_contract_tests::the_in_process_engine -- --ignored
 
 ##@ Bindings
 

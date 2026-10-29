@@ -11,6 +11,11 @@ default = []
 # Emit TypeScript for the image runtime's status the GUI reads. Optional
 # dependency, so the default graph is unchanged with the feature off.
 ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings"]
+# The contract recorder's in-process engine (`make record-upstream-inproc`):
+# gglib-engine-llama's decoder over llama.h, which links llama.framework on
+# macOS with GGLIB_LLAMA_XCFRAMEWORK set and nothing anywhere else. It reaches
+# the tests only, through the dev-dependency.
+inproc-contract = ["gglib-engine-llama/llama"]
 
 [dependencies]
 gglib-agent = { workspace = true }
@@ -67,6 +72,9 @@ tempfile = { workspace = true }
 gglib-core = { workspace = true, features = ["test-utils"] }
 # The connection a fake server answers on, with the request already read.
 gglib-test-http = { workspace = true }
+# The in-process engine the contract recorder asks what it asks the pinned
+# llama-server, on loopback.
+gglib-engine-llama = { workspace = true }
 
 [lints]
 workspace = true

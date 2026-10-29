@@ -3,12 +3,19 @@ description: >-
   Installs the pinned llama.cpp and stable-diffusion.cpp with the gglib just
   built (target/debug/gglib), as a user's machine would, and fetches the
   recorder's tiny models and the pin's chat templates. Shared by ci.yml's
-  CLI Check legs and the engine-pins workflow.
+  CLI Check legs and the engine-pins workflow, whose in-process recording
+  takes only the models and templates.
 
 inputs:
   target:
     description: The Rust target triple, which keys the engine cache.
     required: true
+  engines:
+    description: >-
+      "false" fetches the models and the pin's chat templates and installs
+      no engine, so no gglib build is needed.
+    required: false
+    default: "true"
 
 outputs:
   llama:
@@ -82,6 +89,7 @@ runs:
     # downloads. The entry is saved as soon as both installs pass, never after
     # one fails: the Engine pins workflow continues past a failed install.
     - name: Restore the pinned engines
+      if: inputs.engines == 'true'
       id: engines-cache
       uses: actions/cache/restore@v6
       with:
@@ -89,6 +97,7 @@ runs:
         key: pinned-engines-${{ inputs.target }}-${{ steps.pins.outputs.llama }}-${{ steps.pins.outputs.sd }}
 
     - name: Install the pinned engines
+      if: inputs.engines == 'true'
       shell: bash
       env:
         GGLIB_DATA_DIR: ${{ steps.pins.outputs.engines }}
@@ -99,7 +108,7 @@ runs:
         target/debug/gglib config sd install
 
     - name: Save the pinned engines
-      if: steps.engines-cache.outputs.cache-hit != 'true'
+      if: inputs.engines == 'true' && steps.engines-cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6
       with:
         path: ${{ steps.pins.outputs.engines }}

@@ -235,7 +235,8 @@ crates/gglib-runtime/src/binary_install/checkout_tests.rs 457
 crates/gglib-runtime/src/binary_install/install_tests.rs 438
 crates/gglib-runtime/src/command.rs 696
 crates/gglib-runtime/src/engine.rs 339
-crates/gglib-runtime/src/engine_contract_readings.rs 328
+crates/gglib-runtime/src/engine_contract_launch.rs 307
+crates/gglib-runtime/src/engine_contract_readings.rs 320
 crates/gglib-runtime/src/engine_contract_tier3.rs 438
 crates/gglib-runtime/src/engine_tests.rs 442
 crates/gglib-runtime/src/launch_narration.rs 803

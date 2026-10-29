@@ -20,7 +20,9 @@ small C shim (`csrc/`) whose arguments are scalars, strings and opaque
 handles, so no llama.h struct crosses into Rust. build.rs compiles the shim
 and links the framework only for an Apple target with the `llama` feature on
 and `GGLIB_LLAMA_XCFRAMEWORK` naming the framework `make phone-llama` builds;
-anywhere else the feature compiles nothing and `LlamaDecoder` does not exist.
+anywhere else the feature compiles nothing and `LlamaDecoder` does not exist;
+[`linked_llama_decoder`] hands it out where it exists, for a crate that turns
+the feature on and cannot tell at compile time whether it linked.
 `ScriptedDecoder` (feature `test-decoder`) replays a script of pieces, so this
 crate's tests, and the tests of a crate composing it, run on any OS with no
 model.
@@ -169,7 +171,10 @@ stops the shim and ends the watch.
 `make engine-llama-test` runs the tests with the decoder over llama.h on the
 Mac's slice (the real-model ones read `GGLIB_ENGINE_MODELS_DIR`), and
 `make engine-llama-clippy` lints it for the Mac, the iPhone and its
-simulator; CI's `phone-llama` job runs both.
+simulator; CI's `phone-llama` job runs both. `make record-upstream-inproc`
+records the shim over that decoder, asked what gglib-runtime's contract
+recorder asks the pinned llama-server, into `contracts/upstream/llama-inproc/`,
+which gglib-runtime's tests hold to llama-server's recording on every OS.
 
 ## Usage
 
