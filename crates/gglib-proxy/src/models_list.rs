@@ -97,42 +97,23 @@ impl ModelsResponse {
     }
 }
 
-/// What [`ModelInfo::capabilities`] lists for a model that reads images: one
-/// linked to a projector. The `OpenAI`-side spelling of
-/// [`ModelSummary::image_input`], and what a client reads to offer images.
-pub const VISION_CAPABILITY: &str = "vision";
-
-/// What [`ModelInfo::capabilities`] lists for a model that draws images.
-///
-/// One whose weights name an image family: the `OpenAI`-side spelling of
-/// [`ModelSummary::image_output`]. Such a model is refused for chat.
-pub const IMAGE_GENERATION_CAPABILITY: &str = "image_generation";
-
-/// What [`ModelInfo::capabilities`] lists for a model that thinks: one
-/// tagged `reasoning`, which is what launches it with its thinking set apart
-/// from its answer. The tag, not the template-derived capability bit, and
-/// what a client reads to offer a Thinking switch.
-pub(crate) const REASONING_CAPABILITY: &str = "reasoning";
+/// What [`ModelInfo::capabilities`] lists for a model that reads images, and
+/// for one that draws them: gglib-core's words, which every surface uses.
+pub use capability_tags::{IMAGE_GENERATION_CAPABILITY, VISION_CAPABILITY};
 
 /// What a catalogued model can do beyond text chat, for
-/// [`ModelInfo::capabilities`]: serve embeddings, read images, draw images,
-/// think.
+/// [`ModelInfo::capabilities`], as [`capability_tags::capabilities_of`] lists
+/// it.
 ///
 /// `None` rather than an empty vec for an ordinary chat model, so the field
 /// disappears from the response instead of appearing as `[]` — an empty list
 /// reads as "this model can do nothing", which is the opposite of the truth.
 fn capabilities_of(summary: &ModelSummary) -> Option<Vec<String>> {
-    let embeddings = capability_tags::is_embedding(&summary.tags).then_some("embeddings");
-    let vision = summary.image_input.then_some(VISION_CAPABILITY);
-    let draws = summary.image_output.then_some(IMAGE_GENERATION_CAPABILITY);
-    let reasoning = capability_tags::is_reasoning(&summary.tags).then_some(REASONING_CAPABILITY);
-    let capabilities: Vec<String> = embeddings
-        .into_iter()
-        .chain(vision)
-        .chain(draws)
-        .chain(reasoning)
-        .map(str::to_owned)
-        .collect();
+    let capabilities: Vec<String> =
+        capability_tags::capabilities_of(&summary.tags, summary.image_input, summary.image_output)
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
     (!capabilities.is_empty()).then_some(capabilities)
 }
 

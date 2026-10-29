@@ -14,7 +14,23 @@
 //!     BuildInfo.gglib_version    -> String   the workspace version
 //!     BuildInfo.uniffi_version   -> String   the uniffi that built the binding
 //!     BuildInfo.llama_pin        -> String   PINNED_LLAMA_RELEASE
+//!
+//! open_library(LibraryDirs, hf_token?) async throws -> Library
+//!     Library.suggested(DeviceReading)            -> [Suggestion]   no network
+//!     Library.search(query, cursor?)              throws -> SearchPage
+//!     Library.quantizations(repo, DeviceReading)  throws -> [QuantOffer]
+//!     Library.installed()                         throws -> [InstalledModel]
+//!     Library.remove(id)                          throws
+//!     Library.download(repo, quantization)        throws -> DownloadWatch
+//!     Library.pause_all() / Library.resume_all()
+//!         DownloadWatch.next()    -> DownloadProgress?   None once it is over
+//!         DownloadWatch.cancel()                         returns at once
 //! ```
+//!
+//! Every `Library` call but `suggested`, and `DownloadWatch.next`, is
+//! `async`; every failure is a [`GglibError`]. A verdict ([`FitVerdict`], with its [`FitWhy`]) is
+//! gglib-core's, judged against the budget gglib makes from the
+//! [`DeviceReading`] the app took.
 //!
 //! # One module name
 //!
@@ -57,17 +73,35 @@
 //!   so a wait the app must be able to end is an object with a `cancel`, and
 //!   a stream is pulled one `next()` at a time.
 
+mod browse;
 mod build_info;
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "every async export enters this runtime, and build_info is sync"
-    )
-)]
+mod download_feed;
+mod download_watch;
+mod downloads;
+mod errors;
+mod installed;
+mod library;
+mod reading;
 mod runtime;
+mod verdict;
 
+#[cfg(test)]
+mod test_gguf;
+#[cfg(test)]
+mod test_hub;
+#[cfg(test)]
+mod test_library;
+#[cfg(test)]
+mod test_server;
+
+pub use browse::{QuantOffer, SearchHit, SearchPage, Suggestion};
 pub use build_info::{BuildInfo, build_info};
+pub use download_watch::{DownloadProgress, DownloadState, DownloadWatch};
+pub use errors::GglibError;
+pub use installed::InstalledModel;
+pub use library::{Library, LibraryDirs, open_library};
+pub use reading::DeviceReading;
+pub use verdict::{FitVerdict, FitWhy, MissingInput};
 
 // Defines `UniFfiTag` and the `extern "C"` entry points, at the crate root
 // where every `uniffi` derive and export resolves that tag.

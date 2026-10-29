@@ -452,6 +452,7 @@ impl DownloadManagerImpl {
         let job = Self::job_for(item, destination, cancel, progress_tx);
         let deps = WorkerDeps {
             config: self.config.clone(),
+            hub: Arc::clone(&self.hf_client),
         };
         worker::run_job(job, &deps).await
     }

@@ -100,6 +100,48 @@ pub fn is_embedding(tags: &[String]) -> bool {
     has(tags, EMBEDDING)
 }
 
+/// What a client is told a model that serves embeddings can do: `/v1/models`
+/// lists it in a model's `capabilities`. Not the [`EMBEDDING`] tag.
+pub const EMBEDDINGS_CAPABILITY: &str = "embeddings";
+
+/// What a client is told a model that reads images can do: one linked to a
+/// projector. The `OpenAI`-side word, and what a client reads to offer images.
+pub const VISION_CAPABILITY: &str = "vision";
+
+/// What a client is told a model that draws images can do: one whose weights
+/// name an image family. Such a model is refused for chat.
+pub const IMAGE_GENERATION_CAPABILITY: &str = "image_generation";
+
+/// What a client is told a model that thinks can do: one tagged
+/// [`REASONING`], which is what launches it with its thinking set apart from
+/// its answer, and what a client reads to offer a Thinking switch.
+pub const REASONING_CAPABILITY: &str = "reasoning";
+
+/// What a model can do beyond text chat, in the words a client reads: serve
+/// embeddings, read images, draw images, think, in that order. Empty for an
+/// ordinary chat model.
+///
+/// The one list, so `/v1/models` and the phone's list of its models say the
+/// same of one model. `image_input` and `image_output` are the model's own
+/// answers (`Model::image_input`, `Model::generates_images`).
+#[must_use]
+pub fn capabilities_of(
+    tags: &[String],
+    image_input: bool,
+    image_output: bool,
+) -> Vec<&'static str> {
+    let embeddings = is_embedding(tags).then_some(EMBEDDINGS_CAPABILITY);
+    let vision = image_input.then_some(VISION_CAPABILITY);
+    let draws = image_output.then_some(IMAGE_GENERATION_CAPABILITY);
+    let reasoning = is_reasoning(tags).then_some(REASONING_CAPABILITY);
+    embeddings
+        .into_iter()
+        .chain(vision)
+        .chain(draws)
+        .chain(reasoning)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,6 +200,20 @@ mod tests {
         assert!(!is_embedding(&[]));
         assert!(!is_embedding(&tags(&["agent", "reasoning", "mtp"])));
         assert!(!is_embedding(&tags(&["embeddings", "format:embedding"])));
+    }
+
+    #[test]
+    fn a_models_capabilities_are_listed_in_one_order_and_a_plain_chat_model_has_none() {
+        assert!(capabilities_of(&tags(&["agent"]), false, false).is_empty());
+        assert_eq!(
+            capabilities_of(&tags(&["reasoning", "embedding"]), true, true),
+            [
+                EMBEDDINGS_CAPABILITY,
+                VISION_CAPABILITY,
+                IMAGE_GENERATION_CAPABILITY,
+                REASONING_CAPABILITY
+            ]
+        );
     }
 
     #[test]

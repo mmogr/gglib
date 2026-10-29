@@ -1,5 +1,6 @@
 use super::*;
 use gglib_core::domain::ModelCapabilities;
+use gglib_core::domain::capability_tags::REASONING_CAPABILITY;
 use gglib_core::settings::DEFAULT_CONTEXT_SIZE;
 
 // =========================================================================

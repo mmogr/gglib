@@ -85,29 +85,58 @@ impl CoreBootstrap {
         config: BootstrapConfig,
         emitter: Arc<dyn AppEventEmitter>,
     ) -> Result<BuiltCore> {
-        // 1. Database pool
+        // The HuggingFace client.
+        //
+        // It carries the token, so a gated base repo — Llama and Gemma,
+        // routinely — can answer the registrar's recipe lookup for a user
+        // who has configured one. Without it the lookup 401s and the import
+        // falls back to the tag guess, which is the designed degradation.
+        //
+        // A token the caller hands over is the one wired, unless it is
+        // blank, and the environment is not read. Otherwise it is the
+        // environment's, read here and nowhere else. `holders` hands it to
+        // this client, to the download manager's transfers and to `AppCore`.
+        let holders = holders(&config, hf_token::from_env);
+        let hf_client: Arc<dyn HfClientPort> =
+            Arc::new(DefaultHfClient::new(&holders.client_config));
+        Self::build_over(config, holders, hf_client, emitter).await
+    }
+
+    /// [`Self::build`], over a Hub client the caller made rather than the
+    /// one the config gives: everything that asks the Hub asks `hf_client`,
+    /// and a download fetches each file from the address it gives
+    /// (`HfClientPort::file_url`). A test's stand-in Hub is one.
+    ///
+    /// The token is read as [`Self::build`] reads it and handed to the
+    /// download manager's transfers and to `AppCore`; what `hf_client` sends
+    /// is its own affair.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::build`].
+    pub async fn build_with_hub(
+        config: BootstrapConfig,
+        emitter: Arc<dyn AppEventEmitter>,
+        hf_client: Arc<dyn HfClientPort>,
+    ) -> Result<BuiltCore> {
+        let holders = holders(&config, hf_token::from_env);
+        Self::build_over(config, holders, hf_client, emitter).await
+    }
+
+    /// Open the database and wire everything over `hf_client`.
+    async fn build_over(
+        config: BootstrapConfig,
+        holders: Holders,
+        hf_client: Arc<dyn HfClientPort>,
+        emitter: Arc<dyn AppEventEmitter>,
+    ) -> Result<BuiltCore> {
         let pool = setup_database(&config.db_path).await?;
 
-        // 2. HuggingFace client.
-        //
-        //    It carries the token, so a gated base repo — Llama and Gemma,
-        //    routinely — can answer the registrar's recipe lookup for a user
-        //    who has configured one. Without it the lookup 401s and the
-        //    import falls back to the tag guess, which is the designed
-        //    degradation.
-        //
-        //    A token the caller hands over is the one wired, unless it is
-        //    blank, and the environment is not read. Otherwise it is the
-        //    environment's, read here and nowhere else. `holders` hands it
-        //    to this client, to the download manager's transfers and to
-        //    `AppCore`.
         let Holders {
-            client_config,
+            client_config: _,
             download_config,
             core_token,
-        } = holders(&config, hf_token::from_env);
-        let hf_client: Arc<dyn HfClientPort> = Arc::new(DefaultHfClient::new(&client_config));
-
+        } = holders;
         let built = wire(pool, hf_client, download_config, core_token, emitter);
 
         tracing::debug!(

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Prove the generated Swift links against GglibFFI.xcframework and that a
-# call crosses the boundary, on the macOS slice.
+# Prove the generated Swift links against GglibFFI.xcframework and that
+# every call that needs no network crosses the boundary, on the macOS slice.
 #
 # Builds a scratch SwiftPM package under target/apple/smoke shaped the way an
 # app consumes gglib: a binary target for the XCFramework, a source target
@@ -17,10 +17,18 @@
 #   - uniffi's contract version and API checksums agree between the Swift
 #     and the binary (a mismatch is a fatalError at the first call)
 #   - build_info() returns the record with every field intact
+#   - each Library call crosses and answers, an async one awaited from
+#     Swift and an error caught as a GglibError: open_library in a scratch
+#     folder, suggested, installed, remove of an id the library does not
+#     hold, quantizations and download of a repository id with no owner
+#     (refused before any request is made), pause_all and resume_all
 #
 # WHAT IT DOES NOT PROVE
 #   Anything about iOS: the device and simulator slices are checked by
-#   check-slices.sh, and run only in an app.
+#   check-slices.sh, and run only in an app. Nothing here reaches the
+#   network, so search, a download that runs, and the DownloadWatch it
+#   answers are left to the crate's own tests, which run them against a
+#   stand-in Hub and file server.
 #
 # Uses the binding generated beside the framework (target/apple/swift), so
 # it tests the pair one build made; `make ffi-binding-check` holds the
@@ -113,6 +121,67 @@ let same = BuildInfo(gglibVersion: "${VERSION}", uniffiVersion: "${UNIFFI}", lla
 guard info == same else {
     fail("a BuildInfo built in Swift from the same fields is not equal to the one returned")
 }
+
+// A library in folders of the smoke's own, asking Hugging Face as nobody.
+// Nothing below reaches the network.
+let root = FileManager.default.temporaryDirectory
+    .appendingPathComponent("gglib-ffi-smoke-\(ProcessInfo.processInfo.processIdentifier)")
+defer { try? FileManager.default.removeItem(at: root) }
+let dirs = LibraryDirs(
+    dataDir: root.appendingPathComponent("data").path,
+    modelsDir: root.appendingPathComponent("models").path
+)
+let library: Library
+do {
+    library = try await openLibrary(dirs: dirs, hfToken: nil)
+} catch {
+    fail("openLibrary threw \(error)")
+}
+print("ok  openLibrary() opened a library in \(root.path)")
+
+let reading = DeviceReading(physicalBytes: 8 << 30, availableBytes: 6 << 30, isSimulator: false)
+let suggested = library.suggested(reading: reading)
+guard let smallest = suggested.last, case .fits = smallest.verdict, !smallest.rationale.isEmpty else {
+    fail("suggested() on an 8 GiB phone did not fit its smallest row: \(suggested)")
+}
+print("ok  suggested() named \(suggested.count) models, the smallest \(smallest.repo) \(smallest.verdict)")
+
+do {
+    let installed = try await library.installed()
+    guard installed.isEmpty else { fail("a new library holds \(installed)") }
+} catch {
+    fail("installed() threw \(error)")
+}
+print("ok  installed() is empty in a new library")
+
+do {
+    try await library.remove(id: 404)
+    fail("remove() removed a model the library does not hold")
+} catch GglibError.NotFound {
+    print("ok  remove() of an unknown id threw GglibError.NotFound")
+} catch {
+    fail("remove() threw \(error), not GglibError.NotFound")
+}
+
+// A repository id names an owner and a name; one without is refused before
+// a request is made.
+do {
+    _ = try await library.quantizations(repo: "no-owner", reading: reading)
+    fail("quantizations() answered for a repository id with no owner")
+} catch let error as GglibError {
+    print("ok  quantizations() of an id with no owner threw \(error)")
+}
+do {
+    _ = try await library.download(repo: "no-owner", quantization: "Q4_K_M")
+    fail("download() queued a repository id with no owner")
+} catch let error as GglibError {
+    print("ok  download() of an id with no owner threw \(error)")
+}
+
+await library.pauseAll()
+await library.resumeAll()
+print("ok  pauseAll() and resumeAll() returned with nothing queued")
+
 print("smoke: the binding links and answers across the boundary")
 SMOKE
 

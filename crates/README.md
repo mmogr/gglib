@@ -65,7 +65,8 @@ not only the next: `gglib-cli` uses several infrastructure crates directly, and
 `gglib-app-services` uses `gglib-agent`. Inside a layer, `gglib-cli` and
 `src-tauri` depend on `gglib-axum`, which both use to host the daemon;
 `src-tauri` depends on `gglib-tauri`; `gglib-ffi`, the Swift-facing surface
-an iPhone app embeds as a dynamic framework, depends on no other surface;
+an iPhone app embeds as a dynamic framework, depends on no other surface and
+opens its library through `gglib-bootstrap`;
 `gglib-download` depends on `gglib-hf`;
 `gglib-proxy` depends on `gglib-mcp`; and `gglib-runtime` depends on `gglib-mcp`
 and `gglib-proxy`. `gglib-build-info`, `gglib-sse` and `gglib-test-http` depend on no gglib crate.
@@ -118,7 +119,7 @@ Each row links the crate, whose own README says what it is responsible for and h
 |-------|---------|---------------|
 | **[gglib-cli](gglib-cli/)** | Command-line interface for all gglib operations; [docs/cli.md](../docs/cli.md) is the command reference. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-loc.json) |
 | **[gglib-axum](gglib-axum/)** | The daemon's HTTP API, built with Axum for the web UI, the desktop app and the CLI. The router is built in [`src/routes.rs`](gglib-axum/src/routes.rs), which serves `/health` and nests the API under `/api`. The daemon paths the CLI calls are named in `gglib_core::contracts::http::daemon`, and `gglib-axum/tests/daemon_route_contract.rs` fails when the daemon stops serving one of them. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-loc.json) |
-| **[gglib-ffi](gglib-ffi/)** | The Swift-facing surface of gglib: `GglibFFI.xcframework`, a dynamic framework for iOS and macOS, and the Swift `uniffi` generates for it, committed in [`gglib-ffi/swift/`](gglib-ffi/swift/). Its surface is `build_info()`. Builds as plain Rust on every OS; the framework needs Xcode. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-ffi-loc.json) |
+| **[gglib-ffi](gglib-ffi/)** | The Swift-facing surface of gglib: `GglibFFI.xcframework`, a dynamic framework for iOS and macOS, and the Swift `uniffi` generates for it, committed in [`gglib-ffi/swift/`](gglib-ffi/swift/). Its surface is `build_info()` and a model library: the shortlist and a Hub search, a fit verdict per quantization from its header's first bytes, downloads that pause and resume, and the installed models. Builds as plain Rust on every OS; the framework needs Xcode. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-ffi-loc.json) |
 | **[gglib-tauri](gglib-tauri/)** | Tauri event-emission helpers (`emit_or_log` and the event names) for the desktop app. The Tauri commands, tray and menus live in `src-tauri` itself. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-loc.json) |
 
 ### Utility Crates

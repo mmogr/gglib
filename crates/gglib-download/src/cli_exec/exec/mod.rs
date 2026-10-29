@@ -51,7 +51,7 @@ pub(super) async fn download(
     gglib_core::telemetry::console_println(&format!("Looking for {quant} quantization..."));
     // A forced fetch again of the model's own files: its companions, if it
     // draws with any, are in their own folders and linked already.
-    let resolver = HfQuantizationResolver::weights_only(hub);
+    let resolver = HfQuantizationResolver::weights_only(Arc::clone(&hub));
 
     let quantization = gglib_core::download::Quantization::from_filename(quant);
     let resolution = resolver.resolve(&request.model_id, quantization).await
@@ -92,8 +92,11 @@ pub(super) async fn download(
         token: request.token.as_deref(),
         force: request.force,
     };
-    let fetch_one = |plan| async move { download_file(&plan).await };
-    fetch_files(id, &resolution.files, &transfer, rows.as_ref(), fetch_one).await?;
+    fetch_files(id, &resolution.files, &transfer, rows.as_ref(), |plan| {
+        let url = hub.file_url(plan.repo_id, plan.file, plan.revision);
+        async move { download_file(&plan, &url).await }
+    })
+    .await?;
 
     let primary_path = model_dir.join(&files[0]);
     let all_paths: Vec<_> = files.iter().map(|f| model_dir.join(f)).collect();

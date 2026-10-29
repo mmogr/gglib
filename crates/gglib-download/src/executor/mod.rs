@@ -55,7 +55,9 @@ pub(crate) struct DownloadPlan<'a> {
     pub cancel: Option<CancellationToken>,
 }
 
-/// Fetch the file `plan` names.
+/// Fetch the file `plan` names, whose bytes the native transport reads from
+/// `url`: the address the Hub the download was resolved on gives for it
+/// (`HfClientPort::file_url`).
 ///
 /// The native Rust path is the default. The `hf_xet` accelerator is used only
 /// when its environment is **already** provisioned on this machine — it is never
@@ -68,11 +70,10 @@ pub(crate) struct DownloadPlan<'a> {
 /// Both transports report to one [`FileCounter`], so the caller sees one
 /// count for the file whichever of them moved its bytes, and sees it reach
 /// the file's size only here, once the file is in place.
-pub(crate) async fn download_file(plan: &DownloadPlan<'_>) -> Result<(), DownloadError> {
-    let url = gglib_hf::build_file_url(plan.repo_id, plan.file, Some(plan.revision));
+pub(crate) async fn download_file(plan: &DownloadPlan<'_>, url: &str) -> Result<(), DownloadError> {
     let accelerator =
         fast_helper_provisioned().then_some(|progress| run_accelerated(plan, progress));
-    fetch(plan, accelerator, &url).await
+    fetch(plan, accelerator, url).await
 }
 
 /// [`download_file`], given the accelerator to try first, when there is one,

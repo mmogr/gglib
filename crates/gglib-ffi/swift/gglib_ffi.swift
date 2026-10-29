@@ -465,6 +465,94 @@ fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt32: FfiConverterPrimitive {
+    typealias FfiType = UInt32
+    typealias SwiftType = UInt32
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt32 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
+    typealias FfiType = UInt64
+    typealias SwiftType = UInt64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
+    typealias FfiType = Int64
+    typealias SwiftType = Int64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Int64, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterDouble: FfiConverterPrimitive {
+    typealias FfiType = Double
+    typealias SwiftType = Double
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Double {
+        return try lift(readDouble(&buf))
+    }
+
+    public static func write(_ value: Double, into buf: inout [UInt8]) {
+        writeDouble(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterBool : FfiConverter {
+    typealias FfiType = Int8
+    typealias SwiftType = Bool
+
+    public static func lift(_ value: Int8) throws -> Bool {
+        return value != 0
+    }
+
+    public static func lower(_ value: Bool) -> Int8 {
+        return value ? 1 : 0
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Bool {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Bool, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterString: FfiConverter {
     typealias SwiftType = String
     typealias FfiType = RustBuffer
@@ -507,6 +595,575 @@ fileprivate struct FfiConverterString: FfiConverter {
         writeBytes(&buf, value.utf8)
     }
 }
+
+
+
+
+/**
+ * One download, followed a step at a time.
+ *
+ * [`Self::next`] answers where the download stands each time that changes,
+ * starting with where it stands now, and `None` once it is over: after
+ * [`DownloadState::Done`] or [`DownloadState::Failed`], or once it was
+ * cancelled. A paused download is not over; its watch answers again when it
+ * is resumed.
+ */
+public protocol DownloadWatchProtocol: AnyObject, Sendable {
+    
+    /**
+     * Stop the download, keeping what it fetched for the next attempt to
+     * carry on from, and end this watch: [`Self::next`] answers `None`.
+     * Returns at once; the download manager is told on the library's own
+     * threads.
+     */
+    func cancel() 
+    
+    /**
+     * Where the download stands, once that differs from the last answer,
+     * or `None` once it is over. Calls answer one at a time.
+     */
+    func next() async  -> DownloadProgress?
+    
+}
+/**
+ * One download, followed a step at a time.
+ *
+ * [`Self::next`] answers where the download stands each time that changes,
+ * starting with where it stands now, and `None` once it is over: after
+ * [`DownloadState::Done`] or [`DownloadState::Failed`], or once it was
+ * cancelled. A paused download is not over; its watch answers again when it
+ * is resumed.
+ */
+open class DownloadWatch: DownloadWatchProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_gglib_ffi_fn_clone_downloadwatch(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_gglib_ffi_fn_free_downloadwatch(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * Stop the download, keeping what it fetched for the next attempt to
+     * carry on from, and end this watch: [`Self::next`] answers `None`.
+     * Returns at once; the download manager is told on the library's own
+     * threads.
+     */
+open func cancel()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_gglib_ffi_fn_method_downloadwatch_cancel(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * Where the download stands, once that differs from the last answer,
+     * or `None` once it is over. Calls answer one at a time.
+     */
+open func next()async  -> DownloadProgress?  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_gglib_ffi_fn_method_downloadwatch_next(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_gglib_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_gglib_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_gglib_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeDownloadProgress.lift,
+            errorHandler: nil
+            
+        )
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDownloadWatch: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = DownloadWatch
+
+    public static func lift(_ handle: UInt64) throws -> DownloadWatch {
+        return DownloadWatch(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: DownloadWatch) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DownloadWatch {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: DownloadWatch, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDownloadWatch_lift(_ handle: UInt64) throws -> DownloadWatch {
+    return try FfiConverterTypeDownloadWatch.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDownloadWatch_lower(_ value: DownloadWatch) -> UInt64 {
+    return FfiConverterTypeDownloadWatch.lower(value)
+}
+
+
+
+
+
+
+/**
+ * The models on the device and the ways to get more.
+ *
+ * The verdicts it gives are made against the [`DeviceReading`] it was last
+ * handed by [`Self::suggested`] or [`Self::quantizations`]: one reading per
+ * browse, held for as long as its verdicts are on screen.
+ * [`Self::installed`] judges against the same one.
+ */
+public protocol LibraryProtocol: AnyObject, Sendable {
+    
+    /**
+     * Download quantization `quantization` of `repo` into the models folder,
+     * and follow it.
+     *
+     * # Errors
+     *
+     * The Hub's, when it refuses the repository or quantization, and the
+     * download manager's, when it cannot queue it.
+     */
+    func download(repo: String, quantization: String) async throws  -> DownloadWatch
+    
+    /**
+     * The models on the device, judged at the reading the library holds:
+     * each [`crate::FitVerdict::Unknown`] for want of a budget until one is
+     * handed over.
+     *
+     * # Errors
+     *
+     * [`GglibError::Internal`] when the library cannot be read.
+     */
+    func installed() async throws  -> [InstalledModel]
+    
+    /**
+     * Stop every download, keeping what each fetched, as the app leaves the
+     * foreground. Each one's watch answers [`crate::DownloadState::Paused`].
+     *
+     * Returns once each has stopped, so a resume straight after carries
+     * each on, or after five seconds of one still winding down. A download
+     * already putting its last file away is not paused: it ends done or
+     * failed, as it was going to.
+     */
+    func pauseAll() async 
+    
+    /**
+     * Each quantization `repo` publishes, judged at `reading` from the
+     * first bytes of its file.
+     *
+     * # Errors
+     *
+     * The Hub's: [`GglibError::NotFound`], [`GglibError::AuthRequired`] for
+     * a repository that wants a token, [`GglibError::RateLimited`],
+     * [`GglibError::Network`].
+     */
+    func quantizations(repo: String, reading: DeviceReading) async throws  -> [QuantOffer]
+    
+    /**
+     * Delete installed model `id`: its files, then its row.
+     *
+     * # Errors
+     *
+     * [`GglibError::NotFound`] for an id the library does not hold;
+     * [`GglibError::Internal`] when a file cannot be deleted, which leaves
+     * the model installed.
+     */
+    func remove(id: Int64) async throws 
+    
+    /**
+     * Queue again what [`Self::pause_all`] stopped, in the order it stood;
+     * each carries on from what it fetched. One that cannot be queued
+     * again, with no network for one, answers
+     * [`crate::DownloadState::Failed`] and its watch ends. One still
+     * winding down from the pause stays paused, for the next resume.
+     */
+    func resumeAll() async 
+    
+    /**
+     * A page of Hugging Face's chat models matching `query`, from `cursor`
+     * (a page's `next_cursor`) or the first page.
+     *
+     * # Errors
+     *
+     * The Hub's: [`GglibError::AuthRequired`] when it refuses the token,
+     * [`GglibError::RateLimited`], [`GglibError::Network`].
+     */
+    func search(query: String, cursor: String?) async throws  -> SearchPage
+    
+    /**
+     * The models gglib suggests for a phone, each judged at `reading`,
+     * largest first, with why each. Asks nothing of the network, so it is
+     * the one call that answers at once.
+     */
+    func suggested(reading: DeviceReading)  -> [Suggestion]
+    
+}
+/**
+ * The models on the device and the ways to get more.
+ *
+ * The verdicts it gives are made against the [`DeviceReading`] it was last
+ * handed by [`Self::suggested`] or [`Self::quantizations`]: one reading per
+ * browse, held for as long as its verdicts are on screen.
+ * [`Self::installed`] judges against the same one.
+ */
+open class Library: LibraryProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_gglib_ffi_fn_clone_library(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_gglib_ffi_fn_free_library(handle, $0) }
+    }
+
+    
+
+    
+    /**
+     * Download quantization `quantization` of `repo` into the models folder,
+     * and follow it.
+     *
+     * # Errors
+     *
+     * The Hub's, when it refuses the repository or quantization, and the
+     * download manager's, when it cannot queue it.
+     */
+open func download(repo: String, quantization: String)async throws  -> DownloadWatch  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_gglib_ffi_fn_method_library_download(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(repo),FfiConverterString.lower(quantization)
+                )
+            },
+            pollFunc: ffi_gglib_ffi_rust_future_poll_u64,
+            completeFunc: ffi_gglib_ffi_rust_future_complete_u64,
+            freeFunc: ffi_gglib_ffi_rust_future_free_u64,
+            liftFunc: FfiConverterTypeDownloadWatch_lift,
+            errorHandler: FfiConverterTypeGglibError_lift
+        )
+}
+    
+    /**
+     * The models on the device, judged at the reading the library holds:
+     * each [`crate::FitVerdict::Unknown`] for want of a budget until one is
+     * handed over.
+     *
+     * # Errors
+     *
+     * [`GglibError::Internal`] when the library cannot be read.
+     */
+open func installed()async throws  -> [InstalledModel]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_gglib_ffi_fn_method_library_installed(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_gglib_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_gglib_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_gglib_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeInstalledModel.lift,
+            errorHandler: FfiConverterTypeGglibError_lift
+        )
+}
+    
+    /**
+     * Stop every download, keeping what each fetched, as the app leaves the
+     * foreground. Each one's watch answers [`crate::DownloadState::Paused`].
+     *
+     * Returns once each has stopped, so a resume straight after carries
+     * each on, or after five seconds of one still winding down. A download
+     * already putting its last file away is not paused: it ends done or
+     * failed, as it was going to.
+     */
+open func pauseAll()async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_gglib_ffi_fn_method_library_pause_all(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_gglib_ffi_rust_future_poll_void,
+            completeFunc: ffi_gglib_ffi_rust_future_complete_void,
+            freeFunc: ffi_gglib_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
+}
+    
+    /**
+     * Each quantization `repo` publishes, judged at `reading` from the
+     * first bytes of its file.
+     *
+     * # Errors
+     *
+     * The Hub's: [`GglibError::NotFound`], [`GglibError::AuthRequired`] for
+     * a repository that wants a token, [`GglibError::RateLimited`],
+     * [`GglibError::Network`].
+     */
+open func quantizations(repo: String, reading: DeviceReading)async throws  -> [QuantOffer]  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_gglib_ffi_fn_method_library_quantizations(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(repo),FfiConverterTypeDeviceReading_lower(reading)
+                )
+            },
+            pollFunc: ffi_gglib_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_gglib_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_gglib_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeQuantOffer.lift,
+            errorHandler: FfiConverterTypeGglibError_lift
+        )
+}
+    
+    /**
+     * Delete installed model `id`: its files, then its row.
+     *
+     * # Errors
+     *
+     * [`GglibError::NotFound`] for an id the library does not hold;
+     * [`GglibError::Internal`] when a file cannot be deleted, which leaves
+     * the model installed.
+     */
+open func remove(id: Int64)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_gglib_ffi_fn_method_library_remove(
+                        self.uniffiCloneHandle(),FfiConverterInt64.lower(id)
+                )
+            },
+            pollFunc: ffi_gglib_ffi_rust_future_poll_void,
+            completeFunc: ffi_gglib_ffi_rust_future_complete_void,
+            freeFunc: ffi_gglib_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeGglibError_lift
+        )
+}
+    
+    /**
+     * Queue again what [`Self::pause_all`] stopped, in the order it stood;
+     * each carries on from what it fetched. One that cannot be queued
+     * again, with no network for one, answers
+     * [`crate::DownloadState::Failed`] and its watch ends. One still
+     * winding down from the pause stays paused, for the next resume.
+     */
+open func resumeAll()async   {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_gglib_ffi_fn_method_library_resume_all(
+                        self.uniffiCloneHandle()
+                )
+            },
+            pollFunc: ffi_gglib_ffi_rust_future_poll_void,
+            completeFunc: ffi_gglib_ffi_rust_future_complete_void,
+            freeFunc: ffi_gglib_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: nil
+            
+        )
+}
+    
+    /**
+     * A page of Hugging Face's chat models matching `query`, from `cursor`
+     * (a page's `next_cursor`) or the first page.
+     *
+     * # Errors
+     *
+     * The Hub's: [`GglibError::AuthRequired`] when it refuses the token,
+     * [`GglibError::RateLimited`], [`GglibError::Network`].
+     */
+open func search(query: String, cursor: String?)async throws  -> SearchPage  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_gglib_ffi_fn_method_library_search(
+                        self.uniffiCloneHandle(),FfiConverterString.lower(query),FfiConverterOptionString.lower(cursor)
+                )
+            },
+            pollFunc: ffi_gglib_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_gglib_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_gglib_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSearchPage_lift,
+            errorHandler: FfiConverterTypeGglibError_lift
+        )
+}
+    
+    /**
+     * The models gglib suggests for a phone, each judged at `reading`,
+     * largest first, with why each. Asks nothing of the network, so it is
+     * the one call that answers at once.
+     */
+open func suggested(reading: DeviceReading) -> [Suggestion]  {
+    return try!  FfiConverterSequenceTypeSuggestion.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_gglib_ffi_fn_method_library_suggested(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeDeviceReading_lower(reading),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLibrary: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = Library
+
+    public static func lift(_ handle: UInt64) throws -> Library {
+        return Library(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: Library) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Library {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: Library, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLibrary_lift(_ handle: UInt64) throws -> Library {
+    return try FfiConverterTypeLibrary.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLibrary_lower(_ value: Library) -> UInt64 {
+    return FfiConverterTypeLibrary.lower(value)
+}
+
+
 
 
 /**
@@ -596,6 +1253,1631 @@ public func FfiConverterTypeBuildInfo_lift(_ buf: RustBuffer) throws -> BuildInf
 public func FfiConverterTypeBuildInfo_lower(_ value: BuildInfo) -> RustBuffer {
     return FfiConverterTypeBuildInfo.lower(value)
 }
+
+
+/**
+ * One reading of the device's memory, taken by the app: once each time it
+ * opens a model browser, and held for as long as that browser's verdicts
+ * are on screen.
+ */
+public struct DeviceReading: Equatable, Hashable {
+    /**
+     * The device's physical memory, in bytes.
+     */
+    public var physicalBytes: UInt64
+    /**
+     * The memory the app's process can still allocate, in bytes.
+     */
+    public var availableBytes: UInt64
+    /**
+     * The reading was taken on a simulator, whose memory is the host's.
+     */
+    public var isSimulator: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The device's physical memory, in bytes.
+         */physicalBytes: UInt64, 
+        /**
+         * The memory the app's process can still allocate, in bytes.
+         */availableBytes: UInt64, 
+        /**
+         * The reading was taken on a simulator, whose memory is the host's.
+         */isSimulator: Bool) {
+        self.physicalBytes = physicalBytes
+        self.availableBytes = availableBytes
+        self.isSimulator = isSimulator
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension DeviceReading: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDeviceReading: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DeviceReading {
+        return
+            try DeviceReading(
+                physicalBytes: FfiConverterUInt64.read(from: &buf), 
+                availableBytes: FfiConverterUInt64.read(from: &buf), 
+                isSimulator: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DeviceReading, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.physicalBytes, into: &buf)
+        FfiConverterUInt64.write(value.availableBytes, into: &buf)
+        FfiConverterBool.write(value.isSimulator, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDeviceReading_lift(_ buf: RustBuffer) throws -> DeviceReading {
+    return try FfiConverterTypeDeviceReading.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDeviceReading_lower(_ value: DeviceReading) -> RustBuffer {
+    return FfiConverterTypeDeviceReading.lower(value)
+}
+
+
+/**
+ * How far a download has got.
+ */
+public struct DownloadProgress: Equatable, Hashable {
+    /**
+     * The download's id: the repository and quantization, as
+     * `owner/name:Q4_K_M`.
+     */
+    public var id: String
+    /**
+     * The bytes of it on the device so far, over every file.
+     */
+    public var bytes: UInt64
+    /**
+     * The size of every file together, once every size is known.
+     */
+    public var total: UInt64?
+    /**
+     * Where it is.
+     */
+    public var state: DownloadState
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The download's id: the repository and quantization, as
+         * `owner/name:Q4_K_M`.
+         */id: String, 
+        /**
+         * The bytes of it on the device so far, over every file.
+         */bytes: UInt64, 
+        /**
+         * The size of every file together, once every size is known.
+         */total: UInt64?, 
+        /**
+         * Where it is.
+         */state: DownloadState) {
+        self.id = id
+        self.bytes = bytes
+        self.total = total
+        self.state = state
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension DownloadProgress: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDownloadProgress: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DownloadProgress {
+        return
+            try DownloadProgress(
+                id: FfiConverterString.read(from: &buf), 
+                bytes: FfiConverterUInt64.read(from: &buf), 
+                total: FfiConverterOptionUInt64.read(from: &buf), 
+                state: FfiConverterTypeDownloadState.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DownloadProgress, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterUInt64.write(value.bytes, into: &buf)
+        FfiConverterOptionUInt64.write(value.total, into: &buf)
+        FfiConverterTypeDownloadState.write(value.state, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDownloadProgress_lift(_ buf: RustBuffer) throws -> DownloadProgress {
+    return try FfiConverterTypeDownloadProgress.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDownloadProgress_lower(_ value: DownloadProgress) -> RustBuffer {
+    return FfiConverterTypeDownloadProgress.lower(value)
+}
+
+
+/**
+ * The numbers a [`FitVerdict`] was reached from, for a sheet that says
+ * why. A number that is absent was unknown, never zero.
+ */
+public struct FitWhy: Equatable, Hashable {
+    /**
+     * The weights, every shard of them, in bytes.
+     */
+    public var weightsBytes: UInt64?
+    /**
+     * What each token of context costs in KV cache, in bytes, at the cache
+     * types gglib serves with.
+     */
+    public var kvBytesPerToken: UInt64?
+    /**
+     * The budget the device gives, in bytes.
+     */
+    public var budgetBytes: UInt64?
+    /**
+     * The context the model was trained for, in tokens. A model trained for
+     * fewer than the smallest context gglib serves (4096 tokens) is
+     * [`FitVerdict::TooBig`] at any memory size: this is the number to word
+     * that case with.
+     */
+    public var trainedCtx: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The weights, every shard of them, in bytes.
+         */weightsBytes: UInt64?, 
+        /**
+         * What each token of context costs in KV cache, in bytes, at the cache
+         * types gglib serves with.
+         */kvBytesPerToken: UInt64?, 
+        /**
+         * The budget the device gives, in bytes.
+         */budgetBytes: UInt64?, 
+        /**
+         * The context the model was trained for, in tokens. A model trained for
+         * fewer than the smallest context gglib serves (4096 tokens) is
+         * [`FitVerdict::TooBig`] at any memory size: this is the number to word
+         * that case with.
+         */trainedCtx: UInt64?) {
+        self.weightsBytes = weightsBytes
+        self.kvBytesPerToken = kvBytesPerToken
+        self.budgetBytes = budgetBytes
+        self.trainedCtx = trainedCtx
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FitWhy: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFitWhy: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FitWhy {
+        return
+            try FitWhy(
+                weightsBytes: FfiConverterOptionUInt64.read(from: &buf), 
+                kvBytesPerToken: FfiConverterOptionUInt64.read(from: &buf), 
+                budgetBytes: FfiConverterOptionUInt64.read(from: &buf), 
+                trainedCtx: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FitWhy, into buf: inout [UInt8]) {
+        FfiConverterOptionUInt64.write(value.weightsBytes, into: &buf)
+        FfiConverterOptionUInt64.write(value.kvBytesPerToken, into: &buf)
+        FfiConverterOptionUInt64.write(value.budgetBytes, into: &buf)
+        FfiConverterOptionUInt64.write(value.trainedCtx, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFitWhy_lift(_ buf: RustBuffer) throws -> FitWhy {
+    return try FfiConverterTypeFitWhy.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFitWhy_lower(_ value: FitWhy) -> RustBuffer {
+    return FfiConverterTypeFitWhy.lower(value)
+}
+
+
+/**
+ * A model on the device.
+ */
+public struct InstalledModel: Equatable, Hashable {
+    /**
+     * Its id in the library, which [`crate::Library::remove`] takes.
+     */
+    public var id: Int64
+    /**
+     * Its name, which a served engine's model list calls it by.
+     */
+    public var name: String
+    /**
+     * The bytes its files take on the device: the weights, and a projector
+     * or companions it has.
+     */
+    public var bytes: UInt64
+    /**
+     * The context it was trained for, when its header says.
+     */
+    public var trainedCtx: UInt64?
+    /**
+     * What it can do beyond chat, in the words a model list uses
+     * (`reasoning`, `vision` and so on).
+     */
+    public var capabilities: [String]
+    /**
+     * Whether it fits the device, at the budget the library holds.
+     */
+    public var verdict: FitVerdict
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Its id in the library, which [`crate::Library::remove`] takes.
+         */id: Int64, 
+        /**
+         * Its name, which a served engine's model list calls it by.
+         */name: String, 
+        /**
+         * The bytes its files take on the device: the weights, and a projector
+         * or companions it has.
+         */bytes: UInt64, 
+        /**
+         * The context it was trained for, when its header says.
+         */trainedCtx: UInt64?, 
+        /**
+         * What it can do beyond chat, in the words a model list uses
+         * (`reasoning`, `vision` and so on).
+         */capabilities: [String], 
+        /**
+         * Whether it fits the device, at the budget the library holds.
+         */verdict: FitVerdict) {
+        self.id = id
+        self.name = name
+        self.bytes = bytes
+        self.trainedCtx = trainedCtx
+        self.capabilities = capabilities
+        self.verdict = verdict
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension InstalledModel: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeInstalledModel: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> InstalledModel {
+        return
+            try InstalledModel(
+                id: FfiConverterInt64.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                bytes: FfiConverterUInt64.read(from: &buf), 
+                trainedCtx: FfiConverterOptionUInt64.read(from: &buf), 
+                capabilities: FfiConverterSequenceString.read(from: &buf), 
+                verdict: FfiConverterTypeFitVerdict.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: InstalledModel, into buf: inout [UInt8]) {
+        FfiConverterInt64.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterUInt64.write(value.bytes, into: &buf)
+        FfiConverterOptionUInt64.write(value.trainedCtx, into: &buf)
+        FfiConverterSequenceString.write(value.capabilities, into: &buf)
+        FfiConverterTypeFitVerdict.write(value.verdict, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeInstalledModel_lift(_ buf: RustBuffer) throws -> InstalledModel {
+    return try FfiConverterTypeInstalledModel.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeInstalledModel_lower(_ value: InstalledModel) -> RustBuffer {
+    return FfiConverterTypeInstalledModel.lower(value)
+}
+
+
+/**
+ * The folders a library keeps its files in, which the app makes and names.
+ */
+public struct LibraryDirs: Equatable, Hashable {
+    /**
+     * Where the library's database lives.
+     */
+    public var dataDir: String
+    /**
+     * Where every model is downloaded to, a folder per repository.
+     */
+    public var modelsDir: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Where the library's database lives.
+         */dataDir: String, 
+        /**
+         * Where every model is downloaded to, a folder per repository.
+         */modelsDir: String) {
+        self.dataDir = dataDir
+        self.modelsDir = modelsDir
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension LibraryDirs: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLibraryDirs: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LibraryDirs {
+        return
+            try LibraryDirs(
+                dataDir: FfiConverterString.read(from: &buf), 
+                modelsDir: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LibraryDirs, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.dataDir, into: &buf)
+        FfiConverterString.write(value.modelsDir, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLibraryDirs_lift(_ buf: RustBuffer) throws -> LibraryDirs {
+    return try FfiConverterTypeLibraryDirs.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLibraryDirs_lower(_ value: LibraryDirs) -> RustBuffer {
+    return FfiConverterTypeLibraryDirs.lower(value)
+}
+
+
+/**
+ * One quantization a repository publishes.
+ */
+public struct QuantOffer: Equatable, Hashable {
+    /**
+     * Its name: `Q4_K_M`, `Q8_0` and so on.
+     */
+    public var name: String
+    /**
+     * The size of every file of it, in bytes.
+     */
+    public var totalBytes: UInt64
+    /**
+     * How many files it is split into.
+     */
+    public var shardCount: UInt32
+    /**
+     * Whether it fits the device.
+     */
+    public var verdict: FitVerdict
+    /**
+     * What the verdict was reached from.
+     */
+    public var why: FitWhy
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Its name: `Q4_K_M`, `Q8_0` and so on.
+         */name: String, 
+        /**
+         * The size of every file of it, in bytes.
+         */totalBytes: UInt64, 
+        /**
+         * How many files it is split into.
+         */shardCount: UInt32, 
+        /**
+         * Whether it fits the device.
+         */verdict: FitVerdict, 
+        /**
+         * What the verdict was reached from.
+         */why: FitWhy) {
+        self.name = name
+        self.totalBytes = totalBytes
+        self.shardCount = shardCount
+        self.verdict = verdict
+        self.why = why
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension QuantOffer: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeQuantOffer: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QuantOffer {
+        return
+            try QuantOffer(
+                name: FfiConverterString.read(from: &buf), 
+                totalBytes: FfiConverterUInt64.read(from: &buf), 
+                shardCount: FfiConverterUInt32.read(from: &buf), 
+                verdict: FfiConverterTypeFitVerdict.read(from: &buf), 
+                why: FfiConverterTypeFitWhy.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: QuantOffer, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterUInt64.write(value.totalBytes, into: &buf)
+        FfiConverterUInt32.write(value.shardCount, into: &buf)
+        FfiConverterTypeFitVerdict.write(value.verdict, into: &buf)
+        FfiConverterTypeFitWhy.write(value.why, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQuantOffer_lift(_ buf: RustBuffer) throws -> QuantOffer {
+    return try FfiConverterTypeQuantOffer.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeQuantOffer_lower(_ value: QuantOffer) -> RustBuffer {
+    return FfiConverterTypeQuantOffer.lower(value)
+}
+
+
+/**
+ * One repository a search found.
+ */
+public struct SearchHit: Equatable, Hashable {
+    /**
+     * The repository, `owner/name`.
+     */
+    public var repo: String
+    /**
+     * How many people liked it.
+     */
+    public var likes: UInt64
+    /**
+     * How many times it was downloaded.
+     */
+    public var downloads: UInt64
+    /**
+     * Its parameter count in billions, when the Hub knows it.
+     */
+    public var parametersB: Double?
+    /**
+     * The context its model was trained for, when the Hub read it from the
+     * repository's GGUF header.
+     */
+    public var trainedCtx: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The repository, `owner/name`.
+         */repo: String, 
+        /**
+         * How many people liked it.
+         */likes: UInt64, 
+        /**
+         * How many times it was downloaded.
+         */downloads: UInt64, 
+        /**
+         * Its parameter count in billions, when the Hub knows it.
+         */parametersB: Double?, 
+        /**
+         * The context its model was trained for, when the Hub read it from the
+         * repository's GGUF header.
+         */trainedCtx: UInt64?) {
+        self.repo = repo
+        self.likes = likes
+        self.downloads = downloads
+        self.parametersB = parametersB
+        self.trainedCtx = trainedCtx
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SearchHit: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchHit: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchHit {
+        return
+            try SearchHit(
+                repo: FfiConverterString.read(from: &buf), 
+                likes: FfiConverterUInt64.read(from: &buf), 
+                downloads: FfiConverterUInt64.read(from: &buf), 
+                parametersB: FfiConverterOptionDouble.read(from: &buf), 
+                trainedCtx: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchHit, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.repo, into: &buf)
+        FfiConverterUInt64.write(value.likes, into: &buf)
+        FfiConverterUInt64.write(value.downloads, into: &buf)
+        FfiConverterOptionDouble.write(value.parametersB, into: &buf)
+        FfiConverterOptionUInt64.write(value.trainedCtx, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchHit_lift(_ buf: RustBuffer) throws -> SearchHit {
+    return try FfiConverterTypeSearchHit.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchHit_lower(_ value: SearchHit) -> RustBuffer {
+    return FfiConverterTypeSearchHit.lower(value)
+}
+
+
+/**
+ * A page of a search.
+ */
+public struct SearchPage: Equatable, Hashable {
+    /**
+     * The repositories on this page, in the Hub's order (most downloaded
+     * first).
+     */
+    public var hits: [SearchHit]
+    /**
+     * Where the next page starts, or `None` on the last.
+     */
+    public var nextCursor: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The repositories on this page, in the Hub's order (most downloaded
+         * first).
+         */hits: [SearchHit], 
+        /**
+         * Where the next page starts, or `None` on the last.
+         */nextCursor: String?) {
+        self.hits = hits
+        self.nextCursor = nextCursor
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension SearchPage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchPage: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchPage {
+        return
+            try SearchPage(
+                hits: FfiConverterSequenceTypeSearchHit.read(from: &buf), 
+                nextCursor: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchPage, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeSearchHit.write(value.hits, into: &buf)
+        FfiConverterOptionString.write(value.nextCursor, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchPage_lift(_ buf: RustBuffer) throws -> SearchPage {
+    return try FfiConverterTypeSearchPage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchPage_lower(_ value: SearchPage) -> RustBuffer {
+    return FfiConverterTypeSearchPage.lower(value)
+}
+
+
+/**
+ * A model gglib suggests for the device.
+ */
+public struct Suggestion: Equatable, Hashable {
+    /**
+     * The Hugging Face repository, `owner/name`.
+     */
+    public var repo: String
+    /**
+     * The quantization to download from it.
+     */
+    public var quantization: String
+    /**
+     * The size of its weights, in bytes.
+     */
+    public var bytes: UInt64
+    /**
+     * Whether it fits the device.
+     */
+    public var verdict: FitVerdict
+    /**
+     * What the verdict was reached from.
+     */
+    public var why: FitWhy
+    /**
+     * Why this model, in a person's terms.
+     */
+    public var rationale: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The Hugging Face repository, `owner/name`.
+         */repo: String, 
+        /**
+         * The quantization to download from it.
+         */quantization: String, 
+        /**
+         * The size of its weights, in bytes.
+         */bytes: UInt64, 
+        /**
+         * Whether it fits the device.
+         */verdict: FitVerdict, 
+        /**
+         * What the verdict was reached from.
+         */why: FitWhy, 
+        /**
+         * Why this model, in a person's terms.
+         */rationale: String) {
+        self.repo = repo
+        self.quantization = quantization
+        self.bytes = bytes
+        self.verdict = verdict
+        self.why = why
+        self.rationale = rationale
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Suggestion: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSuggestion: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Suggestion {
+        return
+            try Suggestion(
+                repo: FfiConverterString.read(from: &buf), 
+                quantization: FfiConverterString.read(from: &buf), 
+                bytes: FfiConverterUInt64.read(from: &buf), 
+                verdict: FfiConverterTypeFitVerdict.read(from: &buf), 
+                why: FfiConverterTypeFitWhy.read(from: &buf), 
+                rationale: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Suggestion, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.repo, into: &buf)
+        FfiConverterString.write(value.quantization, into: &buf)
+        FfiConverterUInt64.write(value.bytes, into: &buf)
+        FfiConverterTypeFitVerdict.write(value.verdict, into: &buf)
+        FfiConverterTypeFitWhy.write(value.why, into: &buf)
+        FfiConverterString.write(value.rationale, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSuggestion_lift(_ buf: RustBuffer) throws -> Suggestion {
+    return try FfiConverterTypeSuggestion.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSuggestion_lower(_ value: Suggestion) -> RustBuffer {
+    return FfiConverterTypeSuggestion.lower(value)
+}
+
+
+/**
+ * Where a download is.
+ */
+
+public enum DownloadState: Equatable, Hashable {
+    
+    /**
+     * Waiting for the download ahead of it.
+     */
+    case queued
+    /**
+     * Fetching its files.
+     */
+    case running
+    /**
+     * Stopped by [`crate::Library::pause_all`], with what it fetched kept;
+     * [`crate::Library::resume_all`] carries on from there.
+     */
+    case paused
+    /**
+     * Every file is on the device, and the model is being added to the
+     * library.
+     */
+    case verifying
+    /**
+     * The model is in the library.
+     */
+    case done
+    /**
+     * It stopped, for `reason`, in gglib's words.
+     */
+    case failed(
+        /**
+         * Why.
+         */reason: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension DownloadState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDownloadState: FfiConverterRustBuffer {
+    typealias SwiftType = DownloadState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DownloadState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .queued
+        
+        case 2: return .running
+        
+        case 3: return .paused
+        
+        case 4: return .verifying
+        
+        case 5: return .done
+        
+        case 6: return .failed(reason: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: DownloadState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .queued:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .running:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .paused:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .verifying:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .done:
+            writeInt(&buf, Int32(5))
+        
+        
+        case let .failed(reason):
+            writeInt(&buf, Int32(6))
+            FfiConverterString.write(reason, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDownloadState_lift(_ buf: RustBuffer) throws -> DownloadState {
+    return try FfiConverterTypeDownloadState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDownloadState_lower(_ value: DownloadState) -> RustBuffer {
+    return FfiConverterTypeDownloadState.lower(value)
+}
+
+
+
+/**
+ * Whether a model fits the device, in the words a person reads it in.
+ */
+
+public enum FitVerdict: Equatable, Hashable {
+    
+    /**
+     * A context above the smallest gglib serves fits; `ctx` is the largest
+     * that does, in tokens.
+     */
+    case fits(
+        /**
+         * The context the budget serves.
+         */ctx: UInt64
+    )
+    /**
+     * Only the smallest context gglib serves fits; `ctx` is that size.
+     */
+    case tight(
+        /**
+         * The context the budget serves.
+         */ctx: UInt64
+    )
+    /**
+     * Not even the smallest context fits: the model needs a budget of
+     * `need_bytes` and the device gives `have_bytes`. A model trained for
+     * fewer tokens than the smallest context is too big however much
+     * memory there is, and then `need_bytes` can be below `have_bytes`
+     * ([`FitWhy::trained_ctx`] says so).
+     */
+    case tooBig(
+        /**
+         * The smallest budget the smallest context fits in, in bytes.
+         */needBytes: UInt64, 
+        /**
+         * The budget the device gives, in bytes.
+         */haveBytes: UInt64
+    )
+    /**
+     * gglib could not tell without `missing`.
+     */
+    case unknown(
+        /**
+         * The input that is missing: the first of trained context, KV
+         * shape, weights and budget.
+         */missing: MissingInput, 
+        /**
+         * The input was to be read from the first bytes of the model's
+         * file, and those ended before its header did: the file may still
+         * hold it, and a download can tell. `false` when the file, or
+         * whatever else the verdict was read from, does not hold it.
+         */cutOff: Bool
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FitVerdict: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFitVerdict: FfiConverterRustBuffer {
+    typealias SwiftType = FitVerdict
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FitVerdict {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .fits(ctx: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 2: return .tight(ctx: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 3: return .tooBig(needBytes: try FfiConverterUInt64.read(from: &buf), haveBytes: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 4: return .unknown(missing: try FfiConverterTypeMissingInput.read(from: &buf), cutOff: try FfiConverterBool.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FitVerdict, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .fits(ctx):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt64.write(ctx, into: &buf)
+            
+        
+        case let .tight(ctx):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt64.write(ctx, into: &buf)
+            
+        
+        case let .tooBig(needBytes,haveBytes):
+            writeInt(&buf, Int32(3))
+            FfiConverterUInt64.write(needBytes, into: &buf)
+            FfiConverterUInt64.write(haveBytes, into: &buf)
+            
+        
+        case let .unknown(missing,cutOff):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeMissingInput.write(missing, into: &buf)
+            FfiConverterBool.write(cutOff, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFitVerdict_lift(_ buf: RustBuffer) throws -> FitVerdict {
+    return try FfiConverterTypeFitVerdict.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFitVerdict_lower(_ value: FitVerdict) -> RustBuffer {
+    return FfiConverterTypeFitVerdict.lower(value)
+}
+
+
+
+/**
+ * Why a call failed.
+ */
+public 
+enum GglibError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+    
+    
+    /**
+     * Hugging Face wants a token for this repository or file: it answered
+     * 401 or 403. The library asks with the token it was opened with, or
+     * else with the `HF_TOKEN` its process started with, which an app on a
+     * phone has none of.
+     */
+    case AuthRequired
+    /**
+     * No such repository, quantization, file or installed model: the Hub
+     * answered 404, or the library holds no model by that id.
+     */
+    case NotFound
+    /**
+     * Hugging Face is limiting this device's requests: it answered 429.
+     */
+    case RateLimited
+    /**
+     * The device has no room for what was being written.
+     */
+    case NoSpace
+    /**
+     * Hugging Face could not be reached, or its answer could not be read.
+     */
+    case Network(
+        /**
+         * What went wrong, in gglib's words.
+         */message: String
+    )
+    /**
+     * A model needs a budget of `need` bytes and the device gives `have`.
+     */
+    case DoesNotFit(
+        /**
+         * The smallest budget the model fits in, in bytes.
+         */need: UInt64, 
+        /**
+         * The budget the device gives, in bytes.
+         */have: UInt64
+    )
+    /**
+     * Nothing in this build can run a model on this device.
+     */
+    case EngineUnavailable
+    /**
+     * Anything else, in gglib's own words.
+     */
+    case Internal(
+        /**
+         * What went wrong.
+         */message: String
+    )
+
+    
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
+}
+
+#if compiler(>=6)
+extension GglibError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGglibError: FfiConverterRustBuffer {
+    typealias SwiftType = GglibError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GglibError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .AuthRequired
+        case 2: return .NotFound
+        case 3: return .RateLimited
+        case 4: return .NoSpace
+        case 5: return .Network(
+            message: try FfiConverterString.read(from: &buf)
+            )
+        case 6: return .DoesNotFit(
+            need: try FfiConverterUInt64.read(from: &buf), 
+            have: try FfiConverterUInt64.read(from: &buf)
+            )
+        case 7: return .EngineUnavailable
+        case 8: return .Internal(
+            message: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: GglibError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case .AuthRequired:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .NotFound:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .RateLimited:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .NoSpace:
+            writeInt(&buf, Int32(4))
+        
+        
+        case let .Network(message):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(message, into: &buf)
+            
+        
+        case let .DoesNotFit(need,have):
+            writeInt(&buf, Int32(6))
+            FfiConverterUInt64.write(need, into: &buf)
+            FfiConverterUInt64.write(have, into: &buf)
+            
+        
+        case .EngineUnavailable:
+            writeInt(&buf, Int32(7))
+        
+        
+        case let .Internal(message):
+            writeInt(&buf, Int32(8))
+            FfiConverterString.write(message, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGglibError_lift(_ buf: RustBuffer) throws -> GglibError {
+    return try FfiConverterTypeGglibError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGglibError_lower(_ value: GglibError) -> RustBuffer {
+    return FfiConverterTypeGglibError.lower(value)
+}
+
+
+/**
+ * What a [`FitVerdict::Unknown`] could not do without.
+ */
+
+public enum MissingInput: Equatable, Hashable {
+    
+    /**
+     * The model's trained context: `{arch}.context_length` in its GGUF.
+     */
+    case trainedContext
+    /**
+     * The model's KV shape: its layers, KV heads and head dimensions.
+     */
+    case kvShape
+    /**
+     * The size of the weights.
+     */
+    case weights
+    /**
+     * The memory budget, from a reading of the device.
+     */
+    case budget
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension MissingInput: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMissingInput: FfiConverterRustBuffer {
+    typealias SwiftType = MissingInput
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MissingInput {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .trainedContext
+        
+        case 2: return .kvShape
+        
+        case 3: return .weights
+        
+        case 4: return .budget
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: MissingInput, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .trainedContext:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .kvShape:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .weights:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .budget:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMissingInput_lift(_ buf: RustBuffer) throws -> MissingInput {
+    return try FfiConverterTypeMissingInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMissingInput_lower(_ value: MissingInput) -> RustBuffer {
+    return FfiConverterTypeMissingInput.lower(value)
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
+    typealias SwiftType = UInt64?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt64.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt64.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionDouble: FfiConverterRustBuffer {
+    typealias SwiftType = Double?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterDouble.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterDouble.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
+    typealias SwiftType = String?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterString.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterString.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeDownloadProgress: FfiConverterRustBuffer {
+    typealias SwiftType = DownloadProgress?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeDownloadProgress.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeDownloadProgress.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]
+
+    public static func write(_ value: [String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [String]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeInstalledModel: FfiConverterRustBuffer {
+    typealias SwiftType = [InstalledModel]
+
+    public static func write(_ value: [InstalledModel], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeInstalledModel.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [InstalledModel] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [InstalledModel]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeInstalledModel.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeQuantOffer: FfiConverterRustBuffer {
+    typealias SwiftType = [QuantOffer]
+
+    public static func write(_ value: [QuantOffer], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeQuantOffer.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [QuantOffer] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [QuantOffer]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeQuantOffer.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSearchHit: FfiConverterRustBuffer {
+    typealias SwiftType = [SearchHit]
+
+    public static func write(_ value: [SearchHit], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSearchHit.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SearchHit] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SearchHit]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSearchHit.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSuggestion: FfiConverterRustBuffer {
+    typealias SwiftType = [Suggestion]
+
+    public static func write(_ value: [Suggestion], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSuggestion.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Suggestion] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Suggestion]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSuggestion.read(from: &buf))
+        }
+        return seq
+    }
+}
+private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
+private let UNIFFI_RUST_FUTURE_POLL_WAKE: Int8 = 1
+
+fileprivate let uniffiContinuationHandleMap = UniffiHandleMap<UnsafeContinuation<Int8, Never>>()
+
+fileprivate func uniffiRustCallAsync<F, T>(
+    rustFutureFunc: () -> UInt64,
+    pollFunc: (UInt64, @escaping UniffiRustFutureContinuationCallback, UInt64) -> (),
+    completeFunc: (UInt64, UnsafeMutablePointer<RustCallStatus>) -> F,
+    freeFunc: (UInt64) -> (),
+    liftFunc: (F) throws -> T,
+    errorHandler: ((RustBuffer) throws -> Swift.Error)?
+) async throws -> T {
+    // Make sure to call the ensure init function since future creation doesn't have a
+    // RustCallStatus param, so doesn't use makeRustCall()
+    uniffiEnsureGglibFfiInitialized()
+    let rustFuture = rustFutureFunc()
+    defer {
+        freeFunc(rustFuture)
+    }
+    var pollResult: Int8;
+    repeat {
+        pollResult = await withUnsafeContinuation {
+            pollFunc(
+                rustFuture,
+                { handle, pollResult in
+                    uniffiFutureContinuationCallback(handle: handle, pollResult: pollResult)
+                },
+                uniffiContinuationHandleMap.insert(obj: $0)
+            )
+        }
+    } while pollResult != UNIFFI_RUST_FUTURE_POLL_READY
+
+    return try liftFunc(makeRustCall(
+        { completeFunc(rustFuture, $0) },
+        errorHandler: errorHandler
+    ))
+}
+
+// Callback handlers for an async calls.  These are invoked by Rust when the future is ready.  They
+// lift the return value or error and resume the suspended function.
+fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: Int8) {
+    if let continuation = try? uniffiContinuationHandleMap.remove(handle: handle) {
+        continuation.resume(returning: pollResult)
+    } else {
+        print("uniffiFutureContinuationCallback invalid handle")
+    }
+}
 /**
  * The versions this library was built from.
  */
@@ -605,6 +2887,32 @@ public func buildInfo() -> BuildInfo  {
     uniffi_gglib_ffi_fn_func_build_info(uniffiCallStatus
     )
 })
+}
+/**
+ * Open the library in `dirs`, asking Hugging Face with `hf_token`.
+ *
+ * With `None` it asks with the `HF_TOKEN` the process started with, which
+ * an app on a phone has none of, so there it asks as nobody. Each folder is
+ * made if it is missing.
+ *
+ * # Errors
+ *
+ * [`GglibError::NoSpace`] or [`GglibError::Internal`] when a folder cannot
+ * be made or the database cannot be opened, as when a newer gglib wrote it.
+ */
+public func openLibrary(dirs: LibraryDirs, hfToken: String?)async throws  -> Library  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_gglib_ffi_fn_func_open_library(FfiConverterTypeLibraryDirs_lower(dirs),FfiConverterOptionString.lower(hfToken)
+                )
+            },
+            pollFunc: ffi_gglib_ffi_rust_future_poll_u64,
+            completeFunc: ffi_gglib_ffi_rust_future_complete_u64,
+            freeFunc: ffi_gglib_ffi_rust_future_free_u64,
+            liftFunc: FfiConverterTypeLibrary_lift,
+            errorHandler: FfiConverterTypeGglibError_lift
+        )
 }
 
 private enum InitializationResult {
@@ -623,6 +2931,39 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.contractVersionMismatch
     }
     if (uniffi_gglib_ffi_checksum_func_build_info() != 38321) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_func_open_library() != 55536) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_downloadwatch_cancel() != 62065) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_downloadwatch_next() != 20593) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_library_download() != 4777) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_library_installed() != 1005) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_library_pause_all() != 63397) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_library_quantizations() != 60291) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_library_remove() != 2211) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_library_resume_all() != 42573) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_library_search() != 26080) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_gglib_ffi_checksum_method_library_suggested() != 5119) {
         return InitializationResult.apiChecksumMismatch
     }
 

@@ -154,6 +154,7 @@ impl Fixture {
         let job = self.job(&started);
         let deps = WorkerDeps {
             config: self.manager.config.clone(),
+            hub: Arc::clone(&self.manager.hf_client),
         };
         let file = job.destination.files[0].clone();
         let plan = worker::plan_for(&job, &file, &deps, Arc::new(|_| {}), Arc::new(|_| {}));
