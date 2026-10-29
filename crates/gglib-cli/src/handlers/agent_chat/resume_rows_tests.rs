@@ -26,9 +26,7 @@ async fn registered(ctx: &CliContext, dir: &tempfile::TempDir, name: &str) -> i6
 /// A row as the store keeps it, written past the service: through the
 /// repository of a second opening of `dir`'s database.
 async fn stored_as_is(dir: &tempfile::TempDir, conv: NewConversation) -> i64 {
-    let config = gglib_bootstrap::BootstrapConfig {
-        db_path: dir.path().join("gglib.db"),
-    };
+    let config = gglib_bootstrap::BootstrapConfig::for_db(dir.path().join("gglib.db"));
     let emitter = std::sync::Arc::new(gglib_core::ports::NoopEmitter::new());
     let built = gglib_bootstrap::CoreBootstrap::build(config, emitter).await;
     let store = built.expect("the database opens").repos.chat_history;

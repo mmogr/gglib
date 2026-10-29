@@ -144,7 +144,7 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     let sse = Arc::new(SseBroadcaster::with_defaults());
 
     // 2. Shared infrastructure via gglib-bootstrap.
-    let bootstrap_config = BootstrapConfig { db_path };
+    let bootstrap_config = BootstrapConfig::for_db(db_path);
     let emitter: Arc<dyn AppEventEmitter> = sse.clone();
     let BuiltCore {
         app: core,

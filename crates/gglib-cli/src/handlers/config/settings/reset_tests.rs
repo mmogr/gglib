@@ -43,9 +43,7 @@ fn pairing() -> RemotePairing {
 /// The settings store `CoreBootstrap` wires over `dir`'s database, with a
 /// pool of its own: what `ctx.settings_repo` is in the binary.
 async fn store(dir: &tempfile::TempDir) -> Arc<dyn SettingsRepository> {
-    let config = BootstrapConfig {
-        db_path: dir.path().join("gglib.db"),
-    };
+    let config = BootstrapConfig::for_db(dir.path().join("gglib.db"));
     CoreBootstrap::build(config, Arc::new(NoopEmitter::new()))
         .await
         .expect("the database opens")

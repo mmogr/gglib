@@ -67,7 +67,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`utils/`** — Shared utility functions and helpers
 - **`settings.rs`** — Application settings and configuration types
 - **`secret.rs`** — The secrets gglib stores (`SettingSecret`, `SecretRef`), what a held one is shown as (`SHOWN_AS`), and the blank rule (`held`). `services::SecretsService::reveal` is the one way a stored value comes back (ADR 0027)
-- **`hf_token.rs`** — The `HuggingFace` token: `from_env`, the one read of `HF_TOKEN`. `AppCore` holds what the bootstrap read and hands it out
+- **`hf_token.rs`** — The `HuggingFace` token: `from_env`, the one read of `HF_TOKEN`, and `normalised`, the one rule for what a value counts as (trimmed; a blank one is no token), whether it came from the environment or a caller. `AppCore` holds the token the bootstrap wired, its caller's or the environment's, and hands it out
 
 ## Design Principles
 
