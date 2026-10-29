@@ -253,6 +253,7 @@ stream chunk	choices	array
 stream chunk	choices[]	object
 stream chunk	choices[].delta	object
 stream chunk	choices[].delta.content	null
+stream chunk	choices[].delta.content	string
 stream chunk	choices[].delta.reasoning_content	string
 stream chunk	choices[].delta.role	string
 stream chunk	choices[].finish_reason	null

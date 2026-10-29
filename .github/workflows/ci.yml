@@ -668,6 +668,63 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit 1
 
+      # The in-process engine, a phone's: gglib-engine-llama over llama.cpp's
+      # own llama.xcframework at the pin, asked the same questions on the same
+      # models, into contracts/upstream/llama-inproc (engine_contract_inproc.rs
+      # says what differs). macOS only, where the framework builds, and
+      # report-only as the llama-server recording is: a framework that does
+      # not build, a recorder that fails or a recording that moved shows in the
+      # step summary. Test (Rust) holds the committed recording to llama's on
+      # every OS. The flag that turns the recorder on is set on its step alone.
+      - name: Build or restore llama.xcframework at the pin
+        if: runner.os == 'macOS'
+        id: xcframework
+        continue-on-error: true
+        uses: ./.github/actions/llama-xcframework
+
+      - name: Record the in-process engine
+        if: runner.os == 'macOS' && steps.xcframework.outcome == 'success'
+        id: record-inproc
+        continue-on-error: true
+        env:
+          GGLIB_ENGINE_MODELS_DIR: ${{ steps.engines.outputs.models }}
+          GGLIB_INPROC_ENGINE: "1"
+          GGLIB_RECORD_CONTRACTS: "1"
+        run: >-
+          cargo test -p gglib-runtime --lib --features inproc-contract
+          engine_contract_tests::the_in_process_engine -- --ignored --nocapture
+
+      - name: Compare with contracts/upstream/llama-inproc
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        shell: bash
+        env:
+          PIN: ${{ steps.engines.outputs.llama }}
+          BUILT: ${{ steps.xcframework.outcome }}
+          RECORDED: ${{ steps.record-inproc.outcome }}
+        run: |
+          if [[ $BUILT != success || $RECORDED != success ]]; then
+            echo "::error title=the in-process recorder did not finish::Read the \"Build or restore llama.xcframework at the pin\" and \"Record the in-process engine\" steps; contracts/upstream/llama-inproc was not checked."
+            echo "The in-process recorder did not finish, so contracts/upstream/llama-inproc was not checked." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          changed=$(git status --porcelain -- contracts/upstream/llama-inproc | awk '{print $2}')
+          if [[ -z $changed ]]; then
+            echo "contracts/upstream/llama-inproc matches what the in-process engine answered at $PIN." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          names=$(xargs -n1 basename <<<"$changed" | paste -sd, - | sed 's/,/, /g')
+          count=$(wc -l <<<"$changed" | tr -d ' ')
+          echo "::error title=contracts/upstream/llama-inproc is stale::$count files differ from what the in-process engine answered at $PIN on this tree: $names. Run \`make record-upstream-inproc\` on a Mac on this branch, or download artifact \`upstream-recordings-${{ matrix.target }}\` from this run and commit its llama-inproc/."
+          {
+            echo "### contracts/upstream/llama-inproc: $count files differ from what the in-process engine answered at $PIN"
+            echo
+            echo '```diff'
+            git diff -- contracts/upstream/llama-inproc | head -c 60000
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
       - name: Gather the recordings
         if: runner.os != 'Windows' && always()
         shell: bash

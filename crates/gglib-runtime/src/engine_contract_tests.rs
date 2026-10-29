@@ -1,12 +1,14 @@
-//! The pinned llama-server's own answers, recorded into `contracts/upstream/`.
+//! The pinned llama-server's own answers, recorded into `contracts/upstream/`,
+//! and the in-process engine's, held to them.
 //!
 //! CI starts the pinned llama-server on two tiny models, through gglib's own
 //! launch path, asks it what gglib asks, and keeps an allowlisted projection
 //! of each answer: `shape.txt` (endpoint, key path, JSON type), `help.txt`,
 //! `version.txt` and `observed.json`, plus sd-server's `help.txt` and
 //! `version.txt`. Nothing the model generated and nothing rendered from a
-//! prompt enters a projection (see `engine_contract_project`). It records
-//! twice, from fresh processes, and fails if the two differ.
+//! prompt enters a projection but the readings `engine_contract_project`
+//! names. It records twice, from fresh processes, and fails if the two
+//! differ.
 //!
 //! Each `observed.json` leaf an ADR's criterion names carries the quote; the
 //! hand-kept `approvals.json` beside it is what `scripts/check_adr_readings.sh`
@@ -18,12 +20,26 @@
 //! `GGLIB_ENGINE_MODELS_DIR` (the models, and `templates/` fetched at the
 //! pin). It skips when the second is unset. By default it compares with the
 //! committed files; `GGLIB_RECORD_CONTRACTS=1` rewrites them.
+//!
+//! The same recorder asks gglib-engine-llama in this process the same
+//! questions on the same models (`engine_contract_inproc.rs`) into
+//! `llama-inproc/`, with its stream and its renders, when
+//! `GGLIB_INPROC_ENGINE=1` (`make record-upstream-inproc`). Tests on every OS
+//! hold what is committed there to llama-server's recording
+//! (`engine_contract_parity.rs`).
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Instant;
 
+#[path = "engine_contract_gemma.rs"]
+mod gemma;
+#[path = "engine_contract_inproc.rs"]
+mod inproc;
 #[path = "engine_contract_launch.rs"]
 mod launch;
+#[path = "engine_contract_parity.rs"]
+mod parity;
 #[path = "engine_contract_project.rs"]
 mod project;
 #[path = "engine_contract_readings.rs"]
@@ -31,9 +47,11 @@ mod readings;
 #[path = "engine_contract_tier3.rs"]
 mod tier3;
 
+use inproc::Upstream;
 use launch::Inputs;
 use project::{
-    Recording, assert_nothing_local, help_default, line_diff, redact_stream, write_under,
+    Recording, assert_nothing_local, help_default, line_diff, redact_stream, upstream_dir,
+    write_under,
 };
 use readings::record;
 
@@ -63,36 +81,31 @@ fn assert_stable(first: &Recording, second: &Recording) {
     }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "starts the pinned llama-server; CI sets GGLIB_ENGINE_MODELS_DIR"]
-async fn the_pinned_llama_server_answers_as_contracts_upstream_records() {
-    let scratch = tempfile::tempdir().expect("a scratch folder");
-    let Some(inputs) = Inputs::from_env(scratch.path()) else {
-        eprintln!("GGLIB_ENGINE_MODELS_DIR is unset: nothing recorded");
-        return;
-    };
+/// Two passes of `upstream`, which must agree and name nothing on this
+/// machine: the first.
+async fn record_twice(upstream: Upstream<'_>) -> Recording {
     let started = Instant::now();
-    let first = record(&inputs).await;
-    let second = record(&inputs).await;
+    let first = record(upstream).await;
+    let second = record(upstream).await;
     eprintln!("recorded twice in {:.1} s", started.elapsed().as_secs_f64());
     assert_stable(&first, &second);
-    let files = first.files();
-    for (name, text) in files
+    for (name, text) in first
+        .files()
         .iter()
-        .map(|(n, t)| (*n, t))
-        .chain(first.bodies.iter().map(|(n, t)| (n.as_str(), t)))
-        .chain(first.prompts.iter().map(|(n, t)| (n.as_str(), t)))
+        .chain(&first.bodies)
+        .chain(&first.prompts)
     {
         assert_nothing_local(name, text);
     }
-    let bodies = std::env::var_os("GGLIB_ENGINE_BODIES_DIR")
-        .map_or_else(|| inputs.scratch_path("bodies"), PathBuf::from);
-    for (name, body) in first.bodies.iter().chain(&first.prompts) {
-        write_under(&bodies, name, body);
-    }
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../contracts/upstream");
+    first
+}
+
+/// Write `files` into `contracts/upstream/` under `GGLIB_RECORD_CONTRACTS`,
+/// or fail naming each one that differs from what is committed.
+fn write_or_compare(files: &BTreeMap<String, String>, again: &str) {
+    let root = upstream_dir();
     if std::env::var_os("GGLIB_RECORD_CONTRACTS").is_some() {
-        for (rel, text) in &files {
+        for (rel, text) in files {
             write_under(&root, rel, text);
         }
         return;
@@ -106,9 +119,37 @@ async fn the_pinned_llama_server_answers_as_contracts_upstream_records() {
         .collect();
     assert!(
         stale.is_empty(),
-        "contracts/upstream is stale; rerun with GGLIB_RECORD_CONTRACTS=1\n{}",
+        "contracts/upstream is stale; {again}\n{}",
         stale.join("\n")
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "starts the pinned llama-server; CI sets GGLIB_ENGINE_MODELS_DIR"]
+async fn the_pinned_llama_server_answers_as_contracts_upstream_records() {
+    let scratch = tempfile::tempdir().expect("a scratch folder");
+    let Some(inputs) = Inputs::from_env(scratch.path()) else {
+        eprintln!("GGLIB_ENGINE_MODELS_DIR is unset: nothing recorded");
+        return;
+    };
+    let first = record_twice(Upstream::LlamaServer(&inputs)).await;
+    let bodies = std::env::var_os("GGLIB_ENGINE_BODIES_DIR")
+        .map_or_else(|| inputs.scratch_path("bodies"), PathBuf::from);
+    for (name, body) in first.bodies.iter().chain(&first.prompts) {
+        write_under(&bodies, name, body);
+    }
+    write_or_compare(&first.files(), "rerun with GGLIB_RECORD_CONTRACTS=1");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "runs llama.cpp in this process; make record-upstream-inproc sets GGLIB_INPROC_ENGINE=1"]
+async fn the_in_process_engine_answers_as_contracts_upstream_records() {
+    let Some(inputs) = inproc::Inputs::from_env() else {
+        eprintln!("GGLIB_INPROC_ENGINE is not 1: the in-process engine is not recorded");
+        return;
+    };
+    let first = record_twice(Upstream::InProcess(&inputs)).await;
+    write_or_compare(&first.files(), "run make record-upstream-inproc on a Mac");
 }
 
 /// The recorded `--version` is the pinned release's, so a pin moved without

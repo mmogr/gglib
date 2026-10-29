@@ -1,10 +1,12 @@
-//! Starting the pinned llama-server for the recorder, and asking it things.
+//! Starting the pinned llama-server for the recorder, and asking a server
+//! things.
 //!
 //! Every launch goes through gglib's own [`build_server_config`] and
 //! [`build_command`], so the flags are the ones a user's launch gets. The
 //! recorder adds only `--chat-template-file`, to try a template on a model
 //! that does not carry it. Each process is killed when its [`Server`] drops,
-//! a panic included.
+//! a panic included. [`Server::at`] asks a server the recorder did not start,
+//! the in-process engine's (`engine_contract_inproc.rs`).
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Stdio};
@@ -117,18 +119,21 @@ pub(super) struct Launch<'a> {
     pub(super) slots_debug: bool,
 }
 
-/// A running llama-server, killed on drop.
+/// A server the recorder asks: a llama-server it started, killed on drop,
+/// or one answering at a base URL it was handed.
 pub(super) struct Server {
-    child: Child,
+    child: Option<Child>,
     base: String,
     client: reqwest::Client,
-    log: PathBuf,
+    log: Option<PathBuf>,
 }
 
 impl Drop for Server {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        if let Some(child) = &mut self.child {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 }
 
@@ -148,6 +153,25 @@ fn free_port() -> u16 {
 }
 
 impl Server {
+    /// The server answering at `base` (`http://127.0.0.1:<port>`), which the
+    /// recorder did not start and does not stop.
+    pub(super) fn at(base: &str) -> Self {
+        Self::new(None, base.to_owned(), None)
+    }
+
+    fn new(child: Option<Child>, base: String, log: Option<PathBuf>) -> Self {
+        let client = gglib_proxy::loopback::client_builder()
+            .timeout(Duration::from_mins(1))
+            .build()
+            .expect("an HTTP client");
+        Self {
+            child,
+            base,
+            client,
+            log,
+        }
+    }
+
     /// Start llama-server as gglib would, and wait until `/health` is ok.
     pub(super) async fn start(inputs: &Inputs, launch: &Launch<'_>, n: usize) -> Self {
         // gglib's default q8_0 cache needs a head size divisible by 32;
@@ -179,15 +203,8 @@ impl Server {
             .stderr(file)
             .current_dir(&inputs.scratch);
         let child = cmd.spawn().expect("start llama-server");
-        let mut server = Self {
-            child,
-            base: format!("http://127.0.0.1:{port}"),
-            client: gglib_proxy::loopback::client_builder()
-                .timeout(Duration::from_mins(1))
-                .build()
-                .expect("an HTTP client"),
-            log,
-        };
+        let base = format!("http://127.0.0.1:{port}");
+        let mut server = Self::new(Some(child), base, Some(log));
         server.wait_healthy().await;
         server
     }
@@ -195,7 +212,8 @@ impl Server {
     async fn wait_healthy(&mut self) {
         let deadline = Instant::now() + Duration::from_mins(1);
         loop {
-            if let Ok(Some(status)) = self.child.try_wait() {
+            let exited = self.child.as_mut().map(Child::try_wait);
+            if let Some(Ok(Some(status))) = exited {
                 panic!("llama-server exited ({status}):\n{}", self.log_tail());
             }
             if let Ok((200, _)) = self.try_get("/health").await {
@@ -211,7 +229,8 @@ impl Server {
     }
 
     fn log_tail(&self) -> String {
-        let log = std::fs::read_to_string(&self.log).unwrap_or_default();
+        let log = self.log.as_ref().map(std::fs::read_to_string);
+        let log = log.and_then(Result::ok).unwrap_or_default();
         let lines: Vec<&str> = log.lines().collect();
         lines[lines.len().saturating_sub(30)..].join("\n")
     }

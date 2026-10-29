@@ -1,0 +1,122 @@
+/apply-template	prompt	string
+/health	status	string
+/props	bos_token	string
+/props	build_info	string
+/props	chat_template	string
+/props	chat_template_caps	object
+/props	chat_template_caps.supports_string_content	bool
+/props	chat_template_caps.supports_tool_calls	bool
+/props	chat_template_caps.supports_tools	bool
+/props	chat_template_caps.supports_typed_content	bool
+/props	default_generation_settings	object
+/props	default_generation_settings.n_ctx	number
+/props	default_generation_settings.params	object
+/props	default_generation_settings.params.dry_allowed_length	number
+/props	default_generation_settings.params.dry_base	number
+/props	default_generation_settings.params.dry_multiplier	number
+/props	default_generation_settings.params.dry_penalty_last_n	number
+/props	default_generation_settings.params.dynatemp_exponent	number
+/props	default_generation_settings.params.dynatemp_range	number
+/props	default_generation_settings.params.frequency_penalty	number
+/props	default_generation_settings.params.ignore_eos	bool
+/props	default_generation_settings.params.max_tokens	number
+/props	default_generation_settings.params.min_keep	number
+/props	default_generation_settings.params.min_p	number
+/props	default_generation_settings.params.mirostat	number
+/props	default_generation_settings.params.mirostat_eta	number
+/props	default_generation_settings.params.mirostat_tau	number
+/props	default_generation_settings.params.n_predict	number
+/props	default_generation_settings.params.presence_penalty	number
+/props	default_generation_settings.params.repeat_last_n	number
+/props	default_generation_settings.params.repeat_penalty	number
+/props	default_generation_settings.params.seed	number
+/props	default_generation_settings.params.temperature	number
+/props	default_generation_settings.params.top_k	number
+/props	default_generation_settings.params.top_n_sigma	number
+/props	default_generation_settings.params.top_p	number
+/props	default_generation_settings.params.typical_p	number
+/props	default_generation_settings.params.xtc_probability	number
+/props	default_generation_settings.params.xtc_threshold	number
+/props	endpoint_metrics	bool
+/props	endpoint_props	bool
+/props	endpoint_slots	bool
+/props	eos_token	string
+/props	is_sleeping	bool
+/props	modalities	object
+/props	modalities.audio	bool
+/props	modalities.video	bool
+/props	modalities.vision	bool
+/props	model_alias	string
+/props	model_path	string
+/props	total_slots	number
+chat completion	choices	array
+chat completion	choices[]	object
+chat completion	choices[].finish_reason	string
+chat completion	choices[].index	number
+chat completion	choices[].message	object
+chat completion	choices[].message.content	string
+chat completion	choices[].message.reasoning_content	string
+chat completion	choices[].message.role	string
+chat completion	created	number
+chat completion	id	string
+chat completion	model	string
+chat completion	object	string
+chat completion	system_fingerprint	string
+chat completion	timings	object
+chat completion	timings.cache_n	number
+chat completion	timings.predicted_ms	number
+chat completion	timings.predicted_n	number
+chat completion	timings.predicted_per_second	number
+chat completion	timings.predicted_per_token_ms	number
+chat completion	timings.prompt_ms	number
+chat completion	timings.prompt_n	number
+chat completion	timings.prompt_per_second	number
+chat completion	timings.prompt_per_token_ms	number
+chat completion	usage	object
+chat completion	usage.completion_tokens	number
+chat completion	usage.prompt_tokens	number
+chat completion	usage.prompt_tokens_details	object
+chat completion	usage.prompt_tokens_details.cached_tokens	number
+chat completion	usage.total_tokens	number
+error (over context)	error	object
+error (over context)	error.code	number
+error (over context)	error.message	string
+error (over context)	error.n_ctx	number
+error (over context)	error.n_prompt_tokens	number
+error (over context)	error.type	string
+stream chunk	choices	array
+stream chunk	choices[]	object
+stream chunk	choices[].delta	object
+stream chunk	choices[].delta.content	null
+stream chunk	choices[].delta.content	string
+stream chunk	choices[].delta.reasoning_content	string
+stream chunk	choices[].delta.role	string
+stream chunk	choices[].finish_reason	null
+stream chunk	choices[].finish_reason	string
+stream chunk	choices[].index	number
+stream chunk	created	number
+stream chunk	id	string
+stream chunk	model	string
+stream chunk	object	string
+stream chunk	prompt_progress	object
+stream chunk	prompt_progress.cache	number
+stream chunk	prompt_progress.processed	number
+stream chunk	prompt_progress.time_ms	number
+stream chunk	prompt_progress.total	number
+stream chunk	system_fingerprint	string
+stream chunk	timings	object
+stream chunk	timings.cache_n	number
+stream chunk	timings.predicted_ms	number
+stream chunk	timings.predicted_n	number
+stream chunk	timings.predicted_per_second	number
+stream chunk	timings.predicted_per_token_ms	number
+stream chunk	timings.prompt_ms	number
+stream chunk	timings.prompt_n	number
+stream chunk	timings.prompt_per_second	number
+stream chunk	timings.prompt_per_token_ms	number
+stream chunk	usage	object
+stream chunk	usage.completion_tokens	number
+stream chunk	usage.prompt_tokens	number
+stream chunk	usage.prompt_tokens_details	object
+stream chunk	usage.prompt_tokens_details.cached_tokens	number
+stream chunk	usage.total_tokens	number

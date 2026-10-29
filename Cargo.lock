@@ -2764,6 +2764,7 @@ dependencies = [
  "futures-util",
  "gglib-agent",
  "gglib-core",
+ "gglib-engine-llama",
  "gglib-mcp",
  "gglib-proxy",
  "gglib-test-http",

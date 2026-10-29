@@ -1,0 +1,113 @@
+{
+  "cache_prompt_default": {
+    "value": true
+  },
+  "caps.Qwen-Qwen3-0.6B.supports_string_content": {
+    "value": true
+  },
+  "caps.Qwen-Qwen3-0.6B.supports_tool_calls": {
+    "value": false
+  },
+  "caps.Qwen-Qwen3-0.6B.supports_tools": {
+    "value": false
+  },
+  "caps.Qwen-Qwen3-0.6B.supports_typed_content": {
+    "value": false
+  },
+  "caps.Qwen3.5-4B.supports_string_content": {
+    "value": true
+  },
+  "caps.Qwen3.5-4B.supports_tool_calls": {
+    "value": false
+  },
+  "caps.Qwen3.5-4B.supports_tools": {
+    "value": false
+  },
+  "caps.Qwen3.5-4B.supports_typed_content": {
+    "value": false
+  },
+  "caps.ibm-granite-granite-4.0.supports_string_content": {
+    "value": true
+  },
+  "caps.ibm-granite-granite-4.0.supports_tool_calls": {
+    "value": false
+  },
+  "caps.ibm-granite-granite-4.0.supports_tools": {
+    "value": false
+  },
+  "caps.ibm-granite-granite-4.0.supports_typed_content": {
+    "value": false
+  },
+  "effort_validated": {
+    "value": false
+  },
+  "endpoints_present.apply-template": {
+    "value": true
+  },
+  "endpoints_present.input_tokens": {
+    "value": false
+  },
+  "endpoints_present.tokenize": {
+    "value": false
+  },
+  "greedy.tinygemma3.completion_tokens": {
+    "value": 16
+  },
+  "greedy.tinygemma3.finish_reason": {
+    "value": "length"
+  },
+  "greedy.tinygemma3.prompt_tokens": {
+    "value": 16
+  },
+  "greedy.tinygemma3.visible_pieces": {
+    "value": [
+      "What",
+      " is",
+      " this",
+      ":",
+      "\n\n"
+    ]
+  },
+  "greedy_parity.tinygemma3": {
+    "value": true
+  },
+  "over_context.status": {
+    "value": 400
+  },
+  "sampler_defaults.dry_multiplier": {
+    "value": 0.0
+  },
+  "sampler_defaults.min_p": {
+    "value": 0.05
+  },
+  "sampler_defaults.presence_penalty": {
+    "value": 0.0
+  },
+  "sampler_defaults.repeat_penalty": {
+    "value": 1.0
+  },
+  "sampler_defaults.temperature": {
+    "value": 0.8
+  },
+  "sampler_defaults.top_k": {
+    "value": 40.0
+  },
+  "sampler_defaults.top_p": {
+    "value": 0.95
+  },
+  "slots_status": {
+    "value": 501
+  },
+  "template_parity.Qwen-Qwen3-0.6B": {
+    "value": true
+  },
+  "template_parity.Qwen3.5-4B": {
+    "value": true
+  },
+  "template_parity.ibm-granite-granite-4.0": {
+    "value": true
+  },
+  "vision_without_mmproj": {
+    "value": false
+  }
+}

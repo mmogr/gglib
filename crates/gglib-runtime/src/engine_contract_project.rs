@@ -1,15 +1,17 @@
-//! What the recorder keeps of llama-server's answers.
+//! What the recorder keeps of an engine's answers.
 //!
 //! The rule: nothing the model generated and nothing rendered from a prompt
 //! enters a projection. `/props` values, `--help` defaults, prompt-side
 //! counts on the dateless templates, same-run deltas and booleans may. Raw
 //! bodies are redacted the same way and go to a folder of their own, never
-//! into the per-PR comparison. The one body kept verbatim is what
-//! `/apply-template` renders for a fixed chat on a dateless template
-//! ([`Recording::prompts`]): the rendering is the reading.
+//! into the per-PR comparison. Two exceptions are the readings themselves:
+//! what `/apply-template` renders for a fixed chat on a dateless template,
+//! kept verbatim ([`Recording::prompts`]), and the pieces tinygemma3 streams
+//! for one question at temperature 0, which the in-process engine must
+//! stream alike.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
 
@@ -24,16 +26,40 @@ pub(super) struct Criterion {
     pub(super) if_moved: &'static str,
 }
 
+/// The engine a recording is of, and the folder under `contracts/upstream/`
+/// it is kept in.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) enum Engine {
+    /// The pinned llama-server, the oracle: `llama/`.
+    #[default]
+    LlamaServer,
+    /// gglib-engine-llama in this process, held to the oracle:
+    /// `llama-inproc/`.
+    InProcess,
+}
+
+impl Engine {
+    /// Its folder under `contracts/upstream/`.
+    pub(super) const fn folder(self) -> &'static str {
+        match self {
+            Self::LlamaServer => "llama",
+            Self::InProcess => "llama-inproc",
+        }
+    }
+}
+
 /// Everything one recording pass kept.
 #[derive(Default)]
 pub(super) struct Recording {
+    /// Whose answers they are.
+    pub(super) engine: Engine,
     /// `endpoint<TAB>key path<TAB>JSON type`, one line each.
     pub(super) shape: BTreeSet<String>,
-    /// One flat scalar per reading, with its criterion if an ADR names it.
+    /// One value per reading, with its criterion if an ADR names it.
     pub(super) observed: BTreeMap<String, (Value, Option<&'static Criterion>)>,
     /// The projections other than the two above, by path under
     /// `contracts/upstream/`.
-    pub(super) texts: BTreeMap<&'static str, String>,
+    pub(super) texts: BTreeMap<String, String>,
     /// Redacted raw bodies, by file name.
     pub(super) bodies: BTreeMap<String, String>,
     /// Rendered prompts, verbatim, by file name: bodies that are not
@@ -42,20 +68,29 @@ pub(super) struct Recording {
 }
 
 impl Recording {
+    /// An empty recording of `engine`.
+    pub(super) fn of(engine: Engine) -> Self {
+        Self {
+            engine,
+            ..Self::default()
+        }
+    }
+
     /// A reading no ADR names.
     pub(super) fn plain(&mut self, name: impl Into<String>, value: impl Into<Value>) {
         self.observed.insert(name.into(), (value.into(), None));
     }
 
-    /// A reading an ADR's criterion names.
+    /// A reading an ADR's criterion names. The criteria read the pinned
+    /// llama-server, so the in-process engine's reading is plain.
     pub(super) fn named(
         &mut self,
         name: impl Into<String>,
         value: impl Into<Value>,
         criterion: &'static Criterion,
     ) {
-        self.observed
-            .insert(name.into(), (value.into(), Some(criterion)));
+        let criterion = (self.engine == Engine::LlamaServer).then_some(criterion);
+        self.observed.insert(name.into(), (value.into(), criterion));
     }
 
     /// Add `value`'s key paths and types under `endpoint`.
@@ -71,15 +106,25 @@ impl Recording {
         self.bodies.insert(name.to_owned(), text + "\n");
     }
 
-    /// Every projection file, by path under `contracts/upstream/`.
-    pub(super) fn files(&self) -> BTreeMap<&'static str, String> {
+    /// Every projection file, by path under `contracts/upstream/`. The
+    /// in-process engine's keep its two streams and its renders too: they
+    /// are held to llama-server's, and are fixtures for what reads a phone's
+    /// stream.
+    pub(super) fn files(&self) -> BTreeMap<String, String> {
+        let folder = self.engine.folder();
         let mut files = self.texts.clone();
+        if self.engine == Engine::InProcess {
+            let kept = self.bodies.iter().filter(|(n, _)| n.starts_with("stream"));
+            for (name, text) in kept.chain(&self.prompts) {
+                files.insert(format!("{folder}/bodies/{name}"), text.clone());
+            }
+        }
         let shape = self.shape.iter().fold(String::new(), |mut text, line| {
             text.push_str(line);
             text.push('\n');
             text
         });
-        files.insert("llama/shape.txt", shape);
+        files.insert(format!("{folder}/shape.txt"), shape);
         let observed: Map<String, Value> = self
             .observed
             .iter()
@@ -95,7 +140,7 @@ impl Recording {
             })
             .collect();
         let observed = serde_json::to_string_pretty(&Value::Object(observed)).expect("JSON");
-        files.insert("llama/observed.json", observed + "\n");
+        files.insert(format!("{folder}/observed.json"), observed + "\n");
         files
     }
 }
@@ -221,6 +266,11 @@ pub(super) fn assert_nothing_local(name: &str, text: &str) {
             .find(|line| line.to_lowercase().contains(marker));
         assert!(line.is_none(), "{name} would commit {marker:?}: {line:?}");
     }
+}
+
+/// `contracts/upstream/`, where the recordings are kept.
+pub(super) fn upstream_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../contracts/upstream")
 }
 
 /// Write `content` to `root/rel`, which must stay inside `root`.

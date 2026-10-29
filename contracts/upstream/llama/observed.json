@@ -162,6 +162,24 @@
   "endpoints_present.tokenize": {
     "value": true
   },
+  "greedy.tinygemma3.completion_tokens": {
+    "value": 16
+  },
+  "greedy.tinygemma3.finish_reason": {
+    "value": "length"
+  },
+  "greedy.tinygemma3.prompt_tokens": {
+    "value": 16
+  },
+  "greedy.tinygemma3.visible_pieces": {
+    "value": [
+      "What",
+      " is",
+      " this",
+      ":",
+      "\n\n"
+    ]
+  },
   "help_defaults.batch": {
     "value": "2048"
   },

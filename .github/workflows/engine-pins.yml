@@ -5,10 +5,12 @@ name: Engine pins
 # and merge (CONTRIBUTING.md, "The engine pins"). The job picks the tag,
 # edits the pin's one line, builds gglib, installs the candidate and records
 # what it answers into contracts/upstream/ (on a llama.cpp bump, with tier 3's
-# real small model too), and opens the pull request with both in one commit.
-# Its body, from scripts/engine_pin_body.sh, leads with the ADR readings that
-# moved. CI's CLI Check then checks every launch flag gglib passes against the
-# release, and `ADR criterion moved` holds the readings to their approvals.
+# real small model too, and the in-process engine built at the candidate on
+# macOS into llama-inproc/), and opens the pull request with both in one
+# commit. Its body, from scripts/engine_pin_body.sh, leads with the ADR
+# readings that moved. CI's CLI Check then checks every launch flag gglib
+# passes against the release, `ADR criterion moved` holds the readings to
+# their approvals, and Test (Rust) holds llama-inproc/ to llama/.
 #
 # It never edits or force-pushes a branch, and proposes a candidate once: a
 # pull request from the candidate's branch, open or closed, means it has been
@@ -35,13 +37,15 @@ defaults:
   run:
     shell: bash
 
-# Two jobs, so the write token is never on a machine that has run untrusted
+# Three jobs, so the write token is never on a machine that has run untrusted
 # code. `record` picks the candidate, builds gglib, installs the candidate and
 # runs it and tier 3's model; it has no secret and reads only. It hands over
 # the pin file, contracts/upstream/ and the recorder's outcome as an artifact.
-# `propose`, on a fresh runner, takes that handover as data
-# (scripts/engine_pin_take.sh), writes the body from its own checkout, and
-# only then mints the app token to push and open the pull request.
+# On a llama.cpp bump `record-inproc`, on macOS and as read-only, takes that
+# handover, records the in-process engine at the candidate beside it, and
+# hands both over. `propose`, on a fresh runner, takes the last handover as
+# data (scripts/engine_pin_take.sh), writes the body from its own checkout,
+# and only then mints the app token to push and open the pull request.
 
 jobs:
   record:
@@ -55,6 +59,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    # `true` when the llama.cpp leg proposes a candidate, which `record-inproc`
+    # waits for. The sd leg's is empty, and an empty output never replaces
+    # another leg's.
+    outputs:
+      llama_proposes: ${{ matrix.engine == 'llama' && steps.pick.outputs.propose || '' }}
     # As ci.yml sets them: other flags would rebuild even what the cache
     # restored below has.
     env:
@@ -341,12 +350,158 @@ jobs:
           path: ${{ runner.temp }}/handover
           retention-days: 1
 
+  # The in-process engine at the candidate, on a llama.cpp bump: a phone's
+  # engine, gglib-engine-llama over llama.cpp's own llama.xcframework, asked
+  # the recorder's questions into contracts/upstream/llama-inproc. It runs on
+  # macOS, where the framework builds, once `record` has moved the pin and
+  # recorded llama-server: it takes that handover as `propose` does, so the
+  # in-process recording's parity readings are against llama-server at the
+  # candidate, and hands over both recordings, with `record`'s line and one
+  # of its own. `propose` takes this handover in place of `record`'s. A
+  # framework or a recorder that fails still hands over, saying so; a
+  # function the shim calls that the candidate renamed or retyped then fails
+  # CI's `phone-llama` on the pull request. It starts only when the llama.cpp
+  # leg proposes, so a run with nothing to propose, or an sd-only one, starts
+  # no macOS runner. `propose` waits for it, so on a run that bumps both
+  # engines the sd pull request opens after it too.
+  record-inproc:
+    name: Record the in-process engine at a new llama.cpp pin
+    needs: record
+    if: ${{ !cancelled() && needs.record.outputs.llama_proposes == 'true' }}
+    runs-on: macos-26
+    # A cold llama.xcframework (20 to 30 minutes), a cold build of the
+    # recorder, and the recorder itself.
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch || github.ref_name }}
+          persist-credentials: false
+
+      # A llama.cpp leg that stopped before its handover leaves none, and
+      # every step below is skipped.
+      - name: Download the llama.cpp handover
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: engine-pin-handover-llama
+          path: ${{ runner.temp }}/handover
+
+      # As `propose` takes it: the pin moved by its one line to a b<n> tag,
+      # and contracts/upstream/ as llama-server answered at the candidate.
+      - name: Take the pin and llama-server's recordings
+        if: steps.download.outcome == 'success'
+        id: take
+        env:
+          FILE: crates/gglib-core/src/domain/engine_pins.rs
+        run: |
+          current=$(scripts/llama_pin.sh)
+          recorder=$(scripts/engine_pin_take.sh "$RUNNER_TEMP/handover" "$FILE")
+          candidate=$(scripts/llama_pin.sh)
+          [[ $candidate =~ ^b[0-9]+$ && $candidate != "$current" ]] \
+            || { echo "::error::the handover's pin is not a new llama.cpp release"; exit 1; }
+          [[ $(git diff --numstat -- "$FILE") == $'1\t1\t'"$FILE" ]] \
+            || { git diff -- "$FILE"; echo "::error::moving the pin should change one line of $FILE"; exit 1; }
+          printf '%s\n' "$recorder" > "$RUNNER_TEMP/recorder.txt"
+          echo "pin=$candidate" >> "$GITHUB_OUTPUT"
+
+      # The recorder's models, and the candidate's chat templates, which
+      # move with the pin: the pinned-engines action without its engines,
+      # before anything built at the candidate runs.
+      - name: Fetch the test models and the candidate's chat templates
+        if: steps.take.outcome == 'success'
+        id: models
+        uses: ./.github/actions/pinned-engines
+        with:
+          target: aarch64-apple-darwin
+          engines: "false"
+
+      - name: Build llama.xcframework at the candidate
+        if: steps.take.outcome == 'success'
+        id: xcframework
+        continue-on-error: true
+        uses: ./.github/actions/llama-xcframework
+
+      # rust-toolchain.toml lists the Apple targets, so this installs them.
+      - name: Install Rust toolchain
+        if: steps.take.outcome == 'success'
+        run: rustup show
+
+      - name: Record the in-process engine at the candidate
+        if: steps.xcframework.outcome == 'success'
+        id: record
+        continue-on-error: true
+        timeout-minutes: 45
+        env:
+          GGLIB_ENGINE_MODELS_DIR: ${{ steps.models.outputs.models }}
+          GGLIB_INPROC_ENGINE: "1"
+          GGLIB_RECORD_CONTRACTS: "1"
+        run: |
+          cargo test --locked -p gglib-runtime --lib --features inproc-contract -- --ignored --nocapture --exact \
+            engine_contract_tests::the_in_process_engine_answers_as_contracts_upstream_records \
+            2>&1 | tee "$RUNNER_TEMP/record-inproc.log"
+
+      # What `propose` takes in place of `record`'s handover: the pin file and
+      # contracts/upstream/, llama-server's recordings as taken with
+      # llama-inproc/ beside them, `record`'s line, and this job's own: `ok`,
+      # or why the in-process engine was not recorded.
+      - name: Hand over both recordings
+        if: steps.take.outcome == 'success'
+        env:
+          FILE: crates/gglib-core/src/domain/engine_pins.rs
+          BUILT: ${{ steps.xcframework.outcome }}
+          RECORDED: ${{ steps.record.outcome }}
+        run: |
+          out="$RUNNER_TEMP/handover-inproc"
+          mkdir -p "$out/files/${FILE%/*}" "$out/files/contracts"
+          cp "$FILE" "$out/files/$FILE"
+          cp -R contracts/upstream "$out/files/contracts/"
+          cp "$RUNNER_TEMP/recorder.txt" "$out/recorder.txt"
+          if [[ $BUILT != success ]]; then
+            recorder="llama.xcframework did not build at the candidate"
+          elif [[ $RECORDED == success ]]; then
+            recorder=ok
+          else
+            log="$RUNNER_TEMP/record-inproc.log"
+            recorder=$(awk '/panicked at/ { getline; print; exit }' "$log" 2>/dev/null || true)
+            [[ -n $recorder ]] || recorder=$(grep -m1 '^error' "$log" 2>/dev/null || true)
+            [[ -n $recorder ]] || recorder="the in-process record step ended in $RECORDED"
+          fi
+          printf '%s\n' "${recorder:0:200}" > "$out/recorder-inproc.txt"
+
+      - name: Upload the handover
+        if: steps.take.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: engine-pin-handover-llama-inproc
+          path: ${{ runner.temp }}/handover-inproc
+          retention-days: 1
+
+      # The in-process recording and the recorder's log, for whoever reads
+      # the pull request.
+      - name: Upload what was recorded
+        if: always() && steps.take.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: engine-pin-llama-inproc-${{ steps.take.outputs.pin }}
+          path: |
+            contracts/upstream/llama-inproc
+            ${{ runner.temp }}/record-inproc.log
+          if-no-files-found: ignore
+
   propose:
     name: Propose a new ${{ matrix.product }} pin
-    needs: record
-    # After each leg of `record`, whatever it concluded: a leg with nothing
-    # to propose, or that stopped before its handover, leaves no artifact,
-    # and this leg then ends without proposing.
+    needs: [record, record-inproc]
+    # After each leg of `record` and `record-inproc`, whatever they
+    # concluded: a leg with nothing to propose, or that stopped before its
+    # handover, leaves no artifact, and this leg then ends without proposing.
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -383,6 +538,18 @@ jobs:
           name: engine-pin-handover-${{ matrix.engine }}
           path: ${{ runner.temp }}/handover
 
+      # On a llama.cpp bump `record-inproc` hands over `record`'s recordings
+      # as it took them, with the in-process engine's beside them: taken in
+      # place of `record`'s when it is there.
+      - name: Download the in-process handover
+        if: matrix.engine == 'llama' && steps.download.outcome == 'success'
+        id: download-inproc
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: engine-pin-handover-llama-inproc
+          path: ${{ runner.temp }}/handover-inproc
+
       # The handover is data from a machine that ran untrusted code: only
       # regular files at the pin's path and under contracts/upstream/ are
       # taken, approvals.json stays as main has it, and the pin may move by
@@ -395,10 +562,17 @@ jobs:
           CONSTANT: ${{ matrix.constant }}
           TAG: ${{ matrix.tag }}
           ENGINE: ${{ matrix.engine }}
+          INPROC: ${{ steps.download-inproc.outcome }}
         run: |
           current=$(sed -nE "s/.*$CONSTANT: &str = \"([^\"]+)\".*/\1/p" "$FILE")
           cp -R contracts/upstream "$RUNNER_TEMP/upstream-before"
-          recorder=$(scripts/engine_pin_take.sh "$RUNNER_TEMP/handover" "$FILE")
+          handover="$RUNNER_TEMP/handover"
+          inproc="the in-process recording left no handover"
+          if [[ $INPROC == success ]]; then
+            handover="$RUNNER_TEMP/handover-inproc"
+            inproc=$(head -1 "$handover/recorder-inproc.txt" 2>/dev/null | tr -cd '[:print:]' | tr -d '`' | cut -c1-200 || true)
+          fi
+          recorder=$(scripts/engine_pin_take.sh "$handover" "$FILE")
           candidate=$(sed -nE "s/.*$CONSTANT: &str = \"([^\"]+)\".*/\1/p" "$FILE")
           [[ $candidate =~ $TAG && $candidate != "$current" ]] \
             || { echo "::error::the handover's pin is not a new $ENGINE release"; exit 1; }
@@ -415,6 +589,9 @@ jobs:
             echo "branch=chore(deps)/$ENGINE-$candidate"
           } >> "$GITHUB_OUTPUT"
           printf '%s\n' "$recorder" > "$RUNNER_TEMP/recorder.txt"
+          if [[ $ENGINE == llama ]]; then
+            printf '%s\n' "${inproc:-the in-process recorder left no reason}" > "$RUNNER_TEMP/recorder-inproc.txt"
+          fi
 
       - name: Write the body
         if: steps.take.outcome == 'success'
@@ -427,8 +604,10 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           recorder=$(cat "$RUNNER_TEMP/recorder.txt")
+          inproc=()
+          if [[ -f $RUNNER_TEMP/recorder-inproc.txt ]]; then inproc=("$(cat "$RUNNER_TEMP/recorder-inproc.txt")"); fi
           if ! scripts/engine_pin_body.sh "$ENGINE" "$CURRENT" "$CANDIDATE" \
-              "$RUNNER_TEMP/upstream-before" contracts/upstream "$recorder" "$RUN_URL" > "$RUNNER_TEMP/body.md"; then
+              "$RUNNER_TEMP/upstream-before" contracts/upstream "$recorder" "$RUN_URL" "${inproc[@]}" > "$RUNNER_TEMP/body.md"; then
             printf 'Moves %s from %s to %s. The body could not be written; read the run: %s\n' \
               "$FILE" "$CURRENT" "$CANDIDATE" "$RUN_URL" > "$RUNNER_TEMP/body.md"
           fi

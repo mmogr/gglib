@@ -17,14 +17,6 @@ use crate::decoder::Script;
 /// line each.
 const RECORDED: &str = include_str!("../../../../contracts/upstream/llama/shape.txt");
 
-/// Lines llama-server answers that the recording did not happen to see.
-///
-/// The one: a streamed chunk carrying the answer. The recorded stream ran
-/// out of tokens while it was still reasoning, so llama-server sent all of
-/// it as `reasoning_content`; the recorded completion attests the field and
-/// its type (`chat completion choices[].message.content string`).
-const UNRECORDED: [&str; 1] = ["stream chunk\tchoices[].delta.content\tstring"];
-
 /// Qwen3.5-4B's template at the pin: thinking on, its generation prompt
 /// opens `<think>`.
 const QWEN35: &str = include_str!("../../../gglib-gguf/src/render/testdata/Qwen3.5-4B.jinja");
@@ -156,7 +148,7 @@ async fn every_answer_s_shape_is_one_the_pinned_llama_server_answered() {
         project("stream chunk", &frame);
     }
 
-    let recorded: BTreeSet<&str> = RECORDED.lines().chain(UNRECORDED).collect();
+    let recorded: BTreeSet<&str> = RECORDED.lines().collect();
     let unseen: Vec<&String> = seen
         .iter()
         .filter(|line| !recorded.contains(line.as_str()))
@@ -173,14 +165,4 @@ async fn every_answer_s_shape_is_one_the_pinned_llama_server_answered() {
         missing.is_empty(),
         "lines gglib reads, not answered: {missing:#?}"
     );
-}
-
-#[test]
-fn the_unrecorded_line_is_still_unrecorded() {
-    for line in UNRECORDED {
-        assert!(
-            !RECORDED.lines().any(|l| l == line),
-            "{line:?} is recorded now: drop it from UNRECORDED"
-        );
-    }
 }

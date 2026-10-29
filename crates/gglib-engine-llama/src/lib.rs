@@ -13,7 +13,7 @@ mod sys;
 pub use decoder::LlamaDecoder;
 pub use decoder::{
     Abort, Decoder, DecoderError, FinishReason, Finished, LoadParams, Loaded, PromptProgress,
-    Sampling, Step, Token,
+    Sampling, Step, Token, linked_llama_decoder,
 };
 #[cfg(any(test, feature = "test-decoder"))]
 pub use decoder::{Script, ScriptRecord, ScriptedDecoder};

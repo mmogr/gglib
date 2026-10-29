@@ -8,12 +8,15 @@
 # model, and proposes it from another, which holds the write token and runs
 # none of them. The first hands over <handover>/files/ (the pin file and
 # contracts/upstream/, at their paths in the repository) and
-# <handover>/recorder.txt (`ok`, or why the recorder did not run). This script
-# is the second job's only reader of them: it refuses anything but regular
-# files at those paths, mirrors contracts/upstream/ from the handover, keeps
-# the hand-kept approvals.json and README.md from this checkout, copies the
-# pin file, and prints the recorder line made safe for the body. It runs from
-# the checkout's root, and never runs anything the handover holds.
+# <handover>/recorder.txt (`ok`, or why the recorder did not run). On a
+# llama.cpp bump a job between them, on macOS and as read-only as the first,
+# takes that handover, records the in-process engine beside it, and hands
+# over in the same form. This script is how either takes a handover: it
+# refuses anything but regular files at those paths, mirrors
+# contracts/upstream/ from the handover, keeps the hand-kept approvals.json
+# and README.md from this checkout, copies the pin file, and prints the
+# recorder line made safe for the body. It runs from the checkout's root, and
+# never runs anything the handover holds.
 
 set -euo pipefail
 
