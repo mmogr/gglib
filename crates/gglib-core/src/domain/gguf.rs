@@ -278,6 +278,33 @@ pub struct GgufMetadata {
     pub image_family: Option<crate::domain::ImageFamily>,
 }
 
+/// The metadata of a GGUF file as far as its first bytes hold it.
+///
+/// A head holds a prefix of the file's metadata pairs: a pair the head cuts
+/// is left out, and so is every pair after it. A file is judged from its
+/// head before it is downloaded, and converters write the keys a fit is
+/// judged by (`{arch}.context_length`, `{arch}.block_count`, the attention
+/// head counts and lengths) before the tokenizer's arrays, which run to
+/// megabytes.
+#[derive(Debug, Clone, Default)]
+pub struct HeadMetadata {
+    /// The whole pairs the head holds, extracted as a whole file's are.
+    /// `image_family` is `None`: the tensor table follows the metadata.
+    pub metadata: GgufMetadata,
+    /// Whether the head reached a key under `tokenizer.`, whole or not.
+    /// It says nothing of the keys after it: a file may write its
+    /// tokenizer first, as llama.cpp's own small test models do.
+    pub reached_tokenizer: bool,
+    /// Whether the head holds every pair the file declares, so a key
+    /// missing from [`Self::metadata`] is missing from the file.
+    pub complete: bool,
+    /// The bytes of the head that the header and the whole pairs fill:
+    /// where the first pair the head cuts starts, or where the metadata
+    /// ends when [`Self::complete`]. Zero when the head ends inside the
+    /// header.
+    pub bytes_used: u64,
+}
+
 /// Raw metadata from GGUF parsing (before string conversion).
 ///
 /// Used internally by parsers; services typically use `GgufMetadata`.

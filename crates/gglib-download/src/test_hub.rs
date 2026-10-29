@@ -11,7 +11,9 @@ use gglib_core::ports::huggingface::{
     HfClientPort, HfFileInfo, HfPortError, HfPortResult, HfQuantInfo, HfRepoInfo, HfSearchOptions,
     HfSearchResult,
 };
-use gglib_core::ports::{GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort};
+use gglib_core::ports::{
+    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata,
+};
 
 /// One repository. A file's role is read from its name by
 /// [`GgufFileRole::classify`], and its OID is `oid-<path>`.
@@ -250,5 +252,9 @@ impl GgufParserPort for ImageHeadParser {
         })?;
         debug_assert_eq!(ImageFamily::sniff(&table), named);
         Ok(table)
+    }
+
+    fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        unimplemented!("only tensor tables are read from heads here")
     }
 }

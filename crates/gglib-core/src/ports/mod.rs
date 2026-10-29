@@ -69,7 +69,8 @@ pub use generation_gate::{
     WaitReason,
 };
 pub use gguf_parser::{
-    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopGgufParser, TensorTable,
+    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata, NoopGgufParser,
+    TensorTable,
 };
 pub use hub_chats::{AgentRunStarter, HubChatsError, HubChatsPort, TurnRefused};
 pub use huggingface::{

@@ -72,6 +72,11 @@ impl<R: Read> GgufReader<R> {
         Ok(())
     }
 
+    /// The bytes of the file not yet read.
+    pub(crate) const fn remaining(&self) -> u64 {
+        self.remaining
+    }
+
     /// Count `bytes` that were read off what the file has left.
     ///
     /// A file that grew after it was opened reads past the length it had,
@@ -125,6 +130,21 @@ impl<R: Read> GgufReader<R> {
             return Err(GgufInternalError::UnsupportedVersion(version));
         }
         Ok(version)
+    }
+
+    /// Read the rest of a GGUF header after its magic: the version, then the
+    /// tensor count and the metadata count, each a `u32` in version 1 and a
+    /// `u64` after. Neither count is held to anything here.
+    pub(crate) fn read_counts(&mut self) -> GgufResult<(u64, u64)> {
+        let version = self.read_version()?;
+        let mut count = || {
+            if version >= 2 {
+                self.read_u64()
+            } else {
+                self.read_u32().map(u64::from)
+            }
+        };
+        Ok((count()?, count()?))
     }
 
     /// Read a u8 value.

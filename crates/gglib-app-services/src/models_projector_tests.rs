@@ -7,8 +7,8 @@ use std::sync::Arc;
 use gglib_core::GgufFileRole;
 use gglib_core::domain::{ModelListQuery, NewModelFile};
 use gglib_core::ports::{
-    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, NoopEmitter, NoopModelRuntime,
-    TensorTable,
+    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata, NoopEmitter,
+    NoopModelRuntime, TensorTable,
 };
 use gglib_core::services::{AppCore, ImportMode};
 use gglib_db::{CoreFactory, setup_test_database};
@@ -46,6 +46,10 @@ impl GgufParserPort for FirstBytesParser {
     }
     fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
         Err(GgufParseError::InvalidFormat("no tensor table".to_owned()))
+    }
+
+    fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        Err(GgufParseError::InvalidFormat("no head is read".to_owned()))
     }
 }
 

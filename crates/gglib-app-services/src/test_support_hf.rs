@@ -63,6 +63,8 @@ impl HfClientPort for MockHfClient {
             description: None,
             last_modified: None,
             chat_template: None,
+            architecture: None,
+            context_length: None,
             tags: vec![],
         })
     }

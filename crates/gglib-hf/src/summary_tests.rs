@@ -44,13 +44,22 @@ fn a_model_object_with_every_field_is_read_whole() {
         "downloads": 50000,
         "likes": 42,
         "lastModified": "2024-01-15T10:30:00Z",
-        "gguf": {"total": 7_000_000_000_u64, "chat_template": "{{ messages }}"},
+        "gguf": {
+            "total": 7_000_000_000_u64,
+            "chat_template": "{{ messages }}",
+            "architecture": "llama",
+            "context_length": 4096
+        },
         "tags": ["llama", "gguf"],
         "description": "A fine model for testing"
     }))
     .expect("a summary");
 
     assert_eq!(model.chat_template.as_deref(), Some("{{ messages }}"));
+    assert_eq!(
+        (model.architecture.as_deref(), model.context_length),
+        (Some("llama"), Some(4096))
+    );
     assert_eq!(
         shown(model),
         Shown {
@@ -94,6 +103,34 @@ fn the_parameter_count_is_the_gguf_headers_before_any_other() {
     );
     assert_eq!(counted(json!({"config": config})), Some(2.0));
     assert_eq!(counted(json!({})), None);
+}
+
+/// The architecture and the trained context length are the GGUF header's,
+/// as the Hub read it, and absent when the response has no header or the
+/// header has no such field.
+#[test]
+fn the_architecture_and_context_length_are_the_gguf_headers() {
+    let read = |model: Value| {
+        let info = repo_info_from_json(&model).unwrap();
+        (info.architecture, info.context_length)
+    };
+
+    assert_eq!(
+        read(json!({"id": "o/r", "gguf": {"architecture": "qwen3", "context_length": 40960}})),
+        (Some("qwen3".to_string()), Some(40_960))
+    );
+    assert_eq!(
+        read(json!({"id": "o/r", "gguf": {"total": 1}})),
+        (None, None)
+    );
+    assert_eq!(
+        read(json!({"id": "o/r", "config": {"architectures": ["Qwen3ForCausalLM"]}})),
+        (None, None)
+    );
+    assert_eq!(
+        read(json!({"id": "o/r", "gguf": {"context_length": "40960"}})),
+        (None, None)
+    );
 }
 
 /// The description is the object's own, and the card's summary when it has

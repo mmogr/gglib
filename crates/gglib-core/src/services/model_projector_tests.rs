@@ -10,8 +10,8 @@ use super::*;
 use crate::domain::NewModel;
 use crate::download::GgufFileRole;
 use crate::ports::{
-    CoreError, GgufCapabilities, GgufMetadata, GgufParseError, ModelRepository, RepositoryError,
-    TensorTable,
+    CoreError, GgufCapabilities, GgufMetadata, GgufParseError, HeadMetadata, ModelRepository,
+    RepositoryError, TensorTable,
 };
 use crate::services::LinkError;
 
@@ -77,6 +77,10 @@ impl GgufParserPort for FirstBytesParser {
     fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
         Err(GgufParseError::InvalidFormat("no tensor table".to_owned()))
     }
+
+    fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        Err(GgufParseError::InvalidFormat("no head is read".to_owned()))
+    }
 }
 
 /// Fails the test if a header is read at all.
@@ -94,6 +98,10 @@ impl GgufParserPort for NeverReadParser {
     }
     fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
         panic!("no header should be read, and a head was");
+    }
+
+    fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        panic!("a head was parsed")
     }
 }
 

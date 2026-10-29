@@ -98,6 +98,8 @@ fn recorded_hit() -> HfRepoInfo {
         description: None,
         last_modified: None,
         chat_template: Some("{% for message in messages %}".to_string()),
+        architecture: Some("phi3".to_string()),
+        context_length: Some(131_072),
         tags: vec!["gguf".to_string(), "phi3".to_string()],
     }
 }

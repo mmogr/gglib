@@ -153,7 +153,9 @@ pub use chat::{
 pub use thinking::Thinking;
 
 // Re-export GGUF types at the domain level for convenience
-pub use gguf::{CapabilityFlags, GgufCapabilities, GgufMetadata, GgufValue, RawMetadata};
+pub use gguf::{
+    CapabilityFlags, GgufCapabilities, GgufMetadata, GgufValue, HeadMetadata, RawMetadata,
+};
 pub use tensor_table::{TensorInfo, TensorTable, WeightsFormat};
 
 // Re-export image-model types at the domain level for convenience

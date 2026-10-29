@@ -14,7 +14,7 @@ use std::path::Path;
 use thiserror::Error;
 
 // Re-export domain types for convenience
-pub use crate::domain::gguf::{GgufCapabilities, GgufMetadata};
+pub use crate::domain::gguf::{GgufCapabilities, GgufMetadata, HeadMetadata};
 pub use crate::domain::tensor_table::TensorTable;
 
 /// Errors that can occur during GGUF parsing.
@@ -93,6 +93,24 @@ pub trait GgufParserPort: Send + Sync {
     /// As [`Self::tensor_table`], and when the header runs past the end of
     /// `head`.
     fn tensor_table_of_head(&self, head: &[u8]) -> Result<TensorTable, GgufParseError>;
+
+    /// Read the metadata of a GGUF file from `head`, its first bytes, as far
+    /// as they hold it. `file_name` stands in for the file's path where
+    /// [`Self::parse`] reads the name (the quantization and the parameter
+    /// count, when the header has neither).
+    ///
+    /// A head that ends inside the header or a pair is the normal case and
+    /// no error: what it holds whole is returned, and
+    /// [`HeadMetadata::complete`] says whether that is all of it. A size the
+    /// file declares that runs past the head is taken for the head ending.
+    ///
+    /// # Errors
+    ///
+    /// When `head` does not start with the GGUF magic (or holds fewer than
+    /// its four bytes), or what it holds is malformed: an unsupported
+    /// version, a value type the format does not have, a string that is not
+    /// UTF-8, or arrays nested too deep.
+    fn parse_head(&self, head: &[u8], file_name: &str) -> Result<HeadMetadata, GgufParseError>;
 }
 
 /// A no-op GGUF parser that returns default/empty metadata.
@@ -116,6 +134,10 @@ impl GgufParserPort for NoopGgufParser {
 
     fn tensor_table_of_head(&self, _head: &[u8]) -> Result<TensorTable, GgufParseError> {
         Ok(empty_table())
+    }
+
+    fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        Ok(HeadMetadata::default())
     }
 }
 
