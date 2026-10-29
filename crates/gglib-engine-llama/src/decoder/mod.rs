@@ -1,9 +1,13 @@
 #![doc = include_str!("README.md")]
 
 mod abort;
+#[cfg(gglib_llama)]
+mod llama;
 mod sampling;
 #[cfg(any(test, feature = "test-decoder"))]
 mod scripted;
+#[cfg(any(test, gglib_llama))]
+mod utf8;
 
 use std::path::Path;
 
@@ -11,6 +15,8 @@ use gglib_core::cache_config::KvCacheType;
 use gglib_gguf::VocabTokens;
 
 pub use abort::Abort;
+#[cfg(gglib_llama)]
+pub use llama::LlamaDecoder;
 pub use sampling::Sampling;
 #[cfg(any(test, feature = "test-decoder"))]
 pub use scripted::{Script, ScriptRecord, ScriptedDecoder};
@@ -102,6 +108,14 @@ pub enum DecoderError {
     /// A decode step failed.
     #[error("decoding failed: {0}")]
     Decode(String),
+    /// A generation was asked of an empty prompt, which leaves nothing to
+    /// sample a reply after.
+    #[error("the prompt is empty, so there is nothing to sample a reply after")]
+    EmptyPrompt,
+    /// The load's [`Abort`] was raised before the model was ready, and no
+    /// model is held.
+    #[error("the load was stopped before the model was ready")]
+    LoadAborted,
 }
 
 /// llama.cpp behind a seam: one model at a time, one generation at a time.
@@ -110,8 +124,18 @@ pub enum DecoderError {
 /// its own, and whoever loads and unloads models through it does so from a
 /// thread that may block.
 pub trait Decoder: Send {
-    /// Load the model at `path`, freeing any model held before.
-    fn load(&mut self, path: &Path, params: &LoadParams) -> Result<Loaded, DecoderError>;
+    /// Load the model at `path`, freeing any model held before, handing
+    /// `progress` the fraction read, from 0 to 1, as the load goes on.
+    ///
+    /// `abort` is checked at every report: once it is raised the load stops
+    /// there, frees what it read, and is [`DecoderError::LoadAborted`].
+    fn load(
+        &mut self,
+        path: &Path,
+        params: &LoadParams,
+        abort: &Abort,
+        progress: &mut dyn FnMut(f32),
+    ) -> Result<Loaded, DecoderError>;
 
     /// `text` as tokens, the vocabulary's BOS added when it adds one and
     /// special tokens read as themselves, as llama-server tokenizes a
@@ -127,6 +151,10 @@ pub trait Decoder: Send {
     /// `sampling.n_predict` tokens, when the context is full, or when
     /// `abort` is raised: it is checked before every decode step, so a raised
     /// abort ends the generation within one step.
+    ///
+    /// An empty `prompt` is refused as [`DecoderError::EmptyPrompt`] before
+    /// the KV cache is touched: llama.cpp has no logits to sample from until
+    /// a token is read. The engine answers an empty prompt itself.
     fn generate(
         &mut self,
         prompt: &[Token],

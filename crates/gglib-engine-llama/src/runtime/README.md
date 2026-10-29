@@ -34,12 +34,15 @@ a task of its own, so a caller that stops waiting does not leave a model
 loaded that the runtime does not know of.
 
 The engine publishes each step as an `EngineState` on a tokio watch: `Idle`,
-`Loading`, `Ready` with its context, `Generating` while a reply runs,
-`Unloading`, `Failed` (a load that failed or panicked; the next admission
-tries again), and `Stopped`. `shutdown` raises the abort of the reply in
-flight and frees the model once the decoder's lock is free, which a load under
-way and the reply's generation hold until they return; it then stops the shim
-and ends the watch on `Stopped`, and the runtime admits nothing after.
+`Loading` with the fraction the decoder reports read, `Ready` with its
+context, `Generating` while a reply runs, `Unloading`, `Failed` (a load that
+failed or panicked; the next admission tries again), and `Stopped`. Every
+load is given the runtime's closing `Abort`, which `shutdown` raises: a load
+under way stops at the decoder's next report of progress and frees what it
+read. `shutdown` also raises the abort of the reply in flight, and frees the
+model once the decoder's lock is free, which the load and the reply's
+generation hold until they return; it then stops the shim and ends the watch
+on `Stopped`, and the runtime admits nothing after.
 
 # Structure
 
@@ -57,8 +60,9 @@ and ends the watch on `Stopped`, and the runtime admits nothing after.
   model freeing the first, two admitted at once taking turns, models the
   runtime refuses, a model with a projector fitted on its weights, and one
   trained under the smallest rung
-- `lifecycle_tests.rs` - shutdown during a load, a runtime shut down, stops,
-  a reply's `Generating`, a load that fails, a load that panics, and a model
-  swapped out mid-reply
+- `load_tests.rs` - a load's progress on the watch, and a shutdown stopping
+  a load under way or freeing the model of one it lands on as it ends
+- `lifecycle_tests.rs` - a runtime shut down, stops, a reply's `Generating`,
+  a load that fails, a load that panics, and a model swapped out mid-reply
 
 <!-- module-docs:end -->

@@ -2,7 +2,8 @@
 # them, so `make test` and `make setup` were one stray directory away from
 # being skipped as up-to-date.
 .PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri \
-        test test-helper check ios-check phone-llama fmt lint doc doc-check dev pre-commit release \
+        test test-helper check ios-check phone-llama engine-llama-test engine-llama-clippy \
+        fmt lint doc doc-check dev pre-commit release \
         lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
         adr-readings record-upstream bindings bindings-check \
         ffi-binding ffi-binding-check ffi-xcframework ffi-xcframework-fast ffi-smoke \
@@ -253,6 +254,28 @@ ios-check: ## Check the phone crates compile for aarch64-apple-ios (macOS)
 phone-llama: ## Build llama.cpp's xcframework at the pin for the phone engine (macOS)
 	@./scripts/apple/build-llama-xcframework.sh
 	@./scripts/apple/check-llama-xcframework.sh "$(CURDIR)/target/apple/llama-$$(./scripts/llama_pin.sh)/llama.xcframework"
+
+# The phone engine's decoder over llama.h (gglib-engine-llama's `llama`
+# feature), built against GGLIB_LLAMA_XCFRAMEWORK, or else the framework
+# `phone-llama` builds for the pin. `engine-llama-test` runs the crate's tests
+# on the Mac's slice; the decoder's read the test models in
+# GGLIB_ENGINE_MODELS_DIR and are skipped without them (failed under CI).
+# `engine-llama-clippy` lints the decoder for the Mac, the iPhone and its
+# simulator. ci.yml's `phone-llama` job runs both. macOS only, and not part
+# of `pre-commit`.
+LLAMA_XCFRAMEWORK_AT_PIN = fw="$${GGLIB_LLAMA_XCFRAMEWORK:-$(CURDIR)/target/apple/llama-$$(./scripts/llama_pin.sh)/llama.xcframework}"; \
+	[ -d "$$fw" ] || { echo "✗ no llama.xcframework at $$fw: run 'make phone-llama' first"; exit 1; }; \
+	export GGLIB_LLAMA_XCFRAMEWORK="$$fw"
+
+engine-llama-test: ## Test the phone engine's decoder over llama.framework on the Mac's slice (macOS)
+	@$(LLAMA_XCFRAMEWORK_AT_PIN); \
+	 $(CARGO) test --locked -p gglib-engine-llama --features llama
+
+engine-llama-clippy: ## Lint the phone engine's decoder for the Mac, the iPhone and its simulator (macOS)
+	@$(LLAMA_XCFRAMEWORK_AT_PIN); \
+	 $(CARGO) clippy --locked -p gglib-engine-llama --all-targets --features llama -- -D warnings && \
+	 $(CARGO) clippy --locked --target aarch64-apple-ios -p gglib-engine-llama --features llama -- -D warnings && \
+	 $(CARGO) clippy --locked --target aarch64-apple-ios-sim -p gglib-engine-llama --features llama -- -D warnings
 
 ##@ Frontend and architecture checks
 

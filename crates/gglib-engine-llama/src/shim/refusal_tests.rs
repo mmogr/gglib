@@ -1,9 +1,10 @@
 //! What the shim refuses, and how: each refusal in llama-server's error
-//! envelope, and none of them reaching the decoder.
+//! envelope, none of them reaching the decoder, and the empty prompt
+//! llama-server answers rather than refuses.
 
 use serde_json::{Value, json};
 
-use super::test_support::{N_CTX, ask, empty, json_of, running};
+use super::test_support::{N_CTX, ask, empty, frames, json_of, running, streamed};
 use crate::decoder::Script;
 
 /// `body`'s `error.type`, after checking `status` is `want`.
@@ -94,6 +95,43 @@ async fn a_prompt_that_fills_the_context_is_refused_as_llama_server_refuses_it()
     assert!(
         shim.record().samplings.is_empty(),
         "an over-long prompt was decoded"
+    );
+}
+
+#[tokio::test]
+async fn an_empty_prompt_is_answered_with_nothing_as_llama_server_answers_it() {
+    // A template that renders nothing, for a vocabulary that adds no BOS.
+    let mut script = Script::new(["no"]);
+    script.chat_template = "{%- for message in messages -%}{%- endfor -%}".to_owned();
+    script.vocab.add_bos = false;
+    let shim = running(script).await;
+
+    let (status, whole) = shim.post("/v1/chat/completions", &ask("Hi")).await;
+    assert_eq!(status, 200, "{whole}");
+    let whole = json_of(&whole);
+    assert_eq!(whole["choices"][0]["message"]["content"], json!(""));
+    assert_eq!(whole["choices"][0]["finish_reason"], json!("length"));
+    let (status, stream) = shim.post("/v1/chat/completions", &streamed("Hi")).await;
+    assert_eq!(status, 200, "{stream}");
+    let frames = frames(&stream);
+    let finish = frames
+        .iter()
+        .find_map(|f| f["choices"][0]["finish_reason"].as_str());
+    assert_eq!(finish, Some("length"), "{stream}");
+    assert!(
+        frames
+            .iter()
+            .all(|f| f["choices"][0]["delta"]["content"].is_null()),
+        "{stream}"
+    );
+    let usage = frames.iter().find(|f| f["usage"].is_object());
+    for usage in [&whole["usage"], &usage.expect("a usage frame")["usage"]] {
+        assert_eq!(usage["prompt_tokens"], json!(0), "{usage}");
+        assert_eq!(usage["completion_tokens"], json!(0), "{usage}");
+    }
+    assert!(
+        shim.record().prompts.is_empty(),
+        "the decoder was asked to generate from nothing"
     );
 }
 

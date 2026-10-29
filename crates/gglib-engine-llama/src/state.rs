@@ -16,8 +16,8 @@ pub enum EngineState {
     Loading {
         /// The model being loaded.
         model: String,
-        /// How much of it has been read, from 0 to 1. The decoder seam
-        /// reports no load progress, so this is 0 until the model is ready.
+        /// How much of it has been read, from 0 to 1, as the decoder
+        /// reports it; a new value is sent at each whole percent.
         fraction: f32,
     },
     /// A model is held and no reply is being generated.
@@ -127,6 +127,29 @@ impl States {
         });
     }
 
+    /// `model` has read `fraction` of itself: `Loading` with it, sent at the
+    /// load's first report and at each whole percent past the one shown.
+    pub(crate) fn loading(&self, model: &str, fraction: f32) {
+        let fraction = fraction.clamp(0.0, 1.0);
+        self.modify(|state| {
+            let shown = match state {
+                EngineState::Loading {
+                    model: loading,
+                    fraction: shown,
+                } if loading == model => Some(whole_percent(*shown)),
+                _ => None,
+            };
+            if shown.is_some_and(|shown| whole_percent(fraction) <= shown) {
+                return false;
+            }
+            *state = EngineState::Loading {
+                model: model.to_owned(),
+                fraction,
+            };
+            true
+        });
+    }
+
     /// `model` has started a reply: `Ready` becomes `Generating`. Any other
     /// state is left alone, since the model is on its way out.
     pub(crate) fn generating(&self, model: &str) {
@@ -195,4 +218,14 @@ impl States {
             .unwrap_or_else(PoisonError::into_inner)
             .push(state);
     }
+}
+
+/// `fraction`, from 0 to 1, in whole percent.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a fraction clamped to 0..=1 is 0..=100 percent once floored"
+)]
+fn whole_percent(fraction: f32) -> u8 {
+    (fraction * 100.0).floor() as u8
 }

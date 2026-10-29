@@ -12,7 +12,8 @@ through the model's template, its generation prompt found to say where the
 reply starts, then waits its turn: one generation runs at a time, as one
 llama-server slot serves. The generation runs on a thread of its own,
 tokenizes the prompt and refuses it when it leaves no token of the context
-free, then hands its events over a bounded channel. Its first event decides
+free (an empty one is answered with nothing, ended at its length, as
+llama-server answers it), then hands its events over a bounded channel. Its first event decides
 the answer, as llama-server's first result does: an error is answered alone,
 as JSON, streamed or not. Otherwise the events become chunks or one
 completion. A stop string found in the reply cuts it there and raises the
@@ -45,7 +46,8 @@ get llama-server's 404, and a slot's save or restore its 501.
   unary answer, and a client that hangs up
 - `shape_tests.rs` - every answer's key paths and types against the pin's
   `shape.txt`
-- `refusal_tests.rs` - what is refused, and how
+- `refusal_tests.rs` - what is refused, and how, and the empty prompt
+  answered with nothing
 - `template_tests.rs` - `POST /apply-template` and the decoded prompt
   against the pin's render
 - `reasoning_tests.rs` - the split piece by piece, and where each pinned

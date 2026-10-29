@@ -11,7 +11,8 @@
 # built for the slice's platform, that llama.h is among its headers, and that
 # every architecture exports each function in SYMBOLS. A slice that passes
 # gets one line, and one that fails a line for each thing it lacks. A slice
-# the plist lists beyond these is named and passes.
+# the plist lists beyond these is named and passes. SYMBOLS itself must name
+# exactly the llama_* functions the engine's C shim calls.
 #
 # Needs macOS: it reads the binaries with plutil, lipo, otool and nm.
 
@@ -41,13 +42,27 @@ SLICES="ios-arm64:2:IOS:arm64
 ios-arm64_x86_64-simulator:7:IOSSIMULATOR:arm64 x86_64
 macos-arm64_x86_64:1:MACOS:arm64 x86_64"
 
-# The llama.h functions the phone engine calls. A pin whose framework renames
-# or drops one fails here, before anything links against it.
-SYMBOLS="llama_backend_init llama_model_load_from_file llama_model_free
-llama_init_from_model llama_free llama_tokenize llama_token_to_piece
-llama_decode llama_batch_get_one llama_sampler_chain_init llama_sampler_sample
-llama_set_abort_callback llama_model_n_ctx_train llama_supports_gpu_offload
-llama_model_chat_template"
+# The llama.h functions the phone engine calls: every one
+# crates/gglib-engine-llama/csrc/gglib_llama.c names. A pin whose framework
+# renames or drops one fails here, before anything links against it.
+SYMBOLS="llama_backend_free llama_backend_init llama_batch_get_one
+llama_context_default_params llama_decode llama_free llama_get_memory
+llama_init_from_model llama_log_set llama_memory_seq_pos_min
+llama_memory_seq_rm llama_model_chat_template llama_model_default_params
+llama_model_free llama_model_get_vocab llama_model_load_from_file
+llama_model_n_ctx_train llama_model_n_swa llama_n_ctx llama_sampler_accept
+llama_sampler_chain_add llama_sampler_chain_default_params
+llama_sampler_chain_init llama_sampler_free llama_sampler_init_dist
+llama_sampler_init_dry llama_sampler_init_greedy llama_sampler_init_logit_bias
+llama_sampler_init_min_p llama_sampler_init_mirostat
+llama_sampler_init_mirostat_v2 llama_sampler_init_penalties
+llama_sampler_init_temp llama_sampler_init_temp_ext llama_sampler_init_top_k
+llama_sampler_init_top_n_sigma llama_sampler_init_top_p
+llama_sampler_init_typical llama_sampler_init_xtc llama_sampler_sample
+llama_set_abort_callback llama_supports_gpu_offload llama_token_to_piece
+llama_tokenize llama_vocab_bos llama_vocab_eos llama_vocab_get_add_bos
+llama_vocab_get_add_eos llama_vocab_get_suppress_tokens llama_vocab_is_eog
+llama_vocab_n_tokens"
 
 PLIST="$FRAMEWORK/Info.plist"
 if [[ ! -f "$PLIST" ]]; then
@@ -64,6 +79,19 @@ done
 
 # shellcheck disable=SC2086 # SYMBOLS is a list of plain names
 symbol_count=$(echo $SYMBOLS | wc -w | tr -d ' ')
+
+# A call the shim gains or loses changes this list in the same change.
+SHIM="$ROOT_DIR/crates/gglib-engine-llama/csrc/gglib_llama.c"
+called=$(grep -oE '\bllama_[a-z0-9_]+[[:space:]]*\(' "$SHIM" | tr -d ' (' | sort -u)
+# shellcheck disable=SC2086 # SYMBOLS is a list of plain names
+listed_symbols=$(printf '%s\n' $SYMBOLS | sort -u)
+if [[ "$called" != "$listed_symbols" ]]; then
+    echo "error: SYMBOLS here is not the list of llama_* functions $SHIM calls:" >&2
+    diff <(echo "$listed_symbols") <(echo "$called") | sed -n 's/^\([<>]\)/  \1/p' >&2
+    echo "  (< listed only here, > called only by the shim)" >&2
+    exit 1
+fi
+
 echo "Checking $FRAMEWORK"
 fail=0
 

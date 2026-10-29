@@ -10,7 +10,7 @@ use gglib_core::sse::SseStreamDecoder;
 use serde_json::{Value, json};
 
 use super::{Shim, start};
-use crate::decoder::{LoadParams, Script, ScriptRecord, ScriptedDecoder};
+use crate::decoder::{Abort, LoadParams, Script, ScriptRecord, ScriptedDecoder};
 use crate::engine::Engine;
 
 /// The context the tests' model is loaded with.
@@ -56,7 +56,12 @@ pub(super) async fn running_in(script: Script, n_ctx: u32) -> Running {
     };
     running
         .engine
-        .load("tiny", Path::new("/models/tiny.gguf"), &params)
+        .load(
+            "tiny",
+            Path::new("/models/tiny.gguf"),
+            &params,
+            &Abort::new(),
+        )
         .expect("the scripted model loads");
     running
 }

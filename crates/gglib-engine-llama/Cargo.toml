@@ -17,6 +17,11 @@ path = "src/lib.rs"
 # `ScriptedDecoder`, a decoder that replays a script, for other crates'
 # tests. They enable it from `[dev-dependencies]` only.
 test-decoder = []
+# `LlamaDecoder`, the decoder over llama.h: build.rs compiles csrc/ against
+# the pinned llama.framework and links it, on an Apple target with
+# GGLIB_LLAMA_XCFRAMEWORK set (`make phone-llama`). Anywhere else the
+# feature compiles nothing, so `--all-features` builds on every OS.
+llama = ["dep:cc"]
 
 [dependencies]
 # The pin (`/props` build_info), the request a chat was asked with, and the
@@ -37,6 +42,10 @@ async-trait = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+[build-dependencies]
+# Compiles csrc/gglib_llama.c, under the `llama` feature only.
+cc = { version = "1.2", optional = true }
 
 [dev-dependencies]
 # The tests talk to the shim over a real socket, as gglib-proxy does.
