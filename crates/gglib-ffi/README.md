@@ -167,3 +167,26 @@ Both builds set `IPHONEOS_DEPLOYMENT_TARGET` and `MACOSX_DEPLOYMENT_TARGET`
 to 26.0, ggchat's floor; `scripts/apple/build-xcframework.sh` says why they
 must be set at all. CI's `ffi-apple` job runs the fast build, the binding
 check and the smoke test whenever a change reaches the crate's inputs.
+
+## Release assets
+
+Each gglib release attaches the framework and its binding, built by
+`release.yml`'s `build-phone` job with the runner's default Xcode:
+
+| Asset | Holds |
+|---|---|
+| `GglibFFI-<version>.xcframework.zip` | `GglibFFI.xcframework`, optimised, at the archive's root, where Swift Package Manager looks for a binary target's framework |
+| `GglibFFI-swift-<version>.zip` | `gglib_ffi.swift`, `GglibFFI.h` and `module.modulemap` as the build generated them, and `binding.json`, at its root |
+
+`binding.json` names what `build_info()` reports, under the same field names:
+`gglib_version`, `uniffi_version` and `llama_pin`. Both archives are in the
+release's `SHA256SUMS` and carry build provenance. The framework archive's line
+there is what `swift package compute-checksum` reports, so an app's
+`.binaryTarget(name: "GglibFFI", url:checksum:)` takes it as it stands.
+
+`scripts/apple/package-release.sh` makes the two from a build and checks them
+as an app meets them: the framework archive holds `GglibFFI.xcframework` alone
+and unzips to slices `check-slices.sh` passes, a scratch Swift package takes
+the archive as its binary target and gets back from `build_info()` what
+`binding.json` says, and the checksum Swift Package Manager computes is the
+SHA-256.

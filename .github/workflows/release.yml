@@ -991,11 +991,129 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: v${{ needs.check-version.outputs.new-version }}
           files: dist/*
+
+  # gglib-ffi as an app links it, attached to the release as two assets:
+  # GglibFFI-<version>.xcframework.zip, a dynamic framework per slice (iOS
+  # device, iOS simulator, macOS), and GglibFFI-swift-<version>.zip, the Swift
+  # uniffi generates for it with the header, modulemap and a binding.json
+  # naming the gglib version, uniffi version and llama.cpp pin.
+  # scripts/apple/package-release.sh says what each holds and how it is
+  # checked. An app pins the framework archive by URL and by the checksum
+  # SHA256SUMS lists for it, which is what `swift package compute-checksum`
+  # reports.
+  #
+  # The runner's default Xcode, as ci.yml's `ffi-apple` and ggchat's CI use:
+  # the framework shipped is the one an app built with that Xcode links.
+  # Optimised, with the workspace's release profile as it stands.
+  #
+  # Gated as `build` is, for the reasons given there.
+  build-phone:
+    name: Build Swift framework
+    runs-on: macos-26
+    needs: [check-version, create-release]
+    if: >-
+      !cancelled()
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && (needs.check-version.outputs.version-changed == 'true' || inputs.test_run == true)
+      && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
+    # A cold optimised build of three slices, then two Swift packages. The
+    # ceiling is for a hang, not for a slow runner.
+    timeout-minutes: 90
+    steps:
+      - name: 🧪 Test Mode Banner
+        if: needs.check-version.outputs.is-test-version == 'true' || inputs.test_run == true
+        run: |
+          echo "::notice::🧪 TEST MODE - Builds will run but no release will be created"
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # rust-toolchain.toml lists the three Apple targets, so this installs them.
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "release-phone"
+          cache-on-failure: true
+          # Only a run on main saves; `deploy-docs` above says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # Which Xcode built the shipped bytes, in the log of the run that
+      # built them.
+      - name: Xcode and Swift
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build the XCFramework and check each slice
+        run: make ffi-xcframework
+
+      - name: The Swift binding links and calls the macOS slice
+        run: make ffi-smoke
+
+      # Into dist/, which holds nothing else on this runner, so the steps
+      # below hash, attest and upload exactly the two archives.
+      - name: Package the framework and its Swift binding
+        env:
+          VERSION: ${{ needs.check-version.outputs.new-version }}
+        run: scripts/apple/package-release.sh "$VERSION" dist
+
+      # See the matching step in the `build` job for why hashing happens here
+      # and not by reading the assets back off the release.
+      - name: Hash release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256() {
+            if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"
+            else shasum -a 256 "$@"; fi
+          }
+          mkdir -p sums
+          ( cd dist && sha256 -- * ) > sums/phone.sha256
+          cat sums/phone.sha256
+
+      - name: Upload checksum fragment
+        uses: actions/upload-artifact@v7
+        with:
+          name: sums-phone
+          path: sums/phone.sha256
+          retention-days: 1
+
+      # As in the `build` job: a dry run's archives are the thing to try in
+      # an app before a tag exists.
+      - name: Upload the archives for a dry run
+        if: needs.check-version.outputs.is-test-version == 'true' || inputs.test_run == true
+        uses: actions/upload-artifact@v7
+        with:
+          name: dryrun-phone
+          path: dist/*
+          retention-days: 7
+
+      # Provenance, as in the `build` job; it is not code signing, and Xcode
+      # signs the framework when it embeds it in an app.
+      - name: Attest build provenance
+        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: dist/*
+
+      - name: Upload the archives to release
+        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
+        uses: softprops/action-gh-release@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: v${{ needs.check-version.outputs.new-version }}
+          files: dist/*
+
   checksums:
     name: Publish SHA256SUMS
     runs-on: ubuntu-24.04
-    needs: [check-version, create-release, build, build-gui]
-    # Requires success from both build jobs, not just "not failure". A partial
+    needs: [check-version, create-release, build, build-gui, build-phone]
+    # Requires success from every build job, not just "not failure". A partial
     # manifest is worse than none: `sha256sum -c --ignore-missing` passes
     # cleanly against a SHA256SUMS that omits the Windows assets, so a Windows
     # user would be told their download verified when nothing was checked.
@@ -1008,15 +1126,17 @@ jobs:
     # version-changed true. It did not hold for a test_run dispatch until the
     # `|| inputs.test_run == true` below: such a dispatch normally runs at the
     # version already on main, leaving version-changed false and this job
-    # skipped. The same allowance is on build and build-gui, and it is needed
-    # in all three — this job consumes their fragments, so gating it alone open
-    # would only leave it waiting on artifacts that were never produced.
+    # skipped. The same allowance is on build, build-gui and build-phone, and
+    # it is needed in all four — this job consumes their fragments, so gating
+    # it alone open would only leave it waiting on artifacts that were never
+    # produced.
     if: >-
       !cancelled()
       && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       && (needs.check-version.outputs.version-changed == 'true' || inputs.test_run == true)
       && needs.build.result == 'success'
       && needs.build-gui.result == 'success'
+      && needs.build-phone.result == 'success'
       && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
     steps:
       - name: Collect checksum fragments
