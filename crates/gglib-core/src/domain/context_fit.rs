@@ -23,16 +23,9 @@
 
 use crate::cache_config::KvCacheType;
 use crate::domain::kv_estimate::{KvElemsPerToken, kv_bytes_per_token};
-use crate::domain::recommendation::BUDGET_UTILISATION;
+use crate::domain::recommendation::usable_share;
 
 use crate::settings::DEFAULT_CONTEXT_SIZE;
-
-/// `bytes * factor`, saturating and rounding down.
-#[allow(clippy::cast_precision_loss, clippy::cast_sign_loss)]
-#[allow(clippy::cast_possible_truncation)]
-fn scale(bytes: u64, factor: f64) -> u64 {
-    (bytes as f64 * factor) as u64
-}
 
 /// The context sizes a fitted value is allowed to take.
 ///
@@ -136,7 +129,7 @@ pub fn fit_context_explained(
     // Never claim more than the model was trained for, *before* snapping, so
     // the result is always both a rung and within the model's range.
     let unsnapped = (|| {
-        let usable = scale(budget_bytes?, BUDGET_UTILISATION);
+        let usable = usable_share(budget_bytes?);
         let for_kv = usable.checked_sub(weights?)?;
         Some((for_kv / per_token?).min(trained_ctx?))
     })();

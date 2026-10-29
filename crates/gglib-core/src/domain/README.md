@@ -66,5 +66,9 @@ infrastructure concerns (database, filesystem, etc.).
   only: `kv_memory` reads metadata and knows nothing of the estimate
 - `device_budget` - A device's memory budget for a model (`budget_from`), from
   one reading of its memory (`DeviceReading`), read once per serve and held
+- `phone_fit` - Whether a model fits a phone, as a verdict (`FitVerdict`:
+  fits, tight, too big, or unknown with the missing input named), read off the
+  launch's own context fit at the default KV cache types, with the inputs it
+  was reached from as the reason
 
 <!-- module-docs:end -->
