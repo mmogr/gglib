@@ -42,6 +42,8 @@ use minijinja::{Environment, UndefinedBehavior, context};
 use serde_json::{Value, json};
 use tracing::debug;
 
+use crate::template_env::base_env;
+
 /// Sentinel content for the plain-text assistant turn.  The snowmen pin
 /// the diff: no real template scaffolding starts or ends with one, so the
 /// common prefix/suffix cannot bite into the payload.
@@ -85,22 +87,10 @@ pub(super) fn derive(metadata: &HashMap<String, String>) -> Option<DialectSpec> 
 
 /// Build the lenient probe environment for `template`.
 pub(super) fn build_env(template: &str) -> Result<Environment<'_>, minijinja::Error> {
-    let mut env = Environment::new();
+    let mut env = base_env();
     // Missing variables render as empty rather than erroring — probe
     // contexts cannot anticipate every variable a template consults.
     env.set_undefined_behavior(UndefinedBehavior::Lenient);
-    // Python-isms (`.strip()`, `.split()`, …) that HF templates use freely.
-    env.set_unknown_method_callback(minijinja_contrib::pycompat::unknown_method_callback);
-    // HF templates abort unsupported inputs through `raise_exception`.
-    env.add_function(
-        "raise_exception",
-        |msg: String| -> Result<minijinja::Value, minijinja::Error> {
-            Err(minijinja::Error::new(
-                minijinja::ErrorKind::InvalidOperation,
-                msg,
-            ))
-        },
-    );
     // Deterministic stub: the date cancels in the A/B diff as long as both
     // renders agree, and a fixed value guarantees they do.
     env.add_function("strftime_now", |_format: String| String::from("2024-01-01"));

@@ -8,8 +8,10 @@ mod format;
 mod head;
 mod parser;
 mod reader;
+mod render;
 mod role;
 mod safetensors;
+mod template_env;
 mod tensor_table;
 
 // =============================================================================
@@ -25,6 +27,9 @@ pub use gglib_core::{GgufCapabilities, GgufMetadata, GgufParseError, GgufParserP
 
 // Re-export tool support detector
 pub use capabilities::tool_calling::ToolSupportDetector;
+
+// A chat rendered through its template as the pinned llama-server renders it.
+pub use render::{ChatKwargs, ChatMessage, ChatTemplate, RenderError, VocabTokens, render_chat};
 
 // Weights files written without a model, for another crate's tests.
 #[cfg(any(test, feature = "test-utils"))]
