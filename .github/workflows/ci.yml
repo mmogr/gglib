@@ -758,11 +758,48 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+  # The crates a phone build compiles, the Makefile's PHONE_CRATES, checked
+  # for aarch64-apple-ios. On macOS because ring, aws-lc-sys and the bundled
+  # SQLite compile C for the target in their build scripts, which takes
+  # Xcode's iOS SDK. That the same crates reach no desktop-only package is the
+  # `boundaries` job's: it reads their closure for this target from the
+  # metadata, with no Apple toolchain.
+  #
+  # Every push and pull request, and no `needs:`: unlike the two cross-OS
+  # jobs it does not wait for `clippy`, so an iOS break shows without the
+  # longest job ahead of it.
+  ios-check:
+    name: iOS Check
+    runs-on: macos-26
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Add the iOS targets
+        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+
+      # Its own shared-key, for the reason spelled out on the `test` job: one
+      # key across four different feature sets meant every job but the first
+      # restored artifacts it could not use.
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci-ios-check"
+          cache-on-failure: true
+          # Only a run on main saves; the `test` job says why.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Check the phone crates for aarch64-apple-ios
+        run: make ios-check
+
   ci-success:
     name: CI Success
     runs-on: ubuntu-24.04
     if: always()
-    needs: [boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os]
+    needs: [boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os, ios-check]
     steps:
       - name: Check all jobs succeeded
         run: |

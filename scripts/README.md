@@ -16,6 +16,7 @@ no second list.
 | Script | Purpose | Run by |
 |--------|---------|--------|
 | `check_boundaries.sh` | The crate dependency rules of CONTRIBUTING's [Crate Boundaries](../CONTRIBUTING.md#crate-boundaries) that a crate's direct dependencies show, the `gglib-bootstrap` source guard, and `check_readmes.sh --strict` | `make boundaries`, in `ci.yml`'s `boundaries` job |
+| `check_phone_closure.sh` | The phone crates' rule in CONTRIBUTING's [Crate Boundaries](../CONTRIBUTING.md#crate-boundaries): no crate the Makefile's `PHONE_CRATES` names reaches a desktop-only package in its `aarch64-apple-ios` dependency closure. It reads `cargo tree` and needs no iOS toolchain | `make boundaries`, in `ci.yml`'s `boundaries` job |
 | `check_readmes.sh` | README coverage: each directory below a crate's `src/`, below `src-tauri/src/` and below the TypeScript `src/` (`src/types/generated/` excepted) has a README with its `module-docs` markers | `check_boundaries.sh`, with `--strict` |
 | The checks in the `enforce` recipe | The repository rules that neither the compiler nor a linter checks | `make enforce`, in `ci.yml`'s `enforcement` job |
 | `check_adr_readings.sh` | Each reading an ADR's criterion names, in `contracts/upstream/llama/observed.json`, against its hand-kept approval in `approvals.json`, and each quoted criterion against its ADR | `make adr-readings`, in `ci.yml`'s `adr-readings` job (`ADR criterion moved`) |
