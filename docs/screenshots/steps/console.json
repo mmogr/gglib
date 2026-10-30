@@ -1,0 +1,1 @@
+[{"click":"[aria-label=\"1 server running\"]"},{"sleep":800},{"clickText":"Qwen3-4B"},{"sleep":800},{"clickText":"Console"},{"sleep":4000}]

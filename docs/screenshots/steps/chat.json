@@ -1,0 +1,1 @@
+[{"click":"[aria-label=\"1 server running\"]"},{"sleep":800},{"clickText":"Qwen3-4B"},{"sleep":800},{"clickText":"Chat"},{"sleep":2500},{"clickText":"Five largest files, in bash"},{"sleep":6000}]

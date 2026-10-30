@@ -1,0 +1,9 @@
+{
+  "name": "gglib-screenshots",
+  "private": true,
+  "type": "module",
+  "description": "Takes the GUI pictures in docs/assets; see README.md",
+  "dependencies": {
+    "puppeteer-core": "24.4.0"
+  }
+}
