@@ -6,53 +6,216 @@
 ![Version](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/version.json)
 [![License](https://img.shields.io/badge/license-AGPL--3.0--only-blue)](LICENSE)
 
-**The local model runtime that makes llama.cpp behave like an API provider.**
+**The local model runtime that makes llama.cpp behave like an API provider.**  
+Every GGUF you own, as one endpoint, on every device you own.
 
-Running a local model with an agentic client means remembering where your GGUFs
-live, figuring out llama-server flags for each model, and managing sampling
-parameters. Even then, the model still produces broken tool calls, gets stuck
-in loops, and ignores your sampling config.
+Running llama.cpp directly gives you the current engine and every flag.
+It also gives you the chores: launch flags that differ per model, the right
+chat template, the right sampling, GGUFs spread across folders, a client
+that wants a different setup every time, and nothing that reaches your
+phone.
 
-GGLib handles the whole stack. It reads each GGUF's metadata and chat template
-to figure out the right launch flags, tool-call format, and sampling defaults,
-with no per-model config. It launches llama-server and runs an intelligent
-proxy between your client and the model. To your client, your entire local GGUF
-library looks like an OpenAI-compatible provider. Clients query `/v1/models`,
-pick a model, and everything just works.
+gglib does those chores. It reads each GGUF and launches llama-server the
+way you would have, keeps your models as a library, and serves the whole
+library as one OpenAI-compatible endpoint. `gglib remote` puts that
+endpoint on your other machines and your phone over an encrypted
+peer-to-peer link, with no VPN and no account.
+
+It is still llama.cpp. Every sampling value gglib resolves is shown with the
+layer that set it, and you can override any of them per model, per profile
+or per request.
 
 <p align="center">
-  <img src="docs/assets/gui-model-browser.png" alt="GGLib model browser" width="49%">
-  <img src="docs/assets/gui-console.png" alt="GGLib console with live inference" width="49%">
+  <img src="docs/assets/cli-up.gif" alt="gglib up: from nothing to a working endpoint" width="800">
 </p>
 
-## Get running
-
-### Pre-built binary
-
-Download a binary from the
-[Releases page](https://github.com/mmogr/gglib/releases) (macOS, Linux,
-Windows) and run it:
+## Two minutes
 
 ```bash
-./gglib up
+brew install mmogr/tap/gglib        # macOS (Apple silicon) and Linux
+sudo apt install gglib              # Ubuntu 24.04+, Debian 13+ (repository below)
+gglib up
 ```
 
-The binaries are not code-signed yet, so macOS and Windows warn about them:
+`gglib up` reads your hardware, installs llama.cpp if it is missing,
+recommends a model that fits, starts the proxy, sends one real request
+through it to prove it works, and prints the settings to paste into your
+client. Already have GGUFs? `gglib model add <file>` puts them in the library
+as they are, wherever they live.
 
-- **macOS** refuses a file a browser downloaded. Clear the download flag
-  with `xattr -d com.apple.quarantine ./gglib`, or for the desktop app,
-  after dragging it to Applications,
-  `xattr -dr com.apple.quarantine "/Applications/GGLib GUI.app"`. The
-  desktop app's tar.gz includes `macos-install.command`, which does this,
-  and Homebrew does it for you.
-- **Windows** SmartScreen stops the desktop app's installer with "Windows
-  protected your PC". Choose **More info**, then **Run anyway**.
+The endpoint is `http://127.0.0.1:8080/v1`. Every model in the library is on
+`/v1/models`; ask for one and gglib loads it, ask for another and it swaps.
+No API key is needed on loopback; use any placeholder if your client insists.
 
-Each release also carries gglib for an iOS or macOS app to link,
-`GglibFFI-<version>.xcframework.zip`, with its Swift binding in
-`GglibFFI-swift-<version>.zip` and the llama.cpp it runs models with in
-`llama-<version>.xcframework.zip`; [gglib-ffi](crates/gglib-ffi/README.md#release-assets)
-says what they hold.
+| Client | Setup |
+|--------|-------|
+| **Cline / Roo Code** | API Provider *OpenAI Compatible*, Base URL `http://127.0.0.1:8080/v1`, API Key `gglib`, Model ID from `gglib model list` |
+| **Continue** | `config.yaml`: provider `openai`, apiBase `http://127.0.0.1:8080/v1` |
+| **Aider** | `OPENAI_API_BASE=http://127.0.0.1:8080/v1 OPENAI_API_KEY=gglib aider --model openai/<model>` |
+| **Zed, Copilot, Open WebUI, anything else** | [docs/clients.md](docs/clients.md) |
+
+Binaries for macOS, Linux and Windows, the desktop app, and the build from
+source are under [Install](#install).
+
+## A library
+
+<p align="center">
+  <img src="docs/assets/gui-library.png" alt="The library in the desktop app, with one model's metadata and resolved sampling open" width="900">
+</p>
+
+Every GGUF you own in one place, with what gglib read from it: size,
+architecture, quantization, trained context, whether it sees images, and
+tags for whether it reasons and how its chat template writes tool calls.
+Download from Hugging Face by repository name
+(`gglib model download unsloth/Qwen3-4B-GGUF`, pick a quant with `-q`),
+search and browse the hub, verify hashes, and upgrade a model when its
+repository publishes a newer file. A download that comes with a projector
+links it, so the model can read images from day one.
+
+The inspector on the right is the control staying in your hands: each
+sampling value, the layer it came from (request, profile, this model, your
+global default, or the recipe the model's author published), and a form to
+override any of them. [Sampling →](docs/sampling.md)
+
+## One endpoint
+
+What runs between the client and llama-server is most of the product. In
+order of how often it matters:
+
+- **Launch flags from metadata.** Context size fitted to the model and this
+  machine, `q8_0` KV cache, Jinja templating, speculative decoding where the
+  GGUF carries an MTP head, the projector when the model has one. No
+  per-model config file. [Details →](docs/tags.md)
+- **Capability detection.** At import, gglib renders the chat template
+  against probe conversations to learn whether the model reasons, how it
+  writes tool calls, and whether it reads `reasoning_effort`. Clients get
+  strict OpenAI-format events whatever dialect the model speaks (Qwen XML
+  tool calls, bare `<think>` tags). [Details →](docs/tags.md#format-dialect-tags)
+- **Sampling authority.** Request → profile → per-model → global → the
+  model's own recipe. Client values are untrusted by default, so no request
+  silently overrides your configuration. Append `:coding` to a model name
+  to pick a profile. [Details →](docs/sampling.md)
+- **Tool-call repair.** A malformed tool call from the model is validated
+  against the client's schema and re-issued under llama.cpp's grammar before
+  the client sees it. Through a real proxy on Llama 3.2 3B, 11 of 11
+  re-issues produced a conformant call; on Qwen3.8-27B nothing broke a schema
+  and repair never fired. [Details →](docs/tool-call-repair.md)
+- **Loop defence.** Agentic clients replay the whole conversation each turn,
+  so the proxy spots tool-call batches repeated with the same answers and
+  repeated response text, and tells the model what it has repeated; a run
+  that trips again is ended with a reply that calls no tool.
+  [Details →](crates/gglib-proxy/README.md#loop--stagnation-defence)
+- **Context defence.** Oversized tool and assistant messages are truncated
+  before forwarding, scaled to the model's real context, because most
+  clients do not compact for custom endpoints.
+  [Details →](crates/gglib-proxy/README.md#history-truncation)
+- **KV cache tiering.** Quantized KV in VRAM, a host-RAM prompt cache sized
+  from your memory on every launch, and opt-in disk slots that survive model
+  swaps and restarts. [Details →](docs/cache.md)
+- **Admission control.** Alternating models (chat plus embeddings) batch
+  their swaps instead of thrashing.
+  [Details →](crates/gglib-runtime/src/process/admission/README.md)
+- **Images.** A screenshot pasted into a client goes to a model linked to
+  its projector, is counted against the context by its pixels, and is
+  refused by name on a model that cannot see, before anything is loaded.
+  [Details →](docs/clients.md#images)
+
+<p align="center">
+  <img src="docs/assets/gui-chat.png" alt="A chat in the desktop app, with each reply's timing" width="800">
+</p>
+
+The chat page is the quickest way to try a model, and it shows what every
+reply cost: thinking time, tokens read, how many came from cache, and
+generation speed. Tools come from MCP servers you add; a folder you choose
+for a chat is readable by its file tools, read-only, and nothing outside it is.
+
+## Every device
+
+Your desktop has the GPU; your laptop, and your phone, have the question.
+
+```bash
+# desktop
+gglib remote enable --invite          # a ticket and a six-digit code, shown once
+
+# laptop, within two minutes
+gglib remote join <ticket>-<code>     # a local port here is now the desktop's proxy
+gglib q --remote -m <model> "Why is this test flaky?"
+```
+
+<p align="center">
+  <img src="docs/assets/cli-remote.png" alt="gglib remote enable --invite" width="800">
+</p>
+
+The connection is direct and end-to-end encrypted, from
+[modelpipe](https://github.com/mmogr/modelpipe): no port forwarding, no VPN,
+no account, no relay that can read a request. The code is single-use and
+dies in two minutes; the tunnel enforces the same API key the proxy does.
+On the laptop, the chat page lists the desktop's conversations beside its
+own and carries them on live. [Details →](docs/remote.md)
+
+On an iPhone or iPad, [ggchat](https://github.com/mmogr/ggchat) scans the
+same QR code and talks to the same endpoint; it is a native iPhone and Mac
+app.
+
+The desktop app doubles as an always-on host: `--proxy-autostart`,
+`--close-to-tray` and `--start-at-login` keep the endpoint up without a
+terminal window, and the tray shows what it is doing.
+
+<p align="center">
+  <img src="docs/assets/tray-dashboard.png" alt="The tray dashboard during a reply" height="420">
+</p>
+
+## Day to day
+
+```bash
+gglib model download unsloth/Qwen3-4B-GGUF -q Q4_K_M
+gglib model search "gemma 3 instruct"
+gglib model list
+gglib model explain Qwen3-4B          # every resolved parameter and which layer set it
+
+gglib chat Qwen3-4B                    # interactive
+gglib q "Explain the builder pattern in Rust"
+cat error.log | gglib q "What went wrong here?"
+gglib q --image shot.png "what is the error?"
+
+gglib serve Qwen3-4B                   # the same proxy, pinned to one model
+gglib proxy dashboard                  # live connections, slots, cache, in the terminal
+```
+
+Settings are optional and persist:
+
+```bash
+gglib config settings set --default-context-size 131072
+gglib config settings set --proxy-autostart true --close-to-tray true
+```
+
+`gglib benchmark` compares models on one prompt, measures throughput, and
+sweeps sampling parameters for a model with `--apply` to keep the winner.
+[CLI reference →](docs/cli.md)
+
+## Interfaces
+
+All of them share one database and one models folder.
+
+| Interface | Command | Details |
+|-----------|---------|---------|
+| OpenAI proxy | `gglib proxy` | [gglib-proxy](crates/gglib-proxy/README.md) |
+| Pinned endpoint | `gglib serve <model>` | Same proxy, one model |
+| CLI | `gglib <command>` | [gglib-cli](crates/gglib-cli/README.md) |
+| Desktop app | `gglib gui` | [gglib-tauri](crates/gglib-tauri/README.md) |
+| Web UI | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) |
+| Terminal dashboard | `gglib proxy dashboard` | Connections, slots, cache, requests |
+| Remote access | `gglib remote enable` / `join` | [docs/remote.md](docs/remote.md) |
+| Phone | [ggchat](https://github.com/mmogr/ggchat) | iPhone and Mac |
+
+## Install
+
+### Homebrew (macOS on Apple silicon, Linux)
+
+```bash
+brew install mmogr/tap/gglib
+brew install --cask mmogr/tap/gglib-gui   # the desktop app, macOS only
+```
 
 ### apt (Ubuntu 24.04+, Debian 13+)
 
@@ -64,22 +227,31 @@ echo "deb [signed-by=/usr/share/keyrings/gglib-archive-keyring.gpg] https://mmog
 sudo apt update && sudo apt install gglib   # the desktop app is gg-lib-gui
 ```
 
-The repository carries stable releases only. Release candidates are on the
+The repository carries stable releases only; release candidates are on the
 [Releases page](https://github.com/mmogr/gglib/releases) as prereleases.
 
-### Homebrew (macOS on Apple silicon, Linux)
+### Pre-built binaries (macOS, Linux, Windows)
 
-```bash
-brew install mmogr/tap/gglib
-brew install --cask mmogr/tap/gglib-gui   # the desktop app, macOS only
-```
+Download from the [Releases page](https://github.com/mmogr/gglib/releases)
+and run `./gglib up`. The binaries are not code-signed yet:
 
-### Arch Linux
+- **macOS** refuses a file a browser downloaded. Clear the flag with
+  `xattr -d com.apple.quarantine ./gglib`, or for the desktop app, after
+  dragging it to Applications,
+  `xattr -dr com.apple.quarantine "/Applications/GGLib GUI.app"`. The
+  desktop app's tar.gz includes `macos-install.command`, which does this,
+  and Homebrew does it for you.
+- **Windows** SmartScreen stops the desktop app's installer with "Windows
+  protected your PC". Choose **More info**, then **Run anyway**.
+- **Arch Linux**: AUR packages will follow once the AUR takes new accounts
+  again. Until then, the Linux binary or the desktop app's AppImage
+  (`chmod +x` it first).
 
-AUR packages (`gglib-bin`, `gglib-gui-bin`) will follow once the AUR takes
-new accounts again. Until then, use the Linux binary or the desktop app's
-AppImage (`chmod +x` it first) from the
-[Releases page](https://github.com/mmogr/gglib/releases).
+Each release also carries gglib for an iOS or macOS app to link,
+`GglibFFI-<version>.xcframework.zip`, its Swift binding in
+`GglibFFI-swift-<version>.zip`, and the llama.cpp it runs models with in
+`llama-<version>.xcframework.zip`;
+[gglib-ffi](crates/gglib-ffi/README.md#release-assets) says what they hold.
 
 ### Build from source
 
@@ -95,240 +267,21 @@ gglib up
 `make setup` installs both engines at their pinned releases, llama.cpp for
 chat and the image runtime that draws pictures, and offers faster downloads
 as an optional extra. It goes on without the image runtime if that install
-fails: chat models need only llama.cpp.
-
-A build from source keeps its library in the same per-user folder as an
-installed gglib, so the two share models, settings and llama.cpp;
+fails: chat models need only llama.cpp. A build from source keeps its library
+in the same per-user folder as an installed gglib;
 [CONTRIBUTING](CONTRIBUTING.md#your-data-while-developing) says how to keep a
 development build apart.
-
-`gglib up` reads your hardware, installs llama.cpp if missing, recommends a
-model that fits your VRAM, starts the proxy, sends a test request to prove it
-works, and prints the settings to paste into your client. You have a working
-endpoint at `http://127.0.0.1:8080/v1`.
-
-## What it fixes
-
-Everything between the OpenAI request and llama-server is the product:
-
-- **Tool-call repair**: `tool_choice: "auto"` can leave llama.cpp
-  unconstrained, producing malformed arguments that crash the client's
-  executor. GGLib validates each tool call in the answer's first choice
-  against the client's schema (no other choice is judged) and silently
-  re-issues failures: with `tool_choice: "required"`, which activates
-  llama.cpp's own grammar, or, on a turn gglib's own grammar constrained, as a
-  second draw under it. The client gets the re-issue's answer when that
-  validates, and the original when it does not. Measured through a real proxy
-  on 2026-09-20: on Llama 3.2 3B over a schema-stress suite, 11 of 11
-  re-issues produced a conformant call, and the proxy arm as a whole — repair
-  among several things it does — scored higher on 8 of 15 matched pairs and
-  lower on none; on Qwen3.8-27B nothing broke a schema, so repair attempted
-  nothing.
-  [Details →](docs/tool-call-repair.md),
-  [reading →](docs/adr/log-0004.md#addendum--the-first-reading-through-the-proxy-2026-09-20)
-- **Loop defense**: agentic clients replay the full conversation each turn,
-  so the proxy scans the incoming history for tool-call batches repeated back
-  to back *and answered the same way*, observation-tool spam, and repeated
-  *response text* anywhere in the session. A batch whose answer keeps changing
-  is an agent polling for output, not a loop, and does not trip it. What happens
-  to a stuck session is one setting: by default the request is **forwarded with
-  a note** telling the model what it has repeated, so a client with no recovery
-  path from a refusal still gets an answer, and a run that trips again after
-  its note is ended with a finished reply that calls no tool
-  ([ADR 0021](docs/adr/0021-the-loop-guard-ends-the-loop.md));
-  `--loop-guard-mode refuse` answers 400 instead, before a model swap or
-  another generation, and `off` stops the scan. No run has measured how often
-  it fires or what the note changes yet ([#1047](https://github.com/mmogr/gglib/issues/1047)).
-  [Details →](crates/gglib-proxy/README.md#loop--stagnation-defence)
-- **Sampling authority**: a hierarchy (request → profile → per-model →
-  global → model recipe) resolves every sampling parameter server-side.
-  Client values are untrusted by default, so no request can silently override
-  your configuration. [Details →](docs/sampling.md)
-- **Context defense**: tool-heavy sessions balloon past the context window
-  because most clients don't compact for custom endpoints. The proxy
-  truncates oversized tool and assistant messages before forwarding, scaled
-  to the model's actual context size, not a fixed floor.
-  [Details →](crates/gglib-proxy/README.md#history-truncation)
-- **Dialect normalization**: model-specific markup (Qwen XML tool calls,
-  bare `<think>` tags) is parsed and re-encoded into strict OpenAI-format
-  events. [Details →](docs/tags.md#format-dialect-tags)
-- **KV cache tiering**: three layers, all auto-configured. `q8_0` KV
-  quantization halves VRAM usage versus llama-server's default, a host-RAM
-  prompt cache is auto-sized from your system memory on every launch, and
-  opt-in disk slot persistence lets KV state survive model swaps and
-  restarts. Sliding-window and hybrid-attention models are detected and
-  excluded from disk caching automatically.
-  [Details →](docs/cache.md)
-- **Capability detection**: at import, GGLib reads GGUF metadata and renders
-  the chat template against probe conversations to derive reasoning support,
-  tool-call dialect, and speculative-decoding config. No per-model setup.
-  [Details →](docs/tags.md)
-- **Admission control**: alternating models (chat + embeddings) batch swaps
-  instead of thrashing. [Details →](crates/gglib-runtime/src/process/admission/README.md)
-- **Images**: a screenshot pasted into Copilot, or attached with
-  `gglib q --image` or in the chat page, goes to a model linked to its
-  projector, which a download from a repository that has one fetches and
-  links. An image is counted against the context by its pixels, not by its
-  base64, and one sent to a model with no projector is refused by name
-  before anything is loaded, where llama-server alone answers HTTP 500 once
-  the model is up. [Details →](docs/clients.md#images)
-
-## Client configuration
-
-The endpoint is `http://127.0.0.1:8080/v1`. No API key is needed on loopback;
-use any placeholder if your client requires one. Model names come from
-`gglib model list` (shown as `qwen3.6` below).
-
-| Client | Setup |
-|--------|-------|
-| **Cline / Roo Code** | Settings → API Provider: *OpenAI Compatible*, Base URL `http://127.0.0.1:8080/v1`, API Key `gglib`, Model ID `qwen3.6` |
-| **Continue** | In `config.yaml`: provider `openai`, model `qwen3.6`, apiBase `http://127.0.0.1:8080/v1` |
-| **Aider** | `OPENAI_API_BASE=http://127.0.0.1:8080/v1 OPENAI_API_KEY=gglib aider --model openai/qwen3.6` |
-| **Zed** | In `settings.json` under `language_models.openai_compatible` ([example](docs/clients.md)) |
-
-Append `:coding` to a model name (e.g. `qwen3.6:coding`) to select a sampling
-profile. See [Sampling → Inference profiles](docs/sampling.md#inference-profiles-modelprofile).
-
-## Day-to-day usage
-
-```bash
-# Download a model directly from a HuggingFace repo
-gglib model download bartowski/Qwen3-4B-GGUF
-
-# Search HuggingFace for models
-gglib model search "gemma 3 instruct"
-
-# List your installed models
-gglib model list
-
-# Start the proxy (all models available via /v1/models)
-gglib proxy
-
-# Ask a one-shot question
-gglib q "Explain the builder pattern in Rust"
-
-# Pipe context in
-cat error.log | gglib q "What went wrong here?"
-
-# Ask about a screenshot (the model must be linked to a projector)
-gglib q --image shot.png "what is the error?"
-
-# Link a model to its projector (an mmproj GGUF), which gives it image input
-gglib model update <model> --projector <file>
-
-# Interactive chat
-gglib chat
-```
-
-## Configure
-
-Optional, after first run:
-
-```bash
-gglib config settings set --default-context-size 131072
-gglib config settings set --proxy-autostart true --close-to-tray true
-```
-
-## Benchmark and tune
-
-```bash
-# Compare the same prompt across multiple models side-by-side
-gglib benchmark compare -p "Explain ownership in Rust" -m Qwen3-4B -m Gemma3-4B
-
-# Measure raw throughput (prompt processing + generation) via llama-bench
-gglib benchmark perf -m Qwen3-4B
-
-# Sweep sampling parameters to find the best settings for a model,
-# scored on tool-call accuracy, loop avoidance, and task completion
-gglib benchmark tune -m Qwen3-4B --sweep temperature=0.2,0.5,0.8 --apply
-
-# A/B test: run the agentic suite against raw llama-server vs. through
-# GGLib's request pipeline, on the same model and seeds; --proxy adds an
-# arm through a real GGLib proxy, tool-call repair on, and a raw baseline
-gglib benchmark agentic -m Qwen3-4B --seeds 12345,67890 --proxy
-```
-
-The agentic benchmark includes its own A/A arm and positive control so it
-can't overclaim. Full methodology:
-[ADR 0004's log](docs/adr/log-0004.md#addendum--the-ab-instrument-and-the-first-thing-it-measured).
-
-## Interfaces
-
-All interfaces share the same database and model directory.
-
-| Interface | Command | Details |
-|-----------|---------|---------|
-| OpenAI proxy | `gglib proxy` | [gglib-proxy](crates/gglib-proxy/README.md) |
-| Pinned endpoint | `gglib serve <id>` | Same proxy, locked to one model |
-| CLI | `gglib <command>` | [gglib-cli](crates/gglib-cli/README.md) |
-| Desktop GUI | `gglib gui` | [gglib-tauri](crates/gglib-tauri/README.md) |
-| Web UI | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) |
-| Dashboard | `gglib proxy dashboard` | Live terminal view of connections, cache, and requests |
-| Remote access | `gglib remote enable` / `join` | One machine's models on another, end-to-end encrypted — [docs](docs/remote.md) |
-
-`gglib proxy dashboard` streams live proxy state to your terminal:
-
-```text
-Active connections (1)
-  slot 0  Qwen3.5-4B  task 426  generating  7.36 t/s
-
-Slots (llama.cpp /slots)
-  slot 0  [████████████░░░░░░░░]  58%
-
-VRAM residency
-  Qwen3.5-4B (Q8_0)  6.4 GiB loaded
-  Model swaps        0
-
-Prompt cache
-  Reused       2,278 of 8,641 prompt tokens (3 requests)
-  Last request 2,278 of 5,979 tokens from cache
-
-Client sampling dropped (trust_client_sampling off)
-  temperature: 3 requests
-```
-
-The desktop GUI doubles as a quick way to test models and as an always-on
-proxy host. `--proxy-autostart`, `--close-to-tray`, and `--start-at-login`
-keep the endpoint available without a terminal window.
-
-<p align="center">
-  <img src="docs/assets/gui-chat.png" alt="GGLib chat with tool calls" width="600">
-  &nbsp;&nbsp;
-  <img src="docs/assets/tray-dashboard.png" alt="GGLib tray dashboard" height="300">
-</p>
-
-## Remote access
-
-Your desktop has the GPU; your laptop has the question. `gglib remote` puts
-the desktop's proxy on the laptop's loopback over a direct, end-to-end
-encrypted connection between the two machines — no VPN, no account, and no
-relay that can read a request.
-
-```bash
-# desktop
-gglib remote enable --invite             # shows a ticket + six-digit code, once
-
-# laptop, within two minutes
-gglib remote join <ticket>-<code>        # binds a local port that is the desktop
-gglib q --remote -m <model> "Why is this test flaky?"   # a model the desktop serves
-```
-
-The code is single-use and dies in two minutes; the ticket is fresh every
-`enable`; the tunnel enforces the same API key the proxy does, and `/mcp` is
-always closed over it. On the laptop, the chat page's rail
-switches between its own chats and the desktop's, which it reads and carries
-on live without copying them. [Details →](docs/remote.md)
 
 ## Security
 
 Everything binds `127.0.0.1` by default. **Do not expose the endpoint to the
-public internet.** Optional bearer API key on loopback; auto-minted if you bind
-externally, and put on the loopback proxy — the OpenAI-compatible one on
-`:8080`, not the daemon's management API on `:9887` — the moment you enable
-remote access. The daemon's API asks its own token, minted at every start and
-readable only by your account; `gglib web` opens your browser on a link that
-carries it (`--no-open` only prints the link).
-Host-header allowlist and local-only CORS are always on. No
+public internet.** An optional bearer API key covers loopback; one is minted
+for you if you bind externally, and put on the loopback proxy (the
+OpenAI-compatible one on `:8080`, not the daemon's management API on
+`:9887`) the moment you enable remote access. The daemon's API asks its own
+token, minted at every start and readable only by your account; `gglib web`
+opens your browser on a link that carries it (`--no-open` only prints the
+link). Host-header allowlist and local-only CORS are always on. No
 multi-tenancy or rate limiting. Details in
 [gglib-proxy](crates/gglib-proxy/README.md); the tunnel's model is in
 [Remote access](docs/remote.md#how-it-stays-private).
