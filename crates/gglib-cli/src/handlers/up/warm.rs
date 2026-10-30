@@ -1,4 +1,5 @@
-//! Step 5: prove the endpoint works, then say how to connect to it.
+//! Step 5: prove the endpoint works, then say how to connect to it and what
+//! to run next.
 //!
 //! The proxy runs on the daemon, so this talks to the endpoint over HTTP like
 //! any other client rather than reaching into a runtime: the point is to
@@ -34,7 +35,10 @@ const LOAD_TIMEOUT: Duration = Duration::from_mins(10);
 /// Never returns an error: a failed warm-up leaves a perfectly usable proxy,
 /// and tearing that down over a slow first load would be a worse outcome than
 /// the cold start it was trying to avoid.
-pub(super) async fn run(port: u16, model: String, api_key: Option<String>) {
+///
+/// `model` is the name a client sends; `model_id` is what a printed command
+/// takes, since a name is often several words.
+pub(super) async fn run(port: u16, model: String, model_id: i64, api_key: Option<String>) {
     let addr: SocketAddr = ([127, 0, 0, 1], port).into();
     let client = gglib_proxy::loopback::client();
 
@@ -72,7 +76,7 @@ pub(super) async fn run(port: u16, model: String, api_key: Option<String>) {
         }
     }
 
-    for line in render_client_config(addr, &model, api_key.is_some(), use_color()) {
+    for line in render_client_config(addr, &model, model_id, api_key.is_some(), use_color()) {
         println!("{line}");
     }
 }
@@ -151,7 +155,13 @@ async fn warm_request(
 /// Told whether the endpoint has a key, never the key, so it cannot print
 /// one (ADR 0027): this block is the one most likely to be pasted into a chat
 /// or an issue. The `curl` line reads the key through the reveal command.
-fn render_client_config(addr: SocketAddr, model: &str, has_key: bool, color: bool) -> Vec<String> {
+fn render_client_config(
+    addr: SocketAddr,
+    model: &str,
+    model_id: i64,
+    has_key: bool,
+    color: bool,
+) -> Vec<String> {
     let (bold, dim, reset) = if color {
         (BOLD, DIM, RESET)
     } else {
@@ -192,12 +202,42 @@ fn render_client_config(addr: SocketAddr, model: &str, has_key: bool, color: boo
         format!("      URL        {base}"),
         String::new(),
         format!("    VS Code Copilot (BYOK) needs one fixed model, so use:"),
-        format!("      gglib serve {model}"),
+        format!("      gglib serve {model_id}"),
         String::new(),
         format!("    Check it from another shell:"),
         curl_line,
         String::new(),
         format!("  Dashboard  http://{addr}/v1/proxy/status"),
+        String::new(),
+    ]
+}
+
+/// What to run once `up` is done, as data: the endpoint keeps serving on the
+/// daemon, so the list ends with how to watch it and how to stop it. The model
+/// is named by its id, which a shell passes as one argument.
+pub(super) fn render_next_steps(port: u16, model_id: i64, color: bool) -> Vec<String> {
+    let (bold, dim, reset) = if color {
+        (BOLD, DIM, RESET)
+    } else {
+        ("", "", "")
+    };
+    let watch = format!("gglib proxy dashboard --port {port}");
+    vec![
+        format!("  {bold}Ready.{reset} The endpoint keeps running in the background."),
+        String::new(),
+        format!(
+            "    {:<36}{dim}chat in this terminal{reset}",
+            format!("gglib chat {model_id}")
+        ),
+        format!(
+            "    {:<36}{dim}open the chat page in your browser{reset}",
+            "gglib web"
+        ),
+        format!("    {watch:<36}{dim}watch requests as they arrive{reset}"),
+        format!(
+            "    {:<36}{dim}stop the endpoint{reset}",
+            "gglib proxy stop"
+        ),
         String::new(),
     ]
 }
@@ -216,7 +256,7 @@ mod tests {
     /// command has failed at its whole purpose.
     #[test]
     fn the_pasteable_values_are_all_present() {
-        let lines = render_client_config(addr(), "qwen3-30b-a3b", false, false);
+        let lines = render_client_config(addr(), "qwen3-30b-a3b", 7, false, false);
         let text = lines.join("\n");
         assert!(text.contains(&format!("http://127.0.0.1:{DEFAULT_PROXY_PORT}/v1")));
         assert!(text.contains("qwen3-30b-a3b"));
@@ -224,20 +264,18 @@ mod tests {
     }
 
     /// Copilot cannot use the unpinned endpoint; the pinned alternative has to
-    /// be spelled out with the model already filled in.
+    /// be spelled out with the model already filled in, by id: a name such as
+    /// "Qwen3 8B" would reach `serve` as two arguments.
     #[test]
     fn copilot_is_pointed_at_the_pinned_command() {
-        let lines = render_client_config(addr(), "qwen3-30b-a3b", false, false);
-        assert!(
-            lines
-                .iter()
-                .any(|l| l.contains("gglib serve qwen3-30b-a3b"))
-        );
+        let lines = render_client_config(addr(), "Qwen3 8B", 7, false, false);
+        assert!(lines.iter().any(|l| l.ends_with("gglib serve 7")));
+        assert!(!lines.iter().any(|l| l.contains("gglib serve Qwen3")));
     }
 
     #[test]
     fn a_verification_command_is_offered() {
-        let lines = render_client_config(addr(), "m", false, false);
+        let lines = render_client_config(addr(), "m", 1, false, false);
         assert!(
             lines
                 .iter()
@@ -247,7 +285,7 @@ mod tests {
 
     #[test]
     fn the_dashboard_url_is_included() {
-        let lines = render_client_config(addr(), "m", false, false);
+        let lines = render_client_config(addr(), "m", 1, false, false);
         assert!(lines.iter().any(|l| l.contains("/v1/proxy/status")));
     }
 
@@ -255,13 +293,13 @@ mod tests {
     /// likely to be copied out of a terminal into a chat or an issue.
     #[test]
     fn no_ansi_escapes_when_color_is_off() {
-        let lines = render_client_config(addr(), "m", false, false);
+        let lines = render_client_config(addr(), "m", 1, false, false);
         assert!(lines.iter().all(|l| !l.contains('\u{1b}')));
     }
 
     #[test]
     fn ansi_escapes_appear_only_when_color_is_on() {
-        let lines = render_client_config(addr(), "m", false, true);
+        let lines = render_client_config(addr(), "m", 1, false, true);
         assert!(lines.iter().any(|l| l.contains(DIM)));
         assert!(lines.iter().any(|l| l.contains(BOLD)));
     }
@@ -269,7 +307,7 @@ mod tests {
     /// The address is not hardcoded — `--port` has to reach the printed URLs.
     #[test]
     fn a_non_default_port_reaches_every_url() {
-        let lines = render_client_config(([127, 0, 0, 1], 9999).into(), "m", false, false);
+        let lines = render_client_config(([127, 0, 0, 1], 9999).into(), "m", 1, false, false);
         let text = lines.join("\n");
         assert!(text.contains("http://127.0.0.1:9999/v1"));
         assert!(!text.contains(&DEFAULT_PROXY_PORT.to_string()));
@@ -279,7 +317,7 @@ mod tests {
     /// through the reveal, which then runs in the reader's own shell.
     #[test]
     fn a_key_is_named_and_read_through_the_reveal() {
-        let text = render_client_config(addr(), "m", true, false).join("\n");
+        let text = render_client_config(addr(), "m", 1, true, false).join("\n");
 
         assert!(
             text.contains("API Key    (set, not shown)"),
@@ -292,5 +330,22 @@ mod tests {
             "{text}"
         );
         assert!(!text.contains("not-needed"), "{text}");
+    }
+
+    /// `up` ends here rather than in the dashboard, so the list has to name
+    /// the chat, the web page, and how to watch and stop what is still
+    /// running, with this run's model and port filled in.
+    #[test]
+    fn the_next_steps_name_this_runs_model_and_port() {
+        let text = render_next_steps(8123, 7, false).join("\n");
+        for command in [
+            "gglib chat 7 ",
+            "gglib web",
+            "gglib proxy dashboard --port 8123",
+            "gglib proxy stop",
+        ] {
+            assert!(text.contains(command), "missing {command:?} in:\n{text}");
+        }
+        assert!(!text.contains('\x1b'));
     }
 }

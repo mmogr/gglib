@@ -31,10 +31,11 @@ pub enum Commands {
     // ── Getting started ──────────────────────────────────────────────────
     /// Go from nothing to a working OpenAI-compatible endpoint in one command
     ///
-    /// Detects your hardware, installs llama.cpp if it is missing, recommends
-    /// and downloads a model that actually fits, starts the proxy, sends a
-    /// real request through it to prove the endpoint works, and prints the
-    /// configuration to paste into your client.
+    /// Detects your hardware, installs llama.cpp and the image runtime if they
+    /// are missing, recommends and downloads a model that actually fits,
+    /// starts the proxy, sends a real request through it to prove the endpoint
+    /// works, prints the configuration to paste into your client, and exits
+    /// with a list of what to run next. The endpoint keeps running.
     ///
     /// Safe to re-run: anything already present is skipped, so a second run is
     /// just "start the proxy".

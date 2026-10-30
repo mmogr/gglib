@@ -12,7 +12,7 @@ stands in for.
 | Step | Delegates to |
 |------|--------------|
 | 1. Hardware | [`gglib_app_services::SetupOps::get_status`] — the same status the GUI wizard renders |
-| 2. llama.cpp | [`ensure_installed`](crate::handlers::config::engine::ensure_installed), as `gglib serve` uses |
+| 2. Engines | [`ensure_installed`](crate::handlers::config::engine::ensure_installed) for llama.cpp, as `gglib serve` uses, then for stable-diffusion.cpp, which is optional: skipping or failing it never stops `up` |
 | 3. Model | [`gglib_core::domain::recommend`], then `DownloadManagerPort::queue_smart` + the shared interactive monitor |
 | 4. Proxy | [`DaemonHandle::start_proxy`], unpinned — identical to `gglib proxy` |
 | 5. Warm-up | one HTTP request to the endpoint it just started |
