@@ -46,7 +46,7 @@ crates/gglib-axum/src/handlers/agent/turn_fixture.rs 318
 crates/gglib-axum/src/routes.rs 467
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-bootstrap/src/builder.rs 309
-crates/gglib-cli/src/commands.rs 370
+crates/gglib-cli/src/commands.rs 371
 crates/gglib-cli/src/daemon_client/images_tests.rs 387
 crates/gglib-cli/src/handlers/agent_chat/config.rs 477
 crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 460
@@ -71,6 +71,8 @@ crates/gglib-cli/src/handlers/model/update_surface_tests.rs 304
 crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 351
 crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 534
 crates/gglib-cli/src/handlers/up/mod.rs 330
+crates/gglib-cli/src/handlers/up/probe.rs 310
+crates/gglib-cli/src/handlers/up/warm.rs 351
 crates/gglib-cli/src/model_commands.rs 399
 crates/gglib-cli/src/presentation/explain_display.rs 413
 crates/gglib-cli/src/presentation/explain_display_tests.rs 687
