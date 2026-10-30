@@ -56,8 +56,8 @@ fn start_body(port: Option<u16>, default_context: Option<u64>) -> StartProxyBody
 
 /// Execute the up command.
 ///
-/// Blocks until Ctrl-C, like `gglib proxy` — the endpoint it just built is the
-/// point, so the command stays in the foreground serving it.
+/// Returns once the endpoint has answered, saying what to run next: the
+/// daemon owns the proxy, so it keeps serving after `up` exits.
 pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     println!();
     println!(
@@ -92,12 +92,11 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
 
     // Step 5: prove it. The warm request loads the model through the very
     // endpoint the user is about to point their client at.
-    warm::run(proxy_port, model.name.clone(), api_key).await;
-
-    // The endpoint now outlives this command — the daemon owns it. Attach the
-    // dashboard so `up` keeps its "foreground until Ctrl-C" feel; detaching
-    // leaves the endpoint serving.
-    proxy::attach_dashboard(ctx, proxy_port, None).await
+    warm::run(proxy_port, model.name.clone(), model.id, api_key).await;
+    for line in warm::render_next_steps(proxy_port, model.id, use_color()) {
+        println!("{line}");
+    }
+    Ok(())
 }
 
 // ─── Shared output helpers ───────────────────────────────────────────────────

@@ -139,7 +139,7 @@ pub(crate) async fn execute(
 /// Attach the live dashboard to the running proxy, and print the detach
 /// hint when the user leaves it.
 ///
-/// Shared by `proxy`, `serve` and `up`: the daemon owns the process, so the
+/// Shared by `proxy` and `serve`: the daemon owns the process, so the
 /// foreground command's job after starting it is to show it working.
 pub(in crate::handlers) async fn attach_dashboard(
     ctx: &CliContext,

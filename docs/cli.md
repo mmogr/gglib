@@ -71,8 +71,9 @@ reported as an error.
 Detects your hardware, installs llama.cpp and the image runtime
 (stable-diffusion.cpp) if missing, recommends and downloads a
 model that fits your VRAM (asking first), starts the proxy, sends a real request
-through it to prove the endpoint answers, and prints the settings to paste into
-your client.
+through it to prove the endpoint answers, prints the settings to paste into
+your client, and exits with a short list of what to run next. The endpoint keeps
+running on the daemon until `gglib proxy stop`.
 
 Safe to re-run — anything already present is skipped, so a second run is just
 "start the proxy". Deliberately unconfigurable beyond `--yes`, `--model` and
