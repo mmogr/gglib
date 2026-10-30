@@ -9,15 +9,16 @@
 **The local model runtime that makes llama.cpp behave like an API provider.**  
 Every GGUF you own, as one endpoint, on every device you own.
 
-I moved from Ollama to llama.cpp for the control and the output, and then
-spent my evenings on the chores: the right flags for each model, the right
-chat template, the right sampling, GGUFs in three folders, a client that
-wants a different setup every time, and nothing that reaches my phone.
+Running llama.cpp directly gives you the current engine and every flag.
+It also gives you the chores: launch flags that differ per model, the right
+chat template, the right sampling, GGUFs spread across folders, a client
+that wants a different setup every time, and nothing that reaches your
+phone.
 
-gglib is those chores, automated. It reads each GGUF and launches the real
-llama-server the way you would have, keeps your models as a library, and
-serves the whole library as one OpenAI-compatible endpoint. `gglib remote`
-puts that endpoint on your other machines and your phone over an encrypted
+gglib does those chores. It reads each GGUF and launches llama-server the
+way you would have, keeps your models as a library, and serves the whole
+library as one OpenAI-compatible endpoint. `gglib remote` puts that
+endpoint on your other machines and your phone over an encrypted
 peer-to-peer link, with no VPN and no account.
 
 It is still llama.cpp. Every sampling value gglib resolves is shown with the
