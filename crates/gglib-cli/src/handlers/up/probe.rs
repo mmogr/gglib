@@ -1,10 +1,12 @@
-//! Steps 1-2: what this machine is, and llama.cpp on it.
+//! Steps 1-2: what this machine is, and the engines on it.
 
+use std::io::IsTerminal;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use gglib_app_services::{GpuInfoDto, SetupDeps, SetupOps, SetupStatus};
 use gglib_core::domain::format_gib;
+use gglib_core::paths::SD_INSTALL_COMMAND;
 use gglib_core::utils::system::SystemMemoryInfo;
 use gglib_runtime::DefaultSystemProbe;
 
@@ -13,7 +15,7 @@ use crate::bootstrap::CliContext;
 use crate::handlers::config::engine::ensure_installed;
 use crate::presentation::style::{RESET, SUCCESS};
 use gglib_core::domain::RuntimeKind;
-use gglib_runtime::engine::PinStanding;
+use gglib_runtime::engine::{PinStanding, pin_state};
 
 /// Run steps 1 and 2, returning the memory figures the model choice needs.
 ///
@@ -42,7 +44,7 @@ pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemo
         (!status.models_directory.exists).then_some("will be created"),
     );
 
-    step(2, "llama.cpp");
+    step(2, "Engines");
     match status.llama_pin.standing {
         PinStanding::Missing => {
             if !yes {
@@ -55,14 +57,99 @@ pub(super) async fn run(ctx: &CliContext, yes: bool) -> Result<Option<SystemMemo
         // installed already runs.
         PinStanding::Older => {
             ensure_installed(ctx, RuntimeKind::Llama, yes).await?;
-            row("binaries", "installed", None);
+            row("chat", "llama.cpp installed", None);
         }
         PinStanding::AtPin | PinStanding::Newer | PinStanding::Unknown => {
-            row("binaries", "already installed", None);
+            row("chat", "llama.cpp already installed", None);
         }
     }
+    ensure_images(ctx, yes).await;
 
     Ok(memory)
+}
+
+/// Install stable-diffusion.cpp, which draws images, as `make setup` and the
+/// GUI wizard's Engines step do. Chat does not need it, so it never stops
+/// `up`: declined, failed, or with nobody to ask, `up` says how to install it
+/// later and goes on to the model.
+async fn ensure_images(ctx: &CliContext, yes: bool) {
+    let kind = RuntimeKind::StableDiffusion;
+    let standing = match pin_state(kind) {
+        Ok(state) => state.standing,
+        Err(e) => {
+            images_skipped(&format!("{e:#}"));
+            return;
+        }
+    };
+    match images_action(standing, yes, std::io::stdin().is_terminal()) {
+        ImagesAction::SkipNobodyToAsk => {
+            images_skipped("there is no terminal to ask, and --yes was not given");
+        }
+        ImagesAction::Install => match ensure_installed(ctx, kind, yes).await {
+            Ok(()) => println!(
+                "  {}\u{2713}{} {} ready",
+                sgr(SUCCESS),
+                sgr(RESET),
+                kind.label()
+            ),
+            Err(e) => images_skipped(&format!("{e:#}")),
+        },
+        // As for llama.cpp, a declined or failed update keeps what is there.
+        ImagesAction::OfferUpdate => match ensure_installed(ctx, kind, yes).await {
+            Ok(()) => row("images", &format!("{} installed", kind.label()), None),
+            Err(e) => images_skipped(&format!("{e:#}")),
+        },
+        ImagesAction::AlreadyThere => {
+            row(
+                "images",
+                &format!("{} already installed", kind.label()),
+                None,
+            );
+        }
+    }
+}
+
+/// What [`ensure_images`] does about the image runtime.
+#[derive(Debug, PartialEq, Eq)]
+enum ImagesAction {
+    /// Missing, and nobody can be asked: skip rather than prompt into a
+    /// closed stdin.
+    SkipNobodyToAsk,
+    /// Missing: offer it, or install it under `--yes`.
+    Install,
+    /// Older than the pin: offer the update, which may be declined.
+    OfferUpdate,
+    /// At or past the pin: nothing to do.
+    AlreadyThere,
+}
+
+/// The rule [`ensure_images`] applies, given where the install stands,
+/// `--yes`, and whether stdin is a terminal.
+fn images_action(standing: PinStanding, yes: bool, stdin_is_terminal: bool) -> ImagesAction {
+    match standing {
+        PinStanding::Missing if !yes && !stdin_is_terminal => ImagesAction::SkipNobodyToAsk,
+        PinStanding::Missing => ImagesAction::Install,
+        PinStanding::Older => ImagesAction::OfferUpdate,
+        PinStanding::AtPin | PinStanding::Newer | PinStanding::Unknown => {
+            ImagesAction::AlreadyThere
+        }
+    }
+}
+
+/// Say that images were skipped, why, and how to get them later.
+fn images_skipped(reason: &str) {
+    for line in images_skipped_lines(reason) {
+        println!("{line}");
+    }
+}
+
+/// The lines [`images_skipped`] prints, as data.
+fn images_skipped_lines(reason: &str) -> Vec<String> {
+    let product = RuntimeKind::StableDiffusion.label();
+    vec![
+        format!("  \u{26a0}\u{fe0f}  {product} was not installed: {reason}"),
+        format!("     Chat works without it. To draw images later, run '{SD_INSTALL_COMMAND}'."),
+    ]
 }
 
 /// Print the memory rows and assemble the figure the recommendation sizes
@@ -191,5 +278,33 @@ mod tests {
     #[test]
     fn no_gpu_at_all_is_cpu_only() {
         assert_eq!(backend_label(&gpu()), "CPU only");
+    }
+
+    /// A missing image runtime is installed when `--yes` or a terminal can
+    /// answer, and skipped only when neither can; one already there is left.
+    #[test]
+    fn images_are_installed_unless_nobody_can_answer() {
+        use ImagesAction::*;
+        use PinStanding::*;
+        assert_eq!(images_action(Missing, false, false), SkipNobodyToAsk);
+        assert_eq!(images_action(Missing, true, false), Install);
+        assert_eq!(images_action(Missing, false, true), Install);
+        assert_eq!(images_action(Older, false, false), OfferUpdate);
+        for standing in [AtPin, Newer, Unknown] {
+            assert_eq!(images_action(standing, false, true), AlreadyThere);
+        }
+    }
+
+    /// A skipped image runtime names why, says chat is unaffected, and gives
+    /// the command that installs it later.
+    #[test]
+    fn skipped_images_say_why_and_how_to_install_later() {
+        assert_eq!(
+            images_skipped_lines("the download failed"),
+            [
+                "  \u{26a0}\u{fe0f}  stable-diffusion.cpp was not installed: the download failed",
+                "     Chat works without it. To draw images later, run 'gglib config sd install'.",
+            ]
+        );
     }
 }

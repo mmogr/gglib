@@ -37,8 +37,8 @@ sudo apt install gglib              # Ubuntu 24.04+, Debian 13+ (repository belo
 gglib up
 ```
 
-`gglib up` reads your hardware, installs llama.cpp if it is missing,
-recommends a model that fits, starts the proxy, sends one real request
+`gglib up` reads your hardware, installs llama.cpp and the image runtime if
+they are missing, recommends a model that fits, starts the proxy, sends one real request
 through it to prove it works, and prints the settings to paste into your
 client. Already have GGUFs? `gglib model add <file>` puts them in the library
 as they are, wherever they live.
