@@ -24,7 +24,9 @@ name: Engine pins
 
 on:
   schedule:
-    - cron: '23 3 * * 1'
+    # 03:23 on Monday in Brisbane (17:23 UTC on Sunday), so the pull request
+    # is waiting at the start of the week. Cron here is always UTC.
+    - cron: '23 17 * * 0'
   workflow_dispatch:
 
 permissions: {}
@@ -64,11 +66,10 @@ jobs:
     # another leg's.
     outputs:
       llama_proposes: ${{ matrix.engine == 'llama' && steps.pick.outputs.propose || '' }}
-    # As ci.yml sets them: other flags would rebuild even what the cache
-    # restored below has.
+    # As ci.yml sets it. rust-cache hashes the CARGO* and RUST* variables into
+    # its key, so an environment that differs restores nothing of `test`'s.
     env:
       CARGO_TERM_COLOR: always
-      RUSTFLAGS: "-C relocation-model=dynamic-no-pic"
     strategy:
       fail-fast: false
       matrix:

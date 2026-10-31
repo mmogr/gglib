@@ -16,11 +16,12 @@
 # one `security` and puts `[security]` after the entry's commit prefix in its
 # title.
 #
-# Each entry runs every day at 06:00 in the maintainer's timezone
-# (`interval: daily` would skip weekends). When the set of updates a group
-# would carry changes, Dependabot opens a new pull request for the group and
-# closes the old one as superseded, so an open group is replaced rather than
-# topped up.
+# Each entry runs once a week at 06:00 in the maintainer's timezone: cargo
+# on Monday, npm on Wednesday, the actions and pip on Friday, so their CI runs
+# do not queue behind each other. When the set of updates a group would carry
+# changes, Dependabot opens a new pull request for the group and closes the
+# old one as superseded. Run daily, most of the CI it started went on pull
+# requests that were superseded before anyone merged them.
 #
 # No `target-branch` anywhere: with one set, none of these options would
 # reach security updates, which always target the default branch.
@@ -35,7 +36,7 @@ updates:
     directory: "/"
     schedule:
       interval: cron
-      cronjob: "0 6 * * *"
+      cronjob: "0 6 * * 1"
       timezone: Australia/Brisbane
     # Transitive crates as well as direct ones. Most of the lock's
     # semver-compatible updates are transitive, and a fix whose advisory
@@ -117,7 +118,7 @@ updates:
     directory: "/"
     schedule:
       interval: cron
-      cronjob: "0 6 * * *"
+      cronjob: "0 6 * * 3"
       timezone: Australia/Brisbane
     # An update the range already admits changes package-lock.json only. The
     # range moves only when it has to, the same rule as the cargo entry.
@@ -186,7 +187,7 @@ updates:
     directory: "/"
     schedule:
       interval: cron
-      cronjob: "0 6 * * *"
+      cronjob: "0 6 * * 5"
       timezone: Australia/Brisbane
     cooldown:
       default-days: 3
@@ -201,7 +202,7 @@ updates:
     # run in PR CI or in a test_run of release.yml, so the pull request can be
     # tested before it merges. The ignore list holds the ones neither
     # exercises: a test_run skips release.yml's tag, attest, upload and Pages
-    # steps, release-please.yml runs only on pushes to main, and promote.yml
+    # steps, release-please.yml runs only after CI on main, and promote.yml
     # only when dispatched. A major of one of these would first run in a real
     # release, so each is bumped by hand in a pull request of its own, just
     # before a release someone watches.
@@ -242,19 +243,21 @@ updates:
         applies-to: security-updates
         patterns: ["*"]
 
-  # The status card's one Python dependency, pinned in a requirements file.
+  # The two requirements files: the status card's, and the download
+  # accelerator's, which gglib embeds and installs on a user's machine, so a
+  # change to it is a Rust change and runs the full CI. Dependabot reads any
+  # .txt file whose name holds "requirements".
   - package-ecosystem: pip
-    directory: "/scripts/status_card"
+    directories: ["/scripts/status_card", "/crates/gglib-download/scripts"]
     schedule:
       interval: cron
-      cronjob: "0 6 * * *"
+      cronjob: "0 6 * * 5"
       timezone: Australia/Brisbane
     cooldown:
       default-days: 3
     commit-message:
-      prefix: "ci(deps)"
+      prefix: "chore(deps)"
     labels:
       - dependencies
       - automated
       - "type: chore"
-      - "component: ci"

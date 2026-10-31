@@ -23,12 +23,16 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-C relocation-model=dynamic-no-pic"
 
+# Every job has a timeout-minutes, counted from when it starts rather than
+# from when it was queued: a ceiling for a hang, well above a cold run. The
+# cross-OS legs take theirs from the matrix: 75 minutes on macOS, where CLI
+# Check builds llama.xcframework when its cache misses, and 45 elsewhere.
 jobs:
   fmt:
     name: Format
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -42,6 +46,7 @@ jobs:
   quality:
     name: Lint & Typecheck
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -75,6 +80,7 @@ jobs:
   boundaries:
     name: Check Boundaries
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -101,6 +107,7 @@ jobs:
   enforcement:
     name: Enforce Architecture
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -121,6 +128,7 @@ jobs:
   adr-readings:
     name: ADR criterion moved
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -131,6 +139,7 @@ jobs:
   test:
     name: Test (Rust)
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     # No `needs:`. This was chained to `clippy` so it would restore the target
     # dir clippy had just populated — but clippy builds `--all-features` and
     # this job builds default features, so on run 32705784511 it inherited
@@ -191,9 +200,7 @@ jobs:
         run: rustup show
 
       - name: Lockfile guard
-        run: |
-          cargo metadata --locked --format-version 1 > /dev/null
-          cargo metadata --locked --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
+        run: cargo metadata --locked --format-version 1 > /dev/null
 
       # Swatinem/rust-cache, as release.yml already uses, with a shared-key
       # per build configuration. The raw actions/cache this replaces used one
@@ -232,6 +239,7 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
+      # gglib-axum embeds `web_ui/` and its tests serve `/` from it.
       - name: Build Web UI
         run: |
           npm ci
@@ -290,18 +298,14 @@ jobs:
         if: always()
         with:
           name: test-results
-          # A glob, not a list. The list this replaces named fifteen crates
-          # while badges.yml's ALL_CRATES named sixteen, and the two had
-          # already drifted: the broadcaster and gglib-build-info had badges that
-          # nothing ever wrote a file for, and gglib-integration-tests had a
-          # file nothing reads. Deriving the set from what was actually built
-          # cannot drift.
+          # A glob, so the set is whatever the run built.
           path: rust-test-*.txt
           retention-days: 30
 
   bindings:
     name: Bindings Freshness
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     # Its own job rather than a step on `test`, which is where it lived on the
     # stated grounds that "the cargo cache is warm in this job". It was not:
     # this builds `--features ts-bindings`, a different feature unification
@@ -365,6 +369,7 @@ jobs:
   rustdoc:
     name: Rustdoc
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     # Off `test` for the same reason as `bindings` above: it sat there for a
     # cargo cache that did not apply to it. rustdoc builds its own artifacts
     # and the job log shows 137 crates recompiling, so the four and a half
@@ -429,6 +434,7 @@ jobs:
   test-frontend:
     name: Test (Frontend)
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     # No `needs:` — this job is pure npm and finishes in about a minute. It used
     # to wait on a full workspace clippy build it shares nothing with.
     # Same masking as the Rust job: `npm run test:run … | tee` reported `tee`'s
@@ -473,6 +479,7 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     # No `needs:` — clippy is a long pole and nothing gates it. It no longer
     # warms anyone else's cache: it builds `--all-features`, which is not what
     # `test` or `cli-cross-os` build, and the shared key that pretended
@@ -534,24 +541,24 @@ jobs:
   cli-cross-os:
     name: CLI Check (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    if: github.event_name == 'pull_request'
-    # Same reason as `clippy-cross-os` below, and no longer any other: these
-    # legs spend minutes on three runners, macOS and Windows among them, and
-    # there is no sense spending them on a tree ubuntu clippy has already
-    # rejected. It was never about the cache here either — the key is per-OS,
-    # so the Linux leg was the only one that could ever have shared, and it
-    # does not now.
-    needs: [clippy]
+    timeout-minutes: ${{ matrix.timeout }}
+    # Only when `scope` says a change can reach these builds. `clippy` first,
+    # so no macOS or Windows minutes go on a tree ubuntu clippy has rejected.
+    if: needs.scope.outputs.cross_os == 'true'
+    needs: [clippy, scope]
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-24.04
+            timeout: 45
           - target: aarch64-apple-darwin
             os: macos-26
+            timeout: 75
           - target: x86_64-pc-windows-msvc
             os: windows-2022
+            timeout: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -567,9 +574,9 @@ jobs:
         with:
           shared-key: "ci-cli-${{ matrix.target }}"
           cache-on-failure: true
-          # Only a run on main saves; the `test` job says why. This job runs
-          # only on pull requests, so nothing saves under these keys and every
-          # leg builds cold.
+          # Only a run on main saves; the `test` job says why. Main runs this
+          # job when Cargo.lock or the toolchain moves, so the key the next
+          # pull requests restore is saved there.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install system dependencies (Linux)
@@ -774,19 +781,20 @@ jobs:
   clippy-cross-os:
     name: Clippy (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    if: github.event_name == 'pull_request'
-    # Not for the cache — the key is per-OS, so there is nothing to share.
-    # This is to avoid spending macOS and Windows minutes on a tree that
-    # ubuntu clippy has already rejected.
-    needs: [clippy]
+    timeout-minutes: ${{ matrix.timeout }}
+    # As `cli-cross-os`: when `scope` says so, and after ubuntu clippy.
+    if: needs.scope.outputs.cross_os == 'true'
+    needs: [clippy, scope]
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: aarch64-apple-darwin
             os: macos-26
+            timeout: 75
           - target: x86_64-pc-windows-msvc
             os: windows-2022
+            timeout: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -802,9 +810,7 @@ jobs:
         with:
           shared-key: "ci-clippy-${{ matrix.target }}"
           cache-on-failure: true
-          # Only a run on main saves; the `test` job says why. As with
-          # `cli-cross-os`, this job runs only on pull requests, so every leg
-          # builds cold.
+          # Only a run on main saves, as for `cli-cross-os`.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Node.js
@@ -828,12 +834,15 @@ jobs:
   # `boundaries` job's: it reads their closure for this target from the
   # metadata, with no Apple toolchain.
   #
-  # Every push and pull request, and no `needs:`: unlike the two cross-OS
-  # jobs it does not wait for `clippy`, so an iOS break shows without the
-  # longest job ahead of it.
+  # Whenever `scope` says a change reaches a Rust build. It waits for `scope`
+  # alone, not `clippy`, so an iOS break shows without the longest job ahead
+  # of it.
   ios-check:
     name: iOS Check
     runs-on: macos-26
+    timeout-minutes: 45
+    needs: [scope]
+    if: needs.scope.outputs.ios == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -856,42 +865,63 @@ jobs:
       - name: Check the phone crates for aarch64-apple-ios
         run: make ios-check
 
-  # Whether a change reaches what `ffi-apple` builds: the workspace crates in
-  # gglib-ffi's dependency closure, as cargo resolves it, and the files the
-  # job's builds read (scripts/apple/ffi-inputs-changed.sh names them). A pull
-  # request is compared with its base, through the merge commit GitHub checks
-  # out; a push to main always builds the framework.
+  # What a change can reach, read once on Linux so the macOS and Windows jobs
+  # run only when it can matter to them. scripts/ci_scope.py says what each
+  # output means; every gated job's `if:` and `ci-success` read these and
+  # nothing else.
   #
-  # In `ci-success`'s needs with `ffi-apple`. A skipped job counts as passed
-  # there, as the two pull-request-only jobs above are on a push, so the
-  # skip is only as sound as this job's answer: the closure is read from
-  # cargo rather than listed, and a failure here fails the run instead of
-  # skipping the framework silently.
-  ffi-inputs:
-    name: Swift Framework Inputs
+  # A pull request is the merge commit against its first parent. A push is
+  # compared with the commit main was at before it, since one push can carry
+  # several commits; `before` is all zeros only when a branch is created, and
+  # then the commit's parent stands in. The pull request count is for an
+  # admin's direct push, which no pull request CI has seen.
+  scope:
+    name: Scope
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
-      changed: ${{ steps.inputs.outputs.changed }}
+      version_only: ${{ steps.scope.outputs.version_only }}
+      rust: ${{ steps.scope.outputs.rust }}
+      ffi: ${{ steps.scope.outputs.ffi }}
+      ios: ${{ steps.scope.outputs.ios }}
+      lock: ${{ steps.scope.outputs.lock }}
+      cross_os: ${{ steps.scope.outputs.cross_os }}
+      apple: ${{ steps.scope.outputs.apple }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          # The merge commit and its first parent, the base it is compared with.
+          # The head and its parent: a pull request's base, or a push's
+          # fallback.
           fetch-depth: 2
 
+      # scripts/apple/ffi-inputs-changed.sh reads gglib-ffi's closure with
+      # `cargo tree`.
       - name: Install Rust toolchain
-        if: github.event_name == 'pull_request'
         run: rustup show
 
-      - name: Does this change reach the Swift framework?
-        id: inputs
+      - name: Decide what this change can reach
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            ./scripts/apple/ffi-inputs-changed.sh HEAD^1 HEAD >> "$GITHUB_OUTPUT"
-          else
-            echo "A push to main always builds the framework."
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+          if [[ $EVENT == pull_request ]]; then
+            ./scripts/ci_scope.py scope --base HEAD^1 --head HEAD >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          base=HEAD^1
+          if [[ ! $BEFORE =~ ^0+$ ]]; then
+            git fetch --no-tags --depth=1 origin "$BEFORE"
+            base=$BEFORE
+          fi
+          prs=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq length)
+          ./scripts/ci_scope.py scope --base "$base" --head "$SHA" --event push --pr-count "$prs" >> "$GITHUB_OUTPUT"
 
   # gglib-ffi as the app links it: GglibFFI.xcframework, a dynamic framework
   # per slice (iOS device, iOS simulator, macOS) linking llama.cpp's own
@@ -908,23 +938,15 @@ jobs:
   # builds is the one an app built with that Xcode links. Unoptimised, since
   # nothing it answers depends on optimisation; release.yml builds the
   # optimised one it ships.
-  #
-  # RUSTFLAGS is cleared so the framework is built with the flags release.yml
-  # builds it with, which are none. The workflow's relocation-model flag would
-  # change nothing here (aarch64 Apple code is position-independent whatever
-  # it says, and a local build with it links the same dylib), but this job
-  # should not build something the release does not.
   ffi-apple:
     name: Swift Framework (macOS)
     runs-on: macos-26
-    needs: [ffi-inputs]
-    if: needs.ffi-inputs.outputs.changed == 'true'
+    needs: [scope]
+    if: needs.scope.outputs.apple == 'true'
     # A cold build of three slices, the generator and the Swift package is a
     # few minutes, and llama.cpp's three builds half an hour more when its
     # cache misses; the ceiling is for a hang, not for a slow runner.
     timeout-minutes: 75
-    env:
-      RUSTFLAGS: ""
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -933,9 +955,8 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show
 
-      # Its own shared-key, for the reason spelled out on the `test` job. A
-      # push to main always runs this job, so main keeps the cache warm for
-      # the pull requests that restore it.
+      # Its own shared-key, for the reason spelled out on the `test` job. Main
+      # saves it whenever a push reaches the framework.
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -1006,12 +1027,17 @@ jobs:
   # Mac, the iPhone and its simulator. Every other job builds the crate as
   # plain Rust, with no framework.
   #
-  # Every push and pull request, like `ios-check`. A run that misses a cache
-  # saves its entry, so a pull request restores main's entry or one an
-  # earlier run of its own saved.
+  # When the change reaches the Swift framework's inputs, as `ffi-apple`:
+  # gglib-engine-llama is in gglib-ffi's closure, and the pin, the
+  # llama-xcframework action and the test models' list are inputs. A run that
+  # misses the xcframework cache saves its entry, so a pull request restores
+  # main's entry or one an earlier run of its own saved.
   phone-llama:
     name: Phone Engine on llama.cpp (macOS)
     runs-on: macos-26
+    timeout-minutes: 75
+    needs: [scope]
+    if: needs.scope.outputs.apple == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -1071,23 +1097,109 @@ jobs:
       - name: The decoder over llama.h, linted for the Mac, the iPhone and its simulator
         run: make engine-llama-clippy
 
+  # Main's Rust caches, down to the newest entry per job and toolchain.
+  # rust-cache keys an entry
+  # `v0-rust-<shared-key>-<os>-<arch>-<env hash>-<lockfile hash>` and
+  # restores by everything before the lockfile hash, so once a newer entry
+  # exists for the same job and env hash an older one is never restored
+  # again; but it stays until the repository's 10 GB limit evicts something,
+  # and what it evicts first is the macOS entries, saved least often. Every
+  # lockfile change leaves a generation of these behind, so this runs on
+  # every push. The env hash stays in the group: two runner images with
+  # different toolchains serve the pool at once during a rollout, and each
+  # restores only its own lineage.
+  #
+  # After the jobs that save on most pushes, so their new entries are
+  # counted; an entry the macOS jobs save later is pruned by the next push.
+  cache-prune:
+    name: Prune the Rust caches
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, bindings, rustdoc, clippy, cli-cross-os, clippy-cross-os]
+    permissions:
+      actions: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # A failure here costs cache space, not correctness, and must not turn
+      # main's run red: the release pull request and the badges follow only
+      # a green one. A delete that loses a race with another run's prune is
+      # a warning.
+      - name: Delete every entry but the newest per job and toolchain
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh cache list --ref refs/heads/main --json id,key,createdAt --limit 500 \
+            | jq -r '[.[] | select(.key | test("^v0-rust-.+-[0-9a-f]{8}-[0-9a-f]{8}$"))]
+                     | group_by(.key | sub("-[0-9a-f]{8}$"; ""))
+                     | .[] | sort_by(.createdAt) | .[:-1][] | "\(.id) \(.key)"' \
+            > "$RUNNER_TEMP/stale.txt"
+          echo "$(wc -l < "$RUNNER_TEMP/stale.txt") stale entries"
+          while read -r id key; do
+            echo "Deleting $key"
+            gh cache delete "$id" < /dev/null || echo "::warning::could not delete $key"
+          done < "$RUNNER_TEMP/stale.txt"
+
+  # The one required check. A gated job's own `if:` reads its scope output,
+  # and this holds every job to what that output says it must have done:
+  #
+  #   job                            must be
+  #   cli-cross-os, clippy-cross-os  success if cross_os, else skipped
+  #   ios-check                      success if ios, else skipped
+  #   ffi-apple, phone-llama         success if apple, else skipped
+  #   every other job                success
+  #
+  # A skip is a pass only where its gate says `false`, so a gate that comes
+  # out wrong, or empty because `scope` failed, cannot turn a run green with
+  # the job unrun. A matrix job reports one result for all its legs.
   ci-success:
     name: CI Success
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     if: always()
-    needs: [boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os, ios-check, ffi-inputs, ffi-apple, phone-llama]
+    needs: [scope, boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os, ios-check, ffi-apple, phone-llama]
     steps:
-      - name: Check all jobs succeeded
+      - name: Check every job did what its scope says
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        shell: python3 {0}
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
-            echo "One or more CI jobs failed"
-            exit 1
-          fi
-          if [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
-            echo "One or more CI jobs were cancelled"
-            exit 1
-          fi
-          echo "All CI jobs passed successfully"
+          import json, os, sys
+
+          GATES = {
+              "cli-cross-os": "cross_os",
+              "clippy-cross-os": "cross_os",
+              "ios-check": "ios",
+              "ffi-apple": "apple",
+              "phone-llama": "apple",
+          }
+          OUTPUTS = ("version_only", "rust", "ffi", "ios", "lock", "cross_os", "apple")
+
+          needs = json.loads(os.environ["NEEDS"])
+          scope = needs.get("scope", {}).get("outputs", {})
+          bad = []
+          for name in OUTPUTS:
+              value = scope.get(name)
+              print(f"scope: {name}={value}")
+              if value not in ("true", "false"):
+                  bad.append(f"scope output {name} is {value!r}, not true or false")
+          for job in GATES:
+              if job not in needs:
+                  bad.append(f"{job} is gated here but missing from needs")
+          for job, info in sorted(needs.items()):
+              gate = GATES.get(job)
+              want = "success" if gate is None or scope.get(gate) == "true" else "skipped"
+              got = info["result"]
+              print(f"{job}: {got}" + (f" ({gate}={scope.get(gate)})" if gate else ""))
+              if got != want:
+                  bad.append(f"{job} is {got}, and must be {want}")
+          for line in bad:
+              print(f"::error::{line}")
+          sys.exit(1 if bad else 0)
 
   release:
     name: Release
