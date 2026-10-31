@@ -79,6 +79,8 @@ need macOS with Xcode.
 | `install-engine.sh` | `install-engine.sh llama\|sd` runs `gglib config <engine> install`, which installs the engine's pinned release: the download where this machine has one, and a source build for the acceleration it detects where it has none. With no terminal it answers a source build's "Continue?" with yes | `make llama-install-auto`, `make sd-install` and `make setup` |
 | `generate_submodule_readmes.sh` | Writes a README stub wherever a source directory lacks one | By hand |
 | `split_test_output.py` | Cuts one `cargo test` run into the per-crate files the badges read | `ci.yml`'s `test` job |
+| `crate_list.py` | The crate lists, from `crates/layers.toml`: `list` prints one, `readmes --write` writes each badged crate README's header block, and `--check` fails when the table and the workspace disagree, a crate depends on a layer above its own, a README links a badge file the pipeline does not write, or a header is stale | `coverage.yml`, `check_boundaries.sh`, `write_badges.py`, `make readmes` and `make enforce` |
+| `write_badges.py` | Writes the `badges` branch's JSON files from one CI or Coverage run of `main`, and deletes every other JSON file there | `badges.yml` |
 | `check_issue_form_mapping.mjs` | The issue form's field ids are the ones `issue-labels.yml` maps to labels | `check-issue-form.yml` |
 | `sync_versions.py` | Copies the workspace version into `package.json` | `bump-version.yml` |
 | `next_version.py` | The version a Bump Version run moves to: the next release candidate, a new cycle, or a promotion | `bump-version.yml` |
@@ -96,5 +98,3 @@ need macOS with Xcode.
 | `backtest_label_heuristics.sh` | Measures the pull-request labelling heuristics against merged pull requests | By hand |
 | `macos-install.command`, `MACOS-README.txt` | The double-click installer in the macOS release bundle and its instructions: it clears the quarantine attribute and offers to move the app to `/Applications` | `release.yml` copies both into the bundle |
 | `experiments/` | The measurements that ADRs, `docs/sampling.md` and doc comments cite, kept so that they can be run again | By hand |
-
-`badges.yml` inlines its own badge generation and invokes no script here.

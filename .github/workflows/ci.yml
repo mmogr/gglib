@@ -254,9 +254,8 @@ jobs:
 
       # `--no-fail-fast` is a deliberate change, not a transcription. Without
       # it cargo stops at the first failing binary, so on a red run every later
-      # crate's file is never written — and because badges.yml keeps files it
-      # cannot regenerate, those badges go on serving their last green value.
-      # One failure should not hide the state of everything after it.
+      # crate's tests go unrun and the log says nothing about them. One failure
+      # should not hide the state of everything after it.
       #
       # No `--verbose`: nothing parses the per-rustc lines and they were 5324
       # of this step's log. And no `--all-targets`, ever — it would silently
@@ -277,10 +276,11 @@ jobs:
           /tmp/hfx/bin/pip install --quiet -r crates/gglib-download/scripts/hf_xet_requirements.txt
           cd crates/gglib-download/scripts && /tmp/hfx/bin/python -m unittest test_hf_xet_downloader
 
-      # badges.yml counts per-crate tests out of
-      # rust-test-<crate>.txt. Those used to come from the loop above; they now
-      # come from dividing the one run's output by the package each binary
-      # belongs to. `always()` so a red suite still publishes what it did run.
+      # badges.yml counts per-crate tests out of rust-test-<crate>.txt,
+      # through scripts/write_badges.py. Those used to come from the loop
+      # above; they now come from dividing the one run's output by the package
+      # each binary belongs to. `always()` so a red suite still publishes what
+      # it did run.
       - name: Split test output per crate
         if: always()
         run: ./scripts/split_test_output.py cargo-test-artifacts.json rust-test-output.txt

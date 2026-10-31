@@ -337,7 +337,7 @@ A fourth surface — [Architecture Decision Records](#architecture-decision-reco
 
 Each crate's `README.md` serves two narrow purposes:
 
-1. **Badges** — metrics surfaced as shields.io endpoint badges (tests, coverage, LOC, complexity) that read from the `badges` branch (see [Badges Pipeline](#badges-pipeline) below).
+1. **Badges** — metrics surfaced as shields.io endpoint badges (tests, coverage, LOC, complexity) that read from the `badges` branch, in a header block `make readmes` writes (see [Badges Pipeline](#badges-pipeline) below).
 2. **Architecture ASCII diagrams** — a text diagram showing where the crate sits in the layer model and an internal structure diagram. These are written and maintained by hand.
 
 Crate READMEs are **not** the place for API documentation, usage examples, or explanatory prose about how individual types work — that belongs in Rustdoc.
@@ -507,25 +507,23 @@ A brief that carries work between sessions is not an ADR and does not need one's
 
 ## Badges Pipeline
 
-The version, test, coverage, LOC and complexity badges in the root README, in `crates/README.md` and in each crate's own `README.md` are shields.io endpoint badges that read JSON files from the `badges` branch. `badges.yml` writes those files when a CI or Coverage run on `main` completes: do not write or edit one by hand. No README below a crate's top level carries such a badge, because `badges.yml` writes no file for a directory.
+The version, test, coverage, LOC and complexity badges in the root README, in `crates/README.md` and in each crate's own `README.md` are shields.io endpoint badges that read JSON files from the `badges` branch. Nothing on that branch is written by hand.
 
-For each crate named in `ALL_CRATES` in `badges.yml` it writes `<crate>-<metric>.json`:
+[`crates/layers.toml`](crates/layers.toml) is the one list of crates. Every workspace member has a row there, and a crate has badges unless its row says `badges = false`, with a `why`. For each crate with badges the branch holds four files:
 
-| `<metric>` | Counted from |
-|---|---|
-| `tests` | The CI run's `rust-test-<crate>.txt` (see below) |
-| `coverage` | The Coverage run's `<crate>-lcov.info`, which `coverage.yml` makes only for the crates in its own lists |
-| `loc`, `complexity` | `scc` over `crates/<crate>` on `main` |
+| File | Counted from | Written after |
+|---|---|---|
+| `<crate>-tests.json` | The CI run's `rust-test-<crate>.txt` (see below): tests passed over tests run, from every `test result:` line | CI |
+| `<crate>-coverage.json` | The Coverage run's `<crate>-lcov.info`. `coverage.yml` measures every crate with badges, less any whose row says `coverage = false` | Coverage |
+| `<crate>-loc.json`, `<crate>-complexity.json` | `scc` over the crate's directory, at the commit the run tested | CI |
 
-The root README's version badge reads `version.json`, written from `Cargo.toml`.
+The root README's version badge reads `version.json`, written from `Cargo.toml` by the same CI run.
 
-A new crate's README carries one line per metric, with its own name in place of `gglib-core`:
+`badges.yml` runs `scripts/write_badges.py` after each successful CI or Coverage run of a push to `main`; a red or cancelled run changes nothing. The script deletes every JSON file on the branch outside that set, so the branch holds no file a README does not read. A badge reads `none` when the run's artifact had no file for its crate, and `pending` until the first run that writes it. The branch's own README lists the files. No README below a crate's top level carries a badge, because the pipeline writes no file for a module.
 
-```markdown
-![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json)
-```
+A crate's README carries its badges in a block between `<!-- crate-header:start -->` and `<!-- crate-header:end -->`, which `make readmes` writes from `crates/layers.toml`. `make enforce` runs `scripts/crate_list.py --check`, which fails when a member has no row, a crate depends on a layer above its own, a header block is out of date, or a Markdown file links a file on the `badges` branch that the pipeline does not write.
 
-Add the crate to `ALL_CRATES`, and to the lists in `coverage.yml` if it is to have a coverage badge. A badge has nothing to read until the first run on `main` that writes its file.
+A new crate gets a row in `crates/layers.toml`, then `make readmes`. Its badges read `pending` until the next CI and Coverage runs on `main`.
 
 ### Where the per-crate test numbers come from
 
