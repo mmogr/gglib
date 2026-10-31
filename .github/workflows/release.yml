@@ -121,6 +121,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # No macOS leg: `build-gui`'s macOS leg builds the same CLI for the app to
+        # carry, and packages it as this job would.
         include:
           # A Linux binary needs at least the glibc of the image it was built on, and the
           # AppImage also carries that image's WebKitGTK and GLib. So this is the oldest
@@ -129,8 +131,6 @@ jobs:
           # start on Ubuntu 24.04. Steps below test runner.os, never this label.
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-24.04
-          - target: aarch64-apple-darwin
-            os: macos-26
           - target: x86_64-pc-windows-msvc
             os: windows-2022
 
@@ -399,6 +399,18 @@ jobs:
           mkdir -p src-tauri/binaries
           cp "target/${{ matrix.target }}/release/gglib${ext}" \
             "src-tauri/binaries/gglib-${{ matrix.target }}${ext}"
+
+      # The macOS CLI asset, packaged as the `build` job packages the others:
+      # the one binary at the archive's root, under the name the Homebrew
+      # formula and SHA256SUMS expect.
+      - name: Package the CLI (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          mkdir -p package dist
+          cp target/${{ matrix.target }}/release/gglib package/
+          tar czf dist/gglib-${{ needs.meta.outputs.version }}-${{ matrix.target }}.tar.gz \
+            -C package gglib
 
       # tauri.sidecar.conf.json adds the CLI as an externalBin. It is merged
       # in here only, not in tauri.conf.json: tauri-build refuses to compile
