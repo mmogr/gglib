@@ -18,7 +18,9 @@
     { "type": "test", "section": "Internal" },
     { "type": "ci", "section": "Internal" },
     { "type": "chore", "section": "Internal" },
-    { "type": "build", "section": "Internal" }
+    { "type": "build", "section": "Internal" },
+    { "type": "style", "section": "Internal" },
+    { "type": "revert", "section": "Internal" }
   ],
   "packages": {
     ".": {

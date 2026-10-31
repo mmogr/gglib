@@ -224,7 +224,7 @@ def self_test() -> bool:
 
     # 3. Refusals write nothing.
     refusals = {
-        "a stable version": ({**base, "Cargo.toml": CARGO.replace("0.29.0-rc.3", "0.29.0")}, "v0.28.0"),
+        "a stable version": ({k: v.replace("0.29.0-rc.3", "0.29.0") for k, v in base.items()}, "v0.28.0"),
         "a prerelease that is not an rc": ({**base, "Cargo.toml": CARGO.replace("rc.3", "beta.1")}, "v0.28.0"),
         "the version twice in a file": (
             {**base, "package.json": PACKAGE.replace('"^19.0.0"', '"0.29.0-rc.3"')},

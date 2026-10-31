@@ -160,9 +160,9 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           branch: promote-v${{ steps.promote.outputs.stable }}
           delete-branch: true
-          # chore is a hidden type in release-please-config.json, so the
-          # promotion adds no line to the next release's changelog; promote.py
-          # has written the stable version's heading already.
+          # This commit is the one release.yml tags vX.Y.Z, and release-please
+          # reads the next cycle from the commits after it, so it adds no line
+          # to any changelog; promote.py has written the stable heading already.
           title: "chore(release): promote ${{ steps.promote.outputs.rc }} to ${{ steps.promote.outputs.stable }}"
           commit-message: "chore(release): promote ${{ steps.promote.outputs.rc }} to ${{ steps.promote.outputs.stable }}"
           body: |

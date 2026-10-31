@@ -56,37 +56,38 @@ jobs:
       # while a merged release PR still carries `autorelease: pending`: it
       # stops with "untagged, merged release PRs outstanding". It never tags
       # (skip-github-release below), so release.yml swaps that label for
-      # `autorelease: tagged` once it has tagged the version. And it finds
-      # the last release through the GitHub releases, not the tags: with no
-      # release for main's version it walks back through hundreds of commits
-      # and proposes a release of all of them. release.yml makes the release
-      # a few seconds after the tag, so the release is what is waited for.
+      # `autorelease: tagged` once it has tagged the version. And it reads
+      # the last release from the tag `v<version>`, falling back to it when
+      # no GitHub release exists yet: with neither, it reads main's whole
+      # history as unreleased. The tag is what is waited for, not the
+      # release: a release step that failed after tagging would otherwise
+      # block every release PR until someone made the release by hand.
       #
       # A push that changed main's version, which is a merged release PR or
       # promotion, therefore waits here until CI on main has passed and
-      # release.yml has released it, about 40 minutes. Every other push finds
-      # the release already there and goes straight on. A run that gives up
+      # release.yml has tagged it, about 40 minutes. Every other push finds
+      # the tag already there and goes straight on. A run that gives up
       # fails: the release itself failed, and once it has been re-run this
       # run can be re-run too.
-      - name: Wait until main's version is released
+      - name: Wait until main's version is tagged
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
           for attempt in $(seq 1 90); do
-            released=false
-            if gh release view "v${VERSION}" -R "$GITHUB_REPOSITORY" --json tagName > /dev/null 2>&1; then
-              released=true
+            tagged=false
+            if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" > /dev/null 2>&1; then
+              tagged=true
             fi
             pending=$(gh pr list -R "$GITHUB_REPOSITORY" --state merged --label 'autorelease: pending' --json number --jq 'length')
-            if [ "$released" = true ] && [ "$pending" = 0 ]; then
-              echo "✓ v$VERSION is released, and no merged release PR is waiting for its tag"
+            if [ "$tagged" = true ] && [ "$pending" = 0 ]; then
+              echo "✓ v$VERSION is tagged, and no merged release PR is waiting for its tag"
               exit 0
             fi
-            echo "v$VERSION is not released yet, or a merged release PR is still labelled pending; looking again in a minute ($attempt/90)"
+            echo "v$VERSION is not tagged yet, or a merged release PR is still labelled pending; looking again in a minute ($attempt/90)"
             sleep 60
           done
-          echo "::error::v$VERSION was not released within 90 minutes. Re-run the release (the Release job of CI on main), then re-run this workflow."
+          echo "::error::v$VERSION was not tagged within 90 minutes. Re-run the release (the Release job of CI on main), then re-run this workflow."
           exit 1
 
       # After the gate, not before: an installation token lasts an hour, and
@@ -224,11 +225,6 @@ jobs:
           fi
           echo "✓ Verified src-tauri/tauri.conf.json inherits its version"
 
-      # release-please rewrites the branch from main on every update, which
-      # drops this commit, and with `always-update` it updates on every push
-      # to main; this job runs after each of those updates and adds the commit
-      # back. CI's concurrency cancels the run on release-please's own commit,
-      # which this one follows within minutes.
       # The action's release-please writes `, closes [#N]` after each fix in
       # the PR body, which GitHub reads as a closing keyword: merging the
       # release PR would close those issues a second time. Newer releases of
@@ -245,6 +241,12 @@ jobs:
             gh pr edit "$NUMBER" --body-file "$RUNNER_TEMP/body.md"
             echo "✓ The release PR's body refers to its issues without closing them"
           fi
+
+      # release-please rewrites the branch from main on every update, which
+      # drops this commit, and with `always-update` it updates on every push
+      # to main; this job runs after each of those updates and adds the commit
+      # back. CI's concurrency cancels the run on release-please's own commit,
+      # which this one follows within minutes.
       - name: Commit the lockfiles
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
