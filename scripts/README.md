@@ -88,7 +88,7 @@ need macOS with Xcode.
 | `write_badges.py` | Writes the `badges` branch's JSON files from one CI or Coverage run of `main`, and deletes every other JSON file there | `badges.yml` |
 | `status_card/status_card.py` | Draws the README's status card, light and dark, from the releases, llama.cpp's pin, 90 days of merged pull requests and the commits since the last stable release, which it collects through `gh`. `--self-test` checks its counting rules and a golden render | `status-card.yml` |
 | `check_issue_form_mapping.mjs` | The issue form's field ids are the ones `issue-labels.yml` maps to labels | `check-issue-form.yml` |
-| `promote.py` | Turns main's release candidate X.Y.Z-rc.N into X.Y.Z in `Cargo.toml`, `package.json` and the release-please manifest, and heads `CHANGELOG.md` with the stable version. `--self-test` runs its fixtures | `promote.yml`; `make enforce` runs the self-test |
+| `promote.py` | Turns the checked-out release candidate X.Y.Z-rc.N into X.Y.Z in `Cargo.toml`, `package.json` and the release-please manifest, and heads `CHANGELOG.md` with the stable version. `--self-test` runs its fixtures | `promote.yml`; `make enforce` runs the self-test |
 | `check_rc_promotion.sh` | A stable version must be its last release candidate with only the version changed, `CHANGELOG.md` aside | `promote.yml`, `release-tag.yml` |
 | `build_cli_deb.sh` | Packages the Linux CLI binary as a `.deb` | `release.yml` |
 | `build_linux_repos.sh` | Builds and signs the apt, dnf and pacman repositories served at `/apt`, `/rpm` and `/arch` on the Pages site, with the key and `packaging/install.sh` at its root | `release.yml` |

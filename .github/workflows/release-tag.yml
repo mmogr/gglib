@@ -5,8 +5,9 @@
 # publishes the assets in a run of its own. Nothing that cancels this CI run
 # can then cancel the builds.
 #
-# This is the only tagger. release-please.yml never tags, and promote.yml
-# only opens the pull request whose merge this workflow tags.
+# This tags every candidate. release-please.yml never tags, and promote.yml
+# tags a stable version itself, from the candidate's tag, so a promotion
+# never comes this way.
 #
 # Run by hand, it tags without waiting for CI: the same steps on main as it
 # is now, and then the release PR workflow, which otherwise follows CI. That
@@ -105,10 +106,12 @@ jobs:
           echo "v$VERSION will tag $bump"
 
       # A stable version is released only as its last release candidate with
-      # the version changed. Checked before anything is tagged, so a refused
-      # promotion leaves no tag and no release behind; the script's header
-      # says how to recover. Judged on the bump commit's own tree, so a
-      # promotion whose run was overtaken is not judged on a newer one.
+      # the version changed. promote.yml makes one that way from the
+      # candidate's tag and never comes here, so this guards a version set
+      # to stable on main by hand. Checked before anything is tagged, so a
+      # refusal leaves no tag and no release behind; the script's header
+      # says how to recover. Judged on the bump commit's own tree, so a bump
+      # whose run was overtaken is not judged on a newer one.
       - name: Require a stable release to match its last RC
         if: steps.version.outputs.changed == 'true' && steps.version.outputs.is-prerelease != 'true'
         env:

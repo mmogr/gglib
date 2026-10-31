@@ -2,10 +2,10 @@
 # for a stable version, to the apt, dnf and pacman repositories, the AUR,
 # Homebrew and the docs site.
 #
-# CI's `release` job (release-tag.yml) tags the version, makes the release
-# and dispatches this workflow with `tag`. A run of its own, not a part of
-# the CI run, so cancelling CI after the tag cannot leave a release half
-# built. A build that failed is re-run with the same tag:
+# CI's `release` job (release-tag.yml) tags a candidate, and promote.yml a
+# stable version; each makes the release and dispatches this workflow with
+# `tag`. A run of its own, not a part of the CI run, so cancelling CI after
+# the tag cannot leave a release half built. A build that failed is re-run with the same tag:
 #
 #   gh workflow run release.yml --ref main -f tag=v<version>
 #
@@ -105,8 +105,8 @@ jobs:
             echo "artifacts=release" >> "$GITHUB_OUTPUT"
           fi
 
-      # release-tag.yml makes the release before it dispatches; publishing
-      # adds assets to it and never creates one.
+      # release-tag.yml and promote.yml make the release before they
+      # dispatch; publishing adds assets to it and never creates one.
       - name: Require the release to exist
         if: inputs.tag != ''
         env:
@@ -114,7 +114,7 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           if ! gh release view "$TAG" -R "$GITHUB_REPOSITORY" > /dev/null; then
-            echo "::error::there is no release for $TAG. Re-run the failed jobs of the CI run that tagged it, which makes the release and dispatches this again; or by hand: gh release create $TAG --title 'Release $TAG' --generate-notes --verify-tag (add --prerelease for a candidate), swap the merged release PR's label autorelease: pending for autorelease: tagged, then dispatch again"
+            echo "::error::there is no release for $TAG. For a candidate, re-run the failed jobs of the CI run that tagged it, which makes the release and dispatches this again; or by hand: gh release create $TAG --title 'Release $TAG' --generate-notes --verify-tag (--prerelease for a candidate, --notes-start-tag <last stable> for a stable version), for a candidate swap the merged release PR's label autorelease: pending for autorelease: tagged, then dispatch again"
             exit 1
           fi
 
@@ -1168,7 +1168,7 @@ jobs:
       id-token: write
     # Declared so deploy-pages records the deployment, and so the
     # environment's rule that only main deploys applies: github.ref is main
-    # for the dispatch release-tag.yml makes.
+    # for the dispatches release-tag.yml and promote.yml make.
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
