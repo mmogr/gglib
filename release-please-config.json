@@ -9,6 +9,8 @@
   "bump-patch-for-minor-pre-major": false,
   "always-update": true,
   "extra-label": "version-bump,automated",
+  "pull-request-header": "Merging this cuts the candidate. It is rebuilt from main on every push, so edit nothing here.",
+  "pull-request-footer": "release.yml tags it once CI on main passes; Promote ships a candidate as the stable version.",
   "changelog-sections": [
     { "type": "feat", "section": "What gglib now does" },
     { "type": "fix", "section": "What it stopped getting wrong" },
