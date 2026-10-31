@@ -13,7 +13,7 @@ stands in for.
 |------|--------------|
 | 1. Hardware | [`gglib_app_services::SetupOps::get_status`] — the same status the GUI wizard renders |
 | 2. Engines | [`ensure_installed`](crate::handlers::config::engine::ensure_installed) for llama.cpp, as `gglib serve` uses, then for stable-diffusion.cpp, which is optional: skipping or failing it never stops `up` |
-| 3. Model | [`gglib_core::domain::recommend`], then `DownloadManagerPort::queue_smart` + the shared interactive monitor |
+| 3. Model | [`gglib_core::domain::recommend`], then `DownloadManagerPort::queue_smart` + the shared interactive monitor; the model becomes the default when none is set, so `gglib q` needs no `-m` after `up` |
 | 4. Proxy | [`DaemonHandle::start_proxy`], unpinned — identical to `gglib proxy` |
 | 5. Warm-up | one HTTP request to the endpoint it just started |
 
@@ -34,7 +34,7 @@ cold start it was avoiding.
 
 ## Not responsible for
 
-Configuring anything. `up` binds loopback with gglib's defaults and takes three
+Configuring anything beyond that empty default. `up` binds loopback with gglib's defaults and takes three
 flags (`--yes`, `--model`, `--port`). Host, upstream port, sampling and cache
 behaviour belong to `gglib proxy`.
 

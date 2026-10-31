@@ -1,0 +1,39 @@
+{
+ "cols": 110,
+ "rows": 28,
+ "env": {"GGLIB_DATA_DIR": "~/.local/share/gglib-demo", "GGLIB_MODELS_DIR": "~/.local/share/gglib-demo/models", "GGLIB_DAEMON_PORT": "9907", "HOME": "~/.local/share/gglib-demo/home", "XDG_CONFIG_HOME": "~/.local/share/gglib-demo/opencode/config", "XDG_DATA_HOME": "~/.local/share/gglib-demo/opencode/data", "XDG_STATE_HOME": "~/.local/share/gglib-demo/opencode/state", "XDG_CACHE_HOME": "~/.local/share/gglib-demo/opencode/cache", "GIT_PAGER": "cat"},
+ "cwd": "~/.local/share/gglib-demo/home/orders-api",
+ "panes": [
+  {"name": "gglib", "rows": 11, "cmd": "tail -n 0 -F \"$GGLIB_DATA_DIR/logs/daemon.log\" | grep --line-buffered -v -E '[0-9]{4}-[0-9]{2}-[0-9]{2}T'"}
+ ],
+ "steps": [
+  {"mark": "chapter:Ask opencode to fix something"},
+  {"sleep": 0.5},
+  {"type": "opencode"},
+  {"keys": "\r"},
+  {"idle": 3, "timeout": 60},
+  {"sleep": 0.5},
+  {"type": "server.log says the export is starving the db pool. find the leak and fix it, no need to run anything", "delay": 0.03},
+  {"sleep": 0.6},
+  {"keys": "\r"},
+  {"sleep": 1},
+  {"mark": "speed:4"},
+  {"wait": "dialect", "pane": "gglib", "timeout": 300},
+  {"sleep": 0.5},
+  {"mark": "speed:1"},
+  {"mark": "chapter:gglib loads the model, flags and all"},
+  {"sleep": 5},
+  {"mark": "speed:20"},
+  {"mark": "title:opencode works on the fix"},
+  {"idle": 12, "timeout": 1200},
+  {"mark": "speed:1"},
+  {"sleep": 5},
+  {"mark": "chapter:The fix"},
+  {"keys": "\u0003"},
+  {"idle": 1},
+  {"sleep": 0.3},
+  {"type": "git diff"},
+  {"keys": "\r"},
+  {"idle": 1.5}
+ ]
+}
