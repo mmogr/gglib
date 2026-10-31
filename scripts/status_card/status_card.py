@@ -115,14 +115,14 @@ MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", 
 # The numbers below are the positions that gives, rounded.
 WIDTH, HEIGHT = 800, 224
 LEFT, RIGHT = 25, 775
-CHART_X = LEFT + 112
+CHART_X = LEFT + 144
 CHART_W = RIGHT - CHART_X
 ADVANCE = 0.6  # every glyph's advance in em; asserted against the fonts
 
 HEADER_BASE = 34.4
 WEEK_TOP, WEEK_BOTTOM = 58, 86  # the week columns' row
 WEEK_GAP = 3
-WEEK_LABEL_BASES = (68.4, 82.4)  # "releases," / "12 months", bottom-aligned
+WEEK_LABEL_BASE = 82.4  # "releases, 12 months", bottom-aligned with the columns
 RELEASE_PX = 2
 BAR_TOP, BAR_H, BAR_GAP = 105, 10, 2
 BAR_LABEL_BASE = 116.9  # "90 days"
@@ -217,7 +217,7 @@ def collect(out: str, now: dt.datetime) -> None:
     since = (today - dt.timedelta(days=WINDOW_DAYS)).isoformat()
     prs = gh_json(
         "pr", "list", "-R", REPO, "--state", "merged", "--search", f"merged:>={since}",
-        "--json", "number,mergedAt,title,labels", "--limit", str(PR_LIMIT),
+        "--json", "number,mergedAt,title,labels,author", "--limit", str(PR_LIMIT),
     )
     if len(prs) >= PR_LIMIT:
         raise Failure(f"the pull request list came back full ({PR_LIMIT}); it may be cut")
@@ -243,6 +243,7 @@ def collect(out: str, now: dt.datetime) -> None:
                 "merged_at": p["mergedAt"],
                 "title": p["title"],
                 "labels": sorted(label["name"] for label in p["labels"]),
+                "bot": bool(p["author"].get("is_bot")),
             }
             for p in sorted(prs, key=lambda p: p["number"])
         ],
@@ -290,7 +291,9 @@ def component_counts(prs: Sequence[dict], today: dt.date) -> List[Tuple[str, int
     start = today - dt.timedelta(days=WINDOW_DAYS)
     counts: Dict[str, int] = {}
     for pr in prs:
-        if not start <= day_of(pr["merged_at"]) <= today:
+        # A bot's PR (Dependabot, the release bot) is left out whatever it is
+        # labelled: the bar is about the work people merged.
+        if pr.get("bot") or not start <= day_of(pr["merged_at"]) <= today:
             continue
         names = {
             label[len(COMPONENT):].strip()
@@ -601,8 +604,7 @@ def draw(card: Card, fonts: Dict[str, Font], theme: str) -> str:
     # Releases by week. Like the mockup's `column-reverse` flex with a 1px
     # gap: a 1px base, then the stable releases, then the candidates, each
     # item 1px above the last even when it is empty.
-    c.text(LEFT, WEEK_LABEL_BASES[0], "releases,", 12, "muted")
-    c.text(LEFT, WEEK_LABEL_BASES[1], "12 months", 12, "muted")
+    c.text(LEFT, WEEK_LABEL_BASE, "releases, 12 months", 12, "muted")
     column = (CHART_W - WEEK_GAP * (WEEKS - 1)) / WEEKS
     room = (WEEK_BOTTOM - WEEK_TOP) - 3
     for i, (stable, candidates) in enumerate(card.weeks):
@@ -683,8 +685,8 @@ def release(tag: str, when: str, pre: bool) -> dict:
     return {"tag": tag, "published_at": when, "prerelease": pre}
 
 
-def pr(number: int, when: str, *labels: str) -> dict:
-    return {"number": number, "merged_at": when, "title": f"pr {number}", "labels": list(labels)}
+def pr(number: int, when: str, *labels: str, bot: bool = False) -> dict:
+    return {"number": number, "merged_at": when, "title": f"pr {number}", "labels": list(labels), "bot": bot}
 
 
 def self_test() -> bool:
@@ -721,6 +723,7 @@ def self_test() -> bool:
         pr(5, "2026-07-29T23:00:00Z", "component: core"),  # the day before the window
         pr(6, "2026-07-30T00:30:00Z", "component: cli"),  # the window's first day
         pr(7, "2026-10-05T10:00:00Z", "component: core", "component: core "),  # once per component
+        pr(8, "2026-10-06T10:00:00Z", "component: frontend", bot=True),  # a bot, labelled: left out
     ], today)
     case("counts: per component, bots and old PRs out", counts,
          [("core", 3), ("cli", 2), ("build", 1)])
