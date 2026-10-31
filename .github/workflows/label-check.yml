@@ -73,7 +73,7 @@ jobs:
             // regardless of how the PR happens to be titled. Title patterns survive only
             // as a secondary allowlist for human-authored mechanical PRs.
             const EXEMPT_LABELS = ['automated', 'version-bump'];
-            const EXEMPT_TITLES = [/^Bump version to /, /^chore\(deps\):/, /^fix\(deps\):/];
+            const EXEMPT_TITLES = [/^chore\(deps\):/, /^fix\(deps\):/];
             if (pr.user?.type === 'Bot'
                 || EXEMPT_LABELS.some(l => names.includes(l))
                 || EXEMPT_TITLES.some(re => re.test(pr.title))) {
@@ -329,7 +329,7 @@ jobs:
           script: |
             const REQUIRED_PREFIXES = ['component:', 'priority:', 'size:'];
             const EXEMPT_LABELS = ['automated', 'version-bump'];
-            const EXEMPT_TITLES = [/^Bump version to /, /^chore\(deps\):/, /^fix\(deps\):/];
+            const EXEMPT_TITLES = [/^chore\(deps\):/, /^fix\(deps\):/];
 
             const pr = context.payload.pull_request;
             const { owner, repo } = context.repo;

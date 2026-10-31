@@ -80,9 +80,8 @@ need macOS with Xcode.
 | `generate_submodule_readmes.sh` | Writes a README stub wherever a source directory lacks one | By hand |
 | `split_test_output.py` | Cuts one `cargo test` run into the per-crate files the badges read | `ci.yml`'s `test` job |
 | `check_issue_form_mapping.mjs` | The issue form's field ids are the ones `issue-labels.yml` maps to labels | `check-issue-form.yml` |
-| `sync_versions.py` | Copies the workspace version into `package.json` | `bump-version.yml` |
-| `next_version.py` | The version a Bump Version run moves to: the next release candidate, a new cycle, or a promotion | `bump-version.yml` |
-| `check_rc_promotion.sh` | A stable version must be its last release candidate with only the version changed | `bump-version.yml`, `release.yml` |
+| `promote.py` | Turns main's release candidate X.Y.Z-rc.N into X.Y.Z in `Cargo.toml`, `package.json` and the release-please manifest, and heads `CHANGELOG.md` with the stable version. `--self-test` runs its fixtures | `promote.yml`; `make enforce` runs the self-test |
+| `check_rc_promotion.sh` | A stable version must be its last release candidate with only the version changed, `CHANGELOG.md` aside | `promote.yml`, `release.yml` |
 | `build_cli_deb.sh` | Packages the Linux CLI binary as a `.deb` | `release.yml` |
 | `build_apt_repo.sh` | Builds and signs the apt repository served at `/apt` on the Pages site | `release.yml` |
 | `render_aur.sh` | Fills the `packaging/aur` PKGBUILD templates with a release's version and checksums | `release.yml` |

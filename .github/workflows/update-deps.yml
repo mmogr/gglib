@@ -13,8 +13,8 @@
 # summary.
 #
 # The checkout, push and pull request all use the GitHub App token
-# bump-version.yml uses: a branch or pull request made with GITHUB_TOKEN starts
-# no workflows, so CI would never run on it. Label Check exempts the pull
+# release-please.yml and promote.yml use: a branch or pull request made with
+# GITHUB_TOKEN starts no workflows, so CI would never run on it. Label Check exempts the pull
 # request three ways: its author is the app's bot, it carries `automated`, and
 # its title starts `chore(deps):`.
 
