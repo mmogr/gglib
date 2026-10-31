@@ -189,7 +189,7 @@ jobs:
       # save a fresh set of entries, each a few GB, which push CI's own out
       # of the repository's cache.
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: "release-${{ matrix.target }}"
           cache-on-failure: true
@@ -289,7 +289,7 @@ jobs:
       # Authenticode respectively.
       - name: Attest build provenance
         if: inputs.test_run != true
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*
 
@@ -356,7 +356,7 @@ jobs:
         run: rustup target add ${{ matrix.target }}
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: "gui-${{ matrix.target }}"
           cache-on-failure: true
@@ -717,7 +717,7 @@ jobs:
       # Authenticode respectively.
       - name: Attest build provenance
         if: inputs.test_run != true
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*
 
@@ -775,7 +775,7 @@ jobs:
         run: rustup show
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: "release-phone"
           cache-on-failure: true
@@ -834,7 +834,7 @@ jobs:
       # signs the framework when it embeds it in an app.
       - name: Attest build provenance
         if: inputs.test_run != true
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*
 
@@ -1257,7 +1257,7 @@ jobs:
         run: rustup show
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: "docs-ubuntu"
           cache-on-failure: true
@@ -1326,7 +1326,7 @@ jobs:
           path: target/doc
 
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5

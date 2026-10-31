@@ -66,7 +66,7 @@ jobs:
       # `keep_files: true`: the badges stay; only the two SVGs are replaced.
       - name: Publish to the badges branch
         if: github.event_name != 'pull_request'
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ${{ runner.temp }}/card

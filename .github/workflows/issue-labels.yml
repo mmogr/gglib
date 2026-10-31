@@ -62,7 +62,7 @@ jobs:
     if: always()
     steps:
       - name: Apply parsed labels, then check required categories
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         # PARSED_JSON is issue-body-derived (user-controlled) content. It MUST be passed
         # via env, not interpolated straight into `script:` as `${{ needs.parse.outputs.json }}`
         # — that form does raw textual substitution before the script is parsed, and
