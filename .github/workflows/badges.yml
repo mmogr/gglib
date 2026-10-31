@@ -10,406 +10,76 @@ permissions:
   contents: write
   actions: read
 
-# Prevent race conditions when updating the badges branch
+# One group for everything that pushes to the badges branch: this workflow
+# for both of its triggers, and status-card.yml. A second push queues behind
+# the first instead of racing it.
 concurrency:
-  group: badges-${{ github.event.workflow_run.name }}
+  group: badges-branch
   cancel-in-progress: false
 
-# Single source of truth for the crate list used across all badge jobs.
-# Add new crates here; every loop below picks up the change automatically.
-env:
-  ALL_CRATES: >-
-    gglib-core gglib-db gglib-gguf gglib-hf gglib-download gglib-mcp
-    gglib-agent gglib-proxy gglib-runtime gglib-app-services gglib-bootstrap
-    gglib-cli gglib-axum gglib-ffi gglib-build-info gglib-broadcast
-    gglib-test-http gglib-engine-llama
-
 jobs:
-  # =============================================================================
-  # CI WORKFLOW: Update test badges and boundary badge
-  # =============================================================================
-  update-test-badges:
-    name: Update Test Badges
-    if: ${{ github.event.workflow_run.name == 'CI' }}
+  badges:
+    name: Update Badges
+    # Only a green run of a push to main. A red or cancelled run leaves the
+    # badges as they were; the CI badge at the top of the README is the one
+    # that turns red.
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout badges branch
+      # The commit the run tested, not main's tip: scc counts its crates and
+      # Cargo.toml gives its version, and crates/layers.toml says which files
+      # the branch should hold.
+      - name: Checkout the commit the run tested
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Checkout the badges branch
         uses: actions/checkout@v7
         with:
           ref: badges
+          path: badges
           fetch-depth: 1
 
-      - name: Download CI test artifacts
+      - name: Download the run's artifact
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
         run: |
-          rm -rf artifacts
-          mkdir -p artifacts badges
-          
-          echo "Downloading test-results from CI run ${{ github.event.workflow_run.id }}"
-          gh run download "${{ github.event.workflow_run.id }}" \
-            --name test-results \
-            --dir artifacts || echo "No test-results artifact found"
-          
-          echo "Downloaded files:"
-          find artifacts -type f 2>/dev/null || echo "No files"
-
-      - name: Generate test badge JSON
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          CONCLUSION="${{ github.event.workflow_run.conclusion }}"
-          
-          # --- Aggregate Rust tests ---
-          RUST_TEST_FILE="$(find artifacts -name 'rust-test-output.txt' -type f 2>/dev/null | head -1)"
-          if [ -n "$RUST_TEST_FILE" ] && [ -f "$RUST_TEST_FILE" ]; then
-            echo "Parsing Rust test results from: $RUST_TEST_FILE"
-            PASSED=$(grep -o "test result: ok\. [0-9]* passed" "$RUST_TEST_FILE" | grep -o "[0-9]*" | awk '{s+=$1} END {print s+0}')
-            FAILED=$(grep -o "[0-9]* failed" "$RUST_TEST_FILE" | grep -o "[0-9]*" | awk '{s+=$1} END {print s+0}')
-            TOTAL=$((PASSED + FAILED))
-            
-            if [ "$TOTAL" -gt 0 ]; then
-              PCT=$((PASSED * 100 / TOTAL))
-              MSG="${PASSED}/${TOTAL} (${PCT}%)"
-              if [ "$PCT" -eq 100 ]; then COL="brightgreen";
-              elif [ "$PCT" -gt 90 ]; then COL="green";
-              elif [ "$PCT" -gt 80 ]; then COL="yellowgreen";
-              elif [ "$PCT" -gt 60 ]; then COL="yellow";
-              else COL="red"; fi
-            else
-              MSG="0/0"
-              COL="yellow"
-            fi
-            
-            echo "{\"schemaVersion\":1,\"label\":\"Rust tests\",\"message\":\"$MSG\",\"color\":\"$COL\"}" > badges/tests.json
-            echo "Rust tests: $MSG"
-          elif [ "$CONCLUSION" == "failure" ]; then
-            echo '{"schemaVersion":1,"label":"Rust tests","message":"failed","color":"red"}' > badges/tests.json
-          fi
-          
-          # --- Per-crate Rust tests ---
-          for CRATE in $ALL_CRATES; do
-            FILE="$(find artifacts -name "rust-test-$CRATE.txt" -type f 2>/dev/null | head -1)"
-            if [ -n "$FILE" ] && [ -f "$FILE" ]; then
-              echo "Parsing $CRATE test results"
-              P=$(grep -o "test result: ok\. [0-9]* passed" "$FILE" | grep -o "[0-9]*" | awk '{s+=$1} END {print s+0}')
-              F=$(grep -o "[0-9]* failed" "$FILE" | grep -o "[0-9]*" | awk '{s+=$1} END {print s+0}')
-              T=$((P + F))
-              
-              if [ "$T" -gt 0 ]; then
-                PCT=$((P * 100 / T))
-                MSG="${P}/${T}"
-                if [ "$PCT" -eq 100 ]; then COL="brightgreen";
-                elif [ "$PCT" -gt 90 ]; then COL="green";
-                elif [ "$PCT" -gt 80 ]; then COL="yellowgreen";
-                elif [ "$PCT" -gt 60 ]; then COL="yellow";
-                else COL="red"; fi
-              else
-                MSG="0/0"
-                COL="yellow"
-              fi
-              
-              echo "{\"schemaVersion\":1,\"label\":\"$CRATE\",\"message\":\"$MSG\",\"color\":\"$COL\"}" > "badges/$CRATE-tests.json"
-              echo "$CRATE: $MSG"
-            fi
-          done
-          
-          # --- Boundary badge ---
-          # Download boundary results from separate artifact
-          set +e
-          gh run download ${{ github.event.workflow_run.id }} -n boundary-results -D artifacts/boundary
-          boundary_rc=$?
-          set -e
-          if [ $boundary_rc -ne 0 ]; then
-            echo "WARNING: boundary-results artifact download failed (rc=$boundary_rc)"
-            echo '{"schemaVersion":1,"label":"boundaries","message":"unknown","color":"lightgrey"}' > badges/boundary.json
-          fi
-          BOUNDARY_FILE="$(find artifacts -name 'boundary-status.json' -type f 2>/dev/null | head -1)"
-          if [ -n "$BOUNDARY_FILE" ] && [ -f "$BOUNDARY_FILE" ]; then
-            echo "Parsing boundary check results"
-            OVERALL=$(jq -r '.overall // "unknown"' "$BOUNDARY_FILE" 2>/dev/null || echo "unknown")
-            if [ "$OVERALL" == "pass" ]; then
-              MSG="✓ clean"
-              COL="brightgreen"
-            elif [ "$OVERALL" == "fail" ]; then
-              MSG="✗ violation"
-              COL="red"
-            else
-              MSG="unknown"
-              COL="lightgrey"
-            fi
-            echo "{\"schemaVersion\":1,\"label\":\"boundaries\",\"message\":\"$MSG\",\"color\":\"$COL\"}" > badges/boundary.json
-            echo "Boundary: $MSG"
-          elif [ "$CONCLUSION" == "failure" ]; then
-            echo '{"schemaVersion":1,"label":"boundaries","message":"failed","color":"red"}' > badges/boundary.json
-          fi
-          
-          # --- TypeScript tests (from CI artifacts) ---
-          TS_JSON="$(find artifacts -name 'ts-test-results.json' -type f 2>/dev/null | head -1)"
-          TS_TEXT="$(find artifacts -name 'ts-test-output.txt' -type f 2>/dev/null | head -1)"
-          
-          if [ -n "$TS_JSON" ] && [ -f "$TS_JSON" ]; then
-            echo "Parsing TS test results from JSON"
-            TS_PASSED=$(jq -r '.numPassedTests // 0' "$TS_JSON" 2>/dev/null || echo "0")
-            TS_FAILED=$(jq -r '.numFailedTests // 0' "$TS_JSON" 2>/dev/null || echo "0")
-            TS_TOTAL=$(jq -r '.numTotalTests // 0' "$TS_JSON" 2>/dev/null || echo "0")
-          elif [ -n "$TS_TEXT" ] && [ -f "$TS_TEXT" ]; then
-            echo "Parsing TS test results from text"
-            TS_PASSED=$(grep -E "Tests\s+[0-9]+ passed" "$TS_TEXT" | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | tail -1 || echo "0")
-            TS_FAILED=$(grep -E "[0-9]+ failed" "$TS_TEXT" | grep -oE "[0-9]+ failed" | grep -oE "[0-9]+" | tail -1 || echo "0")
-            TS_TOTAL=$((TS_PASSED + TS_FAILED))
-          else
-            TS_PASSED=0
-            TS_FAILED=0
-            TS_TOTAL=0
-          fi
-          
-          TS_PASSED=${TS_PASSED:-0}
-          TS_FAILED=${TS_FAILED:-0}
-          TS_TOTAL=${TS_TOTAL:-0}
-          
-          if [ "$TS_TOTAL" -gt 0 ]; then
-            TS_PCT=$((TS_PASSED * 100 / TS_TOTAL))
-            TS_MSG="${TS_PASSED}/${TS_TOTAL} (${TS_PCT}%)"
-            if [ "$TS_PCT" -eq 100 ]; then TS_COL="brightgreen";
-            elif [ "$TS_PCT" -gt 90 ]; then TS_COL="green";
-            elif [ "$TS_PCT" -gt 80 ]; then TS_COL="yellowgreen";
-            elif [ "$TS_PCT" -gt 60 ]; then TS_COL="yellow";
-            else TS_COL="red"; fi
-            
-            echo "{\"schemaVersion\":1,\"label\":\"TS tests\",\"message\":\"$TS_MSG\",\"color\":\"$TS_COL\"}" > badges/ts-tests.json
-            echo "TS tests: $TS_MSG"
-          fi
-          
-          echo "Generated test badges:"
-          ls -la badges/
-
-      - name: Deploy to badges branch
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./badges
-          publish_branch: badges
-          keep_files: true
-          user_name: 'github-actions[bot]'
-          user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'Update test badges [skip ci] ${{ github.event.workflow_run.head_sha }}'
-
-  # =============================================================================
-  # COVERAGE WORKFLOW: Update coverage badges only
-  # =============================================================================
-  update-coverage-badges:
-    name: Update Coverage Badges
-    if: ${{ github.event.workflow_run.name == 'Coverage' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout badges branch
-        uses: actions/checkout@v7
-        with:
-          ref: badges
-          fetch-depth: 1
-
-      - name: Download Coverage artifacts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          rm -rf artifacts
-          mkdir -p artifacts badges
-          
-          echo "Downloading coverage-report from Coverage run ${{ github.event.workflow_run.id }}"
-          gh run download "${{ github.event.workflow_run.id }}" \
-            --name coverage-report \
-            --dir artifacts || echo "No coverage-report artifact found"
-          
-          echo "Downloaded files:"
-          find artifacts -type f 2>/dev/null || echo "No files"
-
-      - name: Generate coverage badge JSON
-        run: |
-          CONCLUSION="${{ github.event.workflow_run.conclusion }}"
-          
-          # --- Aggregate Rust coverage ---
-          LCOV_FILE="$(find artifacts -name 'lcov.info' -type f 2>/dev/null | head -1)"
-          if [ -n "$LCOV_FILE" ] && [ -f "$LCOV_FILE" ]; then
-            echo "Parsing Rust coverage from: $LCOV_FILE"
-            TOTAL_LINES=$(grep -h '^LF:' "$LCOV_FILE" | awk -F ':' '{s+=$2} END {print s+0}')
-            COVERED_LINES=$(grep -h '^LH:' "$LCOV_FILE" | awk -F ':' '{s+=$2} END {print s+0}')
-            
-            if [ "$TOTAL_LINES" -gt 0 ]; then
-              COV=$(awk -v c="$COVERED_LINES" -v t="$TOTAL_LINES" 'BEGIN { printf "%d", (c/t)*100 }')
-              MSG="${COV}%"
-              if [ "$COV" -gt 90 ]; then COL="brightgreen";
-              elif [ "$COV" -gt 80 ]; then COL="green";
-              elif [ "$COV" -gt 70 ]; then COL="yellowgreen";
-              elif [ "$COV" -gt 60 ]; then COL="yellow";
-              else COL="red"; fi
-            else
-              MSG="0%"
-              COL="red"
-            fi
-            
-            echo "{\"schemaVersion\":1,\"label\":\"Rust coverage\",\"message\":\"$MSG\",\"color\":\"$COL\"}" > badges/coverage.json
-            echo "Rust coverage: $MSG"
-          elif [ "$CONCLUSION" == "failure" ]; then
-            echo '{"schemaVersion":1,"label":"Rust coverage","message":"failed","color":"red"}' > badges/coverage.json
-          fi
-          
-          # --- Per-crate Rust coverage ---
-          for CRATE in $ALL_CRATES; do
-            CRATE_LCOV="$(find artifacts -name "$CRATE-lcov.info" -type f 2>/dev/null | head -1)"
-            if [ -n "$CRATE_LCOV" ] && [ -f "$CRATE_LCOV" ]; then
-              echo "Parsing $CRATE coverage"
-              TL=$(grep -h '^LF:' "$CRATE_LCOV" | awk -F ':' '{s+=$2} END {print s+0}')
-              CL=$(grep -h '^LH:' "$CRATE_LCOV" | awk -F ':' '{s+=$2} END {print s+0}')
-              
-              if [ "$TL" -gt 0 ]; then
-                COV=$(awk -v c="$CL" -v t="$TL" 'BEGIN { printf "%d", (c/t)*100 }')
-                MSG="${COV}%"
-                if [ "$COV" -gt 90 ]; then COL="brightgreen";
-                elif [ "$COV" -gt 80 ]; then COL="green";
-                elif [ "$COV" -gt 70 ]; then COL="yellowgreen";
-                elif [ "$COV" -gt 60 ]; then COL="yellow";
-                else COL="red"; fi
-              else
-                MSG="0%"
-                COL="red"
-              fi
-              
-              echo "{\"schemaVersion\":1,\"label\":\"$CRATE cov\",\"message\":\"$MSG\",\"color\":\"$COL\"}" > "badges/$CRATE-coverage.json"
-              echo "$CRATE coverage: $MSG"
-            fi
-          done
-          
-          # --- TypeScript coverage ---
-          TS_COV_FILE="$(find artifacts -name 'coverage-summary.json' -type f 2>/dev/null | head -1)"
-          if [ -n "$TS_COV_FILE" ] && [ -f "$TS_COV_FILE" ]; then
-            echo "Parsing TS coverage"
-            TS_COV=$(jq -r '.total.lines.pct // 0' "$TS_COV_FILE" 2>/dev/null || echo "0")
-            TS_COV=$(printf "%.0f" "$TS_COV" 2>/dev/null || echo "0")
-            
-            if [ "$TS_COV" -gt 90 ]; then TS_COL="brightgreen";
-            elif [ "$TS_COV" -gt 80 ]; then TS_COL="green";
-            elif [ "$TS_COV" -gt 70 ]; then TS_COL="yellowgreen";
-            elif [ "$TS_COV" -gt 60 ]; then TS_COL="yellow";
-            else TS_COL="red"; fi
-            
-            echo "{\"schemaVersion\":1,\"label\":\"TS coverage\",\"message\":\"${TS_COV}%\",\"color\":\"$TS_COL\"}" > badges/ts-coverage.json
-            echo "TS coverage: ${TS_COV}%"
-          fi
-          
-          echo "Generated coverage badges:"
-          ls -la badges/
-
-      - name: Deploy to badges branch
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./badges
-          publish_branch: badges
-          keep_files: true
-          user_name: 'github-actions[bot]'
-          user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'Update coverage badges [skip ci] ${{ github.event.workflow_run.head_sha }}'
-
-  # =============================================================================
-  # CI WORKFLOW (post-release): Update version badge and SCC metrics
-  # Since PR #356 converted Release to a workflow_call inside CI, the "Release"
-  # workflow_run event no longer fires. Trigger on CI instead (see issue #402).
-  # Serialised after update-test-badges to avoid concurrent pushes to badges.
-  # =============================================================================
-  update-release-badges:
-    name: Update Release Badges
-    needs: [update-test-badges]
-    if: ${{ github.event.workflow_run.name == 'CI' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout main branch (for source analysis)
-        uses: actions/checkout@v7
-        with:
-          ref: main
-          fetch-depth: 1
-
-      - name: Generate version badge
-        run: |
-          mkdir -p badges
-          VERSION=$(grep '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
-          echo "Detected version: $VERSION"
-          
-          echo "{\"schemaVersion\":1,\"label\":\"version\",\"message\":\"v$VERSION\",\"color\":\"blue\"}" > badges/version.json
+          case "$WORKFLOW" in
+            CI) event=ci; artifact=test-results ;;
+            Coverage) event=coverage; artifact=coverage-report ;;
+            *) echo "::error::badges.yml reads CI and Coverage runs, not $WORKFLOW"; exit 1 ;;
+          esac
+          echo "EVENT=$event" >> "$GITHUB_ENV"
+          gh run download "$RUN_ID" --name "$artifact" --dir artifacts
 
       - name: Install scc
+        if: env.EVENT == 'ci'
         run: |
-          curl -sL https://github.com/boyter/scc/releases/download/v3.2.0/scc_Linux_x86_64.tar.gz | tar xz
-          chmod +x scc
+          curl -sSfL https://github.com/boyter/scc/releases/download/v3.2.0/scc_Linux_x86_64.tar.gz | tar xz scc
           sudo mv scc /usr/local/bin/
 
-      - name: Generate SCC complexity badges
-        run: |
-          # Helper function for LOC color
-          loc_color() {
-            local LOC=$1
-            if [ "$LOC" -lt 200 ]; then echo "brightgreen";
-            elif [ "$LOC" -lt 500 ]; then echo "green";
-            elif [ "$LOC" -lt 1000 ]; then echo "yellowgreen";
-            elif [ "$LOC" -lt 2000 ]; then echo "yellow";
-            else echo "orange"; fi
-          }
-          
-          # Helper function for complexity color
-          cx_color() {
-            local CX=$1
-            if [ "$CX" -lt 10 ]; then echo "brightgreen";
-            elif [ "$CX" -lt 25 ]; then echo "green";
-            elif [ "$CX" -lt 50 ]; then echo "yellowgreen";
-            elif [ "$CX" -lt 100 ]; then echo "yellow";
-            else echo "orange"; fi
-          }
-          
-          # Generate per-crate LOC and complexity badges
-          for CRATE in $ALL_CRATES; do
-            if [ -d "crates/$CRATE" ]; then
-              SCC_DATA=$(scc "crates/$CRATE" --format json 2>/dev/null | jq '[.[] | select(.Name == "Rust")] | .[0] // {Code: 0, Complexity: 0}')
-              LOC=$(echo "$SCC_DATA" | jq '.Code // 0')
-              COMPLEXITY=$(echo "$SCC_DATA" | jq '.Complexity // 0')
-              
-              LOC_COL=$(loc_color $LOC)
-              CX_COL=$(cx_color $COMPLEXITY)
-              
-              echo "{\"schemaVersion\":1,\"label\":\"loc\",\"message\":\"$LOC\",\"color\":\"$LOC_COL\"}" > "badges/$CRATE-loc.json"
-              echo "{\"schemaVersion\":1,\"label\":\"complexity\",\"message\":\"$COMPLEXITY\",\"color\":\"$CX_COL\"}" > "badges/$CRATE-complexity.json"
-              echo "$CRATE: $LOC loc, $COMPLEXITY complexity"
-            fi
-          done
-          
-          # TypeScript aggregate LOC and complexity
-          TS_DATA=$(scc src --include-ext ts,tsx --format json 2>/dev/null)
-          TS_LOC=$(echo "$TS_DATA" | jq '[.[] | select(.Name == "TypeScript" or .Name == "TypeScript JSX")] | map(.Code) | add // 0')
-          TS_COMPLEXITY=$(echo "$TS_DATA" | jq '[.[] | select(.Name == "TypeScript" or .Name == "TypeScript JSX")] | map(.Complexity) | add // 0')
-          
-          if [ "$TS_LOC" -lt 2000 ]; then TS_LOC_COL="brightgreen";
-          elif [ "$TS_LOC" -lt 5000 ]; then TS_LOC_COL="green";
-          elif [ "$TS_LOC" -lt 10000 ]; then TS_LOC_COL="yellowgreen";
-          else TS_LOC_COL="yellow"; fi
-          
-          if [ "$TS_COMPLEXITY" -lt 50 ]; then TS_CX_COL="brightgreen";
-          elif [ "$TS_COMPLEXITY" -lt 150 ]; then TS_CX_COL="green";
-          elif [ "$TS_COMPLEXITY" -lt 300 ]; then TS_CX_COL="yellowgreen";
-          else TS_CX_COL="yellow"; fi
-          
-          echo "{\"schemaVersion\":1,\"label\":\"loc\",\"message\":\"$TS_LOC\",\"color\":\"$TS_LOC_COL\"}" > badges/ts-loc.json
-          echo "{\"schemaVersion\":1,\"label\":\"complexity\",\"message\":\"$TS_COMPLEXITY\",\"color\":\"$TS_CX_COL\"}" > badges/ts-complexity.json
-          echo "Web UI: $TS_LOC loc, $TS_COMPLEXITY complexity"
-          
-          echo "Generated release badges:"
-          ls -la badges/
+      # What each run writes, keeps and deletes is in the script's header.
+      - name: Write the badges
+        run: python3 scripts/write_badges.py write --event "$EVENT" --artifacts artifacts --branch badges
 
+      # The action clones the branch itself and copies this directory in;
+      # the checkout's own .git has no business in the copy.
+      - name: Drop the checkout's git directory
+        run: rm -rf badges/.git
+
+      # `keep_files: false`: the branch becomes exactly this directory, so a
+      # file the script deleted is deleted on the branch too.
       - name: Deploy to badges branch
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./badges
           publish_branch: badges
-          keep_files: true
+          keep_files: false
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'Update release badges (from CI) [skip ci] ${{ github.event.workflow_run.head_sha }}'
+          commit_message: 'Update badges [skip ci] ${{ github.event.workflow_run.head_sha }}'

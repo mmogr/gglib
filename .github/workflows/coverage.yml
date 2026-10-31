@@ -34,6 +34,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # The crates to measure are crates/layers.toml's badged crates, less any
+      # it marks `coverage = false`. Read once, here, for every step below;
+      # the assignment fails the step when crate_list.py refuses.
+      - name: List the crates to measure
+        run: |
+          crates=$(python3 scripts/crate_list.py list coverage)
+          echo "CRATES=${crates//$'\n'/ }" >> "$GITHUB_ENV"
+
       - name: Install Rust toolchain
         run: rustup show
 
@@ -61,20 +69,7 @@ jobs:
 
       - name: Run Rust tests with coverage
         run: |
-          cargo llvm-cov \
-            -p gglib-core \
-            -p gglib-db \
-            -p gglib-gguf \
-            -p gglib-hf \
-            -p gglib-download \
-            -p gglib-mcp \
-            -p gglib-agent \
-            -p gglib-proxy \
-            -p gglib-runtime \
-            -p gglib-app-services \
-            -p gglib-bootstrap \
-            -p gglib-cli \
-            -p gglib-axum \
+          cargo llvm-cov $(printf -- '-p %s ' $CRATES) \
             --lcov --output-path lcov.info 2>&1 | tee rust-test-output.txt
 
       - name: Run per-crate Rust coverage
@@ -86,40 +81,13 @@ jobs:
           #
           # NOTE: `report` does NOT accept --all-features (it's a report-only
           # subcommand that doesn't invoke cargo build).
-          cargo llvm-cov report --package gglib-core --lcov --output-path gglib-core-lcov.info
-          cargo llvm-cov report --package gglib-db --lcov --output-path gglib-db-lcov.info
-          cargo llvm-cov report --package gglib-gguf --lcov --output-path gglib-gguf-lcov.info
-          cargo llvm-cov report --package gglib-hf --lcov --output-path gglib-hf-lcov.info
-          cargo llvm-cov report --package gglib-download --lcov --output-path gglib-download-lcov.info
-          cargo llvm-cov report --package gglib-mcp --lcov --output-path gglib-mcp-lcov.info
-          cargo llvm-cov report --package gglib-agent --lcov --output-path gglib-agent-lcov.info
-          cargo llvm-cov report --package gglib-proxy --lcov --output-path gglib-proxy-lcov.info
-          cargo llvm-cov report --package gglib-runtime --lcov --output-path gglib-runtime-lcov.info
-          cargo llvm-cov report --package gglib-app-services --lcov --output-path gglib-app-services-lcov.info
-          cargo llvm-cov report --package gglib-bootstrap --lcov --output-path gglib-bootstrap-lcov.info
-          cargo llvm-cov report --package gglib-cli --lcov --output-path gglib-cli-lcov.info
-          cargo llvm-cov report --package gglib-axum --lcov --output-path gglib-axum-lcov.info
-
-      - name: Run TypeScript tests with coverage
-        run: npm run test:coverage -- --reporter=json --reporter=default --outputFile=ts-test-results.json 2>&1 | tee ts-test-output.txt
+          for crate in $CRATES; do
+            cargo llvm-cov report --package "$crate" --lcov --output-path "$crate-lcov.info"
+          done
 
       - name: Generate HTML report
         run: |
-          cargo llvm-cov report \
-            --package gglib-core \
-            --package gglib-db \
-            --package gglib-gguf \
-            --package gglib-hf \
-            --package gglib-download \
-            --package gglib-mcp \
-            --package gglib-agent \
-            --package gglib-proxy \
-            --package gglib-runtime \
-            --package gglib-app-services \
-            --package gglib-bootstrap \
-            --package gglib-cli \
-            --package gglib-axum \
-            --html
+          cargo llvm-cov report $(printf -- '--package %s ' $CRATES) --html
 
       - name: Archive coverage report
         uses: actions/upload-artifact@v7
@@ -129,21 +97,6 @@ jobs:
           path: |
             target/llvm-cov/html/
             lcov.info
-            gglib-core-lcov.info
-            gglib-db-lcov.info
-            gglib-gguf-lcov.info
-            gglib-hf-lcov.info
-            gglib-download-lcov.info
-            gglib-mcp-lcov.info
-            gglib-agent-lcov.info
-            gglib-proxy-lcov.info
-            gglib-runtime-lcov.info
-            gglib-app-services-lcov.info
-            gglib-bootstrap-lcov.info
-            gglib-cli-lcov.info
-            gglib-axum-lcov.info
-            coverage/
+            *-lcov.info
             rust-test-output.txt
-            ts-test-output.txt
-            ts-test-results.json
           retention-days: 30
