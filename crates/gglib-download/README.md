@@ -2,6 +2,8 @@
 
 <!-- crate-header:start -->
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-complexity.json)
+
+Layer: **infrastructure** · [workspace diagram](../README.md#architecture-overview)
 <!-- crate-header:end -->
 
 Download queue and manager for `HuggingFace` model files.

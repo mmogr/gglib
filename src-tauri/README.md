@@ -1,5 +1,9 @@
 # GGLib Desktop GUI (Tauri)
 
+<!-- crate-header:start -->
+Layer: **adapter** · [workspace diagram](../crates/README.md#architecture-overview)
+<!-- crate-header:end -->
+
 This directory contains the Tauri-based desktop application for GGLib.
 
 ## Overview

@@ -2,6 +2,8 @@
 
 <!-- crate-header:start -->
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-complexity.json)
+
+Layer: **application** · [workspace diagram](../README.md#architecture-overview)
 <!-- crate-header:end -->
 
 Pure-domain agentic loop implementation for gglib.

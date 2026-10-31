@@ -2,6 +2,8 @@
 
 <!-- crate-header:start -->
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-complexity.json)
+
+Layer: **utility** · [workspace diagram](../README.md#architecture-overview)
 <!-- crate-header:end -->
 
 The connection a test's fake HTTP server answers on, handed over only once the

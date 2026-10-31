@@ -2,6 +2,8 @@
 
 <!-- crate-header:start -->
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-complexity.json)
+
+Layer: **adapter** · [workspace diagram](../README.md#architecture-overview)
 <!-- crate-header:end -->
 
 HTTP API server for gglib — provides REST endpoints for the web UI and external integrations.

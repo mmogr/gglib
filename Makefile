@@ -228,8 +228,8 @@ doc-check: ## Build rustdoc with warnings denied, exactly as CI does
 	@# `custom-protocol` is on); see the note above `bindings`.
 	$(CARGO) doc --workspace --no-deps --document-private-items --exclude gglib-app
 
-# The generated parts of the crate READMEs: each badged crate's header block,
-# from crates/layers.toml. `enforce` fails while one is out of date.
+# The generated parts of the crate READMEs: each crate's header block, from
+# crates/layers.toml. `enforce` fails while one is out of date.
 readmes: ## Rewrite the generated blocks in the crate READMEs
 	@./scripts/crate_list.py readmes --write
 

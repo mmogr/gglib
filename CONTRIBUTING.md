@@ -521,7 +521,7 @@ The root README's version badge reads `version.json`, written from `Cargo.toml` 
 
 `badges.yml` runs `scripts/write_badges.py` after each successful CI or Coverage run of a push to `main`; a red or cancelled run changes nothing. The script deletes every JSON file on the branch outside that set, so the branch holds no file a README does not read. A badge reads `none` when the run's artifact had no file for its crate, and `pending` until the first run that writes it. The branch's own README lists the files. No README below a crate's top level carries a badge, because the pipeline writes no file for a module.
 
-A crate's README carries its badges in a block between `<!-- crate-header:start -->` and `<!-- crate-header:end -->`, which `make readmes` writes from `crates/layers.toml`. `make enforce` runs `scripts/crate_list.py --check`, which fails when a member has no row, a crate depends on a layer above its own, a header block is out of date, or a Markdown file links a file on the `badges` branch that the pipeline does not write.
+A crate's README carries its badges, and a line naming its layer that links the workspace diagram, in a block between `<!-- crate-header:start -->` and `<!-- crate-header:end -->`, which `make readmes` writes from `crates/layers.toml`. `make enforce` runs `scripts/crate_list.py --check`, which fails when a member has no row, a crate depends on a layer above its own, a header block is out of date, or a Markdown file links a file on the `badges` branch that the pipeline does not write.
 
 A new crate gets a row in `crates/layers.toml`, then `make readmes`. Its badges read `pending` until the next CI and Coverage runs on `main`.
 
