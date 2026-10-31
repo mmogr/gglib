@@ -88,8 +88,11 @@ jobs:
           npm ci
           npm run build
 
+      # $CRATES is split on purpose, one `-p` per crate; crate names hold no
+      # space or glob.
       - name: Run Rust tests with coverage
         run: |
+          # shellcheck disable=SC2046,SC2086
           cargo llvm-cov $(printf -- '-p %s ' $CRATES) \
             --lcov --output-path lcov.info 2>&1 | tee rust-test-output.txt
 
@@ -106,8 +109,10 @@ jobs:
             cargo llvm-cov report --package "$crate" --lcov --output-path "$crate-lcov.info"
           done
 
+      # Split as in the test step above.
       - name: Generate HTML report
         run: |
+          # shellcheck disable=SC2046,SC2086
           cargo llvm-cov report $(printf -- '--package %s ' $CRATES) --html
 
       - name: Archive coverage report

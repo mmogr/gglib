@@ -114,6 +114,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # check_workflow_yaml.sh runs it and fails here without it. The release
+      # tarball, checked against the checksum its release lists, so a moved
+      # asset cannot change what lints. shellcheck comes with the runner.
+      - name: Install actionlint
+        env:
+          URL: https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/actionlint.tar.gz" "$URL"
+          echo "$SHA256  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          sudo install "$RUNNER_TEMP/actionlint" /usr/local/bin/actionlint
+          actionlint --version
+          shellcheck --version
+
       # Every architecture script, in the order the Makefile's `enforce` recipe
       # lists them. The first to fail ends the step, and its output is the end
       # of the log. Among them is the workflow YAML check, which cannot catch a

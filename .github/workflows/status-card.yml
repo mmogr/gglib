@@ -29,6 +29,11 @@ concurrency:
   group: ${{ github.event_name == 'pull_request' && format('status-card-{0}', github.ref) || 'badges-branch' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+defaults:
+  run:
+    # GitHub's default is `bash -e`; this adds pipefail.
+    shell: bash
+
 jobs:
   card:
     name: Status Card

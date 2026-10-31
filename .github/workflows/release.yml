@@ -1106,7 +1106,8 @@ jobs:
             exit 0
           fi
 
-          mkdir -p -m 700 ~/.ssh
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
           # Pinned, not trusted on first use: the Ed25519 host key fingerprint
@@ -1188,7 +1189,8 @@ jobs:
             exit 0
           fi
 
-          mkdir -p -m 700 ~/.ssh
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           printf '%s\n' "$HOMEBREW_TAP_DEPLOY_KEY" > ~/.ssh/tap
           chmod 600 ~/.ssh/tap
           # GitHub's published Ed25519 host key.

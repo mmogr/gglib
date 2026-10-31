@@ -3,7 +3,8 @@
 # Validate every YAML file under .github/ for duplicate mapping keys: the
 # workflows, and configuration such as the issue forms.
 # Also checks that the two workflows that move the version, release-please.yml
-# and promote.yml, re-lock the lockfiles rather than re-resolve them.
+# and promote.yml, re-lock the lockfiles rather than re-resolve them, and
+# runs actionlint over the workflows.
 #
 # GitHub rejects a workflow file containing a duplicate key outright: the run is
 # marked "failed because of a workflow file issue" and NO jobs start. That makes
@@ -110,3 +111,38 @@ for workflow in .github/workflows/release-please.yml .github/workflows/promote.y
     fi
     echo -e "\033[0;32m✓\033[0m $workflow re-locks the workspace only"
 done
+
+# ---------------------------------------------------------------------------
+# actionlint, with shellcheck over every run: script
+# ---------------------------------------------------------------------------
+#
+# A bad expression, a `needs:` naming a job that does not exist, an input a
+# composite action does not declare, or a shell quoting slip in a step: each
+# parses as YAML, so the check above passes it, and each shows only when the
+# workflow runs. actionlint reads the workflows as GitHub will, and hands
+# every run: script to shellcheck when shellcheck is on the PATH.
+#
+# CI's `enforcement` job installs actionlint, and the runner image carries
+# shellcheck, so there the absence of either is a failure. Locally a missing
+# one is skipped with a warning, as ruby is above:
+# `brew install actionlint shellcheck`.
+
+echo ""
+echo "Linting the workflows with actionlint..."
+if ! command -v actionlint >/dev/null 2>&1; then
+    if [ -n "${GITHUB_ACTIONS:-}" ]; then
+        echo -e "\033[0;31m✗\033[0m actionlint is not installed; the enforcement job installs it before this runs."
+        exit 1
+    fi
+    echo "⚠ actionlint not found — skipping (brew install actionlint shellcheck)"
+    exit 0
+fi
+if ! command -v shellcheck >/dev/null 2>&1; then
+    if [ -n "${GITHUB_ACTIONS:-}" ]; then
+        echo -e "\033[0;31m✗\033[0m shellcheck is not on the runner, so actionlint would check no run: script."
+        exit 1
+    fi
+    echo "⚠ shellcheck not found — actionlint runs without it, so no run: script is checked"
+fi
+actionlint
+echo -e "\033[0;32m✓\033[0m actionlint found nothing"

@@ -17,6 +17,11 @@ concurrency:
   group: badges-branch
   cancel-in-progress: false
 
+defaults:
+  run:
+    # GitHub's default is `bash -e`; this adds pipefail.
+    shell: bash
+
 jobs:
   badges:
     name: Update Badges
