@@ -1,0 +1,36 @@
+$ gglib config settings show
+Current application settings:
+
+  General
+  ────────────────────────────────────────
+  agentic-sampling            None
+  bind-host                   None
+  close-to-tray               None
+  default-context-size        None (sized per launch)
+  default-download-path       None
+  default-image-model-id      None
+  default-model-id            1 (Qwen3-30B-A3B)
+  inference-profiles          None
+  llama-base-port             9300
+  loop-guard-mode             None
+  max-download-queue-size     None
+  max-stagnation-steps        None
+  max-tool-iterations         None
+  mcp-drawing                 None (off)
+  proxy-api-key               None
+  proxy-autostart             None
+  proxy-port                  8080
+  remote-devices              None
+  remote-enabled              None
+  remote-pairing              None
+  remote-serve                None
+  share-lan                   None
+  show-memory-fit-indicators  None
+  start-at-login              None
+  title-generation-prompt     None
+  tool-call-repair            None
+  trust-client-sampling       None
+
+  Inference Defaults
+  ────────────────────────────────────────
+  (none configured)

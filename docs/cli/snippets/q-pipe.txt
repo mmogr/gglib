@@ -1,0 +1,19 @@
+$ grep -E "WARN|ERROR" server.log | gglib q -Q "What went wrong here?"
+The logs indicate that the application is experiencing a database connection issue. Specifically:
+
+- The database connection pool has reached its maximum capacity of 10 connections.
+- Each time a request arrives (e.g., `/orders/export`, `/orders`), the system tries to allocate a new connection, but all 10 slots are already in use.
+- As a result, requests are being queued and eventually timeout after 5 seconds.
+- When the timeout occurs, the server returns a 500 Internal Server Error.
+
+### Root Cause:
+The database pool is saturated. This suggests either:
+1. Too many concurrent requests are hitting the system (e.g., due to high traffic or misconfigured load).
+2. The application is not properly closing database connections after use (leak).
+3. The pool size (10) is too small for current demand.
+
+### Recommendations:
+- Increase the database connection pool size (configurable in the DB setup).
+- Ensure all database connections are properly closed in the code.
+- Add logging or monitoring to track request volume and connection usage.
+- Implement circuit breakers or rate limiting to prevent overloading.

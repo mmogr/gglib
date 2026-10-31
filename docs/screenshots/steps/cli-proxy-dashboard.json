@@ -1,0 +1,42 @@
+{
+ "cols": 100,
+ "rows": 38,
+ "env": {
+  "GGLIB_DATA_DIR": "~/.local/share/gglib-demo",
+  "GGLIB_MODELS_DIR": "~/.local/share/gglib-demo/models",
+  "GGLIB_DAEMON_PORT": "9907",
+  "HOME": "~/.local/share/gglib-demo/home",
+  "GIT_PAGER": "cat"
+ },
+ "cwd": "~/.local/share/gglib-demo/home/orders-api",
+ "panes": [
+  {
+   "name": "gglib q, in another terminal",
+   "rows": 6,
+   "cmd": "sleep 6; gglib q -Q \"In one sentence, what is a GGUF file?\""
+  }
+ ],
+ "steps": [
+  {
+   "sleep": 0.8
+  },
+  {
+   "mark": "title:gglib proxy dashboard"
+  },
+  {
+   "type": "gglib proxy dashboard"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 30
+  },
+  {
+   "keys": "q"
+  },
+  {
+   "sleep": 1.5
+  }
+ ]
+}

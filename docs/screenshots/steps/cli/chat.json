@@ -1,0 +1,53 @@
+{
+ "cols": 88,
+ "rows": 30,
+ "env": {
+  "GGLIB_DATA_DIR": "~/.local/share/gglib-demo",
+  "GGLIB_MODELS_DIR": "~/.local/share/gglib-demo/models",
+  "GGLIB_DAEMON_PORT": "9907",
+  "HOME": "~/.local/share/gglib-demo/home",
+  "GIT_PAGER": "cat"
+ },
+ "cwd": "~/.local/share/gglib-demo/home/orders-api",
+ "steps": [
+  {
+   "sleep": 0.5
+  },
+  {
+   "type": "gglib chat Qwen3-4B-Instruct-2507"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "wait": "You: ",
+   "timeout": 600
+  },
+  {
+   "sleep": 0.6
+  },
+  {
+   "type": "Read app.py and say in one sentence what it serves."
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "wait": "You: ",
+   "timeout": 900
+  },
+  {
+   "sleep": 0.6
+  },
+  {
+   "type": "/exit"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "idle": 1.5,
+   "timeout": 60
+  }
+ ]
+}

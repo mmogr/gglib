@@ -1,0 +1,7 @@
+$ gglib proxy trips
+The loop guard's log, the last 30 day(s):
+DAY (UTC)   MODEL                         VERSION    MODE    SCANNED  TRIPS  LOOPS  STAGN.  SESSIONS
+2026-10-31  Qwen3-30B-A3B                 0.29.0-rc.1  note          1      0      0       0         0
+2026-10-31  Qwen3.8-27B                   0.29.0-rc.1  note         10      0      0       0         0
+
+A trip is the guard's decision, not a delivery: a noted request can still fail to reach the model.

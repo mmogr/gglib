@@ -167,7 +167,7 @@ still a success.
   image gets the same marker. `gglib chat --continue` shows the images the
   last turn's tools made on a line of their own. `gglib attachment save <id>
   [path]` writes one to a file as stored, from the whole id or its first 8 or
-  more characters ([docs/cli.md](../cli.md#attachment-save)).
+  more characters ([docs/cli/chat.md](../cli/chat.md#attachment-save)).
 - **The chat page** draws the images of an assistant message's tool calls as
   one strip in that message's body, under its text and outside "How this was
   made", in the order the calls come: live from `tool_call_complete`, and

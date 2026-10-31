@@ -212,7 +212,7 @@ gglib config settings set --proxy-autostart true --close-to-tray true
 
 `gglib benchmark` compares models on one prompt, measures throughput, and
 sweeps sampling parameters for a model with `--apply` to keep the winner.
-[CLI reference →](docs/cli.md)
+[CLI reference →](docs/cli/)
 
 ## Interfaces
 
@@ -336,7 +336,7 @@ diagram and the catalog of crates, each with its own README,
 
 ## Documentation
 
-- [CLI command reference](docs/cli.md)
+- [CLI command reference](docs/cli/)
 - [Client configuration and images](docs/clients.md)
 - [Sampling resolution](docs/sampling.md)
 - [Tags & capability detection](docs/tags.md)
