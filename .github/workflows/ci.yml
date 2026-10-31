@@ -24,10 +24,15 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
 
+# Every job has a timeout-minutes, counted from when it starts rather than
+# from when it was queued: a ceiling for a hang, well above a cold run. The
+# cross-OS legs take theirs from the matrix: 75 minutes on macOS, where CLI
+# Check builds llama.xcframework when its cache misses, and 45 elsewhere.
 jobs:
   fmt:
     name: Format
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -41,6 +46,7 @@ jobs:
   quality:
     name: Lint & Typecheck
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -74,6 +80,7 @@ jobs:
   boundaries:
     name: Check Boundaries
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -100,6 +107,7 @@ jobs:
   enforcement:
     name: Enforce Architecture
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -120,6 +128,7 @@ jobs:
   adr-readings:
     name: ADR criterion moved
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -130,6 +139,7 @@ jobs:
   test:
     name: Test (Rust)
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     # No `needs:`. This was chained to `clippy` so it would restore the target
     # dir clippy had just populated — but clippy builds `--all-features` and
     # this job builds default features, so on run 32705784511 it inherited
@@ -287,6 +297,7 @@ jobs:
   bindings:
     name: Bindings Freshness
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     # Its own job rather than a step on `test`, which is where it lived on the
     # stated grounds that "the cargo cache is warm in this job". It was not:
     # this builds `--features ts-bindings`, a different feature unification
@@ -350,6 +361,7 @@ jobs:
   rustdoc:
     name: Rustdoc
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     # Off `test` for the same reason as `bindings` above: it sat there for a
     # cargo cache that did not apply to it. rustdoc builds its own artifacts
     # and the job log shows 137 crates recompiling, so the four and a half
@@ -414,6 +426,7 @@ jobs:
   test-frontend:
     name: Test (Frontend)
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     # No `needs:` — this job is pure npm and finishes in about a minute. It used
     # to wait on a full workspace clippy build it shares nothing with.
     # Same masking as the Rust job: `npm run test:run … | tee` reported `tee`'s
@@ -458,6 +471,7 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     # No `needs:` — clippy is a long pole and nothing gates it. It no longer
     # warms anyone else's cache: it builds `--all-features`, which is not what
     # `test` or `cli-cross-os` build, and the shared key that pretended
@@ -519,6 +533,7 @@ jobs:
   cli-cross-os:
     name: CLI Check (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout }}
     # Only when `scope` says a change can reach these builds. `clippy` first,
     # so no macOS or Windows minutes go on a tree ubuntu clippy has rejected.
     if: needs.scope.outputs.cross_os == 'true'
@@ -529,10 +544,13 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-24.04
+            timeout: 45
           - target: aarch64-apple-darwin
             os: macos-26
+            timeout: 75
           - target: x86_64-pc-windows-msvc
             os: windows-2022
+            timeout: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -755,6 +773,7 @@ jobs:
   clippy-cross-os:
     name: Clippy (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout }}
     # As `cli-cross-os`: when `scope` says so, and after ubuntu clippy.
     if: needs.scope.outputs.cross_os == 'true'
     needs: [clippy, scope]
@@ -764,8 +783,10 @@ jobs:
         include:
           - target: aarch64-apple-darwin
             os: macos-26
+            timeout: 75
           - target: x86_64-pc-windows-msvc
             os: windows-2022
+            timeout: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -811,6 +832,7 @@ jobs:
   ios-check:
     name: iOS Check
     runs-on: macos-26
+    timeout-minutes: 45
     needs: [scope]
     if: needs.scope.outputs.ios == 'true'
     steps:
@@ -848,6 +870,7 @@ jobs:
   scope:
     name: Scope
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
@@ -1004,6 +1027,7 @@ jobs:
   phone-llama:
     name: Phone Engine on llama.cpp (macOS)
     runs-on: macos-26
+    timeout-minutes: 75
     needs: [scope]
     if: needs.scope.outputs.apple == 'true'
     steps:
@@ -1078,6 +1102,7 @@ jobs:
   cache-prune:
     name: Prune the Rust caches
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [test, bindings, rustdoc, clippy, cli-cross-os, clippy-cross-os]
     permissions:
@@ -1122,6 +1147,7 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     if: always()
     needs: [scope, boundaries, bindings, enforcement, adr-readings, quality, rustdoc, test, test-frontend, clippy, clippy-cross-os, fmt, cli-cross-os, ios-check, ffi-apple, phone-llama]
     steps:
