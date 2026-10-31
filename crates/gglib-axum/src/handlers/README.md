@@ -7,6 +7,13 @@ HTTP request handlers for the Axum web server.
 Handlers are organized into domain-scoped subdirectories:
 - [`model`]  — CRUD, verification, downloads, `HuggingFace` discovery
 - [`config`] — settings, system setup
+- [`agent`]  — `POST /api/agent/chat`, the server-side agentic loop, and the
+  agent runs the daemon and a paired device start
+- [`benchmark`] — compare, perf, tune and agentic runs, and the run history
+- [`proxy`]  — the OpenAI-compatible proxy's status, start, stop and loop-guard log
+- [`remote`] — the remote tunnel, both sides, and the far machine's chats,
+  runs, images and models
+- [`runs`]   — `/api/runs/*`, this machine's door to the daemon's runs
 
 `attachments.rs` is `POST /api/attachments` and `GET /api/attachments/{id}`:
 an image the chat page sends once, as the raw body, and names by its id in

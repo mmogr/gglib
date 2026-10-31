@@ -1,9 +1,9 @@
 # Isolating one agentic task
 
-The default agentic eval runs 21 tasks × 3 seeds × 4 arms — 210 model runs, and
-the better part of an hour. That is the wrong instrument for asking "what did
-the model actually do on *this* task", and the cost is enough that the question
-usually goes unasked.
+The default agentic eval runs 21 tasks on three arms at 3 seeds each and on a
+control arm at one seed — 210 model runs, and the better part of an hour. That
+is the wrong instrument for asking "what did the model actually do on *this*
+task", and the cost is enough that the question usually goes unasked.
 
 `--task-suite` takes a **file path** as readily as `default`, so a suite of one
 task is a suite. Combined with `--seeds ""` (one unseeded run) and dropping the

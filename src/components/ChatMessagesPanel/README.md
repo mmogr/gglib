@@ -8,19 +8,23 @@ Central chat interface, laid out as a notebook (each turn a row: a margin saying
 
 ```
 ChatMessagesPanel                 ← composition root; owns the thread runtime
-    ├── ThinkingTimingProvider    ← context for live reasoning timers
-    │     └── ThreadPrimitive     ← @assistant-ui message list, one notebook column
-    │           ├── ChatPanelHeader     ← head row: title, rename, AI title, actions
-    │           │     └── SystemPromptSection  (own draft state)
-    │           ├── ChatStatusBanners   ← chat error / server-down warning
-    │           ├── MessageBubbles      ← each turn a TurnRow: margin + body
-    │           │     ├── TurnMargin (who; figures or arrival, from turnFigures)
-    │           │     ├── BranchSwitcher (the options where the chat's branches part)
-    │           │     ├── MarkdownMessageContent
-    │           │     └── ThinkingBlock / ToolUsageBadge / ToolExecutionProgress
-    │           ├── BranchEnd           ← where other branches go on past the last message
-    │           ├── Unanswered          ← Retry, under a chat that ends in a question
-    │           └── ComposerFooter      ← model, tools, context ring, Thinking switch, folder chip and Draw button; input, send / stop
+    ├── MessageActionsContext     ← delete, whose chat it is, fixing and redoing a picture
+    │     └── BranchingContext    ← the branch points, and the changes made from them
+    │           └── ImageInputContext   ← whether the composers offer images
+    │                 └── ThinkingTimingProvider  ← context for live reasoning timers
+    │                       └── ThreadPrimitive   ← @assistant-ui message list, one notebook column
+    │                             ├── ChatPanelHeader     ← head row: title, rename, AI title, actions
+    │                             │     └── SystemPromptSection  (own draft state)
+    │                             ├── ChatStatusBanners   ← chat error / server-down warning
+    │                             ├── RunPreviewsProvider ← the run's preview frames, for the replies
+    │                             │     └── MessageBubbles      ← each turn a TurnRow: margin + body
+    │                             │           ├── TurnMargin (who; figures or arrival, from turnFigures)
+    │                             │           ├── BranchSwitcher (the options where the chat's branches part)
+    │                             │           ├── MarkdownMessageContent
+    │                             │           └── ThinkingBlock / ToolUsageBadge / ToolExecutionProgress
+    │                             ├── BranchEnd           ← where other branches go on past the last message
+    │                             ├── Unanswered          ← Retry, under a chat that ends in a question
+    │                             └── ComposerFooter      ← model, tools, context ring, Thinking switch, folder chip and Draw button; input, send / stop
     └── ConfirmDeleteModal        ← cascade-delete confirmation
 ```
 
@@ -41,7 +45,7 @@ On this machine's chats a question and a reply can each be edited, a reply regen
 | Directory | Contents |
 |-----------|----------|
 | `components/` | Every child of the root — panel chrome (`ChatPanelHeader`, `SystemPromptSection`, `ChatStatusBanners`, `ComposerFooter`, `ConfirmDeleteModal`) and message rendering (`MessageBubbles`, `BranchSwitcher`, `BranchingContext`, `Unanswered`, `MarkdownMessageContent`, `ThinkingBlock`, `MessageActionsContext`) |
-| `context/` | `ThinkingTimingContext` — decoupled timer updates to avoid full list re-renders |
+| `context/` | `ThinkingTimingContext` — decoupled timer updates to avoid full list re-renders; `RunPreviewsContext` — the run's preview frames, reaching a reply beside its message and never in it |
 | `hooks/` | `useMessageDeletion`, `useSharedTicker`, `useTitleGeneration`, `useImageUrl`, `useContextReading`, `usePictureRedraw`, `usePictureKeeping` |
 
 <!-- module-docs:end -->

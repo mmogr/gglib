@@ -12,7 +12,7 @@ endpoint produces, and passing.
 | File | Builds | The thing it gets right |
 |------|--------|-------------------------|
 | `inference.ts` | `InferenceConfig` | All eighteen keys, `null` for unset. `gglib-core`'s struct has no `skip_serializing_if`, so a two-field config is not a smaller response — it is not a response. |
-| `settings.ts` | `AppSettings` | All twenty-three, `null` for unset. Same reason, on `gglib_app_services::types::AppSettings` — the type the endpoint returns, not the persisted `gglib_core::Settings`. |
+| `settings.ts` | `AppSettings` | All twenty-five, `null` for unset. Same reason, on `gglib_app_services::types::AppSettings` — the type the endpoint returns, not the persisted `gglib_core::Settings`. |
 | `model.ts` | `GuiModel` | The eight fields the old mirror made optional are required; only the three MoE fields, which really do carry `skip_serializing_if`, are omitted. |
 | `explain.ts` | `SamplingExplanation` | `published` is an empty array rather than an absent key, and `defaultsOrigin` and `profile` are required nullables. `effortSuppressed` stays optional — it is the one field that genuinely skips. |
 | `mcp.ts` | `McpServerInfo` | The nested `{server, status, tools}` every server route answers with, not the bare row two mocks were returning. |

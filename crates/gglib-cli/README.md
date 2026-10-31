@@ -21,35 +21,44 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 ## Internal Structure
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                gglib-cli                                            │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                     │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐        │
-│  │   main.rs   │ ──► │  parser.rs  │ ──► │ commands.rs │ ──► │  handlers/  │        │
-│  │  Entry pt   │     │   clap CLI  │     │  Dispatch   │     │  Command    │        │
-│  │             │     │   parsing   │     │   table     │     │  handlers   │        │
-│  └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘        │
-│                                                                                     │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                            │
-│  │bootstrap.rs │     │presentation/│     │   utils/    │                            │
-│  │  DI setup   │     │  Table fmt  │     │   Helpers   │                            │
-│  │  & wiring   │     │  & output   │     │             │                            │
-│  └─────────────┘     └─────────────┘     └─────────────┘                            │
-│                                                                                     │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │                          *_commands.rs modules                                │  │
-│  │   llama_commands │ config_commands │ model_commands │ ...                   │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                                gglib-cli                                              │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                       │
+│  ┌───────────────┐     ┌───────────────┐     ┌───────────────┐     ┌───────────────┐  │
+│  │    main.rs    │     │   parser.rs   │     │  dispatch.rs  │     │   handlers/   │  │
+│  │    Entry pt   │ ──► │    clap CLI   │ ──► │  Routes each  │ ──► │    Command    │  │
+│  │               │     │    parsing    │     │    command    │     │    handlers   │  │
+│  └───────────────┘     └───────────────┘     └───────────────┘     └───────────────┘  │
+│                                                                                       │
+│  ┌───────────────┐     ┌───────────────┐     ┌───────────────┐     ┌───────────────┐  │
+│  │  commands.rs  │     │   target.rs   │     │  bootstrap.rs │     │ daemon_client/│  │
+│  │    Commands   │     │ Which machine │     │    DI setup   │     │  Daemon probe │  │
+│  │      enum     │     │   (--remote)  │     │    & wiring   │     │  & HTTP calls │  │
+│  └───────────────┘     └───────────────┘     └───────────────┘     └───────────────┘  │
+│                                                                                       │
+│  ┌───────────────┐     ┌───────────────┐                                              │
+│  │ presentation/ │     │     utils/    │                                              │
+│  │   Table fmt   │     │    Helpers    │                                              │
+│  │    & output   │     │               │                                              │
+│  └───────────────┘     └───────────────┘                                              │
+│                                                                                       │
+│  ┌─────────────────────────────────────────────────────────────────────────────────┐  │
+│  │                              *_commands.rs modules                              │  │
+│  │   llama_commands │ config_commands │ model_commands │ mcp_commands │ ...        │  │
+│  └─────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                       │
+└───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Module Descriptions:**
 - **`bootstrap.rs`** — Dependency injection and service wiring
-- **`commands.rs`** — Command dispatch and routing
-- **`config_commands.rs`** — Configuration management commands
-- **`llama_commands.rs`** — Llama server/chat command definitions
+- **`commands.rs`** — The `Commands` enum, the top-level subcommands
+- **`dispatch.rs`** — Routes each parsed command to its handler
+- **`target.rs`** — Which machine a command is for: this one, or the paired one under `--remote`
+- **`daemon_client/`** — The CLI's side of the daemon: probe, auto-launch, and typed calls to its management API
+- **`config_commands/`** — Configuration management commands
+- **`llama_commands.rs`** — llama.cpp's install, status, uninstall and detect command definitions
 - **`sd_commands.rs`** — stable-diffusion.cpp (the image runtime) command definitions
 - **`parser.rs`** — Clap-based CLI argument parsing
 - **`handlers/`** — Individual command handler implementations
@@ -60,41 +69,88 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 
 | Command | Description |
 |---------|-------------|
-| `add <path>` | Add a GGUF model to the library; `--component <role>=<path>` links an image model's component as it is added |
-| `list` | List all models with metadata, an image model's family and the components it still needs in the `Draws` column; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
-| `inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata, an image model's family and components), and the port it is being served on when it is; `--remote` reads the paired machine's |
-| `explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
-| `remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--yes` skips the confirmation only) |
+| `up [-y] [--model <id\|name>] [-p PORT]` | Go from nothing to a working OpenAI-compatible endpoint: install llama.cpp and the image runtime when missing, recommend and download a model that fits, start the proxy, send one request through it, and print the client configuration; safe to re-run |
+| `model add <path>` | Add a GGUF model to the library; `--component <role>=<path>` links an image model's component as it is added |
+| `model list` | List all models with metadata, an image model's family and the components it still needs in the `Draws` column; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
+| `model inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata, an image model's family and components), and the port it is being served on when it is; `--remote` reads the paired machine's |
+| `model explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
+| `model remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--yes` skips the confirmation only) |
+| `model update <id\|name> [flags]` | Change a model's stored metadata (name, parameter count, architecture, quantization, context length, metadata keys), its inference defaults (`--unset <param>` clears one), its projector (`--projector`, `--no-projector`) and an image model's components (`--component`, `--no-component`) |
+| `model retag [<id\|name>] [--all] [--full]` | Re-derive auto-tags from the stored GGUF metadata; additive unless `--full` |
+| `model capabilities <id\|name> [--set FLAG] [--unset FLAG]` | Show a model's capability flags, or override them |
+| `model download <repo>` | Download a model from `HuggingFace`; an image model's companions come too, named with their sizes before it is queued |
+| `model search <query>` | Search `HuggingFace` Hub for models; `--images` for image models |
+| `model browse [category] [--size S] [--images]` | Browse popular GGUF models on the `HuggingFace` Hub |
+| `model check-updates [--identifier <id\|name>] [--all]` | Check whether downloaded models have a newer commit on the Hub |
+| `model upgrade <id\|name> [--yes]` | Download a model's latest version and update its row |
+| `model verify <id\|name>` | Verify model integrity via SHA256 hash comparison |
+| `model repair <id\|name>` | Re-download corrupt shards for a model |
 | `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`); for an image model, pin the proxy to it and load it once through stable-diffusion.cpp's `sd-server`, refusing the chat-only flags (`--ctx-size`, `--mlock`, `--jinja`, MTP, sampling, a profile) by name |
 | `chat <id\|name>` | Chat with a model interactively |
 | `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on; refused while the daemon is still replying to it, for the web page or a paired device |
 | `chat … --thinking on\|off` | Switch the chat's Thinking on or off, as the chat page's switch does: the choice runs the session and the chat remembers it, on a new chat or with `--continue` |
 | `chat <id\|name>`, files | Reads files in the directory it was launched in, read-only, never home or `/`, and says which on one `Files:` stderr line; under `--tools`, name `read_file` to keep the file tools |
-| `question <text>` | Ask a question (with optional piped context) |
-| `question <text>` | Ask a question; filesystem tools are on unless `--no-tools` |
+| `question <text>` (alias `q`) | Ask a question, with optional piped or file context; filesystem tools are on unless `--no-tools` |
 | `question --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |
 | `chat history` | List past conversations with message counts, and the chat each branch was made from |
 | `image "<prompt>" [--size WxH] [-n N] [--seed S] [-m MODEL] [-o PATH]` | Draw with this machine's image model through the daemon; one live line (queued, loading, sampling step/total, decoding), each PNG saved to `PATH` or `gglib-<unix>.png`, `-1`, `-2`, … for more than one, and `[image WxH] <path>` printed for each |
 | `attachment save <id> [path] [--force]` | Write a stored image, such as one a tool made, to a file; `<id>` is the whole id or at least the 8 characters a chat's marker shows; an existing file is replaced only with `--force` |
+| `run start -m <model> <prompt> [--follow]` | Start a reply the daemon finishes and print its id, or the reply as it arrives with `--follow` |
+| `run list` | List the daemon's runs, newest first |
+| `run show <id> [--follow]` | Print a run's reply so far; `--follow` keeps printing until it ends |
+| `run cancel <id>` | Stop a run |
+| `benchmark compare` | Run one prompt through several models and compare the outputs side by side |
+| `benchmark perf` | Measure prompt-processing and token-generation throughput with llama-bench |
+| `benchmark list`, `benchmark show <run-id>`, `benchmark model <model-id>` | List past runs, show one, or show one model's history (compare and perf) |
+| `benchmark tune` | Sweep sampling parameters for one model against an agentic tool-calling task suite |
+| `benchmark agentic` | Run the agentic task suite twice against one model, bypassing the gglib pipeline and through it, and report the difference |
+| `gui [--dev]` | Launch the Tauri desktop app |
+| `web [--share-lan] [--no-open]` | Make sure the daemon is running, print the web dashboard's link and open it in the browser (`--no-open` only prints); `--share-lan` instead runs `gglib daemon run --share-lan` in the foreground |
+| `daemon run [--share-lan] [--allowed-host HOST]` | Run the daemon, the one process that owns llama-server, in the foreground |
+| `daemon status` | Show whether the daemon is running, and what it is doing |
+| `daemon stop [-y]` | Stop the daemon and every server it owns; with `--remote`, the paired machine's, which asks first unless `-y` |
+| `remote enable [--invite] [--relay URL] [--no-discovery] [--no-qr]` | Turn remote access on; it stays on across restarts until `disable`, and `--invite` also pairs a device |
+| `remote disable` | Stop answering; with no daemon running, switch remote access off in settings |
+| `remote status` | Show the tunnel's state, its peers, and what came through it |
+| `remote invite [--no-qr]` | Pair one more device: mint its key and show a six-digit code that hands it over once |
+| `remote list` | List the devices this machine has issued a key to |
+| `remote forget <device>` | Retire one device's key and drop the runs it started; the others are untouched |
+| `remote join [<ticket>-<code>\|<ticket>] [--port PORT]` | Bind a local port that is another machine's proxy; the first time redeems the invite's code for this device's own key, later a bare ticket or nothing reuses the pairing |
+| `remote disconnect` | Close the local port; the far machine and the stored pairing stay |
+| `mcp list` | List the configured MCP servers with their status |
+| `mcp add --name <name> --type stdio --command <cmd> [flags]` | Add a stdio MCP server, with its arguments, working directory, `PATH` entries, environment and lifecycle (`eager`, `lazy` or `manual`) |
+| `mcp remove <server>`, `mcp start <server>`, `mcp stop <server>` | Remove, start or stop a server |
+| `mcp enable <server>`, `mcp disable <server>` | Include a server's tools in chat, or leave them out |
+| `mcp allow-remote <server>…`, `mcp deny-remote <server>…` | Offer servers' tools to paired devices' runs, or stop offering them |
+| `mcp tools <server>` | List the tools a running server exposes |
+| `mcp test <server>` | Start a server for the test, list its tools, and stop it |
 | `/retry`, `/edit <text>`, `/branch`, `/branches` (in a chat) | Answer the last question again, ask it again as `<text>`, copy the chat into a new branch, or list the chat's branches; see [Branches](#branches) |
 | `proxy` | Start the OpenAI-compatible proxy (context comes from settings `default_context_size`, or is sized per launch when unset) |
 | `proxy dashboard [--host HOST] [--port PORT]` | Live terminal view of a running proxy's active connections, slot context usage, prompt-cache health and reuse, and request history |
 | `proxy trips [--since DAYS]` | The loop guard's log from this machine's database, daemon or not: requests scanned per UTC day, model, version and mode, and the ones it noted or refused |
-| `download <repo>` | Download a model from `HuggingFace`; an image model's companions come too, named with their sizes before it is queued |
-| `search <query>` | Search `HuggingFace` Hub for models; `--images` for image models |
+| `proxy stop` | Stop the proxy on the running daemon; it keeps running there after `gglib proxy` or `gglib serve` detach |
 | `config settings show` | Show current configuration; a stored secret is shown as `(set, not shown)` with the command that prints it |
+| `config settings set [flags]` | Update application settings, one flag each |
+| `config settings unset <key>` | Clear one setting, returning it to unset (for `default-context-size`, sized per launch again) |
+| `config settings reset` | Reset every preference to its default; keeps the joined machine, the devices it admits, remote access and the proxy's API key |
 | `config settings reveal <key>` | Print a stored secret, `proxy-api-key` or `remote-pairing.api-key`, alone on stdout, so `$(gglib config settings reveal proxy-api-key)` is exactly the key |
 | `config default <id\|name>` | Set/show/clear the default model |
+| `config models-dir show\|prompt\|set <path>` | Show, ask for, or set the models directory |
+| `config paths` | Show the resolved path of every gglib directory |
 | `config profile list` | List named sampling profiles |
 | `config profile show <name>` | Show one profile's parameters |
 | `config profile set <name> [flags]` | Create or update a profile (only the flags passed are set; `--unset <param>` clears one) |
 | `config profile rm <name>` | Delete a profile |
 | `config profile install-templates` | Install the starter profiles: three sampling (coding, chat, creative) and six reasoning rungs (minimal…max) |
+| `config llama install [--build] [--force]` (also `update`) | Install the pinned llama.cpp release when it is missing or older than the pin, or build it from source with `--build` |
+| `config llama status` | Show what is installed, and where it stands against the pinned release |
+| `config llama uninstall [--yes]` | Remove the llama.cpp installation |
+| `config llama detect [--json]` | Detect GPU acceleration and check build readiness |
 | `config sd install [--build] [--force]` (also `update`) | Install stable-diffusion.cpp's pinned `sd-server`, which serves image models, when it is missing or older than the pin: the pre-built release for this platform (a CPU-only build is warned about before it starts), or a source build with `--build`, where no release fits, or over a source build of a release |
 | `config sd status` | Show whether `sd-server` is installed, as a download or a source build, with its release, platform, commit and path, and where it stands against the pinned release |
 | `config sd uninstall [--yes]` | Remove what the image runtime's install put in `.sd/`, and say what was removed; refused while the daemon runs an image model |
-| `verify <id\|name>` | Verify model integrity via SHA256 hash comparison |
-| `repair <id\|name>` | Re-download corrupt shards for a model |
+| `config check-deps` | Check the system dependencies gglib needs to build, with install commands for any missing |
+| `config fast-downloads [status\|enable\|disable\|prompt]` | Show, build or remove the optional `hf_xet` download accelerator's environment, or offer to build it |
 | `completions <shell>` | Print a shell completion script to stdout |
 
 ### Shell Completions
@@ -141,6 +197,7 @@ Proxy cache-clear options:
 | `--host` | Proxy host (default: 127.0.0.1) |
 | `-p`, `--port` | Proxy port (default: the stored `proxy_port` setting) |
 | `--session-id` | Optional session ID to target (without it, clears all sessions) |
+| `--api-key` | The proxy's API key, if it requires one (default: the stored `proxy_api_key` setting; also `GGLIB_API_KEY`) |
 
 Cache flags (`gglib proxy`, `gglib serve`):
 | Flag | Description |

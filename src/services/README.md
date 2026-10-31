@@ -21,10 +21,15 @@ The services module contains the TypeScript client layer for the gglib GUI front
 │  │  API layer  │  │ HTTP + SSE  │  │ OS-specific │  │MCP tooling  │                 │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘                 │
 │                                                                                     │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                                  │
-│  │   server/   │  │  registry   │  │  decoders/  │                                  │
-│  │ Safe calls  │  │Server state │  │Event decode │                                  │
-│  └─────────────┘  └─────────────┘  └─────────────┘                                  │
+│  ┌─────────────┐  ┌─────────────┐                                                   │
+│  │   server/   │  │  decoders/  │                                                   │
+│  │  Safe calls │  │ Event decode│                                                   │
+│  └─────────────┘  └─────────────┘                                                   │
+│                                                                                     │
+│  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐                         │
+│  │ serverRegistry │  │ proxyRegistry  │  │ remoteRegistry │                         │
+│  │  Server state  │  │  Proxy state   │  │  Tunnel state  │                         │
+│  └────────────────┘  └────────────────┘  └────────────────┘                         │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
                                        │

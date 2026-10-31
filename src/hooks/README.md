@@ -16,7 +16,7 @@ Custom React hooks for gglib GUI functionality.
 │   │                                                                             │   │
 │   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │   │
 │   │  │  useModels  │  │ useServers  │  │ useSettings │  │  useTags    │         │   │
-│   │  │   CRUD ops  │  │  Lifecycle  │  │   Config    │  │  Tagging    │         │   │
+│   │  │   CRUD ops  │  │Registry view│  │   Config    │  │  Tagging    │         │   │
 │   │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘         │   │
 │   │         │                │                │                │                │   │
 │   │         └────────────────┴────────────────┴────────────────┘                │   │
@@ -40,7 +40,7 @@ Custom React hooks for gglib GUI functionality.
 | [`useModelLibraryEvents.ts`](useModelLibraryEvents.ts) | Reload the library when another client changes it |
 | [`usePairedModels.ts`](usePairedModels.ts) | The paired machine's models for the library and a chat on one of them: read while it is reached and the caller needs them, kept and marked stale while it is away or a read fails, cleared on disconnect or once another machine answers |
 | [`useLibrarySelection.ts`](useLibrarySelection.ts) | The library's one selection, a model here or a far one, never both; a far pick tells the native menu nothing here is selected |
-| [`useServers.ts`](useServers.ts) | Server lifecycle management (start/stop/health) |
+| [`useServers.ts`](useServers.ts) | Running servers from the event-driven registry, and stopping one |
 | [`useChatModelFacts.ts`](useChatModelFacts.ts) | The chat page's model: tool-calling support, its format, quantisation, whether it reads images, its context, and whether it thinks |
 | [`useImageInput.ts`](useImageInput.ts) | Whether the chat's composers offer images, by `canSee` (this machine's model, or the paired machine's row for it, read only for a chat on its model; always for a far chat), why not, and the context their cost is read against |
 | [`useThinkingSwitch.ts`](useThinkingSwitch.ts) | The chat's Thinking switch: shown where its model thinks, by `thinks` (this machine's model, the paired machine's row for it, or a far chat's row for the model it last ran on); showing what gglib remembers of the chat until it is clicked; and saying the choice on a send, `off` or `default`, until the turn that says it is accepted, after which the choice shows only until the chat is next read and that reading is shown whatever it says; a choice no accepted turn has said ends when a reading of the chat agrees with it |
@@ -65,7 +65,7 @@ Custom React hooks for gglib GUI functionality.
 | [`useSystemMemory.ts`](useSystemMemory.ts) | System memory probes |
 | [`useModelsDirectory.ts`](useModelsDirectory.ts) | Models directory configuration |
 | [`useServerLogs.ts`](useServerLogs.ts) | Server log streaming |
-| [`useToolSupportCache.ts`](useToolSupportCache.ts) | MCP tool support caching |
+| [`useToolSupportCache.ts`](useToolSupportCache.ts) | Whether a HuggingFace model supports tool calling, cached in memory and shared across components |
 | [`useDaemonReachable.ts`](useDaemonReachable.ts) | Whether the daemon answers at all — the state the tray popover used to confuse with a stopped proxy |
 | [`useProxyDashboard.ts`](useProxyDashboard.ts) | Subscribes to a running proxy's live dashboard stream, on the proxy's own host, port and credential |
 | [`useProxyKey.ts`](useProxyKey.ts) | The proxy's API key, revealed each time a surface that presents it opens (ADR 0027): the dashboard stream, the tray panel's stream and Clear Cache |
@@ -86,7 +86,7 @@ Custom React hooks for gglib GUI functionality.
 
 | Hook | Description |
 |------|-------------|
-| [`useGglibRuntime/`](useGglibRuntime/) | Consolidated runtime state (models, servers, downloads) |
+| [`useGglibRuntime/`](useGglibRuntime/) | The assistant-ui chat adapter: starts agent runs on the daemon and turns their events into thread messages |
 | [`useChatPersistence/`](useChatPersistence/) | Turning a conversation's saved rows into thread messages; the daemon writes them, the page only reads |
 
 ## Usage
@@ -96,12 +96,12 @@ import { useModels } from './hooks/useModels';
 import { useServers } from './hooks/useServers';
 
 function ModelList() {
-  const { models, loading, error, refreshModels } = useModels();
-  const { startServer, stopServer } = useServers();
+  const { models, loading, error, loadModels } = useModels();
+  const { servers, stopServer } = useServers();
 
-  const handleStart = async (modelId: number) => {
-    await startServer({ id: modelId, port: 8080 });
-    await refreshModels();
+  const handleStop = async (modelId: number) => {
+    await stopServer(modelId);
+    await loadModels();
   };
 }
 ```
@@ -111,6 +111,6 @@ function ModelList() {
 1. **Single Responsibility** — Each hook manages one domain concept
 2. **Composable** — Hooks can be combined for complex features
 3. **Backend-Driven** — Hooks fetch from and sync to the Rust backend
-4. **Error Handling** — All hooks expose error state for UI feedback
+4. **Error Handling** — Hooks that load data expose error state for UI feedback
 
 <!-- module-docs:end -->

@@ -58,10 +58,14 @@ This crate is in the **Infrastructure Layer** — it implements the repository p
 - **`factory.rs`** — Database connection factory and pooling
 - **`loop_guard_trip_writer.rs`** — The loop guard's batched writer: the sink the proxy records into, and the task that writes and prunes the log
 - **`setup.rs`** — Schema migrations and database initialization
+- **`setup_generation.rs`** — The schema generation, one number in its own `schema_generation` table that says which build's schema a file carries; a build that finds a higher one than its own refuses the file before touching it
+- **`sqlite_init.rs`** — `SQLite` initialised once, on one thread, before `setup_database` or `setup_test_database` opens a pool
 - **`setup_attachments.rs`** — The `attachments` table (an image's bytes under the SHA-256 of them) and `message_attachments` (the images each message carries, in order), and the sweep of images no message carries
 - **`setup_models.rs`** — The `models` table: its definition, the columns added to it since (`image_family` the latest), its indexes, and the one-time rebuild that stops it reusing ids
 - **`setup_model_files.rs`** — The `model_files` table, and `models.projector_path` with the one-time link of each model to the projector among its own files
 - **`setup_model_components.rs`** — The `model_components` table: the files an image model draws with beside its weights, one row per role, gone with their model, indexed by path
+- **`setup_branches.rs`** — The columns a branched chat is recorded by (ADR 0017), added after the chat tables
+- **`setup_recipes.rs`** — The one-time clearing of stored copies of the `reasoning` recipe from `models` rows
 - **`setup_settings.rs`** — Settings rows whose setting is gone: the `auto_tune` row reclaimed, and the one-time fold of the loop guard's `proxy_loop_detection` row into `loop_guard_mode`
 - **`setup_remote_grant.rs`** — The one-time copy of the remote tunnel's old list of MCP servers onto each server's own `allow_remote` flag
 - **`repositories/`** — `SQLite` implementations of all repository ports
@@ -102,7 +106,8 @@ async fn example() {
 There is no migration runner. `create_schema()` is `CREATE TABLE IF NOT EXISTS`
 for the current shape, plus one `add_column_if_missing()` call per column that
 was added after the fact, and it is safe to run against a database of any
-vintage.
+older vintage. A database a newer build stamped with a higher schema
+generation is refused (`setup_generation.rs`).
 
 **An `ALTER` that fails is a failure.** `add_column_if_missing()` reads `PRAGMA
 table_info`, returns without doing anything if the column is already there, and
@@ -244,5 +249,8 @@ mod tests {
 | `SqliteChatHistoryRepository` | create/list conversations, get by id, count, update title, delete, messages round-trip, update/delete messages |
 | `SqliteMcpRepository` | insert/get/list/update/delete servers, an SSE server, a failed insert or update leaving nothing partial, the type strings the schema admits, a database holding two servers of one name |
 | `SqliteSettingsRepository` | load empty, save and load, clear individual fields |
+| `SqliteBenchmarkRepository` | `applied_json` through both read paths, an agentic run's type and report round-trip |
+| `SqliteAttachmentStore` | an image's facts and bytes read back, one id stored twice is one row, storing again moves its last-stored time, an unknown id, a store failure, ids found by their start |
+| `ModelFilesRepository` | insert and get, verification time, a file inserted again (changed or unchanged), database and decode failures as storage errors |
 | `SqliteLoopGuardTripLog` | summary over both tables — a scanned day with no trips, and a trip whose scan was lost — detectors, modes and models apart, the window, a second flush adding to a day, pruning by age and by cap, no text in any column |
 

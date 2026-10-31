@@ -121,7 +121,8 @@ pub struct RemoteJoinBody {
     /// omitted to reuse the last one.
     #[serde(default)]
     pub pairing: Option<String>,
-    /// The loopback port to bind; omitted picks a free one.
+    /// The loopback port to bind; omitted takes the last one used, else 8180,
+    /// and a free one if that is taken.
     #[serde(default)]
     pub port: Option<u16>,
     /// A self-hosted relay URL for this side; omitted uses the public relays.

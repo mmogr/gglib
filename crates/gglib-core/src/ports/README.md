@@ -5,7 +5,9 @@
 Port definitions (trait abstractions) for external systems.
 
 Ports define the interfaces that the core domain expects from infrastructure.
-They contain no implementation details and use only domain types.
+They hold the traits and the types their signatures carry, plus two
+decorators over `ToolExecutorPort` (`tool_executor_filter`) and small
+helpers on those types; a few signatures carry a `tokio` channel.
 
 # Design Rules
 

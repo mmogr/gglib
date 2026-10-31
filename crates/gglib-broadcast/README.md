@@ -26,15 +26,16 @@ inverting the hexagonal layering rules enforced by `scripts/check_boundaries.sh`
 
 ```text
 ┌───────────────────────────────────────────────────────────────┐
-│                       gglib-broadcast                          │
+│                        gglib-broadcast                        │
 ├───────────────────────────────────────────────────────────────┤
-│  ┌────────────────────────────────────────────────────────┐   │
-│  │                       lib.rs                            │   │
-│  │  Broadcaster<T>   - generic broadcast::Sender<T> wrapper│   │
-│  │  SseOptions       - keep-alive interval/text config      │   │
-│  │  subscribe_until()        - live events only             │   │
-│  │  subscribe_with_hydration_until() - snapshot + live       │   │
-│  └────────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │                          lib.rs                         │  │
+│  │  Broadcaster<T>   - generic broadcast::Sender<T> wrapper│  │
+│  │  SseOptions       - keep-alive interval/text config     │  │
+│  │  subscribe_until()        - live events only            │  │
+│  │  subscribe_with_hydration_until() - snapshot + live     │  │
+│  │  subscribe_events()       - raw events, tests only      │  │
+│  └─────────────────────────────────────────────────────────┘  │
 └───────────────────────────────────────────────────────────────┘
 ```
 

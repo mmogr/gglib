@@ -30,12 +30,21 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
 
 3. **Frontend (React)**: The React application in `src/` communicates **exclusively via HTTP** to the daemon:
    - `/api/models` - List and manage models
+   - `/api/models/downloads/*` - Download queue management
+   - `/api/models/hf/*` - The `HuggingFace` browser: search, a repository's quantizations
    - `/api/servers` - Control llama-server instances
    - `/api/conversations`, `/api/messages` - Chat history and conversations
    - `/api/chat` - A chat's title
+   - `/api/runs` - Runs, the replies the daemon owns (a chat turn is `PUT /api/runs/{id}?kind=agent`): their events, cancelling one
+   - `/api/attachments` - The images a message carries
+   - `/api/images` - Drawing a picture
    - `/api/proxy` - Proxy management
-   - `/api/downloads` - Download queue management
-   - `/api/mcp` - MCP server configuration
+   - `/api/mcp`, `/api/builtin/tools` - MCP server configuration, and the builtin tools
+   - `/api/config` - Settings, profiles, and system setup (memory, models directory, engines)
+   - `/api/secrets/reveal` - A stored secret's value, for Show and Copy
+   - `/api/benchmark` - Benchmark runs and their history
+   - `/api/remote` - The remote tunnel, pairing and paired devices
+   - `/api/version` - The daemon's build
    - `/api/events` - Server-Sent Events for real-time updates
 
 4. **System Tray**: The tray icon, its menu and the popover panel live in `src/tray/`. The panel is a second window loading its own Vite entry (`tray.html`), and uses **no Tauri IPC at all** — it reaches the daemon through the same HTTP transport as every other surface. Window-level actions (open, preferences, quit, and starting or stopping the service) are on the native tray menu, handled in Rust, which is what keeps the command list below unchanged. The icon tracks whether gglib is consuming anything on this machine — a listening proxy *or* a resident model — from a snapshot polled by `src/daemon/watch.rs`. See [src/tray/README.md](src/tray/README.md).
@@ -47,9 +56,11 @@ The Tauri application uses an **HTTP-first architecture** with minimal OS integr
    - `log_from_frontend` - Forward frontend logs to the Rust logger
 
 6. **Real-Time Events**: The daemon's `/api/events` endpoint streams Server-Sent Events to each webview:
-   - `server:*` events - Server lifecycle updates
-   - `download:*` events - The download queue's snapshot, and how each download ended
-   - `proxy:*` events - Proxy lifecycle
+   - `server_*` events - Server lifecycle and health updates
+   - `download` events - The download queue's snapshot, and how each download ended
+   - `model_*` and `verification_*` events - Library changes and model verification
+   - `proxy_*` events - Proxy lifecycle
+   - `remote_*` events - The remote tunnel
 
    The Rust side deliberately does not subscribe: it polls instead, because the lifecycle events are deltas that a lagging subscriber drops silently, and a tray rebuilt from deltas drifts. See `src/daemon/watch.rs`.
 
@@ -126,7 +137,7 @@ For more details on the architecture and how all interfaces work together, see:
   - `src/lifecycle.rs`: Hardened shutdown orchestration with watchdog
   - `src/menu/`: Native menu bar with stateful items (macOS only)
   - `src/tray/`: System tray icon, menu and popover panel (all platforms)
-  - `src/proxy_actions.rs`: Proxy start/stop shared by the tray and autostart
+  - `src/proxy_actions.rs`: Proxy start/stop and the endpoint URL, for the tray and the menu
   - `src/autostart.rs`: Always-on proxy startup and OS login-item registration
   - `src/dock.rs`: macOS Dock icon visibility (activation policy)
   - `src/commands/`: Tauri command handlers (organized by domain)
@@ -134,7 +145,7 @@ For more details on the architecture and how all interfaces work together, see:
 
 ## Backend Module Architecture
 
-The Rust backend is organized into three main modules:
+The Rust backend is organized into these modules:
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -183,6 +194,9 @@ The Rust backend is organized into three main modules:
                     │  • ProxySupervisor      │
                     │  • McpService           │
                     │  • SseBroadcaster       │
+                    │  • RunRegistry          │
+                    │  • RemoteOps            │
+                    │  • BenchmarkOps         │
                     └─────────────────────────┘
 ```
 
@@ -199,7 +213,7 @@ the three ways it comes by one and what quitting is allowed to take with it.
 | **lifecycle.rs** | Application startup & hardened shutdown | `request_shutdown()` (single guarded entry point), `is_shutting_down()` / `should_prevent_exit()` (exit re-entrancy), `perform_shutdown()` (daemon teardown, bounded, and only when the daemon is ours) |
 | **menu/** | macOS menu bar with state sync | `AppMenu` (item refs), `MenuState`, menu builder, event handlers, `sync_all_state` (drives both the menu and the tray) |
 | **tray/** | System tray icon, menu and panel | `build` (icon/menu), `icon` (pure state → icon/tooltip), `handlers` (thin dispatch), `confirm` (what a teardown would take away), `window` (panel show/hide/position) |
-| **proxy_actions.rs** | Proxy start/stop outside a request | Used by the tray and autostart; calls the daemon's `/api/proxy/*` directly and asks for a fresh poll — it deliberately does **not** publish what it expects to be true |
+| **proxy_actions.rs** | Proxy start/stop outside a request | Used by the tray (start, stop, copy the endpoint URL) and the menu (copy the endpoint URL); calls the daemon's `/api/proxy/*` directly and asks for a fresh poll — it deliberately does **not** publish what it expects to be true |
 | **autostart.rs** | Launch visibility & login item | `start_at_login` login item, `should_start_hidden()` (pure launch decision, fails visible). Proxy autostart is the daemon's job |
 | **dock.rs** | macOS Dock icon visibility | `hide()` / `show()` via activation policy; no-ops off macOS so callers need no `cfg` |
 | **commands/** | 5 OS integration commands in 2 modules | `util.rs` (API discovery, shell, menu), `app_logs.rs` (frontend log ingestion) |
@@ -207,35 +221,38 @@ the three ways it comes by one and what quitting is allowed to take with it.
 ### Communication Flow
 
 ```text
-┌─────────────────┐                              ┌─────────────────┐
-│   React UI      │                              │  Native Menu    │
-│   (Frontend)    │                              │  (macOS/Win/Lin)│
-└────────┬────────┘                              └────────┬────────┘
-         │                                                │
-         │  HTTP: POST /api/servers/start               │  Click "Start Server"
-         │  Tauri: invoke("open_url")                   │
-         │                                                │
-         ▼                                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                  HTTP API (primary) / Tauri IPC (OS)                │
-└────────┬───────────────────────────────────────────────────┬────────┘
-         │                                                   │
-         ▼                                                   ▼
-┌─────────────────┐                              ┌─────────────────┐
-│ gglib-axum      │                              │ commands/       │
-│ handlers/       │                              │ util.rs         │
-│ servers.rs      │                              │ (API discovery, │
-└────────┬────────┘                              │  shell, menu)   │
-         │                                       └────────┬────────┘
-         │                                                │
-         ▼                                                ▼
-┌─────────────────┐                              ┌─────────────────┐
-│ gglib-runtime   │                              │ AppState        │
-│ ProcessManager  │                              │ .snapshot       │
-└────────┬────────┘                              └────────▲────────┘
-         │                                                │
-         └──────────────► /api/proxy/status ──────────────┘
-                          /api/servers          daemon/watch, every 2s
+┌─────────────────┐      webview event            ┌─────────────────┐
+│   React UI      │◄──────────────────────────────┤  Native Menu    │
+│   (Frontend)    │    (menu:start-server)        │  (macOS only)   │
+└────────┬────────┘                               └─────────────────┘
+         │
+         ├─────────────────────────────────────────────────┐
+         │  HTTP: POST /api/servers/start                  │
+         │                      Tauri: invoke("open_url")  │
+         ▼                                                 ▼
+┌───────────────────────────────────────────────────────────────────┐
+│                HTTP API (primary) / Tauri IPC (OS)                │
+└────────┬─────────────────────────────────────────────────┬────────┘
+         ▼                                                 ▼
+┌─────────────────┐                               ┌─────────────────┐
+│ gglib-axum      │                               │ commands/       │
+│ handlers/       │                               │ util.rs         │
+│ servers.rs      │                               │ (API discovery, │
+└────────┬────────┘                               │  shell, menu)   │
+         │                                        └────────┬────────┘
+         ▼                                                 ▼
+┌─────────────────┐                               ┌─────────────────┐
+│ gglib-app-      │                               │ AppState        │
+│ services        │                               │ .snapshot       │
+│ ServerOps       │                               └────────▲────────┘
+└────────┬────────┘                                        │
+         ▼                                                 │
+┌─────────────────┐                                        │
+│ gglib-runtime   │                                        │
+│ ProcessManager  │                                        │
+└────────┬────────┘                                        │
+         └──────────────► /api/proxy/status ───────────────┘
+                          /api/servers        daemon/watch, every 2s
 ```
 
 Both columns end at the same daemon. The native surfaces never learn what

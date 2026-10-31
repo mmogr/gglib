@@ -10,7 +10,7 @@ Splits model API operations into two domains — local GGUF models and HuggingFa
 |------|------|
 | `index.ts` | Composes `local` and `hf` into a single module |
 | `local.ts` | `GET/POST/PUT/DELETE /api/models` — list, get, add, remove, update (which links or unlinks a projector, and an image model's components by role), a model's projector choices and component choices, search, filter options |
-| `hf.ts` | `POST /api/models/hf/*` — search Hub, get model summary, list quantizations, tool support |
+| `hf.ts` | `/api/models/hf/*` — search Hub (`POST`); get model summary, list quantizations, tool support (`GET`) |
 
 ## Domain Split
 

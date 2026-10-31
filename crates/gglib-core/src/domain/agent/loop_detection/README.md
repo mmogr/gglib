@@ -58,14 +58,13 @@ Reading the answers did not close this, and it is worth saying so plainly
 because it looks as though it should have.  The run breaks on **signature**,
 before any answer is consulted, so a cycle escapes whatever came back.
 
-Nothing backstops it in the general case.
-[`crate::domain::agent::stagnation::StagnationDetector`] keeps its session-wide
-counting and catches an oscillating session **only if the model also repeats its
-prose** — a tool-call-only turn carries `content: null`, which that detector
-ignores by design.  A model alternating two batches and narrating nothing is
-therefore refused by neither guard.  What observes it is
-`identical_result_repeats` in the proxy's ledger: a reading for a person, not a
-verdict.
+Nothing backstops it.
+[`crate::domain::agent::stagnation::StagnationDetector`] counts repeated prose
+within a sliding window of recent turns, and does not record a turn that called
+a tool at all — that work is this detector's to judge.  A model alternating two
+batches is therefore refused by neither guard, whatever it narrates.  What
+observes it is `identical_result_repeats` in the proxy's ledger: a reading for
+a person, not a verdict.
 
 # The verdict reads what came back
 

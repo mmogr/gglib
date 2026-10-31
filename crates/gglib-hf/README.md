@@ -9,8 +9,7 @@ Layer: **infrastructure** · [workspace diagram](../README.md#architecture-overv
 `HuggingFace` Hub client for gglib — searching, browsing, and resolving GGUF models on the Hub. Implements `HfClientPort` from `gglib-core`.
 
 Resolving a repository to the right quantization is the step that turns "I want
-this model" into a concrete file to fetch — including the sizing judgement
-behind `gglib up`'s recommendation.
+this model" into a concrete file to fetch.
 
 ## Architecture
 
@@ -88,4 +87,4 @@ async fn example() {
 1. **Port Pattern**: Core owns the trait and DTOs, this crate implements the adapter
 2. **Generic HTTP Backend**: `HfClient<B: HttpBackend>` allows testing with mock backends
 3. **No Re-exports**: Types flow through `gglib-core` ports, not transitional aliases
-4. **Split Modules**: Each module under 200 lines for maintainability
+4. **Split Modules**: One module per concern, as listed above

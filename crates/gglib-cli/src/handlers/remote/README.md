@@ -4,8 +4,8 @@
 
 `gglib remote` — the tunnel that puts one machine's proxy on another
 ([ADR 0012](../../../../../docs/adr/0012-the-remote-tunnel.md)). Mostly thin
-clients over `/api/remote/*` on the daemon; `key` reads the stored pairing
-from settings instead. The tunnel itself lives in
+clients over `/api/remote/*` on the daemon; with no daemon running, `disable`
+switches remote access off in settings instead. The tunnel itself lives in
 `gglib-app-services::RemoteOps` and this crate never sees it.
 
 # Module Layout

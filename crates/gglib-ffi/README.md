@@ -40,6 +40,7 @@ This crate is a **surface** in the Adapter Layer, beside `gglib-cli`,
 │ gglib-bootstrap: the database, the  │  │ gglib-proxy on a port of loopback, │
 │ Hub client, the download manager    │  │ admitting through InProcessRuntime │
 └──────────────────┬──────────────────┘  │ gglib-engine-llama: shim, llama.h  │
+                   │                     │ gglib-mcp: McpService, empty table │
                    │                     └─────────────────┬──────────────────┘
                    ▼                                       ▼
 ┌─────────────────────────────────────┐  ┌────────────────────────────────────┐

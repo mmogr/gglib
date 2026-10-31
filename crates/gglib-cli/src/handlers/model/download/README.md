@@ -227,7 +227,7 @@ gglib model check-updates --all
 gglib model check-updates --identifier 1
 ```
 
-### `update-model`
+### `upgrade`
 Update a model to the latest version from `HuggingFace` Hub.
 
 **Module:** `update_model.rs`
@@ -259,11 +259,13 @@ this process's own, and draw its snapshots. `model upgrade` fetches with
 Every model download's line on the terminal is drawn by `board.rs`.
 
 ### Database Integration
-After successful download:
+`model download` writes no model row itself. The download manager that ran it,
+the daemon's for `model download` and this process's own for `gglib up`,
+registers it on completion through `ModelRegistrarPort::register_model`:
 1. Parse GGUF metadata via `GgufParserPort`
-2. Create `NewModel` entity
-3. Call `ModelRepository::add_model()`
-4. Display confirmation with model ID
+2. Write the model row, linking a projector or an image model's companions
+   fetched with it
+3. The download's row goes from `Registering` to `Completed`
 
 ### Error Handling
 Handlers convert download errors to user-friendly messages:

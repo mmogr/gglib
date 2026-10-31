@@ -4,7 +4,7 @@
 
 Benchmark domain types.
 
-Two benchmark modes today (a third, tuning, is being added incrementally):
+Four benchmark modes:
 - **Compare** ([`compare`]): send the same prompt to N models sequentially;
   capture live streamed text and real-world timing data from llama-server's
   `timings` response field.
@@ -13,6 +13,10 @@ Two benchmark modes today (a third, tuning, is being added incrementally):
 - **Tune** ([`tune`]): sweep sampling parameters for one model against an
   agentic tool-calling task suite, scoring each candidate for tool-call
   accuracy and loop/stagnation avoidance to find the best-scoring settings.
+- **Agentic** ([`agentic`]): run the same agentic task suite against one
+  model with the request pipeline bypassed (raw) and through it (gglib),
+  with further arms that check the eval itself, and report the per-axis
+  deltas between them.
 
 All timing fields are `Option<f64>` because llama-server may omit the
 `timings` object (e.g. older builds, stream errors). Missing timing data
@@ -27,6 +31,7 @@ is gracefully represented as `None` — never causes a panic or parse error.
 | [`compare`] | [`CompareConfig`], [`ModelCompareResult`] |
 | [`perf`] | [`PerfConfig`], [`ModelPerfResult`] |
 | [`tune`] | [`TuneConfig`], task-suite schema, scoring result types |
+| [`agentic`] | [`AgenticEvalConfig`], [`AgenticEvalReport`], [`EvalArm`] |
 | [`events`] | [`BenchmarkEvent`] (SSE units), [`BenchmarkModelResult`] |
 
 <!-- module-docs:end -->

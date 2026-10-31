@@ -72,10 +72,15 @@ backend.
 | `Unresolved` — nothing ever answered | Nothing to stop |
 
 Stopping means `POST /api/daemon/shutdown` and a bounded wait. The ordered
-teardown — proxy drained, every llama-server stopped with SIGTERM then SIGKILL,
-downloads cancelled, a final pidfile audit — runs *in the daemon*, under its own
-10-second force-exit watchdog. The app waits 12 seconds, deliberately longer, so
-it outlasts the deadline the daemon holds itself to rather than racing it.
+teardown — remote tunnel closed, runs cancelled, proxy drained, every
+llama-server stopped with SIGTERM then SIGKILL, downloads cancelled, the loop
+guard's log written, a final pidfile audit — runs *in the daemon*, under its
+own 30-second force-exit watchdog (up to 20 seconds for an image model to
+finish a render, plus 10 for the rest). The app waits until the daemon has
+let go of its lock, which it does only once that teardown is done or its
+process has ended. The daemon stops answering before its teardown starts, so
+"not answering" alone would be too early. The wait is bounded at two seconds
+past the watchdog, read from `gglib_axum::SHUTDOWN_WATCHDOG`.
 
 Quit means quit. `close_to_tray` is the verb for keeping the endpoint up without
 a window, so an exit that quietly did the same thing was one button doing

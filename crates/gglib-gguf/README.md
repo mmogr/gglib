@@ -14,27 +14,34 @@ tags, and those tags become llama-server flags. No per-model setup.
 
 ## Architecture
 
-This crate is in the **Infrastructure Layer** — it implements the `GgufParser` port from `gglib-core`.
+This crate is in the **Infrastructure Layer** — it implements the `GgufParserPort` port from `gglib-core`.
 
 ## Internal Structure
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                gglib-gguf                                           │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                     │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐        │
-│  │  reader.rs  │ ──► │  parser.rs  │ ──► │  format.rs  │     │capabilities/│        │
-│  │ File I/O &  │     │  Metadata   │     │ GGUF types  │     │  Model caps │        │
-│  │   header    │     │  extraction │     │  & enums    │     │  detection  │        │
-│  └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘        │
-│                                                                                     │
-│  ┌─────────────┐                                                                    │
-│  │  error.rs   │                                                                    │
-│  │ Parse errors│                                                                    │
-│  └─────────────┘                                                                    │
-│                                                                                     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│                                gglib-gguf                                             │
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                       │
+│  ┌───────────────┐     ┌───────────────┐     ┌───────────────┐     ┌───────────────┐  │
+│  │   reader.rs   │     │   parser.rs   │     │   format.rs   │     │ capabilities/ │  │
+│  │   File I/O &  │ ──► │    Metadata   │ ──► │   GGUF types  │     │   Model caps  │  │
+│  │     header    │     │   extraction  │     │    & enums    │     │   detection   │  │
+│  └───────────────┘     └───────────────┘     └───────────────┘     └───────────────┘  │
+│                                                                                       │
+│  ┌───────────────┐     ┌───────────────┐     ┌───────────────┐     ┌───────────────┐  │
+│  │    head.rs    │     │tensor_table.rs│     │ safetensors.rs│     │    role.rs    │  │
+│  │ Metadata from │     │  Tensor names │ ──► │  safetensors  │     │   Weights or  │  │
+│  │  first bytes  │     │    & shapes   │     │     header    │     │   projector   │  │
+│  └───────────────┘     └───────────────┘     └───────────────┘     └───────────────┘  │
+│                                                                                       │
+│  ┌───────────────┐     ┌───────────────┐     ┌───────────────┐     ┌───────────────┐  │
+│  │    render/    │     │template_env.rs│     │    error.rs   │     │   fixture.rs  │  │
+│  │  Chat through │     │   minijinja   │     │  Parse errors │     │  Test weights │  │
+│  │  its template │     │  environment  │     │               │     │     files     │  │
+│  └───────────────┘     └───────────────┘     └───────────────┘     └───────────────┘  │
+│                                                                                       │
+└───────────────────────────────────────────────────────────────────────────────────────┘
                                           │
                                 depends on
                                           ▼
@@ -76,7 +83,7 @@ These tags drive automatic llama-server flag selection at serve time.
 | `"agent"` | Chat template contains tool-calling syntax | `--jinja` auto-enabled |
 | `"reasoning"` | Chat template contains `<think>` / `DeepSeek` reasoning tokens | `--reasoning-format deepseek` auto-enabled |
 | `"mtp"` | `{arch}.nextn_predict_layers > 0` in GGUF metadata | `--spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75` auto-enabled |
-| `"moe"` | `{arch}.expert_count > 0` | Informational only |
+| `"embedding"` | `{arch}.pooling_type > 0`, or an encoder-only `general.architecture` (the BERT family, `t5encoder`) | `--embeddings` auto-enabled |
 
 ### MTP tag details
 
@@ -126,6 +133,6 @@ assert_eq!(prompt, "<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\n");
 
 ## Design Decisions
 
-1. **Port Pattern** — Implements `GgufParser` trait from `gglib-core`
+1. **Port Pattern** — `GgufParser` implements the `GgufParserPort` trait from `gglib-core`
 2. **No Full Load** — Only parses header and metadata, not tensor weights
 3. **Quantization Detection** — Infers quantization from filename patterns and metadata

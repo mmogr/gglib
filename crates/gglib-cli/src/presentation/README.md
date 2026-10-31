@@ -82,6 +82,39 @@ page's test of its own four flags reads that file.
 **Key Functions:**
 - `stated_parameters(config: &InferenceConfig)` - Every field the config sets, by name, rendered as it was typed. The serve banner and `gglib model inspect` both list from it.
 
+### Style
+**Module:** `style.rs`
+
+The ANSI colour and style constants every CLI module prints with, and the
+terminal pieces built on them.
+
+**Key Items:**
+- `SUCCESS`, `DANGER`, `WARNING`, `INFO`, `MUTED`, `BOLD`, `DIM`, `RESET` - The escape sequences
+- `get_markdown_skin()` - The termimad skin Rich mode renders Markdown with
+- `print_info_banner()`, `print_thinking_banner()`, `print_banner_close()` - A banner's top and bottom borders on stderr
+- `make_spinner()` - The indicatif spinner shown on stderr while a reply is received
+
+### Explain Display
+**Module:** `explain_display.rs`
+
+Draws `gglib model explain`: each resolved sampling parameter beside the layer
+that supplied it, from the `SamplingExplanationDto` the explain call answers
+with.
+
+**Key Functions:**
+- `print_explanation()` - Prints the table
+- `explanation_text()` - The table as text: heading, one row per parameter, caveats
+- `explanation_lines()` - One string per parameter
+
+### Inspect Display
+**Module:** `inspect_display.rs`
+
+Draws `gglib model inspect` from a `ModelDetailDto`; the handler only fetches
+the model and branches on `--json`.
+
+**Key Functions:**
+- `print_model_detail(dto, show_metadata)` - Every section; `show_metadata` adds the raw GGUF key-value pairs (`--metadata`)
+
 ### Tables
 **Module:** `tables.rs`
 
@@ -170,9 +203,11 @@ display_model_list(&view_models);
 
 ## Dependencies
 
-- **Standard library only** - No external presentation frameworks
-- Uses ANSI color codes for terminal coloring
-- Relies on fixed-width formatting (`println!` with format strings)
+- **termimad** - Markdown rendering for Rich mode (`style.rs`)
+- **crossterm** - The colours and attributes of that skin (`style.rs`)
+- **indicatif** - The spinner (`style.rs`)
+- **chrono** - Relative times (`tables.rs`)
+- Everything else is ANSI color codes and fixed-width formatting (`println!` with format strings)
 
 ## Testing
 
@@ -204,7 +239,6 @@ fn truncate_long_string_gets_ellipsis() {
 
 ## Future Considerations
 
-- JSON output mode for scripting (`--json` flag)
 - Color theme customization
 - Terminal width detection and adaptive layout
 - Progress bar utilities (currently in individual handlers)

@@ -15,8 +15,8 @@ automatically and each overridable:
 Every launch defaults the KV cache to `q8_0` quantization on both K and V
 (llama-server's `--cache-type-k`/`--cache-type-v`), roughly halving KV memory versus
 llama-server's own `f16` default — which directly buys context headroom on a
-16–24 GB card. Override per-axis with the same flags, or set
-`GGLIB_DISABLE_KV_QUANT=1` to fall back to `f16`.
+16–24 GB card. Set `GGLIB_DISABLE_KV_QUANT=1` to fall back to `f16` on both;
+there is no per-run flag for either.
 
 ## Host-RAM prompt cache auto-sizing
 
@@ -30,13 +30,17 @@ startup.
 ## Disk slot persistence
 
 Available on `gglib serve` and `gglib proxy` alike, and opt-in on both. For
-sequential multi-agent workflows, enable `--cache --slot-dir <path>` to persist
-KV cache state between requests. The proxy automatically saves and restores per-session
+sequential multi-agent workflows, enable `--cache` to persist KV cache
+state between requests, in `slots` under gglib's data folder unless
+`--slot-dir <path>` names another folder. The proxy automatically saves and restores per-session
 slot files (saved atomically via a temp-then-rename), gated by a semaphore to prevent
 concurrent access. Stale caches are detected via mtime comparison and skipped
 (fail-open). A background sweep evicts the least-recently-used slot files once the
-on-disk cache exceeds a byte budget — by default auto-sized from free disk space,
-override with `--cache-disk-gb`. Use `gglib proxy cache-clear` to manually clear
+on-disk cache exceeds a byte budget — by default a quarter of the free space on
+the slot folder's disk and the cache's own size taken together, recomputed on
+every sweep.
+`--cache-disk-gb` sets a fixed budget in GiB, as does `GGLIB_CACHE_DISK_GB` in
+the daemon's environment; the flag wins if both are set. Use `gglib proxy cache-clear` to manually clear
 cached state.
 
 ### Models where disk persistence is skipped

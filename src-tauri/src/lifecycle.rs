@@ -12,6 +12,7 @@
 //! alone.
 
 use crate::app::AppState;
+use gglib_axum::SHUTDOWN_WATCHDOG;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
@@ -19,9 +20,9 @@ use tracing::info;
 
 /// How long to wait for the daemon's ordered teardown before exiting anyway.
 ///
-/// Two seconds past the daemon's own 10-second force-exit watchdog, so the
-/// app outlasts the deadline the daemon holds itself to rather than racing it.
-const TEARDOWN_WAIT: Duration = Duration::from_secs(12);
+/// Two seconds past the daemon's own force-exit watchdog, so the app outlasts
+/// the deadline the daemon holds itself to rather than racing it.
+pub(crate) const TEARDOWN_WAIT: Duration = SHUTDOWN_WATCHDOG.saturating_add(Duration::from_secs(2));
 
 /// Whether a shutdown has been started, so it is sequenced exactly once.
 ///
@@ -143,7 +144,7 @@ mod tests {
     /// it gives up while a teardown that is about to finish is still running.
     #[test]
     fn the_teardown_budget_outlasts_the_daemons_watchdog() {
-        assert!(TEARDOWN_WAIT > Duration::from_secs(10));
+        assert!(TEARDOWN_WAIT > SHUTDOWN_WATCHDOG);
     }
 
     /// The guard is a swap, not a load-then-store, so two quit paths firing

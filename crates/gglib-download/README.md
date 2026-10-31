@@ -24,9 +24,9 @@ This crate is in the **Infrastructure Layer** — it orchestrates downloads usin
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                            │
-│  │  manager/   │ ──► │   queue/    │ ──► │  executor/  │                            │
-│  │  Public API │     │  Task queue │     │  Download   │                            │
-│  │  & facade   │     │  & state    │     │  workers    │                            │
+│  │   queue/    │ ◄── │  manager/   │ ──► │  executor/  │                            │
+│  │  Task queue │     │  Public API │     │  Download   │                            │
+│  │  & state    │     │  & facade   │     │  backends   │                            │
 │  └─────────────┘     └─────────────┘     └─────────────┘                            │
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐                                                │
@@ -42,7 +42,8 @@ This crate is in the **Infrastructure Layer** — it orchestrates downloads usin
                       ▼                                       ▼
           ┌───────────────────┐                   ┌───────────────────┐
           │    gglib-core     │                   │     gglib-hf      │
-          │  (download types) │                   │  (HfClientPort)   │
+          │  (download types, │                   │ (DefaultHfClient) │
+          │   HfClientPort)   │                   │                   │
           └───────────────────┘                   └───────────────────┘
 ```
 
@@ -127,9 +128,10 @@ This crate is in the **Infrastructure Layer** — it orchestrates downloads usin
 - **Native Downloads** — The default path is Rust `reqwest`: a resumable ranged
   GET verified against the object's SHA-256, written to `<dest>.part` and
   renamed into place only once it checks out. Needs nothing installed.
-- **Optional Acceleration** — `hf_xet` is used for multi-gigabyte files when its
-  environment is already provisioned; it is never provisioned implicitly, and
-  its absence or failure falls back to the native path. Either way each file
+- **Optional Acceleration** — `hf_xet` is used for every file when its
+  environment is already provisioned, except a forced re-fetch, which goes
+  native; it is never provisioned implicitly, and its absence or failure
+  falls back to the native path. Either way each file
   has one count (`executor/progress.rs`): bytes on disk for the bar, and bytes
   off the network apart from them.
 - **The Models Directory, Asked as a Download Starts** — A download goes
@@ -178,7 +180,7 @@ let snapshot = manager.get_queue_snapshot().await?;
 ## Design Decisions
 
 1. **Async Queue** — Downloads run in background with status polling/events
-2. **HF Client Injection** — Uses `gglib-hf` via trait for testability
+2. **HF Client Injection** — The manager takes `gglib-core`'s `HfClientPort`, so tests hand it a fake Hub (`test_hub.rs`); `gglib-hf` is named directly only in `cli_exec/`
 3. **Native by Default** — Rust HTTP always works; `hf_xet` is an opt-in accelerator layered on top, never a prerequisite
 4. **Event-Driven** — Progress updates via `AppEventEmitter` for UI decoupling
 5. **Automatic Registration** — `ModelRegistrarPort` injected for seamless database integration on download completion

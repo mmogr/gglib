@@ -13,8 +13,14 @@ applies all three:
 | Host allowlist | always on | *did this client know where the proxy lives?* |
 | Origin check | always on | *is a page on another site asking for a change?* |
 
-Everything here is pure — predicates and data. The middleware that applies it
-lives in `gglib-proxy`, which is the crate allowed to depend on axum.
+The same config carries the remote tunnel's owner (`remote`) and the daemon's
+ports a paired device reaches ([`DevicePorts`]). Beside it, this module keeps
+two secrets on disk: the keys this machine issued to paired devices, and the
+daemon's own token (below).
+
+Apart from reading and writing those two files, everything here is predicates
+and data. The middleware that applies it lives in `gglib-proxy`, which is the
+crate allowed to depend on axum.
 
 # Why a Host allowlist, when CORS already exists
 

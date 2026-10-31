@@ -17,7 +17,7 @@ appLogger.info('service.download', 'Download started', { modelId })
           ▼
   appLogger fans out to each registered transport:
     ├── ConsoleTransport      → console.log/warn/error
-    └── TauriTracingTransport → invoke('plugin:log|...')
+    └── TauriTracingTransport → invoke('log_from_frontend', ...)
 ```
 
 ## Key Files

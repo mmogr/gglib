@@ -25,6 +25,14 @@ the decode-time GBNF grammar, so parsing and enforcement cannot drift.
   tag → builtin-spec fallback map.
 - [`residue`] — chunk-safe scanner for dialect markup that survived
   normalization into client-visible text (the proxy's drift alarm).
+- [`oneshot`] — [`normalize_chat_completion_body`], the same parser applied
+  to a non-streaming response body.
+- [`coerce`] — `coerce_json_object`, a deterministic local repair of a
+  tool-call body the parsers rejected (a code fence, trailing prose, a
+  trailing comma); it returns a body only when the result parses.
+- [`history`] — [`strip_thinking_debt`], which drops reasoning left in
+  earlier assistant turns of a chat's history; stage 1 of the request
+  pipeline calls it.
 - [`stream`] — [`NormalizingStream`], the one wrap point, and
   `strip_think_tags`, which removes a stray `<think>` or `</think>` tag from
   a reply's text: one function, called by the stream and by the

@@ -58,10 +58,11 @@ says where a download's files are fetched from.
 
 ## Hexagonal boundary
 
-Depends **only** on infrastructure crates:
-`gglib-core`, `gglib-db`, `gglib-download`, `gglib-gguf`, `gglib-hf`.
+Depends **only** on `gglib-core` and the infrastructure crates
+`gglib-db`, `gglib-download`, `gglib-gguf`, `gglib-hf`.
 
-Does **not** depend on adapter crates (`gglib-mcp`, `gglib-axum`, `gglib-cli`, `gglib-app-services`).
+Does **not** depend on `gglib-mcp` (infrastructure), the other facade crate
+(`gglib-app-services`), or adapter crates (`gglib-axum`, `gglib-cli`).
 
 ## Testing
 
