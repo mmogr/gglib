@@ -10,6 +10,10 @@
 > measurement and both #755 reproducers were rerun there, and findings 4
 > and 5 hold ([log-0002](log-0002.md)).
 
+> **Amended 2026-10-31.** The follow-ups are settled. The inert module goes
+> quiet and is watched, as ADR 0022 decided; nothing more is filed upstream;
+> no third dialect is measured for its own sake. See Follow-ups.
+
 ## Context
 
 [ADR 0001](0001-runtime-capability-tiers.md) classified `request_pipeline::constrain`
@@ -290,15 +294,21 @@ unconstrained upstream, and the attempt/success ratio distinguishes that from
 
 - ~~Run the harness against a second dialect family before generalising
   finding 1.~~ Done — see findings 4 and 5. It did not generalise.
-- Decide whether an inert Tier A module should be actively exercised (a
-  synthetic markup path in tests) or allowed to go quiet — ADR 0001 has no
-  answer for this.
-- File the upstream issue, which has not been filed, or drop it (#755). The
-  writeup is no longer in the repository; its text is at
-  `git show d7002d00:upstream_issue_tool_dialect_escaping.md`. If a
-  resolution lands, revisit findings 3 and 4.
-- Record grammar-presence per model in `RuntimeCapabilities` once a third data
-  point exists. Two models is a pattern, not a rule. The repair counters from
-  finding 6 are now the runtime signal this previously lacked; a third model
-  measured against the harness would let a threshold be set rather than
-  observed.
+- ~~Decide whether an inert Tier A module should be actively exercised (a
+  synthetic markup path in tests) or allowed to go quiet.~~ Decided by
+  [ADR 0022](0022-the-proxy-does-less.md) decision 3: it goes quiet and is
+  watched, not exercised. The residue scan keeps counting what llama-server's
+  own parser leaves in content, and `GGLIB_DISABLE_DIALECT_PARSER` (#1447)
+  bypasses the parser to measure what it catches. Its deletion rule is the one
+  in `normalize/parsers/delimited.rs`.
+- ~~File the upstream issue, or drop it (#755).~~ Settled. The XML bleed
+  (finding 3) was already reported as ggml-org/llama.cpp#26763 and closed as
+  not planned. The JSON-dialect 500 (finding 4) still reproduces at `b11429`
+  ([log-0002](log-0002.md)) and is dropped, not filed, as ADR 0005 filed nothing
+  for its own upstream gap. The writeup is at
+  `git show d7002d00:upstream_issue_tool_dialect_escaping.md`. If a fix lands
+  upstream anyway, revisit findings 3 and 4.
+- ~~Record grammar-presence per model in `RuntimeCapabilities` once a third
+  data point exists.~~ Dropped: no third dialect family is measured for its
+  own sake. If a third family is measured for another reason, its reading
+  goes in the log, and this can be picked up then.
