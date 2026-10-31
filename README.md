@@ -290,7 +290,7 @@ says, not in a public issue.
 
 ## Architecture
 
-An 18-crate Rust workspace (17 under `crates/`, plus the desktop app in
+A Rust workspace (every crate under `crates/`, plus the desktop app in
 `src-tauri`) and a React front end. Dependencies point one way: adapters →
 facades → infrastructure → `gglib-agent` → core, and
 `scripts/check_boundaries.sh` checks part of that in CI. See
