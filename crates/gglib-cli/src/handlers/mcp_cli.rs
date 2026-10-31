@@ -43,7 +43,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: McpCommand) -> Result<()> {
             )
             .await
         }
-        McpCommand::Remove { server, force } => remove(ctx, &server, force).await,
+        McpCommand::Remove { server, yes } => remove(ctx, &server, yes).await,
         McpCommand::Start { server } => start(ctx, &server).await,
         McpCommand::Stop { server } => stop(ctx, &server).await,
         McpCommand::Enable { server } => set_enabled(ctx, &server, true).await,
@@ -165,10 +165,10 @@ async fn add(
     Ok(())
 }
 
-async fn remove(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
+async fn remove(ctx: &CliContext, identifier: &str, yes: bool) -> Result<()> {
     let server = resolve_server(ctx, identifier).await?;
 
-    if !force {
+    if !yes {
         println!(
             "Server: {} (id: {}, type: {})",
             server.name, server.id, server.server_type

@@ -88,8 +88,10 @@ and `--profile coding` does the same on `serve`, `chat` and `q`.
 
 ## `models-dir`
 
-Where downloads land. `show` prints the directory; `prompt` asks;
-`set <PATH>` stores one.
+The download folder: where `gglib model download`, `gglib up` and the app
+put the files they fetch. A model you `add` stays where it is, so the library
+need not be one folder. `show` prints the directory; `prompt` asks; `set <PATH>`
+stores one.
 
 - A running daemon's next download goes to the new directory; a download
   already running finishes where it started.

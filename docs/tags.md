@@ -232,9 +232,7 @@ gglib model add --reimport ~/models/qwen3-30b.gguf
 ```
 
 Without `--reimport` the command reports the model already present and changes
-nothing. `--force` is kept as an alias, but it is the odd one out: every other
-`--force` in the CLI skips a confirmation prompt, and this one rewrites stored
-metadata.
+nothing.
 
 `--reimport` refreshes what was *detected*, not the whole row, and the columns
 it touches do not all behave alike:

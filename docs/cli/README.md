@@ -38,7 +38,6 @@ reported as an error.
 
 | Option | Effect |
 |---|---|
-| `--models-dir <PATH>` | Accepted on every command, and read by none: `GGLIB_MODELS_DIR` and `gglib config models-dir` decide the directory |
 | `--remote` | Do this on the machine this one is paired with; `gglib remote status` names it ([Remote access](../remote.md)) |
 | `-v`, `--verbose` | Debug-level logging, and a log file under `logs/` |
 | `-h`, `--help`; `-V`, `--version` | `--version` ends with the commit the binary was built from |

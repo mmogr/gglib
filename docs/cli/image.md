@@ -50,7 +50,7 @@ the runtime that draws them ([config](config.md#llama-and-sd)).
 - Stopping the image model from the app, or removing it there with force,
   while it draws waits up to 20 seconds for the render to stop, and answers
   an error if it has not, leaving the model loaded. The command line's
-  `model remove --force` skips the confirmation and stops nothing.
+  `model remove --yes` skips the confirmation and stops nothing.
 
 In a chat, `/draw` asks the model to draw for the next message
 ([chat](chat.md#draw)).

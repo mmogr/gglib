@@ -22,7 +22,7 @@ async fn a_projector_is_linked_and_survives_the_rest_of_the_update() {
             "model",
             "update",
             &id,
-            "--force",
+            "--yes",
             "--name",
             "Renamed",
             "--projector",
@@ -46,7 +46,7 @@ async fn neither_flag_leaves_the_link() {
     let (ctx, model) = library(dir.path()).await;
     let projector = write_gguf(dir.path(), "mmproj-F16.gguf", &[("general.type", "mmproj")]);
     let id = model.id.to_string();
-    let update = ["gglib", "model", "update", &id, "--force"];
+    let update = ["gglib", "model", "update", &id, "--yes"];
     let link = [&update[..], &["--projector", projector.to_str().unwrap()]].concat();
     run(&ctx, &link).await.unwrap();
 
@@ -71,7 +71,7 @@ async fn a_weights_file_is_refused_by_name() {
         &[("general.architecture", "llama")],
     );
     let id = model.id.to_string();
-    let argv = ["gglib", "model", "update", &id, "--force", "--projector"];
+    let argv = ["gglib", "model", "update", &id, "--yes", "--projector"];
 
     let refused = run(&ctx, &[&argv[..], &[weights.to_str().unwrap()]].concat())
         .await
@@ -135,7 +135,7 @@ async fn the_command_links_unlinks_and_refuses() {
     let (ctx, model) = library(dir.path()).await;
     let projector = write_gguf(dir.path(), "mmproj-F16.gguf", &[("general.type", "mmproj")]);
     let id = model.id.to_string();
-    let update = ["gglib", "model", "update", &id, "--force"];
+    let update = ["gglib", "model", "update", &id, "--yes"];
 
     let link = [&update[..], &["--projector", projector.to_str().unwrap()]].concat();
     run(&ctx, &link).await.unwrap();

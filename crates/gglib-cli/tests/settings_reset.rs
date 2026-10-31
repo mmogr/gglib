@@ -1,4 +1,4 @@
-//! `gglib config settings reset --force` against a database on disk.
+//! `gglib config settings reset --yes` against a database on disk.
 //!
 //! The unit tests over `reset` hand it a store they built; this runs the
 //! command a person types, against the database the binary opens under
@@ -43,10 +43,10 @@ fn a_reset_keeps_the_pairing_the_device_roster_and_the_proxy_key() {
     let before = data_dir::read_settings(root.path());
 
     let out = Command::new(env!("CARGO_BIN_EXE_gglib"))
-        .args(["config", "settings", "reset", "--force"])
+        .args(["config", "settings", "reset", "--yes"])
         .env("GGLIB_DATA_DIR", root.path())
         .output()
-        .expect("running `gglib config settings reset --force`");
+        .expect("running `gglib config settings reset --yes`");
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(

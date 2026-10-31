@@ -27,7 +27,7 @@ async fn each_command_that_changes_the_library_posts_the_daemon_its_event() {
     let mut expected = Vec::new();
 
     for change in [
-        &["update", &id, "--name", "Renamed", "--force"][..],
+        &["update", &id, "--name", "Renamed", "--yes"][..],
         &["capabilities", &id, "--set", "supports-tool-calls"],
     ] {
         let argv = [&["gglib", "model"][..], change].concat();
@@ -41,7 +41,7 @@ async fn each_command_that_changes_the_library_posts_the_daemon_its_event() {
     }
     assert_eq!(stored(&ctx, model.id).await.name, "Renamed");
 
-    let argv = ["gglib", "model", "remove", &id, "--force"];
+    let argv = ["gglib", "model", "remove", &id, "--yes"];
     beside(port, Some(TOKEN), run(&ctx, &argv))
         .await
         .expect("the model is removed");
@@ -166,7 +166,7 @@ async fn a_daemon_that_left_no_token_under_this_data_root_is_asked_nothing() {
     let (port, asked) = daemon("204 No Content");
     let id = model.id.to_string();
 
-    let argv = ["gglib", "model", "update", &id, "--name", "Renamed", "-f"];
+    let argv = ["gglib", "model", "update", &id, "--name", "Renamed", "-y"];
     STAND_IN_PORT
         .scope(port, run(&ctx, &argv))
         .await
@@ -188,7 +188,7 @@ async fn a_token_left_by_a_daemon_that_has_stopped_does_not_fail_the_command() {
         let (ctx, model) = library(dir.path()).await;
         let id = model.id.to_string();
 
-        let argv = ["gglib", "model", "update", &id, "--name", "Renamed", "-f"];
+        let argv = ["gglib", "model", "update", &id, "--name", "Renamed", "-y"];
         let ended = beside(port, Some(TOKEN), run(&ctx, &argv)).await;
 
         assert!(ended.is_ok(), "{on_it} on the port: {ended:?}");
@@ -206,7 +206,7 @@ async fn a_daemon_that_refuses_the_event_does_not_fail_the_command() {
     let (port, asked) = daemon("401 Unauthorized");
     let id = model.id.to_string();
 
-    let argv = ["gglib", "model", "update", &id, "--name", "Renamed", "-f"];
+    let argv = ["gglib", "model", "update", &id, "--name", "Renamed", "-y"];
     let ended = beside(port, Some(TOKEN), run(&ctx, &argv)).await;
 
     assert!(ended.is_ok(), "{ended:?}");

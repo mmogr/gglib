@@ -28,9 +28,9 @@ pub enum LlamaCommand {
 
     /// Remove llama.cpp installation
     Uninstall {
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        force: bool,
+        /// Answer yes to the confirmation, so nothing is asked
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
 
     /// Detect GPU acceleration and check build readiness

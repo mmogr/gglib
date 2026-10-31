@@ -74,7 +74,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `model list` | List all models with metadata, an image model's family and the components it still needs in the `Draws` column; while paired, end with one line on the paired machine (`--remote` lists its models, and which of them read images) |
 | `model inspect <id\|name>` | Show full details for a model (arch, quant, capabilities, inference defaults, GGUF metadata, an image model's family and components), and the port it is being served on when it is; `--remote` reads the paired machine's |
 | `model explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
-| `model remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--force` skips the confirmation only) |
+| `model remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--yes` skips the confirmation only) |
 | `model update <id\|name> [flags]` | Change a model's stored metadata (name, parameter count, architecture, quantization, context length, metadata keys), its inference defaults (`--unset <param>` clears one), its projector (`--projector`, `--no-projector`) and an image model's components (`--component`, `--no-component`) |
 | `model retag [<id\|name>] [--all] [--full]` | Re-derive auto-tags from the stored GGUF metadata; additive unless `--full` |
 | `model capabilities <id\|name> [--set FLAG] [--unset FLAG]` | Show a model's capability flags, or override them |
@@ -82,7 +82,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `model search <query>` | Search `HuggingFace` Hub for models; `--images` for image models |
 | `model browse [category] [--size S] [--images]` | Browse popular GGUF models on the `HuggingFace` Hub |
 | `model check-updates [--identifier <id\|name>] [--all]` | Check whether downloaded models have a newer commit on the Hub |
-| `model upgrade <id\|name> [--force]` | Download a model's latest version and update its row |
+| `model upgrade <id\|name> [--yes]` | Download a model's latest version and update its row |
 | `model verify <id\|name>` | Verify model integrity via SHA256 hash comparison |
 | `model repair <id\|name>` | Re-download corrupt shards for a model |
 | `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`); for an image model, pin the proxy to it and load it once through stable-diffusion.cpp's `sd-server`, refusing the chat-only flags (`--ctx-size`, `--mlock`, `--jinja`, MTP, sampling, a profile) by name |
@@ -144,11 +144,11 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `config profile install-templates` | Install the starter profiles: three sampling (coding, chat, creative) and six reasoning rungs (minimal…max) |
 | `config llama install [--build] [--force]` (also `update`) | Install the pinned llama.cpp release when it is missing or older than the pin, or build it from source with `--build` |
 | `config llama status` | Show what is installed, and where it stands against the pinned release |
-| `config llama uninstall [--force]` | Remove the llama.cpp installation |
+| `config llama uninstall [--yes]` | Remove the llama.cpp installation |
 | `config llama detect [--json]` | Detect GPU acceleration and check build readiness |
 | `config sd install [--build] [--force]` (also `update`) | Install stable-diffusion.cpp's pinned `sd-server`, which serves image models, when it is missing or older than the pin: the pre-built release for this platform (a CPU-only build is warned about before it starts), or a source build with `--build`, where no release fits, or over a source build of a release |
 | `config sd status` | Show whether `sd-server` is installed, as a download or a source build, with its release, platform, commit and path, and where it stands against the pinned release |
-| `config sd uninstall [--force]` | Remove what the image runtime's install put in `.sd/`, and say what was removed; refused while the daemon runs an image model |
+| `config sd uninstall [--yes]` | Remove what the image runtime's install put in `.sd/`, and say what was removed; refused while the daemon runs an image model |
 | `config check-deps` | Check the system dependencies gglib needs to build, with install commands for any missing |
 | `config fast-downloads [status\|enable\|disable\|prompt]` | Show, build or remove the optional `hf_xet` download accelerator's environment, or offer to build it |
 | `completions <shell>` | Print a shell completion script to stdout |

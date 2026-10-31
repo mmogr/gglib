@@ -165,6 +165,26 @@ fn uninstall_told_yes_removes_what_sd_installed_and_says_what_it_removed() {
     assert!(!root.path().join(".sd").exists());
 }
 
+/// `-y` is the answer given up front: nothing is asked, so with nobody to
+/// ask (input closed, which is a no) it still removes everything.
+#[test]
+fn uninstall_with_yes_asks_nothing_and_removes_everything() {
+    let root = tempfile::tempdir().unwrap();
+    install(root.path());
+
+    let out = gglib(root.path(), &["config", "sd", "uninstall", "-y"], None);
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(!stdout.contains("Continue?"), "{}", text(&out));
+    assert!(
+        stdout.ends_with("stable-diffusion.cpp uninstalled successfully.\n"),
+        "{}",
+        text(&out)
+    );
+    assert!(!root.path().join(".sd").exists());
+}
+
 /// A source install told no says it was cancelled and exits with an error,
 /// so a script that ran it knows nothing was installed, and nothing is
 /// cloned. The stand-in `nvcc` gives a machine with no Metal a CUDA build to

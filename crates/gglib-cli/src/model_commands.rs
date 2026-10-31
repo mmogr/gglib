@@ -41,7 +41,7 @@ pub enum ModelCommand {
         /// The model keeps its id, and its name, parameter count and
         /// architecture are left exactly as stored — those columns are not
         /// part of the upsert at all.
-        #[arg(long = "reimport", alias = "force")]
+        #[arg(long = "reimport")]
         reimport: bool,
         /// An image model's components, linked once the file is added.
         #[command(flatten)]
@@ -55,9 +55,9 @@ pub enum ModelCommand {
     Remove {
         /// Name or ID of the model to remove
         identifier: String,
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        force: bool,
+        /// Answer yes to the confirmation, so nothing is asked
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
 
     /// Update model metadata in the database
@@ -166,9 +166,9 @@ pub enum ModelCommand {
         /// Show preview without applying changes
         #[arg(long)]
         dry_run: bool,
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        force: bool,
+        /// Answer yes to the confirmation, so nothing is asked
+        #[arg(short = 'y', long)]
+        yes: bool,
         #[command(flatten)]
         projector: ProjectorArgs,
         #[command(flatten)]
@@ -215,9 +215,9 @@ pub enum ModelCommand {
         /// Specific file indices to repair, as verify lists them (comma-separated, e.g., "0,2,5")
         #[arg(short, long)]
         shards: Option<String>,
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        force: bool,
+        /// Answer yes to the confirmation, so nothing is asked
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
 
     /// Download a GGUF model from `HuggingFace` Hub.
@@ -277,9 +277,9 @@ pub enum ModelCommand {
     Upgrade {
         /// Name or ID of the model to upgrade
         identifier: String,
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        force: bool,
+        /// Answer yes to the confirmation, so nothing is asked
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
 
     /// Search `HuggingFace` Hub for GGUF models

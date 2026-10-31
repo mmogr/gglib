@@ -26,9 +26,9 @@ use super::board::SoloBoard;
 
 /// Execute the update-model command.
 ///
-/// Upgrades a model to the latest revision from `HuggingFace`. `force` skips
+/// Upgrades a model to the latest revision from `HuggingFace`. `yes` skips
 /// the confirmation prompt; everything else is identical to the GUI path.
-pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> Result<()> {
+pub(crate) async fn execute(ctx: &CliContext, identifier: &str, yes: bool) -> Result<()> {
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
 
     // What it is built with, and why, is `one_shot_model_ops`'s to say.
@@ -64,9 +64,9 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, force: bool) -> 
     }
     println!("  Latest SHA:  {}", short_sha(&check.latest_sha));
 
-    // Confirmation prompt if not forced — this re-downloads the full model
+    // Confirmation prompt unless --yes answered already — this re-downloads the full model
     // and overwrites the stored file path.
-    if !force {
+    if !yes {
         println!();
         println!("This will:");
         println!("  • Re-download the model at the latest revision");

@@ -33,7 +33,7 @@ async fn each_component_is_linked_and_the_rest_of_the_update_is_written() {
             "model",
             "update",
             &id,
-            "--force",
+            "--yes",
             "--name",
             "Flux",
             "--component",
@@ -71,7 +71,7 @@ async fn no_component_unlinks_its_role_only() {
     let vae = write_component(dir.path(), "ae.safetensors", FLUX_VAE);
     let clip = write_component(dir.path(), "clip_l.safetensors", FLUX_CLIP_L);
     let id = model.id.to_string();
-    let update = ["gglib", "model", "update", &id, "--force"];
+    let update = ["gglib", "model", "update", &id, "--yes"];
     let vae_flag = format!("vae={}", vae.display());
     let clip_flag = format!("clip_l={}", clip.display());
     let link = [
@@ -111,7 +111,7 @@ async fn a_file_of_another_role_is_refused_by_name() {
             "model",
             "update",
             &id,
-            "--force",
+            "--yes",
             "--component",
             &flag,
         ],
@@ -141,7 +141,7 @@ async fn a_chat_model_is_refused() {
             "model",
             "update",
             &id,
-            "--force",
+            "--yes",
             "--component",
             &flag,
         ],
