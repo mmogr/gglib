@@ -130,11 +130,17 @@ jobs:
       # untagged; the one that loses gets a 422 and stops here, and the
       # winner makes the release and dispatches the build.
       #
-      # A re-run of this job after it failed past this step meets its own tag
-      # and stops the same way. CONTRIBUTING's release section says how to
-      # finish by hand.
+      # A re-run of this job after it failed past this step meets its own
+      # tag, on the bump commit, and carries on: the release is made if it
+      # is missing, and the build dispatched again (a second dispatch waits
+      # in release.yml's concurrency group, then replaces the assets as a
+      # whole). The attempt number is what tells that from a lost race,
+      # where the loser is on its first attempt and the winner's release
+      # may not exist yet.
       - name: Tag the bump commit
         id: tag
+        env:
+          ATTEMPT: ${{ github.run_attempt }}
         run: |
           if out=$(gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/v$VERSION" -f sha="$BUMP" 2>&1); then
             echo "tagged=true" >> "$GITHUB_OUTPUT"
@@ -143,12 +149,15 @@ jobs:
           fi
           echo "$out"
           # A 422 also answers a bad sha, so only an existing tag counts.
-          if grep -q 'HTTP 422' <<< "$out" && gh api "repos/$GH_REPO/git/ref/tags/v$VERSION" > /dev/null 2>&1; then
-            echo "tagged=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::another run tagged v$VERSION; this run makes no release and dispatches nothing"
+          if ! grep -q 'HTTP 422' <<< "$out"; then exit 1; fi
+          at=$(gh api "repos/$GH_REPO/git/ref/tags/v$VERSION" --jq .object.sha) || exit 1
+          if [ "$at" = "$BUMP" ] && [ "$ATTEMPT" -gt 1 ]; then
+            echo "tagged=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::v$VERSION is already on $BUMP from an earlier attempt of this run; carrying on from there"
             exit 0
           fi
-          exit 1
+          echo "tagged=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::another run tagged v$VERSION; this run makes no release and dispatches nothing"
 
       # The notes are generated, sorted by .github/release.yml.
       - name: Create GitHub Release
@@ -156,6 +165,10 @@ jobs:
         env:
           PRERELEASE: ${{ needs.check-version.outputs.is-prerelease }}
         run: |
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "the release for v$VERSION exists already"
+            exit 0
+          fi
           args=(--title "Release v$VERSION" --generate-notes --verify-tag)
           if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
           gh release create "v$VERSION" "${args[@]}"

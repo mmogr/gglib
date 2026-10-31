@@ -15,8 +15,8 @@ on:
 # cancels the older pending run when a newer one arrives, whatever
 # `cancel-in-progress` says, so one group shared by main's pushes would drop
 # runs merged in quick succession, and the push run is the one that runs
-# `release`. One job inside it is still exposed: release.yml's `deploy-docs`
-# runs in the `pages` group, where a newer deploy cancels one in progress.
+# `release`, which tags. The builds it dispatches run in release.yml under
+# a group of the tag's own, out of this workflow's reach.
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-main-{0}', github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

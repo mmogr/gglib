@@ -55,10 +55,20 @@ jobs:
       artifacts: ${{ steps.version.outputs.artifacts }}
     steps:
       - name: Require a tag or a test run
-        if: inputs.tag == '' && inputs.test_run != true
+        env:
+          TAG: ${{ inputs.tag }}
+          TEST_RUN: ${{ inputs.test_run }}
         run: |
-          echo "::error::give a tag to build and publish (-f tag=v<version>), or -f test_run=true"
-          exit 1
+          if [ -z "$TAG" ] && [ "$TEST_RUN" != "true" ]; then
+            echo "::error::give a tag to build and publish (-f tag=v<version>), or -f test_run=true"
+            exit 1
+          fi
+          # Only a version tag is built: nothing else is checked out, named
+          # or published from here.
+          if [ -n "$TAG" ] && ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::$TAG is not a version tag (vX.Y.Z or vX.Y.Z-rc.N)"
+            exit 1
+          fi
 
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -103,7 +113,7 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           if ! gh release view "$TAG" -R "$GITHUB_REPOSITORY" > /dev/null; then
-            echo "::error::there is no release for $TAG. Make it with gh release create $TAG --generate-notes --verify-tag (add --prerelease for a candidate), then dispatch again"
+            echo "::error::there is no release for $TAG. Re-run the failed jobs of the CI run that tagged it, which makes the release and dispatches this again; or by hand: gh release create $TAG --title 'Release $TAG' --generate-notes --verify-tag (add --prerelease for a candidate), swap the merged release PR's label autorelease: pending for autorelease: tagged, then dispatch again"
             exit 1
           fi
 
