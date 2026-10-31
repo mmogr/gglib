@@ -333,12 +333,12 @@ This codebase has three distinct documentation surfaces. Each has a defined purp
 
 A fourth surface — [Architecture Decision Records](#architecture-decision-records) — records *why* a decision was made, which none of the three below are for.
 
-### Surface 1: Crate READMEs (shields.io badges + ASCII architecture diagrams)
+### Surface 1: Crate READMEs (badges + an internal structure diagram)
 
 Each crate's `README.md` serves two narrow purposes:
 
 1. **Badges** — metrics surfaced as shields.io endpoint badges (tests, coverage, LOC, complexity) that read from the `badges` branch, in a header block `make readmes` writes (see [Badges Pipeline](#badges-pipeline) below).
-2. **Architecture ASCII diagrams** — a text diagram showing where the crate sits in the layer model and an internal structure diagram. These are written and maintained by hand.
+2. **An internal structure diagram** — a text diagram of the crate's modules, drawn by hand; `scripts/check_diagram_names.py` checks that every name in it exists in the code. Where the crate sits is the generated graph in [`crates/README.md`](crates/README.md#architecture-overview), which the header block links.
 
 Crate READMEs are **not** the place for API documentation, usage examples, or explanatory prose about how individual types work — that belongs in Rustdoc.
 

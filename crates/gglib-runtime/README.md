@@ -46,10 +46,10 @@ This crate is in the **Infrastructure Layer** — it manages external processes 
                                           │
                                 depends on
                                           ▼
-                              ┌───────────────────┐
-                              │    gglib-core     │
-                              │  (port traits)    │
-                              └───────────────────┘
+              ┌───────────────────────────────────────────────────┐
+              │ gglib-core (port traits) · gglib-agent · gglib-mcp │
+              │ gglib-proxy                                        │
+              └───────────────────────────────────────────────────┘
 ```
 
 **Module Descriptions:**
