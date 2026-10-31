@@ -20,7 +20,7 @@ use wire::{to_api_status, to_runtime_config};
 async fn fetch_status(state: &AppState) -> ProxyStatus {
     let s = state.proxy.status().await;
     let pinned = state.proxy.pinned().map(|pin| pin.name);
-    to_api_status(s, pinned)
+    to_api_status(&s, pinned)
 }
 
 /// Start the proxy pinned to one model, resolving the launch cascade
@@ -106,10 +106,6 @@ pub(crate) async fn trips(
 }
 
 /// Start the proxy (idempotent).
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) async fn start(
     State(state): State<AppState>,
     Json(cfg): Json<Option<StartProxyConfig>>,

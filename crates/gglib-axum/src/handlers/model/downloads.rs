@@ -81,18 +81,13 @@ pub(crate) async fn remove(
 /// This endpoint is idempotent: it answers 200 whether or not the download
 /// is in the queue. This prevents client-side errors during race
 /// conditions (e.g., SSE removes download while cancel is in-flight).
-#[allow(
-    clippy::match_same_arms,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) async fn cancel(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<(), HttpError> {
     match state.downloads.cancel_download(&id).await {
-        Ok(()) => Ok(()),
         // Treat NotFound as success (idempotent cancel)
-        Err(gglib_app_services::GuiError::NotFound { .. }) => Ok(()),
+        Ok(()) | Err(gglib_app_services::GuiError::NotFound { .. }) => Ok(()),
         Err(e) => Err(e.into()),
     }
 }
