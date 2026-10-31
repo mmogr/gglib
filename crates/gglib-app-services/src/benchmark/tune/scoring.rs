@@ -258,5 +258,9 @@ fn json_values_match(expected: &Value, actual: &Value) -> bool {
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::float_cmp,
+    reason = "every compare in these tests is against 0.0 or 1.0, which the scorer's ratios give exactly (0/n and n/n)"
+)]
 #[path = "scoring_tests.rs"]
 mod scoring_tests;

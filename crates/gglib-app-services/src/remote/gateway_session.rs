@@ -100,6 +100,10 @@ impl RemoteGateway {
     /// device, it would have the pairing screen report success within a
     /// second of the second code being shown, and stop watching while the
     /// code stayed live and redeemable for the rest of its `ttl`.
+    #[expect(
+        clippy::significant_drop_tightening,
+        reason = "the session lock is held across the epoch check and the arming, so a session cannot end between them"
+    )]
     pub(in crate::remote) fn offer_pairing(
         &self,
         epoch: u64,
@@ -164,6 +168,10 @@ impl RemoteGateway {
     /// and a `disable` landing in that window would leave `offer_pairing`
     /// holding an invite for a tunnel that is down. Ending a session has to
     /// retire its name along with its state.
+    #[expect(
+        clippy::significant_drop_tightening,
+        reason = "the session lock is held from the epoch check through the reset, so an `offer_pairing` cannot land in between"
+    )]
     pub(in crate::remote) fn reset_session_if(&self, epoch: u64) {
         let mut session = self.session();
         if *session != epoch {

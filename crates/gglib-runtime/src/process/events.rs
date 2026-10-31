@@ -49,15 +49,14 @@ impl ServerStateInfo {
     }
 
     /// Get current time as Unix milliseconds.
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
     fn now_ms() -> u64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64
+        u64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis(),
+        )
+        .unwrap_or(u64::MAX)
     }
 }
 

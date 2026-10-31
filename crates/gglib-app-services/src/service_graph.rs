@@ -141,9 +141,9 @@ pub struct AppServices {
 ///
 /// Returns an error if settings cannot be read or the benchmark HTTP client
 /// cannot be constructed.
-#[allow(
+#[expect(
     clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "the one place the services are wired together, each in a few lines and in dependency order"
 )]
 pub async fn build_service_graph(params: ServiceGraphParams) -> anyhow::Result<AppServices> {
     let ServiceGraphParams {

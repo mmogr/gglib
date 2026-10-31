@@ -49,7 +49,7 @@ fn spawnable(model_id: i64) -> (Arc<RwLock<GuiProcessCore>>, SpawnConfig, tempfi
 #[tokio::test]
 async fn dropping_an_armed_guard_stops_the_child() {
     let (core, config, _dir) = spawnable(i64::from(ARMED_ID));
-    let (_, pid) = core.write().await.spawn(config).await.expect("spawn");
+    let (_, pid) = core.write().await.spawn(config).expect("spawn");
     assert_eq!(core.read().await.count(), 1);
 
     drop(SpawnedChild::arm(&core, ARMED_ID, pid));
@@ -71,7 +71,7 @@ async fn dropping_an_armed_guard_stops_the_child() {
 #[tokio::test]
 async fn a_disarmed_guard_leaves_the_child_alone() {
     let (core, config, _dir) = spawnable(i64::from(DISARMED_ID));
-    let (_, pid) = core.write().await.spawn(config).await.expect("spawn");
+    let (_, pid) = core.write().await.spawn(config).expect("spawn");
 
     let mut guard = SpawnedChild::arm(&core, DISARMED_ID, pid);
     guard.disarm();
@@ -123,7 +123,7 @@ fn the_liveness_tick_is_short_next_to_the_smallest_budget() {
 #[tokio::test]
 async fn a_cancelled_launch_still_stops_the_child() {
     let (core, config, _dir) = spawnable(i64::from(CANCELLED_ID));
-    let (_, pid) = core.write().await.spawn(config).await.expect("spawn");
+    let (_, pid) = core.write().await.spawn(config).expect("spawn");
     assert_eq!(core.read().await.count(), 1);
 
     let cancelled = tokio::time::timeout(std::time::Duration::from_millis(50), async {
@@ -152,12 +152,7 @@ async fn a_cancelled_launch_still_stops_the_child() {
 #[tokio::test]
 async fn a_guard_does_not_stop_a_replacement_process() {
     let (core, config, _dir) = spawnable(i64::from(ABA_ID));
-    let (_, original_pid) = core
-        .write()
-        .await
-        .spawn(config.clone())
-        .await
-        .expect("spawn");
+    let (_, original_pid) = core.write().await.spawn(config.clone()).expect("spawn");
 
     let guard = SpawnedChild::arm(&core, ABA_ID, original_pid);
 
@@ -168,7 +163,7 @@ async fn a_guard_does_not_stop_a_replacement_process() {
         .kill(ABA_ID)
         .await
         .expect("kill original");
-    let (_, replacement_pid) = core.write().await.spawn(config).await.expect("respawn");
+    let (_, replacement_pid) = core.write().await.spawn(config).expect("respawn");
     assert_ne!(
         replacement_pid, original_pid,
         "precondition: the replacement must be a different process"

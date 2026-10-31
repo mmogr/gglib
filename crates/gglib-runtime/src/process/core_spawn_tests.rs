@@ -20,6 +20,9 @@ use crate::sd::SdServerConfig;
 /// `residency::launch_tests` gives.
 const LLAMA_ID: i64 = 999_020;
 const SD_ID: i64 = 999_021;
+/// The two ids as the core holds them.
+const LLAMA: u32 = 999_020;
+const SD: u32 = 999_021;
 const BASE_PORT: u16 = 19_520;
 
 /// A script that writes its arguments, one per line, to `<dir>/<name>.argv`
@@ -82,14 +85,12 @@ async fn each_runtime_runs_its_own_binary() {
         }],
         port: None,
     };
-    let (sd_port, _) = core.spawn(SpawnConfig::Sd(sd)).await.expect("spawn sd");
+    let (sd_port, _) = core.spawn(SpawnConfig::Sd(sd)).expect("spawn sd");
     let sd_argv = recorded(dir.path(), "sd-server").await;
     let llama_ran_for_sd = dir.path().join("llama-server.argv").exists();
 
     let llama = ServerConfig::new(LLAMA_ID, "qwen".to_owned(), model.clone(), BASE_PORT);
-    core.spawn(SpawnConfig::Llama(llama))
-        .await
-        .expect("spawn llama");
+    core.spawn(SpawnConfig::Llama(llama)).expect("spawn llama");
     let llama_argv = recorded(dir.path(), "llama-server").await;
 
     let mut listed: Vec<(u32, RuntimeKind)> = core
@@ -99,8 +100,8 @@ async fn each_runtime_runs_its_own_binary() {
         .collect();
     listed.sort_unstable_by_key(|(id, _)| *id);
 
-    core.kill(SD_ID as u32).await.ok();
-    core.kill(LLAMA_ID as u32).await.ok();
+    core.kill(SD).await.ok();
+    core.kill(LLAMA).await.ok();
     delete_pidfile(SD_ID).ok();
     delete_pidfile(LLAMA_ID).ok();
 
@@ -137,8 +138,8 @@ async fn each_runtime_runs_its_own_binary() {
     assert_eq!(
         listed,
         [
-            (LLAMA_ID as u32, RuntimeKind::Llama),
-            (SD_ID as u32, RuntimeKind::StableDiffusion),
+            (LLAMA, RuntimeKind::Llama),
+            (SD, RuntimeKind::StableDiffusion),
         ]
     );
 }
@@ -170,7 +171,6 @@ async fn a_missing_sd_server_names_the_install_command() {
 
     let error = core
         .spawn(SpawnConfig::Sd(sd))
-        .await
         .expect_err("no binary, no launch")
         .to_string();
 

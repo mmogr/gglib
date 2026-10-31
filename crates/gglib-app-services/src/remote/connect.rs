@@ -87,22 +87,22 @@ impl RemoteOps {
         // thing it happens to find wrong with the arguments. The lock is
         // gone by the end of this line; the reservation below is the one
         // that actually holds the slot.
-        if let Some(busy) = self.live_connect.lock().await.busy() {
+        let busy = self.live_connect.lock().await.busy();
+        if let Some(busy) = busy {
             return Err(busy_dialling(&busy));
         }
         let settings = self.settings().await?;
-        let pairing: PairingString = match request.pairing.as_deref() {
-            Some(pairing) => connect_dial::parse_pairing(pairing)?,
-            None => {
-                let stored = settings.remote_pairing.as_ref().ok_or_else(|| {
-                    GuiError::ValidationFailed(
-                        "this machine has not connected to a remote before — give it the pairing \
-                         string `gglib remote invite` showed there"
-                            .to_owned(),
-                    )
-                })?;
-                connect_dial::parse_pairing(&stored.ticket)?
-            }
+        let pairing: PairingString = if let Some(pairing) = request.pairing.as_deref() {
+            connect_dial::parse_pairing(pairing)?
+        } else {
+            let stored = settings.remote_pairing.as_ref().ok_or_else(|| {
+                GuiError::ValidationFailed(
+                    "this machine has not connected to a remote before — give it the pairing \
+                     string `gglib remote invite` showed there"
+                        .to_owned(),
+                )
+            })?;
+            connect_dial::parse_pairing(&stored.ticket)?
         };
         // The key this machine holds *for the machine about to be dialled*,
         // which is the only key that means anything: one is issued by the
@@ -152,6 +152,10 @@ impl RemoteOps {
     /// # Errors
     ///
     /// `Conflict` when nothing is connected and nothing is dialling.
+    #[expect(
+        clippy::significant_drop_in_scrutinee,
+        reason = "the connect slot stays locked through the drain, so a `join` waits for it; taking it in a statement of its own would change that"
+    )]
     pub async fn disconnect(&self) -> Result<(), GuiError> {
         match self.live_connect.lock().await.take() {
             Taken::Value(LiveConnect {

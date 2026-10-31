@@ -46,10 +46,9 @@ pub async fn kill_pid(pid: u32) -> io::Result<()> {
 }
 
 #[cfg(unix)]
-#[allow(
+#[expect(
     clippy::cast_possible_wrap,
-    clippy::match_same_arms,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "nix takes an i32 pid_t; a pidfile value above i32::MAX wraps to a negative pid, which kill reads as a process group (-1, from u32::MAX, as every process); #1647"
 )]
 async fn kill_pid_unix(pid: u32) -> io::Result<()> {
     let nix_pid = Pid::from_raw(pid as i32);
@@ -69,17 +68,11 @@ async fn kill_pid_unix(pid: u32) -> io::Result<()> {
 
         // Check if process still exists using kill with null signal (works on Linux/macOS)
         // On nix 0.29, we can't use Signal::from_c_int, but we can check process existence via errno
-        match signal::kill(nix_pid, None) {
-            Ok(()) => {
-                // Still alive, continue polling
-            }
-            Err(Errno::ESRCH) => {
-                // Process exited
-                return Ok(());
-            }
-            Err(_) => {
-                // Other error (permission) - assume still alive
-            }
+        // ESRCH: the process exited. Anything else is still alive, or
+        // another error (permission) - assume still alive, and continue
+        // polling.
+        if signal::kill(nix_pid, None) == Err(Errno::ESRCH) {
+            return Ok(());
         }
     }
 
@@ -95,16 +88,10 @@ async fn kill_pid_unix(pid: u32) -> io::Result<()> {
     for _ in 0..20 {
         sleep(Duration::from_millis(100)).await;
 
-        match signal::kill(nix_pid, None) {
-            Ok(()) => {
-                // Still alive (very unusual after SIGKILL)
-            }
-            Err(Errno::ESRCH) => {
-                return Ok(());
-            }
-            Err(_) => {
-                // Other error - continue polling
-            }
+        // Anything but ESRCH is still alive (very unusual after SIGKILL), or
+        // another error - continue polling
+        if signal::kill(nix_pid, None) == Err(Errno::ESRCH) {
+            return Ok(());
         }
     }
 
@@ -170,13 +157,9 @@ mod tests {
     use tokio::process::Command;
 
     #[tokio::test]
-    #[allow(
-        clippy::unreadable_literal,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
     async fn kill_pid_handles_already_gone() {
         // Use a PID that's very unlikely to exist
-        let result = kill_pid(999999).await;
+        let result = kill_pid(999_999).await;
         assert!(result.is_ok());
     }
 

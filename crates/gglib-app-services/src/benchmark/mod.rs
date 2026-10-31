@@ -13,16 +13,7 @@ use gglib_core::ports::{
     SettingsRepository,
 };
 
-#[allow(
-    clippy::match_same_arms,
-    clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 mod agentic;
-#[allow(
-    clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 mod compare;
 pub mod guard;
 mod http_client;
@@ -31,14 +22,6 @@ pub mod mapper;
 mod mock_upstream;
 mod perf;
 mod proxy_arm;
-#[allow(
-    clippy::float_cmp,
-    clippy::future_not_send,
-    clippy::needless_pass_by_value,
-    clippy::similar_names,
-    clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub mod tune;
 
 // ────────────────────────────────────────────────────────────────────────────

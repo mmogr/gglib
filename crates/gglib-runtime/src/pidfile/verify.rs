@@ -89,21 +89,20 @@ fn executable_of(_pid: u32) -> Option<PathBuf> {
 ///
 /// On Unix, uses `kill` with null signal which doesn't send a signal but
 /// checks existence.
-#[cfg(unix)]
-#[allow(
+#[expect(
     clippy::cast_possible_wrap,
-    clippy::match_same_arms,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "nix takes an i32 pid_t; a pidfile value above i32::MAX wraps to a negative pid, which kill reads as a process group (-1, from u32::MAX, as every process); #1647"
 )]
+#[cfg(unix)]
 pub fn pid_exists(pid: u32) -> bool {
     use nix::sys::signal;
     use nix::unistd::Pid;
 
     // Signal None is a special "null signal" that checks if we can signal the process
     match signal::kill(Pid::from_raw(pid as i32), None) {
-        Ok(()) => true,
         Err(nix::errno::Errno::ESRCH) => false, // No such process
-        Err(_) => true,                         // Process exists but we lack permission
+        // Signalled, or the process exists but we lack permission
+        Ok(()) | Err(_) => true,
     }
 }
 
@@ -137,12 +136,8 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    #[allow(
-        clippy::unreadable_literal,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
     fn pid_exists_false_for_impossible_pid() {
-        assert!(!pid_exists(999999));
+        assert!(!pid_exists(999_999));
     }
 
     #[test]

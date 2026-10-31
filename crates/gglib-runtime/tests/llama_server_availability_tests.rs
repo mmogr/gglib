@@ -21,34 +21,22 @@ fn test_missing_binary_returns_not_found_error() {
 }
 
 #[test]
-#[ignore] // Requires unsafe block for env var manipulation
-#[allow(
-    clippy::ignore_without_reason,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
+#[ignore = "requires an unsafe block for env var manipulation"]
 fn test_env_var_override_takes_precedence() {
     // This test is ignored because it requires unsafe blocks to set environment variables
     // Run with: cargo test -- --ignored
 }
 
 #[test]
-#[ignore] // Requires unsafe block for env var manipulation
+#[ignore = "requires an unsafe block for env var manipulation"]
 #[cfg(unix)]
-#[allow(
-    clippy::ignore_without_reason,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 fn test_non_executable_binary_returns_error() {
     // This test is ignored because it requires unsafe blocks to set environment variables
     // Run with: cargo test -- --ignored
 }
 
 #[test]
-#[ignore] // Requires unsafe block for env var manipulation
-#[allow(
-    clippy::ignore_without_reason,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
+#[ignore = "requires an unsafe block for env var manipulation"]
 fn test_nonexistent_path_in_env_var_returns_not_found() {
     // This test is ignored because it requires unsafe blocks to set environment variables
     // Run with: cargo test -- --ignored
@@ -72,23 +60,15 @@ fn test_error_messages_include_install_instructions() {
 
 /// Integration test: validate full error propagation chain
 #[test]
-#[allow(
-    clippy::match_same_arms,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 fn test_error_has_all_required_fields() {
     let result = resolve_llama_server();
 
     if let Err(err) = result {
         match err {
-            LlamaServerError::NotFound { path } => {
+            LlamaServerError::NotFound { path }
+            | LlamaServerError::NotExecutable { path }
+            | LlamaServerError::PermissionDenied { path } => {
                 // Path should be populated
-                assert!(!path.as_os_str().is_empty());
-            }
-            LlamaServerError::NotExecutable { path } => {
-                assert!(!path.as_os_str().is_empty());
-            }
-            LlamaServerError::PermissionDenied { path } => {
                 assert!(!path.as_os_str().is_empty());
             }
             LlamaServerError::PathResolution(msg) => {
@@ -99,11 +79,7 @@ fn test_error_has_all_required_fields() {
 }
 
 #[test]
-#[ignore] // Requires unsafe block for env var manipulation
-#[allow(
-    clippy::ignore_without_reason,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
+#[ignore = "requires an unsafe block for env var manipulation"]
 fn test_valid_executable_with_env_var() {
     // This test is ignored because it requires unsafe blocks to set environment variables
     // Run with: cargo test -- --ignored

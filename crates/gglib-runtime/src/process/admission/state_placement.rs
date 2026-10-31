@@ -285,8 +285,7 @@ impl QueueState {
         if self.too_large_for_its_place(candidate) {
             return None;
         }
-        let beside = self
-            .secondary_slots()
+        let beside = Self::secondary_slots()
             .filter(|&slot| self.may_use(slot, candidate))
             .collect::<Vec<_>>();
         if let Some(&slot) = beside

@@ -9,10 +9,6 @@ mod config;
     reason = "a guard's scope is its critical section, so this lint is never applied \
               in admission, residency or proxy lock code"
 )]
-#[allow(
-    clippy::manual_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub mod supervisor;
 
 // The daemon settles its own bearer token by the proxy's rule.

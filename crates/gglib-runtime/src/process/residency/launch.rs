@@ -195,10 +195,7 @@ async fn launch(
         .to_path_buf();
     launch_files::preflight(spec, &sd_server).await?;
 
-    {
-        let mut core_w = core.write().await;
-        core_w.cleanup_dead().await;
-    }
+    core.write().await.cleanup_dead();
 
     info!(
         model_id = %spec.id,
@@ -230,7 +227,6 @@ async fn launch(
         let mut core_w = core.write().await;
         let (port, pid) = core_w
             .spawn(config)
-            .await
             .map_err(|e| ModelRuntimeError::SpawnFailed(e.to_string()))?;
         (port, SpawnedChild::arm(core, spec.id, pid))
     };

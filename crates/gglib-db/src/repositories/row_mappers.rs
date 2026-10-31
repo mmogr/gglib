@@ -34,12 +34,34 @@ pub(crate) fn parse_datetime(datetime_str: Option<String>) -> Option<DateTime<Ut
     })
 }
 
+/// A context length as the `context_length` column holds it.
+#[expect(
+    clippy::cast_possible_wrap,
+    reason = "the column holds the u64's bits; `context_length_from_column` casts them back, so every value round-trips"
+)]
+pub(crate) const fn context_length_column(length: u64) -> i64 {
+    length as i64
+}
+
+/// The context length a `context_length` column holds.
+#[expect(
+    clippy::cast_sign_loss,
+    reason = "the inverse of `context_length_column`: a negative value is a u64 above i64::MAX, stored as its bits"
+)]
+const fn context_length_from_column(column: i64) -> u64 {
+    column as u64
+}
+
 /// Parse a database row into a Model.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one field read per column of the model row, in column order; splitting it would split the row"
+)]
 pub(crate) fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, RepositoryError> {
     let context_length: Option<u64> = row
         .try_get::<Option<i64>, _>("context_length")
         .map_err(|e| RepositoryError::Storage(e.to_string()))?
-        .map(|v| v as u64);
+        .map(context_length_from_column);
 
     let metadata_json: String = row
         .try_get("metadata")

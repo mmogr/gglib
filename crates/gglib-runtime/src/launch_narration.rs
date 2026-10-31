@@ -542,13 +542,13 @@ mod tests {
             caps(),
             cache_ram(Some(6144), CacheRamSource::Auto),
         );
-        let mut i = inputs(&s, &c, &r);
-        i.kv_types = KvCacheTypeResolution {
+        let mut input = inputs(&s, &c, &r);
+        input.kv_types = KvCacheTypeResolution {
             k: KvCacheType::F16,
             v: KvCacheType::F16,
             source: KvCacheTypeSource::DisabledByEnv,
         };
-        let n = narrate(&i);
+        let n = narrate(&input);
         let kv = n.decision("kv").unwrap();
         assert!(!kv.value.contains("f16 would be"), "got {}", kv.value);
         assert_eq!(kv.source.as_deref(), Some("GGLIB_DISABLE_KV_QUANT"));
@@ -615,12 +615,12 @@ mod tests {
             caps(),
             cache_ram(Some(6144), CacheRamSource::Auto),
         );
-        let mut i = inputs(&s, &c, &r);
-        i.slot_restore = SlotRestoreResolution {
+        let mut input = inputs(&s, &c, &r);
+        input.slot_restore = SlotRestoreResolution {
             enabled: false,
             source: SlotRestoreSource::UnsupportedPartialKv,
         };
-        let n = narrate(&i);
+        let n = narrate(&input);
         assert!(
             n.decision("cache")
                 .unwrap()
@@ -729,8 +729,8 @@ mod tests {
             cache_ram(Some(6144), CacheRamSource::Auto),
         );
         let n = narrate(&inputs(&s, &c, &r));
-        let d = n.decision("dialect").unwrap();
-        assert_eq!(d.value, "qwen-xml -> OpenAI tool_calls");
+        let dialect = n.decision("dialect").unwrap();
+        assert_eq!(dialect.value, "qwen-xml -> OpenAI tool_calls");
     }
 
     /// Pass-through is still a decision worth stating.

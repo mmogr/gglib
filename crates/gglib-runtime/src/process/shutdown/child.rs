@@ -26,20 +26,14 @@ const SIGKILL_REAP_TIMEOUT_SECS: u64 = 2;
 /// is dropped by the caller. Tokio spawns a background reaper task to await
 /// the zombie process asynchronously — the reap is not lost, just detached
 /// from the blocking shutdown path.
-#[allow(
-    clippy::option_if_let_else,
-    clippy::or_fun_call,
-    clippy::single_match_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 async fn bounded_wait<F>(fut: F, secs: u64, pid: Option<u32>) -> io::Result<ExitStatus>
 where
     F: Future<Output = io::Result<ExitStatus>>,
 {
-    match timeout(Duration::from_secs(secs), fut).await {
-        Ok(result) => result,
-        Err(_) => {
-            let pid_str = pid.map_or("unknown".to_string(), |p| p.to_string());
+    timeout(Duration::from_secs(secs), fut)
+        .await
+        .unwrap_or_else(|_| {
+            let pid_str = pid.map_or_else(|| "unknown".to_string(), |p| p.to_string());
             tracing::error!(
                 timeout_secs = secs,
                 pid = %pid_str,
@@ -51,8 +45,7 @@ where
                 io::ErrorKind::TimedOut,
                 format!("child did not exit within bounded wait after SIGKILL: pid={pid_str}"),
             ))
-        }
-    }
+        })
 }
 
 /// Gracefully shut down a child process with SIGTERM, escalating to SIGKILL if needed.
@@ -90,17 +83,11 @@ pub async fn shutdown_child(mut child: Child) -> io::Result<ExitStatus> {
 }
 
 #[cfg(unix)]
-#[allow(
+#[expect(
     clippy::cast_possible_wrap,
-    clippy::items_after_statements,
-    clippy::single_match_else,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "the pid is the OS's own, whose pid_t is i32, so it fits"
 )]
 async fn shutdown_unix(child: &mut Child) -> io::Result<ExitStatus> {
-    let pid = child
-        .id()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "child has no PID"))?;
-
     // Phase 1: SIGTERM with platform-specific grace period
     // Linux: 2 seconds (faster shutdown for better UX)
     // Other Unix: 5 seconds (more conservative)
@@ -108,6 +95,10 @@ async fn shutdown_unix(child: &mut Child) -> io::Result<ExitStatus> {
     const SIGTERM_TIMEOUT_SECS: u64 = 2;
     #[cfg(not(target_os = "linux"))]
     const SIGTERM_TIMEOUT_SECS: u64 = 5;
+
+    let pid = child
+        .id()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "child has no PID"))?;
 
     if let Err(e) = signal::kill(Pid::from_raw(pid as i32), Signal::SIGTERM) {
         // Process may have already exited
@@ -118,12 +109,10 @@ async fn shutdown_unix(child: &mut Child) -> io::Result<ExitStatus> {
     }
 
     // Wait for graceful exit
-    match timeout(Duration::from_secs(SIGTERM_TIMEOUT_SECS), child.wait()).await {
-        Ok(result) => return result,
-        Err(_) => {
-            // Timeout - escalate to SIGKILL
-        }
+    if let Ok(result) = timeout(Duration::from_secs(SIGTERM_TIMEOUT_SECS), child.wait()).await {
+        return result;
     }
+    // Timeout - escalate to SIGKILL
 
     // Phase 2: SIGKILL (via Child::kill which uses SIGKILL on Unix)
     child.kill().await?;

@@ -100,7 +100,9 @@ pub fn free_gpu_memory_bytes() -> Option<u64> {
     let now = std::time::Instant::now();
 
     {
-        let guard = FREE_VRAM_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = FREE_VRAM_CACHE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some((probed_at, value)) = *guard
             && now.duration_since(probed_at) < FREE_VRAM_TTL
         {
@@ -124,7 +126,9 @@ pub fn free_gpu_memory_bytes() -> Option<u64> {
         FreeVramSource::Unavailable => None,
     };
 
-    *FREE_VRAM_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some((now, value));
+    *FREE_VRAM_CACHE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((now, value));
     value
 }
 
@@ -249,6 +253,10 @@ impl Default for DefaultSystemProbe {
 }
 
 impl SystemProbePort for DefaultSystemProbe {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the dependency list, one entry per tool with its install hint; long because the list is"
+    )]
     fn check_all_dependencies(&self) -> Vec<Dependency> {
         let gpu_info = self.detect_gpu_info();
 
@@ -576,6 +584,13 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        target_os = "macos",
+        expect(
+            clippy::used_underscore_binding,
+            reason = "read only on macOS; the underscore keeps it unused elsewhere without a warning"
+        )
+    )]
     fn test_gpu_detection() {
         let probe = DefaultSystemProbe::new();
         let _gpu = probe.detect_gpu_info();

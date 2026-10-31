@@ -44,22 +44,17 @@ impl ServerHealthChecker {
     /// Check if process is still alive via PID.
     ///
     /// Returns `ProcessDied` status if the process no longer exists.
-    #[allow(
-        clippy::option_if_let_else,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
     pub fn check_process(handle: &ProcessHandle) -> ServerHealthStatus {
-        if let Some(pid) = handle.pid {
+        // No PID available: assume alive (will be caught by HTTP check). A
+        // live process is healthy too; the HTTP check will determine actual
+        // health.
+        handle.pid.map_or(ServerHealthStatus::Healthy, |pid| {
             if Self::is_process_alive(pid) {
-                // Process alive, HTTP check will determine actual health
                 ServerHealthStatus::Healthy
             } else {
                 ServerHealthStatus::ProcessDied
             }
-        } else {
-            // No PID available, assume alive (will be caught by HTTP check)
-            ServerHealthStatus::Healthy
-        }
+        })
     }
 
     /// Check if a process is alive by PID.

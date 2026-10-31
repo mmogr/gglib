@@ -215,25 +215,23 @@ pub(crate) fn values(rows: &[SqliteRow]) -> anyhow::Result<serde_json::Map<Strin
 }
 
 /// Store `value` as `key`'s row, or remove the row when there is no value.
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) async fn write_row(
     conn: &mut SqliteConnection,
     key: &str,
     value: Option<&Value>,
     updated_at: &str,
 ) -> Result<(), RepositoryError> {
-    let query = match value {
-        Some(value) => sqlx::query(
-            "INSERT OR REPLACE INTO settings_kv (key, value, updated_at) VALUES (?, ?, ?)",
-        )
-        .bind(key)
-        .bind(value.to_string())
-        .bind(updated_at),
-        None => sqlx::query("DELETE FROM settings_kv WHERE key = ?").bind(key),
-    };
+    let query = value.map_or_else(
+        || sqlx::query("DELETE FROM settings_kv WHERE key = ?").bind(key),
+        |value| {
+            sqlx::query(
+                "INSERT OR REPLACE INTO settings_kv (key, value, updated_at) VALUES (?, ?, ?)",
+            )
+            .bind(key)
+            .bind(value.to_string())
+            .bind(updated_at)
+        },
+    );
     query.execute(conn).await.map(drop).map_err(storage)
 }
 

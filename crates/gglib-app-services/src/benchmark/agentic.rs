@@ -55,6 +55,10 @@ mod agentic_rollup;
 use agentic_rollup::{arm_scores, flatten};
 
 /// Entry point called by [`super::BenchmarkOps::run_agentic`].
+#[expect(
+    clippy::too_many_lines,
+    reason = "the eval end to end under one model lease: set up, run each arm, roll up the scores; the steps share the lease, the run id and the arm results"
+)]
 pub(crate) async fn run_agentic_eval(
     deps: &BenchmarkDeps,
     config: AgenticEvalConfig,
@@ -632,6 +636,10 @@ fn build_arm_llm(
     .with_sampling(Some(sampling))
     .with_usage_sink(Some(usage));
 
+    #[expect(
+        clippy::match_same_arms,
+        reason = "the arms are bare for different reasons, and each comment says which; merging them would lose that"
+    )]
     let adapter = match arm {
         // The A/A arm is the raw arm in every respect but its seeds. Any other
         // difference here — however small — would turn the noise floor it

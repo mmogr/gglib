@@ -74,13 +74,12 @@ async fn stops(pid: u32) -> bool {
 /// Leave nothing behind: `Drop` keeps the pidfile, and a failing run can
 /// leave the child running. Only a child that did not stop is signalled, so a
 /// passing run sends nothing to a pid the OS may since have handed on.
-#[allow(
-    clippy::cast_possible_wrap,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 fn clean_up(model_id: i64, pid: u32, stopped: bool) {
     if !stopped {
-        let _ = kill(Pid::from_raw(pid as i32), Signal::SIGKILL);
+        let _ = kill(
+            Pid::from_raw(i32::try_from(pid).expect("a pid fits pid_t")),
+            Signal::SIGKILL,
+        );
     }
     delete_pidfile(model_id).ok();
 }
@@ -91,14 +90,8 @@ fn clean_up(model_id: i64, pid: u32, stopped: bool) {
 async fn dropping_the_core_stops_every_child_it_tracks() {
     let dir = tempfile::tempdir().expect("temp dir");
     let mut core = core_of_sleepers(dir.path());
-    let (_, first) = core
-        .spawn(config(dir.path(), FIRST_ID))
-        .await
-        .expect("spawn");
-    let (_, second) = core
-        .spawn(config(dir.path(), SECOND_ID))
-        .await
-        .expect("spawn");
+    let (_, first) = core.spawn(config(dir.path(), FIRST_ID)).expect("spawn");
+    let (_, second) = core.spawn(config(dir.path(), SECOND_ID)).expect("spawn");
     let ran = [is_running(first), is_running(second)];
 
     drop(core);
@@ -121,10 +114,7 @@ async fn dropping_the_core_stops_every_child_it_tracks() {
 async fn dropping_the_core_leaves_the_pidfile_for_the_sweep() {
     let dir = tempfile::tempdir().expect("temp dir");
     let mut core = core_of_sleepers(dir.path());
-    let (port, pid) = core
-        .spawn(config(dir.path(), PIDFILE_ID))
-        .await
-        .expect("spawn");
+    let (port, pid) = core.spawn(config(dir.path(), PIDFILE_ID)).expect("spawn");
 
     drop(core);
 

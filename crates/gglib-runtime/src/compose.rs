@@ -120,11 +120,11 @@ pub struct LoopGeneration {
 ///   machine's model waits for an image render rather than sharing the GPU
 ///   with it. A send to `far_machine` takes no turn. With it, the drawing
 ///   tool, offered only while its arm says so.
-#[allow(clippy::too_many_arguments)]
-#[allow(
+#[expect(
     clippy::implicit_hasher,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "every caller passes the default-hashed set its tool filter is built as; a hasher parameter would add a generic and nothing else"
 )]
+#[allow(clippy::too_many_arguments)]
 pub fn compose_agent_loop(
     base_url: String,
     http_client: Client,
@@ -187,11 +187,11 @@ pub fn compose_agent_loop(
 ///
 /// `generation` carries the daemon's gate when one is running to share the
 /// GPU with; `gglib chat` takes its turns there over a connection.
-#[allow(clippy::too_many_arguments)]
-#[allow(
+#[expect(
     clippy::implicit_hasher,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "as `compose_agent_loop`: every caller passes a default-hashed set"
 )]
+#[allow(clippy::too_many_arguments)]
 pub fn compose_agent_loop_with_sampling(
     base_url: String,
     http_client: Client,

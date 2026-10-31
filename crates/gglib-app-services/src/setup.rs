@@ -23,6 +23,10 @@ use crate::types::ModelsDirectoryInfo;
 /// Provides everything the frontend wizard needs to render its initial state.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "a wire type: each flag is a separate answer the setup wizard reads by name"
+)]
 pub struct SetupStatus {
     /// Whether the setup wizard has been completed previously.
     pub setup_completed: bool,
@@ -55,6 +59,10 @@ pub struct SetupStatus {
 /// GPU detection results.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "a wire type: one flag per GPU backend and Vulkan build package, as the setup wizard shows them"
+)]
 pub struct GpuInfoDto {
     pub has_metal: bool,
     pub has_nvidia: bool,

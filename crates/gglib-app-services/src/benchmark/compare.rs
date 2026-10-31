@@ -154,6 +154,10 @@ pub(crate) async fn run_compare(
 ///
 /// `default_ctx` is the user's stored global default, or `None` when they set
 /// none — the same value the proxy passes, so both resolve the same chain.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one model's compare run under one lease: send the prompt, parse the stream, record the result; the parse keeps running totals the record reads"
+)]
 #[allow(clippy::too_many_arguments)]
 async fn run_single_compare(
     deps: &BenchmarkDeps,

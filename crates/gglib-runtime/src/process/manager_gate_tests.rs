@@ -50,7 +50,6 @@ async fn retiring_a_render_stops_its_server_and_empties_its_slot() {
             components: Vec::new(),
             port: None,
         }))
-        .await
         .expect("the stand-in starts");
     let lease = manager.residency.queue().install(
         1,

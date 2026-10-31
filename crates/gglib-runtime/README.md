@@ -224,7 +224,7 @@ let mut core = GuiProcessCore::new(
 let (port, pid) = core.spawn(SpawnConfig::Llama(
     ServerConfig::new(1, "llama-3.2".to_string(), "/path/to/model.gguf".into(), 8080)
         .with_context_size(4096),
-)).await?;
+))?;
 
 // Stop the server, by model id
 core.kill(1).await?;

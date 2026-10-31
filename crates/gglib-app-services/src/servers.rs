@@ -240,10 +240,13 @@ impl ServerOps {
             let mut stream = pin!(stream);
 
             while let Some(status) = stream.next().await {
-                let timestamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as u64;
+                let timestamp = u64::try_from(
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis(),
+                )
+                .unwrap_or(u64::MAX);
 
                 let detail = match &status {
                     ServerHealthStatus::Degraded { reason } => Some(reason.clone()),
@@ -300,8 +303,7 @@ impl ServerOps {
             registry.find_by_model_id(id)
         };
         if let Some(server_id) = server_id {
-            let mut registry = self.monitors.lock().await;
-            registry.cancel(server_id).await?;
+            self.monitors.lock().await.cancel(server_id).await?;
         }
 
         let stopped = self
