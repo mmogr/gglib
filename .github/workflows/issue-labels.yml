@@ -40,6 +40,7 @@ jobs:
   parse:
     name: Parse form (opened only)
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     if: github.event.action == 'opened'
     # The checkout, for the form the parser reads.
     permissions:
@@ -61,6 +62,7 @@ jobs:
   enrich_and_verify:
     name: Apply labels and verify
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     needs: parse
     if: always()
     # The repository's and the issue's labels, and the triage comment.

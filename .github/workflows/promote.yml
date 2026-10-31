@@ -37,6 +37,7 @@ jobs:
   promote:
     name: Promote the release candidate
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - name: Generate GitHub App token
         id: app-token

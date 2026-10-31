@@ -25,6 +25,7 @@ jobs:
   check:
     name: Check Issue Form Mapping
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       # Fetching the real label list lets the script also verify that every dropdown

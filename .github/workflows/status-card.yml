@@ -40,6 +40,7 @@ jobs:
   self-test:
     name: Status Card self-test
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -59,6 +60,7 @@ jobs:
     needs: self-test
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: write  # the push to the badges branch
       pull-requests: read  # the merged pull requests the card counts
