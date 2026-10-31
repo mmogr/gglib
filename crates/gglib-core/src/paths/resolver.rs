@@ -59,28 +59,6 @@ impl ResolvedPaths {
             models_source: models_resolution.source,
         })
     }
-
-    /// Resolve with an explicit models directory override.
-    ///
-    /// Use this to test behavior when `--models-dir` is passed.
-    pub fn resolve_with_models_dir(models_dir: Option<&str>) -> Result<Self, PathError> {
-        let data_root = data_root()?;
-        let resource_root = resource_root()?;
-        let database_path = database_path()?;
-        let llama_server_path = llama_server_path()?;
-        let sd_server_path = sd_server_path()?;
-        let models_resolution = resolve_models_dir(models_dir)?;
-
-        Ok(Self {
-            data_root,
-            resource_root,
-            database_path,
-            llama_server_path,
-            sd_server_path,
-            models_dir: models_resolution.path,
-            models_source: models_resolution.source,
-        })
-    }
 }
 
 impl std::fmt::Display for ResolvedPaths {

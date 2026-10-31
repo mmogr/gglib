@@ -6,7 +6,7 @@
 //! is otherwise the user's real one, and an installed daemon shares it
 //! (#955).
 
-use gglib_core::paths::{ModelsDirSource, ResolvedPaths, isolate_data_root};
+use gglib_core::paths::{ResolvedPaths, isolate_data_root};
 
 /// Two calls under the same environment resolve identical paths.
 #[test]
@@ -71,25 +71,4 @@ fn display_format_contains_all_paths() {
     );
     assert!(output.contains("models_dir = "), "missing models_dir");
     assert!(output.contains("models_source = "), "missing models_source");
-}
-
-/// Explicit `models_dir` override should be respected.
-#[test]
-fn explicit_models_dir_override_is_respected() {
-    let root = isolate_data_root();
-    let explicit_path = "/tmp/test-models";
-    let paths = ResolvedPaths::resolve_with_models_dir(Some(explicit_path))
-        .expect("resolve with override failed");
-    assert_eq!(paths.data_root, root);
-
-    assert_eq!(
-        paths.models_dir.to_string_lossy(),
-        explicit_path,
-        "explicit models_dir should be used"
-    );
-    assert_eq!(
-        paths.models_source,
-        ModelsDirSource::Explicit,
-        "source should be Explicit when path is provided"
-    );
 }
