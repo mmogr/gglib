@@ -1,0 +1,3 @@
+# What status_card.py's render and --self-test import, pinned. collect needs
+# only the standard library. status-card.yml installs this into a venv.
+fonttools==4.68.0
