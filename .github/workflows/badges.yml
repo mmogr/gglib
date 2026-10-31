@@ -61,11 +61,18 @@ jobs:
           echo "EVENT=$event" >> "$GITHUB_ENV"
           gh run download "$RUN_ID" --name "$artifact" --dir artifacts
 
+      # The release tarball, checked against the checksum its release
+      # lists, so a moved asset cannot change what counts the lines.
       - name: Install scc
         if: env.EVENT == 'ci'
+        env:
+          URL: https://github.com/boyter/scc/releases/download/v3.2.0/scc_Linux_x86_64.tar.gz
+          SHA256: 975446e993cdd0a0193084ba43b13d290a48d4510c9210d788046b9a10acf609
         run: |
-          curl -sSfL https://github.com/boyter/scc/releases/download/v3.2.0/scc_Linux_x86_64.tar.gz | tar xz scc
-          sudo mv scc /usr/local/bin/
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/scc.tar.gz" "$URL"
+          echo "$SHA256  $RUNNER_TEMP/scc.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/scc.tar.gz" -C "$RUNNER_TEMP" scc
+          sudo install "$RUNNER_TEMP/scc" /usr/local/bin/scc
 
       # What each run writes, keeps and deletes is in the script's header.
       - name: Write the badges
@@ -77,7 +84,12 @@ jobs:
         run: rm -rf badges/.git
 
       # `keep_files: false`: the branch becomes exactly this directory, so a
-      # file the script deleted is deleted on the branch too.
+      # file the script deleted is deleted on the branch too. And
+      # `force_orphan`: it becomes one commit with no parent, so the branch
+      # stays one commit long however often it is published. Safe here
+      # because the directory is a checkout of the whole branch, the status
+      # card's two SVGs included; status-card.yml publishes only its two
+      # files and must never set it.
       - name: Deploy to badges branch
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
@@ -85,6 +97,7 @@ jobs:
           publish_dir: ./badges
           publish_branch: badges
           keep_files: false
+          force_orphan: true
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
           commit_message: 'Update badges [skip ci] ${{ github.event.workflow_run.head_sha }}'

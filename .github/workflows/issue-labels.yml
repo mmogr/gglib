@@ -29,8 +29,8 @@ on:
   issues:
     types: [opened, edited, labeled, unlabeled]
 
-permissions:
-  issues: write
+# Default to nothing; each job opts in to the minimum it needs.
+permissions: {}
 
 concurrency:
   group: issue-labels-${{ github.event.issue.number }}
@@ -41,6 +41,9 @@ jobs:
     name: Parse form (opened only)
     runs-on: ubuntu-24.04
     if: github.event.action == 'opened'
+    # The checkout, for the form the parser reads.
+    permissions:
+      contents: read
     outputs:
       json: ${{ steps.parse.outputs.jsonString }}
     steps:
@@ -60,6 +63,9 @@ jobs:
     runs-on: ubuntu-24.04
     needs: parse
     if: always()
+    # The repository's and the issue's labels, and the triage comment.
+    permissions:
+      issues: write
     steps:
       - name: Apply parsed labels, then check required categories
         uses: actions/github-script@v9
