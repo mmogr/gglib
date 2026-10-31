@@ -7,11 +7,18 @@
 #
 # This is the only tagger. release-please.yml never tags, and promote.yml
 # only opens the pull request whose merge this workflow tags.
+#
+# Run by hand, it tags without waiting for CI: the same steps on main as it
+# is now, and then the release PR workflow, which otherwise follows CI. That
+# is the maintainer's shortcut past a CI run that takes an hour, taken on
+# their own judgement of the tree: nothing here has tested it. A CI run that
+# finishes afterwards finds the tag and releases nothing twice.
 
 name: Release tag
 
 on:
   workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -211,3 +218,10 @@ jobs:
               });
               core.info(`#${item.number} is now labelled autorelease: tagged`);
             }
+
+      # Run by hand there is no CI run for release-please.yml to follow, so
+      # it is started here, after the relabel above: its gate reads that
+      # label.
+      - name: Refresh the release PR
+        if: github.event_name == 'workflow_dispatch' && steps.tag.outputs.tagged == 'true'
+        run: gh workflow run release-please.yml --ref main
