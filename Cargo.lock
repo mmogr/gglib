@@ -2373,7 +2373,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-agent"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2387,7 +2387,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "gglib-app-services",
  "gglib-axum",
@@ -2412,7 +2412,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-app-services"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2443,7 +2443,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-axum"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2483,7 +2483,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-bootstrap"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2500,7 +2500,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-broadcast"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "axum",
  "futures-util",
@@ -2513,14 +2513,14 @@ dependencies = [
 
 [[package]]
 name = "gglib-build-info"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "vergen-gix",
 ]
 
 [[package]]
 name = "gglib-cli"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2559,7 +2559,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-core"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2586,7 +2586,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-db"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2603,7 +2603,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-download"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2630,7 +2630,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-engine-llama"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "async-trait",
  "axum",
@@ -2648,7 +2648,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-ffi"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2673,7 +2673,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-gguf"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "chrono",
  "gglib-core",
@@ -2686,7 +2686,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-hf"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "async-trait",
  "gglib-core",
@@ -2702,7 +2702,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-integration-tests"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "chrono",
  "gglib-core",
@@ -2720,7 +2720,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-mcp"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2739,7 +2739,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-proxy"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2772,7 +2772,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-runtime"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2807,7 +2807,7 @@ dependencies = [
 
 [[package]]
 name = "gglib-test-http"
-version = "0.29.0-rc.1"
+version = "0.29.0-rc.2"
 dependencies = [
  "tokio",
 ]
