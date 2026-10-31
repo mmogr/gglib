@@ -1093,19 +1093,11 @@ jobs:
     name: Release
     needs: [ci-success]
     if: always() && needs.ci-success.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # A called workflow cannot exceed the caller's grant: these are exactly
+    # what release-tag.yml's create-release job asks for.
     permissions:
       contents: write
-      # A called workflow cannot exceed the caller's grant, so release.yml's own
-      # `attestations: write` is capped here. Without this line the provenance
-      # step fails on the real release path (push to main) while still working
-      # on a direct workflow_dispatch — which is the worst way to find out.
-      attestations: write
       issues: write
-      pull-requests: write
-      pages: write
-      id-token: write
-      deployments: write
-    uses: ./.github/workflows/release.yml
-    with:
-      test_run: false
-    secrets: inherit
+      pull-requests: read
+      actions: write
+    uses: ./.github/workflows/release-tag.yml

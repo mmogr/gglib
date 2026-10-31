@@ -1,0 +1,198 @@
+# The tagging half of a release, called by ci.yml's `release` job after CI
+# passes on a push to main, so its check shows on the commit. When main's
+# version has no `v<version>` tag it tags the commit that set that version,
+# makes the GitHub (pre)release, and dispatches release.yml, which builds and
+# publishes the assets in a run of its own. Nothing that cancels this CI run
+# can then cancel the builds.
+#
+# This is the only tagger. release-please.yml never tags, and promote.yml
+# only opens the pull request whose merge this workflow tags.
+
+name: Release tag
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # GitHub's default is `bash -e`; this adds pipefail.
+    shell: bash
+
+jobs:
+  check-version:
+    name: Check Version Change
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.version.outputs.changed }}
+      version: ${{ steps.version.outputs.version }}
+      is-prerelease: ${{ steps.version.outputs.is-prerelease }}
+      bump: ${{ steps.bump.outputs.sha }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # The whole history and every tag: the bump commit is found in the
+          # history, and a stable version is compared with its last RC's tag.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Get current version
+        id: version
+        run: |
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          # A prerelease is any version carrying a -alpha, -beta or -rc suffix.
+          if [[ "$VERSION" == *"-alpha"* ]] || [[ "$VERSION" == *"-beta"* ]] || [[ "$VERSION" == *"-rc"* ]]; then
+            echo "is-prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is-prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Asked of the remote rather than the checkout's tags, so a tag made
+          # since the checkout counts.
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" > /dev/null; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "v$VERSION is already tagged"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "New version detected: v$VERSION"
+          fi
+
+      # The tag goes on the commit that set the version, not on this run's
+      # commit. When runs overlap, or a run is cancelled and a later one picks
+      # the version up, the run that tags can be testing a newer commit; the
+      # bump commit is the same whichever run gets there.
+      #
+      # -G matches a line the commit added or removed. The newest such commit
+      # is the one that added it, since main still carries the line.
+      - name: Find the commit that set the version
+        id: bump
+        if: steps.version.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          ver_re=$(printf '%s' "$VERSION" | sed 's/[.[\*^$/]/\\&/g')
+          bump=$(git log -1 --format=%H -G"^version = \"${ver_re}\"\$" -- Cargo.toml)
+          if [ -z "$bump" ]; then
+            echo "::error::no commit in main's history sets version = \"$VERSION\" in Cargo.toml"
+            exit 1
+          fi
+          git show "$bump:Cargo.toml" > "$RUNNER_TEMP/bump-Cargo.toml"
+          if [ "$(grep -m1 '^version = ' "$RUNNER_TEMP/bump-Cargo.toml")" != "version = \"$VERSION\"" ]; then
+            echo "::error::$bump was found as the commit that set $VERSION, but its Cargo.toml says otherwise"
+            exit 1
+          fi
+          echo "sha=$bump" >> "$GITHUB_OUTPUT"
+          echo "v$VERSION will tag $bump"
+
+      # A stable version is released only as its last release candidate with
+      # the version changed. Checked before anything is tagged, so a refused
+      # promotion leaves no tag and no release behind; the script's header
+      # says how to recover. Judged on the bump commit's own tree, so a
+      # promotion whose run was overtaken is not judged on a newer one.
+      - name: Require a stable release to match its last RC
+        if: steps.version.outputs.changed == 'true' && steps.version.outputs.is-prerelease != 'true'
+        env:
+          BUMP: ${{ steps.bump.outputs.sha }}
+        run: |
+          git checkout --detach "$BUMP"
+          scripts/check_rc_promotion.sh
+
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    permissions:
+      # The tag and the release.
+      contents: write
+      # The release PR's labels, below.
+      issues: write
+      pull-requests: read
+      # The dispatch of release.yml.
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.check-version.outputs.version }}
+      BUMP: ${{ needs.check-version.outputs.bump }}
+    steps:
+      # Through the API, which creates the tag only if no tag of that name
+      # exists. Two overlapping runs on main can both find the version
+      # untagged; the one that loses gets a 422 and stops here, and the
+      # winner makes the release and dispatches the build.
+      #
+      # A re-run of this job after it failed past this step meets its own tag
+      # and stops the same way. CONTRIBUTING's release section says how to
+      # finish by hand.
+      - name: Tag the bump commit
+        id: tag
+        run: |
+          if out=$(gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/v$VERSION" -f sha="$BUMP" 2>&1); then
+            echo "tagged=true" >> "$GITHUB_OUTPUT"
+            echo "Tagged $BUMP as v$VERSION"
+            exit 0
+          fi
+          echo "$out"
+          # A 422 also answers a bad sha, so only an existing tag counts.
+          if grep -q 'HTTP 422' <<< "$out" && gh api "repos/$GH_REPO/git/ref/tags/v$VERSION" > /dev/null 2>&1; then
+            echo "tagged=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::another run tagged v$VERSION; this run makes no release and dispatches nothing"
+            exit 0
+          fi
+          exit 1
+
+      # The notes are generated, sorted by .github/release.yml.
+      - name: Create GitHub Release
+        if: steps.tag.outputs.tagged == 'true'
+        env:
+          PRERELEASE: ${{ needs.check-version.outputs.is-prerelease }}
+        run: |
+          args=(--title "Release v$VERSION" --generate-notes --verify-tag)
+          if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
+          gh release create "v$VERSION" "${args[@]}"
+
+      # From main, whose release.yml is the current one; it checks out the tag.
+      # A failed build is re-run with the same command.
+      - name: Dispatch the build
+        if: steps.tag.outputs.tagged == 'true'
+        run: gh workflow run release.yml --ref main -f tag="v$VERSION"
+
+      # release-please.yml never tags (it runs with skip-github-release), so it
+      # cannot see that the release PR it opened has been released, and it
+      # opens no other while a merged release PR is labelled
+      # `autorelease: pending`. Swapping that label for `autorelease: tagged`
+      # is how a release tells it. Only the merged PR titled for this version
+      # is touched; a promotion has no such PR, and nothing changes. Last and
+      # allowed to fail, so a label can never hold up the build: if it fails,
+      # release-please.yml stops with an error naming the label.
+      - name: Mark the release PR as tagged
+        if: steps.tag.outputs.tagged == 'true'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const title = `chore(main): release ${process.env.VERSION}`;
+            // The issues list rather than search, which can lag behind a label.
+            const items = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'closed', labels: 'autorelease: pending', per_page: 100,
+            });
+            for (const item of items) {
+              if (!item.pull_request?.merged_at || item.title !== title) continue;
+              await github.rest.issues.removeLabel({
+                owner, repo, issue_number: item.number, name: 'autorelease: pending',
+              });
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: item.number, labels: ['autorelease: tagged'],
+              });
+              core.info(`#${item.number} is now labelled autorelease: tagged`);
+            }
