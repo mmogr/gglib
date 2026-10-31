@@ -1,0 +1,26 @@
+{
+ "cols": 100,
+ "rows": 36,
+ "env": {"GGLIB_DATA_DIR": "~/.local/share/gglib-demo", "GGLIB_MODELS_DIR": "~/.local/share/gglib-demo/models", "GGLIB_DAEMON_PORT": "9907", "HOME": "~/.local/share/gglib-demo/home", "XDG_CONFIG_HOME": "~/.local/share/gglib-demo/opencode/config", "XDG_DATA_HOME": "~/.local/share/gglib-demo/opencode/data", "XDG_STATE_HOME": "~/.local/share/gglib-demo/opencode/state", "XDG_CACHE_HOME": "~/.local/share/gglib-demo/opencode/cache", "GIT_PAGER": "cat"},
+ "cwd": "~/.local/share/gglib-demo/home/orders-api",
+ "steps": [
+  {"sleep": 0.8},
+  {"type": "gglib up"},
+  {"keys": "\r"},
+  {"wait": "\\(Y/n\\):?\\s*$"},
+  {"sleep": 0.8},
+  {"type": "y"},
+  {"keys": "\r"},
+  {"wait": "\\(Y/n\\):?\\s*$", "timeout": 300},
+  {"sleep": 0.8},
+  {"type": "y"},
+  {"keys": "\r"},
+  {"wait": "gglib proxy stop", "timeout": 900},
+  {"idle": 1.0},
+  {"sleep": 2.5},
+  {"type": "grep -E \"WARN|ERROR|export\" server.log | gglib q \"what went wrong?\""},
+  {"sleep": 0.4},
+  {"keys": "\r"},
+  {"idle": 4, "timeout": 300}
+ ]
+}

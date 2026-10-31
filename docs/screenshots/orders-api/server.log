@@ -1,0 +1,12 @@
+2026-10-31T09:14:02Z INFO  api: listening on 0.0.0.0:3000
+2026-10-31T09:14:05Z INFO  db: pool ready (max_connections=10)
+2026-10-31T09:20:11Z INFO  GET /orders 200 41ms
+2026-10-31T09:20:12Z INFO  GET /orders 200 39ms
+2026-10-31T09:21:47Z WARN  db: pool at 10/10 connections, request queued
+2026-10-31T09:21:52Z WARN  db: pool at 10/10 connections, request queued
+2026-10-31T09:21:57Z ERROR db: timed out after 5s waiting for a connection
+2026-10-31T09:21:57Z ERROR GET /orders/export 500 5003ms
+2026-10-31T09:22:03Z ERROR db: timed out after 5s waiting for a connection
+2026-10-31T09:22:03Z ERROR GET /orders 500 5001ms
+2026-10-31T09:22:09Z INFO  export: job 8812 still streaming 1.2M rows (held 10 connections, 140s)
+2026-10-31T09:22:15Z ERROR db: timed out after 5s waiting for a connection
