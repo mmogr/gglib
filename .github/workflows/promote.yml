@@ -1,0 +1,181 @@
+# Promotes main's release candidate to a stable release: X.Y.Z-rc.N becomes
+# X.Y.Z and nothing else changes. Run it once main is exactly the last
+# candidate, from Actions -> Promote -> Run workflow, or with
+# `gh workflow run promote.yml -R mmogr/gglib`.
+#
+# release-please cannot do this: with no commit since the candidate's tag it
+# opens no pull request. So this workflow opens one, and sets it to merge
+# itself once CI passes, since there is nothing in it to review:
+# check_rc_promotion.sh proves the code is the candidate's, and release.yml
+# checks again before it tags. The release PR, by contrast, never merges
+# itself. After the merge release.yml tags X.Y.Z, and each stable channel
+# waits for its approval as before.
+#
+# The pull request is opened with the GitHub App token, as update-deps.yml's
+# is: a pull request opened with GITHUB_TOKEN starts no workflows, so CI would
+# never run on it.
+
+name: Promote
+
+on:
+  workflow_dispatch:
+
+# Everything that writes uses the app token.
+permissions:
+  contents: read
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # GitHub's default is `bash -e`; this adds pipefail.
+    shell: bash
+
+jobs:
+  promote:
+    name: Promote the release candidate
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # The candidate's tag and the last stable tag
+
+      - name: Fetch tags
+        run: git fetch --force --tags
+
+      # The comparison below is against the candidate's tag, so a candidate
+      # whose release has not happened yet cannot be promoted.
+      - name: Require the candidate to be released
+        run: |
+          RC=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          if ! git rev-parse -q --verify "refs/tags/v${RC}" > /dev/null; then
+            echo "::error::main's candidate $RC hasn't released: v$RC is not tagged. Wait for its release, or re-run it if it failed, then run Promote again."
+            exit 1
+          fi
+          echo "✓ v$RC is tagged"
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      # Needed by the npm half of "Update lockfiles".
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Promote the version
+        id: promote
+        run: |
+          PREVIOUS=$(git tag -l 'v*' | grep -v -- - | sort -V | tail -n1)
+          python3 scripts/promote.py --previous "$PREVIOUS" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Update lockfiles
+        run: |
+          # `--workspace` restricts the re-lock to the workspace's OWN members,
+          # so the only Cargo.lock diff is the 19 gglib-* version fields the
+          # bump just moved. `cargo generate-lockfile`, which stood here, throws
+          # the lockfile away and re-resolves every dependency from scratch
+          # against whatever the registry holds at that minute -- so a PR titled
+          # only "Bump version to X.Y.Z" carried third-party upgrades. #975 is
+          # the shipped example: 36 third-party crates moved under that title,
+          # aws-lc-rs and tokio-rustls among them.
+          #
+          # This is the Cargo half of the guard the npm step below already had.
+          #
+          # There is one Cargo.lock, not two: src-tauri is a member of the root
+          # workspace (see the `members` list in Cargo.toml), so cargo writes
+          # its resolution into the root lockfile and src-tauri/Cargo.lock does
+          # not exist. A second `--manifest-path src-tauri/Cargo.toml` call
+          # stood here and only re-resolved the root lockfile a second time.
+          cargo update --workspace
+          # --package-lock-only writes the lockfile without touching node_modules.
+          # It keeps every resolution the lockfile already pins, so the only diff
+          # is the two root version fields -- a bump must not smuggle in a
+          # dependency upgrade.
+          npm install --package-lock-only --no-audit --no-fund
+
+      - name: Verify lockfiles (no build)
+        run: |
+          # --locked fails if the lockfile does not already satisfy every
+          # manifest, which is what proves `cargo update --workspace` left a
+          # complete lockfile rather than a stale one.
+          cargo metadata --locked --format-version 1 > /dev/null
+          # The npm equivalent: `npm ci` is the one command that refuses to run
+          # when package.json and package-lock.json disagree on dependencies.
+          npm ci --dry-run --no-audit --no-fund > /dev/null
+
+      - name: Verify changes
+        run: |
+          VERSION="${{ steps.promote.outputs.stable }}"
+          
+          # Check that key files were updated. src-tauri/tauri.conf.json is not
+          # in this list: it no longer carries a "version" key, because Tauri
+          # falls back to the Cargo.toml version when the key is absent.
+          for file in package.json; do
+            if ! grep -q "\"version\": \"$VERSION\"" "$file"; then
+              echo "::error::$file was not updated correctly"
+              exit 1
+            fi
+            echo "✓ Verified $file"
+          done
+
+          # package-lock.json is checked separately because it carries the
+          # version twice — the top-level key, and the one on the "" entry under
+          # `packages`. Both must move; a grep -q would pass on either alone.
+          if [ "$(grep -c "\"version\": \"$VERSION\"" package-lock.json)" -lt 2 ]; then
+            echo "::error::package-lock.json was not updated correctly"
+            exit 1
+          fi
+          echo "✓ Verified package-lock.json"
+
+          # Guard the fallback: a re-added "version" key would silently pin the
+          # app metadata and reintroduce the drift this removal eliminated.
+          if grep -q '"version"' src-tauri/tauri.conf.json; then
+            echo "::error::src-tauri/tauri.conf.json must not declare a version; Tauri inherits it from Cargo.toml"
+            exit 1
+          fi
+          echo "✓ Verified src-tauri/tauri.conf.json inherits its version"
+
+      # release.yml makes the same check and is the guard. Making it here too
+      # means a promotion the release would refuse is never opened as a PR.
+      - name: Require a stable version to match its last RC
+        # After the lockfiles, which a promotion also changes.
+        run: scripts/check_rc_promotion.sh
+
+      - name: Create Pull Request
+        id: create-pr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          branch: promote-v${{ steps.promote.outputs.stable }}
+          delete-branch: true
+          # chore is a hidden type in release-please-config.json, so the
+          # promotion adds no line to the next release's changelog; promote.py
+          # has written the stable version's heading already.
+          title: "chore(release): promote ${{ steps.promote.outputs.rc }} to ${{ steps.promote.outputs.stable }}"
+          commit-message: "chore(release): promote ${{ steps.promote.outputs.rc }} to ${{ steps.promote.outputs.stable }}"
+          body: |
+            ${{ steps.promote.outputs.rc }} becomes ${{ steps.promote.outputs.stable }}, and nothing else changes. Cargo.toml, package.json, the release-please manifest and both lockfiles move only their version, and CHANGELOG.md gains a heading for ${{ steps.promote.outputs.stable }}. `scripts/check_rc_promotion.sh` checked that against the tag v${{ steps.promote.outputs.rc }}, and release.yml checks it again before it tags.
+
+            This pull request merges itself once CI passes. Each stable channel then waits for its approval.
+          labels: |
+            version-bump
+            automated
+
+      - name: Enable auto-merge
+        if: steps.create-pr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR: ${{ steps.create-pr.outputs.pull-request-number }}
+        run: gh pr merge "$PR" --auto --squash

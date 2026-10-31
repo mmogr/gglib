@@ -2,7 +2,8 @@
 #
 # Validate every YAML file under .github/ for duplicate mapping keys: the
 # workflows, and configuration such as the issue forms.
-# Also checks that bump-version.yml re-locks rather than re-resolves.
+# Also checks that the two workflows that move the version, release-please.yml
+# and promote.yml, re-lock the lockfiles rather than re-resolve them.
 #
 # GitHub rejects a workflow file containing a duplicate key outright: the run is
 # marked "failed because of a workflow file issue" and NO jobs start. That makes
@@ -68,37 +69,44 @@ end
 '
 
 # ---------------------------------------------------------------------------
-# bump-version.yml must re-lock the workspace, not re-resolve the graph
+# The version workflows must re-lock the workspace, not re-resolve the graph
 # ---------------------------------------------------------------------------
 #
 # `cargo generate-lockfile` throws Cargo.lock away and re-resolves every
 # dependency against whatever the registry holds that minute, so a PR titled
-# only "Bump version to X.Y.Z" carries third-party upgrades nobody reviewed.
-# #975 shipped exactly that: 36 third-party crates moved under that title,
-# aws-lc-rs and tokio-rustls among them. `cargo update --workspace` re-locks
-# only the workspace's own members, which is the whole job of a version bump.
+# only as a version change carries third-party upgrades nobody reviewed.
+# #975, "Bump version to 0.16.0", shipped exactly that: 36 third-party crates
+# moved under that title, aws-lc-rs and tokio-rustls among them.
+# `cargo update --workspace` re-locks only the workspace's own members, which
+# is the whole job of a version change.
 #
-# Nothing else can catch a regression here. The bump workflow runs on
-# workflow_dispatch, its output is a bot PR whose diff is expected to be large,
-# and a reviewer scanning "Bump version" has no reason to read 250 lockfile
-# lines. The one-word edit that reintroduces it is invisible until it ships.
+# Nothing else can catch a regression here. Both workflows run outside pull
+# requests (release-please.yml on pushes to main, promote.yml when
+# dispatched), their output is a bot PR whose diff is expected to touch the
+# lockfiles, and a reviewer scanning a release PR has no reason to read 250
+# lockfile lines. The one-word edit that reintroduces it is invisible until
+# it ships.
 
 echo ""
-echo "Checking bump-version.yml re-locks rather than re-resolves..."
-BUMP=".github/workflows/bump-version.yml"
-if [ -f "$BUMP" ]; then
-    if grep -qE '^[^#]*cargo[[:space:]]+generate-lockfile' "$BUMP"; then
-        echo -e "\033[0;31m✗\033[0m $BUMP runs 'cargo generate-lockfile', which re-resolves every"
-        echo "  dependency from scratch. A version bump must move only the workspace's own"
-        echo "  crates: use 'cargo update --workspace'. See ADR-adjacent note in the workflow."
-        grep -nE '^[^#]*cargo[[:space:]]+generate-lockfile' "$BUMP" | sed 's/^/    /'
+echo "Checking the version workflows re-lock rather than re-resolve..."
+for workflow in .github/workflows/release-please.yml .github/workflows/promote.yml; do
+    if [ ! -f "$workflow" ]; then
+        echo -e "\033[0;31m✗\033[0m $workflow is missing. Both version workflows re-lock the"
+        echo "  lockfiles; if one was renamed, rename it in this check too."
         exit 1
     fi
-    if ! grep -qE '^[^#]*cargo[[:space:]]+update[[:space:]]+--workspace' "$BUMP"; then
-        echo -e "\033[0;31m✗\033[0m $BUMP no longer runs 'cargo update --workspace', so nothing"
+    if grep -qE '^[^#]*cargo[[:space:]]+generate-lockfile' "$workflow"; then
+        echo -e "\033[0;31m✗\033[0m $workflow runs 'cargo generate-lockfile', which re-resolves every"
+        echo "  dependency from scratch. A version change must move only the workspace's own"
+        echo "  crates: use 'cargo update --workspace'. See the note in the workflow."
+        grep -nE '^[^#]*cargo[[:space:]]+generate-lockfile' "$workflow" | sed 's/^/    /'
+        exit 1
+    fi
+    if ! grep -qE '^[^#]*cargo[[:space:]]+update[[:space:]]+--workspace' "$workflow"; then
+        echo -e "\033[0;31m✗\033[0m $workflow no longer runs 'cargo update --workspace', so nothing"
         echo "  moves the workspace crate versions in Cargo.lock and 'cargo metadata --locked'"
-        echo "  will fail the bump."
+        echo "  will fail the release PR or the promotion."
         exit 1
     fi
-    echo -e "\033[0;32m✓\033[0m bump-version.yml re-locks the workspace only"
-fi
+    echo -e "\033[0;32m✓\033[0m $workflow re-locks the workspace only"
+done
