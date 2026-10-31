@@ -1,9 +1,12 @@
 # GGLib
 
-[![CI](https://github.com/mmogr/gglib/actions/workflows/ci.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/ci.yml)
-[![Coverage](https://github.com/mmogr/gglib/actions/workflows/coverage.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/coverage.yml)
 ![Version](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/version.json)
 [![License](https://img.shields.io/badge/license-AGPL--3.0--only-blue)](LICENSE)
+
+[![Homebrew](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmmogr%2Fhomebrew-tap%2Fmain%2FFormula%2Fgglib.rb&search=version%20%22%28%5B%5E%22%5D%2B%29%22&replace=%241&label=Homebrew&logo=homebrew&color=FBB040)](https://github.com/mmogr/homebrew-tap)
+[![AUR](https://img.shields.io/aur/version/gglib-bin?label=AUR&logo=archlinux)](https://aur.archlinux.org/packages/gglib-bin)
+[![apt · dnf · pacman](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fmmogr.github.io%2Fgglib%2Fapt%2Fdists%2Fstable%2Fmain%2Fbinary-amd64%2FPackages&search=Version%3A%20%28%5CS%2B%29&replace=%241&label=apt%20%C2%B7%20dnf%20%C2%B7%20pacman&logo=linux&logoColor=white&color=A81D33)](#linux-debian-ubuntu-arch-fedora)
+[![Binaries](https://img.shields.io/github/v/release/mmogr/gglib?label=binaries&logo=github)](https://github.com/mmogr/gglib/releases/latest)
 
 **The local model runtime that makes llama.cpp behave like an API provider.**  
 Every GGUF you own, as one endpoint, on every device you own.
@@ -28,7 +31,20 @@ or per request.
   <img src="docs/assets/cli-up.gif" alt="gglib up: from nothing to a working endpoint, then a log piped into gglib q" width="800">
 </p>
 
-## Two minutes
+[![CI](https://github.com/mmogr/gglib/actions/workflows/ci.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/ci.yml)
+[![Coverage](https://github.com/mmogr/gglib/actions/workflows/coverage.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/coverage.yml)
+[![Release PR](https://github.com/mmogr/gglib/actions/workflows/release-please.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/release-please.yml)
+[![Release](https://github.com/mmogr/gglib/actions/workflows/release.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/release.yml)
+[![Promote](https://github.com/mmogr/gglib/actions/workflows/promote.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/promote.yml)
+[![Engine pins](https://github.com/mmogr/gglib/actions/workflows/engine-pins.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/engine-pins.yml)
+[![Update dependencies](https://github.com/mmogr/gglib/actions/workflows/update-deps.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/update-deps.yml)
+[![Update Badges](https://github.com/mmogr/gglib/actions/workflows/badges.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/badges.yml)
+[![Status Card](https://github.com/mmogr/gglib/actions/workflows/status-card.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/status-card.yml)
+[![Label Check](https://github.com/mmogr/gglib/actions/workflows/label-check.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/label-check.yml)
+[![Issue Labels](https://github.com/mmogr/gglib/actions/workflows/issue-labels.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/issue-labels.yml)
+[![Check Issue Form](https://github.com/mmogr/gglib/actions/workflows/check-issue-form.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/check-issue-form.yml)
+
+## Quick Start
 
 ```bash
 brew install mmogr/tap/gglib        # macOS (Apple silicon) and Linux
