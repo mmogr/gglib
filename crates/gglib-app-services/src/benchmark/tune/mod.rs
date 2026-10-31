@@ -37,6 +37,10 @@ use usage::TaskUsageTally;
 use super::BenchmarkDeps;
 
 /// Entry point called by [`super::BenchmarkOps::run_tune`].
+#[expect(
+    clippy::too_many_lines,
+    reason = "the sweep end to end under one model lease: build the candidates, pre-screen them, prune, run the rest; the rounds share the lease and the candidate list"
+)]
 pub async fn run_tune(
     deps: &BenchmarkDeps,
     config: TuneConfig,
@@ -362,6 +366,10 @@ fn build_candidates(
 /// Cartesian product of every non-empty [`SweepSpec`] dimension. A dimension
 /// left empty contributes a single `None` value (don't vary it — the normal
 /// inference-config resolution chain fills it in downstream).
+#[expect(
+    clippy::similar_names,
+    reason = "one binding per sweep dimension, each named for its field (top_p, top_k, min_p, ...)"
+)]
 fn build_candidate_grid(sweep: &SweepSpec) -> Vec<InferenceConfig> {
     let temps = sweep_dimension(&sweep.temperature);
     let top_ps = sweep_dimension(&sweep.top_p);
@@ -610,6 +618,10 @@ async fn run_task(
 /// own the [`TaskUsageTally`] it has to read afterwards: the sink is handed to
 /// the adapter on the way in, which makes "forgot to wire the tally"
 /// unrepresentable at the call site.
+#[expect(
+    clippy::future_not_send,
+    reason = "generic over the caller's port builder, which this signature does not require to be Sync; every caller's builder is, so the futures they spawn are Send"
+)]
 pub(crate) async fn run_task_with_llm<F>(build_llm: F, task: &TuneTask) -> TuneTaskResult
 where
     F: Fn(Arc<dyn UsageSink>) -> Arc<dyn LlmCompletionPort>,
@@ -643,9 +655,9 @@ where
 /// set with no order to violate, so a wrong guess can only ever be more
 /// lenient than the truth. Inventing extra boundaries would do the opposite and
 /// demand an order the model never expressed.
-fn partition_calls(recorded: Vec<ToolCall>, sizes: &[usize]) -> Vec<Vec<ToolCall>> {
+fn partition_calls(recorded: &[ToolCall], sizes: &[usize]) -> Vec<Vec<ToolCall>> {
     let mut batches = Vec::with_capacity(sizes.len() + 1);
-    let mut rest = recorded.as_slice();
+    let mut rest = recorded;
     for &size in sizes {
         let take = size.min(rest.len());
         if take == 0 {
@@ -691,6 +703,14 @@ const TRANSPORT_RETRY_ATTEMPTS: u32 = 2;
 /// `latency_ms` here is *this attempt's* wall time, so a retried run reports
 /// what its successful attempt cost rather than the sum of its failures. The
 /// discarded time is not lost — it is what `transport_retries` is for.
+#[expect(
+    clippy::future_not_send,
+    reason = "holds the caller's builder by reference, under the same bound `run_task_with_llm` explains"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one attempt from first message to score, over one conversation the agent loop and the scorer both read"
+)]
 async fn run_task_once<F>(build_llm: &F, task: &TuneTask) -> TuneTaskResult
 where
     F: Fn(Arc<dyn UsageSink>) -> Arc<dyn LlmCompletionPort>,
@@ -783,7 +803,7 @@ where
     let latency_ms = u64::try_from(started_at.elapsed().as_millis()).unwrap_or(u64::MAX);
 
     let recorded = call_log.lock().await.clone();
-    let scoring = score_outcome(&task.expected, &partition_calls(recorded, &batch_sizes));
+    let scoring = score_outcome(&task.expected, &partition_calls(&recorded, &batch_sizes));
 
     // Read from the tally, not from `AgentRunOutput`: a guard-aborted run
     // returns `Err` and its tokens would otherwise vanish — and those are the
@@ -1318,6 +1338,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::float_cmp,
+        reason = "an empty run scores the literal 0.0, which an exact compare is the test of"
+    )]
     fn composite_score_of_empty_results_is_zero() {
         assert_eq!(compute_composite_score(&[], &ScoreWeights::default()), 0.0);
     }

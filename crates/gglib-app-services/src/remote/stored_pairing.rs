@@ -93,9 +93,9 @@ impl Settled {
 /// Whatever `redeem` says, and whatever [`remember`] says of a pairing it
 /// cannot store — as `Internal`, in [`store_redeemed`]'s wording, on the
 /// redeemed arm, because by then the code is gone.
-#[allow(
+#[expect(
     clippy::similar_names,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "`core` is the app core and `code` the pairing code, as everywhere in this module"
 )]
 pub(super) async fn settle(
     core: &AppCore,
@@ -105,27 +105,23 @@ pub(super) async fn settle(
     port: u16,
     redeem: impl AsyncFnOnce(String) -> Result<String, GuiError>,
 ) -> Result<Settled, GuiError> {
-    match code {
-        Some(code) => {
-            let key = redeem(code).await?;
-            let replaced = store_redeemed(core, key, ticket, port).await?;
-            Ok(Settled::Paired { replaced })
+    if let Some(code) = code {
+        let key = redeem(code).await?;
+        let replaced = store_redeemed(core, key, ticket, port).await?;
+        Ok(Settled::Paired { replaced })
+    } else {
+        // The caller refused a codeless dial with no key for this
+        // machine, so `held` is `Some`. Filing the ticket just dialled
+        // beside that machine's key is how the record follows a machine
+        // that moved: same identity, new addresses, same key — and the
+        // port just bound, which is how the address a client was
+        // configured against stays the address. It is the only write on
+        // this arm, so a dial to the machine already recorded, on the
+        // port already recorded, touches nothing.
+        if held.is_some_and(|held| held.ticket != ticket.to_string() || held.port != Some(port)) {
+            remember(core, |stored| follow(stored, ticket, port)).await?;
         }
-        None => {
-            // The caller refused a codeless dial with no key for this
-            // machine, so `held` is `Some`. Filing the ticket just dialled
-            // beside that machine's key is how the record follows a machine
-            // that moved: same identity, new addresses, same key — and the
-            // port just bound, which is how the address a client was
-            // configured against stays the address. It is the only write on
-            // this arm, so a dial to the machine already recorded, on the
-            // port already recorded, touches nothing.
-            if held.is_some_and(|held| held.ticket != ticket.to_string() || held.port != Some(port))
-            {
-                remember(core, |stored| follow(stored, ticket, port)).await?;
-            }
-            Ok(Settled::Redialled)
-        }
+        Ok(Settled::Redialled)
     }
 }
 
@@ -241,9 +237,9 @@ pub(super) async fn store_redeemed(
 /// It does not get the key back. Nothing at this layer can: the key exists
 /// only in the response that was just read, and the store that would have
 /// kept it is the thing that failed.
-#[allow(
+#[expect(
     clippy::needless_pass_by_value,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "the shape `map_err` calls it with"
 )]
 fn spent_code(e: GuiError) -> GuiError {
     GuiError::Internal(format!(

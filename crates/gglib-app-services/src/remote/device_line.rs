@@ -20,10 +20,6 @@ pub(super) fn joined(d: &RemoteDevice) -> bool {
 ///
 /// The name is not part of it: a surface prints the label and the id beside
 /// this, and they are the same whatever state the row is in.
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(super) fn describe(d: &RemoteDevice, now_ms: i64) -> String {
     // A key this machine holds that no roster row lists (#1034): its id and
     // whether the edge admits it are all that is known. Said first, because
@@ -48,10 +44,10 @@ pub(super) fn describe(d: &RemoteDevice, now_ms: i64) -> String {
             invited
         };
     }
-    let mut line = match d.last_seen {
-        Some(at) => format!("last seen {}", ago(at, now_ms)),
-        None => "no requests yet".to_owned(),
-    };
+    let mut line = d.last_seen.map_or_else(
+        || "no requests yet".to_owned(),
+        |at| format!("last seen {}", ago(at, now_ms)),
+    );
     // Where the invite was redeemed from, when that was recorded (#1041). An
     // empty fingerprint names no endpoint, so it is no peer.
     if let Some(peer) = d.peer.as_deref().filter(|peer| !peer.is_empty()) {

@@ -19,6 +19,7 @@
 //! Anything else gets a 404, and a connection that sends nothing, such as the
 //! proxy's reachability probe, is closed. Every chat body is recorded.
 
+use std::fmt::Write as _;
 use std::sync::{Arc, Mutex};
 
 use gglib_core::domain::ModelCapabilities;
@@ -188,16 +189,12 @@ async fn answer(incoming: Incoming, seen: Arc<Mutex<Vec<Value>>>) {
 }
 
 /// A streamed response of `chunks`, then `[DONE]`.
-#[allow(
-    clippy::format_push_string,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 fn sse(chunks: &[Value]) -> String {
     let mut out = String::from(
         "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n",
     );
     for chunk in chunks {
-        out.push_str(&format!("data: {chunk}\n\n"));
+        let _ = write!(out, "data: {chunk}\n\n");
     }
     out.push_str("data: [DONE]\n\n");
     out

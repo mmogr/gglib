@@ -230,6 +230,10 @@ impl RemoteOps {
     /// # Errors
     ///
     /// `Conflict` when nothing is enabled and nothing is arming.
+    #[expect(
+        clippy::significant_drop_in_scrutinee,
+        reason = "the serve slot stays locked through `take_down`, so `enable` and `status` wait for it, though the `ArmingDrain` test in teardown.rs says no caller holds it; which is meant is #1646, not a lint pass"
+    )]
     pub async fn shut_down(&self) -> Result<(), GuiError> {
         match self.live.lock().await.take() {
             Taken::Value(live) => {

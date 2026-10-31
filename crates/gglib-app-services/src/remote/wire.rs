@@ -19,12 +19,12 @@ use serde::{Deserialize, Serialize};
 
 /// `GET /api/remote/status`, and the answer to `disable`, `disconnect` and
 /// `kill`.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "a wire type: each flag is a field the GUI and the CLI read by name"
+)]
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
-#[allow(
-    clippy::struct_excessive_bools,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub struct RemoteStatus {
     /// Whether the serve side is up.
     pub enabled: bool,

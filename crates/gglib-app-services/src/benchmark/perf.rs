@@ -157,10 +157,6 @@ pub(crate) async fn run_perf(
 }
 
 /// Spawn `llama-bench` for one model, capture output, and build a result.
-#[allow(
-    clippy::or_fun_call,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 async fn run_single_perf(
     _deps: &BenchmarkDeps,
     model_id: i64,
@@ -224,8 +220,8 @@ async fn run_single_perf(
         run_id: Some(run_id),
         pp_tps,
         tg_tps,
-        pp_tokens: n_prompt.unwrap_or(i64::from(config.pp_tokens)),
-        tg_tokens: n_gen.unwrap_or(i64::from(config.tg_tokens)),
+        pp_tokens: n_prompt.unwrap_or_else(|| i64::from(config.pp_tokens)),
+        tg_tokens: n_gen.unwrap_or_else(|| i64::from(config.tg_tokens)),
         backend,
         ngl,
         context_size: None, // not reported by llama-bench -o json

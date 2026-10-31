@@ -4,10 +4,11 @@ crates/gglib-agent/tests/integration_cut_off.rs 406
 crates/gglib-agent/tests/integration_guards.rs 777
 crates/gglib-agent/tests/integration_happy_path.rs 421
 crates/gglib-agent/tests/unit_first_call.rs 527
-crates/gglib-app-services/src/benchmark/agentic.rs 745
-crates/gglib-app-services/src/benchmark/compare.rs 364
+crates/gglib-app-services/src/benchmark/agentic.rs 753
+crates/gglib-app-services/src/benchmark/compare.rs 368
 crates/gglib-app-services/src/benchmark/mapper.rs 529
-crates/gglib-app-services/src/benchmark/tune/mod.rs 1366
+crates/gglib-app-services/src/benchmark/tune/mod.rs 1390
+crates/gglib-app-services/src/downloads.rs 305
 crates/gglib-app-services/src/mcp.rs 330
 crates/gglib-app-services/src/mcp_tests.rs 329
 crates/gglib-app-services/src/models.rs 419
@@ -19,7 +20,7 @@ crates/gglib-app-services/src/remote/far_proxy.rs 315
 crates/gglib-app-services/src/runs/cell.rs 373
 crates/gglib-app-services/src/sampling_explain.rs 438
 crates/gglib-app-services/src/sampling_explain_tests.rs 728
-crates/gglib-app-services/src/servers.rs 820
+crates/gglib-app-services/src/servers.rs 822
 crates/gglib-app-services/src/servers_events_tests.rs 415
 crates/gglib-app-services/src/service_graph.rs 314
 crates/gglib-app-services/src/settings_tests.rs 327

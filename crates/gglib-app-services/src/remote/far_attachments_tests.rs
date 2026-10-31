@@ -80,7 +80,7 @@ async fn an_upload_is_posted_whole_and_outlasts_the_bounded_limit() {
 
     assert_eq!(answer.status(), 200);
     assert_eq!(answer.text().await.unwrap(), r#"{"id":"x"}"#);
-    let seen = seen.lock().unwrap();
+    let seen = std::mem::take(&mut *seen.lock().unwrap());
     assert!(
         seen.head.starts_with("post /v1/attachments http/1.1"),
         "{}",
@@ -116,7 +116,7 @@ async fn a_fetch_reads_the_image_by_its_id_and_outlasts_the_bounded_limit() {
     let content_type = answer.headers()[reqwest::header::CONTENT_TYPE].clone();
     assert_eq!(content_type, "image/png");
     assert_eq!(answer.bytes().await.unwrap().as_ref(), image.as_slice());
-    let seen = seen.lock().unwrap();
+    let seen = std::mem::take(&mut *seen.lock().unwrap());
     assert!(
         seen.head
             .starts_with(&format!("get /v1/attachments/{id} http/1.1")),

@@ -55,9 +55,9 @@ impl Drain for modelpipe::ServeHandle {
 /// the operator was just handed on a tunnel that is up. So the epoch this
 /// tunnel was armed
 /// under is handed back, and a superseded teardown clears nothing.
-#[allow(
+#[expect(
     clippy::future_not_send,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "generic over the tunnel handle, which `Drain` does not require to be Sync; the daemon's handle is, so its teardown future is Send"
 )]
 pub(super) async fn take_down<H: Drain>(live: Live<H>, gateway: &RemoteGateway) {
     // First, because it is what stops anything following a tunnel that is

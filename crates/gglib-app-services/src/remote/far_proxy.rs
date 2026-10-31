@@ -88,15 +88,14 @@ impl FarProxy {
     /// `Internal` when an HTTP client cannot be built.
     pub fn new(base_url: &str, credentials: &FarCredentials) -> Result<Self, GuiError> {
         static CLIENTS: OnceLock<(reqwest::Client, reqwest::Client)> = OnceLock::new();
-        let (bounded, streaming) = match CLIENTS.get() {
-            Some(clients) => clients.clone(),
-            None => {
-                let built = (
-                    build(gglib_proxy::loopback::client_builder().timeout(TIMEOUT))?,
-                    build(streaming_builder(STREAM_READ_TIMEOUT))?,
-                );
-                CLIENTS.get_or_init(|| built).clone()
-            }
+        let (bounded, streaming) = if let Some(clients) = CLIENTS.get() {
+            clients.clone()
+        } else {
+            let built = (
+                build(gglib_proxy::loopback::client_builder().timeout(TIMEOUT))?,
+                build(streaming_builder(STREAM_READ_TIMEOUT))?,
+            );
+            CLIENTS.get_or_init(|| built).clone()
         };
         Ok(Self::with_clients(
             base_url,

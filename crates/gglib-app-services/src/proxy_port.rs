@@ -16,20 +16,14 @@ use crate::error::GuiError;
 /// Validates that the port is [`MIN_PORT`] or above, as a stored one must be.
 ///
 /// Returns (port, `source_description`) for logging.
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) fn resolve_llama_base_port(
     override_port: Option<u16>,
     settings: &Settings,
 ) -> Result<(u16, &'static str), GuiError> {
-    let (port, source) = if let Some(port) = override_port {
-        (port, "override")
-    } else if let Some(port) = settings.llama_base_port {
-        (port, "saved setting")
-    } else {
-        (DEFAULT_LLAMA_BASE_PORT, "default")
+    let (port, source) = match (override_port, settings.llama_base_port) {
+        (Some(port), _) => (port, "override"),
+        (None, Some(port)) => (port, "saved setting"),
+        (None, None) => (DEFAULT_LLAMA_BASE_PORT, "default"),
     };
 
     if port < MIN_PORT {

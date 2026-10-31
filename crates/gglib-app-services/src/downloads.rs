@@ -108,6 +108,10 @@ impl DownloadOps {
     ///
     /// The position is the one a queue snapshot gives a download: 1 is the
     /// running download, when there is one, and the waiting ones follow.
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "a caller's queue position past u32::MAX truncates as it always has; this module makes no change to what a bad position does"
+    )]
     pub async fn reorder_queue(
         &self,
         model_id: &str,
@@ -129,6 +133,10 @@ impl DownloadOps {
     /// Behind a running download the waiting places start at 2, so the order
     /// that results can differ from the one given. An id that is not waiting
     /// is skipped.
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "positions past u32::MAX truncate, as in `reorder_queue`"
+    )]
     pub async fn reorder_queue_full(&self, ids: &[String]) -> Result<(), GuiError> {
         for (position, model_id) in ids.iter().enumerate() {
             let id = DownloadId::from(model_id.as_str());

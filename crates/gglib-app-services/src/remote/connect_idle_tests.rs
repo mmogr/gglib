@@ -66,10 +66,6 @@ async fn a_pipe_already_half_way_through_the_grace_is_called_away_on_time() {
 /// see a round trip it was never told about, so it called the peer away on
 /// an anchor the pipe had already abandoned.
 #[tokio::test(start_paused = true)]
-#[allow(
-    clippy::unchecked_time_subtraction,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 async fn a_round_trip_nobody_saw_restarts_the_grace() {
     let (_tx, source) = source();
     let clock = Clock::new();
@@ -79,7 +75,7 @@ async fn a_round_trip_nobody_saw_restarts_the_grace() {
     // Most of the way to being called away, then reached and lost again
     // with no status sent: exactly what gglib observes when two transitions
     // land between its polls.
-    tokio::time::sleep(AWAY_AFTER - SLACK).await;
+    tokio::time::sleep(AWAY_AFTER.saturating_sub(SLACK)).await;
     clock.reached();
     clock.idle();
 

@@ -11,6 +11,10 @@ impl RemoteOps {
     /// the last pairing (by fingerprint and name, never the ticket), and the
     /// roster, which rides this call because its read is already paid for —
     /// see [`RemoteStatus::devices`].
+    #[expect(
+        clippy::significant_drop_tightening,
+        reason = "what the edge holds and whether the tunnel is up are read under one hold of the serve slot, as the comment at the lock says"
+    )]
     pub async fn status(&self) -> RemoteStatus {
         // Every settings answer below — the switch, the stored pairing and
         // the roster — comes off one record, which is what makes them agree:

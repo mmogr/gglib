@@ -16,6 +16,10 @@ fn call(name: &str, args: Value) -> ToolCall {
     }
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "takes the `json!(...)` literal its callers write inline"
+)]
 fn expected_call(name: &str, required_args: Value, ordered: bool) -> ExpectedCall {
     ExpectedCall {
         name: name.to_string(),

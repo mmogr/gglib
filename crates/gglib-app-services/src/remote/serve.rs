@@ -104,13 +104,18 @@ impl RemoteOps {
     /// nothing to cancel, and this turns itself away; after it, it cancels
     /// the reservation, and `remember_enabled` makes sure a person's write of
     /// the switch does not outlast it.
+    #[expect(
+        clippy::significant_drop_tightening,
+        reason = "the disable and shutdown checks are read under the same hold of the slot as the reservation, as the comments there say"
+    )]
     pub(super) async fn turn_on(
         &self,
         request: EnableRequest,
         caller: Caller,
         disables: watch::Receiver<u64>,
     ) -> Result<Enabled, GuiError> {
-        if let Some(busy) = self.live.lock().await.busy() {
+        let busy = self.live.lock().await.busy();
+        if let Some(busy) = busy {
             return Err(busy_serving(&busy));
         }
         // Subscribed before the address is read, because the channel
