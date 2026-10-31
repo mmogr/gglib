@@ -14,11 +14,11 @@
     { "type": "fix", "section": "What it stopped getting wrong" },
     { "type": "perf", "section": "What got faster" },
     { "type": "docs", "section": "Documentation" },
-    { "type": "refactor", "section": "Internal", "hidden": true },
-    { "type": "test", "section": "Internal", "hidden": true },
-    { "type": "ci", "section": "Internal", "hidden": true },
-    { "type": "chore", "section": "Internal", "hidden": true },
-    { "type": "build", "section": "Internal", "hidden": true }
+    { "type": "refactor", "section": "Internal" },
+    { "type": "test", "section": "Internal" },
+    { "type": "ci", "section": "Internal" },
+    { "type": "chore", "section": "Internal" },
+    { "type": "build", "section": "Internal" }
   ],
   "packages": {
     ".": {
