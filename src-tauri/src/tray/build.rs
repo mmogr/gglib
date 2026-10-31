@@ -78,10 +78,6 @@ pub(super) fn build(app: &AppHandle) -> Result<Handle, String> {
     build_inner(app).map_err(|e| format!("Failed to build system tray: {e}"))
 }
 
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 fn build_inner(app: &AppHandle) -> tauri::Result<Handle> {
     let mut items: HashMap<&'static str, MenuItem<Wry>> = HashMap::new();
     // Separators are positional and never looked up again, so they are kept
@@ -123,9 +119,11 @@ fn build_inner(app: &AppHandle) -> tauri::Result<Handle> {
 
     let refs: Vec<&dyn IsMenuItem<Wry>> = order
         .iter()
-        .map(|(id, index)| match id {
-            Some(id) => &items[id] as &dyn IsMenuItem<Wry>,
-            None => &separators[*index] as &dyn IsMenuItem<Wry>,
+        .map(|(id, index)| {
+            id.as_ref().map_or_else(
+                || &separators[*index] as &dyn IsMenuItem<Wry>,
+                |id| &items[id] as &dyn IsMenuItem<Wry>,
+            )
         })
         .collect();
 

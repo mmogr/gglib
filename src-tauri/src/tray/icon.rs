@@ -163,12 +163,8 @@ mod tests {
 
     /// Build a snapshot the way the watcher does, so these tests exercise the
     /// same construction the app runs.
-    #[allow(
-        clippy::needless_pass_by_value,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
-    fn snapshot(proxy: serde_json::Value, servers: serde_json::Value) -> DaemonSnapshot {
-        DaemonSnapshot::from_responses(&proxy, &servers)
+    fn snapshot(proxy: &serde_json::Value, servers: &serde_json::Value) -> DaemonSnapshot {
+        DaemonSnapshot::from_responses(proxy, servers)
     }
 
     #[test]
@@ -183,7 +179,7 @@ mod tests {
     /// distinct one: "idle" is not "not running".
     #[test]
     fn a_daemon_doing_nothing_is_idle() {
-        let visual = derive(&snapshot(json!({"running": false}), json!([])));
+        let visual = derive(&snapshot(&json!({"running": false}), &json!([])));
 
         assert_eq!(visual.state, TrayState::Idle);
         assert_eq!(visual.status, "gglib — idle");
@@ -191,7 +187,10 @@ mod tests {
 
     #[test]
     fn a_running_proxy_reports_its_port() {
-        let visual = derive(&snapshot(json!({"running": true, "port": 8080}), json!([])));
+        let visual = derive(&snapshot(
+            &json!({"running": true, "port": 8080}),
+            &json!([]),
+        ));
 
         assert_eq!(visual.state, TrayState::Active);
         assert_eq!(visual.status, "gglib — proxy on :8080");
@@ -202,8 +201,8 @@ mod tests {
     #[test]
     fn a_resident_model_lights_the_icon_with_the_proxy_off() {
         let visual = derive(&snapshot(
-            json!({"running": false}),
-            json!([{"model_id": 1}]),
+            &json!({"running": false}),
+            &json!([{"model_id": 1}]),
         ));
 
         assert_eq!(visual.state, TrayState::Active);
@@ -213,8 +212,8 @@ mod tests {
     #[test]
     fn serving_and_resident_are_reported_together() {
         let visual = derive(&snapshot(
-            json!({"running": true, "port": 8080}),
-            json!([{"model_id": 1}, {"model_id": 2}]),
+            &json!({"running": true, "port": 8080}),
+            &json!([{"model_id": 1}, {"model_id": 2}]),
         ));
 
         assert_eq!(visual.status, "gglib — proxy on :8080 · 2 models resident");
@@ -224,7 +223,7 @@ mod tests {
     /// running rather than inventing a port number.
     #[test]
     fn running_without_a_known_port_still_reads_as_running() {
-        let visual = derive(&snapshot(json!({"running": true}), json!([])));
+        let visual = derive(&snapshot(&json!({"running": true}), &json!([])));
 
         assert_eq!(visual.state, TrayState::Active);
         assert_eq!(visual.status, "gglib — proxy running");

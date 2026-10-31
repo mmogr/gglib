@@ -10,6 +10,10 @@ use tauri::{
 ///
 /// Returns both the Menu to attach to the app and the `AppMenu` struct
 /// containing references to stateful items for later updates.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the whole menu bar, submenu by submenu, in the order macOS shows it"
+)]
 pub(crate) fn build_app_menu(app: &AppHandle) -> Result<(Menu<Wry>, AppMenu), tauri::Error> {
     // =========================================================================
     // App Menu (GGLib) - First submenu becomes app menu on macOS
