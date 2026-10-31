@@ -5,26 +5,12 @@ mod chat_fixture;
 mod message_rows;
 mod model_component_rows;
 mod model_files_repository;
-#[allow(
-    clippy::cast_sign_loss,
-    clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 mod row_mappers;
 mod sqlite_attachment_store;
 mod sqlite_benchmark_repository;
-#[allow(
-    clippy::cast_possible_wrap,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 mod sqlite_chat_history_repository;
 pub(crate) mod sqlite_loop_guard_trip_log;
 mod sqlite_mcp_repository;
-#[allow(
-    clippy::cast_lossless,
-    clippy::cast_possible_wrap,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) mod sqlite_model_repository;
 pub(crate) mod sqlite_settings_repository;
 

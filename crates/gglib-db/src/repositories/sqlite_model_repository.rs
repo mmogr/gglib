@@ -10,8 +10,8 @@ use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
 
 use super::model_component_rows;
 use super::row_mappers::{
-    BENCHMARK_SUMMARY_COLUMNS, MODEL_SELECT_COLUMNS, normalized_file_path_string, path_list_json,
-    row_to_model,
+    BENCHMARK_SUMMARY_COLUMNS, MODEL_SELECT_COLUMNS, context_length_column,
+    normalized_file_path_string, path_list_json, row_to_model,
 };
 
 /// Compute a canonical model key for deduplication.
@@ -276,10 +276,10 @@ impl ModelRepository for SqliteModelRepository {
         .bind(model.param_count_b)
         .bind(&model.architecture)
         .bind(&model.quantization)
-        .bind(model.context_length.map(|c| c as i64))
-        .bind(model.expert_count.map(|c| c as i64))
-        .bind(model.expert_used_count.map(|c| c as i64))
-        .bind(model.expert_shared_count.map(|c| c as i64))
+        .bind(model.context_length.map(context_length_column))
+        .bind(model.expert_count.map(i64::from))
+        .bind(model.expert_used_count.map(i64::from))
+        .bind(model.expert_shared_count.map(i64::from))
         .bind(&metadata_json)
         .bind(model.added_at.to_string())
         .bind(&model.hf_repo_id)
@@ -290,7 +290,7 @@ impl ModelRepository for SqliteModelRepository {
         .bind(&tags_json)
         .bind(&model_key)
         .bind(&file_paths_json)
-        .bind(model.capabilities.bits() as i64)
+        .bind(i64::from(model.capabilities.bits()))
         .bind(&inference_defaults_json)
         .bind(&defaults_origin_str)
         .bind(&server_defaults_json)
@@ -367,7 +367,7 @@ impl ModelRepository for SqliteModelRepository {
             .bind(model.param_count_b)
             .bind(&model.architecture)
             .bind(&model.quantization)
-            .bind(model.context_length.map(|c| c as i64))
+            .bind(model.context_length.map(context_length_column))
             .bind(&metadata_json)
             .bind(&model.hf_repo_id)
             .bind(&model.hf_commit_sha)
@@ -375,7 +375,7 @@ impl ModelRepository for SqliteModelRepository {
             .bind(model.download_date.as_ref().map(std::string::ToString::to_string))
             .bind(model.last_update_check.as_ref().map(std::string::ToString::to_string))
             .bind(&tags_json)
-            .bind(model.capabilities.bits() as i64)
+            .bind(i64::from(model.capabilities.bits()))
             .bind(&inference_defaults_json)
             .bind(&defaults_origin_str)
             .bind(&server_defaults_json)

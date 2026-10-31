@@ -3,16 +3,8 @@
 mod daemon_startup;
 mod database_file;
 pub mod factory;
-#[allow(
-    clippy::significant_drop_in_scrutinee,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 mod loop_guard_trip_writer;
 pub mod repositories;
-#[allow(
-    clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub mod setup;
 mod sqlite_init;
 

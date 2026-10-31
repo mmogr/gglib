@@ -187,6 +187,10 @@ pub async fn cleanup_zombie_benchmark_runs(pool: &SqlitePool) -> Result<()> {
 ///
 /// This function creates all tables and indexes required by the application.
 /// It is safe to call multiple times as all operations use IF NOT EXISTS.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the schema's steps in the order they must run, most of them one CREATE each; the order is the point"
+)]
 async fn create_schema(pool: &SqlitePool) -> Result<()> {
     models::create_models_table(pool).await?;
     models::create_model_indexes(&mut *pool.acquire().await?).await?;

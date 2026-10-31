@@ -164,7 +164,8 @@ impl LoopGuardTripWriter {
     /// they are written. A second call returns at once — before the first has
     /// finished, if the two race; the daemon has one caller.
     pub async fn shutdown(&self) {
-        if let Some(stop) = lock(&self.stop).take() {
+        let stop = lock(&self.stop).take();
+        if let Some(stop) = stop {
             // An `Err` means the task has already ended; there is nothing to
             // tell it.
             let _ = stop.send(());
