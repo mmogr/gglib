@@ -1088,6 +1088,48 @@ jobs:
       - name: The decoder over llama.h, linted for the Mac, the iPhone and its simulator
         run: make engine-llama-clippy
 
+  # Main's Rust caches, down to the newest entry per job. rust-cache keys an
+  # entry `v0-rust-<shared-key>-<os>-<arch>-<env hash>-<lockfile hash>` and
+  # restores by everything before the lockfile hash, so once a newer entry
+  # exists for the same job an older one is never restored again; but it
+  # stays until the repository's 10 GB limit evicts something, and what it
+  # evicts first is the macOS entries, saved least often. Every lockfile
+  # change leaves a generation of these behind, so this runs on every push.
+  #
+  # After the jobs that save on most pushes, so their new entries are
+  # counted; an entry the macOS jobs save later is pruned by the next push.
+  cache-prune:
+    name: Prune the Rust caches
+    runs-on: ubuntu-24.04
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, bindings, rustdoc, clippy, cli-cross-os, clippy-cross-os]
+    permissions:
+      actions: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # A failure here costs cache space, not correctness, and must not turn
+      # main's run red: the release pull request and the badges follow only
+      # a green one. A delete that loses a race with another run's prune is
+      # a warning.
+      - name: Delete every entry but the newest per job
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh cache list --ref refs/heads/main --json id,key,createdAt --limit 500 \
+            | jq -r '[.[] | select(.key | test("^v0-rust-.+-[0-9a-f]{8}-[0-9a-f]{8}$"))]
+                     | group_by(.key | sub("-[0-9a-f]{8}-[0-9a-f]{8}$"; ""))
+                     | .[] | sort_by(.createdAt) | .[:-1][] | "\(.id) \(.key)"' \
+            > "$RUNNER_TEMP/stale.txt"
+          echo "$(wc -l < "$RUNNER_TEMP/stale.txt") stale entries"
+          while read -r id key; do
+            echo "Deleting $key"
+            gh cache delete "$id" < /dev/null || echo "::warning::could not delete $key"
+          done < "$RUNNER_TEMP/stale.txt"
+
   # The one required check. A gated job's own `if:` reads its scope output,
   # and this holds every job to what that output says it must have done:
   #
