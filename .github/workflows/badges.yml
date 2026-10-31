@@ -26,7 +26,7 @@ jobs:
   badges:
     name: Update Badges
     # Only a green run of a push to main. A red or cancelled run leaves the
-    # badges as they were; the CI badge at the top of the README is the one
+    # badges as they were; the CI badge in the README is the one
     # that turns red.
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' }}
     runs-on: ubuntu-24.04
