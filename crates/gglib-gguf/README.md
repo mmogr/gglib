@@ -2,6 +2,8 @@
 
 <!-- crate-header:start -->
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-complexity.json)
+
+Layer: **infrastructure** · [workspace diagram](../README.md#architecture-overview)
 <!-- crate-header:end -->
 
 GGUF file format parser for gglib — extracts metadata from GGUF model files.
@@ -13,22 +15,6 @@ tags, and those tags become llama-server flags. No per-model setup.
 ## Architecture
 
 This crate is in the **Infrastructure Layer** — it implements the `GgufParser` port from `gglib-core`.
-
-```text
-gglib-core (port)           gglib-gguf (adapter)          Adapters
-┌──────────────────┐        ┌──────────────────┐        ┌──────────────────┐
-│   GgufParser     │◄───────│  impl GgufParser │◄───────│    gglib-cli     │
-│   trait          │        │  for GgufReader  │        │   gglib-axum     │
-└──────────────────┘        └──────────────────┘        └──────────────────┘
-                                     │
-                                     ▼
-                            ┌──────────────────┐
-                            │   .gguf files    │
-                            │ (GGUF v3 format) │
-                            └──────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
 
 ## Internal Structure
 

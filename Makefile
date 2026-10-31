@@ -227,11 +227,16 @@ doc-check: ## Build rustdoc with warnings denied, exactly as CI does
 	@# (its `tauri::generate_context!()` embeds `frontendDist` when
 	@# `custom-protocol` is on); see the note above `bindings`.
 	$(CARGO) doc --workspace --no-deps --document-private-items --exclude gglib-app
+	@# rustdoc passes a Markdown link that goes nowhere; this does not.
+	@./scripts/check_doc_links.py "$${CARGO_TARGET_DIR:-target}/doc"
 
-# The generated parts of the crate READMEs: each badged crate's header block,
-# from crates/layers.toml. `enforce` fails while one is out of date.
+# The generated parts of the crate READMEs, from crates/layers.toml and the
+# manifests: each crate's header block, and the crate graph and catalogue in
+# crates/README.md (the graph also in gglib-core's). `enforce` fails while one
+# is out of date.
 readmes: ## Rewrite the generated blocks in the crate READMEs
 	@./scripts/crate_list.py readmes --write
+	@./scripts/crate_graph.py --write
 
 # The crates a phone build compiles, and the only list of them: `ios-check`
 # checks them for aarch64-apple-ios, and `boundaries` passes them to
@@ -376,6 +381,12 @@ enforce: ## Run the architecture enforcement checks
 	@# a crate depends on a layer above its own, a README links a badge file
 	@# the pipeline does not write, or a crate's header block is stale.
 	@./scripts/crate_list.py --check
+	@# The crate graph and catalogue are written from the manifests, so an
+	@# edge or a crate added without `make readmes` fails here.
+	@./scripts/crate_graph.py --check
+	@# The diagrams inside the crate READMEs are drawn by hand; this fails when
+	@# one names a type or a .rs file the code no longer has.
+	@./scripts/check_diagram_names.py --check
 
 # The ADR readings in contracts/upstream against their hand-kept approvals. Not
 # in `enforce`: CI runs it as a job of its own, `ADR criterion moved`, so one

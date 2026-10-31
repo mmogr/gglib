@@ -2,6 +2,8 @@
 
 <!-- crate-header:start -->
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-complexity.json)
+
+Layer: **adapter** · [workspace diagram](../README.md#architecture-overview)
 <!-- crate-header:end -->
 
 HTTP API server for gglib — provides REST endpoints for the web UI and external integrations.
@@ -13,30 +15,6 @@ desktop app, or the web UI needs the runtime, this is what they talk to.
 ## Architecture
 
 This crate is in the **Adapter Layer** — it exposes gglib functionality via HTTP using the Axum framework.
-
-```text
-                              ┌──────────────────┐
-                              │   gglib-axum     │
-                              │   HTTP server    │
-                              └────────┬─────────┘
-                                       │
-         ┌─────────────┬───────────────┬───────────────┬─────────────┐
-         ▼             ▼               ▼               ▼             ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│  gglib-db   │ │gglib-download│ │gglib-runtime│ │  gglib-hf   │ │  gglib-mcp  │
-│   SQLite    │ │  Downloads  │ │   Servers   │ │  HF client  │ │ MCP servers │
-└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
-         │             │               │               │             │
-         └─────────────┴───────────────┴───────────────┴─────────────┘
-                                       │
-                                       ▼
-                              ┌──────────────────┐
-                              │    gglib-core    │
-                              │   (all ports)    │
-                              └──────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
 
 ## Internal Structure
 

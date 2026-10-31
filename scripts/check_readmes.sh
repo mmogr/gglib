@@ -4,7 +4,7 @@
 # Checks performed:
 #   [always]  Rust crate src/ subdirs have README.md
 #   [always]  Rust subdir READMEs have <!-- module-docs:start/end --> markers
-#   [always]  Crate-level READMEs have ## Architecture + ## Internal Structure headings
+#   [always]  Crate-level READMEs have an ## Internal Structure heading
 #   [always]  TypeScript src/ subdirs have README.md with <!-- module-docs --> markers
 #   [always]  tests/README.md exists
 #   [--strict] module-docs block does not contain "TODO:" placeholder text
@@ -208,7 +208,9 @@ check_rust_subdir_readmes() {
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CHECK 2: Crate-level README structural headings
-# Every crate-level README must have both ## Architecture and ## Internal Structure.
+# Every crate-level README must have ## Internal Structure. Where a crate sits
+# in the workspace is the generated graph's to say (scripts/crate_graph.py),
+# and each README's header links it, so no ## Architecture is asked for.
 # ─────────────────────────────────────────────────────────────────────────────
 check_rust_crate_readmes() {
     log "${CYAN}📦 Crate-level README structure${NC}"
@@ -227,14 +229,6 @@ check_rust_crate_readmes() {
         local crate_ok=1
         local crate
         crate=$(basename "$(dirname "$readme")")
-
-        if ! grep -q "^## Architecture" "$readme"; then
-            log "  ${RED}FAIL${NC} $crate — missing '## Architecture' heading"
-            violations+=("$(json_escape "$crate: missing ## Architecture heading")")
-            (( HARD_FAIL++ )) || true
-            crate_ok=0
-            any_fail=1
-        fi
 
         if ! grep -q "^## Internal Structure" "$readme"; then
             log "  ${RED}FAIL${NC} $crate — missing '## Internal Structure' heading"

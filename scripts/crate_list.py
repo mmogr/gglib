@@ -10,7 +10,7 @@ there is one list to keep and nothing else to drift from it:
     crate_list.py list coverage      the badged members coverage.yml measures
     crate_list.py list adapter       the adapter layer: the surface crates
     crate_list.py list non-adapter   every other member
-    crate_list.py readmes [--write]  each badged crate README's header block
+    crate_list.py readmes [--write]  each crate README's header block
     crate_list.py --check            self-test, then check the repository
     crate_list.py --self-test        run the fixtures only
 
@@ -19,10 +19,11 @@ the members, and refuses (exit 1) while layers.toml and the workspace disagree,
 so a workflow never measures a list that is short of a crate.
 
 `readmes` writes the block between `<!-- crate-header:start -->` and
-`<!-- crate-header:end -->` in each badged crate's README: one line of shields
-badges for its tests, coverage, lines of code and complexity. A README with no
-block gets one under its title. Without `--write` it names the READMEs whose
-block is missing or out of date.
+`<!-- crate-header:end -->` in each crate's README: for a badged crate, one
+line of shields badges for its tests, coverage, lines of code and complexity;
+for every crate, a line naming its layer and linking the workspace diagram in
+crates/README.md. A README with no block gets one under its title. Without
+`--write` it names the READMEs whose block is missing or out of date.
 
 `--check` fails when:
 
@@ -34,8 +35,9 @@ block is missing or out of date.
 4. a tracked Markdown file links a file on the `badges` branch that the
    pipeline does not write: `<crate>-<metric>.json` for each badged crate,
    `version.json`, and the status card's two SVGs;
-5. a badged crate has no README, or its header block is not what `readmes
-   --write` would write.
+5. a badged crate has no README, or a crate's README has a header block other
+   than what `readmes --write` would write. A crate with no badges and no
+   README, such as gglib-integration-tests, is not asked for one.
 
 What it does NOT check, so that nobody reads more into a pass than is there:
 
@@ -57,6 +59,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -78,6 +81,7 @@ VERSION_FILE = "version.json"
 STATUS_CARD = ("status-light.svg", "status-dark.svg")
 
 HEADER_START = "<!-- crate-header:start -->"
+DIAGRAM = "crates/README.md#architecture-overview"
 HEADER_END = "<!-- crate-header:end -->"
 
 ROW_KEYS = {"layer", "badges", "coverage", "why"}
@@ -223,10 +227,16 @@ def expected_branch_files(workspace: Workspace) -> Set[str]:
     return files
 
 
+def badge_line(crate: Crate) -> str:
+    """The crate's badges on one line, or an empty string for a crate with none."""
+    return " ".join(f"![{alt}]({SHIELD_URL}{crate.name}-{metric}.json)" for metric, alt in badge_metrics(crate))
+
+
 def header_lines(crate: Crate) -> List[str]:
     """The header block's lines. Each is its own paragraph."""
-    badges = " ".join(f"![{alt}]({SHIELD_URL}{crate.name}-{metric}.json)" for metric, alt in badge_metrics(crate))
-    return [badges]
+    path, anchor = DIAGRAM.split("#")
+    layer = f"Layer: **{crate.layer}** · [workspace diagram]({posixpath.relpath(path, crate.path)}#{anchor})"
+    return [line for line in (badge_line(crate), layer) if line]
 
 
 def header_block(crate: Crate) -> str:
@@ -247,7 +257,7 @@ def with_header(text: str, crate: Crate) -> Optional[str]:
     for index, line in enumerate(lines):
         if line.startswith("# "):
             rest = "\n".join(lines[index + 1:]).lstrip("\n")
-            return "\n".join(lines[:index + 1]) + "\n\n" + block + "\n\n" + rest
+            return "\n".join(lines[:index + 1]) + "\n\n" + block + ("\n\n" + rest if rest else "\n")
     return None
 
 
@@ -257,13 +267,14 @@ def readme_path(crate: Crate) -> str:
 
 def header_problems(workspace: Workspace) -> List[Problem]:
     problems = []
-    for crate in workspace.named("badged"):
+    for crate in workspace.crates:
         path = readme_path(crate)
         try:
             with open(os.path.join(workspace.root, path), encoding="utf-8") as handle:
                 text = handle.read()
         except FileNotFoundError:
-            problems.append(Problem(path, "readme", crate.name, f"{crate.name} has badges but no README"))
+            if crate.badges:
+                problems.append(Problem(path, "readme", crate.name, f"{crate.name} has badges but no README"))
             continue
         current = with_header(text, crate)
         if current is None:
@@ -401,6 +412,8 @@ FIXTURE = {
 
         {HEADER_START}
         ![Tests]({SHIELD}gglib-top-tests.json) ![Coverage]({SHIELD}gglib-top-coverage.json) ![LOC]({SHIELD}gglib-top-loc.json) ![Complexity]({SHIELD}gglib-top-complexity.json)
+
+        Layer: **adapter** · [workspace diagram](../README.md#architecture-overview)
         {HEADER_END}
 
         The top crate.
@@ -422,7 +435,8 @@ FIXTURE = {
 
         The bottom crate.
         """,
-    # Unbadged crates are not read for a header.
+    # An unbadged crate's README gets the layer line alone, linked from
+    # outside crates/. gglib-quiet has no README and is not asked for one.
     "app/README.md": """\
         # The app
         """,
@@ -449,18 +463,21 @@ EXPECTED = {
     ("crates/low/Cargo.toml", "edge", "gglib-low->gglib-mid"),
     ("crates/mid/README.md", "header", "gglib-mid"),
     ("crates/low/README.md", "header", "gglib-low"),
+    ("app/README.md", "header", "gglib-app"),
     ("crates/mid/README.md:4", "link", "gglib-mid-coverage.json"),
     ("docs/links.md:3", "link", "tests.json"),
     ("docs/links.md:4", "link", "gglib-app-tests.json"),
 }
 
-# What --write leaves in the two READMEs it rewrites: the format, pinned.
+# What --write leaves in the three READMEs it rewrites: the format, pinned.
 WRITTEN = {
     "crates/mid/README.md": f"""\
         # gglib-mid
 
         {HEADER_START}
         ![Tests]({SHIELD}gglib-mid-tests.json) ![LOC]({SHIELD}gglib-mid-loc.json) ![Complexity]({SHIELD}gglib-mid-complexity.json)
+
+        Layer: **middle** · [workspace diagram](../README.md#architecture-overview)
         {HEADER_END}
 
         The middle crate.
@@ -470,9 +487,18 @@ WRITTEN = {
 
         {HEADER_START}
         ![Tests]({SHIELD}gglib-low-tests.json) ![Coverage]({SHIELD}gglib-low-coverage.json) ![LOC]({SHIELD}gglib-low-loc.json) ![Complexity]({SHIELD}gglib-low-complexity.json)
+
+        Layer: **bottom** · [workspace diagram](../README.md#architecture-overview)
         {HEADER_END}
 
         The bottom crate.
+        """,
+    "app/README.md": f"""\
+        # The app
+
+        {HEADER_START}
+        Layer: **adapter** · [workspace diagram](../crates/README.md#architecture-overview)
+        {HEADER_END}
         """,
 }
 

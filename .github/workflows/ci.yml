@@ -420,6 +420,12 @@ jobs:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --no-deps --document-private-items --exclude gglib-app
 
+      # rustdoc does not warn about a Markdown link that goes nowhere, and a
+      # crate README is its front page, so a relative link that works on
+      # GitHub can break here with the step above green.
+      - name: Check the links on each crate's front page
+        run: python3 scripts/check_doc_links.py target/doc
+
   test-frontend:
     name: Test (Frontend)
     runs-on: ubuntu-24.04

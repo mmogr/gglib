@@ -2,6 +2,8 @@
 
 <!-- crate-header:start -->
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-complexity.json)
+
+Layer: **infrastructure** · [workspace diagram](../README.md#architecture-overview)
 <!-- crate-header:end -->
 
 `SQLite` repository implementations for gglib domain types.
@@ -14,17 +16,6 @@ restart.
 
 This crate is in the **Infrastructure Layer** — it implements the repository ports defined in `gglib-core`.
 
-```text
-gglib-core (ports)          gglib-db (adapters)           Adapters
-┌──────────────────┐        ┌──────────────────┐        ┌──────────────────┐
-│ ModelRepository  │◄───────│ SqliteModelRepo  │◄───────│    gglib-cli     │
-│ McpServerRepo    │        │ SqliteMcpRepo    │        │   gglib-axum     │
-│ ConversationRepo │        │ SqliteConvRepo   │        │    src-tauri     │
-└──────────────────┘        └──────────────────┘        └──────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## Internal Structure
 
 ```text
@@ -34,11 +25,15 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │                                                                                     │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
 │  │                           repositories/                                     │    │
-│  │  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐  ┌─────────────┐   │    │
-│  │  │  model_repo   │  │   mcp_repo    │  │  conv_repo    │  │ settings_   │   │    │
-│  │  │  SqliteModel  │  │  SqliteMcp    │  │  SqliteConv   │  │   repo      │   │    │
-│  │  │   Repository  │  │  Repository   │  │  Repository   │  │             │   │    │
-│  │  └───────────────┘  └───────────────┘  └───────────────┘  └─────────────┘   │    │
+│  │                                                                             │    │
+│  │   sqlite_model_repository.rs          SqliteModelRepository                 │    │
+│  │   sqlite_mcp_repository.rs            SqliteMcpRepository                   │    │
+│  │   sqlite_chat_history_repository.rs   SqliteChatHistoryRepository           │    │
+│  │   sqlite_settings_repository.rs       SqliteSettingsRepository              │    │
+│  │   sqlite_benchmark_repository.rs      SqliteBenchmarkRepository             │    │
+│  │   sqlite_attachment_store.rs          SqliteAttachmentStore                 │    │
+│  │   sqlite_loop_guard_trip_log.rs       SqliteLoopGuardTripLog                │    │
+│  │   model_files_repository.rs           ModelFilesRepository                  │    │
 │  └─────────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                     │
 │  ┌───────────────┐  ┌───────────────┐                                               │

@@ -1,7 +1,7 @@
 [package]
 name = "gglib-app"
 version.workspace = true
-description = "Tauri GUI for GGLib - GGUF Model Manager"
+description = "The desktop app: a window, a tray and a native menu on the gglib daemon it launches or connects to"
 # The deb's Maintainer field: Debian policy wants an address in it.
 authors = ["mmogr <172192206+mmogr@users.noreply.github.com>"]
 license.workspace = true

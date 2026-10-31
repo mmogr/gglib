@@ -2,6 +2,8 @@
 
 <!-- crate-header:start -->
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-engine-llama-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-engine-llama-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-engine-llama-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-engine-llama-complexity.json)
+
+Layer: **infrastructure** · [workspace diagram](../README.md#architecture-overview)
 <!-- crate-header:end -->
 
 llama.cpp in-process, for a device that cannot start llama-server: a phone.
@@ -42,26 +44,26 @@ gglib-runtime or sysinfo, which a phone build cannot take
 it live in `gglib-integration-tests`.
 
 ```text
-  gglib-proxy                        gglib-engine-llama
-  ┌────────────────┐  admit          ┌──────────────────────────────────────────┐
-  │ resolve model  │ ──────────────▶ │ InProcessRuntime: catalog, fit, load     │
-  │                │ ◀────────────── │   target = shim port, loaded n_ctx       │
-  └────────────────┘  RunningTarget  └──────────────────────────────────────────┘
-  ┌────────────────┐  POST /v1/chat  ┌──────────────────────────────────────────┐
-  │ shape request  │ ──────────────▶ │ shim: render (gglib-gguf render_chat)    │
-  │ forward        │  GET /props     │       tokenize, check n_ctx              │
-  │ NormalizingSt. │  GET /slots     │       ▼                                  │
-  │ usage reading  │ ◀────────────── │ Engine: one turn ──▶ decode thread       │
-  └────────────────┘  llama's SSE    │                       Decoder::generate  │
-                                     │       ▼                       │          │
-                                     │ reply: stop strings,          ▼          │
-                                     │   reasoning split       LlamaDecoder     │
-                                     │                         sys (unsafe)     │
-                                     └───────────────────────────────┼──────────┘
-                                                                     ▼
-                                                csrc/gglib_llama.c, flat C over llama.h
-                                                                     ▼
-                                                    llama.framework, built at the pin
+  gglib-proxy                           gglib-engine-llama
+  ┌───────────────────┐  admit          ┌──────────────────────────────────────────┐
+  │ resolve model     │ ──────────────▶ │ InProcessRuntime: catalog, fit, load     │
+  │                   │ ◀────────────── │   target = shim port, loaded n_ctx       │
+  └───────────────────┘  RunningTarget  └──────────────────────────────────────────┘
+  ┌───────────────────┐  POST /v1/chat  ┌──────────────────────────────────────────┐
+  │ shape request     │ ──────────────▶ │ shim: render (gglib-gguf render_chat)    │
+  │ forward           │  GET /props     │       tokenize, check n_ctx              │
+  │ NormalizingStream │  GET /slots     │       ▼                                  │
+  │ usage reading     │ ◀────────────── │ Engine: one turn ──▶ decode thread       │
+  └───────────────────┘  llama's SSE    │                       Decoder::generate  │
+                                        │       ▼                       │          │
+                                        │ reply: stop strings,          ▼          │
+                                        │   reasoning split       LlamaDecoder     │
+                                        │                         sys (unsafe)     │
+                                        └───────────────────────────────┼──────────┘
+                                                                        ▼
+                                                   csrc/gglib_llama.c, flat C over llama.h
+                                                                        ▼
+                                                       llama.framework, built at the pin
 ```
 
 What the shim answers, each in llama-server's shape at the pin

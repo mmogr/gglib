@@ -2,6 +2,8 @@
 
 <!-- crate-header:start -->
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-complexity.json)
+
+Layer: **infrastructure** · [workspace diagram](../README.md#architecture-overview)
 <!-- crate-header:end -->
 
 Process management and system probes for gglib — manages llama.cpp server instances and proxy routing.
@@ -15,24 +17,6 @@ the runtime feel smarter than llama.cpp on its own.
 
 This crate is in the **Infrastructure Layer** — it manages external processes and provides system information.
 
-```text
-gglib-core (ports)          gglib-runtime                       External
-┌──────────────────────┐    ┌──────────────────────┐    ┌──────────────────┐
-│ ModelRuntimePort     │◄───│ RuntimePortImpl      │───►│  llama-server    │
-│ LlmCompletionPort    │    │ LlmCompletionAdapter │    │  llama-cli       │
-│ SystemProbePort      │    │ DefaultSystemProbe   │    └──────────────────┘
-│ AdmissionRelease     │    │ AdmissionQueue       │
-└──────────────────────┘    └──────────────────────┘
-                                     │
-                                     ▼
-                            ┌──────────────────┐
-                            │   System APIs    │
-                            │  (GPU, memory)   │
-                            └──────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## Internal Structure
 
 ```text
@@ -42,8 +26,8 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐        │
 │  │ ports_impl/ │     │   llama/    │     │   proxy/    │     │  process/   │        │
-│  │ Port trait  │ ──► │ llama-server│     │  OpenAI API │     │  Lifecycle  │        │
-│  │   impls     │     │  llama-cli  │     │   routing   │     │  management │        │
+│  │ Port trait  │ ──► │  llama.cpp  │     │  OpenAI API │     │  Lifecycle  │        │
+│  │   impls     │     │   install   │     │   routing   │     │  management │        │
 │  └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘        │
 │                                                                                     │
 │  ┌─────────────┐     ┌─────────────┐                                                │
@@ -62,10 +46,10 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
                                           │
                                 depends on
                                           ▼
-                              ┌───────────────────┐
-                              │    gglib-core     │
-                              │  (port traits)    │
-                              └───────────────────┘
+              ┌───────────────────────────────────────────────────┐
+              │ gglib-core (port traits) · gglib-agent · gglib-mcp │
+              │ gglib-proxy                                        │
+              └───────────────────────────────────────────────────┘
 ```
 
 **Module Descriptions:**
@@ -78,7 +62,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 - **`pidfile/`** — PID file writing and cleanup for spawned servers
 - **`binary_install/`** — Installing a server binary from a pinned GitHub release, for any product, and the source checkout a build starts from
 - **`engine.rs`** — The questions asked of llama.cpp and stable-diffusion.cpp alike, by their `RuntimeKind`: where an install stands against its pin, and removing what an install put there
-- **`llama/`** — llama-server and llama-cli process management
+- **`llama/`** — llama.cpp at the pin: installing it (a download or a source build), detecting the GPU backend, and checking the binaries
 - **`proxy/`** — Proxy supervisor and routing logic
 - **`sd/`** — stable-diffusion.cpp's `sd-server`: install, status, its command line and its launch
 - **`process/`** — Generic process lifecycle (start, stop, signal)
@@ -88,7 +72,6 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 ## Features
 
 - **Server Management** — Start/stop llama-server with automatic port allocation
-- **CLI Chat** — Direct terminal chat via llama-cli
 - **`OpenAI` Proxy** — Transparent proxy that routes to appropriate model instances
 - **Auto Model Swap** — Proxy automatically loads/unloads models based on requests
 - **Pinned Mode** — `ProcessManager::set_pin` restricts the resident set to exactly one model and refuses all others, backing `gglib serve`

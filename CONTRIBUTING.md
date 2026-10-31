@@ -319,7 +319,7 @@ CI's `boundaries` job runs `scripts/check_boundaries.sh` on every pull request i
 
 **`gglib-ffi`** — The Swift-facing surface, built into the dynamic framework an iPhone app embeds, and one of the phone crates below. `check_boundaries.sh` rejects `clap`, `tauri`, `axum`, `tower-http`, `hyper`, `sqlx`, `sysinfo`, `netdev`, `nix`, `iroh`, `modelpipe`, `gglib-runtime` and `gglib-app-services` there: it composes gglib's own crates, and takes no server, database or host probe of its own. The engine it serves is `gglib-proxy` in front of `gglib-engine-llama`. Its only `unsafe` is the `extern "C"` scaffolding `uniffi` expands, which the workspace's `unsafe_code` deny does not report because it comes from another crate's macro; it carries no `allow` for it.
 
-**`src-tauri`** (package `gglib-app`) — The desktop app binary. It depends on one surface, `gglib-axum`, to host the daemon in-process when it cannot launch an external one, and holds its own Tauri event emission in `src/app/events.rs`. It also depends on `gglib-app-services`, `gglib-runtime`, `gglib-proxy`, `gglib-core` and `gglib-build-info`. No crate depends on it. `check_boundaries.sh` checks it only as a surface crate: no surface dependency but `gglib-axum`.
+**`src-tauri`** (package `gglib-app`) — The desktop app binary. It depends on one surface, `gglib-axum`, to host the daemon in-process when it cannot launch an external one, and holds its own Tauri event emission in `src/app/events.rs`. It also depends on `gglib-app-services`, `gglib-proxy`, `gglib-core` and `gglib-build-info`. No crate depends on it. `check_boundaries.sh` checks it only as a surface crate: no surface dependency but `gglib-axum`.
 
 **The phone crates** — the crates a phone build compiles, which `PHONE_CRATES` in the `Makefile` lists; nothing else lists them. `make ios-check`, and CI's `ios-check` job, check them for `aarch64-apple-ios`. Their dependency closure for that target, every normal dependency at any depth with each crate's default features, must not reach `sysinfo`, `netdev`, `nix`, `iroh`, `modelpipe`, `gglib-runtime` or `gglib-app-services`: `scripts/check_phone_closure.sh` rejects any of them and prints the path that reaches it, and `make boundaries` runs it. It reads `cargo tree` and builds nothing, so it needs no iOS toolchain. A crate whose closure reaches one of them joins the list once that dependency is behind a port its caller fills.
 
@@ -333,12 +333,12 @@ This codebase has three distinct documentation surfaces. Each has a defined purp
 
 A fourth surface — [Architecture Decision Records](#architecture-decision-records) — records *why* a decision was made, which none of the three below are for.
 
-### Surface 1: Crate READMEs (shields.io badges + ASCII architecture diagrams)
+### Surface 1: Crate READMEs (badges + an internal structure diagram)
 
 Each crate's `README.md` serves two narrow purposes:
 
 1. **Badges** — metrics surfaced as shields.io endpoint badges (tests, coverage, LOC, complexity) that read from the `badges` branch, in a header block `make readmes` writes (see [Badges Pipeline](#badges-pipeline) below).
-2. **Architecture ASCII diagrams** — a text diagram showing where the crate sits in the layer model and an internal structure diagram. These are written and maintained by hand.
+2. **An internal structure diagram** — a text diagram of the crate's modules, drawn by hand; `scripts/check_diagram_names.py` checks that every name in it exists in the code. Where the crate sits is the generated graph in [`crates/README.md`](crates/README.md#architecture-overview), which the header block links.
 
 Crate READMEs are **not** the place for API documentation, usage examples, or explanatory prose about how individual types work — that belongs in Rustdoc.
 
@@ -521,7 +521,7 @@ The root README's version badge reads `version.json`, written from `Cargo.toml` 
 
 `badges.yml` runs `scripts/write_badges.py` after each successful CI or Coverage run of a push to `main`; a red or cancelled run changes nothing. The script deletes every JSON file on the branch outside that set, so the branch holds no file a README does not read. A badge reads `none` when the run's artifact had no file for its crate, and `pending` until the first run that writes it. The branch's own README lists the files. No README below a crate's top level carries a badge, because the pipeline writes no file for a module.
 
-A crate's README carries its badges in a block between `<!-- crate-header:start -->` and `<!-- crate-header:end -->`, which `make readmes` writes from `crates/layers.toml`. `make enforce` runs `scripts/crate_list.py --check`, which fails when a member has no row, a crate depends on a layer above its own, a header block is out of date, or a Markdown file links a file on the `badges` branch that the pipeline does not write.
+A crate's README carries its badges, and a line naming its layer that links the workspace diagram, in a block between `<!-- crate-header:start -->` and `<!-- crate-header:end -->`, which `make readmes` writes from `crates/layers.toml`. `make enforce` runs `scripts/crate_list.py --check`, which fails when a member has no row, a crate depends on a layer above its own, a header block is out of date, or a Markdown file links a file on the `badges` branch that the pipeline does not write.
 
 A new crate gets a row in `crates/layers.toml`, then `make readmes`. Its badges read `pending` until the next CI and Coverage runs on `main`.
 
@@ -758,7 +758,7 @@ A release is cut by merging a pull request. `release.yml` is the only thing that
 | `enforcement` | `make enforce` | The repository rules that neither the compiler nor a linter checks. The `enforce` recipe in the `Makefile` is the only list of them, and each script's header says what it rejects |
 | `test` | `cargo metadata --locked` (the workspace and `src-tauri`), `npm run build`, `cargo test --no-fail-fast`, `scripts/split_test_output.py` | `Cargo.lock` is current; the Rust tests and doctests pass; the per-crate test output the badges read, from a run that ran doctests |
 | `bindings` | `make bindings-check` | The committed TypeScript bindings are what the Rust types generate |
-| `rustdoc` | `cargo doc --workspace --no-deps --document-private-items --exclude gglib-app`, with `RUSTDOCFLAGS=-D warnings` | No rustdoc warning |
+| `rustdoc` | `cargo doc --workspace --no-deps --document-private-items --exclude gglib-app`, with `RUSTDOCFLAGS=-D warnings`, then `scripts/check_doc_links.py target/doc` | No rustdoc warning, and every link on each crate's front page (its README) is a URL or a file in the docs |
 | `test-frontend` | `npm run deadcode`, `npm run test:run` | No TypeScript file that nothing imports, and no unused or undeclared dependency; the frontend tests pass |
 | `clippy` | `npm run build`, then `cargo clippy --all-targets --all-features -- -D warnings` | No Clippy warning on Linux |
 | `cli-cross-os` | `cargo test -p gglib-cli --no-run` on Linux, macOS and Windows; on Linux and macOS, `gglib-runtime`'s ignored tests against the pinned engines, and the llama-server recording, report-only; on macOS, the in-process engine's recording against the `llama-xcframework` action's framework, report-only | `gglib-cli` and its tests compile on each; every flag gglib passes is one the pinned engines take. The recordings' differences from `contracts/upstream/` show in the step summary without failing the job (see [The engine pins](#the-engine-pins)). Pull requests only |

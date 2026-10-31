@@ -2,6 +2,8 @@
 
 <!-- crate-header:start -->
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-complexity.json)
+
+Layer: **application** · [workspace diagram](../README.md#architecture-overview)
 <!-- crate-header:end -->
 
 Pure-domain agentic loop implementation for gglib.
@@ -17,8 +19,6 @@ pruning.  The loop and stagnation detectors themselves live in
 This crate is in the **Application Layer** — it orchestrates the LLM→tool→LLM
 cycle using only injected port traits from `gglib-core`.  It has **zero
 infrastructure dependencies**: no HTTP, no MCP internals, no Axum, no database.
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
 
 ## Overview
 

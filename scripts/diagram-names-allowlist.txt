@@ -1,0 +1,4 @@
+# Names a crate README's diagram may use although no Rust source under crates/
+# or src-tauri/src/ has them, read by scripts/check_diagram_names.py.
+# One row per name: <crate directory><TAB><word><TAB><why>. A row the scan does
+# not need fails the check.

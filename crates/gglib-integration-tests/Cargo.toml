@@ -2,7 +2,7 @@
 name = "gglib-integration-tests"
 version.workspace = true
 edition.workspace = true
-description = "Cross-crate integration tests for gglib (model import, naming, quantization and serialization, the model and chat repositories, settings, path resolution, server defaults, validation, and gglib-proxy in front of the phone's in-process runtime)"
+description = "Cross-crate integration tests for gglib, gglib-proxy in front of the phone's in-process runtime among them"
 license.workspace = true
 publish = false
 

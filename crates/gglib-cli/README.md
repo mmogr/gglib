@@ -2,6 +2,8 @@
 
 <!-- crate-header:start -->
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-complexity.json)
+
+Layer: **adapter** · [workspace diagram](../README.md#architecture-overview)
 <!-- crate-header:end -->
 
 <!-- module-docs:start -->
@@ -15,30 +17,6 @@ renders and asks, it never spawns llama-server itself.
 ## Architecture
 
 This crate is in the **Adapter Layer** — it wires together all infrastructure crates and exposes them via CLI commands.
-
-```text
-                              ┌──────────────────┐
-                              │    gglib-cli     │
-                              │  CLI interface   │
-                              └────────┬─────────┘
-                                       │
-         ┌─────────────┬───────────────┼───────────────┬─────────────┐
-         ▼             ▼               ▼               ▼             ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│  gglib-db   │ │gglib-download│ │gglib-runtime│ │  gglib-hf   │ │  gglib-mcp  │
-│   SQLite    │ │  Downloads  │ │   Servers   │ │  HF client  │ │ MCP servers │
-└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
-         │             │               │               │             │
-         └─────────────┴───────────────┴───────────────┴─────────────┘
-                                       │
-                                       ▼
-                              ┌──────────────────┐
-                              │    gglib-core    │
-                              │   (all ports)    │
-                              └──────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
 
 ## Internal Structure
 
@@ -88,7 +66,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 | `explain <id\|name> [--profile <name>]` | Show every resolved inference parameter and which layer of the sampling hierarchy supplied it |
 | `remove <id\|name>` | Remove a model from the library; refused while the model is being served under this data root (`--force` skips the confirmation only) |
 | `serve <id\|name>` | Start llama-server for a model (respects per-model `server_defaults` from DB, overridable with `--ctx-size`); for an image model, pin the proxy to it and load it once through stable-diffusion.cpp's `sd-server`, refusing the chat-only flags (`--ctx-size`, `--mlock`, `--jinja`, MTP, sampling, a profile) by name |
-| `chat <id\|name>` | Start interactive llama-cli chat |
+| `chat <id\|name>` | Chat with a model interactively |
 | `chat --continue <N>` | Resume a previous conversation by ID, on the machine it ran on; refused while the daemon is still replying to it, for the web page or a paired device |
 | `chat … --thinking on\|off` | Switch the chat's Thinking on or off, as the chat page's switch does: the choice runs the session and the chat remembers it, on a new chat or with `--continue` |
 | `chat <id\|name>`, files | Reads files in the directory it was launched in, read-only, never home or `/`, and says which on one `Files:` stderr line; under `--tools`, name `read_file` to keep the file tools |

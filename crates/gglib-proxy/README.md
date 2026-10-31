@@ -2,6 +2,8 @@
 
 <!-- crate-header:start -->
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-complexity.json)
+
+Layer: **infrastructure** · [workspace diagram](../README.md#architecture-overview)
 <!-- crate-header:end -->
 
 **OpenAI-compatible proxy** — the front door to your local models, with an integrated MCP Streamable HTTP gateway.
@@ -15,35 +17,6 @@ like an API provider.
 ## Architecture
 
 This crate is in the **Infrastructure Layer** — it provides external API compatibility by bridging `OpenAI` clients to internal llama-server instances.
-
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            Infrastructure Layer                             │
-│                                                                             │
-│                              ┌──────────────────┐                           │
-│                              │   gglib-proxy    │                           │
-│                              │  OpenAI-compat   │                           │
-│                              │   proxy server   │                           │
-│                              └────────┬─────────┘                           │
-│                                       │                                     │
-│                                       │ (ports only, no infra deps)         │
-│                                       │                                     │
-└───────────────────────────────────────┼─────────────────────────────────────┘
-                                        │
-                                        ▼
-                              ┌──────────────────┐
-                              │    gglib-core    │
-                              │   (port traits)  │
-                              └──────────────────┘
-
-At runtime, adapters inject concrete implementations:
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│gglib-runtime│     │  gglib-db   │     │  gglib-hf   │
-│  (servers)  │     │   (models)  │     │  (search)   │
-└─────────────┘     └─────────────┘     └─────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
 
 ## Overview
 
@@ -75,7 +48,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 
 ### Key Design Decisions
 
-- **Ports-only dependency**: Depends only on `gglib-core` (no sqlx, no gglib-runtime)
+- **No runtime or database below it**: its gglib dependencies are `gglib-core`, `gglib-mcp`, `gglib-broadcast` and `gglib-build-info`; it takes neither sqlx nor gglib-runtime, whose implementations its caller injects through `gglib-core`'s ports
 - **No host probe**: the machine's name and free disk come from the `HostFacts` readers its caller passes in `ServeConfig`, never from sysinfo, so the crate builds for iOS
 - **Bind externally**: `serve()` takes a pre-bound `TcpListener` from supervisor
 - **Router, not validator**: Inbound `/v1/chat/completions` requests are parsed into a narrow `ChatRoutingEnvelope` (just `model`, `stream`, `num_ctx`) and then forwarded as raw bytes. Unknown fields and `OpenAI` content variants (array-form `content`, bare-string `stop`, future extensions) pass through as they came, except where a request-pipeline stage rewrites message text in either shape. Schema validation is llama-server's responsibility.

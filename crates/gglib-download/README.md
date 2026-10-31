@@ -2,6 +2,8 @@
 
 <!-- crate-header:start -->
 ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-complexity.json)
+
+Layer: **infrastructure** · [workspace diagram](../README.md#architecture-overview)
 <!-- crate-header:end -->
 
 Download queue and manager for `HuggingFace` model files.
@@ -13,22 +15,6 @@ opt-in upgrade that falls back to the native path rather than failing.
 ## Architecture
 
 This crate is in the **Infrastructure Layer** — it orchestrates downloads using `gglib-hf` for file resolution.
-
-```text
-gglib-core (types)          gglib-download            External
-┌──────────────────┐        ┌──────────────────┐        ┌──────────────────┐
-│  QueueSnapshot   │◄───────│  DownloadManager │───────►│   HuggingFace    │
-│  DownloadRow     │        │  DownloadQueue   │        │       Hub        │
-│  DownloadEvent   │        │  FileResolver    │        └──────────────────┘
-└──────────────────┘        └───────┬──────────┘                 
-                                    │                            
-                            ┌───────▼──────────┐        ┌──────────────────┐
-                            │    gglib-hf      │        │  hf_xet helper   │
-                            │  (HfClientPort)  │        │ (opt-in accel.)  │
-                            └──────────────────┘        └──────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
 
 ## Internal Structure
 
