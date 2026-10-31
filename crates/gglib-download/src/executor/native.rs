@@ -384,10 +384,7 @@ async fn send_following_redirects(
             request = request.header(RANGE, format!("bytes={resume_from}-"));
         }
 
-        let response = request
-            .send()
-            .await
-            .map_err(|e| NativeError::Network(e.to_string()))?;
+        let response = send_unless_cancelled(request, req.cancel.as_ref()).await?;
 
         // Capture the digest from the first hop that offers one — later hops
         // (the CDN) do not carry it.
@@ -413,6 +410,29 @@ async fn send_following_redirects(
     }
 
     Err(NativeError::TooManyRedirects(req.url.to_string()))
+}
+
+/// Send `request`, unless `cancel` fires first. A cancel while the server is
+/// still deciding what to answer is then as prompt as one mid-transfer, and
+/// nothing is on disk yet to flush.
+async fn send_unless_cancelled(
+    request: reqwest::RequestBuilder,
+    cancel: Option<&CancellationToken>,
+) -> Result<Response, NativeError> {
+    let send = async {
+        request
+            .send()
+            .await
+            .map_err(|e| NativeError::Network(e.to_string()))
+    };
+    let Some(cancel) = cancel else {
+        return send.await;
+    };
+    tokio::select! {
+        biased;
+        () = cancel.cancelled() => Err(NativeError::Cancelled),
+        response = send => response,
+    }
 }
 
 /// Nothing to transfer (HTTP 416): hash whatever is on disk so verification can
@@ -575,4 +595,4 @@ fn hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 #[path = "native_tests.rs"]
-pub(super) mod tests;
+pub(crate) mod tests;

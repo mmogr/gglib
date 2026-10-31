@@ -29,10 +29,10 @@
 # reaches outside, and this job builds no tests. A script scripts/apple/
 # runs from elsewhere in the tree is listed by name, as llama_pin.sh is.
 #
-# `ci-success` counts a skipped job as passed, so an input missing here would
+# CI skips `ffi-apple` when this says false, so an input missing here would
 # be a change the job never sees and a green run that says nothing. The
-# closure is therefore read rather than written down, and the job that runs
-# this is in `ci-success`'s needs too, so a failure here fails the run.
+# closure is therefore read rather than written down, and a failure here
+# fails scripts/ci_scope.py, the `scope` job, and the run.
 #
 # Needs cargo (it builds nothing) and a checkout holding both commits.
 set -euo pipefail

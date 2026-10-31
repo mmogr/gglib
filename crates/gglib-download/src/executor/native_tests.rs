@@ -25,7 +25,7 @@ use reqwest::header::ETAG;
 
 /// How the server should answer one request.
 #[derive(Clone)]
-pub(in crate::executor) enum Reply {
+pub(crate) enum Reply {
     /// Serve `body`, honouring `Range` and advertising `etag` when set.
     File { body: Vec<u8>, etag: Option<String> },
     /// Serve only the first `limit` bytes of `body`, then drop the connection
@@ -43,9 +43,16 @@ pub(in crate::executor) enum Reply {
     /// the hash of the body — `HuggingFace`'s CDN does exactly this, echoing the
     /// Xet block hash from the URL path.
     CdnFile { body: Vec<u8>, decoy_etag: String },
+    /// Advertise the full length, send the first `limit` bytes, then keep the
+    /// connection open and never send the rest. The transfer stays mid-body
+    /// until the client gives up on it.
+    Stalls { body: Vec<u8>, limit: usize },
+    /// Read the request, then keep the connection open and never answer. The
+    /// client stays waiting for headers until it gives up.
+    NeverAnswers,
 }
 
-pub(in crate::executor) struct TestServer {
+pub(crate) struct TestServer {
     base_url: String,
     /// `Range` header value seen on each request, in order.
     ranges: Arc<Mutex<Vec<Option<String>>>>,
@@ -56,7 +63,7 @@ pub(in crate::executor) struct TestServer {
 impl TestServer {
     /// Bind an ephemeral loopback port. Replies are served in order; the last
     /// one repeats for any further requests.
-    pub(in crate::executor) async fn start(script: Vec<Reply>) -> Self {
+    pub(crate) async fn start(script: Vec<Reply>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind ephemeral loopback port");
@@ -82,7 +89,7 @@ impl TestServer {
         }
     }
 
-    pub(in crate::executor) fn url(&self) -> String {
+    pub(crate) fn url(&self) -> String {
         format!("{}/model.gguf", self.base_url)
     }
 
@@ -212,6 +219,20 @@ async fn handle_one(
             socket.write_all(head.as_bytes()).await?;
             socket.write_all(&body[..limit]).await?;
         }
+        Reply::Stalls { body, limit } => {
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            socket.write_all(head.as_bytes()).await?;
+            socket.write_all(&body[..limit]).await?;
+            socket.flush().await?;
+            // Held open until the test's runtime goes away with the task.
+            std::future::pending::<()>().await;
+        }
+        Reply::NeverAnswers => {
+            std::future::pending::<()>().await;
+        }
     }
 
     socket.flush().await?;
@@ -240,7 +261,7 @@ fn etag_header(etag: Option<&str>) -> String {
 // Fixtures
 // ============================================================================
 
-pub(in crate::executor) fn body_of(len: usize) -> Vec<u8> {
+pub(crate) fn body_of(len: usize) -> Vec<u8> {
     // A repeating non-power-of-two pattern, so a mis-sliced resume shows up as a
     // content mismatch rather than lining up by accident.
     (0..len)
@@ -719,8 +740,9 @@ async fn an_unreachable_host_is_a_network_error() {
     assert!(!fx.dest.exists());
 }
 
+/// A download cancelled before it starts asks the server nothing.
 #[tokio::test]
-async fn a_cancelled_download_keeps_its_partial_file() {
+async fn a_download_cancelled_before_it_starts_asks_the_server_nothing() {
     let body = body_of(8192);
     let server = TestServer::start(vec![Reply::Truncated { body, limit: 2000 }]).await;
     let fx = Fixture::new();
@@ -745,6 +767,41 @@ async fn a_cancelled_download_keeps_its_partial_file() {
 
     assert!(matches!(err, NativeError::Cancelled), "got {err:?}");
     assert!(!fx.dest.exists());
+    assert!(!fx.part().exists());
+    assert_eq!(server.request_count(), 0);
+}
+
+/// A cancel while the server has not answered yet ends the transfer at
+/// once: it does not wait for headers that may never come.
+#[tokio::test]
+async fn a_cancel_while_the_server_is_silent_ends_the_transfer_at_once() {
+    let server = TestServer::start(vec![Reply::NeverAnswers]).await;
+    let fx = Fixture::new();
+    let cancel = CancellationToken::new();
+
+    let url = server.url();
+    let client = build_client();
+    let request = NativeDownload {
+        url: &url,
+        dest: &fx.dest,
+        token: None,
+        expected_size: None,
+        progress: None,
+        cancel: Some(cancel.clone()),
+    };
+    let transfer = download_file(&client, &request);
+    let cancelled_shortly = async {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        cancel.cancel();
+    };
+    let (err, ()) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        tokio::join!(transfer, cancelled_shortly)
+    })
+    .await
+    .expect("the transfer ends once cancelled, not when the server does");
+
+    assert!(matches!(err, Err(NativeError::Cancelled)), "got {err:?}");
+    assert!(!fx.part().exists(), "nothing arrived to keep");
     assert_eq!(server.request_count(), 1);
 }
 
