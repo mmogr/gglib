@@ -227,6 +227,9 @@ def write(event: str, workspace: crate_list.Workspace, artifacts: str, branch: s
         elif os.path.exists(path):
             report["kept"].append(name)
             continue
+        elif name == crate_list.VERSION_FILE:
+            # A branch that Coverage reaches before CI has no version yet.
+            content, outcome = badge("version", "pending", "lightgrey"), "pending"
         else:
             crate, metric = name[:-len(".json")].rsplit("-", 1)
             content, outcome = badge(label(crate, metric), "pending", "lightgrey"), "pending"
@@ -392,6 +395,17 @@ def self_test() -> bool:
         write("coverage", workspace, cov, branch, fake_measure)
         compare(failures, "after coverage", contents(branch), AFTER_COVERAGE)
 
+        # A coverage run on a branch with no version badge yet, the state of a
+        # fresh branch Coverage reaches before CI, writes a pending one.
+        fresh = os.path.join(tmp, "fresh")
+        plant(fresh, {".nojekyll": ""})
+        write("coverage", workspace, cov, fresh, fake_measure)
+        if contents(fresh).get("version.json") != compact("version", "pending", "lightgrey"):
+            failures.append("coverage before ci: version.json is not pending")
+
+        # An artifact with no crate files faults before the prune: the orphan
+        # planted here must survive every faulting run.
+        plant(branch, {"ts-tests.json": "{}"})
         before = contents(branch)
         for event, artifacts in (("ci", empty), ("coverage", empty), ("ci", cov), ("coverage", ci),
                                  ("ci", os.path.join(tmp, "absent"))):
@@ -400,7 +414,7 @@ def self_test() -> bool:
                 failures.append(f"{event} with {os.path.basename(artifacts)}: no fault for an artifact with no crate files")
             except Fault:
                 pass
-        if contents(branch) != before:
+        if contents(branch) != before or "ts-tests.json" not in contents(branch):
             failures.append("an artifact with no crate files changed the branch")
     if not failures:
         print("✅ self-test: counts, kept and pending files, the prune and the empty-artifact fault as fixed")
