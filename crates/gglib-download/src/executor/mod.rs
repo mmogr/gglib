@@ -1,5 +1,5 @@
 #![doc = include_str!("README.md")]
-mod native;
+pub(crate) mod native;
 mod progress;
 
 use std::future::Future;
