@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/v17.11.2/schemas/config.json",
+  "release-type": "simple",
+  "include-component-in-tag": false,
+  "versioning": "prerelease",
+  "prerelease": true,
+  "prerelease-type": "rc.1",
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": false,
+  "always-update": true,
+  "extra-label": "version-bump,automated",
+  "changelog-sections": [
+    { "type": "feat", "section": "What gglib now does" },
+    { "type": "fix", "section": "What it stopped getting wrong" },
+    { "type": "perf", "section": "What got faster" },
+    { "type": "docs", "section": "Documentation" },
+    { "type": "refactor", "section": "Internal", "hidden": true },
+    { "type": "test", "section": "Internal", "hidden": true },
+    { "type": "ci", "section": "Internal", "hidden": true },
+    { "type": "chore", "section": "Internal", "hidden": true },
+    { "type": "build", "section": "Internal", "hidden": true }
+  ],
+  "packages": {
+    ".": {
+      "extra-files": [
+        { "type": "toml", "path": "Cargo.toml", "jsonpath": "$.workspace.package.version" },
+        { "type": "json", "path": "package.json", "jsonpath": "$.version" }
+      ]
+    }
+  }
+}
