@@ -31,17 +31,23 @@ mod tests {
         assert_eq!(parse("# why\n\n  a>=1,<2  \nb==3\n"), ["a>=1,<2", "b==3"]);
     }
 
-    /// The pins are bumped on purpose: this fails when the file changes, so
-    /// the change is made twice and read once.
+    /// The file names these three packages and bounds each from both sides:
+    /// a floor the helper was tested at, and a ceiling under the next release
+    /// line, so a bump moves a line rather than opening it. The versions
+    /// themselves are Dependabot's to move: CI installs the file and runs
+    /// the helper's tests against it on every run, which is what vouches for
+    /// a bump.
     #[test]
-    fn the_embedded_file_pins_the_tested_release_lines() {
-        assert_eq!(
-            requirements(),
-            [
-                "huggingface_hub>=2.1.1,<2.2",
-                "hf_xet>=1.6.0,<1.7",
-                "tqdm>=4.70.1,<5"
-            ]
-        );
+    fn the_embedded_file_bounds_each_package_from_both_sides() {
+        let lines = requirements();
+        let names: Vec<&str> = lines
+            .iter()
+            .map(|line| line.split(['>', '<', '=', '~', '!']).next().unwrap())
+            .collect();
+        assert_eq!(names, ["huggingface_hub", "hf_xet", "tqdm"], "{lines:?}");
+        for line in &lines {
+            assert!(line.contains(">="), "no floor: {line}");
+            assert!(line.contains(",<"), "no ceiling: {line}");
+        }
     }
 }
