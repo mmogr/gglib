@@ -19,7 +19,7 @@ body:
         - downloads
         - hf
         - mcp
-        - sse
+        - broadcast
         - gui
         - tauri
         - frontend

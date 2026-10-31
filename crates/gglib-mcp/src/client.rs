@@ -39,6 +39,14 @@ const REPLY_TIMEOUT: Duration = Duration::from_secs(30);
 /// about to.
 const STDERR_SETTLE: Duration = Duration::from_millis(500);
 
+/// How long a server with no tools has to answer the `ping` that checks it
+/// is still running. A server that exited is found at once, by its closed
+/// pipe; this is only how long a live server that ignores the ping holds up
+/// its start. It must be well over [`STDERR_SETTLE`], which the closed
+/// connection's error waits inside it, or that error is lost to the timeout.
+const PING_TIMEOUT: Duration = Duration::from_secs(3);
+const _: () = assert!(PING_TIMEOUT.as_millis() > 2 * STDERR_SETTLE.as_millis());
+
 /// Errors that can occur during MCP client operations.
 #[derive(Debug, Error)]
 pub(crate) enum McpClientError {
@@ -308,15 +316,18 @@ impl McpClient {
     }
 
     /// List available tools from the MCP server.
+    ///
+    /// A server without the `tools` capability has none, and is pinged
+    /// instead: one that answered `initialize` and exited fails here, with
+    /// what it printed, rather than starting with no tools and no error.
     pub(crate) async fn list_tools(&self) -> Result<Vec<McpTool>, McpClientError> {
-        // Check if server supports tools
         if self
             .capabilities
             .as_ref()
             .and_then(|c| c.tools.as_ref())
             .is_none()
         {
-            return Ok(Vec::new());
+            return self.ping().await.map(|()| Vec::new());
         }
 
         let result: Value = self.request("tools/list", None).await?;
@@ -341,6 +352,24 @@ impl McpClient {
                 }
             })
             .collect())
+    }
+
+    /// Check that the server is still running with a `ping`: a reply, an
+    /// error reply (a server that does not know the method) and no reply
+    /// within [`PING_TIMEOUT`] all mean it is.
+    ///
+    /// # Errors
+    ///
+    /// When the server has closed the connection, ending with what it
+    /// printed, or the pipes fail otherwise.
+    async fn ping(&self) -> Result<(), McpClientError> {
+        match self
+            .request_within::<Value>("ping", None, PING_TIMEOUT)
+            .await
+        {
+            Ok(_) | Err(McpClientError::ServerError { .. } | McpClientError::Timeout) => Ok(()),
+            Err(e) => Err(e),
+        }
     }
 
     /// Call a tool on the MCP server.
@@ -398,6 +427,17 @@ impl McpClient {
         method: &str,
         params: Option<Value>,
     ) -> Result<T, McpClientError> {
+        self.request_within(method, params, self.reply_timeout)
+            .await
+    }
+
+    /// As [`Self::request`], waiting `wait` for the reply.
+    async fn request_within<T: for<'de> Deserialize<'de>>(
+        &self,
+        method: &str,
+        params: Option<Value>,
+        wait: Duration,
+    ) -> Result<T, McpClientError> {
         let pipes = self.pipes.as_ref().ok_or(McpClientError::NotConnected)?;
         let id = self.request_id.fetch_add(1, Ordering::SeqCst);
         let request = JsonRpcRequest {
@@ -410,7 +450,7 @@ impl McpClient {
 
         let stderr = self.stderr.as_ref();
         let mut pipes = pipes.lock().await;
-        let response = timeout(self.reply_timeout, async {
+        let response = timeout(wait, async {
             write_line(&mut pipes, &request_line, stderr).await?;
             read_reply(&mut pipes.reader, id, stderr).await
         })

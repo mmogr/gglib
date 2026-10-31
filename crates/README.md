@@ -10,13 +10,9 @@ gglib follows **hexagonal architecture** (ports & adapters) with clear separatio
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                               ADAPTER LAYER                                │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐ │
-│  │  gglib-cli   │   │  gglib-axum  │   │  src-tauri   │   │ gglib-tauri  │ │
-│  │   CLI tool   │   │   REST API   │   │ desktop app  │   │ Tauri events │ │
+│  │  gglib-cli   │   │  gglib-axum  │   │  src-tauri   │   │  gglib-ffi   │ │
+│  │   CLI tool   │   │   REST API   │   │ desktop app  │   │Swift, for iOS│ │
 │  └──────────────┘   └──────────────┘   └──────────────┘   └──────────────┘ │
-│  ┌──────────────┐                                                          │
-│  │  gglib-ffi   │                                                          │
-│  │Swift, for iOS│                                                          │
-│  └──────────────┘                                                          │
 └──────────────────────────────────────┬─────────────────────────────────────┘
                                        ▼
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -55,7 +51,7 @@ gglib follows **hexagonal architecture** (ports & adapters) with clear separatio
 │                       CORE LAYER AND UTILITY CRATES                        │
 │  ┌────────────────────────────────────────────┐    ┌────────────────────┐  │
 │  │                 gglib-core                 │    │  gglib-build-info  │  │
-│  │    domain/  ports/  services/  events/     │    │     gglib-sse      │  │
+│  │    domain/  ports/  services/  events/     │    │  gglib-broadcast   │  │
 │  │       paths/  normalize/  sse/  ...        │    │   utility crates   │  │
 │  └────────────────────────────────────────────┘    └────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────────┘
@@ -65,14 +61,14 @@ An arrow means "depends on", and a crate may depend on any layer below its own,
 not only the next: `gglib-cli` uses several infrastructure crates directly, and
 `gglib-app-services` uses `gglib-agent`. Inside a layer, `gglib-cli` and
 `src-tauri` depend on `gglib-axum`, which both use to host the daemon;
-`src-tauri` depends on `gglib-tauri`; `gglib-ffi`, the Swift-facing surface
+`gglib-ffi`, the Swift-facing surface
 an iPhone app embeds as a dynamic framework, depends on no other surface,
 opens its library through `gglib-bootstrap`, and serves its engine with
 `gglib-proxy` in front of `gglib-engine-llama`;
 `gglib-download` depends on `gglib-hf`;
 `gglib-proxy` depends on `gglib-mcp`; `gglib-engine-llama` depends on
 `gglib-gguf`; and `gglib-runtime` depends on `gglib-mcp` and `gglib-proxy`.
-`gglib-build-info`, `gglib-sse` and `gglib-test-http` depend on no gglib crate.
+`gglib-build-info`, `gglib-broadcast` and `gglib-test-http` depend on no gglib crate.
 `src-tauri` is the desktop app and lives outside `crates/`;
 `gglib-integration-tests` holds cross-crate tests and has only dev-dependencies.
 
@@ -124,14 +120,13 @@ Each row links the crate, whose own README says what it is responsible for and h
 | **[gglib-cli](gglib-cli/)** | Command-line interface for all gglib operations; [docs/cli.md](../docs/cli.md) is the command reference. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-loc.json) |
 | **[gglib-axum](gglib-axum/)** | The daemon's HTTP API, built with Axum for the web UI, the desktop app and the CLI. The router is built in [`src/routes.rs`](gglib-axum/src/routes.rs), which serves `/health` and nests the API under `/api`. The daemon paths the CLI calls are named in `gglib_core::contracts::http::daemon`, and `gglib-axum/tests/daemon_route_contract.rs` fails when the daemon stops serving one of them. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-loc.json) |
 | **[gglib-ffi](gglib-ffi/)** | The Swift-facing surface of gglib: `GglibFFI.xcframework`, a dynamic framework for iOS and macOS, and the Swift `uniffi` generates for it, committed in [`gglib-ffi/swift/`](gglib-ffi/swift/). Its surface is `build_info()` and a model library: the shortlist and a Hub search, a fit verdict per quantization from its header's first bytes, downloads that pause and resume, the installed models, and `serve`, which runs gglib's own proxy on loopback in front of llama.cpp in the app's process. Builds as plain Rust on every OS; the framework needs Xcode and links `llama.framework`. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-ffi-loc.json) |
-| **[gglib-tauri](gglib-tauri/)** | Tauri event-emission helpers (`emit_or_log` and the event names) for the desktop app. The Tauri commands, tray and menus live in `src-tauri` itself. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-tauri-loc.json) |
 
 ### Utility Crates
 
 | Crate | Purpose | Lines of Code |
 |-------|---------|---------------|
+| **[gglib-broadcast](gglib-broadcast/)** | Generic Server-Sent Events broadcast utility shared by `gglib-axum` and `gglib-proxy`. Zero `gglib-*` dependencies. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-broadcast-loc.json) |
 | **[gglib-build-info](gglib-build-info/)** | Compile-time version and git metadata for CLI/GUI version strings. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-loc.json) |
-| **[gglib-sse](gglib-sse/)** | Generic Server-Sent Events broadcast utility shared by `gglib-axum` and `gglib-proxy`. Zero `gglib-*` dependencies. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-sse-loc.json) |
 | **[gglib-test-http](gglib-test-http/)** | The connection a test's fake HTTP server answers on, handed over only once the request has been read whole. Dev-dependency only; zero `gglib-*` dependencies. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-loc.json) |
 
 ## Development Guidelines

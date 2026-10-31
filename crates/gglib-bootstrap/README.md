@@ -79,7 +79,7 @@ See the [Architecture Overview](../../README.md#architecture) for the complete d
 Depends **only** on infrastructure crates:
 `gglib-core`, `gglib-db`, `gglib-download`, `gglib-gguf`, `gglib-hf`.
 
-Does **not** depend on adapter crates (`gglib-mcp`, `gglib-axum`, `gglib-tauri`, `gglib-cli`, `gglib-app-services`).
+Does **not** depend on adapter crates (`gglib-mcp`, `gglib-axum`, `gglib-cli`, `gglib-app-services`).
 
 ## Testing
 

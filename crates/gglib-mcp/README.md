@@ -125,6 +125,7 @@ Low-level JSON-RPC 2.0 client for the MCP protocol:
 - Provides `list_tools()` and `call_tool()` methods
 - Reads the server's stdout asynchronously, one request at a time, taking the reply whose `id` is the request's and skipping notifications and other lines before it; a request waits 30 s for its reply
 - Drains the server's stderr as it is written, keeping the last 4 KiB (`stderr_tail.rs`), so a chatty server never blocks on a full pipe; a server that closes the connection is an error ending in what it printed, which is how a server that cannot start says why
+- Sends a server without the `tools` capability a `ping` in place of `tools/list`, waiting 3 s: a reply, an error reply or no reply means it is running, with no tools, and a closed connection fails its start with what it printed
 
 ### `McpManager`
 

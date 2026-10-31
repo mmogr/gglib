@@ -13,11 +13,10 @@ crates/gglib-proxy 50 8
 crates/gglib-runtime 83 17
 crates/gglib-agent 4 4
 crates/gglib-engine-llama 30 0
-crates/gglib-sse 0 0
+crates/gglib-broadcast 0 0
 crates/gglib-test-http 2 0
 crates/gglib-cli 87 12
 crates/gglib-axum 10 8
-crates/gglib-tauri 0 0
 crates/gglib-ffi 0 0
 crates/gglib-integration-tests 2 2
 src-tauri 22 4

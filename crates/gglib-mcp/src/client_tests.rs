@@ -215,6 +215,93 @@ async fn a_server_that_exits_after_its_reply_says_what_it_printed() {
     );
 }
 
+/// A server with no tools that exits once it has answered `initialize`
+/// fails to list them, with what it printed: the ping it is sent instead
+/// finds the connection closed.
+#[tokio::test]
+async fn a_server_with_no_tools_that_exits_says_what_it_printed() {
+    let (mut client, mut server) = client_and_server(Duration::from_secs(5));
+    client.capabilities = Some(ServerCapabilities::default());
+    client.stderr = Some(StderrTail::drain(&b"no workspace given\n"[..]));
+    let serve = tokio::spawn(async move {
+        let request = read_json(&mut server).await;
+        drop(server);
+        request
+    });
+
+    let got = client.list_tools().await.unwrap_err().to_string();
+
+    assert!(
+        got.ends_with("Server closed connection - stderr: no workspace given"),
+        "{got}"
+    );
+    assert_eq!(serve.await.unwrap()["method"], "ping");
+}
+
+/// A server with no tools that answers `ping` with `answer` lists none.
+async fn a_server_with_no_tools_answering(answer: Value) -> Vec<McpTool> {
+    let (mut client, mut server) = client_and_server(Duration::from_secs(5));
+    client.capabilities = Some(ServerCapabilities::default());
+    let serve = tokio::spawn(async move {
+        let request = read_json(&mut server).await;
+        assert_eq!(request["method"], "ping");
+        let mut line = json!({ "jsonrpc": "2.0", "id": request["id"] });
+        line.as_object_mut()
+            .unwrap()
+            .extend(answer.as_object().unwrap().clone());
+        let line = line.to_string() + "\n";
+        server.get_mut().write_all(line.as_bytes()).await.unwrap();
+        server
+    });
+
+    let started = tokio::time::Instant::now();
+    let tools = client.list_tools().await.unwrap();
+    // Answered, not timed out: a reply that went unmatched would still list
+    // none, only after the ping's timeout.
+    assert!(started.elapsed() < PING_TIMEOUT, "{:?}", started.elapsed());
+    // The server end was held open until the ping was answered, so the
+    // server was running throughout. The client goes first, so a server
+    // still waiting for a ping that never came reads the end and fails.
+    drop(client);
+    drop(serve.await.unwrap());
+    tools
+}
+
+/// A server with no tools that answers the ping is running, with none.
+#[tokio::test]
+async fn a_server_with_no_tools_that_answers_the_ping_lists_none() {
+    let tools = a_server_with_no_tools_answering(json!({ "result": {} })).await;
+    assert!(tools.is_empty(), "{tools:?}");
+}
+
+/// A server that does not know `ping` says so, and is running all the same.
+#[tokio::test]
+async fn a_server_with_no_tools_that_does_not_know_ping_lists_none() {
+    let not_found = json!({ "error": { "code": -32601, "message": "Method not found" } });
+    let tools = a_server_with_no_tools_answering(not_found).await;
+    assert!(tools.is_empty(), "{tools:?}");
+}
+
+/// A server with no tools that never answers the ping is running too: it
+/// is waited for only the ping's own short timeout, not the reply timeout.
+#[tokio::test(start_paused = true)]
+async fn a_server_with_no_tools_that_ignores_the_ping_lists_none() {
+    let (mut client, mut server) = client_and_server(REPLY_TIMEOUT);
+    client.capabilities = Some(ServerCapabilities::default());
+    let serve = tokio::spawn(async move {
+        read_request(&mut server).await;
+        server
+    });
+
+    let started = tokio::time::Instant::now();
+    let tools = client.list_tools().await.unwrap();
+
+    assert!(tools.is_empty(), "{tools:?}");
+    assert_eq!(started.elapsed(), PING_TIMEOUT);
+    drop(client);
+    drop(serve.await.unwrap());
+}
+
 /// A server that prints far more on stderr than a pipe holds before it
 /// replies still has its reply read: the print never blocks it.
 #[cfg(unix)]
