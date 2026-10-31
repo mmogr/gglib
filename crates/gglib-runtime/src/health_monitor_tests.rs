@@ -18,13 +18,9 @@ async fn test_health_checker_http_unreachable() {
 }
 
 #[test]
-#[allow(
-    clippy::unreadable_literal,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 fn test_process_check_with_invalid_pid() {
     // PID 999999 should not exist
-    let handle = ProcessHandle::new(1, "test".to_string(), Some(999999), 8080, 0);
+    let handle = ProcessHandle::new(1, "test".to_string(), Some(999_999), 8080, 0);
     let status = ServerHealthChecker::check_process(&handle);
     assert_eq!(status, ServerHealthStatus::ProcessDied);
 }
@@ -38,10 +34,6 @@ fn test_process_check_without_pid() {
 }
 
 #[tokio::test]
-#[allow(
-    clippy::match_same_arms,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 async fn test_monitor_cancellation() {
     // Create a monitor for an unused port (will be unreachable)
     let handle = ProcessHandle::new(1, "test".to_string(), None, 65433, 0);
@@ -63,14 +55,10 @@ async fn test_monitor_cancellation() {
     let result = tokio::time::timeout(Duration::from_millis(200), stream.next()).await;
 
     // Either timed out (stream completed) or got one last item then completed
-    match result {
-        Ok(Some(_)) => {
-            // Got one item, next should be None (stream completed)
-            let next = tokio::time::timeout(Duration::from_millis(100), stream.next()).await;
-            assert!(next.is_err() || next.unwrap().is_none());
-        }
-        Ok(None) => {} // Stream completed, good
-        Err(_) => {}   // Timeout, stream is done, good
+    if let Ok(Some(_)) = result {
+        // Got one item, next should be None (stream completed)
+        let next = tokio::time::timeout(Duration::from_millis(100), stream.next()).await;
+        assert!(next.is_err() || next.unwrap().is_none());
     }
 }
 

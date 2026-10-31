@@ -754,7 +754,8 @@ async fn progress_resets_the_stall_clock_and_a_true_stall_still_expires() {
     assert_eq!(d, AdmissionDecision::Wait, "slot at capacity");
 
     // Nearly the whole deadline passes with nothing happening...
-    tokio::time::advance(ADMISSION_DEADLINE - std::time::Duration::from_secs(1)).await;
+    tokio::time::advance(ADMISSION_DEADLINE.saturating_sub(std::time::Duration::from_secs(1)))
+        .await;
     assert_eq!(q.poll(&capped, NEVER_FITS), AdmissionDecision::Wait);
 
     // ...then a generation finishes, and a pipelined rival immediately takes
@@ -771,7 +772,8 @@ async fn progress_resets_the_stall_clock_and_a_true_stall_still_expires() {
     // Under the old absolute deadline this poll sat at nearly 2x the budget
     // and would have expired. Under stall semantics the clock restarted at
     // the release, so the waiter is still merely waiting...
-    tokio::time::advance(ADMISSION_DEADLINE - std::time::Duration::from_secs(1)).await;
+    tokio::time::advance(ADMISSION_DEADLINE.saturating_sub(std::time::Duration::from_secs(1)))
+        .await;
     assert_eq!(q.poll(&capped, NEVER_FITS), AdmissionDecision::Wait);
 
     // ...until a full deadline passes with no progress at all.

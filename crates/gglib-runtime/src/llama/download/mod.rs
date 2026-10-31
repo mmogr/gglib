@@ -17,9 +17,8 @@ use crate::binary_install::{
 /// Check if llama.cpp binaries are installed.
 /// Returns true if llama-server exists.
 pub fn check_llama_installed() -> bool {
-    let server_path = match llama_server_path() {
-        Ok(p) => p,
-        Err(_) => return false,
+    let Ok(server_path) = llama_server_path() else {
+        return false;
     };
     server_path.exists()
 }
@@ -45,6 +44,10 @@ fn llama_download_dir() -> Result<PathBuf> {
 /// Whether an archive member named `file_name` is extracted.
 ///
 /// Licences, C headers and Metal shader sources are left in the archive.
+#[expect(
+    clippy::case_sensitive_file_extension_comparisons,
+    reason = "the names are llama.cpp's own archive members, which spell these extensions in lower case"
+)]
 fn wanted(file_name: &str) -> bool {
     !(file_name.starts_with("LICENSE")
         || file_name.ends_with(".h")
@@ -405,8 +408,7 @@ pub(super) mod tests {
         let availability = check_prebuilt_availability();
         // Just verify it doesn't panic and returns a valid variant
         match availability {
-            PrebuiltAvailability::Available { .. } => {}
-            PrebuiltAvailability::NotAvailable { .. } => {}
+            PrebuiltAvailability::Available { .. } | PrebuiltAvailability::NotAvailable { .. } => {}
         }
     }
 

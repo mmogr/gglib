@@ -77,12 +77,12 @@ impl MissingPackage {
 ///
 /// Captures the presence of each component independently so callers
 /// can provide targeted remediation advice.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "one flag per build component, each checked and reported on its own, as the doc says"
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[allow(
-    clippy::struct_excessive_bools,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub struct VulkanStatus {
     /// Vulkan runtime loader is present and working.
     pub has_loader: bool,

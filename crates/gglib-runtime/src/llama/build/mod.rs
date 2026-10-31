@@ -203,7 +203,7 @@ fn configure_cmake(
 
     // For CUDA builds, set CUDA paths explicitly
     let cuda_args = if matches!(acceleration, Acceleration::Cuda) {
-        if let Some(cuda_path) = get_cuda_path() {
+        get_cuda_path().map_or_else(Vec::new, |cuda_path| {
             let _ = tx.blocking_send(BuildEvent::Log {
                 message: format!("Using CUDA installation at: {cuda_path}"),
             });
@@ -219,9 +219,7 @@ fn configure_cmake(
                 format!("-DCUDAToolkit_ROOT={}", cuda_path),
                 format!("-DCMAKE_CUDA_COMPILER={}", nvcc_path),
             ]
-        } else {
-            Vec::new()
-        }
+        })
     } else {
         Vec::new()
     };

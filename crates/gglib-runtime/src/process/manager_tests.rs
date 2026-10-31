@@ -329,7 +329,6 @@ async fn a_running_sd_server_is_listed_with_its_runtime() {
         .write()
         .await
         .spawn(crate::process::SpawnConfig::Sd(sd))
-        .await
         .expect("spawn");
     let listed: Vec<RuntimeKind> = manager
         .list_running()

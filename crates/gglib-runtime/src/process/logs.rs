@@ -33,15 +33,14 @@ pub struct ServerLogEntry {
 
 impl ServerLogEntry {
     /// Create a new log entry with current timestamp
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
     pub fn new(line: String, port: u16) -> Self {
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
+        let timestamp = u64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis(),
+        )
+        .unwrap_or(u64::MAX);
         Self {
             timestamp,
             line,
@@ -90,19 +89,16 @@ impl ServerLogManager {
     }
 
     /// Add a log line for a server (sync - can be called from std threads)
-    #[allow(
-        clippy::significant_drop_tightening,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
     pub fn add_log(&self, port: u16, line: &str) {
         let entry = ServerLogEntry::new(line.to_string(), port);
 
         // Add to buffer
-        {
-            let mut buffers = self.buffers.write().unwrap();
-            let buffer = buffers.entry(port).or_default();
-            buffer.push(entry.clone());
-        }
+        self.buffers
+            .write()
+            .unwrap()
+            .entry(port)
+            .or_default()
+            .push(entry.clone());
 
         // Broadcast to subscribers (ignore if no receivers)
         let _ = self.broadcast_tx.send(entry);

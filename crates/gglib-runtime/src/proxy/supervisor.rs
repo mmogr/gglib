@@ -376,9 +376,8 @@ impl ProxySupervisor {
     pub async fn stop(&self) -> Result<(), SupervisorError> {
         let mut guard = self.handle.lock().await;
 
-        let handle = match guard.take() {
-            Some(h) => h,
-            None => return Err(SupervisorError::NotRunning),
+        let Some(handle) = guard.take() else {
+            return Err(SupervisorError::NotRunning);
         };
 
         info!("Stopping proxy on {}", handle.bound_addr);
@@ -425,9 +424,8 @@ impl ProxySupervisor {
     pub async fn status(&self) -> ProxyStatus {
         let mut guard = self.handle.lock().await;
 
-        let handle = match guard.as_ref() {
-            None => return ProxyStatus::Stopped,
-            Some(h) => h,
+        let Some(handle) = guard.as_ref() else {
+            return ProxyStatus::Stopped;
         };
 
         if handle.join_handle.is_finished() {

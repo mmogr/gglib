@@ -90,7 +90,7 @@ async fn a_spawned_servers_stdout_and_stderr_reach_the_log_manager_under_its_por
     let mut ports = Vec::new();
     for id in IDS {
         let config = ServerConfig::new(id, "test-model".to_owned(), model.clone(), BASE_PORT);
-        let (port, _pid) = core.spawn(SpawnConfig::Llama(config)).await.expect("spawn");
+        let (port, _pid) = core.spawn(SpawnConfig::Llama(config)).expect("spawn");
         ports.push(port);
     }
     let held = [lines(ports[0], 2).await, lines(ports[1], 2).await];

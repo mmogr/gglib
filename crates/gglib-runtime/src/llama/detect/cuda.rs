@@ -207,6 +207,13 @@ fn get_specific_gcc_version(gcc_cmd: &str) -> Result<String> {
 /// Returns `Ok(())` if the combination is supported, or an `Err` with
 /// a detailed message including remediation steps. Validation is only
 /// performed on Linux; other platforms return `Ok(())` unconditionally.
+#[cfg_attr(
+    not(target_os = "linux"),
+    expect(
+        clippy::unnecessary_wraps,
+        reason = "off Linux there is nothing to validate, but the signature is the Linux one, which can fail"
+    )
+)]
 pub(crate) fn validate_cuda_gcc_compatibility() -> Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
@@ -215,13 +222,10 @@ pub(crate) fn validate_cuda_gcc_compatibility() -> Result<()> {
 
     #[cfg(target_os = "linux")]
     {
-        let (cuda_major, cuda_minor) = match get_cuda_version_tuple() {
-            Some(v) => v,
-            None => {
-                anyhow::bail!(
-                    "CUDA toolkit not detected. Please install CUDA, or install the download with 'gglib config llama install --force'."
-                );
-            }
+        let Some((cuda_major, cuda_minor)) = get_cuda_version_tuple() else {
+            anyhow::bail!(
+                "CUDA toolkit not detected. Please install CUDA, or install the download with 'gglib config llama install --force'."
+            );
         };
 
         let (compiler_name, gcc_version) = select_cuda_compiler_for_build()?;
@@ -231,9 +235,8 @@ pub(crate) fn validate_cuda_gcc_compatibility() -> Result<()> {
             return Ok(());
         }
 
-        let (gcc_major, _gcc_minor) = match gcc_version {
-            Some(v) => v,
-            None => return Ok(()), // Can't determine version, let the build try
+        let Some((gcc_major, _gcc_minor)) = gcc_version else {
+            return Ok(()); // Can't determine version, let the build try
         };
 
         // CUDA/GCC compatibility matrix

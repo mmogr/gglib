@@ -59,7 +59,12 @@ impl GuiProcessCore {
     /// at which the child exists and nothing owns it. Handing both out of the
     /// same critical section removes the window rather than arguing it is
     /// small.
-    pub async fn spawn(&mut self, config: SpawnConfig) -> Result<(u16, u32)> {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a model id is a database row id the core keys by u32; one outside u32 is cast as it always has been, which this lint pass leaves alone"
+    )]
+    pub fn spawn(&mut self, config: SpawnConfig) -> Result<(u16, u32)> {
         let model_id = config.model_id() as u32;
         let runtime = config.runtime();
 
@@ -152,7 +157,7 @@ impl GuiProcessCore {
         let _ = shutdown_child(running.child).await;
 
         // Remove PID file
-        if let Err(e) = delete_pidfile(model_id as i64) {
+        if let Err(e) = delete_pidfile(i64::from(model_id)) {
             debug!("Failed to delete PID file: {}", e);
         }
 
@@ -222,7 +227,7 @@ impl GuiProcessCore {
     }
 
     /// Remove dead processes from tracking and clean PID files
-    pub async fn cleanup_dead(&mut self) -> Vec<u32> {
+    pub fn cleanup_dead(&mut self) -> Vec<u32> {
         debug!(process_count = %self.processes.len(), "cleanup_dead called");
         let mut dead = Vec::new();
 
@@ -248,7 +253,7 @@ impl GuiProcessCore {
             debug!(id = %id, "Removing dead process from map");
             self.processes.remove(id);
             // Remove PID file for naturally exited process
-            if let Err(e) = delete_pidfile(*id as i64) {
+            if let Err(e) = delete_pidfile(i64::from(*id)) {
                 debug!("Failed to delete PID file for {}: {}", id, e);
             }
         }

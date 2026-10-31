@@ -396,8 +396,7 @@ impl QueueState {
         // a secondary slot could actually have used it, so the dashboard shows
         // the last verdict that mattered rather than one for a moment when no
         // slot was on offer.
-        let secondary_available = self
-            .secondary_slots()
+        let secondary_available = Self::secondary_slots()
             .any(|slot| matches!(self.slots[slot], SlotState::Empty) || self.evictable(slot));
         if secondary_available {
             self.secondary_slot = SecondarySlotStatus::from_decision(secondary);
@@ -561,9 +560,8 @@ impl QueueState {
             return Some(PRIMARY_SLOT);
         }
         if may_co_reside
-            && let Some(slot) = self
-                .secondary_slots()
-                .find(|&slot| matches!(self.slots[slot], SlotState::Empty))
+            && let Some(slot) =
+                Self::secondary_slots().find(|&slot| matches!(self.slots[slot], SlotState::Empty))
         {
             return Some(slot);
         }
@@ -580,7 +578,7 @@ impl QueueState {
         // displace the primary or wait, never be squeezed in where it does not
         // belong.
         if may_co_reside
-            && let Some(slot) = self.secondary_slots().find(|&slot| self.evictable(slot))
+            && let Some(slot) = Self::secondary_slots().find(|&slot| self.evictable(slot))
         {
             return Some(slot);
         }
@@ -622,7 +620,7 @@ impl QueueState {
     }
 
     /// Every slot that is not the primary.
-    fn secondary_slots(&self) -> impl Iterator<Item = usize> + use<> {
+    fn secondary_slots() -> impl Iterator<Item = usize> + use<> {
         PRIMARY_SLOT + 1..SLOT_COUNT
     }
 

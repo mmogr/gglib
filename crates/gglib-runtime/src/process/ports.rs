@@ -6,18 +6,9 @@ use tracing::debug;
 
 /// Check if a port is available by attempting to bind to it.
 /// This method binds and immediately drops the listener, which releases the port.
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(super) fn is_port_available(port: u16) -> bool {
-    match TcpListener::bind(("127.0.0.1", port)) {
-        Ok(listener) => {
-            // Get the actual bound address to ensure it worked
-            listener.local_addr().is_ok()
-        }
-        Err(_) => false,
-    }
+    // Get the actual bound address to ensure it worked
+    TcpListener::bind(("127.0.0.1", port)).is_ok_and(|listener| listener.local_addr().is_ok())
 }
 
 /// Allocate an available port from a range, avoiding ports already in use.

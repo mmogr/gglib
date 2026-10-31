@@ -247,6 +247,7 @@ crates/gglib-runtime/src/engine_tests.rs 442
 crates/gglib-runtime/src/launch_narration.rs 803
 crates/gglib-runtime/src/llama/args/cache_ram.rs 328
 crates/gglib-runtime/src/llama/build/mod.rs 541
+crates/gglib-runtime/src/llama/detect/cuda.rs 303
 crates/gglib-runtime/src/llama/download/mod.rs 714
 crates/gglib-runtime/src/pinned_engines_tests.rs 452
 crates/gglib-runtime/src/ports_impl/llm_completion/drawn_picture_tests.rs 471
@@ -260,12 +261,12 @@ crates/gglib-runtime/src/ports_impl/llm_completion/retry/execute_tests.rs 340
 crates/gglib-runtime/src/ports_impl/llm_completion/shaping_tests.rs 301
 crates/gglib-runtime/src/ports_impl/llm_completion/turn_tests.rs 337
 crates/gglib-runtime/src/process/admission/gate_tests.rs 585
-crates/gglib-runtime/src/process/admission/queue_tests.rs 1043
+crates/gglib-runtime/src/process/admission/queue_tests.rs 1045
 crates/gglib-runtime/src/process/admission/state.rs 774
 crates/gglib-runtime/src/process/admission/state_gate.rs 359
 crates/gglib-runtime/src/process/admission/state_placement.rs 308
 crates/gglib-runtime/src/process/admission/state_placement_tests.rs 741
-crates/gglib-runtime/src/process/core.rs 304
+crates/gglib-runtime/src/process/core.rs 309
 crates/gglib-runtime/src/process/manager.rs 321
 crates/gglib-runtime/src/process/manager_tests.rs 344
 crates/gglib-runtime/src/process/residency/launch.rs 631
@@ -280,6 +281,6 @@ crates/gglib-runtime/src/sd/server/job.rs 396
 crates/gglib-runtime/src/sd/server/job_leave_tests.rs 537
 crates/gglib-runtime/src/sd/server/job_tests.rs 1014
 crates/gglib-runtime/src/system/gpu.rs 331
-crates/gglib-runtime/src/system/mod.rs 625
+crates/gglib-runtime/src/system/mod.rs 640
 crates/gglib-runtime/src/unified_server_config.rs 465
 crates/gglib-sse/src/lib.rs 320

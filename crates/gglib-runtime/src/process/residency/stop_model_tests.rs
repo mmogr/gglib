@@ -71,7 +71,6 @@ async fn running(
         .write()
         .await
         .spawn(SpawnConfig::Llama(config))
-        .await
         .expect("the stand-in starts");
     drop(set.queue().install(slot, resident(id, name, port, runtime)));
 }

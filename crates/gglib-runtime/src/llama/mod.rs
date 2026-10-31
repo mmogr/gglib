@@ -2,23 +2,10 @@
 // === Submodules ===
 
 pub mod args;
-#[allow(
-    clippy::option_if_let_else,
-    clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) mod build;
 pub mod build_events;
 mod deps;
 pub(crate) mod detect;
-#[allow(
-    clippy::case_sensitive_file_extension_comparisons,
-    clippy::items_after_statements,
-    clippy::manual_let_else,
-    clippy::match_same_arms,
-    clippy::needless_collect,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 mod download;
 pub(crate) mod install;
 pub mod install_events;

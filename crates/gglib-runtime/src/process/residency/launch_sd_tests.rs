@@ -144,7 +144,6 @@ async fn running_primary(
         .write()
         .await
         .spawn(SpawnConfig::Llama(config))
-        .await
         .expect("the stand-in starts");
     drop(set.queue().install(PRIMARY_SLOT, qwen_resident(id, port)));
 }

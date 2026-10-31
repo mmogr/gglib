@@ -11,6 +11,7 @@
 //! Every canned response carries `Connection: close`, so the client never
 //! reuses a connection and the accept count is exactly the request count.
 
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -128,19 +129,14 @@ pub(super) fn json_with(status: u16, reason: &str, body: &str, extra: &[(&str, &
 }
 
 /// An SSE response body, as llama-server would stream it.
-#[allow(
-    clippy::format_collect,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(super) fn sse(frames: &[&str]) -> String {
-    let body: String = frames.iter().map(|f| format!("data: {f}\n\n")).collect();
+    let body = frames.iter().fold(String::new(), |mut body, f| {
+        let _ = write!(body, "data: {f}\n\n");
+        body
+    });
     with_headers(200, "OK", &body, "text/event-stream", &[])
 }
 
-#[allow(
-    clippy::format_push_string,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 fn with_headers(
     status: u16,
     reason: &str,
@@ -156,7 +152,7 @@ fn with_headers(
         body.len()
     );
     for (name, value) in extra {
-        head.push_str(&format!("{name}: {value}\r\n"));
+        let _ = write!(head, "{name}: {value}\r\n");
     }
     head.push_str("\r\n");
     head.push_str(body);

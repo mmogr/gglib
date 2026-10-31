@@ -350,7 +350,7 @@ impl ResidentSet {
 
             match self
                 .queue
-                .poll(&queued.ticket, self.secondary_verdict(&request))
+                .poll(&queued.ticket, Self::secondary_verdict(&request))
             {
                 AdmissionDecision::Serve { slot } => {
                     let launched_as = LaunchedAs {
@@ -440,7 +440,7 @@ impl ResidentSet {
     /// other image model still loaded, so it does not count what that one
     /// gives back; the queue adds that model's weights back before it swaps
     /// the request into its slot.
-    fn secondary_verdict(&self, request: &LaunchRequest) -> Candidate {
+    fn secondary_verdict(request: &LaunchRequest) -> Candidate {
         let candidate = match request.spec.runtime() {
             RuntimeKind::StableDiffusion => {
                 Candidate::image(vram::image_slot_decision(&request.spec))
@@ -579,23 +579,20 @@ impl ResidentSet {
         let budget = launch_timeout(Duration::from_secs(launch_request.health_deadline_secs));
 
         let handle = tokio::spawn(async move {
-            match tokio::time::timeout(
+            tokio::time::timeout(
                 budget,
                 run_launch(core, Arc::clone(&queue), catalog, launch_request),
             )
             .await
-            {
-                Ok(result) => result,
-                Err(_) => {
-                    // The launch overran its budget. Free the slot explicitly:
-                    // the future was dropped mid-flight, so nothing inside it
-                    // will do so.
-                    queue.launch_failed(slot);
-                    Err(ModelRuntimeError::Internal(
-                        "model startup exceeded its deadline".to_string(),
-                    ))
-                }
-            }
+            .unwrap_or_else(|_| {
+                // The launch overran its budget. Free the slot explicitly:
+                // the future was dropped mid-flight, so nothing inside it
+                // will do so.
+                queue.launch_failed(slot);
+                Err(ModelRuntimeError::Internal(
+                    "model startup exceeded its deadline".to_string(),
+                ))
+            })
         });
 
         match handle.await {

@@ -47,16 +47,12 @@ fn status_serialises_as_camel_case() {
 /// `RuntimeCapabilities` directly would put `snake_case` keys inside this
 /// camelCase payload, which is what the TS mirror silently tripped over.
 #[test]
-#[allow(
-    clippy::default_trait_access,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 fn runtime_block_is_camel_case() {
     let caps = gglib_core::domain::RuntimeCapabilities {
         build: Some(9656),
         commit: None,
         version_line: "version: 9656 (deadbee)".into(),
-        flags: Default::default(),
+        flags: gglib_core::domain::RuntimeFlags::default(),
     };
 
     let json = serde_json::to_value(LlamaRuntimeInfo::from(&caps)).unwrap();
