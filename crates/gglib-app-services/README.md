@@ -17,31 +17,6 @@ same shared runtime rather than competing for the GPU.
 
 This crate is a **Shared Facade** — sitting between adapters and infrastructure, providing a unified orchestration layer.
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                 Adapter Layer                                       │
-│      ┌────────────────┐    ┌────────────────┐    ┌────────────────┐                 │
-│      │   gglib-axum   │    │   gglib-cli    │    │   src-tauri    │                 │
-│      │   (HTTP API)   │    │     (CLI)      │    │ (desktop app)  │                 │
-│      └────────┬───────┘    └────────┬───────┘    └────────┬───────┘                 │
-│               │                     │                     │                         │
-│               └─────────────────────┼─────────────────────┘                         │
-│                                     ▼                                               │
-│   ┌─────────────────────────────────────────────────────────────────────────────┐   │
-│   │                          ►►► gglib-app-services ◄◄◄                         │   │
-│   │         Platform-agnostic GUI orchestration (ensures feature parity)        │   │
-│   └─────────────────────────────────────────────────────────────────────────────┘   │
-│                                     │                                               │
-└─────────────────────────────────────┼───────────────────────────────────────────────┘
-                                      ▼
-              ┌───────────────────────────────────────────────────────┐
-              │  gglib-core, gglib-runtime, gglib-proxy, gglib-agent, │
-              │               gglib-download, gglib-mcp               │
-              └───────────────────────────────────────────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## Internal Structure
 
 ```text

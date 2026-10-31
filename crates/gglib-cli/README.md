@@ -18,30 +18,6 @@ renders and asks, it never spawns llama-server itself.
 
 This crate is in the **Adapter Layer** — it wires together all infrastructure crates and exposes them via CLI commands.
 
-```text
-                              ┌──────────────────┐
-                              │    gglib-cli     │
-                              │  CLI interface   │
-                              └────────┬─────────┘
-                                       │
-         ┌─────────────┬───────────────┼───────────────┬─────────────┐
-         ▼             ▼               ▼               ▼             ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│  gglib-db   │ │gglib-download│ │gglib-runtime│ │  gglib-hf   │ │  gglib-mcp  │
-│   SQLite    │ │  Downloads  │ │   Servers   │ │  HF client  │ │ MCP servers │
-└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
-         │             │               │               │             │
-         └─────────────┴───────────────┴───────────────┴─────────────┘
-                                       │
-                                       ▼
-                              ┌──────────────────┐
-                              │    gglib-core    │
-                              │   (all ports)    │
-                              └──────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## Internal Structure
 
 ```text

@@ -18,35 +18,6 @@ like an API provider.
 
 This crate is in the **Infrastructure Layer** — it provides external API compatibility by bridging `OpenAI` clients to internal llama-server instances.
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            Infrastructure Layer                             │
-│                                                                             │
-│                              ┌──────────────────┐                           │
-│                              │   gglib-proxy    │                           │
-│                              │  OpenAI-compat   │                           │
-│                              │   proxy server   │                           │
-│                              └────────┬─────────┘                           │
-│                                       │                                     │
-│                                       │ (ports only, no infra deps)         │
-│                                       │                                     │
-└───────────────────────────────────────┼─────────────────────────────────────┘
-                                        │
-                                        ▼
-                              ┌──────────────────┐
-                              │    gglib-core    │
-                              │   (port traits)  │
-                              └──────────────────┘
-
-At runtime, adapters inject concrete implementations:
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│gglib-runtime│     │  gglib-db   │     │  gglib-hf   │
-│  (servers)  │     │   (models)  │     │  (search)   │
-└─────────────┘     └─────────────┘     └─────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## Overview
 
 This crate provides an OpenAI-compatible HTTP server that:

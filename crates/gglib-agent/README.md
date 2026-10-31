@@ -20,8 +20,6 @@ This crate is in the **Application Layer** — it orchestrates the LLM→tool→
 cycle using only injected port traits from `gglib-core`.  It has **zero
 infrastructure dependencies**: no HTTP, no MCP internals, no Axum, no database.
 
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## Overview
 
 This crate implements:

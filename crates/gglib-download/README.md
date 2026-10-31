@@ -16,22 +16,6 @@ opt-in upgrade that falls back to the native path rather than failing.
 
 This crate is in the **Infrastructure Layer** — it orchestrates downloads using `gglib-hf` for file resolution.
 
-```text
-gglib-core (types)          gglib-download            External
-┌──────────────────┐        ┌──────────────────┐        ┌──────────────────┐
-│  QueueSnapshot   │◄───────│  DownloadManager │───────►│   HuggingFace    │
-│  DownloadRow     │        │  DownloadQueue   │        │       Hub        │
-│  DownloadEvent   │        │  FileResolver    │        └──────────────────┘
-└──────────────────┘        └───────┬──────────┘                 
-                                    │                            
-                            ┌───────▼──────────┐        ┌──────────────────┐
-                            │    gglib-hf      │        │  hf_xet helper   │
-                            │  (HfClientPort)  │        │ (opt-in accel.)  │
-                            └──────────────────┘        └──────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## Internal Structure
 
 ```text

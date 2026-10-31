@@ -16,17 +16,6 @@ restart.
 
 This crate is in the **Infrastructure Layer** — it implements the repository ports defined in `gglib-core`.
 
-```text
-gglib-core (ports)          gglib-db (adapters)           Adapters
-┌──────────────────┐        ┌──────────────────┐        ┌──────────────────┐
-│ ModelRepository  │◄───────│ SqliteModelRepo  │◄───────│    gglib-cli     │
-│ McpServerRepo    │        │ SqliteMcpRepo    │        │   gglib-axum     │
-│ ConversationRepo │        │ SqliteConvRepo   │        │    src-tauri     │
-└──────────────────┘        └──────────────────┘        └──────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## Internal Structure
 
 ```text

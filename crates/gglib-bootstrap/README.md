@@ -19,33 +19,6 @@ across the CLI, Axum, and Tauri bootstrap modules into a single
 
 This crate is the **Composition Root** — sitting between adapter crates and pure infrastructure, wiring all dependencies before handing a fully-configured `BuiltCore` to each adapter.
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                 Adapter Layer                                       │
-│                  ┌───────────────┐             ┌───────────────┐                    │
-│                  │   gglib-axum  │             │   gglib-cli   │                    │
-│                  │   (HTTP API)  │             │    (CLI UX)   │                    │
-│                  └───────┬───────┘             └───────┬───────┘                    │
-│                          │                             │                            │
-│                          └──────────────┬──────────────┘                            │
-│                                         │                                           │
-└─────────────────────────────────────────┼───────────────────────────────────────────┘
-                                          ▼
-              ┌───────────────────────────────────────────────────────┐
-              │              ►► gglib-bootstrap ◄◄                    │
-              │        Single shared wiring call for all adapters     │
-              └───────────────────────────┬───────────────────────────┘
-                                          │
-                                          ▼
-              ┌───────────────────────────────────────────────────────┐
-              │    gglib-core, gglib-db, gglib-download,              │
-              │    gglib-gguf, gglib-hf                               │
-              │              (Infrastructure crates)                  │
-              └───────────────────────────────────────────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## What it wires
 
 1. `SQLite` database pool + repository set

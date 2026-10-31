@@ -16,8 +16,6 @@ behind `gglib up`'s recommendation.
 
 This crate is in the **Infrastructure Layer** — it implements the `HfClientPort` trait from `gglib-core`.
 
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## Internal Structure
 
 ```text

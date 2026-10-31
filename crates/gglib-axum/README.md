@@ -16,30 +16,6 @@ desktop app, or the web UI needs the runtime, this is what they talk to.
 
 This crate is in the **Adapter Layer** — it exposes gglib functionality via HTTP using the Axum framework.
 
-```text
-                              ┌──────────────────┐
-                              │   gglib-axum     │
-                              │   HTTP server    │
-                              └────────┬─────────┘
-                                       │
-         ┌─────────────┬───────────────┬───────────────┬─────────────┐
-         ▼             ▼               ▼               ▼             ▼
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│  gglib-db   │ │gglib-download│ │gglib-runtime│ │  gglib-hf   │ │  gglib-mcp  │
-│   SQLite    │ │  Downloads  │ │   Servers   │ │  HF client  │ │ MCP servers │
-└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
-         │             │               │               │             │
-         └─────────────┴───────────────┴───────────────┴─────────────┘
-                                       │
-                                       ▼
-                              ┌──────────────────┐
-                              │    gglib-core    │
-                              │   (all ports)    │
-                              └──────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## Internal Structure
 
 ```text

@@ -17,24 +17,6 @@ the runtime feel smarter than llama.cpp on its own.
 
 This crate is in the **Infrastructure Layer** — it manages external processes and provides system information.
 
-```text
-gglib-core (ports)          gglib-runtime                       External
-┌──────────────────────┐    ┌──────────────────────┐    ┌──────────────────┐
-│ ModelRuntimePort     │◄───│ RuntimePortImpl      │───►│  llama-server    │
-│ LlmCompletionPort    │    │ LlmCompletionAdapter │    │  llama-cli       │
-│ SystemProbePort      │    │ DefaultSystemProbe   │    └──────────────────┘
-│ AdmissionRelease     │    │ AdmissionQueue       │
-└──────────────────────┘    └──────────────────────┘
-                                     │
-                                     ▼
-                            ┌──────────────────┐
-                            │   System APIs    │
-                            │  (GPU, memory)   │
-                            └──────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## Internal Structure
 
 ```text

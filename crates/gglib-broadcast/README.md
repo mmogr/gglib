@@ -22,23 +22,6 @@ does **not** depend on any other `gglib-*` crate, which is what allows both an A
 (`gglib-axum`) and an Infrastructure-layer crate (`gglib-proxy`) to depend on it directly without
 inverting the hexagonal layering rules enforced by `scripts/check_boundaries.sh`.
 
-```text
-        gglib-axum (adapter)              gglib-proxy (infrastructure)
-        ┌──────────────────┐              ┌──────────────────┐
-        │  SseBroadcaster   │              │ DashboardState    │
-        │  wraps            │              │  wraps            │
-        └─────────┬─────────┘              └─────────┬─────────┘
-                  │                                   │
-                  └───────────────┬───────────────────┘
-                                  ▼
-                        ┌──────────────────┐
-                        │ gglib-broadcast   │
-                        │  Broadcaster<T>   │
-                        └──────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete workspace diagram.
-
 ## Internal Structure
 
 ```text

@@ -16,8 +16,6 @@ proxy exposes at `/mcp`.
 
 This crate is in the **Infrastructure Layer** — it manages MCP server lifecycle and protocol handling.
 
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## Overview
 
 This crate provides MCP server lifecycle management, including:

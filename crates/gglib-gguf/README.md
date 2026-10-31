@@ -16,22 +16,6 @@ tags, and those tags become llama-server flags. No per-model setup.
 
 This crate is in the **Infrastructure Layer** — it implements the `GgufParser` port from `gglib-core`.
 
-```text
-gglib-core (port)           gglib-gguf (adapter)          Adapters
-┌──────────────────┐        ┌──────────────────┐        ┌──────────────────┐
-│   GgufParser     │◄───────│  impl GgufParser │◄───────│    gglib-cli     │
-│   trait          │        │  for GgufReader  │        │   gglib-axum     │
-└──────────────────┘        └──────────────────┘        └──────────────────┘
-                                     │
-                                     ▼
-                            ┌──────────────────┐
-                            │   .gguf files    │
-                            │ (GGUF v3 format) │
-                            └──────────────────┘
-```
-
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
-
 ## Internal Structure
 
 ```text
