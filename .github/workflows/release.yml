@@ -1,5 +1,6 @@
 # Builds a release's assets and publishes them to its GitHub release, then,
-# for a stable version, to apt, the AUR, Homebrew and the docs site.
+# for a stable version, to the apt, dnf and pacman repositories, the AUR,
+# Homebrew and the docs site.
 #
 # CI's `release` job (release-tag.yml) tags the version, makes the release
 # and dispatches this workflow with `tag`. A run of its own, not a part of
@@ -254,16 +255,16 @@ jobs:
 
       # Into dist/ with the tarball, so it is hashed, attested and attached to
       # the release like every other asset. The apt repository is built from
-      # this same file by the `apt-repo` job.
+      # this same file by the `linux-repos` job.
       - name: Package CLI .deb (Linux)
         if: runner.os == 'Linux'
         run: scripts/build_cli_deb.sh target/${{ matrix.target }}/release/gglib ${{ needs.meta.outputs.version }} dist
 
-      - name: Upload .deb for the apt repository
+      - name: Upload .deb for the Linux repositories
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v7
         with:
-          name: deb-cli
+          name: pkg-cli
           path: dist/*.deb
           retention-days: 7
 
@@ -664,12 +665,14 @@ jobs:
             stage dmg dmg
           fi
 
-      - name: Upload .deb for the apt repository
+      - name: Upload .deb and .rpm for the Linux repositories
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v7
         with:
-          name: deb-gui
-          path: dist/*.deb
+          name: pkg-gui
+          path: |
+            dist/*.deb
+            dist/*.rpm
           retention-days: 7
 
       - name: Stage GUI installers (Windows)
@@ -906,110 +909,27 @@ jobs:
           gh release upload "$TAG" assets/* --clobber
           gh release upload "$TAG" SHA256SUMS --clobber
 
-  # Everything past the GitHub release that a user's package manager reads
-  # waits for a person. Each channel is its own environment with required
-  # reviewers (Settings > Environments): `apt`, `aur` and `homebrew`. They
-  # wait together, so one "Review deployments" dialog shows a box per
-  # channel; tick them all and approve once, or hold one back. Each
-  # environment's url is what the repository's Deployments sidebar links to:
-  # the README's install section for apt and Arch (the apt tree has no index
-  # page, and the AUR page exists only after the first push), the tap for
-  # Homebrew.
-  #
-  # Stable releases only. A release candidate gets its GitHub prerelease and
-  # stops; nothing it builds reaches apt or the docs. That is what lets RCs be
-  # cut as often as wanted.
-  #
-  # A channel's secret belongs in its environment's secrets, so a job reads
-  # only its own key. A repository secret of the same name works too, but
-  # every job can read it, and an environment secret overrides it.
-  #
-  # An environment a job names is created on first use with no reviewers, so
-  # all three must exist, with reviewers, before a stable release runs.
-  apt-repo:
-    name: Build apt repository
-    runs-on: ubuntu-24.04
-    needs: [meta, publish]
-    if: needs.meta.outputs.is-prerelease == 'false' && inputs.test_run != true
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    environment:
-      name: apt
-      url: https://github.com/mmogr/gglib#apt-ubuntu-2404-debian-13
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.meta.outputs.sha }}
-          persist-credentials: false
-
-      - name: Install apt-ftparchive
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y apt-utils
-
-      - name: Collect .deb packages
-        uses: actions/download-artifact@v8
-        with:
-          pattern: deb-*
-          merge-multiple: true
-          path: debs
-
-      # The key is generated once, off CI, and stored as the
-      # APT_GPG_PRIVATE_KEY secret (armored); APT_GPG_PASSPHRASE only if it
-      # has one. Its public half ships with the repository on every build.
-      - name: Import signing key
-        env:
-          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
-        run: |
-          if [ -z "$APT_GPG_PRIVATE_KEY" ]; then
-            echo "::error::APT_GPG_PRIVATE_KEY is not set; the apt repository cannot be signed"
-            exit 1
-          fi
-          printf '%s\n' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
-
-      - name: Build and sign the repository
-        env:
-          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
-        run: scripts/build_apt_repo.sh debs apt
-
-      - name: Upload apt repository
-        uses: actions/upload-artifact@v7
-        with:
-          name: apt-repo
-          path: apt
-          retention-days: 1
-
   # gglib-bin and gglib-gui-bin, rendered from packaging/aur with the
-  # release's own SHA256SUMS and pushed to the AUR.
+  # release's own SHA256SUMS and built. The same packages go two ways: the
+  # `aur` job pushes their PKGBUILD and .SRCINFO, and `linux-repos` serves
+  # the built packages from the pacman repository.
   #
   # Runs on Arch so makepkg itself writes .SRCINFO and verifies every source
-  # against its checksum by downloading it from the release, before anything
-  # is pushed.
-  #
-  # Until AUR_SSH_PRIVATE_KEY is set (the private half of an SSH key whose
-  # public half is on the AUR account) this renders and verifies, then stops
-  # with a notice instead of failing the release. The first push of each
-  # package is what creates it on the AUR.
-  aur:
-    name: Publish to the AUR
+  # against its checksum by downloading it from the release. It holds no
+  # secret, so it needs no approval; what it builds reaches users only
+  # through jobs that do.
+  arch-packages:
+    name: Build Arch packages
     runs-on: ubuntu-24.04
     needs: [meta, publish]
     if: needs.meta.outputs.is-prerelease == 'false' && inputs.test_run != true
     timeout-minutes: 20
     permissions:
       contents: read
-    environment:
-      name: aur
-      url: https://github.com/mmogr/gglib#arch-linux
     container: archlinux:base-devel
     env:
       VERSION: ${{ needs.meta.outputs.version }}
     steps:
-      - name: Install git and ssh
-        run: pacman -Syu --noconfirm --needed git openssh
-
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -1017,22 +937,164 @@ jobs:
           persist-credentials: false
 
       # Read back from the release, which is what a user's download is
-      # checked against, rather than from this run's artifacts, which can
-      # expire while this job waits for its approval.
+      # checked against.
       - name: Fetch SHA256SUMS
         run: curl -fsSL -o SHA256SUMS "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/SHA256SUMS"
 
-      - name: Render and verify the packages
+      # --nodeps: the packages repackage built binaries, so building them
+      # needs none of the desktop libraries they depend on at run time.
+      # PKGDEST collects both packages in one directory for the repository.
+      - name: Render, verify and build the packages
         run: |
           set -euo pipefail
           scripts/render_aur.sh "$VERSION" SHA256SUMS aur
           # makepkg refuses to run as root.
           useradd -m builder
-          chown -R builder aur
+          mkdir arch
+          chown -R builder aur arch
           for dir in aur/*/; do
             su builder -c "cd '$dir' && makepkg --verifysource --noconfirm && makepkg --printsrcinfo > .SRCINFO"
             echo "::group::$(basename "$dir")/.SRCINFO"; cat "$dir/.SRCINFO"; echo "::endgroup::"
+            su builder -c "cd '$dir' && PACKAGER='mmogr <172192206+mmogr@users.noreply.github.com>' PKGDEST='$PWD/arch' makepkg --nodeps --noconfirm"
           done
+
+      # Two artifacts, so each job downloads only what it uses. Seven days,
+      # as for the .deb and .rpm ones: the jobs that read them wait for an
+      # approval.
+      - name: Upload the PKGBUILDs for the AUR
+        uses: actions/upload-artifact@v7
+        with:
+          name: aur-pkgbuilds
+          path: |
+            aur/*/PKGBUILD
+            aur/*/.SRCINFO
+          include-hidden-files: true
+          retention-days: 7
+
+      - name: Upload the packages for the pacman repository
+        uses: actions/upload-artifact@v7
+        with:
+          name: arch-packages
+          path: arch/*.pkg.tar.zst
+          retention-days: 7
+
+  # Everything past the GitHub release that a user's package manager reads
+  # waits for a person. Each channel is its own environment with required
+  # reviewers (Settings > Environments): `apt`, `aur` and `homebrew`. `apt`
+  # holds the one signing key the apt, dnf and pacman repositories share, so
+  # it guards all three. They wait together, so one "Review deployments"
+  # dialog shows a box per channel; tick them all and approve once, or hold
+  # one back. Each environment's url is what the repository's Deployments
+  # sidebar links to: the README's install section for the repositories and
+  # the AUR (the repository trees have no index page, and the AUR page exists
+  # only after the first push), the tap for Homebrew.
+  #
+  # Stable releases only. A release candidate gets its GitHub prerelease and
+  # stops; nothing it builds reaches the package repositories or the docs.
+  # That is what lets RCs be cut as often as wanted.
+  #
+  # A channel's secret belongs in its environment's secrets, so a job reads
+  # only its own key. A repository secret of the same name works too, but
+  # every job can read it, and an environment secret overrides it.
+  #
+  # An environment a job names is created on first use with no reviewers, so
+  # all three must exist, with reviewers, before a stable release runs.
+  # The apt, dnf and pacman repositories, served from the Pages site beside
+  # install.sh and the one key that signs them all. deploy-docs publishes
+  # what this uploads.
+  linux-repos:
+    name: Build Linux package repositories
+    runs-on: ubuntu-24.04
+    needs: [meta, arch-packages]
+    if: needs.meta.outputs.is-prerelease == 'false' && inputs.test_run != true
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    environment:
+      name: apt
+      url: https://github.com/mmogr/gglib#linux-debian-ubuntu-arch-fedora
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+          persist-credentials: false
+
+      - name: Install apt-ftparchive and createrepo_c
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-utils createrepo-c
+
+      - name: Collect .deb and .rpm packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: pkg-*
+          merge-multiple: true
+          path: pkgs
+
+      - name: Collect Arch packages
+        uses: actions/download-artifact@v8
+        with:
+          name: arch-packages
+          path: arch
+
+      # The key is generated once, off CI, and stored as the
+      # APT_GPG_PRIVATE_KEY secret (armored); APT_GPG_PASSPHRASE only if it
+      # has one. Its public half ships with the repositories on every build.
+      # The secrets keep the names they had when they signed apt alone.
+      - name: Import signing key
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$APT_GPG_PRIVATE_KEY" ]; then
+            echo "::error::APT_GPG_PRIVATE_KEY is not set; the Linux repositories cannot be signed"
+            exit 1
+          fi
+          printf '%s\n' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+
+      - name: Build and sign the repositories
+        env:
+          REPO_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: scripts/build_linux_repos.sh pkgs arch site
+
+      # A broken repository or installer fails here, before deploy-docs
+      # publishes it.
+      - name: Install from them on Ubuntu, Arch and Fedora
+        run: scripts/verify_linux_repos.sh site
+
+      - name: Upload the repositories
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-repos
+          path: site
+          retention-days: 1
+
+  # Pushes the PKGBUILDs and .SRCINFO files `arch-packages` rendered and
+  # verified.
+  #
+  # Until AUR_SSH_PRIVATE_KEY is set (the private half of an SSH key whose
+  # public half is on the AUR account) this stops with a notice instead of
+  # failing the release. The first push of each package is what creates it
+  # on the AUR.
+  aur:
+    name: Publish to the AUR
+    runs-on: ubuntu-24.04
+    needs: [meta, arch-packages]
+    if: needs.meta.outputs.is-prerelease == 'false' && inputs.test_run != true
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    environment:
+      name: aur
+      url: https://github.com/mmogr/gglib#linux-debian-ubuntu-arch-fedora
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - name: Collect the PKGBUILDs
+        uses: actions/download-artifact@v8
+        with:
+          name: aur-pkgbuilds
+          path: aur
 
       - name: Push to the AUR
         env:
@@ -1152,11 +1214,12 @@ jobs:
   deploy-docs:
     name: Deploy Documentation
     runs-on: ubuntu-24.04
-    # The apt repository is served from the same Pages site, under /apt, and
-    # a Pages deploy replaces the whole site. So this job publishes both and
-    # waits for `apt-repo`, which waits for the `apt` approval: a stable
-    # release reaches the docs and apt together or not at all.
-    needs: [meta, apt-repo]
+    # The apt, dnf and pacman repositories and install.sh are served from the
+    # same Pages site, and a Pages deploy replaces the whole site. So this job
+    # publishes them all and waits for `linux-repos`, which waits for the
+    # `apt` approval: a stable release reaches the docs and the repositories
+    # together or not at all.
+    needs: [meta, linux-repos]
     if: needs.meta.outputs.is-prerelease == 'false' && inputs.test_run != true
     timeout-minutes: 20
     permissions:
@@ -1256,11 +1319,11 @@ jobs:
           </html>
           EOF
 
-      - name: Collect the apt repository
+      - name: Collect the Linux repositories
         uses: actions/download-artifact@v8
         with:
-          name: apt-repo
-          path: target/doc/apt
+          name: linux-repos
+          path: target/doc
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

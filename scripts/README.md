@@ -91,7 +91,8 @@ need macOS with Xcode.
 | `promote.py` | Turns main's release candidate X.Y.Z-rc.N into X.Y.Z in `Cargo.toml`, `package.json` and the release-please manifest, and heads `CHANGELOG.md` with the stable version. `--self-test` runs its fixtures | `promote.yml`; `make enforce` runs the self-test |
 | `check_rc_promotion.sh` | A stable version must be its last release candidate with only the version changed, `CHANGELOG.md` aside | `promote.yml`, `release-tag.yml` |
 | `build_cli_deb.sh` | Packages the Linux CLI binary as a `.deb` | `release.yml` |
-| `build_apt_repo.sh` | Builds and signs the apt repository served at `/apt` on the Pages site | `release.yml` |
+| `build_linux_repos.sh` | Builds and signs the apt, dnf and pacman repositories served at `/apt`, `/rpm` and `/arch` on the Pages site, with the key and `packaging/install.sh` at its root | `release.yml` |
+| `verify_linux_repos.sh` | Runs a built site's `install.sh` in Ubuntu, Arch and Fedora containers, so the installer and every signature are checked before the site is published | `release.yml` |
 | `render_aur.sh` | Fills the `packaging/aur` PKGBUILD templates with a release's version and checksums | `release.yml` |
 | `render_homebrew.sh` | Fills the `packaging/homebrew` formula and cask with a release's version and checksums | `release.yml` |
 | `lock_changes.py` | Lists what moved between two copies of a lockfile | `update-deps.yml` |
