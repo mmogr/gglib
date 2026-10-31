@@ -460,8 +460,10 @@ Private helper functions, unit-test modules (`#[cfg(test)]`), and generated code
 `cargo doc` is deployed to GitHub Pages by the `deploy-docs` job of `.github/workflows/release.yml`, which runs for each release that is not a prerelease. It runs:
 
 ```bash
-cargo doc --workspace --no-deps --document-private-items --exclude gglib-app
+./scripts/doc_workspace.py -- --document-private-items --exclude gglib-app
 ```
+
+The script runs `cargo doc --workspace --no-deps` with those arguments, then once more per dependency level with that level's doc directories deleted, so each crate is rendered after the crates it links to. A bare `cargo doc` renders a crate as soon as its dependencies' metadata is ready, and rustdoc then leaves a link to another crate's items as a literal path, without a warning, whenever that crate's pages are not on disk yet. A warm `target/doc` hides this; a cold one does not.
 
 The published site redirects to `gglib_core/index.html`, which is the primary API reference. You can preview locally with `make doc` (opens the browser). Do not add a docs deployment step manually — the release workflow handles it.
 
@@ -758,7 +760,7 @@ A release is cut by merging a pull request. `release.yml` is the only thing that
 | `enforcement` | `make enforce` | The repository rules that neither the compiler nor a linter checks. The `enforce` recipe in the `Makefile` is the only list of them, and each script's header says what it rejects |
 | `test` | `cargo metadata --locked` (the workspace and `src-tauri`), `npm run build`, `cargo test --no-fail-fast`, `scripts/split_test_output.py` | `Cargo.lock` is current; the Rust tests and doctests pass; the per-crate test output the badges read, from a run that ran doctests |
 | `bindings` | `make bindings-check` | The committed TypeScript bindings are what the Rust types generate |
-| `rustdoc` | `cargo doc --workspace --no-deps --document-private-items --exclude gglib-app`, with `RUSTDOCFLAGS=-D warnings`, then `scripts/check_doc_links.py target/doc` | No rustdoc warning, and every link on each crate's front page (its README) is a URL or a file in the docs |
+| `rustdoc` | `scripts/doc_workspace.py -- --document-private-items --exclude gglib-app`, with `RUSTDOCFLAGS=-D warnings`, then `scripts/check_doc_links.py target/doc` | No rustdoc warning, and every link on each crate's front page (its README) is a URL or a file in the docs |
 | `test-frontend` | `npm run deadcode`, `npm run test:run` | No TypeScript file that nothing imports, and no unused or undeclared dependency; the frontend tests pass |
 | `clippy` | `npm run build`, then `cargo clippy --all-targets --all-features -- -D warnings` | No Clippy warning on Linux |
 | `cli-cross-os` | `cargo test -p gglib-cli --no-run` on Linux, macOS and Windows; on Linux and macOS, `gglib-runtime`'s ignored tests against the pinned engines, and the llama-server recording, report-only; on macOS, the in-process engine's recording against the `llama-xcframework` action's framework, report-only | `gglib-cli` and its tests compile on each; every flag gglib passes is one the pinned engines take. The recordings' differences from `contracts/upstream/` show in the step summary without failing the job (see [The engine pins](#the-engine-pins)). Pull requests only |
