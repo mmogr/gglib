@@ -174,14 +174,16 @@ The Rust backend is organized into three main modules:
 └────────────────────────────────┼─────────────────────────────────────────┘
                                  │ HTTP, 127.0.0.1:9887
                                  ▼
-                    ┌───────────────────────┐
-                    │    gglib daemon       │
-                    │  • Database           │
-                    │  • ProcessManager     │
-                    │  • DownloadService    │
-                    │  • HuggingFaceClient  │
-                    │  • ProxyServer        │
-                    └───────────────────────┘
+                    ┌─────────────────────────┐
+                    │       gglib daemon      │
+                    │  • AppCore (database)   │
+                    │  • ProcessManager       │
+                    │  • DownloadManagerImpl  │
+                    │  • HfClient             │
+                    │  • ProxySupervisor      │
+                    │  • McpService           │
+                    │  • SseBroadcaster       │
+                    └─────────────────────────┘
 ```
 
 The app hosts none of that. It finds a daemon, watches it, and paints two OS

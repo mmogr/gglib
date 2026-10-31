@@ -25,11 +25,15 @@ This crate is in the **Infrastructure Layer** — it implements the repository p
 │                                                                                     │
 │  ┌─────────────────────────────────────────────────────────────────────────────┐    │
 │  │                           repositories/                                     │    │
-│  │  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐  ┌─────────────┐   │    │
-│  │  │  model_repo   │  │   mcp_repo    │  │  conv_repo    │  │ settings_   │   │    │
-│  │  │  SqliteModel  │  │  SqliteMcp    │  │  SqliteConv   │  │   repo      │   │    │
-│  │  │   Repository  │  │  Repository   │  │  Repository   │  │             │   │    │
-│  │  └───────────────┘  └───────────────┘  └───────────────┘  └─────────────┘   │    │
+│  │                                                                             │    │
+│  │   sqlite_model_repository.rs          SqliteModelRepository                 │    │
+│  │   sqlite_mcp_repository.rs            SqliteMcpRepository                   │    │
+│  │   sqlite_chat_history_repository.rs   SqliteChatHistoryRepository           │    │
+│  │   sqlite_settings_repository.rs       SqliteSettingsRepository              │    │
+│  │   sqlite_benchmark_repository.rs      SqliteBenchmarkRepository             │    │
+│  │   sqlite_attachment_store.rs          SqliteAttachmentStore                 │    │
+│  │   sqlite_loop_guard_trip_log.rs       SqliteLoopGuardTripLog                │    │
+│  │   model_files_repository.rs           ModelFilesRepository                  │    │
 │  └─────────────────────────────────────────────────────────────────────────────┘    │
 │                                                                                     │
 │  ┌───────────────┐  ┌───────────────┐                                               │
