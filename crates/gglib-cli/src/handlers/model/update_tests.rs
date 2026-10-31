@@ -71,8 +71,7 @@ fn test_parse_metadata_updates_invalid_format() {
 
 #[test]
 fn test_parse_metadata_removals() {
-    let remove_arg = Some("key1,key2, key3 ".to_string());
-    let result = parse_metadata_removals(&remove_arg).unwrap();
+    let result = parse_metadata_removals(Some("key1,key2, key3 "));
 
     assert_eq!(result.len(), 3);
     assert_eq!(result, vec!["key1", "key2", "key3"]);
@@ -139,7 +138,10 @@ fn apply(existing: &Model, args: &UpdateArgs) -> Model {
 }
 
 #[test]
-#[allow(clippy::float_cmp, reason = "grandfathered at lint inheritance, #1157")]
+#[expect(
+    clippy::float_cmp,
+    reason = "the parameter count is stored as typed, so 13.0 comes back exactly"
+)]
 fn test_create_updated_model() {
     let updated = apply(
         &create_test_model(),

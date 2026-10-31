@@ -210,15 +210,15 @@ async fn set(ctx: &CliContext, name: &str, edits: Edits) -> Result<()> {
     let mut profiles = load(ctx).await?;
 
     let existing = profiles.iter().position(|p| p.name == name);
-    let mut profile = match existing {
-        Some(index) => profiles[index].clone(),
-        None => InferenceProfile {
+    let mut profile = existing.map_or_else(
+        || InferenceProfile {
             name: name.to_owned(),
             description: None,
             config: InferenceConfig::default(),
             list_in_models: false,
         },
-    };
+        |index| profiles[index].clone(),
+    );
 
     // Merge: only parameters actually passed are touched.
     merge_set(&mut profile.config, &edits.config);

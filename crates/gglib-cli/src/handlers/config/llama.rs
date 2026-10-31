@@ -27,7 +27,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: LlamaCommand) -> Result<
             engine::uninstall(ctx, RuntimeKind::Llama, force).await?;
         }
         LlamaCommand::Detect { json } => {
-            llama_detect::execute(json)?;
+            llama_detect::execute(json);
         }
     }
     Ok(())

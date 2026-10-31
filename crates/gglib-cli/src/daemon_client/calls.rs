@@ -19,11 +19,7 @@ use super::{DaemonHandle, auth, base_url, paths};
 
 impl DaemonHandle {
     /// One absolute URL on the daemon.
-    #[allow(
-        clippy::unused_self,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
-    pub(super) fn url(&self, path: &str) -> String {
+    pub(super) fn url(path: &str) -> String {
         format!("{}{path}", base_url())
     }
 
@@ -35,7 +31,7 @@ impl DaemonHandle {
     /// before method routing, and a missing credential therefore looks exactly
     /// like a route that does not exist.
     pub(super) fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
-        let request = self.client.request(method, self.url(path));
+        let request = self.client.request(method, Self::url(path));
         match &self.api_key {
             Some(key) => request.bearer_auth(key),
             None => request,

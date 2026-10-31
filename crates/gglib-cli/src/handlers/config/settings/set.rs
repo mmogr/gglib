@@ -91,7 +91,8 @@ pub(super) async fn handle_set(ctx: &CliContext, args: SettingsSetArgs) -> Resul
 
     let updated = ctx.app.settings().update(update).await?;
     let (model_display, image_display) = resolve_model_display(ctx, &updated).await?;
-    let all_rows = settings_display_rows(&updated, model_display, image_display);
+    let all_rows =
+        settings_display_rows(&updated, model_display.as_deref(), image_display.as_deref());
 
     // Match exact key OR any dot-notation sub-row that starts with
     // "{changed_key}." — needed for nested fields such as inference-defaults.

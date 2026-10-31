@@ -10,6 +10,8 @@
 //!
 //! [`super::render`]: crate::handlers::proxy_dashboard::render
 
+use std::fmt::Write as _;
+
 use super::render::thousands;
 use super::wire_sampling::{EffortSupport, SamplingAudit};
 use crate::presentation::truncate_string;
@@ -24,10 +26,6 @@ use crate::presentation::truncate_string;
 /// one prints gglib's record and says so — the server sends the sentence, and
 /// it is printed beside a value rather than permanently, because a warning that
 /// qualifies nothing is a warning people learn to skip.
-#[allow(
-    clippy::format_push_string,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(super) fn render_reasoning_section(audit: Option<&SamplingAudit>, term_width: u16) -> String {
     let mut out = String::from("Reasoning controls\n");
     let Some(reasoning) = audit.and_then(|a| a.reasoning.as_ref()) else {
@@ -38,11 +36,12 @@ pub(super) fn render_reasoning_section(audit: Option<&SamplingAudit>, term_width
     // Clip to one physical row, matching how every other server-phrased string
     // in this frame is handled.
     let max_chars = usize::from(term_width.saturating_sub(4));
-    out.push_str(&format!(
-        "  {:<24} {}\n",
+    let _ = writeln!(
+        out,
+        "  {:<24} {}",
         "Template reads effort",
         truncate_string(&effort_support_label(&reasoning.effort_support), max_chars)
-    ));
+    );
 
     let Some(latest) = reasoning.latest.as_ref() else {
         out.push_str("  (no request has resolved either control yet)\n");
@@ -50,34 +49,43 @@ pub(super) fn render_reasoning_section(audit: Option<&SamplingAudit>, term_width
     };
 
     match latest.effort.as_ref() {
-        None => out.push_str(&format!("  {:<24} {}\n", "Effort", "none resolved")),
+        None => {
+            let _ = writeln!(out, "  {:<24} none resolved", "Effort");
+        }
         Some(rung) => {
             let suppressed = if rung.suppressed {
                 " — suppressed, this template never reads it"
             } else {
                 ""
             };
-            out.push_str(&format!(
-                "  {:<24} {} ({}){}\n",
+            let _ = writeln!(
+                out,
+                "  {:<24} {} ({}){}",
                 "Effort", rung.level, rung.source, suppressed
-            ));
+            );
         }
     }
     match latest.budget.as_ref() {
-        None => out.push_str(&format!("  {:<24} {}\n", "Budget", "none resolved")),
-        Some(rung) => out.push_str(&format!(
-            "  {:<24} {} tokens ({})\n",
-            "Budget",
-            budget_tokens(rung.tokens),
-            rung.source
-        )),
+        None => {
+            let _ = writeln!(out, "  {:<24} none resolved", "Budget");
+        }
+        Some(rung) => {
+            let _ = writeln!(
+                out,
+                "  {:<24} {} tokens ({})",
+                "Budget",
+                budget_tokens(rung.tokens),
+                rung.source
+            );
+        }
     }
 
     if latest.effort.is_some() || latest.budget.is_some() {
-        out.push_str(&format!(
-            "  ! {}\n",
+        let _ = writeln!(
+            out,
+            "  ! {}",
             truncate_string(&reasoning.wire_blind_reason, max_chars)
-        ));
+        );
     }
     out
 }
@@ -140,10 +148,6 @@ fn effort_support_label(support: &EffortSupport) -> String {
 /// [`super::wire_sampling`]), and rendering that silence as "nothing was
 /// dropped" turns an unobserved state into a clean reading — the exact
 /// collapse the section above this one exists to prevent.
-#[allow(
-    clippy::format_push_string,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(super) fn render_client_fields_section(audit: Option<&SamplingAudit>) -> String {
     let mut out = String::from("Client sampling dropped (trust_client_sampling off)\n");
     let Some(names) = audit.and_then(|a| a.client_field_names.as_ref()) else {
@@ -164,21 +168,23 @@ pub(super) fn render_client_fields_section(audit: Option<&SamplingAudit>) -> Str
         if tally.rejected > 0 {
             what.push(format!("{} unreadable", thousands(tally.rejected)));
         }
-        out.push_str(&format!(
-            "  {:<24} {}\n",
+        let _ = writeln!(
+            out,
+            "  {:<24} {}",
             truncate_string(&tally.field, 24),
             what.join(", ")
-        ));
+        );
     }
 
     // Only when it fires: the tally is bounded, and a bound nobody can see is
     // indistinguishable from a bound nobody hit.
     if names.untracked > 0 {
-        out.push_str(&format!(
-            "  {:<24} {}\n",
+        let _ = writeln!(
+            out,
+            "  {:<24} {}",
             "(untracked names)",
             thousands(names.untracked)
-        ));
+        );
     }
     out
 }

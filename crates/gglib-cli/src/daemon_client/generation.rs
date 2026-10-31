@@ -60,7 +60,7 @@ impl DaemonGenerationGate {
     pub(crate) fn new(daemon: &DaemonHandle, quiet: bool) -> Self {
         Self {
             client: daemon.client.clone(),
-            url: daemon.url(paths::GENERATION_TURN_PATH),
+            url: DaemonHandle::url(paths::GENERATION_TURN_PATH),
             api_key: daemon.api_key.clone(),
             quiet,
             warned: AtomicBool::new(false),

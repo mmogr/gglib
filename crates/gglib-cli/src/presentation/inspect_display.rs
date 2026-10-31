@@ -227,10 +227,10 @@ fn published_sampling_lines(metadata: &std::collections::HashMap<String, String>
         // reverse lookup exists: `general.sampling.penalty_repeat` and
         // `repeat_penalty` are the same knob under two spellings, and nothing
         // else on screen connects them.
-        match gglib_field_for(key) {
-            Some(field) => format!("  {key:<width$} = {value}   ({field})"),
-            None => format!("  {key:<width$} = {value}   (not modelled by gglib)"),
-        }
+        gglib_field_for(key).map_or_else(
+            || format!("  {key:<width$} = {value}   (not modelled by gglib)"),
+            |field| format!("  {key:<width$} = {value}   ({field})"),
+        )
     }));
     lines.push(String::new());
     lines.push("  llama.cpp applies these to every field gglib does not send.".to_owned());
@@ -283,17 +283,17 @@ fn image_model_lines(dto: &ModelDetailDto) -> Vec<String> {
     let mut lines = vec![format!("  Family         : {}", family.label())];
     lines.extend(family.recipe().components.iter().map(|spec| {
         let linked = dto.components.iter().find(|link| link.role == spec.role);
-        let state = match linked {
-            None => "missing".to_owned(),
-            Some(link) => {
+        let state = linked.map_or_else(
+            || "missing".to_owned(),
+            |link| {
                 let file = link.path.as_deref().unwrap_or("linked");
                 if link.present {
                     file.to_owned()
                 } else {
                     format!("{file} (no file there)")
                 }
-            }
-        };
+            },
+        );
         format!("    {:<13}: {state}", spec.role.label())
     }));
     lines

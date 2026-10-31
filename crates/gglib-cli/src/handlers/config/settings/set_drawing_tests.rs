@@ -35,7 +35,7 @@ async fn model(ctx: &CliContext, name: &str, draws: bool, dir: &std::path::Path)
 async fn shown(ctx: &CliContext, key: &str) -> String {
     let settings = ctx.app.settings().get().await.expect("settings");
     let (model, image) = resolve_model_display(ctx, &settings).await.expect("names");
-    let rows = settings_display_rows(&settings, model, image);
+    let rows = settings_display_rows(&settings, model.as_deref(), image.as_deref());
     let row = rows.into_iter().find(|(k, _)| k == key);
     row.unwrap_or_else(|| panic!("no {key} row")).1
 }

@@ -5,10 +5,6 @@ mod browse;
 mod check_updates;
 mod companions;
 mod exec;
-#[allow(
-    clippy::manual_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 mod interactive;
 mod monitor;
 mod remote;

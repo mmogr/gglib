@@ -55,7 +55,7 @@ crates/gglib-cli/src/handlers/agent_chat/mod.rs 317
 crates/gglib-cli/src/handlers/agent_chat/repl.rs 372
 crates/gglib-cli/src/handlers/agent_chat/sight_tests.rs 331
 crates/gglib-cli/src/handlers/agent_chat/turn_rows_tests.rs 472
-crates/gglib-cli/src/handlers/benchmark.rs 1613
+crates/gglib-cli/src/handlers/benchmark.rs 1623
 crates/gglib-cli/src/handlers/config/engine.rs 433
 crates/gglib-cli/src/handlers/config/engine_tests.rs 309
 crates/gglib-cli/src/handlers/config/sd.rs 326
@@ -68,7 +68,7 @@ crates/gglib-cli/src/handlers/model/download/interactive.rs 396
 crates/gglib-cli/src/handlers/model/list_tests.rs 314
 crates/gglib-cli/src/handlers/model/update.rs 618
 crates/gglib-cli/src/handlers/model/update_surface_tests.rs 304
-crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 351
+crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 362
 crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 534
 crates/gglib-cli/src/handlers/up/mod.rs 330
 crates/gglib-cli/src/handlers/up/probe.rs 310

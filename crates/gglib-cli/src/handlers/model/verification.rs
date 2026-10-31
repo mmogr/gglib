@@ -25,11 +25,9 @@ use crate::utils::input;
 /// spelled `--verbose`: that id belongs to the global logging flag, and a
 /// local one by the same name stops the global from ever reaching this
 /// command.
-#[allow(
-    clippy::cast_precision_loss,
-    clippy::match_same_arms,
+#[expect(
     clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "the progress lines and the report, printed in the order a run produces them"
 )]
 pub(crate) async fn execute_verify(
     ctx: &CliContext,
@@ -60,6 +58,10 @@ pub(crate) async fn execute_verify(
                 ShardProgress::Starting => {
                     println!("  {}: Starting verification...", progress.kind.label());
                 }
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "display only: a byte count shown in MiB to one decimal"
+                )]
                 ShardProgress::Hashing {
                     percent,
                     bytes_processed,
@@ -121,8 +123,7 @@ pub(crate) async fn execute_verify(
         use gglib_core::services::ShardHealth;
         let status = match &shard.health {
             ShardHealth::Healthy => "✓".to_string(),
-            ShardHealth::Corrupt { .. } => "✗".to_string(),
-            ShardHealth::Missing => "✗".to_string(),
+            ShardHealth::Corrupt { .. } | ShardHealth::Missing => "✗".to_string(),
             ShardHealth::NoOid => "⚠".to_string(),
         };
         println!(

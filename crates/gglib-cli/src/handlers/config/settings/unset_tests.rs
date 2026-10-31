@@ -61,16 +61,9 @@ async fn the_retired_loop_detection_key_is_refused_as_unknown() {
 /// existed a stored 4096 outranked the fitted rung with no way back short of
 /// resetting everything.
 #[test]
-#[allow(
-    clippy::iter_on_single_items,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 fn a_null_for_a_known_key_reads_as_clear_not_as_absent() {
-    let body = Value::Object(
-        [("defaultContextSize".to_string(), Value::Null)]
-            .into_iter()
-            .collect(),
-    );
+    let body =
+        Value::Object(std::iter::once(("defaultContextSize".to_string(), Value::Null)).collect());
     let req: UpdateSettingsRequest = serde_json::from_value(body).expect("known key");
     assert_eq!(
         req.default_context_size,

@@ -43,10 +43,6 @@ use super::thinking_dispatch::{
 ///
 /// The caller **must** gate any history update on the return value: history
 /// from a failed or incomplete turn must not replace the previous context.
-#[allow(
-    clippy::debug_assert_with_mut_call,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) async fn drain_event_stream(
     rx: &mut mpsc::Receiver<AgentEvent>,
     verbose: bool,
@@ -114,10 +110,17 @@ pub(crate) async fn drain_event_stream(
                     println!();
                 }
 
-                debug_assert!(
-                    rx.try_recv().is_err(),
-                    "events after FinalAnswer violate agent protocol"
-                );
+                #[expect(
+                    clippy::debug_assert_with_mut_call,
+                    reason = "this returns next and never reads `rx` again, so an event taken \
+                              in debug builds only changes nothing"
+                )]
+                {
+                    debug_assert!(
+                        rx.try_recv().is_err(),
+                        "events after FinalAnswer violate agent protocol"
+                    );
+                }
                 return true;
             }
 
