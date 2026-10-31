@@ -61,6 +61,8 @@ remote/
   gateway.rs        — RemoteGateway: the port the proxy tells (a tunnelled
                       request arrived) and asks whether a session is live,
                       and the invite a session holds
+  gateway_session.rs — starting, replacing and ending a gateway session,
+                      and the invite it holds
   pairing.rs        — the open invite: one at a time, read without taking it
   invite_watch.rs   — waiting for an invite to end, and handing it to the
                       gateway to record
@@ -81,6 +83,17 @@ remote/
                       answers the daemon gives
   device_line.rs    — the words a device row is described by, on the
                       daemon's clock
+  devices.rs        — the three things a person asks about devices: invite
+                      one, forget one, list them
+  enrolment.rs      — the two-store write under invite and forget: the key
+                      file before the roster, and what unwinds on a failure
+  device_keys.rs    — the 0600 file that says which key admits which device
+  device_view.rs    — device rows as list and status give them: the roster,
+                      the key file and the edge, joined
+  device_runs.rs    — a forgotten device's runs, dropped once its key is out
+                      of the file
+  roster.rs         — a device's label and last-seen time, sent off the
+                      request path to the task that writes them to settings
 ```
 
 # Two keys, two doors
