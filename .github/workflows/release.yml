@@ -1,347 +1,138 @@
+# Builds a release's assets and publishes them to its GitHub release, then,
+# for a stable version, to apt, the AUR, Homebrew and the docs site.
+#
+# CI's `release` job (release-tag.yml) tags the version, makes the release
+# and dispatches this workflow with `tag`. A run of its own, not a part of
+# the CI run, so cancelling CI after the tag cannot leave a release half
+# built. A build that failed is re-run with the same tag:
+#
+#   gh workflow run release.yml --ref main -f tag=v<version>
+#
+# `test_run` builds the dispatched ref instead and keeps every file as a
+# `dryrun-*` artifact; it attests, uploads and deploys nothing.
+
 name: Release
+
 on:
-  workflow_call:
-    inputs:
-      test_run:
-        description: 'Test run (skip actual release)'
-        required: false
-        default: false
-        type: boolean
   workflow_dispatch:
     inputs:
+      tag:
+        description: 'The tag to build and publish, v<version>; CI passes it'
+        required: false
+        default: ''
+        type: string
       test_run:
-        description: 'Test run (skip actual release)'
+        description: 'Test run: build the ref, keep the files as artifacts, publish nothing'
         required: false
         default: false
         type: boolean
 
 permissions:
-  contents: write
-  # Lets the build jobs record signed build provenance for each release asset.
-  # id-token: write below already supplies the OIDC identity the signing uses.
-  attestations: write
-  issues: write
-  pull-requests: write
-  pages: write
-  id-token: write
-  deployments: write
+  contents: read
+
+# One run per tag at a time, and never cancelled: a re-dispatch waits for the
+# run before it, then replaces its assets as a whole.
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # GitHub's default is `bash -e`; this adds pipefail. The Windows steps
+    # that use cmd-style `copy` and 7z's `*` say `shell: pwsh` themselves.
+    shell: bash
 
 jobs:
-  check-version:
-    name: Check Version Change
+  meta:
+    name: Read the version
     runs-on: ubuntu-24.04
-    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+    timeout-minutes: 10
     outputs:
-      version-changed: ${{ steps.version-check.outputs.changed }}
-      new-version: ${{ steps.version-check.outputs.version }}
-      tag-exists: ${{ steps.tag-check.outputs.exists }}
-      is-test-version: ${{ steps.version-check.outputs.is-test }}
-      is-prerelease: ${{ steps.version-check.outputs.is-prerelease }}
+      version: ${{ steps.version.outputs.version }}
+      is-prerelease: ${{ steps.version.outputs.is-prerelease }}
+      sha: ${{ steps.version.outputs.sha }}
+      # The prefix of the asset artifacts' names, which `publish` collects.
+      artifacts: ${{ steps.version.outputs.artifacts }}
     steps:
+      - name: Require a tag or a test run
+        env:
+          TAG: ${{ inputs.tag }}
+          TEST_RUN: ${{ inputs.test_run }}
+        run: |
+          if [ -z "$TAG" ] && [ "$TEST_RUN" != "true" ]; then
+            echo "::error::give a tag to build and publish (-f tag=v<version>), or -f test_run=true"
+            exit 1
+          fi
+          # Only a version tag is built: nothing else is checked out, named
+          # or published from here.
+          if [ -n "$TAG" ] && ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::$TAG is not a version tag (vX.Y.Z or vX.Y.Z-rc.N)"
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ inputs.tag != '' && format('refs/tags/{0}', inputs.tag) || github.sha }}
+          persist-credentials: false
 
-      - name: Get current version
-        id: version-check
+      - name: Get the version
+        id: version
+        env:
+          TAG: ${{ inputs.tag }}
+          TEST_RUN: ${{ inputs.test_run }}
         run: |
-          CURRENT_VERSION=$(grep '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
-          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          
-          # Check if version contains -test suffix
-          if [[ "$CURRENT_VERSION" == *"-test"* ]]; then
-            echo "is-test=true" >> $GITHUB_OUTPUT
-            echo "::notice::🧪 Test version detected: v$CURRENT_VERSION - Will run in test mode"
-          else
-            echo "is-test=false" >> $GITHUB_OUTPUT
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          if [ -n "$TAG" ] && [ "v$VERSION" != "$TAG" ]; then
+            echo "::error::$TAG's Cargo.toml says $VERSION"
+            exit 1
           fi
-          
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
           # A prerelease is any version carrying a -alpha, -beta or -rc suffix.
-          #
-          # `-rc` was missing until now, which made it the most dangerous
-          # spelling of the three: `1.0.0-rc.1` fell through to the else branch
-          # and shipped as a full release, marked latest, with deploy-docs
-          # running against it. The two spellings that were handled are the two
-          # nobody reaches for when cutting a release candidate.
-          if [[ "$CURRENT_VERSION" == *"-alpha"* ]] || [[ "$CURRENT_VERSION" == *"-beta"* ]] || [[ "$CURRENT_VERSION" == *"-rc"* ]]; then
-            echo "is-prerelease=true" >> $GITHUB_OUTPUT
-            echo "::notice::📦 Prerelease version detected: v$CURRENT_VERSION"
+          if [[ "$VERSION" == *"-alpha"* ]] || [[ "$VERSION" == *"-beta"* ]] || [[ "$VERSION" == *"-rc"* ]]; then
+            echo "is-prerelease=true" >> "$GITHUB_OUTPUT"
           else
-            echo "is-prerelease=false" >> $GITHUB_OUTPUT
-          fi
-          
-          # Check if this version exists in git tags
-          if git tag -l | grep -q "^v${CURRENT_VERSION}$"; then
-            echo "changed=false" >> $GITHUB_OUTPUT
-            echo "Version v$CURRENT_VERSION already exists"
-          else
-            echo "changed=true" >> $GITHUB_OUTPUT
-            echo "New version detected: v$CURRENT_VERSION"
+            echo "is-prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # A stable version is released only as its last release candidate with
-      # the version changed. Checked before create-release tags anything, so a
-      # refused promotion leaves no tag and no release behind; the script's
-      # header says how to recover.
-      - name: Require a stable release to match its last RC
-        if: steps.version-check.outputs.changed == 'true' && steps.version-check.outputs.is-test != 'true' && steps.version-check.outputs.is-prerelease != 'true'
-        run: scripts/check_rc_promotion.sh
-
-      - name: Check if tag exists
-        id: tag-check
-        run: |
-          if git tag -l | grep -q "^v${{ steps.version-check.outputs.version }}$"; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+          if [ "$TEST_RUN" = "true" ]; then
+            echo "artifacts=dryrun" >> "$GITHUB_OUTPUT"
+            echo "::notice::Test run of $VERSION at $(git rev-parse --short HEAD): nothing will be published"
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "artifacts=release" >> "$GITHUB_OUTPUT"
           fi
 
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-24.04
-    needs: check-version
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.check-version.outputs.version-changed == 'true' && needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-    outputs:
-      version: ${{ needs.check-version.outputs.new-version }}
-    steps:
-      - name: 🧪 Test Mode Banner
-        if: github.event_name == 'workflow_dispatch' && inputs.test_run == true
-        run: |
-          echo "::warning::🧪 TEST MODE - No release will be created"
-          echo "This is a test run. Skipping actual release creation."
-
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
-
-      - name: Create and push tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag v${{ needs.check-version.outputs.new-version }}
-          git push origin v${{ needs.check-version.outputs.new-version }}
+      # release-tag.yml makes the release before it dispatches; publishing
+      # adds assets to it and never creates one.
+      - name: Require the release to exist
+        if: inputs.tag != ''
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # release-please.yml never tags (it runs with skip-github-release), so it
-      # cannot see that the release PR it opened has been released, and it
-      # opens no other while a merged release PR is labelled
-      # `autorelease: pending`. Swapping that label for `autorelease: tagged`
-      # is how a release tells it, straight after the tag so that the label
-      # says what is true even if a later step fails. Only the merged PR
-      # titled for this version is touched; a promotion has no such PR, and
-      # nothing changes.
-      - name: Mark the release PR as tagged
-        uses: actions/github-script@v7
-        env:
-          VERSION: ${{ needs.check-version.outputs.new-version }}
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const title = `chore(main): release ${process.env.VERSION}`;
-            // The issues list rather than search, which can lag behind a label.
-            const items = await github.paginate(github.rest.issues.listForRepo, {
-              owner, repo, state: 'closed', labels: 'autorelease: pending', per_page: 100,
-            });
-            for (const item of items) {
-              if (!item.pull_request?.merged_at || item.title !== title) continue;
-              await github.rest.issues.removeLabel({
-                owner, repo, issue_number: item.number, name: 'autorelease: pending',
-              });
-              await github.rest.issues.addLabels({
-                owner, repo, issue_number: item.number, labels: ['autorelease: tagged'],
-              });
-              core.info(`#${item.number} is now labelled autorelease: tagged`);
-            }
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: v${{ needs.check-version.outputs.new-version }}
-          name: Release v${{ needs.check-version.outputs.new-version }}
-          draft: false
-          prerelease: ${{ needs.check-version.outputs.is-prerelease == 'true' }}
-          generate_release_notes: true
-
-  deploy-docs:
-    name: Deploy Documentation
-    runs-on: ubuntu-24.04
-    # The apt repository is served from the same Pages site, under /apt, and
-    # a Pages deploy replaces the whole site. So this job publishes both and
-    # waits for `apt-repo`, which waits for the `apt` approval: a stable
-    # release reaches the docs and apt together or not at all.
-    needs: [check-version, create-release, apt-repo]
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.check-version.outputs.version-changed == 'true' && needs.check-version.outputs.is-test-version != 'true' && needs.check-version.outputs.is-prerelease != 'true' && inputs.test_run != true
-    # Allow one concurrent deployment
-    concurrency:
-      group: "pages"
-      cancel-in-progress: true
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          # Always checkout main branch for docs, even when triggered by release tag
-          ref: main
-
-      - name: Install system dependencies
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libasound2-dev
-
-      - name: Install Rust toolchain
-        run: rustup show
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "docs-ubuntu"
-          cache-on-failure: true
-          # Only a run on main saves, as in ci.yml's `test` job: a test_run
-          # dispatched from a branch would otherwise save entries that no run
-          # on main can restore.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      # No Node or Web UI steps: with gglib-app excluded below, nothing this
-      # job builds needs web_ui/ (see the `allow_missing` note in gglib-axum's
-      # ui.rs).
-      - name: Build documentation
-        # Exclude gglib-app (Tauri desktop): the one member whose build can need the Web UI
-        # (its `tauri::generate_context!()` embeds `frontendDist` when `custom-protocol` is on).
-        # gglib-app has minimal API documentation (6 items) and is not the primary doc target.
-        # gglib-core (119 items) is the comprehensive library documentation.
-        #
-        # `-D warnings` so a broken intra-doc link cannot be published. This is
-        # the backstop, not the gate: ci.yml's `rustdoc` job runs the same build
-        # on every PR, which is where a regression should be caught.
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: ./scripts/doc_workspace.py -- --document-private-items --exclude gglib-app
-
-      - name: Create index.html redirect
-        run: |
-          cat > target/doc/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <title>gglib Documentation</title>
-            <meta http-equiv="refresh" content="0; url=gglib_core/index.html">
-            <link rel="canonical" href="gglib_core/index.html">
-            <style>
-              body { 
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                text-align: center;
-                padding: 50px;
-                background: #f5f5f5;
-              }
-              .container {
-                max-width: 600px;
-                margin: 0 auto;
-                background: white;
-                padding: 40px;
-                border-radius: 8px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-              }
-              a { color: #0366d6; text-decoration: none; }
-              a:hover { text-decoration: underline; }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <h1>🦀 gglib Documentation</h1>
-              <p>Redirecting to the <a href="gglib_core/index.html">gglib-core documentation</a>...</p>
-              <p><small>If you're not redirected automatically, <a href="gglib_core/index.html">click here</a>.</small></p>
-            </div>
-          </body>
-          </html>
-          EOF
-
-      - name: Collect the apt repository
-        uses: actions/download-artifact@v8
-        with:
-          name: apt-repo
-          path: target/doc/apt
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: './target/doc'
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
-
-      - name: Update deployment status
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const deployment = await github.rest.repos.createDeployment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: context.sha,
-              environment: 'github-pages',
-              description: 'Docs deployment via GitHub Actions',
-              auto_merge: false,
-              required_contexts: []
-            });
-            
-            const status = '${{ steps.deployment.outcome }}' === 'success' ? 'success' : 'failure';
-            
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: deployment.data.id,
-              state: status,
-              description: status === 'success' ? 'Documentation deployed successfully' : 'Documentation deployment failed',
-              environment_url: status === 'success' ? 'https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}' : undefined
-            });
+          if ! gh release view "$TAG" -R "$GITHUB_REPOSITORY" > /dev/null; then
+            echo "::error::there is no release for $TAG. Re-run the failed jobs of the CI run that tagged it, which makes the release and dispatches this again; or by hand: gh release create $TAG --title 'Release $TAG' --generate-notes --verify-tag (add --prerelease for a candidate), swap the merged release PR's label autorelease: pending for autorelease: tagged, then dispatch again"
+            exit 1
+          fi
 
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
-    needs: [check-version, create-release]
-    # `softprops/action-gh-release` creates a release when none exists for the
-    # tag. Without a dependency on create-release these jobs race it, and if
-    # create-release fails the first upload to finish publishes a release with
-    # no notes and prerelease: false — even for an -alpha, defeating the
-    # is-prerelease output above. It also leaves create-release's own
-    # `git tag && git push` failing against a tag that now exists, which takes
-    # deploy-docs down with it.
-    #
-    # create-release is deliberately skipped for test versions and test_run
-    # while these jobs still run, so this cannot be a bare `needs:` — a job
-    # depending on a skipped job is itself skipped unless its `if:` contains a
-    # status function. `!cancelled()` supplies that; `always()` would be wrong
-    # because it also pushes on through a cancelled run.
-    #
-    # `|| inputs.test_run == true` because version-changed only means "there is
-    # no tag for this version yet". A test_run dispatch is normally fired at
-    # the version already sitting on main, so without this the builds it exists
-    # to exercise are skipped and the run does nothing at all. Nothing gets
-    # published either way — every upload and attestation step below is guarded
-    # on its own.
-    if: >-
-      !cancelled()
-      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-      && (needs.check-version.outputs.version-changed == 'true' || inputs.test_run == true)
-      && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
+    needs: meta
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      # Signed build provenance for each asset: the OIDC identity and the
+      # attestation it records.
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
+        # No macOS leg: `build-gui`'s macOS leg builds the same CLI for the app to
+        # carry, and packages it as this job would.
         include:
           # A Linux binary needs at least the glibc of the image it was built on, and the
           # AppImage also carries that image's WebKitGTK and GLib. So this is the oldest
@@ -350,17 +141,10 @@ jobs:
           # start on Ubuntu 24.04. Steps below test runner.os, never this label.
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-24.04
-          - target: aarch64-apple-darwin
-            os: macos-26
           - target: x86_64-pc-windows-msvc
             os: windows-2022
 
     steps:
-      - name: 🧪 Test Mode Banner
-        if: needs.check-version.outputs.is-test-version == 'true' || inputs.test_run == true
-        run: |
-          echo "::notice::🧪 TEST MODE - Builds will run but no release will be created"
-
       # Pinned by SHA; ci.yml's `test` job says why.
       - name: Free Disk Space (Ubuntu)
         if: runner.os == 'Linux'
@@ -377,7 +161,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ needs.meta.outputs.sha }}
+          persist-credentials: false
 
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
@@ -398,13 +183,16 @@ jobs:
       - name: Install Rust toolchain
         run: rustup target add ${{ matrix.target }}
 
+      # A release restores the rust-cache entry its key last saved and never
+      # saves one. A version bump changes Cargo.lock, so every release would
+      # save a fresh set of entries, each a few GB, which push CI's own out
+      # of the repository's cache.
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "release-${{ matrix.target }}"
           cache-on-failure: true
-          # Only a run on main saves; `deploy-docs` above says why.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: false
 
       - name: Cache node_modules
         uses: actions/cache@v6
@@ -445,28 +233,23 @@ jobs:
       # A release built from a tree where the frontend step silently failed
       # would ship an API with no dashboard, and nothing downstream would say
       # so. Fail here instead.
-      # `shell: bash` for the same reason the checksum step below sets it: the
-      # Windows leg otherwise runs under pwsh, where `test` resolves only via
-      # Git-for-Windows' `usr\bin` being on the runner's PATH. That happens to
-      # hold today, but it is the runner image's choice, not ours.
       - name: Assert the dashboard is present before it is embedded
-        shell: bash
         run: test -f web_ui/index.html
 
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }} -p gglib-cli
 
       # Everything that ships lands in dist/. One staging directory means the
-      # upload is `files: dist/*` rather than a per-OS list, and it gives the
-      # checksum step a directory to hash whose contents are exactly the
-      # release assets — not whatever else is lying around the checkout.
+      # attest and upload steps take `dist/*` rather than a per-OS list, and
+      # what they take is exactly the release assets — not whatever else is
+      # lying around the checkout.
       - name: Package binary (Unix)
         if: matrix.os != 'windows-2022'
         run: |
           set -euo pipefail
           mkdir -p package dist
           cp target/${{ matrix.target }}/release/gglib package/
-          tar czf dist/gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz \
+          tar czf dist/gglib-${{ needs.meta.outputs.version }}-${{ matrix.target }}.tar.gz \
             -C package gglib
 
       # Into dist/ with the tarball, so it is hashed, attested and attached to
@@ -474,7 +257,7 @@ jobs:
       # this same file by the `apt-repo` job.
       - name: Package CLI .deb (Linux)
         if: runner.os == 'Linux'
-        run: scripts/build_cli_deb.sh target/${{ matrix.target }}/release/gglib ${{ needs.check-version.outputs.new-version }} dist
+        run: scripts/build_cli_deb.sh target/${{ matrix.target }}/release/gglib ${{ needs.meta.outputs.version }} dist
 
       - name: Upload .deb for the apt repository
         if: runner.os == 'Linux'
@@ -486,58 +269,14 @@ jobs:
 
       - name: Package binary (Windows)
         if: matrix.os == 'windows-2022'
+        shell: pwsh
         run: |
           mkdir package
           mkdir dist
           copy target\${{ matrix.target }}\release\gglib.exe package\
           cd package
-          7z a ..\dist\gglib-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip gglib.exe
+          7z a ..\dist\gglib-${{ needs.meta.outputs.version }}-${{ matrix.target }}.zip gglib.exe
           cd ..
-
-      # Hashed here, on the runner that produced the bytes, rather than by
-      # reading the assets back from the release: uploaded assets pass through
-      # state "starting" before "uploaded", so a later job that lists and
-      # downloads them can hit a listed-but-not-yet-servable asset and 404.
-      # Hashing the distributor's copy would also attest to the distributor,
-      # not to this build.
-      #
-      # shell: bash on all three runners — Windows git-bash provides sha256sum
-      # with LF output, so there is nothing to normalise. macOS has shasum only.
-      - name: Hash release artifacts
-        shell: bash
-        run: |
-          set -euo pipefail
-          sha256() {
-            if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"
-            else shasum -a 256 "$@"; fi
-          }
-          mkdir -p sums
-          ( cd dist && sha256 * ) > "sums/cli-${{ matrix.target }}.sha256"
-          cat "sums/cli-${{ matrix.target }}.sha256"
-
-      - name: Upload checksum fragment
-        uses: actions/upload-artifact@v7
-        with:
-          name: sums-cli-${{ matrix.target }}
-          path: sums/cli-${{ matrix.target }}.sha256
-          retention-days: 1
-
-      # A dry run's whole purpose is to put the real artifact in someone's
-      # hands before a tag exists. Without this the binaries die with the
-      # runner and the run proves only that three platforms compile — which
-      # the CLI Check matrix in ci.yml already proves.
-      #
-      # That gap is not hypothetical: #904 (GUI path resolved against the CI
-      # workspace) and #907 (GUI and CLI could not find each other on Windows)
-      # both reached a tagged release, because neither is visible until the
-      # built binary is run.
-      - name: Upload binaries for a dry run
-        if: needs.check-version.outputs.is-test-version == 'true' || inputs.test_run == true
-        uses: actions/upload-artifact@v7
-        with:
-          name: dryrun-cli-${{ matrix.target }}
-          path: dist/*
-          retention-days: 7
 
       # Binds each artifact's digest to this workflow, commit and runner via
       # keyless Sigstore signing — no private key to store or leak. Verified by
@@ -548,48 +287,34 @@ jobs:
       # Gatekeeper or Windows SmartScreen, which still need a Developer ID and
       # Authenticode respectively.
       - name: Attest build provenance
-        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
+        if: inputs.test_run != true
         uses: actions/attest-build-provenance@v3
         with:
           subject-path: dist/*
 
-      - name: Upload binary to release
-        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v3
+      # Every file that ships goes up as an artifact, and `publish` attaches
+      # them all at once. On a test run these `dryrun-*` artifacts are the
+      # result: a dry run's whole purpose is to put the real artifact in
+      # someone's hands before a tag exists. #904 (GUI path resolved against
+      # the CI workspace) and #907 (GUI and CLI could not find each other on
+      # Windows) both reached a tagged release, because neither is visible
+      # until the built binary is run.
+      - name: Upload the assets
+        uses: actions/upload-artifact@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: v${{ needs.check-version.outputs.new-version }}
-          files: dist/*
+          name: ${{ needs.meta.outputs.artifacts }}-cli-${{ matrix.target }}
+          path: dist/*
+          retention-days: 7
 
   build-gui:
     name: Build GUI ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
-    needs: [check-version, create-release]
-    # `softprops/action-gh-release` creates a release when none exists for the
-    # tag. Without a dependency on create-release these jobs race it, and if
-    # create-release fails the first upload to finish publishes a release with
-    # no notes and prerelease: false — even for an -alpha, defeating the
-    # is-prerelease output above. It also leaves create-release's own
-    # `git tag && git push` failing against a tag that now exists, which takes
-    # deploy-docs down with it.
-    #
-    # create-release is deliberately skipped for test versions and test_run
-    # while these jobs still run, so this cannot be a bare `needs:` — a job
-    # depending on a skipped job is itself skipped unless its `if:` contains a
-    # status function. `!cancelled()` supplies that; `always()` would be wrong
-    # because it also pushes on through a cancelled run.
-    #
-    # `|| inputs.test_run == true` because version-changed only means "there is
-    # no tag for this version yet". A test_run dispatch is normally fired at
-    # the version already sitting on main, so without this the builds it exists
-    # to exercise are skipped and the run does nothing at all. Nothing gets
-    # published either way — every upload and attestation step below is guarded
-    # on its own.
-    if: >-
-      !cancelled()
-      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-      && (needs.check-version.outputs.version-changed == 'true' || inputs.test_run == true)
-      && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
+    needs: meta
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -607,11 +332,6 @@ jobs:
             os: windows-2022
 
     steps:
-      - name: 🧪 Test Mode Banner
-        if: needs.check-version.outputs.is-test-version == 'true' || inputs.test_run == true
-        run: |
-          echo "::notice::🧪 TEST MODE - Builds will run but no release will be created"
-
       # Pinned by SHA; ci.yml's `test` job says why.
       - name: Free Disk Space (Ubuntu)
         if: runner.os == 'Linux'
@@ -628,7 +348,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ needs.meta.outputs.sha }}
+          persist-credentials: false
 
       - name: Install Rust toolchain
         run: rustup target add ${{ matrix.target }}
@@ -638,8 +359,8 @@ jobs:
         with:
           shared-key: "gui-${{ matrix.target }}"
           cache-on-failure: true
-          # Only a run on main saves; `deploy-docs` above says why.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Restores only; the `build` job says why.
+          save-if: false
 
       - name: Install Node.js
         uses: actions/setup-node@v7
@@ -689,6 +410,18 @@ jobs:
           cp "target/${{ matrix.target }}/release/gglib${ext}" \
             "src-tauri/binaries/gglib-${{ matrix.target }}${ext}"
 
+      # The macOS CLI asset, packaged as the `build` job packages the others:
+      # the one binary at the archive's root, under the name the Homebrew
+      # formula and SHA256SUMS expect.
+      - name: Package the CLI (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          mkdir -p package dist
+          cp target/${{ matrix.target }}/release/gglib package/
+          tar czf dist/gglib-${{ needs.meta.outputs.version }}-${{ matrix.target }}.tar.gz \
+            -C package gglib
+
       # tauri.sidecar.conf.json adds the CLI as an externalBin. It is merged
       # in here only, not in tauri.conf.json: tauri-build refuses to compile
       # the app when an externalBin is missing, and every `cargo check` and
@@ -720,7 +453,7 @@ jobs:
           if [ "${{ matrix.os }}" == "windows-2022" ]; then
             npm run tauri:build -- --target ${{ matrix.target }} --bundles nsis --config "$sidecar"
           elif [ "${{ runner.os }}" = "Linux" ]; then
-            version="${{ needs.check-version.outputs.new-version }}"
+            version="${{ needs.meta.outputs.version }}"
             rpm_args=(--config "$sidecar")
             if [[ "$version" == *-* ]]; then
               base="${version%%-*}"
@@ -758,7 +491,7 @@ jobs:
           if [ "${{ runner.os }}" = "Linux" ]; then
             deb=$(find "$bundle/deb" -maxdepth 1 -name '*.deb' | head -n1)
             dpkg-deb --field "$deb" Depends | tee /dev/stderr | grep -q 'gglib (= '
-            version="${{ needs.check-version.outputs.new-version }}"
+            version="${{ needs.meta.outputs.version }}"
             deb_version=$(dpkg-deb --field "$deb" Version)
             echo "deb Version: $deb_version"
             test "$deb_version" = "${version/-/\~}"
@@ -885,6 +618,7 @@ jobs:
 
       - name: Prepare GUI binary for packaging (Windows)
         if: matrix.os == 'windows-2022'
+        shell: pwsh
         run: |
           mkdir gui-release
           copy target\${{ matrix.target }}\release\gglib-app.exe gui-release\
@@ -909,7 +643,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           bundle="target/${{ matrix.target }}/release/bundle"
-          stem="gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}"
+          stem="gglib-gui-${{ needs.meta.outputs.version }}-${{ matrix.target }}"
 
           stage() {
             dir="$bundle/$1"; ext="$2"; dest="dist/${stem}.$2"
@@ -945,7 +679,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           bundle="target/${{ matrix.target }}/release/bundle"
-          dest="dist/gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}-setup.exe"
+          dest="dist/gglib-gui-${{ needs.meta.outputs.version }}-${{ matrix.target }}-setup.exe"
           found=$(find "$bundle/nsis" -maxdepth 1 -type f -name "*.exe" 2>/dev/null | sort | head -n1)
           if [ -z "$found" ]; then
             echo "::error::no NSIS installer in ${bundle}/nsis — bundler did not produce it, or renamed it"
@@ -959,47 +693,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          tar czf dist/gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.tar.gz \
+          tar czf dist/gglib-gui-${{ needs.meta.outputs.version }}-${{ matrix.target }}.tar.gz \
             -C gui-release .
 
       - name: Package GUI archive (Windows)
         if: matrix.os == 'windows-2022'
+        shell: pwsh
         run: |
           cd gui-release
-          7z a ..\dist\gglib-gui-${{ needs.check-version.outputs.new-version }}-${{ matrix.target }}.zip *
+          7z a ..\dist\gglib-gui-${{ needs.meta.outputs.version }}-${{ matrix.target }}.zip *
           cd ..
-
-      # See the matching step in the `build` job for why hashing happens here
-      # and not by reading the assets back off the release.
-      - name: Hash release artifacts
-        shell: bash
-        run: |
-          set -euo pipefail
-          sha256() {
-            if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"
-            else shasum -a 256 "$@"; fi
-          }
-          mkdir -p sums
-          ( cd dist && sha256 * ) > "sums/gui-${{ matrix.target }}.sha256"
-          cat "sums/gui-${{ matrix.target }}.sha256"
-
-      - name: Upload checksum fragment
-        uses: actions/upload-artifact@v7
-        with:
-          name: sums-gui-${{ matrix.target }}
-          path: sums/gui-${{ matrix.target }}.sha256
-          retention-days: 1
-
-      # Same reasoning as the CLI job above: on a dry run the installers are
-      # the thing most worth having, since #906 shipped a release whose
-      # installers were built and then never attached.
-      - name: Upload installers for a dry run
-        if: needs.check-version.outputs.is-test-version == 'true' || inputs.test_run == true
-        uses: actions/upload-artifact@v7
-        with:
-          name: dryrun-gui-${{ matrix.target }}
-          path: dist/*
-          retention-days: 7
 
       # Binds each artifact's digest to this workflow, commit and runner via
       # keyless Sigstore signing — no private key to store or leak. Verified by
@@ -1010,18 +713,20 @@ jobs:
       # Gatekeeper or Windows SmartScreen, which still need a Developer ID and
       # Authenticode respectively.
       - name: Attest build provenance
-        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
+        if: inputs.test_run != true
         uses: actions/attest-build-provenance@v3
         with:
           subject-path: dist/*
 
-      - name: Upload GUI assets to release
-        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v3
+      # As in the `build` job. On a dry run the installers are the thing most
+      # worth having, since #906 shipped a release whose installers were built
+      # and then never attached.
+      - name: Upload the assets
+        uses: actions/upload-artifact@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: v${{ needs.check-version.outputs.new-version }}
-          files: dist/*
+          name: ${{ needs.meta.outputs.artifacts }}-gui-${{ matrix.target }}
+          path: dist/*
+          retention-days: 7
 
   # gglib-ffi as an app links it, attached to the release as three assets:
   # GglibFFI-<version>.xcframework.zip, a dynamic framework per slice (iOS
@@ -1043,31 +748,24 @@ jobs:
   # The runner's default Xcode, as ci.yml's `ffi-apple` and ggchat's CI use:
   # the framework shipped is the one an app built with that Xcode links.
   # Optimised, with the workspace's release profile as it stands.
-  #
-  # Gated as `build` is, for the reasons given there.
   build-phone:
     name: Build Swift framework
     runs-on: macos-26
-    needs: [check-version, create-release]
-    if: >-
-      !cancelled()
-      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-      && (needs.check-version.outputs.version-changed == 'true' || inputs.test_run == true)
-      && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
+    needs: meta
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     # A cold optimised build of three slices, then two Swift packages, and
     # llama.cpp's three builds when its cache misses. The ceiling is for a
     # hang, not for a slow runner.
     timeout-minutes: 120
     steps:
-      - name: 🧪 Test Mode Banner
-        if: needs.check-version.outputs.is-test-version == 'true' || inputs.test_run == true
-        run: |
-          echo "::notice::🧪 TEST MODE - Builds will run but no release will be created"
-
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ needs.meta.outputs.sha }}
+          persist-credentials: false
 
       # rust-toolchain.toml lists the three Apple targets, so this installs them.
       - name: Install Rust toolchain
@@ -1078,8 +776,8 @@ jobs:
         with:
           shared-key: "release-phone"
           cache-on-failure: true
-          # Only a run on main saves; `deploy-docs` above says why.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Restores only; the `build` job says why.
+          save-if: false
 
       # After the Rust cache, never before it: rust-cache pre-cleans target/
       # when it restores another Cargo.lock's entry, and that clean deletes
@@ -1123,151 +821,90 @@ jobs:
         run: make ffi-smoke
 
       # Into dist/, which holds nothing else on this runner, so the steps
-      # below hash, attest and upload exactly the three archives.
+      # below attest and upload exactly the three archives.
       - name: Package the frameworks and the Swift binding
         env:
-          VERSION: ${{ needs.check-version.outputs.new-version }}
+          VERSION: ${{ needs.meta.outputs.version }}
         run: scripts/apple/package-release.sh "$VERSION" dist
-
-      # See the matching step in the `build` job for why hashing happens here
-      # and not by reading the assets back off the release.
-      - name: Hash release artifacts
-        shell: bash
-        run: |
-          set -euo pipefail
-          sha256() {
-            if command -v sha256sum >/dev/null 2>&1; then sha256sum "$@"
-            else shasum -a 256 "$@"; fi
-          }
-          mkdir -p sums
-          ( cd dist && sha256 -- * ) > sums/phone.sha256
-          cat sums/phone.sha256
-
-      - name: Upload checksum fragment
-        uses: actions/upload-artifact@v7
-        with:
-          name: sums-phone
-          path: sums/phone.sha256
-          retention-days: 1
-
-      # As in the `build` job: a dry run's archives are the thing to try in
-      # an app before a tag exists.
-      - name: Upload the archives for a dry run
-        if: needs.check-version.outputs.is-test-version == 'true' || inputs.test_run == true
-        uses: actions/upload-artifact@v7
-        with:
-          name: dryrun-phone
-          path: dist/*
-          retention-days: 7
 
       # Provenance, as in the `build` job; it is not code signing, and Xcode
       # signs the framework when it embeds it in an app.
       - name: Attest build provenance
-        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
+        if: inputs.test_run != true
         uses: actions/attest-build-provenance@v3
         with:
           subject-path: dist/*
 
-      - name: Upload the archives to release
-        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v3
+      # As in the `build` job: a dry run's archives are the thing to try in
+      # an app before a tag exists.
+      - name: Upload the assets
+        uses: actions/upload-artifact@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: v${{ needs.check-version.outputs.new-version }}
-          files: dist/*
+          name: ${{ needs.meta.outputs.artifacts }}-phone
+          path: dist/*
+          retention-days: 7
 
-  checksums:
-    name: Publish SHA256SUMS
+  # The only job that writes to the release, and it runs only once every
+  # build has succeeded, so a release carries all its assets or none of this
+  # run's. A re-dispatch replaces them as a whole: SHA256SUMS goes first, so
+  # no download can check against a manifest from the run before, and comes
+  # back last, once every asset it lists is up.
+  #
+  # On a test run this collects and hashes the `dryrun-*` artifacts, so the
+  # manifest is built and checked before a real release needs it.
+  publish:
+    name: Publish the release
     runs-on: ubuntu-24.04
-    needs: [check-version, create-release, build, build-gui, build-phone]
-    # Requires success from every build job, not just "not failure". A partial
-    # manifest is worse than none: `sha256sum -c --ignore-missing` passes
-    # cleanly against a SHA256SUMS that omits the Windows assets, so a Windows
-    # user would be told their download verified when nothing was checked.
-    #
-    # The job itself runs on test versions and test_run dispatches; only the
-    # upload is guarded. Gating the whole job would mean the hashing, sorting
-    # and validation below were never exercised until a real release.
-    #
-    # That holds for a -test version, which is untagged and so has
-    # version-changed true. It did not hold for a test_run dispatch until the
-    # `|| inputs.test_run == true` below: such a dispatch normally runs at the
-    # version already on main, leaving version-changed false and this job
-    # skipped. The same allowance is on build, build-gui and build-phone, and
-    # it is needed in all four — this job consumes their fragments, so gating
-    # it alone open would only leave it waiting on artifacts that were never
-    # produced.
-    if: >-
-      !cancelled()
-      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-      && (needs.check-version.outputs.version-changed == 'true' || inputs.test_run == true)
-      && needs.build.result == 'success'
-      && needs.build-gui.result == 'success'
-      && needs.build-phone.result == 'success'
-      && (needs.create-release.result == 'success' || needs.create-release.result == 'skipped')
+    needs: [meta, build, build-gui, build-phone]
+    timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
-      - name: Collect checksum fragments
+      # Each artifact into a folder of its own, so two that carry a file of
+      # the same name are caught below instead of one overwriting the other.
+      - name: Collect the assets
         uses: actions/download-artifact@v8
         with:
-          pattern: sums-*
-          merge-multiple: true
-          path: sums
+          pattern: ${{ needs.meta.outputs.artifacts }}-*
+          path: collected
 
       - name: Build SHA256SUMS
         run: |
           set -euo pipefail
-          # LC_ALL=C so the ordering is byte-wise and reproducible. With
-          # fail-fast: false the matrix legs finish in arbitrary order, and an
-          # unsorted manifest would churn between releases for no reason —
-          # locale-dependent ordering has already bitten this repo once.
-          # tr -d '\r' guards against a fragment ever being produced by pwsh.
-          #
-          # A GNU checksum line is a digest, one space, an input-mode flag
-          # ('*' for binary, ' ' for text), then the name. coreutils takes the
-          # default flag from the compile-time O_BINARY macro, which is 0 on
-          # GNU/Linux but not on the MSYS2 build git-bash provides, so the
-          # windows-2022 legs emit '*' where ubuntu and macOS emit ' '. The
-          # flag also sits inside the `sort -k2` key, so it has to be
-          # normalised before the sort — do it after and every Windows entry
-          # herds to the bottom of the manifest regardless of its filename.
-          #
-          # Normalising the separator rather than passing --text/-t to the
-          # hashing step: on Windows text mode is not a no-op and can change
-          # the digest, which would publish a hash matching nothing we ship.
-          #
-          # awk 1 rather than cat: it terminates a fragment that arrives
-          # without a trailing newline, so two legs can never be joined onto
-          # a single line.
-          awk 1 sums/*.sha256 \
-            | tr -d '\r' \
-            | sed -E 's/^([0-9a-f]{64}) \*/\1  /' \
-            | LC_ALL=C sort -k2 > SHA256SUMS
+          mkdir assets
+          dupes=$(find collected -type f -exec basename {} \; | LC_ALL=C sort | uniq -d)
+          if [ -n "$dupes" ]; then
+            echo "::error::more than one build produced: $dupes"
+            exit 1
+          fi
+          find collected -type f -exec mv {} assets/ \;
+          # LC_ALL=C so the ordering is byte-wise and reproducible, whatever
+          # order the matrix legs finished in.
+          ( cd assets && sha256sum -- * ) | LC_ALL=C sort -k2 > SHA256SUMS
           echo "::group::SHA256SUMS"; cat SHA256SUMS; echo "::endgroup::"
 
           # Canonical form only: 64 lowercase hex, two spaces, then a bare
-          # filename carrying no directory component and no leading whitespace.
-          #
-          # This is deliberately stricter than `sha256sum -c`, which also reads
-          # the ' *' binary-mode form and a path-bearing name quite happily. The
-          # point is one stable shape, so the manifest stays diffable between
-          # releases and a consumer splitting on whitespace gets the name it
-          # expects — not that the other forms are unreadable.
+          # filename carrying no directory component and no leading whitespace,
+          # so the manifest stays diffable between releases and a consumer
+          # splitting on whitespace gets the name it expects.
           if grep -nvE '^[0-9a-f]{64}  [^/[:space:]][^/]*$' SHA256SUMS; then
             echo "::error::non-canonical, path-bearing or leading-space line in SHA256SUMS"
             exit 1
           fi
-          if [ "$(wc -l < SHA256SUMS)" -ne "$(LC_ALL=C sort -u -k2 SHA256SUMS | wc -l)" ]; then
-            echo "::error::duplicate filenames in SHA256SUMS"
-            exit 1
-          fi
 
-      - name: Upload SHA256SUMS to release
-        if: needs.check-version.outputs.is-test-version != 'true' && inputs.test_run != true
-        uses: softprops/action-gh-release@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: v${{ needs.check-version.outputs.new-version }}
-          files: SHA256SUMS
+      - name: Upload the assets, SHA256SUMS last
+        if: inputs.test_run != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "$(gh release view "$TAG" --json assets --jq '.assets[] | select(.name == "SHA256SUMS") | .name')" ]; then
+            gh release delete-asset "$TAG" SHA256SUMS --yes
+          fi
+          gh release upload "$TAG" assets/* --clobber
+          gh release upload "$TAG" SHA256SUMS --clobber
 
   # Everything past the GitHub release that a user's package manager reads
   # waits for a person. Each channel is its own environment with required
@@ -1292,20 +929,20 @@ jobs:
   apt-repo:
     name: Build apt repository
     runs-on: ubuntu-24.04
-    needs: [check-version, create-release, checksums]
-    if: >-
-      !cancelled()
-      && needs.checksums.result == 'success'
-      && needs.create-release.result == 'success'
-      && needs.check-version.outputs.is-prerelease != 'true'
-      && needs.check-version.outputs.is-test-version != 'true'
-      && inputs.test_run != true
+    needs: [meta, publish]
+    if: needs.meta.outputs.is-prerelease == 'false' && inputs.test_run != true
+    timeout-minutes: 20
+    permissions:
+      contents: read
     environment:
       name: apt
       url: https://github.com/mmogr/gglib#apt-ubuntu-2404-debian-13
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+          persist-credentials: false
 
       - name: Install apt-ftparchive
         run: |
@@ -1358,30 +995,30 @@ jobs:
   aur:
     name: Publish to the AUR
     runs-on: ubuntu-24.04
-    needs: [check-version, create-release, checksums]
-    if: >-
-      !cancelled()
-      && needs.checksums.result == 'success'
-      && needs.create-release.result == 'success'
-      && needs.check-version.outputs.is-prerelease != 'true'
-      && needs.check-version.outputs.is-test-version != 'true'
-      && inputs.test_run != true
+    needs: [meta, publish]
+    if: needs.meta.outputs.is-prerelease == 'false' && inputs.test_run != true
+    timeout-minutes: 20
+    permissions:
+      contents: read
     environment:
       name: aur
       url: https://github.com/mmogr/gglib#arch-linux
     container: archlinux:base-devel
     env:
-      VERSION: ${{ needs.check-version.outputs.new-version }}
+      VERSION: ${{ needs.meta.outputs.version }}
     steps:
       - name: Install git and ssh
         run: pacman -Syu --noconfirm --needed git openssh
 
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+          persist-credentials: false
 
-      # Read back from the release rather than from the build jobs'
-      # fragments: those artifacts expire after a day, and this job can wait
-      # longer than that for its approval.
+      # Read back from the release, which is what a user's download is
+      # checked against, rather than from this run's artifacts, which can
+      # expire while this job waits for its approval.
       - name: Fetch SHA256SUMS
         run: curl -fsSL -o SHA256SUMS "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/SHA256SUMS"
 
@@ -1452,22 +1089,22 @@ jobs:
   homebrew:
     name: Publish to the Homebrew tap
     runs-on: ubuntu-24.04
-    needs: [check-version, create-release, checksums]
-    if: >-
-      !cancelled()
-      && needs.checksums.result == 'success'
-      && needs.create-release.result == 'success'
-      && needs.check-version.outputs.is-prerelease != 'true'
-      && needs.check-version.outputs.is-test-version != 'true'
-      && inputs.test_run != true
+    needs: [meta, publish]
+    if: needs.meta.outputs.is-prerelease == 'false' && inputs.test_run != true
+    timeout-minutes: 20
+    permissions:
+      contents: read
     environment:
       name: homebrew
       url: https://github.com/mmogr/homebrew-tap
     env:
-      VERSION: ${{ needs.check-version.outputs.new-version }}
+      VERSION: ${{ needs.meta.outputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+          persist-credentials: false
 
       # From the release, for the reason the `aur` job gives.
       - name: Fetch SHA256SUMS
@@ -1511,3 +1148,128 @@ jobs:
             git push origin HEAD
             echo "::notice::pushed gglib $VERSION to the tap"
           fi
+
+  deploy-docs:
+    name: Deploy Documentation
+    runs-on: ubuntu-24.04
+    # The apt repository is served from the same Pages site, under /apt, and
+    # a Pages deploy replaces the whole site. So this job publishes both and
+    # waits for `apt-repo`, which waits for the `apt` approval: a stable
+    # release reaches the docs and apt together or not at all.
+    needs: [meta, apt-repo]
+    if: needs.meta.outputs.is-prerelease == 'false' && inputs.test_run != true
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    # Declared so deploy-pages records the deployment, and so the
+    # environment's rule that only main deploys applies: github.ref is main
+    # for the dispatch release-tag.yml makes.
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # Allow one concurrent deployment
+    concurrency:
+      group: "pages"
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+          persist-credentials: false
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libasound2-dev
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "docs-ubuntu"
+          cache-on-failure: true
+          # Restores only; the `build` job says why.
+          save-if: false
+
+      # No Node or Web UI steps: with gglib-app excluded below, nothing this
+      # job builds needs web_ui/ (see the `allow_missing` note in gglib-axum's
+      # ui.rs).
+      - name: Build documentation
+        # Exclude gglib-app (Tauri desktop): the one member whose build can need the Web UI
+        # (its `tauri::generate_context!()` embeds `frontendDist` when `custom-protocol` is on).
+        # gglib-app has minimal API documentation (6 items) and is not the primary doc target.
+        # gglib-core (119 items) is the comprehensive library documentation.
+        #
+        # `-D warnings` so a broken intra-doc link cannot be published. This is
+        # the backstop, not the gate: ci.yml's `rustdoc` job runs the same build
+        # on every PR, which is where a regression should be caught.
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: ./scripts/doc_workspace.py -- --document-private-items --exclude gglib-app
+
+      - name: Create index.html redirect
+        run: |
+          cat > target/doc/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>gglib Documentation</title>
+            <meta http-equiv="refresh" content="0; url=gglib_core/index.html">
+            <link rel="canonical" href="gglib_core/index.html">
+            <style>
+              body { 
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                text-align: center;
+                padding: 50px;
+                background: #f5f5f5;
+              }
+              .container {
+                max-width: 600px;
+                margin: 0 auto;
+                background: white;
+                padding: 40px;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+              }
+              a { color: #0366d6; text-decoration: none; }
+              a:hover { text-decoration: underline; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>🦀 gglib Documentation</h1>
+              <p>Redirecting to the <a href="gglib_core/index.html">gglib-core documentation</a>...</p>
+              <p><small>If you're not redirected automatically, <a href="gglib_core/index.html">click here</a>.</small></p>
+            </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Collect the apt repository
+        uses: actions/download-artifact@v8
+        with:
+          name: apt-repo
+          path: target/doc/apt
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: './target/doc'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

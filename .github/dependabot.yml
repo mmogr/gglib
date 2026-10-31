@@ -201,25 +201,23 @@ updates:
     # Majors ride the group here, unlike cargo and npm. Most of these actions
     # run in PR CI or in a test_run of release.yml, so the pull request can be
     # tested before it merges. The ignore list holds the ones neither
-    # exercises: a test_run skips release.yml's tag, attest, upload and Pages
-    # steps, release-please.yml runs only after CI on main, and promote.yml
-    # only when dispatched. A major of one of these would first run in a real
-    # release, so each is bumped by hand in a pull request of its own, just
-    # before a release someone watches.
+    # exercises: a test_run skips release.yml's attest and Pages steps,
+    # release-tag.yml runs only in CI on main, release-please.yml only after
+    # it, and promote.yml only when dispatched. A major of one of these would
+    # first run in a real release, so each is bumped by hand in a pull request
+    # of its own, just before a release someone watches.
     #
     # actions/github-script is on the list although Label Check runs it on
     # every pull request: on a pull request Dependabot opens, Label Check's
-    # scripts stop at the bot exemption, so the deployment script in
-    # release.yml would meet a new major first in a real release. Bumped by
-    # hand, Label Check runs its whole script on the pull request.
+    # scripts stop at the bot exemption, so release-tag.yml's relabel step
+    # would meet a new major first in a real release. Bumped by hand, Label
+    # Check runs its whole script on the pull request.
     #
     # peaceiris/actions-gh-pages (badges.yml) and
     # stefanbuck/github-issue-parser (issue-labels.yml) are not exercised
     # either, but a failure there costs a badge or an issue label, not a
     # release.
     ignore:
-      - dependency-name: softprops/action-gh-release
-        update-types: ["version-update:semver-major"]
       - dependency-name: actions/attest-build-provenance
         update-types: ["version-update:semver-major"]
       - dependency-name: actions/configure-pages

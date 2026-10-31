@@ -1,10 +1,8 @@
-# How GitHub sorts pull requests in generated release notes. This is not the
-# release workflow, which is .github/workflows/release.yml. That workflow's
-# Create GitHub Release step asks for generated notes
-# (generate_release_notes: true, .github/workflows/release.yml:169).
-# softprops/action-gh-release v3 fetches them from the generate-notes
-# endpoint, which reads this file when it is given no other path. It takes
-# effect from the first release cut after it lands.
+# How GitHub sorts pull requests in generated release notes. This is not a
+# release workflow: those are .github/workflows/release-tag.yml, which makes
+# the release, and release.yml, which builds it. release-tag.yml's Create
+# GitHub Release step runs `gh release create --generate-notes`, and GitHub
+# generates the notes from this file when it is given no other path.
 #
 # Security comes first, so a security fix is never filed as routine.
 # Dependabot labels every security update it opens `security`, and a

@@ -6,10 +6,10 @@
 # release-please cannot do this: with no commit since the candidate's tag it
 # opens no pull request. So this workflow opens one, and sets it to merge
 # itself once CI passes, since there is nothing in it to review:
-# check_rc_promotion.sh proves the code is the candidate's, and release.yml
-# checks again before it tags. The release PR, by contrast, never merges
-# itself. After the merge release.yml tags X.Y.Z, and each stable channel
-# waits for its approval as before.
+# check_rc_promotion.sh proves the code is the candidate's, and CI's release
+# job (release-tag.yml) checks again before it tags. The release PR, by
+# contrast, never merges itself. After the merge CI tags X.Y.Z, release.yml
+# builds it, and each stable channel waits for its approval as before.
 #
 # The pull request is opened with the GitHub App token, as update-deps.yml's
 # is: a pull request opened with GITHUB_TOKEN starts no workflows, so CI would
@@ -147,7 +147,7 @@ jobs:
           fi
           echo "✓ Verified src-tauri/tauri.conf.json inherits its version"
 
-      # release.yml makes the same check and is the guard. Making it here too
+      # release-tag.yml makes the same check and is the guard. Making it here too
       # means a promotion the release would refuse is never opened as a PR.
       - name: Require a stable version to match its last RC
         # After the lockfiles, which a promotion also changes.
@@ -160,13 +160,13 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           branch: promote-v${{ steps.promote.outputs.stable }}
           delete-branch: true
-          # This commit is the one release.yml tags vX.Y.Z, and release-please
+          # This commit is the one release-tag.yml tags vX.Y.Z, and release-please
           # reads the next cycle from the commits after it, so it adds no line
           # to any changelog; promote.py has written the stable heading already.
           title: "chore(release): promote ${{ steps.promote.outputs.rc }} to ${{ steps.promote.outputs.stable }}"
           commit-message: "chore(release): promote ${{ steps.promote.outputs.rc }} to ${{ steps.promote.outputs.stable }}"
           body: |
-            ${{ steps.promote.outputs.rc }} becomes ${{ steps.promote.outputs.stable }}, and nothing else changes. Cargo.toml, package.json, the release-please manifest and both lockfiles move only their version, and CHANGELOG.md gains a heading for ${{ steps.promote.outputs.stable }}. `scripts/check_rc_promotion.sh` checked that against the tag v${{ steps.promote.outputs.rc }}, and release.yml checks it again before it tags.
+            ${{ steps.promote.outputs.rc }} becomes ${{ steps.promote.outputs.stable }}, and nothing else changes. Cargo.toml, package.json, the release-please manifest and both lockfiles move only their version, and CHANGELOG.md gains a heading for ${{ steps.promote.outputs.stable }}. `scripts/check_rc_promotion.sh` checked that against the tag v${{ steps.promote.outputs.rc }}, and CI checks it again before it tags.
 
             This pull request merges itself once CI passes. Each stable channel then waits for its approval.
           labels: |
