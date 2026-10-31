@@ -6,9 +6,9 @@
 # dependencies and fails on:
 # - an external crate on that crate's forbidden list (ADAPTER_DEPS and the
 #   *_FORBIDDEN arrays in main);
-# - a surface crate (gglib-cli, gglib-axum, gglib-ffi) that
-#   depends on another, except gglib-cli on gglib-axum;
-# - an infrastructure crate that depends on a surface crate;
+# - a surface crate (the adapter layer in crates/layers.toml) that depends
+#   on another, except gglib-cli and gglib-app on gglib-axum;
+# - any other crate that depends on a surface crate;
 # - gglib-broadcast, a leaf, depending on any gglib-* crate
 #   (check_no_gglib_dependency).
 #
@@ -243,11 +243,25 @@ main() {
     # above only match external crate names (e.g. `axum`), never sibling
     # `gglib-*` crates, so they miss a direct surface-to-surface edge like
     # `gglib-cli -> gglib-axum`. Check sibling names directly instead, with
-    # the one exception CONTRIBUTING.md documents.
-    SURFACE_CRATES=(gglib-cli gglib-axum gglib-ffi)
-    SURFACE_ALLOWED_EXCEPTIONS=("gglib-cli->gglib-axum")
+    # the exceptions CONTRIBUTING.md documents: the CLI and the desktop app
+    # both host the daemon gglib-axum builds.
+    #
+    # The surface crates are the adapter layer in crates/layers.toml and the
+    # infrastructure crates every other member, so a new crate is checked
+    # from the day it has a row. The assignments fail the run when
+    # crate_list.py refuses, rather than checking an empty list.
+    local crate_list
+    crate_list="$(dirname "${BASH_SOURCE[0]}")/crate_list.py"
+    local adapters others
+    adapters=$(python3 "$crate_list" list adapter)
+    others=$(python3 "$crate_list" list non-adapter)
+    # shellcheck disable=SC2206 # one package name per line, no spaces
+    SURFACE_CRATES=($adapters)
+    # shellcheck disable=SC2206
+    INFRA_CRATES=($others)
+    SURFACE_ALLOWED_EXCEPTIONS=("gglib-cli->gglib-axum" "gglib-app->gglib-axum")
 
-    log "📦 Surface-to-surface isolation (no undocumented cli/axum/ffi cross-deps)"
+    log "📦 Surface-to-surface isolation (no undocumented cross-deps between ${SURFACE_CRATES[*]})"
     for surface_crate in "${SURFACE_CRATES[@]}"; do
         if ! check_surface_isolation "$surface_crate"; then
             FAILED=1
@@ -351,15 +365,9 @@ main() {
     fi
     log ""
 
-    # Every infrastructure crate, the three with no forbidden list above
-    # (gglib-bootstrap, gglib-build-info and gglib-integration-tests)
-    # included.
-    INFRA_CRATES=(
-        gglib-runtime gglib-proxy gglib-agent gglib-download gglib-hf
-        gglib-mcp gglib-gguf gglib-broadcast gglib-bootstrap gglib-build-info
-        gglib-integration-tests gglib-test-http gglib-engine-llama
-    )
-    log "📦 Infrastructure crates (no direct dependency on a surface crate)"
+    # Every crate outside the adapter layer (INFRA_CRATES, read above), those
+    # with no forbidden list of their own included.
+    log "📦 Non-surface crates (no direct dependency on a surface crate)"
     for infra_crate in "${INFRA_CRATES[@]}"; do
         if ! check_no_surface_dependency "$infra_crate"; then
             FAILED=1

@@ -3,7 +3,7 @@
 # being skipped as up-to-date.
 .PHONY: help setup install uninstall build build-dev build-gui build-all build-tauri \
         test test-helper check ios-check phone-llama engine-llama-test engine-llama-clippy \
-        fmt lint doc doc-check dev pre-commit release \
+        fmt lint doc doc-check readmes dev pre-commit release \
         lint-web typecheck-web deadcode-web test-web boundaries unused-deps enforce \
         adr-readings record-upstream record-upstream-inproc bindings bindings-check \
         ffi-binding ffi-binding-check ffi-xcframework ffi-xcframework-fast ffi-smoke \
@@ -228,6 +228,11 @@ doc-check: ## Build rustdoc with warnings denied, exactly as CI does
 	@# `custom-protocol` is on); see the note above `bindings`.
 	$(CARGO) doc --workspace --no-deps --document-private-items --exclude gglib-app
 
+# The generated parts of the crate READMEs: each badged crate's header block,
+# from crates/layers.toml. `enforce` fails while one is out of date.
+readmes: ## Rewrite the generated blocks in the crate READMEs
+	@./scripts/crate_list.py readmes --write
+
 # The crates a phone build compiles, and the only list of them: `ios-check`
 # checks them for aarch64-apple-ios, and `boundaries` passes them to
 # scripts/check_phone_closure.sh, which keeps their closure for that target
@@ -366,6 +371,11 @@ enforce: ## Run the architecture enforcement checks
 	@# A link into docs/adr/ breaks when an ADR or a heading is renamed, and
 	@# rustdoc does not follow a URL.
 	@./scripts/check_adrs.py --check
+	@# crates/layers.toml is the one crate list coverage.yml, badges.yml and
+	@# check_boundaries.sh read. This fails when it and the workspace disagree,
+	@# a crate depends on a layer above its own, a README links a badge file
+	@# the pipeline does not write, or a crate's header block is stale.
+	@./scripts/crate_list.py --check
 
 # The ADR readings in contracts/upstream against their hand-kept approvals. Not
 # in `enforce`: CI runs it as a job of its own, `ADR criterion moved`, so one
