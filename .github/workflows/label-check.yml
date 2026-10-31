@@ -4,11 +4,16 @@
 #   priority:*   — how urgent is this
 #   size:*       — estimated effort (hours/days, NOT diff volume — see the note below)
 #
+# And one rule for a fix: a PR titled `fix(…):` closes an issue (Closes/Fixes/Resolves
+# #N) that carries all four of component:, priority:, size: and type:, so each component
+# keeps a record of what broke. The `no-issue` label is the escape for a fix with no
+# issue on purpose. The rule reads the title and body, hence `edited` in the triggers.
+#
 # Two jobs in ONE workflow, deliberately:
 #   enrich       — applies what can be derived (including inheriting component:/
 #                  priority:/type: from any issue this PR closes), and asks for
 #                  what can't
-#   label-check  — the required status check; verifies and reports
+#   label-check  — the "Label Check" status; verifies and reports
 #
 # Why one workflow and not two: label changes made with GITHUB_TOKEN do NOT trigger new
 # workflow runs. A separate enrichment workflow would apply labels and leave this check
@@ -23,7 +28,7 @@ name: Label Check
 
 on:
   pull_request:
-    types: [opened, labeled, unlabeled, synchronize, reopened, ready_for_review]
+    types: [opened, edited, labeled, unlabeled, synchronize, reopened, ready_for_review]
 
 # Default to nothing; each job opts in to the minimum it needs.
 permissions: {}
@@ -81,6 +86,48 @@ jobs:
               return;
             }
 
+            // --- A fix closes a triaged issue -----------------------------------
+            // Keep in step with the same block in the label-check job below.
+            // Only a closing keyword counts: a bare issue URL in the body closes nothing.
+            const LINK_RE = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*#(\d+)\b/gi;
+            async function fixIssueProblem(number, labelNames) {
+              const FIX_RE = /^fix(\([^)]*\))?!?:/;
+              const TRIAGE_PREFIXES = ['component:', 'priority:', 'size:', 'type:'];
+              // Title and body come from the API for the reason the labels do: a re-run
+              // replays its event's payload, which can predate the latest edit.
+              const { data: current } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+              if (!FIX_RE.test(current.title) || labelNames.includes('no-issue')) return null;
+
+              const linked = new Set();
+              for (const m of (current.body || '').matchAll(LINK_RE)) linked.add(Number(m[1]));
+              if (!linked.size) {
+                return '**A fix closes its issue.** Add `Closes #N`, or the `no-issue` label'
+                  + ' if there is none on purpose.';
+              }
+
+              const problems = [];
+              for (const num of linked) {
+                try {
+                  const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: num });
+                  if (issue.pull_request) {
+                    problems.push(`#${num} is a pull request, not an issue`);
+                    continue;
+                  }
+                  const labels = issue.labels.map(l => typeof l === 'string' ? l : l.name);
+                  const missing = TRIAGE_PREFIXES.filter(p => !labels.some(l => l.startsWith(p)));
+                  if (missing.length) {
+                    problems.push(`#${num} is missing ${missing.map(p => `\`${p}\``).join(', ')}`);
+                  }
+                } catch (e) {
+                  problems.push(`#${num} could not be read (${e.message})`);
+                }
+              }
+              if (!problems.length) return null;
+              return `**A fix's issue is triaged first.** ${problems.join('; ')}; label it,`
+                + ` then edit this PR or re-run Label Check.`;
+            }
+            const fixAsk = await fixIssueProblem(issue_number, names);
+
             // --- Inherit component:/priority:/type: from linked issues -----------
             // The original label audit's top finding: labels don't propagate from a
             // fully-labelled issue to the PR that closes it (e.g. issue #640 had
@@ -88,7 +135,6 @@ jobs:
             // issue size is a triage estimate, PR size is the measured diff, and these
             // legitimately differ (see the size: section below).
             const INHERITABLE_PREFIXES = ['component:', 'priority:', 'type:'];
-            const LINK_RE = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*#(\d+)\b/gi;
             const url = `github\\.com/${owner}/${repo}/issues/(\\d+)`;
             const URL_RE = new RegExp(url, 'gi');
 
@@ -235,6 +281,8 @@ jobs:
             const MARKER = '<!-- label-check-assist -->';
             const asks = [];
 
+            if (fixAsk) asks.push(fixAsk);
+
             if (!has('size:')) {
               asks.push([
                 `**Needs a \`size:\` label.**`,
@@ -322,6 +370,7 @@ jobs:
     if: always() && github.event.pull_request.draft == false
     permissions:
       pull-requests: read
+      issues: read # to read the labels of the issue a fix closes
     steps:
       - name: Check required labels
         uses: actions/github-script@v7
@@ -348,26 +397,75 @@ jobs:
               return;
             }
 
+            // --- A fix closes a triaged issue -----------------------------------
+            // Keep in step with the same block in the enrich job above.
+            // Only a closing keyword counts: a bare issue URL in the body closes nothing.
+            const LINK_RE = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*#(\d+)\b/gi;
+            async function fixIssueProblem(number, labelNames) {
+              const FIX_RE = /^fix(\([^)]*\))?!?:/;
+              const TRIAGE_PREFIXES = ['component:', 'priority:', 'size:', 'type:'];
+              // Title and body come from the API for the reason the labels do: a re-run
+              // replays its event's payload, which can predate the latest edit.
+              const { data: current } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+              if (!FIX_RE.test(current.title) || labelNames.includes('no-issue')) return null;
+
+              const linked = new Set();
+              for (const m of (current.body || '').matchAll(LINK_RE)) linked.add(Number(m[1]));
+              if (!linked.size) {
+                return '**A fix closes its issue.** Add `Closes #N`, or the `no-issue` label'
+                  + ' if there is none on purpose.';
+              }
+
+              const problems = [];
+              for (const num of linked) {
+                try {
+                  const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: num });
+                  if (issue.pull_request) {
+                    problems.push(`#${num} is a pull request, not an issue`);
+                    continue;
+                  }
+                  const labels = issue.labels.map(l => typeof l === 'string' ? l : l.name);
+                  const missing = TRIAGE_PREFIXES.filter(p => !labels.some(l => l.startsWith(p)));
+                  if (missing.length) {
+                    problems.push(`#${num} is missing ${missing.map(p => `\`${p}\``).join(', ')}`);
+                  }
+                } catch (e) {
+                  problems.push(`#${num} could not be read (${e.message})`);
+                }
+              }
+              if (!problems.length) return null;
+              return `**A fix's issue is triaged first.** ${problems.join('; ')}; label it,`
+                + ` then edit this PR or re-run Label Check.`;
+            }
+
+            const failures = [];
+
             const missing = REQUIRED_PREFIXES.filter(p => !names.some(n => n.startsWith(p)));
-            if (!missing.length) {
+            if (missing.length) {
+              const isFork = pr.head.repo.full_name !== `${owner}/${repo}`;
+              failures.push([
+                `Missing required labels: ${missing.join(', ')}`,
+                ``,
+                `Every PR needs at least one label from each category:`,
+                ...REQUIRED_PREFIXES.map(p => `  - ${p}*`),
+                ``,
+                isFork
+                  // Say what CONTRIBUTING.md says rather than promise labels: code from
+                  // outside is not accepted yet. Check output, so it needs no write access.
+                  ? `This PR is from a fork. Code from outside contributors is not accepted`
+                    + ` yet; issues, bug reports and ideas are welcome through the issue`
+                    + ` tracker. See https://github.com/${owner}/${repo}/blob/main/`
+                    + `CONTRIBUTING.md#outside-contributions`
+                  : `component: auto-applies only when exactly one is touched; priority:`
+                    + ` and size: are human judgements — see the bot comment on this PR.`,
+              ].join('\n'));
+            }
+
+            const fixProblem = await fixIssueProblem(pr.number, names);
+            if (fixProblem) failures.push(fixProblem);
+
+            if (!failures.length) {
               core.info(`All required labels present: ${names.join(', ')}`);
               return;
             }
-
-            const isFork = pr.head.repo.full_name !== `${owner}/${repo}`;
-            core.setFailed([
-              `Missing required labels: ${missing.join(', ')}`,
-              ``,
-              `Every PR needs at least one label from each category:`,
-              ...REQUIRED_PREFIXES.map(p => `  - ${p}*`),
-              ``,
-              isFork
-                // Say what CONTRIBUTING.md says rather than promise labels: code from
-                // outside is not accepted yet. Check output, so it needs no write access.
-                ? `This PR is from a fork. Code from outside contributors is not accepted`
-                  + ` yet; issues, bug reports and ideas are welcome through the issue`
-                  + ` tracker. See https://github.com/${owner}/${repo}/blob/main/`
-                  + `CONTRIBUTING.md#outside-contributions`
-                : `component: auto-applies only when exactly one is touched; priority:`
-                  + ` and size: are human judgements — see the bot comment on this PR.`,
-            ].join('\n'));
+            core.setFailed(failures.join('\n\n'));
