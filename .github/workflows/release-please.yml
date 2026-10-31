@@ -3,7 +3,8 @@
 # release and works out the next candidate (release-please-config.json says
 # how), then writes it into Cargo.toml, package.json and the manifest, and adds
 # its changes to CHANGELOG.md. Merging the pull request changes main's version,
-# and release.yml, the only tagger, releases that version as a prerelease.
+# and CI's release job (release-tag.yml), the only tagger, releases that
+# version as a prerelease.
 # Promotion to a stable version is promote.yml's job, not this one's.
 #
 # release-please knows nothing of Cargo.lock or package-lock.json, and CI
@@ -16,8 +17,9 @@
 
 name: Release PR
 
-# After CI on main, not on the push: release.yml runs inside CI and tags a
-# changed version, and release-please must see that tag before it reads main.
+# After CI on main, not on the push: CI's release job tags a changed version,
+# and release-please must see that tag before it reads main. The builds run
+# in release.yml afterwards; release-please does not wait for them.
 # Running once per green CI run also means a burst of merges rebuilds the
 # pull request once, not once per merge.
 on:
@@ -55,15 +57,20 @@ jobs:
       # The pull request the action opened or updated, as JSON.
       pr: ${{ steps.release.outputs.pr }}
     steps:
+      # The commit CI tested, whose version that run's release job tagged.
+      # main can be ahead by then, at a version whose own CI run has not yet
+      # reached its release job.
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       # Two things must be true before release-please runs, and after a green
       # CI run on main they are, so this checks once and fails if not. It
       # opens nothing while a merged release PR still carries
       # `autorelease: pending`: it stops with "untagged, merged release PRs
       # outstanding". It never tags (skip-github-release below), so
-      # release.yml, inside the CI run this follows, swaps that label for
+      # release-tag.yml, inside the CI run this follows, swaps that label for
       # `autorelease: tagged` once it has tagged the version. And it reads the
       # last release from the tag `v<version>`: with no tag, it reads main's
       # whole history as unreleased. A failure here means the release job of
@@ -79,7 +86,7 @@ jobs:
           fi
           pending=$(gh pr list -R "$GITHUB_REPOSITORY" --state merged --label 'autorelease: pending' --json number --jq 'length')
           if [ "$pending" != 0 ]; then
-            echo "::error::a merged release PR is still labelled 'autorelease: pending'; release.yml relabels it when it tags. Re-run the Release job of CI on main, then run this workflow by hand."
+            echo "::error::a merged release PR is still labelled 'autorelease: pending'; CI's release job relabels it when it tags, and goes on if the relabel fails. Swap the label for 'autorelease: tagged' by hand, then run this workflow by hand."
             exit 1
           fi
           echo "✓ v$VERSION is tagged, and no merged release PR is waiting for its tag"
@@ -91,7 +98,7 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # skip-github-release because release.yml is the only tagger and makes
+      # skip-github-release because release-tag.yml is the only tagger and makes
       # the GitHub release itself, with generated notes. Here release-please
       # only keeps the pull request. With `always-update` in the config it
       # rewrites the pull request on every run, so the pull request is never
