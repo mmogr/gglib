@@ -8,7 +8,9 @@
 #   *_FORBIDDEN arrays in main);
 # - a surface crate (gglib-cli, gglib-axum, gglib-ffi) that
 #   depends on another, except gglib-cli on gglib-axum;
-# - an infrastructure crate that depends on a surface crate.
+# - an infrastructure crate that depends on a surface crate;
+# - gglib-broadcast, a leaf, depending on any gglib-* crate
+#   (check_no_gglib_dependency).
 #
 # It also fails when a Rust file under crates/, outside BOOTSTRAP_ALLOWED_DIRS,
 # names one of the shared composition entry points (BOOTSTRAP_GUARDS), and
@@ -153,6 +155,39 @@ check_no_surface_dependency() {
     fi
 }
 
+# A leaf crate may not depend on any other gglib-* crate. A forbidden list
+# would have to name every sibling and grow with the workspace; this matches
+# the prefix. A crate `cargo tree` cannot resolve fails here rather than
+# passing with no dependencies read.
+check_no_gglib_dependency() {
+    local crate=$1
+    local deps
+    if ! deps=$(direct_deps "$crate"); then
+        log "${RED}FAIL${NC}: $crate"
+        log "  cargo tree could not read its dependencies"
+        RESULTS+=("{\"crate\": \"$crate-leaf\", \"status\": \"fail\", \"violations\": [\"cargo tree failed\"]}")
+        return 1
+    fi
+
+    local violations=()
+    for dep in $deps; do
+        [[ "$dep" == gglib-* ]] && violations+=("$dep")
+    done
+
+    if [[ ${#violations[@]} -gt 0 ]]; then
+        log "${RED}FAIL${NC}: $crate"
+        log "  Depends on a gglib crate: ${violations[*]}"
+        local violations_json
+        violations_json=$(printf '"%s",' "${violations[@]}" | sed 's/,$//')
+        RESULTS+=("{\"crate\": \"$crate-leaf\", \"status\": \"fail\", \"violations\": [$violations_json]}")
+        return 1
+    else
+        log "${GREEN}PASS${NC}: $crate"
+        RESULTS+=("{\"crate\": \"$crate-leaf\", \"status\": \"pass\", \"violations\": []}")
+        return 0
+    fi
+}
+
 main() {
     log "🔍 Checking workspace crate boundaries..."
     log ""
@@ -265,13 +300,18 @@ main() {
     fi
     log ""
 
-    # gglib-sse: pure leaf utility (generic SSE broadcaster). It legitimately
-    # depends on axum (for the Sse/Event response types), so it is NOT
-    # checked against DOMAIN_FORBIDDEN. It must never gain adapter-specific
-    # deps beyond that, nor depend on any other gglib-* crate.
-    SSE_FORBIDDEN=(clap tauri sqlx tower-http)
-    log "📦 gglib-sse (pure leaf - generic SSE broadcaster, no gglib-* deps)"
-    if ! check_crate_deps "gglib-sse" "${SSE_FORBIDDEN[@]}"; then
+    # gglib-broadcast: pure leaf utility (generic SSE broadcaster). It
+    # legitimately depends on axum (for the Sse/Event response types), so it
+    # is NOT checked against DOMAIN_FORBIDDEN. It must never gain
+    # adapter-specific deps beyond that, nor depend on any other gglib-*
+    # crate, which is what lets both a surface and an infrastructure crate
+    # use it.
+    BROADCAST_FORBIDDEN=(clap tauri sqlx tower-http)
+    log "📦 gglib-broadcast (pure leaf - generic SSE broadcaster, no gglib-* deps)"
+    if ! check_crate_deps "gglib-broadcast" "${BROADCAST_FORBIDDEN[@]}"; then
+        FAILED=1
+    fi
+    if ! check_no_gglib_dependency "gglib-broadcast"; then
         FAILED=1
     fi
     log ""
@@ -316,7 +356,7 @@ main() {
     # included.
     INFRA_CRATES=(
         gglib-runtime gglib-proxy gglib-agent gglib-download gglib-hf
-        gglib-mcp gglib-gguf gglib-sse gglib-bootstrap gglib-build-info
+        gglib-mcp gglib-gguf gglib-broadcast gglib-bootstrap gglib-build-info
         gglib-integration-tests gglib-test-http gglib-engine-llama
     )
     log "📦 Infrastructure crates (no direct dependency on a surface crate)"

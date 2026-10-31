@@ -47,8 +47,8 @@ use crate::slots_poller::{SlotsCache, spawn_slots_poller};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
 use crate::upstream_read::StreamBounds;
+use gglib_broadcast::SseOptions;
 use gglib_core::services::SettingsCache;
-use gglib_sse::SseOptions;
 
 /// Shared application state for the proxy server.
 #[derive(Clone)]
@@ -374,7 +374,7 @@ pub(crate) async fn handle_proxy_status(State(state): State<AppState>) -> impl I
 /// Subscribe to a live stream of [`crate::dashboard::DashboardSnapshot`]
 /// updates via Server-Sent Events.
 ///
-/// Uses hydrate-then-stream semantics (via [`gglib_sse::Broadcaster`]): the
+/// Uses hydrate-then-stream semantics (via [`gglib_broadcast::Broadcaster`]): the
 /// client immediately receives one event carrying the current snapshot,
 /// then a fresh snapshot on every subsequent publish tick — no waiting for
 /// the next tick to see the current state.

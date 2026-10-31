@@ -17,7 +17,7 @@ members = [
     "crates/gglib-runtime",
     "crates/gglib-agent",
     "crates/gglib-engine-llama",
-    "crates/gglib-sse",
+    "crates/gglib-broadcast",
     "crates/gglib-test-http",
     "crates/gglib-cli",
     "crates/gglib-axum",
@@ -54,7 +54,7 @@ authors = ["mmogr"]
 # Note this does not shorten a full workspace build: Cargo unifies features
 # across the graph, and gglib-download/gglib-runtime between them already need
 # most of `full`. The win is honest manifests and cheap single-crate builds
-# (`cargo check -p gglib-sse` no longer compiles process, net and signal).
+# (`cargo check -p gglib-broadcast` no longer compiles process, net and signal).
 tokio = { version = "1.0" }
 tokio-stream = "0.1"
 tokio-util = "0.7"
@@ -161,7 +161,7 @@ gglib-download = { path = "crates/gglib-download" }
 gglib-gguf = { path = "crates/gglib-gguf" }
 gglib-hf = { path = "crates/gglib-hf" }
 gglib-runtime = { path = "crates/gglib-runtime" }
-gglib-sse = { path = "crates/gglib-sse" }
+gglib-broadcast = { path = "crates/gglib-broadcast" }
 gglib-test-http = { path = "crates/gglib-test-http" }
 gglib-axum = { path = "crates/gglib-axum" }
 gglib-app-services = { path = "crates/gglib-app-services" }

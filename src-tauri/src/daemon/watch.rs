@@ -11,8 +11,8 @@
 //! instead of publishing a guess.
 //!
 //! Polling rather than subscribing to the daemon's `/api/events` stream is
-//! deliberate. The server lifecycle events are deltas; `gglib-sse`'s
-//! broadcaster documents that it drops them silently for a lagging subscriber,
+//! deliberate. The server lifecycle events are deltas; `gglib-broadcast`
+//! documents that it drops them silently for a lagging subscriber,
 //! and no event carries the whole picture — so a single missed event would
 //! leave the resident count wrong until the app restarted. Every poll is
 //! absolute, so drift cannot accumulate; a failed request is also the

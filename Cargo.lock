@@ -2453,6 +2453,7 @@ dependencies = [
  "futures-util",
  "gglib-app-services",
  "gglib-bootstrap",
+ "gglib-broadcast",
  "gglib-build-info",
  "gglib-core",
  "gglib-db",
@@ -2460,7 +2461,6 @@ dependencies = [
  "gglib-mcp",
  "gglib-proxy",
  "gglib-runtime",
- "gglib-sse",
  "gglib-test-http",
  "http-body-util",
  "reqwest",
@@ -2495,6 +2495,19 @@ dependencies = [
  "sqlx",
  "tempfile",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "gglib-broadcast"
+version = "0.29.0-rc.1"
+dependencies = [
+ "axum",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-stream",
  "tracing",
 ]
 
@@ -2735,11 +2748,11 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "futures-util",
+ "gglib-broadcast",
  "gglib-build-info",
  "gglib-core",
  "gglib-mcp",
  "gglib-proxy",
- "gglib-sse",
  "gglib-test-http",
  "http-body-util",
  "modelpipe",
@@ -2790,19 +2803,6 @@ dependencies = [
  "tracing",
  "ts-rs",
  "zip",
-]
-
-[[package]]
-name = "gglib-sse"
-version = "0.29.0-rc.1"
-dependencies = [
- "axum",
- "futures-util",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tracing",
 ]
 
 [[package]]

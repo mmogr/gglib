@@ -51,7 +51,7 @@ gglib follows **hexagonal architecture** (ports & adapters) with clear separatio
 │                       CORE LAYER AND UTILITY CRATES                        │
 │  ┌────────────────────────────────────────────┐    ┌────────────────────┐  │
 │  │                 gglib-core                 │    │  gglib-build-info  │  │
-│  │    domain/  ports/  services/  events/     │    │     gglib-sse      │  │
+│  │    domain/  ports/  services/  events/     │    │  gglib-broadcast   │  │
 │  │       paths/  normalize/  sse/  ...        │    │   utility crates   │  │
 │  └────────────────────────────────────────────┘    └────────────────────┘  │
 └────────────────────────────────────────────────────────────────────────────┘
@@ -68,7 +68,7 @@ opens its library through `gglib-bootstrap`, and serves its engine with
 `gglib-download` depends on `gglib-hf`;
 `gglib-proxy` depends on `gglib-mcp`; `gglib-engine-llama` depends on
 `gglib-gguf`; and `gglib-runtime` depends on `gglib-mcp` and `gglib-proxy`.
-`gglib-build-info`, `gglib-sse` and `gglib-test-http` depend on no gglib crate.
+`gglib-build-info`, `gglib-broadcast` and `gglib-test-http` depend on no gglib crate.
 `src-tauri` is the desktop app and lives outside `crates/`;
 `gglib-integration-tests` holds cross-crate tests and has only dev-dependencies.
 
@@ -125,8 +125,8 @@ Each row links the crate, whose own README says what it is responsible for and h
 
 | Crate | Purpose | Lines of Code |
 |-------|---------|---------------|
+| **[gglib-broadcast](gglib-broadcast/)** | Generic Server-Sent Events broadcast utility shared by `gglib-axum` and `gglib-proxy`. Zero `gglib-*` dependencies. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-broadcast-loc.json) |
 | **[gglib-build-info](gglib-build-info/)** | Compile-time version and git metadata for CLI/GUI version strings. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-loc.json) |
-| **[gglib-sse](gglib-sse/)** | Generic Server-Sent Events broadcast utility shared by `gglib-axum` and `gglib-proxy`. Zero `gglib-*` dependencies. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-sse-loc.json) |
 | **[gglib-test-http](gglib-test-http/)** | The connection a test's fake HTTP server answers on, handed over only once the request has been read whole. Dev-dependency only; zero `gglib-*` dependencies. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-loc.json) |
 
 ## Development Guidelines
