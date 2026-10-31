@@ -22,10 +22,12 @@ async fn a_load_is_loading_at_each_fraction_it_reports_then_ready() {
         .expect("the model loads");
 
     let loading = |fraction| EngineState::Loading {
+        id: 1,
         model: "small".to_owned(),
         fraction,
     };
     let ready = EngineState::Ready {
+        id: 1,
         model: "small".to_owned(),
         n_ctx: 8192,
     };

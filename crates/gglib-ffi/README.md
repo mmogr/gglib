@@ -138,8 +138,10 @@ binding.
 - **The watch.** `status()` is an `EngineWatch`, pulled with `next()`, which
   answers where the engine stands now, then each change, and `None` once it
   has answered `Stopped`. The runtime publishes seven states and the watch
-  shows five (`EngineState`): `Idle`, `Loading{model, fraction}`,
-  `Ready{model, n_ctx}`, `Failed{model, reason}` and `Stopped`. A reply being
+  shows five (`EngineState`): `Idle`, `Loading{id, model, fraction}`,
+  `Ready{id, model, n_ctx}`, `Failed{id, model, reason}` and `Stopped`, where
+  `id` is the model's id in the library and `model` the name it is served
+  under, which two models may share. A reply being
   generated is `Ready` still, at the same `n_ctx`, the `context_size` its
   usage reports; a model being freed is `Idle`, since it is no longer served
   from the moment it starts to go. Two states that show the same are one

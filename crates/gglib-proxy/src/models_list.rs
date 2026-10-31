@@ -68,6 +68,7 @@ impl ModelsResponse {
                     id: summary.name.clone(),
                     gglib_id: i64::from(summary.id),
                     profile: None,
+                    quantization: summary.quantization.clone(),
                     object: "model".to_string(),
                     created: summary.created_at,
                     owned_by: "gglib".to_string(),
@@ -136,6 +137,13 @@ pub struct ModelInfo {
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
+    /// The model's quantization (`Q4_K_M`, `Q8_0` and so on), the one its
+    /// `description` names; `None` when the catalogue recorded none. Two
+    /// quantizations of one model share its name, and this and `gglib_id`
+    /// tell them apart. A profile variant carries its base model's.
+    #[cfg_attr(feature = "ts-bindings", ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quantization: Option<String>,
     pub object: String,
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub created: i64,

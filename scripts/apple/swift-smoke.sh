@@ -178,11 +178,13 @@ guard let smallest = suggested.last, case .fits = smallest.verdict, !smallest.ra
 }
 print("ok  suggested() named \(suggested.count) models, the smallest \(smallest.repo) \(smallest.verdict)")
 
+let installedId: Int64
 do {
     let installed = try await library.installed()
     guard installed.map(\.name) == ["${MODEL_NAME}"] else {
         fail("the library holds \(installed), not ${MODEL_NAME} alone")
     }
+    installedId = installed[0].id
 } catch {
     fail("installed() threw \(error)")
 }
@@ -286,7 +288,8 @@ guard done, !reply.isEmpty else { fail("the stream ended without [DONE] or with 
 guard let contextSize, contextSize > 0 else { fail("the stream's usage carried no context_size") }
 var shown = await status.next()
 while case .loading = shown { shown = await status.next() }
-guard case .ready(let model, let nCtx) = shown, model == "${MODEL_NAME}", nCtx == UInt64(contextSize) else {
+guard case .ready(let id, let model, let nCtx) = shown, id == installedId, model == "${MODEL_NAME}",
+      nCtx == UInt64(contextSize) else {
     fail("the engine says \(String(describing: shown)), and the reply's usage a context of \(contextSize)")
 }
 print("ok  a reply of \(reply.count) characters streamed; usage.context_size \(contextSize) is the context Ready reports")

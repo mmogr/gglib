@@ -23,6 +23,9 @@ pub enum EngineState {
     Idle,
     /// `model` is being loaded.
     Loading {
+        /// Its id in the library, which tells it from another model of the
+        /// same name.
+        id: i64,
         /// The name the model is served under.
         model: String,
         /// How much of it has been read, from 0 to 1.
@@ -30,6 +33,9 @@ pub enum EngineState {
     },
     /// `model` is loaded and served, generating a reply or not.
     Ready {
+        /// Its id in the library, which tells it from another model of the
+        /// same name.
+        id: i64,
         /// The name the model is served under.
         model: String,
         /// The context it was loaded with, in tokens: the `context_size`
@@ -39,6 +45,9 @@ pub enum EngineState {
     /// `model` could not be loaded. The next request naming a model tries
     /// again.
     Failed {
+        /// Its id in the library, which tells it from another model of the
+        /// same name.
+        id: i64,
         /// The name the model is served under.
         model: String,
         /// Why, in gglib's words.
@@ -53,16 +62,23 @@ impl From<&engine::EngineState> for EngineState {
     fn from(state: &engine::EngineState) -> Self {
         match state {
             engine::EngineState::Idle | engine::EngineState::Unloading { .. } => Self::Idle,
-            engine::EngineState::Loading { model, fraction } => Self::Loading {
+            engine::EngineState::Loading {
+                id,
+                model,
+                fraction,
+            } => Self::Loading {
+                id: i64::from(*id),
                 model: model.clone(),
                 fraction: f64::from(*fraction),
             },
-            engine::EngineState::Ready { model, n_ctx }
-            | engine::EngineState::Generating { model, n_ctx } => Self::Ready {
+            engine::EngineState::Ready { id, model, n_ctx }
+            | engine::EngineState::Generating { id, model, n_ctx } => Self::Ready {
+                id: i64::from(*id),
                 model: model.clone(),
                 n_ctx: u64::from(*n_ctx),
             },
-            engine::EngineState::Failed { model, reason } => Self::Failed {
+            engine::EngineState::Failed { id, model, reason } => Self::Failed {
+                id: i64::from(*id),
                 model: model.clone(),
                 reason: reason.clone(),
             },

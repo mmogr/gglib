@@ -89,6 +89,7 @@ async fn a_reply_is_generating_until_it_ends() {
     assert_eq!(
         generating,
         EngineState::Generating {
+            id: 1,
             model: "small".to_owned(),
             n_ctx: 8192
         }
@@ -99,6 +100,7 @@ async fn a_reply_is_generating_until_it_ends() {
     assert_eq!(
         ready,
         EngineState::Ready {
+            id: 1,
             model: "small".to_owned(),
             n_ctx: 8192
         }
@@ -119,7 +121,7 @@ async fn a_load_that_fails_is_failed_and_the_next_admission_tries_again() {
         "{failed:?}"
     );
     assert!(
-        matches!(runtime.state(), EngineState::Failed { ref model, .. } if model == "broken"),
+        matches!(runtime.state(), EngineState::Failed { id: 1, ref model, .. } if model == "broken"),
         "{:?}",
         runtime.state()
     );
@@ -149,7 +151,7 @@ async fn a_load_that_panics_is_failed_and_the_next_admission_loads() {
     );
     let failed = until(&mut states, |s| matches!(s, EngineState::Failed { .. })).await;
     assert!(
-        matches!(&failed, EngineState::Failed { model, .. } if model == "fragile"),
+        matches!(&failed, EngineState::Failed { id: 1, model, .. } if model == "fragile"),
         "{failed:?}"
     );
     assert!(runtime.current_model().await.is_none());
@@ -160,6 +162,7 @@ async fn a_load_that_panics_is_failed_and_the_next_admission_loads() {
     assert_eq!(
         runtime.state(),
         EngineState::Ready {
+            id: 1,
             model: "fragile".to_owned(),
             n_ctx: 8192
         }
@@ -213,6 +216,7 @@ async fn a_model_swapped_out_mid_reply_ends_the_reply_with_an_error() {
     assert_eq!(record.finished[0].reason, FinishReason::Aborted);
     assert_eq!(record.loads_over_a_model, 0, "never two models at once");
     let ready = EngineState::Ready {
+        id: 2,
         model: "second".to_owned(),
         n_ctx: 8192,
     };
@@ -221,6 +225,7 @@ async fn a_model_swapped_out_mid_reply_ends_the_reply_with_an_error() {
     // swapped out ready again.
     let sent = runtime.inner.engine.states().sent();
     let unloading = EngineState::Unloading {
+        id: 1,
         model: "first".to_owned(),
     };
     let from = sent
@@ -230,7 +235,7 @@ async fn a_model_swapped_out_mid_reply_ends_the_reply_with_an_error() {
     assert!(
         !sent[from..]
             .iter()
-            .any(|s| matches!(s, EngineState::Ready { model, .. } if model == "first")),
+            .any(|s| matches!(s, EngineState::Ready { id: 1, .. })),
         "{sent:?}"
     );
     assert_eq!(sent.last(), Some(&ready), "{sent:?}");

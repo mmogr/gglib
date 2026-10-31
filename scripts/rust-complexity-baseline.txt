@@ -177,10 +177,11 @@ crates/gglib-download/src/resolver/tests.rs 387
 crates/gglib-engine-llama/src/decoder/llama.rs 321
 crates/gglib-engine-llama/src/decoder/llama_tests.rs 372
 crates/gglib-engine-llama/src/decoder/scripted.rs 310
-crates/gglib-engine-llama/src/engine.rs 305
+crates/gglib-engine-llama/src/engine.rs 313
+crates/gglib-engine-llama/src/runtime/admit_tests.rs 305
 crates/gglib-engine-llama/src/runtime/mod.rs 304
 crates/gglib-ffi/src/library.rs 320
-crates/gglib-ffi/src/serve_tests.rs 361
+crates/gglib-ffi/src/serve_tests.rs 400
 crates/gglib-gguf/src/capabilities/template_probe.rs 491
 crates/gglib-gguf/src/head_tests.rs 319
 crates/gglib-gguf/src/parser.rs 350

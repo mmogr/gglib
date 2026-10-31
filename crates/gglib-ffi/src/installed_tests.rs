@@ -28,6 +28,12 @@ fn file(path: &Path, len: usize) -> PathBuf {
 /// A llama-shaped model at `weights`, trained for 40,960 tokens, with
 /// `tags`, stored in `library`. Answers its id.
 fn store(library: &Library, weights: &Path, projector: Option<&Path>, tags: &[&str]) -> i64 {
+    insert(library, &test_model(weights, projector, tags))
+}
+
+/// A llama-shaped model named `Test model` at `weights`, trained for 40,960
+/// tokens, with `tags`.
+fn test_model(weights: &Path, projector: Option<&Path>, tags: &[&str]) -> NewModel {
     let mut model = NewModel::new(
         "Test model".to_owned(),
         weights.to_path_buf(),
@@ -48,7 +54,12 @@ fn store(library: &Library, weights: &Path, projector: Option<&Path>, tags: &[&s
         ]
         .map(|(key, value)| (key.to_owned(), value.to_owned())),
     );
-    wait(library.composition.models.insert(&model))
+    model
+}
+
+/// `model`, stored in `library`. Answers its id.
+fn insert(library: &Library, model: &NewModel) -> i64 {
+    wait(library.composition.models.insert(model))
         .expect("the model is stored")
         .id
 }
@@ -82,6 +93,52 @@ fn an_installed_model_says_its_size_context_and_what_it_can_do() {
     assert_eq!(model.bytes, MIB as u64);
     assert_eq!(model.trained_ctx, Some(40_960));
     assert_eq!(model.capabilities, ["reasoning"]);
+    assert_eq!(
+        (model.quantization.as_deref(), model.repo.as_deref()),
+        (None, None)
+    );
+}
+
+/// Two quantizations of one repository share its name: each is listed with
+/// its own id and quantization, and the repository they came from.
+#[test]
+fn installed_models_of_one_name_say_their_own_quantization() {
+    let root = TempDir::new().unwrap();
+    let library = library_over(TestHub::default(), &root);
+    let folder = models_dir(&root).join("o_r");
+    let stored: Vec<i64> = ["Q4_K_M", "Q8_0"]
+        .into_iter()
+        .map(|quantization| {
+            let weights = file(&folder.join(format!("X.{quantization}.gguf")), MIB);
+            let mut model = test_model(&weights, None, &[]);
+            model.quantization = Some(quantization.to_owned());
+            model.hf_repo_id = Some("o/r".to_owned());
+            insert(&library, &model)
+        })
+        .collect();
+
+    let installed = wait(Arc::clone(&library).installed()).unwrap();
+
+    // Listed newest first, and both were added in the same moment.
+    let mut listed: Vec<(i64, &str, Option<&str>, Option<&str>)> = installed
+        .iter()
+        .map(|model| {
+            (
+                model.id,
+                model.name.as_str(),
+                model.quantization.as_deref(),
+                model.repo.as_deref(),
+            )
+        })
+        .collect();
+    listed.sort_unstable();
+    assert_eq!(
+        listed,
+        [
+            (stored[0], "Test model", Some("Q4_K_M"), Some("o/r")),
+            (stored[1], "Test model", Some("Q8_0"), Some("o/r")),
+        ]
+    );
 }
 
 /// With no reading handed over there is no budget to judge at; with one,

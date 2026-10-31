@@ -37,8 +37,10 @@ The engine publishes each step as an `EngineState` on a tokio watch: `Idle`,
 `Loading` with the fraction the decoder reports read, `Ready` with its
 context, `Generating` with the same context while a reply runs, `Unloading`,
 `Failed` (a load that failed or panicked; the next admission tries again), and
-`Stopped`. Every load is given the runtime's closing `Abort`, which `shutdown`
-raises: a load under way stops at the decoder's next report of progress and
+`Stopped`. A state that names a model gives its catalogue id beside the name
+it is served under, since two models may share a name. Every load is given
+the runtime's closing `Abort`, which `shutdown` raises: a load under way
+stops at the decoder's next report of progress and
 frees what it read. `shutdown` also raises the abort of the reply in flight,
 and frees the model once the decoder's lock is free, which the load and the
 reply's generation hold until they return; it then stops the shim and ends the

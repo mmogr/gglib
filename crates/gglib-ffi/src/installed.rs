@@ -17,8 +17,15 @@ use crate::verdict::{FitVerdict, ModelShape};
 pub struct InstalledModel {
     /// Its id in the library, which [`crate::Library::remove`] takes.
     pub id: i64,
-    /// Its name, which a served engine's model list calls it by.
+    /// Its name, which a served engine's model list calls it by. Two
+    /// quantizations of one model share it; the id tells them apart.
     pub name: String,
+    /// Its quantization (`Q4_K_M`, `Q8_0` and so on), when the library
+    /// recorded one.
+    pub quantization: Option<String>,
+    /// The Hugging Face repository it was downloaded from
+    /// (`unsloth/Qwen3-8B-GGUF`), when it came from one.
+    pub repo: Option<String>,
     /// The bytes its files take on the device: the weights, and a projector
     /// or companions it has.
     pub bytes: u64,
@@ -57,6 +64,8 @@ pub(crate) async fn installed(
                 .collect(),
                 verdict,
                 name: model.name,
+                quantization: model.quantization,
+                repo: model.hf_repo_id,
             }
         })
         .collect())

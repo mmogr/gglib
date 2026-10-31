@@ -57,6 +57,7 @@ pub(super) async fn running_in(script: Script, n_ctx: u32) -> Running {
     running
         .engine
         .load(
+            1,
             "tiny",
             Path::new("/models/tiny.gguf"),
             &params,

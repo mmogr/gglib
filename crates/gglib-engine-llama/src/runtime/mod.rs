@@ -168,10 +168,10 @@ impl Inner {
             cache_type_v: v,
         };
         let engine = Arc::clone(&self.engine);
-        let (name, path) = (spec.name.clone(), spec.file_path.clone());
+        let (id, name, path) = (spec.id, spec.name.clone(), spec.file_path.clone());
         let closing = self.closing.clone();
         let loaded =
-            tokio::task::spawn_blocking(move || engine.load(&name, &path, &params, &closing))
+            tokio::task::spawn_blocking(move || engine.load(id, &name, &path, &params, &closing))
                 .await
                 .map_err(|e| ModelRuntimeError::Internal(format!("the load stopped: {e}")))?;
         // A shutdown during the load stopped it, or came as it ended.
