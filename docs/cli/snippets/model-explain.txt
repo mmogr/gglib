@@ -1,0 +1,34 @@
+$ gglib model explain Qwen3-4B-Instruct-2507
+
+  Sampling for Qwen3-4B-Instruct-2507 (id 2)
+-------------------------------------------------------------------------------------
+  temperature             1.0     ← per-model defaults (auto-detected: reasoning tag)
+  top_p                   0.95    ← per-model defaults (auto-detected: reasoning tag)
+  top_k                   20      ← per-model defaults (auto-detected: reasoning tag)
+  presence_penalty        1.5     ← per-model defaults (auto-detected: reasoning tag)
+  repeat_penalty          1.0     ← per-model defaults (auto-detected: reasoning tag)
+  min_p                   0.0     ← per-model defaults (auto-detected: reasoning tag)
+  frequency_penalty       —       ← unset by design
+  dynatemp_range          —       ← unset by design
+  dynatemp_exponent       —       ← unset by design
+  top_n_sigma             —       ← unset by design
+  dry_multiplier          —       ← unset by design
+  dry_base                —       ← unset by design
+  dry_allowed_length      —       ← unset by design
+  dry_penalty_last_n      —       ← unset by design
+  max_tokens              32768   ← per-model defaults (auto-detected: reasoning tag)
+  reasoning_effort        —       ← unset by design
+  reasoning_budget_tokens —       ← unset by design
+-------------------------------------------------------------------------------------
+  Operator flags (gglib proxy --temperature, ...) outrank every layer above.
+  Client sampling is ignored, except max_tokens, reasoning_budget_tokens.
+
+
+Context
+  serves at              131072 (fitted to hardware)
+  fitted to hardware     131072
+    device budget        96.00 GiB
+    weights              3.99 GiB
+    kv bytes/token       78336
+    trained window       262144
+    before snapping      262144

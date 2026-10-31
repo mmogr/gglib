@@ -1,0 +1,27 @@
+$ gglib model inspect Qwen3-4B-Instruct-2507
+------------------------------------------------------------
+  Model: Qwen3-4B-Instruct-2507
+------------------------------------------------------------
+  ID             : 2
+  File           : /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf
+  Projector      : none (text only)
+  Parameters     : 4.0B
+  Architecture   : qwen3
+  Quantization   : Q8_0
+  Context Length : 262144 tokens
+
+  Tags
+------------------------------------------------------------
+  reasoning, agent, format:qwen-xml
+
+  Capabilities
+------------------------------------------------------------
+  supports-system-role  : yes
+  requires-strict-turns : no
+  supports-tool-calls   : yes
+  supports-reasoning    : yes
+
+  Timestamps
+------------------------------------------------------------
+  Added          : 2026-10-31 06:25:37 (7 hours ago)
+------------------------------------------------------------
