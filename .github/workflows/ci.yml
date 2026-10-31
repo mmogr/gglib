@@ -1060,6 +1060,6 @@ jobs:
     permissions:
       contents: write
       issues: write
-      pull-requests: read
+      pull-requests: write
       actions: write
     uses: ./.github/workflows/release-tag.yml
