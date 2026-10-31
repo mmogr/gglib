@@ -16,9 +16,16 @@
 
 name: Release PR
 
+# After CI on main, not on the push: release.yml runs inside CI and tags a
+# changed version, and release-please must see that tag before it reads main.
+# Running once per green CI run also means a burst of merges rebuilds the
+# pull request once, not once per merge.
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
+  workflow_dispatch:
 
 # GITHUB_TOKEN only reads: main's version and its tag, and the pull
 # requests the gate asks about.
@@ -26,9 +33,8 @@ permissions:
   contents: read
   pull-requests: read
 
-# A newer push cancels a run that is still waiting at the gate or updating the
-# pull request: the newer run reads a later main and rewrites the same pull
-# request from it.
+# A newer CI run's trigger cancels a run still updating the pull request: the
+# newer run reads a later main and rewrites the same pull request from it.
 concurrency:
   group: release-pr
   cancel-in-progress: true
@@ -41,9 +47,9 @@ defaults:
 jobs:
   release-pr:
     name: Open or update the release PR
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04
-    # The gate's 90 minutes, and release-please after it.
-    timeout-minutes: 100
+    timeout-minutes: 15
     outputs:
       updated: ${{ steps.release.outputs.prs_created }}
       # The pull request the action opened or updated, as JSON.
@@ -52,46 +58,32 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      # Two things must be true before release-please runs. It opens nothing
-      # while a merged release PR still carries `autorelease: pending`: it
-      # stops with "untagged, merged release PRs outstanding". It never tags
-      # (skip-github-release below), so release.yml swaps that label for
-      # `autorelease: tagged` once it has tagged the version. And it reads
-      # the last release from the tag `v<version>`, falling back to it when
-      # no GitHub release exists yet: with neither, it reads main's whole
-      # history as unreleased. The tag is what is waited for, not the
-      # release: a release step that failed after tagging would otherwise
-      # block every release PR until someone made the release by hand.
-      #
-      # A push that changed main's version, which is a merged release PR or
-      # promotion, therefore waits here until CI on main has passed and
-      # release.yml has tagged it, about 40 minutes. Every other push finds
-      # the tag already there and goes straight on. A run that gives up
-      # fails: the release itself failed, and once it has been re-run this
-      # run can be re-run too.
-      - name: Wait until main's version is tagged
+      # Two things must be true before release-please runs, and after a green
+      # CI run on main they are, so this checks once and fails if not. It
+      # opens nothing while a merged release PR still carries
+      # `autorelease: pending`: it stops with "untagged, merged release PRs
+      # outstanding". It never tags (skip-github-release below), so
+      # release.yml, inside the CI run this follows, swaps that label for
+      # `autorelease: tagged` once it has tagged the version. And it reads the
+      # last release from the tag `v<version>`: with no tag, it reads main's
+      # whole history as unreleased. A failure here means the release job of
+      # that CI run did not tag: re-run it, then run this workflow by hand.
+      - name: Require main's version to be tagged
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
-          for attempt in $(seq 1 90); do
-            tagged=false
-            if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" > /dev/null 2>&1; then
-              tagged=true
-            fi
-            pending=$(gh pr list -R "$GITHUB_REPOSITORY" --state merged --label 'autorelease: pending' --json number --jq 'length')
-            if [ "$tagged" = true ] && [ "$pending" = 0 ]; then
-              echo "✓ v$VERSION is tagged, and no merged release PR is waiting for its tag"
-              exit 0
-            fi
-            echo "v$VERSION is not tagged yet, or a merged release PR is still labelled pending; looking again in a minute ($attempt/90)"
-            sleep 60
-          done
-          echo "::error::v$VERSION was not tagged within 90 minutes. Re-run the release (the Release job of CI on main), then re-run this workflow."
-          exit 1
+          if ! git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" > /dev/null 2>&1; then
+            echo "::error::v$VERSION is not tagged. Re-run the Release job of CI on main, then run this workflow by hand."
+            exit 1
+          fi
+          pending=$(gh pr list -R "$GITHUB_REPOSITORY" --state merged --label 'autorelease: pending' --json number --jq 'length')
+          if [ "$pending" != 0 ]; then
+            echo "::error::a merged release PR is still labelled 'autorelease: pending'; release.yml relabels it when it tags. Re-run the Release job of CI on main, then run this workflow by hand."
+            exit 1
+          fi
+          echo "✓ v$VERSION is tagged, and no merged release PR is waiting for its tag"
 
-      # After the gate, not before: an installation token lasts an hour, and
-      # the gate can wait longer than that.
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
@@ -102,8 +94,8 @@ jobs:
       # skip-github-release because release.yml is the only tagger and makes
       # the GitHub release itself, with generated notes. Here release-please
       # only keeps the pull request. With `always-update` in the config it
-      # rewrites the pull request on every push to main, so the pull request is
-      # never behind main, which the ruleset requires before a merge.
+      # rewrites the pull request on every run, so the pull request is never
+      # behind main, which the ruleset requires before a merge.
       - name: Open or update the release PR
         id: release
         uses: googleapis/release-please-action@v5
@@ -243,9 +235,9 @@ jobs:
           fi
 
       # release-please rewrites the branch from main on every update, which
-      # drops this commit, and with `always-update` it updates on every push
-      # to main; this job runs after each of those updates and adds the commit
-      # back. CI's concurrency cancels the run on release-please's own commit,
+      # drops this commit, and with `always-update` it updates on every green
+      # CI run on main; this job runs after each of those updates and adds the
+      # commit back. CI's concurrency cancels the run on release-please's own commit,
       # which this one follows within minutes.
       - name: Commit the lockfiles
         env:
