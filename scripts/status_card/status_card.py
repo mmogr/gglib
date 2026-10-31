@@ -90,7 +90,9 @@ REPO = "mmogr/gglib"
 LLAMA = "ggml-org/llama.cpp"
 WINDOW_DAYS = 90
 WEEKS = 52
-PR_LIMIT = 1500
+# GitHub's search returns at most 1000 results whatever `--limit` asks for, so
+# a list of 1000 may be a cut one, and collect fails on it.
+PR_LIMIT = 1000
 RELEASE_LIMIT = 1000
 MAX_BYTES = 60 * 1024
 OUTPUTS = ("status-light.svg", "status-dark.svg")
