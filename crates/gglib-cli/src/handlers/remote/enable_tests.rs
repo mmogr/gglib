@@ -29,16 +29,22 @@ fn the_invite_notice_claims_a_code_and_not_a_device() {
 }
 
 /// A plain `enable` that waited for the daemon's own resume was answered from
-/// a session it did not arm. It says the session came back and changed
+/// a session it did not arm. It says remote access was already on and changed
 /// nothing, rather than that the switch was just thrown, which would bring the
-/// key notice with it ([#1037]). It says nothing of the MCP servers, which
-/// no `enable` changes.
+/// key notice with it ([#1037]), or that it is still coming back up, which
+/// reads as a daemon still restarting ([#1534]). It says nothing of the MCP
+/// servers, which no `enable` changes.
 ///
 /// [#1037]: https://github.com/mmogr/gglib/issues/1037
+/// [#1534]: https://github.com/mmogr/gglib/issues/1534
 #[test]
-fn the_resumed_notice_says_the_session_came_back_and_changed_nothing() {
+fn the_resumed_notice_says_remote_access_was_already_on_and_changed_nothing() {
     assert!(
-        RESUMED_NOTICE.contains("already coming back up"),
+        RESUMED_NOTICE.contains("was already on"),
+        "{RESUMED_NOTICE}"
+    );
+    assert!(
+        !RESUMED_NOTICE.contains("coming back up"),
         "{RESUMED_NOTICE}"
     );
     assert!(
