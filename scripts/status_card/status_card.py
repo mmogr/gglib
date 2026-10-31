@@ -18,9 +18,10 @@ The card is one 800x224 image, written twice, as `status-light.svg` and
   candidates grey above them. A week with more than the row holds is cut at
   the top of the row and marked with a `+` above it.
 * Merged pull requests by component over the 90 days up to the card's date,
-  one bar. A pull request counts once for each `component:` label it carries
-  and not at all with none, which is how a bot's pull requests are left out
-  when they carry none. Segment widths are proportional to the counts and
+  one bar. A pull request whose author is a bot (`author.is_bot`: Dependabot,
+  the release bot) is left out whatever its labels; any other counts once for
+  each `component:` label it carries, and not at all with none. Segment widths
+  are proportional to the counts and
   fill the chart's width less 2px gaps, rounded to whole pixels, at least 1px
   each. The seven largest are named under their segments. A name wider than
   its segment is cut with `…`; one that would keep fewer than three

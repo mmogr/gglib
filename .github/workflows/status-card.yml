@@ -11,10 +11,11 @@ on:
   schedule:
     - cron: '0 20 * * *'  # 06:00 in Brisbane
   workflow_dispatch:
-  # A change to the script runs its self-test and stops there.
+  # A change to the script or this workflow runs the self-test and stops there.
   pull_request:
     paths:
       - 'scripts/status_card/**'
+      - '.github/workflows/status-card.yml'
 
 permissions:
   contents: read

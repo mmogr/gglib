@@ -216,7 +216,7 @@ This card is drawn each morning from the repository's record: what is current, h
   <img src="https://raw.githubusercontent.com/mmogr/gglib/badges/status-light.svg" width="800" alt="gglib's status card: the newest release and its age, the llama.cpp pin and how far it is behind upstream, releases by week over twelve months, merged pull requests by component over ninety days, and the features, fixes and breaking changes since the last stable release.">
 </picture>
 
-What each release changed is in [the changelog](CHANGELOG.md).
+What each release changed is in [the releases](https://github.com/mmogr/gglib/releases).
 
 ## Install
 
