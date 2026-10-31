@@ -3,8 +3,9 @@ description: >-
   Installs the pinned llama.cpp and stable-diffusion.cpp with the gglib just
   built (target/debug/gglib), as a user's machine would, and fetches the
   recorder's tiny models and the pin's chat templates. Shared by ci.yml's
-  CLI Check legs and the engine-pins workflow, whose in-process recording
-  takes only the models and templates.
+  CLI Check legs and the engine-pins workflow; with `engines: "false"` it
+  fetches only the models and templates, for the in-process recording, for
+  ci.yml's ffi-apple and phone-llama, and for release.yml's build-phone.
 
 inputs:
   target:

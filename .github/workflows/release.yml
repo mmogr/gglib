@@ -696,7 +696,7 @@ jobs:
   # llama.xcframework comes from the llama-xcframework action, restored from
   # the cache ci.yml's `phone-llama` keeps for the pin and the runner's
   # Xcode, or built; the smoke test serves the recorder's tinygemma3, fetched
-  # as `phone-llama` fetches it.
+  # by the pinned-engines action.
   #
   # The runner's default Xcode, as ci.yml's `ffi-apple` and ggchat's CI use:
   # the framework shipped is the one an app built with that Xcode links.
@@ -743,31 +743,22 @@ jobs:
           xcodebuild -version
           swift --version
 
-      # As ci.yml's `phone-llama` restores and fetches them, under its key.
-      # Nothing is saved from a release run.
-      - name: Restore the test models
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ runner.temp }}/test-models
-          key: test-models-${{ hashFiles('.github/actions/pinned-engines/models.txt') }}
-
+      # The pinned-engines action without its engines, as ci.yml's
+      # `ffi-apple` runs it. The models' entry is the one cache a release may
+      # save, under the key CI saves, and only when CI has not saved it.
       - name: Fetch the test models
-        env:
-          MODELS: ${{ runner.temp }}/test-models
-          LIST: .github/actions/pinned-engines/models.txt
-        run: |
-          mkdir -p "$MODELS"
-          grep -v '^#' "$LIST" | while read -r name url; do
-            [[ -z $name || -s $MODELS/$name ]] && continue
-            curl -fsSL --retry 3 -o "$MODELS/$name.part" "$url"
-            mv "$MODELS/$name.part" "$MODELS/$name"
-          done
-          echo "GGLIB_ENGINE_MODELS_DIR=$MODELS" >> "$GITHUB_ENV"
+        id: models
+        uses: ./.github/actions/pinned-engines
+        with:
+          target: aarch64-apple-darwin
+          engines: "false"
 
       - name: Build the XCFramework and check each slice
         run: make ffi-xcframework
 
       - name: The Swift binding links and calls the macOS slice, and its engine streams a reply
+        env:
+          GGLIB_ENGINE_MODELS_DIR: ${{ steps.models.outputs.models }}
         run: make ffi-smoke
 
       # Into dist/, which holds nothing else on this runner, so the steps

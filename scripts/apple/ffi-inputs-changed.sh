@@ -19,9 +19,9 @@
 #     build_info() to report, and the llama.xcframework build reads;
 #   - .github/actions/llama-xcframework, which builds or restores the
 #     llama.xcframework every slice links,
-#     .github/actions/pinned-engines/models.txt, which names the model the
-#     smoke test serves, and .github/actions/rust-prelude, which installs
-#     the toolchain and restores the job's Rust cache;
+#     .github/actions/pinned-engines, which fetches the model the smoke test
+#     serves and whose models.txt names it, and .github/actions/rust-prelude,
+#     which installs the toolchain and restores the job's Rust cache;
 #   - the root Cargo.toml and Cargo.lock, rust-toolchain.toml, the Makefile,
 #     scripts/apple/ and .github/workflows/ci.yml.
 #
@@ -62,7 +62,7 @@ inputs+=(
     crates/build_common.rs
     scripts/llama_pin.sh
     .github/actions/llama-xcframework
-    .github/actions/pinned-engines/models.txt
+    .github/actions/pinned-engines
     .github/actions/rust-prelude
     Cargo.toml
     Cargo.lock

@@ -825,7 +825,7 @@ jobs:
   #
   # llama.xcframework comes from the llama-xcframework action, which restores
   # the one `phone-llama` cached for the pin and the runner's Xcode, or builds
-  # it; the model is fetched and cached as `phone-llama` fetches it.
+  # it; the model comes from the pinned-engines action, as CLI Check's do.
   #
   # The runner's default Xcode, as ggchat's CI uses: the framework this
   # builds is the one an app built with that Xcode links. Unoptimised, since
@@ -866,33 +866,15 @@ jobs:
           xcodebuild -version
           swift --version
 
-      # As `phone-llama` restores, fetches and saves them, under the same key.
-      - name: Restore the test models
-        id: models-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ runner.temp }}/test-models
-          key: test-models-${{ hashFiles('.github/actions/pinned-engines/models.txt') }}
-
+      # The pinned-engines action without its engines: the recorder's tiny
+      # models, restored, fetched and saved under the key CLI Check uses, and
+      # the pin's chat templates beside them.
       - name: Fetch the test models
-        env:
-          MODELS: ${{ runner.temp }}/test-models
-          LIST: .github/actions/pinned-engines/models.txt
-        run: |
-          mkdir -p "$MODELS"
-          grep -v '^#' "$LIST" | while read -r name url; do
-            [[ -z $name || -s $MODELS/$name ]] && continue
-            curl -fsSL --retry 3 -o "$MODELS/$name.part" "$url"
-            mv "$MODELS/$name.part" "$MODELS/$name"
-          done
-          echo "GGLIB_ENGINE_MODELS_DIR=$MODELS" >> "$GITHUB_ENV"
-
-      - name: Save the test models
-        if: steps.models-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        id: models
+        uses: ./.github/actions/pinned-engines
         with:
-          path: ${{ runner.temp }}/test-models
-          key: ${{ steps.models-cache.outputs.cache-primary-key }}
+          target: aarch64-apple-darwin
+          engines: "false"
 
       - name: Build the XCFramework and check each slice
         run: make ffi-xcframework-fast
@@ -901,6 +883,8 @@ jobs:
         run: make ffi-binding-check
 
       - name: The Swift binding links and calls the macOS slice, and its engine streams a reply
+        env:
+          GGLIB_ENGINE_MODELS_DIR: ${{ steps.models.outputs.models }}
         run: make ffi-smoke
 
   # llama.cpp's own llama.xcframework at the pin, built by upstream's script
@@ -947,36 +931,17 @@ jobs:
       - name: Build or restore llama.xcframework at the pin
         uses: ./.github/actions/llama-xcframework
 
-      # The pinned-engines action's models, fetched as it fetches them, and
-      # cached under its key and path, so each restores what the other saved.
-      - name: Restore the test models
-        id: models-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ runner.temp }}/test-models
-          key: test-models-${{ hashFiles('.github/actions/pinned-engines/models.txt') }}
-
+      # The pinned-engines action without its engines, as `ffi-apple` runs it.
       - name: Fetch the test models
-        env:
-          MODELS: ${{ runner.temp }}/test-models
-          LIST: .github/actions/pinned-engines/models.txt
-        run: |
-          mkdir -p "$MODELS"
-          grep -v '^#' "$LIST" | while read -r name url; do
-            [[ -z $name || -s $MODELS/$name ]] && continue
-            curl -fsSL --retry 3 -o "$MODELS/$name.part" "$url"
-            mv "$MODELS/$name.part" "$MODELS/$name"
-          done
-          echo "GGLIB_ENGINE_MODELS_DIR=$MODELS" >> "$GITHUB_ENV"
-
-      - name: Save the test models
-        if: steps.models-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        id: models
+        uses: ./.github/actions/pinned-engines
         with:
-          path: ${{ runner.temp }}/test-models
-          key: ${{ steps.models-cache.outputs.cache-primary-key }}
+          target: aarch64-apple-darwin
+          engines: "false"
 
       - name: The decoder over llama.h, tested on the Mac's slice
+        env:
+          GGLIB_ENGINE_MODELS_DIR: ${{ steps.models.outputs.models }}
         run: make engine-llama-test
 
       - name: The decoder over llama.h, linted for the Mac, the iPhone and its simulator
