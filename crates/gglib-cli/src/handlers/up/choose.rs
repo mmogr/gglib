@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow, bail};
+use gglib_core::SettingsUpdate;
 use gglib_core::domain::{Model, Recommendation, format_gib, recommend};
 use gglib_core::utils::system::SystemMemoryInfo;
 
@@ -42,6 +43,27 @@ pub(super) async fn run(
     }
 
     download_recommended(ctx, memory, yes).await
+}
+
+/// Make the model `up` serves the default when no default is set, and say
+/// whether it did.
+///
+/// `gglib q` falls back to the default model, and a first run has none, so
+/// without this the first question after `up` asks for `-m`. A default
+/// the user chose is theirs, and stays; one whose model has since been
+/// removed is as good as none.
+pub(super) async fn adopt_as_default(ctx: &CliContext, model_id: i64) -> Result<bool> {
+    if let Some(current) = ctx.app.settings().get().await?.default_model_id
+        && ctx.app.models().get_by_id(current).await?.is_some()
+    {
+        return Ok(false);
+    }
+    let update = SettingsUpdate {
+        default_model_id: Some(Some(model_id)),
+        ..Default::default()
+    };
+    ctx.app.settings().update(update).await?;
+    Ok(true)
 }
 
 /// The most recently added model, if the catalog has anything at all.
@@ -235,6 +257,46 @@ mod tests {
     use super::*;
 
     const GB: u64 = 1_073_741_824;
+
+    async fn registered(ctx: &CliContext, dir: &std::path::Path, name: &str) -> i64 {
+        let path = dir.join(format!("{name}.gguf"));
+        let entry =
+            gglib_core::domain::NewModel::new(name.to_owned(), path, 4.0, chrono::Utc::now());
+        ctx.app.models().add(entry).await.expect("registered").id
+    }
+
+    /// The first model `up` serves becomes the default, so `gglib q` works
+    /// straight after; a default already set is the user's and stays.
+    #[tokio::test]
+    async fn the_served_model_fills_an_empty_default_and_never_replaces_one() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = crate::bootstrap::test_context(dir.path()).await;
+        let first = registered(&ctx, dir.path(), "first").await;
+        let second = registered(&ctx, dir.path(), "second").await;
+
+        assert!(adopt_as_default(&ctx, first).await.expect("first"));
+        assert!(!adopt_as_default(&ctx, second).await.expect("second"));
+
+        let settings = ctx.app.settings().get().await.expect("settings");
+        assert_eq!(settings.default_model_id, Some(first));
+    }
+
+    /// A default whose model was removed leaves `gglib q` without a model,
+    /// so `up` treats it as no default at all.
+    #[tokio::test]
+    async fn a_default_whose_model_is_gone_is_replaced() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = crate::bootstrap::test_context(dir.path()).await;
+        let gone = registered(&ctx, dir.path(), "gone").await;
+        let served = registered(&ctx, dir.path(), "served").await;
+        assert!(adopt_as_default(&ctx, gone).await.expect("adopted"));
+        ctx.app.models().delete(gone).await.expect("removed");
+
+        assert!(adopt_as_default(&ctx, served).await.expect("replaced"));
+
+        let settings = ctx.app.settings().get().await.expect("settings");
+        assert_eq!(settings.default_model_id, Some(served));
+    }
 
     fn mem(vram: Option<u64>, apple: bool) -> SystemMemoryInfo {
         SystemMemoryInfo {

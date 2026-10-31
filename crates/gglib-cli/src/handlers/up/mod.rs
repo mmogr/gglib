@@ -71,6 +71,12 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
 
     // Step 3: the model. Either already here, or chosen, confirmed, downloaded.
     let model = choose::run(ctx, memory.as_ref(), args.model.as_deref(), args.yes).await?;
+    // A convenience: a settings write that fails is no reason to stop `up`.
+    match choose::adopt_as_default(ctx, model.id).await {
+        Ok(true) => row("default", &model.name, Some("gglib q uses it")),
+        Ok(false) => {}
+        Err(e) => tracing::warn!(error = %e, "could not make the served model the default"),
+    }
 
     // Step 4: the proxy. Its own banners take over from here.
     step(4, "Endpoint");
