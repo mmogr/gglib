@@ -153,7 +153,7 @@ GPU Support:
 - winget commands first, then the same packages through Chocolatey
 - Rust from rustup-init.exe or `winget install Rustlang.Rustup`, and Node.js through winget
 - Visual Studio Build Tools, or MSYS2's toolchain, when `make` is missing
-- GPU notes for NVIDIA (CUDA Toolkit) and AMD (Vulkan drivers, or ROCm)
+- GPU notes for NVIDIA (CUDA Toolkit) and AMD (Vulkan drivers, or `ROCm`)
 
 ## Output Format
 
