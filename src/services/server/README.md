@@ -2,27 +2,26 @@
 
 <!-- module-docs:start -->
 
-Safe action wrappers around server lifecycle operations. Encapsulates error handling and toast notification triggering so that UI components never manage server state directly or deal with unhandled rejections.
+Safe action wrappers around server lifecycle operations. A stop of a server that is already stopped counts as done, so UI components never manage server state directly; any other failure is thrown to the caller.
 
 ## Key Files
 
 | File | Role |
 |------|------|
-| `safeActions.ts` | `safeStopServer(modelId)` — wraps `getTransport().stopServer()`, catches errors, triggers toast on failure |
+| `safeActions.ts` | `safeStopServer(modelId)` — wraps `getTransport().stopServer()`, treats `NOT_FOUND`, `CONFLICT` or "not running" as success, rethrows anything else |
 
 ## Flow
 
 ```
 UI: onClick → safeStopServer(modelId)
        ▼
-  Error boundary
-       ▼
   getTransport().stopServer(modelId)
        ▼
   transport → POST /api/servers/stop
        ▼
   Success: server registry updates via event stream
-  Failure: toast notification shown, no unhandled rejection
+  Already stopped (NOT_FOUND, CONFLICT, "not running"): resolves
+  Other failure: rethrown to the caller
 ```
 
 <!-- module-docs:end -->

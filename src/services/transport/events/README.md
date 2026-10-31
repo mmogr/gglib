@@ -15,7 +15,8 @@ Single SSE connection: GET /api/events
   Demultiplexes by event.type field
   Auto-reconnects with exponential backoff
        ▼
-handler(payload)  ← validated via decoders/
+handler(payload)  ← download frames validated via decoders/;
+                    every other frame passed through as sent
 ```
 
 One path, on desktop and on the web alike: the desktop WebView resolves the

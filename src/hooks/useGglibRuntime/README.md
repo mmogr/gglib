@@ -26,6 +26,12 @@ useGglibRuntime                      send / edit / regenerate / Retry / Stop
               │                                  its part until its result
               ├── waiting                      → what the turn waits for, on its
               │                                  message until its prompt is read
+              ├── prompt_progress              → how far the prompt has been read,
+              │                                  on its message as the turn arrives
+              ├── turn_usage                   → how the turn was made, on its
+              │                                  message
+              ├── system_warning               → a notice to the caller
+              │                                  (onSystemWarning); the run goes on
               ├── event: preview (no seq)      → the tool's picture so far, held
               │                                  beside the messages, never in one
               ├── iteration_complete           → finalize, open the next message

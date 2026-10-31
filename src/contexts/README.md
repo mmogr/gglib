@@ -11,18 +11,19 @@ React Context providers for shared application state across the gglib GUI.
 │                                    App.tsx                                          │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐   │
 │   │                            Context Providers                                │   │
-│   │     ┌─────────────────┐     ┌─────────────────┐                            │   │
-│   │     │ SettingsContext │     │  ToastContext   │                            │   │
-│   │     │   App settings  │     │  Notifications  │                            │   │
-│   │     └────────┬────────┘     └────────┬────────┘                            │   │
-│   │              │                       │                                      │   │
-│   │              └───────────┬───────────┘                                      │   │
-│   │                          ▼                                                  │   │
-│   │              ┌───────────────────────┐                                      │   │
-│   │              │   Child Components    │                                      │   │
-│   │              │   useSettings()       │                                      │   │
-│   │              │   useToast()          │                                      │   │
-│   │              └───────────────────────┘                                      │   │
+│   │     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     │   │
+│   │     │ SettingsContext │     │  ToastContext   │     │ ConfirmContext  │     │   │
+│   │     │   App settings  │     │  Notifications  │     │ Confirm dialog  │     │   │
+│   │     └────────┬────────┘     └────────┬────────┘     └────────┬────────┘     │   │
+│   │              │                       │                       │              │   │
+│   │              └───────────────────────┼───────────────────────┘              │   │
+│   │                                      ▼                                      │   │
+│   │                          ┌───────────────────────┐                          │   │
+│   │                          │   Child Components    │                          │   │
+│   │                          │   useSettings()       │                          │   │
+│   │                          │   useToastContext()   │                          │   │
+│   │                          │   useConfirmContext() │                          │   │
+│   │                          └───────────────────────┘                          │   │
 │   └─────────────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -38,15 +39,15 @@ React Context providers for shared application state across the gglib GUI.
 ## Usage
 
 ```tsx
-import { useSettings } from './contexts/SettingsContext';
-import { useToast } from './contexts/ToastContext';
+import { useSettings } from './hooks/useSettings';
+import { useToastContext } from './contexts/ToastContext';
 
 function MyComponent() {
-  const { settings, updateSettings } = useSettings();
-  const { showToast } = useToast();
+  const { settings, save } = useSettings();
+  const { showToast } = useToastContext();
 
   const handleSave = async () => {
-    await updateSettings({ maxDownloadQueueSize: 10 });
+    await save({ maxDownloadQueueSize: 10 });
     showToast('Settings saved!', 'success');
   };
 }
