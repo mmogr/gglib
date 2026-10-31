@@ -5,7 +5,7 @@
 //! [`crate::slots_poller::SlotsCache`], and
 //! [`crate::metrics::ContextMetricsStore`] into the single JSON shape
 //! returned by `GET /v1/proxy/status` and pushed (via
-//! [`gglib_sse::Broadcaster`]) over `GET /v1/proxy/status/stream`.
+//! [`gglib_broadcast::Broadcaster`]) over `GET /v1/proxy/status/stream`.
 //!
 //! ## Live updates without spreading broadcast plumbing everywhere
 //!
@@ -25,8 +25,8 @@
 use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 
+use gglib_broadcast::Broadcaster;
 use gglib_core::domain::CacheRamHealth;
-use gglib_sse::Broadcaster;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;

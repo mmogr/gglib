@@ -49,8 +49,8 @@ whatever it had last done itself and a proxy started by `proxy_autostart`, the
 CLI, or the window left it wrong for the whole session.
 
 Polling rather than subscribing to `/api/events` is deliberate. The server
-lifecycle events are deltas; `gglib-sse`'s broadcaster drops them silently for
-a lagging subscriber, and no event carries the whole picture — so a single
+lifecycle events are deltas; `gglib-broadcast` drops them silently for a
+lagging subscriber, and no event carries the whole picture — so a single
 missed event would leave the resident count wrong until the app restarted.
 Every poll is absolute, so drift cannot accumulate; a failed request is also
 the daemon-down signal, and it catches a wedged daemon that a 30-second SSE

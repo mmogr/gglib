@@ -5,9 +5,9 @@
 //! streamed to connected web clients.
 //!
 //! The actual broadcast-channel + SSE-encoding plumbing lives in the shared
-//! `gglib-sse` crate (a dependency-free leaf); this module just wraps it to
-//! implement the `AppEventEmitter` port, keeping that port-implementation
-//! glue in the adapter layer where it belongs.
+//! `gglib-broadcast` crate (a dependency-free leaf); this module just wraps
+//! it to implement the `AppEventEmitter` port, keeping that
+//! port-implementation glue in the adapter layer where it belongs.
 
 use std::convert::Infallible;
 use std::future::Future;
@@ -15,9 +15,9 @@ use std::sync::Arc;
 
 use axum::response::sse::{Event, Sse};
 use futures_util::stream::Stream;
+use gglib_broadcast::{Broadcaster, SseOptions};
 use gglib_core::events::AppEvent;
 use gglib_core::ports::AppEventEmitter;
-use gglib_sse::{Broadcaster, SseOptions};
 
 /// SSE broadcaster that implements event emitter ports.
 ///
