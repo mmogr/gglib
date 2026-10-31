@@ -83,9 +83,9 @@ end
 #
 # Nothing else can catch a regression here. Both workflows run outside pull
 # requests (release-please.yml on pushes to main, promote.yml when
-# dispatched), their output is a bot PR whose diff is expected to touch the
-# lockfiles, and a reviewer scanning a release PR has no reason to read 250
-# lockfile lines. The one-word edit that reintroduces it is invisible until
+# dispatched), their output is a bot commit whose diff is expected to touch
+# the lockfiles, and a reviewer scanning a release PR has no reason to read
+# 250 lockfile lines. The one-word edit that reintroduces it is invisible until
 # it ships.
 #
 # Both re-lock through the lock-the-version action, so the command is checked

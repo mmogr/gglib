@@ -1,26 +1,44 @@
-# Promotes main's release candidate to a stable release: X.Y.Z-rc.N becomes
-# X.Y.Z and nothing else changes. Run it once main is exactly the last
-# candidate, from Actions -> Promote -> Run workflow, or with
-# `gh workflow run promote.yml -R mmogr/gglib`.
+# Promotes a release candidate to the stable release: X.Y.Z-rc.N becomes
+# X.Y.Z and nothing else changes. Run it from Actions -> Promote -> Run
+# workflow, or with `gh workflow run promote.yml -R mmogr/gglib`, any time
+# after the candidate has released. main need not stand still.
+#
+# The stable version is made from the candidate's tag, not from main. The
+# candidate's commit is checked out, the version moved, and the result
+# committed on top of it and pushed as the tag vX.Y.Z. Nothing lands on
+# main, so merging while a candidate is out does not force another
+# candidate, and the code that ships is exactly the code that was tested.
+# The tag, the release and the build are made here, as release-tag.yml
+# makes a candidate's; a promotion never passes through release-tag.yml.
+# main's CHANGELOG.md gets no heading for the stable version: the tag's copy
+# has it, and so does the release page.
 #
 # release-please cannot do this: with no commit since the candidate's tag it
-# opens no pull request. So this workflow opens one, and sets it to merge
-# itself once CI passes, since there is nothing in it to review:
-# check_rc_promotion.sh proves the code is the candidate's, and CI's release
-# job (release-tag.yml) checks again before it tags. The release PR, by
-# contrast, never merges itself. After the merge CI tags X.Y.Z, release.yml
-# builds it, and each stable channel waits for its approval as before.
+# opens no pull request. And once a stable version has shipped this way, the
+# release PR it next opens proposes rc.N+1 of that same version;
+# release-please.yml refuses that and names the two Release-As lines, the
+# next minor's or the next patch's rc.1, that can start the next cycle.
 #
-# The pull request is opened with the GitHub App token, as update-deps.yml's
-# is: a pull request opened with GITHUB_TOKEN starts no workflows, so CI would
-# never run on it.
+# The push uses the GitHub App token, as release-tag.yml's tag does:
+# GITHUB_TOKEN may create a ref only at the run's own commit. The release and
+# the dispatch use GITHUB_TOKEN with this job's grants, as there.
 
 name: Promote
 
 on:
   workflow_dispatch:
+    inputs:
+      candidate:
+        description: 'The candidate to promote, vX.Y.Z-rc.N; blank takes the newest'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: 'Dry run: make the promotion and check it, then tag, release and build nothing'
+        required: false
+        default: false
+        type: boolean
 
-# Everything that writes uses the app token.
 permissions:
   contents: read
 
@@ -38,6 +56,11 @@ jobs:
     name: Promote the release candidate
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      # The release, with GITHUB_TOKEN; the tag is pushed with the App's.
+      contents: write
+      # The dispatch of release.yml.
+      actions: write
     steps:
       - name: Generate GitHub App token
         id: app-token
@@ -46,29 +69,70 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
+      # main, for the tags and the history; the candidate is checked out
+      # below. The App's token stays in the checkout for the push.
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0  # The candidate's tag and the last stable tag
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Fetch tags
         run: git fetch --force --tags
 
-      # The comparison below is against the candidate's tag, so a candidate
-      # whose release has not happened yet cannot be promoted.
-      - name: Require the candidate to be released
+      # A stable release ships its last candidate, so an older candidate of
+      # the same version is refused here with the newest one named.
+      # check_rc_promotion.sh checks the same thing on the tree, later.
+      - name: Choose the candidate
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE: ${{ inputs.candidate }}
         run: |
-          RC=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
-          if ! git rev-parse -q --verify "refs/tags/v${RC}" > /dev/null; then
-            echo "::error::main's candidate $RC hasn't released: v$RC is not tagged. Wait for its release, or re-run it if it failed, then run Promote again."
+          if [ -n "$CANDIDATE" ]; then
+            if ! [[ "$CANDIDATE" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+              echo "::error::$CANDIDATE is not a candidate's tag, vX.Y.Z-rc.N"
+              exit 1
+            fi
+            if ! git rev-parse -q --verify "refs/tags/$CANDIDATE" > /dev/null; then
+              echo "::error::$CANDIDATE is not tagged. CI tags a candidate once it passes on main; wait for that, or re-run CI's release job if it failed."
+              exit 1
+            fi
+          else
+            CANDIDATE=$(git tag -l 'v*-rc.*' | sort -V | tail -n1)
+            if [ -z "$CANDIDATE" ]; then
+              echo "::error::no candidate is tagged. Merge the release PR to cut one, let it release, then run Promote."
+              exit 1
+            fi
+          fi
+          STABLE=${CANDIDATE%-rc.*}
+          newest=$(git tag -l "${STABLE}-rc.*" | sort -V | tail -n1)
+          if [ "$newest" != "$CANDIDATE" ]; then
+            echo "::error::$CANDIDATE is not the newest candidate of ${STABLE#v}; $newest is. A stable release ships the last candidate: promote $newest, or leave the candidate blank for the newest."
             exit 1
           fi
-          echo "✓ v$RC is tagged"
+          if git rev-parse -q --verify "refs/tags/$STABLE" > /dev/null; then
+            previous=$(git tag -l 'v*' | grep -v -- - | grep -vx "$STABLE" | sort -V | tail -n1)
+            echo "::error::${STABLE#v} has shipped already: $STABLE is tagged. If an earlier run tagged it and then failed, finish by hand: gh release create $STABLE --title 'Release $STABLE' --generate-notes --notes-start-tag $previous --verify-tag, then gh workflow run release.yml --ref main -f tag=$STABLE."
+            exit 1
+          fi
+          if ! gh release view "$CANDIDATE" > /dev/null 2>&1; then
+            echo "::error::$CANDIDATE is tagged but has no release, so it was never built. Re-run the failed jobs of the CI run that tagged it, then run Promote again."
+            exit 1
+          fi
+          echo "candidate=$CANDIDATE" >> "$GITHUB_OUTPUT"
+          echo "✓ promoting $CANDIDATE"
+
+      - name: Check out the candidate
+        env:
+          CANDIDATE: ${{ steps.candidate.outputs.candidate }}
+        run: git checkout --detach "refs/tags/$CANDIDATE"
 
       - name: Promote the version
         id: promote
         run: |
           PREVIOUS=$(git tag -l 'v*' | grep -v -- - | sort -V | tail -n1)
+          echo "previous=$PREVIOUS" >> "$GITHUB_OUTPUT"
           python3 scripts/promote.py --previous "$PREVIOUS" | tee -a "$GITHUB_OUTPUT"
 
       # As release-please.yml locks a candidate's version.
@@ -77,35 +141,88 @@ jobs:
         with:
           version: ${{ steps.promote.outputs.stable }}
 
-      # release-tag.yml makes the same check and is the guard. Making it here too
-      # means a promotion the release would refuse is never opened as a PR.
-      - name: Require a stable version to match its last RC
-        # After the lockfiles, which a promotion also changes.
+      # The guard: the tree is the candidate's with only the version changed,
+      # or nothing is tagged. After the lockfiles, which a promotion also
+      # changes.
+      - name: Require the promotion to match the candidate
         run: scripts/check_rc_promotion.sh
 
-      - name: Create Pull Request
-        id: create-pr
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          branch: promote-v${{ steps.promote.outputs.stable }}
-          delete-branch: true
-          # This commit is the one release-tag.yml tags vX.Y.Z, and release-please
-          # reads the next cycle from the commits after it, so it adds no line
-          # to any changelog; promote.py has written the stable heading already.
-          title: "chore(release): promote ${{ steps.promote.outputs.rc }} to ${{ steps.promote.outputs.stable }}"
-          commit-message: "chore(release): promote ${{ steps.promote.outputs.rc }} to ${{ steps.promote.outputs.stable }}"
-          body: |
-            ${{ steps.promote.outputs.rc }} becomes ${{ steps.promote.outputs.stable }}, and nothing else changes. Cargo.toml, package.json, the release-please manifest and both lockfiles move only their version, and CHANGELOG.md gains a heading for ${{ steps.promote.outputs.stable }}. `scripts/check_rc_promotion.sh` checked that against the tag v${{ steps.promote.outputs.rc }}, and CI checks it again before it tags.
-
-            This pull request merges itself once CI passes. Each stable channel then waits for its approval.
-          labels: |
-            version-bump
-            automated
-
-      - name: Enable auto-merge
-        if: steps.create-pr.outputs.pull-request-number
+      # One commit on top of the candidate's, by the App, as release-please.yml
+      # commits the release PR's lockfiles. Only the files a promotion moves
+      # are taken, and anything else left in the tree stops the run.
+      - name: Commit the promotion
+        id: commit
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          PR: ${{ steps.create-pr.outputs.pull-request-number }}
-        run: gh pr merge "$PR" --auto --squash
+          GH_TOKEN: ${{ github.token }}
+          SLUG: ${{ steps.app-token.outputs.app-slug }}
+          RC: ${{ steps.promote.outputs.rc }}
+          STABLE: ${{ steps.promote.outputs.stable }}
+        run: |
+          git add Cargo.toml package.json .release-please-manifest.json Cargo.lock package-lock.json CHANGELOG.md
+          if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+            echo "::error::the promotion left changes outside the files it moves:"
+            git status --porcelain
+            exit 1
+          fi
+          id=$(gh api "users/${SLUG}[bot]" --jq .id)
+          git -c user.name="${SLUG}[bot]" -c user.email="${id}+${SLUG}[bot]@users.noreply.github.com" \
+            commit -q -m "chore(release): promote $RC to $STABLE"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git show --stat --format='%H%n%an <%ae>%n%s' HEAD
+
+      - name: Dry run
+        if: inputs.dry_run
+        env:
+          CANDIDATE: ${{ steps.candidate.outputs.candidate }}
+          STABLE: ${{ steps.promote.outputs.stable }}
+        run: |
+          {
+            echo "## Dry run: v$STABLE from $CANDIDATE"
+            echo
+            echo "The promotion was made and checked. Nothing was tagged, released or built."
+            echo
+            echo '```'
+            git diff --stat "$CANDIDATE" HEAD
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::dry run of v$STABLE from $CANDIDATE: nothing was tagged, released or built"
+
+      # The commit reaches the repository only as this tag.
+      - name: Push the tag
+        if: ${{ !inputs.dry_run }}
+        env:
+          STABLE: ${{ steps.promote.outputs.stable }}
+        run: |
+          git push origin "HEAD:refs/tags/v$STABLE"
+          echo "✓ tagged v$STABLE"
+
+      # The notes run from the last stable version, sorted by
+      # .github/release.yml. --notes-start-tag pins the range to that tag,
+      # where GitHub starts a stable release's notes anyway.
+      - name: Create GitHub Release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STABLE: ${{ steps.promote.outputs.stable }}
+          PREVIOUS: ${{ steps.promote.outputs.previous }}
+        run: |
+          gh release create "v$STABLE" --title "Release v$STABLE" --generate-notes --notes-start-tag "$PREVIOUS" --verify-tag
+          echo "✓ released v$STABLE, with notes since $PREVIOUS"
+
+      # From main, whose release.yml is the current one and whose ref the
+      # stable channels' environments require; it checks out the tag. A
+      # failed build is re-run with the same command.
+      - name: Dispatch the build
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE: ${{ steps.candidate.outputs.candidate }}
+          STABLE: ${{ steps.promote.outputs.stable }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          gh workflow run release.yml --ref main -f tag="v$STABLE"
+          {
+            echo "## v$STABLE from $CANDIDATE"
+            echo
+            echo "Tagged $SHA, released, and release.yml dispatched. Each stable channel waits for its approval there."
+          } >> "$GITHUB_STEP_SUMMARY"

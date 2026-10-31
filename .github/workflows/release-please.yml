@@ -3,9 +3,9 @@
 # release and works out the next candidate (release-please-config.json says
 # how), then writes it into Cargo.toml, package.json and the manifest, and adds
 # its changes to CHANGELOG.md. Merging the pull request changes main's version,
-# and CI's release job (release-tag.yml), the only tagger, releases that
-# version as a prerelease.
-# Promotion to a stable version is promote.yml's job, not this one's.
+# and CI's release job (release-tag.yml) tags and releases that version as a
+# prerelease. Promotion to a stable version is promote.yml's job, made from
+# the candidate's tag, not this one's.
 #
 # release-please knows nothing of Cargo.lock or package-lock.json, and CI
 # builds with --locked, so after every update this workflow adds a commit that
@@ -98,8 +98,9 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # skip-github-release because release-tag.yml is the only tagger and makes
-      # the GitHub release itself, with generated notes. Here release-please
+      # skip-github-release because release-please never tags here:
+      # release-tag.yml tags a candidate and promote.yml a stable version, and
+      # each makes the GitHub release itself, with generated notes. release-please
       # only keeps the pull request. With `always-update` in the config it
       # rewrites the pull request on every run, so the pull request is never
       # behind main, which the ruleset requires before a merge.
@@ -133,16 +134,27 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       # A stable version comes only from promote.yml, never from this pull
-      # request. release-please proposes one in a single case: a feat merged
-      # while main is a patch candidate such as 0.29.1-rc.1 makes it propose
-      # 0.30.0 rather than 0.30.0-rc.1. A `Release-As: 0.30.0-rc.1` line in the
-      # message of a commit that merges next tells it the version to use.
-      - name: Require a release candidate
+      # request, and the pull request must propose a candidate of a version
+      # that has not shipped. release-please gets this wrong in two cases, and
+      # a `Release-As: X.Y.Z-rc.1` line at the end of the message of a commit
+      # that merges next puts it right. A feat merged while main is a patch
+      # candidate such as 0.29.1-rc.1 makes it propose 0.30.0 rather than
+      # 0.30.0-rc.1. And after a promotion it proposes the shipped version's
+      # rc.N+1: promote.yml tags the stable version from the candidate's
+      # commit, not from main, so the candidate is still the last release it
+      # can see from main.
+      - name: Require a release candidate of an unshipped version
         id: guard
         run: |
           VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
             echo "::error::The release PR proposes $VERSION, which is not a release candidate; a stable version comes only from Promote. Merge a commit whose message ends with a 'Release-As: X.Y.Z-rc.1' line naming the candidate meant, and the release PR is rewritten to it."
+            exit 1
+          fi
+          STABLE=${VERSION%-rc.*}
+          if git ls-remote --exit-code --tags origin "refs/tags/v${STABLE}" > /dev/null 2>&1; then
+            IFS=. read -r major minor patch <<< "$STABLE"
+            echo "::error::The release PR proposes $VERSION, but $STABLE has shipped: Promote tagged v$STABLE from its candidate, so from main the candidate still looks like the last release. Merge a commit whose message ends with 'Release-As: $major.$((minor + 1)).0-rc.1' (a feat or a breaking change since $STABLE) or 'Release-As: $major.$minor.$((patch + 1))-rc.1' (fixes only), and the release PR is rewritten to it."
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"

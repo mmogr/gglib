@@ -11,8 +11,8 @@ $GITHUB_OUTPUT. Its reasons go to stderr.
 * `version_only`: the two Cargo.toml versions differ, no file was added,
   deleted or renamed, and every changed line of every changed file but
   CHANGELOG.md is its old line with the old version replaced by the new one.
-  A release pull request, a promotion and a bump commit are; a change that
-  moves anything else is not.
+  A release pull request and a bump commit are; a change that moves anything
+  else is not.
 * `rust`: not `version_only`, and some changed path is outside INERT below.
   Everything not listed there counts as reaching a Rust build.
 * `ffi`: not `version_only`, and scripts/apple/ffi-inputs-changed.sh says the

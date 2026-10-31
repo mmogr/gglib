@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Turn main's release candidate X.Y.Z-rc.N into the stable X.Y.Z.
+"""Turn the checked-out release candidate X.Y.Z-rc.N into the stable X.Y.Z.
 
     scripts/promote.py --previous vA.B.C   # promote the working tree
     scripts/promote.py --self-test         # run the fixtures only
@@ -109,7 +109,7 @@ def promote(root: str, previous: str, today: str) -> Tuple[str, str]:
     rc = workspace_version(texts["Cargo.toml"])
     candidate = CANDIDATE.match(rc)
     if not candidate:
-        raise Refusal(f"main's version is {rc}, not a release candidate X.Y.Z-rc.N; there is nothing to promote")
+        raise Refusal(f"the version is {rc}, not a release candidate X.Y.Z-rc.N; there is nothing to promote")
     stable = candidate.group(1)
 
     changed: Dict[str, str] = {}

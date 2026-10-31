@@ -1,8 +1,9 @@
 # How GitHub sorts pull requests in generated release notes. This is not a
 # release workflow: those are .github/workflows/release-tag.yml, which makes
-# the release, and release.yml, which builds it. release-tag.yml's Create
-# GitHub Release step runs `gh release create --generate-notes`, and GitHub
-# generates the notes from this file when it is given no other path.
+# a candidate's release, promote.yml, which makes a stable version's, and
+# release.yml, which builds either. Both makers run `gh release create
+# --generate-notes`, and GitHub generates the notes from this file when it is
+# given no other path.
 #
 # Security comes first, so a security fix is never filed as routine.
 # Dependabot labels every security update it opens `security`, and a
@@ -16,9 +17,9 @@
 # hand stays with the rest unless it carries that label. Add the label when
 # the change is routine. Leave it off when the change is worth reading.
 #
-# The release PR (release-please.yml) and the promotion PR (promote.yml)
-# carry `version-bump` and are left out: a stable release would otherwise
-# list every candidate's release PR.
+# The release PR (release-please.yml) carries `version-bump` and is left
+# out: a stable release's notes run from the last stable version and would
+# otherwise list every candidate's release PR.
 #
 # There is no category per `type:` label. Those labels are applied by hand
 # and some pull requests carry none, so a scheme built on them would file
