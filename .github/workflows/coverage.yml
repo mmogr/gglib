@@ -1,15 +1,36 @@
 name: Coverage
 
+# Only a change that can move a measured number or break this job: the
+# crates (crates/layers.toml, which says what is measured, among them), their
+# manifests and lockfile, the toolchain, the recorded contracts their tests
+# read, the npm manifests the job installs from, and the script that reads
+# the crate list. The badges keep the last run's figures in between.
 on:
   push:
     branches: [main]
+    paths:
+      - 'crates/**'
+      - 'src-tauri/**'
+      - 'Cargo.*'
+      - 'rust-toolchain.toml'
+      - 'contracts/**'
+      - 'package*.json'
+      - '.github/workflows/coverage.yml'
+      - 'scripts/crate_list.py'
+
+# The newest push's figures are the ones the badges show, so a run still
+# measuring an older commit is cancelled.
+concurrency:
+  group: coverage
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
     # `… | tee` reports tee's exit status, not the test runner's, under
     # GitHub's default `bash -e`. `shell: bash` adds pipefail so a failing
     # suite fails the job here too — see the note in ci.yml's `test` job.
