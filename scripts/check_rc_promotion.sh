@@ -7,14 +7,17 @@
 # Reads the version from the working tree's Cargo.toml. For a stable X.Y.Z it
 # finds the newest vX.Y.Z-rc.N tag and requires every tracked file to equal
 # that tag's copy once the RC's version string is replaced by X.Y.Z. The
-# version bump is therefore the only change a promotion can carry: a fix that
-# lands after the RC, or a dependency moved in Cargo.lock, needs an rc.N+1.
+# version change is therefore the only change a promotion can carry: a fix
+# that lands after the RC, or a dependency moved in Cargo.lock, needs an
+# rc.N+1.
 #
-# A stable version with no RC tag fails too. Cutting rc.1 and promoting it is
-# two runs of the Bump Version workflow, and it means every stable release has
-# been out as a prerelease first.
+# CHANGELOG.md is left out. Promotion adds the stable version's heading to
+# it, and the substitution would rewrite the candidate's own heading.
 #
-# Run in two places: bump-version.yml, before it opens a promotion PR, and
+# A stable version with no RC tag fails too, so every stable release has been
+# out as a prerelease first: a candidate is cut by merging the release PR.
+#
+# Run in two places: promote.yml, before it opens a promotion PR, and
 # release.yml's check-version, before it tags. The second is the guard; the
 # first only saves a merged PR that the release would then refuse.
 #
@@ -31,7 +34,7 @@ fi
 
 RC_TAG="$(git tag -l "v${VERSION}-rc.*" | sort -V | tail -n1)"
 if [ -z "$RC_TAG" ]; then
-  echo "::error::$VERSION has no release candidate. Run Bump Version with 'rc-patch', 'rc-minor' or 'rc-major' to cut ${VERSION}-rc.1, let it release, then 'promote'."
+  echo "::error::$VERSION has no release candidate. Merge the release PR to cut one, let it release, then run Promote."
   exit 1
 fi
 RC_VERSION="${RC_TAG#v}"
@@ -53,10 +56,10 @@ while IFS= read -r file; do
       | diff -u --label "$RC_TAG:$file" --label "$file" - "$file" | head -n 20 | sed 's/^/      /' || true
     bad=$((bad + 1))
   fi
-done < <(git diff --no-renames --name-only "$RC_TAG" --)
+done < <(git diff --no-renames --name-only "$RC_TAG" -- . ':(exclude)CHANGELOG.md')
 
 if [ "$bad" -ne 0 ]; then
-  echo "::error::$VERSION is not $RC_TAG with its version changed: $bad file(s) differ. Cut another release candidate (Bump Version, 'next-rc') and promote that."
+  echo "::error::$VERSION is not $RC_TAG with its version changed: $bad file(s) differ. Merge the release PR to cut another candidate, let it release, then run Promote."
   exit 1
 fi
 echo "✓ $VERSION is $RC_TAG with only its version changed"

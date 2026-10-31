@@ -201,9 +201,10 @@ updates:
     # run in PR CI or in a test_run of release.yml, so the pull request can be
     # tested before it merges. The ignore list holds the ones neither
     # exercises: a test_run skips release.yml's tag, attest, upload and Pages
-    # steps, and bump-version.yml runs only when dispatched. A major of one of
-    # these would first run in a real release, so each is bumped by hand in a
-    # pull request of its own, just before a release someone watches.
+    # steps, release-please.yml runs only on pushes to main, and promote.yml
+    # only when dispatched. A major of one of these would first run in a real
+    # release, so each is bumped by hand in a pull request of its own, just
+    # before a release someone watches.
     #
     # actions/github-script is on the list although Label Check runs it on
     # every pull request: on a pull request Dependabot opens, Label Check's
@@ -229,6 +230,8 @@ updates:
       - dependency-name: actions/create-github-app-token
         update-types: ["version-update:semver-major"]
       - dependency-name: peter-evans/create-pull-request
+        update-types: ["version-update:semver-major"]
+      - dependency-name: googleapis/release-please-action
         update-types: ["version-update:semver-major"]
       - dependency-name: actions/github-script
         update-types: ["version-update:semver-major"]

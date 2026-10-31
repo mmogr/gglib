@@ -357,6 +357,9 @@ enforce: ## Run the architecture enforcement checks
 	@# starts no jobs at all in a workflow file it will not parse. Local is the
 	@# only place that case gets caught before the push.
 	@./scripts/check_workflow_yaml.sh
+	@# promote.py runs only when someone presses Promote, so a break in it would
+	@# first show in a stable release. Its fixtures run here instead.
+	@./scripts/promote.py --self-test
 	@# ts-rs reads Rust types, not serde's behaviour, so two annotations stand
 	@# between the generated bindings and a new class of lie: i64 becomes a
 	@# `bigint` no `JSON.parse` can produce, and `skip_serializing_if` becomes a

@@ -127,6 +127,37 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # release-please.yml never tags (it runs with skip-github-release), so it
+      # cannot see that the release PR it opened has been released, and it
+      # opens no other while a merged release PR is labelled
+      # `autorelease: pending`. Swapping that label for `autorelease: tagged`
+      # is how a release tells it, straight after the tag so that the label
+      # says what is true even if a later step fails. Only the merged PR
+      # titled for this version is touched; a promotion has no such PR, and
+      # nothing changes.
+      - name: Mark the release PR as tagged
+        uses: actions/github-script@v7
+        env:
+          VERSION: ${{ needs.check-version.outputs.new-version }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const title = `chore(main): release ${process.env.VERSION}`;
+            // The issues list rather than search, which can lag behind a label.
+            const items = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'closed', labels: 'autorelease: pending', per_page: 100,
+            });
+            for (const item of items) {
+              if (!item.pull_request?.merged_at || item.title !== title) continue;
+              await github.rest.issues.removeLabel({
+                owner, repo, issue_number: item.number, name: 'autorelease: pending',
+              });
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: item.number, labels: ['autorelease: tagged'],
+              });
+              core.info(`#${item.number} is now labelled autorelease: tagged`);
+            }
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
