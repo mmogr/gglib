@@ -9,11 +9,17 @@ import type { AttachmentInfo } from '../../types/generated/AttachmentInfo';
 // Tool-row folding (CLI agent conversations store tool results as separate rows)
 // ============================================================================
 
-/** Metadata shape for assistant messages with tool calls (from CLI persistence). */
+/**
+ * Metadata shape for assistant messages with tool calls (from CLI persistence).
+ * A call keeps beside it the name its run showed it by and the MCP server it
+ * went to, which gglib's own tools have none of.
+ */
 interface CliToolCallMeta {
   id: string;
   name: string;
   arguments: unknown;
+  display_name?: string;
+  server?: string;
 }
 
 /**
@@ -80,6 +86,8 @@ export function foldToolMessages(messages: ChatMessage[]): ChatMessage[] {
             ...(toolResult !== undefined && { result: toolResult.content }),
             ...(toolResult !== undefined &&
               toolResult.images.length > 0 && { artifact: { images: toolResult.images } }),
+            ...(tc.display_name !== undefined && { displayName: tc.display_name }),
+            ...(tc.server !== undefined && { server: tc.server }),
           };
         }),
       ];
