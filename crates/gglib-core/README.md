@@ -16,23 +16,51 @@ without a GPU, a network, or a running llama-server, and therefore testable.
 
 This crate is the **Core Layer** — the innermost ring of the architecture. It depends on no other gglib crate, and every other workspace crate except `gglib-build-info`, `gglib-broadcast` and `gglib-test-http` depends on it (`gglib-integration-tests` as a dev-dependency).
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                    Core Layer                                       │
-│   ┌─────────────────────────────────────────────────────────────────────────────┐   │
-│   │                         ►►► gglib-core ◄◄◄                                  │   │
-│   │        Domain types, ports & traits (no database, HTTP or UI crates)        │   │
-│   └─────────────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-                                          ▲
-                                          │
-              ┌───────────────────────────────────────────────────────┐
-              │  gglib-db, gglib-gguf, gglib-hf, gglib-mcp,           │
-              │  gglib-download, gglib-runtime                        │
-              └───────────────────────────────────────────────────────┘
-```
+<!-- crate-graph:start -->
+Each band is a layer of `crates/layers.toml`, from the top down. Under the bands, each crate is listed with the workspace crates it names in a normal or build dependency, as its manifest lists them; dev-dependencies are left out.
 
-See the [Architecture Overview](../../README.md#architecture) for the complete diagram.
+```text
+ADAPTER ──────────────────────────────────────────────────────────────────────
+  axum               cli                ffi                src-tauri
+FACADE ───────────────────────────────────────────────────────────────────────
+  app-services       bootstrap
+INFRASTRUCTURE ───────────────────────────────────────────────────────────────
+  db                 download           engine-llama       gguf
+  hf                 mcp                proxy              runtime
+APPLICATION ──────────────────────────────────────────────────────────────────
+  agent
+CORE ─────────────────────────────────────────────────────────────────────────
+  core
+UTILITY ──────────────────────────────────────────────────────────────────────
+  broadcast          build-info         test-http
+TESTS ────────────────────────────────────────────────────────────────────────
+  integration-tests
+
+DEPENDS ON ───────────────────────────────────────────────────────────────────
+  axum               → app-services, bootstrap, db, gguf, mcp, proxy, runtime,
+                       core, broadcast, build-info
+  cli                → axum, app-services, bootstrap, db, download, mcp, proxy,
+                       runtime, core, build-info
+  ffi                → bootstrap, engine-llama, mcp, proxy, core
+  src-tauri          → axum, app-services, proxy, core, build-info
+  app-services       → download, mcp, proxy, runtime, agent, core
+  bootstrap          → db, download, gguf, hf, core
+  db                 → core
+  download           → hf, core
+  engine-llama       → gguf, core
+  gguf               → core
+  hf                 → core
+  mcp                → core, build-info
+  proxy              → mcp, core, broadcast, build-info
+  runtime            → mcp, proxy, agent, core
+  agent              → core
+  core               → none
+  broadcast          → none
+  build-info         → none
+  test-http          → none
+  integration-tests  → none
+```
+<!-- crate-graph:end -->
 
 ## Internal Structure
 

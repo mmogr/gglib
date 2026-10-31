@@ -4,130 +4,89 @@ This directory holds every crate of the workspace except the desktop app, which 
 
 ## Architecture Overview
 
-gglib follows **hexagonal architecture** (ports & adapters) with clear separation of concerns:
+gglib follows **hexagonal architecture** (ports & adapters) with clear separation of concerns. The diagram and the catalogue below are written by `make readmes` from `crates/layers.toml` and the crates' manifests, and `make enforce` fails while either is out of date.
+
+<!-- crate-graph:start -->
+Each band is a layer of `crates/layers.toml`, from the top down. Under the bands, each crate is listed with the workspace crates it names in a normal or build dependency, as its manifest lists them; dev-dependencies are left out.
 
 ```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│                               ADAPTER LAYER                                │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐ │
-│  │  gglib-cli   │   │  gglib-axum  │   │  src-tauri   │   │  gglib-ffi   │ │
-│  │   CLI tool   │   │   REST API   │   │ desktop app  │   │Swift, for iOS│ │
-│  └──────────────┘   └──────────────┘   └──────────────┘   └──────────────┘ │
-└──────────────────────────────────────┬─────────────────────────────────────┘
-                                       ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│                                FACADE LAYER                                │
-│          ┌──────────────────────┐        ┌──────────────────────┐          │
-│          │  gglib-app-services  │        │   gglib-bootstrap    │          │
-│          │    shared backend    │        │   composition root   │          │
-│          └──────────────────────┘        └──────────────────────┘          │
-└──────────────────────────────────────┬─────────────────────────────────────┘
-                                       ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│                            INFRASTRUCTURE LAYER                            │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐ │
-│  │   gglib-db   │   │  gglib-gguf  │   │   gglib-hf   │   │  gglib-mcp   │ │
-│  │    SQLite    │   │ GGUF parsing │   │ HuggingFace  │   │   MCP SDK    │ │
-│  │ repositories │   │              │   │    client    │   │              │ │
-│  └──────────────┘   └──────────────┘   └──────────────┘   └──────────────┘ │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐ │
-│  │gglib-runtime │   │gglib-download│   │ gglib-proxy  │   │gglib-engine- │ │
-│  │  llama.cpp   │   │   download   │   │ OpenAI proxy │   │    llama     │ │
-│  │  management  │   │   manager    │   │              │   │  in-process  │ │
-│  │              │   │              │   │              │   │  llama.cpp   │ │
-│  └──────────────┘   └──────────────┘   └──────────────┘   └──────────────┘ │
-└──────────────────────────────────────┬─────────────────────────────────────┘
-                                       ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│                             APPLICATION LAYER                              │
-│                          ┌──────────────────────┐                          │
-│                          │     gglib-agent      │                          │
-│                          │     agentic loop     │                          │
-│                          │   (port-injected)    │                          │
-│                          └──────────────────────┘                          │
-└──────────────────────────────────────┬─────────────────────────────────────┘
-                                       ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│                       CORE LAYER AND UTILITY CRATES                        │
-│  ┌────────────────────────────────────────────┐    ┌────────────────────┐  │
-│  │                 gglib-core                 │    │  gglib-build-info  │  │
-│  │    domain/  ports/  services/  events/     │    │  gglib-broadcast   │  │
-│  │       paths/  normalize/  sse/  ...        │    │   utility crates   │  │
-│  └────────────────────────────────────────────┘    └────────────────────┘  │
-└────────────────────────────────────────────────────────────────────────────┘
-```
+ADAPTER ──────────────────────────────────────────────────────────────────────
+  axum               cli                ffi                src-tauri
+FACADE ───────────────────────────────────────────────────────────────────────
+  app-services       bootstrap
+INFRASTRUCTURE ───────────────────────────────────────────────────────────────
+  db                 download           engine-llama       gguf
+  hf                 mcp                proxy              runtime
+APPLICATION ──────────────────────────────────────────────────────────────────
+  agent
+CORE ─────────────────────────────────────────────────────────────────────────
+  core
+UTILITY ──────────────────────────────────────────────────────────────────────
+  broadcast          build-info         test-http
+TESTS ────────────────────────────────────────────────────────────────────────
+  integration-tests
 
-An arrow means "depends on", and a crate may depend on any layer below its own,
-not only the next: `gglib-cli` uses several infrastructure crates directly, and
-`gglib-app-services` uses `gglib-agent`. Inside a layer, `gglib-cli` and
-`src-tauri` depend on `gglib-axum`, which both use to host the daemon;
-`gglib-ffi`, the Swift-facing surface
-an iPhone app embeds as a dynamic framework, depends on no other surface,
-opens its library through `gglib-bootstrap`, and serves its engine with
-`gglib-proxy` in front of `gglib-engine-llama`;
-`gglib-download` depends on `gglib-hf`;
-`gglib-proxy` depends on `gglib-mcp`; `gglib-engine-llama` depends on
-`gglib-gguf`; and `gglib-runtime` depends on `gglib-mcp` and `gglib-proxy`.
-`gglib-build-info`, `gglib-broadcast` and `gglib-test-http` depend on no gglib crate.
-`src-tauri` is the desktop app and lives outside `crates/`;
-`gglib-integration-tests` holds cross-crate tests and has only dev-dependencies.
+DEPENDS ON ───────────────────────────────────────────────────────────────────
+  axum               → app-services, bootstrap, db, gguf, mcp, proxy, runtime,
+                       core, broadcast, build-info
+  cli                → axum, app-services, bootstrap, db, download, mcp, proxy,
+                       runtime, core, build-info
+  ffi                → bootstrap, engine-llama, mcp, proxy, core
+  src-tauri          → axum, app-services, proxy, core, build-info
+  app-services       → download, mcp, proxy, runtime, agent, core
+  bootstrap          → db, download, gguf, hf, core
+  db                 → core
+  download           → hf, core
+  engine-llama       → gguf, core
+  gguf               → core
+  hf                 → core
+  mcp                → core, build-info
+  proxy              → mcp, core, broadcast, build-info
+  runtime            → mcp, proxy, agent, core
+  agent              → core
+  core               → none
+  broadcast          → none
+  build-info         → none
+  test-http          → none
+  integration-tests  → none
+```
+<!-- crate-graph:end -->
 
 **Key Principle**: no crate depends on a layer above its own, and `gglib-core`
 depends on no other gglib crate. Infrastructure crates such as `gglib-db`
 implement its port traits, and `gglib-cli` and `gglib-axum` wire them together
-through `gglib-bootstrap`.
+through `gglib-bootstrap`. Two surfaces depend on a third: `gglib-cli` and
+`src-tauri` use `gglib-axum` to host the daemon, the two exceptions
+CONTRIBUTING's Crate Boundaries allows.
 
 ## Crate Catalog
 
-Each row links the crate, whose own README says what it is responsible for and how it is laid out.
+Each row links the crate, whose own README says what it is responsible for and how it is laid out. The descriptions are the manifests' own.
 
-### Core Layer
-
-| Crate | Purpose | Lines of Code |
-|-------|---------|---------------|
-| **[gglib-core](gglib-core/)** | Domain types, port traits, application services and the event types adapters are notified with. Depends on no other gglib crate and on no database, HTTP or UI crate; it does local file I/O, and holds the helpers other crates build child-process commands with. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loc.json) |
-
-### Application Layer
-
-| Crate | Purpose | Lines of Code |
-|-------|---------|---------------|
-| **[gglib-agent](gglib-agent/)** | Pure-domain agentic loop (LLM→tool→LLM cycle). Depends only on `gglib-core`. No HTTP, no MCP internals, no database. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-loc.json) |
-
-### Infrastructure Layer
-
-| Crate | Purpose | Lines of Code |
-|-------|---------|---------------|
-| **[gglib-db](gglib-db/)** | SQLite repositories implementing `gglib-core` port traits for data persistence: `ModelRepository`, `McpServerRepository`, `ChatHistoryRepository` and `SettingsRepository` among them, each as a `Sqlite…` type. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-loc.json) |
-| **[gglib-gguf](gglib-gguf/)** | GGUF file format parser: a model's architecture, quantization, context size and capabilities, and whether a file is a model's weights or a projector. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-loc.json) |
-| **[gglib-hf](gglib-hf/)** | HuggingFace API client: model search, repository metadata, and the files and quantizations a repository holds. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-hf-loc.json) |
-| **[gglib-mcp](gglib-mcp/)** | Model Context Protocol server management: starting and stopping servers, the stdio JSON-RPC client, tool discovery and invocation, and the built-in tools. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-loc.json) |
-| **[gglib-runtime](gglib-runtime/)** | llama.cpp installation and updates, launch-argument building (context size resolution included), process spawning and monitoring, health checks and port allocation. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-loc.json) |
-| **[gglib-download](gglib-download/)** | Multi-file download manager with a queue, progress tracking, resume and cancel. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-loc.json) |
-| **[gglib-proxy](gglib-proxy/)** | OpenAI-compatible proxy (`/v1/chat/completions`, `/v1/embeddings`, `/v1/models`, streaming included) with automatic model routing and swapping, and the MCP gateway at `/mcp`. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loc.json) |
-| **[gglib-engine-llama](gglib-engine-llama/)** | llama.cpp in-process, for a phone that cannot start llama-server: a decoder seam, the engine that runs one generation at a time on it, a server on loopback that answers `gglib-proxy` in the pinned llama-server's shape, and `InProcessRuntime`, the model runtime port that fits one model at a time to the device's memory and serves it there. Its `llama` feature adds `LlamaDecoder`, llama.cpp's own `llama.framework` at the pin reached through a small C shim, on an Apple target given the framework; otherwise pure Rust on every target. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-engine-llama-loc.json) |
-
-### Facade Layer
-
-| Crate | Purpose | Lines of Code |
-|-------|---------|---------------|
-| **[gglib-app-services](gglib-app-services/)** | Backend facade shared by `gglib-axum`, `gglib-cli` and `src-tauri` (ensures feature parity). | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-loc.json) |
-| **[gglib-bootstrap](gglib-bootstrap/)** | Composition root: `CoreBootstrap::build` wires the database, the download manager, the HuggingFace client and the GGUF parser once, for `gglib-cli` and `gglib-axum`. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-loc.json) |
-
-### Adapter Layer
-
-| Crate | Purpose | Lines of Code |
-|-------|---------|---------------|
-| **[gglib-cli](gglib-cli/)** | Command-line interface for all gglib operations; [docs/cli.md](../docs/cli.md) is the command reference. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-loc.json) |
-| **[gglib-axum](gglib-axum/)** | The daemon's HTTP API, built with Axum for the web UI, the desktop app and the CLI. The router is built in [`src/routes.rs`](gglib-axum/src/routes.rs), which serves `/health` and nests the API under `/api`. The daemon paths the CLI calls are named in `gglib_core::contracts::http::daemon`, and `gglib-axum/tests/daemon_route_contract.rs` fails when the daemon stops serving one of them. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-loc.json) |
-| **[gglib-ffi](gglib-ffi/)** | The Swift-facing surface of gglib: `GglibFFI.xcframework`, a dynamic framework for iOS and macOS, and the Swift `uniffi` generates for it, committed in [`gglib-ffi/swift/`](gglib-ffi/swift/). Its surface is `build_info()` and a model library: the shortlist and a Hub search, a fit verdict per quantization from its header's first bytes, downloads that pause and resume, the installed models, and `serve`, which runs gglib's own proxy on loopback in front of llama.cpp in the app's process. Builds as plain Rust on every OS; the framework needs Xcode and links `llama.framework`. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-ffi-loc.json) |
-
-### Utility Crates
-
-| Crate | Purpose | Lines of Code |
-|-------|---------|---------------|
-| **[gglib-broadcast](gglib-broadcast/)** | Generic Server-Sent Events broadcast utility shared by `gglib-axum` and `gglib-proxy`. Zero `gglib-*` dependencies. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-broadcast-loc.json) |
-| **[gglib-build-info](gglib-build-info/)** | Compile-time version and git metadata for CLI/GUI version strings. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-loc.json) |
-| **[gglib-test-http](gglib-test-http/)** | The connection a test's fake HTTP server answers on, handed over only once the request has been read whole. Dev-dependency only; zero `gglib-*` dependencies. | ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-loc.json) |
+<!-- crate-catalog:start -->
+| Crate | Layer | Description | Badges |
+|-------|-------|-------------|--------|
+| [gglib-axum](gglib-axum/) | adapter | Axum web server adapter for gglib | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-axum-complexity.json) |
+| [gglib-cli](gglib-cli/) | adapter | CLI interface for gglib | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-cli-complexity.json) |
+| [gglib-ffi](gglib-ffi/) | adapter | The Swift-facing surface of gglib, shipped as a dynamic framework for iOS and macOS | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-ffi-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-ffi-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-ffi-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-ffi-complexity.json) |
+| [src-tauri](../src-tauri/) | adapter | The desktop app: a window, a tray and a native menu on the gglib daemon it launches or connects to | — |
+| [gglib-app-services](gglib-app-services/) | facade | The backend facade gglib-axum, gglib-cli and src-tauri share, so every surface offers the same features | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-app-services-complexity.json) |
+| [gglib-bootstrap](gglib-bootstrap/) | facade | Shared composition root for gglib adapters — wires infrastructure without adapter concerns | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-bootstrap-complexity.json) |
+| [gglib-db](gglib-db/) | infrastructure | SQLite repository implementations for gglib | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-db-complexity.json) |
+| [gglib-download](gglib-download/) | infrastructure | Download manager for gglib - handles model downloads from HuggingFace | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-download-complexity.json) |
+| [gglib-engine-llama](gglib-engine-llama/) | infrastructure | llama.cpp in-process: a decoder, and a server on loopback that answers gglib-proxy as the pinned llama-server does | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-engine-llama-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-engine-llama-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-engine-llama-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-engine-llama-complexity.json) |
+| [gglib-gguf](gglib-gguf/) | infrastructure | GGUF file format parsing for gglib | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-gguf-complexity.json) |
+| [gglib-hf](gglib-hf/) | infrastructure | HuggingFace Hub client for gglib | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-hf-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-hf-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-hf-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-hf-complexity.json) |
+| [gglib-mcp](gglib-mcp/) | infrastructure | MCP (Model Context Protocol) server management for gglib | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-mcp-complexity.json) |
+| [gglib-proxy](gglib-proxy/) | infrastructure | OpenAI-compatible proxy server for gglib | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-proxy-complexity.json) |
+| [gglib-runtime](gglib-runtime/) | infrastructure | Process runtime and OS-level concerns for gglib | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-runtime-complexity.json) |
+| [gglib-agent](gglib-agent/) | application | Pure-domain agentic loop for gglib (no HTTP/infra dependencies) | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-agent-complexity.json) |
+| [gglib-core](gglib-core/) | core | Core domain types and port definitions for gglib | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-core-complexity.json) |
+| [gglib-broadcast](gglib-broadcast/) | utility | Generic Server-Sent Events broadcast utility shared by gglib-axum and gglib-proxy | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-broadcast-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-broadcast-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-broadcast-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-broadcast-complexity.json) |
+| [gglib-build-info](gglib-build-info/) | utility | Shared build/version metadata for gglib | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-build-info-complexity.json) |
+| [gglib-test-http](gglib-test-http/) | utility | A fake HTTP server's connection for tests: the request is read whole before the test can answer it | ![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-tests.json) ![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-coverage.json) ![LOC](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-loc.json) ![Complexity](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/mmogr/gglib/badges/gglib-test-http-complexity.json) |
+| [gglib-integration-tests](gglib-integration-tests/) | tests | Cross-crate integration tests for gglib, gglib-proxy in front of the phone's in-process runtime among them | — |
+<!-- crate-catalog:end -->
 
 ## Development Guidelines
 
@@ -152,5 +111,5 @@ What a crate in each layer may depend on, and which of those rules `scripts/chec
 ## Further Reading
 
 - [Main README](../README.md) - Project overview and getting started
-- [CONTRIBUTING](../CONTRIBUTING.md) - Conventions, the dependency rules, and the [Badges Pipeline](../CONTRIBUTING.md#badges-pipeline) that writes the LOC badges above
+- [CONTRIBUTING](../CONTRIBUTING.md) - Conventions, the dependency rules, and the [Badges Pipeline](../CONTRIBUTING.md#badges-pipeline) that writes the badges above
 - Individual crate READMEs linked in table above

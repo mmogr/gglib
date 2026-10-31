@@ -2,7 +2,7 @@
 name = "gglib-app-services"
 version.workspace = true
 edition.workspace = true
-description = "Shared application service ops for gglib adapters (Tauri, Axum)"
+description = "The backend facade gglib-axum, gglib-cli and src-tauri share, so every surface offers the same features"
 license.workspace = true
 publish = false
 build = "build.rs"
