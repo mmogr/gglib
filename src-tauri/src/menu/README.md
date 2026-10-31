@@ -2,8 +2,9 @@
 
 Native application menu for `GGLib` GUI.
 
-Provides a cross-platform menu bar with stateful items that reflect
-the current application state (proxy status, selected model, etc.).
+Provides the macOS menu bar, with stateful items that reflect the
+current application state (proxy status, selected model, etc.). Other
+platforms are given an empty menu.
 
 # Module Structure
 

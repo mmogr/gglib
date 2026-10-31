@@ -75,10 +75,11 @@ one that was already answering is left alone.
 **Stop gglib Service** is the separate verb for ending a daemon without
 quitting, and **Start gglib Service** the way back — reachable even when the
 app came up with no daemon at all, which used to be a panic before any tray
-existed. Both warn first, from `confirm`, and the warning is derived from the
-snapshot: it names the port and the resident models actually at stake rather
-than asserting a fixed sentence, which is how the old one came to claim that
-quitting stopped a proxy it had long since stopped stopping.
+existed. Stop, like Quit, warns first, from `confirm`, when something is at
+stake, and the warning is derived from the snapshot: it names the port and the
+resident models actually at stake rather than asserting a fixed sentence,
+which is how the old one came to claim that quitting stopped a proxy it had
+long since stopped stopping.
 
 ## What the panel depends on staying alive
 
