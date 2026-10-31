@@ -225,7 +225,7 @@ jobs:
         # on every PR, which is where a regression should be caught.
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --workspace --no-deps --document-private-items --exclude gglib-app
+        run: ./scripts/doc_workspace.py -- --document-private-items --exclude gglib-app
 
       - name: Create index.html redirect
         run: |

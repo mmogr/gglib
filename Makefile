@@ -226,7 +226,10 @@ doc-check: ## Build rustdoc with warnings denied, exactly as CI does
 	@# `--exclude gglib-app`: the one member whose build can need the Web UI
 	@# (its `tauri::generate_context!()` embeds `frontendDist` when
 	@# `custom-protocol` is on); see the note above `bindings`.
-	$(CARGO) doc --workspace --no-deps --document-private-items --exclude gglib-app
+	@# Through the script, which renders each crate after the crates it
+	@# links to; a bare `cargo doc` leaves cross-crate links unresolved on
+	@# a cold target/doc.
+	$(CARGO_ENV) ./scripts/doc_workspace.py -- --document-private-items --exclude gglib-app
 	@# rustdoc passes a Markdown link that goes nowhere; this does not.
 	@./scripts/check_doc_links.py "$${CARGO_TARGET_DIR:-target}/doc"
 
@@ -365,6 +368,7 @@ enforce: ## Run the architecture enforcement checks
 	@# promote.py runs only when someone presses Promote, so a break in it would
 	@# first show in a stable release. Its fixtures run here instead.
 	@./scripts/promote.py --self-test
+	@./scripts/doc_workspace.py --self-test
 	@# ts-rs reads Rust types, not serde's behaviour, so two annotations stand
 	@# between the generated bindings and a new class of lie: i64 becomes a
 	@# `bigint` no `JSON.parse` can produce, and `skip_serializing_if` becomes a
