@@ -189,8 +189,8 @@ crates/gglib-hf/src/url.rs 449
 crates/gglib-mcp/src/builtin/generate_image.rs 380
 crates/gglib-mcp/src/builtin/generate_image_tests.rs 476
 crates/gglib-mcp/src/builtin/mod.rs 414
-crates/gglib-mcp/src/client.rs 580
-crates/gglib-mcp/src/client_tests.rs 371
+crates/gglib-mcp/src/client.rs 620
+crates/gglib-mcp/src/client_tests.rs 458
 crates/gglib-mcp/src/manager.rs 315
 crates/gglib-mcp/src/opened_tests.rs 488
 crates/gglib-mcp/src/service.rs 847
