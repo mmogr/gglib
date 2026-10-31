@@ -235,16 +235,12 @@ async fn execute_download(job: &DownloadJob, deps: &WorkerDeps) -> Result<(), Do
     let plan = plan_for(job, file, deps, progress_callback, notice_callback);
     let url = deps.hub.file_url(plan.repo_id, plan.file, plan.revision);
 
-    // Execute with cancellation support via select
-    tokio::select! {
-        biased;
-
-        () = job.cancel.cancelled() => {
-            Err(DownloadError::Cancelled)
-        }
-
-        result = download_file(&plan, &url) => result,
-    }
+    // The transfer carries the job's token and answers `Cancelled` itself,
+    // once the bytes it has are flushed to the `.part` file. Racing the token
+    // against it here would drop the transfer mid-flush and announce the
+    // cancellation while the `.part` is still short: the next attempt then
+    // resumes from a length the late flush goes on to extend.
+    download_file(&plan, &url).await
 }
 
 /// The plan that fetches `file` of `job`: from the repository the file

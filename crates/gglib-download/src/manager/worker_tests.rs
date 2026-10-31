@@ -1,8 +1,14 @@
 //! Tests of the download worker.
 
+use std::time::Duration;
+
+use async_trait::async_trait;
+use gglib_core::ports::huggingface::HfPortResult;
 use gglib_core::ports::huggingface::fake_hub::FakeHub;
+use gglib_core::ports::{HfFileInfo, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult};
 
 use super::*;
+use crate::executor::native::tests::{Reply, TestServer, body_of};
 
 const fn at(bytes: u64, wire: u64) -> FileProgress {
     FileProgress {
@@ -110,4 +116,103 @@ fn test_percent_encode_revision() {
 
     // Full verification
     assert_eq!(percent_encode_revision("café"), "caf%C3%A9");
+}
+
+/// A Hub that sends every file's download to one address. The worker asks
+/// it nothing else.
+struct ServedAt(String);
+
+#[async_trait]
+impl HfClientPort for ServedAt {
+    async fn search(&self, _: &HfSearchOptions) -> HfPortResult<HfSearchResult> {
+        unreachable!("the worker fetches by address alone")
+    }
+    async fn list_quantizations(&self, _: &str) -> HfPortResult<Vec<HfQuantInfo>> {
+        unreachable!("the worker fetches by address alone")
+    }
+    async fn list_projectors(&self, _: &str) -> HfPortResult<Vec<HfFileInfo>> {
+        unreachable!("the worker fetches by address alone")
+    }
+    async fn list_gguf_files(&self, _: &str) -> HfPortResult<Vec<HfFileInfo>> {
+        unreachable!("the worker fetches by address alone")
+    }
+    async fn get_quantization_files(&self, _: &str, _: &str) -> HfPortResult<Vec<HfFileInfo>> {
+        unreachable!("the worker fetches by address alone")
+    }
+    async fn get_commit_sha(&self, _: &str) -> HfPortResult<String> {
+        unreachable!("the worker fetches by address alone")
+    }
+    async fn get_model_info(&self, _: &str) -> HfPortResult<HfRepoInfo> {
+        unreachable!("the worker fetches by address alone")
+    }
+    async fn read_head(&self, _: &str, _: &str, _: u64) -> HfPortResult<Vec<u8>> {
+        unreachable!("the worker fetches by address alone")
+    }
+    fn file_url(&self, _: &str, _: &str, _: &str) -> String {
+        self.0.clone()
+    }
+    async fn file_at(&self, _: &str, _: &str) -> HfPortResult<Option<HfFileInfo>> {
+        unreachable!("the worker fetches by address alone")
+    }
+}
+
+/// A cancel is answered once the bytes that arrived are in the `.part`
+/// file, so what the manager announces as cancelled is already resumable.
+/// The transfer's sink buffers megabytes before it writes, and only a
+/// closed channel makes it write; a worker that dropped the transfer on the
+/// token would answer while that write is still to come.
+#[tokio::test]
+async fn a_cancel_is_answered_once_the_part_holds_what_arrived() {
+    gglib_core::paths::isolate_data_root();
+    let body = body_of(8192);
+    let sent = 3000;
+    let server = TestServer::start(vec![Reply::Stalls { body, limit: sent }]).await;
+    let models = tempfile::tempdir().unwrap();
+
+    let (progress_tx, mut progress_rx) = watch::channel(ProgressUpdate::default());
+    let job = DownloadJob {
+        id: DownloadId::new("tester/stalled-GGUF", Some("Q4_0")),
+        repo: "tester/stalled-GGUF".to_string(),
+        destination: DownloadDestination::plan(
+            models.path(),
+            "tester/stalled-GGUF",
+            vec!["stalled.gguf".to_string()],
+        ),
+        revision: None,
+        cancel: CancellationToken::new(),
+        progress_tx,
+        expected_size: None,
+        upgrade: None,
+    };
+    let deps = WorkerDeps {
+        config: DownloadManagerConfig::default(),
+        hub: Arc::new(ServedAt(server.url())),
+    };
+
+    let fetch = execute_download(&job, &deps);
+    let cancel_once_bytes_arrive = async {
+        progress_rx
+            .wait_for(|update| update.progress.wire > 0)
+            .await
+            .expect("the worker reports the first bytes");
+        // Long enough for the rest of what was sent to arrive on loopback.
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        job.cancel.cancel();
+    };
+    let (result, ()) = tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::join!(fetch, cancel_once_bytes_arrive)
+    })
+    .await
+    .expect("the cancelled fetch ends");
+
+    assert!(
+        matches!(result, Err(DownloadError::Cancelled)),
+        "got {result:?}"
+    );
+    let part = job.destination.model_dir.join("stalled.gguf.part");
+    let kept = std::fs::metadata(&part).map_or(0, |m| m.len());
+    assert_eq!(
+        kept, sent as u64,
+        "the .part holds what arrived when the cancel is answered"
+    );
 }

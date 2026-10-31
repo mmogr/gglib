@@ -167,8 +167,8 @@ crates/gglib-db/src/setup_models_tests.rs 317
 crates/gglib-download/src/cli_exec/exec/python_bridge.rs 331
 crates/gglib-download/src/cli_exec/exec/python_env.rs 1544
 crates/gglib-download/src/cli_exec/exec/python_protocol.rs 347
-crates/gglib-download/src/executor/native.rs 578
-crates/gglib-download/src/executor/native_tests.rs 859
+crates/gglib-download/src/executor/native.rs 598
+crates/gglib-download/src/executor/native_tests.rs 901
 crates/gglib-download/src/manager/companion_group_tests.rs 475
 crates/gglib-download/src/manager/group_completion_tests.rs 366
 crates/gglib-download/src/manager/mod.rs 1266
