@@ -788,13 +788,18 @@ If an issue is created outside the form — a scripted `gh issue create`, or the
 
 ### On PRs
 
-`label-check.yml`'s `enrich` job does three things automatically, before the required-label check even runs:
+`label-check.yml`'s `enrich` job does three things automatically, before the label check even runs:
 
-- **Inherits `component:`/`priority:`/`type:`** from any issue the PR closes (`Closes #N`, `Fixes #N`, `Resolves #N`, or a full issue URL) — skipping any category the PR already carries, so a deliberate override always wins.
+- **Inherits `component:`/`priority:`/`type:`** from any issue the PR closes (`Closes #N`, `Fixes #N`, `Resolves #N`, with the number also written as `mmogr/gglib#N` or the issue's URL; a URL with no keyword closes nothing) — skipping any category the PR already carries, so a deliberate override always wins.
 - **Auto-applies `component:`** from changed file paths, but only when the touch maps to exactly one component. Backtesting showed this is reliable when unambiguous (~68% match) and wrong most of the time when several components are touched (~63% over-labelled) — so an ambiguous touch gets a comment listing the candidates instead of a guess.
 - **Never auto-applies `size:`.** Backtested against 318 merged PRs: line count predicts this repo's `size:` labels only ~49–55% of the time, because `size:` is an hours/days estimate and effort doesn't track diff volume (a 3000-line lockfile-churn PR can be `xs`; a 90-line dead-CSS removal can be `l`, because the work was figuring out what was safe to delete). Instead, the PR gets a comment with the measured diff size and the historical label distribution for PRs of that size, and a human picks.
 
-In practice: if your PR closes a fully-labelled issue, you'll rarely touch labels on the PR at all — everything but `size:` (or all four, if the issue itself had one) inherits automatically. `Label Check` is the required status check that gates merge; its failure message says exactly which category is missing and why it wasn't auto-filled.
+Two rules apply to a fix:
+
+- **A fix has an issue first.** A PR titled `fix(…):` closes an issue with `Closes #N`, `Fixes #N` or `Resolves #N` (a bare issue URL closes nothing, so it doesn't count), and that issue carries all four categories. Until it does, the assist comment asks for it and `Label Check` fails. The issues are the per-component record of what breaks. A fix with no issue on purpose takes the `no-issue` label instead. A PR exempt from the labels (a bot's, one labelled `automated` or `version-bump`, or one titled `chore(deps):` or `fix(deps):`) is exempt from this too.
+- **A fix PR carries `type: bug`**, inherited from its issue like `component:` and `priority:`. There is no `type: fix` label.
+
+In practice: if your PR closes a fully-labelled issue, you'll rarely touch labels on the PR at all — everything but `size:` inherits automatically. `Label Check`'s failure message says exactly which category is missing and why it wasn't auto-filled, or what a fix's issue still lacks. It does not gate merge yet: `main`'s ruleset, ggRules (id 11292806), requires only `CI Success` today, and adding `Label Check` to it is a one-line edit of that ruleset.
 
 `scripts/backtest_label_heuristics.sh` reproduces the accuracy numbers above against current PR history, if the taxonomy or crate layout changes enough to warrant re-checking them.
 
