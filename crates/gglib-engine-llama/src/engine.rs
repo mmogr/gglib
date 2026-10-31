@@ -42,6 +42,8 @@ pub(crate) struct Resident {
     /// Which load this is: a generation rendered for one load is not run
     /// on the next.
     pub(crate) id: u64,
+    /// The model's id in the catalogue.
+    pub(crate) model_id: u32,
     /// The name the model is served under.
     pub(crate) name: String,
     /// Where its GGUF is.
@@ -96,8 +98,8 @@ impl Engine {
         })
     }
 
-    /// Load the model at `path`, served as `name`, in place of any model
-    /// held: the generation in flight is aborted and waited for, and the
+    /// Load model `id`, the one at `path`, served as `name`, in place of any
+    /// model held: the generation in flight is aborted and waited for, and the
     /// model held is freed before the new one is read.
     ///
     /// Raising `abort` stops the load at the decoder's next report of its
@@ -108,16 +110,18 @@ impl Engine {
     /// was left holding.
     pub fn load(
         &self,
+        id: u32,
         name: &str,
         path: &Path,
         params: &LoadParams,
         abort: &Abort,
     ) -> Result<Loaded, DecoderError> {
-        let _panicked = self.states.failed_on_panic(name);
+        let _panicked = self.states.failed_on_panic(id, name);
         let failed = |e: DecoderError| {
             self.states.set(match e {
                 DecoderError::LoadAborted => EngineState::Idle,
                 _ => EngineState::Failed {
+                    id,
                     model: name.to_owned(),
                     reason: e.to_string(),
                 },
@@ -125,10 +129,10 @@ impl Engine {
             e
         };
         let mut decoder = self.free();
-        self.states.loading(name, 0.0);
+        self.states.loading(id, name, 0.0);
         let loaded = decoder
             .load(path, params, abort, &mut |read| {
-                self.states.loading(name, read);
+                self.states.loading(id, name, read);
             })
             .map_err(&failed)?;
         let template = match ChatTemplate::new(&loaded.chat_template, loaded.vocab.clone()) {
@@ -140,12 +144,14 @@ impl Engine {
         };
         *write(&self.resident) = Some(Arc::new(Resident {
             id: self.loads.fetch_add(1, Ordering::Relaxed),
+            model_id: id,
             name: name.to_owned(),
             path: path.to_owned(),
             loaded: loaded.clone(),
             template,
         }));
         self.states.set(EngineState::Ready {
+            id,
             model: name.to_owned(),
             n_ctx: loaded.n_ctx,
         });
@@ -169,6 +175,7 @@ impl Engine {
     fn free(&self) -> MutexGuard<'_, Box<dyn Decoder>> {
         if let Some(held) = self.evict() {
             self.states.set(EngineState::Unloading {
+                id: held.model_id,
                 model: held.name.clone(),
             });
         }
@@ -178,6 +185,7 @@ impl Engine {
         let late = write(&self.resident).take();
         if let Some(held) = late {
             self.states.set(EngineState::Unloading {
+                id: held.model_id,
                 model: held.name.clone(),
             });
         }
@@ -255,9 +263,9 @@ impl Engine {
             held
         };
         let n_ctx = held.loaded.n_ctx;
-        self.states.generating(&held.name);
+        self.states.generating(held.model_id);
         let result = generate(&mut **decoder, n_ctx, prompt, sampling, abort, on);
-        self.states.generated(&held.name, n_ctx);
+        self.states.generated(held.model_id, n_ctx);
         drop(decoder);
         *lock(&self.current) = None;
         result

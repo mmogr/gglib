@@ -36,6 +36,46 @@ fn model_info_handles_missing_arch_and_quant() {
     );
 }
 
+/// Two quantizations of one model share its name: each entry says its own,
+/// the one its description names, and an entry with none leaves the key out.
+#[test]
+fn model_info_carries_the_quantization_its_description_names() {
+    let quantized = |id, quantization: Option<&str>| ModelSummary {
+        quantization: quantization.map(str::to_owned),
+        ..ModelSummary::bare(id, "qwen3")
+    };
+    let summaries = vec![
+        quantized(1, Some("Q4_K_M")),
+        quantized(2, Some("Q8_0")),
+        quantized(3, None),
+    ];
+    let resp = ModelsResponse::from_summaries(summaries, Some(DEFAULT_CONTEXT_SIZE), true);
+
+    let listed: Vec<(&str, i64, Option<&str>)> = resp
+        .data
+        .iter()
+        .map(|m| (m.id.as_str(), m.gglib_id, m.quantization.as_deref()))
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            ("qwen3", 1, Some("Q4_K_M")),
+            ("qwen3", 2, Some("Q8_0")),
+            ("qwen3", 3, None)
+        ]
+    );
+    assert!(
+        resp.data[1]
+            .description
+            .as_deref()
+            .unwrap()
+            .contains("Q8_0")
+    );
+    let json = serde_json::to_value(&resp).unwrap();
+    assert_eq!(json["data"][1]["quantization"], "Q8_0");
+    assert!(json["data"][2].get("quantization").is_none(), "{json}");
+}
+
 #[test]
 fn model_info_maps_context_length_to_context_window() {
     let summary = ModelSummary {

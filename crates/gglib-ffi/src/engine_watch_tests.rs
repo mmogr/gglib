@@ -11,6 +11,7 @@ use crate::test_library::wait;
 
 fn ready(n_ctx: u64) -> EngineState {
     EngineState::Ready {
+        id: 3,
         model: "small".to_owned(),
         n_ctx,
     }
@@ -23,16 +24,19 @@ fn each_of_the_runtimes_states_is_one_an_app_shows() {
         (engine::EngineState::Idle, EngineState::Idle),
         (
             engine::EngineState::Loading {
+                id: 3,
                 model: model(),
                 fraction: 0.5,
             },
             EngineState::Loading {
+                id: 3,
                 model: model(),
                 fraction: 0.5,
             },
         ),
         (
             engine::EngineState::Ready {
+                id: 3,
                 model: model(),
                 n_ctx: 8192,
             },
@@ -41,6 +45,7 @@ fn each_of_the_runtimes_states_is_one_an_app_shows() {
         // A reply being written: the model is served at the same context.
         (
             engine::EngineState::Generating {
+                id: 3,
                 model: model(),
                 n_ctx: 8192,
             },
@@ -48,15 +53,20 @@ fn each_of_the_runtimes_states_is_one_an_app_shows() {
         ),
         // A model being freed is no longer served.
         (
-            engine::EngineState::Unloading { model: model() },
+            engine::EngineState::Unloading {
+                id: 3,
+                model: model(),
+            },
             EngineState::Idle,
         ),
         (
             engine::EngineState::Failed {
+                id: 3,
                 model: model(),
                 reason: "no".to_owned(),
             },
             EngineState::Failed {
+                id: 3,
                 model: model(),
                 reason: "no".to_owned(),
             },
@@ -78,6 +88,7 @@ fn answer_soon(watch: &Arc<EngineWatch>) -> Result<Option<EngineState>, Elapsed>
 #[test]
 fn a_watch_answers_the_state_now_then_each_change_an_app_can_see() {
     let (tx, rx) = watch::channel(engine::EngineState::Ready {
+        id: 3,
         model: "small".to_owned(),
         n_ctx: 4096,
     });
@@ -87,17 +98,20 @@ fn a_watch_answers_the_state_now_then_each_change_an_app_can_see() {
 
     // A reply starts and ends: nothing an app shows has changed.
     tx.send_replace(engine::EngineState::Generating {
+        id: 3,
         model: "small".to_owned(),
         n_ctx: 4096,
     });
     assert!(answer_soon(&watch).is_err());
     tx.send_replace(engine::EngineState::Ready {
+        id: 3,
         model: "small".to_owned(),
         n_ctx: 4096,
     });
     assert!(answer_soon(&watch).is_err());
 
     tx.send_replace(engine::EngineState::Unloading {
+        id: 3,
         model: "small".to_owned(),
     });
     assert_eq!(answer_soon(&watch), Ok(Some(EngineState::Idle)));

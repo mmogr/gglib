@@ -6,7 +6,8 @@ use tokio::sync::watch;
 
 /// What the in-process engine is doing, as a phone shows it.
 ///
-/// `model` is the name the model is served under. Its only way out of
+/// `id` is the model's id in the catalogue, and `model` the name it is
+/// served under, which two models may share. Its only way out of
 /// [`EngineState::Stopped`] is a new engine.
 #[derive(Debug, Clone, PartialEq)]
 pub enum EngineState {
@@ -14,6 +15,8 @@ pub enum EngineState {
     Idle,
     /// A model is being loaded.
     Loading {
+        /// The id of the model being loaded.
+        id: u32,
         /// The model being loaded.
         model: String,
         /// How much of it has been read, from 0 to 1, as the decoder
@@ -22,6 +25,8 @@ pub enum EngineState {
     },
     /// A model is held and no reply is being generated.
     Ready {
+        /// The id of the model held.
+        id: u32,
         /// The model held.
         model: String,
         /// The context it was loaded with, in tokens.
@@ -29,6 +34,8 @@ pub enum EngineState {
     },
     /// A model is generating a reply.
     Generating {
+        /// The id of the model generating.
+        id: u32,
         /// The model generating.
         model: String,
         /// The context it was loaded with, in tokens, as its `Ready` said.
@@ -37,11 +44,15 @@ pub enum EngineState {
     /// A model is being freed: the reply in flight is ending, then its
     /// weights and context are released.
     Unloading {
+        /// The id of the model being freed.
+        id: u32,
         /// The model being freed.
         model: String,
     },
     /// A model failed to load. The next admission of a model tries again.
     Failed {
+        /// The id of the model that failed.
+        id: u32,
         /// The model that failed.
         model: String,
         /// What the decoder said, or that the load panicked.
@@ -73,6 +84,7 @@ pub(crate) struct States {
 #[derive(Debug)]
 pub(crate) struct FailedOnPanic<'a> {
     states: &'a States,
+    id: u32,
     model: &'a str,
 }
 
@@ -80,6 +92,7 @@ impl Drop for FailedOnPanic<'_> {
     fn drop(&mut self) {
         if std::thread::panicking() {
             self.states.set(EngineState::Failed {
+                id: self.id,
                 model: self.model.to_owned(),
                 reason: "the load panicked".to_owned(),
             });
@@ -99,11 +112,12 @@ impl States {
         }
     }
 
-    /// A guard, held for the whole of a load of `model`, that moves to
-    /// `Failed` if the load panics.
-    pub(crate) fn failed_on_panic<'a>(&'a self, model: &'a str) -> FailedOnPanic<'a> {
+    /// A guard, held for the whole of a load of model `id`, served as
+    /// `model`, that moves to `Failed` if the load panics.
+    pub(crate) fn failed_on_panic<'a>(&'a self, id: u32, model: &'a str) -> FailedOnPanic<'a> {
         FailedOnPanic {
             states: self,
+            id,
             model,
         }
     }
@@ -129,22 +143,25 @@ impl States {
         });
     }
 
-    /// `model` has read `fraction` of itself: `Loading` with it, sent at the
-    /// load's first report and at each whole percent past the one shown.
-    pub(crate) fn loading(&self, model: &str, fraction: f32) {
+    /// Model `id`, served as `model`, has read `fraction` of itself:
+    /// `Loading` with it, sent at the load's first report and at each whole
+    /// percent past the one shown.
+    pub(crate) fn loading(&self, id: u32, model: &str, fraction: f32) {
         let fraction = fraction.clamp(0.0, 1.0);
         self.modify(|state| {
             let shown = match state {
                 EngineState::Loading {
-                    model: loading,
+                    id: loading,
                     fraction: shown,
-                } if loading == model => Some(whole_percent(*shown)),
+                    ..
+                } if *loading == id => Some(whole_percent(*shown)),
                 _ => None,
             };
             if shown.is_some_and(|shown| whole_percent(fraction) <= shown) {
                 return false;
             }
             *state = EngineState::Loading {
+                id,
                 model: model.to_owned(),
                 fraction,
             };
@@ -152,14 +169,19 @@ impl States {
         });
     }
 
-    /// `model` has started a reply: `Ready` becomes `Generating`, with the
-    /// same context. Any other state is left alone, since the model is on
-    /// its way out.
-    pub(crate) fn generating(&self, model: &str) {
+    /// Model `id` has started a reply: `Ready` becomes `Generating`, with
+    /// the same context. Any other state is left alone, since the model is
+    /// on its way out.
+    pub(crate) fn generating(&self, id: u32) {
         self.modify(|state| match state {
-            EngineState::Ready { model: held, n_ctx } if held == model => {
+            EngineState::Ready {
+                id: held,
+                model,
+                n_ctx,
+            } if *held == id => {
                 *state = EngineState::Generating {
-                    model: model.to_owned(),
+                    id,
+                    model: model.clone(),
                     n_ctx: *n_ctx,
                 };
                 true
@@ -168,12 +190,15 @@ impl States {
         });
     }
 
-    /// `model`'s reply has ended: `Generating` becomes `Ready` again.
-    pub(crate) fn generated(&self, model: &str, n_ctx: u32) {
+    /// Model `id`'s reply has ended: `Generating` becomes `Ready` again.
+    pub(crate) fn generated(&self, id: u32, n_ctx: u32) {
         self.modify(|state| match state {
-            EngineState::Generating { model: held, .. } if held == model => {
+            EngineState::Generating {
+                id: held, model, ..
+            } if *held == id => {
                 *state = EngineState::Ready {
-                    model: model.to_owned(),
+                    id,
+                    model: model.clone(),
                     n_ctx,
                 };
                 true

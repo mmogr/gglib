@@ -23,8 +23,8 @@ use crate::models::ModelInfo;
 /// Variants inherit the base model's `context_window`: a profile changes
 /// sampling only, never how much context the model was launched with, so
 /// advertising anything else would mislead clients that budget against it.
-/// For the same reason a variant carries its base's `gglib_id`: it is the same
-/// model, and names its profile in `profile`.
+/// For the same reason a variant carries its base's `gglib_id` and
+/// `quantization`: it is the same model, and names its profile in `profile`.
 ///
 /// `models` must be the base catalog entries only. Passing entries that already
 /// include variants would compound them into `{model}:{a}:{b}`.
@@ -45,6 +45,7 @@ pub(crate) fn variant_entries(
                 id: format!("{}:{}", model.id, profile.name),
                 gglib_id: model.gglib_id,
                 profile: Some(profile.name.clone()),
+                quantization: model.quantization.clone(),
                 object: "model".to_owned(),
                 created: model.created,
                 owned_by: "gglib".to_owned(),
@@ -112,6 +113,7 @@ mod tests {
             id: id.to_owned(),
             gglib_id: 7,
             profile: None,
+            quantization: Some("Q4_K_M".to_owned()),
             object: "model".to_owned(),
             created: 42,
             owned_by: "gglib".to_owned(),
@@ -185,12 +187,13 @@ mod tests {
         assert_eq!(entries[0].capabilities, capabilities);
     }
 
-    /// A variant is its base model under a profile: the same catalogue id,
-    /// and the profile named.
+    /// A variant is its base model under a profile: the same catalogue id
+    /// and quantization, and the profile named.
     #[test]
     fn variants_share_the_base_id_and_name_their_profile() {
         let entries = variant_entries(&[model_info("qwen", None)], &[listed("chat")]);
         assert_eq!(entries[0].gglib_id, 7);
+        assert_eq!(entries[0].quantization.as_deref(), Some("Q4_K_M"));
         assert_eq!(entries[0].profile.as_deref(), Some("chat"));
     }
 

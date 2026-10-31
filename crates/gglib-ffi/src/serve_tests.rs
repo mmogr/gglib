@@ -1,8 +1,9 @@
 //! A served engine over a scripted decoder, driven as the app drives one:
 //! serving and shutting down, again and again; the watch; the bearer; a
 //! streamed reply through the proxy, carrying the context the engine loaded;
-//! a reading no budget can be made from; serving again, over a server held
-//! and over one let go of mid-load; a server let go of.
+//! a model asked for by id, beside one of the same name; a reading no budget
+//! can be made from; serving again, over a server held and over one let go
+//! of mid-load; a server let go of.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -40,7 +41,14 @@ fn scripted() -> ScriptedDecoder {
 /// shape its fit reads.
 fn library_with_small(root: &TempDir) -> Arc<Library> {
     let library = library_over(TestHub::default(), root);
-    let weights = root.path().join("models").join("small.gguf");
+    add_small(&library, root, "small.gguf");
+    library
+}
+
+/// A model named `small` added to `library`, its weights `file` in `root`'s
+/// models folder. Answers its id.
+fn add_small(library: &Library, root: &TempDir, file: &str) -> i64 {
+    let weights = root.path().join("models").join(file);
     std::fs::File::create(&weights)
         .and_then(|file| file.set_len(64 * MIB))
         .expect("the weights are written");
@@ -57,8 +65,9 @@ fn library_with_small(root: &TempDir) -> Arc<Library> {
         ]
         .map(|(k, v)| (k.to_owned(), v.to_owned())),
     );
-    wait(library.models().insert(&small)).expect("the model is added");
-    library
+    wait(library.models().insert(&small))
+        .expect("the model is added")
+        .id
 }
 
 fn serve(library: &Library, reading: DeviceReading) -> Arc<Server> {
@@ -89,14 +98,14 @@ fn models_status(base_url: &str, key: &str) -> Option<u16> {
     })
 }
 
-/// A streamed chat with `small`, asking for progress as the app asks, with
+/// A streamed chat with `model`, asking for progress as the app asks, with
 /// `key` as its bearer when there is one: the status and the body.
-fn chat(server: &Server, key: Option<&str>) -> (u16, String) {
+fn chat(server: &Server, model: &str, key: Option<&str>) -> (u16, String) {
     wait(async {
         let mut request = client()
             .post(format!("{}/chat/completions", server.base_url()))
             .json(&json!({
-                "model": "small",
+                "model": model,
                 "stream": true,
                 "return_progress": true,
                 "messages": [{"role": "user", "content": "Hello?"}],
@@ -182,8 +191,8 @@ fn a_chat_without_the_serves_key_is_401_and_loads_nothing() {
     let watch = server.status();
     assert_eq!(next(&watch), Some(EngineState::Idle));
 
-    let (missing, _) = chat(&server, None);
-    let (wrong, _) = chat(&server, Some("another-key"));
+    let (missing, _) = chat(&server, "small", None);
+    let (wrong, _) = chat(&server, "small", Some("another-key"));
 
     assert_eq!(missing, 401);
     assert_eq!(wrong, 401);
@@ -201,7 +210,7 @@ fn a_streamed_reply_reports_the_context_the_engine_loaded_its_model_at() {
     let server = serve(&library, TIGHT);
     let watch = server.status();
 
-    let (status, body) = chat(&server, Some(&server.api_key()));
+    let (status, body) = chat(&server, "small", Some(&server.api_key()));
 
     assert_eq!(status, 200, "{body}");
     assert!(body.trim_end().ends_with("data: [DONE]"), "{body}");
@@ -225,13 +234,43 @@ fn a_streamed_reply_reports_the_context_the_engine_loaded_its_model_at() {
     while matches!(shown, Some(EngineState::Idle | EngineState::Loading { .. })) {
         shown = next(&watch);
     }
+    let installed = wait(Arc::clone(&library).installed()).expect("the library lists");
     assert_eq!(
         shown,
         Some(EngineState::Ready {
+            id: installed[0].id,
             model: "small".to_owned(),
             n_ctx: 16_384
         }),
         "the watch's context is the one the reply reported"
+    );
+    shut_down(&server);
+}
+
+/// Two quantizations of one model share its name. The one a chat names by
+/// id is the one served, and the watch says which by that id.
+#[test]
+fn a_model_asked_for_by_id_is_watched_by_that_id_beside_a_namesake() {
+    let root = TempDir::new().unwrap();
+    let library = library_with_small(&root);
+    let namesake = add_small(&library, &root, "small-Q8_0.gguf");
+    let server = serve(&library, TIGHT);
+    let watch = server.status();
+
+    let (status, body) = chat(&server, &namesake.to_string(), Some(&server.api_key()));
+
+    assert_eq!(status, 200, "{body}");
+    let mut shown = next(&watch);
+    while matches!(shown, Some(EngineState::Idle | EngineState::Loading { .. })) {
+        shown = next(&watch);
+    }
+    assert_eq!(
+        shown,
+        Some(EngineState::Ready {
+            id: namesake,
+            model: "small".to_owned(),
+            n_ctx: 16_384
+        })
     );
     shut_down(&server);
 }

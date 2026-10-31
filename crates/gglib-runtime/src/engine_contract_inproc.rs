@@ -32,6 +32,8 @@ use super::launch::{CONTEXT, Inputs as ServerInputs, Launch, STORIES, Server};
 use super::project::{Engine, Recording, upstream_dir};
 use super::readings::{RENDERS, TEMPLATES};
 
+/// The catalogue id each model is loaded as.
+const ID: u32 = 1;
 /// The name the shim serves each model under.
 const NAME: &str = "contract";
 
@@ -157,7 +159,7 @@ impl Inputs {
         };
         let path = self.models.join(launch.model);
         let loading = Arc::clone(&engine);
-        tokio::task::spawn_blocking(move || loading.load(NAME, &path, &params, &Abort::new()))
+        tokio::task::spawn_blocking(move || loading.load(ID, NAME, &path, &params, &Abort::new()))
             .await
             .expect("the load ran to its end")
             .unwrap_or_else(|e| panic!("{}: {e}", launch.model));

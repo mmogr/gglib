@@ -39,6 +39,7 @@ async fn a_model_is_loaded_at_the_rung_its_budget_fits_and_served_by_the_shim() 
     assert_eq!(
         runtime.state(),
         EngineState::Ready {
+            id: 7,
             model: "small".to_owned(),
             n_ctx: 8192
         }
@@ -143,9 +144,45 @@ async fn a_second_model_frees_the_first_before_it_loads() {
     assert_eq!(
         runtime.state(),
         EngineState::Ready {
+            id: 2,
             model: "second".to_owned(),
             n_ctx: 4096
         }
+    );
+}
+
+/// Two quantizations of one model share its name. Asked for by id, each is
+/// the one loaded, and its states say which by that id.
+#[tokio::test]
+async fn a_model_asked_for_by_id_is_named_by_that_id_beside_a_namesake() {
+    let shelf = Shelf::new();
+    let q4 = shelf.model(4, "twin", GIB);
+    let mut q8 = shelf.model(8, "twin", GIB);
+    q8.file_path = shelf.file("twin-Q8_0.gguf", GIB);
+    let (runtime, _) = runtime(hello(), vec![q4, q8]).await;
+
+    for id in [8, 4] {
+        let admitted = runtime
+            .admit(&id.to_string(), None, None, LaunchOverrides::default())
+            .await
+            .expect("the model is admitted");
+        assert_eq!(admitted.target.model_id, id);
+        assert_eq!(
+            runtime.state(),
+            EngineState::Ready {
+                id,
+                model: "twin".to_owned(),
+                n_ctx: 8192
+            }
+        );
+    }
+    let sent = runtime.inner.engine.states().sent();
+    assert!(
+        sent.contains(&EngineState::Unloading {
+            id: 8,
+            model: "twin".to_owned()
+        }),
+        "the namesake loaded first was freed by its id: {sent:?}"
     );
 }
 
@@ -210,10 +247,10 @@ async fn admissions_of_two_models_at_once_take_turns() {
     assert_eq!(record.unloads, 1);
     let current = runtime.current_model().await.expect("a model is running");
     let held = match runtime.state() {
-        EngineState::Ready { model, .. } => model,
+        EngineState::Ready { id, .. } => id,
         other => panic!("one model ready, not {other:?}"),
     };
-    assert_eq!(current.model_name, held, "the runtime and the engine agree");
+    assert_eq!(current.model_id, held, "the runtime and the engine agree");
 }
 
 #[tokio::test]

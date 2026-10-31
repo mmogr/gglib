@@ -1947,9 +1947,20 @@ public struct InstalledModel: Equatable, Hashable {
      */
     public var id: Int64
     /**
-     * Its name, which a served engine's model list calls it by.
+     * Its name, which a served engine's model list calls it by. Two
+     * quantizations of one model share it; the id tells them apart.
      */
     public var name: String
+    /**
+     * Its quantization (`Q4_K_M`, `Q8_0` and so on), when the library
+     * recorded one.
+     */
+    public var quantization: String?
+    /**
+     * The Hugging Face repository it was downloaded from
+     * (`unsloth/Qwen3-8B-GGUF`), when it came from one.
+     */
+    public var repo: String?
     /**
      * The bytes its files take on the device: the weights, and a projector
      * or companions it has.
@@ -1976,8 +1987,17 @@ public struct InstalledModel: Equatable, Hashable {
          * Its id in the library, which [`crate::Library::remove`] takes.
          */id: Int64, 
         /**
-         * Its name, which a served engine's model list calls it by.
+         * Its name, which a served engine's model list calls it by. Two
+         * quantizations of one model share it; the id tells them apart.
          */name: String, 
+        /**
+         * Its quantization (`Q4_K_M`, `Q8_0` and so on), when the library
+         * recorded one.
+         */quantization: String?, 
+        /**
+         * The Hugging Face repository it was downloaded from
+         * (`unsloth/Qwen3-8B-GGUF`), when it came from one.
+         */repo: String?, 
         /**
          * The bytes its files take on the device: the weights, and a projector
          * or companions it has.
@@ -1994,6 +2014,8 @@ public struct InstalledModel: Equatable, Hashable {
          */verdict: FitVerdict) {
         self.id = id
         self.name = name
+        self.quantization = quantization
+        self.repo = repo
         self.bytes = bytes
         self.trainedCtx = trainedCtx
         self.capabilities = capabilities
@@ -2018,6 +2040,8 @@ public struct FfiConverterTypeInstalledModel: FfiConverterRustBuffer {
             try InstalledModel(
                 id: FfiConverterInt64.read(from: &buf), 
                 name: FfiConverterString.read(from: &buf), 
+                quantization: FfiConverterOptionString.read(from: &buf), 
+                repo: FfiConverterOptionString.read(from: &buf), 
                 bytes: FfiConverterUInt64.read(from: &buf), 
                 trainedCtx: FfiConverterOptionUInt64.read(from: &buf), 
                 capabilities: FfiConverterSequenceString.read(from: &buf), 
@@ -2028,6 +2052,8 @@ public struct FfiConverterTypeInstalledModel: FfiConverterRustBuffer {
     public static func write(_ value: InstalledModel, into buf: inout [UInt8]) {
         FfiConverterInt64.write(value.id, into: &buf)
         FfiConverterString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.quantization, into: &buf)
+        FfiConverterOptionString.write(value.repo, into: &buf)
         FfiConverterUInt64.write(value.bytes, into: &buf)
         FfiConverterOptionUInt64.write(value.trainedCtx, into: &buf)
         FfiConverterSequenceString.write(value.capabilities, into: &buf)
@@ -2639,6 +2665,10 @@ public enum EngineState: Equatable, Hashable {
      */
     case loading(
         /**
+         * Its id in the library, which tells it from another model of the
+         * same name.
+         */id: Int64, 
+        /**
          * The name the model is served under.
          */model: String, 
         /**
@@ -2649,6 +2679,10 @@ public enum EngineState: Equatable, Hashable {
      * `model` is loaded and served, generating a reply or not.
      */
     case ready(
+        /**
+         * Its id in the library, which tells it from another model of the
+         * same name.
+         */id: Int64, 
         /**
          * The name the model is served under.
          */model: String, 
@@ -2662,6 +2696,10 @@ public enum EngineState: Equatable, Hashable {
      * again.
      */
     case failed(
+        /**
+         * Its id in the library, which tells it from another model of the
+         * same name.
+         */id: Int64, 
         /**
          * The name the model is served under.
          */model: String, 
@@ -2697,13 +2735,13 @@ public struct FfiConverterTypeEngineState: FfiConverterRustBuffer {
         
         case 1: return .idle
         
-        case 2: return .loading(model: try FfiConverterString.read(from: &buf), fraction: try FfiConverterDouble.read(from: &buf)
+        case 2: return .loading(id: try FfiConverterInt64.read(from: &buf), model: try FfiConverterString.read(from: &buf), fraction: try FfiConverterDouble.read(from: &buf)
         )
         
-        case 3: return .ready(model: try FfiConverterString.read(from: &buf), nCtx: try FfiConverterUInt64.read(from: &buf)
+        case 3: return .ready(id: try FfiConverterInt64.read(from: &buf), model: try FfiConverterString.read(from: &buf), nCtx: try FfiConverterUInt64.read(from: &buf)
         )
         
-        case 4: return .failed(model: try FfiConverterString.read(from: &buf), reason: try FfiConverterString.read(from: &buf)
+        case 4: return .failed(id: try FfiConverterInt64.read(from: &buf), model: try FfiConverterString.read(from: &buf), reason: try FfiConverterString.read(from: &buf)
         )
         
         case 5: return .stopped
@@ -2720,20 +2758,23 @@ public struct FfiConverterTypeEngineState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
         
         
-        case let .loading(model,fraction):
+        case let .loading(id,model,fraction):
             writeInt(&buf, Int32(2))
+            FfiConverterInt64.write(id, into: &buf)
             FfiConverterString.write(model, into: &buf)
             FfiConverterDouble.write(fraction, into: &buf)
             
         
-        case let .ready(model,nCtx):
+        case let .ready(id,model,nCtx):
             writeInt(&buf, Int32(3))
+            FfiConverterInt64.write(id, into: &buf)
             FfiConverterString.write(model, into: &buf)
             FfiConverterUInt64.write(nCtx, into: &buf)
             
         
-        case let .failed(model,reason):
+        case let .failed(id,model,reason):
             writeInt(&buf, Int32(4))
+            FfiConverterInt64.write(id, into: &buf)
             FfiConverterString.write(model, into: &buf)
             FfiConverterString.write(reason, into: &buf)
             

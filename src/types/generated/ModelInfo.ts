@@ -21,7 +21,14 @@ gglib_id: number,
  * The inference profile a `{name}:{profile}` variant selects; `None` on
  * a base entry.
  */
-profile?: string, object: string, created: number, owned_by: string, description?: string, 
+profile?: string, 
+/**
+ * The model's quantization (`Q4_K_M`, `Q8_0` and so on), the one its
+ * `description` names; `None` when the catalogue recorded none. Two
+ * quantizations of one model share its name, and this and `gglib_id`
+ * tell them apart. A profile variant carries its base model's.
+ */
+quantization?: string, object: string, created: number, owned_by: string, description?: string, 
 /**
  * Model's context window size, in tokens (llama.cpp's `/v1/models`
  * field-naming convention). `None` when unknown, and for a model that

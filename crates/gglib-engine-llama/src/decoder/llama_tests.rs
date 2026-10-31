@@ -318,7 +318,7 @@ fn the_shim_streams_a_real_reply_whose_usage_counts_the_prompt_and_the_reply() {
     let _turn = turn();
     let engine = Engine::new(LlamaDecoder::new());
     engine
-        .load("stories", &path, &f16(512), &Abort::new())
+        .load(1, "stories", &path, &f16(512), &Abort::new())
         .expect("the model loads");
     let body = json!({
         "model": "stories",

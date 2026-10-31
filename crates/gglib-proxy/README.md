@@ -258,6 +258,10 @@ gglib adds:
   reused. A variant carries its base model's. It means something only on
   this machine; `id` is what a client sends.
 - `profile` — on a variant, the profile it selects; absent on a base entry.
+- `quantization` — the model's quantization (`Q4_K_M`), the one its
+  `description` names; absent when the catalog recorded none. Two
+  quantizations of one model share its name, and with `gglib_id` this tells
+  them apart. A variant carries its base model's.
 - `capabilities` — what the model does beyond text chat, in this order:
   `"embeddings"` (tagged `embedding`), `"vision"` (linked to a projector),
   `"image_generation"` (its weights name an image family: a model that draws,
@@ -538,8 +542,8 @@ keys — uses the model the base resolves to, so a profile never launches a seco
 llama-server or invalidates the KV cache.
 
 Profiles with `list_in_models` set are advertised in `/v1/models` as
-`{model}:{profile}`, inheriting the base model's `context_window` and
-`gglib_id`, with `profile` naming the profile.  Listing is
+`{model}:{profile}`, inheriting the base model's `context_window`,
+`gglib_id` and `quantization`, with `profile` naming the profile.  Listing is
 opt-in per profile because the full cross product would swamp a client's model
 picker; unlisted profiles remain usable by name.
 
