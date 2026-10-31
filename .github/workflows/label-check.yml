@@ -88,8 +88,9 @@ jobs:
 
             // --- A fix closes a triaged issue -----------------------------------
             // Keep in step with the same block in the label-check job below.
-            // Only a closing keyword counts: a bare issue URL in the body closes nothing.
-            const LINK_RE = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*#(\d+)\b/gi;
+            // Only a closing keyword counts, before `#N`, `owner/repo#N` or the
+            // issue's URL: a bare URL in the body closes nothing.
+            const LINK_RE = new RegExp(String.raw`\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*(?:https://github\.com/${owner}/${repo}/issues/|${owner}/${repo}#|#)(\d+)\b`, 'gi');
             async function fixIssueProblem(number, labelNames) {
               const FIX_RE = /^fix(\([^)]*\))?!?:/;
               const TRIAGE_PREFIXES = ['component:', 'priority:', 'size:', 'type:'];
@@ -123,8 +124,8 @@ jobs:
                 }
               }
               if (!problems.length) return null;
-              return `**A fix's issue is triaged first.** ${problems.join('; ')}; label it,`
-                + ` then edit this PR or re-run Label Check.`;
+              return `**A fix's issue is triaged first.** ${problems.join('; ')}.`
+                + ` Link the right issue and give it all four labels, then edit this PR or re-run Label Check.`;
             }
             const fixAsk = await fixIssueProblem(issue_number, names);
 
@@ -399,8 +400,9 @@ jobs:
 
             // --- A fix closes a triaged issue -----------------------------------
             // Keep in step with the same block in the enrich job above.
-            // Only a closing keyword counts: a bare issue URL in the body closes nothing.
-            const LINK_RE = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*#(\d+)\b/gi;
+            // Only a closing keyword counts, before `#N`, `owner/repo#N` or the
+            // issue's URL: a bare URL in the body closes nothing.
+            const LINK_RE = new RegExp(String.raw`\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*(?:https://github\.com/${owner}/${repo}/issues/|${owner}/${repo}#|#)(\d+)\b`, 'gi');
             async function fixIssueProblem(number, labelNames) {
               const FIX_RE = /^fix(\([^)]*\))?!?:/;
               const TRIAGE_PREFIXES = ['component:', 'priority:', 'size:', 'type:'];
@@ -434,8 +436,8 @@ jobs:
                 }
               }
               if (!problems.length) return null;
-              return `**A fix's issue is triaged first.** ${problems.join('; ')}; label it,`
-                + ` then edit this PR or re-run Label Check.`;
+              return `**A fix's issue is triaged first.** ${problems.join('; ')}.`
+                + ` Link the right issue and give it all four labels, then edit this PR or re-run Label Check.`;
             }
 
             const failures = [];

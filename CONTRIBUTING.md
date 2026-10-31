@@ -792,7 +792,7 @@ If an issue is created outside the form — a scripted `gh issue create`, or the
 
 `label-check.yml`'s `enrich` job does three things automatically, before the label check even runs:
 
-- **Inherits `component:`/`priority:`/`type:`** from any issue the PR closes (`Closes #N`, `Fixes #N`, `Resolves #N`, or a full issue URL) — skipping any category the PR already carries, so a deliberate override always wins.
+- **Inherits `component:`/`priority:`/`type:`** from any issue the PR closes (`Closes #N`, `Fixes #N`, `Resolves #N`, with the number also written as `mmogr/gglib#N` or the issue's URL; a URL with no keyword closes nothing) — skipping any category the PR already carries, so a deliberate override always wins.
 - **Auto-applies `component:`** from changed file paths, but only when the touch maps to exactly one component. Backtesting showed this is reliable when unambiguous (~68% match) and wrong most of the time when several components are touched (~63% over-labelled) — so an ambiguous touch gets a comment listing the candidates instead of a guess.
 - **Never auto-applies `size:`.** Backtested against 318 merged PRs: line count predicts this repo's `size:` labels only ~49–55% of the time, because `size:` is an hours/days estimate and effort doesn't track diff volume (a 3000-line lockfile-churn PR can be `xs`; a 90-line dead-CSS removal can be `l`, because the work was figuring out what was safe to delete). Instead, the PR gets a comment with the measured diff size and the historical label distribution for PRs of that size, and a human picks.
 
