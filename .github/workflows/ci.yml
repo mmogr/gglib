@@ -23,7 +23,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-C relocation-model=dynamic-no-pic"
 
 jobs:
   fmt:
@@ -922,12 +921,6 @@ jobs:
   # builds is the one an app built with that Xcode links. Unoptimised, since
   # nothing it answers depends on optimisation; release.yml builds the
   # optimised one it ships.
-  #
-  # RUSTFLAGS is cleared so the framework is built with the flags release.yml
-  # builds it with, which are none. The workflow's relocation-model flag would
-  # change nothing here (aarch64 Apple code is position-independent whatever
-  # it says, and a local build with it links the same dylib), but this job
-  # should not build something the release does not.
   ffi-apple:
     name: Swift Framework (macOS)
     runs-on: macos-26
@@ -937,8 +930,6 @@ jobs:
     # few minutes, and llama.cpp's three builds half an hour more when its
     # cache misses; the ceiling is for a hang, not for a slow runner.
     timeout-minutes: 75
-    env:
-      RUSTFLAGS: ""
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

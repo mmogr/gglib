@@ -10,8 +10,6 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-    env:
-      RUSTFLAGS: "-C relocation-model=dynamic-no-pic"
     # `… | tee` reports tee's exit status, not the test runner's, under
     # GitHub's default `bash -e`. `shell: bash` adds pipefail so a failing
     # suite fails the job here too — see the note in ci.yml's `test` job.
