@@ -66,7 +66,8 @@ rendered reason, and the far machine — passed in by whichever surface chose
 the remote upstream, and the only thing here that knows one was involved — is
 offered the chance to say something better before the reason is used. Today
 that is only `invalid_api_key`, which becomes a sentence naming the machine by
-its ticket fingerprint and pointing at `gglib remote enable` on it.
+the name every remote surface shows it by, saying it is not admitting this
+device's key, and pointing at a fresh `gglib remote invite` on it.
 
 Both halves of that condition are load-bearing. The code alone is not enough:
 gglib's own proxy answers a bad key with the same `invalid_api_key`, and

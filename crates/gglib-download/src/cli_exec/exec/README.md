@@ -42,7 +42,7 @@ without one they fall back to
 `gglib_core::telemetry::console_println`. A queued download supplies one, and
 so does a `model upgrade` that was given a `RowCallback`, as the CLI's is.
 `ensure_fast_helper_ready`, the explicit setup, has none, nor has an upgrade
-given no `RowCallback`, as the daemon's route runs it.
+given no `RowCallback`.
 The environment build runs via
 `.output()`, not `.status()`, so its own stdio is captured rather than
 inherited — an inherited handle would write straight to the terminal, outside

@@ -13,17 +13,22 @@ This module contains the **handler functions** that implement the actual logic f
 **Separation of Concerns**
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                      CLI Flow                               │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  User Input → Parser → Handler → Service → Port → Adapter  │
-│     (clap)   (parser.rs) (this)  (core)   (core)  (infra)  │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                      CLI Flow                                                 │
+├───────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  User Input → Parser → dispatch.rs → Handler ─┬→ Service → Port → Adapter     │
+│               (clap)    (routes)     (this)   │  (core)   (core)  (infra)     │
+│                                               │                               │
+│                                               └→ daemon_client/ → daemon API  │
+│                                                  (HTTP; the daemon owns the   │
+│                                                   runtime)                    │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Handlers** sit between the CLI parser and the service layer:
+**Handlers** sit between the CLI parser and the service layer, or the daemon
+that owns the runtime, which they reach through `daemon_client/`:
 - Extract validated arguments from parser
 - Format inputs for service calls
 - Handle errors and format output
@@ -39,15 +44,15 @@ handlers were grouped.
 
 | Path | Serves |
 |------|--------|
-| `model/` | `gglib model …` — add, list, inspect, explain, remove, capabilities, and `download/` |
+| `model/` | `gglib model …` — add, list, inspect, explain, remove, update, retag, capabilities, verify and repair (`verification.rs`), and `download/` |
 | `inference/` | `serve`, `proxy`, `chat`, and `agent_question` (`gglib q`) |
-| `config/` | `gglib config …` — `settings/`, `paths.rs`, `llama*.rs`, `check_deps/`, `fast_downloads.rs` |
+| `config/` | `gglib config …` — `settings/`, `paths.rs`, `llama*.rs`, `sd.rs`, `engine.rs`, `check_deps/`, `fast_downloads.rs` |
 | `agent_chat/` | The interactive agent REPL behind `gglib chat` |
 | `daemon/` | `gglib daemon run / status / stop` |
 | `up/` | `gglib up` — the one-command setup path |
 | `proxy_dashboard/` | `gglib proxy dashboard` — the live terminal view |
 | `run/` | `gglib run start / list / show / cancel` — replies the daemon owns until they end |
-| `remote/` | `gglib remote enable / disable / status / invite / list / forget / join / disconnect / key` — the tunnel that puts one machine's proxy on another (ADR 0012) |
+| `remote/` | `gglib remote enable / disable / status / invite / list / forget / join / disconnect` — the tunnel that puts one machine's proxy on another (ADR 0012) |
 | `benchmark.rs`, `benchmark_verdicts.rs` | `gglib benchmark …`, including `tune`; the second holds the agentic report's three verdict blocks |
 | `mcp_cli.rs` | `gglib mcp …` |
 | `image.rs` | `gglib image` — draws through the daemon with one live line, saves each PNG |
