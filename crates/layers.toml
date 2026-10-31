@@ -1,0 +1,86 @@
+# The workspace's crates: the layer each one sits in, and whether it has badges.
+#
+# scripts/crate_list.py reads this file. Every list of crates a script or a
+# workflow needs comes from it: the crates coverage.yml measures, the badges
+# badges.yml writes and each crate README's header shows, and the surface and
+# infrastructure crates check_boundaries.sh checks. `make enforce` fails when a
+# workspace member has no row here, or a row names no member.
+#
+# `order` runs from the top layer down. A crate may depend on a crate in its
+# own layer or in any layer below it, never above; only normal and build
+# dependencies count, not dev-dependencies.
+#
+# Each row is keyed by the package name, which for src-tauri is `gglib-app`.
+#   layer     one of `order`
+#   badges    false for a crate with no badges: it is left out of coverage.yml
+#             and gets no badge files or README header. Needs `why`.
+#   coverage  false for a badged crate cargo-llvm-cov cannot build: it keeps
+#             its tests, loc and complexity badges but has no coverage badge.
+#             Needs `why`.
+#   why       the reason for a `false`, in a sentence.
+
+order = ["adapter", "facade", "infrastructure", "application", "core", "utility", "tests"]
+
+[crate.gglib-cli]
+layer = "adapter"
+
+[crate.gglib-axum]
+layer = "adapter"
+
+[crate.gglib-ffi]
+layer = "adapter"
+
+[crate.gglib-app]
+layer = "adapter"
+badges = false
+why = "The desktop app links GTK and WebKit, which the coverage runner does not install."
+
+[crate.gglib-app-services]
+layer = "facade"
+
+[crate.gglib-bootstrap]
+layer = "facade"
+
+[crate.gglib-db]
+layer = "infrastructure"
+
+[crate.gglib-download]
+layer = "infrastructure"
+
+[crate.gglib-engine-llama]
+layer = "infrastructure"
+
+[crate.gglib-gguf]
+layer = "infrastructure"
+
+[crate.gglib-hf]
+layer = "infrastructure"
+
+[crate.gglib-mcp]
+layer = "infrastructure"
+
+[crate.gglib-proxy]
+layer = "infrastructure"
+
+[crate.gglib-runtime]
+layer = "infrastructure"
+
+[crate.gglib-agent]
+layer = "application"
+
+[crate.gglib-core]
+layer = "core"
+
+[crate.gglib-broadcast]
+layer = "utility"
+
+[crate.gglib-build-info]
+layer = "utility"
+
+[crate.gglib-test-http]
+layer = "utility"
+
+[crate.gglib-integration-tests]
+layer = "tests"
+badges = false
+why = "It holds cross-crate tests and no library code, so there is nothing of its own to measure."
