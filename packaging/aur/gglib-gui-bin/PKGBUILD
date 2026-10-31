@@ -16,6 +16,9 @@ pkgdesc='Local model runtime and OpenAI-compatible proxy for llama.cpp (desktop 
 arch=('x86_64')
 url='https://github.com/mmogr/gglib'
 license=('AGPL-3.0-only')
+# The release's binaries as built: stripping them would cut the symbols
+# their panic backtraces name, and split off a -debug package of them.
+options=('!strip')
 depends=("gglib-bin=${pkgver}" 'webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'librsvg' 'alsa-lib' 'hicolor-icon-theme')
 provides=('gglib-gui')
 conflicts=('gglib-gui')

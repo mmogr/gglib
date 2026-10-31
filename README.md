@@ -32,7 +32,7 @@ or per request.
 
 ```bash
 brew install mmogr/tap/gglib        # macOS (Apple silicon) and Linux
-sudo apt install gglib              # Ubuntu 24.04+, Debian 13+ (repository below)
+curl -fsSL https://mmogr.github.io/gglib/install.sh | sh   # Debian, Ubuntu, Arch, Fedora
 gglib up
 ```
 
@@ -232,18 +232,23 @@ brew install mmogr/tap/gglib
 brew install --cask mmogr/tap/gglib-gui   # the desktop app, macOS only
 ```
 
-### apt (Ubuntu 24.04+, Debian 13+)
+### Linux (Debian, Ubuntu, Arch, Fedora)
 
 ```bash
-curl -fsSL https://mmogr.github.io/gglib/apt/gglib-archive-keyring.gpg \
-  | sudo tee /usr/share/keyrings/gglib-archive-keyring.gpg >/dev/null
-echo "deb [signed-by=/usr/share/keyrings/gglib-archive-keyring.gpg] https://mmogr.github.io/gglib/apt stable main" \
-  | sudo tee /etc/apt/sources.list.d/gglib.list
-sudo apt update && sudo apt install gglib   # the desktop app is gg-lib-gui
+curl -fsSL https://mmogr.github.io/gglib/install.sh | sh              # the desktop app, which brings the CLI
+curl -fsSL https://mmogr.github.io/gglib/install.sh | sh -s -- --cli  # the CLI alone (apt and pacman)
 ```
 
-The repository carries stable releases only; release candidates are on the
-[Releases page](https://github.com/mmogr/gglib/releases) as prereleases.
+[`install.sh`](packaging/install.sh) adds gglib's signed repository and key
+for apt, pacman or dnf, then installs from it. From then on `apt upgrade`,
+`pacman -Syu` or `dnf upgrade` keeps gglib up to date with the rest of the
+system. The script is short: read it first, or run its steps by hand.
+
+The repositories carry stable releases for x86_64; release candidates are on
+the [Releases page](https://github.com/mmogr/gglib/releases) as prereleases.
+The apt packages need Ubuntu 24.04+ or Debian 13+. On Arch the packages are
+the AUR's `gglib-bin` and `gglib-gui-bin`, so once they are on the AUR an AUR
+helper updates the same install.
 
 ### Pre-built binaries (macOS, Linux, Windows)
 
@@ -258,9 +263,6 @@ and run `./gglib up`. The binaries are not code-signed yet:
   and Homebrew does it for you.
 - **Windows** SmartScreen stops the desktop app's installer with "Windows
   protected your PC". Choose **More info**, then **Run anyway**.
-- **Arch Linux**: AUR packages will follow once the AUR takes new accounts
-  again. Until then, the Linux binary or the desktop app's AppImage
-  (`chmod +x` it first).
 
 Each release also carries gglib for an iOS or macOS app to link,
 `GglibFFI-<version>.xcframework.zip`, its Swift binding in

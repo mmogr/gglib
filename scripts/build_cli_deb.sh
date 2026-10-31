@@ -6,8 +6,8 @@
 #
 # Writes <out-dir>/gglib-<version>-x86_64-unknown-linux-gnu.deb, named like
 # every other release asset so the checksum and attestation steps take it with
-# no special case. The apt repository (build_apt_repo.sh) cares only about the
-# control fields, never the filename.
+# no special case. The apt repository (build_linux_repos.sh) cares only about
+# the control fields, never the filename.
 #
 # Depends is computed by dpkg-shlibdeps from the libraries the binary actually
 # links, not written by hand, so it cannot drift from the build: on the

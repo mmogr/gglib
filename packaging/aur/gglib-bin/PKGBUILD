@@ -10,6 +10,9 @@ pkgdesc='Local model runtime and OpenAI-compatible proxy for llama.cpp (CLI)'
 arch=('x86_64')
 url='https://github.com/mmogr/gglib'
 license=('AGPL-3.0-only')
+# The release's binaries as built: stripping them would cut the symbols
+# their panic backtraces name, and split off a -debug package of them.
+options=('!strip')
 depends=('glibc' 'gcc-libs' 'alsa-lib')
 provides=('gglib')
 conflicts=('gglib')
