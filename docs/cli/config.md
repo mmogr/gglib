@@ -151,8 +151,8 @@ The image runtime has its own page:
 ## `check-deps`
 
 What a source build needs on this platform, what is missing, and the exact
-install commands. It changes nothing, and exits with an error while a
-required dependency is missing.
+install commands. It installs nothing unless asked, and exits with an error
+while a required dependency is missing.
 
 ## `fast-downloads`
 
@@ -186,9 +186,8 @@ models_source = EnvVar
 
 - `data_root` holds the database, the engines, logs and pids; it is per
   user, `~/Library/Application Support/gglib` on a Mac, and every build of
-  gglib shares it unless `GGLIB_DATA_DIR` names another. The `*_source`
-  lines say which values an environment variable set: this recording ran
-  with `GGLIB_DATA_DIR` and `GGLIB_MODELS_DIR` set.
+  gglib shares it unless `GGLIB_DATA_DIR` names another. This recording
+  ran with `GGLIB_DATA_DIR` and `GGLIB_MODELS_DIR` set.
 - `daemon_port` is the daemon's management port, not the endpoint's.
 
 ## Flags
