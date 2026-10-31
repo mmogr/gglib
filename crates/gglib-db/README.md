@@ -20,7 +20,7 @@ gglib-core (ports)          gglib-db (adapters)           Adapters
 ┌──────────────────┐        ┌──────────────────┐        ┌──────────────────┐
 │ ModelRepository  │◄───────│ SqliteModelRepo  │◄───────│    gglib-cli     │
 │ McpServerRepo    │        │ SqliteMcpRepo    │        │   gglib-axum     │
-│ ConversationRepo │        │ SqliteConvRepo   │        │   gglib-tauri    │
+│ ConversationRepo │        │ SqliteConvRepo   │        │    src-tauri     │
 └──────────────────┘        └──────────────────┘        └──────────────────┘
 ```
 

@@ -2394,7 +2394,6 @@ dependencies = [
  "gglib-build-info",
  "gglib-core",
  "gglib-proxy",
- "gglib-tauri",
  "gtk",
  "ksni",
  "libloading",
@@ -2803,15 +2802,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-stream",
- "tracing",
-]
-
-[[package]]
-name = "gglib-tauri"
-version = "0.29.0-rc.1"
-dependencies = [
- "serde",
- "tauri",
  "tracing",
 ]
 

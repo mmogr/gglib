@@ -148,7 +148,6 @@ jobs:
               [/^crates\/gglib-mcp\//,          'component: mcp'],
               [/^crates\/gglib-sse\//,          'component: sse'],
               [/^crates\/gglib-app-services\//, 'component: gui'],
-              [/^crates\/gglib-tauri\//,        'component: tauri'],
               [/^src-tauri\//,                  'component: tauri'],
               [/^src\//,                        'component: frontend'],
               [/^web_ui\//,                     'component: frontend'],

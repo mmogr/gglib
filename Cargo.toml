@@ -21,7 +21,6 @@ members = [
     "crates/gglib-test-http",
     "crates/gglib-cli",
     "crates/gglib-axum",
-    "crates/gglib-tauri",
     "crates/gglib-ffi",
     "crates/gglib-integration-tests",
     # Tauri desktop app (gglib-app binary)
@@ -166,7 +165,6 @@ gglib-sse = { path = "crates/gglib-sse" }
 gglib-test-http = { path = "crates/gglib-test-http" }
 gglib-axum = { path = "crates/gglib-axum" }
 gglib-app-services = { path = "crates/gglib-app-services" }
-gglib-tauri = { path = "crates/gglib-tauri" }
 gglib-build-info = { path = "crates/gglib-build-info" }
 gglib-agent = { path = "crates/gglib-agent" }
 gglib-bootstrap = { path = "crates/gglib-bootstrap" }

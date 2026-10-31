@@ -126,7 +126,7 @@ while IFS=$'\t' read -r num human; do
           [/^crates\/gglib-proxy\//, 'proxy'], [/^crates\/gglib-db\//, 'db'],
           [/^crates\/gglib-download\//, 'downloads'], [/^crates\/gglib-hf\//, 'hf'],
           [/^crates\/gglib-mcp\//, 'mcp'], [/^crates\/gglib-sse\//, 'sse'],
-          [/^crates\/gglib-app-services\//, 'gui'], [/^crates\/gglib-tauri\//, 'tauri'],
+          [/^crates\/gglib-app-services\//, 'gui'],
           [/^src-tauri\//, 'tauri'], [/^src\//, 'frontend'], [/^web_ui\//, 'frontend'],
           [/^\.github\//, 'ci'], [/^scripts\//, 'ci'],
         ];

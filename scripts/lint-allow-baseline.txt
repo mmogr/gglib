@@ -17,7 +17,6 @@ crates/gglib-sse 0 0
 crates/gglib-test-http 2 0
 crates/gglib-cli 87 12
 crates/gglib-axum 25 8
-crates/gglib-tauri 0 0
 crates/gglib-ffi 0 0
 crates/gglib-integration-tests 2 2
 src-tauri 22 4
