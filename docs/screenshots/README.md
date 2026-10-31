@@ -10,8 +10,11 @@ puppeteer-core, and xterm.js for the terminal GIFs. No browser is
 downloaded: it drives the Chrome at `/Applications/Google Chrome.app` (set
 `CHROME` for another path).
 
-The terminal GIFs (`cli-up.gif`, `cli-opencode.gif`) are recorded by
-`record.py` and drawn by `render.mjs`; see [Terminal GIFs](#terminal-gifs).
+The terminal GIFs (`cli-up.gif`, `cli-opencode.gif`, `cli-model-download.gif`,
+`cli-proxy-dashboard.gif`) are recorded by `record.py` and drawn by
+`render.mjs`; see [Terminal GIFs](#terminal-gifs). The output blocks on the
+[CLI reference](../cli/) pages come from the same recorder, through
+`snippets.py`; see [CLI snippets](#cli-snippets).
 The stills `cli-up.png` and `cli-remote.png` came before these scripts:
 recorded from a pty and rendered with xterm.js by hand. `social-preview.png`
 is the card GitHub shows when the repo is linked, made by hand.
@@ -102,3 +105,45 @@ node render.mjs opencode.cast ../assets/cli-opencode.gif --idle 1 --hold 6 --ren
 
 `--rename` swaps text before it is drawn, so the paths in the picture do not
 name you.
+
+The two GIFs on the CLI reference pages want the same copy with its proxy
+up: `cli-model-download.gif` fetches a small model and shows the queue
+monitor, and `cli-proxy-dashboard.gif` watches the dashboard while a pane
+runs `gglib q`. Remove the downloaded model afterwards so the snippets'
+`model list` stays true.
+
+```bash
+python3 record.py steps/cli-model-download.json dl.cast
+node render.mjs dl.cast ../assets/cli-model-download.gif --idle 1 --hold 4 --rename "$HOME=/Users/mmogr" \
+  --rename "/Users/mmogr/.local/share/gglib-demo=/Users/mmogr/Library/Application Support/gglib"
+python3 record.py steps/cli-proxy-dashboard.json dash.cast
+node render.mjs dash.cast ../assets/cli-proxy-dashboard.gif --idle 1 --hold 4 --rename "$HOME=/Users/mmogr" \
+  --rename "/Users/mmogr/.local/share/gglib-demo=/Users/mmogr/Library/Application Support/gglib"
+```
+
+## CLI snippets
+
+Every ```` ```console ```` block on the [CLI reference](../cli/) pages sits
+between `<!-- snippet: <name> -->` and `<!-- /snippet -->`, and is the
+recording of `steps/cli/<name>.json`: `record.py` runs it against the demo
+copy, `render.mjs --text` writes what the terminal showed to
+`../cli/snippets/<name>.txt`, with wrapped lines joined and the prompt
+waiting at the end left off, and `snippets.py` splices each file into its
+page.
+
+```bash
+PATH=$(cd ../../target/release && pwd):$PATH python3 snippets.py          # every snippet
+PATH=$(cd ../../target/release && pwd):$PATH python3 snippets.py model-list q   # some
+python3 snippets.py --splice   # after editing a page's prose: no recording
+python3 snippets.py --check    # the pages hold what snippets/ holds
+```
+
+The steps files use the demo copy above, with its proxy on 8080, so your own
+proxy is stopped while they record. The ones that ask a model (`q`,
+`q-pipe`, `chat`, `run-start`, `benchmark-compare`, `up-again`) load the
+copy's default model, `Qwen3-4B-Instruct-2507`, and `mcp` adds a filesystem
+server to the copy with `npx`. Put the gglib under test first on `PATH`, as
+above, so `config paths` names it. `--rename` is applied twice: this
+machine's user becomes `mmogr`, and the demo copy's folder becomes the
+folder gglib uses by default on a Mac, so a page shows the paths a reader
+would see.

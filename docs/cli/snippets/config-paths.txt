@@ -1,0 +1,12 @@
+$ gglib config paths
+binary = /Users/mmogr/.local/src/gglib/target/release/gglib
+version = 0.29.0-rc.4 (12c44308c253)
+data_root_source = GGLIB_DATA_DIR
+daemon_port = 9907
+data_root = /Users/mmogr/Library/Application Support/gglib
+resource_root = /Users/mmogr/Library/Application Support/gglib
+database_path = /Users/mmogr/Library/Application Support/gglib/data/gglib.db
+llama_server_path = /Users/mmogr/Library/Application Support/gglib/.llama/bin/llama-server
+sd_server_path = /Users/mmogr/Library/Application Support/gglib/.sd/bin/sd-server
+models_dir = /Users/mmogr/Library/Application Support/gglib/models
+models_source = EnvVar

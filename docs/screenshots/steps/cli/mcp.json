@@ -1,0 +1,47 @@
+{
+ "cols": 88,
+ "rows": 30,
+ "env": {
+  "GGLIB_DATA_DIR": "~/.local/share/gglib-demo",
+  "GGLIB_MODELS_DIR": "~/.local/share/gglib-demo/models",
+  "GGLIB_DAEMON_PORT": "9907",
+  "HOME": "~/.local/share/gglib-demo/home",
+  "GIT_PAGER": "cat"
+ },
+ "cwd": "~/.local/share/gglib-demo/home/orders-api",
+ "steps": [
+  {
+   "sleep": 0.5
+  },
+  {
+   "type": "gglib mcp add --name filesystem --type stdio --command npx --args=\"-y,@modelcontextprotocol/server-filesystem,.\""
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "idle": 1.5,
+   "timeout": 60
+  },
+  {
+   "type": "gglib mcp list"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "idle": 1.5,
+   "timeout": 60
+  },
+  {
+   "type": "gglib mcp test filesystem"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "idle": 12,
+   "timeout": 600
+  }
+ ]
+}

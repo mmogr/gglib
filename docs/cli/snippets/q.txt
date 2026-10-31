@@ -1,0 +1,13 @@
+$ gglib q "In one sentence, what is a GGUF file?"
+
+  ╭─ ℹ️ Info ─────────────────────────────╮
+  Starting llama-server for 'Qwen3-4B-Instruct-2507' via the gglib daemon (this may take a moment) …
+  llama-server ready on port 9300
+
+  ╰───────────────────────────────────────╯
+A GGUF file is a general-purpose, flexible format for storing models in the LLM (Large 
+Language Model) ecosystem, specifically designed to support various model architectures 
+and hardware types.
+
+Continue chatting? (Y/n): 
+n

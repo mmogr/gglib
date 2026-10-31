@@ -412,7 +412,7 @@ command that links a projector, to be run on the desktop.
 
 **Files are read here.** `gglib chat --remote` reads files in the
 directory it was launched in on the laptop, as it does without the flag
-([`chat`](cli.md#chat-identifier)), and a chat page's chat with the desktop's
+([`chat`](cli/chat.md#chat)), and a chat page's chat with the desktop's
 model reads the folder chosen on the laptop: the agent loop, and so the file
 tools, run on the laptop. What they read goes to the desktop's model as part
 of the chat, with the folder's path, and so reaches the desktop's logs; the

@@ -1,0 +1,8 @@
+$ gglib model list
+Found 3 model(s):
+
+ID  Name                      Params   Arch         Quant    Context    Images  Draws Added                File Path
+---------------------------------------------------------------------------------------------------------------------------------
+3   Qwen3.8-27B               27.0     qwen35       Q8_0     262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/q38/Qwen3.8-27B-Q8_0.gguf
+2   Qwen3-4B-Instruct-2507    4.0      qwen3        Q8_0     262144     --      --    2026-10-31 06:25:37  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-4B-Instruct-2507-Q8_0.gguf
+1   Qwen3-30B-A3B             30.0     qwen3moe     Q4_K_M   40960      --      --    2026-10-31 06:24:05  /Users/mmogr/Library/Application Support/gglib/models/Qwen3-30B-A3B-Q4_K_M.gguf

@@ -1,0 +1,27 @@
+{
+ "cols": 88,
+ "rows": 30,
+ "env": {
+  "GGLIB_DATA_DIR": "~/.local/share/gglib-demo",
+  "GGLIB_MODELS_DIR": "~/.local/share/gglib-demo/models",
+  "GGLIB_DAEMON_PORT": "9907",
+  "HOME": "~/.local/share/gglib-demo/home",
+  "GIT_PAGER": "cat"
+ },
+ "cwd": "~/.local/share/gglib-demo/home/orders-api",
+ "steps": [
+  {
+   "sleep": 0.5
+  },
+  {
+   "type": "grep -E \"WARN|ERROR\" server.log | gglib q -Q \"What went wrong here?\""
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "idle": 3,
+   "timeout": 600
+  }
+ ]
+}
