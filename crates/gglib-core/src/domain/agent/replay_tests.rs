@@ -348,3 +348,28 @@ fn progress_and_waiting_frames_change_no_row() {
     assert_eq!(want.len(), 2, "the assistant row and the tool row");
     assert_eq!(format!("{got:?}"), format!("{want:?}"));
 }
+
+/// Each saved call keeps the name its start showed and the MCP server it
+/// went to, beside the call; a call to one of gglib's own tools has no
+/// server. The entries still read back as the plain calls the next turn
+/// sends.
+#[test]
+fn a_saved_call_keeps_its_display_name_and_the_server_it_went_to() {
+    let own = AgentEvent::ToolCallStart {
+        tool_call: call("c2"),
+        display_name: "Read File".to_owned(),
+        args_summary: None,
+        server: None,
+    };
+
+    let got = rows(&[started("c1"), own], true);
+
+    let calls = meta(&got[0], "tool_calls");
+    assert_eq!(calls[0]["display_name"], "Read File");
+    assert_eq!(calls[0]["server"], "Files");
+    assert_eq!(calls[1]["display_name"], "Read File");
+    assert!(calls[1].get("server").is_none(), "{calls}");
+    let read: Vec<ToolCall> = serde_json::from_value(calls).unwrap();
+    let ids: Vec<&str> = read.iter().map(|c| c.id.as_str()).collect();
+    assert_eq!(ids, ["c1", "c2"]);
+}

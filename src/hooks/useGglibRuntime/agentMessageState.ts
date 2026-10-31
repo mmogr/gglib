@@ -153,9 +153,9 @@ export function setFullText(
 
 /**
  * Add a pending (no result yet) tool-call part, with the MCP server the
- * tool belongs to when the start names one. Like `displayName`, `server` is
- * live only: when the run ends, and on reload, the page shows the saved
- * rows, which do not keep it.
+ * tool belongs to when the start names one. The saved rows keep `server`
+ * and `displayName` too, so a reloaded chat shows the same
+ * (`foldToolMessages`).
  */
 export function addToolCallPart(
   setMessages: React.Dispatch<React.SetStateAction<GglibMessage[]>>,

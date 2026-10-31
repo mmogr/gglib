@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { buildLoadedMessage } from '../../../src/hooks/useChatPersistence/buildLoadedMessage';
+import { buildLoadedMessage, foldToolMessages } from '../../../src/hooks/useChatPersistence/buildLoadedMessage';
 import type { ChatMessage } from '../../../src/services/transport';
 
 function row(extra: Partial<ChatMessage>): ChatMessage {
@@ -67,5 +67,35 @@ describe('buildLoadedMessage', () => {
 
   it('gives a row with no images no attachments', () => {
     expect(buildLoadedMessage(row({ role: 'user', content: 'hi' }), 1).attachments).toBeUndefined();
+  });
+
+  it('shows a saved call by the name and MCP server its run showed, and an own tool with no server', () => {
+    const rows = [
+      row({
+        id: 1,
+        content: '',
+        metadata: {
+          tool_calls: [
+            { id: 'c1', name: '3:tavily_search', arguments: { q: 'x' }, display_name: 'Tavily Search', server: 'Tavily Web Search' },
+            { id: 'c2', name: 'builtin:get_current_time', arguments: {}, display_name: 'Get Current Time' },
+          ],
+        },
+      }),
+      row({ id: 2, role: 'tool', content: 'found', metadata: { tool_call_id: 'c1' } }),
+      row({ id: 3, role: 'tool', content: 'noon', metadata: { tool_call_id: 'c2' } }),
+    ];
+    const [folded] = foldToolMessages(rows);
+    const content = buildLoadedMessage(folded, 1).content as unknown as Array<Record<string, unknown>>;
+
+    expect(content[0]).toMatchObject({ toolCallId: 'c1', displayName: 'Tavily Search', server: 'Tavily Web Search', result: 'found' });
+    expect(content[1]).toEqual({
+      type: 'tool-call',
+      toolCallId: 'c2',
+      toolName: 'builtin:get_current_time',
+      args: {},
+      argsText: '{}',
+      result: 'noon',
+      displayName: 'Get Current Time',
+    });
   });
 });
