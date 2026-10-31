@@ -37,7 +37,9 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+# `test-util` for `#[tokio::test(start_paused = true)]`: the ping a server
+# never answers is waited out on the virtual clock.
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
 tempfile = { workspace = true }
 
 [lints]
