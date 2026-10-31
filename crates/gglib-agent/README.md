@@ -8,7 +8,8 @@ Layer: **application** · [workspace diagram](../README.md#architecture-overview
 
 Pure-domain agentic loop implementation for gglib.
 
-Backs `gglib chat` and `gglib q`, and enforces the defences a local model needs
+Backs `gglib chat`, `gglib q` and the daemon's agent runs (`POST /api/agent/chat`
+and `PUT /api/runs/{id}?kind=agent`), and enforces the defences a local model needs
 to finish a tool-calling task: loop detection, stagnation detection, and context
 pruning.  The loop and stagnation detectors themselves live in
 `gglib_core::domain::agent` so the proxy can enforce the same guards on

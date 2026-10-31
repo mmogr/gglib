@@ -9,7 +9,7 @@ This directory contains the React components used in the Desktop GUI (Tauri) and
 ```text
 ┌─────────────┐      ┌────────────────┐
 │   App.tsx   │ ───► │    Header      │
-│  (Router)   │      │ (Settings/Srv) │
+│ (Providers) │      │ (Settings/Srv) │
 └──────┬──────┘      └───────┬────────┘
        │                     │
        ▼                     ▼
@@ -19,16 +19,17 @@ This directory contains the React components used in the Desktop GUI (Tauri) and
 │  │   Library   │  Inspector  │      │
 │  │    Panel    │    Panel    │      │
 │  └─────────────┴─────────────┘      │
-└─────────────────────────────────────┘
-              │
-              ▼ (when model served)
-┌─────────────────────────────────────┐
-│            ChatPage                 │
-│  ┌─────────────┬─────────────┐      │
-│  │Conversation │   Messages  │      │
-│  │    List     │    Panel    │      │
-│  └─────────────┴─────────────┘      │
-└─────────────────────────────────────┘
+└─────────────────┬───────────────────┘
+                  │  lazy-loaded, in place of the panels
+       ┌──────────┴──────────────────┐
+       ▼ (chat open)                 ▼ (Benchmark)
+┌─────────────────────────┐   ┌───────────────┐
+│        ChatPage         │   │ BenchmarkPage │
+│ ┌────────────┬────────┐ │   └───────────────┘
+│ │Conversation│Messages│ │
+│ │    List    │ Panel  │ │
+│ └────────────┴────────┘ │
+└─────────────────────────┘
 ```
 
 ## Layout Structure

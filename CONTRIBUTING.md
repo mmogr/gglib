@@ -305,17 +305,17 @@ let mut child = Command::new("cmake")
 
 ## Crate Boundaries
 
-CI's `boundaries` job runs `scripts/check_boundaries.sh` on every pull request into `main` and every push to it, and a violation fails the build. The script reads each checked crate's direct dependencies with `cargo tree --depth 1 --all-features --target all`: normal, build and dev dependencies, optional ones, and those declared for any platform. It takes the surface crates from the adapter layer in [`crates/layers.toml`](crates/layers.toml), and checks every other member as a crate that may not depend on one. Of the rules below, only what a bullet says `check_boundaries.sh` rejects or allow-lists is checked, and only on those direct edges, apart from the phone crates' rule, which `scripts/check_phone_closure.sh` checks over the whole dependency closure; the rest, such as `gglib-db` depending on no other `gglib-*` crate, are not.
+CI's `boundaries` job runs `scripts/check_boundaries.sh` on every pull request into `main` and every push to it, and a violation fails the build. The script reads each checked crate's direct dependencies with `cargo tree --depth 1 --all-features --target all`: normal, build and dev dependencies, optional ones, and those declared for any platform. It takes the surface crates from the adapter layer in [`crates/layers.toml`](crates/layers.toml), and checks every other member as a crate that may not depend on one. Of the rules below, only what a bullet says `check_boundaries.sh` rejects or allow-lists is checked, and only on those direct edges, apart from the phone crates' rule, which `scripts/check_phone_closure.sh` checks over the whole dependency closure, and the layer rule, which `scripts/crate_list.py --check` checks; the rest, such as `gglib-db` depending on no other `gglib-*` crate, are not.
 
 **`gglib-core`** — Domain types, port traits, error types and path utilities. May read and write local files and build the process `Command`s other crates spawn (its tokio carries the `fs` and `process` features). Must not depend on a database, HTTP, CLI or UI crate: `check_boundaries.sh` rejects `axum`, `tower`, `tower-http`, `hyper`, `reqwest`, `clap`, `tauri` and `sqlx` there.
 
 **`gglib-db`** — May depend on `gglib-core`, `sqlx` and utility crates, and on no other `gglib-*` crate. `check_boundaries.sh` rejects `axum`, `tower`, `tower-http`, `hyper`, `clap` and `tauri` there.
 
-**`gglib-runtime`**, **`gglib-proxy`**, **`gglib-engine-llama`**, **`gglib-agent`**, **`gglib-download`**, **`gglib-hf`**, **`gglib-mcp`**, **`gglib-gguf`**, **`gglib-broadcast`**, **`gglib-bootstrap`**, **`gglib-build-info`**, **`gglib-integration-tests`**, **`gglib-test-http`** — the infrastructure crates. May depend on `gglib-core`, `gglib-db` and each other, except `gglib-broadcast` and `gglib-test-http`, which depend on no `gglib-*` crate; `check_boundaries.sh` rejects any direct `gglib-*` dependency in `gglib-broadcast`. Must not depend on a surface crate, which `check_boundaries.sh` rejects for every crate outside the adapter layer. It also rejects `axum`, `tower`, `tower-http`, `hyper`, `clap`, `tauri` and `sqlx` in `gglib-runtime`, `gglib-agent`, `gglib-download`, `gglib-hf`, `gglib-mcp` and `gglib-gguf`, `clap`, `tauri`, `sqlx` and `tower-http` in `gglib-broadcast`, `axum`, `tower`, `tower-http`, `hyper`, `reqwest`, `clap`, `tauri` and `sqlx` in `gglib-test-http`, `sysinfo` in `gglib-proxy`, which reads its host's name and free disk only through the `HostFacts` its caller hands it, and `tower`, `tower-http`, `hyper`, `clap`, `tauri`, `sqlx`, `sysinfo`, `gglib-runtime` and `gglib-proxy` in `gglib-engine-llama`, the in-process engine a phone runs in place of llama-server, whose client is `gglib-proxy`; `gglib-proxy`, `gglib-engine-llama` and `gglib-broadcast` depend on `axum`.
+**`gglib-runtime`**, **`gglib-proxy`**, **`gglib-engine-llama`**, **`gglib-agent`**, **`gglib-download`**, **`gglib-hf`**, **`gglib-mcp`**, **`gglib-gguf`**, **`gglib-broadcast`**, **`gglib-bootstrap`**, **`gglib-build-info`**, **`gglib-integration-tests`**, **`gglib-test-http`** — the other crates below the surface. Each has a layer in `crates/layers.toml`: `gglib-bootstrap` is in the facade layer with `gglib-app-services`; `gglib-runtime`, `gglib-proxy`, `gglib-engine-llama`, `gglib-download`, `gglib-hf`, `gglib-mcp` and `gglib-gguf` are in the infrastructure layer with `gglib-db`; `gglib-agent` is in the application layer below it; `gglib-broadcast`, `gglib-build-info` and `gglib-test-http` are in the utility layer below `gglib-core`; and `gglib-integration-tests` is in the tests layer at the bottom. A crate's normal and build dependencies may name a crate in its own layer or a lower one, never a higher one, and `crate_list.py --check` rejects the rest. Dev-dependencies do not count, which is how `gglib-integration-tests`, at the bottom, reaches every crate. `gglib-broadcast`, `gglib-build-info` and `gglib-test-http` depend on no `gglib-*` crate; `check_boundaries.sh` rejects any direct `gglib-*` dependency in `gglib-broadcast`. Must not depend on a surface crate, which `check_boundaries.sh` rejects for every crate outside the adapter layer. It also rejects `axum`, `tower`, `tower-http`, `hyper`, `clap`, `tauri` and `sqlx` in `gglib-runtime`, `gglib-agent`, `gglib-download`, `gglib-hf`, `gglib-mcp` and `gglib-gguf`, `clap`, `tauri`, `sqlx` and `tower-http` in `gglib-broadcast`, `axum`, `tower`, `tower-http`, `hyper`, `reqwest`, `clap`, `tauri` and `sqlx` in `gglib-test-http`, `sysinfo` in `gglib-proxy`, which reads its host's name and free disk only through the `HostFacts` its caller hands it, and `tower`, `tower-http`, `hyper`, `clap`, `tauri`, `sqlx`, `sysinfo`, `gglib-runtime` and `gglib-proxy` in `gglib-engine-llama`, the in-process engine a phone runs in place of llama-server, whose client is `gglib-proxy`; `gglib-proxy`, `gglib-engine-llama` and `gglib-broadcast` depend on `axum`.
 
 **`gglib-app-services`** — The backend bridge: its consumers are `gglib-axum`, `gglib-cli` and `src-tauri`. No surface-specific code. `check_boundaries.sh` rejects `axum`, `tower`, `tower-http`, `hyper`, `clap`, `tauri` and `sqlx` there.
 
-**Surface crates** (`gglib-cli`, `gglib-axum`, `gglib-ffi`, and `src-tauri` as `gglib-app`: the adapter layer in `crates/layers.toml`) — May depend on anything in lower layers. Must not depend on each other, with two documented exceptions, both for hosting the daemon `gglib-axum` builds: `gglib-cli` may depend on it for `gglib daemon run` (which `gglib web --share-lan` also runs), and `gglib-app` for the daemon it runs in-process. Splitting that one module into a crate of its own would be more churn than the exceptions are worth. `scripts/check_boundaries.sh` allow-lists exactly these two edges; any other surface-to-surface dependency is a violation, and so is a direct dependency on a surface crate from any crate outside the adapter layer.
+**Surface crates** (`gglib-cli`, `gglib-axum`, `gglib-ffi`, and `src-tauri` as `gglib-app`: the adapter layer in `crates/layers.toml`) — May depend on anything in lower layers. Must not depend on each other, with two documented exceptions, both for hosting the daemon `gglib-axum` builds: `gglib-cli` may depend on it for `gglib daemon run` (which `gglib web --share-lan` also runs), and `gglib-app` for the daemon it runs in-process. Splitting that one module into a crate of its own would be more churn than the exceptions are worth. `scripts/check_boundaries.sh` allow-lists exactly these two edges; any other surface-to-surface dependency is a violation, and so is a direct dependency on a surface crate from any crate outside the adapter layer. `check_boundaries.sh` also rejects `axum`, `tower`, `tower-http`, `hyper` and `tauri` in `gglib-cli`, and `clap` and `tauri` in `gglib-axum`.
 
 **`gglib-ffi`** — The Swift-facing surface, built into the dynamic framework an iPhone app embeds, and one of the phone crates below. `check_boundaries.sh` rejects `clap`, `tauri`, `axum`, `tower-http`, `hyper`, `sqlx`, `sysinfo`, `netdev`, `nix`, `iroh`, `modelpipe`, `gglib-runtime` and `gglib-app-services` there: it composes gglib's own crates, and takes no server, database or host probe of its own. The engine it serves is `gglib-proxy` in front of `gglib-engine-llama`. Its only `unsafe` is the `extern "C"` scaffolding `uniffi` expands, which the workspace's `unsafe_code` deny does not report because it comes from another crate's macro; it carries no `allow` for it.
 
@@ -509,7 +509,7 @@ A brief that carries work between sessions is not an ADR and does not need one's
 
 ## Badges Pipeline
 
-The version, test, coverage, LOC and complexity badges in the root README, in `crates/README.md` and in each crate's own `README.md` are shields.io endpoint badges that read JSON files from the `badges` branch. Nothing on that branch is written by hand.
+The test, coverage, LOC and complexity badges in `crates/README.md` and in each crate's own `README.md` are shields.io endpoint badges that read JSON files from the `badges` branch. Nothing on that branch is written by hand.
 
 [`crates/layers.toml`](crates/layers.toml) is the one list of crates. Every workspace member has a row there, and a crate has badges unless its row says `badges = false`, with a `why`. For each crate with badges the branch holds four files:
 
@@ -519,9 +519,9 @@ The version, test, coverage, LOC and complexity badges in the root README, in `c
 | `<crate>-coverage.json` | The Coverage run's `<crate>-lcov.info`. `coverage.yml` measures every crate with badges, less any whose row says `coverage = false` | Coverage |
 | `<crate>-loc.json`, `<crate>-complexity.json` | `scc` over the crate's directory, at the commit the run tested | CI |
 
-The root README's version badge reads `version.json`, written from `Cargo.toml` by the same CI run.
+The branch also holds `version.json`, the workspace version from `Cargo.toml`, written after CI. The root README's stable and release-candidate badges are shields.io release badges, read from the repository's GitHub releases.
 
-`badges.yml` runs `scripts/write_badges.py` after each successful CI or Coverage run of a push to `main`; a red or cancelled run changes nothing. The script deletes every JSON file on the branch outside that set, so the branch holds no file a README does not read. A badge reads `none` when the run's artifact had no file for its crate, and `pending` until the first run that writes it. The branch's own README lists the files. No README below a crate's top level carries a badge, because the pipeline writes no file for a module.
+`badges.yml` runs `scripts/write_badges.py` after each successful CI or Coverage run of a push to `main`; a red or cancelled run changes nothing. The script deletes every other JSON file on the branch. A badge reads `none` when the run's artifact had no file for its crate, and `pending` until the first run that writes it. The branch's own README lists the files. No README below a crate's top level carries a badge, because the pipeline writes no file for a module.
 
 A crate's README carries its badges, and a line naming its layer that links the workspace diagram, in a block between `<!-- crate-header:start -->` and `<!-- crate-header:end -->`, which `make readmes` writes from `crates/layers.toml`. `make enforce` runs `scripts/crate_list.py --check`, which fails when a member has no row, a crate depends on a layer above its own, a header block is out of date, or a Markdown file links a file on the `badges` branch that the pipeline does not write.
 
@@ -543,7 +543,7 @@ The README's status card lives on the same branch, as `status-light.svg` and `st
 ### Prerequisites
 
 - Rust 1.97.1 (managed via `rust-toolchain.toml` — `rustup` will install it automatically)
-- Node.js 22.12+ (see below)
+- Node.js 20.19+, 22.12+ or 24+ (see below)
 - Platform system libraries (`gglib config check-deps` is the live dependency check; `make check-deps` runs it once gglib is built, after checking the toolchains itself)
 
 Run `make setup` for a one-command first-time setup on macOS. On Linux, run `cargo run -p gglib-cli -- config check-deps` first: it lists the system packages to install.
@@ -574,7 +574,7 @@ fnm install   # reads .nvmrc
 fnm use
 ```
 
-**Manual fallback** — install Node ≥22.12 directly from [nodejs.org](https://nodejs.org) and verify with `node --version`.
+**Manual fallback** — install Node 20.19+, 22.12+ or 24+ directly from [nodejs.org](https://nodejs.org) and verify with `node --version`.
 
 > **Note:** if you ever see `EACCES: permission denied` on `npm install -g`, that means the active Node is a system-owned binary. The fix is always to switch to a version-manager-managed Node — never `sudo npm install -g`.
 
@@ -598,7 +598,7 @@ make doc
 
 # Run all pre-commit checks in sequence: fmt, lint, test, lint-web,
 # typecheck-web, deadcode-web, test-web, boundaries, unused-deps, enforce,
-# bindings-check, doc-check
+# adr-readings, bindings-check, doc-check
 make pre-commit
 ```
 
@@ -761,6 +761,7 @@ A release is cut by merging a pull request. CI's `release` job (`release-tag.yml
 | `quality` | `npm run lint -- --max-warnings 0`, `npm run typecheck` | The ESLint rules, warnings included; TypeScript types |
 | `boundaries` | `make boundaries`, which is `check_boundaries.sh` and the `check_readmes.sh --strict` it runs, then `check_phone_closure.sh` over the `Makefile`'s `PHONE_CRATES`; `make unused-deps`, which is `cargo shear --deny-warnings` | What [Crate Boundaries](#crate-boundaries) says `check_boundaries.sh` and `check_phone_closure.sh` reject or allow-list; the `gglib-bootstrap` source guard; README coverage; no dependency a crate declares and none of its targets uses (see [Unused dependencies](#unused-dependencies)) |
 | `enforcement` | `make enforce` | The repository rules that neither the compiler nor a linter checks. The `enforce` recipe in the `Makefile` is the only list of them, and each script's header says what it rejects. Among them, `check_workflow_yaml.sh` runs actionlint, with shellcheck over every `run:` script, which the job installs; locally, `brew install actionlint shellcheck`, or the check skips them with a warning |
+| `adr-readings` | `make adr-readings`, which is `scripts/check_adr_readings.sh` | Each reading an ADR's criterion names in `contracts/upstream/llama/observed.json` matches its hand-kept approval in `approvals.json`, and each quoted criterion is still in its ADR under `docs/adr/`. It reads only those committed files and starts no engine |
 | `test` | `cargo metadata --locked`, `npm run build`, `cargo test --no-fail-fast`, `scripts/split_test_output.py` | `Cargo.lock` is current; the Rust tests and doctests pass; the per-crate test output the badges read, from a run that ran doctests |
 | `bindings` | `make bindings-check` | The committed TypeScript bindings are what the Rust types generate |
 | `rustdoc` | `scripts/doc_workspace.py -- --document-private-items --exclude gglib-app`, with `RUSTDOCFLAGS=-D warnings`, then `scripts/check_doc_links.py target/doc` | No rustdoc warning, and every link on each crate's front page (its README) is a URL or a file in the docs |

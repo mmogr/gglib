@@ -16,6 +16,6 @@ The chat page's left side: a narrow rail (new chat, search, the list's fold, the
 | `useConversationActivity.ts` | Running (a live agent run, from `GET /api/runs`) and New (a reply that ended while another conversation was shown); New marks are kept in this browser as conversation id → end time, read before each write and followed across tabs, and dropped only when a list the daemon just sent lacks the conversation and the mark predates asking for it; the far machine's runs and marks are its own (`gglib.chat.unread.far`), so its ids never meet this machine's |
 | `useListFold.ts` | Whether the list shows: the policy, the remembered choice, and folding by itself in a narrow window |
 
-Timestamps use relative format for recent conversations ("2 minutes ago") and switch to absolute date strings for entries older than 7 days.
+Timestamps are always relative: minutes under an hour ("2 minutes ago"), hours under a day, and days after that ("30 days ago").
 
 <!-- module-docs:end -->

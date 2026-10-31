@@ -3,9 +3,11 @@
 <!-- module-docs:start -->
 
 The tensor tables of the eight image-model files measured on 2026-10-09, one
-file per source. `image_family_tests.rs` reads them with `include_str!` to pin
-`ImageFamily::sniff` and `ComponentRole::fits` against real files, and
-`model_components_tests.rs` links them as components.
+file per source. `image_family_goldens.rs` reads them with `include_str!`;
+`image_family_tests.rs` pins `ImageFamily::sniff` and `ComponentRole::fits`
+against them, and the component tests (`model_components_tests.rs`,
+`model_registrar_components_tests.rs`, `image_companions_tests.rs`) use
+them as components.
 
 Each `.tsv` holds one line per tensor, sorted: the tensor's name, a tab, and
 its shape outermost first as `AxBxC` (`-` for a tensor of no dimensions). A

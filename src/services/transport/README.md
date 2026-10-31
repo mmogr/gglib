@@ -39,7 +39,7 @@ The event half is two functions of `events/sse.ts`, `subscribe` and `onEventStre
 | File | Role |
 |------|------|
 | `index.ts` | `getTransport()` factory; spreads the API client and event bus into one object, then memoises |
-| `errors.ts` | `TransportError` with typed error codes (`NOT_SUPPORTED`, `NETWORK_ERROR`, etc.) |
+| `errors.ts` | `TransportError` with typed error codes (`NOT_SUPPORTED`, `NETWORK`, etc.) |
 | `mappers.ts` | Maps frontend types to backend request DTOs (`toStartServerRequest()`, etc.) |
 | `sanitizeMessages.ts` | Strips `<think>` tags and unsupported fields before sending to llama-server |
 | `parseTitleResponse.ts` | Parses LLM title generation responses |

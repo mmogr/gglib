@@ -27,6 +27,7 @@ no infrastructure concerns.
 | `replay` | [`rows_from_frames`] — a reply's saved rows, rebuilt from its logged events, each turn's [`TurnUsage`] saved under [`MADE_KEYS`], its context's size, the messages trimmed and why it stopped among them; a tool row carries the ids of the images its result lists |
 | `turn_usage` | [`TurnUsage`] — how one model turn was made: model, token counts, times, why it stopped; never text. [`ContextReading`] — how large the answering server's context was and how many earlier messages did not fit, under one spelling for the proxy's usage frame and the `turn_usage` event |
 | [`fnv1a`] | [`fnv1a::fnv1a_64`] — the hash backing both detectors |
+| [`tool_display`] | [`tool_display::format_tool_display_name`] and [`tool_display::format_tool_args_summary`] — a tool's name and arguments as the label every surface shows |
 
 # Design Principles
 

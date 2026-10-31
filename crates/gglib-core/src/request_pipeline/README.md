@@ -80,6 +80,9 @@ does either.
   reads images is shown (the most recent one) and on which message (the
   first `user` one after it), and [`DRAWN_PICTURE_LINE`] is the text that
   goes before it. The completion adapter asks it as it builds a request.
+- [`tools`] — [`strip_unsupported_tools()`], stage 2b: dropping `tools` from
+  a request to a model the catalog says cannot call them. A model the
+  catalog does not know keeps its tools.
 - [`truncation`] — [`truncate_history()`], stage 3: trimming stale tool results
   and oversized assistant turns to fit the model's context budget, and
   rejecting the request when it cannot be made to fit.
@@ -98,6 +101,19 @@ does either.
 - [`sampling_log`] — no stage of its own; the single `sampling resolved` debug
   line, rendered after 5b so it describes what was *sent* rather than what
   stage 4 folded. Its module docs carry the argument for that placement.
+- [`constrain`] — [`constrain_tool_calls()`], stage 6: gglib's own
+  decode-time grammar for a dialect model's tool calls. It runs after
+  stage 3 because the grammar adds a top-level key.
+
+**Checking and explaining — no stage**
+
+- [`validate`] — [`validate_tool_calls()`]: whether the tool calls a model
+  emitted match the schemas the client advertised, as a [`Verdict`]. The
+  proxy's tool-call repair reads it; the re-issue lives there.
+- [`explain`] — [`explain_stored()`]: a model's stored sampling
+  configuration resolved with no request in hand, each value with the rung
+  that supplied it, and the stage-5b effort gate applied. `gglib model
+  explain` and the GUI's sampling panel both draw it.
 
 Outside tests, three paths call [`apply()`]: the proxy's forwarding path
 (`gglib-proxy`'s `forward.rs`), the runtime's completion adapter

@@ -15,13 +15,14 @@ OS-specific utilities that cannot be cleanly abstracted through the transport la
 ┌──────────────────────────────────────────────────────┐
 │              platform/  (Shell Integration)          │
 │                                                      │
-│   detect.ts ─────── isDesktop()                     │
-│        │                                            │
-│        ├── Tauri ──► native invoke()                │
-│        └── Web  ──► browser API or no-op            │
+│   detect.ts ─────── isDesktop()                      │
+│        │                                             │
+│        ├── Tauri ──► native invoke()                 │
+│        └── Web  ──► browser API or no-op             │
 │                                                      │
-│   logging/  ─────── Unified appLogger               │
-│                     ConsoleTransport + TauriTransport│
+│   logging/  ─────── Unified appLogger                │
+│                     ConsoleTransport +               │
+│                     TauriTracingTransport            │
 └──────────────────────────────────────────────────────┘
 ```
 

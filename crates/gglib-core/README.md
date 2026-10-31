@@ -69,16 +69,21 @@ DEPENDS ON ───────────────────────
 │                              gglib-core                                             │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                     │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
-│  │   domain/   │  │   ports/    │  │  services/  │  │   events/   │                 │
-│  │  Pure types │  │   Traits    │  │  Use cases  │  │  App events │                 │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘                 │
-│         │                │                │                │                        │
-│         ▼                ▼                ▼                ▼                        │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
-│  │   paths/    │  │  download/  │  │   utils/    │  │  settings   │                 │
-│  │ Path config │  │Download DTOs│  │   Helpers   │  │   Config    │                 │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘                 │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │     domain/     │  │      ports/     │  │    services/    │  │     events/     │ │
+│  │    Pure types   │  │      Traits     │  │    Use cases    │  │    App events   │ │
+│  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘ │
+│           │                    │                    │                    │          │
+│           ▼                    ▼                    ▼                    ▼          │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │      paths/     │  │    download/    │  │      utils/     │  │     settings    │ │
+│  │   Path config   │  │  Download DTOs  │  │     Helpers     │  │      Config     │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
+│                                                                                     │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │request_pipeline/│  │     access/     │  │      retry/     │  │    contracts/   │ │
+│  │ Request shaping │  │   Proxy access  │  │  Backoff policy │  │ Routes and DTOs │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
 │                                                                                     │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -86,13 +91,17 @@ DEPENDS ON ───────────────────────
 **Module Descriptions:**
 - **`domain/`** — Pure domain types: `Model`, `ModelFile`, `McpServer`, `Conversation`; agent loop primitives: `AgentConfig`, `AgentMessage`, `AgentEvent`, `ToolDefinition`, `ToolCall`, `ToolResult`; and server configuration: `ServerConfig` (per-model launch defaults with `context_length`, used in the 5-level fallback chain: runtime request → model `server_defaults` → global settings → fitted to hardware → hardcoded `DEFAULT_CONTEXT_SIZE`)
 - **`ports/`** — Trait definitions (repository ports, HF client port, event emitter, `AgentLoopPort` / `ToolExecutorPort` / `AgentError` for the backend agentic loop)
-- **`services/`** — Application use cases and business logic orchestration (model management, server lifecycle, chat history, image attachments, settings, model verification & repair, and `CatalogPortImpl`, the model catalog port over a `ModelRepository`)
+- **`services/`** — Application use cases and business logic orchestration (model management, chat history, image attachments, settings, model verification & repair, and `CatalogPortImpl`, the model catalog port over a `ModelRepository`)
 - **`events/`** — Strongly-typed application events for UI/adapter notification
 - **`paths/`** — Path configuration and platform-specific directory handling
 - **`download/`** — Download-related DTOs and progress tracking types
 - **`ports/mcp_dto.rs`** — Cross-boundary DTOs for MCP resolution status (Tauri/Axum/TypeScript)
 - **`sse/`** — OpenAI-compatible SSE codec: the byte-level splitter `DataFrames` (complete lines, then each event's `data:` payload), byte-stream `SseStreamDecoder` built on the same lines, single-frame `parse_sse_frame`, and `SseEncoder` that re-emits canonical `chat.completion.chunk` envelopes. Used by the proxy's universal consistency layer, by the daemon's runs and its compare benchmark, and by every event stream the CLI reads.
 - **`normalize/`** — Universal normalization layer. The `ToolCallParser` trait plus dialect parsers (`StandardJsonParser` identity and the spec-driven `DelimitedToolCallParser` for marker-delimited tool calls) rewrite model-specific output into strict `OpenAI` events. Selected per-request from the model's persisted `DialectSpec` (with a `format:*` tag fallback) via `normalize::registry::get_parser`.
+- **`request_pipeline/`** — Request shaping for every inference path: `resolve` reads what the catalog knows of a model into a `ModelContext`, and `apply` runs the ordered stages (reasoning strip, capability coalescing, tool stripping, truncation, sampling, the effort gate, the dialect grammar) on the outgoing body. Called by the proxy's forwarding path, the runtime's completion adapter and the daemon's chat-title request
+- **`access/`** — Who may reach the proxy: the bearer token, the Host allowlist and the Origin check, carried together in `ProxyAccessConfig`; and, on disk, the keys issued to paired devices and the daemon's own token
+- **`retry/`** — The backoff policy for retryable upstream failures, as the pure `decide`; the caller owns the clock, the randomness and the sleeping
+- **`contracts/`** — HTTP route constants the daemon, the proxy and the CLI share, and the bodies of a few routes: the drawing route's request, answer and streamed events, and where an image attachment is sent and read
 - **`utils/`** — Shared utility functions and helpers
 - **`settings.rs`** — Application settings and configuration types
 - **`secret.rs`** — The secrets gglib stores (`SettingSecret`, `SecretRef`), what a held one is shown as (`SHOWN_AS`), and the blank rule (`held`). `services::SecretsService::reveal` is the one way a stored value comes back (ADR 0027)

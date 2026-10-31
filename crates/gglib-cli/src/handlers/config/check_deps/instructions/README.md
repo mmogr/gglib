@@ -120,40 +120,40 @@ For CUDA support (NVIDIA GPUs):
 - Provides distro-specific commands
 
 #### `windows.rs`
-Windows-specific instructions using Chocolatey and Scoop.
+Windows-specific instructions using winget, with Chocolatey as the alternative.
 
-**Example Output:**
+**Example Output** (git and cmake missing):
 ```text
-Missing Dependencies - Windows Installation Instructions:
-────────────────────────────────────────────────────────
+Installation Instructions (Windows):
+============================================================
 
-Using Chocolatey (recommended):
-  # Install Chocolatey (if not already installed):
-  Set-ExecutionPolicy Bypass -Scope Process -Force
-  [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-  iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+Install via winget (recommended):
+  $ winget install Git.Git
+  $ winget install Kitware.CMake
 
-  # Install dependencies:
-  choco install cmake git visualstudio2022-workload-vctools
 
-Alternative - Using Scoop:
-  # Install Scoop (if not already installed):
-  Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
-  irm get.scoop.sh | iex
+Alternative: Install via Chocolatey:
+  $ choco install git cmake
 
-  # Install dependencies:
-  scoop install cmake git mingw
+GPU Support:
 
-For CUDA support (NVIDIA GPUs):
-  Download and install CUDA Toolkit from:
-  https://developer.nvidia.com/cuda-downloads?target_os=Windows
+  NVIDIA GPU:
+  Install CUDA Toolkit from:
+  https://developer.nvidia.com/cuda-downloads
+
+  AMD GPU:
+  Install Vulkan drivers (usually included with GPU drivers).
+  Verify with: vulkaninfo --summary
+
+  Alternatively, install ROCm for Windows (if supported):
+  https://rocm.docs.amd.com/
 ```
 
 **Special Handling:**
-- PowerShell-specific installation commands
-- Both Chocolatey and Scoop options
-- Visual Studio Build Tools for C++ compiler
-- CUDA Toolkit download links
+- winget commands first, then the same packages through Chocolatey
+- Rust from rustup-init.exe or `winget install Rustlang.Rustup`, and Node.js through winget
+- Visual Studio Build Tools, or MSYS2's toolchain, when `make` is missing
+- GPU notes for NVIDIA (CUDA Toolkit) and AMD (Vulkan drivers, or ROCm)
 
 ## Output Format
 
@@ -222,7 +222,6 @@ fn test_macos_instructions() {
 
 - **nix** package manager support
 - **snap** package support for Linux
-- **winget** support for Windows 11
 - Automatic clipboard copy of commands
 - Interactive installation (run commands directly)
 - Version-specific instructions (e.g., CUDA 12 vs 11)

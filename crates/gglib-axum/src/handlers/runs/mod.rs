@@ -44,7 +44,7 @@ pub(crate) struct PutQuery {
 /// `PUT /api/runs/{id}`: start a chat run with the body as its request, or
 /// answer with the run that already has the id. 201 new, 200 existing.
 /// With `?kind=agent` the body is an agent chat request, and the run is
-/// the agent loop; only this door starts one.
+/// the agent loop.
 pub(crate) async fn put(
     State(state): State<AppState>,
     Path(id): Path<String>,

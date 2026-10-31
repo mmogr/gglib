@@ -2,7 +2,9 @@
 
 <!-- module-docs:start -->
 
-Handlers for the OpenAI-compatible proxy: status, start, start-pinned, stop.
+Handlers for the OpenAI-compatible proxy: status, start, start-pinned, stop,
+and the loop guard's log, one row per day, model, version and mode
+(`GET /api/proxy/loop-guard-trips`).
 
 `wire` holds the request and response shapes and the rules for resolving what a
 caller left out — an omitted field means "use what is configured", not "use the

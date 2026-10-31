@@ -15,7 +15,7 @@ Multi-step first-run setup wizard: welcome, models directory configuration, both
 ## Step Flow
 
 ```
-welcome → models-dir → engines → python-setup → complete
+welcome → models → engines → python → complete
 ```
 
 `streamEngineInstall(kind, …)` streams each install's events, drawn by `InstallProgress` within the engines step.

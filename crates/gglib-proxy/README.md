@@ -61,42 +61,64 @@ This crate provides an OpenAI-compatible HTTP server that:
 │                                 gglib-proxy                                          │
 ├──────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                │
-│  │  server.rs  │  │  models.rs  │  │ forward.rs  │  │   lib.rs    │                │
-│  │   Axum app  │─▶│  /v1/models │─▶│  Streaming  │  │Entry point  │                │
-│  │  & routing  │  │   endpoint  │  │   forward   │  │             │                │
-│  └──────┬──────┘  └─────────────┘  └─────────────┘  └─────────────┘                │
-│         │                                                                            │
-│         │ /mcp                                                                       │
-│         ▼                                                                            │
+│  ┌─────────────┐  builds  ┌─────────────┐  guards  ┌─────────────┐  ┌─────────────┐  │
+│  │  server.rs  │─────────▶│  router.rs  │◀─────────│   access/   │  │   lib.rs    │  │
+│  │  AppState,  │          │ routes and  │          │   remote/   │  │ Entry point │  │
+│  │   serve()   │          │ layer order │          │   chats/    │  │             │  │
+│  └─────────────┘          └──────┬──────┘          └─────────────┘  └─────────────┘  │
+│                                  │                                                   │
+│                                  │ each path to its handler                          │
+│                                  ▼                                                   │
+│  ┌──────────────────────────────────────────────────────────────────────────────┐    │
+│  │ /v1/chat/completions      server.rs ─▶ forward.rs                            │    │
+│  │ /v1/embeddings            embeddings.rs                                      │    │
+│  │ /v1/models                models_endpoint.rs                                 │    │
+│  │ /v1/models/{name}/detail  model_detail_endpoint.rs                           │    │
+│  │ /v1/models/{name}/load    load_endpoint.rs                                   │    │
+│  │ /v1/images/*              images.rs                                          │    │
+│  │ /v1/proxy/status(/stream) server.rs, reading dashboard.rs                    │    │
+│  │ /v1/proxy/cache/clear     admin.rs                                           │    │
+│  │ /v1/proxy/shutdown        admin.rs                                           │    │
+│  │ /v1/runs/*                runs/                                              │    │
+│  │ /v1/chats/*               chats/                                             │    │
+│  │ /v1/attachments/*         chats/                                             │    │
+│  │ /mcp                      mcp/                                               │    │
+│  └──────────────────────────────────────────────────────────────────────────────┘    │
+│                                                                                      │
 │  ┌─────────────────────────────────────────────┐                                     │
 │  │  mcp/                                       │                                     │
-│  │  ├─ handlers.rs  (POST/GET/DELETE /mcp)     │                                     │
-│  │  ├─ types.rs     (JSON-RPC & MCP wire types)│                                     │
-│  │  └─ session.rs   (Mcp-Session-Id tracking)  │                                     │
+│  │  ├─ handlers.rs   (POST/GET/DELETE /mcp)    │                                     │
+│  │  ├─ meta_tools.rs (the three meta-tools)    │                                     │
+│  │  ├─ types.rs      (JSON-RPC & MCP types)    │                                     │
+│  │  └─ session.rs    (Mcp-Session-Id tracking) │                                     │
 │  └─────────────────────────────────────────────┘                                     │
 │                                                                                      │
-│         │ GET /v1/proxy/status(/stream)                                             │
-│         ▼                                                                            │
 │  ┌─────────────────────────────────────────────┐                                     │
-│  │  dashboard.rs                                │                                     │
-│  │  aggregates connections.rs (active reqs),    │                                     │
-│  │  slots.rs / slots_poller.rs (context usage), │                                     │
-│  │  metrics.rs (recent requests) into one       │                                     │
-│  │  DashboardSnapshot (JSON or SSE)              │                                     │
+│  │  dashboard.rs                               │                                     │
+│  │  aggregates connections.rs (active reqs),   │                                     │
+│  │  slots.rs / slots_poller.rs (context usage),│                                     │
+│  │  metrics.rs (recent requests) into one      │                                     │
+│  │  DashboardSnapshot (JSON or SSE)            │                                     │
 │  └─────────────────────────────────────────────┘                                     │
 │                                                                                      │
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Module Descriptions:**
-- **`server.rs`** — Axum application setup, routing, `/v1/chat/completions`, `/v1/proxy/status`, and `/v1/proxy/status/stream` handlers
+- **`server.rs`** — The composition root: `AppState`, and `serve()`, which builds the state and the router; also the `/health`, `/v1/chat/completions`, `/v1/proxy/status`, and `/v1/proxy/status/stream` handlers
+- **`router.rs`** — Which routes exist, and which guards wrap which, in what order (see the [`access`](src/access/) module)
+- **`admin.rs`** — `POST /v1/proxy/cache/clear` and `POST /v1/proxy/shutdown`: clearing the caches, and stopping the daemon
+- **`observers.rs`** — `ProxyObservers`: what a proxy run reports to that outlives the run, owned by the supervisor so a restarted proxy keeps counting into the same place
 - **`serve_config.rs`** — `ServeConfig`: everything `serve()` is started with, one named field each
 - **`host_facts.rs`** — `HostFacts`: the readers a caller hands in for this machine's name and the free space on a disk, each optional; `HostFacts::none()` has neither
 - **`models.rs`** — OpenAI-compatible request, response and error types, and the error response factories
+- **`models_endpoint.rs`** — `GET /v1/models`: each model's advertised context window, which has to describe what a launch would serve, less a safety margin
 - **`models_list.rs`** — The `/v1/models` list (`ModelsResponse`, `ModelInfo`), built from the catalogue's summaries; it serializes and deserializes, for a reader of the list on another machine
+- **`profiles.rs`** — Which `{model}:{profile}` variants `/v1/models` lists
 - **`model_detail_endpoint.rs`** — `GET /v1/models/{name}/detail`: one model in full, resolved as a chat request would resolve it, without its file path or port
-- **`forward.rs`** — HTTP forwarding to llama-server with three-step request transform pipeline
+- **`load_endpoint.rs`** — `POST /v1/models/{name}/load`: admits a model as a chat completion would and drops the lease at once, so the model is resident before a turn needs it; answers a `LoadResponse`
+- **`forward.rs`** — HTTP forwarding to llama-server: the request shaped by core's `request_pipeline::apply`, and the streamed reply parsed, normalized and re-encoded
+- **`turn_dialect.rs`** — The dialect a turn's answer is read in, and whether the dialect parser reads it, for both chat paths
 - **`forward_unary.rs`** — The non-streaming half of `/v1/chat/completions`: one request up, one body back, normalised, judged by `repair` and answered with the draw that validates
 - **`unary_body.rs`** — A non-streaming request sent and its body read whole within the total bound, then run through the dialect parser once; shared by the chat and embeddings routes
 - **`embeddings.rs`** — `POST /v1/embeddings`; the chat path minus truncation, sampling, sessions and SSE, plus the pre-swap guard that keeps a non-embedding model from being loaded to serve it
@@ -111,7 +133,8 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`generation.rs`** — What one turn generated (completion tokens, reasoning characters, tool calls queued for the client, finish reason, time between the first and last generated token the upstream streamed): metered as a streamed turn drains, read from the body of one that is not, and written onto the turn's `recent_requests` entry once it is over
 - **`repair.rs`** — Tool-call repair: validates emitted `tool_calls` against the advertised schema and, when they do not conform, re-issues the turn: with `tool_choice: "required"`, so llama.cpp's own schema-derived grammar does the correcting, or, on a turn gglib's own grammar constrained, as a second draw under that same grammar. gglib originates no grammar of its own here — see [Tool-call repair](../../docs/tool-call-repair.md) and [ADR 0002](../../docs/adr/0002-defer-tool-call-constraint-to-llama-cpp.md)
 - **`connections.rs`** — `ActiveConnectionsRegistry` + RAII `ConnectionGuard`; tracks every in-flight `/v1/chat/completions` request through `Queued` → `ProcessingPrompt` → `Generating`, feeding `DashboardSnapshot.active_connections`
-- **`slots.rs`** — Fetch + defensive parsing of llama.cpp's native `GET /slots` endpoint into `SlotSnapshot`; also provides slot I/O primitives (`save_slot`, `restore_slot`, `clear_slot_files`, `sanitize_session_id`) and background LRU eviction
+- **`slots.rs`** — Fetch + defensive parsing of llama.cpp's native `GET /slots` endpoint into `SlotSnapshot`; also provides slot I/O primitives (`save_slot`, `restore_slot`, `clear_slot_files`, `sanitize_session_id`)
+- **`slot_eviction.rs`** — Disk-aware byte-budget LRU eviction of the slot files, over core's pure selection, and the reaping of orphaned `.tmp` files
 - **`canonicalization.rs`** — System prompt stabilization (the IDE's dynamic date/time/line-count lines are coarsened in place so the prompt stops changing between requests) and `tools[]` order canonicalization, both for cache-prefix stability
 - **`fallback_session.rs`** — The session id of a request that names none: a hash of its system prompt and its first user message, that message's images included
 - **`cache_lifecycle.rs`** — KV cache save→forward→save orchestration with semaphore gating and retry logic
@@ -122,10 +145,17 @@ This crate provides an OpenAI-compatible HTTP server that:
 - **`upstream_read.rs`** — llama-server's streamed reply decoded into `LlmStreamEvent`s for the normalizer, each read under the idle bound, and the `upstream_timeout` bodies a streaming client is sent when the upstream goes quiet before its reply or partway through it (see [When the upstream stops talking](#when-the-upstream-stops-talking))
 - **`slots_poller.rs`** — Background task that polls `slots.rs` on an interval with exponential backoff, caching the latest `SlotsPollResult`
 - **`dashboard.rs`** — `DashboardSnapshot`, the unified data contract aggregating `connections.rs` + `slots_poller.rs` + `metrics.rs`; `spawn_dashboard_publisher` recomputes and broadcasts it once per second for `/v1/proxy/status/stream` subscribers
+- **`sampling_audit.rs`** — Whether the sampling gglib resolved reached llama-server intact, compared against what a slot reports for the request; feeds `DashboardSnapshot.sampling_audit`
+- **`audit_records.rs`** — The two records the sampling readback keeps because nothing on the wire confirms them: the reasoning controls gglib decided, and the names of the client fields the trust gate dropped
+- **`props.rs`** — llama-server's `GET /props` read: the sampler table a request falls back to when gglib names nothing
+- **`template_caps_read.rs`** — The template-capability half of a `GET /props` read, kept apart from the sampler table so one missing half does not discard the other
+- **`access/`** — The Host, origin and bearer guards and the CORS layer; the daemon installs the Host and origin guards and the CORS layer in its own router too
+- **`remote/`** — The proxy's side of the remote tunnel: `remote_marker` reads the tunnel's markers, `device_gate` refuses a tunnelled request no device token admitted, `mcp_tunnel_guard` refuses every tunnelled `/mcp` request, and the MCP servers a paired device's run is offered
 - **`chats/`** — `/v1/chats` and `/v1/chats/{id}`: a paired device lists and opens the hub's chats, each with what the hub says of its branches, and changes one at `/v1/chats/{id}/changes` as the hub's page does (ADR 0017), and keeps a picture it had drawn again beside the one a tool drew at `/v1/chats/{id}/pictures` (ADR 0018); `POST /v1/attachments` and `GET /v1/attachments/{id}`: it stores an image a turn will name by id, and reads one back; any request not tunnelled from a named device is refused `device_not_named`
 - **`runs/`** — `/v1/runs/*`: a paired device starts, reads and cancels its own runs through the tunnel, adds a turn to a hub chat with `?kind=agent`, and runs a chat it keeps itself through the agent loop with `?kind=chat&tools=3,7`, the ids of the open servers it may use, or `?kind=chat&tools=none` with none (and `&draw=true` to draw); the SSE framing is shared with the daemon's `/api/runs`
 - **`mcp/`** — MCP Streamable HTTP gateway (see [below](#mcp-streamable-http-gateway))
   - **`mcp/handlers.rs`** — `POST /mcp` JSON-RPC dispatch, `GET /mcp` (405), `DELETE /mcp` (terminate session)
+  - **`mcp/meta_tools.rs`** — The three meta-tools `tools/list` returns (`search_tools`, `get_tool_schema`, `invoke_tool`), over an index of every running server's tools
   - **`mcp/types.rs`** — JSON-RPC 2.0 and MCP protocol wire types
   - **`mcp/call_result.rs`** — an MCP server's tool result passed on as MCP content items: text as text, images inline with their `mimeType`
   - **`mcp/session.rs`** — `Mcp-Session-Id` tracking and validation
@@ -198,11 +228,15 @@ page on another site, and one from a browser extension (`chrome-extension://`,
 `moz-extension://`), which no setting admits. A program, which sends no
 `Origin`, is not affected. See the [`access`](src/access/) module.
 
+"Named device" rows refuse any request not tunnelled from a named device
+with `403 device_not_named`.
+
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/health` | GET | open | Health check (always 200, `{"status":"ok"}` and nothing else) |
 | `/v1/models` | GET | bearer | List available models, each with its catalog id, and this machine's name — see [The model list](#the-model-list) |
 | `/v1/models/{name}/detail` | GET | bearer | One model in full, by id, name or `name:profile` — see [The model list](#the-model-list) |
+| `/v1/models/{name}/load` | POST | bearer | Have a model resident before a turn needs it, admitted as a chat completion would be; optional `num_ctx` in the body; answers `{model, started, context}` |
 | `/v1/chat/completions` | POST | bearer | Chat completion (streaming/non-streaming) |
 | `/v1/embeddings` | POST | bearer | Embeddings — see [Embeddings](#embeddings) |
 | `/v1/images/generations` | POST | bearer | Draw with the daemon's image driver, `OpenAI`'s Images API; `stream: true` for progress, partial images and one completed event per image; gglib's `image`, `mask` and `strength` draw from a picture, all of it or where the mask is white |
@@ -213,6 +247,18 @@ page on another site, and one from a browser extension (`chrome-extension://`,
 | `/v1/proxy/status` | GET | bearer | Proxy dashboard snapshot (JSON) — see [Proxy Dashboard](#proxy-dashboard) |
 | `/v1/proxy/status/stream` | GET | bearer | Proxy dashboard live updates (SSE, hydrate-then-stream) |
 | `/v1/proxy/cache/clear` | POST | bearer | Clear KV cache for a session or all sessions (optional `X-Gglib-Session-Id` header) |
+| `/v1/proxy/shutdown` | POST | bearer | Stop the whole daemon; the body must be `{"confirm":"shutdown"}` |
+| `/v1/runs` | GET | bearer | The runs the caller may see, newest first; a paired device sees only its own |
+| `/v1/runs/{id}` | PUT | bearer | Start a run with the body as its request, or answer with the caller's run that has the id (201 new, 200 existing); `?kind=agent` and `?kind=chat&tools=…` as in [`runs/`](src/runs/) |
+| `/v1/runs/{id}` | GET | bearer | One run |
+| `/v1/runs/{id}/events` | GET | bearer | A run's events (SSE), from `?after=N` |
+| `/v1/runs/{id}/cancel` | POST | bearer | Cancel a run; idempotent |
+| `/v1/chats` | GET | bearer + named device | The hub's chats, newest first |
+| `/v1/chats/{id}` | GET | bearer + named device | One chat and its rows |
+| `/v1/chats/{id}/changes` | POST | bearer + named device | An edit, a regenerate or a branch of one chat (ADR 0017) |
+| `/v1/chats/{id}/pictures` | POST | bearer + named device | Keep a picture beside the one it was made from (ADR 0018) |
+| `/v1/attachments` | POST | bearer + named device | Store an image, the raw body (at most 8 MiB), and answer its id, type, size and estimated prompt tokens |
+| `/v1/attachments/{id}` | GET | bearer + named device | A stored image's bytes, as they were sent |
 
 ### Model Resolution
 
@@ -492,7 +538,7 @@ model) and sparse (unset parameters fall through to the model's own defaults).
 They are stored in `Settings::inference_profiles` and edited via
 `gglib config profile` or the GUI settings panel.
 
-`profiles::resolve_route` decides what a requested id means, first match wins:
+`gglib_core::request_pipeline::resolve_route` decides what a requested id means, first match wins:
 
 1. No `:` in the id → **bare model**, without touching the catalog. This is
    every request from a client that does not use profiles, so they pay nothing.
@@ -530,7 +576,7 @@ or defaults if there is none.
 
 ## Usage
 
-This crate is used by `gglib-runtime`'s `ProxySupervisor`. The supervisor binds a `TcpListener` and passes it to `gglib_proxy::serve()` in a `ServeConfig`, along with port trait implementations. Every field of the config is set by name and none has a default:
+This crate is used by `gglib-runtime`'s `ProxySupervisor`, by `gglib-ffi`'s `serve` (the engine an app serves) and by the agentic eval's proxy arm in `gglib-app-services`. Each binds a `TcpListener` and passes it to `gglib_proxy::serve()` in a `ServeConfig`, along with port trait implementations. Every field of the config is set by name and none has a default:
 
 ```rust,ignore
 use gglib_proxy::ServeConfig;
@@ -650,8 +696,8 @@ The proxy includes a built-in [MCP Streamable HTTP](https://modelcontextprotocol
 1. Client sends `POST /mcp` with a JSON-RPC `initialize` request
 2. Server returns capabilities and an `Mcp-Session-Id` header
 3. Client sends `notifications/initialized` to confirm
-4. Client calls `tools/list` to discover available tools
-5. Client calls `tools/call` to invoke a tool (response is SSE). The server's content items come back as items: text as text, an image with its base64 `data` and `mimeType`, any other kind as a text item naming it
+4. Client calls `tools/list`, which returns the three meta-tools (`search_tools`, `get_tool_schema`, `invoke_tool`), not every server's tools
+5. Client calls `tools/call` with `invoke_tool` to invoke a tool by its qualified name (response is SSE). The server's content items come back as items: text as text, an image with its base64 `data` and `mimeType`, any other kind as a text item naming it
 6. Client sends `DELETE /mcp` when done
 
 Tool names are qualified as `{server_name}__{tool_name}` so tools from different MCP servers never collide.
@@ -698,6 +744,9 @@ curl -X POST http://localhost:8080/mcp \
 | 400 | Loop or stagnation detected in the replayed history, under `--loop-guard-mode refuse` (`loop_detected` / `stagnation_detected`) |
 | 400 | A message carries an image and the model has no projector linked (`model_cannot_read_images`) — see [Images](#images) |
 | 413 | The body of a chat completion or a run is over 32 MiB (`request_too_large`) |
+| 504 | A chat completion that does not stream, or an embeddings request, outlasted its total bound (`upstream_timeout`) — see [When the upstream stops talking](#when-the-upstream-stops-talking) |
+| 401 | A key is configured and the request does not present it, or presents another (`invalid_api_key`) |
+| 403 | Refused by a guard: `host_not_allowed`, `origin_not_allowed`, `device_not_paired`, `device_not_named` or `mcp_not_allowed_over_tunnel` |
 | 500 | Internal error |
 | 507 | A chat model's weights and its smallest context need more memory than this device gives a model (`model_does_not_fit`) |
 
@@ -932,11 +981,8 @@ GET /v1/proxy/status/stream  (SSE, hydrate-then-stream)
 
 Both endpoints return the same [`DashboardSnapshot`](src/dashboard.rs) shape
 — the single, unified data contract consumed by both `gglib proxy dashboard`
-(CLI, `crates/gglib-cli/src/handlers/proxy_dashboard.rs`) and the web GUI's
-Proxy Dashboard modal (`src/components/ProxyDashboardModal.tsx`). It fully
-replaces the old `{snapshots, total_requests}` shape — there is no
-backwards-compatible shim, since nothing consumed the old shape (it was
-explicitly documented as a not-yet-consumed "future" contract).
+(CLI, `crates/gglib-cli/src/handlers/proxy_dashboard/`) and the web GUI's
+Proxy Dashboard modal (`src/components/ProxyDashboardModal.tsx`).
 
 - `GET /v1/proxy/status` returns one snapshot, computed on demand.
 - `GET /v1/proxy/status/stream` is a Server-Sent Events stream: the first
@@ -1021,7 +1067,7 @@ explicitly documented as a not-yet-consumed "future" contract).
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `active_connections` | array | Every currently in-flight `/v1/chat/completions` request |
+| `active_connections` | array | Every currently in-flight `/v1/chat/completions` and `/v1/embeddings` request |
 | `slots_available` | `bool` | `true` if the running llama-server's `/slots` endpoint is reachable and enabled |
 | `slots` | array | Per-slot context usage; empty unless `slots_available` is `true` |
 | `slots_status` | `string \| null` | Reason `slots` is empty (disabled via `--no-slots`, or the poller's last connect/timeout/parse error); `null` when `slots_available` |
@@ -1032,8 +1078,11 @@ explicitly documented as a not-yet-consumed "future" contract).
 | `dialect_residue_total` | `u64` | Requests whose client-visible output carried dialect markup that survived normalization; eviction-safe |
 | `tool_repairs_attempted` | `u64` | Turns whose tool call failed schema validation and was re-issued, with `tool_choice: "required"` or as a second draw under gglib's own grammar on a turn it constrained, counted whether or not the re-issue worked |
 | `tool_repairs_succeeded` | `u64` | Of those, the ones that produced a conformant call. The **ratio** is the number worth watching — many attempts with few successes means `required` is not fixing what the model gets wrong, a different problem from an unconstrained `auto` path |
-| `upstream_health` | `object` | Degradation watchdog counters since proxy start: empty responses, first-byte timeouts, proactive recycles |
+| `upstream_health` | `object` | Degradation watchdog counters since proxy start: the current strike streak (`consecutive_strikes`), and totals of empty responses, upstream errors, stream stalls, first-byte timeouts, client aborts, proactive recycles and recycles not carried out |
 | `per_model_defects` | `object` | Per-model defect counts, keyed by the name of the model a request resolved to — see below |
+| `launch` | `object \| null` | What the running model's launch decided, and why: the record the CLI banner prints at startup; `null` until a request has resolved a model |
+| `admission` | `object` | Which models hold VRAM slots, what is queued behind them, and why the second slot is or is not in use; read live from the runtime on every snapshot |
+| `sampling_audit` | `object` | Whether the sampling gglib resolved is what llama-server applied, or that nothing is in a position to know; also the reasoning controls gglib decided and the client field names the trust gate dropped |
 
 #### `per_model_defects`
 
@@ -1198,14 +1247,21 @@ gap without changing the adapter.
 | `id_task` | `i64 \| null` | ID of the task currently occupying this slot |
 | `n_ctx` | `u64 \| null` | Context size configured for this slot |
 | `is_processing` | `bool` | Whether this slot is actively processing a request |
+| `params` | `object \| null` | The sampler settings llama-server parsed for the request in this slot; `null` on an idle slot |
 | `n_past` | `u64 \| null` | Legacy tokens-in-KV-cache field (older llama.cpp versions) |
 | `cache_tokens` | `u64 \| null` | Alternate legacy field name for the same thing |
-| `next_token.n_decoded` | `u64 \| null` | Current-schema generation-progress field |
+| `n_prompt_tokens` | `u64 \| null` | Current-schema field: the whole prompt loaded into this slot, cached prefix included |
+| `n_prompt_tokens_processed` | `u64 \| null` | Current-schema field: the prompt tokens run through the model this round, excluding those reused from the cache |
+| `n_prompt_tokens_cache` | `u64 \| null` | Current-schema field: the prompt tokens reused from the KV cache this round |
+| `next_token.n_decoded` | `u64 \| null` | Current-schema generation-progress field; on a build with Multi-Token Prediction, `next_token` is an array and the first entry is read |
 
 `/slots`'s JSON shape varies across llama.cpp versions, so consumers should
-compute "tokens in use" via the same priority-fallback chain the proxy itself
-uses (`SlotSnapshot::tokens_in_use()`): `n_past` → `cache_tokens` →
-`next_token.n_decoded`, `None` if none are present. Context remaining is
+compute "tokens in use" the way the proxy itself does
+(`SlotSnapshot::tokens_in_use()`): the prompt side is
+`n_prompt_tokens_processed + n_prompt_tokens_cache` when `_processed` is
+present, else `n_prompt_tokens`, plus `next_token.n_decoded`. Only when
+neither prompt field is present does it fall back to `n_past` →
+`cache_tokens` → `next_token.n_decoded`, `None` if none are present. Context remaining is
 `n_ctx.saturating_sub(tokens_in_use())` when both are known.
 
 #### `recent_requests[]` (`ContextSnapshot`)

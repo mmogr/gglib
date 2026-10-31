@@ -67,13 +67,14 @@ already has".
 
 ## Module placement
 
-Follows the workspace's existing dependency direction — the decision is pure
-and lives in core, the I/O lives in the adapter that already owns forwarding.
+Follows the workspace's existing dependency direction — validation is pure
+and lives in core; the repair decision and the I/O live in the adapter that
+already owns forwarding.
 
 | Piece | Crate | Why there |
 |---|---|---|
-| `ToolCallValidator` — `(tools, tool_calls) -> Verdict` | `gglib-core::request_pipeline::validate` | Pure function over `serde_json::Value`. No HTTP, no runtime. Testable exhaustively against schema fixtures. |
-| `RepairPolicy` — should this verdict be repaired, and how | `gglib-core::request_pipeline::validate` | Policy is domain. Keeps the "when" answerable without a server. |
+| `validate_tool_calls` — `(tools, tool_calls) -> Verdict` | `gglib-core::request_pipeline::validate` | Pure function over `serde_json::Value`. No HTTP, no runtime. Testable exhaustively against schema fixtures. |
+| `decide` — forward the response, or re-issue it with which body | `gglib-proxy::repair` | The re-issue body is built from the request as forwarded upstream, so it sits beside the code that sends it. Makes no request itself. |
 | Repair executor — re-issue, swap, record | `gglib-proxy::forward` (streamed) and `gglib-proxy::forward_unary` (buffered), sharing `repair::read_second_draw` | Only the proxy can issue a second upstream request. |
 | Counters / dashboard fields | `gglib-proxy::metrics` | Same shape as `dialect_residue_total` and `grammar_enforced`. |
 
@@ -282,9 +283,9 @@ generation ends, bounded by the same sixty-second re-issue cap. See "Cost".
 Every repair is a fact about a model/build pair, which makes this Tier C data
 as much as Tier B behaviour:
 
-- `tool_calls_validated`, `tool_calls_repaired`, `tool_calls_repair_failed` on
-  the dashboard snapshot, alongside `dialect_residue_total`.
-- `ContextSnapshot` gains `tool_call_repaired`, back-patched after the response
+- `tool_repairs_attempted` and `tool_repairs_succeeded` on the dashboard
+  snapshot, alongside `dialect_residue_total`.
+- `ContextSnapshot` gains `tool_repaired`, back-patched after the response
   completes — the same pattern `dialect_residue` uses.
 - A `warn!` on repair failure naming the model, the violation kinds, and the
   llama.cpp build.

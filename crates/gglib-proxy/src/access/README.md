@@ -22,15 +22,22 @@ Each router keeps its own layer order. The proxy's is below. The daemon puts
 
 # Layer order
 
-The guards are installed in `router.rs`, and the order is load-bearing:
+The guards are installed in `router.rs`, and the order is load-bearing. The
+four that are not this module's are `remote_marker`, `device_gate` and
+`mcp_tunnel_guard`, in `remote/`, and `named_device_only`, in `chats/`:
 
 ```text
 CorsLayer              outermost — answers OPTIONS preflight and returns
   host_guard           every route, every path, always on
     origin_guard       every route; asks only of a change
-      (route match)
-        bearer_guard   matched routes only; asks a token only when one is set
-          handler
+      remote_marker    every route; records whether the request is tunnelled
+        (route match)
+          bearer_guard   the protected group; asks a token only when one is set
+            device_gate  the protected group: tunnelled ⇒ names a device
+              mcp_tunnel_guard   /mcp only: tunnelled ⇒ refused, always
+              named_device_only  /v1/chats and /v1/attachments: a named
+                                 device, never local
+                handler
 ```
 
 `CorsLayer` has to stay outside every guard. It short-circuits a preflight `OPTIONS`

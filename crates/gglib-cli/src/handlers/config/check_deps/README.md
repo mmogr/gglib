@@ -40,7 +40,7 @@ This module handles the `check-deps` command, which verifies that all required s
   - `common.rs` - Cross-platform instructions
   - `macos.rs` - macOS-specific commands (Homebrew)
   - `linux.rs` - Linux-specific commands (apt, dnf, pacman)
-  - `windows.rs` - Windows-specific commands (Chocolatey, Scoop)
+  - `windows.rs` - Windows-specific commands (winget, Chocolatey)
 
 ### Platform Detection
 - **`platform.rs`** - OS and architecture detection
@@ -49,17 +49,30 @@ This module handles the `check-deps` command, which verifies that all required s
 
 ## Checked Dependencies
 
-### Required
-- **git** - For cloning llama.cpp repository
-- **cmake** - For building native code
-- **C++ compiler** - Platform-specific (gcc/clang/MSVC)
-- **make/ninja** - Build system
+The list is `DefaultSystemProbe::check_all_dependencies`, in `gglib-runtime`'s
+`system/` module.
 
-### Optional (GPU Acceleration)
-- **CUDA toolkit** - For NVIDIA GPU support
-- **Metal** - For Apple Silicon GPU support (built-in)
-- **Vulkan SDK** - For cross-platform GPU support
-- **`ROCm`** - For AMD GPU support
+### Required
+- **cargo**, **rustc** - The Rust toolchain
+- **node**, **npm** - For building the web UI and the Tauri app
+- **git** - For llama.cpp installation
+- **make**, **cmake** - For the llama.cpp build
+- **gcc**, **g++** - For llama.cpp compilation
+- **pkg-config** - For building with system libraries
+- **libssl-dev** - For llama.cpp's HTTPS support
+- **Linux only:** patchelf, webkit2gtk-4.1, librsvg, libappindicator-gtk3,
+  libasound2-dev, libcurl-dev, libsqlite3-dev, libclang-dev (the Tauri app,
+  audio, llama.cpp's HTTP support, the database and bindgen)
+
+### Optional
+- **python3** - Enables the `hf_xet` download accelerator
+- **gtk-layer-shell** (Linux) - Anchors the tray panel beside the system tray on Wayland
+
+### GPU Acceleration
+- **Metal** - Listed as available when detected (built-in on Apple GPUs)
+- **CUDA** - Listed with its version when installed, or as optional when an NVIDIA GPU is detected without it
+- **Vulkan runtime** - Listed when present, and then **Vulkan headers**, **glslc** and **SPIR-V headers** are required, since the build picks Vulkan
+- **Vulkan** - Suggested as optional when neither Metal nor a Vulkan runtime is found (not on macOS)
 
 ## Output Format
 

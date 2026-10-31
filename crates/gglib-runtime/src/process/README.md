@@ -2,10 +2,10 @@
 
 <!-- module-docs:start -->
 
-Process management infrastructure for GUI applications.
+Process management infrastructure for every server gglib starts.
 
-This module provides shared infrastructure for managing llama-server processes
-with integrated log streaming and event broadcasting for GUI use cases.
+This module provides shared infrastructure for managing llama-server and
+`sd-server` processes, with integrated log streaming and event broadcasting.
 
 # Structure
 
@@ -17,7 +17,8 @@ with integrated log streaming and event broadcasting for GUI use cases.
 - `AdmissionQueue` (`admission/`) - Decides who gets the GPU next, and for how long
 - `ServerEvent` / `ServerEventBroadcaster` - Lifecycle event broadcasting
 - `ServerLogManager` - Log streaming infrastructure
-- Health check utilities
+- `check_http_health` / `wait_for_http_health` - Health checks, at each runtime's own path
+- `shutdown_child` / `kill_pid` (`shutdown/`) - Stopping a server: SIGTERM, then SIGKILL with a bounded wait
 
 # Residency and admission
 
@@ -28,8 +29,8 @@ per request: serve from a resident model, launch into a free or evictable
 slot, wait, or give up.
 
 A set may be *pinned*: `ProcessManager::set_pin` restricts admission to
-exactly one model (backing `gglib serve`) and returns `PinnedModelMismatch`
-for any other, rather than swapping. The request is resolved first and the pin
+exactly one model (backing `gglib serve`), and admission answers any other
+with `PinnedModelMismatch` rather than swapping. The request is resolved first and the pin
 compares catalog ids, so the pinned model answers to its id and to its name; a
 model the catalog does not hold is `ModelNotFound`, pinned or not. Pinning
 changes only which models are admitted — startup coordination, cache handling

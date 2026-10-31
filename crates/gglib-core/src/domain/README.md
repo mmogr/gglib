@@ -10,6 +10,15 @@ infrastructure concerns (database, filesystem, etc.).
 # Structure
 
 - `agent` - Agent loop types (`AgentConfig`, `AgentMessage`, `AgentEvent`, etc.)
+- `benchmark` - Benchmark run types for the four modes (compare, perf, tune,
+  agentic), their configs, results and streamed events
+- `defects` - Per-model defect counters the proxy writes as events happen
+  (`ModelDefectLedger`); `defects_agent` holds the one the agent loop writes,
+  and `defect_counts` the counts a reader is handed (`ModelDefectCounts`,
+  `LoopGuardTrip`)
+- `loop_guard_log` - The loop guard's log, which survives a restart: one row
+  per decision (`LoopGuardTripEvent`) and one per day, model, version and mode
+  counting the requests it scanned (`LoopGuardTripDay`)
 - `model` - Model types (`Model`, `NewModel`). A model reads images exactly when
   it has a projector (`Model::image_input`), and draws them exactly when its
   tensors named an image family (`Model::generates_images`)
@@ -22,6 +31,8 @@ infrastructure concerns (database, filesystem, etc.).
   ADR 0013's use-don't-change line as one table), and the name a machine is
   shown by, sanitised from its host name (`machine_name`)
 - `model_naming` - Shared model-naming policy (`resolve_model_name`, `NameSource`)
+- `query` - Model list filtering and sorting (`ModelListQuery`, `apply_query`),
+  the one rule the CLI and the HTTP handler share
 - `mcp` - MCP server types (`McpServer`, `NewMcpServer`, etc.)
 - `chat` - Chat conversation and message types. A message carries its images
   by reference: `NewMessage.images` are ids, `Message.images` are facts
@@ -51,6 +62,15 @@ infrastructure concerns (database, filesystem, etc.).
   `llama-server` or stable-diffusion.cpp's `sd-server`), derived from its image
   family and never stored
 - `capabilities` - Model capability detection and inference
+- `capability_tags` - The capability tags stored on a model and the
+  predicates that read them (`capabilities_of`, `is_reasoning`, `is_embedding`)
+- `dialect` - How a model wraps tool calls, as data (`DialectSpec`), which
+  drives both the delimited parser and the decode-time grammar
+- `template_caps` - llama-server's report of what a loaded chat template
+  supports (`TemplateCaps`), held as read, unreadable or not yet read
+  (`TemplateCapsState`)
+- `runtime_capabilities` - What the engine under gglib can do
+  (`RuntimeCapabilities`), the mirror of the GGUF capabilities
 - `thinking` - A chat's Thinking choice (`Thinking`: `off` or `default`), which a
   turn says and `ConversationSettings.thinking` remembers, and the one rule
   (`thinking::settle`) that reads a turn by it at the daemon's doors and in the CLI
@@ -58,6 +78,22 @@ infrastructure concerns (database, filesystem, etc.).
   `folder::launched` for `gglib chat`'s launch directory, never home or the
   root, and `folder::chosen` for the page's pick (absolute, canonical, a
   folder, else `FolderError`); `ConversationSettings.folder` remembers the pick
+- `inference` - Sampling configuration (`InferenceConfig`), the per-model
+  rungs of the sampling ladder (`ModelRungs`) and where a model's defaults came
+  from (`DefaultsOrigin`)
+- `inference_profile` - Named, sparse sampling profiles a client selects with a
+  `:{name}` suffix on the model (`InferenceProfile`), and the builtin templates
+- `model_sampling` - The sampler defaults a model carries in its GGUF metadata
+  (`ModelSamplingDefaults`)
+- `generation_config` - The sampling recipe a model author publishes in
+  `generation_config.json` (`PublishedGenerationConfig`)
+- `reasoning_effort` - The `reasoning_effort` level a request asks for
+  (`ReasoningEffort`)
+- `sampling_provenance` - Which rung supplied each resolved sampling value
+  (`FieldSources`, `ParamSource`)
+- `sampling_discards` - Which values a caller named and the ladder then passed
+  over (`discarded_from_rung`)
+- `server_config` - Per-model server launch defaults (`ServerConfig`)
 - `kv_memory` - Shape of a model's KV memory from GGUF metadata: whether it
   keeps only part of the token history (`kv_memory_is_partial`), and how many
   layers hold a per-token cache at all (`kv_cache_layer_count`)
@@ -70,5 +106,19 @@ infrastructure concerns (database, filesystem, etc.).
   fits, tight, too big, or unknown with the missing input named), read off the
   launch's own context fit at the default KV cache types, with the inputs it
   was reached from as the reason
+- `context_fit` - How large a context this machine can serve (`fit_context`),
+  the launch-time half of `gglib up`'s fit arithmetic
+- `recommendation` - Picking a first model that fits the machine
+  (`recommend`, `Recommendation`)
+- `residency` - Whether a second model may stay resident in VRAM beside the
+  first (`decide_secondary_slot`, `SecondarySlotDecision`)
+- `admission` - What the admission queue and the VRAM resident set look like
+  right now (`AdmissionSnapshot`), the shape `gglib-runtime` reports them in
+- `cache_budget` - Auto-sizing of llama-server's host-RAM prompt cache
+  (`--cache-ram`)
+- `slot_eviction` - Which on-disk KV slot files to delete to stay within a byte
+  budget (`select_evictions`); the scanning and deleting live in `gglib-proxy`
+- `launch_narration` - What the runtime decided for one llama-server launch,
+  and why (`LaunchNarration`, `LaunchDecision`)
 
 <!-- module-docs:end -->

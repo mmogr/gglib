@@ -19,6 +19,8 @@ tune/
   pruning.rs  — successive-halving candidate reduction math
   usage.rs    — TaskUsageTally: per-task completion-token count that survives
                 a guard-aborted run
+  apply_run.rs — applying a stored run's winner as a model's Measured
+                defaults, once the gate's verdict is Apply
 ```
 
 # What The Axes Actually Measure

@@ -13,7 +13,8 @@ accurate at tool calls and resistant to loop/stagnation guard triggers.
 |--------|----------|
 | [`config`] | [`TuneConfig`], [`SweepSpec`], [`ScoreWeights`] |
 | [`task`] | [`TuneTask`], [`TaskCategory`], [`ExpectedOutcome`], [`ExpectedCall`], [`TaskSuite`] |
-| [`result`] | [`TuneCandidateResult`], [`CandidateSource`], [`TuneTaskResult`] |
+| [`result`] | [`TuneCandidateResult`], [`CandidateSource`], [`TuneTaskResult`], [`GeneratedOutput`] |
+| [`apply`] | [`ApplyVerdict`](apply::ApplyVerdict), [`ApplyRecord`](apply::ApplyRecord) — whether a run's winner may become a model's measured defaults |
 
 # Task Categories
 

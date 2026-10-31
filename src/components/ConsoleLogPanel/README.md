@@ -11,6 +11,6 @@ Terminal-style log viewer for live llama-server output. Parses ANSI escape codes
 | `ConsoleLogPanel.tsx` | Log list with ANSI parsing (Anser library), auto-scroll logic, copy/clear actions |
 | `ConsoleLogPanel.css` | Terminal appearance, ANSI colour classes, monospace font |
 
-Auto-scroll disables when the user scrolls up and re-enables automatically when they return to within 40px of the bottom.
+Auto-scroll disables when the user scrolls up and re-enables automatically when they return to within 50px of the bottom.
 
 <!-- module-docs:end -->

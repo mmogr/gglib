@@ -32,13 +32,17 @@ benchmark/
   agentic.rs — the raw-vs-gglib agentic eval, and its optional proxy pair
   proxy_arm.rs — the in-process gglib-proxy the eval's proxy arm talks to,
                  with the stand-in ports it is handed in proxy_arm_ports.rs
+  http_client.rs — the HTTP clients compare mode and the agentic eval
+                 stream over, and their timeouts
+  tune/      — the tune sweep: run_tune(), its scoring, pruning and the
+               apply of a run's winner (see tune/README.md)
 ```
 
 # VRAM Contention Prevention
 
 `BenchmarkDeps::runtime` is the **same** [`ModelRuntimePort`] instance
 shared with `ProxyOps` at the composition root (created once in
-`bootstrap.rs`).  Both operations go through the same
+`service_graph.rs`).  Both operations go through the same
 [`ProcessManager`] and its admission queue, which guarantees every
 llama-server on the machine lives in the same bounded resident set.
 `run_perf()` additionally calls `stop_current()` before

@@ -12,6 +12,7 @@ same `/api/events` stream a browser tab does.
 
 - `app` - Application-level events (model added/removed/updated)
 - `server` - Model server lifecycle events
+- `remote` - Remote tunnel events (enabled, paired, joined, away, back)
 
 Download events are not a submodule here: `AppEvent::Download` wraps
 `crate::download::DownloadEvent` verbatim.
