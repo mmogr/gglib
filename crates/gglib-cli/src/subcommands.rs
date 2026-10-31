@@ -234,7 +234,7 @@ pub enum RemoteCommand {
     Join {
         /// `<ticket>-<code>`, a bare ticket, or nothing to reuse the last one
         pairing: Option<String>,
-        /// Loopback port to bind here (default: a free one)
+        /// Loopback port to bind here (default: the last one used, else 8180; a free one if that is taken)
         #[arg(long)]
         port: Option<u16>,
         /// Self-hosted relay URL for this side (default: iroh's public relays)

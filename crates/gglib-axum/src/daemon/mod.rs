@@ -23,6 +23,7 @@ use crate::state::AppState;
 // the whole way, and demoting this link is E0365. The lint tracks the chain
 // correctly; it only fires if the root re-export is missing.
 pub use lock::DaemonLock;
+pub use shutdown::SHUTDOWN_WATCHDOG;
 
 /// CORS origins the daemon always allows.
 ///

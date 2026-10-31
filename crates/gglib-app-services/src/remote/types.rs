@@ -73,7 +73,8 @@ pub struct JoinRequest {
     /// `<ticket>-<code>` for a first pairing, a bare ticket afterwards, or
     /// `None` to dial the ticket this machine last connected to.
     pub pairing: Option<String>,
-    /// The loopback port to bind here; `None` picks a free one.
+    /// The loopback port to bind here; `None` takes the last one used, else
+    /// 8180, and a free one if that is taken.
     pub port: Option<u16>,
     /// A self-hosted relay URL for this endpoint; `None` uses the public
     /// relays.

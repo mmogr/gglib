@@ -11,7 +11,8 @@ export type RemoteJoinBody = {
  */
 pairing: string | null, 
 /**
- * The loopback port to bind; omitted picks a free one.
+ * The loopback port to bind; omitted takes the last one used, else 8180,
+ * and a free one if that is taken.
  */
 port: number | null, 
 /**

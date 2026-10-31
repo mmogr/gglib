@@ -97,6 +97,28 @@ impl DaemonLock {
         Ok(Self { file, path })
     }
 
+    /// Whether a daemon still holds the lock in `dir`.
+    ///
+    /// The daemon keeps its lock until its ordered teardown is done, or until
+    /// its process ends, so this is how a caller that asked it to stop knows
+    /// it has. A health probe answers too soon: the daemon closes its listener
+    /// before the teardown starts. Takes the lock for an instant when it is
+    /// free. A lock file that cannot be opened reads as not held.
+    #[must_use]
+    pub fn is_held(dir: &Path) -> bool {
+        let Ok(file) = File::open(dir.join("daemon.lock")) else {
+            return false;
+        };
+        match file.try_lock() {
+            Ok(()) => {
+                let _ = file.unlock();
+                false
+            }
+            Err(std::fs::TryLockError::WouldBlock) => true,
+            Err(std::fs::TryLockError::Error(_)) => false,
+        }
+    }
+
     /// Read a lock file's recorded holder without taking the lock.
     ///
     /// For `gglib daemon status`: says who *claims* to hold the lock. `None`
@@ -205,5 +227,31 @@ mod tests {
     fn read_holder_is_none_when_no_lock_file_exists() {
         let dir = tempfile::tempdir().unwrap();
         assert!(DaemonLock::read_holder(dir.path()).is_none());
+    }
+
+    /// The stop signal: held while a daemon has the lock, free once it lets
+    /// go, and free when no daemon ever ran here.
+    #[test]
+    fn is_held_follows_the_lock() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!DaemonLock::is_held(dir.path()), "no lock file");
+
+        let lock = DaemonLock::acquire(dir.path(), 9887).unwrap();
+        assert!(DaemonLock::is_held(dir.path()), "while acquired");
+        assert!(
+            DaemonLock::is_held(dir.path()),
+            "asking does not release it"
+        );
+
+        drop(lock);
+        assert!(!DaemonLock::is_held(dir.path()), "after release");
+    }
+
+    /// A file left by a dead holder is not a held lock.
+    #[test]
+    fn a_stale_lock_file_is_not_held() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("daemon.lock"), r#"{"pid":1,"port":9887}"#).unwrap();
+        assert!(!DaemonLock::is_held(dir.path()));
     }
 }

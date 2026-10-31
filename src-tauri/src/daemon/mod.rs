@@ -250,16 +250,23 @@ impl Daemon {
             .await;
     }
 
-    /// Wait (bounded) for the daemon to stop answering.
+    /// Wait (bounded) for the daemon to finish stopping: not answering, and
+    /// its lock released. It closes its listener before its teardown starts,
+    /// and lets go of the lock only once that teardown is done or it exits.
     pub(crate) async fn wait_for_exit(&self, budget: Duration) {
         let deadline = tokio::time::Instant::now() + budget;
         while tokio::time::Instant::now() < deadline {
-            if matches!(probe(&self.client).await, Probe::NotRunning) {
+            if !lock_is_held() && matches!(probe(&self.client).await, Probe::NotRunning) {
                 return;
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
     }
+}
+
+/// Whether a daemon on this machine still holds its lock.
+fn lock_is_held() -> bool {
+    gglib_core::paths::data_root().is_ok_and(|dir| gglib_axum::DaemonLock::is_held(&dir))
 }
 
 /// Poll until a just-launched daemon answers, or the launch budget runs out.

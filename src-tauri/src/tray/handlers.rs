@@ -5,8 +5,6 @@
 //! diverge, and the quit path stays in [`crate::lifecycle`] so the tray gets
 //! the same hardened shutdown as every other exit.
 
-use std::time::Duration;
-
 use tauri::{AppHandle, Manager};
 use tracing::{debug, error};
 
@@ -16,12 +14,6 @@ use crate::lifecycle;
 use crate::proxy_actions;
 use crate::tray::placement::Anchor;
 use crate::tray::{confirm, ids, window};
-
-/// How long to wait for a daemon asked to stop to actually go.
-///
-/// Matches the budget `lifecycle` gives a hosted daemon, which is in turn
-/// sized against the daemon's own 10-second shutdown watchdog.
-const SERVICE_STOP_WAIT: Duration = Duration::from_secs(12);
 
 /// Perform the action a menu item id names.
 ///
@@ -97,7 +89,7 @@ fn spawn_service(app: AppHandle, start: bool) {
             }
 
             state.daemon.request_shutdown().await;
-            state.daemon.wait_for_exit(SERVICE_STOP_WAIT).await;
+            state.daemon.wait_for_exit(lifecycle::TEARDOWN_WAIT).await;
             Ok(())
         };
 
