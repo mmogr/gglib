@@ -190,9 +190,7 @@ jobs:
         run: rustup show
 
       - name: Lockfile guard
-        run: |
-          cargo metadata --locked --format-version 1 > /dev/null
-          cargo metadata --locked --format-version 1 --manifest-path src-tauri/Cargo.toml > /dev/null
+        run: cargo metadata --locked --format-version 1 > /dev/null
 
       # Swatinem/rust-cache, as release.yml already uses, with a shared-key
       # per build configuration. The raw actions/cache this replaces used one
@@ -225,17 +223,10 @@ jobs:
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      - name: Build Web UI
-        run: |
-          npm ci
-          npm run build
-
+      # No frontend build. Without its `custom-protocol` feature gglib-app
+      # embeds no `web_ui/`, and gglib-axum's `#[allow_missing = true]` leaves
+      # its asset set empty, so neither needs one to build or to test.
+      #
       # One build, then one run over it. The fifteen-crate loop this replaces
       # cost 23m15s of a 57m job, and it was not merely repeating work: naming
       # a crate with `-p` changes feature unification, so `cargo test -p
@@ -289,12 +280,7 @@ jobs:
         if: always()
         with:
           name: test-results
-          # A glob, not a list. The list this replaces named fifteen crates
-          # while badges.yml's ALL_CRATES named sixteen, and the two had
-          # already drifted: the broadcaster and gglib-build-info had badges that
-          # nothing ever wrote a file for, and gglib-integration-tests had a
-          # file nothing reads. Deriving the set from what was actually built
-          # cannot drift.
+          # A glob, so the set is whatever the run built.
           path: rust-test-*.txt
           retention-days: 30
 
