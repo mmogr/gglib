@@ -227,6 +227,8 @@ doc-check: ## Build rustdoc with warnings denied, exactly as CI does
 	@# (its `tauri::generate_context!()` embeds `frontendDist` when
 	@# `custom-protocol` is on); see the note above `bindings`.
 	$(CARGO) doc --workspace --no-deps --document-private-items --exclude gglib-app
+	@# rustdoc passes a Markdown link that goes nowhere; this does not.
+	@./scripts/check_doc_links.py "$${CARGO_TARGET_DIR:-target}/doc"
 
 # The generated parts of the crate READMEs, from crates/layers.toml and the
 # manifests: each crate's header block, and the crate graph and catalogue in
