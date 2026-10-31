@@ -21,7 +21,8 @@
         "arguments": { "path": "src/main.rs" }
       },
       "display_name": "Read File",
-      "args_summary": "src/main.rs"
+      "args_summary": "src/main.rs",
+      "server": "Files"
     },
     {
       "type": "tool_call_complete",
@@ -64,7 +65,9 @@
           {
             "id": "c1",
             "name": "read_file",
-            "arguments": { "path": "src/main.rs" }
+            "arguments": { "path": "src/main.rs" },
+            "display_name": "Read File",
+            "server": "Files"
           }
         ],
         "thinking": "The file will say.",
@@ -116,7 +119,9 @@
           {
             "id": "c1",
             "name": "read_file",
-            "arguments": { "path": "src/main.rs" }
+            "arguments": { "path": "src/main.rs" },
+            "display_name": "Read File",
+            "server": "Files"
           }
         ],
         "thinking": "The file will say.",

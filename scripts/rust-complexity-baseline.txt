@@ -87,7 +87,8 @@ crates/gglib-core/src/domain/agent/config.rs 795
 crates/gglib-core/src/domain/agent/events.rs 392
 crates/gglib-core/src/domain/agent/loop_detection/tests.rs 414
 crates/gglib-core/src/domain/agent/openai_history.rs 301
-crates/gglib-core/src/domain/agent/replay_tests.rs 350
+crates/gglib-core/src/domain/agent/replay.rs 336
+crates/gglib-core/src/domain/agent/replay_tests.rs 375
 crates/gglib-core/src/domain/benchmark/agentic.rs 1101
 crates/gglib-core/src/domain/benchmark/agentic_tests.rs 864
 crates/gglib-core/src/domain/benchmark/tune/apply.rs 449
