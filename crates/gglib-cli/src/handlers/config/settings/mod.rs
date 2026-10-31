@@ -1,8 +1,4 @@
 #![doc = include_str!("README.md")]
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 mod profiles;
 mod reset;
 mod reveal;
@@ -53,10 +49,6 @@ async fn model_display(ctx: &CliContext, id: Option<i64>) -> Result<Option<Strin
 /// - No args: show current default
 /// - With identifier: set as default
 /// - With --clear: remove default
-#[allow(
-    clippy::single_match_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) async fn handle_default_model(
     ctx: &CliContext,
     identifier: Option<String>,
@@ -73,34 +65,30 @@ pub(crate) async fn handle_default_model(
         return Ok(());
     }
 
-    match identifier {
-        Some(id) => {
-            // Set the default model
-            let model = resolver::resolve_model_identifier(ctx, &id).await?;
-            let update = SettingsUpdate {
-                default_model_id: Some(Some(model.id)),
-                ..Default::default()
-            };
-            ctx.app.settings().update(update).await?;
-            println!("✓ Default model set to: {} (ID: {})", model.name, model.id);
-        }
-        None => {
-            // Show current default
-            let settings = ctx.app.settings().get().await?;
-            match settings.default_model_id {
-                Some(model_id) => match ctx.app.models().get_by_id(model_id).await? {
-                    Some(model) => {
-                        println!("Default model: {} (ID: {})", model.name, model.id);
-                    }
-                    None => {
-                        println!("Default model ID: {model_id} (warning: model not found)");
-                    }
-                },
+    if let Some(id) = identifier {
+        // Set the default model
+        let model = resolver::resolve_model_identifier(ctx, &id).await?;
+        let update = SettingsUpdate {
+            default_model_id: Some(Some(model.id)),
+            ..Default::default()
+        };
+        ctx.app.settings().update(update).await?;
+        println!("✓ Default model set to: {} (ID: {})", model.name, model.id);
+    } else {
+        // Show current default
+        let settings = ctx.app.settings().get().await?;
+        if let Some(model_id) = settings.default_model_id {
+            match ctx.app.models().get_by_id(model_id).await? {
+                Some(model) => {
+                    println!("Default model: {} (ID: {})", model.name, model.id);
+                }
                 None => {
-                    println!("No default model set.");
-                    println!("Use 'gglib config default <id-or-name>' to set one.");
+                    println!("Default model ID: {model_id} (warning: model not found)");
                 }
             }
+        } else {
+            println!("No default model set.");
+            println!("Use 'gglib config default <id-or-name>' to set one.");
         }
     }
     Ok(())
@@ -151,7 +139,11 @@ pub(crate) async fn handle_settings(ctx: &CliContext, command: SettingsCommand) 
         SettingsCommand::Show => {
             let settings = ctx.app.settings().get().await?;
             let (model_display, image_display) = resolve_model_display(ctx, &settings).await?;
-            let rows = settings_display_rows(&settings, model_display, image_display);
+            let rows = settings_display_rows(
+                &settings,
+                model_display.as_deref(),
+                image_display.as_deref(),
+            );
             println!("Current application settings:");
             print_sections(&settings_to_sections(&rows));
             Ok(())

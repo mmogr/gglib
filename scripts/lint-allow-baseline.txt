@@ -1,6 +1,6 @@
 # <member> <lints allowed> <of those, without a reason>
 # Written by scripts/check_lint_inheritance.sh --update.
-crates/gglib-core 77 75
+crates/gglib-core 77 65
 crates/gglib-db 4 0
 crates/gglib-download 10 10
 crates/gglib-gguf 6 6
@@ -9,16 +9,15 @@ crates/gglib-app-services 46 16
 crates/gglib-hf 2 2
 crates/gglib-build-info 0 0
 crates/gglib-mcp 9 9
-crates/gglib-proxy 75 8
+crates/gglib-proxy 50 8
 crates/gglib-runtime 37 16
 crates/gglib-agent 4 4
 crates/gglib-engine-llama 30 0
-crates/gglib-sse 0 0
+crates/gglib-broadcast 0 0
 crates/gglib-test-http 2 0
-crates/gglib-cli 87 12
-crates/gglib-axum 25 8
-crates/gglib-tauri 0 0
+crates/gglib-cli 38 12
+crates/gglib-axum 10 8
 crates/gglib-ffi 0 0
 crates/gglib-integration-tests 2 2
-src-tauri 22 4
+src-tauri 15 4
 (outside-members) 0 0

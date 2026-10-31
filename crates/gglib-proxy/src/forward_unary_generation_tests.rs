@@ -42,7 +42,7 @@ fn recorded(metrics: &ContextMetricsStore) -> TurnGeneration {
 #[tokio::test]
 async fn a_unary_turn_records_what_its_answer_carries() {
     let answers = vec![answer(2, "{\"path\":\"a\"}", "résumé", 37)];
-    let body = forwarded_body(json!({"tool_choice": "auto"}));
+    let body = forwarded_body(&json!({"tool_choice": "auto"}));
     let (requests, _, metrics) = run_turn(body, answers, None, RepairTurn::OFF).await;
 
     assert_eq!(requests.len(), 1);
@@ -66,7 +66,7 @@ async fn a_repaired_unary_turn_records_the_answer_the_client_gets() {
         answer(1, "{\"max_lines\":42}", "first", 5),
         answer(2, "{\"path\":\"a\"}", "the second", 9),
     ];
-    let body = forwarded_body(json!({"tool_choice": "auto"}));
+    let body = forwarded_body(&json!({"tool_choice": "auto"}));
     let (requests, _, metrics) = run_turn(body, answers, None, RepairTurn::ON).await;
 
     assert_eq!(requests.len(), 2, "one original, one repair");
@@ -95,7 +95,7 @@ async fn a_unary_turn_the_upstream_refuses_records_nothing() {
 
     let response = forward_unary(
         Client::new().post(format!("http://127.0.0.1:{port}/v1/chat/completions")),
-        forwarded_body(json!({})),
+        forwarded_body(&json!({})),
         &TurnDialect::parsed(None),
         &CacheMetricsStore::new(),
         (&metrics, seq),

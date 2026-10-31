@@ -44,7 +44,7 @@
 //! [`FieldSources`]: gglib_core::domain::FieldSources
 //! [`InferenceConfig::to_openai_json_patch`]: gglib_core::domain::InferenceConfig::to_openai_json_patch
 
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 
 use gglib_core::domain::{
     FieldIssue, ReasoningEffort, Support, TemplateCapsState, reasoning_effort_support,
@@ -255,7 +255,7 @@ impl ClientFieldNameTally {
         if discarded.is_empty() && rejected.is_empty() {
             return;
         }
-        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
         for field in discarded {
             bump(&mut guard, field, DropKind::Discarded);
         }
@@ -267,7 +267,11 @@ impl ClientFieldNameTally {
     /// The tally, ordered for display.
     #[must_use]
     pub(crate) fn snapshot(&self) -> ClientFieldNames {
-        let mut out = self.inner.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let mut out = self
+            .inner
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
         out.fields.sort_by(|a, b| {
             b.total()
                 .cmp(&a.total())

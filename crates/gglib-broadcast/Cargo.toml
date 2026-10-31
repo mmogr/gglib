@@ -1,5 +1,5 @@
 [package]
-name = "gglib-sse"
+name = "gglib-broadcast"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -10,7 +10,7 @@ publish = false
 build = "build.rs"
 
 [lib]
-name = "gglib_sse"
+name = "gglib_broadcast"
 path = "src/lib.rs"
 
 [features]

@@ -29,10 +29,10 @@ fn format_param_count(param_b: f64) -> String {
 }
 
 /// Helper to convert Model to `ModelSummary` (for listing).
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "a model id is a positive SQLite rowid; `try_from` would turn the cast into an error path no caller has"
 )]
 fn model_to_summary(m: &Model) -> ModelSummary {
     // Get file size from disk if possible, otherwise 0
@@ -61,10 +61,10 @@ fn model_to_summary(m: &Model) -> ModelSummary {
 
 /// Helper to convert Model to `ModelLaunchSpec` (for launching).
 #[must_use]
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "a model id is a positive SQLite rowid; `try_from` would turn the cast into an error path no caller has"
 )]
 pub fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
     let file_size_bytes = resident_bytes(&m);

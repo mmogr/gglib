@@ -137,15 +137,11 @@ impl DaemonAccess {
     ///
     /// So a keyless daemon gets a policy that names no key, permanently.
     #[must_use]
-    #[allow(
-        clippy::option_if_let_else,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
     pub fn bearer_policy(&self, settings: Arc<SettingsCache>) -> BearerPolicy {
-        match self.api_key() {
-            Some(key) => BearerPolicy::tracking(Some(key), settings),
-            None => BearerPolicy::fixed(None),
-        }
+        self.api_key().map_or_else(
+            || BearerPolicy::fixed(None),
+            |key| BearerPolicy::tracking(Some(key), settings),
+        )
     }
 }
 

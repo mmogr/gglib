@@ -40,10 +40,6 @@ pub(crate) async fn sync_all_state(
 /// Gathers the model state the menu needs but the tray does not,
 /// so those reads do not happen on platforms with no menu to show them in.
 #[cfg(target_os = "macos")]
-#[allow(
-    clippy::significant_drop_tightening,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 async fn sync_app_menu(
     state: &tauri::State<'_, AppState>,
     snapshot: &DaemonSnapshot,
@@ -58,15 +54,16 @@ async fn sync_app_menu(
 
     let selected_id = *state.selected_model_id.read().await;
 
-    menu.sync_state(&MenuState {
+    let synced = menu.sync_state(&MenuState {
         proxy_running: snapshot.proxy_running,
         model_selected: selected_id.is_some(),
         // A selected model with a running server enables Stop rather than
         // Start. The snapshot already carries every resident model id, so this
         // costs no `/api/servers` round trip of its own.
         selected_model_server_active: selected_id.is_some_and(|id| snapshot.serves(id)),
-    })
-    .map_err(|e| format!("Failed to sync menu state: {e}"))
+    });
+    drop(menu_guard);
+    synced.map_err(|e| format!("Failed to sync menu state: {e}"))
 }
 
 /// No application menu exists off macOS — the other platforms are given an

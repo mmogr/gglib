@@ -58,6 +58,11 @@ const RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_millis(100)
 /// [`StreamOutcome::worth_saving`](crate::forward::StreamOutcome::worth_saving)
 /// says so.
 #[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the spawned task's send-with-retry, first-byte wait and drain in order, \
+              all three using the task's one sender and connection guard"
+)]
 pub(crate) fn spawn_and_return(
     req_builder: reqwest::RequestBuilder,
     body: Bytes,
@@ -171,7 +176,6 @@ pub(crate) fn spawn_and_return(
                     retries += 1;
                     warn!(error = %e, retries, "pre-generation request send failed; retrying");
                     tokio::time::sleep(RETRY_BACKOFF).await;
-                    continue 'retry;
                 }
                 other => break 'retry other,
             }
@@ -345,6 +349,12 @@ pub(crate) fn spawn_and_return(
 /// rather than seeing an opaque `server_error` wrapper. It falls back to the
 /// generic envelope, around the raw bytes, only when `body` is not JSON.
 fn upstream_error_body(model: &str, status: StatusCode, body: &[u8]) -> String {
+    #[expect(
+        clippy::option_if_let_else,
+        clippy::single_match_else,
+        reason = "two arms of several statements each, the JSON envelope and the raw-bytes \
+                  fallback, which read more plainly as a match than as two closures"
+    )]
     let (message, error) = match serde_json::from_slice::<serde_json::Value>(body) {
         Ok(upstream) => {
             let msg = upstream

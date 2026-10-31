@@ -82,7 +82,7 @@
 //! await point.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gglib_core::ports::{AdmissionLease, LeaseProgress};
@@ -244,7 +244,10 @@ impl ActiveConnectionsRegistry {
         };
 
         {
-            let mut guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+            let mut guard = self
+                .connections
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
             guard.insert(id, connection);
         }
 
@@ -261,7 +264,10 @@ impl ActiveConnectionsRegistry {
     ///
     /// A no-op if `id` is not (or no longer) present.
     pub fn update_progress(&self, id: Uuid, processed: u32, total: u32, cached: u32, time_ms: u64) {
-        let mut guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self
+            .connections
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         if let Some(conn) = guard.get_mut(&id) {
             conn.phase = ConnectionPhase::ProcessingPrompt;
             conn.prompt_processed = Some(processed);
@@ -277,7 +283,10 @@ impl ActiveConnectionsRegistry {
     /// event) arrives. A no-op if `id` is absent, and idempotent if called
     /// repeatedly for the same connection.
     pub fn mark_generating(&self, id: Uuid) {
-        let mut guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self
+            .connections
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         if let Some(conn) = guard.get_mut(&id) {
             conn.phase = ConnectionPhase::Generating;
         }
@@ -288,7 +297,10 @@ impl ActiveConnectionsRegistry {
     /// A no-op if `id` is absent — a request whose client hung up during
     /// shaping has nothing left to audit.
     pub fn set_sampling(&self, id: Uuid, decision: SamplingDecision) {
-        let mut guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self
+            .connections
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         if let Some(conn) = guard.get_mut(&id) {
             conn.sampling = Some(decision);
         }
@@ -309,7 +321,10 @@ impl ActiveConnectionsRegistry {
     /// turning a correct abstention into a confident misattribution.
     #[must_use]
     pub fn in_flight_sampling(&self, model_id: u32) -> Vec<SamplingDecision> {
-        let guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = self
+            .connections
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         guard
             .values()
             .filter(|c| c.model_id == model_id)
@@ -320,7 +335,10 @@ impl ActiveConnectionsRegistry {
     /// Snapshot every currently active connection.
     #[must_use]
     pub fn snapshot(&self) -> Vec<ActiveConnectionSnapshot> {
-        let guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = self
+            .connections
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         guard.iter().map(|(id, conn)| conn.snapshot(*id)).collect()
     }
 
@@ -329,7 +347,7 @@ impl ActiveConnectionsRegistry {
     pub fn len(&self) -> usize {
         self.connections
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(PoisonError::into_inner)
             .len()
     }
 
@@ -349,7 +367,10 @@ impl ActiveConnectionsRegistry {
     /// degradation strike.
     #[must_use]
     pub fn others_busy(&self, exclude: Uuid) -> bool {
-        let guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = self
+            .connections
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         guard.iter().any(|(id, conn)| {
             *id != exclude
                 && matches!(
@@ -364,7 +385,7 @@ impl ActiveConnectionsRegistry {
     fn remove(&self, id: Uuid) {
         self.connections
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(PoisonError::into_inner)
             .remove(&id);
     }
 }
@@ -421,7 +442,10 @@ impl StreamProgress {
     pub(crate) fn report(&self) {
         let Some(reporting) = &self.0 else { return };
         let now = Instant::now();
-        let mut reported = reporting.reported.lock().unwrap_or_else(|e| e.into_inner());
+        let mut reported = reporting
+            .reported
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         if reported.is_some_and(|at| now.duration_since(at) < PROGRESS_EVERY) {
             return;
         }
@@ -487,6 +511,11 @@ impl ConnectionGuard {
     }
 }
 
+#[expect(
+    clippy::missing_fields_in_debug,
+    reason = "the id names the connection; the registry is the whole shared table, and \
+              the lease and progress reporter are plumbing, so none says which guard this is"
+)]
 impl std::fmt::Debug for ConnectionGuard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ConnectionGuard")
@@ -635,8 +664,6 @@ mod tests {
 
     #[test]
     fn guard_drop_on_early_return_still_cleans_up() {
-        let registry = Arc::new(ActiveConnectionsRegistry::new());
-
         fn do_work(registry: &Arc<ActiveConnectionsRegistry>, fail: bool) -> Result<(), ()> {
             let _guard = registry.register(1, "test-model", false, None);
             if fail {
@@ -644,6 +671,8 @@ mod tests {
             }
             Ok(())
         }
+
+        let registry = Arc::new(ActiveConnectionsRegistry::new());
 
         let _ = do_work(&registry, true);
         assert_eq!(registry.len(), 0, "guard must be dropped on early return");

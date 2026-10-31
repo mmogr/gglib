@@ -17,11 +17,7 @@ fn loop_note() -> LoopGuardNote {
     .expect("a tripped verdict has a note")
 }
 
-#[allow(
-    clippy::needless_pass_by_value,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-fn body(messages: Value) -> Bytes {
+fn body(messages: &Value) -> Bytes {
     Bytes::from(
         json!({
             "model": "test-model",
@@ -68,7 +64,7 @@ fn the_stagnation_note_names_the_count_and_the_limit() {
 
 #[test]
 fn a_string_tail_gains_the_note_last_and_keeps_every_earlier_message() {
-    let before = body(json!([
+    let before = body(&json!([
         { "role": "system", "content": "be helpful" },
         { "role": "user", "content": "carry on" },
         { "role": "tool", "tool_call_id": "c1", "content": "1 file changed" },
@@ -100,7 +96,7 @@ fn a_string_tail_gains_the_note_last_and_keeps_every_earlier_message() {
 #[test]
 fn an_array_tail_gains_one_text_part_at_the_end() {
     // The shape VS Code's LLM gateway sends on every message.
-    let before = body(json!([
+    let before = body(&json!([
         { "role": "user", "content": [
             { "type": "text", "text": "look at this" },
             { "type": "image_url", "image_url": { "url": "data:..." } },
@@ -131,7 +127,7 @@ fn an_array_tail_gains_one_text_part_at_the_end() {
 fn a_tail_that_cannot_carry_the_note_gets_a_marked_user_turn() {
     // An assistant turn that is only tool calls: `content` is null, so there
     // is nothing to append to.
-    let before = body(json!([
+    let before = body(&json!([
         { "role": "user", "content": "go" },
         { "role": "assistant", "content": null, "tool_calls": [
             { "id": "c1", "type": "function",
@@ -151,7 +147,7 @@ fn a_tail_that_cannot_carry_the_note_gets_a_marked_user_turn() {
 
 #[test]
 fn an_empty_string_tail_gains_the_note_with_no_leading_blank_line() {
-    let before = body(json!([{ "role": "user", "content": "" }]));
+    let before = body(&json!([{ "role": "user", "content": "" }]));
     let note = loop_note();
 
     let after = parsed(&note.append_to(before));
@@ -210,7 +206,7 @@ fn the_note_neither_creates_a_trip_nor_masks_one() {
 
     // One repeat under the threshold: passes, and must still pass with the
     // note in it. A note that added a tool-call batch would trip here.
-    let under = body(json!(looping(2)));
+    let under = body(&json!(looping(2)));
     assert_eq!(
         scan(&under),
         LoopGuardVerdict::Pass,
@@ -229,7 +225,7 @@ fn the_note_neither_creates_a_trip_nor_masks_one() {
     // note appended after that point is never reached, and a delivery that
     // *did* reset the detectors would not fail here. The first half above is
     // the one that can fail.
-    let over = body(json!(looping(3)));
+    let over = body(&json!(looping(3)));
     let verdict = scan(&over);
     assert!(
         matches!(verdict, LoopGuardVerdict::LoopDetected { .. }),
@@ -262,7 +258,7 @@ fn the_note_survives_a_truncation_that_trims_the_history_around_it() {
     history.push(json!({ "role": "user", "content": "continue" }));
 
     let note = loop_note();
-    let noted = note.append_to(body(json!(history)));
+    let noted = note.append_to(body(&json!(history)));
     let mut value: Value = serde_json::from_slice(&noted).expect("json");
 
     let before = serde_json::to_string(&value).expect("serialise").len();

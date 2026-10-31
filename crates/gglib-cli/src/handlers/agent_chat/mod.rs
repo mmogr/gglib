@@ -9,10 +9,6 @@ mod markdown;
 mod memory_jogger;
 pub(crate) mod persistence;
 mod progress_line;
-#[allow(
-    clippy::needless_pass_by_value,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) mod renderer;
 pub(crate) mod repl;
 mod repl_line;
@@ -43,10 +39,6 @@ use self::sight::Sight;
 /// with the original session parameters (saved settings fill in any CLI args
 /// the user didn't explicitly provide), unless the daemon is replying to
 /// that conversation ([`refuse_running_elsewhere`]).
-#[allow(
-    clippy::default_trait_access,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
     // Before anything is stored: an image, a setting, a row.
     if let Some(id) = args.continue_id {
@@ -68,7 +60,7 @@ pub(crate) async fn run(ctx: &CliContext, args: &ChatArgs) -> Result<()> {
 
     // 2. Compose the agent with the (possibly merged) args.
     let inference_config = args.sampling.clone().into_inference_config();
-    let sampling = if inference_config == Default::default() {
+    let sampling = if inference_config == gglib_core::domain::InferenceConfig::default() {
         None
     } else {
         Some(inference_config)
@@ -135,10 +127,6 @@ struct Session<'a> {
 
 /// What [`run`] does before it composes its agent: read the settings, create
 /// or resume the conversation, and settle the model and the profile.
-#[allow(
-    clippy::useless_let_if_seq,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>> {
     // 1. If resuming, load the conversation first and merge saved settings
     //    into args so the agent is composed with the correct parameters.
@@ -159,20 +147,22 @@ async fn prepare<'a>(ctx: &'a CliContext, args: &ChatArgs) -> Result<Session<'a>
         let pairing = settings.remote_pairing.as_ref();
         resume_settings::follow_stored_machine(&mut args, conv, pairing)?;
     }
-    let mut selected_profile = None;
-    if let Some(selection) = crate::handlers::inference::profile_selection::select_before_resume(
-        args.target,
-        ctx.catalog.as_ref(),
-        configured_profiles,
-        &args.identifier,
-        args.profile.as_deref(),
-        typed_this_invocation,
-    )
-    .await?
+    let mut selected_profile = if let Some(selection) =
+        crate::handlers::inference::profile_selection::select_before_resume(
+            args.target,
+            ctx.catalog.as_ref(),
+            configured_profiles,
+            &args.identifier,
+            args.profile.as_deref(),
+            typed_this_invocation,
+        )
+        .await?
     {
         args.identifier = selection.model;
-        selected_profile = selection.profile;
-    }
+        selection.profile
+    } else {
+        None
+    };
 
     let (resumed, prior_messages, saved) = if let Some(conv) = stored {
         let id = conv.id;
@@ -298,7 +288,11 @@ async fn resume_conversation(
     }
 
     // Merge saved settings into a copy of the current args.
-    let merged = resume_settings::apply_saved_settings(args, &conv.system_prompt, &conv.settings);
+    let merged = resume_settings::apply_saved_settings(
+        args,
+        conv.system_prompt.as_deref(),
+        conv.settings.as_ref(),
+    );
 
     if merged.identifier.is_empty() {
         bail!(

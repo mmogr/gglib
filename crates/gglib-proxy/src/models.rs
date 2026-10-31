@@ -505,8 +505,8 @@ impl From<ModelRuntimeError> for ErrorResponse {
         match err {
             ModelRuntimeError::ModelNotFound(name) => Self::model_not_found(&name),
             ModelRuntimeError::ModelLoading => Self::model_loading(),
-            ModelRuntimeError::SpawnFailed(reason) => Self::upstream_error(&reason),
-            ModelRuntimeError::HealthCheckFailed(reason) => Self::upstream_error(&reason),
+            ModelRuntimeError::SpawnFailed(reason)
+            | ModelRuntimeError::HealthCheckFailed(reason) => Self::upstream_error(&reason),
             ModelRuntimeError::AdmissionTimeout(msg) => Self::admission_timeout(&msg),
             ModelRuntimeError::ModelFileNotFound(path) => Self::with_code(
                 format!("Model file not found: {path}"),

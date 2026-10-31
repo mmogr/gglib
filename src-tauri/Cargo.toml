@@ -21,7 +21,6 @@ serde.workspace = true
 serde_json.workspace = true
 gglib-build-info.workspace = true
 gglib-core.workspace = true
-gglib-tauri.workspace = true
 gglib-axum.workspace = true
 gglib-app-services.workspace = true
 # For `loopback`, the one builder of an HTTP client for the daemon on this machine (#1085).

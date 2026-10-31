@@ -9,6 +9,7 @@
 //! Pure, like its siblings: data in, `String` out, no IO and no clock.
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 use super::render::thousands;
 use super::wire::ModelDefectCounts;
@@ -45,10 +46,9 @@ use crate::presentation::truncate_string;
 /// had moved. They print below the defects under an `observed` heading of their
 /// own, and a model whose only signal is one of them still earns a line. The
 /// section is named for signals rather than defects because of them.
-#[allow(
-    clippy::format_push_string,
+#[expect(
     clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "one row per signal, in print order, each with the comment on why it reads as it does"
 )]
 pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCounts>) -> String {
     let mut out = String::from("Per-model signals (this proxy run)\n");
@@ -78,10 +78,7 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
         } else {
             format!("{} request(s)", thousands(served))
         };
-        out.push_str(&format!(
-            "  none across {over}, {} model(s)\n",
-            per_model.len()
-        ));
+        let _ = writeln!(out, "  none across {over}, {} model(s)", per_model.len());
         return out;
     }
 
@@ -92,45 +89,49 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
         // path — so it names the absence instead. The agent path's own
         // denominator rides with its trips below.
         if counts.requests == 0 && counts.agent_guard_scanned > 0 {
-            out.push_str(&format!(
-                "  {:<28} no proxy requests\n",
+            let _ = writeln!(
+                out,
+                "  {:<28} no proxy requests",
                 truncate_string(model, 28)
-            ));
+            );
         } else {
-            out.push_str(&format!(
-                "  {:<28} {} request(s)\n",
+            let _ = writeln!(
+                out,
+                "  {:<28} {} request(s)",
                 truncate_string(model, 28),
                 thousands(counts.requests)
-            ));
+            );
         }
 
         // Repairs read as a ratio: the attempt rate says how often this model
         // packages a tool call badly, and the success rate says whether the
         // one lever gglib pulls is working on it.
         if counts.repairs_attempted > 0 {
-            out.push_str(&format!(
-                "    {:<24} {} of {} succeeded\n",
+            let _ = writeln!(
+                out,
+                "    {:<24} {} of {} succeeded",
                 "tool-call repairs",
                 thousands(counts.repairs_succeeded),
                 thousands(counts.repairs_attempted)
-            ));
+            );
         }
 
         // The sum first, because it is the row an older proxy can still fill,
         // then which detector raised them, indented as parts of it. A proxy
         // that predates the split sends neither part and prints the sum alone.
         if counts.loop_guard_trips > 0 {
-            out.push_str(&format!(
-                "    {:<24} {}\n",
+            let _ = writeln!(
+                out,
+                "    {:<24} {}",
                 "loop-guard trips",
                 thousands(counts.loop_guard_trips)
-            ));
+            );
             for (label, value) in [
                 ("loop detector", counts.loop_guard_loops),
                 ("stagnation detector", counts.loop_guard_stagnations),
             ] {
                 if value > 0 {
-                    out.push_str(&format!("      {label:<24} {}\n", thousands(value)));
+                    let _ = writeln!(out, "      {label:<24} {}", thousands(value));
                 }
             }
         }
@@ -146,18 +147,19 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
         // default forwards the request with a note and the conversation goes
         // on, while this one ended the run.
         if counts.agent_guard_trips > 0 {
-            out.push_str(&format!(
-                "    {:<24} {} of {} decision(s)\n",
+            let _ = writeln!(
+                out,
+                "    {:<24} {} of {} decision(s)",
                 "agent-path guard trips",
                 thousands(counts.agent_guard_trips),
                 thousands(counts.agent_guard_scanned)
-            ));
+            );
             for (label, value) in [
                 ("loop detector", counts.agent_guard_loops),
                 ("stagnation detector", counts.agent_guard_stagnations),
             ] {
                 if value > 0 {
-                    out.push_str(&format!("      {label:<24} {}\n", thousands(value)));
+                    let _ = writeln!(out, "      {label:<24} {}", thousands(value));
                 }
             }
         }
@@ -170,7 +172,7 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
             ("normalization errors", counts.normalization_errors),
         ] {
             if value > 0 {
-                out.push_str(&format!("    {label:<24} {}\n", thousands(value)));
+                let _ = writeln!(out, "    {label:<24} {}", thousands(value));
             }
         }
 
@@ -179,18 +181,20 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
         // reads as more empty turns than actually happened.
         if counts.empty_responses > 0 {
             if counts.reasoning_only > 0 {
-                out.push_str(&format!(
-                    "    {:<24} {} ({} reasoning-only)\n",
+                let _ = writeln!(
+                    out,
+                    "    {:<24} {} ({} reasoning-only)",
                     "empty responses",
                     thousands(counts.empty_responses),
                     thousands(counts.reasoning_only)
-                ));
+                );
             } else {
-                out.push_str(&format!(
-                    "    {:<24} {}\n",
+                let _ = writeln!(
+                    out,
+                    "    {:<24} {}",
                     "empty responses",
                     thousands(counts.empty_responses)
-                ));
+                );
             }
         }
 
@@ -212,7 +216,7 @@ pub(super) fn render_defects_section(per_model: &BTreeMap<String, ModelDefectCou
                 ("repeated, new result", counts.repeats_rescued),
             ] {
                 if value > 0 {
-                    out.push_str(&format!("      {label:<24} {}\n", thousands(value)));
+                    let _ = writeln!(out, "      {label:<24} {}", thousands(value));
                 }
             }
         }

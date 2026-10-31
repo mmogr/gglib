@@ -80,21 +80,16 @@ pub(crate) fn restore_profile(
 ///
 /// CLI-provided values always win; saved settings fill in blanks. The chat's
 /// Thinking choice is not merged here: [`settle_thinking`] reads it.
-#[allow(
-    clippy::assigning_clones,
-    clippy::ref_option,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) fn apply_saved_settings(
     args: &ChatArgs,
-    saved_system_prompt: &Option<String>,
-    saved_settings: &Option<ConversationSettings>,
+    saved_system_prompt: Option<&str>,
+    saved_settings: Option<&ConversationSettings>,
 ) -> ChatArgs {
     let mut merged = args.clone();
 
     // Restore system prompt if the user didn't supply one on the CLI.
     if merged.system_prompt.is_none() {
-        merged.system_prompt.clone_from(saved_system_prompt);
+        merged.system_prompt = saved_system_prompt.map(str::to_owned);
     }
 
     let Some(saved) = saved_settings else {
@@ -105,7 +100,7 @@ pub(crate) fn apply_saved_settings(
     if merged.identifier.is_empty()
         && let Some(ref name) = saved.model_name
     {
-        merged.identifier = name.clone();
+        merged.identifier.clone_from(name);
     }
 
     // Sampling parameters — only fill if CLI left them as None.

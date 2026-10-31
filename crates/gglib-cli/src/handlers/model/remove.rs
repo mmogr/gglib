@@ -60,7 +60,7 @@ pub(crate) async fn execute(
     }
 
     if !force {
-        display_model_summary(&model, ModelSummaryOpts::for_removal());
+        display_model_summary(&model, &ModelSummaryOpts::for_removal());
         println!();
 
         let confirm = input::prompt_confirmation(

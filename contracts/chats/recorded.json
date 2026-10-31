@@ -107,6 +107,7 @@
             "arguments": {
               "prompt": "a red dot"
             },
+            "display_name": "Draw",
             "id": "call-draw-1",
             "name": "draw"
           }

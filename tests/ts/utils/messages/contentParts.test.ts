@@ -108,6 +108,14 @@ describe('reconstructContent', () => {
     ]);
   });
 
+  it('keeps the name a call was shown by and the MCP server it went to', () => {
+    const parts: SerializableToolCallPart[] = [
+      { type: 'tool-call', toolCallId: 'tc-1', toolName: '3:tavily_search', displayName: 'Tavily Search', server: 'Tavily Web Search' },
+      { type: 'tool-call', toolCallId: 'tc-2', toolName: 'builtin:echo', displayName: 'Echo' },
+    ];
+    expect(reconstructContent('', parts)).toEqual(parts);
+  });
+
   it('keeps the tool calls in their stored order, after the text', () => {
     const parts = [
       { type: 'tool-call' as const, toolCallId: 'tc-1', toolName: 'search', args: { q: 'cats' } },

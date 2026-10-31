@@ -103,7 +103,7 @@ fn an_old_row_without_the_field_resumes_unprofiled() {
     let saved: ConversationSettings =
         serde_json::from_str(r#"{"model_name":"qwen","top_k":40}"#).unwrap();
 
-    let merged = apply_saved_settings(&chat_args(), &None, &Some(saved.clone()));
+    let merged = apply_saved_settings(&chat_args(), None, Some(&saved));
     let resumed = restore_profile(None, Target::Local, &profiles(), saved.profile.as_deref());
 
     assert_eq!(merged.sampling.top_k, Some(40));

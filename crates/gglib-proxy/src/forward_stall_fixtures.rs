@@ -57,6 +57,7 @@ pub(super) fn done() -> Bytes {
 }
 
 /// How a scripted upstream ends once its chunks are sent.
+#[derive(Clone, Copy)]
 pub(super) enum Then {
     /// It closes the body.
     Close,
@@ -68,10 +69,6 @@ pub(super) enum Then {
 
 /// An upstream that sends each chunk once its delay has passed, then does
 /// what `then` says.
-#[allow(
-    clippy::needless_pass_by_value,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(super) fn upstream(
     chunks: Vec<(Duration, Bytes)>,
     then: Then,

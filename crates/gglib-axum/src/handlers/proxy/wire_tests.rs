@@ -144,7 +144,7 @@ fn default_context_is_the_context_somebody_chose() {
 /// port for a client to be handed and no pin left standing.
 #[test]
 fn a_crashed_proxy_reports_as_stopped() {
-    let status = to_api_status(RuntimeProxyStatus::Crashed, Some("qwen".to_owned()));
+    let status = to_api_status(&RuntimeProxyStatus::Crashed, Some("qwen".to_owned()));
 
     assert!(!status.running);
     assert_eq!(status.port, None);

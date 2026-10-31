@@ -84,7 +84,14 @@ fn tool_reply() -> Vec<Message> {
     };
     vec![
         Message {
-            metadata: Some(json!({ "tool_calls": [call] })),
+            // A saved call carries the name its start showed it by; `draw` is
+            // gglib's own, so it went to no MCP server and has no `server`.
+            metadata: Some(json!({ "tool_calls": [{
+                "id": call.id,
+                "name": call.name,
+                "arguments": call.arguments,
+                "display_name": "Draw",
+            }] })),
             ..row(44, MessageRole::Assistant, "", "2026-09-30 09:15:02")
         },
         Message {

@@ -68,6 +68,11 @@ fn a_reasoning_only_turn_is_still_empty() {
 }
 
 #[test]
+#[expect(
+    clippy::float_cmp,
+    reason = "both sides read one stored ratio by the same path, so they must be the \
+              same f64 exactly"
+)]
 fn session_aware_budget_falls_back_to_live_ratio_without_a_session_id() {
     let cal = TokenCalibration::new();
     cal.record("m", Some(40_000), 10_000);

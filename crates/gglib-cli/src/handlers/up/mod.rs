@@ -70,7 +70,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: UpArgs) -> Result<()> {
     let memory = probe::run(ctx, args.yes).await?;
 
     // Step 3: the model. Either already here, or chosen, confirmed, downloaded.
-    let model = choose::run(ctx, &memory, args.model.as_deref(), args.yes).await?;
+    let model = choose::run(ctx, memory.as_ref(), args.model.as_deref(), args.yes).await?;
 
     // Step 4: the proxy. Its own banners take over from here.
     step(4, "Endpoint");
@@ -176,10 +176,6 @@ pub(super) fn row(label: &str, value: &str, note: Option<&str>) {
 
 /// The rendered line, as data — split out so the layout is testable without
 /// capturing stdout.
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(super) fn render_row(label: &str, value: &str, note: Option<&str>, color: bool) -> Vec<String> {
     let (dim, reset) = if color {
         (
@@ -190,10 +186,10 @@ pub(super) fn render_row(label: &str, value: &str, note: Option<&str>, color: bo
         ("", "")
     };
     let padded = format!("{label:<LABEL_WIDTH$}");
-    vec![match note {
-        Some(n) => format!("    {padded}  {value}  {dim}({n}){reset}"),
-        None => format!("    {padded}  {value}"),
-    }]
+    vec![note.map_or_else(
+        || format!("    {padded}  {value}"),
+        |n| format!("    {padded}  {value}  {dim}({n}){reset}"),
+    )]
 }
 
 #[cfg(test)]
@@ -244,7 +240,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let ctx = crate::bootstrap::test_context(dir.path()).await;
 
-        let missed = choose::run(&ctx, &None, Some("__no_such_model__"), true)
+        let missed = choose::run(&ctx, None, Some("__no_such_model__"), true)
             .await
             .expect_err("no such model")
             .to_string();

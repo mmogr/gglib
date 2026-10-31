@@ -108,6 +108,11 @@ pub(crate) enum ForwardError {
 ///
 /// Used by the caller to distinguish a healthy response from a degenerate one
 /// (no output at all) for upstream-health bookkeeping.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each bool is a separate observation of one stream, and `health_verdict` \
+              ranks them; they are not a state machine folded into flags"
+)]
 #[derive(Debug, Default, Clone)]
 pub(crate) struct StreamOutcome {
     /// `true` if at least one *client-renderable* frame (content, tool call,
@@ -212,6 +217,11 @@ impl StreamOutcome {
     ///    model may have been mid-prefill — so it abstains.
     /// 5. Otherwise the turn produced nothing and nobody left: an empty
     ///    response, the degradation this watchdog was built for.
+    #[expect(
+        clippy::option_if_let_else,
+        reason = "the five rungs above read in order as one if-chain; `map_or` would put \
+                  the first rung last"
+    )]
     pub(crate) fn health_verdict(&self) -> StreamVerdict {
         if let Some(stall) = self.upstream_stalled {
             StreamVerdict::Stalled {
@@ -641,6 +651,11 @@ pub(crate) struct ForwardRequest<'a> {
 /// Returns the response from llama-server, with the streaming SSE body
 /// re-emitted through the universal normalization pipeline when
 /// `is_streaming` is true.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the chat forward path in order (budget, shaping, send, then the unary or \
+              streaming answer), each step reading the context the one before it built"
+)]
 pub(crate) async fn forward_chat_completion(
     req: ForwardRequest<'_>,
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
@@ -695,6 +710,14 @@ pub(crate) async fn forward_chat_completion(
         || calibration.chars_per_token(model_name),
         |sid| calibration.session_chars_per_token(model_name, sid, std::time::Instant::now()),
     );
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        reason = "a context size is far below 2^52 tokens, usize is 64 bits on every target \
+                  gglib builds for, and the ratio is positive, so neither cast wraps or \
+                  saturates; the budget is a rounded-down estimate either way"
+    )]
     let budget = Some(ContextBudget {
         chars: (effective_ctx as f64 * chars_per_token) as usize,
         tokens: effective_ctx as usize,
@@ -1054,6 +1077,11 @@ pub(crate) async fn stream_response_to_channel(
 /// leaves `tx` open, and once it is full a send waits for the client to make
 /// room, with the per-read timer parked. [`ClientSender`] bounds that wait,
 /// and a send that outlasts it ends the turn as a departure.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one loop over the stream's events with each kind handled in place, all of \
+              them writing the one outcome the caller reads"
+)]
 pub(crate) async fn drain_events(
     events: impl futures_util::Stream<Item = anyhow::Result<LlmStreamEvent>> + Send + 'static,
     model_name: String,

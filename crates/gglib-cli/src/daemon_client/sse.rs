@@ -20,9 +20,10 @@ use gglib_core::sse::DataFrames;
 /// field and holds a bare client, so it inherits nothing.
 ///
 /// [`DaemonHandle`]: super::DaemonHandle
-#[allow(
+#[expect(
     clippy::future_not_send,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "generic over the caller's body and callback; each caller awaits it in place, \
+              none spawns it"
 )]
 pub(crate) async fn stream_json<T, B>(
     client: &reqwest::Client,

@@ -21,6 +21,10 @@ const REAL_SLOT: &str = r#"{
     "samplers": ["penalties","dry","top_n_sigma","top_k","typ_p","top_p","min_p","xtc","temperature"]
 }"#;
 
+#[expect(
+    clippy::large_types_passed_by_value,
+    reason = "the decision takes `sources` as its own field; a reference would only add a clone"
+)]
 fn decision(resolved: InferenceConfig, sources: FieldSources) -> SamplingDecision {
     SamplingDecision {
         resolved,

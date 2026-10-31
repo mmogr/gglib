@@ -21,6 +21,10 @@ use crate::utils::input;
 
 /// Arguments for the update command.
 #[derive(Debug, Clone)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "the `model update` flags, one field each, filled in from the parsed command"
+)]
 pub(crate) struct UpdateArgs {
     pub identifier: String,
     pub name: Option<String>,
@@ -139,11 +143,10 @@ pub(crate) fn parse_metadata_updates(metadata_args: &[String]) -> Result<HashMap
 }
 
 /// Parse metadata keys to remove.
-pub(crate) fn parse_metadata_removals(remove_arg: &Option<String>) -> Result<Vec<String>> {
-    match remove_arg {
-        Some(keys_str) => Ok(keys_str.split(',').map(|s| s.trim().to_string()).collect()),
-        None => Ok(Vec::new()),
-    }
+pub(crate) fn parse_metadata_removals(remove_arg: Option<&str>) -> Vec<String> {
+    remove_arg.map_or_else(Vec::new, |keys_str| {
+        keys_str.split(',').map(|s| s.trim().to_string()).collect()
+    })
 }
 
 /// The request `args` make of `existing`: each flag as the field it sets.
@@ -176,7 +179,7 @@ pub(crate) fn build_request(existing: &Model, args: &UpdateArgs) -> Result<Updat
 /// flag touches it.
 fn metadata_after(existing: &Model, args: &UpdateArgs) -> Result<Option<HashMap<String, String>>> {
     let updates = parse_metadata_updates(&args.metadata)?;
-    let removals = parse_metadata_removals(&args.remove_metadata)?;
+    let removals = parse_metadata_removals(args.remove_metadata.as_deref());
     if updates.is_empty() && removals.is_empty() && !args.replace_metadata {
         return Ok(None);
     }
@@ -311,31 +314,38 @@ fn show_changes_preview(existing: &Model, updated: &Model) {
     );
     show_field_change(
         "Architecture",
-        &format_option(&existing.architecture),
-        &format_option(&updated.architecture),
+        &format_option(existing.architecture.as_deref()),
+        &format_option(updated.architecture.as_deref()),
     );
     show_field_change(
         "Quantization",
-        &format_option(&existing.quantization),
-        &format_option(&updated.quantization),
+        &format_option(existing.quantization.as_deref()),
+        &format_option(updated.quantization.as_deref()),
     );
     show_field_change(
         "Context Length",
-        &format_option_u64(&existing.context_length),
-        &format_option_u64(&updated.context_length),
+        &format_option_u64(existing.context_length),
+        &format_option_u64(updated.context_length),
     );
 
     // Show metadata changes
     show_metadata_changes(&existing.metadata, &updated.metadata);
 
     // Show inference defaults changes
-    show_inference_defaults_changes(&existing.inference_defaults, &updated.inference_defaults);
+    show_inference_defaults_changes(
+        existing.inference_defaults.as_ref(),
+        updated.inference_defaults.as_ref(),
+    );
 }
 
 /// Show inference defaults changes.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one printed line per sampling field, for a newly set block and for a changed one"
+)]
 fn show_inference_defaults_changes(
-    old_config: &Option<InferenceConfig>,
-    new_config: &Option<InferenceConfig>,
+    old_config: Option<&InferenceConfig>,
+    new_config: Option<&InferenceConfig>,
 ) {
     // Field-by-field equality, not a hand-written disjunction: the previous
     // one listed fifteen fields by name, so a newly modelled parameter changed
@@ -408,106 +418,106 @@ fn show_inference_defaults_changes(
             if old.temperature != new.temperature {
                 println!(
                     "    Temperature: {} → {}",
-                    format_option_f32(&old.temperature),
-                    format_option_f32(&new.temperature)
+                    format_unset(old.temperature),
+                    format_unset(new.temperature)
                 );
             }
             if old.top_p != new.top_p {
                 println!(
                     "    Top-p: {} → {}",
-                    format_option_f32(&old.top_p),
-                    format_option_f32(&new.top_p)
+                    format_unset(old.top_p),
+                    format_unset(new.top_p)
                 );
             }
             if old.top_k != new.top_k {
                 println!(
                     "    Top-k: {} → {}",
-                    format_option_i32(&old.top_k),
-                    format_option_i32(&new.top_k)
+                    format_unset(old.top_k),
+                    format_unset(new.top_k)
                 );
             }
             if old.max_tokens != new.max_tokens {
                 println!(
                     "    Max tokens: {} → {}",
-                    format_option_u32(&old.max_tokens),
-                    format_option_u32(&new.max_tokens)
+                    format_unset(old.max_tokens),
+                    format_unset(new.max_tokens)
                 );
             }
             if old.repeat_penalty != new.repeat_penalty {
                 println!(
                     "    Repeat penalty: {} → {}",
-                    format_option_f32(&old.repeat_penalty),
-                    format_option_f32(&new.repeat_penalty)
+                    format_unset(old.repeat_penalty),
+                    format_unset(new.repeat_penalty)
                 );
             }
             if old.presence_penalty != new.presence_penalty {
                 println!(
                     "    Presence penalty: {} → {}",
-                    format_option_f32(&old.presence_penalty),
-                    format_option_f32(&new.presence_penalty)
+                    format_unset(old.presence_penalty),
+                    format_unset(new.presence_penalty)
                 );
             }
             if old.min_p != new.min_p {
                 println!(
                     "    Min-P: {} → {}",
-                    format_option_f32(&old.min_p),
-                    format_option_f32(&new.min_p)
+                    format_unset(old.min_p),
+                    format_unset(new.min_p)
                 );
             }
             if old.dry_multiplier != new.dry_multiplier {
                 println!(
                     "    DRY multiplier: {} → {}",
-                    format_option_f32(&old.dry_multiplier),
-                    format_option_f32(&new.dry_multiplier)
+                    format_unset(old.dry_multiplier),
+                    format_unset(new.dry_multiplier)
                 );
             }
             if old.dry_base != new.dry_base {
                 println!(
                     "    DRY base: {} → {}",
-                    format_option_f32(&old.dry_base),
-                    format_option_f32(&new.dry_base)
+                    format_unset(old.dry_base),
+                    format_unset(new.dry_base)
                 );
             }
             if old.dry_allowed_length != new.dry_allowed_length {
                 println!(
                     "    DRY allowed length: {} → {}",
-                    format_option_i32(&old.dry_allowed_length),
-                    format_option_i32(&new.dry_allowed_length)
+                    format_unset(old.dry_allowed_length),
+                    format_unset(new.dry_allowed_length)
                 );
             }
             if old.dry_penalty_last_n != new.dry_penalty_last_n {
                 println!(
                     "    DRY penalty last N: {} → {}",
-                    format_option_i32(&old.dry_penalty_last_n),
-                    format_option_i32(&new.dry_penalty_last_n)
+                    format_unset(old.dry_penalty_last_n),
+                    format_unset(new.dry_penalty_last_n)
                 );
             }
             if old.dynatemp_range != new.dynatemp_range {
                 println!(
                     "    Dynatemp range: {} → {}",
-                    format_option_f32(&old.dynatemp_range),
-                    format_option_f32(&new.dynatemp_range)
+                    format_unset(old.dynatemp_range),
+                    format_unset(new.dynatemp_range)
                 );
             }
             if old.dynatemp_exponent != new.dynatemp_exponent {
                 println!(
                     "    Dynatemp exponent: {} → {}",
-                    format_option_f32(&old.dynatemp_exponent),
-                    format_option_f32(&new.dynatemp_exponent)
+                    format_unset(old.dynatemp_exponent),
+                    format_unset(new.dynatemp_exponent)
                 );
             }
             if old.top_n_sigma != new.top_n_sigma {
                 println!(
                     "    Top-n-sigma: {} → {}",
-                    format_option_f32(&old.top_n_sigma),
-                    format_option_f32(&new.top_n_sigma)
+                    format_unset(old.top_n_sigma),
+                    format_unset(new.top_n_sigma)
                 );
             }
             if old.frequency_penalty != new.frequency_penalty {
                 println!(
                     "    Frequency penalty: {} → {}",
-                    format_option_f32(&old.frequency_penalty),
-                    format_option_f32(&new.frequency_penalty)
+                    format_unset(old.frequency_penalty),
+                    format_unset(new.frequency_penalty)
                 );
             }
             if old.reasoning_effort != new.reasoning_effort {
@@ -569,32 +579,17 @@ fn show_metadata_changes(
     }
 }
 
-fn format_option(opt: &Option<String>) -> String {
-    opt.as_deref().unwrap_or("--").to_string()
+fn format_option(opt: Option<&str>) -> String {
+    opt.unwrap_or("--").to_string()
 }
 
-fn format_option_u64(opt: &Option<u64>) -> String {
+fn format_option_u64(opt: Option<u64>) -> String {
     opt.map_or_else(|| "--".to_string(), |v| v.to_string())
 }
 
 /// A `Copy` option rendered for the preview, `None` as `unset`.
-///
-/// The `format_option_*` family below takes references and predates this;
-/// `ReasoningEffort` is `Copy` and this reads the same on either side.
 fn format_unset<T: std::fmt::Display>(opt: Option<T>) -> String {
     opt.map_or_else(|| "unset".to_owned(), |v| v.to_string())
-}
-
-fn format_option_f32(opt: &Option<f32>) -> String {
-    opt.map_or_else(|| "unset".to_string(), |v| v.to_string())
-}
-
-fn format_option_i32(opt: &Option<i32>) -> String {
-    opt.map_or_else(|| "unset".to_string(), |v| v.to_string())
-}
-
-fn format_option_u32(opt: &Option<u32>) -> String {
-    opt.map_or_else(|| "unset".to_string(), |v| v.to_string())
 }
 
 /// Show a single field change.

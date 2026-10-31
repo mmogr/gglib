@@ -165,7 +165,7 @@ pub(crate) async fn execute(
     } else {
         println!("\nModel successfully created:");
     }
-    display_model_summary(&saved_model, ModelSummaryOpts::with_title(""));
+    display_model_summary(&saved_model, &ModelSummaryOpts::with_title(""));
 
     if reimport {
         // Be precise about what moved. The row is re-read after the upsert, so

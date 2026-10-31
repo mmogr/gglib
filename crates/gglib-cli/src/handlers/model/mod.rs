@@ -9,16 +9,6 @@ mod recorded_servers;
 pub(crate) mod remove;
 pub(crate) mod resolver;
 pub(crate) mod retag;
-#[allow(
-    clippy::assigning_clones,
-    clippy::option_if_let_else,
-    clippy::ref_option,
-    clippy::struct_excessive_bools,
-    clippy::too_many_lines,
-    clippy::trivially_copy_pass_by_ref,
-    clippy::unnecessary_wraps,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) mod update;
 mod update_components;
 mod update_projector;
@@ -89,9 +79,9 @@ pub(crate) async fn dispatch(
 
 /// [`dispatch`], with the `ModelOps` a command reads and writes the library
 /// through, so a test can watch what it does with them.
-#[allow(
+#[expect(
     clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "one arm per `model` subcommand, each a call into its handler"
 )]
 async fn dispatch_with(
     ctx: &CliContext,

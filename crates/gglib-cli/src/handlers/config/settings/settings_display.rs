@@ -149,19 +149,13 @@ fn mask_or_show(key: &str, leaf: serde_json::Value) -> String {
 /// `default-model-id` and `default-image-model-id` are substituted with the
 /// pre-resolved `model_display` and `image_display` strings (or `"None"`) to
 /// avoid a DB round-trip inside this pure function.
-#[allow(
-    clippy::manual_let_else,
-    clippy::needless_pass_by_value,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(super) fn settings_display_rows(
     settings: &Settings,
-    model_display: Option<String>,
-    image_display: Option<String>,
+    model_display: Option<&str>,
+    image_display: Option<&str>,
 ) -> Vec<(String, String)> {
-    let obj = match serde_json::to_value(settings) {
-        Ok(serde_json::Value::Object(m)) => m,
-        _ => return Vec::new(),
+    let Ok(serde_json::Value::Object(obj)) = serde_json::to_value(settings) else {
+        return Vec::new();
     };
 
     let mut rows: Vec<(String, String)> = Vec::new();
@@ -179,10 +173,10 @@ pub(super) fn settings_display_rows(
         };
 
         if kebab_key == "default-model-id" {
-            let display = model_display.clone().unwrap_or_else(|| "None".to_owned());
+            let display = model_display.unwrap_or("None").to_owned();
             rows.push((kebab_key, display));
         } else if kebab_key == "default-image-model-id" {
-            let display = image_display.clone().unwrap_or_else(|| "None".to_owned());
+            let display = image_display.unwrap_or("None").to_owned();
             rows.push((kebab_key, display));
         } else if kebab_key == "mcp-drawing" && val.is_null() {
             // Absent is off, and the row says so rather than leave "None"

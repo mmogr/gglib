@@ -111,9 +111,10 @@ pub struct AxumContext {
 }
 
 /// Bootstrap the Axum server with all services.
-#[allow(
+#[expect(
     clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "the daemon's paths and services, resolved and built once, in dependency \
+              order, top to bottom"
 )]
 pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     // Log resolved paths at startup for diagnostics. The models directory is

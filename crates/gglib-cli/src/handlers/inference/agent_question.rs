@@ -66,10 +66,10 @@ pub(crate) struct QuestionArgs {
 }
 
 /// Run a single-turn agentic question, with optional continuation into chat.
-#[allow(
-    clippy::default_trait_access,
+#[expect(
     clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "one `gglib q` read top to bottom: input, model and profile, agent, the turn, \
+              and the hand-off to chat"
 )]
 pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> {
     let QuestionArgs {
@@ -170,7 +170,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: QuestionArgs) -> Result<()> 
     };
 
     let inference_config = sampling.into_inference_config();
-    let sampling_override = if inference_config == Default::default() {
+    let sampling_override = if inference_config == gglib_core::domain::InferenceConfig::default() {
         None
     } else {
         Some(inference_config)

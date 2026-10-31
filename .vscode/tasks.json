@@ -267,7 +267,7 @@
 		{
 			"label": "🔬 Rust Coverage (lcov)",
 			"type": "shell",
-			"command": "$HOME/.cargo/bin/cargo llvm-cov --workspace --exclude gglib-tauri --exclude gglib-app --lcov --output-path lcov.info",
+			"command": "$HOME/.cargo/bin/cargo llvm-cov --workspace --exclude gglib-app --lcov --output-path lcov.info",
 			"options": { "env": { "MACOSX_DEPLOYMENT_TARGET": "14.0" } },
 			"group": "test",
 			"problemMatcher": ["$rustc"],
@@ -276,7 +276,7 @@
 		{
 			"label": "🔬 Rust Coverage (table)",
 			"type": "shell",
-			"command": "$HOME/.cargo/bin/cargo llvm-cov --workspace --exclude gglib-tauri --exclude gglib-app",
+			"command": "$HOME/.cargo/bin/cargo llvm-cov --workspace --exclude gglib-app",
 			"options": { "env": { "MACOSX_DEPLOYMENT_TARGET": "14.0" } },
 			"group": "test",
 			"problemMatcher": ["$rustc"],
@@ -285,7 +285,7 @@
 		{
 			"label": "🔬 Rust Coverage (html)",
 			"type": "shell",
-			"command": "$HOME/.cargo/bin/cargo llvm-cov --workspace --exclude gglib-tauri --exclude gglib-app --html --output-dir coverage && open coverage/html/index.html",
+			"command": "$HOME/.cargo/bin/cargo llvm-cov --workspace --exclude gglib-app --html --output-dir coverage && open coverage/html/index.html",
 			"options": { "env": { "MACOSX_DEPLOYMENT_TARGET": "14.0" } },
 			"group": "test",
 			"problemMatcher": ["$rustc"],

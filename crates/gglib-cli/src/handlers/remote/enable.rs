@@ -69,7 +69,11 @@ pub(crate) async fn enable(ctx: &CliContext, args: EnableArgs) -> Result<()> {
     let arming = if enabled.already_up {
         // A code means `--invite` found a session to offer one on. None means
         // a plain `enable` that waited for the daemon's own resume, the only
-        // way the daemon answers `already_up` without one.
+        // way the daemon answers `already_up` without one. To the person that
+        // is remote access left on from before: a daemon that has just started
+        // (a rebuild, a restart, `enable` itself starting it) turns the switch
+        // back on by itself. A plain `enable` on a session that was simply up
+        // is refused with a 409 and never gets here.
         if enabled.code.is_some() {
             Arming::Invite
         } else {
@@ -257,8 +261,8 @@ const INVITE_NOTICE: &str = "  Remote access was already on and still is; this o
 /// daemon's own resume brought back. Nothing was switched on by it and no flag
 /// took, so the key notice is not its to give. A constant, pinned by a test,
 /// as `INVITE_NOTICE` is.
-const RESUMED_NOTICE: &str = "  Remote access was already coming back up when you asked, and is on now; \
-     this changed nothing about the session. `gglib remote disable`, then `enable`, changes its flags.";
+const RESUMED_NOTICE: &str = "  Remote access was already on: the daemon turned it back on when it started. \
+     This changed nothing about the session. `gglib remote disable`, then `enable`, changes its flags.";
 
 /// Which command is printing the closing notice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

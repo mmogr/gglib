@@ -47,8 +47,8 @@ use crate::slots_poller::{SlotsCache, spawn_slots_poller};
 use crate::token_calibration::TokenCalibration;
 use crate::upstream_health::UpstreamHealth;
 use crate::upstream_read::StreamBounds;
+use gglib_broadcast::SseOptions;
 use gglib_core::services::SettingsCache;
-use gglib_sse::SseOptions;
 
 /// Shared application state for the proxy server.
 #[derive(Clone)]
@@ -175,6 +175,11 @@ impl AppState {
 /// # Returns
 ///
 /// Returns `Ok(())` on clean shutdown, or an error if the server fails.
+#[expect(
+    clippy::too_many_lines,
+    reason = "wires the state, background tasks and listener once, in start-up order, from \
+              a config destructured by name"
+)]
 pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
     // Every field by name and no `..`: one this function never reads is an
     // unused binding, not a silently ignored setting.
@@ -374,7 +379,7 @@ pub(crate) async fn handle_proxy_status(State(state): State<AppState>) -> impl I
 /// Subscribe to a live stream of [`crate::dashboard::DashboardSnapshot`]
 /// updates via Server-Sent Events.
 ///
-/// Uses hydrate-then-stream semantics (via [`gglib_sse::Broadcaster`]): the
+/// Uses hydrate-then-stream semantics (via [`gglib_broadcast::Broadcaster`]): the
 /// client immediately receives one event carrying the current snapshot,
 /// then a fresh snapshot on every subsequent publish tick — no waiting for
 /// the next tick to see the current state.
@@ -394,6 +399,11 @@ pub(crate) async fn handle_proxy_status_stream(State(state): State<AppState>) ->
 }
 
 /// Handle chat completions - ensure model is running and proxy to llama-server.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the chat request's entry in order (parse, route, admit, forward), with each \
+              refusal answered where its condition is found"
+)]
 pub(crate) async fn chat_completions(
     State(state): State<AppState>,
     headers: HeaderMap,

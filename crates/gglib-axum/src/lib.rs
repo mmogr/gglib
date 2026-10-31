@@ -4,10 +4,6 @@
 // and nothing under `handlers` is reachable from outside this crate.
 pub(crate) mod access;
 pub(crate) mod bootstrap;
-#[allow(
-    clippy::option_option,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) mod chat_api;
 pub(crate) mod chat_changes;
 pub(crate) mod config;

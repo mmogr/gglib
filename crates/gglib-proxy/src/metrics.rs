@@ -25,8 +25,8 @@
 //! conditional pop, done.  There is no I/O or allocation inside the lock.
 
 use std::collections::VecDeque;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, PoisonError};
 
 use gglib_core::domain::defects::LoopGuardTrip;
 
@@ -45,6 +45,11 @@ const MAX_SNAPSHOTS: usize = 50;
 // =============================================================================
 
 /// A single per-request observation recorded after the truncation pass.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "a record the dashboard reads, whose bools are separate per-request flags, \
+              some of them back-patched on their own after the response"
+)]
 #[derive(Debug, Clone, serde::Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ContextSnapshot {
@@ -252,7 +257,10 @@ impl ContextMetricsStore {
             }
         }
 
-        let mut guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self
+            .snapshots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         guard.push_back(snapshot);
         if guard.len() > MAX_SNAPSHOTS {
             guard.pop_front();
@@ -270,7 +278,10 @@ impl ContextMetricsStore {
     /// in the recent-request list.
     pub fn flag_dialect_residue(&self, seq: u64) {
         self.dialect_residue_total.fetch_add(1, Ordering::Relaxed);
-        let mut guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self
+            .snapshots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         if let Some(snapshot) = guard.iter_mut().find(|s| s.seq == seq) {
             snapshot.dialect_residue = true;
             // Also per model: attribution is the whole point, since residue
@@ -296,7 +307,10 @@ impl ContextMetricsStore {
         if succeeded {
             self.tool_repairs_succeeded.fetch_add(1, Ordering::Relaxed);
         }
-        let mut guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self
+            .snapshots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         if let Some(snapshot) = guard.iter_mut().find(|s| s.seq == seq) {
             snapshot.tool_repaired = succeeded;
             // The ring row still knows its model; a repair whose snapshot
@@ -322,7 +336,10 @@ impl ContextMetricsStore {
     /// the same bounded, bias-free undercount [`Self::flag_tool_repair`]
     /// accepts, on exactly the busiest traffic.
     pub fn flag_stream_error(&self, seq: u64) {
-        let guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = self
+            .snapshots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         if let Some(snapshot) = guard.iter().find(|s| s.seq == seq)
             && let Some(ledger) = &self.ledger
         {
@@ -366,7 +383,10 @@ impl ContextMetricsStore {
     /// Does nothing when that snapshot has left the ring buffer. It counts
     /// nothing: no total, and nothing in the ledger.
     pub fn flag_generation(&self, seq: u64, generation: TurnGeneration) {
-        let mut guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self
+            .snapshots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         if let Some(snapshot) = guard.iter_mut().find(|s| s.seq == seq) {
             snapshot.completion_tokens = generation.completion_tokens;
             snapshot.reasoning_chars = generation.reasoning_chars;
@@ -387,7 +407,10 @@ impl ContextMetricsStore {
         seq: u64,
         record: impl FnOnce(&gglib_core::domain::defects::ModelDefectLedger, &str),
     ) {
-        let guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = self
+            .snapshots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         if let Some(snapshot) = guard.iter().find(|s| s.seq == seq)
             && let Some(ledger) = &self.ledger
         {
@@ -453,7 +476,10 @@ impl ContextMetricsStore {
     ///
     /// If the buffer contains fewer than `n` entries all of them are returned.
     pub fn recent(&self, n: usize) -> Vec<ContextSnapshot> {
-        let guard = self.snapshots.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = self
+            .snapshots
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         let len = guard.len();
         let skip = len.saturating_sub(n);
         guard.iter().skip(skip).cloned().collect()

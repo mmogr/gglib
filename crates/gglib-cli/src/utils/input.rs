@@ -60,10 +60,6 @@ tokio::task_local! {
 /// # Returns
 ///
 /// * `Result<String>` - The user's input or default value
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) fn prompt_string_with_default(prompt: &str, default: Option<&str>) -> Result<String> {
     if let Some(default_val) = default {
         println!("{prompt} [{default_val}]: ");
@@ -78,11 +74,7 @@ pub(crate) fn prompt_string_with_default(prompt: &str, default: Option<&str>) ->
 
     let trimmed: &str = input.trim();
     if trimmed.is_empty() {
-        if let Some(default_val) = default {
-            Ok(default_val.to_string())
-        } else {
-            Ok(trimmed.to_string())
-        }
+        Ok(default.unwrap_or(trimmed).to_string())
     } else {
         Ok(trimmed.to_string())
     }
@@ -177,24 +169,14 @@ pub(crate) fn confirm_from(
 /// # Returns
 ///
 /// * `Result<f64>` - The user's input as a positive float
-#[allow(
-    clippy::needless_continue,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) fn prompt_float(prompt: &str) -> Result<f64> {
     loop {
         let input: String = prompt_string(prompt)?;
 
         match input.parse::<f64>() {
             Ok(value) if value > 0.0 => return Ok(value),
-            Ok(_) => {
-                eprintln!("Please enter a positive number.");
-                continue;
-            }
-            Err(_) => {
-                eprintln!("Please enter a valid number.");
-                continue;
-            }
+            Ok(_) => eprintln!("Please enter a positive number."),
+            Err(_) => eprintln!("Please enter a valid number."),
         }
     }
 }
@@ -212,10 +194,6 @@ pub(crate) fn prompt_float(prompt: &str) -> Result<f64> {
 /// # Returns
 ///
 /// * `Result<f64>` - The user's input or default value as a positive float
-#[allow(
-    clippy::needless_continue,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(crate) fn prompt_float_with_default(prompt: &str, default: Option<f64>) -> Result<f64> {
     loop {
         let input: String = if let Some(default_val) = default {
@@ -232,14 +210,8 @@ pub(crate) fn prompt_float_with_default(prompt: &str, default: Option<f64>) -> R
 
         match input.parse::<f64>() {
             Ok(value) if value > 0.0 => return Ok(value),
-            Ok(_) => {
-                eprintln!("Please enter a positive number.");
-                continue;
-            }
-            Err(_) => {
-                eprintln!("Please enter a valid number.");
-                continue;
-            }
+            Ok(_) => eprintln!("Please enter a positive number."),
+            Err(_) => eprintln!("Please enter a valid number."),
         }
     }
 }

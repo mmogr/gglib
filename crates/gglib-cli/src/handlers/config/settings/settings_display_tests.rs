@@ -211,7 +211,7 @@ fn settings_display_rows_model_display_override() {
         default_model_id: Some(42),
         ..Default::default()
     };
-    let rows = settings_display_rows(&settings, Some("42 (TestModel)".to_owned()), None);
+    let rows = settings_display_rows(&settings, Some("42 (TestModel)"), None);
     let model_row = rows
         .iter()
         .find(|(k, _)| k == "default-model-id")
