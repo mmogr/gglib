@@ -301,7 +301,7 @@ fn chat_response_serializes_correctly() {
     let resp = ChatCompletionResponse {
         id: "chatcmpl-123".into(),
         object: "chat.completion".into(),
-        created: 1700000000,
+        created: 1_700_000_000,
         model: "llama-3".into(),
         choices: vec![ChatChoice {
             index: 0,
@@ -353,7 +353,7 @@ fn chat_chunk_serializes_with_delta() {
     let chunk = ChatCompletionChunk {
         id: "chatcmpl-123".into(),
         object: "chat.completion.chunk".into(),
-        created: 1700000000,
+        created: 1_700_000_000,
         model: "llama-3".into(),
         choices: vec![ChatChunkChoice {
             index: 0,

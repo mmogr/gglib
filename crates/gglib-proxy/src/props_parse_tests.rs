@@ -53,7 +53,7 @@ const EMPTY_CAPS: &str = r#"{"chat_template_caps": {}}"#;
 fn real_params() -> SlotParams {
     match parse_props(StatusCode::OK, REAL_PROPS).params {
         PropsResult::Available(p) => p,
-        other => panic!("real /props must parse: {other:?}"),
+        other @ PropsResult::Unavailable(_) => panic!("real /props must parse: {other:?}"),
     }
 }
 

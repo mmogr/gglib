@@ -2,10 +2,19 @@
 
 use super::*;
 
+/// [`CHARS_PER_TOKEN_APPROX`] as the ratio a model with no observations reads.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "the constant is 4, which an f64 holds exactly"
+)]
+fn static_default() -> f64 {
+    CHARS_PER_TOKEN_APPROX as f64
+}
+
 #[test]
 fn unknown_model_returns_static_default() {
     let cal = TokenCalibration::new();
-    assert!((cal.chars_per_token("nope") - CHARS_PER_TOKEN_APPROX as f64).abs() < f64::EPSILON);
+    assert!((cal.chars_per_token("nope") - static_default()).abs() < f64::EPSILON);
 }
 
 #[test]
@@ -20,7 +29,7 @@ fn first_observation_sets_ratio() {
 fn zero_tokens_ignored() {
     let cal = TokenCalibration::new();
     cal.record("m", Some(5_000), 0);
-    assert!((cal.chars_per_token("m") - CHARS_PER_TOKEN_APPROX as f64).abs() < f64::EPSILON);
+    assert!((cal.chars_per_token("m") - static_default()).abs() < f64::EPSILON);
 }
 
 /// A request that carried an image reports no characters: its prompt tokens
@@ -29,7 +38,7 @@ fn zero_tokens_ignored() {
 fn a_request_with_an_image_teaches_nothing() {
     let cal = TokenCalibration::new();
     cal.record("m", None, 10_000);
-    assert!((cal.chars_per_token("m") - CHARS_PER_TOKEN_APPROX as f64).abs() < f64::EPSILON);
+    assert!((cal.chars_per_token("m") - static_default()).abs() < f64::EPSILON);
 
     cal.record("m", Some(33_000), 10_000);
     cal.record("m", None, 1);
@@ -57,6 +66,10 @@ fn ratio_is_clamped_to_sane_bounds() {
 }
 
 #[test]
+#[expect(
+    clippy::float_cmp,
+    reason = "a snapshot hands back the f64 it stored, so the test compares it exactly"
+)]
 fn session_snapshot_is_stable_while_the_global_ratio_keeps_drifting() {
     let cal = TokenCalibration::new();
     let t0 = Instant::now();
@@ -77,6 +90,10 @@ fn session_snapshot_is_stable_while_the_global_ratio_keeps_drifting() {
 }
 
 #[test]
+#[expect(
+    clippy::float_cmp,
+    reason = "4.0 is a ratio of whole numbers held exactly, and a snapshot hands back the f64 it stored"
+)]
 fn different_sessions_get_independent_snapshots() {
     let cal = TokenCalibration::new();
     let t0 = Instant::now();
@@ -99,6 +116,10 @@ fn different_sessions_get_independent_snapshots() {
 }
 
 #[test]
+#[expect(
+    clippy::float_cmp,
+    reason = "4.0 and 2.0 are ratios of whole numbers that an f64 holds exactly"
+)]
 fn session_snapshot_is_keyed_per_model() {
     let cal = TokenCalibration::new();
     let t0 = Instant::now();
@@ -109,6 +130,10 @@ fn session_snapshot_is_keyed_per_model() {
 }
 
 #[test]
+#[expect(
+    clippy::float_cmp,
+    reason = "the two snapshots must differ at all, which is an exact comparison"
+)]
 fn clear_session_forces_a_fresh_snapshot() {
     let cal = TokenCalibration::new();
     let t0 = Instant::now();
@@ -126,6 +151,10 @@ fn clear_session_forces_a_fresh_snapshot() {
 }
 
 #[test]
+#[expect(
+    clippy::float_cmp,
+    reason = "the refreshed ratio must not be the exact 4.0 the first snapshot held"
+)]
 fn clear_all_sessions_resets_every_session() {
     let cal = TokenCalibration::new();
     let t0 = Instant::now();
@@ -141,6 +170,10 @@ fn clear_all_sessions_resets_every_session() {
 }
 
 #[test]
+#[expect(
+    clippy::float_cmp,
+    reason = "a snapshot hands back the f64 it stored, so the test compares it exactly"
+)]
 fn session_snapshot_expires_after_the_ttl() {
     let cal = TokenCalibration::new();
     let t0 = Instant::now();
@@ -170,6 +203,6 @@ fn session_snapshots_are_bounded_by_max_session_snapshots() {
     for i in 0..(MAX_SESSION_SNAPSHOTS + 10) {
         let _ = cal.session_chars_per_token("m", &format!("sess-{i}"), t0);
     }
-    let guard = cal.session_snapshots.lock().unwrap();
-    assert!(guard.values.len() <= MAX_SESSION_SNAPSHOTS);
+    let held = cal.session_snapshots.lock().unwrap().values.len();
+    assert!(held <= MAX_SESSION_SNAPSHOTS);
 }

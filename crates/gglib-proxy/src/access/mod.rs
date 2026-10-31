@@ -73,10 +73,6 @@ impl Endpoint for ProxyAccessConfig {
 /// as an outer `layer`, so it covers every route including `/health` and
 /// including paths that match nothing — a check this cheap has no reason to
 /// have holes in it.
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub async fn host_guard<E: Endpoint>(
     State(endpoint): State<Arc<E>>,
     req: Request,
@@ -102,10 +98,9 @@ pub async fn host_guard<E: Endpoint>(
     // matches on the host alone, so echoing back `gglib.lan:8080` would teach
     // the reader that the port is part of the value. A header too malformed to
     // normalize gets the generic half of the message and no suggestion.
-    let remedy = match normalize_host(host) {
-        Some(name) => format!(" Add --allowed-host {name} if that is how you reach it."),
-        None => String::new(),
-    };
+    let remedy = normalize_host(host).map_or_else(String::new, |name| {
+        format!(" Add --allowed-host {name} if that is how you reach it.")
+    });
     (StatusCode::FORBIDDEN, E::host_refusal(host, &remedy)).into_response()
 }
 

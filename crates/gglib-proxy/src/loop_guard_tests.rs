@@ -591,6 +591,11 @@ fn a_repeat_with_the_same_answer_still_trips_and_is_reported() {
 /// `guards.record_results` from `run` leaves this test green. That is held by
 /// `test_changing_tool_results_do_not_trip_the_loop_guard` instead.
 #[test]
+#[expect(
+    clippy::option_if_let_else,
+    reason = "the agent path's check, a refusal or a record-then-continue, written as \
+              the agent loop writes it: a match with the recording in its own arm"
+)]
 fn the_two_paths_agree_on_when_a_run_trips() {
     // (tool, answer) per turn. Chosen so that the recording half is what
     // decides the answer: a different batch breaks the first run, the resumed

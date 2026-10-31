@@ -9,11 +9,7 @@ use gglib_core::domain::{DialectSpec, ModelCapabilities};
 use gglib_core::request_pipeline::{ModelContext, SamplingLayers};
 use serde_json::json;
 
-#[allow(
-    clippy::needless_pass_by_value,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-fn request(tool_choice: Value) -> Vec<u8> {
+fn request(tool_choice: &Value) -> Vec<u8> {
     serde_json::to_vec(&json!({
         "model": "m",
         "messages": [{"role": "user", "content": "read it"}],
@@ -55,7 +51,7 @@ fn response(arguments: &str) -> Vec<u8> {
 #[test]
 fn a_schema_violation_on_the_auto_path_is_reissued() {
     let d = decide(
-        &request(json!("auto")),
+        &request(&json!("auto")),
         &response(r#"{"path":"a","max_lines":"42"}"#),
         RepairTurn::ON,
     );
@@ -75,7 +71,7 @@ fn a_schema_violation_on_the_auto_path_is_reissued() {
 }
 
 fn request_value() -> Value {
-    serde_json::from_slice(&request(json!("auto"))).unwrap()
+    serde_json::from_slice(&request(&json!("auto"))).unwrap()
 }
 
 /// The repair must go out non-streaming, or a second SSE pipeline would
@@ -83,7 +79,7 @@ fn request_value() -> Value {
 #[test]
 fn the_repair_request_is_non_streaming() {
     let Decision::Reissue { body, .. } = decide(
-        &request(json!("auto")),
+        &request(&json!("auto")),
         &response(r#"{"path":"a","max_lines":"42"}"#),
         RepairTurn::ON,
     ) else {
@@ -99,7 +95,7 @@ fn the_repair_request_is_non_streaming() {
 fn a_conformant_call_is_forwarded() {
     assert_eq!(
         decide(
-            &request(json!("auto")),
+            &request(&json!("auto")),
             &response(r#"{"path":"a"}"#),
             RepairTurn::ON
         ),
@@ -113,7 +109,7 @@ fn a_conformant_call_is_forwarded() {
 fn an_already_required_request_is_not_reissued() {
     assert_eq!(
         decide(
-            &request(json!("required")),
+            &request(&json!("required")),
             &response(r#"{"path":"a","max_lines":"42"}"#),
             RepairTurn::ON
         ),
@@ -126,7 +122,7 @@ fn an_already_required_request_is_not_reissued() {
 #[test]
 fn an_absent_tool_choice_counts_as_auto() {
     let d = decide(
-        &request(json!(null)),
+        &request(&json!(null)),
         &response(r#"{"path":"a","max_lines":"42"}"#),
         RepairTurn::ON,
     );
@@ -137,7 +133,7 @@ fn an_absent_tool_choice_counts_as_auto() {
 fn disabling_repair_forwards_everything() {
     assert_eq!(
         decide(
-            &request(json!("auto")),
+            &request(&json!("auto")),
             &response(r#"{"path":"a","max_lines":"42"}"#),
             RepairTurn::OFF
         ),
@@ -161,7 +157,7 @@ fn a_response_without_tool_calls_is_not_applicable() {
     .unwrap();
 
     assert_eq!(
-        decide(&request(json!("auto")), &plain, RepairTurn::ON),
+        decide(&request(&json!("auto")), &plain, RepairTurn::ON),
         Decision::Forward(Skipped::NotApplicable)
     );
 }
@@ -171,7 +167,7 @@ fn a_conformant_repair_replaces_the_original() {
     let original = Bytes::from(response(r#"{"path":"a","max_lines":"42"}"#));
     let repaired = Bytes::from(response(r#"{"path":"a","max_lines":42}"#));
 
-    let (chosen, did_repair) = choose(&request(json!("auto")), original, repaired.clone());
+    let (chosen, did_repair) = choose(&request(&json!("auto")), original, repaired.clone());
 
     assert!(did_repair);
     assert_eq!(chosen, repaired);
@@ -184,7 +180,7 @@ fn a_still_invalid_repair_is_discarded() {
     let original = Bytes::from(response(r#"{"path":"a","max_lines":"42"}"#));
     let repaired = Bytes::from(response(r#"{"path":"a","max_lines":"still bad"}"#));
 
-    let (chosen, did_repair) = choose(&request(json!("auto")), original.clone(), repaired);
+    let (chosen, did_repair) = choose(&request(&json!("auto")), original.clone(), repaired);
 
     assert!(!did_repair);
     assert_eq!(chosen, original);
@@ -194,7 +190,7 @@ fn a_still_invalid_repair_is_discarded() {
 fn an_unreadable_repair_is_discarded() {
     let original = Bytes::from(response(r#"{"path":"a"}"#));
     let (chosen, did_repair) = choose(
-        &request(json!("auto")),
+        &request(&json!("auto")),
         original.clone(),
         Bytes::from_static(b"garbage"),
     );
@@ -227,7 +223,7 @@ fn the_pipeline_would_destroy_a_repair_body_which_is_why_it_bypasses_it() {
     };
 
     let Decision::Reissue { body, .. } = decide(
-        &request(json!("auto")),
+        &request(&json!("auto")),
         &response(r#"{"path":"a","max_lines":"42"}"#),
         RepairTurn::ON,
     ) else {

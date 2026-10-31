@@ -79,11 +79,7 @@ async fn spawn_markup_mock(
 }
 
 /// A `read_file` request as forwarded upstream, with `extra` merged in.
-#[allow(
-    clippy::needless_pass_by_value,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-fn forwarded_body(extra: serde_json::Value) -> Bytes {
+fn forwarded_body(extra: &serde_json::Value) -> Bytes {
     let mut body = json!({
         "model": "m",
         "stream": true,
@@ -210,7 +206,7 @@ async fn run_turn(
 /// the same grammar, and the second draw's markup is read as a call.
 #[tokio::test]
 async fn a_bad_call_under_gglibs_grammar_is_drawn_again_before_the_client_sees_it() {
-    let body = forwarded_body(json!({
+    let body = forwarded_body(&json!({
         "tool_choice": "none",
         "grammar": "root ::= \"<tool_call>\" [^<]* \"</tool_call>\""
     }));
@@ -239,7 +235,7 @@ async fn a_bad_call_under_gglibs_grammar_is_drawn_again_before_the_client_sees_i
 /// markup, it is read as a call all the same.
 #[tokio::test]
 async fn a_re_issue_answered_in_markup_is_read_as_a_call() {
-    let body = forwarded_body(json!({"tool_choice": "auto"}));
+    let body = forwarded_body(&json!({"tool_choice": "auto"}));
     let (outcome, requests, wire) = run_turn(body, RepairTurn::ON).await;
 
     assert!(

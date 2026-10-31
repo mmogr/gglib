@@ -46,9 +46,10 @@ use crate::unary_body::{Exchange, answer_with, exchange};
 use gglib_core::domain::capability_tags;
 
 /// Handle an embeddings request — ensure the model is running, then proxy.
-#[allow(
+#[expect(
     clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "one request read top to bottom, from reading `model` through admission to \
+              the answer"
 )]
 pub(crate) async fn embeddings(
     State(state): State<AppState>,

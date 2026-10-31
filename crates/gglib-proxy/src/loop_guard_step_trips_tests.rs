@@ -66,9 +66,10 @@ fn a_guard_that_is_off_records_neither_a_scan_nor_a_trip() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::significant_drop_tightening,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "the recorder is read once the step has returned and nothing else locks it, \
+              so its guards may last to the end of the test"
 )]
 fn a_scan_with_no_trip_is_one_scan_and_no_decision() {
     let sink = Recorder::default();
@@ -87,9 +88,10 @@ fn a_scan_with_no_trip_is_one_scan_and_no_decision() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::significant_drop_tightening,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "the recorder is read once the step has returned and nothing else locks it, \
+              so its guards may last to the end of the test"
 )]
 fn a_noted_loop_is_one_scan_and_one_noted_decision_at_the_same_moment() {
     let sink = Recorder::default();
@@ -129,9 +131,10 @@ fn a_noted_loop_is_one_scan_and_one_noted_decision_at_the_same_moment() {
 }
 
 #[test]
-#[allow(
+#[expect(
     clippy::significant_drop_tightening,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "the recorder is read once the step has returned and nothing else locks it, \
+              so its guards may last to the end of the test"
 )]
 fn a_refused_stagnation_is_one_refused_decision_with_its_count() {
     let sink = Recorder::default();

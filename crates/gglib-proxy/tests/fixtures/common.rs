@@ -670,6 +670,11 @@ enum ChatResponseMode {
     Sse,
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one mock upstream's routes, chat and the `/slots/0` save and restore, \
+              declared together so the handlers can share its state"
+)]
 async fn spawn_mock_upstream_with_slots_impl(
     cancel: CancellationToken,
     slot_dir: PathBuf,

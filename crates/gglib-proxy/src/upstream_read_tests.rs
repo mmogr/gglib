@@ -18,9 +18,10 @@ fn content_frame(text: &str) -> Bytes {
 
 /// The events [`upstream_events`] yields for `chunks`, and how many chunks it
 /// read to get them.
-#[allow(
+#[expect(
     clippy::future_not_send,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "the read count is a `Cell` the future borrows, and the future is awaited \
+              on the test's own thread"
 )]
 async fn read_all(
     chunks: Vec<Result<Bytes, std::io::Error>>,
