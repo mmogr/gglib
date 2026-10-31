@@ -3,8 +3,8 @@
 # Validate every YAML file under .github/ for duplicate mapping keys: the
 # workflows, and configuration such as the issue forms.
 # Also checks that the two workflows that move the version, release-please.yml
-# and promote.yml, re-lock the lockfiles rather than re-resolve them, and
-# runs actionlint over the workflows.
+# and promote.yml, re-lock the lockfiles rather than re-resolve them, through
+# the lock-the-version action, and runs actionlint over the workflows.
 #
 # GitHub rejects a workflow file containing a duplicate key outright: the run is
 # marked "failed because of a workflow file issue" and NO jobs start. That makes
@@ -87,29 +87,50 @@ end
 # lockfiles, and a reviewer scanning a release PR has no reason to read 250
 # lockfile lines. The one-word edit that reintroduces it is invisible until
 # it ships.
+#
+# Both re-lock through the lock-the-version action, so the command is checked
+# there, and each workflow is checked to run the action.
 
 echo ""
 echo "Checking the version workflows re-lock rather than re-resolve..."
+lock_action=.github/actions/lock-the-version/action.yml
+if [ ! -f "$lock_action" ]; then
+    echo -e "\033[0;31m✗\033[0m $lock_action is missing. Both version workflows re-lock the"
+    echo "  lockfiles through it; if it was renamed, rename it in this check too."
+    exit 1
+fi
+if grep -qE '^[^#]*cargo[[:space:]]+generate-lockfile' "$lock_action"; then
+    echo -e "\033[0;31m✗\033[0m $lock_action runs 'cargo generate-lockfile', which re-resolves every"
+    echo "  dependency from scratch. A version change must move only the workspace's own"
+    echo "  crates: use 'cargo update --workspace'. See the note in the action."
+    grep -nE '^[^#]*cargo[[:space:]]+generate-lockfile' "$lock_action" | sed 's/^/    /'
+    exit 1
+fi
+if ! grep -qE '^[^#]*cargo[[:space:]]+update[[:space:]]+--workspace' "$lock_action"; then
+    echo -e "\033[0;31m✗\033[0m $lock_action no longer runs 'cargo update --workspace', so nothing"
+    echo "  moves the workspace crate versions in Cargo.lock and 'cargo metadata --locked'"
+    echo "  will fail the release PR or the promotion."
+    exit 1
+fi
+echo -e "\033[0;32m✓\033[0m $lock_action re-locks the workspace only"
 for workflow in .github/workflows/release-please.yml .github/workflows/promote.yml; do
     if [ ! -f "$workflow" ]; then
         echo -e "\033[0;31m✗\033[0m $workflow is missing. Both version workflows re-lock the"
         echo "  lockfiles; if one was renamed, rename it in this check too."
         exit 1
     fi
-    if grep -qE '^[^#]*cargo[[:space:]]+generate-lockfile' "$workflow"; then
-        echo -e "\033[0;31m✗\033[0m $workflow runs 'cargo generate-lockfile', which re-resolves every"
-        echo "  dependency from scratch. A version change must move only the workspace's own"
-        echo "  crates: use 'cargo update --workspace'. See the note in the workflow."
-        grep -nE '^[^#]*cargo[[:space:]]+generate-lockfile' "$workflow" | sed 's/^/    /'
+    if grep -qE '^[^#]*cargo[[:space:]]+(generate-lockfile|update)' "$workflow"; then
+        echo -e "\033[0;31m✗\033[0m $workflow moves Cargo.lock itself. The version workflows re-lock"
+        echo "  through $lock_action, which this check holds to 'cargo update --workspace'."
+        grep -nE '^[^#]*cargo[[:space:]]+(generate-lockfile|update)' "$workflow" | sed 's/^/    /'
         exit 1
     fi
-    if ! grep -qE '^[^#]*cargo[[:space:]]+update[[:space:]]+--workspace' "$workflow"; then
-        echo -e "\033[0;31m✗\033[0m $workflow no longer runs 'cargo update --workspace', so nothing"
-        echo "  moves the workspace crate versions in Cargo.lock and 'cargo metadata --locked'"
-        echo "  will fail the release PR or the promotion."
+    if ! grep -qE '^[[:space:]]*uses:[[:space:]]*\./\.github/actions/lock-the-version[[:space:]]*$' "$workflow"; then
+        echo -e "\033[0;31m✗\033[0m $workflow no longer runs the lock-the-version action, so nothing"
+        echo "  moves the workspace crate versions in its lockfiles."
         exit 1
     fi
-    echo -e "\033[0;32m✓\033[0m $workflow re-locks the workspace only"
+    echo -e "\033[0;32m✓\033[0m $workflow re-locks through lock-the-version"
 done
 
 # ---------------------------------------------------------------------------
