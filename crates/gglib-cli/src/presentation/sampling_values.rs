@@ -26,9 +26,9 @@ pub(crate) fn stated_parameters(config: &InferenceConfig) -> Vec<(String, String
 /// which is accurate, useless, and not what anyone typed. Narrowing back to
 /// `f32` before formatting restores the shortest representation that
 /// round-trips, so `--temperature 0.1` prints `0.1`.
-#[allow(
+#[expect(
     clippy::cast_possible_truncation,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "narrowing to the f32 gglib stores is the point: it prints as the user typed it"
 )]
 fn render(value: &serde_json::Value) -> String {
     match value.as_f64() {

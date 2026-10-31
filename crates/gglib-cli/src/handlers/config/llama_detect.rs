@@ -11,14 +11,9 @@ use gglib_runtime::llama::{Acceleration, detect_optimal_acceleration, vulkan_sta
 
 /// Execute the `detect` subcommand.
 ///
-/// Returns `Ok(())` when all build dependencies for the detected
-/// acceleration are present. Returns `Err` (non-zero exit) when
-/// dependencies are missing.
-#[allow(
-    clippy::unnecessary_wraps,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-pub(crate) fn execute(json: bool) -> Result<()> {
+/// Returns when all build dependencies for the detected acceleration are
+/// present, and exits the process non-zero when they are missing.
+pub(crate) fn execute(json: bool) {
     let accel = detect_optimal_acceleration();
     let vk = vulkan_status();
 
@@ -43,26 +38,19 @@ pub(crate) fn execute(json: bool) -> Result<()> {
         Err(_) => {
             std::process::exit(1);
         }
-        _ => Ok(()),
+        _ => {}
     }
 }
 
 /// JSON output for machine consumption.
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 fn print_json(accel: &Result<Acceleration>, vk: &gglib_runtime::llama::VulkanStatus) {
-    let (acceleration, ready) = match accel {
-        Ok(a) => {
-            let ready = match a {
-                Acceleration::Vulkan => vk.ready_for_build(),
-                _ => true,
-            };
-            (Some(a.display_name().to_string()), ready)
-        }
-        Err(_) => (None, false),
-    };
+    let (acceleration, ready) = accel.as_ref().map_or((None, false), |a| {
+        let ready = match a {
+            Acceleration::Vulkan => vk.ready_for_build(),
+            _ => true,
+        };
+        (Some(a.display_name().to_string()), ready)
+    });
 
     // Emit the Vulkan status block whenever the loader is detected,
     // even if the strict detector rejected Vulkan because of missing

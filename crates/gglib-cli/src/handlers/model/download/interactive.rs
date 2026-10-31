@@ -172,9 +172,8 @@ async fn run_tty_monitor(
         // Stderr, matching the bars — see the comment on `run_interactive_monitor`.
         let term = Term::stderr();
         loop {
-            let key = match term.read_key() {
-                Ok(k) => k,
-                Err(_) => return, // stdin closed or unsupported
+            let Ok(key) = term.read_key() else {
+                return; // stdin closed or unsupported
             };
             // If the channel is closed, main has exited — bail out.
             if key_tx.blocking_send(key).is_err() {

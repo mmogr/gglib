@@ -242,8 +242,4 @@ pub(crate) fn warn_profile_gone(name: &str) {
 
 #[cfg(test)]
 #[path = "profile_selection_tests.rs"]
-#[allow(
-    clippy::default_trait_access,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 mod profile_selection_tests;

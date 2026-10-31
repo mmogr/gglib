@@ -1,9 +1,5 @@
 #![doc = include_str!("README.md")]
 #[cfg(target_os = "macos")]
-#[allow(
-    clippy::too_many_lines,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 mod build;
 
 #[cfg(target_os = "macos")]

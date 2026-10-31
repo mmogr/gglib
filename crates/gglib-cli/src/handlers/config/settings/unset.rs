@@ -33,10 +33,6 @@ fn known_keys() -> Map<String, Value> {
     }
 }
 
-#[allow(
-    clippy::iter_on_single_items,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(super) async fn handle_unset(ctx: &CliContext, key: &str) -> Result<()> {
     let camel = kebab_to_camel(key);
     let known = known_keys();
@@ -52,7 +48,7 @@ pub(super) async fn handle_unset(ctx: &CliContext, key: &str) -> Result<()> {
     // An explicit `null` is what `double_option` reads as "clear this"; an
     // omitted key means "leave it alone". Building the request through serde
     // rather than by field keeps this generic over all of them.
-    let body = Value::Object([(camel, Value::Null)].into_iter().collect());
+    let body = Value::Object(std::iter::once((camel, Value::Null)).collect());
     let request: UpdateSettingsRequest =
         serde_json::from_value(body).expect("a known key with a null value always deserialises");
 

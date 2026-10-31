@@ -11,6 +11,7 @@
 //! to move the cursor up; a renderer that asked the terminal directly would be
 //! measuring a different width than the one it drew for.
 
+use std::fmt::Write as _;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::BAR_WIDTH;
@@ -22,6 +23,12 @@ use crate::presentation::truncate_string;
 /// Render a `[███░░░] NN%` bar. `total == 0` renders an empty bar at 0%
 /// rather than dividing by zero — used for every gauge in this dashboard so
 /// the bar-drawing logic exists in exactly one place.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    reason = "display only: a fraction clamped to 0..=1, scaled to a bar's cells and to a percentage"
+)]
 pub(super) fn progress_bar(filled: u64, total: u64, width: usize) -> String {
     let fraction = if total == 0 {
         0.0
@@ -71,13 +78,14 @@ pub(super) fn format_elapsed_secs(started_at_secs: u64) -> String {
 /// compute how far to move the cursor up.
 pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: u16) -> String {
     let mut out = String::new();
-    out.push_str(&format!("gglib proxy dashboard — {url}\n"));
+    let _ = writeln!(out, "gglib proxy dashboard — {url}");
     out.push_str("(Ctrl+C to exit)\n\n");
 
-    out.push_str(&format!(
-        "Active connections ({})\n",
+    let _ = writeln!(
+        out,
+        "Active connections ({})",
         snapshot.active_connections.len()
-    ));
+    );
     if snapshot.active_connections.is_empty() {
         out.push_str("  (none)\n");
     }
@@ -88,13 +96,14 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
             }
             _ => progress_bar(0, 0, BAR_WIDTH),
         };
-        out.push_str(&format!(
-            "  {:<24} {:<11} {}  {}\n",
+        let _ = writeln!(
+            out,
+            "  {:<24} {:<11} {}  {}",
             truncate_string(&conn.model_name, 24),
             conn.phase.label(),
             bar,
             format_elapsed_secs(conn.started_at_secs)
-        ));
+        );
     }
 
     out.push('\n');
@@ -104,10 +113,7 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
         // "  " prefix takes 2 columns — clip so the whole line fits in
         // one physical row regardless of terminal width.
         let max_reason_chars = usize::from(term_width.saturating_sub(2));
-        out.push_str(&format!(
-            "  {}\n",
-            truncate_string(reason, max_reason_chars)
-        ));
+        let _ = writeln!(out, "  {}", truncate_string(reason, max_reason_chars));
     } else if snapshot.slots.is_empty() {
         out.push_str("  (no slots reported)\n");
     } else {
@@ -116,7 +122,7 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
                 (Some(used), Some(ctx)) => progress_bar(used, ctx, BAR_WIDTH),
                 _ => progress_bar(0, 0, BAR_WIDTH),
             };
-            out.push_str(&format!("  slot {:<3} {}\n", slot.id, bar));
+            let _ = writeln!(out, "  slot {:<3} {}", slot.id, bar);
         }
     }
 
@@ -147,10 +153,7 @@ pub(super) fn render_frame(url: &str, snapshot: &DashboardSnapshot, term_width: 
     out.push_str(&render_client_fields_section(audit));
 
     out.push('\n');
-    out.push_str(&format!(
-        "Total requests served: {}\n",
-        snapshot.total_requests
-    ));
+    let _ = writeln!(out, "Total requests served: {}", snapshot.total_requests);
     out
 }
 
@@ -181,13 +184,14 @@ pub(super) fn render_admission_section(admission: &AdmissionSnapshot, term_width
         } else {
             "idle".to_string()
         };
-        out.push_str(&format!(
-            "  {:<24} {:<10} {:<14} {}\n",
+        let _ = writeln!(
+            out,
+            "  {:<24} {:<10} {:<14} {}",
             truncate_string(&slot.model_name, 24),
             role,
             activity,
             format_duration_secs(slot.resident_for_secs),
-        ));
+        );
     }
 
     if !admission.secondary_slot.detail.is_empty() {
@@ -195,28 +199,27 @@ pub(super) fn render_admission_section(admission: &AdmissionSnapshot, term_width
         // physical row whatever the terminal width, matching how the slots
         // error line is handled above.
         let max_chars = usize::from(term_width.saturating_sub(2));
-        out.push_str(&format!(
-            "  {}\n",
+        let _ = writeln!(
+            out,
+            "  {}",
             truncate_string(&admission.secondary_slot.detail, max_chars)
-        ));
+        );
     }
 
     for queued in &admission.queued {
-        out.push_str(&format!(
-            "  {:<24} {} waiting, oldest {}\n",
+        let _ = writeln!(
+            out,
+            "  {:<24} {} waiting, oldest {}",
             truncate_string(&queued.model_name, 24),
             queued.waiting,
             format_duration_secs(queued.oldest_wait_ms / 1000),
-        ));
+        );
     }
 
     // Printed unconditionally, and next to nothing else: a swap count on its
     // own reads as a cost, but next to a queue that is draining it reads as
     // how much the batching saved.
-    out.push_str(&format!(
-        "  {:<24} {}\n",
-        "Model swaps", admission.total_swaps
-    ));
+    let _ = writeln!(out, "  {:<24} {}", "Model swaps", admission.total_swaps);
     out
 }
 
@@ -229,6 +232,10 @@ pub(super) fn render_admission_section(admission: &AdmissionSnapshot, term_width
 /// tracking how far to move the cursor up on the next redraw — see the
 /// module's "Redraw strategy" doc comment for why an undercount there
 /// corrupts the display.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "a dashboard line spans a row or a few, never 65,535 characters"
+)]
 pub(super) fn visual_row_count(frame: &str, term_width: u16) -> u16 {
     let cols = term_width.max(1);
     frame
@@ -252,33 +259,36 @@ pub(super) fn render_usage_rows(usage: &CacheUsage) -> String {
     if usage.reporting_requests == 0 {
         out.push_str("  (no cache activity recorded yet)\n");
     } else {
-        out.push_str(&format!(
-            "  {:<14} {} of {} prompt tokens ({} requests)\n",
+        let _ = writeln!(
+            out,
+            "  {:<14} {} of {} prompt tokens ({} requests)",
             "Reused",
             thousands(usage.cached_tokens),
             thousands(usage.prompt_tokens),
             thousands(usage.reporting_requests),
-        ));
+        );
         if let (Some(last_cached), Some(last_prompt)) =
             (usage.last_cached_tokens, usage.last_prompt_tokens)
         {
-            out.push_str(&format!(
-                "  {:<14} {} of {} tokens from cache\n",
+            let _ = writeln!(
+                out,
+                "  {:<14} {} of {} tokens from cache",
                 "Last request",
                 thousands(u64::from(last_cached)),
                 thousands(u64::from(last_prompt)),
-            ));
+            );
         }
     }
 
     // Only shown when it's non-zero: on a current llama.cpp every request
     // reports, so a permanent "0" row would be noise.
     if usage.unreported_requests > 0 {
-        out.push_str(&format!(
-            "  {:<14} {}\n",
+        let _ = writeln!(
+            out,
+            "  {:<14} {}",
             "No cache data",
             thousands(usage.unreported_requests),
-        ));
+        );
     }
 
     out
@@ -293,10 +303,7 @@ pub(super) fn render_cache_section(cache: &CacheStatus, term_width: u16) -> Stri
     // physical row, matching how `slots_status` is handled above.
     let max_warning_chars = usize::from(term_width.saturating_sub(4));
     for warning in &cache.warnings {
-        out.push_str(&format!(
-            "  ! {}\n",
-            truncate_string(warning, max_warning_chars)
-        ));
+        let _ = writeln!(out, "  ! {}", truncate_string(warning, max_warning_chars));
     }
 
     out.push_str(&render_usage_rows(&cache.usage));
@@ -309,8 +316,12 @@ pub(super) fn render_cache_section(cache: &CacheStatus, term_width: u16) -> Stri
         "on"
     };
     match ram_budget_label(cache) {
-        Some(budget) => out.push_str(&format!("  RAM budget: {budget} · disk: {disk}\n")),
-        None => out.push_str(&format!("  disk: {disk}\n")),
+        Some(budget) => {
+            let _ = writeln!(out, "  RAM budget: {budget} · disk: {disk}");
+        }
+        None => {
+            let _ = writeln!(out, "  disk: {disk}");
+        }
     }
 
     out

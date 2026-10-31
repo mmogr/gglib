@@ -147,7 +147,7 @@ fn render_frame_truncates_long_slots_error_to_fit_terminal_width() {
     );
 
     assert!(
-        long_reason.chars().count() as u16 > width,
+        long_reason.chars().count() > usize::from(width),
         "test fixture must actually exceed the terminal width"
     );
     for line in frame.lines() {
@@ -167,8 +167,8 @@ fn render_frame_truncates_long_slots_error_to_fit_terminal_width() {
 fn visual_row_count_matches_logical_lines_when_nothing_wraps() {
     let frame = "gglib proxy dashboard\n(Ctrl+C to exit)\n\nTotal requests served: 0\n";
     assert_eq!(
-        visual_row_count(frame, DEFAULT_TERM_WIDTH),
-        frame.lines().count() as u16
+        usize::from(visual_row_count(frame, DEFAULT_TERM_WIDTH)),
+        frame.lines().count()
     );
 }
 
@@ -205,8 +205,8 @@ fn visual_row_count_exceeds_naive_line_count_on_a_narrow_terminal() {
         term_width,
     );
 
-    let naive_count = frame.lines().count() as u16;
-    let accurate_count = visual_row_count(&frame, term_width);
+    let naive_count = frame.lines().count();
+    let accurate_count = usize::from(visual_row_count(&frame, term_width));
     assert!(
         accurate_count > naive_count,
         "expected wrapping to be detected: naive={naive_count} accurate={accurate_count}"

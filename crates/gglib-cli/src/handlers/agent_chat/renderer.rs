@@ -167,21 +167,21 @@ mod tests {
     use super::render_event;
 
     /// Convenience: call `render_event` and assert it does not panic.
-    fn smoke(event: AgentEvent) {
-        render_event(&event, false, false, false);
-        render_event(&event, true, false, false);
+    fn smoke(event: &AgentEvent) {
+        render_event(event, false, false, false);
+        render_event(event, true, false, false);
     }
 
     #[test]
     fn final_answer_does_not_panic() {
-        smoke(AgentEvent::FinalAnswer {
+        smoke(&AgentEvent::FinalAnswer {
             content: "42".into(),
         });
     }
 
     #[test]
     fn error_does_not_panic() {
-        smoke(AgentEvent::Error {
+        smoke(&AgentEvent::Error {
             message: "something went wrong".into(),
         });
     }
@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn tool_call_complete_does_not_panic() {
-        smoke(AgentEvent::ToolCallComplete {
+        smoke(&AgentEvent::ToolCallComplete {
             tool_name: "some_tool".into(),
             result: ToolResult::text("c1", "output", true),
             wait_ms: 0,
@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn read_file_render_shows_line_count() {
         // Should not panic and format nicely
-        smoke(AgentEvent::ToolCallComplete {
+        smoke(&AgentEvent::ToolCallComplete {
             tool_name: "builtin:read_file".into(),
             result: ToolResult::text("c2", "line 1\nline 2\nline 3\n", true),
             wait_ms: 0,
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn list_directory_render_shows_counts() {
-        smoke(AgentEvent::ToolCallComplete {
+        smoke(&AgentEvent::ToolCallComplete {
             tool_name: "builtin:list_directory".into(),
             result: ToolResult::text("c3", "file.rs\ndir/\nother.txt\n", true),
             wait_ms: 0,
@@ -249,7 +249,7 @@ mod tests {
 
     #[test]
     fn grep_search_render_shows_match_count() {
-        smoke(AgentEvent::ToolCallComplete {
+        smoke(&AgentEvent::ToolCallComplete {
             tool_name: "builtin:grep_search".into(),
             result: ToolResult::text(
                 "c4",
@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn grep_no_matches_render() {
-        smoke(AgentEvent::ToolCallComplete {
+        smoke(&AgentEvent::ToolCallComplete {
             tool_name: "builtin:grep_search".into(),
             result: ToolResult::text("c5", "no matches found for 'xyz'", true),
             wait_ms: 0,
@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn failed_tool_falls_back_to_truncation() {
-        smoke(AgentEvent::ToolCallComplete {
+        smoke(&AgentEvent::ToolCallComplete {
             tool_name: "builtin:read_file".into(),
             result: ToolResult::text("c6", "file 'nope.txt' does not exist", false),
             wait_ms: 0,

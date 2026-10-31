@@ -47,7 +47,7 @@ Formats model information for terminal output.
 use crate::presentation::model_display::{display_model_summary, ModelSummaryOpts};
 
 let model = /* ... */;
-display_model_summary(&model, ModelSummaryOpts::with_title("Model created:"));
+display_model_summary(&model, &ModelSummaryOpts::with_title("Model created:"));
 ```
 
 **Output:**

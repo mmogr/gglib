@@ -186,17 +186,14 @@ impl Shared {
 
 #[async_trait]
 impl SettingsRepository for Shared {
-    #[allow(
-        clippy::significant_drop_in_scrutinee,
-        clippy::significant_drop_tightening,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
     async fn load(&self) -> Result<Settings, RepositoryError> {
         let mut stored = self.stored.lock().unwrap();
         let read = stored.clone();
-        if let Some(write) = self.between.lock().unwrap().take() {
+        let between = self.between.lock().unwrap().take();
+        if let Some(write) = between {
             write(&mut stored);
         }
+        drop(stored);
         Ok(read)
     }
 
@@ -206,9 +203,9 @@ impl SettingsRepository for Shared {
     }
 }
 
-#[allow(
+#[expect(
     clippy::unnecessary_wraps,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "every caller stores it in, or compares it with, the settings' `Option` field"
 )]
 fn pairing(ticket: &str, api_key: &str) -> Option<RemotePairing> {
     Some(RemotePairing {

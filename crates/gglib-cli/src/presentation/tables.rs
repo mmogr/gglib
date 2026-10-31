@@ -95,9 +95,9 @@ pub(crate) fn short_sha(sha: &str) -> &str {
 }
 
 /// Format large numbers with K/M suffixes.
-#[allow(
+#[expect(
     clippy::cast_precision_loss,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "display only: a count shown to one decimal of a thousand or a million"
 )]
 pub(crate) fn format_number(n: u64) -> String {
     if n >= 1_000_000 {

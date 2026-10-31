@@ -129,6 +129,11 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: BenchmarkCommand) -> Result<
 /// Dropping the stream (Ctrl-C aborts the future) disconnects the request,
 /// which is the daemon's cancellation signal — the run stops at the next
 /// model boundary and VRAM is freed.
+#[expect(
+    clippy::future_not_send,
+    reason = "generic over the caller's body and callback; each command awaits it in place, \
+              none spawns it"
+)]
 async fn run_on_daemon(
     ctx: &CliContext,
     path: &str,
@@ -370,6 +375,10 @@ async fn apply_gated(ctx: &CliContext, run_id: i64) -> Result<()> {
 
 /// Run the raw-vs-gglib A/B agentic eval on the daemon and render the delta.
 #[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::fn_params_excessive_bools,
+    reason = "each bool is one independent `benchmark agentic` flag, passed through from clap"
+)]
 async fn cmd_agentic(
     ctx: &CliContext,
     model: String,
@@ -1054,6 +1063,11 @@ fn fmt_factor(factor: Option<f64>) -> String {
     )
 }
 
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "display only: a measured duration in milliseconds, rounded to a whole one"
+)]
 fn fmt_ms(millis: Option<f64>) -> String {
     let time = millis.map(|m| format_duration_human(m.round() as u64));
     time.unwrap_or_else(|| "—".to_owned())
@@ -1310,7 +1324,7 @@ async fn cmd_model(ctx: &CliContext, model_id: i64) -> Result<()> {
             let date = r.created_at.format("%Y-%m-%d %H:%M");
             let gen_tps = r
                 .generation_tps
-                .map_or("—".into(), |t| format!("{t:.1} tok/s"));
+                .map_or_else(|| "—".into(), |t| format!("{t:.1} tok/s"));
             println!(
                 "  {date}  gen={gen_tps}  tokens={tokens}",
                 tokens = r.completion_tokens.unwrap_or(0)
@@ -1409,6 +1423,9 @@ fn render_event(event: &BenchmarkEvent) {
 
         BenchmarkEvent::TuneTaskComplete {
             task_id, passed, ..
+        }
+        | BenchmarkEvent::AgenticTaskComplete {
+            task_id, passed, ..
         } => {
             let mark = if *passed { "✓" } else { "✗" };
             eprintln!("  {mark} {task_id}");
@@ -1433,13 +1450,6 @@ fn render_event(event: &BenchmarkEvent) {
             );
         }
 
-        BenchmarkEvent::AgenticTaskComplete {
-            task_id, passed, ..
-        } => {
-            let mark = if *passed { "✓" } else { "✗" };
-            eprintln!("  {mark} {task_id}");
-        }
-
         // Rendered by cmd_agentic as the final A/B table.
         BenchmarkEvent::AgenticEvalComplete { .. } => {}
     }
@@ -1448,14 +1458,14 @@ fn render_event(event: &BenchmarkEvent) {
 fn render_compare_complete(r: &ModelCompareResult) {
     let gen_tps = r
         .generation_tps
-        .map_or("—".into(), |t| format!("{t:.1} tok/s gen"));
+        .map_or_else(|| "—".into(), |t| format!("{t:.1} tok/s gen"));
     let pp = r
         .prompt_tps
-        .map_or("—".into(), |t| format!("{t:.1} tok/s prompt"));
+        .map_or_else(|| "—".into(), |t| format!("{t:.1} tok/s prompt"));
     let tokens = r.completion_tokens.unwrap_or(0);
     let ms = r
         .generation_ms
-        .map_or("—".into(), |m| format!("{:.1}s", m / 1000.0));
+        .map_or_else(|| "—".into(), |m| format!("{:.1}s", m / 1000.0));
     eprintln!(
         "{SUCCESS}✓ {gen_tps}  ·  {pp}  ·  {tokens} tokens  ·  {ms}{RESET}",
         SUCCESS = style::SUCCESS,

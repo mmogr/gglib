@@ -41,9 +41,9 @@ pub(crate) struct FrontendLogEntry {
 /// RUST_LOG=gglib=debug,gglib_frontend=debug
 /// ```
 #[tauri::command]
-#[allow(
+#[expect(
     clippy::unnecessary_wraps,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "a Tauri command, on the `Result<(), String>` signature this crate's commands return"
 )]
 #[allow(
     clippy::needless_pass_by_value,

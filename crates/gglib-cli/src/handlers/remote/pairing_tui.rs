@@ -88,15 +88,11 @@ pub(super) fn withdrawn_notice(tunnel_up: bool) -> [&'static str; 2] {
 /// The line that says a device paired, naming the one its code was for.
 ///
 /// One copy for `enable` and `invite`, as [`withdrawn_notice`] is.
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(super) fn paired_line(device: Option<&str>) -> String {
-    match device {
-        Some(device) => format!("  \u{2705} Paired {device}. `gglib remote list` shows it."),
-        None => "  \u{2705} A device paired.".to_owned(),
-    }
+    device.map_or_else(
+        || "  \u{2705} A device paired.".to_owned(),
+        |device| format!("  \u{2705} Paired {device}. `gglib remote list` shows it."),
+    )
 }
 
 /// What the plain pairing says about the device its code is for, beside the
@@ -141,7 +137,7 @@ pub(super) async fn run(handle: &DaemonHandle, enabled: &RemoteEnableResponse) -
         // The time left is taken again, because the second's sleep has made
         // the one above stale.
         if let Ok(status) = handle.remote_status().await
-            && let Some(outcome) = watch.read(status, ttl.saturating_sub(started.elapsed()))
+            && let Some(outcome) = watch.read(&status, ttl.saturating_sub(started.elapsed()))
         {
             break outcome;
         }
@@ -191,11 +187,7 @@ impl Watch {
     /// the code and records the pairing in two steps, and a read between them
     /// sees neither. And one that goes inside [`LAPSE_GRACE`] is left for the
     /// countdown to call expired.
-    #[allow(
-        clippy::needless_pass_by_value,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
-    fn read(&mut self, status: RemoteStatus, left: Duration) -> Option<Outcome> {
+    fn read(&mut self, status: &RemoteStatus, left: Duration) -> Option<Outcome> {
         if status.paired {
             return Some(Outcome::Paired {
                 device: self.device.clone(),

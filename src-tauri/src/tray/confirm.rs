@@ -115,12 +115,8 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    #[allow(
-        clippy::needless_pass_by_value,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
-    fn snapshot(proxy: serde_json::Value, servers: serde_json::Value) -> DaemonSnapshot {
-        DaemonSnapshot::from_responses(&proxy, &servers)
+    fn snapshot(proxy: &serde_json::Value, servers: &serde_json::Value) -> DaemonSnapshot {
+        DaemonSnapshot::from_responses(proxy, servers)
     }
 
     /// Nothing serving and nothing held means nothing to warn about, and the
@@ -128,7 +124,7 @@ mod tests {
     #[test]
     fn an_idle_daemon_has_nothing_at_stake() {
         assert_eq!(
-            at_stake(&snapshot(json!({"running": false}), json!([]))),
+            at_stake(&snapshot(&json!({"running": false}), &json!([]))),
             None
         );
         assert_eq!(at_stake(&DaemonSnapshot::default()), None);
@@ -138,7 +134,7 @@ mod tests {
     /// go away is the one their editor is pointed at.
     #[test]
     fn a_serving_proxy_names_its_port() {
-        let snap = snapshot(json!({"running": true, "port": 8080}), json!([]));
+        let snap = snapshot(&json!({"running": true, "port": 8080}), &json!([]));
 
         assert_eq!(at_stake(&snap).as_deref(), Some("the proxy on :8080"));
     }
@@ -146,7 +142,7 @@ mod tests {
     /// A model held in VRAM is worth naming even with nothing listening.
     #[test]
     fn resident_models_count_on_their_own() {
-        let snap = snapshot(json!({"running": false}), json!([{"model_id": 1}]));
+        let snap = snapshot(&json!({"running": false}), &json!([{"model_id": 1}]));
 
         assert_eq!(at_stake(&snap).as_deref(), Some("1 resident model"));
     }
@@ -154,8 +150,8 @@ mod tests {
     #[test]
     fn a_proxy_and_models_are_named_together() {
         let snap = snapshot(
-            json!({"running": true, "port": 9000}),
-            json!([{"model_id": 1}, {"model_id": 2}]),
+            &json!({"running": true, "port": 9000}),
+            &json!([{"model_id": 1}, {"model_id": 2}]),
         );
 
         assert_eq!(
@@ -168,7 +164,7 @@ mod tests {
     /// leaving it out of the warning entirely.
     #[test]
     fn a_proxy_without_a_known_port_is_still_at_stake() {
-        let snap = snapshot(json!({"running": true}), json!([]));
+        let snap = snapshot(&json!({"running": true}), &json!([]));
 
         assert_eq!(at_stake(&snap).as_deref(), Some("the proxy"));
     }

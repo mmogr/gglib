@@ -199,19 +199,15 @@ fn report_memory(status: &SetupStatus) -> Option<SystemMemoryInfo> {
 /// An NVIDIA card without the CUDA toolkit is called out rather than reported
 /// as plain "NVIDIA": it is the difference between a fast install and one
 /// that takes the Vulkan download, or a CPU build.
-#[allow(
-    clippy::option_if_let_else,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 fn backend_label(gpu: &GpuInfoDto) -> String {
     if gpu.has_metal {
         return "Metal".to_string();
     }
     if gpu.has_nvidia {
-        return match &gpu.cuda_version {
-            Some(v) => format!("CUDA {v}"),
-            None => "NVIDIA GPU, no CUDA toolkit".to_string(),
-        };
+        return gpu.cuda_version.as_ref().map_or_else(
+            || "NVIDIA GPU, no CUDA toolkit".to_string(),
+            |v| format!("CUDA {v}"),
+        );
     }
     if gpu.has_vulkan {
         return "Vulkan".to_string();

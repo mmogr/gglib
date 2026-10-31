@@ -44,17 +44,13 @@ impl<'a> ModelSummaryOpts<'a> {
 /// use crate::presentation::{display_model_summary, ModelSummaryOpts};
 ///
 /// // Simple usage with title
-/// display_model_summary(&model, ModelSummaryOpts::with_title("Model created:"));
+/// display_model_summary(&model, &ModelSummaryOpts::with_title("Model created:"));
 ///
 /// // For removal confirmation
-/// display_model_summary(&model, ModelSummaryOpts::for_removal());
+/// display_model_summary(&model, &ModelSummaryOpts::for_removal());
 /// ```
-#[allow(
-    clippy::needless_pass_by_value,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-pub(crate) fn display_model_summary(model: &Model, opts: ModelSummaryOpts) {
-    for line in summary_lines(model, &opts) {
+pub(crate) fn display_model_summary(model: &Model, opts: &ModelSummaryOpts) {
+    for line in summary_lines(model, opts) {
         println!("{line}");
     }
 }
