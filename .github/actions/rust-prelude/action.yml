@@ -1,0 +1,105 @@
+name: Rust prelude
+description: >-
+  What a job does before it builds Rust: on Linux, frees disk space and
+  installs the system packages it names; on every OS, installs the toolchain
+  rust-toolchain.toml pins (its Apple targets included) and restores the
+  job's Rust cache. A local action, so the caller checks out first.
+
+inputs:
+  apt-packages:
+    description: >-
+      The apt packages a Linux job installs, separated by spaces or newlines.
+      Empty installs none. Ignored off Linux.
+    required: false
+    default: ""
+  shared-key:
+    description: >-
+      The rust-cache shared-key, one per build configuration. Empty restores
+      and saves no Rust cache.
+    required: false
+    default: ""
+  save-if:
+    description: >-
+      "true" lets this run save its Rust cache entry, "false" restores only.
+    required: false
+    default: "false"
+  free-disk:
+    description: >-
+      "false" skips freeing disk space, for a Linux job whose build fits the
+      runner as it comes.
+    required: false
+    default: "true"
+  large-packages:
+    description: >-
+      "true" also removes the runner's large apt packages, for a job that
+      needs the space and installs none of what they drag back in.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    # The android, dotnet and haskell removals free 20 GB in about 155
+    # seconds. `large-packages` is off unless asked for: measured on run
+    # 32705784511 it spent 77 of that step's 232 seconds to reclaim 1.79 GB,
+    # and among what it purged were libgl1, libglx-mesa0 and
+    # libdbusmenu-gtk3-4, which a job that installs the GTK and appindicator
+    # packages immediately pulls back.
+    #
+    # Pinned to the commit v2.0.0 names rather than @main: the action runs
+    # `sudo` removals across the runner, and @main is whatever that
+    # repository last pushed. Dependabot rewrites the SHA and the trailing
+    # `# v2.0.0` together, which is why nothing may follow it on the line.
+    - name: Free Disk Space (Ubuntu)
+      if: runner.os == 'Linux' && inputs.free-disk == 'true'
+      uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: ${{ inputs.large-packages }}
+        docker-images: true
+        swap-storage: true
+
+    - name: Install system dependencies (Linux)
+      if: runner.os == 'Linux' && inputs.apt-packages != ''
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.apt-packages }}
+      run: |
+        sudo apt-get update
+        # Split on purpose, one argument per package.
+        # shellcheck disable=SC2086
+        sudo apt-get install -y $PACKAGES
+
+    # rust-toolchain.toml names the channel, the components and the Apple
+    # targets, so this installs all of them. Each release leg builds for its
+    # own host, which needs no target added.
+    - name: Install Rust toolchain
+      shell: bash
+      run: rustup show
+
+    # Swatinem/rust-cache with a shared-key per build configuration. One key
+    # for every job meant each restored the artifacts of another feature set:
+    # `test` restored clippy's `--all-features` build and got 49 of 630 units
+    # fresh.
+    #
+    # Only a run on main saves (each caller passes `save-if`). A pull
+    # request's entry is stored under refs/pull/N/merge, where only that pull
+    # request can restore it, and a pull request that moves a locked
+    # dependency misses main's exact key and would write one of its own;
+    # every Dependabot cargo pull request would. Those entries crowd main's
+    # out of the repository's cache limit. A pull request still restores
+    # main's newest entry, through a restore key that leaves out the lockfile
+    # hash, so a lockfile bump rebuilds the crates it moved and what depends
+    # on them, not the whole graph. A release restores and never saves: a
+    # version bump changes Cargo.lock, so every release would save a fresh
+    # set of entries, each a few GB.
+    - name: Setup Rust cache
+      if: inputs.shared-key != ''
+      uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      with:
+        shared-key: ${{ inputs.shared-key }}
+        cache-on-failure: true
+        save-if: ${{ inputs.save-if }}

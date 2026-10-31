@@ -190,34 +190,13 @@ jobs:
       # restores the `test` job's cache, which only main saves, but that job
       # builds the whole workspace and `-p` here unifies features differently,
       # so most of the graph still builds cold.
-      - name: Free disk space
+      - name: Rust prelude, restoring the test job's cache
         if: steps.pick.outputs.propose == 'true'
-        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
+        uses: ./.github/actions/rust-prelude
         with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: true
-
-      - name: Install system dependencies
-        if: steps.pick.outputs.propose == 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev
-
-      - name: Install Rust toolchain
-        if: steps.pick.outputs.propose == 'true'
-        run: rustup show
-
-      - name: Restore the test job's Rust cache
-        if: steps.pick.outputs.propose == 'true'
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
+          apt-packages: libasound2-dev
           shared-key: "ci-test"
-          save-if: false
+          save-if: "false"
 
       - name: Build gglib and the recorder
         if: steps.pick.outputs.propose == 'true'
