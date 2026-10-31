@@ -3,8 +3,9 @@ name: Coverage
 # Only a change that can move a measured number or break this job: the
 # crates (crates/layers.toml, which says what is measured, among them), their
 # manifests and lockfile, the toolchain, the recorded contracts their tests
-# read, the npm manifests the job installs from, and the script that reads
-# the crate list. The badges keep the last run's figures in between.
+# read, the npm manifests the job installs from, the script that reads the
+# crate list, and the rust-prelude action. The badges keep the last run's
+# figures in between.
 on:
   push:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - 'contracts/**'
       - 'package*.json'
       - '.github/workflows/coverage.yml'
+      - '.github/actions/rust-prelude/**'
       - 'scripts/crate_list.py'
 
 # The newest push's figures are the ones the badges show, so a run still
@@ -38,20 +40,19 @@ jobs:
       run:
         shell: bash
     steps:
-      # Pinned by SHA; ci.yml's `test` job says why.
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: true
-
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      # No build cache, on purpose: no shared-key. `target` here holds
+      # cargo-llvm-cov's instrumented build, which cached whole takes most of
+      # the repository's Actions cache limit and is nearly always evicted
+      # before the next run can restore it. Only the coverage badges wait on
+      # this job, so the space goes to the entries pull-request CI restores.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
+        with:
+          large-packages: "true"
+          apt-packages: bc libasound2-dev
 
       # The crates to measure are crates/layers.toml's badged crates, less any
       # it marks `coverage = false`. Read once, here, for every step below;
@@ -61,19 +62,10 @@ jobs:
           crates=$(python3 scripts/crate_list.py list coverage)
           echo "CRATES=${crates//$'\n'/ }" >> "$GITHUB_ENV"
 
-      - name: Install Rust toolchain
-        run: rustup show
-
-      # No build cache, on purpose. `target` here holds cargo-llvm-cov's
-      # instrumented build, which cached whole takes most of the repository's
-      # Actions cache limit and is nearly always evicted before the next run
-      # can restore it. Only the coverage badges wait on this job, so the
-      # space goes to the entries pull-request CI restores.
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y bc libasound2-dev
-
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+        uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2.88.1
+        with:
+          tool: cargo-llvm-cov
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -86,8 +78,11 @@ jobs:
           npm ci
           npm run build
 
+      # $CRATES is split on purpose, one `-p` per crate; crate names hold no
+      # space or glob.
       - name: Run Rust tests with coverage
         run: |
+          # shellcheck disable=SC2046,SC2086
           cargo llvm-cov $(printf -- '-p %s ' $CRATES) \
             --lcov --output-path lcov.info 2>&1 | tee rust-test-output.txt
 
@@ -104,8 +99,10 @@ jobs:
             cargo llvm-cov report --package "$crate" --lcov --output-path "$crate-lcov.info"
           done
 
+      # Split as in the test step above.
       - name: Generate HTML report
         run: |
+          # shellcheck disable=SC2046,SC2086
           cargo llvm-cov report $(printf -- '--package %s ' $CRATES) --html
 
       - name: Archive coverage report

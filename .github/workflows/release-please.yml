@@ -93,7 +93,7 @@ jobs:
 
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -105,7 +105,7 @@ jobs:
       # behind main, which the ruleset requires before a merge.
       - name: Open or update the release PR
         id: release
-        uses: googleapis/release-please-action@v5
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
@@ -117,10 +117,11 @@ jobs:
     needs: release-pr
     if: needs.release-pr.outputs.updated == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -147,82 +148,13 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "✓ The release PR proposes the release candidate $VERSION"
 
-      - name: Install Rust toolchain
-        run: rustup show
-
-      # Needed by the npm half of "Update lockfiles".
-      - name: Setup Node
-        uses: actions/setup-node@v7
+      # The workspace's own versions in both lockfiles, moved to the
+      # candidate and checked; scripts/check_workflow_yaml.sh holds the
+      # action to `cargo update --workspace`.
+      - name: Lock the release's version
+        uses: ./.github/actions/lock-the-version
         with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      - name: Update lockfiles
-        run: |
-          # `--workspace` restricts the re-lock to the workspace's OWN members,
-          # so the only Cargo.lock diff is the 19 gglib-* version fields the
-          # bump just moved. `cargo generate-lockfile`, which stood here, throws
-          # the lockfile away and re-resolves every dependency from scratch
-          # against whatever the registry holds at that minute -- so a PR titled
-          # only "Bump version to X.Y.Z" carried third-party upgrades. #975 is
-          # the shipped example: 36 third-party crates moved under that title,
-          # aws-lc-rs and tokio-rustls among them.
-          #
-          # This is the Cargo half of the guard the npm step below already had.
-          #
-          # There is one Cargo.lock, not two: src-tauri is a member of the root
-          # workspace (see the `members` list in Cargo.toml), so cargo writes
-          # its resolution into the root lockfile and src-tauri/Cargo.lock does
-          # not exist. A second `--manifest-path src-tauri/Cargo.toml` call
-          # stood here and only re-resolved the root lockfile a second time.
-          cargo update --workspace
-          # --package-lock-only writes the lockfile without touching node_modules.
-          # It keeps every resolution the lockfile already pins, so the only diff
-          # is the two root version fields -- a bump must not smuggle in a
-          # dependency upgrade.
-          npm install --package-lock-only --no-audit --no-fund
-
-      - name: Verify lockfiles (no build)
-        run: |
-          # --locked fails if the lockfile does not already satisfy every
-          # manifest, which is what proves `cargo update --workspace` left a
-          # complete lockfile rather than a stale one.
-          cargo metadata --locked --format-version 1 > /dev/null
-          # The npm equivalent: `npm ci` is the one command that refuses to run
-          # when package.json and package-lock.json disagree on dependencies.
-          npm ci --dry-run --no-audit --no-fund > /dev/null
-
-      - name: Verify changes
-        run: |
-          VERSION="${{ steps.guard.outputs.version }}"
-          
-          # Check that key files were updated. src-tauri/tauri.conf.json is not
-          # in this list: it no longer carries a "version" key, because Tauri
-          # falls back to the Cargo.toml version when the key is absent.
-          for file in package.json; do
-            if ! grep -q "\"version\": \"$VERSION\"" "$file"; then
-              echo "::error::$file was not updated correctly"
-              exit 1
-            fi
-            echo "✓ Verified $file"
-          done
-
-          # package-lock.json is checked separately because it carries the
-          # version twice — the top-level key, and the one on the "" entry under
-          # `packages`. Both must move; a grep -q would pass on either alone.
-          if [ "$(grep -c "\"version\": \"$VERSION\"" package-lock.json)" -lt 2 ]; then
-            echo "::error::package-lock.json was not updated correctly"
-            exit 1
-          fi
-          echo "✓ Verified package-lock.json"
-
-          # Guard the fallback: a re-added "version" key would silently pin the
-          # app metadata and reintroduce the drift this removal eliminated.
-          if grep -q '"version"' src-tauri/tauri.conf.json; then
-            echo "::error::src-tauri/tauri.conf.json must not declare a version; Tauri inherits it from Cargo.toml"
-            exit 1
-          fi
-          echo "✓ Verified src-tauri/tauri.conf.json inherits its version"
+          version: ${{ steps.guard.outputs.version }}
 
       # The action's release-please writes `, closes [#N]` after each fix in
       # the PR body, which GitHub reads as a closing keyword: merging the

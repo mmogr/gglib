@@ -29,13 +29,18 @@ concurrency:
   group: ${{ github.event_name == 'pull_request' && format('status-card-{0}', github.ref) || 'badges-branch' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+defaults:
+  run:
+    # GitHub's default is `bash -e`; this adds pipefail.
+    shell: bash
+
 jobs:
-  card:
-    name: Status Card
+  # On every trigger. On a pull request it is the whole run; before the card
+  # it stops a script that fails its own fixtures from publishing anything.
+  self-test:
+    name: Status Card self-test
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write  # the push to the badges branch
-      pull-requests: read  # the merged pull requests the card counts
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -50,23 +55,40 @@ jobs:
       - name: Self-test
         run: /tmp/card/bin/python scripts/status_card/status_card.py --self-test
 
+  card:
+    name: Status Card
+    needs: self-test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write  # the push to the badges branch
+      pull-requests: read  # the merged pull requests the card counts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install fontTools
+        run: |
+          python3 -m venv /tmp/card
+          /tmp/card/bin/pip install --quiet -r scripts/status_card/requirements.txt
+
       # A failed read fails this step, and the job ends with the last card
       # still on the branch.
       - name: Collect
-        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: /tmp/card/bin/python scripts/status_card/status_card.py collect --out "$RUNNER_TEMP/data.json"
 
       # The directory holds the two SVGs and nothing else.
       - name: Render
-        if: github.event_name != 'pull_request'
         run: /tmp/card/bin/python scripts/status_card/status_card.py render --data "$RUNNER_TEMP/data.json" --out-dir "$RUNNER_TEMP/card"
 
       # `keep_files: true`: the badges stay; only the two SVGs are replaced.
+      # Never `force_orphan`, which would make the branch this directory
+      # alone and drop the badges.
       - name: Publish to the badges branch
-        if: github.event_name != 'pull_request'
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ${{ runner.temp }}/card

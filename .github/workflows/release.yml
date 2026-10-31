@@ -146,54 +146,25 @@ jobs:
             os: windows-2022
 
     steps:
-      # Pinned by SHA; ci.yml's `test` job says why.
-      - name: Free Disk Space (Ubuntu)
-        if: runner.os == 'Linux'
-        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: true
-
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           ref: ${{ needs.meta.outputs.sha }}
           persist-credentials: false
 
-      - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          # This job builds `-p gglib-cli` and nothing else. The CLI does not
-          # link GTK or WebKit — ci.yml's `cli-cross-os` job compiles it on
-          # Linux with libasound2-dev alone. The GTK/WebKit/appindicator/rsvg
-          # packages were vestigial here and cost runner minutes on every
-          # release. gglib-app's job installs its own set separately.
-          sudo apt-get update
-          # dpkg-dev provides dpkg-shlibdeps, which computes the CLI .deb's
-          # Depends below.
-          sudo apt-get install -y \
-            libasound2-dev \
-            pkg-config \
-            dpkg-dev
-
-      - name: Install Rust toolchain
-        run: rustup target add ${{ matrix.target }}
-
-      # A release restores the rust-cache entry its key last saved and never
-      # saves one. A version bump changes Cargo.lock, so every release would
-      # save a fresh set of entries, each a few GB, which push CI's own out
-      # of the repository's cache.
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      # This job builds `-p gglib-cli` and nothing else. The CLI does not
+      # link GTK or WebKit: ci.yml's `cli-cross-os` job compiles it on Linux
+      # with libasound2-dev alone, and gglib-app's job installs its own set.
+      # dpkg-dev provides dpkg-shlibdeps, which computes the CLI .deb's
+      # Depends below. The Rust cache is restored and never saved; the
+      # rust-prelude action says why.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
         with:
+          large-packages: "true"
+          apt-packages: libasound2-dev pkg-config dpkg-dev
           shared-key: "release-${{ matrix.target }}"
-          cache-on-failure: true
-          save-if: false
+          save-if: "false"
 
       - name: Cache node_modules
         uses: actions/cache@v6
@@ -289,7 +260,7 @@ jobs:
       # Authenticode respectively.
       - name: Attest build provenance
         if: inputs.test_run != true
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*
 
@@ -333,35 +304,29 @@ jobs:
             os: windows-2022
 
     steps:
-      # Pinned by SHA; ci.yml's `test` job says why.
-      - name: Free Disk Space (Ubuntu)
-        if: runner.os == 'Linux'
-        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: true
-
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           ref: ${{ needs.meta.outputs.sha }}
           persist-credentials: false
 
-      - name: Install Rust toolchain
-        run: rustup target add ${{ matrix.target }}
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      # Restores the Rust cache only, as in the `build` job.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
         with:
+          large-packages: "true"
+          apt-packages: >-
+            libwebkit2gtk-4.1-dev
+            libayatana-appindicator3-dev
+            librsvg2-dev
+            patchelf
+            libgtk-3-dev
+            libssl-dev
+            libasound2-dev
+            pkg-config
+            rpm
           shared-key: "gui-${{ matrix.target }}"
-          cache-on-failure: true
-          # Restores only; the `build` job says why.
-          save-if: false
+          save-if: "false"
 
       - name: Install Node.js
         uses: actions/setup-node@v7
@@ -378,21 +343,6 @@ jobs:
       # same pinned dependency set as every other job.
       - name: Install frontend dependencies
         run: npm ci
-
-      - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libgtk-3-dev \
-            libssl-dev \
-            libasound2-dev \
-            pkg-config \
-            rpm
 
       # The app launches the CLI beside it and never one from PATH
       # (src-tauri/src/daemon/launch.rs), so every artifact below has one
@@ -717,7 +667,7 @@ jobs:
       # Authenticode respectively.
       - name: Attest build provenance
         if: inputs.test_run != true
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*
 
@@ -746,7 +696,7 @@ jobs:
   # llama.xcframework comes from the llama-xcframework action, restored from
   # the cache ci.yml's `phone-llama` keeps for the pin and the runner's
   # Xcode, or built; the smoke test serves the recorder's tinygemma3, fetched
-  # as `phone-llama` fetches it.
+  # by the pinned-engines action.
   #
   # The runner's default Xcode, as ci.yml's `ffi-apple` and ggchat's CI use:
   # the framework shipped is the one an app built with that Xcode links.
@@ -770,17 +720,14 @@ jobs:
           ref: ${{ needs.meta.outputs.sha }}
           persist-credentials: false
 
-      # rust-toolchain.toml lists the three Apple targets, so this installs them.
-      - name: Install Rust toolchain
-        run: rustup show
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      # rust-toolchain.toml lists the three Apple targets, so the toolchain
+      # step installs them. Restores the Rust cache only, as in the `build`
+      # job.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
         with:
           shared-key: "release-phone"
-          cache-on-failure: true
-          # Restores only; the `build` job says why.
-          save-if: false
+          save-if: "false"
 
       # After the Rust cache, never before it: rust-cache pre-cleans target/
       # when it restores another Cargo.lock's entry, and that clean deletes
@@ -796,31 +743,22 @@ jobs:
           xcodebuild -version
           swift --version
 
-      # As ci.yml's `phone-llama` restores and fetches them, under its key.
-      # Nothing is saved from a release run.
-      - name: Restore the test models
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ runner.temp }}/test-models
-          key: test-models-${{ hashFiles('.github/actions/pinned-engines/models.txt') }}
-
+      # The pinned-engines action without its engines, as ci.yml's
+      # `ffi-apple` runs it. The models' entry is the one cache a release may
+      # save, under the key CI saves, and only when CI has not saved it.
       - name: Fetch the test models
-        env:
-          MODELS: ${{ runner.temp }}/test-models
-          LIST: .github/actions/pinned-engines/models.txt
-        run: |
-          mkdir -p "$MODELS"
-          grep -v '^#' "$LIST" | while read -r name url; do
-            [[ -z $name || -s $MODELS/$name ]] && continue
-            curl -fsSL --retry 3 -o "$MODELS/$name.part" "$url"
-            mv "$MODELS/$name.part" "$MODELS/$name"
-          done
-          echo "GGLIB_ENGINE_MODELS_DIR=$MODELS" >> "$GITHUB_ENV"
+        id: models
+        uses: ./.github/actions/pinned-engines
+        with:
+          target: aarch64-apple-darwin
+          engines: "false"
 
       - name: Build the XCFramework and check each slice
         run: make ffi-xcframework
 
       - name: The Swift binding links and calls the macOS slice, and its engine streams a reply
+        env:
+          GGLIB_ENGINE_MODELS_DIR: ${{ steps.models.outputs.models }}
         run: make ffi-smoke
 
       # Into dist/, which holds nothing else on this runner, so the steps
@@ -834,7 +772,7 @@ jobs:
       # signs the framework when it embeds it in an app.
       - name: Attest build provenance
         if: inputs.test_run != true
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*
 
@@ -1106,7 +1044,8 @@ jobs:
             exit 0
           fi
 
-          mkdir -p -m 700 ~/.ssh
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
           # Pinned, not trusted on first use: the Ed25519 host key fingerprint
@@ -1188,7 +1127,8 @@ jobs:
             exit 0
           fi
 
-          mkdir -p -m 700 ~/.ssh
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
           printf '%s\n' "$HOMEBREW_TAP_DEPLOY_KEY" > ~/.ssh/tap
           chmod 600 ~/.ssh/tap
           # GitHub's published Ed25519 host key.
@@ -1243,26 +1183,20 @@ jobs:
           ref: ${{ needs.meta.outputs.sha }}
           persist-credentials: false
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libasound2-dev
-
-      - name: Install Rust toolchain
-        run: rustup show
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      # Restores the Rust cache only, as in the `build` job. The docs build
+      # fits the runner's disk as it comes.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
         with:
+          free-disk: "false"
+          apt-packages: >-
+            libgtk-3-dev
+            libwebkit2gtk-4.1-dev
+            libayatana-appindicator3-dev
+            librsvg2-dev
+            libasound2-dev
           shared-key: "docs-ubuntu"
-          cache-on-failure: true
-          # Restores only; the `build` job says why.
-          save-if: false
+          save-if: "false"
 
       # No Node or Web UI steps: with gglib-app excluded below, nothing this
       # job builds needs web_ui/ (see the `allow_missing` note in gglib-axum's
@@ -1326,7 +1260,7 @@ jobs:
           path: target/doc
 
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5

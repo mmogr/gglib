@@ -21,6 +21,11 @@ concurrency:
   group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-main-{0}', github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Read only. A job that needs more says so: `scope`, `cache-prune` and
+# `release`.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -92,7 +97,9 @@ jobs:
       # names. cargo-shear reads the source as text and compiles nothing, so
       # code for another platform or behind a feature counts as a use.
       - name: Install cargo-shear
-        uses: taiki-e/install-action@cargo-shear
+        uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2.88.1
+        with:
+          tool: cargo-shear
 
       - name: Check for unused dependencies
         run: make unused-deps
@@ -111,6 +118,21 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      # check_workflow_yaml.sh runs it and fails here without it. The release
+      # tarball, checked against the checksum its release lists, so a moved
+      # asset cannot change what lints. shellcheck comes with the runner.
+      - name: Install actionlint
+        env:
+          URL: https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/actionlint.tar.gz" "$URL"
+          echo "$SHA256  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          sudo install "$RUNNER_TEMP/actionlint" /usr/local/bin/actionlint
+          actionlint --version
+          shellcheck --version
 
       # Every architecture script, in the order the Makefile's `enforce` recipe
       # lists them. The first to fail ends the step, and its output is the end
@@ -162,76 +184,26 @@ jobs:
       run:
         shell: bash
     steps:
-      # `large-packages` is off: measured on run 32705784511 it spent 77 of this
-      # step's 232 seconds to reclaim 1.79 GB, and among what it purged were
-      # libgl1, libglx-mesa0 and libdbusmenu-gtk3-4 — which `Install system
-      # dependencies` immediately pulls back as appindicator dependencies. The
-      # android/dotnet/haskell removals stay: 20 GB in 155 seconds.
-      #
-      # Pinned to the commit v2.0.0 names rather than @main: the action runs
-      # `sudo` removals across the runner, and @main is whatever that
-      # repository last pushed. Dependabot rewrites the SHA and the trailing
-      # `# v2.0.0` together, which is why nothing may follow it on the line.
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: true
-
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
+      # A shared-key per build configuration, and only main saves; the
+      # rust-prelude action says why. `large-packages` stays off because this
+      # job installs the GTK and appindicator packages it would purge.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
+        with:
+          apt-packages: >-
+            libgtk-3-dev
+            libwebkit2gtk-4.1-dev
+            libayatana-appindicator3-dev
+            librsvg2-dev
             libasound2-dev
-
-      - name: Install Rust toolchain
-        run: rustup show
+          shared-key: "ci-test"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Lockfile guard
         run: cargo metadata --locked --format-version 1 > /dev/null
-
-      # Swatinem/rust-cache, as release.yml already uses, with a shared-key
-      # per build configuration. The raw actions/cache this replaces used one
-      # key for every job: clippy runs --all-features and saved it, test runs
-      # default features and restored it, and got 49 of 630 units fresh. And
-      # because test hit the key exactly, actions/cache never saved — test's
-      # own artifacts were discarded every run, permanently.
-      #
-      # It also prunes. Those two Linux entries were 2.69 and 2.24 GB of a
-      # repo cache budget that had reached 10.09 GB against GitHub's 10 GB
-      # ceiling, so the cross-OS entries were being evicted: the Windows leg
-      # logged `Cache not found for input keys: Windows-cargo-…, Windows-cargo-`
-      # and cold-built the workspace every run. release.yml's rust-cache
-      # entries are 0.55-0.80 GB for comparable graphs.
-      #
-      # Only a run on main saves. A pull request's entry is stored under
-      # refs/pull/N/merge, where only that pull request can restore it, and a
-      # pull request that moves a locked dependency misses main's exact key
-      # and would write one of its own; every Dependabot cargo pull request
-      # would.
-      # Those entries crowd main's out of the repository's cache limit, and
-      # this job builds cold when it finds none of main's to restore. A pull
-      # request still restores main's newest entry, through a restore key that
-      # leaves out the lockfile hash, so a lockfile bump rebuilds the crates it
-      # moved and what depends on them, not the whole graph.
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "ci-test"
-          cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -323,39 +295,21 @@ jobs:
     # `check_ts_bindings.sh` in `enforcement`, because a missing annotation
     # regenerates consistently and leaves this diff clean.
     steps:
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: true
-
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libasound2-dev
-
-      - name: Install Rust toolchain
-        run: rustup show
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      # Its own shared-key, and only main saves; the rust-prelude action
+      # says why.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
         with:
+          apt-packages: >-
+            libgtk-3-dev
+            libwebkit2gtk-4.1-dev
+            libayatana-appindicator3-dev
+            librsvg2-dev
+            libasound2-dev
           shared-key: "ci-bindings"
-          cache-on-failure: true
-          # Only a run on main saves; the `test` job says why.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # No frontend build. gglib-axum compiles without `web_ui/`: the
@@ -380,39 +334,21 @@ jobs:
     # than by whoever next cuts a release: `deploy-docs` runs only for a
     # release, so nothing else checks rustdoc on the way in.
     steps:
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: true
-
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libasound2-dev
-
-      - name: Install Rust toolchain
-        run: rustup show
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      # Its own shared-key, and only main saves; the rust-prelude action
+      # says why.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
         with:
+          apt-packages: >-
+            libgtk-3-dev
+            libwebkit2gtk-4.1-dev
+            libayatana-appindicator3-dev
+            librsvg2-dev
+            libasound2-dev
           shared-key: "ci-rustdoc"
-          cache-on-failure: true
-          # Only a run on main saves; the `test` job says why.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # No frontend build. gglib-axum compiles without `web_ui/`: the
@@ -486,42 +422,21 @@ jobs:
     # otherwise cost `test` five minutes of waiting for artifacts it could not
     # use.
     steps:
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: true
-
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libasound2-dev
-
-      - name: Install Rust toolchain
-        run: rustup show
-
-      # Its own shared-key, for the reason spelled out on the `test` job: one
-      # key across four different feature sets meant every job but the first
-      # restored artifacts it could not use.
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      # Its own shared-key, and only main saves; the rust-prelude action
+      # says why.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
         with:
+          apt-packages: >-
+            libgtk-3-dev
+            libwebkit2gtk-4.1-dev
+            libayatana-appindicator3-dev
+            librsvg2-dev
+            libasound2-dev
           shared-key: "ci-clippy"
-          cache-on-failure: true
-          # Only a run on main saves; the `test` job says why.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Node.js
@@ -563,27 +478,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Install Rust toolchain
-        run: rustup show
-
-      # Its own shared-key, for the reason spelled out on the `test` job: one
-      # key across four different feature sets meant every job but the first
-      # restored artifacts it could not use.
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      # Its own shared-key per target, and only main saves; the rust-prelude
+      # action says why. Main runs this job when Cargo.lock or the toolchain
+      # moves, so the key the next pull requests restore is saved there. The
+      # Linux leg builds one crate and needs no disk freed.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
         with:
+          free-disk: "false"
+          apt-packages: libasound2-dev
           shared-key: "ci-cli-${{ matrix.target }}"
-          cache-on-failure: true
-          # Only a run on main saves; the `test` job says why. Main runs this
-          # job when Cargo.lock or the toolchain moves, so the key the next
-          # pull requests restore is saved there.
           save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Install system dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev
 
       - name: Check gglib-cli compilation
         run: cargo test -p gglib-cli --no-run
@@ -799,18 +704,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Install Rust toolchain
-        run: rustup show
-
-      # Its own shared-key, for the reason spelled out on the `test` job: one
-      # key across four different feature sets meant every job but the first
-      # restored artifacts it could not use.
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      # Its own shared-key per target, and only main saves, as for
+      # `cli-cross-os`.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
         with:
           shared-key: "ci-clippy-${{ matrix.target }}"
-          cache-on-failure: true
-          # Only a run on main saves, as for `cli-cross-os`.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Node.js
@@ -847,19 +746,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      # rust-toolchain.toml lists the Apple targets, so this installs them.
-      - name: Install Rust toolchain
-        run: rustup show
-
-      # Its own shared-key, for the reason spelled out on the `test` job: one
-      # key across four different feature sets meant every job but the first
-      # restored artifacts it could not use.
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      # rust-toolchain.toml lists the Apple targets, so the toolchain step
+      # installs them. Its own shared-key, and only main saves; the
+      # rust-prelude action says why.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
         with:
           shared-key: "ci-ios-check"
-          cache-on-failure: true
-          # Only a run on main saves; the `test` job says why.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Check the phone crates for aarch64-apple-ios
@@ -932,7 +825,7 @@ jobs:
   #
   # llama.xcframework comes from the llama-xcframework action, which restores
   # the one `phone-llama` cached for the pin and the runner's Xcode, or builds
-  # it; the model is fetched and cached as `phone-llama` fetches it.
+  # it; the model comes from the pinned-engines action, as CLI Check's do.
   #
   # The runner's default Xcode, as ggchat's CI uses: the framework this
   # builds is the one an app built with that Xcode links. Unoptimised, since
@@ -951,18 +844,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      # rust-toolchain.toml lists the three Apple targets, so this installs them.
-      - name: Install Rust toolchain
-        run: rustup show
-
-      # Its own shared-key, for the reason spelled out on the `test` job. Main
-      # saves it whenever a push reaches the framework.
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      # rust-toolchain.toml lists the three Apple targets, so the toolchain
+      # step installs them. Its own shared-key, and only main saves; the
+      # rust-prelude action says why. Main saves it whenever a push reaches
+      # the framework.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
         with:
           shared-key: "ci-ffi-apple"
-          cache-on-failure: true
-          # Only a run on main saves; the `test` job says why.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # After the Rust cache, never before it: rust-cache pre-cleans target/
@@ -977,33 +866,15 @@ jobs:
           xcodebuild -version
           swift --version
 
-      # As `phone-llama` restores, fetches and saves them, under the same key.
-      - name: Restore the test models
-        id: models-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ runner.temp }}/test-models
-          key: test-models-${{ hashFiles('.github/actions/pinned-engines/models.txt') }}
-
+      # The pinned-engines action without its engines: the recorder's tiny
+      # models, restored, fetched and saved under the key CLI Check uses, and
+      # the pin's chat templates beside them.
       - name: Fetch the test models
-        env:
-          MODELS: ${{ runner.temp }}/test-models
-          LIST: .github/actions/pinned-engines/models.txt
-        run: |
-          mkdir -p "$MODELS"
-          grep -v '^#' "$LIST" | while read -r name url; do
-            [[ -z $name || -s $MODELS/$name ]] && continue
-            curl -fsSL --retry 3 -o "$MODELS/$name.part" "$url"
-            mv "$MODELS/$name.part" "$MODELS/$name"
-          done
-          echo "GGLIB_ENGINE_MODELS_DIR=$MODELS" >> "$GITHUB_ENV"
-
-      - name: Save the test models
-        if: steps.models-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        id: models
+        uses: ./.github/actions/pinned-engines
         with:
-          path: ${{ runner.temp }}/test-models
-          key: ${{ steps.models-cache.outputs.cache-primary-key }}
+          target: aarch64-apple-darwin
+          engines: "false"
 
       - name: Build the XCFramework and check each slice
         run: make ffi-xcframework-fast
@@ -1012,6 +883,8 @@ jobs:
         run: make ffi-binding-check
 
       - name: The Swift binding links and calls the macOS slice, and its engine streams a reply
+        env:
+          GGLIB_ENGINE_MODELS_DIR: ${{ steps.models.outputs.models }}
         run: make ffi-smoke
 
   # llama.cpp's own llama.xcframework at the pin, built by upstream's script
@@ -1042,17 +915,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      # rust-toolchain.toml lists the Apple targets, so this installs them.
-      - name: Install Rust toolchain
-        run: rustup show
-
-      # Its own shared-key, for the reason spelled out on the `test` job.
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+      # rust-toolchain.toml lists the Apple targets, so the toolchain step
+      # installs them. Its own shared-key, and only main saves; the
+      # rust-prelude action says why.
+      - name: Rust prelude
+        uses: ./.github/actions/rust-prelude
         with:
           shared-key: "ci-phone-llama"
-          cache-on-failure: true
-          # Only a run on main saves; the `test` job says why.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # After the Rust cache, never before it: rust-cache pre-cleans target/
@@ -1062,36 +931,17 @@ jobs:
       - name: Build or restore llama.xcframework at the pin
         uses: ./.github/actions/llama-xcframework
 
-      # The pinned-engines action's models, fetched as it fetches them, and
-      # cached under its key and path, so each restores what the other saved.
-      - name: Restore the test models
-        id: models-cache
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ runner.temp }}/test-models
-          key: test-models-${{ hashFiles('.github/actions/pinned-engines/models.txt') }}
-
+      # The pinned-engines action without its engines, as `ffi-apple` runs it.
       - name: Fetch the test models
-        env:
-          MODELS: ${{ runner.temp }}/test-models
-          LIST: .github/actions/pinned-engines/models.txt
-        run: |
-          mkdir -p "$MODELS"
-          grep -v '^#' "$LIST" | while read -r name url; do
-            [[ -z $name || -s $MODELS/$name ]] && continue
-            curl -fsSL --retry 3 -o "$MODELS/$name.part" "$url"
-            mv "$MODELS/$name.part" "$MODELS/$name"
-          done
-          echo "GGLIB_ENGINE_MODELS_DIR=$MODELS" >> "$GITHUB_ENV"
-
-      - name: Save the test models
-        if: steps.models-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
+        id: models
+        uses: ./.github/actions/pinned-engines
         with:
-          path: ${{ runner.temp }}/test-models
-          key: ${{ steps.models-cache.outputs.cache-primary-key }}
+          target: aarch64-apple-darwin
+          engines: "false"
 
       - name: The decoder over llama.h, tested on the Mac's slice
+        env:
+          GGLIB_ENGINE_MODELS_DIR: ${{ steps.models.outputs.models }}
         run: make engine-llama-test
 
       - name: The decoder over llama.h, linted for the Mac, the iPhone and its simulator

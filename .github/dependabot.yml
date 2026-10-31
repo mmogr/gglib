@@ -183,8 +183,12 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: github-actions
-    # "/" points Dependabot at .github/workflows.
-    directory: "/"
+    # "/" points Dependabot at .github/workflows; the composite actions each
+    # have a directory of their own. A third-party action is pinned to a
+    # commit with its version after it, `@<sha> # vX.Y.Z`, and Dependabot
+    # rewrites the two together, so nothing may follow the version on the
+    # line.
+    directories: ["/", "/.github/actions/*"]
     schedule:
       interval: cron
       cronjob: "0 6 * * 5"
@@ -213,7 +217,7 @@ updates:
     # would meet a new major first in a real release. Bumped by hand, Label
     # Check runs its whole script on the pull request.
     #
-    # peaceiris/actions-gh-pages (badges.yml) and
+    # peaceiris/actions-gh-pages (badges.yml, status-card.yml) and
     # stefanbuck/github-issue-parser (issue-labels.yml) are not exercised
     # either, but a failure there costs a badge or an issue label, not a
     # release.

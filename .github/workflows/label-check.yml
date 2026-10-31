@@ -41,24 +41,33 @@ jobs:
   enrich:
     name: Enrich labels
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     # Fork PRs get a read-only GITHUB_TOKEN, so label writes would fail. Skip cleanly
     # instead — `label-check` below still runs (if: always()) and still reports, so a
     # maintainer just applies labels by hand.
     #
-    # Deliberately NOT pull_request_target: it would work today, since this job only
-    # reads API metadata and never checks out PR code. But it runs with a write token in
-    # base-repo context, so it is one careless future `actions/checkout` away from
-    # arbitrary code execution with write access. Not worth it for a repo whose PRs are
-    # all branch-based.
+    # Deliberately NOT pull_request_target: it runs with a write token in base-repo
+    # context, and this job checks out the PR's own copy of the fix rule and runs it.
+    # Under pull_request that copy runs only for a branch in this repository, whose
+    # author can push here anyway; under pull_request_target a fork's would run with
+    # write access. Not worth it for a repo whose PRs are all branch-based.
     if: >-
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository
     permissions:
+      contents: read # the checkout of the shared rule
       pull-requests: write
       issues: read # to fetch labels from issues linked via Closes/Fixes/Resolves
     steps:
+      # The fix rule both jobs apply, in .github/scripts/fix-issue-rule.cjs.
+      - name: Checkout the shared rule
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       - name: Derive component labels and request a size
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const pr = context.payload.pull_request;
@@ -87,47 +96,8 @@ jobs:
             }
 
             // --- A fix closes a triaged issue -----------------------------------
-            // Keep in step with the same block in the label-check job below.
-            // Only a closing keyword counts, before `#N`, `owner/repo#N` or the
-            // issue's URL: a bare URL in the body closes nothing.
-            const LINK_RE = new RegExp(String.raw`\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*(?:https://github\.com/${owner}/${repo}/issues/|${owner}/${repo}#|#)(\d+)\b`, 'gi');
-            async function fixIssueProblem(number, labelNames) {
-              const FIX_RE = /^fix(\([^)]*\))?!?:/;
-              const TRIAGE_PREFIXES = ['component:', 'priority:', 'size:', 'type:'];
-              // Title and body come from the API for the reason the labels do: a re-run
-              // replays its event's payload, which can predate the latest edit.
-              const { data: current } = await github.rest.pulls.get({ owner, repo, pull_number: number });
-              if (!FIX_RE.test(current.title) || labelNames.includes('no-issue')) return null;
-
-              const linked = new Set();
-              for (const m of (current.body || '').matchAll(LINK_RE)) linked.add(Number(m[1]));
-              if (!linked.size) {
-                return '**A fix closes its issue.** Add `Closes #N`, or the `no-issue` label'
-                  + ' if there is none on purpose.';
-              }
-
-              const problems = [];
-              for (const num of linked) {
-                try {
-                  const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: num });
-                  if (issue.pull_request) {
-                    problems.push(`#${num} is a pull request, not an issue`);
-                    continue;
-                  }
-                  const labels = issue.labels.map(l => typeof l === 'string' ? l : l.name);
-                  const missing = TRIAGE_PREFIXES.filter(p => !labels.some(l => l.startsWith(p)));
-                  if (missing.length) {
-                    problems.push(`#${num} is missing ${missing.map(p => `\`${p}\``).join(', ')}`);
-                  }
-                } catch (e) {
-                  problems.push(`#${num} could not be read (${e.message})`);
-                }
-              }
-              if (!problems.length) return null;
-              return `**A fix's issue is triaged first.** ${problems.join('; ')}.`
-                + ` Link the right issue and give it all four labels, then edit this PR or re-run Label Check.`;
-            }
-            const fixAsk = await fixIssueProblem(issue_number, names);
+            const { linkRe, fixIssueProblem } = require('./.github/scripts/fix-issue-rule.cjs');
+            const fixAsk = await fixIssueProblem({ github, owner, repo, number: issue_number, labelNames: names });
 
             // --- Inherit component:/priority:/type: from linked issues -----------
             // The original label audit's top finding: labels don't propagate from a
@@ -140,7 +110,7 @@ jobs:
             const URL_RE = new RegExp(url, 'gi');
 
             const linkedNumbers = new Set();
-            for (const m of (pr.body || '').matchAll(LINK_RE)) linkedNumbers.add(Number(m[1]));
+            for (const m of (pr.body || '').matchAll(linkRe(owner, repo))) linkedNumbers.add(Number(m[1]));
             for (const m of (pr.body || '').matchAll(URL_RE)) linkedNumbers.add(Number(m[1]));
 
             const inheritable = new Set();
@@ -363,6 +333,7 @@ jobs:
   label-check:
     name: Label Check
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     needs: enrich
     # always() is what makes this run when `enrich` is SKIPPED (fork PR) or errors.
     # Never gate this job on the fork condition itself: a required status check whose job
@@ -370,11 +341,19 @@ jobs:
     # of failing cleanly.
     if: always() && github.event.pull_request.draft == false
     permissions:
+      contents: read # the checkout of the shared rule
       pull-requests: read
       issues: read # to read the labels of the issue a fix closes
     steps:
+      # The fix rule both jobs apply, in .github/scripts/fix-issue-rule.cjs.
+      - name: Checkout the shared rule
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       - name: Check required labels
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const REQUIRED_PREFIXES = ['component:', 'priority:', 'size:'];
@@ -396,48 +375,6 @@ jobs:
                 || EXEMPT_TITLES.some(re => re.test(pr.title))) {
               core.info(`PR #${pr.number} is exempt (author type: ${pr.user?.type}).`);
               return;
-            }
-
-            // --- A fix closes a triaged issue -----------------------------------
-            // Keep in step with the same block in the enrich job above.
-            // Only a closing keyword counts, before `#N`, `owner/repo#N` or the
-            // issue's URL: a bare URL in the body closes nothing.
-            const LINK_RE = new RegExp(String.raw`\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*(?:https://github\.com/${owner}/${repo}/issues/|${owner}/${repo}#|#)(\d+)\b`, 'gi');
-            async function fixIssueProblem(number, labelNames) {
-              const FIX_RE = /^fix(\([^)]*\))?!?:/;
-              const TRIAGE_PREFIXES = ['component:', 'priority:', 'size:', 'type:'];
-              // Title and body come from the API for the reason the labels do: a re-run
-              // replays its event's payload, which can predate the latest edit.
-              const { data: current } = await github.rest.pulls.get({ owner, repo, pull_number: number });
-              if (!FIX_RE.test(current.title) || labelNames.includes('no-issue')) return null;
-
-              const linked = new Set();
-              for (const m of (current.body || '').matchAll(LINK_RE)) linked.add(Number(m[1]));
-              if (!linked.size) {
-                return '**A fix closes its issue.** Add `Closes #N`, or the `no-issue` label'
-                  + ' if there is none on purpose.';
-              }
-
-              const problems = [];
-              for (const num of linked) {
-                try {
-                  const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: num });
-                  if (issue.pull_request) {
-                    problems.push(`#${num} is a pull request, not an issue`);
-                    continue;
-                  }
-                  const labels = issue.labels.map(l => typeof l === 'string' ? l : l.name);
-                  const missing = TRIAGE_PREFIXES.filter(p => !labels.some(l => l.startsWith(p)));
-                  if (missing.length) {
-                    problems.push(`#${num} is missing ${missing.map(p => `\`${p}\``).join(', ')}`);
-                  }
-                } catch (e) {
-                  problems.push(`#${num} could not be read (${e.message})`);
-                }
-              }
-              if (!problems.length) return null;
-              return `**A fix's issue is triaged first.** ${problems.join('; ')}.`
-                + ` Link the right issue and give it all four labels, then edit this PR or re-run Label Check.`;
             }
 
             const failures = [];
@@ -463,7 +400,9 @@ jobs:
               ].join('\n'));
             }
 
-            const fixProblem = await fixIssueProblem(pr.number, names);
+            // --- A fix closes a triaged issue -----------------------------------
+            const { fixIssueProblem } = require('./.github/scripts/fix-issue-rule.cjs');
+            const fixProblem = await fixIssueProblem({ github, owner, repo, number: pr.number, labelNames: names });
             if (fixProblem) failures.push(fixProblem);
 
             if (!failures.length) {
