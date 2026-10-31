@@ -20,7 +20,7 @@ on:
   push:
     branches: [main]
 
-# GITHUB_TOKEN only reads: main's version and its release, and the pull
+# GITHUB_TOKEN only reads: main's version and its tag, and the pull
 # requests the gate asks about.
 permissions:
   contents: read
