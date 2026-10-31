@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.29.0-rc.5](https://github.com/mmogr/gglib/compare/v0.29.0-rc.4...v0.29.0-rc.5) (2026-10-31)
+
+
+### What it stopped getting wrong
+
+* **ci:** the release job can relabel the release PR ([#1681](https://github.com/mmogr/gglib/issues/1681)) ([12c4430](https://github.com/mmogr/gglib/commit/12c44308c2539621f757ebfb4d5cf7a4c9d8b6ce)), closes [#1679](https://github.com/mmogr/gglib/issues/1679)
+
+
+### Documentation
+
+* **readme:** one badge for the stable release, one for the release candidate ([#1678](https://github.com/mmogr/gglib/issues/1678)) ([240a8fd](https://github.com/mmogr/gglib/commit/240a8fdded555b64a6723658c100a8f210622d89))
+* **readme:** the badges say where gglib installs from and how each workflow stands ([#1677](https://github.com/mmogr/gglib/issues/1677)) ([7328f74](https://github.com/mmogr/gglib/commit/7328f74e91af2e8791b88b07ca2e48ef7a8501ac))
+
 ## [0.29.0-rc.4](https://github.com/mmogr/gglib/compare/v0.29.0-rc.3...v0.29.0-rc.4) (2026-10-31)
 
 
