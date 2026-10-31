@@ -114,9 +114,11 @@ jobs:
     permissions:
       # The tag and the release.
       contents: write
-      # The release PR's labels, below.
+      # The release PR's labels, below: the issues list finds it, and a
+      # label on a pull request needs pull-requests: write even through the
+      # issues endpoints (issues: write alone got a 403 on v0.29.0-rc.4).
       issues: write
-      pull-requests: read
+      pull-requests: write
       # The dispatch of release.yml.
       actions: write
     env:
