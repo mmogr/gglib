@@ -4,8 +4,9 @@ name: Status Card
 # badges branch beside the badges. What the card shows and how it counts is
 # in scripts/status_card/status_card.py's header.
 #
-# Nothing triggers it on CI or on a release: release.yml makes its releases
-# with GITHUB_TOKEN, which fires no events, and the morning run picks them up.
+# Nothing triggers it on CI or on a release: release-tag.yml makes the
+# releases with GITHUB_TOKEN, which fires no events, and the morning run
+# picks them up.
 
 on:
   schedule:

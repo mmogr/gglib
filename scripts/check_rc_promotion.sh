@@ -18,7 +18,7 @@
 # out as a prerelease first: a candidate is cut by merging the release PR.
 #
 # Run in two places: promote.yml, before it opens a promotion PR, and
-# release.yml's check-version, before it tags. The second is the guard; the
+# release-tag.yml's check-version, on the bump commit, before it tags. The second is the guard; the
 # first only saves a merged PR that the release would then refuse.
 #
 # A prerelease version passes untouched.
