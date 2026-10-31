@@ -28,6 +28,14 @@ This crate is the **Composition Root** — sitting between adapter crates and pu
 5. `AppCore`, with the `ModelVerificationService` it builds from the above,
    whose repair queues on that download manager
 
+Each adapter then adds its own concerns on top of the returned `BuiltCore`:
+the MCP service, the proxy supervisor, the SSE broadcaster, its domain `*Ops`
+and so on.
+
+`CoreBootstrap::build_with_hub` wires the same over a Hub client the caller
+made, in place of the one the config gives: a test's stand-in Hub, which also
+says where a download's files are fetched from.
+
 ## Internal Structure
 
 ```text
@@ -62,7 +70,7 @@ The test suite is split into these layers:
 | Layer | Location | Purpose |
 |-------|----------|---------|
 | Repair | `src/builder_repair_tests.rs` | A repair through the wired core queues its download on the manager the adapters hold, and that manager runs it. The Hub is a stand-in. |
-| Happy path / config | `tests/build_happy_path.rs` | Full `CoreBootstrap::build()` calls that confirm the wiring succeeds and the returned `BuiltCore` is live. |
+| Happy path / config | `tests/build_happy_path.rs` | Full `CoreBootstrap::build()` calls that confirm the wiring succeeds and the returned `BuiltCore` is live, and one over a stand-in Hub that holds it. |
 | Config | `src/config.rs` `#[cfg(test)]` | `BootstrapConfig::for_db` names no models directory and no token, and the config's `Debug` does not show a token. |
 | Models directory | `src/builder.rs` `#[cfg(test)]` | The download manager's config names the directory in the config, or none. What the manager does with none is tested in `gglib-download`. |
 | Hub token | `src/builder.rs` `#[cfg(test)]`, `tests/hub_token.rs` | Inline: one token is handed to the Hub client's config, the download manager's config and `AppCore`, or to none of them; it is the config's, trimmed, and the environment is not read, or, when the config holds none or a blank one, the environment's. `tests/hub_token.rs`: `build()` handed no token reads `HF_TOKEN` itself, and the `AppCore` it returns holds it; handed one, it holds that one whatever `HF_TOKEN` says. Those tests run themselves again in a process started with the variable, since a running process cannot safely set it. |
