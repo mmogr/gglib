@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.29.0-rc.7](https://github.com/mmogr/gglib/compare/v0.29.0-rc.6...v0.29.0-rc.7) (2026-10-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** -y/--yes for a flag that only answers the confirmation, and no global --models-dir ([#1693](https://github.com/mmogr/gglib/issues/1693))
+
+### What it stopped getting wrong
+
+* **daemon:** a stop waits until the daemon has let go of its lock ([#1691](https://github.com/mmogr/gglib/issues/1691)) ([7898b3d](https://github.com/mmogr/gglib/commit/7898b3d64323714d6adc7582e5bfa81bfdac2b61))
+
+
+### Documentation
+
+* **cli:** ROCm in backticks, as clippy's doc_markdown asks ([#1695](https://github.com/mmogr/gglib/issues/1695)) ([cef3f28](https://github.com/mmogr/gglib/commit/cef3f280063cbed083b827719e17f3d4c87582a9))
+* the architecture diagrams and tables match the code ([#1692](https://github.com/mmogr/gglib/issues/1692)) ([039e7a6](https://github.com/mmogr/gglib/commit/039e7a6ebd1d3d8e154a8dcb7702bb6ea0f46583))
+
+
+### Internal
+
+* **cli:** -y/--yes for a flag that only answers the confirmation, and no global --models-dir ([#1693](https://github.com/mmogr/gglib/issues/1693)) ([8c8ec2d](https://github.com/mmogr/gglib/commit/8c8ec2d5bad68df9dd9cef78e487a4652520afb7))
+
 ## [0.29.0-rc.6](https://github.com/mmogr/gglib/compare/v0.29.0-rc.5...v0.29.0-rc.6) (2026-10-31)
 
 
