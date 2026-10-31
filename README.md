@@ -207,6 +207,17 @@ All of them share one database and one models folder.
 | Remote access | `gglib remote enable` / `join` | [docs/remote.md](docs/remote.md) |
 | Phone | [ggchat](https://github.com/mmogr/ggchat) | iPhone and Mac |
 
+## Where the work is going
+
+This card is drawn each morning from the repository's record: what is current, how often it ships, and where the work has gone.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mmogr/gglib/badges/status-dark.svg">
+  <img src="https://raw.githubusercontent.com/mmogr/gglib/badges/status-light.svg" width="800" alt="gglib's status card: the newest release and its age, the llama.cpp pin and how far it is behind upstream, releases by week over twelve months, merged pull requests by component over ninety days, and the features, fixes and breaking changes since the last stable release.">
+</picture>
+
+What each release changed is in [the changelog](CHANGELOG.md).
+
 ## Install
 
 ### Homebrew (macOS on Apple silicon, Linux)

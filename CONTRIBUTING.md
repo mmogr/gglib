@@ -525,6 +525,8 @@ A crate's README carries its badges in a block between `<!-- crate-header:start 
 
 A new crate gets a row in `crates/layers.toml`, then `make readmes`. Its badges read `pending` until the next CI and Coverage runs on `main`.
 
+The README's status card lives on the same branch, as `status-light.svg` and `status-dark.svg`. `status-card.yml` writes them each morning with `scripts/status_card/status_card.py`, which collects the releases, llama.cpp's pin and the merged pull requests through `gh` and draws both files from that. `write_badges.py` deletes only JSON files, so neither pipeline removes the other's. A pull request that changes the script runs its self-test, which compares the light card drawn from a fixture with a golden copy; the script's header says how to refresh that copy after a deliberate change to the drawing.
+
 ### Where the per-crate test numbers come from
 
 `scripts/split_test_output.py` cuts one `rust-test-<crate>.txt` per crate out of the single workspace `cargo test` run, by the package each test binary belongs to. Two consequences worth knowing:
