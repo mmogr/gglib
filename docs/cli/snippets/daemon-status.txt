@@ -1,0 +1,8 @@
+$ gglib daemon status
+
+  ╭─ ℹ️ Daemon ───────────────────────────╮
+  Status:  running at http://127.0.0.1:9907
+  PID:     54648
+  Proxy:   running on port 8080
+
+  ╰───────────────────────────────────────╯

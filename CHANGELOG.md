@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.29.0-rc.6](https://github.com/mmogr/gglib/compare/v0.29.0-rc.5...v0.29.0-rc.6) (2026-10-31)
+
+
+### What it stopped getting wrong
+
+* **ci:** the tag is made with the App's token on every path ([#1686](https://github.com/mmogr/gglib/issues/1686)) ([503d563](https://github.com/mmogr/gglib/commit/503d56334c4ae4f39c606467b1372777b4847bba)), closes [#1685](https://github.com/mmogr/gglib/issues/1685)
+* **ci:** the tagging workflow run by hand tags with the App's token ([#1684](https://github.com/mmogr/gglib/issues/1684)) ([f2604e2](https://github.com/mmogr/gglib/commit/f2604e2bf4b00b15ea1d37d9cd5ae16ff7ce7108)), closes [#1683](https://github.com/mmogr/gglib/issues/1683)
+
+
+### Internal
+
+* **release:** the tagging workflow runs by hand, without waiting for CI ([#1682](https://github.com/mmogr/gglib/issues/1682)) ([7d44a34](https://github.com/mmogr/gglib/commit/7d44a34536ce0d98fd33e959db5cf22d2e08b848))
+
 ## [0.29.0-rc.5](https://github.com/mmogr/gglib/compare/v0.29.0-rc.4...v0.29.0-rc.5) (2026-10-31)
 
 

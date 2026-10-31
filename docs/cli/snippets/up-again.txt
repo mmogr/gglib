@@ -1,0 +1,44 @@
+$ gglib up
+
+  gglib up — from nothing to a working endpoint
+
+[1/5] Hardware
+    backend   Metal
+    memory    96.0 GiB  (unified, usable share)
+    models    /Users/mmogr/Library/Application Support/gglib/models
+
+[2/5] Engines
+    chat      llama.cpp already installed
+    images    stable-diffusion.cpp already installed
+
+[3/5] Model
+    model     Qwen3.8-27B  (already installed; --model picks another)
+
+[4/5] Endpoint
+
+  ✓ endpoint answered in 20.0s
+
+  Connect your client
+
+    Cline / Roo / Continue   provider: OpenAI Compatible
+      Base URL   http://127.0.0.1:8080/v1
+      API Key    not-needed  (unused, but most clients demand one)
+      Model ID   Qwen3.8-27B
+
+    Open WebUI               Settings -> Connections -> OpenAI API
+      URL        http://127.0.0.1:8080/v1
+
+    VS Code Copilot (BYOK) needs one fixed model, so use:
+      gglib serve 3
+
+    Check it from another shell:
+      curl http://127.0.0.1:8080/v1/models
+
+  Dashboard  http://127.0.0.1:8080/v1/proxy/status
+
+  Ready. The endpoint keeps running in the background.
+
+    gglib chat 3                        chat in this terminal
+    gglib web                           open the chat page in your browser
+    gglib proxy dashboard --port 8080   watch requests as they arrive
+    gglib proxy stop                    stop the endpoint

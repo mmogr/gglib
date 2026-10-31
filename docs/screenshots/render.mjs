@@ -1,4 +1,4 @@
-// Usage: node render.mjs <in.cast> <out.gif> [--idle 1.2] [--hold 4] [--rename from=to]...
+// Usage: node render.mjs <in.cast> [out.gif] [--text out.txt] [--idle 1.2] [--hold 4] [--rename from=to]...
 //
 // Plays an asciicast (record.py writes them) into xterm.js in headless
 // Chrome, screenshots each change, and has ffmpeg make the GIF. A pause
@@ -6,6 +6,10 @@
 // load reads as a beat rather than dead air; --hold keeps the last frame up
 // before the loop starts again. --rename replaces text in what was printed
 // before it is drawn, for a path that should not name this machine's user.
+// --text writes what the main terminal shows when the playback ends, as
+// plain text with the renames applied, for a code block in the docs; the
+// prompt waiting at the end is left off. With no GIF path, that is all it
+// does.
 //
 // A cast with `panes` in its header (record.py's side panes) gets one more
 // terminal per pane under the main one, labelled with the pane's name.
@@ -26,8 +30,9 @@ import { createRequire } from 'node:module';
 
 const args = process.argv.slice(2);
 const [castFile, out] = args.filter((a, i) => !a.startsWith('--') && !args[i - 1]?.startsWith('--'));
-if (!castFile || !out) {
-  console.error('usage: node render.mjs <in.cast> <out.gif> [--idle s] [--hold s] [--rename from=to]...');
+const textOut = args.includes('--text') ? args[args.indexOf('--text') + 1] : undefined;
+if (!castFile || (!out && !textOut)) {
+  console.error('usage: node render.mjs <in.cast> [out.gif] [--text out.txt] [--idle s] [--hold s] [--rename from=to]...');
   process.exit(2);
 }
 const flag = (name, dflt) => {
@@ -174,6 +179,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gglib-render-'));
 const frames = [];
 let last = '';
 const shoot = async (at) => {
+  if (!out) return;
   const png = await win.screenshot({ type: 'png' });
   const hash = createHash('sha1').update(png).digest('hex');
   if (hash === last) return;
@@ -209,8 +215,29 @@ for (const [i, a] of actions.entries()) {
   }
   await shoot(a.at);
 }
+if (textOut) {
+  const shown = await page.evaluate(() => {
+    const buf = terms.o.buffer.active;
+    // A line the terminal wrapped is one line of output.
+    const lines = [];
+    for (let i = 0; i < buf.length; i++) {
+      const line = buf.getLine(i);
+      if (!line) continue;
+      if (line.isWrapped && lines.length) lines[lines.length - 1] += line.translateToString(true);
+      else lines.push(line.translateToString(true));
+    }
+    return lines;
+  });
+  while (shown.length && /^(\$ ?)?$/.test(shown.at(-1))) shown.pop();
+  fs.writeFileSync(textOut, `${shown.join('\n')}\n`);
+  console.log(`wrote ${textOut}: ${shown.length} lines`);
+}
 const end = (frames.at(-1)?.at ?? 0) + hold;
 await browser.close();
+if (!out) {
+  fs.rmSync(dir, { recursive: true });
+  process.exit(0);
+}
 
 // The concat demuxer takes each frame's duration; the last is named twice so
 // its duration is honoured.

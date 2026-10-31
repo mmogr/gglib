@@ -1,0 +1,33 @@
+{
+ "cols": 118,
+ "rows": 8,
+ "env": {
+  "GGLIB_DATA_DIR": "~/.local/share/gglib-demo",
+  "GGLIB_MODELS_DIR": "~/.local/share/gglib-demo/models",
+  "GGLIB_DAEMON_PORT": "9907",
+  "HOME": "~/.local/share/gglib-demo/home",
+  "GIT_PAGER": "cat"
+ },
+ "cwd": "~/.local/share/gglib-demo/home/orders-api",
+ "steps": [
+  {
+   "sleep": 0.8
+  },
+  {
+   "mark": "title:gglib model download"
+  },
+  {
+   "type": "gglib model download unsloth/Qwen3-0.6B-GGUF -q Q8_0"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "idle": 20,
+   "timeout": 900
+  },
+  {
+   "sleep": 1
+  }
+ ]
+}

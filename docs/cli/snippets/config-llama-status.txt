@@ -1,0 +1,14 @@
+$ gglib config llama status
+Status: Installed
+Binary: /Users/mmogr/Library/Application Support/gglib/.llama/bin/llama-server
+Pinned release: b11669, which is the one installed.
+Health: ✓ Functional
+
+Pre-built download:
+  Version: b11669
+  Platform: macOS ARM64 (Metal)
+  Installed: 2026-10-31 06:24:56 UTC
+
+Binary version: version: 0.7.0-dev (build 11669, commit 620d2225c)
+  Build: b11669
+  Native capabilities: RuntimeFlags(PEG_NATIVE_TOOL_CALLS)
