@@ -22,7 +22,7 @@ This crate provides MCP server lifecycle management, including:
 - **JSON-RPC 2.0 protocol client** for communicating with MCP servers
 - **Server lifecycle management** (start, stop, status tracking)
 - **Tool discovery and invocation** via the MCP protocol
-- **In-process builtin tools** (filesystem, time); the file tools read only the run's folder (where `gglib chat` ran, the folder a chat page chose, none for a paired device's turn) and are not offered without one; external MCP servers are never told it
+- **In-process builtin tools** (filesystem, time, image generation); the file tools read only the run's folder (where `gglib chat` ran, the folder a chat page chose, none for a paired device's turn) and are not offered without one; external MCP servers are never told it
 
 ## Internal Structure
 
@@ -50,6 +50,7 @@ This crate provides MCP server lifecycle management, including:
 │    ├── fs_read.rs: read_file (sandboxed)                    │
 │    ├── fs_list.rs: list_directory (sandboxed)               │
 │    ├── fs_grep.rs: grep_search (sandboxed)                  │
+│    ├── generate_image.rs: generate_image (Draw pressed)     │
 │    └── sandboxing.rs: path validation & jail                │
 │                                                             │
 │  resolver/ (path resolution)                                │
@@ -58,6 +59,8 @@ This crate provides MCP server lifecycle management, including:
 │    ├── fs: Filesystem operations (injectable)               │
 │    ├── search: Platform-specific search strategies          │
 │    └── resolve: 6-step resolution orchestration             │
+│                                                             │
+│  opened.rs: the servers open to paired devices              │
 │                                                             │
 │  path: Validation & PATH building utilities                 │
 └─────────────────────────────────────────────────────────────┘
@@ -112,7 +115,7 @@ This enables:
 - **`combined.rs`** — Unified tool executor dispatching to MCP and builtin tools
 - **`tool_executor.rs`** — The MCP side of that executor: runs a qualified tool on its server
 - **`tool_images.rs`** — An MCP tool's content split into the text the model reads and the images stored through `AttachmentService`, each named in the text, never sent as bytes ([ADR 0016](../../docs/adr/0016-a-tools-image-is-an-attachment-on-its-tool-row.md))
-- **`builtin/`** — In-process builtin tools (filesystem, time) with optional sandbox
+- **`builtin/`** — In-process builtin tools (filesystem, time, and `generate_image`, offered only for a message sent to draw: Draw pressed, or `/draw` in `gglib chat`) with optional sandbox
 - **`resolver/`** — Cross-platform executable path resolution with 6-step search strategy
 
 
