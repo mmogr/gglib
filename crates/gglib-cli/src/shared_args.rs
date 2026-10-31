@@ -209,7 +209,7 @@ pub struct CacheArgs {
     /// slot state to disk per session.
     ///
     /// Independent of the host-RAM prompt cache, which is auto-sized on
-    /// every launch whether or not this flag is set (see `--cache-ram-mb`).
+    /// every launch whether or not this flag is set.
     #[arg(long)]
     pub cache: bool,
     /// Directory for KV cache slot files (defaults to `<app-data-dir>/slots` if --cache is set and this is omitted)
