@@ -103,7 +103,7 @@ a wrong key is. A device paired before keys were pinned, or one that has lost
 its endpoint key, is listed as not admitted and has to be paired again, after
 `gglib remote forget` here if it pairs from the same endpoint. gglib's own
 `join` keeps an endpoint key for each machine it joins (see
-[The laptop](#the-laptop-join-disconnect-key)), and ggchat keeps one for each
+[The laptop](#the-laptop-join-disconnect)), and ggchat keeps one for each
 machine it pairs with from 0.3.1, so a laptop or a phone presents the
 fingerprint it paired from each time it connects here, for as long as it keeps
 that key. A laptop that paired from a gglib that kept no such key has to be
@@ -276,7 +276,7 @@ per-device keys holds the old shared key, and the edge no longer admits it.
 Invite each device once and they are back; nothing else about the machine
 changes, and the ticket is the same ticket.
 
-### The laptop: `join`, `disconnect`, `key`
+### The laptop: `join`, `disconnect`
 
 `gglib remote connect`, this command's old name, is gone, and so is
 `POST /api/remote/connect`. A pairing you already have is unaffected.
@@ -456,7 +456,7 @@ it.
 | `proxy cache-clear` | Clear the desktop proxy's prompt cache. |
 | `daemon stop` | Stop the desktop's daemon. Asks you to type `shutdown`; `--yes` for scripts. |
 
-Every other command is about this machine — `model pull` and `model remove`
+Every other command is about this machine — `model download` and `model remove`
 change what is on a machine, and that is done at the machine; `config`
 writes settings; `remote` manages the pairing itself — and refuses the flag
 with a sentence naming what it does reach, rather than ignoring it.
@@ -779,7 +779,7 @@ readability.
 
 Everything the desktop's proxy serves — `/v1/models`, a model's detail at
 `/v1/models/{name}/detail`, `POST /v1/models/{name}/load`,
-`/v1/chat/completions`, `POST /v1/images/generations`, `GET /v1/images/drawing`, `/v1/runs`, `/v1/chats`, `/v1/attachments`, the dashboard, `POST /v1/proxy/shutdown` —
+`/v1/chat/completions`, `POST /v1/embeddings`, `POST /v1/images/generations`, `GET /v1/images/drawing`, `/v1/runs`, `/v1/chats`, `POST /v1/chats/{id}/changes`, `POST /v1/chats/{id}/pictures`, `/v1/attachments`, the dashboard, `POST /v1/proxy/cache/clear`, `POST /v1/proxy/shutdown` —
 with one exception. `/mcp`, the tool gateway, is refused to every request
 through the tunnel, whatever `enable` was given, because it starts any MCP
 server configured on the desktop and a leaked key with a shell server

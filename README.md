@@ -34,6 +34,7 @@ or per request.
 [![CI](https://github.com/mmogr/gglib/actions/workflows/ci.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/ci.yml)
 [![Coverage](https://github.com/mmogr/gglib/actions/workflows/coverage.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/coverage.yml)
 [![Release PR](https://github.com/mmogr/gglib/actions/workflows/release-please.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/release-please.yml)
+[![Release tag](https://github.com/mmogr/gglib/actions/workflows/release-tag.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/release-tag.yml)
 [![Release](https://github.com/mmogr/gglib/actions/workflows/release.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/release.yml)
 [![Promote](https://github.com/mmogr/gglib/actions/workflows/promote.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/promote.yml)
 [![Engine pins](https://github.com/mmogr/gglib/actions/workflows/engine-pins.yml/badge.svg)](https://github.com/mmogr/gglib/actions/workflows/engine-pins.yml)
