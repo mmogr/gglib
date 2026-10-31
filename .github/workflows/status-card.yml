@@ -1,0 +1,76 @@
+name: Status Card
+
+# Draws the README's status card each morning and publishes it to the
+# badges branch beside the badges. What the card shows and how it counts is
+# in scripts/status_card/status_card.py's header.
+#
+# Nothing triggers it on CI or on a release: release.yml makes its releases
+# with GITHUB_TOKEN, which fires no events, and the morning run picks them up.
+
+on:
+  schedule:
+    - cron: '0 20 * * *'  # 06:00 in Brisbane
+  workflow_dispatch:
+  # A change to the script or this workflow runs the self-test and stops there.
+  pull_request:
+    paths:
+      - 'scripts/status_card/**'
+      - '.github/workflows/status-card.yml'
+
+permissions:
+  contents: read
+
+# badges.yml shares this group, so a push to the badges branch queues behind
+# the other instead of racing it. A pull request's self-test pushes nothing
+# and takes a group of its own: in the shared group it could replace a
+# waiting badges run.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('status-card-{0}', github.ref) || 'badges-branch' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  card:
+    name: Status Card
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write  # the push to the badges branch
+      pull-requests: read  # the merged pull requests the card counts
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # fontTools draws the glyphs. In a venv, so nothing is installed into
+      # the runner's own Python.
+      - name: Install fontTools
+        run: |
+          python3 -m venv /tmp/card
+          /tmp/card/bin/pip install --quiet -r scripts/status_card/requirements.txt
+
+      - name: Self-test
+        run: /tmp/card/bin/python scripts/status_card/status_card.py --self-test
+
+      # A failed read fails this step, and the job ends with the last card
+      # still on the branch.
+      - name: Collect
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: /tmp/card/bin/python scripts/status_card/status_card.py collect --out "$RUNNER_TEMP/data.json"
+
+      # The directory holds the two SVGs and nothing else.
+      - name: Render
+        if: github.event_name != 'pull_request'
+        run: /tmp/card/bin/python scripts/status_card/status_card.py render --data "$RUNNER_TEMP/data.json" --out-dir "$RUNNER_TEMP/card"
+
+      # `keep_files: true`: the badges stay; only the two SVGs are replaced.
+      - name: Publish to the badges branch
+        if: github.event_name != 'pull_request'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ${{ runner.temp }}/card
+          publish_branch: badges
+          keep_files: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'Update status card [skip ci]'

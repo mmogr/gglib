@@ -241,3 +241,20 @@ updates:
       actions-security:
         applies-to: security-updates
         patterns: ["*"]
+
+  # The status card's one Python dependency, pinned in a requirements file.
+  - package-ecosystem: pip
+    directory: "/scripts/status_card"
+    schedule:
+      interval: cron
+      cronjob: "0 6 * * *"
+      timezone: Australia/Brisbane
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: "ci(deps)"
+    labels:
+      - dependencies
+      - automated
+      - "type: chore"
+      - "component: ci"
