@@ -21,10 +21,13 @@ const TEARDOWN_MARGIN: Duration = Duration::from_secs(10);
 
 /// How long the whole teardown may take before the watchdog force-exits.
 ///
+/// Public so the desktop app can wait a little longer than this, rather than
+/// keeping its own copy of the number.
+///
 /// Teardown stops every model the way a person's Stop does, which for an
 /// image model that is drawing waits up to [`RENDER_STOP_WAIT`] for its
 /// render to let go; the rest of the teardown has [`TEARDOWN_MARGIN`] on top.
-const SHUTDOWN_WATCHDOG: Duration = RENDER_STOP_WAIT.saturating_add(TEARDOWN_MARGIN);
+pub const SHUTDOWN_WATCHDOG: Duration = RENDER_STOP_WAIT.saturating_add(TEARDOWN_MARGIN);
 
 /// How long the loop guard's log may take over its last write, out of the
 /// watchdog's margin.

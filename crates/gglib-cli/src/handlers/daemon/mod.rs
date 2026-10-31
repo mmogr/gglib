@@ -10,7 +10,7 @@ use crate::bootstrap::CliContext;
 use crate::daemon_client::{self, Absent, DaemonProbe};
 use crate::presentation::style;
 use crate::target::Target;
-use gglib_axum::{DaemonLock, DaemonOptions, run_daemon};
+use gglib_axum::{DaemonLock, DaemonOptions, SHUTDOWN_WATCHDOG, run_daemon};
 use gglib_core::{CorsConfig, daemon_port};
 
 /// Execute `gglib daemon run`: host the daemon in the foreground.
@@ -122,22 +122,31 @@ async fn stop_here(ctx: &CliContext) -> Result<()> {
         );
     }
 
-    // The daemon tears down llama-server children before exiting; give it
-    // the same window its own shutdown watchdog enforces.
+    // The daemon stops its models after it stops answering, and lets go of
+    // its lock only when that is done, so wait for both. Two seconds past
+    // its own force-exit watchdog, which ends it whatever is left.
+    let budget = SHUTDOWN_WATCHDOG + std::time::Duration::from_secs(2);
+    let deadline = tokio::time::Instant::now() + budget;
     eprint!("  Stopping daemon");
-    for _ in 0..40 {
+    while tokio::time::Instant::now() < deadline {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        if matches!(
-            daemon_client::probe(&handle.client).await,
-            DaemonProbe::NotRunning
-        ) {
+        let lock_held = gglib_core::paths::data_root().is_ok_and(|dir| DaemonLock::is_held(&dir));
+        if !lock_held
+            && matches!(
+                daemon_client::probe(&handle.client).await,
+                DaemonProbe::NotRunning
+            )
+        {
             eprintln!(" \u{2014} stopped.");
             return Ok(());
         }
         eprint!(".");
     }
     eprintln!();
-    anyhow::bail!("the daemon accepted the shutdown request but is still answering after 20s")
+    anyhow::bail!(
+        "the daemon accepted the shutdown request but is still stopping after {}s",
+        budget.as_secs()
+    )
 }
 
 /// The LAN-exposure warning, printed before a `--share-lan` daemon binds.

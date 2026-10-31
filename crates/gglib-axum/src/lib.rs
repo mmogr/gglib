@@ -25,7 +25,7 @@ pub(crate) mod ui;
 pub use access::DaemonAccess;
 pub use bootstrap::{AxumContext, bootstrap};
 pub use config::ServerConfig;
-pub use daemon::{DaemonLock, DaemonOptions, run_daemon};
+pub use daemon::{DaemonLock, DaemonOptions, SHUTDOWN_WATCHDOG, run_daemon};
 pub use error::HttpError;
 pub use gglib_core::CorsConfig;
 pub use routes::{create_router, create_spa_router};
