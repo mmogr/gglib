@@ -18,6 +18,11 @@ name: Release tag
 
 on:
   workflow_call:
+    secrets:
+      APP_ID:
+        required: true
+      APP_PRIVATE_KEY:
+        required: true
   workflow_dispatch:
 
 permissions:
@@ -146,16 +151,15 @@ jobs:
       # whole). The attempt number is what tells that from a lost race,
       # where the loser is on its first attempt and the winner's release
       # may not exist yet.
-      # Run by hand, the tag is made with the App's token. GitHub refuses
-      # GITHUB_TOKEN a new ref from a dispatched run, answering 403 with
+      # The tag is made with the App's token. GITHUB_TOKEN may create a
+      # ref only at the run's own commit: at any other it gets a 403 with
       # `X-Accepted-Github-Permissions: contents=write,workflows=write`, a
-      # permission GITHUB_TOKEN never has; from the CI run on the push it
-      # allows the same request. The App has that permission (its settings,
-      # "Workflows: read and write"). Called from ci.yml there are no
-      # secrets here, and none are needed.
-      - name: App token, when run by hand
+      # permission it never has. The bump commit is the run's own only when
+      # nothing merged after the release PR before this ran, which a hand
+      # run or a busy main breaks. The App has that permission (its
+      # settings: "Workflows: read and write").
+      - name: App token
         id: app
-        if: github.event_name == 'workflow_dispatch'
         uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.APP_ID }}
@@ -165,7 +169,7 @@ jobs:
         id: tag
         env:
           ATTEMPT: ${{ github.run_attempt }}
-          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
           if out=$(gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/v$VERSION" -f sha="$BUMP" 2>&1); then
             echo "tagged=true" >> "$GITHUB_OUTPUT"
