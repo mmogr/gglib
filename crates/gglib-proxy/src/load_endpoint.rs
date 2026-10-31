@@ -60,9 +60,10 @@ pub struct LoadResponse {
 /// every refusal is [`handle_runtime_error`]'s, worded exactly as the same
 /// condition is worded on a chat request, so a person who has seen one has
 /// seen both.
-#[allow(
+#[expect(
     clippy::literal_string_with_formatting_args,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "the log's braces are escaped, so it names the route as written, \
+              `{name}`; the lint does not see that `info!` formats its message"
 )]
 pub(crate) async fn load_model(
     State(state): State<AppState>,

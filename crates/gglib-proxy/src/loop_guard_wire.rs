@@ -35,7 +35,7 @@
 //! not a shape quirk in content the guard is inspecting, it is a request the
 //! chat endpoint has no way to serve. `unparseable_body_fails_open` pins it.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -150,10 +150,6 @@ pub(super) fn extract_text(content: &Value) -> String {
 ///
 /// `None` when any call is unanswered — a partially-answered batch says
 /// nothing about whether work repeated.
-#[allow(
-    clippy::zero_sized_map_values,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 pub(super) fn turn_results_hash(calls: &[ToolCall], rest: &[HistoryMessage]) -> Option<u64> {
     let mut answers: HashMap<&str, u64> = HashMap::new();
     for m in rest.iter().take_while(|m| m.role.as_str() == Some("tool")) {
@@ -177,9 +173,9 @@ pub(super) fn turn_results_hash(calls: &[ToolCall], rest: &[HistoryMessage]) -> 
     // that one answer moved, manufacture a rescue. The agent path joins
     // positionally and can do neither, so this is also where the two paths
     // would drift.
-    let mut seen: HashMap<&str, ()> = HashMap::with_capacity(calls.len());
+    let mut seen: HashSet<&str> = HashSet::with_capacity(calls.len());
     for c in calls {
-        if seen.insert(c.id.as_str(), ()).is_some() {
+        if !seen.insert(c.id.as_str()) {
             return None;
         }
     }

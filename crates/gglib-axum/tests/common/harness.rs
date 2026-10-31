@@ -60,10 +60,6 @@ use super::ports::TEST_BASE_PORT;
 /// (Cargo runs this crate's test binaries one at a time; it is the tests
 /// *within* a binary that share a process. The binary name is in the path
 /// for legibility, not for exclusion.)
-#[allow(
-    clippy::unnecessary_debug_formatting,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
 static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let exe = std::env::current_exe().expect("locate the test executable");
     let mut name = exe
@@ -83,7 +79,8 @@ static SCRATCH_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
         assert_eq!(
             e.kind(),
             std::io::ErrorKind::NotFound,
-            "could not empty the scratch directory {dir:?}: {e}"
+            "could not empty the scratch directory {}: {e}",
+            dir.display()
         );
     }
     std::fs::create_dir_all(&dir).expect("create isolated data dir");

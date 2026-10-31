@@ -316,6 +316,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::redundant_clone,
+        reason = "the clone is the test: it fails to build if `StreamConfig` stops being `Clone`"
+    )]
     fn test_stream_config_is_clone() {
         let config = config("http://localhost:8080", Path::new("/tmp/slots"), UNIX_EPOCH);
         let _clone = config.clone();

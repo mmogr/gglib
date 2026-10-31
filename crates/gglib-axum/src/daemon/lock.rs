@@ -26,7 +26,7 @@ pub enum LockError {
     /// Another daemon holds the lock. `holder` is what it wrote into the
     /// lock file — `None` when the file could not be parsed (e.g. the holder
     /// died mid-write; the lock is still authoritative).
-    #[error("daemon already running{}", holder_suffix(.holder))]
+    #[error("daemon already running{}", holder_suffix(.holder.as_ref()))]
     AlreadyRunning {
         /// The running daemon's recorded pid/port, when readable.
         holder: Option<LockInfo>,
@@ -36,16 +36,10 @@ pub enum LockError {
     Io(#[from] std::io::Error),
 }
 
-#[allow(
-    clippy::option_if_let_else,
-    clippy::ref_option,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-fn holder_suffix(holder: &Option<LockInfo>) -> String {
-    match holder {
-        Some(info) => format!(" (pid {}) at http://127.0.0.1:{}", info.pid, info.port),
-        None => String::new(),
-    }
+fn holder_suffix(holder: Option<&LockInfo>) -> String {
+    holder.map_or_else(String::new, |info| {
+        format!(" (pid {}) at http://127.0.0.1:{}", info.pid, info.port)
+    })
 }
 
 /// An acquired singleton lock. Held for the daemon's lifetime; the OS
@@ -137,10 +131,6 @@ mod tests {
     /// The core singleton guarantee: a second acquire in the same directory
     /// fails while the first lock is held, and reports the holder.
     #[test]
-    #[allow(
-        clippy::match_wildcard_for_single_variants,
-        reason = "grandfathered at lint inheritance, #1157"
-    )]
     fn second_acquire_fails_while_first_is_held() {
         let dir = tempfile::tempdir().unwrap();
 
@@ -154,7 +144,7 @@ mod tests {
                 assert_eq!(holder.pid, std::process::id());
                 assert_eq!(holder.port, 9887);
             }
-            other => panic!("expected AlreadyRunning, got {other:?}"),
+            other @ LockError::Io(_) => panic!("expected AlreadyRunning, got {other:?}"),
         }
 
         drop(first);

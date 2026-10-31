@@ -78,9 +78,10 @@ async fn shutdown_completes_with_no_subscribers() {
 /// the desktop app can genuinely have the tray panel, the dashboard modal and
 /// a CLI dashboard attached at once.
 #[tokio::test]
-#[allow(
+#[expect(
     clippy::collection_is_never_read,
-    reason = "grandfathered at lint inheritance, #1157"
+    reason = "the vector holds the three streams open through the shutdown; reading \
+              them is not the test"
 )]
 async fn shutdown_completes_with_several_streams_open() {
     let Spawned {
