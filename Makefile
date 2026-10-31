@@ -382,6 +382,9 @@ enforce: ## Run the architecture enforcement checks
 	@# The crate graph and catalogue are written from the manifests, so an
 	@# edge or a crate added without `make readmes` fails here.
 	@./scripts/crate_graph.py --check
+	@# The diagrams inside the crate READMEs are drawn by hand; this fails when
+	@# one names a type or a .rs file the code no longer has.
+	@./scripts/check_diagram_names.py --check
 
 # The ADR readings in contracts/upstream against their hand-kept approvals. Not
 # in `enforce`: CI runs it as a job of its own, `ADR criterion moved`, so one
