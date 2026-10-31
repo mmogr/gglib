@@ -202,7 +202,7 @@ All of them share one database and one models folder.
 | OpenAI proxy | `gglib proxy` | [gglib-proxy](crates/gglib-proxy/README.md) |
 | Pinned endpoint | `gglib serve <model>` | Same proxy, one model |
 | CLI | `gglib <command>` | [gglib-cli](crates/gglib-cli/README.md) |
-| Desktop app | `gglib gui` | [gglib-tauri](crates/gglib-tauri/README.md) |
+| Desktop app | `gglib gui` | [src-tauri](src-tauri/README.md) |
 | Web UI | `gglib web` | [gglib-axum](crates/gglib-axum/README.md) |
 | Terminal dashboard | `gglib proxy dashboard` | Connections, slots, cache, requests |
 | Remote access | `gglib remote enable` / `join` | [docs/remote.md](docs/remote.md) |

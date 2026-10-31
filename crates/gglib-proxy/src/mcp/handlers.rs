@@ -36,7 +36,11 @@ use tracing::{debug, error, warn};
 
 use crate::server::AppState;
 
-use super::types::*;
+use super::types::{
+    CallToolResult, INVALID_PARAMS, INVALID_REQUEST, InitializeResult, JsonRpcError,
+    JsonRpcRequest, JsonRpcResponse, METHOD_NOT_FOUND, PARSE_ERROR, ServerCapabilities, ServerInfo,
+    ToolCapabilities, ToolsListResult,
+};
 
 /// Header name for the MCP session ID.
 const MCP_SESSION_HEADER: &str = "mcp-session-id";
@@ -130,12 +134,11 @@ pub(crate) async fn delete_mcp(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let session_id = match headers
+    let Some(session_id) = headers
         .get(MCP_SESSION_HEADER)
         .and_then(|v| v.to_str().ok())
-    {
-        Some(id) => id,
-        None => return StatusCode::BAD_REQUEST,
+    else {
+        return StatusCode::BAD_REQUEST;
     };
 
     if state.sessions.remove_session(session_id).await {
@@ -208,16 +211,18 @@ async fn tool_index(state: &AppState) -> gglib_core::ToolIndex {
 /// `invoke_tool` are accepted. Any other name — including direct calls to
 /// raw `"server__tool"` identifiers — returns `METHOD_NOT_FOUND`. There is
 /// no legacy passthrough.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one match over the three meta-tools, the strict routing the doc above \
+              describes, kept in one place"
+)]
 async fn handle_meta_tools_call(state: &AppState, id: Value, params: Option<Value>) -> Response {
-    let params_val = match params {
-        Some(v) => v,
-        None => {
-            return json_rpc_error_response(
-                StatusCode::OK,
-                id,
-                JsonRpcError::new(INVALID_PARAMS, "Missing params"),
-            );
-        }
+    let Some(params_val) = params else {
+        return json_rpc_error_response(
+            StatusCode::OK,
+            id,
+            JsonRpcError::new(INVALID_PARAMS, "Missing params"),
+        );
     };
 
     let mcp = &state.mcp;
@@ -236,7 +241,7 @@ async fn handle_meta_tools_call(state: &AppState, id: Value, params: Option<Valu
     let meta_args = params_val
         .get("arguments")
         .cloned()
-        .unwrap_or(Value::Object(serde_json::Map::new()));
+        .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
 
     match name.as_str() {
         // ── search_tools ──────────────────────────────────────────────────
@@ -301,22 +306,19 @@ async fn handle_meta_tools_call(state: &AppState, id: Value, params: Option<Valu
                 return super::drawing::call(state, id, meta_args.get("arguments"), token).await;
             }
 
-            let (server_id, bare_name) = match super::meta_tools::resolve_tool_name(mcp, &tool_id)
-                .await
-            {
-                Some(pair) => pair,
-                None => {
-                    return json_rpc_error_response(
-                        StatusCode::OK,
-                        id,
-                        JsonRpcError::new(
-                            INVALID_PARAMS,
-                            format!(
-                                "Unknown tool: '{tool_id}'. Use search_tools to discover available tool IDs."
-                            ),
+            let Some((server_id, bare_name)) =
+                super::meta_tools::resolve_tool_name(mcp, &tool_id).await
+            else {
+                return json_rpc_error_response(
+                    StatusCode::OK,
+                    id,
+                    JsonRpcError::new(
+                        INVALID_PARAMS,
+                        format!(
+                            "Unknown tool: '{tool_id}'. Use search_tools to discover available tool IDs."
                         ),
-                    );
-                }
+                    ),
+                );
             };
 
             let tool_args: HashMap<String, Value> = match meta_args.get("arguments").cloned() {

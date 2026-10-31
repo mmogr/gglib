@@ -401,18 +401,14 @@ pub(crate) fn spawn_slots_poller(
                     );
                     let delay = next_delay(&result, backoff);
                     cache.set(result);
-                    match delay {
-                        Some(delay) => {
-                            backoff = delay;
-                            delay
-                        }
-                        None => {
-                            info!(
-                                "proxy dashboard: /slots endpoint is disabled upstream (--no-slots); poller stopping"
-                            );
-                            return;
-                        }
-                    }
+                    let Some(delay) = delay else {
+                        info!(
+                            "proxy dashboard: /slots endpoint is disabled upstream (--no-slots); poller stopping"
+                        );
+                        return;
+                    };
+                    backoff = delay;
+                    delay
                 }
             };
 

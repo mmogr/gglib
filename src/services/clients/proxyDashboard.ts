@@ -48,7 +48,7 @@ function proxyAuthHeaders(apiKey?: string | null): Record<string, string> {
  *
  * The server hydrates this stream itself (the first event is always the
  * current full snapshot, followed by live ticks — see
- * `gglib_sse::Broadcaster::subscribe_with_hydration` on the Rust side), so
+ * `gglib_broadcast::Broadcaster::subscribe_with_hydration` on the Rust side), so
  * there is no separate initial-fetch step here: the very first `onSnapshot`
  * call already contains complete state. That also means a reconnect
  * re-hydrates on its own.

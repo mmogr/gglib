@@ -106,11 +106,7 @@ pub(super) fn refused(body: &serde_json::Value) -> serde_json::Value {
 
 /// A `read_file` request as forwarded upstream, non-streaming, with `extra`
 /// merged in.
-#[allow(
-    clippy::needless_pass_by_value,
-    reason = "grandfathered at lint inheritance, #1157"
-)]
-pub(super) fn forwarded_body(extra: serde_json::Value) -> Bytes {
+pub(super) fn forwarded_body(extra: &serde_json::Value) -> Bytes {
     let mut body = json!({
         "model": "m",
         "stream": false,
@@ -202,7 +198,7 @@ async fn a_bad_unary_tool_call_is_reissued_and_the_client_gets_the_valid_one() {
         structured("call_bad", BAD_ARGUMENTS),
         structured("call_fixed", FIXED_ARGUMENTS),
     ];
-    let body = forwarded_body(json!({"tool_choice": "auto"}));
+    let body = forwarded_body(&json!({"tool_choice": "auto"}));
     let (requests, answer, metrics) = run_turn(body, answers, None, RepairTurn::ON).await;
 
     assert_eq!(requests.len(), 2, "one original, one repair");
@@ -231,7 +227,7 @@ async fn a_bad_unary_tool_call_is_reissued_and_the_client_gets_the_valid_one() {
 /// the same grammar, and the second draw's markup is read as a call.
 #[tokio::test]
 async fn a_unary_turn_gglibs_grammar_constrained_is_answered_in_markup_and_read_as_a_call() {
-    let body = forwarded_body(json!({
+    let body = forwarded_body(&json!({
         "tool_choice": "none",
         "grammar": "root ::= \"<tool_call>\" [^<]* \"</tool_call>\""
     }));
@@ -270,7 +266,7 @@ async fn a_unary_turn_gglibs_grammar_constrained_is_answered_in_markup_and_read_
 #[tokio::test]
 async fn a_valid_unary_tool_call_is_not_reissued() {
     let good = structured("call_good", FIXED_ARGUMENTS);
-    let body = forwarded_body(json!({"tool_choice": "auto"}));
+    let body = forwarded_body(&json!({"tool_choice": "auto"}));
     let (requests, answer, metrics) =
         run_turn(body, vec![good.clone()], None, RepairTurn::ON).await;
 
@@ -284,7 +280,7 @@ async fn a_valid_unary_tool_call_is_not_reissued() {
 #[tokio::test]
 async fn a_rejected_re_issue_falls_open_to_the_first_answer() {
     let bad = structured("call_bad", BAD_ARGUMENTS);
-    let body = forwarded_body(json!({"tool_choice": "auto"}));
+    let body = forwarded_body(&json!({"tool_choice": "auto"}));
     let (requests, answer, metrics) =
         run_turn(body, vec![bad.clone(), json!(null)], None, RepairTurn::ON).await;
 
@@ -304,7 +300,7 @@ async fn a_rejected_re_issue_falls_open_to_the_first_answer() {
 async fn repair_off_leaves_a_unary_body_as_it_came() {
     let bad = structured("call_bad", BAD_ARGUMENTS);
     let answers = vec![bad.clone(), structured("call_fixed", FIXED_ARGUMENTS)];
-    let body = forwarded_body(json!({"tool_choice": "auto"}));
+    let body = forwarded_body(&json!({"tool_choice": "auto"}));
     let (requests, answer, metrics) = run_turn(body, answers, None, RepairTurn::OFF).await;
 
     assert_eq!(requests.len(), 1, "nothing is asked twice with repair off");

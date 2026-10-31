@@ -48,6 +48,11 @@ pub(crate) struct UpdateConversationRequest {
     pub title: Option<String>,
     #[cfg_attr(feature = "ts-bindings", ts(type = "string | null", optional))]
     #[serde(default, with = "serde_with::rust::double_option")]
+    #[expect(
+        clippy::option_option,
+        reason = "the three states are the API: omitted leaves the prompt, null clears it, \
+                  a string sets it, and double_option deserializes exactly that"
+    )]
     pub system_prompt: Option<Option<String>>,
 }
 

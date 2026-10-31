@@ -126,6 +126,10 @@ impl TokenCalibration {
         if prompt_tokens == 0 {
             return;
         }
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "a payload's character count is far below 2^52, so the cast is exact"
+        )]
         let observed =
             (payload_chars as f64 / f64::from(prompt_tokens)).clamp(MIN_RATIO, MAX_RATIO);
 
@@ -133,7 +137,14 @@ impl TokenCalibration {
         guard
             .entry(model.to_owned())
             .and_modify(|current| {
-                *current = (1.0 - EWMA_ALPHA) * *current + EWMA_ALPHA * observed;
+                #[expect(
+                    clippy::suboptimal_flops,
+                    reason = "`mul_add` rounds once where this rounds twice, which would move \
+                              every ratio the proxy learns; the arithmetic is kept as it was"
+                )]
+                {
+                    *current = (1.0 - EWMA_ALPHA) * *current + EWMA_ALPHA * observed;
+                }
             })
             .or_insert(observed);
     }
@@ -141,6 +152,10 @@ impl TokenCalibration {
     /// The chars-per-token factor to use for `model`, or the static default
     /// ([`CHARS_PER_TOKEN_APPROX`]) if the model has no observations yet.
     #[must_use]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "`CHARS_PER_TOKEN_APPROX` is 4, which an f64 holds exactly"
+    )]
     pub(crate) fn chars_per_token(&self, model: &str) -> f64 {
         let guard = self.ratios.lock().unwrap_or_else(PoisonError::into_inner);
         guard

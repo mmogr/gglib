@@ -22,7 +22,7 @@ fn models_response_from_summaries_maps_fields() {
             param_count: "8B".into(),
             quantization: Some("Q4_K_M".into()),
             architecture: Some("llama".into()),
-            created_at: 1700000000,
+            created_at: 1_700_000_000,
             file_size: 4_000_000_000,
             context_length: Some(8192),
             ..ModelSummary::bare(1, "llama-3-8b-q4")
@@ -30,7 +30,7 @@ fn models_response_from_summaries_maps_fields() {
         ModelSummary {
             quantization: Some("Q8_0".into()),
             architecture: Some("mistral".into()),
-            created_at: 1700000001,
+            created_at: 1_700_000_001,
             file_size: 7_000_000_000,
             ..ModelSummary::bare(2, "mistral-7b-q8")
         },
@@ -41,7 +41,7 @@ fn models_response_from_summaries_maps_fields() {
     assert_eq!(resp.data[0].id, "llama-3-8b-q4");
     assert_eq!(resp.data[0].object, "model");
     assert_eq!(resp.data[0].owned_by, "gglib");
-    assert_eq!(resp.data[0].created, 1700000000);
+    assert_eq!(resp.data[0].created, 1_700_000_000);
     assert!(resp.data[0].description.is_some());
 }
 

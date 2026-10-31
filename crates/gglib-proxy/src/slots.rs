@@ -249,11 +249,11 @@ impl SlotSnapshot {
             .and_then(NextTokenField::primary)
             .and_then(|nt| nt.n_decoded);
 
-        let prompt_component = if let Some(processed) = self.n_prompt_tokens_processed {
-            Some(processed + self.n_prompt_tokens_cache.unwrap_or(0))
-        } else {
-            self.n_prompt_tokens
-        };
+        let prompt_component = self
+            .n_prompt_tokens_processed
+            .map_or(self.n_prompt_tokens, |processed| {
+                Some(processed + self.n_prompt_tokens_cache.unwrap_or(0))
+            });
 
         if let Some(prompt_tokens) = prompt_component {
             return Some(prompt_tokens + n_decoded.unwrap_or(0));
@@ -558,7 +558,7 @@ mod tests {
             panic!("expected Available, got {result:?}");
         };
         assert_eq!(slots.len(), 1);
-        assert_eq!(slots[0].n_ctx, Some(131072));
+        assert_eq!(slots[0].n_ctx, Some(131_072));
         assert_eq!(slots[0].tokens_in_use(), Some(20906 + 89));
     }
 
@@ -760,6 +760,7 @@ pub fn sanitize_session_id(id: &str) -> Result<String, String> {
 }
 
 /// Return the full path to a slot `.bin` file for a given model and session.
+///
 /// Uses the shared `slot_bin_path()` from gglib-core so both runtime (purge)
 /// and proxy (save/restore) agree on `{slot_dir}/{model_id}__{session}.bin`.
 pub fn slot_bin_path(slot_dir: &Path, model_id: u32, session_id: &str) -> PathBuf {
@@ -883,6 +884,10 @@ pub async fn save_slot(
     let tmp_path = slot_dir.join(&tmp_name);
     let dest_path = slot_bin_path(slot_dir, model_id, session_id);
     match finalize_slot_save(&tmp_path, &dest_path).await {
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "the size is only printed, to two decimal places of a GiB"
+        )]
         Ok(bytes) => {
             info!(
                 "saved slot for {session_id}: {:.2} GiB in {:.1}s",
@@ -978,15 +983,12 @@ pub async fn restore_slot(
 pub async fn clear_slot_files(slot_dir: &Path, session_id: Option<&str>) -> std::io::Result<()> {
     let candidates = iter_all_slot_files(slot_dir).await;
     for path in candidates {
-        let matches = match session_id {
-            Some(id) => {
-                path.file_stem()
-                    .and_then(|s| s.to_str())
-                    .and_then(gglib_core::paths::slot_session_from_stem)
-                    == Some(id)
-            }
-            None => true,
-        };
+        let matches = session_id.is_none_or(|id| {
+            path.file_stem()
+                .and_then(|s| s.to_str())
+                .and_then(gglib_core::paths::slot_session_from_stem)
+                == Some(id)
+        });
         if matches
             && let Err(e) = tokio::fs::remove_file(&path).await
             && e.kind() != std::io::ErrorKind::PermissionDenied
@@ -1059,9 +1061,8 @@ pub async fn attempt_save(
 /// eviction and cache-clear operations that need the complete set of cached
 /// slots regardless of model.
 pub async fn iter_all_slot_files(slot_dir: &Path) -> Vec<PathBuf> {
-    let mut entries = match tokio::fs::read_dir(slot_dir).await {
-        Ok(e) => e,
-        Err(_) => return Vec::new(),
+    let Ok(mut entries) = tokio::fs::read_dir(slot_dir).await else {
+        return Vec::new();
     };
     let mut slots: Vec<PathBuf> = Vec::new();
     while let Ok(Some(entry)) = entries.next_entry().await {

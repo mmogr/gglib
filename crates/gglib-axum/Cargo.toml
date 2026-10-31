@@ -23,7 +23,7 @@ gglib-mcp = { workspace = true }
 # and for `access`, the Host guard, origin guard and CORS layer both routers install.
 gglib-proxy = { workspace = true }
 gglib-runtime = { workspace = true }
-gglib-sse = { workspace = true }
+gglib-broadcast = { workspace = true }
 
 # Shared deps
 async-trait = { workspace = true }
@@ -75,7 +75,7 @@ ts-bindings = ["dep:ts-rs", "gglib-core/ts-bindings", "gglib-app-services/ts-bin
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
 # Re-declared to turn on `test-support`, which carries
 # `Broadcaster::subscribe_events`. The feature stays off in the normal build.
-gglib-sse = { workspace = true, features = ["test-support"] }
+gglib-broadcast = { workspace = true, features = ["test-support"] }
 # Re-declared to turn on `test-support`, which carries
 # `RemoteGateway::serve_for_test`: a device's run is offered the servers open
 # to devices only while a session is live. The feature stays off in the

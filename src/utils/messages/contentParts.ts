@@ -4,7 +4,8 @@
  * Text is stored in the `content` column as plain markdown.
  * Reasoning is stored in `metadata.thinking`.
  * Tool calls are stored in `metadata.contentParts` and rebuilt here, so they
- * survive the DB round-trip. An image is not a content part: a message names
+ * survive the DB round-trip, with the name the run showed each by and the
+ * MCP server it went to. An image is not a content part: a message names
  * it by id, in the row's `images`. A tool's images ride on its tool call's
  * `artifact`, folded there from its tool row's `images`.
  *
@@ -29,6 +30,10 @@ export interface SerializableToolCallPart {
   isError?: boolean;
   /** The images the tool made, when it made any. */
   artifact?: ToolCallArtifact;
+  /** The name the run showed the tool by (e.g. "Read File"). */
+  displayName?: string;
+  /** The MCP server the tool belongs to; absent for gglib's own tools. */
+  server?: string;
 }
 
 // ============================================================================
@@ -105,6 +110,8 @@ export function reconstructContent(
       ...(cp.result !== undefined && { result: cp.result }),
       ...(cp.isError !== undefined && { isError: cp.isError }),
       ...(images.length > 0 && { artifact: { images } }),
+      ...(cp.displayName !== undefined && { displayName: cp.displayName }),
+      ...(cp.server !== undefined && { server: cp.server }),
     });
   }
 

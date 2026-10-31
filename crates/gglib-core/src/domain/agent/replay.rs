@@ -8,7 +8,8 @@
 //! frames: one assistant row per model turn (its text, its tool calls, its
 //! reasoning) followed by one tool row per result, each in the shape
 //! [`to_new_message`] gives a message, a tool row with the ids of the images
-//! its result made.
+//! its result made. Each saved call keeps the name its start showed it by
+//! and the MCP server it went to, beside the call in `tool_calls`.
 //!
 //! Only the fields read here are parsed, so a frame this does not know is
 //! skipped rather than failing the whole transcript.
@@ -74,6 +75,12 @@ pub const INCOMPLETE_KEY: &str = "incomplete";
 /// no saved call is left without its answer when the history is sent back.
 pub const UNFINISHED_TOOL_CALL: &str = "The tool call did not finish: the reply stopped first.";
 
+/// The keys a saved call's entry in `tool_calls` keeps beside the call: the
+/// name its start showed it by, and the MCP server it went to, left out
+/// when the start named none.
+const CALL_DISPLAY_NAME_KEY: &str = "display_name";
+const CALL_SERVER_KEY: &str = "server";
+
 /// The parts of a logged event the rows are made from.
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -84,9 +91,7 @@ enum Logged {
     ReasoningDelta {
         content: String,
     },
-    ToolCallStart {
-        tool_call: ToolCall,
-    },
+    ToolCallStart(Started),
     ToolCallComplete {
         result: ToolResult,
     },
@@ -99,12 +104,22 @@ enum Logged {
     Other,
 }
 
+/// A call as its start logged it, with the name it was shown by and the MCP
+/// server it went to, which gglib's own tools have none of.
+#[derive(Deserialize)]
+struct Started {
+    tool_call: ToolCall,
+    display_name: String,
+    #[serde(default)]
+    server: Option<String>,
+}
+
 /// One model turn as it arrived.
 #[derive(Default)]
 struct Turn {
     text: String,
     reasoning: String,
-    calls: Vec<ToolCall>,
+    calls: Vec<Started>,
     results: Vec<ToolResult>,
     /// When its first and last reasoning events were logged, in ms.
     reasoned: Option<(u64, u64)>,
@@ -126,10 +141,11 @@ impl Turn {
         let assistant = AgentMessage::Assistant {
             content: AssistantContent {
                 text: Some(self.text).filter(|t| !t.is_empty()),
-                tool_calls: self.calls.clone(),
+                tool_calls: self.calls.iter().map(|c| c.tool_call.clone()).collect(),
             },
         };
         let mut row = to_new_message(&assistant, conversation_id);
+        name_calls(&mut row, &self.calls);
         if !self.reasoning.is_empty() {
             set(&mut row, THINKING_KEY, Value::String(self.reasoning));
             if let Some((first, last)) = self.reasoned {
@@ -143,7 +159,10 @@ impl Turn {
             set_made(&mut row, usage);
         }
         rows.push(row);
-        for call in &self.calls {
+        for Started {
+            tool_call: call, ..
+        } in &self.calls
+        {
             let result = match self.results.iter().position(|r| r.tool_call_id == call.id) {
                 Some(i) => self.results.remove(i),
                 None => ToolResult::text(call.id.clone(), UNFINISHED_TOOL_CALL.to_owned(), false),
@@ -152,6 +171,27 @@ impl Turn {
         }
         for result in self.results {
             rows.push(tool_row(result, conversation_id));
+        }
+    }
+}
+
+/// Write each call's display name and server into its entry in the row's
+/// `tool_calls`, in the calls' order; a call to none of the MCP servers has
+/// no server.
+fn name_calls(row: &mut NewMessage, calls: &[Started]) {
+    let entries = row
+        .metadata
+        .as_mut()
+        .and_then(|m| m.get_mut("tool_calls"))
+        .and_then(Value::as_array_mut);
+    for (entry, call) in entries.into_iter().flatten().zip(calls) {
+        let Value::Object(entry) = entry else {
+            continue;
+        };
+        let shown = Value::String(call.display_name.clone());
+        entry.insert(CALL_DISPLAY_NAME_KEY.to_owned(), shown);
+        if let Some(server) = &call.server {
+            entry.insert(CALL_SERVER_KEY.to_owned(), Value::String(server.clone()));
         }
     }
 }
@@ -252,7 +292,7 @@ pub fn rows_from_timed_frames<'a>(
                     turn.reasoned = Some(turn.reasoned.map_or((at, at), |(first, _)| (first, at)));
                 }
             }
-            Logged::ToolCallStart { tool_call } => turn.calls.push(tool_call),
+            Logged::ToolCallStart(started) => turn.calls.push(started),
             Logged::ToolCallComplete { result } => turn.results.push(result),
             Logged::TurnUsage(usage) => turn.usage = Some(usage),
             Logged::IterationComplete {} => {

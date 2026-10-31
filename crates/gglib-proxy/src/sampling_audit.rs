@@ -150,8 +150,8 @@
 //! [ADR 0007]: https://github.com/mmogr/gglib/blob/main/docs/adr/0007-ask-the-server-for-template-capabilities.md
 
 use std::collections::VecDeque;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, PoisonError};
 
 use gglib_core::domain::{
     InferenceConfig, ModelSamplingDefaults, ParamSource, ReasoningEffort, SamplingOverride,
@@ -436,6 +436,11 @@ pub(crate) fn compare(intent: &SamplingDecision, observed: &SlotParams) -> Vec<D
 /// [`SamplingDecision`] here would abstain on almost every poll, because
 /// `max_tokens` is client-authoritative and varies request to request while
 /// the ladder-supplied fields do not.
+#[expect(
+    clippy::cast_sign_loss,
+    reason = "`top_k` only has to stay distinct for an equality check, and `as` maps \
+              distinct i32s to distinct u64s, negatives included"
+)]
 fn comparable_key(d: &SamplingDecision) -> [Option<u64>; 7] {
     let r = &d.resolved;
     // Bit patterns rather than floats: this is an equality check between two
@@ -641,7 +646,7 @@ impl SamplingAuditStore {
             *self
                 .latest_effort_suppressed
                 .lock()
-                .unwrap_or_else(|e| e.into_inner()) = Some(SuppressedEffortRecord {
+                .unwrap_or_else(PoisonError::into_inner) = Some(SuppressedEffortRecord {
                 level: suppressed.level,
                 source: describe_source(suppressed.source, &decision.layer_names),
             });
@@ -650,7 +655,7 @@ impl SamplingAuditStore {
         *self
             .latest_reasoning
             .lock()
-            .unwrap_or_else(|e| e.into_inner()) =
+            .unwrap_or_else(PoisonError::into_inner) =
             Some(resolved_reasoning(decision, effort_suppressed));
 
         let rejected = decision.client_fields_rejected.len() as u64;
@@ -677,12 +682,15 @@ impl SamplingAuditStore {
         let model = self
             .model_sampling
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(PoisonError::into_inner)
             .as_ref()
             .and_then(|(_, defaults)| *defaults);
         if let Some(model) = model {
             let fields = compare_published(&model, &decision.resolved);
-            let mut guard = self.published.lock().unwrap_or_else(|e| e.into_inner());
+            let mut guard = self
+                .published
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
             guard.intents = guard.intents.saturating_add(1);
             guard.fields = fields;
         }
@@ -701,10 +709,10 @@ impl SamplingAuditStore {
             .fetch_add(outcome.skipped_ambiguous, Ordering::Relaxed);
 
         if outcome.comparisons > 0 {
-            *self.blind.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            *self.blind.lock().unwrap_or_else(PoisonError::into_inner) = None;
         }
         if !outcome.found.is_empty() {
-            let mut guard = self.recent.lock().unwrap_or_else(|e| e.into_inner());
+            let mut guard = self.recent.lock().unwrap_or_else(PoisonError::into_inner);
             for d in &outcome.found {
                 guard.push_back(d.clone());
                 if guard.len() > MAX_RECENT_DIVERGENCES {
@@ -721,7 +729,7 @@ impl SamplingAuditStore {
     /// compares anything cannot make the dashboard claim sight it does not
     /// have.
     pub fn mark_blind(&self, reason: impl Into<String>) {
-        *self.blind.lock().unwrap_or_else(|e| e.into_inner()) = Some(reason.into());
+        *self.blind.lock().unwrap_or_else(PoisonError::into_inner) = Some(reason.into());
     }
 
     /// Store the baseline reading for the currently running model.
@@ -731,7 +739,7 @@ impl SamplingAuditStore {
     /// [`Unreadable`](crate::props::BaselineState::Unreadable) is a more
     /// honest thing to show in its place than a stale `Read`.
     pub fn set_baseline(&self, state: crate::props::BaselineState) {
-        *self.baseline.lock().unwrap_or_else(|e| e.into_inner()) = state;
+        *self.baseline.lock().unwrap_or_else(PoisonError::into_inner) = state;
     }
 
     /// Store the template-caps reading for the currently running model.
@@ -740,7 +748,10 @@ impl SamplingAuditStore {
     /// leave the previous template's self-report on display, and `Unreadable`
     /// is a more honest thing to hold than a stale `Read`.
     pub fn set_template_caps(&self, state: gglib_core::domain::TemplateCapsState) {
-        *self.template_caps.lock().unwrap_or_else(|e| e.into_inner()) = state;
+        *self
+            .template_caps
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = state;
     }
 
     /// The stored template-caps reading. `NotYetRead` until the poller's
@@ -749,7 +760,7 @@ impl SamplingAuditStore {
     pub fn template_caps(&self) -> gglib_core::domain::TemplateCapsState {
         self.template_caps
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }
 
@@ -772,12 +783,15 @@ impl SamplingAuditStore {
         let mut current = self
             .model_sampling
             .lock()
-            .unwrap_or_else(|e| e.into_inner());
+            .unwrap_or_else(PoisonError::into_inner);
         if current.as_ref().is_some_and(|(id, _)| *id == model_id) {
             return;
         }
         *current = Some((model_id, model));
-        *self.published.lock().unwrap_or_else(|e| e.into_inner()) = PublishedOverrides::default();
+        *self
+            .published
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = PublishedOverrides::default();
     }
 
     /// What the organ can currently say about itself.
@@ -786,7 +800,7 @@ impl SamplingAuditStore {
         if let Some(reason) = self
             .blind
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(PoisonError::into_inner)
             .as_ref()
         {
             return AuditState::Blind {
@@ -814,26 +828,26 @@ impl SamplingAuditStore {
             recent_divergences: self
                 .recent
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(PoisonError::into_inner)
                 .iter()
                 .cloned()
                 .collect(),
             baseline: self
                 .baseline
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(PoisonError::into_inner)
                 .clone(),
             published: self
                 .published
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(PoisonError::into_inner)
                 .clone(),
             effort_suppressed: EffortSuppressions {
                 requests: self.effort_suppressed.load(Ordering::Relaxed),
                 latest: self
                     .latest_effort_suppressed
                     .lock()
-                    .unwrap_or_else(|e| e.into_inner())
+                    .unwrap_or_else(PoisonError::into_inner)
                     .clone(),
             },
             reasoning: ReasoningReadback {
@@ -841,7 +855,7 @@ impl SamplingAuditStore {
                 latest: self
                     .latest_reasoning
                     .lock()
-                    .unwrap_or_else(|e| e.into_inner())
+                    .unwrap_or_else(PoisonError::into_inner)
                     .clone(),
                 wire_blind_reason: WIRE_BLIND_REASON,
             },

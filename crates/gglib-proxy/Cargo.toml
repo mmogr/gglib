@@ -28,7 +28,7 @@ ts-rs = { workspace = true, optional = true }
 gglib-mcp = { workspace = true }
 
 # Generic SSE broadcast utility, shared with gglib-axum (no gglib-* deps of its own)
-gglib-sse = { workspace = true }
+gglib-broadcast = { workspace = true }
 
 # HTTP server
 axum = { workspace = true }
@@ -79,7 +79,7 @@ uuid = { workspace = true, features = ["v4"] }
 gglib-proxy = { workspace = true, features = ["test-support"] }
 # Same arrangement for the SSE broadcaster's raw-stream door, which the
 # dashboard publisher test observes through.
-gglib-sse = { workspace = true, features = ["test-support"] }
+gglib-broadcast = { workspace = true, features = ["test-support"] }
 # `test-util` is what `#[tokio::test(start_paused = true)]` needs, and it is
 # deliberately not part of tokio's `full`. Declared here rather than left to
 # feature unification, so the contention tests do not rest on what another

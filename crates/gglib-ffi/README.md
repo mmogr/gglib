@@ -15,7 +15,7 @@ app talks to a gglib it serves over loopback HTTP, as it talks to one on a Mac.
 ## Architecture
 
 This crate is a **surface** in the Adapter Layer, beside `gglib-cli`,
-`gglib-axum` and `gglib-tauri`, and the only one an app links rather than runs.
+`gglib-axum` and the desktop app's `src-tauri`, and the only one an app links rather than runs.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐

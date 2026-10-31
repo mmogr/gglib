@@ -183,13 +183,13 @@ pub fn decide(request_body: &[u8], response_body: &[u8], turn: RepairTurn) -> De
             } else {
                 repair_body(&request)
             };
-            match body {
-                Some(body) => Decision::Reissue {
+            body.map_or_else(
+                || Decision::Forward(Skipped::Unreadable),
+                |body| Decision::Reissue {
                     body,
                     violations: rendered,
                 },
-                None => Decision::Forward(Skipped::Unreadable),
-            }
+            )
         }
     }
 }
