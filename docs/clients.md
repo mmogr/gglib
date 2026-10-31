@@ -29,6 +29,31 @@ models:
 OPENAI_API_BASE=http://127.0.0.1:8080/v1 OPENAI_API_KEY=gglib aider --model openai/qwen3.6
 ```
 
+## opencode
+
+`opencode.json`, in the project or in `~/.config/opencode/`. opencode does
+not read `/v1/models`, so each model you want to pick from is listed by its
+`id` there:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "gglib": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": { "baseURL": "http://127.0.0.1:8080/v1" },
+      "models": {
+        "qwen3.6": {},
+        "Qwen3-4B-Instruct-2507": {}
+      }
+    }
+  },
+  "model": "gglib/qwen3.6"
+}
+```
+
+`/models` in opencode switches between them, and gglib swaps the model in.
+
 ## Zed
 
 `settings.json`:

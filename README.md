@@ -26,7 +26,7 @@ layer that set it, and you can override any of them per model, per profile
 or per request.
 
 <p align="center">
-  <img src="docs/assets/cli-up.gif" alt="gglib up: from nothing to a working endpoint" width="800">
+  <img src="docs/assets/cli-up.gif" alt="gglib up: from nothing to a working endpoint, then a log piped into gglib q" width="800">
 </p>
 
 ## Two minutes
@@ -52,7 +52,12 @@ No API key is needed on loopback; use any placeholder if your client insists.
 | **Cline / Roo Code** | API Provider *OpenAI Compatible*, Base URL `http://127.0.0.1:8080/v1`, API Key `gglib`, Model ID from `gglib model list` |
 | **Continue** | `config.yaml`: provider `openai`, apiBase `http://127.0.0.1:8080/v1` |
 | **Aider** | `OPENAI_API_BASE=http://127.0.0.1:8080/v1 OPENAI_API_KEY=gglib aider --model openai/<model>` |
+| **opencode** | `opencode.json`: an `@ai-sdk/openai-compatible` provider, baseURL `http://127.0.0.1:8080/v1`, one entry per model ([example](docs/clients.md#opencode)) |
 | **Zed, Copilot, Open WebUI, anything else** | [docs/clients.md](docs/clients.md) |
+
+<p align="center">
+  <img src="docs/assets/cli-opencode.gif" alt="opencode asks for a model; gglib loads it with the flags it read from the GGUF, and opencode fixes a bug" width="800">
+</p>
 
 Binaries for macOS, Linux and Windows, the desktop app, and the build from
 source are under [Install](#install).
