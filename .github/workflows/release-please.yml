@@ -1,0 +1,246 @@
+# Keeps the standing release pull request, "chore(main): release X.Y.Z-rc.N",
+# up to date with main. release-please reads the commit types since the last
+# release and works out the next candidate (release-please-config.json says
+# how), then writes it into Cargo.toml, package.json and the manifest, and adds
+# its changes to CHANGELOG.md. Merging the pull request changes main's version,
+# and release.yml, the only tagger, releases that version as a prerelease.
+# Promotion to a stable version is promote.yml's job, not this one's.
+#
+# release-please knows nothing of Cargo.lock or package-lock.json, and CI
+# builds with --locked, so after every update this workflow adds a commit that
+# moves the workspace's own versions in both lockfiles.
+#
+# Everything that writes uses the GitHub App token, as update-deps.yml does: a
+# pull request opened or pushed with GITHUB_TOKEN starts no workflows, so CI
+# would never run on the release PR.
+
+name: Release PR
+
+on:
+  push:
+    branches: [main]
+
+# GITHUB_TOKEN only reads: main's version and its release, and the pull
+# requests the gate asks about.
+permissions:
+  contents: read
+  pull-requests: read
+
+# A newer push cancels a run that is still waiting at the gate or updating the
+# pull request: the newer run reads a later main and rewrites the same pull
+# request from it.
+concurrency:
+  group: release-pr
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # GitHub's default is `bash -e`; this adds pipefail.
+    shell: bash
+
+jobs:
+  release-pr:
+    name: Open or update the release PR
+    runs-on: ubuntu-24.04
+    # The gate's 90 minutes, and release-please after it.
+    timeout-minutes: 100
+    outputs:
+      updated: ${{ steps.release.outputs.prs_created }}
+      # The pull request the action opened or updated, as JSON.
+      pr: ${{ steps.release.outputs.pr }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # Two things must be true before release-please runs. It opens nothing
+      # while a merged release PR still carries `autorelease: pending`: it
+      # stops with "untagged, merged release PRs outstanding". It never tags
+      # (skip-github-release below), so release.yml swaps that label for
+      # `autorelease: tagged` once it has tagged the version. And it finds
+      # the last release through the GitHub releases, not the tags: with no
+      # release for main's version it walks back through hundreds of commits
+      # and proposes a release of all of them. release.yml makes the release
+      # a few seconds after the tag, so the release is what is waited for.
+      #
+      # A push that changed main's version, which is a merged release PR or
+      # promotion, therefore waits here until CI on main has passed and
+      # release.yml has released it, about 40 minutes. Every other push finds
+      # the release already there and goes straight on. A run that gives up
+      # fails: the release itself failed, and once it has been re-run this
+      # run can be re-run too.
+      - name: Wait until main's version is released
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          for attempt in $(seq 1 90); do
+            released=false
+            if gh release view "v${VERSION}" -R "$GITHUB_REPOSITORY" --json tagName > /dev/null 2>&1; then
+              released=true
+            fi
+            pending=$(gh pr list -R "$GITHUB_REPOSITORY" --state merged --label 'autorelease: pending' --json number --jq 'length')
+            if [ "$released" = true ] && [ "$pending" = 0 ]; then
+              echo "✓ v$VERSION is released, and no merged release PR is waiting for its tag"
+              exit 0
+            fi
+            echo "v$VERSION is not released yet, or a merged release PR is still labelled pending; looking again in a minute ($attempt/90)"
+            sleep 60
+          done
+          echo "::error::v$VERSION was not released within 90 minutes. Re-run the release (the Release job of CI on main), then re-run this workflow."
+          exit 1
+
+      # After the gate, not before: an installation token lasts an hour, and
+      # the gate can wait longer than that.
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      # skip-github-release because release.yml is the only tagger and makes
+      # the GitHub release itself, with generated notes. Here release-please
+      # only keeps the pull request. With `always-update` in the config it
+      # rewrites the pull request on every push to main, so the pull request is
+      # never behind main, which the ruleset requires before a merge.
+      - name: Open or update the release PR
+        id: release
+        uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-release: true
+
+  lock:
+    name: Lock the release's version
+    needs: release-pr
+    if: needs.release-pr.outputs.updated == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout the release PR
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ fromJSON(needs.release-pr.outputs.pr).headBranchName }}
+          token: ${{ steps.app-token.outputs.token }}
+
+      # A stable version comes only from promote.yml, never from this pull
+      # request. release-please proposes one in a single case: a feat merged
+      # while main is a patch candidate such as 0.29.1-rc.1 makes it propose
+      # 0.30.0 rather than 0.30.0-rc.1. A `Release-As: 0.30.0-rc.1` line in the
+      # message of a commit that merges next tells it the version to use.
+      - name: Require a release candidate
+        id: guard
+        run: |
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+            echo "::error::The release PR proposes $VERSION, which is not a release candidate; a stable version comes only from Promote. Merge a commit whose message ends with a 'Release-As: X.Y.Z-rc.1' line naming the candidate meant, and the release PR is rewritten to it."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "✓ The release PR proposes the release candidate $VERSION"
+
+      - name: Install Rust toolchain
+        run: rustup show
+
+      # Needed by the npm half of "Update lockfiles".
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Update lockfiles
+        run: |
+          # `--workspace` restricts the re-lock to the workspace's OWN members,
+          # so the only Cargo.lock diff is the 19 gglib-* version fields the
+          # bump just moved. `cargo generate-lockfile`, which stood here, throws
+          # the lockfile away and re-resolves every dependency from scratch
+          # against whatever the registry holds at that minute -- so a PR titled
+          # only "Bump version to X.Y.Z" carried third-party upgrades. #975 is
+          # the shipped example: 36 third-party crates moved under that title,
+          # aws-lc-rs and tokio-rustls among them.
+          #
+          # This is the Cargo half of the guard the npm step below already had.
+          #
+          # There is one Cargo.lock, not two: src-tauri is a member of the root
+          # workspace (see the `members` list in Cargo.toml), so cargo writes
+          # its resolution into the root lockfile and src-tauri/Cargo.lock does
+          # not exist. A second `--manifest-path src-tauri/Cargo.toml` call
+          # stood here and only re-resolved the root lockfile a second time.
+          cargo update --workspace
+          # --package-lock-only writes the lockfile without touching node_modules.
+          # It keeps every resolution the lockfile already pins, so the only diff
+          # is the two root version fields -- a bump must not smuggle in a
+          # dependency upgrade.
+          npm install --package-lock-only --no-audit --no-fund
+
+      - name: Verify lockfiles (no build)
+        run: |
+          # --locked fails if the lockfile does not already satisfy every
+          # manifest, which is what proves `cargo update --workspace` left a
+          # complete lockfile rather than a stale one.
+          cargo metadata --locked --format-version 1 > /dev/null
+          # The npm equivalent: `npm ci` is the one command that refuses to run
+          # when package.json and package-lock.json disagree on dependencies.
+          npm ci --dry-run --no-audit --no-fund > /dev/null
+
+      - name: Verify changes
+        run: |
+          VERSION="${{ steps.guard.outputs.version }}"
+          
+          # Check that key files were updated. src-tauri/tauri.conf.json is not
+          # in this list: it no longer carries a "version" key, because Tauri
+          # falls back to the Cargo.toml version when the key is absent.
+          for file in package.json; do
+            if ! grep -q "\"version\": \"$VERSION\"" "$file"; then
+              echo "::error::$file was not updated correctly"
+              exit 1
+            fi
+            echo "✓ Verified $file"
+          done
+
+          # package-lock.json is checked separately because it carries the
+          # version twice — the top-level key, and the one on the "" entry under
+          # `packages`. Both must move; a grep -q would pass on either alone.
+          if [ "$(grep -c "\"version\": \"$VERSION\"" package-lock.json)" -lt 2 ]; then
+            echo "::error::package-lock.json was not updated correctly"
+            exit 1
+          fi
+          echo "✓ Verified package-lock.json"
+
+          # Guard the fallback: a re-added "version" key would silently pin the
+          # app metadata and reintroduce the drift this removal eliminated.
+          if grep -q '"version"' src-tauri/tauri.conf.json; then
+            echo "::error::src-tauri/tauri.conf.json must not declare a version; Tauri inherits it from Cargo.toml"
+            exit 1
+          fi
+          echo "✓ Verified src-tauri/tauri.conf.json inherits its version"
+
+      # release-please rewrites the branch from main on every update, which
+      # drops this commit, and with `always-update` it updates on every push
+      # to main; this job runs after each of those updates and adds the commit
+      # back. CI's concurrency cancels the run on release-please's own commit,
+      # which this one follows within minutes.
+      - name: Commit the lockfiles
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SLUG: ${{ steps.app-token.outputs.app-slug }}
+          BRANCH: ${{ fromJSON(needs.release-pr.outputs.pr).headBranchName }}
+        run: |
+          git add Cargo.lock package-lock.json
+          if git diff --cached --quiet; then
+            echo "✓ The lockfiles already carry the release's version"
+            exit 0
+          fi
+          id=$(gh api "users/${SLUG}[bot]" --jq .id)
+          git -c user.name="${SLUG}[bot]" -c user.email="${id}+${SLUG}[bot]@users.noreply.github.com" \
+            commit -m "chore: lock the release's version"
+          git push origin "HEAD:refs/heads/${BRANCH}"
