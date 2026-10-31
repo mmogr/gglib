@@ -197,10 +197,10 @@ fn serving_refusal(kind: RuntimeKind, model: &str) -> String {
 }
 
 /// `gglib config <engine> uninstall`: remove what the engine's install put
-/// in its folder, asking first unless `force`, and print what was removed. Refused while the daemon
+/// in its folder, asking first unless `yes`, and print what was removed. Refused while the daemon
 /// serves a model on it, as the web removal is: removing the binary and its
 /// library under a running server leaves it serving from deleted files.
-pub(super) async fn uninstall(ctx: &CliContext, kind: RuntimeKind, force: bool) -> Result<()> {
+pub(super) async fn uninstall(ctx: &CliContext, kind: RuntimeKind, yes: bool) -> Result<()> {
     let product = kind.label();
     if !engine::files_present(kind)? {
         println!("{product} is not installed.");
@@ -209,7 +209,7 @@ pub(super) async fn uninstall(ctx: &CliContext, kind: RuntimeKind, force: bool) 
     if let Some(model) = serving_on_the_daemon(ctx, kind).await? {
         bail!(removal_refusal(kind, &model));
     }
-    if !force
+    if !yes
         && !input::prompt_confirmation(&format!(
             "This will remove {product} and {}. Continue?",
             kind.server_name()

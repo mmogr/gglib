@@ -94,7 +94,7 @@ pub(super) fn bare_args() -> UpdateArgs {
         remove_metadata: None,
         replace_metadata: false,
         dry_run: false,
-        force: false,
+        yes: false,
         temperature: None,
         top_p: None,
         top_k: None,

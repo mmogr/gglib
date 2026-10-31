@@ -28,8 +28,8 @@ const MISSING: &str = "__no_such_model__";
 const IDENTIFIER_COMMANDS: &[&[&str]] = &[
     &["model", "inspect", MISSING],
     &["model", "inspect", MISSING, "--json"],
-    &["model", "remove", MISSING, "--force"],
-    &["model", "update", MISSING, "--name", "x", "--force"],
+    &["model", "remove", MISSING, "--yes"],
+    &["model", "update", MISSING, "--name", "x", "--yes"],
     &["model", "retag", MISSING],
     &["model", "verify", MISSING],
     &["model", "repair", MISSING],

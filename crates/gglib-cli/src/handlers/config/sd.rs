@@ -45,8 +45,8 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: SdCommand) -> Result<()>
             }
             Ok(())
         }
-        SdCommand::Uninstall { force } => {
-            engine::uninstall(ctx, RuntimeKind::StableDiffusion, force).await
+        SdCommand::Uninstall { yes } => {
+            engine::uninstall(ctx, RuntimeKind::StableDiffusion, yes).await
         }
     }
 }

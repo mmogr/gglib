@@ -21,7 +21,7 @@ use crate::utils::input;
 /// Execute the remove command.
 ///
 /// Searches for a model matching the provided identifier (ID or name),
-/// confirms the deletion with the user (unless force flag is used),
+/// confirms the deletion with the user (unless `--yes` answered already),
 /// and removes the model entry from the database.
 ///
 /// # Arguments
@@ -29,7 +29,7 @@ use crate::utils::input;
 /// * `ctx` - The CLI context providing access to `AppCore`
 /// * `ops` - The model operations the removal is made through
 /// * `identifier` - The name or ID of the model to remove
-/// * `force` - If true, skips confirmation prompt
+/// * `yes` - If true, skips confirmation prompt
 ///
 /// # Returns
 ///
@@ -47,7 +47,7 @@ pub(crate) async fn execute(
     ctx: &CliContext,
     ops: &ModelOps,
     identifier: &str,
-    force: bool,
+    yes: bool,
 ) -> Result<()> {
     // First, try to find the model to show it to the user
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
@@ -59,7 +59,7 @@ pub(crate) async fn execute(
         return Err(being_served(&model, seen.port));
     }
 
-    if !force {
+    if !yes {
         display_model_summary(&model, &ModelSummaryOpts::for_removal());
         println!();
 
@@ -77,7 +77,7 @@ pub(crate) async fn execute(
     // they can disagree, and the second one reports in core's vocabulary.
     //
     // Never the request's `force`. That one stops the server a model is being
-    // served from; `--force` here only skips the prompt above.
+    // served from; `--yes` here only skips the prompt above.
     ops.remove(model.id, RemoveModelRequest { force: false })
         .await
         .map_err(|refused| match refused {
@@ -93,7 +93,7 @@ pub(crate) async fn execute(
         removed.name, removed.id
     );
 
-    if !force {
+    if !yes {
         println!(
             "Note: The model file '{}' remains on disk.",
             removed.file_path.display()
@@ -107,7 +107,7 @@ pub(crate) async fn execute(
 /// served, by the llama-server on `port` when that is known.
 ///
 /// It names what stops a server from here. `ModelOps`' refusal says to stop
-/// the server and not how, and no flag of this command does: `--force`
+/// the server and not how, and no flag of this command does: `--yes`
 /// skips the prompt and stops nothing.
 fn being_served(model: &Model, port: Option<u16>) -> anyhow::Error {
     let by = port.map_or_else(String::new, |port| {

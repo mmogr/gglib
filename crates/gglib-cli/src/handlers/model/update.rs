@@ -56,7 +56,7 @@ pub(crate) struct UpdateArgs {
     pub unset: Vec<String>,
     pub clear_inference_defaults: bool,
     pub dry_run: bool,
-    pub force: bool,
+    pub yes: bool,
     pub projector: crate::projector_args::ProjectorArgs,
     pub components: crate::component_args::ComponentArgs,
 }
@@ -80,7 +80,7 @@ pub(crate) async fn execute(ctx: &CliContext, ops: &ModelOps, args: UpdateArgs) 
     let existing_model = resolver::resolve_model_identifier(ctx, &args.identifier).await?;
 
     // Verify the file still exists
-    if !existing_model.file_path.exists() && !args.force {
+    if !existing_model.file_path.exists() && !args.yes {
         tracing::warn!(
             file_path = %existing_model.file_path.display(),
             "Model file no longer exists"
@@ -111,8 +111,8 @@ pub(crate) async fn execute(ctx: &CliContext, ops: &ModelOps, args: UpdateArgs) 
         return Ok(());
     }
 
-    // Confirm changes unless force flag is used
-    if !args.force {
+    // Confirm the changes unless --yes answered already
+    if !args.yes {
         println!();
         if !input::prompt_confirmation("Apply these changes?")? {
             println!("Update cancelled.");

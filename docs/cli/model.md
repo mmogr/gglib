@@ -31,7 +31,7 @@ speed.
 
 - `remove` drops a model's row and leaves its file. It refuses a model that
   is being served under the same data root, and says how to stop it;
-  `--force` skips the confirmation and stops nothing.
+  `-y` / `--yes` skips the confirmation and stops nothing.
 - `update` changes a model's metadata, including the companion files of an
   image model (below).
 
@@ -199,7 +199,7 @@ differs from the commit recorded at download (any commit counts, a README
 edit among them); `upgrade <model>` replaces the file with that revision.
 
 - Like `remove`, `upgrade` refuses a model that is being served under the
-  same data root, before it asks the Hub anything; `--force` skips the
+  same data root, before it asks the Hub anything; `-y` skips the
   confirmation and stops nothing.
 
 ## `verify`, `repair`

@@ -167,7 +167,7 @@ fn a_stored_sse_server_is_listed_as_not_supported_yet_refused_a_run_and_an_edit_
         );
     }
 
-    let removed = mcp_ok(root.path(), &["remove", "remote", "--force"]);
+    let removed = mcp_ok(root.path(), &["remove", "remote", "--yes"]);
     assert!(
         removed.contains("Removed MCP server 'remote'"),
         "got: {removed}"

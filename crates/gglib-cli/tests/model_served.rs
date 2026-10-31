@@ -109,7 +109,7 @@ fn holds_the_model(root: &Path) -> bool {
     run(root, &["model", "inspect", "1"], "").status.success()
 }
 
-/// Asked or not: `--force` skips the question, and does not stop a server
+/// Asked or not: `--yes` skips the question, and does not stop a server
 /// or remove a model from under one. Nothing is asked either way, since a
 /// removal that would be refused is refused first.
 #[test]
@@ -121,7 +121,7 @@ fn a_model_served_under_this_data_root_is_refused_and_told_how_to_stop_it() {
     record_a_server(root.path(), server.pid());
 
     for args in [
-        &["model", "remove", "1", "--force"][..],
+        &["model", "remove", "1", "--yes"][..],
         &["model", "remove", "1"],
         &["model", "remove", "qwen.Q8_0"],
     ] {
@@ -142,7 +142,7 @@ fn a_model_served_under_this_data_root_is_refused_and_told_how_to_stop_it() {
 
     // Stopped, it is removed as any model is.
     drop(server);
-    let removed = gglib(root.path(), &["model", "remove", "1", "--force"], "");
+    let removed = gglib(root.path(), &["model", "remove", "1", "--yes"], "");
     assert_eq!(removed, REMOVED);
     assert!(!holds_the_model(root.path()));
 }
@@ -163,8 +163,8 @@ fn a_server_for_one_model_does_not_block_the_removal_of_another() {
     let server = StandIn::start();
     record_a_server(root.path(), server.pid());
 
-    let removed = gglib(root.path(), &["model", "remove", "2", "--force"], "");
-    let refused = run(root.path(), &["model", "remove", "1", "--force"], "");
+    let removed = gglib(root.path(), &["model", "remove", "2", "--yes"], "");
+    let refused = run(root.path(), &["model", "remove", "1", "--yes"], "");
 
     assert_eq!(
         removed,
@@ -183,7 +183,7 @@ fn a_record_whose_process_is_gone_does_not_block_a_removal() {
     takes_sleep_for_llama_server(root.path());
     record_a_server(root.path(), pid_of_a_process_that_is_gone());
 
-    let removed = gglib(root.path(), &["model", "remove", "1", "--force"], "");
+    let removed = gglib(root.path(), &["model", "remove", "1", "--yes"], "");
 
     assert_eq!(removed, REMOVED);
     assert!(!holds_the_model(root.path()));
@@ -198,7 +198,7 @@ fn a_record_whose_pid_is_another_program_does_not_block_a_removal() {
     takes_sleep_for_llama_server(root.path());
     record_a_server(root.path(), std::process::id());
 
-    let removed = gglib(root.path(), &["model", "remove", "1", "--force"], "");
+    let removed = gglib(root.path(), &["model", "remove", "1", "--yes"], "");
 
     assert_eq!(removed, REMOVED);
     assert!(!holds_the_model(root.path()));
@@ -219,8 +219,8 @@ fn a_server_recorded_under_another_data_root_does_not_block_a_removal_here() {
     let server = StandIn::start();
     record_a_server(there.path(), server.pid());
 
-    let removed = gglib(here.path(), &["model", "remove", "1", "--force"], "");
-    let refused = run(there.path(), &["model", "remove", "1", "--force"], "");
+    let removed = gglib(here.path(), &["model", "remove", "1", "--yes"], "");
+    let refused = run(there.path(), &["model", "remove", "1", "--yes"], "");
 
     assert_eq!(removed, REMOVED);
     assert!(!holds_the_model(here.path()));
@@ -229,7 +229,7 @@ fn a_server_recorded_under_another_data_root_does_not_block_a_removal_here() {
 }
 
 /// An upgrade replaces a model's file, so it is refused as a removal is,
-/// and before anything else: with `--force` or without, nothing is printed
+/// and before anything else: with `--yes` or without, nothing is printed
 /// but the refusal.
 ///
 /// Stopped, the same command gets as far as an upgrade of this model can.
@@ -244,7 +244,7 @@ fn an_upgrade_of_a_model_served_under_this_data_root_is_refused_first() {
     record_a_server(root.path(), server.pid());
 
     for args in [
-        &["model", "upgrade", "1", "--force"][..],
+        &["model", "upgrade", "1", "--yes"][..],
         &["model", "upgrade", "1"],
     ] {
         let out = run(root.path(), args, "");
@@ -259,7 +259,7 @@ fn an_upgrade_of_a_model_served_under_this_data_root_is_refused_first() {
     }
 
     drop(server);
-    let out = run(root.path(), &["model", "upgrade", "1", "--force"], "");
+    let out = run(root.path(), &["model", "upgrade", "1", "--yes"], "");
     assert_eq!(out.status.code(), Some(1), "{}", stderr(&out));
     assert!(
         stderr(&out).contains("Model is not from HuggingFace"),

@@ -233,7 +233,7 @@ Update a model to the latest version from `HuggingFace` Hub.
 **Module:** `update_model.rs`
 
 **Options:**
-- `--force` - Skip confirmation prompt
+- `-y`, `--yes` - Skip confirmation prompt
 
 **Flow:**
 1. Refuse a model that is being served under this data root
@@ -247,7 +247,7 @@ Update a model to the latest version from `HuggingFace` Hub.
 **Example:**
 ```bash
 gglib model upgrade 1
-gglib model upgrade 1 --force
+gglib model upgrade 1 --yes
 ```
 
 ## Architecture Details

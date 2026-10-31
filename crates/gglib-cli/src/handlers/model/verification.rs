@@ -169,7 +169,7 @@ pub(crate) async fn execute_repair(
     ctx: &CliContext,
     identifier: &str,
     shards: Option<String>,
-    force: bool,
+    yes: bool,
 ) -> Result<()> {
     // Resolve name-or-id to a model record.
     let model = resolver::resolve_model_identifier(ctx, identifier).await?;
@@ -187,8 +187,8 @@ pub(crate) async fn execute_repair(
         None
     };
 
-    // Confirmation prompt if not forced
-    if !force {
+    // Confirmation prompt unless --yes answered already
+    if !yes {
         println!();
         println!("This will:");
         println!("  • Delete corrupt or missing model files");

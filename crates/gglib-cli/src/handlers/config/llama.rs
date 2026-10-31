@@ -23,8 +23,8 @@ pub(crate) async fn dispatch(ctx: &CliContext, command: LlamaCommand) -> Result<
         LlamaCommand::Status => {
             gglib_runtime::llama::handle_status().await?;
         }
-        LlamaCommand::Uninstall { force } => {
-            engine::uninstall(ctx, RuntimeKind::Llama, force).await?;
+        LlamaCommand::Uninstall { yes } => {
+            engine::uninstall(ctx, RuntimeKind::Llama, yes).await?;
         }
         LlamaCommand::Detect { json } => {
             llama_detect::execute(json);

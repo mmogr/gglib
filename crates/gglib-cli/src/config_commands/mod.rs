@@ -236,9 +236,9 @@ pub enum SettingsCommand {
     /// Keeps the machine this one joined, the devices it admits, whether and
     /// how it serves remote access, and the proxy's API key.
     Reset {
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        force: bool,
+        /// Answer yes to the confirmation, so nothing is asked
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
     /// Print a stored secret, alone on stdout
     ///

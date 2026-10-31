@@ -58,7 +58,7 @@ async fn two_models(dir: &Path) -> (CliContext, Model, Model) {
         "--frequency-penalty",
         "0.25",
     ];
-    let argv = [&["gglib", "model", "update", &id, "--force"], &edit[..]].concat();
+    let argv = [&["gglib", "model", "update", &id, "--yes"], &edit[..]].concat();
     run(&ctx, &argv).await.expect("the defaults are stored");
     let tuned = stored(&ctx, tuned.id).await;
     (ctx, plain, tuned)

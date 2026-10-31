@@ -17,8 +17,8 @@ use crate::utils::input::prompt_confirmation;
 const KEPT: &str = "the machine this one joined, the devices it admits, \
                     whether and how it serves remote access, and the proxy's API key";
 
-pub(super) async fn handle_reset(ctx: &CliContext, force: bool) -> Result<()> {
-    if !force
+pub(super) async fn handle_reset(ctx: &CliContext, yes: bool) -> Result<()> {
+    if !yes
         && !prompt_confirmation(&format!(
             "Reset every preference to its default? Kept: {KEPT}."
         ))?

@@ -13,7 +13,7 @@ use library::{gglib, library, run, write_gguf};
 const RULE: &str = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
 
 #[test]
-fn a_forced_update_prints_its_preview_and_that_it_updated() {
+fn an_answered_update_prints_its_preview_and_that_it_updated() {
     let root = tempfile::tempdir().expect("temp data dir");
     library(root.path());
 
@@ -27,7 +27,7 @@ fn a_forced_update_prints_its_preview_and_that_it_updated() {
             "Renamed",
             "--temperature",
             "0.7",
-            "--force",
+            "--yes",
         ],
         "",
     );
@@ -39,7 +39,7 @@ fn a_forced_update_prints_its_preview_and_that_it_updated() {
             "Renamed",
             "--unset",
             "temperature",
-            "--force",
+            "--yes",
         ],
         "",
     );
@@ -67,11 +67,11 @@ fn a_forced_update_prints_its_preview_and_that_it_updated() {
 }
 
 #[test]
-fn a_forced_remove_prints_the_one_line() {
+fn an_answered_remove_prints_the_one_line() {
     let root = tempfile::tempdir().expect("temp data dir");
     library(root.path());
 
-    let removed = gglib(root.path(), &["model", "remove", "1", "--force"], "");
+    let removed = gglib(root.path(), &["model", "remove", "1", "--yes"], "");
 
     assert_eq!(
         removed,
@@ -182,7 +182,7 @@ fn a_retag_prints_what_each_pass_changed_and_how_many_models_it_updated() {
     let root = tempfile::tempdir().expect("temp data dir");
     library(root.path());
     let edit = |change: [&str; 2]| {
-        let argv = [&["model", "update", "1"][..], &change, &["--force"]].concat();
+        let argv = [&["model", "update", "1"][..], &change, &["--yes"]].concat();
         gglib(root.path(), &argv, "");
     };
 

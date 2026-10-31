@@ -27,9 +27,9 @@ pub enum SdCommand {
 
     /// Remove stable-diffusion.cpp's installation
     Uninstall {
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        force: bool,
+        /// Answer yes to the confirmation, so nothing is asked
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
 }
 
@@ -106,14 +106,18 @@ mod tests {
     }
 
     #[test]
-    fn uninstall_asks_unless_forced() {
+    fn uninstall_asks_unless_answered() {
         assert!(matches!(
             parsed(&["gglib", "config", "sd", "uninstall"]),
-            SdCommand::Uninstall { force: false }
+            SdCommand::Uninstall { yes: false }
         ));
         assert!(matches!(
-            parsed(&["gglib", "config", "sd", "uninstall", "--force"]),
-            SdCommand::Uninstall { force: true }
+            parsed(&["gglib", "config", "sd", "uninstall", "--yes"]),
+            SdCommand::Uninstall { yes: true }
+        ));
+        assert!(matches!(
+            parsed(&["gglib", "config", "sd", "uninstall", "-y"]),
+            SdCommand::Uninstall { yes: true }
         ));
     }
 

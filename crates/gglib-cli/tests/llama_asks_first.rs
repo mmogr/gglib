@@ -152,6 +152,36 @@ fn uninstall_told_yes_removes_the_binaries_the_checkout_and_the_record() {
     );
 }
 
+/// `--yes` is the answer given up front: nothing is asked, so with nobody
+/// to ask (input closed, which is a no) it still removes everything.
+#[test]
+fn uninstall_with_yes_asks_nothing_and_removes_everything() {
+    let root = tempfile::tempdir().unwrap();
+    install(root.path());
+
+    let out = gglib(
+        root.path(),
+        &["config", "llama", "uninstall", "--yes"],
+        None,
+    );
+
+    assert!(out.status.success(), "{}", text(&out));
+    assert!(
+        !String::from_utf8_lossy(&out.stdout).contains("Continue?"),
+        "{}",
+        text(&out)
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stdout).ends_with("llama.cpp uninstalled successfully.\n"),
+        "{}",
+        text(&out)
+    );
+    assert!(
+        !root.path().join(".llama").exists(),
+        "the folder it emptied"
+    );
+}
+
 /// A source build is refused before anything is cloned when the tools that
 /// build it are missing, with how to install them.
 #[test]

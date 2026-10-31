@@ -60,9 +60,9 @@ pub enum McpCommand {
         /// Server ID or name
         server: String,
 
-        /// Skip confirmation prompt
-        #[arg(short, long)]
-        force: bool,
+        /// Answer yes to the confirmation, so nothing is asked
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
 
     /// Start an MCP server

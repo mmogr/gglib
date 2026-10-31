@@ -100,8 +100,8 @@ async fn dispatch_with(
         ModelCommand::List(args) => {
             list::execute(target, ctx, ops, args).await?;
         }
-        ModelCommand::Remove { identifier, force } => {
-            remove::execute(ctx, ops, &identifier, force).await?;
+        ModelCommand::Remove { identifier, yes } => {
+            remove::execute(ctx, ops, &identifier, yes).await?;
         }
         ModelCommand::Update {
             identifier,
@@ -133,7 +133,7 @@ async fn dispatch_with(
             unset,
             clear_inference_defaults,
             dry_run,
-            force,
+            yes,
             projector,
             components,
         } => {
@@ -167,7 +167,7 @@ async fn dispatch_with(
                 unset,
                 clear_inference_defaults,
                 dry_run,
-                force,
+                yes,
                 projector,
                 components,
             };
@@ -189,9 +189,9 @@ async fn dispatch_with(
         ModelCommand::Repair {
             identifier,
             shards,
-            force,
+            yes,
         } => {
-            verification::execute_repair(ctx, &identifier, shards, force).await?;
+            verification::execute_repair(ctx, &identifier, shards, yes).await?;
         }
         ModelCommand::Download {
             model_id,
@@ -224,8 +224,8 @@ async fn dispatch_with(
         ModelCommand::CheckUpdates { identifier, all } => {
             download::check_updates(ctx, identifier.as_deref(), all).await?;
         }
-        ModelCommand::Upgrade { identifier, force } => {
-            download::update_model(ctx, &identifier, force).await?;
+        ModelCommand::Upgrade { identifier, yes } => {
+            download::update_model(ctx, &identifier, yes).await?;
         }
         ModelCommand::Search {
             query,

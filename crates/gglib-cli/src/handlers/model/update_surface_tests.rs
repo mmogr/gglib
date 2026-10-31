@@ -48,7 +48,7 @@ async fn from_both_surfaces(flags: &[&str], body: Value) -> (Model, Model) {
     let dir = tempfile::tempdir().unwrap();
     let (ctx, seed, _heard, ops) = seeded_library(&dir).await;
     let id = seed.id.to_string();
-    let argv = [&["gglib", "model", "update", &id, "--force"], flags].concat();
+    let argv = [&["gglib", "model", "update", &id, "--yes"], flags].concat();
 
     run_with(&ctx, &ops, &argv).await.expect("the command");
     let from_cli = stored(&ctx, seed.id).await;
@@ -154,7 +154,7 @@ async fn the_command_announces_the_row_it_stored() {
     assert!(heard.events().is_empty(), "{:?}", heard.events());
     assert_eq!(stored(&ctx, seed.id).await.name, seed.name);
 
-    run_with(&ctx, &ops, &[&rename[..], &["--force"]].concat())
+    run_with(&ctx, &ops, &[&rename[..], &["--yes"]].concat())
         .await
         .expect("the command");
 
@@ -174,7 +174,7 @@ async fn metadata_flags_store_the_map_the_model_holds_afterwards() {
     let dir = tempfile::tempdir().unwrap();
     let (ctx, seed, _heard, ops) = seeded_library(&dir).await;
     let id = seed.id.to_string();
-    let update = ["gglib", "model", "update", &id, "--force"];
+    let update = ["gglib", "model", "update", &id, "--yes"];
     let had = seed.metadata.len();
 
     run_with(&ctx, &ops, &[&update[..], &["--metadata", "a=1"]].concat())
@@ -244,7 +244,7 @@ async fn clearing_an_edited_reasoning_model_gives_back_its_import() {
     );
     let id = model.id.to_string();
     let update = |flags: &[&'static str]| {
-        let mut argv = vec!["gglib", "model", "update", id.as_str(), "--force"];
+        let mut argv = vec!["gglib", "model", "update", id.as_str(), "--yes"];
         argv.extend_from_slice(flags);
         argv
     };
