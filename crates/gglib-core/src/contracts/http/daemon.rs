@@ -49,6 +49,20 @@ pub const SERVERS_START_PATH: &str = "/api/servers/start";
 /// Ask the daemon to shut down.
 pub const DAEMON_SHUTDOWN_PATH: &str = "/api/daemon/shutdown";
 
+/// The daemon's MCP servers, each with its status and, while it runs, its
+/// tools: `GET` lists them.
+pub const MCP_SERVERS_PATH: &str = "/api/mcp/servers";
+
+/// Start the daemon's copy of MCP server `id`, interpolating it into
+/// [`MCP_SERVERS_PATH`]: `POST` answers the server with its tools.
+#[must_use]
+pub fn mcp_server_start_path(id: i64) -> String {
+    format!("{MCP_SERVERS_PATH}/{id}/start")
+}
+
+/// The verbs [`mcp_server_start_path`] is called with.
+pub const MCP_SERVER_START_METHODS: &[&str] = &["POST"];
+
 /// A generation turn on the daemon's gate, held while the connection is
 /// open.
 ///
@@ -291,6 +305,7 @@ pub const CLI_ROUTE_CONTRACT: &[(&[&str], &str)] = &[
     (&["GET"], SERVERS_LIST_PATH),
     (&["POST"], SERVERS_START_PATH),
     (&["POST"], DAEMON_SHUTDOWN_PATH),
+    (&["GET"], MCP_SERVERS_PATH),
     (&["POST"], EVENTS_PATH),
     (&["POST"], REMOTE_ENABLE_PATH),
     (&["POST"], REMOTE_DISABLE_PATH),

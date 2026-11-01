@@ -8,8 +8,8 @@
 
 use std::time::Duration;
 
-use anyhow::{Result, anyhow};
-use gglib_app_services::types::{QueueDownloadResponse, ServerInfo};
+use anyhow::{Context as _, Result, anyhow};
+use gglib_app_services::types::{McpServerInfo, QueueDownloadResponse, ServerInfo};
 use gglib_core::download::{DownloadId, QueueSnapshot};
 
 use super::wire::{
@@ -114,6 +114,33 @@ impl DaemonHandle {
             .timeout(Duration::from_secs(5))
             .send()
             .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// The daemon's MCP servers: each one's status in the daemon, and the
+    /// tools of each one running there, which are the tools its chats get.
+    pub(crate) async fn mcp_servers(&self) -> Result<Vec<McpServerInfo>> {
+        let response = self
+            .get(paths::MCP_SERVERS_PATH)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await?;
+        Ok(Self::expect_ok(response).await?.json().await?)
+    }
+
+    /// Start the daemon's copy of MCP server `id`, answering it with its
+    /// tools.
+    ///
+    /// Long timeout: the daemon resolves the command, spawns the process and
+    /// waits up to 30 s each for its `initialize` and `tools/list` replies
+    /// before answering.
+    pub(crate) async fn mcp_start(&self, id: i64) -> Result<McpServerInfo> {
+        let response = self
+            .post(&paths::mcp_server_start_path(id))
+            .timeout(Duration::from_secs(90))
+            .send()
+            .await
+            .context("the daemon did not answer while starting the MCP server")?;
         Ok(Self::expect_ok(response).await?.json().await?)
     }
 

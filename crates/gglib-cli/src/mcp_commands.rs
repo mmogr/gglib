@@ -7,7 +7,8 @@ use clap::Subcommand;
 /// MCP server management commands.
 #[derive(Subcommand)]
 pub enum McpCommand {
-    /// List all configured MCP servers with status
+    /// List all configured MCP servers, with each one's status in the
+    /// daemon when it is running
     List,
 
     /// Add a new MCP server
@@ -65,18 +66,6 @@ pub enum McpCommand {
         yes: bool,
     },
 
-    /// Start an MCP server
-    Start {
-        /// Server ID or name
-        server: String,
-    },
-
-    /// Stop a running MCP server
-    Stop {
-        /// Server ID or name
-        server: String,
-    },
-
     /// Enable an MCP server (include tools in chat)
     Enable {
         /// Server ID or name
@@ -104,7 +93,8 @@ pub enum McpCommand {
         servers: Vec<String>,
     },
 
-    /// List tools exposed by a running MCP server
+    /// List the tools the daemon's copy of a server offers its chats,
+    /// starting it there if it is not running
     Tools {
         /// Server ID or name
         server: String,

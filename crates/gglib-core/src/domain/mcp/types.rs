@@ -19,8 +19,8 @@ pub enum McpLifecycle {
     /// This is the default: no background process until something actually needs the server.
     #[default]
     Lazy,
-    /// Never start automatically. The server must be started explicitly via the
-    /// CLI (`gglib mcp start`), the REST API, or the GUI.
+    /// Never start automatically. The server must be started explicitly via
+    /// `gglib mcp tools`, the REST API, or the GUI.
     Manual,
 }
 

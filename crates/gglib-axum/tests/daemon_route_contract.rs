@@ -157,6 +157,10 @@ async fn every_daemon_path_the_cli_calls_is_routed() {
     if let Some(complaint) = check(&app, daemon::MODEL_REPAIR_METHODS, &repair).await {
         broken.push(format!("  {complaint}"));
     }
+    let mcp_start = daemon::mcp_server_start_path(1);
+    if let Some(complaint) = check(&app, daemon::MCP_SERVER_START_METHODS, &mcp_start).await {
+        broken.push(format!("  {complaint}"));
+    }
     for (methods, path) in [
         (daemon::RUN_METHODS, daemon::run_path("run-1")),
         (
