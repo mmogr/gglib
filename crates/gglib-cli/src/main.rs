@@ -6,13 +6,11 @@
 //! See [`gglib_cli::dispatch`] for command routing and
 //! [`gglib_cli::bootstrap`] for dependency wiring.
 
-use clap::Parser;
-
-use gglib_cli::{Cli, bootstrap, dispatch};
+use gglib_cli::{bootstrap, dispatch, parse};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
+    let (cli, remote) = parse();
     gglib_core::telemetry::init_tracing(cli.verbose)?;
     let ctx = bootstrap().await?;
 
@@ -22,5 +20,5 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     };
 
-    dispatch(&ctx, command, cli.verbose, cli.remote).await
+    dispatch(&ctx, command, cli.verbose, remote).await
 }

@@ -2,7 +2,7 @@
 
 // Nothing in the workspace depends on this crate: its only outside consumers
 // are its own `gglib` binary and its own `tests/`, and between them they need
-// the eleven names re-exported below and nothing else. So the module tree is
+// the twelve names re-exported below and nothing else. So the module tree is
 // crate-internal and the re-export list *is* the public API — which is what
 // lets `unreachable_pub` and then `dead_code` see inside `handlers/`.
 pub(crate) mod benchmark_commands;
@@ -28,6 +28,7 @@ pub(crate) mod profile_args;
 pub(crate) mod projector_args;
 pub(crate) mod proxy_bind_args;
 pub(crate) mod reasoning_args;
+pub(crate) mod remote_flag;
 pub(crate) mod sampling_params;
 pub(crate) mod sd_commands;
 pub(crate) mod shared_args;
@@ -46,6 +47,7 @@ pub use dispatch::dispatch;
 pub use llama_commands::LlamaCommand;
 pub use model_commands::ModelCommand;
 pub use parser::Cli;
+pub use remote_flag::parse;
 // Exported for `tests/cli_parity.rs` alone, and for one reason: the flag-parity
 // guard derives the expected flag set from clap's own introspection of this
 // type (`SamplingArgs::augment_args`) instead of a hand-written list. The list

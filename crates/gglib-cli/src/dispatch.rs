@@ -24,9 +24,10 @@ use crate::handlers;
 /// * `command` — The command to execute, as parsed by Clap.
 /// * `verbose` — Value of the global `--verbose` flag; forwarded only to
 ///   handlers that expose a verbosity knob.
-/// * `remote`  — Value of the global `--remote` flag (ADR 0013). Becomes the
-///   [`Target`] every command that uses a machine is told; every other
-///   command refuses it here, in one sentence, before anything runs.
+/// * `remote`  — Whether `--remote` was typed (ADR 0028). Becomes the
+///   [`Target`] every command that uses a machine is told; a command that
+///   does not declare the flag never gets here with it, because
+///   [`parse`](crate::remote_flag::parse) refused it first.
 #[expect(
     clippy::too_many_lines,
     reason = "one arm per command, each a call into its handler; the match is the command table"
@@ -38,7 +39,6 @@ pub async fn dispatch(
     remote: bool,
 ) -> Result<()> {
     let target = Target::from_flag(remote);
-    target.admit(&command)?;
     match command {
         // ── Getting started ─────────────────────────────────────────────────
         Commands::Up { yes, model, port } => {
@@ -65,6 +65,7 @@ pub async fn dispatch(
             mtp,
             cache,
             access,
+            remote: _,
         } => {
             handlers::inference::serve::execute(
                 ctx,
@@ -90,6 +91,7 @@ pub async fn dispatch(
             retry,
             no_tools,
             upstream,
+            remote: _,
             max_iterations,
             tools,
             limits,
@@ -146,6 +148,7 @@ pub async fn dispatch(
             profile,
             no_tools,
             upstream,
+            remote: _,
             max_iterations,
             tools,
             limits,
@@ -201,7 +204,7 @@ pub async fn dispatch(
             crate::commands::DaemonCommand::Status => {
                 handlers::daemon::status(ctx).await?;
             }
-            crate::commands::DaemonCommand::Stop { yes } => {
+            crate::commands::DaemonCommand::Stop { yes, remote: _ } => {
                 handlers::daemon::stop(ctx, target, yes).await?;
             }
         },
@@ -220,6 +223,7 @@ pub async fn dispatch(
                         host: dash_host,
                         port: dash_port,
                         api_key,
+                        remote: _,
                     } => {
                         let (dash_host, dash_port, key) = target
                             .proxy_endpoint(ctx, dash_host, dash_port, api_key)
@@ -232,6 +236,7 @@ pub async fn dispatch(
                         port: clear_port,
                         session_id,
                         api_key,
+                        remote: _,
                     } => {
                         let (clear_host, clear_port, key) = target
                             .proxy_endpoint(ctx, clear_host, clear_port, api_key)

@@ -30,6 +30,7 @@ fn flags(client: &str, extra: &[&str]) -> (String, Option<u16>, Option<String>) 
                         host,
                         port,
                         api_key,
+                        ..
                     }
                     | ProxyCommand::CacheClear {
                         host,

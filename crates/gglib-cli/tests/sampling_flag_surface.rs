@@ -38,7 +38,8 @@ mod flag_surface;
 use flag_surface::{assert_both_expose, long_flags, long_flags_at, owned, sampling_flags};
 
 /// Every long flag on `gglib serve` that does not come from `SamplingArgs`:
-/// `ContextArgs`, `ServeOptions`, `MtpArgs`, `CacheArgs` and `AccessArgs`.
+/// `ContextArgs`, `ServeOptions`, `MtpArgs`, `CacheArgs`, `AccessArgs` and
+/// `RemoteFlag`.
 ///
 /// Transcribed, because it is the complement of a derived set and nothing can
 /// derive it — see the module docs. Keeping it current is the price of the
@@ -59,6 +60,8 @@ const SERVE_NON_SAMPLING: &[&str] = &[
     "mtp-draft-n-max",
     "mtp-draft-p-min",
     "port",
+    // Loads the model on the paired machine instead (ADR 0028).
+    "remote",
     "slot-dir",
 ];
 

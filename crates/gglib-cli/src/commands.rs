@@ -15,6 +15,7 @@ use crate::mcp_commands::McpCommand;
 use crate::model_commands::ModelCommand;
 use crate::profile_args::ProfileArgs;
 use crate::proxy_bind_args::ProxyBindArgs;
+use crate::remote_flag::RemoteFlag;
 use crate::shared_args::{
     AccessArgs, CacheArgs, ContextArgs, MtpArgs, RetryArgs, SamplingArgs, ServeOptions,
 };
@@ -111,6 +112,8 @@ pub enum Commands {
         cache: CacheArgs,
         #[command(flatten)]
         access: AccessArgs,
+        #[command(flatten)]
+        remote: RemoteFlag,
     },
 
     /// Chat with a model interactively, or manage chat history
@@ -137,6 +140,8 @@ pub enum Commands {
         no_tools: bool,
         #[command(flatten)]
         upstream: UpstreamArgs,
+        #[command(flatten)]
+        remote: RemoteFlag,
         /// Maximum agent iterations before giving up
         /// [default: the limit the chat saved, with --continue; else the
         /// persisted setting, or 25 if unset]
@@ -225,6 +230,8 @@ pub enum Commands {
         no_tools: bool,
         #[command(flatten)]
         upstream: UpstreamArgs,
+        #[command(flatten)]
+        remote: RemoteFlag,
         /// Maximum agent iterations
         /// [default: persisted setting, or 25 if unset]
         #[arg(long = "max-iterations")]

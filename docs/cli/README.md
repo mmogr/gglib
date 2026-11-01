@@ -38,9 +38,13 @@ reported as an error.
 
 | Option | Effect |
 |---|---|
-| `--remote` | Do this on the machine this one is paired with; `gglib remote status` names it ([Remote access](../remote.md)) |
 | `-v`, `--verbose` | Debug-level logging, and a log file under `logs/` |
 | `-h`, `--help`; `-V`, `--version` | `--version` ends with the commit the binary was built from |
+
+`--remote`, do this on the machine this one is paired with, is not one of
+them: it goes after the command it is for, and only the commands that reach
+the paired machine take it and show it in `--help` ([Remote
+access](../remote.md#using-it)).
 
 ## The commands
 

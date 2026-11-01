@@ -43,6 +43,7 @@ fn serve(argv: &[&str]) -> Serve {
         mtp,
         cache,
         access,
+        remote: _,
     }) = cli.command
     else {
         panic!("{argv:?} is not `serve`");

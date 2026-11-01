@@ -1,7 +1,8 @@
 //! Which machine a command is for.
 //!
-//! ADR 0013. `--remote` is one flag, declared once on the root parser and
-//! accepted after every subcommand, and this is the value it becomes. Every
+//! ADR 0013. `--remote` is one flag, declared on each command that reaches
+//! the paired machine ([`RemoteFlag`](crate::remote_flag::RemoteFlag), ADR
+//! 0028), and this is the value it becomes. Every
 //! question whose answer depends on which machine a turn runs on is asked
 //! of a [`Target`] and answered here — which upstream, whether this
 //! machine's catalogue applies, how the request pipeline shapes the turn,
@@ -16,8 +17,8 @@
 //! command could run on is an arm in each rather than a search.
 //!
 //! What `--remote` reaches is [`reach`]'s table: a command either *uses* a
-//! machine or is about this one, and a command that is about this one
-//! refuses the flag with a sentence rather than ignoring it.
+//! machine, and declares the flag, or is about this one, and refuses the
+//! flag with a sentence rather than ignoring it.
 
 use anyhow::{Result, bail};
 use gglib_core::domain::{Model, ModelAction};
@@ -126,7 +127,7 @@ const THE_PAGE_SHOWS_BOTH: &str = "the page it opens already lists the paired ma
 /// The commands `--remote` reaches, as the refusal names them. A list
 /// rather than derived from [`reach`], so that the sentence a person reads
 /// is written by a person and stays in the order they would say it.
-const REACHES: &str =
+pub(crate) const REACHES: &str =
     "chat, q, serve, model list, model inspect, proxy dashboard, proxy cache-clear, daemon stop";
 
 impl Target {

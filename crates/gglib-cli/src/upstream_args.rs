@@ -7,10 +7,10 @@ use clap::Args;
 ///
 /// Nothing set asks the daemon to start the model here; `--port` reuses
 /// one. Which *machine* a turn runs on is not this struct's question:
-/// that is the global `--remote`, declared once on the root parser and
-/// carried as a [`Target`](crate::target::Target) (ADR 0013). The two still
-/// exclude each other, because a port here and a machine there name
-/// different places.
+/// that is `--remote` ([`RemoteFlag`](crate::remote_flag::RemoteFlag)),
+/// declared beside it on `chat` and `question` and carried as a
+/// [`Target`](crate::target::Target) (ADR 0028). The two exclude each
+/// other, because a port here and a machine there name different places.
 #[derive(Args, Debug, Clone, Default)]
 pub struct UpstreamArgs {
     /// Reuse an already-running llama-server on this port (skips auto-start)
