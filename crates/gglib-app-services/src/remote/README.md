@@ -334,7 +334,10 @@ could not be written, the sentence says so and names nothing to delete.
 Every request to the far machine goes through one `FarProxy`, which
 `RemoteOps::far` builds from the live connection and `far_credentials`: the
 stored key, only when the stored pairing names the machine connected to, by
-fingerprint as `join` checks it. A chat, a model read, a load and the stop
+fingerprint as `join` checks it. The CLI builds the same proxy the same way,
+from the connection its daemon reports, when it talks to the far machine
+directly (a turn, `proxy dashboard`, `proxy cache-clear`), so a route the
+tunnel opens is one method here whichever surface asks it. A chat, a model read, a load and the stop
 all take their key from there, so a key one machine issued is never sent to
 another. `RemoteOps::far_for` is the same proxy for a `Machine` a caller holds,
 refused when that is this machine or no longer the one connected to.

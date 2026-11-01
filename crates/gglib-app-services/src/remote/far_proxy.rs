@@ -161,6 +161,20 @@ impl FarProxy {
         self.name.as_deref().unwrap_or(UNNAMED_PAIRED)
     }
 
+    /// `http://127.0.0.1:<port>/v1`, as the daemon reports it: the URL a
+    /// client pastes, and the one a sentence shows.
+    #[must_use]
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    /// The tunnel's loopback port, for a client that takes a host and a
+    /// port; `None` for a base URL that names none.
+    #[must_use]
+    pub fn port(&self) -> Option<u16> {
+        reqwest::Url::parse(&self.base_url).ok()?.port()
+    }
+
     /// `http://127.0.0.1:<port>`, the far proxy without the `/v1`: where an
     /// agent turn's completion adapter points, since it adds the `/v1` itself.
     #[must_use]

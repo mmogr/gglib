@@ -43,6 +43,8 @@ fn it_names_its_machine_and_its_root() {
         }
     );
     assert_eq!(far.server_root(), "http://127.0.0.1:9");
+    assert_eq!(far.base_url(), NOWHERE);
+    assert_eq!(far.port(), Some(9));
     assert_eq!(far.shown_name(), gglib_core::domain::UNNAMED_PAIRED);
     assert_eq!(far.far_machine().name, gglib_core::domain::UNNAMED_PAIRED);
 }
