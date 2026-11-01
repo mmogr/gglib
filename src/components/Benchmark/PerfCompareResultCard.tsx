@@ -16,6 +16,11 @@ export interface ModelResultState {
   status: 'pending' | 'running' | 'complete' | 'failed';
   /** Throttle-buffered text delta accumulation. */
   liveText: string;
+  /**
+   * A thinking model's reasoning, which is not shown: `undefined` when none
+   * was seen, `null` while it runs, then how long it took in seconds.
+   */
+  thoughtFor?: number | null;
   result?: BenchmarkModelResult;
   error?: string;
 }
@@ -85,6 +90,12 @@ export const PerfCompareResultCard: FC<PerfCompareResultCardProps> = ({ model: m
         <span className="font-medium text-text truncate flex-1">{m.modelName}</span>
         <span className={cn('text-xs font-medium', statusColor)}>{statusLabel}</span>
       </div>
+
+      {m.thoughtFor !== undefined && m.status !== 'failed' && (
+        <div className="text-xs text-text-muted font-mono">
+          {m.thoughtFor === null ? 'thinking…' : `thought for ${m.thoughtFor.toFixed(1)}s`}
+        </div>
+      )}
 
       {m.status === 'running' && m.liveText && showLiveText && (
         <div className="bg-surface-elevated rounded-md p-base text-sm text-text whitespace-pre-wrap font-mono leading-relaxed max-h-[300px] overflow-y-auto">

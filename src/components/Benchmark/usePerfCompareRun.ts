@@ -70,6 +70,15 @@ export function usePerfCompareRun(models: GgufModel[], onRunComplete: () => void
           scheduleFlush();
           break;
 
+        case 'model_thinking':
+          setRunState((prev) => ({
+            ...prev,
+            models: prev.models.map((m) =>
+              m.modelId === event.model_id ? { ...m, thoughtFor: event.seconds } : m,
+            ),
+          }));
+          break;
+
         case 'model_complete':
           setRunState((prev) => ({
             ...prev,
