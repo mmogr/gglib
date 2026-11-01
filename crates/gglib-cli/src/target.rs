@@ -264,3 +264,7 @@ pub(crate) struct Upstream {
 #[cfg(test)]
 #[path = "target_tests.rs"]
 pub(crate) mod target_tests;
+
+#[cfg(test)]
+#[path = "target_tunnel_tests.rs"]
+mod target_tunnel_tests;
