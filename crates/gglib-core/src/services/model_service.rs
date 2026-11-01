@@ -89,7 +89,7 @@ impl ModelService {
         self.repo.list().await.map_err(CoreError::from)
     }
 
-    /// Get a model by its identifier (numeric database id, then exact name).
+    /// Get a model by its identifier: id, exact name or listed `name@…` id.
     ///
     /// Thin wrapper over [`ModelRepository::get_by_identifier`], which owns the
     /// lookup-key policy so this service and the `ModelCatalogPort` adapter

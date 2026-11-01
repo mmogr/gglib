@@ -73,7 +73,7 @@ crates/gglib-cli/src/handlers/model/update_surface_tests.rs 304
 crates/gglib-cli/src/handlers/proxy_dashboard/render.rs 362
 crates/gglib-cli/src/handlers/proxy_dashboard/render_tests.rs 534
 crates/gglib-cli/src/handlers/up/choose.rs 351
-crates/gglib-cli/src/handlers/up/mod.rs 331
+crates/gglib-cli/src/handlers/up/mod.rs 380
 crates/gglib-cli/src/handlers/up/probe.rs 310
 crates/gglib-cli/src/handlers/up/warm.rs 351
 crates/gglib-cli/src/model_commands.rs 399
@@ -108,6 +108,7 @@ crates/gglib-core/src/domain/inference_tests.rs 1283
 crates/gglib-core/src/domain/kv_estimate.rs 341
 crates/gglib-core/src/domain/mcp/types.rs 583
 crates/gglib-core/src/domain/model.rs 426
+crates/gglib-core/src/domain/model_naming.rs 366
 crates/gglib-core/src/domain/model_sampling.rs 674
 crates/gglib-core/src/domain/query.rs 408
 crates/gglib-core/src/domain/recommendation.rs 407
@@ -159,7 +160,7 @@ crates/gglib-db/src/repositories/sqlite_chat_history_repository.rs 363
 crates/gglib-db/src/repositories/sqlite_chat_history_repository_tests.rs 322
 crates/gglib-db/src/repositories/sqlite_mcp_repository.rs 375
 crates/gglib-db/src/repositories/sqlite_mcp_repository_tests.rs 432
-crates/gglib-db/src/repositories/sqlite_model_repository.rs 1061
+crates/gglib-db/src/repositories/sqlite_model_repository.rs 1082
 crates/gglib-db/src/repositories/sqlite_model_repository_components_tests.rs 372
 crates/gglib-db/src/repositories/sqlite_settings_repository_tests.rs 307
 crates/gglib-db/src/setup.rs 753
@@ -236,6 +237,7 @@ crates/gglib-proxy/tests/integration_generation.rs 325
 crates/gglib-proxy/tests/integration_loop_guard.rs 376
 crates/gglib-proxy/tests/integration_mcp_drawing.rs 458
 crates/gglib-proxy/tests/integration_mcp_gateway.rs 469
+crates/gglib-proxy/tests/integration_models_by_id.rs 405
 crates/gglib-proxy/tests/integration_proxy_pipeline.rs 644
 crates/gglib-proxy/tests/integration_slot_roundtrip.rs 584
 crates/gglib-proxy/tests/integration_turns.rs 463

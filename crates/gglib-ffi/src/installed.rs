@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use gglib_core::domain::capability_tags::capabilities_of;
-use gglib_core::domain::{Model, ModelFolder};
+use gglib_core::domain::{ListedModel, Model, ModelFolder, openai_model_ids};
 use gglib_core::ports::{ModelFilesRepositoryPort, ModelRepository};
 use gglib_core::services::{resident_bytes, total_model_bytes, weights_paths};
 
@@ -17,9 +17,13 @@ use crate::verdict::{FitVerdict, ModelShape};
 pub struct InstalledModel {
     /// Its id in the library, which [`crate::Library::remove`] takes.
     pub id: i64,
-    /// Its name, which a served engine's model list calls it by. Two
-    /// quantizations of one model share it; the id tells them apart.
+    /// Its name. Two quantizations of one model share it; the id tells them
+    /// apart.
     pub name: String,
+    /// What a served engine's model list calls it by, and what a chat
+    /// request names it with: the name, or `name@QUANT` (`name@<id>`) when
+    /// another model shares the name (#1648).
+    pub listed_id: String,
     /// Its quantization (`Q4_K_M`, `Q8_0` and so on), when the library
     /// recorded one.
     pub quantization: Option<String>,
@@ -43,11 +47,12 @@ pub(crate) async fn installed(
     models: &dyn ModelRepository,
     budget: Option<u64>,
 ) -> Result<Vec<InstalledModel>, GglibError> {
+    let models = models.list().await?;
+    let listed_ids = openai_model_ids(&models.iter().map(ListedModel::from).collect::<Vec<_>>());
     Ok(models
-        .list()
-        .await?
         .into_iter()
-        .map(|model| {
+        .zip(listed_ids)
+        .map(|(model, listed_id)| {
             let weights = Some(total_model_bytes(&model.file_path));
             let (verdict, _) = ModelShape::of_model(&model).judge(weights, budget);
             InstalledModel {
@@ -64,6 +69,7 @@ pub(crate) async fn installed(
                 .collect(),
                 verdict,
                 name: model.name,
+                listed_id,
                 quantization: model.quantization,
                 repo: model.hf_repo_id,
             }

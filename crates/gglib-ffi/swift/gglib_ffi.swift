@@ -1947,10 +1947,16 @@ public struct InstalledModel: Equatable, Hashable {
      */
     public var id: Int64
     /**
-     * Its name, which a served engine's model list calls it by. Two
-     * quantizations of one model share it; the id tells them apart.
+     * Its name. Two quantizations of one model share it; the id tells them
+     * apart.
      */
     public var name: String
+    /**
+     * What a served engine's model list calls it by, and what a chat
+     * request names it with: the name, or `name@QUANT` (`name@<id>`) when
+     * another model shares the name (#1648).
+     */
+    public var listedId: String
     /**
      * Its quantization (`Q4_K_M`, `Q8_0` and so on), when the library
      * recorded one.
@@ -1987,9 +1993,14 @@ public struct InstalledModel: Equatable, Hashable {
          * Its id in the library, which [`crate::Library::remove`] takes.
          */id: Int64, 
         /**
-         * Its name, which a served engine's model list calls it by. Two
-         * quantizations of one model share it; the id tells them apart.
+         * Its name. Two quantizations of one model share it; the id tells them
+         * apart.
          */name: String, 
+        /**
+         * What a served engine's model list calls it by, and what a chat
+         * request names it with: the name, or `name@QUANT` (`name@<id>`) when
+         * another model shares the name (#1648).
+         */listedId: String, 
         /**
          * Its quantization (`Q4_K_M`, `Q8_0` and so on), when the library
          * recorded one.
@@ -2014,6 +2025,7 @@ public struct InstalledModel: Equatable, Hashable {
          */verdict: FitVerdict) {
         self.id = id
         self.name = name
+        self.listedId = listedId
         self.quantization = quantization
         self.repo = repo
         self.bytes = bytes
@@ -2040,6 +2052,7 @@ public struct FfiConverterTypeInstalledModel: FfiConverterRustBuffer {
             try InstalledModel(
                 id: FfiConverterInt64.read(from: &buf), 
                 name: FfiConverterString.read(from: &buf), 
+                listedId: FfiConverterString.read(from: &buf), 
                 quantization: FfiConverterOptionString.read(from: &buf), 
                 repo: FfiConverterOptionString.read(from: &buf), 
                 bytes: FfiConverterUInt64.read(from: &buf), 
@@ -2052,6 +2065,7 @@ public struct FfiConverterTypeInstalledModel: FfiConverterRustBuffer {
     public static func write(_ value: InstalledModel, into buf: inout [UInt8]) {
         FfiConverterInt64.write(value.id, into: &buf)
         FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.listedId, into: &buf)
         FfiConverterOptionString.write(value.quantization, into: &buf)
         FfiConverterOptionString.write(value.repo, into: &buf)
         FfiConverterUInt64.write(value.bytes, into: &buf)

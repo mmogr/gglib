@@ -4,13 +4,16 @@
 //! A name can belong to more than one model, so the running model's live
 //! context window and the pinned filter are both matched by id: two models
 //! named `qwen` stay two entries, and only the one that is running, or
-//! pinned, is treated as such. The list also names this machine, when the
-//! serve's `HostFacts` can, which `/health` never does.
+//! pinned, is treated as such. Each is listed under an id of its own,
+//! `qwen@Q6_K` or `qwen@2`, and a chat that sends one back is admitted as
+//! that model. The list also names this machine, when the serve's
+//! `HostFacts` can, which `/health` never does.
 
 mod fixtures;
 
-use std::sync::Arc;
+use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use reqwest::Client;
@@ -19,6 +22,8 @@ use serde_json::Value;
 use gglib_core::ports::{
     Admission, LaunchOverrides, ModelRuntimeError, ModelRuntimePort, PinnedSpec, RunningTarget,
 };
+use gglib_core::services::CatalogPortImpl;
+use gglib_core::{Model, ModelRepository, NewModel, RepositoryError};
 use gglib_proxy::{HostFacts, ServeConfig};
 
 use fixtures::common::{settings_listing, spawn_proxy_with_catalog, spawn_proxy_with_settings};
@@ -73,24 +78,21 @@ impl ModelRuntimePort for Running {
     }
 }
 
-/// The `context_window` of every entry `/v1/models` lists, in order, with the
-/// second of two models named `qwen` running.
-async fn context_windows(pinned: bool) -> Vec<Option<u64>> {
+/// Every entry `/v1/models` lists, in order, with the second of two models
+/// named `qwen` running.
+async fn twin_entries(pinned: bool) -> Vec<Value> {
     let catalog = StaticCatalog::numbered(&[(1, "qwen"), (2, "qwen")]);
     let runtime = Arc::new(Running { id: 2, pinned });
     let (base, cancel) = spawn_proxy_with_catalog(runtime, Arc::new(catalog)).await;
-    let body: Value = Client::new()
-        .get(format!("{base}/v1/models"))
-        .send()
-        .await
-        .expect("the proxy answers")
-        .json()
-        .await
-        .expect("json");
+    let body = get_json(&base, "/v1/models").await;
     cancel.cancel();
-    body["data"]
-        .as_array()
-        .expect("a list")
+    body["data"].as_array().expect("a list").clone()
+}
+
+/// The `context_window` of every entry [`twin_entries`] lists.
+async fn context_windows(pinned: bool) -> Vec<Option<u64>> {
+    twin_entries(pinned)
+        .await
         .iter()
         .map(|m| m["context_window"].as_u64())
         .collect()
@@ -115,7 +117,8 @@ async fn a_pinned_endpoint_keeps_only_the_pinned_id() {
 }
 
 /// Every entry carries its catalog id; a profile variant carries its base's
-/// and names the profile. The `id` a client sends stays the name.
+/// and names the profile. A name no other model has is the `id` a client
+/// sends.
 #[tokio::test]
 async fn each_entry_carries_its_catalog_id_and_variants_share_it() {
     let catalog = StaticCatalog::numbered(&[(5, "qwen"), (9, "mistral")]);
@@ -160,6 +163,166 @@ async fn each_entry_carries_its_catalog_id_and_variants_share_it() {
             ("mistral:coding", 9, Some("coding")),
         ]
     );
+}
+
+/// The pinned twin is listed under its own id, worked out over the whole
+/// catalogue: alone in the list, it would be listed as `qwen`, which names
+/// the other twin, the lowest row of that name.
+#[tokio::test]
+async fn a_pinned_twin_is_listed_under_the_id_that_finds_it() {
+    let ids: Vec<String> = twin_entries(true)
+        .await
+        .iter()
+        .map(|m| m["id"].as_str().expect("an id").to_owned())
+        .collect();
+    assert_eq!(ids, ["qwen@2"]);
+}
+
+/// A store over fixed rows that implements only the required lookups, so
+/// the catalogue port over it resolves identifiers by the shared policy
+/// (`ModelRepository::get_by_identifier`), `@` forms included.
+struct Library(Vec<Model>);
+
+#[async_trait]
+impl ModelRepository for Library {
+    async fn list(&self) -> Result<Vec<Model>, RepositoryError> {
+        Ok(self.0.clone())
+    }
+
+    async fn get_by_id(&self, id: i64) -> Result<Model, RepositoryError> {
+        self.0
+            .iter()
+            .find(|m| m.id == id)
+            .cloned()
+            .ok_or_else(|| RepositoryError::NotFound(format!("id={id}")))
+    }
+
+    async fn get_by_name(&self, name: &str) -> Result<Model, RepositoryError> {
+        self.0
+            .iter()
+            .filter(|m| m.name == name)
+            .min_by_key(|m| m.id)
+            .cloned()
+            .ok_or_else(|| RepositoryError::NotFound(format!("name={name}")))
+    }
+
+    async fn find_by_path(&self, _path: &Path) -> Result<Option<Model>, RepositoryError> {
+        Ok(None)
+    }
+
+    async fn insert(&self, _model: &NewModel) -> Result<Model, RepositoryError> {
+        unimplemented!("not exercised")
+    }
+
+    async fn update(&self, _model: &Model) -> Result<(), RepositoryError> {
+        unimplemented!("not exercised")
+    }
+
+    async fn delete(&self, _id: i64) -> Result<(), RepositoryError> {
+        unimplemented!("not exercised")
+    }
+}
+
+/// A runtime that records which model each admission asks for, then refuses
+/// it: which row a chat resolved to is all these tests read.
+#[derive(Debug, Default)]
+struct Admits(Mutex<Vec<String>>);
+
+#[async_trait]
+impl ModelRuntimePort for Admits {
+    async fn admit(
+        &self,
+        model_name: &str,
+        _num_ctx: Option<u64>,
+        _default_ctx: Option<u64>,
+        _overrides: LaunchOverrides,
+    ) -> Result<Admission, ModelRuntimeError> {
+        self.0.lock().unwrap().push(model_name.to_owned());
+        Err(ModelRuntimeError::Internal("recorded".into()))
+    }
+
+    async fn current_model(&self) -> Option<RunningTarget> {
+        None
+    }
+
+    async fn stop_current(&self) -> Result<(), ModelRuntimeError> {
+        Ok(())
+    }
+
+    async fn stop_model(&self, _model_id: u32) -> Result<bool, ModelRuntimeError> {
+        Ok(false)
+    }
+}
+
+/// Model `id`, named `name`, in `quantization`.
+fn quantized(id: u32, name: &str, quantization: &str) -> Model {
+    Model {
+        quantization: Some(quantization.to_owned()),
+        ..StaticCatalog::row(id, name)
+    }
+}
+
+/// Two quantizations of `qwen` are listed under two ids, a profile variant
+/// of each builds on its own, and a chat that sends any of them back is
+/// admitted as that row, never its twin. `mistral`, whose name nobody shares,
+/// keeps it.
+#[tokio::test]
+async fn two_quantizations_of_one_name_are_two_ids_and_two_models() {
+    let library = Library(vec![
+        quantized(3, "qwen", "Q4_K_M"),
+        quantized(8, "qwen", "Q6_K"),
+        quantized(5, "mistral", "Q4_K_M"),
+    ]);
+    let runtime = Arc::new(Admits::default());
+    let (base, cancel) = spawn_proxy_with_settings(
+        Arc::clone(&runtime) as Arc<dyn ModelRuntimePort>,
+        Arc::new(CatalogPortImpl::new(Arc::new(library))),
+        Arc::new(settings_listing("coding")),
+    )
+    .await;
+
+    let list = get_json(&base, "/v1/models").await;
+    let ids: Vec<&str> = list["data"]
+        .as_array()
+        .expect("a list")
+        .iter()
+        .map(|m| m["id"].as_str().expect("an id"))
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            "qwen@Q4_K_M",
+            "qwen@Q6_K",
+            "mistral",
+            "qwen@Q4_K_M:coding",
+            "qwen@Q6_K:coding",
+            "mistral:coding",
+        ]
+    );
+
+    let client = Client::new();
+    for model in [
+        "qwen@Q6_K",
+        "qwen@Q4_K_M",
+        "qwen@8",
+        "qwen@Q6_K:coding",
+        "qwen",
+    ] {
+        client
+            .post(format!("{base}/v1/chat/completions"))
+            .json(&serde_json::json!({
+                "model": model,
+                "messages": [{ "role": "user", "content": "hi" }],
+            }))
+            .send()
+            .await
+            .expect("the proxy answers");
+    }
+    cancel.cancel();
+
+    // A bare shared name is the lowest row, as before the twins were listed
+    // apart.
+    assert_eq!(*runtime.0.lock().unwrap(), ["8", "3", "8", "8", "3"]);
 }
 
 /// A proxy over one model, `qwen`, told what `host` can read.

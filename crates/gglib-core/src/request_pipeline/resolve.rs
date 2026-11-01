@@ -6,7 +6,8 @@ use super::ModelContext;
 use crate::ports::{CatalogError, ModelCatalogPort, ModelRuntimeError, ModelSummary};
 
 /// Resolve `model` to the catalog row it names: a numeric id first, then an
-/// exact name.
+/// exact name, then a `name@…` id as `/v1/models` lists two models of one
+/// name.
 ///
 /// For a caller that must refuse what the catalog does not hold rather than
 /// degrade it — the proxy's chat and embeddings paths, which key everything

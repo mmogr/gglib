@@ -269,17 +269,22 @@ The `model` field in requests supports:
 ### The model list
 
 Each `/v1/models` entry's `id` is what a client sends back as `model`: the
-model's name, or `{name}:{profile}` for a listed profile variant. Beside it,
-gglib adds:
+model's name, or `{name}:{profile}` for a listed profile variant. Two
+quantizations of one model share its name, so a name another model has is
+listed with a suffix: `{name}@{quantization}` (`qwen3@Q6_K`), or, when two
+models of that name share the quantization too or have none recorded,
+`{name}@{gglib_id}` (`qwen3@7`). Every route that takes a model accepts
+both forms, a route that takes a `:{profile}` suffix takes it after them,
+and a bare shared name still means the one with the lowest `gglib_id`.
+Beside it, gglib adds:
 
 - `gglib_id` — the model's id in this machine's catalog, which is never
   reused. A variant carries its base model's. It means something only on
   this machine; `id` is what a client sends.
 - `profile` — on a variant, the profile it selects; absent on a base entry.
 - `quantization` — the model's quantization (`Q4_K_M`), the one its
-  `description` names; absent when the catalog recorded none. Two
-  quantizations of one model share its name, and with `gglib_id` this tells
-  them apart. A variant carries its base model's.
+  `description` names; absent when the catalog recorded none. A variant
+  carries its base model's.
 - `capabilities` — what the model does beyond text chat, in this order:
   `"embeddings"` (tagged `embedding`), `"vision"` (linked to a projector),
   `"image_generation"` (its weights name an image family: a model that draws,
@@ -299,10 +304,11 @@ never carries it: it answers without credentials.
 `detail` is the `ModelDetailDto` the inspector reads, without `filePath` or
 `port`, with `isServing` true when the model is resident in either slot; and
 `profile` is the profile the identifier named. `{name}` is resolved as a chat
-request's `model` is — id first, then exact name, then a `:profile` suffix —
-and a name containing `/` is sent percent-encoded (`org%2Fqwen`). Unknown is
-`404 model_not_found`; so is any model but the pin on a pinned endpoint,
-whatever suffix it carries, as `/v1/models` does not list it either. A suffix
+request's `model` is — id first, then exact name, then a `name@…` id, then
+a `:profile` suffix — and a name containing `/` is sent percent-encoded
+(`org%2Fqwen`). Unknown is `404 model_not_found`; so is any model but the
+pin on a pinned endpoint, whatever suffix it carries, as `/v1/models` does
+not list it either. A suffix
 that names no configured profile is `404 profile_not_found`, on a model the
 endpoint answers for. It sits behind the same bearer and device gate as
 `/v1/models`.

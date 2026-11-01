@@ -199,9 +199,17 @@ The proxy's `/v1/models` gives each entry `gglib_id`, the catalogue id on
 that machine (a `{model}:{profile}` entry shares its base's and carries
 `profile`), and the response `machine_name`, the sanitised host name read
 per request. The OpenAI `id` stays the name, because an OpenAI client sends
-`id` back as `model` and shows it in a picker. `machine_name` sits behind the
-same bearer and device gate as the list and never on `/health`. The running
-model and the pin are matched by id.
+`id` back as `model` and shows it in a picker, unless another model has the
+same name, as two quantizations of one model do. Then it is `name@QUANT`
+(`qwen3@Q6_K`), and where two models of that name share the quantization
+too, or have none recorded, `name@<id>` (`qwen3@7`), worked out over the
+whole catalogue, pinned or not (`openai_model_ids` in `gglib-core`).
+`ModelRepository::get_by_identifier` reads both forms back after the
+numeric id and the exact name, so every route that takes a model accepts
+them, and a route that takes a `:profile` suffix takes it after them; a
+bare shared name is still the lowest row of that name. `machine_name` sits
+behind the same bearer and device gate as the list and never on `/health`.
+The running model and the pin are matched by id.
 
 `GET /v1/models/{name}/detail` returns `ModelLookup { profile, detail }` for
 any identifier the chat route accepts, profile suffix included, with the

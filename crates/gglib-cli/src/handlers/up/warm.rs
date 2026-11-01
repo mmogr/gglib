@@ -36,8 +36,8 @@ const LOAD_TIMEOUT: Duration = Duration::from_mins(10);
 /// and tearing that down over a slow first load would be a worse outcome than
 /// the cold start it was trying to avoid.
 ///
-/// `model` is the name a client sends; `model_id` is what a printed command
-/// takes, since a name is often several words.
+/// `model` is what a client sends, the id the endpoint lists it under;
+/// `model_id` is what a printed command takes: a name is often several words.
 pub(super) async fn run(port: u16, model: String, model_id: i64, api_key: Option<String>) {
     let addr: SocketAddr = ([127, 0, 0, 1], port).into();
     let client = gglib_proxy::loopback::client();

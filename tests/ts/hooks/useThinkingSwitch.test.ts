@@ -178,6 +178,34 @@ describe('useThinkingSwitch, where it is shown', () => {
     expect(hook.result.current.shown).toBe(false);
   });
 
+  it('judges a far chat on one of two models of one name by the id it records, else as that machine reads the bare name', async () => {
+    daemons.entries = [
+      farEntry('qwen', 7, { id: 'qwen@Q6_K' }),
+      farEntry('qwen', 4, { id: 'qwen@Q4_K_M', capabilities: ['reasoning'] }),
+    ];
+    join();
+    const far = (farOpen: HubChatOpen) => local({ far: true, conversations: [], thinks: false, farOpen });
+    const on = (id: number): ConversationSettings => ({ model_name: 'qwen', model: { machine: { kind: 'local' }, id } });
+
+    const hook = mount(far(farChat(1, on(4))));
+    await waitFor(() => expect(hook.result.current.shown).toBe(true));
+    hook.rerender(far(farChat(1, on(7))));
+    expect(hook.result.current.shown).toBe(false);
+    // With no id recorded, the bare name is the lowest of the two, as the far machine resolves it.
+    hook.rerender(far(farChat(1, { model_name: 'qwen' })));
+    expect(hook.result.current.shown).toBe(true);
+  });
+
+  it('takes no model whose id only looks like a longer name for a twin', async () => {
+    daemons.entries = [farEntry('qwenx', 3, { id: 'qwenx', capabilities: ['reasoning'] })];
+    join();
+    const far = (farOpen: HubChatOpen) => local({ far: true, conversations: [], thinks: false, farOpen });
+
+    const hook = mount(far(farChat(1, { model_name: 'qwen' })));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(hook.result.current.shown).toBe(false);
+  });
+
   it('shows nothing for a far chat that has never run, one whose model is not listed, or one not yet read', async () => {
     daemons.entries = [farEntry('thinker', 5, { capabilities: ['reasoning'] })];
     join();

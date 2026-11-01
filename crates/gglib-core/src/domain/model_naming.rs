@@ -4,7 +4,9 @@
 //! resolve the same `models.name` for the same underlying GGUF file. This
 //! module is the single place that decision is made.
 
+use super::Model;
 use super::gguf::GgufMetadata;
+use std::collections::HashMap;
 use std::path::Path;
 
 /// Stored when no naming signal is available at all.
@@ -92,6 +94,139 @@ pub fn resolve_model_name(
 
     UNKNOWN_MODEL_NAME.to_string()
 }
+
+/// One catalogued model, as [`openai_model_ids`] and [`resolve_listed_id`]
+/// read it: its catalogue id, its name and its quantization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ListedModel<'a> {
+    /// The model's id in this machine's catalogue.
+    pub id: i64,
+    /// The model's name, which another model may share.
+    pub name: &'a str,
+    /// The model's quantization (`Q4_K_M`), when the catalogue recorded one.
+    pub quantization: Option<&'a str>,
+}
+
+impl<'a> From<&'a Model> for ListedModel<'a> {
+    fn from(model: &'a Model) -> Self {
+        Self {
+            id: model.id,
+            name: &model.name,
+            quantization: model.quantization.as_deref(),
+        }
+    }
+}
+
+/// What follows the `@` in a listed id such as `qwen3@Q6_K` or `qwen3@7`.
+pub const LISTED_ID_SEPARATOR: char = '@';
+
+/// The id each of `models` is listed under in `/v1/models`, in the order
+/// given: what an `OpenAI` client shows in its picker and sends back as
+/// `model`.
+///
+/// Two quantizations of one model share its name, so the name alone cannot
+/// be the id of both. A name no other model has is its own id. A shared one
+/// is `name@QUANT` (`qwen3@Q6_K`) when no other model of that name has the
+/// same quantization, and otherwise `name@<catalogue id>` (`qwen3@7`): the
+/// same quantization from two repositories, or no quantization recorded.
+/// [`resolve_listed_id`] reads both forms back.
+///
+/// A quantization serves as a suffix only when it cannot be read as
+/// anything else: not empty, not a number, which would read as an id, and
+/// without an `@`. Otherwise the id form is used.
+///
+/// An exact name is looked up before any `@` form, so a suffixed id that is
+/// also another model's name (a model literally named `qwen3@Q6_K`) would
+/// find that model. Such an id falls back to the next form, and in the end
+/// to the bare catalogue id, which a lookup tries before any name.
+#[must_use]
+pub fn openai_model_ids(models: &[ListedModel<'_>]) -> Vec<String> {
+    let taken: std::collections::HashSet<&str> = models.iter().map(|m| m.name).collect();
+    let mut names: HashMap<&str, usize> = HashMap::new();
+    let mut pairs: HashMap<(&str, &str), usize> = HashMap::new();
+    for model in models {
+        *names.entry(model.name).or_default() += 1;
+        if let Some(quantization) = model.quantization {
+            *pairs.entry((model.name, quantization)).or_default() += 1;
+        }
+    }
+    models
+        .iter()
+        .map(|model| {
+            if names[model.name] == 1 {
+                return model.name.to_owned();
+            }
+            let by_quantization = model
+                .quantization
+                .filter(|&q| usable_suffix(q) && pairs[&(model.name, q)] == 1)
+                .map(|q| format!("{}{LISTED_ID_SEPARATOR}{q}", model.name));
+            let by_id = format!("{}{LISTED_ID_SEPARATOR}{}", model.name, model.id);
+            [by_quantization, Some(by_id)]
+                .into_iter()
+                .flatten()
+                .find(|id| !taken.contains(id.as_str()))
+                .unwrap_or_else(|| model.id.to_string())
+        })
+        .collect()
+}
+
+/// Whether `quantization` reads back as itself after an `@`.
+fn usable_suffix(quantization: &str) -> bool {
+    !quantization.is_empty()
+        && !quantization.contains(LISTED_ID_SEPARATOR)
+        && quantization.parse::<i64>().is_err()
+}
+
+/// What a listed id names after its `@`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListedSuffix<'a> {
+    /// `name@7`: the model with catalogue id 7, which must be named `name`.
+    Id(i64),
+    /// `name@Q6_K`: the one model named `name` with that quantization.
+    Quantization(&'a str),
+}
+
+/// `identifier` split on its last `@` into the name and what follows it, or
+/// `None` when it has no `@` or either side is empty.
+#[must_use]
+pub fn split_listed_id(identifier: &str) -> Option<(&str, ListedSuffix<'_>)> {
+    let (name, suffix) = identifier.rsplit_once(LISTED_ID_SEPARATOR)?;
+    if name.is_empty() || suffix.is_empty() {
+        return None;
+    }
+    let suffix = suffix
+        .parse::<i64>()
+        .map_or(ListedSuffix::Quantization(suffix), ListedSuffix::Id);
+    Some((name, suffix))
+}
+
+/// The catalogue id of the model a listed id names among `models`.
+///
+/// Read as [`openai_model_ids`] writes it: `name@<id>` is the model with that
+/// id when it is named `name`; `name@QUANT` is the one model named `name`
+/// with that quantization, and nothing when two have it. `None` for an
+/// identifier with no `@`.
+///
+/// Only the `@` forms: the numeric id and the exact name are tried first, by
+/// [`crate::ports::ModelRepository::get_by_identifier`], so a model whose
+/// own name contains an `@` is found by it before this is asked.
+#[must_use]
+pub fn resolve_listed_id(identifier: &str, models: &[ListedModel<'_>]) -> Option<i64> {
+    let (name, suffix) = split_listed_id(identifier)?;
+    let mut named = models.iter().filter(|m| m.name == name);
+    match suffix {
+        ListedSuffix::Id(id) => named.find(|m| m.id == id).map(|m| m.id),
+        ListedSuffix::Quantization(q) => {
+            let mut matching = named.filter(|m| m.quantization == Some(q));
+            let found = matching.next()?;
+            matching.next().is_none().then_some(found.id)
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "model_naming_listed_tests.rs"]
+mod listed_tests;
 
 #[cfg(test)]
 mod tests {

@@ -6,8 +6,9 @@ import type { ModelDetailDto } from "./ModelDetailDto";
  * identifier resolved to, and the profile it named.
  *
  * The identifier is resolved as a chat request's is — catalogue id first,
- * then exact name, and a `:profile` suffix routed to a configured profile —
- * so a caller that reads this before a turn sends the turn to the same model.
+ * then exact name, then a `name@…` id as `/v1/models` lists two models of
+ * one name, and a `:profile` suffix routed to a configured profile — so a
+ * caller that reads this before a turn sends the turn to the same model.
  */
 export type ModelLookup = { 
 /**

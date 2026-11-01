@@ -8,7 +8,7 @@ use std::path::Path;
 use async_trait::async_trait;
 
 use super::RepositoryError;
-use crate::domain::{Model, NewModel};
+use crate::domain::{ListedModel, Model, NewModel, resolve_listed_id, split_listed_id};
 
 /// Repository for model persistence operations.
 ///
@@ -37,6 +37,21 @@ pub trait ModelRepository: Send + Sync {
     ///
     /// Returns `Err(RepositoryError::NotFound)` if no model with that name exists.
     async fn get_by_name(&self, name: &str) -> Result<Model, RepositoryError>;
+
+    /// Every model named `name`, lowest id first; empty when there is none.
+    ///
+    /// Provided over [`Self::list`] so test doubles inherit it; a store that
+    /// can ask for one name overrides it, as `SqliteModelRepository` does.
+    async fn list_by_name(&self, name: &str) -> Result<Vec<Model>, RepositoryError> {
+        let mut named: Vec<Model> = self
+            .list()
+            .await?
+            .into_iter()
+            .filter(|m| m.name == name)
+            .collect();
+        named.sort_by_key(|m| m.id);
+        Ok(named)
+    }
 
     /// Insert a new model into the repository, or update the existing row for
     /// the same model.
@@ -89,7 +104,11 @@ pub trait ModelRepository: Send + Sync {
     async fn delete(&self, id: i64) -> Result<(), RepositoryError>;
 
     /// Resolve a model by user-facing identifier: numeric database id first,
-    /// then exact name.
+    /// then exact name, then a listed id, `name@QUANT` or `name@<id>`, as
+    /// [`openai_model_ids`](crate::domain::openai_model_ids) writes one for a
+    /// name two models share ([`resolve_listed_id`] reads it). A bare shared
+    /// name is the model of that name with the lowest id, as it was before
+    /// such names were listed apart.
     ///
     /// This is the **single lookup-key policy** for the workspace — every
     /// facade over a repository (`ModelService`, the `ModelCatalogPort`
@@ -113,10 +132,19 @@ pub trait ModelRepository: Send + Sync {
             }
         }
         match self.get_by_name(identifier).await {
-            Ok(model) => Ok(Some(model)),
-            Err(RepositoryError::NotFound(_)) => Ok(None),
-            Err(e) => Err(e),
+            Ok(model) => return Ok(Some(model)),
+            Err(RepositoryError::NotFound(_)) => {}
+            Err(e) => return Err(e),
         }
+        let Some((name, _)) = split_listed_id(identifier) else {
+            return Ok(None);
+        };
+        let named = self.list_by_name(name).await?;
+        let listed: Vec<ListedModel<'_>> = named.iter().map(ListedModel::from).collect();
+        let Some(id) = resolve_listed_id(identifier, &listed) else {
+            return Ok(None);
+        };
+        Ok(named.into_iter().find(|m| m.id == id))
     }
 }
 
@@ -243,6 +271,16 @@ mod tests {
     #[tokio::test]
     async fn unknown_identifier_is_none_not_an_error() {
         assert!(repo().get_by_identifier("ghost").await.unwrap().is_none());
+    }
+
+    /// A listed id is read over the provided `list_by_name`, so a double that
+    /// implements only `list` resolves it too.
+    #[tokio::test]
+    async fn a_listed_id_resolves_through_the_provided_list_by_name() {
+        let found = repo().get_by_identifier("qwen3@7").await.unwrap();
+        assert_eq!(found.unwrap().id, 7);
+        assert!(repo().get_by_identifier("qwen3@8").await.unwrap().is_none());
+        assert!(repo().get_by_identifier("llama@7").await.unwrap().is_none());
     }
 
     /// The fall-through is for `NotFound` only. A real storage failure must
