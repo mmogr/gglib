@@ -20,13 +20,15 @@
 //! machine, and declares the flag, or is about this one, and refuses the
 //! flag with a sentence rather than ignoring it.
 
+use std::sync::LazyLock;
+
 use anyhow::{Result, bail};
 use gglib_core::domain::{Model, ModelAction};
 use gglib_core::request_pipeline::{self, ModelContext};
 use gglib_runtime::FarMachine;
 
 use crate::bootstrap::CliContext;
-use crate::commands::{Commands, DaemonCommand, ProxyCommand};
+use crate::commands::{ChatCommand, Commands, DaemonCommand, ProxyCommand};
 use crate::handlers::agent_chat::config::{AgentSessionParams, BannerInfo};
 use crate::handlers::agent_chat::upstream;
 
@@ -73,9 +75,14 @@ pub(crate) enum Reach {
 /// using the paired machine is opt-in per command, never inherited.
 pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
     match command {
-        // A turn, a load and the model commands are core's table.
+        // A turn, a load and the model commands are core's table. The chat
+        // history is this machine's record, whichever machine a turn ran on.
+        Commands::Chat {
+            command: Some(ChatCommand::History { .. }),
+            ..
+        } => ("chat history", Reach::Local),
         Commands::Chat { .. } => ("chat", reach_of(ModelAction::Chat)),
-        Commands::Question { .. } => ("q", reach_of(ModelAction::Chat)),
+        Commands::Question { .. } => ("question", reach_of(ModelAction::Chat)),
         Commands::Serve { .. } => ("serve", reach_of(ModelAction::Load)),
         Commands::Model { command } => {
             let (name, action) = model_action(command);
@@ -124,11 +131,10 @@ pub(crate) fn reach(command: &Commands) -> (&'static str, Reach) {
 const THE_PAGE_SHOWS_BOTH: &str = "the page it opens already lists the paired machine's models \
      beside this machine's, and chats with them; there is nothing for --remote to add.";
 
-/// The commands `--remote` reaches, as the refusal names them. A list
-/// rather than derived from [`reach`], so that the sentence a person reads
-/// is written by a person and stays in the order they would say it.
-pub(crate) const REACHES: &str =
-    "chat, q, serve, model list, model inspect, proxy dashboard, proxy cache-clear, daemon stop";
+/// The commands `--remote` reaches, as the refusal names them: each command
+/// that declares the flag, in the order `--help` lists them (ADR 0028).
+pub(crate) static REACHES: LazyLock<String> =
+    LazyLock::new(|| crate::remote_flag::declared_on().join(", "));
 
 impl Target {
     pub(crate) const fn from_flag(remote: bool) -> Self {
@@ -145,7 +151,8 @@ impl Target {
         match (self, reach) {
             (Self::Remote, Reach::Local) => bail!(
                 "`gglib {name}` is about this machine, and --remote does not change that. \
-                 What --remote reaches on the paired machine: {REACHES}."
+                 What --remote reaches on the paired machine: {}.",
+                *REACHES
             ),
             (Self::Remote, Reach::LocalBecause(why)) => bail!("`gglib {name}` --remote: {why}"),
             (Self::Local, _) | (Self::Remote, Reach::Use) => Ok(()),

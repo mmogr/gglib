@@ -25,9 +25,10 @@ use crate::handlers;
 /// * `verbose` — Value of the global `--verbose` flag; forwarded only to
 ///   handlers that expose a verbosity knob.
 /// * `remote`  — Whether `--remote` was typed (ADR 0028). Becomes the
-///   [`Target`] every command that uses a machine is told; a command that
-///   does not declare the flag never gets here with it, because
-///   [`parse`](crate::remote_flag::parse) refused it first.
+///   [`Target`] every command that uses a machine is told. A command that
+///   does not declare the flag was refused it by
+///   [`parse`](crate::remote_flag::parse); one under a parent that declares
+///   it (`gglib chat --remote history`) is refused it here.
 #[expect(
     clippy::too_many_lines,
     reason = "one arm per command, each a call into its handler; the match is the command table"
@@ -39,6 +40,7 @@ pub async fn dispatch(
     remote: bool,
 ) -> Result<()> {
     let target = Target::from_flag(remote);
+    target.admit(&command)?;
     match command {
         // ── Getting started ─────────────────────────────────────────────────
         Commands::Up { yes, model, port } => {

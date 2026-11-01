@@ -80,6 +80,29 @@ where
     }
 }
 
+/// Each command that declares `--remote`, named as `--help` names it
+/// (`model list`), in the order `--help` lists them.
+pub(crate) fn declared_on() -> Vec<String> {
+    fn walk(command: &clap::Command, path: &str, found: &mut Vec<String>) {
+        let mut subcommands: Vec<&clap::Command> = command.get_subcommands().collect();
+        subcommands.sort_by_key(|sub| sub.get_display_order());
+        for sub in subcommands {
+            let here = if path.is_empty() {
+                sub.get_name().to_owned()
+            } else {
+                format!("{path} {}", sub.get_name())
+            };
+            if sub.get_arguments().any(|arg| arg.get_id() == REMOTE) {
+                found.push(here.clone());
+            }
+            walk(sub, &here, found);
+        }
+    }
+    let mut found = Vec::new();
+    walk(&Cli::command(), "", &mut found);
+    found
+}
+
 /// Whether `--remote` was typed on any command in the parse that declares it.
 fn typed(matches: &ArgMatches) -> bool {
     let mut level = Some(matches);

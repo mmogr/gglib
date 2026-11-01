@@ -51,7 +51,8 @@ fn a_command_about_this_machine_refuses_the_flag_with_the_one_sentence() {
         text,
         format!(
             "`gglib image` is about this machine, and --remote does not change that. \
-             What --remote reaches on the paired machine: {REACHES}."
+             What --remote reaches on the paired machine: {}.",
+            *REACHES
         )
     );
     let text = refused(&["gglib", "model", "remove", "3", "--remote"]);
@@ -130,4 +131,62 @@ fn remote_and_port_are_exclusive_on_both_agent_commands() {
 fn the_root_does_not_offer_the_flag() {
     let root = Cli::command();
     assert!(root.get_arguments().all(|arg| arg.get_id() != REMOTE));
+}
+
+/// Every command the parser knows, as its name and a command line that
+/// parses: its required arguments filled with the first value each takes.
+/// A parent that cannot run without a subcommand is not a line of its own.
+fn every_command_line() -> Vec<(String, Vec<String>)> {
+    fn walk(command: &clap::Command, path: &mut Vec<String>, out: &mut Vec<(String, Vec<String>)>) {
+        for sub in command.get_subcommands() {
+            path.push(sub.get_name().to_owned());
+            if !sub.is_subcommand_required_set() {
+                let mut argv = vec!["gglib".to_owned()];
+                argv.extend(path.iter().cloned());
+                for arg in sub.get_arguments().filter(|arg| arg.is_required_set()) {
+                    let value = arg
+                        .get_possible_values()
+                        .first()
+                        .map_or_else(|| "7".to_owned(), |v| v.get_name().to_owned());
+                    if !arg.is_positional() {
+                        argv.push(format!("--{}", arg.get_long().expect("a named flag")));
+                    }
+                    argv.push(value);
+                }
+                out.push((path.join(" "), argv));
+            }
+            walk(sub, path, out);
+            path.pop();
+        }
+    }
+    let mut out = Vec::new();
+    walk(&Cli::command(), &mut Vec::new(), &mut out);
+    out
+}
+
+/// The parser and ADR 0013's table say the same thing about every command:
+/// it declares `--remote` exactly when [`reach`] lets it use a machine.
+/// The `model` rows of that table are core's `ModelAction::on_paired()`
+/// (`target_tests`), so the parser agrees with the web page's table too.
+#[test]
+fn a_command_takes_the_flag_exactly_when_it_uses_a_machine() {
+    let declared = declared_on();
+    let lines = every_command_line();
+    assert!(lines.len() > 40, "the walk found {} commands", lines.len());
+    for (path, argv) in lines {
+        let (cli, _) = parse_from(&argv)
+            .unwrap_or_else(|refusal| panic!("`{}` did not parse: {refusal:?}", argv.join(" ")));
+        let (name, how) = reach(&cli.command.expect("a subcommand"));
+        assert_eq!(
+            declared.contains(&path),
+            how == Reach::Use,
+            "`gglib {path}` (reach names it `{name}`, {how:?}) and the parser disagree about --remote"
+        );
+        if how == Reach::Use {
+            assert_eq!(
+                name, path,
+                "the refusal and the parser name `{path}` differently"
+            );
+        }
+    }
 }
