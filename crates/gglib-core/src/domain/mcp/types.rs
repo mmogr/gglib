@@ -19,9 +19,6 @@ pub enum McpLifecycle {
     /// This is the default: no background process until something actually needs the server.
     #[default]
     Lazy,
-    /// Never start automatically. The server must be started explicitly via
-    /// `gglib mcp tools`, the REST API, or the GUI.
-    Manual,
 }
 
 impl std::fmt::Display for McpLifecycle {
@@ -29,7 +26,6 @@ impl std::fmt::Display for McpLifecycle {
         match self {
             Self::Eager => write!(f, "eager"),
             Self::Lazy => write!(f, "lazy"),
-            Self::Manual => write!(f, "manual"),
         }
     }
 }
@@ -41,9 +37,8 @@ impl std::str::FromStr for McpLifecycle {
         match s {
             "eager" => Ok(Self::Eager),
             "lazy" => Ok(Self::Lazy),
-            "manual" => Ok(Self::Manual),
             other => Err(format!(
-                "unknown lifecycle '{other}'; expected eager, lazy, or manual"
+                "unknown lifecycle '{other}'; expected eager or lazy"
             )),
         }
     }
@@ -548,6 +543,29 @@ mod tests {
         );
         // The stored and sent spelling is lowercase, and nothing else parses.
         assert!("Stdio".parse::<McpServerType>().is_err());
+    }
+
+    #[test]
+    fn a_lifecycle_is_spelled_one_way_printed_parsed_and_on_the_wire() {
+        for (lifecycle, spelled) in [(McpLifecycle::Eager, "eager"), (McpLifecycle::Lazy, "lazy")] {
+            assert_eq!(lifecycle.to_string(), spelled);
+            assert_eq!(spelled.parse::<McpLifecycle>(), Ok(lifecycle));
+            assert_eq!(
+                serde_json::to_string(&lifecycle).unwrap(),
+                format!("\"{spelled}\"")
+            );
+        }
+    }
+
+    /// `manual` was a lifecycle until #1699, and is refused like any other
+    /// unknown word, on the wire too.
+    #[test]
+    fn manual_is_not_a_lifecycle() {
+        assert_eq!(
+            "manual".parse::<McpLifecycle>(),
+            Err("unknown lifecycle 'manual'; expected eager or lazy".to_string())
+        );
+        assert!(serde_json::from_str::<McpLifecycle>("\"manual\"").is_err());
     }
 
     #[test]

@@ -93,14 +93,13 @@ impl McpService {
     /// Initialize the MCP service: validates all servers and starts `Eager` ones.
     ///
     /// `Lazy` servers start on first tool use (see `ensure_started_for_call`).
-    /// `Manual` servers are never started automatically.
     /// For one-shot commands that need all tools available immediately, call
     /// `prewarm_lazy` immediately after this.
     pub async fn initialize(&self) -> Result<(), McpServiceError> {
         // First, validate all servers and update their status
         self.validate_all_servers().await?;
 
-        // Start only Eager servers (Lazy: on-demand, Manual: never).
+        // Start only Eager servers (Lazy: on-demand).
         let servers = self.runnable_servers().await?;
         for server in servers {
             if server.lifecycle == McpLifecycle::Eager && server.enabled && server.is_valid {
@@ -734,17 +733,15 @@ impl McpService {
     ///
     /// For `Lazy` servers that are not yet running, this triggers an automatic start
     /// (deduplicated across concurrent callers via a per-server mutex in the manager).
-    /// For `Manual` servers that are not running, this returns a tool-level error so
-    /// the model can recover gracefully rather than receiving a transport failure.
     pub async fn call_tool(
         &self,
         server_id: i64,
         tool_name: &str,
         arguments: HashMap<String, serde_json::Value>,
     ) -> Result<McpToolResult, McpServiceError> {
-        // Ensure the server is running, honouring its lifecycle policy.
-        // Manual servers return a soft tool-level error; all other failures
-        // (repo lookup, start failure) propagate as Err so callers see them.
+        // A disabled server is a tool-level error, so the model can recover;
+        // any other failure (repo lookup, start failure) propagates as Err so
+        // callers see it.
         match self.ensure_started_for_call(server_id).await {
             Ok(()) => {}
             Err(McpServiceError::NotRunning(msg)) => {
@@ -763,11 +760,14 @@ impl McpService {
             .map_err(|e| McpServiceError::ToolError(e.to_string()))
     }
 
-    /// Ensure a server is running before a tool call, honouring its lifecycle policy.
+    /// Ensure a server is running before a tool call: a no-op when it is,
+    /// otherwise a start (via `McpManager::ensure_started`), whatever its
+    /// lifecycle.
     ///
-    /// - Already running → no-op.
-    /// - `Eager` or `Lazy`, not running → attempt to start (via `McpManager::ensure_started`).
-    /// - `Manual`, not running → return an error (caller converts to a tool-level error).
+    /// A disabled server is never started here: `NotRunning`, which
+    /// `call_tool` turns into a tool-level error. The proxy's `/mcp` gateway
+    /// and a model's `{id}:{tool}` call reach this with no enabled check of
+    /// their own.
     pub(crate) async fn ensure_started_for_call(&self, id: i64) -> Result<(), McpServiceError> {
         if self.manager.is_running(id).await {
             return Ok(());
@@ -775,19 +775,18 @@ impl McpService {
 
         let server = self.repository.get_by_id(id).await?;
         Self::refuse_unsupported(server.server_type)?;
-
-        match server.lifecycle {
-            McpLifecycle::Manual => Err(McpServiceError::NotRunning(format!(
-                "Server '{}' is configured as manual and must be started explicitly",
+        if !server.enabled {
+            return Err(McpServiceError::NotRunning(format!(
+                "Server '{}' is disabled; enable it to use its tools",
                 server.name
-            ))),
-            McpLifecycle::Eager | McpLifecycle::Lazy => self
-                .manager
-                .ensure_started(&server)
-                .await
-                .map(|_| ())
-                .map_err(|e| McpServiceError::StartFailed(e.to_string())),
+            )));
         }
+
+        self.manager
+            .ensure_started(&server)
+            .await
+            .map(|_| ())
+            .map_err(|e| McpServiceError::StartFailed(e.to_string()))
     }
 
     // =========================================================================

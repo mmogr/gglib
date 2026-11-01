@@ -308,11 +308,11 @@ async fn starting_up_and_prewarming_try_each_stdio_server_and_leave_a_stored_sse
 
 /// The prewarm names each enabled lazy server that is not running after it,
 /// with why: one whose start failed with that failure, one whose
-/// configuration is invalid with its verdict. An eager server, a disabled
-/// one and a manual one are not its to name.
+/// configuration is invalid with its verdict. An eager server and a
+/// disabled one are not its to name.
 #[tokio::test]
 async fn the_prewarm_names_each_lazy_server_it_could_not_start_and_why() {
-    use gglib_core::McpLifecycle::{Eager, Lazy, Manual};
+    use gglib_core::McpLifecycle::{Eager, Lazy};
 
     let (service, _) = service();
     for (name, command, lifecycle, enabled) in [
@@ -320,7 +320,6 @@ async fn the_prewarm_names_each_lazy_server_it_could_not_start_and_why() {
         ("spaced", "echo hello", Lazy, true),
         ("eager-ghost", "gglib-no-such-command", Eager, true),
         ("off-ghost", "gglib-no-such-command", Lazy, false),
-        ("manual-ghost", "gglib-no-such-command", Manual, true),
     ] {
         let mut server = stdio(name, command).with_lifecycle(lifecycle);
         server.enabled = enabled;
@@ -719,4 +718,25 @@ async fn a_server_already_named_builtin_can_still_be_changed() {
     let stored = service.get_server(server.id).await.unwrap();
     assert_eq!(stored.name, "builtin");
     assert!(!stored.enabled);
+}
+
+/// A tool call never starts a disabled server: the proxy's `/mcp` gateway
+/// and a model's `{id}:{tool}` call check nothing first. It answers a
+/// tool-level error the model can read, and nothing is started.
+#[tokio::test]
+async fn a_tool_call_to_a_disabled_server_is_refused_and_starts_nothing() {
+    let (service, repo) = service();
+    let mut off = stdio("off", "gglib-no-such-command");
+    off.enabled = false;
+    let off = repo.insert(off).await.unwrap();
+
+    let result = service
+        .call_tool(off.id, "anything", HashMap::new())
+        .await
+        .expect("a tool-level error, not a failure");
+
+    assert!(!result.success);
+    let error = result.error.unwrap_or_default();
+    assert!(error.contains("'off' is disabled"), "{error}");
+    assert!(!service.manager.is_running(off.id).await);
 }

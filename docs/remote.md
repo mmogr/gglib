@@ -869,7 +869,7 @@ when it names some, by that name or the tool's bare one, and none when its
 tools are off; never a tool no open server has, never every tool, and
 never gglib's own file tools. An open server that is not running is started
 when the run starts, after its model is ready, and one that is disabled,
-manual and not started, or fails to start is left out, with a warning in the desktop's log
+invalid, or fails to start is left out, with a warning in the desktop's log
 that names it and why (for one that failed to start, what it printed on stderr, as the
 desktop's own start warning does; never a tool's arguments or results), and the reply
 runs without it. The grant is the server's own flag, read when each run

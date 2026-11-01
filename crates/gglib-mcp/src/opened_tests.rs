@@ -102,17 +102,15 @@ async fn a_running_server_not_open_is_not_offered() {
     service.shutdown().await;
 }
 
-/// A disabled server and a manual one are neither started nor offered,
-/// though both are open and would start; the one opened after them still is.
+/// A disabled server is neither started nor offered, though it is open and
+/// would start; the one opened after it still is.
 #[cfg(unix)]
 #[tokio::test]
-async fn a_disabled_and_a_manual_server_are_skipped() {
+async fn a_disabled_server_is_skipped() {
     let (service, _) = service();
     let mut off = stand_in("off");
     off.enabled = false;
     let off = opened(&service, off).await;
-    let manual = stand_in("manual").with_lifecycle(gglib_core::McpLifecycle::Manual);
-    let manual = opened(&service, manual).await;
     let tavily = opened(&service, stand_in("tavily")).await;
 
     let offered = service.opened_tools(&DeviceServers::All).await;
@@ -122,7 +120,6 @@ async fn a_disabled_and_a_manual_server_are_skipped() {
         !running(&service, off.id).await,
         "a disabled server stays stopped"
     );
-    assert!(!running(&service, manual.id).await, "a manual one too");
     service.shutdown().await;
 }
 
