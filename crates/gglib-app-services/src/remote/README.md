@@ -48,9 +48,14 @@ remote/
                       far_credentials, the one check its key passes before
                       it is sent, and the name it is shown by, read after
                       each connect and kept on the record
-  far_proxy.rs      — FarProxy, every request made *through* the tunnel:
-                      the far machine's chats and runs, carried on for this
-                      machine's chat page
+  far_proxy.rs      — FarProxy, the far machine as every request made
+                      *through* the tunnel reaches it: its address, its key,
+                      which machine it is, its name, and the two clients
+  far_chats.rs      — FarProxy's requests for the far machine's chats, and
+                      a turn on one, carried on for this machine's chat page
+  far_runs.rs       — FarProxy's requests for the runs this device may see
+                      there, and the one check a run id passes first
+  far_images.rs     — FarProxy's question of whether the far machine can draw
   far_attachments.rs — FarProxy's two requests for an image: one sent to the
                       far machine's store and one read back, both through
                       the streaming client, which limits silence and not

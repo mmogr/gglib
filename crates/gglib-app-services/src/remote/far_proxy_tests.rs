@@ -1,9 +1,8 @@
-//! What `FarProxy` refuses before anything is sent, what it never shows, and
-//! how long a stream may run.
+//! What `FarProxy` never shows, which machine it serves, and how long a
+//! stream may run.
 
 use std::time::Duration;
 
-use gglib_core::domain::hub_chats::HubTurn;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
@@ -13,47 +12,13 @@ use crate::remote::paired_machine::FarCredentials;
 
 /// Nothing listens here: a request that got as far as sending would fail as
 /// `Unavailable`, so a `ValidationFailed` proves it was never sent.
-const NOWHERE: &str = "http://127.0.0.1:9/v1";
+pub(super) const NOWHERE: &str = "http://127.0.0.1:9/v1";
 
-fn credentials() -> FarCredentials {
+pub(super) fn credentials() -> FarCredentials {
     FarCredentials {
         key: "sk-the-key".to_owned(),
         fingerprint: "0a1b2c3d4e5f".to_owned(),
         name: None,
-    }
-}
-
-#[tokio::test]
-async fn a_run_id_that_could_name_another_route_is_refused_before_sending() {
-    let far = FarProxy::new(NOWHERE, &credentials()).unwrap();
-    let turn = HubTurn {
-        conversation_id: 1,
-        content: "hi".to_owned(),
-        images: Vec::new(),
-        thinking: None,
-        answer_saved: false,
-        draw: false,
-        image_model: None,
-    };
-    for id in ["..", "a/b", "", "run.1", &"x".repeat(65)] {
-        assert!(
-            matches!(
-                far.add_turn(id, &turn).await,
-                Err(GuiError::ValidationFailed(_))
-            ),
-            "{id:?}"
-        );
-        assert!(
-            matches!(far.cancel_run(id).await, Err(GuiError::ValidationFailed(_))),
-            "{id:?}"
-        );
-        assert!(
-            matches!(
-                far.run_events(id, 0).await,
-                Err(GuiError::ValidationFailed(_))
-            ),
-            "{id:?}"
-        );
     }
 }
 
