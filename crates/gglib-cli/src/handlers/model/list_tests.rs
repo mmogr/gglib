@@ -280,6 +280,7 @@ async fn the_rows_are_the_ones_modelops_lists() {
         min_speed: None,
         max_speed: None,
         tags: Vec::new(),
+        remote: crate::remote_flag::RemoteFlag::default(),
     };
 
     let models = fetch_models(&ops, &args).await.unwrap();

@@ -5,16 +5,15 @@
 //! the proxy registers; this holds the same list to the commands that use
 //! them. Nothing links a route to a command mechanically, so the table is
 //! written by hand and pinned at both ends: a route the paired machine opens
-//! cannot go unnoticed here, and a command [`reach`] lets use the paired
-//! machine has to name a route it uses.
+//! cannot go unnoticed here, and a command that takes `--remote` has to name
+//! a route it uses.
 
 use std::collections::BTreeSet;
 
-use clap::Parser as _;
 use gglib_proxy::tunnel_routes::TUNNEL_REACHABLE;
 
-use super::{REACHES, Reach, reach};
-use crate::parser::Cli;
+use super::reach;
+use crate::remote_flag::{declared_on, parse_from};
 
 /// What reaches a route: the command lines that do, or why none does.
 enum Reached {
@@ -111,36 +110,38 @@ fn the_table_names_every_route_the_tunnel_carries_once() {
 }
 
 #[test]
-fn every_command_the_table_names_uses_the_paired_machine() {
+fn every_command_the_table_names_takes_remote() {
     for (route, reached) in ROUTES {
         let By(lines) = reached else { continue };
         for argv in *lines {
-            let command = Cli::parse_from(*argv).command.expect("a subcommand");
-            let (name, how) = reach(&command);
-            assert_eq!(
-                how,
-                Reach::Use,
-                "{route} names `{name}`, which --remote refuses"
+            let with: Vec<&str> = argv.iter().copied().chain(["--remote"]).collect();
+            assert!(
+                matches!(parse_from(&with), Ok((_, true))),
+                "{route} names `{}`, which does not take --remote",
+                argv.join(" ")
             );
         }
     }
 }
 
 #[test]
-fn every_command_that_uses_the_paired_machine_reaches_a_route() {
-    let reaching: BTreeSet<&str> = ROUTES
+fn every_command_that_takes_remote_reaches_a_route() {
+    let reaching: BTreeSet<String> = ROUTES
         .iter()
         .filter_map(|(_, reached)| match reached {
             By(lines) => Some(*lines),
             Exempt(_) => None,
         })
         .flatten()
-        .map(|argv| reach(&Cli::parse_from(*argv).command.expect("a subcommand")).0)
+        .map(|argv| {
+            let (cli, _) = parse_from(*argv).expect("the table's lines parse");
+            reach(&cli.command.expect("a subcommand")).0.to_owned()
+        })
         .collect();
-    for name in REACHES.split(", ") {
+    for name in declared_on() {
         assert!(
-            reaching.contains(name),
-            "--remote reaches `{name}`, but the table names no route it uses"
+            reaching.contains(&name),
+            "`{name}` takes --remote, but the table names no route it uses"
         );
     }
 }

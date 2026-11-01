@@ -256,6 +256,7 @@ async fn dispatch_with(
             identifier,
             metadata,
             json,
+            remote: _,
         } => {
             inspect::execute(ctx, target, &identifier, metadata, json).await?;
         }

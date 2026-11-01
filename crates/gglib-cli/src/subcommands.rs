@@ -13,6 +13,8 @@
 
 use clap::Subcommand;
 
+use crate::remote_flag::RemoteFlag;
+
 /// Subcommands available under `gglib chat`.
 #[derive(Subcommand)]
 pub enum ChatCommand {
@@ -64,6 +66,8 @@ pub enum ProxyCommand {
         /// Omit to use the stored `proxy_api_key` setting.
         #[arg(long, env = "GGLIB_API_KEY")]
         api_key: Option<String>,
+        #[command(flatten)]
+        remote: RemoteFlag,
     },
     /// Clear KV cache on an already-running proxy
     ///
@@ -88,6 +92,8 @@ pub enum ProxyCommand {
         /// Omit to use the stored `proxy_api_key` setting.
         #[arg(long, env = "GGLIB_API_KEY")]
         api_key: Option<String>,
+        #[command(flatten)]
+        remote: RemoteFlag,
     },
     /// Stop the proxy on the running gglib daemon
     ///
@@ -150,6 +156,8 @@ pub enum DaemonCommand {
         /// does nothing.
         #[arg(long, short = 'y')]
         yes: bool,
+        #[command(flatten)]
+        remote: RemoteFlag,
     },
 }
 

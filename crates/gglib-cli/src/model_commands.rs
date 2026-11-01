@@ -10,6 +10,7 @@ use crate::model_list_args::ListArgs;
 use crate::model_sort::{CliBrowseCategory, CliHubSort};
 use crate::presentation::capability_flags::capability_names;
 use crate::projector_args::ProjectorArgs;
+use crate::remote_flag::RemoteFlag;
 
 /// Model management commands.
 ///
@@ -370,6 +371,8 @@ pub enum ModelCommand {
         /// Output as JSON instead of human-readable format
         #[arg(long)]
         json: bool,
+        #[command(flatten)]
+        remote: RemoteFlag,
     },
 
     /// Show every resolved inference parameter and which layer supplied it.

@@ -359,8 +359,8 @@ key is held.
 
 **gglib's own commands** take `--remote`, one flag that means the same
 thing everywhere it is accepted: do this on the machine this one is paired
-with. It is declared once, on `gglib` itself, so it goes before the
-subcommand or after it:
+with. Only the commands below take it, so it goes after the command it is
+for, and `--help` shows it there and nowhere else:
 
 ```bash
 gglib q --remote -m 7 "Summarise this" < notes.md
@@ -459,13 +459,15 @@ it.
 Every other command is about this machine — `model download` and `model remove`
 change what is on a machine, and that is done at the machine; `config`
 writes settings; `remote` manages the pairing itself — and refuses the flag
-with a sentence naming what it does reach, rather than ignoring it.
+with a sentence naming what it does reach, rather than ignoring it or
+answering with clap's "unexpected argument".
 `proxy stop --remote` is refused with its own sentence, because the far
 proxy is what carries the request; so are `web --remote` and `gui --remote`,
 because the page they open already lists the desktop's models beside this
 machine's. `--remote` and `--port` are exclusive:
 they name different machines. [ADR 0013](adr/0013-the-target-is-a-value.md)
-has the reasoning.
+and [ADR 0028](adr/0028-remote-is-declared-on-each-command-that-reaches-the-paired-machine.md)
+have the reasoning.
 
 **The GUI's library** lists the desktop's models after this machine's, in a
 group headed by the desktop's name and whether it is reached right now. Each

@@ -3,6 +3,7 @@
 use clap::Args;
 
 use crate::model_sort::{CliModelSortBy, CliSortOrder};
+use crate::remote_flag::RemoteFlag;
 
 /// How `gglib model list` sorts and filters this machine's catalogue.
 #[derive(Args, Debug, Clone)]
@@ -30,4 +31,6 @@ pub struct ListArgs {
     /// Only show models that have this tag (repeatable: AND semantics).
     #[arg(long = "tag", action = clap::ArgAction::Append)]
     pub tags: Vec<String>,
+    #[command(flatten)]
+    pub remote: RemoteFlag,
 }
