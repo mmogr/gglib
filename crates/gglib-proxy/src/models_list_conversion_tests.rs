@@ -38,6 +38,8 @@ fn model_info_handles_missing_arch_and_quant() {
 
 /// Two quantizations of one model share its name: each entry says its own,
 /// the one its description names, and an entry with none leaves the key out.
+/// Each is listed under an id of its own, by its quantization or, with none,
+/// by its catalogue id; a model whose name nobody shares keeps it.
 #[test]
 fn model_info_carries_the_quantization_its_description_names() {
     let quantized = |id, quantization: Option<&str>| ModelSummary {
@@ -48,6 +50,10 @@ fn model_info_carries_the_quantization_its_description_names() {
         quantized(1, Some("Q4_K_M")),
         quantized(2, Some("Q8_0")),
         quantized(3, None),
+        ModelSummary {
+            quantization: Some("Q8_0".into()),
+            ..ModelSummary::bare(4, "mistral")
+        },
     ];
     let resp = ModelsResponse::from_summaries(summaries, Some(DEFAULT_CONTEXT_SIZE), true);
 
@@ -59,9 +65,10 @@ fn model_info_carries_the_quantization_its_description_names() {
     assert_eq!(
         listed,
         [
-            ("qwen3", 1, Some("Q4_K_M")),
-            ("qwen3", 2, Some("Q8_0")),
-            ("qwen3", 3, None)
+            ("qwen3@Q4_K_M", 1, Some("Q4_K_M")),
+            ("qwen3@Q8_0", 2, Some("Q8_0")),
+            ("qwen3@3", 3, None),
+            ("mistral", 4, Some("Q8_0")),
         ]
     );
     assert!(

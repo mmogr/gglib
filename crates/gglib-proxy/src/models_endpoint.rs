@@ -68,33 +68,32 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
     debug!("GET /v1/models");
 
     match state.catalog_port.list_models().await {
-        Ok(mut models) => {
-            // Pinned mode refuses every other model, so advertising the rest
-            // of the catalog would offer a BYOK client a choice that can only
-            // come back as PinnedModelMismatch. Filtering the summaries here
-            // rather than the finished response also keeps the variants below
-            // correct for free — they are built from what survives.
-            //
-            // Profile variants of the pinned model stay: a profile changes
-            // only the request body, never which model actually runs, so it
-            // cannot trip the guard. Kept by id, as the guard compares.
-            if let Some(pin) = state.runtime_port.pinned() {
-                models.retain(|m| i64::from(m.id) == pin.id);
-            }
-
-            // The running model's entry, found by id: a name can belong to
-            // more than one model. `from_summaries` maps entry for entry, so
-            // its place among the summaries is its place in the response.
-            let running = state.runtime_port.current_model().await;
-            let running_at = running
-                .as_ref()
-                .and_then(|target| models.iter().position(|m| m.id == target.model_id));
-
+        Ok(models) => {
+            // Over the whole catalogue, pinned or not: an entry's `id` is
+            // its name only when no other model has that name, and a pinned
+            // model listed alone under a name its twin shares would be asked
+            // for by a name that resolves to the twin.
             let mut response = ModelsResponse::from_summaries(
                 models,
                 state.default_ctx,
                 state.device_memory_readable,
             );
+
+            // Pinned mode refuses every other model, so advertising the rest
+            // of the catalog would offer a BYOK client a choice that can only
+            // come back as PinnedModelMismatch. Filtered before the variants
+            // below, which are built from what survives.
+            //
+            // Profile variants of the pinned model stay: a profile changes
+            // only the request body, never which model actually runs, so it
+            // cannot trip the guard. Kept by id, as the guard compares.
+            if let Some(pin) = state.runtime_port.pinned() {
+                response.data.retain(|m| m.gglib_id == pin.id);
+            }
+
+            // The running model's entry, found by id: a name can belong to
+            // more than one model.
+            let running = state.runtime_port.current_model().await;
 
             // Apply safety margin to every model's context_window.
             for model in &mut response.data {
@@ -105,7 +104,10 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
             // running or not.
             if let Some(target) = running
                 && target.runtime == gglib_core::domain::RuntimeKind::Llama
-                && let Some(model) = running_at.and_then(|i| response.data.get_mut(i))
+                && let Some(model) = response
+                    .data
+                    .iter_mut()
+                    .find(|m| m.gglib_id == i64::from(target.model_id))
             {
                 model.context_window = Some(advertised_context_window(target.effective_ctx));
             }

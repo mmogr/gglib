@@ -3,8 +3,9 @@
 //! A `#[path]` child of `target.rs`. Locally the identifier is looked up in
 //! this catalogue; on the paired machine it is sent to that machine's detail
 //! route through the daemon, which resolves it as it resolves a turn's —
-//! catalogue id first, then exact name, and a `:profile` suffix routed to a
-//! profile configured *there* — and answers with the model and the profile.
+//! catalogue id first, then exact name, then a `name@…` id, and a
+//! `:profile` suffix routed to a profile configured *there* — and answers
+//! with the model and the profile.
 //! Either way the answer is a [`TurnModel`]: the model named by its machine,
 //! the name it is shown by, and, on the paired machine, the `<id>` or
 //! `<id>:<profile>` the turn then puts on the wire. That one answer is what

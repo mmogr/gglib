@@ -169,7 +169,10 @@ pub use runtime_kind::RuntimeKind;
 pub use dialect::{BodyCodec, DialectSpec, EmissionProfile};
 
 // Re-export model-naming types at the domain level for convenience
-pub use model_naming::{NameSource, repo_short_name, resolve_model_name, strip_gguf_suffix};
+pub use model_naming::{
+    LISTED_ID_SEPARATOR, ListedModel, ListedSuffix, NameSource, openai_model_ids, repo_short_name,
+    resolve_listed_id, resolve_model_name, split_listed_id, strip_gguf_suffix,
+};
 
 // Re-export agent types at the domain level for convenience
 pub use agent::{

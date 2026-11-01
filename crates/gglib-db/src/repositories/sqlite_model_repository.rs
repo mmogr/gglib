@@ -156,6 +156,23 @@ impl ModelRepository for SqliteModelRepository {
         self.with_components(row_to_model(&row)?).await
     }
 
+    async fn list_by_name(&self, name: &str) -> Result<Vec<Model>, RepositoryError> {
+        let query =
+            format!("SELECT {MODEL_SELECT_COLUMNS} FROM models WHERE name = ? ORDER BY models.id");
+
+        let rows = sqlx::query(&query)
+            .bind(name)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?;
+
+        let mut named = Vec::with_capacity(rows.len());
+        for row in &rows {
+            named.push(self.with_components(row_to_model(row)?).await?);
+        }
+        Ok(named)
+    }
+
     async fn find_by_path(&self, path: &Path) -> Result<Option<Model>, RepositoryError> {
         // `path` arrives already resolved, and `file_path` was normalised
         // through the same function on write, so this is a plain equality
@@ -1055,6 +1072,10 @@ mod projector_tests;
 #[cfg(test)]
 #[path = "sqlite_model_repository_components_tests.rs"]
 mod components_tests;
+
+#[cfg(test)]
+#[path = "sqlite_model_repository_listed_id_tests.rs"]
+mod listed_id_tests;
 
 #[cfg(test)]
 #[path = "sqlite_model_repository_component_files_tests.rs"]

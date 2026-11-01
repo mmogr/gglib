@@ -8,7 +8,7 @@
 //! Both types also deserialize, for a reader of this list on another machine,
 //! into the same shape it was written from.
 
-use gglib_core::domain::capability_tags;
+use gglib_core::domain::{ListedModel, capability_tags, openai_model_ids};
 use gglib_core::ports::ModelSummary;
 use gglib_core::server_config::{
     ContextSizeSource, ServerConfigOptions, resolve_context_size_with_source,
@@ -32,7 +32,13 @@ pub struct ModelsResponse {
 }
 
 impl ModelsResponse {
-    /// Create a new `ModelsResponse` from a list of model summaries.
+    /// Create a new `ModelsResponse` from a list of model summaries, one
+    /// entry per summary, in order.
+    ///
+    /// Each entry's `id` is [`openai_model_ids`] over all of `summaries`: the
+    /// name, unless another model shares it. So `summaries` must be the whole
+    /// catalogue, even where only some entries are kept, or an entry would be
+    /// listed under a bare name that resolves to its twin.
     ///
     /// Each model's `context_window` is the GGUF's trained ceiling, capped by
     /// anything a person actually configured — a per-model server default or a
@@ -51,9 +57,20 @@ impl ModelsResponse {
         global_default_ctx: Option<u64>,
         fit_available: bool,
     ) -> Self {
+        let ids = openai_model_ids(
+            &summaries
+                .iter()
+                .map(|s| ListedModel {
+                    id: i64::from(s.id),
+                    name: &s.name,
+                    quantization: s.quantization.as_deref(),
+                })
+                .collect::<Vec<_>>(),
+        );
         let data: Vec<ModelInfo> = summaries
             .into_iter()
-            .map(|summary| {
+            .zip(ids)
+            .map(|(summary, id)| {
                 let (effective_cap, cap_source) =
                     resolve_context_size_with_source(&ServerConfigOptions {
                         context_size: None,
@@ -65,7 +82,7 @@ impl ModelsResponse {
                         ..Default::default()
                     });
                 ModelInfo {
-                    id: summary.name.clone(),
+                    id,
                     gglib_id: i64::from(summary.id),
                     profile: None,
                     quantization: summary.quantization.clone(),
@@ -122,8 +139,10 @@ fn capabilities_of(summary: &ModelSummary) -> Option<Vec<String>> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct ModelInfo {
-    /// What a client sends back as `model`: the model's name, or
-    /// `{name}:{profile}` for a profile variant.
+    /// What a client sends back as `model`: the model's name, or, when
+    /// another model shares it, `{name}@{quantization}` or, where that is
+    /// shared too, `{name}@{gglib_id}`; with `:{profile}` after it for a
+    /// profile variant.
     pub id: String,
     /// The model's id in this machine's catalogue, which is never reused.
     /// A profile variant carries its base model's.
@@ -139,8 +158,8 @@ pub struct ModelInfo {
     pub profile: Option<String>,
     /// The model's quantization (`Q4_K_M`, `Q8_0` and so on), the one its
     /// `description` names; `None` when the catalogue recorded none. Two
-    /// quantizations of one model share its name, and this and `gglib_id`
-    /// tell them apart. A profile variant carries its base model's.
+    /// quantizations of one model share its name; their `id`s tell them
+    /// apart. A profile variant carries its base model's.
     #[cfg_attr(feature = "ts-bindings", ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quantization: Option<String>,

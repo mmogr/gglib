@@ -5,8 +5,10 @@
  */
 export type ModelInfo = { 
 /**
- * What a client sends back as `model`: the model's name, or
- * `{name}:{profile}` for a profile variant.
+ * What a client sends back as `model`: the model's name, or, when
+ * another model shares it, `{name}@{quantization}` or, where that is
+ * shared too, `{name}@{gglib_id}`; with `:{profile}` after it for a
+ * profile variant.
  */
 id: string, 
 /**
@@ -25,8 +27,8 @@ profile?: string,
 /**
  * The model's quantization (`Q4_K_M`, `Q8_0` and so on), the one its
  * `description` names; `None` when the catalogue recorded none. Two
- * quantizations of one model share its name, and this and `gglib_id`
- * tell them apart. A profile variant carries its base model's.
+ * quantizations of one model share its name; their `id`s tell them
+ * apart. A profile variant carries its base model's.
  */
 quantization?: string, object: string, created: number, owned_by: string, description?: string, 
 /**

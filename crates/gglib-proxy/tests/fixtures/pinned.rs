@@ -11,7 +11,9 @@ use std::time::UNIX_EPOCH;
 
 use async_trait::async_trait;
 
-use gglib_core::domain::{ComponentRole, ImageFamily, Model, ModelComponent};
+use gglib_core::domain::{
+    ComponentRole, ImageFamily, ListedModel, Model, ModelComponent, resolve_listed_id,
+};
 use gglib_core::ports::{
     Admission, CatalogError, LaunchOverrides, ModelCatalogPort, ModelLaunchSpec, ModelRuntimeError,
     ModelRuntimePort, ModelSummary, PinnedSpec, RunningTarget,
@@ -27,12 +29,17 @@ pub(crate) fn pin(id: u32, name: &str) -> PinnedSpec {
     }
 }
 
+/// The quantization every [`StaticCatalog`] model has.
+const QUANTIZATION: &str = "Q4_K_M";
+
 /// Catalog port over a fixed set of models, each with its catalog id.
 ///
 /// Found as the real catalog finds them: a string that parses as a number is
-/// an id first, then an exact name. Names and ids are all `/v1/models`
-/// filtering, admission and the detail read care about, so everything else is
-/// filled with plausible constants rather than made configurable.
+/// an id first, then an exact name, then a listed `name@…` id. Every model
+/// is [`QUANTIZATION`], so twins are listed, and found, by catalog id. Names
+/// and ids are all `/v1/models` filtering, admission and the detail read care
+/// about, so everything else is filled with plausible constants rather than
+/// made configurable.
 #[derive(Debug, Clone)]
 pub(crate) struct StaticCatalog(pub Vec<(u32, String)>);
 
@@ -59,11 +66,27 @@ impl StaticCatalog {
     }
 
     fn entry(&self, identifier: &str) -> Option<&(u32, String)> {
-        let by_id = identifier
+        let by_id = |id: u32| self.0.iter().find(|(own, _)| *own == id);
+        identifier
             .parse::<u32>()
             .ok()
-            .and_then(|id| self.0.iter().find(|(own, _)| *own == id));
-        by_id.or_else(|| self.0.iter().find(|(_, name)| name == identifier))
+            .and_then(by_id)
+            .or_else(|| self.0.iter().find(|(_, name)| name == identifier))
+            .or_else(|| {
+                // Then the `@` forms `/v1/models` lists twins under, read by
+                // the rule the real repository reads them by.
+                let listed: Vec<ListedModel<'_>> = self
+                    .0
+                    .iter()
+                    .map(|(id, name)| ListedModel {
+                        id: i64::from(*id),
+                        name,
+                        quantization: Some(QUANTIZATION),
+                    })
+                    .collect();
+                let id = resolve_listed_id(identifier, &listed)?;
+                by_id(u32::try_from(id).ok()?)
+            })
     }
 
     fn find(&self, identifier: &str) -> Option<ModelSummary> {
@@ -75,7 +98,7 @@ impl StaticCatalog {
     /// same constants [`Self::summary`] reports. A model whose name ends in
     /// `-vision` is linked to a projector there too, and one whose name ends
     /// in `-draws` is a Flux.1 model linked to a VAE there.
-    fn row(id: u32, name: &str) -> Model {
+    pub(crate) fn row(id: u32, name: &str) -> Model {
         let draws = name.ends_with("-draws");
         Model {
             components: draws
@@ -95,7 +118,7 @@ impl StaticCatalog {
                 .then(|| PathBuf::from("/models/mmproj-F16.gguf")),
             param_count_b: 7.0,
             architecture: Some("llama".to_owned()),
-            quantization: Some("Q4_K_M".to_owned()),
+            quantization: Some(QUANTIZATION.to_owned()),
             context_length: Some(8192),
             expert_count: None,
             expert_used_count: None,
@@ -121,7 +144,7 @@ impl StaticCatalog {
     fn summary(id: u32, name: &str) -> ModelSummary {
         ModelSummary {
             image_input: name.ends_with("-vision"),
-            quantization: Some("Q4_K_M".to_string()),
+            quantization: Some(QUANTIZATION.to_owned()),
             architecture: Some("llama".to_string()),
             context_length: Some(8192),
             ..ModelSummary::bare(id, name)

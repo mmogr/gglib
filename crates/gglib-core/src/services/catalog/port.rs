@@ -114,7 +114,8 @@ impl CatalogPortImpl {
     }
 
     /// Resolve `name` through the shared identifier policy (numeric id, then
-    /// exact name), mapping storage failures into [`CatalogError`].
+    /// exact name, then a `name@…` listed id), mapping storage failures into
+    /// [`CatalogError`].
     ///
     /// Every lookup by identifier goes through here so the port cannot end up
     /// resolving the same string two different ways.

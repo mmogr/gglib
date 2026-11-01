@@ -139,6 +139,10 @@ fn installed_models_of_one_name_say_their_own_quantization() {
             (stored[1], "Test model", Some("Q8_0"), Some("o/r")),
         ]
     );
+    // And each is named by the id the served model list gives it (#1648).
+    let mut ids: Vec<&str> = installed.iter().map(|m| m.listed_id.as_str()).collect();
+    ids.sort_unstable();
+    assert_eq!(ids, ["Test model@Q4_K_M", "Test model@Q8_0"]);
 }
 
 /// With no reading handed over there is no budget to judge at; with one,
