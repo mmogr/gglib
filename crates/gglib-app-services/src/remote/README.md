@@ -55,7 +55,8 @@ remote/
                       a turn on one, carried on for this machine's chat page
   far_runs.rs       — FarProxy's requests for the runs this device may see
                       there, and the one check a run id passes first
-  far_images.rs     — FarProxy's question of whether the far machine can draw
+  far_images.rs     — FarProxy's drawing: a render that machine draws, read
+                      as a stream, and whether it can draw
   far_attachments.rs — FarProxy's two requests for an image: one sent to the
                       far machine's store and one read back, both through
                       the streaming client, which limits silence and not

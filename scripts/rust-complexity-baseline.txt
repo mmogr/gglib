@@ -47,9 +47,10 @@ crates/gglib-axum/src/routes.rs 467
 crates/gglib-axum/tests/integration_routes.rs 1027
 crates/gglib-bootstrap/src/builder.rs 309
 crates/gglib-broadcast/src/lib.rs 320
-crates/gglib-cli/src/commands.rs 378
+crates/gglib-cli/src/commands.rs 379
 crates/gglib-cli/src/daemon_client/calls.rs 319
-crates/gglib-cli/src/daemon_client/images_tests.rs 387
+crates/gglib-cli/src/daemon_client/images.rs 321
+crates/gglib-cli/src/daemon_client/images_tests.rs 466
 crates/gglib-cli/src/dispatch.rs 306
 crates/gglib-cli/src/handlers/agent_chat/config.rs 477
 crates/gglib-cli/src/handlers/agent_chat/config_sampling_tests.rs 460
@@ -63,7 +64,7 @@ crates/gglib-cli/src/handlers/config/engine.rs 433
 crates/gglib-cli/src/handlers/config/engine_tests.rs 309
 crates/gglib-cli/src/handlers/config/sd.rs 326
 crates/gglib-cli/src/handlers/config/settings/profiles.rs 416
-crates/gglib-cli/src/handlers/image_tests.rs 327
+crates/gglib-cli/src/handlers/image_tests.rs 328
 crates/gglib-cli/src/handlers/inference/agent_question.rs 303
 crates/gglib-cli/src/handlers/inference/serve_image_tests.rs 361
 crates/gglib-cli/src/handlers/mcp_cli.rs 405

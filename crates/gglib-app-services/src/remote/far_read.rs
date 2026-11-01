@@ -145,18 +145,8 @@ impl FarProxy {
                 info!("the remote daemon accepted the shutdown");
                 Ok(())
             }
-            // Deliberately not "its API key has changed": the key sent is one
-            // that machine issued, so a refusal means it no longer admits this
-            // device's key, whether because it stopped trusting the device or
-            // a rotation there has not reached the tunnel yet. That is the
-            // claim the chat path's refusal makes too.
-            StatusCode::UNAUTHORIZED => Err(GuiError::ValidationFailed(format!(
-                "{} is not admitting this device's key — it has either \
-                 stopped trusting this device, or a key rotation there is still reaching the \
-                 tunnel, which clears itself within a few seconds. If waiting does not fix it, \
-                 pair again with a fresh `gglib remote invite` there",
-                self.shown_name()
-            ))),
+            // The claim the chat path's refusal makes too.
+            StatusCode::UNAUTHORIZED => Err(GuiError::ValidationFailed(self.key_refused())),
             StatusCode::CONFLICT => Err(GuiError::Conflict(
                 "the far proxy is not running under a daemon, so there is nothing to stop from \
                  here"

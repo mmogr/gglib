@@ -185,6 +185,21 @@ impl FarProxy {
             .to_owned()
     }
 
+    /// What a person reads when this machine answers a request with 401: it
+    /// is not admitting the key it issued this device. Deliberately not "its
+    /// key has changed": the device stopped being trusted, or a rotation
+    /// there has not reached the tunnel yet, and the remedy is the same.
+    #[must_use]
+    pub fn key_refused(&self) -> String {
+        format!(
+            "{} is not admitting this device's key — it has either stopped trusting this \
+             device, or a key rotation there is still reaching the tunnel, which clears itself \
+             within a few seconds. If waiting does not fix it, pair again with a fresh `gglib \
+             remote invite` there",
+            self.shown_name()
+        )
+    }
+
     /// The key and the name the completion adapter carries, so a refusal of
     /// the key names the machine that refused it.
     #[must_use]

@@ -1,5 +1,6 @@
-//! Drawing through the daemon: the body sent, each event read back as a
-//! report or an image, and each refusal as the daemon's code and words.
+//! Drawing through a daemon, this machine's or the paired machine's: the
+//! body sent, each event read back as a report or an image, and each refusal
+//! as the daemon's code and words.
 
 use std::io::Write as _;
 use std::net::TcpListener;
@@ -16,7 +17,7 @@ use gglib_core::ports::{
 use gglib_test_http::blocking;
 use tokio::sync::mpsc;
 
-use super::{DaemonImageGenerator, body_of, progress_of, read_render, refusal};
+use super::{ImageGenerator, body_of, progress_of, read_render, refusal};
 use crate::daemon_client::{DaemonHandle, STAND_IN_PORT};
 
 /// A PNG's signature and `IHDR` at `width` by `height`.
@@ -276,8 +277,8 @@ fn stand_in(status: u16, content_type: &str, body: String) -> (u16, Arc<Mutex<Ve
     (port, seen)
 }
 
-fn generator() -> DaemonImageGenerator {
-    DaemonImageGenerator::new(DaemonHandle {
+fn generator() -> ImageGenerator {
+    ImageGenerator::Daemon(DaemonHandle {
         client: reqwest::Client::new(),
         api_key: None,
     })
@@ -371,4 +372,95 @@ async fn the_drawing_answer_is_the_daemons_own() {
     let old = ask(404, "{}", None, PLAIN).await;
     assert_eq!(old.code.as_deref(), Some("drawing_unavailable"));
     assert!(old.reason.unwrap().contains("answered 404"));
+}
+
+// ── On the paired machine ────────────────────────────────────────────────
+
+/// A generator that draws on a stand-in paired machine on `port`, known
+/// here as `desk`.
+fn far_generator(port: u16) -> ImageGenerator {
+    let credentials = gglib_app_services::FarCredentials {
+        key: "sk-far".to_owned(),
+        fingerprint: "0a1b2c3d4e5f".to_owned(),
+        name: Some("desk".to_owned()),
+    };
+    let base = format!("http://127.0.0.1:{port}/v1");
+    ImageGenerator::Far(gglib_app_services::FarProxy::new(&base, &credentials).unwrap())
+}
+
+/// `--remote`: the render goes to the paired machine's drawing route with
+/// the model as typed, for that machine to resolve, and reads back as a
+/// local one does.
+#[tokio::test]
+async fn a_render_on_the_paired_machine_is_posted_there_and_read_back() {
+    let (port, seen) = stand_in(
+        200,
+        "text/event-stream",
+        sse(&[progress("loading"), completed(512, 512)]),
+    );
+    let mut request = ImageRequest::new("a happy kitty");
+    request.model = Some("11".to_owned());
+    let (tx, mut rx) = mpsc::channel(16);
+    let generator = far_generator(port);
+    assert_eq!(generator.elsewhere(), Some("desk"));
+
+    let batch = generator.generate(request, tx).await.expect("drawn");
+
+    assert_eq!(batch.images.len(), 1);
+    assert_eq!(drain(&mut rx), [ImageStage::Loading]);
+    let seen = seen.lock().unwrap().clone();
+    assert_eq!(seen[0], "POST /v1/images/generations HTTP/1.1");
+    let sent: serde_json::Value = serde_json::from_str(&seen[1]).unwrap();
+    assert_eq!(sent["model"], "11");
+    assert_eq!(sent["stream"], true);
+}
+
+/// A key the paired machine no longer admits says so, names it, and says
+/// how to pair again, not how to fix this machine's daemon key.
+#[tokio::test]
+async fn a_key_the_paired_machine_refuses_says_how_to_pair_again() {
+    let (port, _) = stand_in(
+        401,
+        "application/json",
+        r#"{"error":{"message":"Invalid API key","type":"authentication_error","code":"invalid_api_key"}}"#.to_owned(),
+    );
+    let (tx, _rx) = mpsc::channel(16);
+
+    let refused = far_generator(port)
+        .generate(ImageRequest::new("a fox"), tx)
+        .await
+        .unwrap_err();
+
+    let ImageError::Refused {
+        status, message, ..
+    } = refused
+    else {
+        panic!("not a refusal: {refused:?}");
+    };
+    assert_eq!(status, 401);
+    assert!(
+        message.starts_with("desk is not admitting this device's key"),
+        "{message}"
+    );
+}
+
+/// A paired machine that does not answer is named, not called the daemon.
+#[tokio::test]
+async fn a_paired_machine_that_does_not_answer_is_named() {
+    let port = TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let (tx, _rx) = mpsc::channel(16);
+
+    let refused = far_generator(port)
+        .generate(ImageRequest::new("a fox"), tx)
+        .await
+        .unwrap_err();
+
+    let ImageError::Refused { message, .. } = refused else {
+        panic!("not a refusal: {refused:?}");
+    };
+    assert!(message.starts_with("could not reach desk:"), "{message}");
 }
