@@ -4,6 +4,7 @@
 /props	build_info	string
 /props	chat_template	string
 /props	chat_template_caps	object
+/props	chat_template_caps.reasoning_effort_levels	array
 /props	chat_template_caps.supports_object_arguments	bool
 /props	chat_template_caps.supports_parallel_tool_calls	bool
 /props	chat_template_caps.supports_preserve_reasoning	bool

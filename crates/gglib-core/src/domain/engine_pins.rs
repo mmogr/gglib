@@ -31,7 +31,7 @@
 /// deliberate, reviewable event: bump this constant, run the suite, ship the
 /// bump as its own commit with the observed differences in the message.
 /// CONTRIBUTING's "The engine pins" has the routine.
-pub const PINNED_LLAMA_RELEASE: &str = "b11669";
+pub const PINNED_LLAMA_RELEASE: &str = "b11960";
 
 #[cfg(test)]
 mod tests {
