@@ -45,7 +45,8 @@ pub struct ModelCompareResult {
     pub prompt_text: String,
     /// Optional system prompt.
     pub system_prompt: Option<String>,
-    /// Full response text accumulated from the stream.
+    /// The answer accumulated from the stream. A thinking model's reasoning
+    /// is not part of it.
     pub response_text: String,
     /// `true` if the response was cut short (`finish_reason == "length"`).
     pub was_truncated: bool,

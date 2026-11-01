@@ -21,8 +21,14 @@ pub enum BenchmarkEvent {
         position: usize,
         total: usize,
     },
-    /// A chunk of generated text for one model (compare runs only).
+    /// A chunk of one model's answer (compare runs only). A thinking model's
+    /// reasoning is never sent as one.
     ModelTextDelta { model_id: i64, text: String },
+    /// A thinking model's reasoning, which compare does not show (compare runs
+    /// only). Sent at most twice per model: with `seconds: None` when the
+    /// reasoning starts, and with how long it lasted when the answer starts or
+    /// the reply ends without one.
+    ModelThinking { model_id: i64, seconds: Option<f64> },
     /// A model finished successfully.
     ModelComplete {
         model_id: i64,

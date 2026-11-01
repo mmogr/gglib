@@ -5,4 +5,4 @@
  *
  * Controls when gglib automatically starts the server process.
  */
-export type McpLifecycle = "eager" | "lazy" | "manual";
+export type McpLifecycle = "eager" | "lazy";

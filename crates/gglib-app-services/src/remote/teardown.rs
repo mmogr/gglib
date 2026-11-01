@@ -9,7 +9,10 @@ use std::time::Duration;
 
 use tracing::warn;
 
+use tokio::sync::Mutex;
+
 use super::gateway::RemoteGateway;
+use super::slot::{Slot, Taken};
 use super::{DRAIN, Live};
 
 /// What taking a tunnel down needs of the handle: stop admitting, let what
@@ -59,7 +62,11 @@ impl Drain for modelpipe::ServeHandle {
     clippy::future_not_send,
     reason = "generic over the tunnel handle, which `Drain` does not require to be Sync; the daemon's handle is, so its teardown future is Send"
 )]
-pub(super) async fn take_down<H: Drain>(live: Live<H>, gateway: &RemoteGateway) {
+///
+/// Returns whether this session was still the current one when the drain
+/// ended. `false` means a newer session armed during the drain, and the
+/// caller must not announce that remote access went down: it is up again.
+pub(super) async fn take_down<H: Drain>(live: Live<H>, gateway: &RemoteGateway) -> bool {
     // First, because it is what stops anything following a tunnel that is
     // ending: this token is the rotation poll's and the proxy watcher's.
     live.cancel.cancel();
@@ -69,7 +76,30 @@ pub(super) async fn take_down<H: Drain>(live: Live<H>, gateway: &RemoteGateway) 
     // Last, and only this session's: a code shown for a session that has
     // ended cannot outlive it, and its serving and the paired flag belong to
     // the same session.
-    gateway.reset_session_if(live.epoch);
+    gateway.reset_session_if(live.epoch)
+}
+
+/// Empty the serve slot and end the session that was in it — what
+/// `disable` and shutdown do. A taken session carries
+/// [`take_down`]'s answer.
+///
+/// The slot is unlocked before the drain starts, as the proxy watcher's own
+/// teardown does, so a `status` read or an `enable` that arrives during the
+/// five-second drain is answered at once rather than waiting it out (#1646).
+#[expect(
+    clippy::future_not_send,
+    reason = "generic over the tunnel handle, as `take_down` is"
+)]
+pub(super) async fn take_down_slot<H: Drain>(
+    slot: &Mutex<Slot<Live<H>>>,
+    gateway: &RemoteGateway,
+) -> Taken<bool> {
+    let taken = slot.lock().await.take();
+    match taken {
+        Taken::Value(live) => Taken::Value(take_down(live, gateway).await),
+        Taken::Cancelled => Taken::Cancelled,
+        Taken::Empty => Taken::Empty,
+    }
 }
 
 #[cfg(test)]
@@ -241,7 +271,7 @@ mod tests {
         });
         let (live, _cancel) = live(&handle, epoch);
 
-        take_down(live, &gateway).await;
+        let current = take_down(live, &gateway).await;
 
         assert!(
             gateway.pairing.active(),
@@ -249,5 +279,53 @@ mod tests {
         );
         assert!(!next.was_withdrawn());
         assert!(gateway.serving(), "and it has to go on serving");
+        assert!(
+            !current,
+            "a teardown superseded by a newer session must not announce remote access down"
+        );
+    }
+
+    /// A handle whose drain looks at the serve slot its session was taken
+    /// from, and records whether a `status` or `enable` arriving then could
+    /// have locked it.
+    struct SlotWatchingDrain {
+        slot: std::sync::OnceLock<Arc<Mutex<Slot<Live<Self>>>>>,
+        free: std::sync::atomic::AtomicBool,
+    }
+
+    impl Drain for SlotWatchingDrain {
+        fn drain(&self, _grace: Duration) -> impl Future<Output = bool> + Send {
+            let slot = self
+                .slot
+                .get()
+                .expect("the slot is set before the teardown");
+            self.free
+                .store(slot.try_lock().is_ok(), std::sync::atomic::Ordering::SeqCst);
+            std::future::ready(true)
+        }
+    }
+
+    /// `disable` drains for up to five seconds. Holding the slot through it
+    /// made `remote status`, the page's poll and the devices list wait for
+    /// the whole drain (#1646).
+    #[tokio::test]
+    async fn the_slot_is_unlocked_while_the_session_drains() {
+        let (gateway, epoch, _invite) = gateway();
+        let handle = Arc::new(SlotWatchingDrain {
+            slot: std::sync::OnceLock::new(),
+            free: std::sync::atomic::AtomicBool::new(false),
+        });
+        let (live, _cancel) = live(&handle, epoch);
+        let slot = Arc::new(Mutex::new(Slot::Full(live)));
+        assert!(handle.slot.set(Arc::clone(&slot)).is_ok());
+
+        let taken = take_down_slot(&slot, &gateway).await;
+
+        assert!(matches!(taken, Taken::Value(true)));
+        assert!(
+            handle.free.load(std::sync::atomic::Ordering::SeqCst),
+            "the slot was still locked during the drain"
+        );
+        assert!(matches!(slot.lock().await.take(), Taken::Empty));
     }
 }

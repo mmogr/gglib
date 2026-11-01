@@ -36,6 +36,11 @@ Testing connection to 'filesystem'...
 
 ## `add`, `remove`, `list`
 
+`list` reads each server's configuration from this machine's database, and
+its Status and Tools from the daemon, whose copy of a server is the one its
+chats use. With no daemon running, those two columns show `—` and a line
+under the table says why; `list` never starts a daemon.
+
 - A server is `stdio`: `--command` and `--args` (comma-separated) say what
   to run, `--working-dir`, `--env KEY=VALUE` and `--path-extra` shape its
   process. `sse` (HTTP) servers are not supported yet: `add` refuses one,
@@ -44,28 +49,30 @@ Testing connection to 'filesystem'...
 - A server's name is its own: `add` refuses a name another server already
   has.
 - `--lifecycle` decides when gglib spawns the server: `eager` at host init,
-  `lazy` on first tool use (the default), `manual` never.
+  `lazy` on first tool use (the default). A server that should not run is
+  disabled (`disable`). A server stored as `manual`, a lifecycle older
+  gglib had, opens as a disabled `lazy` one.
 - A server you add is not told the folder a chat reads: it reads what its
   own arguments name, from `--working-dir` when one was given, else from
   the working directory of the process that spawns it. Each gglib process
   starts one copy of a server, which every chat in that process shares; the
   daemon's copy serves every chat the daemon runs.
 
-## `start`, `stop`, `enable`, `disable`
+## `enable`, `disable`
 
 `enable` and `disable` say whether a server's tools are included in a chat
-at all; a disabled server stays configured. `start` runs a copy of the
-server as a child of the `gglib mcp start` process, and it ends with it;
-`stop` reaches only a server the same process started, so from the command
-line it answers that the server is not running. The daemon's and a chat's
-copies are theirs alone.
+at all; a disabled server stays configured. There is no `start` or `stop`:
+a lazy server starts on first use, an eager one at init, and `disable`
+keeps one out of chats.
 
 ## `tools`, `test`
 
-`test <server>` starts a server, lists its tools, and stops it: it is how to
-see what a server offers and why one will not start. `tools <server>` lists
-the tools of a server the same process started, which from the command line
-is none, so it answers that the server is not running.
+`tools <server>` lists the tools the daemon's copy of a server offers, which
+are the ones its chats get. It starts the daemon if none is running, and
+starts the server there if it is not running, as a chat's first tool call
+would. Of a disabled server it says so and starts nothing. `test <server>`
+starts a throwaway copy, lists its tools, and stops it: it is how to see
+why a server will not start.
 
 - A server that cannot start says why: `chat` and `q` print one line on
   stderr for each lazy server they go on without (none under `-Q`), and

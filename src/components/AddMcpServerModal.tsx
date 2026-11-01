@@ -3,7 +3,7 @@
  */
 
 import { FC, useState, useCallback, useEffect, FormEvent } from "react";
-import type { McpServerType } from "../services/transport/types/mcp";
+import type { McpLifecycle, McpServerType } from "../services/transport/types/mcp";
 import { Modal } from "./ui/Modal";
 import { Banner } from './ui/Banner';
 import { Checkbox } from './ui/Checkbox';
@@ -44,7 +44,7 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
   const [pathExtra, setPathExtra] = useState("");
   const [url, setUrl] = useState("");
   const [envVars, setEnvVars] = useState<EnvRow[]>([]);
-  const [lifecycle, setLifecycle] = useState<'eager' | 'lazy' | 'manual'>('lazy');
+  const [lifecycle, setLifecycle] = useState<McpLifecycle>('lazy');
   const [enabled, setEnabled] = useState(true);
 
   const [saving, setSaving] = useState(false);
@@ -255,12 +255,11 @@ export const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
               <Select
                 id="mcp-lifecycle"
                 value={lifecycle}
-                onChange={(e) => setLifecycle(e.target.value as 'eager' | 'lazy' | 'manual')}
+                onChange={(e) => setLifecycle(e.target.value as McpLifecycle)}
                 disabled={saving}
               >
                 <option value="lazy">Lazy — start on first tool use</option>
                 <option value="eager">Eager — start when app launches</option>
-                <option value="manual">Manual — never auto-spawn</option>
               </Select>
               <Checkbox
                 checked={enabled}

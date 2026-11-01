@@ -1073,7 +1073,7 @@ fn fmt_ms(millis: Option<f64>) -> String {
     time.unwrap_or_else(|| "—".to_owned())
 }
 
-fn fmt_count(count: Option<u64>) -> String {
+fn fmt_count<T: std::fmt::Display>(count: Option<T>) -> String {
     count.map_or_else(|| "—".to_owned(), |c| c.to_string())
 }
 
@@ -1327,7 +1327,7 @@ async fn cmd_model(ctx: &CliContext, model_id: i64) -> Result<()> {
                 .map_or_else(|| "—".into(), |t| format!("{t:.1} tok/s"));
             println!(
                 "  {date}  gen={gen_tps}  tokens={tokens}",
-                tokens = r.completion_tokens.unwrap_or(0)
+                tokens = fmt_count(r.completion_tokens)
             );
         }
     }
@@ -1373,6 +1373,16 @@ fn render_event(event: &BenchmarkEvent) {
             use std::io::Write as _;
             print!("{text}");
             let _ = std::io::stdout().flush();
+        }
+
+        // stderr, as every other status line is: stdout is the answers alone.
+        BenchmarkEvent::ModelThinking { seconds, .. } => {
+            use std::io::IsTerminal as _;
+            match thinking_line(*seconds, std::io::stderr().is_terminal()) {
+                Some(line) if seconds.is_some() => eprintln!("{line}"),
+                Some(line) => eprint!("{line}"),
+                None => {}
+            }
         }
 
         BenchmarkEvent::ModelComplete { result, .. } => {
@@ -1455,22 +1465,42 @@ fn render_event(event: &BenchmarkEvent) {
     }
 }
 
+/// `thinking…` while a model reasons, and the line that overwrites it with how
+/// long the reasoning took: a carriage return and a clear-line first.
+///
+/// Off a terminal nothing can be overwritten, so a log gets only the
+/// `thought for` line, plain.
+fn thinking_line(seconds: Option<f64>, terminal: bool) -> Option<String> {
+    let (dim, reset) = (style::DIM, style::RESET);
+    match (seconds, terminal) {
+        (None, true) => Some(format!("{dim}thinking…{reset}")),
+        (None, false) => None,
+        (Some(s), true) => Some(format!("\r\x1b[2K{dim}thought for {s:.1}s{reset}")),
+        (Some(s), false) => Some(format!("thought for {s:.1}s")),
+    }
+}
+
 fn render_compare_complete(r: &ModelCompareResult) {
+    eprintln!("{}", compare_complete_line(r));
+}
+
+/// A compare result's speed line. A figure the reply did not carry is a dash.
+fn compare_complete_line(r: &ModelCompareResult) -> String {
     let gen_tps = r
         .generation_tps
         .map_or_else(|| "—".into(), |t| format!("{t:.1} tok/s gen"));
     let pp = r
         .prompt_tps
         .map_or_else(|| "—".into(), |t| format!("{t:.1} tok/s prompt"));
-    let tokens = r.completion_tokens.unwrap_or(0);
+    let tokens = fmt_count(r.completion_tokens);
     let ms = r
         .generation_ms
         .map_or_else(|| "—".into(), |m| format!("{:.1}s", m / 1000.0));
-    eprintln!(
+    format!(
         "{SUCCESS}✓ {gen_tps}  ·  {pp}  ·  {tokens} tokens  ·  {ms}{RESET}",
         SUCCESS = style::SUCCESS,
         RESET = style::RESET
-    );
+    )
 }
 
 fn render_perf_complete(r: &ModelPerfResult) {
@@ -1542,6 +1572,58 @@ mod tests {
         assert_eq!(fmt_ms(Some(335.6)), "336ms");
         assert_eq!(fmt_ms(Some(4_807.4)), "4.8s");
         assert_eq!(fmt_ms(Some(94_000.0)), "1m 34s");
+    }
+
+    fn compare_result(completion_tokens: Option<i64>) -> ModelCompareResult {
+        ModelCompareResult {
+            id: None,
+            model_id: 1,
+            run_id: Some(1),
+            prompt_text: String::new(),
+            system_prompt: None,
+            response_text: String::new(),
+            was_truncated: false,
+            prompt_tokens: None,
+            completion_tokens,
+            prompt_ms: None,
+            generation_ms: Some(7_000.0),
+            prompt_tps: Some(103.7),
+            generation_tps: Some(27.9),
+            created_at: chrono::Utc::now(),
+        }
+    }
+
+    /// A count the reply did not carry is unknown, not zero.
+    #[test]
+    fn a_missing_token_count_is_a_dash_not_a_zero() {
+        let line = compare_complete_line(&compare_result(None));
+        assert!(line.contains("·  — tokens  ·"), "{line:?}");
+
+        let line = compare_complete_line(&compare_result(Some(31)));
+        assert!(line.contains("·  31 tokens  ·"), "{line:?}");
+    }
+
+    /// The finished line returns to the start of the `thinking…` line and
+    /// clears it, so the two never show side by side.
+    #[test]
+    fn the_thought_line_overwrites_the_thinking_line() {
+        let thinking = thinking_line(None, true).expect("a terminal shows it");
+        assert!(thinking.contains("thinking…"));
+        assert!(!thinking.contains('\r'));
+        let done = thinking_line(Some(4.06), true).expect("always said");
+        assert!(done.starts_with("\r\x1b[2K"), "{done:?}");
+        assert!(done.contains("thought for 4.1s"), "{done:?}");
+    }
+
+    /// A log cannot be overwritten: it gets one plain line, with no
+    /// `thinking…` before it and no escapes in it.
+    #[test]
+    fn off_a_terminal_the_thought_line_is_plain() {
+        assert_eq!(thinking_line(None, false), None);
+        assert_eq!(
+            thinking_line(Some(4.06), false).as_deref(),
+            Some("thought for 4.1s")
+        );
     }
 
     #[test]

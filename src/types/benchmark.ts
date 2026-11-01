@@ -167,6 +167,7 @@ export type BenchmarkModelResult =
 export type BenchmarkEvent =
   | { type: 'model_started'; model_id: number; model_name: string; position: number; total: number }
   | { type: 'model_text_delta'; model_id: number; text: string }
+  | { type: 'model_thinking'; model_id: number; seconds: number | null }
   | { type: 'model_complete'; model_id: number; result: BenchmarkModelResult }
   | { type: 'model_failed'; model_id: number; model_name: string; error: string }
   | { type: 'run_complete'; run_id: number }

@@ -89,17 +89,18 @@ fn executable_of(_pid: u32) -> Option<PathBuf> {
 ///
 /// On Unix, uses `kill` with null signal which doesn't send a signal but
 /// checks existence.
-#[expect(
-    clippy::cast_possible_wrap,
-    reason = "nix takes an i32 pid_t; a pidfile value above i32::MAX wraps to a negative pid, which kill reads as a process group (-1, from u32::MAX, as every process); #1647"
-)]
+///
+/// A value that names no single process (`0`, or above `i32::MAX`) does not
+/// exist.
 #[cfg(unix)]
 pub fn pid_exists(pid: u32) -> bool {
     use nix::sys::signal;
-    use nix::unistd::Pid;
 
+    let Some(target) = crate::process::shutdown::signal_target(pid) else {
+        return false;
+    };
     // Signal None is a special "null signal" that checks if we can signal the process
-    match signal::kill(Pid::from_raw(pid as i32), None) {
+    match signal::kill(target, None) {
         Err(nix::errno::Errno::ESRCH) => false, // No such process
         // Signalled, or the process exists but we lack permission
         Ok(()) | Err(_) => true,
@@ -138,6 +139,16 @@ mod tests {
     #[cfg(unix)]
     fn pid_exists_false_for_impossible_pid() {
         assert!(!pid_exists(999_999));
+    }
+
+    /// `0` is the caller's own process group to `kill(2)`, and `u32::MAX`
+    /// would wrap to `-1`, every process: neither is a process that exists.
+    #[test]
+    #[cfg(unix)]
+    fn pid_exists_false_for_a_value_that_names_a_group() {
+        assert!(!pid_exists(0));
+        assert!(!pid_exists(u32::MAX));
+        assert!(!pid_exists(1 << 31));
     }
 
     #[test]
