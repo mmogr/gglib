@@ -20,6 +20,8 @@ mod attachments;
 mod branches;
 #[path = "setup_generation.rs"]
 mod generation;
+#[path = "setup_mcp_lifecycle.rs"]
+mod mcp_lifecycle;
 #[path = "setup_model_components.rs"]
 mod model_components;
 #[path = "setup_model_files.rs"]
@@ -594,6 +596,10 @@ async fn create_schema(pool: &SqlitePool) -> Result<()> {
     // rows. After the recipes step, whose version sits below this one, and
     // after the settings and MCP tables it reads exist.
     remote_grant::flag_listed_servers(pool).await?;
+
+    // Stored `manual` servers made disabled `lazy` ones. At every open, off
+    // the `user_version` ladder: an older build can still write `manual`.
+    mcp_lifecycle::retire_manual_lifecycle(pool).await?;
 
     // Last, after every table it reads exists, however old the library.
     models::rebuild_models_if_needed(pool).await?;

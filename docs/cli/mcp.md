@@ -49,8 +49,9 @@ under the table says why; `list` never starts a daemon.
 - A server's name is its own: `add` refuses a name another server already
   has.
 - `--lifecycle` decides when gglib spawns the server: `eager` at host init,
-  `lazy` on first tool use (the default), `manual` only when asked, by
-  `tools` or the GUI.
+  `lazy` on first tool use (the default). A server that should not run is
+  disabled (`disable`). A server stored as `manual`, a lifecycle older
+  gglib had, opens as a disabled `lazy` one.
 - A server you add is not told the folder a chat reads: it reads what its
   own arguments name, from `--working-dir` when one was given, else from
   the working directory of the process that spawns it. Each gglib process

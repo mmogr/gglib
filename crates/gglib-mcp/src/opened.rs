@@ -131,8 +131,8 @@ impl McpService {
     /// them and names the first few ids, and nothing else, and the rest are started: what a device names
     /// only narrows what is open, and never starts a server that is not.
     ///
-    /// A server that is invalid, manual and stopped, or that cannot be
-    /// started is skipped with one warning that names it and says why, and
+    /// A server that is disabled or invalid, or that cannot be started is
+    /// skipped with one warning that names it and says why, and
     /// the rest are offered. The why can hold what a server that failed to
     /// start printed on stderr, as the daemon's own start warning does;
     /// never a tool's arguments or results. Nothing here fails the run: a run

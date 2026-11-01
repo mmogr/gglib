@@ -14,7 +14,7 @@ infrastructure concerns (database, process management, etc.).
 - `McpServerConfig` - Execution configuration (`exe_path`, args, URL, `path_extra`)
 - `McpServerType` - Connection type (stdio, or SSE, which is stored and read but not yet run)
 - `McpServerStatus` - Runtime status (stopped, starting, running, error, unsupported)
-- `McpLifecycle` - Startup lifecycle policy (eager, lazy, manual)
+- `McpLifecycle` - Startup lifecycle policy (eager, lazy)
 - `McpEnvEntry` - Environment variable entry
 - `McpTool` - Tool exposed by an MCP server
 - `McpToolResult` - Result of a tool invocation

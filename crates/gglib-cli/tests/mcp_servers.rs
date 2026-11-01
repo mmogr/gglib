@@ -362,6 +362,38 @@ fn an_unknown_type_is_refused_with_the_types_there_are() {
     );
 }
 
+/// `manual` is no longer a lifecycle: the flag names the two there are, and
+/// nothing is stored.
+#[test]
+fn a_manual_lifecycle_is_refused_with_the_lifecycles_there_are() {
+    let root = tempfile::tempdir().expect("temp data dir");
+
+    let refused = mcp_err(
+        root.path(),
+        &[
+            "add",
+            "--name",
+            "files",
+            "--type",
+            "stdio",
+            "--command",
+            "true",
+            "--lifecycle",
+            "manual",
+        ],
+    );
+
+    assert!(
+        refused.contains("[possible values: eager, lazy]"),
+        "got: {refused}"
+    );
+    let listed = mcp_ok(root.path(), &["list"]);
+    assert!(
+        listed.contains("No MCP servers configured."),
+        "got: {listed}"
+    );
+}
+
 /// The server is added with a bare command, so its row has no resolved path.
 /// `mcp test` has to resolve it first, as the GUI's Test does: the client
 /// refuses to start a path that is not absolute.

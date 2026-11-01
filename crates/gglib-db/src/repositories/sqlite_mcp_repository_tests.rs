@@ -69,7 +69,7 @@ async fn a_stdio_server_reads_back_as_it_was_written() {
         Some("/opt/tools/bin".to_string()),
     )
     .with_working_dir("/srv")
-    .with_lifecycle(McpLifecycle::Manual)
+    .with_lifecycle(McpLifecycle::Eager)
     .with_enabled(false)
     .with_env("API_KEY", "secret123");
 
@@ -89,7 +89,7 @@ async fn a_stdio_server_reads_back_as_it_was_written() {
         );
         assert_eq!(read.config.working_dir, Some("/srv".to_string()));
         assert_eq!(read.config.path_extra, Some("/opt/tools/bin".to_string()));
-        assert_eq!(read.lifecycle, McpLifecycle::Manual);
+        assert_eq!(read.lifecycle, McpLifecycle::Eager);
         assert!(!read.enabled);
         assert_eq!(read.env, vec![McpEnvEntry::new("API_KEY", "secret123")]);
         assert!(!read.is_valid, "a new server is not valid until checked");
@@ -429,4 +429,23 @@ async fn a_whole_row_write_leaves_the_remote_flag_as_it_was() {
     repo.set_allow_remote(added.id, true).await.unwrap();
     repo.update(&added).await.unwrap();
     assert!(repo.get_by_id(added.id).await.unwrap().allow_remote);
+}
+
+/// An older build can write a `manual`, enabled row while this process has
+/// the database open, after the startup step ran. It reads as a disabled
+/// `lazy` server, as the next open would make it, so nothing starts it.
+#[tokio::test]
+async fn a_manual_row_written_while_open_reads_as_disabled() {
+    let repo = repository().await;
+    sqlx::query(
+        "INSERT INTO mcp_servers (name, type, lifecycle, enabled) VALUES ('old', 'stdio', 'manual', 1)",
+    )
+    .execute(&repo.pool)
+    .await
+    .expect("a row an older build wrote");
+
+    let read = repo.get_by_name("old").await.expect("the row");
+
+    assert_eq!(read.lifecycle, McpLifecycle::Lazy);
+    assert!(!read.enabled, "a manual server never ran unasked");
 }
