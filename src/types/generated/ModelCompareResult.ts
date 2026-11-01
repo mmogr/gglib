@@ -29,7 +29,8 @@ prompt_text: string,
  */
 system_prompt: string | null, 
 /**
- * Full response text accumulated from the stream.
+ * The answer accumulated from the stream. A thinking model's reasoning
+ * is not part of it.
  */
 response_text: string, 
 /**

@@ -18,36 +18,29 @@ use serde_json::Value;
 // Compare-mode SSE chunk extractors
 // ────────────────────────────────────────────────────────────────────────────
 
-/// Extract the streaming text delta from one SSE chunk.
+/// Extract the answer text from one SSE chunk: `choices[0].delta.content`.
 ///
-/// Checks `choices[0].delta.content` first.  When that field is absent or an
-/// empty string — as happens during the *thinking* phase of reasoning models
-/// such as Qwen3, which stream thinking tokens in `reasoning_content` instead
-/// of `content` — this falls back to `choices[0].delta.reasoning_content`.
-///
-/// Priority: `content` (non-empty) > `reasoning_content` (non-empty) > `None`.
-///
-/// Returning `None` signals "no text in this chunk" (e.g. the final chunk
-/// that only carries `finish_reason`).
+/// Returns `None` when it is absent or empty, as it is in a thinking model's
+/// reasoning chunks (Qwen3, DeepSeek-R1), which carry `reasoning_content`
+/// instead, and in the final chunk that only carries `finish_reason`.
+/// Reasoning is read by [`extract_reasoning_delta`] and never returned here.
 pub fn extract_text_delta(val: &Value) -> Option<String> {
-    let delta = val
-        .get("choices")
+    delta_field(val, "content")
+}
+
+/// Extract the reasoning text from one SSE chunk:
+/// `choices[0].delta.reasoning_content`, when present and non-empty.
+pub fn extract_reasoning_delta(val: &Value) -> Option<String> {
+    delta_field(val, "reasoning_content")
+}
+
+/// `choices[0].delta.<key>`, when it is a non-empty string.
+fn delta_field(val: &Value, key: &str) -> Option<String> {
+    val.get("choices")
         .and_then(|c| c.get(0))
-        .and_then(|c| c.get("delta"))?;
-
-    // `content` takes priority — present and non-empty means the model is in
-    // its answer phase (or is a non-thinking model).
-    if let Some(s) = delta.get("content").and_then(|v| v.as_str())
-        && !s.is_empty()
-    {
-        return Some(s.to_owned());
-    }
-
-    // Fall back to `reasoning_content` for thinking models (Qwen3, DeepSeek-R1,
-    // etc.) that stream thinking tokens here while `content` is null/"".
-    delta
-        .get("reasoning_content")
-        .and_then(|v| v.as_str())
+        .and_then(|c| c.get("delta"))
+        .and_then(|d| d.get(key))
+        .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
 }
@@ -95,20 +88,27 @@ pub fn extract_compare_timings(
     (prompt_ms, generation_ms, prompt_tps, generation_tps)
 }
 
-/// Extract token-usage counts from `usage.prompt_tokens` and
-/// `usage.completion_tokens`.
+/// Extract token counts: `usage.prompt_tokens` and `usage.completion_tokens`,
+/// or, where `usage` lacks one, llama-server's `timings.prompt_n` and
+/// `timings.predicted_n`.
 ///
-/// Returns `(prompt_tokens, completion_tokens)`.  Either may be `None` if the
-/// field is absent or not an integer.
+/// Returns `(prompt_tokens, completion_tokens)`. Either is `None` when neither
+/// source carries it as an integer.
 pub fn extract_usage(val: &Value) -> (Option<i64>, Option<i64>) {
-    let usage = val.get("usage");
-    let prompt_tokens = usage
-        .and_then(|u| u.get("prompt_tokens"))
-        .and_then(Value::as_i64);
-    let completion_tokens = usage
-        .and_then(|u| u.get("completion_tokens"))
-        .and_then(Value::as_i64);
-    (prompt_tokens, completion_tokens)
+    let count = |usage_key: &str, timings_key: &str| {
+        val.get("usage")
+            .and_then(|u| u.get(usage_key))
+            .and_then(Value::as_i64)
+            .or_else(|| {
+                val.get("timings")
+                    .and_then(|t| t.get(timings_key))
+                    .and_then(Value::as_i64)
+            })
+    };
+    (
+        count("prompt_tokens", "prompt_n"),
+        count("completion_tokens", "predicted_n"),
+    )
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -379,26 +379,31 @@ mod tests {
     }
 
     /// Thinking model during reasoning phase: `content` is null, only
-    /// `reasoning_content` is present → `reasoning_content` returned.
+    /// `reasoning_content` is present → no answer text, the reasoning apart.
     #[test]
-    fn test_extract_text_delta_reasoning_content_fallback() {
+    fn test_extract_text_delta_ignores_reasoning_content() {
         let val = json!({
             "choices": [{ "delta": { "content": null, "reasoning_content": "<think>step 1</think>" } }]
         });
+        assert_eq!(extract_text_delta(&val), None);
         assert_eq!(
-            extract_text_delta(&val),
+            extract_reasoning_delta(&val),
             Some("<think>step 1</think>".to_string())
         );
     }
 
     /// Thinking model: `content` is empty string, `reasoning_content` is
-    /// present → empty `content` is skipped; `reasoning_content` returned.
+    /// present → still no answer text.
     #[test]
-    fn test_extract_text_delta_empty_content_falls_back_to_reasoning() {
+    fn test_extract_text_delta_empty_content_is_no_answer() {
         let val = json!({
             "choices": [{ "delta": { "content": "", "reasoning_content": "thinking..." } }]
         });
-        assert_eq!(extract_text_delta(&val), Some("thinking...".to_string()));
+        assert_eq!(extract_text_delta(&val), None);
+        assert_eq!(
+            extract_reasoning_delta(&val),
+            Some("thinking...".to_string())
+        );
     }
 
     /// Both `content` and `reasoning_content` present and non-empty →

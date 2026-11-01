@@ -23,9 +23,11 @@ agentic eval before each seed of each task. It then marks the run failed as
 ```text
 benchmark/
   mod.rs     — BenchmarkOps, BenchmarkDeps (public API)
-  compare.rs — SSE inference loop: ModelRuntimePort orchestration +
-               defensive parsing of the reply, which
-               gglib_core::sse::DataFrames cuts into its chunks
+  compare.rs — SSE inference loop: ModelRuntimePort orchestration and
+               the request each model is sent
+  compare_reply.rs — one model's reply, which gglib_core::sse::DataFrames
+               cuts into its chunks: the answer, its totals, and how long
+               a thinking model reasoned (its reasoning is not kept)
   perf.rs    — llama-bench process spawning + VRAM drain logic
   mapper.rs  — raw serde_json::Value → domain type transforms
   guard.rs   — BenchmarkTaskGuard (DropCancels pattern for HTTP layer)

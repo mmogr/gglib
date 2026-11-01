@@ -25,8 +25,9 @@
 //!
 //! [`ModelRuntimePort`]: gglib_core::ports::ModelRuntimePort
 
+use std::time::Instant;
+
 use anyhow::{Context as _, Result};
-use chrono::Utc;
 use futures_util::StreamExt;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
@@ -39,9 +40,10 @@ use gglib_core::domain::benchmark::{
 use gglib_core::sse::DataFrames;
 
 use super::BenchmarkDeps;
-use super::mapper::{
-    extract_compare_timings, extract_finish_reason, extract_text_delta, extract_usage,
-};
+
+#[path = "compare_reply.rs"]
+mod reply;
+use reply::{ReplyFold, reply_chunks};
 
 /// Entry point called by [`super::BenchmarkOps::run_compare`].
 pub(crate) async fn run_compare(
@@ -154,10 +156,6 @@ pub(crate) async fn run_compare(
 ///
 /// `default_ctx` is the user's stored global default, or `None` when they set
 /// none — the same value the proxy passes, so both resolve the same chain.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one model's compare run under one lease: send the prompt, parse the stream, record the result; the parse keeps running totals the record reads"
-)]
 #[allow(clippy::too_many_arguments)]
 async fn run_single_compare(
     deps: &BenchmarkDeps,
@@ -209,15 +207,7 @@ async fn run_single_compare(
     }
 
     // ── Defensive SSE stream parsing ─────────────────────────────────────
-    let mut response_text = String::new();
-    let mut was_truncated = false;
-    let mut prompt_ms: Option<f64> = None;
-    let mut generation_ms: Option<f64> = None;
-    let mut prompt_tps: Option<f64> = None;
-    let mut generation_tps: Option<f64> = None;
-    let mut prompt_tokens: Option<i64> = None;
-    let mut completion_tokens: Option<i64> = None;
-
+    let mut reply = ReplyFold::new(model_id);
     let mut byte_stream = response.bytes_stream();
     let mut frames = DataFrames::unbounded();
 
@@ -234,83 +224,16 @@ async fn run_single_compare(
         };
 
         for val in reply_chunks(&mut frames, &chunk, &model.name) {
-            // Text delta
-            if let Some(delta) = extract_text_delta(&val) {
-                response_text.push_str(&delta);
-                let _ = tx
-                    .send(BenchmarkEvent::ModelTextDelta {
-                        model_id,
-                        text: delta,
-                    })
-                    .await;
-            }
-            // Finish reason
-            if matches!(extract_finish_reason(&val).as_deref(), Some("length")) {
-                was_truncated = true;
-            }
-            // Timings (update only when present)
-            let (pm, gm, pt, gt) = extract_compare_timings(&val);
-            if pm.is_some() {
-                prompt_ms = pm;
-            }
-            if gm.is_some() {
-                generation_ms = gm;
-            }
-            if pt.is_some() {
-                prompt_tps = pt;
-            }
-            if gt.is_some() {
-                generation_tps = gt;
-            }
-            // Usage
-            let (ptu, ctu) = extract_usage(&val);
-            if ptu.is_some() {
-                prompt_tokens = ptu;
-            }
-            if ctu.is_some() {
-                completion_tokens = ctu;
+            for event in reply.absorb(&val, Instant::now()) {
+                let _ = tx.send(event).await;
             }
         }
     }
-
-    // If the stream ended mid-response (no finish_reason seen), treat as truncated.
-    if !was_truncated && response_text.is_empty() {
-        was_truncated = true;
+    if let Some(event) = reply.finish(Instant::now()) {
+        let _ = tx.send(event).await;
     }
 
-    Ok(ModelCompareResult {
-        id: None,
-        model_id,
-        run_id: Some(run_id),
-        prompt_text: config.prompt.clone(),
-        system_prompt: config.system_prompt.clone(),
-        response_text,
-        was_truncated,
-        prompt_tokens,
-        completion_tokens,
-        prompt_ms,
-        generation_ms,
-        prompt_tps,
-        generation_tps,
-        created_at: Utc::now(),
-    })
-}
-
-/// Take `chunk` off a model's reply, and return every JSON chunk it
-/// completed. `[DONE]` is not one, and a payload that is not JSON is skipped.
-fn reply_chunks(frames: &mut DataFrames, chunk: &[u8], model: &str) -> Vec<serde_json::Value> {
-    frames
-        .push(chunk)
-        .iter()
-        .filter(|data| *data != "[DONE]")
-        .filter_map(|data| match serde_json::from_str(data) {
-            Ok(val) => Some(val),
-            Err(e) => {
-                warn!("benchmark: failed to parse SSE chunk for '{model}': {e}");
-                None
-            }
-        })
-        .collect()
+    Ok(reply.into_result(config, run_id))
 }
 
 /// Build `messages` array for the chat completions body.
@@ -348,10 +271,12 @@ fn build_compare_request_body(
         .unwrap_or_default()
         .resolve_with_defaults(model.inference_defaults.as_ref(), global_inf, model_ctx);
 
+    // A streamed reply carries `usage` only when asked for it.
     let mut body = serde_json::json!({
         "model": model.name,
         "messages": build_messages(config),
-        "stream": true
+        "stream": true,
+        "stream_options": { "include_usage": true }
     });
 
     if let Some(obj) = body.as_object_mut() {
