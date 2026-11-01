@@ -76,6 +76,10 @@ pub(crate) mod slots_poller;
 pub(crate) mod sse_stream;
 pub mod template_caps_read;
 pub(crate) mod token_calibration;
+// Test builds only, like `error_codes` above, but public under
+// `test-support`: `gglib-cli`'s tests read the list as well as this crate's.
+#[cfg(any(test, feature = "test-support"))]
+pub mod tunnel_routes;
 pub(crate) mod turn_dialect;
 pub(crate) mod unary_body;
 

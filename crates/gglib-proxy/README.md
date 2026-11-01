@@ -107,6 +107,7 @@ This crate provides an OpenAI-compatible HTTP server that:
 **Module Descriptions:**
 - **`server.rs`** — The composition root: `AppState`, and `serve()`, which builds the state and the router; also the `/health`, `/v1/chat/completions`, `/v1/proxy/status`, and `/v1/proxy/status/stream` handlers
 - **`router.rs`** — Which routes exist, and which guards wrap which, in what order (see the [`access`](src/access/) module)
+- **`tunnel_routes.rs`** — `TUNNEL_REACHABLE`, every route a paired machine reaches through the tunnel; test builds only, held to `router.rs` by `router_tests.rs`
 - **`admin.rs`** — `POST /v1/proxy/cache/clear` and `POST /v1/proxy/shutdown`: clearing the caches, and stopping the daemon
 - **`observers.rs`** — `ProxyObservers`: what a proxy run reports to that outlives the run, owned by the supervisor so a restarted proxy keeps counting into the same place
 - **`serve_config.rs`** — `ServeConfig`: everything `serve()` is started with, one named field each
