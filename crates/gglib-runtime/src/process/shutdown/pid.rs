@@ -45,13 +45,29 @@ pub async fn kill_pid(pid: u32) -> io::Result<()> {
     }
 }
 
+/// The pid `kill(2)` should be given for `pid`, or `None` when `pid` names no
+/// single process.
+///
+/// `kill` reads `0` as the caller's own process group and a negative pid as a
+/// group, `-1` as every process the user can signal. A `u32` above
+/// `i32::MAX` would become one of those through an `as` cast, so it is
+/// refused here instead.
 #[cfg(unix)]
-#[expect(
-    clippy::cast_possible_wrap,
-    reason = "nix takes an i32 pid_t; a pidfile value above i32::MAX wraps to a negative pid, which kill reads as a process group (-1, from u32::MAX, as every process); #1647"
-)]
+pub(crate) fn signal_target(pid: u32) -> Option<Pid> {
+    i32::try_from(pid)
+        .ok()
+        .filter(|&raw| raw > 0)
+        .map(Pid::from_raw)
+}
+
+#[cfg(unix)]
 async fn kill_pid_unix(pid: u32) -> io::Result<()> {
-    let nix_pid = Pid::from_raw(pid as i32);
+    let nix_pid = signal_target(pid).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{pid} is not a process id"),
+        )
+    })?;
 
     // Phase 1: SIGTERM
     if let Err(e) = signal::kill(nix_pid, Signal::SIGTERM) {
@@ -161,6 +177,17 @@ mod tests {
         // Use a PID that's very unlikely to exist
         let result = kill_pid(999_999).await;
         assert!(result.is_ok());
+    }
+
+    /// `u32::MAX` would be `-1`, every process the user can signal, and `0`
+    /// this process's own group: both are refused before any signal is sent.
+    /// (Were either sent, this test process would get the SIGTERM.)
+    #[tokio::test]
+    async fn kill_pid_refuses_a_value_that_names_a_group() {
+        for pid in [0, 1 << 31, u32::MAX] {
+            let err = kill_pid(pid).await.expect_err("must be refused");
+            assert_eq!(err.kind(), io::ErrorKind::InvalidInput, "{pid}");
+        }
     }
 
     #[tokio::test]

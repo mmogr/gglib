@@ -111,6 +111,9 @@ fn parse_pidfile_content(content: &str) -> io::Result<PidFileData> {
     let pid = lines
         .next()
         .and_then(|s| s.trim().parse::<u32>().ok())
+        // `0` and anything above `i32::MAX` name a process group to
+        // `kill(2)`, never one process, so they are as invalid as no pid.
+        .filter(|&pid| pid > 0 && i32::try_from(pid).is_ok())
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing or invalid PID"))?;
 
     let port = lines
@@ -177,5 +180,18 @@ mod tests {
                 }
             )]
         );
+    }
+
+    /// A pid that names no single process to `kill(2)` (`0` is the caller's
+    /// group, `2^31` and up wrap negative) reads as invalid, like no pid.
+    #[test]
+    fn a_pid_that_names_a_process_group_is_invalid() {
+        for pid in ["0", "2147483648", "4294967295"] {
+            let err = parse_pidfile_content(&format!("{pid}\n8080\n"))
+                .expect_err(&format!("{pid} should be refused"));
+            assert_eq!(err.kind(), io::ErrorKind::InvalidData, "{pid}");
+        }
+        let largest = parse_pidfile_content("2147483647\n8080\n").expect("i32::MAX is a pid");
+        assert_eq!(largest.pid, 2_147_483_647);
     }
 }
