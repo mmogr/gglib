@@ -1,8 +1,9 @@
 {
   "bos_token": "<s>",
-  "build_info": "b11669-620d2225c",
+  "build_info": "b11960-8642541b2",
   "chat_template": "<redacted>",
   "chat_template_caps": {
+    "reasoning_effort_levels": [],
     "supports_object_arguments": true,
     "supports_parallel_tool_calls": true,
     "supports_preserve_reasoning": false,
