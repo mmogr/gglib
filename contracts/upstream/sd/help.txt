@@ -1,4 +1,4 @@
-stable-diffusion.cpp version unknown, commit 95ff762
+stable-diffusion.cpp version unknown, commit 8ee08e3
 Usage: sd-server [options]
 
 Svr Options:
