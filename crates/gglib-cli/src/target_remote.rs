@@ -4,14 +4,14 @@
 //! brought the file to the size budget. Everything here talks to the daemon
 //! and reads the pairing. [`Paired`] is the daemon and its connection, which
 //! a command that asks the daemon about the paired machine needs; [`Far`] is
-//! that plus the key, for a turn or a proxy client that talks to the far
-//! proxy itself. Each is established once, so "connected" and "holding a key"
+//! the far proxy itself, as the `FarProxy` the daemon's own `/api/remote`
+//! routes use, for a turn or a proxy client that talks to it directly. Each
+//! is established once, so "connected" and "holding a key"
 //! are refused with one set of sentences. Nothing here decides anything —
 //! which commands get either at all is the parent's table.
 
 use anyhow::{Result, anyhow, bail};
-use gglib_app_services::{GuiError, RemoteConnection, far_credentials};
-use gglib_runtime::FarMachine;
+use gglib_app_services::{FarProxy, GuiError, RemoteConnection, far_credentials};
 
 use super::{TurnModel, Upstream};
 use crate::bootstrap::CliContext;
@@ -32,18 +32,12 @@ pub(crate) struct Paired {
     pub name: String,
 }
 
-/// The paired machine, as this machine can reach it directly: the tunnel's
-/// loopback port, the key this machine received when it paired, and the
-/// name it knows the machine by.
+/// The paired machine, as this machine reaches it directly: its proxy
+/// through the tunnel, with the key this machine received when it paired,
+/// and how the tunnel is reaching it.
 pub(crate) struct Far {
-    /// `http://127.0.0.1:<port>/v1`, exactly as the daemon reports it.
-    pub base_url: String,
-    /// The tunnel's loopback port, for a command that takes host and port.
-    pub port: u16,
-    /// The key this machine received when it paired.
-    pub key: String,
-    /// What a sentence calls that machine: its name, never its fingerprint.
-    pub name: String,
+    /// The far proxy, the same client the daemon's `/api/remote` routes use.
+    pub proxy: FarProxy,
     /// How the far side is being reached: `direct`, `relayed`, `idle`.
     pub path: String,
 }
@@ -89,9 +83,7 @@ impl super::Target {
     /// As [`paired`](Self::paired), and a pairing this machine holds no key
     /// for — in the sentence that names the command to run.
     pub(crate) async fn far(self, ctx: &CliContext) -> Result<Far> {
-        let Paired {
-            connection, name, ..
-        } = self.paired(ctx).await?;
+        let Paired { connection, .. } = self.paired(ctx).await?;
         let stored = ctx
             .app
             .settings()
@@ -99,26 +91,14 @@ impl super::Target {
             .await
             .map_err(|e| anyhow!("failed to load settings: {e}"))?
             .remote_pairing;
-        let key = far_credentials(stored.as_ref(), &connection.ticket_fingerprint)
-            .map_err(|e| match e {
-                GuiError::Conflict(message) => anyhow!(message),
-                other => anyhow!(other),
-            })?
-            .key;
-        let port = reqwest::Url::parse(&connection.base_url)
-            .ok()
-            .and_then(|url| url.port())
-            .ok_or_else(|| {
-                anyhow!(
-                    "the daemon reported the remote at {}, which names no port",
-                    connection.base_url
-                )
-            })?;
+        let refused = |e: GuiError| match e {
+            GuiError::Conflict(message) => anyhow!(message),
+            other => anyhow!(other),
+        };
+        let credentials =
+            far_credentials(stored.as_ref(), &connection.ticket_fingerprint).map_err(refused)?;
         Ok(Far {
-            base_url: connection.base_url,
-            port,
-            key,
-            name,
+            proxy: FarProxy::new(&connection.base_url, &credentials).map_err(refused)?,
             path: connection.path,
         })
     }
@@ -131,54 +111,21 @@ pub(super) async fn remote_upstream(
     turn: Option<&TurnModel>,
     banner: &BannerInfo,
 ) -> Result<Upstream> {
-    let far = super::Target::Remote.far(ctx).await?;
+    let Far { proxy, path } = super::Target::Remote.far(ctx).await?;
     if !banner.quiet {
         style::print_info_banner("Info", "\u{2139}\u{fe0f}");
-        let asked = turn.map_or_else(|| far.name.clone(), TurnModel::shown);
-        eprintln!("  Asking {asked} at {} ({})", far.base_url, far.path);
+        let asked = turn.map_or_else(|| proxy.shown_name().to_owned(), TurnModel::shown);
+        eprintln!("  Asking {asked} at {} ({path})", proxy.base_url());
         if let Some(ref s) = banner.sampling {
             upstream::print_sampling_lines(s);
         }
         style::print_banner_close();
     }
     Ok(Upstream {
-        base_url: server_root(&far.base_url),
+        base_url: proxy.server_root(),
         // The banner above has just named this machine to the user; the key
         // carries that name onward so a later refusal of it can name the same
         // machine, which by then nothing downstream could look up.
-        far_machine: Some(FarMachine {
-            key: far.key,
-            name: far.name,
-        }),
+        far_machine: Some(proxy.far_machine()),
     })
-}
-
-/// `http://127.0.0.1:41234/v1` → `http://127.0.0.1:41234`.
-///
-/// The daemon reports the URL a client pastes, with the `/v1`; the adapter
-/// builds `/v1/chat/completions` from the server root itself.
-fn server_root(base_url: &str) -> String {
-    let trimmed = base_url.trim_end_matches('/');
-    trimmed.strip_suffix("/v1").unwrap_or(trimmed).to_owned()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::server_root;
-
-    #[test]
-    fn the_v1_suffix_the_daemon_reports_is_removed_once() {
-        assert_eq!(
-            server_root("http://127.0.0.1:41234/v1"),
-            "http://127.0.0.1:41234"
-        );
-        assert_eq!(
-            server_root("http://127.0.0.1:41234/v1/"),
-            "http://127.0.0.1:41234"
-        );
-        assert_eq!(
-            server_root("http://127.0.0.1:41234"),
-            "http://127.0.0.1:41234"
-        );
-    }
 }

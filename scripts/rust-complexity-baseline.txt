@@ -15,7 +15,6 @@ crates/gglib-app-services/src/models_tests.rs 897
 crates/gglib-app-services/src/models_upgrade.rs 311
 crates/gglib-app-services/src/models_upgrade_tests.rs 373
 crates/gglib-app-services/src/proxy.rs 421
-crates/gglib-app-services/src/remote/far_proxy.rs 315
 crates/gglib-app-services/src/remote/teardown.rs 331
 crates/gglib-app-services/src/runs/cell.rs 373
 crates/gglib-app-services/src/sampling_explain.rs 438

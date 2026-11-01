@@ -1,13 +1,14 @@
-//! The far machine's proxy, reached *through* the tunnel: its chats and runs
-//! for this machine's chat page, its models, and the route that stops it.
+//! The far machine's proxy, reached *through* the tunnel: where it is, the
+//! key it admits this machine by, which machine it is, and the name it goes
+//! by. The routes are each in the file of the feature that asks them:
+//! `far_chats.rs`, `far_runs.rs`, `far_images.rs`, `far_attachments.rs` and
+//! `far_read.rs`, each a `#[path]` child that adds to `impl FarProxy`.
 //!
 //! Each request goes to the far proxy over the local listener with the key
 //! `join` stored, which [`far_credentials`](super::paired_machine::far_credentials)
 //! hands out only for the machine connected to: the listener adds no
-//! credential (ADR 0012, decision 7), so this side attaches it. Chat and run
-//! answers are handed back whole for the daemon to pass on; the models are
-//! read into the far proxy's own types (`far_read.rs`). Nothing here keeps a
-//! row, a title or a message, and nothing here logs one.
+//! credential (ADR 0012, decision 7), so this side attaches it. Nothing here
+//! keeps a row, a title or a message, and nothing here logs one.
 //!
 //! A run's events are a stream that lasts as long as its reply, so they go
 //! through a client with no overall timeout, only a limit on silence; every
@@ -18,8 +19,6 @@ use std::fmt;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use gglib_core::domain::hub_chats::HubTurn;
-use gglib_core::domain::runs::is_run_id;
 use gglib_core::domain::{Machine, UNNAMED_PAIRED};
 use gglib_runtime::FarMachine;
 
@@ -28,8 +27,14 @@ use crate::error::GuiError;
 
 #[path = "far_attachments.rs"]
 mod far_attachments;
+#[path = "far_chats.rs"]
+mod far_chats;
+#[path = "far_images.rs"]
+mod far_images;
 #[path = "far_read.rs"]
 mod far_read;
+#[path = "far_runs.rs"]
+mod far_runs;
 pub use far_read::FarError;
 
 /// How long a bounded request may take end to end. Generous because a first
@@ -156,6 +161,20 @@ impl FarProxy {
         self.name.as_deref().unwrap_or(UNNAMED_PAIRED)
     }
 
+    /// `http://127.0.0.1:<port>/v1`, as the daemon reports it: the URL a
+    /// client pastes, and the one a sentence shows.
+    #[must_use]
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    /// The tunnel's loopback port, for a client that takes a host and a
+    /// port; `None` for a base URL that names none.
+    #[must_use]
+    pub fn port(&self) -> Option<u16> {
+        reqwest::Url::parse(&self.base_url).ok()?.port()
+    }
+
     /// `http://127.0.0.1:<port>`, the far proxy without the `/v1`: where an
     /// agent turn's completion adapter points, since it adds the `/v1` itself.
     #[must_use]
@@ -174,98 +193,6 @@ impl FarProxy {
             key: self.key.clone(),
             name: self.shown_name().to_owned(),
         }
-    }
-
-    /// `GET /v1/chats`.
-    ///
-    /// # Errors
-    ///
-    /// `Unavailable` when the request did not get through.
-    pub async fn list_chats(&self) -> Result<reqwest::Response, GuiError> {
-        self.send(self.bounded.get(self.url("/chats"))).await
-    }
-
-    /// `GET /v1/chats/{id}`.
-    ///
-    /// # Errors
-    ///
-    /// `Unavailable` when the request did not get through.
-    pub async fn open_chat(&self, id: i64) -> Result<reqwest::Response, GuiError> {
-        self.send(self.bounded.get(self.url(&format!("/chats/{id}"))))
-            .await
-    }
-
-    /// `PUT /v1/runs/{run_id}?kind=agent` with `{conversation_id, content,
-    /// images, thinking}`: a turn on one of the far machine's chats, which it
-    /// runs and saves.
-    ///
-    /// # Errors
-    ///
-    /// `ValidationFailed` for a run id the hub would not accept, before
-    /// anything is sent; `Unavailable` when the request did not get through.
-    pub async fn add_turn(
-        &self,
-        run_id: &str,
-        turn: &HubTurn,
-    ) -> Result<reqwest::Response, GuiError> {
-        let path = format!("{}?kind=agent", run_path(run_id)?);
-        self.send(self.bounded.put(self.url(&path)).json(turn))
-            .await
-    }
-
-    /// `GET /v1/images/drawing`: whether that machine can draw for a turn
-    /// sent with Draw pressed, why not, and its image models; with
-    /// `image_model`, one of its ids, as `?image_model=<id>`, so it judges
-    /// that choice. An older hub answers 404.
-    ///
-    /// # Errors
-    ///
-    /// `Unavailable` when the request did not get through.
-    pub async fn drawing(&self, image_model: Option<u32>) -> Result<reqwest::Response, GuiError> {
-        let asked = image_model.map_or_else(String::new, |id| format!("?image_model={id}"));
-        self.send(
-            self.bounded
-                .get(self.url(&format!("/images/drawing{asked}"))),
-        )
-        .await
-    }
-
-    /// `GET /v1/runs`: the runs this device may see there.
-    ///
-    /// # Errors
-    ///
-    /// `Unavailable` when the request did not get through.
-    pub async fn list_runs(&self) -> Result<reqwest::Response, GuiError> {
-        self.send(self.bounded.get(self.url("/runs"))).await
-    }
-
-    /// `POST /v1/runs/{run_id}/cancel`.
-    ///
-    /// # Errors
-    ///
-    /// As [`FarProxy::add_turn`].
-    pub async fn cancel_run(&self, run_id: &str) -> Result<reqwest::Response, GuiError> {
-        let path = format!("{}/cancel", run_path(run_id)?);
-        self.send(self.bounded.post(self.url(&path))).await
-    }
-
-    /// `GET /v1/runs/{run_id}/events?after={after}`, answered as soon as its
-    /// head arrives: the body is the stream, read as the run goes.
-    ///
-    /// # Errors
-    ///
-    /// As [`FarProxy::add_turn`].
-    pub async fn run_events(
-        &self,
-        run_id: &str,
-        after: u32,
-    ) -> Result<reqwest::Response, GuiError> {
-        let path = format!("{}/events?after={after}", run_path(run_id)?);
-        let request = self
-            .streaming
-            .get(self.url(&path))
-            .header(reqwest::header::ACCEPT, "text/event-stream");
-        self.send(request).await
     }
 
     fn url(&self, path: &str) -> String {
@@ -297,16 +224,6 @@ pub(super) fn streaming_builder(read_timeout: Duration) -> reqwest::ClientBuilde
         Some(total) => builder.timeout(total),
         None => builder,
     }
-}
-
-/// `/runs/{run_id}`, for an id the hub accepts: never a path a caller built.
-fn run_path(run_id: &str) -> Result<String, GuiError> {
-    if !is_run_id(run_id) {
-        return Err(GuiError::ValidationFailed(
-            "a run id is 1 to 64 of A-Z, a-z, 0-9, '_' and '-'".to_owned(),
-        ));
-    }
-    Ok(format!("/runs/{run_id}"))
 }
 
 #[cfg(test)]

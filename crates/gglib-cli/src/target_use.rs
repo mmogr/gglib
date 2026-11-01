@@ -67,8 +67,14 @@ impl Target {
                          --api-key would name a different one; drop them"
                     );
                 }
-                let far = self.far(ctx).await?;
-                Ok(("127.0.0.1".to_owned(), far.port, Some(far.key)))
+                let proxy = self.far(ctx).await?.proxy;
+                let port = proxy.port().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "the daemon reported the remote at {}, which names no port",
+                        proxy.base_url()
+                    )
+                })?;
+                Ok(("127.0.0.1".to_owned(), port, Some(proxy.far_machine().key)))
             }
         }
     }
