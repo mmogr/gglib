@@ -17,7 +17,7 @@
 //! the image tool hands the daemon, and never to the chat model.
 //!
 //! The CLI never drives `sd-server` itself. The tool draws through the
-//! daemon ([`DaemonImageGenerator`]), so a render queues with the daemon's
+//! daemon ([`ImageGenerator`]), so a render queues with the daemon's
 //! other work; a session with no daemon, or one whose model is on another
 //! machine (`--remote`), cannot draw, and `/draw` says why.
 
@@ -31,7 +31,7 @@ use gglib_core::services::{AttachmentService, drawing_availability};
 use gglib_mcp::{DrawArm, DrawWith, DrawingTool};
 
 use crate::bootstrap::CliContext;
-use crate::daemon_client::{self, DaemonHandle, images::DaemonImageGenerator};
+use crate::daemon_client::{self, DaemonHandle, images::ImageGenerator};
 use crate::target::Target;
 
 /// Why a `--remote` session cannot draw: its loop would run the tool here,
@@ -76,7 +76,7 @@ impl DrawSwitch {
         } else {
             DaemonHandle::new(ctx, gglib_proxy::loopback::client()).await
         };
-        Self::through(Arc::new(DaemonImageGenerator::new(daemon)))
+        Self::through(Arc::new(ImageGenerator::Daemon(daemon)))
     }
 
     /// A switch that draws through `images`.

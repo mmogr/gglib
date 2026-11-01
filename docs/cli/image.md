@@ -1,8 +1,9 @@
 # gglib image
 
 Draw a picture with this machine's image model, through the daemon (it
-starts one if none runs). The render is shown on one line as it goes, each
-PNG is saved, and its line is printed: `[image WxH] <path>`.
+starts one if none runs), or with `--remote` with the paired machine's. The
+render is shown on one line as it goes, each PNG is saved here, and its line
+is printed: `[image WxH] <path>`.
 
 ```bash
 gglib image "a lighthouse at dusk, oil painting"
@@ -40,6 +41,18 @@ the runtime that draws them ([config](config.md#llama-and-sd)).
 
 - `-o PATH`, or `gglib-<unix time>.png` in the current folder, with `-1`,
   `-2`, … for more than one. An existing file is never replaced.
+
+## On the paired machine
+
+- `--remote` draws on the machine this one is paired with, with its image
+  models: `gglib model list --remote` lists them, and `-m` names one by its
+  id or name there. Without `-m` that machine's default is used, never this
+  one's.
+- The render queues behind that machine's chats, the line says `starting on
+  <machine>`, and each picture is saved here as usual.
+- `--from` and `--mask` are sent with the request, so a picture drawn from
+  goes over the tunnel; the limit on a request's size is the same as here.
+  [Remote access](../remote.md#using-it) has the rest.
 
 ## Stopping
 

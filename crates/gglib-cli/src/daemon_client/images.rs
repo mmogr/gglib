@@ -1,9 +1,11 @@
-//! Drawing through the daemon: [`DaemonImageGenerator`], the image
-//! generation port over `POST /api/images/generations` with `stream: true`.
+//! Drawing through a daemon: [`ImageGenerator`], the image generation port
+//! over `POST /api/images/generations` with `stream: true` on this machine's
+//! daemon, or over the paired machine's `/v1/images/generations` through the
+//! tunnel ([`FarProxy::generate_images`]). Both answer the same events.
 //!
-//! The CLI never drives `sd-server` itself: the daemon owns the image model,
-//! its turn on the GPU and its job, so a render started here queues behind
-//! the daemon's chats and renders like any other. Each streamed progress
+//! The CLI never drives `sd-server` itself: the daemon that draws owns the
+//! image model, its turn on the GPU and its job, so a render started here
+//! queues behind that daemon's chats and renders like any other. Each streamed progress
 //! event becomes an [`ImageProgress`], each completed event an image, and an
 //! error event or a refused request an [`ImageError::Refused`] carrying the
 //! daemon's code and words.
@@ -15,6 +17,7 @@ use async_trait::async_trait;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use futures_util::StreamExt as _;
+use gglib_app_services::FarProxy;
 use gglib_core::contracts::http::images::{
     DrawingAvailability, ImageGenerationsRequest, ImageStreamEvent,
 };
@@ -31,22 +34,55 @@ use tokio::sync::mpsc;
 
 use super::{DaemonHandle, auth, paths};
 
-/// The image generation port over a running daemon.
-pub(crate) struct DaemonImageGenerator {
-    daemon: DaemonHandle,
+/// The image generation port over the daemon that draws.
+pub(crate) enum ImageGenerator {
+    /// This machine's daemon.
+    Daemon(DaemonHandle),
+    /// The paired machine's, through its proxy.
+    Far(FarProxy),
 }
 
-impl std::fmt::Debug for DaemonImageGenerator {
+impl std::fmt::Debug for ImageGenerator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DaemonImageGenerator")
-            .finish_non_exhaustive()
+        f.debug_struct("ImageGenerator").finish_non_exhaustive()
     }
 }
 
-impl DaemonImageGenerator {
-    /// Draw through `daemon`.
-    pub(crate) const fn new(daemon: DaemonHandle) -> Self {
-        Self { daemon }
+impl ImageGenerator {
+    /// The paired machine's name when it is the one drawing; `None` here.
+    pub(crate) fn elsewhere(&self) -> Option<&str> {
+        match self {
+            Self::Daemon(_) => None,
+            Self::Far(proxy) => Some(proxy.shown_name()),
+        }
+    }
+
+    /// What a sentence about the daemon that draws calls it.
+    fn who(&self) -> String {
+        self.elsewhere()
+            .map_or_else(|| "the gglib daemon".to_owned(), str::to_owned)
+    }
+
+    /// A render that never reached the daemon that draws, or whose stream
+    /// broke off.
+    fn unreachable(&self, e: &dyn std::fmt::Display) -> ImageError {
+        ImageError::Refused {
+            status: 0,
+            code: None,
+            message: format!("could not reach {}: {e}", self.who()),
+        }
+    }
+
+    /// A refused render: the daemon's code and words, and for a key the
+    /// paired machine no longer admits, what to do about it.
+    fn refused(&self, status: u16, body: &str) -> ImageError {
+        let mut refused = refusal(status, body);
+        if let (Self::Far(proxy), 401, ImageError::Refused { message, .. }) =
+            (self, status, &mut refused)
+        {
+            *message = proxy.key_refused();
+        }
+        refused
     }
 }
 
@@ -69,33 +105,34 @@ pub(crate) fn body_of(request: &ImageRequest) -> ImageGenerationsRequest {
 }
 
 #[async_trait]
-impl ImageGenerationPort for DaemonImageGenerator {
+impl ImageGenerationPort for ImageGenerator {
     async fn generate(
         &self,
         request: ImageRequest,
         progress: mpsc::Sender<ImageProgress>,
     ) -> Result<ImageBatch, ImageError> {
         let started = Instant::now();
-        let unreachable = |e: &dyn std::fmt::Display| ImageError::Refused {
-            status: 0,
-            code: None,
-            message: format!("could not reach the gglib daemon: {e}"),
+        let body = body_of(&request);
+        let response = match self {
+            Self::Daemon(daemon) => daemon
+                .post(paths::IMAGES_GENERATIONS_PATH)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| self.unreachable(&e))?,
+            Self::Far(proxy) => proxy
+                .generate_images(&body)
+                .await
+                .map_err(|e| self.unreachable(&e))?,
         };
-        let response = self
-            .daemon
-            .post(paths::IMAGES_GENERATIONS_PATH)
-            .json(&body_of(&request))
-            .send()
-            .await
-            .map_err(|e| unreachable(&e))?;
         let status = response.status().as_u16();
         if !response.status().is_success() {
             let body = response.text().await.unwrap_or_default();
-            return Err(refusal(status, &body));
+            return Err(self.refused(status, &body));
         }
         let rendered = read_render(response.bytes_stream(), &progress)
             .await
-            .map_err(|e| unreachable(&e))??;
+            .map_err(|e| self.unreachable(&e))??;
         Ok(ImageBatch {
             model: rendered
                 .model
@@ -106,28 +143,38 @@ impl ImageGenerationPort for DaemonImageGenerator {
         })
     }
 
-    /// The daemon's own answer (`GET /api/images/drawing`), as it gave it:
-    /// its image model when it can draw, its code and reason when it
-    /// cannot, and its image models; `chosen` goes as `?image_model=<id>`.
-    /// A daemon that cannot be reached, or is too old to have the route,
-    /// cannot draw.
+    /// The drawing daemon's own answer (`GET /api/images/drawing` here,
+    /// `/v1/images/drawing` there), as it gave it: its image model when it
+    /// can draw, its code and reason when it cannot, and its image models;
+    /// `chosen` goes as `?image_model=<id>`. A daemon that cannot be
+    /// reached, or is too old to have the route, cannot draw.
     async fn drawing(&self, chosen: Option<u32>) -> DrawingAvailability {
         let unavailable = |reason: String| drawing_refusal(&ImageError::Unavailable { reason });
-        let asked = chosen.map_or_else(String::new, |id| format!("?image_model={id}"));
-        let path = format!("{}{asked}", paths::IMAGES_DRAWING_PATH);
-        let response = match self.daemon.get(&path).send().await {
+        let answered = match self {
+            Self::Daemon(daemon) => {
+                let asked = chosen.map_or_else(String::new, |id| format!("?image_model={id}"));
+                let path = format!("{}{asked}", paths::IMAGES_DRAWING_PATH);
+                daemon.get(&path).send().await.map_err(|e| e.to_string())
+            }
+            Self::Far(proxy) => proxy.drawing(chosen).await.map_err(|e| e.to_string()),
+        };
+        let response = match answered {
             Ok(response) => response,
-            Err(e) => return unavailable(format!("could not reach the gglib daemon: {e}")),
+            Err(e) => return unavailable(format!("could not reach {}: {e}", self.who())),
         };
         if !response.status().is_success() {
+            let remedy = match self {
+                Self::Daemon(_) => "restart it so it runs this version",
+                Self::Far(_) => "it may run a gglib older than this one",
+            };
             return unavailable(format!(
-                "the gglib daemon answered {} when asked whether it can draw; restart it so \
-                 it runs this version",
+                "{} answered {} when asked whether it can draw; {remedy}",
+                self.who(),
                 response.status().as_u16()
             ));
         }
         response.json().await.unwrap_or_else(|e| {
-            unavailable(format!("the gglib daemon's answer could not be read: {e}"))
+            unavailable(format!("{}'s answer could not be read: {e}", self.who()))
         })
     }
 }

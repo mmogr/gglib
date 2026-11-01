@@ -15,6 +15,8 @@ use anyhow::Result;
 use super::Target;
 use crate::bootstrap::CliContext;
 use crate::daemon_client::auth::proxy_key;
+use crate::daemon_client::ensure_daemon;
+use crate::daemon_client::images::ImageGenerator;
 
 impl Target {
     /// Run `here` on this machine, or `far` on the paired one.
@@ -27,6 +29,20 @@ impl Target {
             Self::Local => here().await,
             Self::Remote => far().await,
         }
+    }
+
+    /// What draws a picture: this machine's daemon, started when none runs,
+    /// or the paired machine's, through its proxy.
+    ///
+    /// # Errors
+    ///
+    /// On this machine, a daemon that cannot be started; on the paired one,
+    /// whatever [`far`](Self::far) says.
+    pub(crate) async fn drawer(self, ctx: &CliContext) -> Result<ImageGenerator> {
+        Ok(match self {
+            Self::Local => ImageGenerator::Daemon(ensure_daemon(ctx).await?),
+            Self::Remote => ImageGenerator::Far(self.far(ctx).await?.proxy),
+        })
     }
 
     /// Where a proxy client command connects, and with what.

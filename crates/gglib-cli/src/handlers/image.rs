@@ -1,5 +1,6 @@
-//! `gglib image`: draw through the daemon, show the render on one live line,
-//! save each image, and print where it went.
+//! `gglib image`: draw through the daemon, or with `--remote` through the
+//! paired machine's, show the render on one live line, save each image, and
+//! print where it went.
 //!
 //! `--from` reads a picture to draw from, `--mask` a mask over the part to
 //! draw again, and both ride in the request as the daemon reads them.
@@ -26,9 +27,8 @@ use indicatif::{ProgressBar, ProgressStyle};
 use tokio::sync::mpsc;
 
 use crate::bootstrap::CliContext;
-use crate::daemon_client::ensure_daemon;
-use crate::daemon_client::images::DaemonImageGenerator;
 use crate::image_commands::ImageCommandArgs;
+use crate::target::Target;
 
 /// What Ctrl-C prints before the command exits 130.
 pub(crate) const INTERRUPTED: &str = "stopped; the daemon stops the render too";
@@ -55,7 +55,11 @@ fn source_of(
 }
 
 /// Run `gglib image`.
-pub(crate) async fn execute(ctx: &CliContext, args: ImageCommandArgs) -> Result<()> {
+pub(crate) async fn execute(
+    ctx: &CliContext,
+    target: Target,
+    args: ImageCommandArgs,
+) -> Result<()> {
     let paths = output_paths(args.output.as_deref(), usize::from(args.n), unix_now());
     if let Some(taken) = paths.iter().find(|p| p.exists()) {
         bail!(
@@ -64,7 +68,7 @@ pub(crate) async fn execute(ctx: &CliContext, args: ImageCommandArgs) -> Result<
         );
     }
     let source = source_of(args.from.as_deref(), args.mask.as_deref(), args.strength)?;
-    let generator = DaemonImageGenerator::new(ensure_daemon(ctx).await?);
+    let generator = target.drawer(ctx).await?;
     let request = ImageRequest {
         model: args.model,
         prompt: args.prompt,
@@ -81,7 +85,10 @@ pub(crate) async fn execute(ctx: &CliContext, args: ImageCommandArgs) -> Result<
             .expect("valid spinner template"),
     );
     bar.enable_steady_tick(Duration::from_millis(120));
-    bar.set_message("starting");
+    bar.set_message(generator.elsewhere().map_or_else(
+        || "starting".to_owned(),
+        |name| format!("starting on {name}"),
+    ));
 
     // The spinner draws only on a terminal; anywhere else each stage and
     // step is said once, on a line of its own.

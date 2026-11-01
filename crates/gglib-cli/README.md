@@ -94,7 +94,7 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `question <text>` (alias `q`) | Ask a question, with optional piped or file context; filesystem tools are on unless `--no-tools` |
 | `question --image <path> <text>`, `chat <id\|name> --image <path>` | Attach a PNG or JPEG to the turn (repeatable); see [Images](#images) |
 | `chat history` | List past conversations with message counts, and the chat each branch was made from |
-| `image "<prompt>" [--size WxH] [-n N] [--seed S] [-m MODEL] [-o PATH]` | Draw with this machine's image model through the daemon; one live line (queued, loading, sampling step/total, decoding), each PNG saved to `PATH` or `gglib-<unix>.png`, `-1`, `-2`, … for more than one, and `[image WxH] <path>` printed for each |
+| `image "<prompt>" [--size WxH] [-n N] [--seed S] [-m MODEL] [-o PATH] [--remote]` | Draw with this machine's image model through the daemon, or with `--remote` with the paired machine's (`-m` then names one of its models, and without it that machine's default draws); one live line (queued, loading, sampling step/total, decoding), each PNG saved to `PATH` or `gglib-<unix>.png`, `-1`, `-2`, … for more than one, and `[image WxH] <path>` printed for each |
 | `attachment save <id> [path] [--force]` | Write a stored image, such as one a tool made, to a file; `<id>` is the whole id or at least the 8 characters a chat's marker shows; an existing file is replaced only with `--force` |
 | `run start -m <model> <prompt> [--follow]` | Start a reply the daemon finishes and print its id, or the reply as it arrives with `--follow` |
 | `run list` | List the daemon's runs, newest first |

@@ -450,6 +450,7 @@ it.
 |---|---|
 | `chat`, `q` | A turn on the desktop, as above: the model resolved there once, then sent by its id. |
 | `serve <model>` | Have the desktop load the model now, so the first turn does not wait. Only the model's id or name and a numeric `--ctx-size` travel. |
+| `image "<prompt>"` | Draw with the desktop's image model, `-m` naming one of its ids or names, and save the pictures on the laptop. Without `-m` the desktop's default draws. |
 | `model list` | The desktop's catalogue as its proxy publishes it, one row per model: its id on the desktop, its name, the context it would be served with, and the profiles it can be asked for with. A turn names one as `<id>` or `<id>:<profile>`. |
 | `model inspect <model>` | Everything the desktop stores about one of its models, as its own inspector shows it, but for the paths of its file and its projector on its disk; then the command that chats with it. `--json` prints the same detail. |
 | `proxy dashboard` | The desktop proxy's live dashboard, through the tunnel. |

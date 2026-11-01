@@ -67,13 +67,14 @@ fn image_refuses_a_count_or_size_it_cannot_ask_for() {
     }
 }
 
-/// Drawing uses this machine's daemon; `--remote` does not reach it.
+/// Drawing uses a machine: this one's daemon, or with `--remote` the paired
+/// machine's, which draws with its own image model.
 #[test]
-fn image_is_this_machines() {
+fn image_uses_a_machine() {
     let command = Cli::parse_from(["gglib", "image", "a fox"])
         .command
         .unwrap();
-    assert!(matches!(reach(&command), ("image", Reach::Local)));
+    assert!(matches!(reach(&command), ("image", Reach::Use)));
 }
 
 fn report(stage: ImageStage) -> ImageProgress {

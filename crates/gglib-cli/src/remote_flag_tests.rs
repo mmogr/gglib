@@ -35,6 +35,7 @@ fn each_command_that_reaches_the_paired_machine_takes_the_flag() {
         &["gglib", "proxy", "dashboard", "--remote"],
         &["gglib", "proxy", "cache-clear", "--remote"],
         &["gglib", "daemon", "stop", "--remote"],
+        &["gglib", "image", "a cat", "--remote"],
     ] {
         assert!(remote(argv), "{}", argv.join(" "));
         let without: Vec<&str> = argv.iter().copied().filter(|a| *a != "--remote").collect();
@@ -46,11 +47,11 @@ fn each_command_that_reaches_the_paired_machine_takes_the_flag() {
 /// sentence, word for word, not with clap's "unexpected argument".
 #[test]
 fn a_command_about_this_machine_refuses_the_flag_with_the_one_sentence() {
-    let text = refused(&["gglib", "image", "a cat", "--remote"]);
+    let text = refused(&["gglib", "attachment", "save", "3f9a2c1e", "--remote"]);
     assert_eq!(
         text,
         format!(
-            "`gglib image` is about this machine, and --remote does not change that. \
+            "`gglib attachment` is about this machine, and --remote does not change that. \
              What --remote reaches on the paired machine: {}.",
             *REACHES
         )
@@ -93,7 +94,10 @@ fn the_flag_before_its_command_is_told_where_it_goes() {
 /// either, gets clap's own error, which says what is actually wrong.
 #[test]
 fn a_line_with_nothing_to_refuse_gets_clap_s_error() {
-    for argv in [&["gglib", "--remote"][..], &["gglib", "image", "--remote"]] {
+    for argv in [
+        &["gglib", "--remote"][..],
+        &["gglib", "model", "remove", "--remote"],
+    ] {
         assert!(
             matches!(parse_from(argv), Err(Refusal::Clap(_))),
             "{}",

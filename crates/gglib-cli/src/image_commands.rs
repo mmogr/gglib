@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use clap::Args;
 use gglib_core::ports::{ImageSize, MAX_IMAGES_PER_REQUEST};
 
+use crate::remote_flag::RemoteFlag;
+
 /// `--strength`'s number: from 0.05 to 1, so not `nan` or `inf` either,
 /// which would reach the daemon as no strength at all.
 fn strength(text: &str) -> Result<f32, String> {
@@ -15,7 +17,8 @@ fn strength(text: &str) -> Result<f32, String> {
 }
 
 /// `gglib image "<prompt>"`: draw with this machine's image model, through
-/// the daemon, and save what it drew. With `--from` it draws from a picture:
+/// the daemon, or with `--remote` with the paired machine's, and save what it
+/// drew here. With `--from` it draws from a picture:
 /// all of it again, or with `--mask` only where the mask is white.
 #[derive(Args, Debug, Clone)]
 pub struct ImageCommandArgs {
@@ -38,8 +41,9 @@ pub struct ImageCommandArgs {
     /// The seed, for an image that can be drawn again [default: random]
     #[arg(long)]
     pub seed: Option<i64>,
-    /// The image model to draw with, by name or id [default: the settings'
-    /// default image model, else the only one with every file]
+    /// The image model to draw with, by name or id (with --remote, the paired
+    /// machine's) [default: the settings' default image model, else the only
+    /// one with every file]
     #[arg(long, short)]
     pub model: Option<String>,
     /// A PNG to draw from, in place of starting from nothing: the result is
@@ -59,4 +63,6 @@ pub struct ImageCommandArgs {
     /// With more than one, each name gains -1, -2, …
     #[arg(short = 'o', long = "output", value_name = "PATH")]
     pub output: Option<PathBuf>,
+    #[command(flatten)]
+    pub remote: RemoteFlag,
 }

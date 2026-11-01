@@ -47,7 +47,7 @@ const ROUTES: &[(&str, Reached)] = &[
     ("/v1/embeddings", Exempt("no gglib command embeds")),
     (
         "/v1/images/generations",
-        Exempt("`gglib image` does not reach it yet (#1707)"),
+        By(&[&["gglib", "image", "a cat"]]),
     ),
     (
         "/v1/images/drawing",
