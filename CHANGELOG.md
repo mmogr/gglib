@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.30.0-rc.2](https://github.com/mmogr/gglib/compare/v0.30.0-rc.1...v0.30.0-rc.2) (2026-11-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** `gglib --remote <command>` no longer parses; the flag goes after the command it is for.
+
+### What gglib now does
+
+* **cli:** --remote is offered only by the commands that reach the paired machine ([#1709](https://github.com/mmogr/gglib/issues/1709)) ([dcfba8b](https://github.com/mmogr/gglib/commit/dcfba8b56ec04ac00cb5c59a30fb82e9008e71c6))
+
+
+### What it stopped getting wrong
+
+* **cli:** gglib image --remote draws with the paired machine's image model ([#1711](https://github.com/mmogr/gglib/issues/1711)) ([728ee36](https://github.com/mmogr/gglib/commit/728ee3618df814a52f46300d569e28b523addc23)), closes [#1707](https://github.com/mmogr/gglib/issues/1707)
+
+
+### Internal
+
+* **cli:** every route the tunnel carries is reached by a command or exempted ([#1708](https://github.com/mmogr/gglib/issues/1708)) ([5727676](https://github.com/mmogr/gglib/commit/5727676e9e7c2da1058f2d61eaee90f896123af1))
+* **cli:** the CLI reaches the paired machine through FarProxy ([#1710](https://github.com/mmogr/gglib/issues/1710)) ([8eaf859](https://github.com/mmogr/gglib/commit/8eaf85946658361c2469be9253343257d43bff5b))
+
 ## [0.30.0-rc.1](https://github.com/mmogr/gglib/compare/v0.29.0...v0.30.0-rc.1) (2026-11-01)
 
 
