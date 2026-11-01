@@ -4,3 +4,5 @@ mod pid;
 
 pub use child::shutdown_child;
 pub use pid::kill_pid;
+#[cfg(unix)]
+pub(crate) use pid::signal_target;
