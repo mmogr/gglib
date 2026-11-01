@@ -152,9 +152,11 @@ async fn watch_proxy(
     let Some(live) = taken else { return };
     // The same order `disable` ends a session in, and for the same reason —
     // see [`teardown::take_down`].
-    super::teardown::take_down(live, &gateway).await;
+    let current = super::teardown::take_down(live, &gateway).await;
     info!("remote tunnel disabled with the proxy it fronted");
-    emitter.emit(AppEvent::remote_disabled());
+    if current {
+        emitter.emit(AppEvent::remote_disabled());
+    }
     // Only here, where this watcher took its own tunnel down with the proxy,
     // and after the drain, so the re-arm this prompts comes after it.
     lost.send_modify(|n| *n = n.wrapping_add(1));

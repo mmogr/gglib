@@ -230,16 +230,15 @@ impl RemoteOps {
     /// # Errors
     ///
     /// `Conflict` when nothing is enabled and nothing is arming.
-    #[expect(
-        clippy::significant_drop_in_scrutinee,
-        reason = "the serve slot stays locked through `take_down`, so `enable` and `status` wait for it, though the `ArmingDrain` test in teardown.rs says no caller holds it; which is meant is #1646, not a lint pass"
-    )]
     pub async fn shut_down(&self) -> Result<(), GuiError> {
-        match self.live.lock().await.take() {
-            Taken::Value(live) => {
-                super::teardown::take_down(live, &self.gateway).await;
+        match super::teardown::take_down_slot(&self.live, &self.gateway).await {
+            Taken::Value(current) => {
                 info!("remote tunnel disabled");
-                self.emitter.emit(AppEvent::remote_disabled());
+                // A session armed during the drain is up; saying "disabled"
+                // after its "enabled" would end the code the page shows.
+                if current {
+                    self.emitter.emit(AppEvent::remote_disabled());
+                }
                 Ok(())
             }
             // Nothing is bound and no session has begun — `arm` claims the

@@ -172,10 +172,13 @@ impl RemoteGateway {
         clippy::significant_drop_tightening,
         reason = "the session lock is held from the epoch check through the reset, so an `offer_pairing` cannot land in between"
     )]
-    pub(in crate::remote) fn reset_session_if(&self, epoch: u64) {
+    ///
+    /// Returns whether it did: `false` when a later session had already
+    /// replaced this one, so nothing of this session's was left to end.
+    pub(in crate::remote) fn reset_session_if(&self, epoch: u64) -> bool {
         let mut session = self.session();
         if *session != epoch {
-            return;
+            return false;
         }
         *session += 1;
         // Before the roster channel goes, below: a device that redeemed its
@@ -195,6 +198,7 @@ impl RemoteGateway {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take();
+        true
     }
 
     /// Withdraw `open`, a no-op if it has ended, record how it ended, and say
