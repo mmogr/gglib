@@ -117,12 +117,12 @@ This crate is in the **Adapter Layer** — it wires together all infrastructure 
 | `remote forget <device>` | Retire one device's key and drop the runs it started; the others are untouched |
 | `remote join [<ticket>-<code>\|<ticket>] [--port PORT]` | Bind a local port that is another machine's proxy; the first time redeems the invite's code for this device's own key, later a bare ticket or nothing reuses the pairing |
 | `remote disconnect` | Close the local port; the far machine and the stored pairing stay |
-| `mcp list` | List the configured MCP servers with their status |
+| `mcp list` | List the configured MCP servers, with each one's status and tool count in the daemon when one is running |
 | `mcp add --name <name> --type stdio --command <cmd> [flags]` | Add a stdio MCP server, with its arguments, working directory, `PATH` entries, environment and lifecycle (`eager`, `lazy` or `manual`) |
-| `mcp remove <server>`, `mcp start <server>`, `mcp stop <server>` | Remove, start or stop a server |
+| `mcp remove <server>` | Remove a server |
 | `mcp enable <server>`, `mcp disable <server>` | Include a server's tools in chat, or leave them out |
 | `mcp allow-remote <server>…`, `mcp deny-remote <server>…` | Offer servers' tools to paired devices' runs, or stop offering them |
-| `mcp tools <server>` | List the tools a running server exposes |
+| `mcp tools <server>` | List the tools the daemon's copy of a server offers its chats, starting it there if it is not running |
 | `mcp test <server>` | Start a server for the test, list its tools, and stop it |
 | `/retry`, `/edit <text>`, `/branch`, `/branches` (in a chat) | Answer the last question again, ask it again as `<text>`, copy the chat into a new branch, or list the chat's branches; see [Branches](#branches) |
 | `proxy` | Start the OpenAI-compatible proxy (context comes from settings `default_context_size`, or is sized per launch when unset) |

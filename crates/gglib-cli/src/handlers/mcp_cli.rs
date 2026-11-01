@@ -1,13 +1,20 @@
 //! MCP server management command handlers.
 //!
-//! All handlers delegate to `McpService` via `ctx.mcp` — no business logic
-//! lives here, only CLI input parsing and output formatting.
+//! The configuration handlers delegate to `McpService` via `ctx.mcp`. What
+//! runs is the daemon's: `list` asks it for each server's status and tools
+//! when it is running, and `tools` asks it for one server's, since the
+//! daemon's copy of a server is the one its chats use (#1689). No business
+//! logic lives here, only CLI input parsing and output formatting.
 
 use anyhow::{Result, anyhow};
-use gglib_core::domain::mcp::{McpLifecycle, McpServerStatus, McpServerType, NewMcpServer};
-use gglib_mcp::{McpServerInfo, McpService};
+use gglib_app_services::types::{McpServerInfo, McpServerStatusDto, McpToolInfo};
+use gglib_core::McpServiceError;
+use gglib_core::daemon_port;
+use gglib_core::domain::mcp::{McpLifecycle, McpServerType, NewMcpServer};
+use gglib_mcp::McpService;
 
 use crate::bootstrap::CliContext;
+use crate::daemon_client::{self, Absent, DaemonHandle};
 use crate::mcp_commands::McpCommand;
 use crate::presentation::{print_separator, truncate_string};
 use crate::utils::input;
@@ -44,8 +51,6 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: McpCommand) -> Result<()> {
             .await
         }
         McpCommand::Remove { server, yes } => remove(ctx, &server, yes).await,
-        McpCommand::Start { server } => start(ctx, &server).await,
-        McpCommand::Stop { server } => stop(ctx, &server).await,
         McpCommand::Enable { server } => set_enabled(ctx, &server, true).await,
         McpCommand::Disable { server } => set_enabled(ctx, &server, false).await,
         McpCommand::AllowRemote { servers } => set_allow_remote(ctx, &servers, true).await,
@@ -58,7 +63,7 @@ pub(crate) async fn dispatch(ctx: &CliContext, cmd: McpCommand) -> Result<()> {
 // ─── Handlers ───────────────────────────────────────────────────────────────
 
 async fn list(ctx: &CliContext) -> Result<()> {
-    let servers = ctx.mcp.list_servers_with_status().await?;
+    let servers = ctx.mcp.list_servers().await?;
 
     if servers.is_empty() {
         println!("No MCP servers configured.");
@@ -73,8 +78,8 @@ async fn list(ctx: &CliContext) -> Result<()> {
     );
     print_separator(83);
 
-    for info in servers {
-        let s = &info.server;
+    let daemon = daemon_servers(ctx).await;
+    for s in &servers {
         let type_str = s.server_type.to_string();
         let yes_no = |on: bool| if on { "yes" } else { "no" };
         let lifecycle_str = s.lifecycle.to_string();
@@ -87,24 +92,51 @@ async fn list(ctx: &CliContext) -> Result<()> {
             yes_no(s.enabled),
             yes_no(s.allow_remote),
             lifecycle_str,
-            status_and_tools(&info)
+            status_and_tools(s, daemon.as_deref().ok())
         );
+    }
+    if let Err(why) = daemon {
+        println!("\nStatus and Tools are unknown: {why}.");
     }
 
     Ok(())
 }
 
-/// A row's Status and Tools cells.
+/// The daemon's servers, when a daemon is running, or why there are none to
+/// read. Never a launch: a list is no reason to start one.
+async fn daemon_servers(ctx: &CliContext) -> Result<Vec<McpServerInfo>, String> {
+    match daemon_client::running(ctx).await {
+        Ok(daemon) => daemon
+            .mcp_servers()
+            .await
+            .map_err(|e| format!("the daemon did not answer ({e})")),
+        Err(Absent::NotRunning) => Err("the daemon is not running".to_owned()),
+        Err(Absent::ForeignServer) => Err(format!(
+            "port {} is held by another program (not a gglib daemon)",
+            daemon_port()
+        )),
+    }
+}
+
+/// A row's Status and Tools cells: the daemon's copy of `server`, from
+/// `daemon`'s list, and a dash in each when there is no daemon to read.
 ///
-/// A server gglib cannot run has no status and no tools to count. It says so
-/// across the two cells, which the words fill exactly.
-fn status_and_tools(info: &McpServerInfo) -> String {
+/// A server gglib cannot run has no status and no tools to count, daemon or
+/// not. It says so across the two cells, which the words fill exactly.
+fn status_and_tools(server: &gglib_core::McpServer, daemon: Option<&[McpServerInfo]>) -> String {
+    if server.server_type == McpServerType::Sse {
+        return "not supported yet".to_string();
+    }
+    let Some(info) = daemon.and_then(|infos| infos.iter().find(|i| i.server.id == server.id))
+    else {
+        return format!("{:<10} {:<6}", "—", "—");
+    };
     let status = match &info.status {
-        McpServerStatus::Unsupported => return "not supported yet".to_string(),
-        McpServerStatus::Stopped => "stopped".to_string(),
-        McpServerStatus::Starting => "starting".to_string(),
-        McpServerStatus::Running => "running".to_string(),
-        McpServerStatus::Error(e) => format!("error: {}", truncate_string(e, 20)),
+        McpServerStatusDto::Unsupported => return "not supported yet".to_string(),
+        McpServerStatusDto::Stopped => "stopped".to_string(),
+        McpServerStatusDto::Starting => "starting".to_string(),
+        McpServerStatusDto::Running => "running".to_string(),
+        McpServerStatusDto::Error(e) => format!("error: {}", truncate_string(e, 20)),
     };
     format!(
         "{:<10} {:<6}",
@@ -185,30 +217,6 @@ async fn remove(ctx: &CliContext, identifier: &str, yes: bool) -> Result<()> {
     Ok(())
 }
 
-async fn start(ctx: &CliContext, identifier: &str) -> Result<()> {
-    let server = resolve_server(ctx, identifier).await?;
-    let tools = ctx.mcp.start_server(server.id).await?;
-    println!(
-        "✓ Started '{}' — {} tool(s) available",
-        server.name,
-        tools.len()
-    );
-    for tool in &tools {
-        let desc = tool.description.as_deref().unwrap_or("(no description)");
-        println!("   • {} — {}", tool.name, truncate_string(desc, 60));
-    }
-
-    Ok(())
-}
-
-async fn stop(ctx: &CliContext, identifier: &str) -> Result<()> {
-    let server = resolve_server(ctx, identifier).await?;
-    ctx.mcp.stop_server(server.id).await?;
-    println!("✓ Stopped '{}'", server.name);
-
-    Ok(())
-}
-
 async fn set_enabled(ctx: &CliContext, identifier: &str, enabled: bool) -> Result<()> {
     let mut server = resolve_server(ctx, identifier).await?;
     server.enabled = enabled;
@@ -249,15 +257,32 @@ async fn set_allow_remote(ctx: &CliContext, identifiers: &[String], allow: bool)
     Ok(())
 }
 
+/// The tools the daemon's copy of a server offers: the ones its chats get.
+/// A disabled server is not started, as no chat gets its tools.
 async fn tools(ctx: &CliContext, identifier: &str) -> Result<()> {
     let server = resolve_server(ctx, identifier).await?;
-    let tools = ctx.mcp.list_server_tools(server.id).await?;
-
-    if tools.is_empty() {
+    if server.server_type == McpServerType::Sse {
+        return Err(McpServiceError::SseNotSupported.into());
+    }
+    if !server.enabled {
         println!(
-            "No tools available for '{}' (is the server running?).",
+            "'{}' is disabled, so chats don't get its tools; `gglib mcp enable {}` includes them.",
+            server.name, server.id
+        );
+        return Ok(());
+    }
+
+    let daemon = daemon_client::ensure_daemon(ctx).await?;
+    let Some(tools) = tools_in_the_daemon(&daemon, server.id).await? else {
+        println!(
+            "'{}' is starting in the daemon; ask again in a moment.",
             server.name
         );
+        return Ok(());
+    };
+
+    if tools.is_empty() {
+        println!("'{}' offers no tools.", server.name);
         return Ok(());
     }
 
@@ -275,6 +300,45 @@ async fn tools(ctx: &CliContext, identifier: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// The tools of the daemon's copy of server `id`, started there first when
+/// it is not running, as a chat's first call would start it. `None` while
+/// it is starting.
+async fn tools_in_the_daemon(daemon: &DaemonHandle, id: i64) -> Result<Option<Vec<McpToolInfo>>> {
+    let info = daemon
+        .mcp_servers()
+        .await?
+        .into_iter()
+        .find(|info| info.server.id == id)
+        .ok_or_else(|| {
+            anyhow!(
+                "the daemon on port {} has no MCP server {id}: it keeps its data \
+                 somewhere other than this command",
+                daemon_port()
+            )
+        })?;
+    match info.status {
+        McpServerStatusDto::Running => Ok(Some(info.tools)),
+        McpServerStatusDto::Starting => Ok(None),
+        McpServerStatusDto::Unsupported => Err(McpServiceError::SseNotSupported.into()),
+        McpServerStatusDto::Stopped | McpServerStatusDto::Error(_) => {
+            eprintln!("  starting '{}' in the daemon\u{2026}", info.server.name);
+            match daemon.mcp_start(id).await {
+                Ok(started) => Ok(Some(started.tools)),
+                // A chat's lazy start can get there between the read above
+                // and this start, which then answers "already running".
+                Err(e) => running_tools(daemon, id).await.map(Some).ok_or(e),
+            }
+        }
+    }
+}
+
+/// The tools of the daemon's copy of server `id`, when it is running.
+async fn running_tools(daemon: &DaemonHandle, id: i64) -> Option<Vec<McpToolInfo>> {
+    let servers = daemon.mcp_servers().await.ok()?;
+    let info = servers.into_iter().find(|info| info.server.id == id)?;
+    matches!(info.status, McpServerStatusDto::Running).then_some(info.tools)
 }
 
 async fn test(ctx: &CliContext, identifier: &str) -> Result<()> {
