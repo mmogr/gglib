@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.30.0-rc.1](https://github.com/mmogr/gglib/compare/v0.29.0...v0.30.0-rc.1) (2026-11-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **mcp:** the manual lifecycle is gone ([#1704](https://github.com/mmogr/gglib/issues/1704))
+* **mcp:** tools and list ask the daemon, and start and stop are gone ([#1703](https://github.com/mmogr/gglib/issues/1703))
+
+### What it stopped getting wrong
+
+* **benchmark:** compare counts its tokens and keeps the thinking apart ([#1702](https://github.com/mmogr/gglib/issues/1702)) ([2999e9c](https://github.com/mmogr/gglib/commit/2999e9c371cc03961e6d075315b4be1736454254)), closes [#1690](https://github.com/mmogr/gglib/issues/1690)
+* **mcp:** tools and list ask the daemon, and start and stop are gone ([#1703](https://github.com/mmogr/gglib/issues/1703)) ([318a022](https://github.com/mmogr/gglib/commit/318a0223d31398de64482783d441a9484cad16c1)), closes [#1689](https://github.com/mmogr/gglib/issues/1689)
+* **proxy:** two models with one name get two ids ([#1705](https://github.com/mmogr/gglib/issues/1705)) ([be96abb](https://github.com/mmogr/gglib/commit/be96abb2d0af6c51dc7af605e3edd93d70d941b8)), closes [#1648](https://github.com/mmogr/gglib/issues/1648)
+* **remote:** disable lets go of the serve slot before it drains ([#1701](https://github.com/mmogr/gglib/issues/1701)) ([514f504](https://github.com/mmogr/gglib/commit/514f5041d53e4750fc432c3ddc4b30ab28a239d4)), closes [#1646](https://github.com/mmogr/gglib/issues/1646)
+* **runtime:** a pid that names a process group is never signalled ([#1700](https://github.com/mmogr/gglib/issues/1700)) ([6ac773e](https://github.com/mmogr/gglib/commit/6ac773e7dc8ff46ecb8d939d8fca45fa4b265acc)), closes [#1647](https://github.com/mmogr/gglib/issues/1647)
+
+
+### Internal
+
+* **mcp:** the manual lifecycle is gone ([#1704](https://github.com/mmogr/gglib/issues/1704)) ([11208b8](https://github.com/mmogr/gglib/commit/11208b84617d793b07bb164b4b1de9b086453077)), closes [#1699](https://github.com/mmogr/gglib/issues/1699)
+* **promote:** the stable release is made from the candidate's tag, not from main ([#1697](https://github.com/mmogr/gglib/issues/1697)) ([48303e8](https://github.com/mmogr/gglib/commit/48303e814905739ea04ee4e0bab4b9a24862814d))
+
 ## [0.29.0](https://github.com/mmogr/gglib/compare/v0.28.0...v0.29.0) (2026-10-31)
 
 0.29.0-rc.7, promoted unchanged. The candidates below make up this release.
