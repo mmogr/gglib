@@ -243,11 +243,22 @@ impl HttpBackend for ReqwestBackend {
             return Ok(Vec::new());
         }
         let range = format!("bytes={start}-{}", start.saturating_add(max_bytes - 1));
-        let mut response = self
+        let sent = self
             .send_with_retry(url, || {
                 self.build_request(url).header("Range", range.as_str())
             })
-            .await?;
+            .await;
+        let mut response = match sent {
+            Ok(response) => response,
+            // 416 to a read on from a head: the range starts at or past the
+            // file's end, as when the head ended exactly where the file does.
+            // There is no more of it, which is no error. A 416 to a read from
+            // the start says nothing of the kind, and stays one.
+            Err(HfError::ApiRequestFailed { status: 416, .. }) if start > 0 => {
+                return Ok(Vec::new());
+            }
+            Err(unread) => return Err(unread),
+        };
         // A server that ignored the range sends the body from its start.
         let mut skip = if response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
             0

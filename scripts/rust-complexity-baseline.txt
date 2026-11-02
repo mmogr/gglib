@@ -194,7 +194,7 @@ crates/gglib-gguf/src/head_tests.rs 324
 crates/gglib-gguf/src/parser.rs 330
 crates/gglib-gguf/src/reader.rs 317
 crates/gglib-gguf/src/reader_tests.rs 416
-crates/gglib-hf/src/http.rs 595
+crates/gglib-hf/src/http.rs 606
 crates/gglib-hf/src/parsing.rs 434
 crates/gglib-hf/src/url.rs 449
 crates/gglib-mcp/src/builtin/generate_image.rs 380
