@@ -130,9 +130,6 @@ impl HfClientPort for ServedAt {
     async fn list_quantizations(&self, _: &str) -> HfPortResult<Vec<HfQuantInfo>> {
         unreachable!("the worker fetches by address alone")
     }
-    async fn list_projectors(&self, _: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        unreachable!("the worker fetches by address alone")
-    }
     async fn list_gguf_files(&self, _: &str) -> HfPortResult<Vec<HfFileInfo>> {
         unreachable!("the worker fetches by address alone")
     }

@@ -60,9 +60,6 @@ impl HfClientPort for Hub {
     async fn list_quantizations(&self, _model_id: &str) -> HfPortResult<Vec<HfQuantInfo>> {
         unimplemented!()
     }
-    async fn list_projectors(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        unimplemented!()
-    }
     async fn list_gguf_files(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
         unimplemented!()
     }

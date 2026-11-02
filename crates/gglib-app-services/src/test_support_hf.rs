@@ -39,15 +39,6 @@ impl HfClientPort for MockHfClient {
         Ok(vec![])
     }
 
-    async fn list_projectors(&self, _model_id: &str) -> Result<Vec<HfFileInfo>, HfPortError> {
-        Ok(vec![HfFileInfo {
-            path: "mmproj-F16.gguf".to_string(),
-            size: 7,
-            is_gguf: true,
-            oid: None,
-        }])
-    }
-
     async fn get_quantization_files(
         &self,
         _model_id: &str,

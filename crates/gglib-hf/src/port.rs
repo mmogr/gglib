@@ -132,13 +132,6 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
         Ok(files.into_iter().map(to_file_info).collect())
     }
 
-    async fn list_projectors(&self, model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        let repo = parse_repo(model_id)?;
-
-        let files = self.list_projectors(&repo).await.map_err(map_error)?;
-        Ok(files.into_iter().map(to_file_info).collect())
-    }
-
     async fn get_commit_sha(&self, model_id: &str) -> HfPortResult<String> {
         let repo = parse_repo(model_id)?;
 

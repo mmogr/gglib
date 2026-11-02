@@ -43,10 +43,6 @@ impl HfClientPort for OneQuantHf {
         }])
     }
 
-    async fn list_projectors(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        Ok(vec![])
-    }
-
     async fn search(&self, _options: &HfSearchOptions) -> HfPortResult<HfSearchResult> {
         unimplemented!("not reached by queue_download_smart")
     }

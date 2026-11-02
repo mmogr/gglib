@@ -114,10 +114,6 @@ impl HfClientPort for RepoHub {
         Ok(self.variants())
     }
 
-    async fn list_projectors(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        Ok(self.of_role(GgufFileRole::Projector))
-    }
-
     async fn get_quantization_files(
         &self,
         model_id: &str,

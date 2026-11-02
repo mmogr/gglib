@@ -50,11 +50,6 @@ pub trait HfClientPort: Send + Sync {
     /// * `model_id` - Full model ID (e.g., `TheBloke/Llama-2-7B-GGUF`)
     async fn list_quantizations(&self, model_id: &str) -> HfPortResult<Vec<HfQuantInfo>>;
 
-    /// List the projector files in a model repository, by path, with OIDs.
-    ///
-    /// Empty for a repository that has none.
-    async fn list_projectors(&self, model_id: &str) -> HfPortResult<Vec<HfFileInfo>>;
-
     /// List all GGUF files in a model repository.
     ///
     /// # Arguments

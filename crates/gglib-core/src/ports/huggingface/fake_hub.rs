@@ -107,9 +107,6 @@ impl HfClientPort for FakeHub {
         }
         Ok(self.weights.clone())
     }
-    async fn list_projectors(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        Ok(self.projectors.clone())
-    }
     async fn search(&self, _options: &HfSearchOptions) -> HfPortResult<HfSearchResult> {
         unimplemented!("a listing is all this hub answers")
     }

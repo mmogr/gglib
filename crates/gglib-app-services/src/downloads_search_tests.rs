@@ -52,9 +52,6 @@ impl HfClientPort for SearchedHub {
     async fn list_quantizations(&self, model_id: &str) -> Result<Vec<HfQuantInfo>, HfPortError> {
         MockHfClient.list_quantizations(model_id).await
     }
-    async fn list_projectors(&self, _: &str) -> Result<Vec<HfFileInfo>, HfPortError> {
-        unimplemented!("a search and a lookup are all this hub answers")
-    }
     async fn list_gguf_files(&self, _: &str) -> Result<Vec<HfFileInfo>, HfPortError> {
         unimplemented!("a search and a lookup are all this hub answers")
     }
