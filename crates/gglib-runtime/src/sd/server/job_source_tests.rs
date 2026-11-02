@@ -8,11 +8,14 @@ use std::sync::atomic::Ordering;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use gglib_core::ports::{ImageError, ImageGenerationPort, ImageRequest, ImageSize, ImageSource};
+use gglib_core::domain::{ComponentRole, ImageFamily, ModelComponent};
+use gglib_core::ports::{
+    ImageError, ImageGenerationPort, ImageRequest, ImageSize, ImageSource, ModelLaunchSpec,
+};
 use image::{DynamicImage, GrayImage, ImageFormat, Luma, Rgb, RgbImage};
 use tokio::sync::mpsc;
 
-use super::{Host, Timeline, drain, driver, models, sdxl_request};
+use super::{Host, Timeline, drain, driver, models, sdxl_request, spec};
 use crate::sd::server::job_api::{JobState, SampleParams};
 use crate::sd::server::job_plan::steps_for;
 use crate::sd::server::source::FEATHER;
@@ -133,6 +136,54 @@ async fn a_whole_redraw_sends_no_mask_and_is_answered_as_drawn() {
         Some(steps_for(SDXL_STEPS, 0.8))
     );
     assert_eq!(batch.images[0].bytes, solid(SIZE, DRAWN));
+}
+
+/// A redraw asks for its variant's steps over the strength, read from the
+/// file name; Qwen-Image 2.1 Turbo's sigma preset fixes its schedule, so it
+/// is asked for the preset's own 8, which `sd-server` would set anyway
+/// (`job_plan::redraw_steps`).
+#[tokio::test(start_paused = true)]
+async fn a_redraw_asks_for_its_variants_steps() {
+    let complete = |id, name: &str, family, roles: [ComponentRole; 2]| ModelLaunchSpec {
+        components: roles
+            .map(|role| ModelComponent {
+                role,
+                path: format!("/nonexistent/{role}").into(),
+            })
+            .into(),
+        ..spec(id, name, Some(family))
+    };
+    let qwen = [ComponentRole::Vae, ComponentRole::Llm];
+    let catalog = vec![
+        complete(5, "qwen-image-2.1", ImageFamily::QwenImage21, qwen),
+        complete(6, "qwen-image-2.1-turbo", ImageFamily::QwenImage21, qwen),
+        complete(7, "z-image", ImageFamily::ZImage, qwen),
+        complete(8, "z_image_turbo", ImageFamily::ZImage, qwen),
+    ];
+    for (model, steps) in [
+        ("qwen-image-2.1", 40),
+        ("qwen-image-2.1-turbo", 8),
+        ("z-image", 56),
+        ("z_image_turbo", 16),
+    ] {
+        let jobs = drawing();
+        let host = Host::new();
+        let driver = driver(catalog.clone(), &jobs, &host);
+        let (tx, _rx) = mpsc::channel(64);
+        let request = ImageRequest {
+            model: Some(model.to_owned()),
+            ..from_picture(None, 0.5)
+        };
+        driver.generate(request, tx).await.expect("drawn");
+        let body = jobs.bodies.lock().unwrap()[0].clone();
+        assert_eq!(
+            body.sample_params,
+            Some(SampleParams {
+                sample_steps: steps
+            }),
+            "{model}"
+        );
+    }
 }
 
 /// A request with no picture sends none of a redraw's fields.

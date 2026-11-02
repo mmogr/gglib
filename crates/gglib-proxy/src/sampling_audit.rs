@@ -178,9 +178,9 @@ const FLOAT_EPSILON: f64 = 1e-6;
 /// *type* of `/slots` fields across versions, and one unexpected shape must
 /// degrade that field rather than fail the whole response.
 ///
-/// Only the parameters gglib itself resolves are named. `params` carries 42
-/// keys on the pinned build; the rest are not gglib's business and naming
-/// them would invent an obligation to keep up with them.
+/// Only the parameters gglib itself resolves are named. `/slots` carries 49
+/// `params` keys on the pinned build and `/props` 42; `upstream_shape_tests`
+/// names the rest once, so a key the build adds is seen there, not here.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct SlotParams {
