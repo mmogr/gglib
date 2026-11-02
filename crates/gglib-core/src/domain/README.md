@@ -53,8 +53,10 @@ infrastructure concerns (database, filesystem, etc.).
 - `image_family` - An image model's family (`ImageFamily`: Flux.1, SDXL,
   Qwen-Image 2.1, Z-Image), sniffed from its tensor names by stable-diffusion.cpp's
   rules; the files a family draws with beside its main weights
-  (`ComponentRole`) and whether a file fits one; and each family's `Recipe`,
-  the one table of its components' default sources and its drawing defaults.
+  (`ComponentRole`) and whether a file fits one; each family's `Recipe`, the
+  one table of its components' default sources, placement, sizes and memory;
+  and each variant's `Sampling` (steps, guidance, sampler, sigma preset,
+  linear scale), picked from the file name where two variants share tensors.
   Its tests read the measured files' tables in `testdata/image_families/`
 - `engine_pins` - The llama.cpp release gglib installs (`PINNED_LLAMA_RELEASE`),
   in this crate so that code which builds for iOS reads the pin the installer does

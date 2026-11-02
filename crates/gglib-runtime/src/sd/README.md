@@ -39,11 +39,16 @@ has no asset and builds from source.
 2.1, Z-Image) or `-m <file>` for an all-in-one checkpoint (SDXL); each component in
 role order, `--vae`, `--clip_l`, `--t5xxl`, `--llm`, whatever order the
 model lists them in; `--listen-ip 127.0.0.1 --listen-port <port>`; then the
-recipe's `--steps`, `--cfg-scale` and `--sampling-method`, and its
+variant's `--steps`, `--cfg-scale` and `--sampling-method`, its `--sigmas`
+preset and `--linear-scale` when it has them, and the recipe's
 `--flash-attn` mode (`on` for Qwen-Image 2.1, `off,diffusion=on` for
-Z-Image, `off` for the rest), and `--conv-direct off`. Flags given at launch
-are the defaults for every request. `server/args_tests.rs` pins one whole argv per
-family.
+Z-Image, `off` for the rest), and `--conv-direct off`. The variant is read
+from the main file's name (`ImageFamily::sampling`): "turbo" in it, in any
+case, makes a Qwen-Image 2.1 file Turbo (`--sigmas qwen-image-2.1-turbo`,
+8 steps, guidance 1) and a Z-Image file Turbo (8 steps, guidance 1); a
+Z-Image file without it is base (28 steps, guidance 5,
+`--linear-scale 0.000244140625`). Flags given at launch are the defaults for
+every request. `server/args_tests.rs` pins one whole argv per variant.
 
 ## Launching
 
@@ -87,8 +92,11 @@ pass, then the PNGs, their sizes read from the images.
 
 A request that carries a picture is drawn from it, at the picture's size,
 which the family's rule judges like any size. The job carries the picture
-as `init_image`, the request's strength, and the recipe's steps divided by
-the strength, rounded up, because sd-server shortens the schedule by it.
+as `init_image`, the request's strength, and the variant's steps divided by
+the strength, rounded up, because sd-server shortens the schedule by it. A
+variant with a sigma preset (Qwen-Image 2.1 Turbo) is sent its own steps
+instead: sd-server sets any other count back to the preset's, so its redraw
+samples `floor(8 x strength)` of them.
 With a mask it carries `mask_image` too and draws again only where the mask
 is white; the result is then pasted over the picture, since sd-server does
 not hand back the rest as it was: sd-server's pixels on the white, the
