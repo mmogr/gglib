@@ -476,10 +476,10 @@ async fn a_request_the_recipe_refuses_never_queues() {
     );
 }
 
-/// A base Z-Image, known by a file name without "turbo", is refused with
-/// every file it needs before anything queues; Z-Image Turbo plans.
+/// A base Z-Image, known by a file name without "turbo", is drawn like
+/// Z-Image Turbo: neither is refused by its name.
 #[tokio::test(start_paused = true)]
-async fn a_base_z_image_is_refused_by_name_before_it_queues() {
+async fn a_base_z_image_draws_as_turbo_does() {
     let z_image = |id, name: &str| ModelLaunchSpec {
         components: [ComponentRole::Vae, ComponentRole::Llm]
             .map(|role| ModelComponent {
@@ -499,30 +499,15 @@ async fn a_base_z_image_is_refused_by_name_before_it_queues() {
         ..ImageRequest::new("a lighthouse at dusk")
     };
 
-    let refused = driver
-        .generate(named("z-image"), tx.clone())
-        .await
-        .unwrap_err();
-    assert_eq!(refused.code(), Some("invalid_request"), "{refused:?}");
-    assert!(
-        refused
-            .to_string()
-            .contains("Only Z-Image Turbo is supported"),
-        "{refused}"
-    );
-    assert!(drain(&mut rx).is_empty(), "no stage was reported");
-    assert_eq!(
-        host.admits.load(Ordering::SeqCst),
-        0,
-        "nothing was admitted"
-    );
-    assert!(
-        jobs.bodies.lock().unwrap().is_empty(),
-        "nothing was submitted"
-    );
+    let batch = driver.generate(named("z-image"), tx.clone()).await;
+    assert_eq!(batch.expect("base draws").model, "z-image");
+    assert!(!drain(&mut rx).is_empty(), "its stages were reported");
+    assert_eq!(host.admits.load(Ordering::SeqCst), 1, "base was admitted");
+    assert_eq!(jobs.bodies.lock().unwrap().len(), 1, "base was submitted");
 
     let batch = driver.generate(named("z_image_turbo"), tx).await;
     assert_eq!(batch.expect("Turbo draws").model, "z_image_turbo");
+    assert_eq!(jobs.bodies.lock().unwrap().len(), 2, "Turbo was submitted");
 }
 
 /// With no model named, the only complete image model draws; with none, or

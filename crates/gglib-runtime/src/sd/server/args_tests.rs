@@ -1,9 +1,11 @@
-//! `sd-server`'s argv, one exact golden per family.
+//! `sd-server`'s argv, one exact golden per variant.
 //!
 //! Each golden is the whole command line, not a set of contains checks: a
-//! flag added, dropped or moved fails here. The values are the recipes' own
-//! (`gglib_core::domain::ImageFamily::recipe`), which match the measured
-//! 2026-10-09 runs; Z-Image's are its guide's, and no run has used them.
+//! flag added, dropped or moved fails here. The values are the recipes' and
+//! samplings' own (`gglib_core::domain::ImageFamily::recipe` and
+//! `::sampling`), which match the measured 2026-10-09 runs; Z-Image's and
+//! Qwen-Image 2.1 Turbo's are their guides', and no run through gglib has
+//! used them.
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -95,24 +97,73 @@ fn qwen_image_loads_its_vae_and_language_model_with_flash_attention() {
     );
 }
 
-/// Z-Image Turbo as stable-diffusion.cpp's guide runs it: the diffusion
-/// model, the Flux.1 VAE, Qwen3 4B as `--llm`, 8 steps at guidance 1, and
-/// flash attention in the diffusion model alone.
+/// Qwen-Image 2.1 Turbo, known by "turbo" in its file name, as
+/// stable-diffusion.cpp's guide runs it: base's files, then its sigma preset
+/// at 8 steps and guidance 1.
+#[test]
+fn qwen_image_turbo_adds_its_sigma_preset_at_turbos_steps() {
+    let mut turbo = config(
+        ImageFamily::QwenImage21,
+        vec![
+            component(ComponentRole::Vae, "V"),
+            component(ComponentRole::Llm, "L"),
+        ],
+    );
+    turbo.model_path = PathBuf::from("/models/qwen-image-2.1-turbo-Q8_0.gguf");
+    assert_eq!(
+        argv(&turbo),
+        words(
+            "--diffusion-model /models/qwen-image-2.1-turbo-Q8_0.gguf --vae V --llm L \
+             --listen-ip 127.0.0.1 --listen-port 9123 \
+             --steps 8 --cfg-scale 1 --sampling-method euler --sigmas qwen-image-2.1-turbo \
+             --flash-attn on --conv-direct off"
+        )
+    );
+}
+
+/// Z-Image Turbo, known by "turbo" in its file name, as stable-diffusion.cpp's
+/// guide runs it: the diffusion model, the Flux.1 VAE, Qwen3 4B as `--llm`,
+/// 8 steps at guidance 1, and flash attention in the diffusion model alone.
 #[test]
 fn z_image_loads_its_vae_and_language_model_at_turbos_steps() {
-    let z_image = config(
+    let mut z_image = config(
         ImageFamily::ZImage,
         vec![
             component(ComponentRole::Llm, "L"),
             component(ComponentRole::Vae, "V"),
         ],
     );
+    z_image.model_path = PathBuf::from("z_image_turbo-Q8_0.gguf");
     assert_eq!(
         argv(&z_image),
         words(
-            "--diffusion-model M --vae V --llm L \
+            "--diffusion-model z_image_turbo-Q8_0.gguf --vae V --llm L \
              --listen-ip 127.0.0.1 --listen-port 9123 \
              --steps 8 --cfg-scale 1 --sampling-method euler --flash-attn off,diffusion=on --conv-direct off"
+        )
+    );
+}
+
+/// A Z-Image file whose name lacks "turbo" is base: the same files, 28 steps
+/// at guidance 5, and the linear scale that drew its `Q8_0` file in `sd-cli`,
+/// written as the number it is.
+#[test]
+fn base_z_image_draws_at_bases_steps_with_its_linear_scale() {
+    let mut base = config(
+        ImageFamily::ZImage,
+        vec![
+            component(ComponentRole::Vae, "V"),
+            component(ComponentRole::Llm, "L"),
+        ],
+    );
+    base.model_path = PathBuf::from("/models/z-image-Q8_0.gguf");
+    assert_eq!(
+        argv(&base),
+        words(
+            "--diffusion-model /models/z-image-Q8_0.gguf --vae V --llm L \
+             --listen-ip 127.0.0.1 --listen-port 9123 \
+             --steps 28 --cfg-scale 5 --sampling-method euler --linear-scale 0.000244140625 \
+             --flash-attn off,diffusion=on --conv-direct off"
         )
     );
 }

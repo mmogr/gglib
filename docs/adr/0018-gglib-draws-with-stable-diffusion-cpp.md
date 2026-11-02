@@ -99,6 +99,13 @@ request drawn from a picture (decision 20) is not sent the recipe's count:
 it is sent that count divided by its strength, rounded up, and its size is
 the picture's.
 
+Amended on 2026-11-02: the steps, guidance and sampler are a variant's,
+read from the main file's name, not the family's. Qwen-Image 2.1 Turbo
+draws at 8 steps with the `qwen-image-2.1-turbo` sigma preset and guidance
+1.0; base Z-Image at 28 steps and guidance 5.0, with `--linear-scale
+0.000244140625`. A Turbo redraw from a picture is sent its 8 steps
+([log-0018](log-0018.md#2026-11-02-a-model-is-drawn-by-its-variant-read-from-its-file-name)).
+
 ### 4. `sd-server` is installed pinned, pre-built where there is a build
 
 The pin is `master-948-228c707` (`PINNED_SD_RELEASE`,
@@ -590,6 +597,9 @@ and source. **No Z-Image picture has been drawn**, through gglib or by
    base header was read. It is then drawn with Turbo's settings, where
    sd.cpp's guide runs it at guidance 5.0. Settings per model are still out
    of scope.
+   Amended on 2026-11-02: a base Z-Image file is drawn with its own
+   settings, 28 steps at guidance 5.0 and a linear scale
+   ([log-0018](log-0018.md#2026-11-02-a-model-is-drawn-by-its-variant-read-from-its-file-name)).
 4. *Its compute margin is 7 GiB*, read on 2026-10-11: the largest buffer of
    a 1024x1024 Turbo render was the decode of this same VAE, 6,657 MB, as
    Flux.1's was. The log has the reading.
@@ -910,6 +920,8 @@ Its controls now sit beside the picture in a window from the `md` width up.
   ([log-0018](log-0018.md#2026-10-11-z-image-is-a-fourth-family-recognised-from-a-header-and-never-drawn)).
   Families beyond those four are out, with the variants of the four sd.cpp
   loads differently, Z-Image L2P among them.
+  Amended on 2026-11-02: Qwen-Image 2.1 Turbo and base Z-Image are drawn,
+  each with its own settings ([log-0018](log-0018.md#2026-11-02-a-model-is-drawn-by-its-variant-read-from-its-file-name)).
 - Steps, guidance or a sampler per request or per model.
 - CUDA, Vulkan and ROCm: their assets are matched by name only.
 - Sizes above 1024²: the compute margins were read there.
