@@ -82,7 +82,8 @@ pub trait FitJudge: Send + Sync {
     fn fit(&self, metadata: &GgufMetadata, image: bool, weights_bytes: u64) -> Fit;
 
     /// Whether `weights_bytes` of weights fit alone: the fit of a model whose
-    /// whole header leaves its trained context or KV shape unknown.
+    /// whole header leaves its trained context or KV shape unknown. A model
+    /// whose weights do not fit alone never fits.
     fn weights_fit(&self, weights_bytes: u64) -> bool;
 }
 
@@ -201,8 +202,9 @@ impl std::error::Error for NoWeights {}
 /// The variant a download takes among `contenders` when none is asked for.
 ///
 /// Reads nothing ahead of need: a head per variant walked, and a whole
-/// header only for a variant whose fit its head cannot tell, or that fits
-/// and whose head left its type or role open. A variant whose whole header
+/// header only for a variant whose fit its head cannot tell and whose
+/// weights fit alone, or that fits and whose head left its type or role
+/// open. A variant whose whole header
 /// leaves its trained context or KV shape unknown is judged by its weights
 /// alone. With no `judge` (no budget), the
 /// smallest variant is taken and no fit is judged.
@@ -246,6 +248,9 @@ pub async fn pick_variant(
             Fit::DoesNotFit => false,
             // The whole header leaves the shape unknown: the weights alone.
             Fit::CannotTell if head.head.complete => judge.weights_fit(size),
+            // Weights that do not fit alone fit with no KV cache either: no
+            // header is read to tell.
+            Fit::CannotTell if !judge.weights_fit(size) => false,
             Fit::CannotTell => {
                 header = reader.header(index).await;
                 match header

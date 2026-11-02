@@ -342,6 +342,32 @@ async fn a_head_that_ends_before_the_fit_keys_is_judged_from_the_whole_header() 
     assert_eq!(reader.reads(), ["head 0", "header 0"]);
 }
 
+/// A variant whose fit its head cannot tell, and whose weights do not fit
+/// alone, does not fit with any KV cache: its whole header is not read.
+#[tokio::test]
+async fn weights_too_big_alone_have_no_whole_header_read() {
+    let cut = |file_type| {
+        let mut late = typed_late(file_type);
+        if let Some(head) = &mut late.head {
+            head.head.metadata.context_length = None;
+        }
+        late
+    };
+    let contenders = [open(16), open(8)];
+    let reader = Reader::new(vec![cut(Q8_0), cut(Q4_K_M)]);
+
+    let picked = pick(&contenders, &reader, 10).await.unwrap();
+
+    assert_eq!(
+        picked,
+        Pick {
+            index: 1,
+            reason: PickReason::Quantized(Q4_K_M)
+        }
+    );
+    assert_eq!(reader.reads(), ["head 0", "head 1", "header 1"]);
+}
+
 /// A head that already shows a draft settles it: no whole header is read
 /// for it, though its fit could not be told from the head.
 #[tokio::test]
