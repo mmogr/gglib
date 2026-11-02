@@ -5,7 +5,7 @@
  * - search: Normal text search query
  * - repo: Exact HuggingFace repository (user/repo)
  * - download: Exact repo with quantization (user/repo:quant)
- * - url: HuggingFace URL with optional repo/quant extraction
+ * - url: HuggingFace URL, with the repository and the file it names
  */
 
 export type ModelSearchIntent =
@@ -36,13 +36,7 @@ const DOWNLOAD_PATTERN = /^([a-zA-Z0-9._-]+)\/([a-zA-Z0-9._-]+):([a-zA-Z0-9._-]+
  * - https://huggingface.co/user/repo/resolve/main/filename.gguf
  */
 const HF_URL_PATTERN =
-  /^https?:\/\/huggingface\.co\/([a-zA-Z0-9._-]+)\/([a-zA-Z0-9._-]+)(?:\/.*)?$/;
-
-/**
- * Extract quantization from a GGUF filename
- * Matches patterns like: model.Q4_K_M.gguf, model-Q8_0.gguf, model_IQ4_XS.gguf
- */
-const GGUF_QUANT_PATTERN = /[._-](Q[0-9]+_[A-Z0-9_]+|IQ[0-9]+_[A-Z0-9_]+|F16|F32|BF16)\.gguf$/i;
+  /^https?:\/\/huggingface\.co\/([a-zA-Z0-9._-]+)\/([a-zA-Z0-9._-]+)(\/.*)?$/;
 
 /**
  * Normalize input by trimming whitespace and removing surrounding quotes
@@ -69,24 +63,52 @@ function isUrl(input: string): boolean {
 }
 
 /**
- * Extract repo and optional quant from a HuggingFace URL
+ * A GGUF file's URL in a repository: `/blob/<rev>/<path>.gguf` or
+ * `/resolve/<rev>/<path>.gguf`, before any query or fragment.
  */
-function parseHuggingFaceUrl(
-  url: string
-): { repo: string; quant?: string } | null {
+const HF_FILE_PATH_PATTERN = /^\/(?:blob|resolve)\/[^/]+\/(?:.*\/)?([^/?#]+)\.gguf(?:[?#].*)?$/i;
+
+/** llama.cpp's shard numbering at the end of a stem: `-00001-of-00008`. */
+const SHARD_SUFFIX_PATTERN = /-\d+-of-\d+$/;
+
+/** What a request's label may hold, as for `repo:label`. */
+const REQUEST_PATTERN = /^[a-zA-Z0-9._-]+$/;
+
+/**
+ * The name a file's URL asks for its variant by: the file's base name less
+ * `.gguf` and a shard's numbering. No quant is read from it: the daemon
+ * matches it to the variant whose file it names.
+ */
+function fileStemOf(path: string): string | undefined {
+  const match = path.match(HF_FILE_PATH_PATTERN);
+  if (!match) {
+    return undefined;
+  }
+  let base: string;
+  try {
+    base = decodeURIComponent(match[1]);
+  } catch {
+    return undefined;
+  }
+  const stem = base.replace(SHARD_SUFFIX_PATTERN, "");
+  return REQUEST_PATTERN.test(stem) ? stem : undefined;
+}
+
+/**
+ * Extract the repo from a HuggingFace URL, and when the URL is a GGUF file's,
+ * the file's stem to ask for its variant by.
+ */
+function parseHuggingFaceUrl(url: string): { repo: string; quant?: string } | null {
   const match = url.match(HF_URL_PATTERN);
   if (!match) {
     return null;
   }
 
-  const [, namespace, repoName] = match;
-  const repo = `${namespace}/${repoName}`;
-
-  // Try to extract quant from filename in URL path
-  const quantMatch = url.match(GGUF_QUANT_PATTERN);
-  const quant = quantMatch ? quantMatch[1].toUpperCase() : undefined;
-
-  return { repo, quant };
+  const [, namespace, repoName, rest] = match;
+  return {
+    repo: `${namespace}/${repoName}`,
+    quant: rest ? fileStemOf(rest) : undefined,
+  };
 }
 
 /**
@@ -169,7 +191,6 @@ export function getButtonTextForIntent(intent: ModelSearchIntent): string {
     case "repo":
       return "View Model";
     case "url":
-      // If we extracted repo info from URL, show appropriate action
       if (intent.quant) {
         return "Download";
       }

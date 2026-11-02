@@ -228,14 +228,14 @@ impl ModelVerificationService {
     /// Repair a model by re-downloading corrupt or missing files.
     ///
     /// The unhealthy files are deleted and the model's download is queued
-    /// again, at the quantization the model was stored with, which fetches
+    /// again, at the variant the model was stored from, which fetches
     /// what is missing. An unhealthy projector is deleted only when that
     /// download fetches it; one it would not bring back stays on disk and
     /// stays linked.
     ///
     /// What the download fetches is read from the repository before any file
     /// is deleted, so a repository that cannot be read, or that does not hold
-    /// the stored quantization, costs the model nothing.
+    /// the stored variant, costs the model nothing.
     ///
     /// # Arguments
     ///
@@ -245,7 +245,7 @@ impl ModelVerificationService {
     ///
     /// # Errors
     ///
-    /// A message when the model has no repository or quantization, when
+    /// A message when the model has no repository or variant, when
     /// nothing is unhealthy, when every unhealthy file is a component the
     /// model links (never deleted) or a projector the download would not
     /// bring back, when the repository cannot be read, and when no unhealthy
@@ -280,7 +280,7 @@ impl ModelVerificationService {
             .await
             .map_err(|e| format!("Failed to get model files: {e}"))?;
 
-        let quantization = stored_label(self.hf_client.as_ref(), repo_id, &model)
+        let label = stored_label(self.hf_client.as_ref(), repo_id, &model)
             .await
             .map_err(|e| format!("Failed to list {repo_id}'s variants: {e}"))?
             .ok_or_else(|| no_label(repo_id, &model))?;
@@ -311,7 +311,7 @@ impl ModelVerificationService {
 
         // What the download queued below fetches, asked while every file is
         // still in place.
-        let fetched = self.fetched_projector(repo_id, &quantization).await?;
+        let fetched = self.fetched_projector(repo_id, &label).await?;
 
         // A projector is deleted only when that download fetches that same
         // file. Each one is judged on its own.
@@ -324,7 +324,7 @@ impl ModelVerificationService {
             if repaired.is_empty() {
                 let names: Vec<&str> = left.iter().map(|file| file.file_path.as_str()).collect();
                 return Err(format!(
-                    "{} is unhealthy, and a download of {repo_id} at {quantization} does \
+                    "{} is unhealthy, and a download of {repo_id} at {label} does \
                      not fetch it, so it was left in place. Link another projector with \
                      `gglib model update {model_id} --projector <path>`",
                     names.join(", ")
@@ -357,9 +357,8 @@ impl ModelVerificationService {
 
         // Queue the download and start it. The files are gone by now, so a
         // refusal says which, and what fetches them.
-        let asked = quantization;
         match Arc::clone(&self.downloads)
-            .queue_smart(repo_id.clone(), Some(asked.clone()), None)
+            .queue_smart(repo_id.clone(), Some(label.clone()), None)
             .await
         {
             Ok(download) => Ok(RepairStarted {
@@ -368,7 +367,7 @@ impl ModelVerificationService {
             }),
             Err(e) => Err(format!(
                 "The download that fetches them again could not be queued: {e}. {}",
-                missing_after_repair(&DownloadId::new(repo_id, Some(asked)), &gone)
+                missing_after_repair(&DownloadId::new(repo_id, Some(label)), &gone)
             )),
         }
     }

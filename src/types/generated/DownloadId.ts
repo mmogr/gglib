@@ -3,12 +3,14 @@
 /**
  * Canonical identifier for a download.
  *
- * Represents a unique download as `model_id:quantization` (or just `model_id` if no quantization).
- * This is the single identifier format used throughout the system.
+ * Represents a unique download as `model_id:label` (or just `model_id` when it
+ * names no variant), the label being the variant's as the repository's listing
+ * names it (`Q4_K_M`, `UD-Q4_K_XL`). This is the single identifier format used
+ * throughout the system.
  */
 export type DownloadId = { model_id: string, 
 /**
- * No `skip_serializing_if`, so the key is always on the wire — `null`
- * when the download names no quantization.
+ * The variant's label. No `skip_serializing_if`, so the key is always on
+ * the wire — `null` when the download names no variant.
  */
 quantization: string | null, };

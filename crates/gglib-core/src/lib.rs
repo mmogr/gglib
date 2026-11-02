@@ -41,7 +41,7 @@ pub use domain::{
 pub use download::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, DownloadError, DownloadEvent,
     DownloadId, DownloadOutcome, DownloadPhase, DownloadRow, DownloadRowText, FinishedDownload,
-    GgufFileRole, Quantization, QueueRunSummary, QueueSnapshot, ShardInfo,
+    GgufFileRole, QueueRunSummary, QueueSnapshot, ShardInfo,
 };
 pub use events::{AppEvent, ModelSummary};
 pub use ports::{

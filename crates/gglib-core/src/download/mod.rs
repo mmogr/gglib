@@ -32,4 +32,4 @@ pub use row::{
 };
 pub use shard_info::ShardInfo;
 pub use throttle::ProgressThrottle;
-pub use types::{DownloadId, Quantization};
+pub use types::DownloadId;

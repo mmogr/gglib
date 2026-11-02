@@ -15,7 +15,8 @@ of orders a search can ask for: the browser sends it on the wire and the CLI's
 
 A repository's variants (`list_quantizations`, `HfQuantInfo`) are its GGUF files
 grouped into shard sets, each labelled as its uploader named it (`variants_of`),
-and a request names one by its label (`match_label`). What a variant is comes
+and a request names one by its label (`match_label`), or by its whole file name,
+as a pasted file's URL asks (`match_variant`). What a variant is comes
 from a 64 KiB head of its first file (`variant_role`, `read_roles`): a draft or
 helper is listed and never downloaded (`HELPER_FILES_REFUSAL`). A model stored
 without a label is found again by the variant that holds its file

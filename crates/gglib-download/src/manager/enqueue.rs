@@ -9,7 +9,7 @@ use crate::queue::Upgrade;
 
 impl DownloadManagerImpl {
     /// Queue the upgrade of model `model_id`, its files from `repo_id` at
-    /// `quantization` fetched again at `commit`, and answer its ID.
+    /// `label` fetched again at `commit`, and answer its ID.
     ///
     /// The files are the download's own repository's: the weights and the
     /// projector fetched with them. An image model's companions are in
@@ -22,15 +22,11 @@ impl DownloadManagerImpl {
     pub async fn queue_upgrade_download(
         &self,
         repo_id: &str,
-        quantization: &str,
+        label: &str,
         model_id: i64,
         commit: String,
     ) -> Result<DownloadId, DownloadError> {
-        let resolution = self
-            .resolver
-            .own_files()
-            .resolve(repo_id, quantization)
-            .await?;
+        let resolution = self.resolver.own_files().resolve(repo_id, label).await?;
         let id = DownloadId::new(repo_id, Some(&resolution.label));
         let upgrade = Upgrade { model_id, commit };
 

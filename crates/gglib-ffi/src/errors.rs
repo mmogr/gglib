@@ -99,8 +99,7 @@ impl From<DownloadError> for GglibError {
                 status_code: Some(404),
                 ..
             }
-            | DownloadError::NotFound { .. }
-            | DownloadError::InvalidQuantization { .. } => Self::NotFound,
+            | DownloadError::NotFound { .. } => Self::NotFound,
             DownloadError::Network {
                 status_code: Some(429),
                 ..

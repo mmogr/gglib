@@ -4,7 +4,7 @@
 // Re-export core types for convenience
 pub use gglib_core::download::{
     DownloadError, DownloadEvent, DownloadId, DownloadOutcome, DownloadPhase, DownloadRow,
-    FinishedDownload, Quantization, QueueSnapshot, ShardInfo,
+    FinishedDownload, QueueSnapshot, ShardInfo,
 };
 pub use gglib_core::ports::{
     CompletedDownload, DownloadManagerConfig, DownloadManagerPort, ModelRegistrarPort,
