@@ -335,6 +335,80 @@ async fn a_z_image_model_links_the_flux_vae_and_qwen3_4b_and_refuses_qwen3_vl() 
     assert!(repo.0.lock().unwrap().missing_components().is_empty());
 }
 
+/// A FLUX.3 Image Klein file is found as Klein by a retag, refuses the
+/// Flux.1 VAE and Z-Image's Qwen3 4B by name, and links the FLUX.2 VAE and
+/// Qwen3-VL 4B.
+#[tokio::test]
+async fn a_flux3_klein_model_links_the_flux2_vae_and_qwen3_vl_4b() {
+    let dir = tempfile::tempdir().unwrap();
+    let weights = write_golden(dir.path(), Golden::Flux3KleinQ8);
+    let (service, repo) = service(&weights, None);
+    let diff = service
+        .retag_model(1, &GoldenParser, false)
+        .await
+        .unwrap()
+        .expect("finding a family is a change");
+    assert_eq!(diff.family_found, Some(ImageFamily::Flux3Klein));
+    assert_eq!(stored_family(&repo), Some(ImageFamily::Flux3Klein));
+    assert_eq!(
+        repo.0.lock().unwrap().missing_components(),
+        [ComponentRole::Vae, ComponentRole::Llm]
+    );
+
+    let flux1_vae = write_golden(dir.path(), Golden::FluxVae);
+    let qwen3 = dir.path().join(StandIn::Qwen34bQ8.file_name());
+    std::fs::write(&qwen3, StandIn::Qwen34bQ8.text()).unwrap();
+    for (role, file, expected) in [
+        (
+            ComponentRole::Vae,
+            &flux1_vae,
+            "a FLUX.2 VAE: decoder.conv_in.weight with 32 input channels, and \
+             encoder.conv_in.weight",
+        ),
+        (
+            ComponentRole::Llm,
+            &qwen3,
+            "a Qwen3-VL 4B GGUF: architecture qwen3vl, token_embd.weight of width 2560",
+        ),
+    ] {
+        let refused = service
+            .set_component(1, role, Some(file), &GoldenParser)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            refused.to_string(),
+            format!(
+                "{} is not a {role} for this model: expected {expected}",
+                canonical(file).display()
+            )
+        );
+    }
+    assert!(links(&repo).is_empty());
+
+    let vae = write_golden(dir.path(), Golden::Flux2Vae);
+    let llm = write_golden(dir.path(), Golden::Qwen3Vl4bQ8);
+    for (role, file) in [(ComponentRole::Llm, &llm), (ComponentRole::Vae, &vae)] {
+        service
+            .set_component(1, role, Some(file), &GoldenParser)
+            .await
+            .unwrap_or_else(|e| panic!("{role}: {e}"));
+    }
+    assert_eq!(
+        links(&repo),
+        [
+            ModelComponent {
+                role: ComponentRole::Vae,
+                path: canonical(&vae),
+            },
+            ModelComponent {
+                role: ComponentRole::Llm,
+                path: canonical(&llm),
+            },
+        ]
+    );
+    assert!(repo.0.lock().unwrap().missing_components().is_empty());
+}
+
 #[tokio::test]
 async fn a_missing_component_file_is_named_as_a_component() {
     let dir = tempfile::tempdir().unwrap();

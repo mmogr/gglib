@@ -36,19 +36,22 @@ has no asset and builds from source.
 ## The command line
 
 `--diffusion-model <file>` for a diffusion-only family (Flux.1, Qwen-Image
-2.1, Z-Image) or `-m <file>` for an all-in-one checkpoint (SDXL); each component in
-role order, `--vae`, `--clip_l`, `--t5xxl`, `--llm`, whatever order the
-model lists them in; `--listen-ip 127.0.0.1 --listen-port <port>`; then the
-variant's `--steps`, `--cfg-scale` and `--sampling-method`, its `--sigmas`
-preset and `--linear-scale` when it has them, and the recipe's
-`--flash-attn` mode (`on` for Qwen-Image 2.1, `off,diffusion=on` for
-Z-Image, `off` for the rest), and `--conv-direct off`. The variant is read
-from the main file's name (`ImageFamily::sampling`): "turbo" in it, in any
-case, makes a Qwen-Image 2.1 file Turbo (`--sigmas qwen-image-2.1-turbo`,
-8 steps, guidance 1) and a Z-Image file Turbo (8 steps, guidance 1); a
-Z-Image file without it is base (28 steps, guidance 5,
-`--linear-scale 0.000244140625`). Flags given at launch are the defaults for
-every request. `server/args_tests.rs` pins one whole argv per variant.
+2.1, Z-Image, FLUX.3 Image Klein) or `-m <file>` for an all-in-one
+checkpoint (SDXL); each component in role order, `--vae`, `--clip_l`,
+`--t5xxl`, `--llm`, whatever order the model lists them in; `--listen-ip
+127.0.0.1 --listen-port <port>`; then the variant's `--steps`, `--cfg-scale`
+and `--sampling-method`, its `--sigmas` preset and `--linear-scale` when it
+has them, and the recipe's `--flash-attn` mode (`on` for Qwen-Image 2.1,
+`off,diffusion=on` for Z-Image and FLUX.3 Image Klein, `off` for the rest),
+and `--conv-direct off`. The variant is read from the main file's name
+(`ImageFamily::sampling`): "turbo" in it, in any case, makes a Qwen-Image
+2.1 file Turbo (`--sigmas qwen-image-2.1-turbo`, 8 steps, guidance 1) and a
+Z-Image file Turbo (8 steps, guidance 1); a Z-Image file without it is base
+(28 steps, guidance 5, `--linear-scale 0.000244140625`). FLUX.3 Image Klein
+draws at 16 steps, guidance 1, and a Klein file with "base" in its name is
+refused before anything queues (`ImageFamily::refusal`). Flags given at
+launch are the defaults for every request. `server/args_tests.rs` pins one
+whole argv per variant.
 
 ## Launching
 
@@ -56,7 +59,7 @@ The residency launch starts `sd-server` (`process::residency`): it checks
 the binary and every component before the queue, places the model by its
 files plus its family's compute margin (`Recipe::compute_margin_bytes`, the
 1024x1024 VAE decode buffer rounded up: Flux.1 7 GiB, SDXL 8 GiB,
-Qwen-Image 2.1 9 GiB, Z-Image 7 GiB), spawns
+Qwen-Image 2.1 9 GiB, Z-Image 7 GiB, FLUX.3 Image Klein 7 GiB), spawns
 with `server/spawn.rs`, and narrates the build from
 `sd-config.json` (`binary_install::recorded_release`).
 

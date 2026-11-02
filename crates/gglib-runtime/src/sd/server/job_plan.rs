@@ -5,7 +5,9 @@
 //! The model is the one core's rule picks
 //! ([`resolve_image_model`]): the one named, else the default image model
 //! the settings name, else the only complete image model on this machine.
-//! Its family's recipe judges the size; one to four images.
+//! A variant gglib does not draw is refused by its file name
+//! (`ImageFamily::refusal`: FLUX.3 Image Klein base). Its family's recipe
+//! judges the size; one to four images.
 //!
 //! A request with a picture to draw from ([`Source`]) is drawn at the
 //! picture's size, which the same rule judges: a picture one family drew is
@@ -98,8 +100,17 @@ pub(crate) async fn plan(
     let Some(family) = spec.image_family else {
         return Err(ImageError::NotAnImageModel { model: spec.name });
     };
-    let file_name = spec.file_path.file_name().unwrap_or_default();
-    let sampling = family.sampling(&file_name.to_string_lossy());
+    let file_name = spec
+        .file_path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
+    if let Some(refusal) = family.refusal(&file_name) {
+        return Err(ImageError::Invalid {
+            message: refusal.to_owned(),
+        });
+    }
+    let sampling = family.sampling(&file_name);
     let rule = family.recipe().size;
     if request.source.is_some() && request.size.is_some() {
         return Err(ImageError::Invalid {
