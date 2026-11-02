@@ -1,11 +1,15 @@
-# Keeps the standing release pull request, "chore(main): release X.Y.Z-rc.N",
-# up to date with main. release-please reads the commit types since the last
+# Keeps a branch's standing release pull request,
+# "chore(<branch>): release X.Y.Z-rc.N", up to date with the branch: main's,
+# which carries the next minor's candidates, and each maintenance line's,
+# release/X.Y.x, which carries that version's patches (CONTRIBUTING,
+# "Maintenance lines"). release-please reads the commit types since the last
 # release and works out the next candidate (release-please-config.json says
-# how), then writes it into Cargo.toml, package.json and the manifest, and adds
-# its changes to CHANGELOG.md. Merging the pull request changes main's version,
-# and CI's release job (release-tag.yml) tags and releases that version as a
-# prerelease. Promotion to a stable version is promote.yml's job, made from
-# the candidate's tag, not this one's.
+# how, read from the branch), then writes it into Cargo.toml, package.json
+# and the manifest, and adds its changes to CHANGELOG.md. Merging the pull
+# request changes the branch's version, and CI's release job
+# (release-tag.yml) tags and releases that version as a prerelease.
+# Promotion to a stable version is promote.yml's job, made from the
+# candidate's tag, not this one's.
 #
 # release-please knows nothing of Cargo.lock or package-lock.json, and CI
 # builds with --locked, so after every update this workflow adds a commit that
@@ -17,28 +21,40 @@
 
 name: Release PR
 
-# After CI on main, not on the push: CI's release job tags a changed version,
-# and release-please must see that tag before it reads main. The builds run
-# in release.yml afterwards; release-please does not wait for them.
-# Running once per green CI run also means a burst of merges rebuilds the
-# pull request once, not once per merge.
+# After CI on the branch, not on the push: CI's release job tags a changed
+# version, and release-please must see that tag before it reads the branch.
+# The builds run in release.yml afterwards; release-please does not wait for
+# them. Running once per green CI run also means a burst of merges rebuilds
+# the pull request once, not once per merge.
+#
+# A workflow_run workflow runs as main holds it, whatever branch the CI run
+# was on, so a line needs nothing of this file. By hand, `branch` names the
+# branch whose pull request to bring up to date.
 on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
-    branches: [main]
+    branches: [main, 'release/**']
   workflow_dispatch:
+    inputs:
+      branch:
+        description: "The branch whose release PR to update: main, or a line release/X.Y.x"
+        required: false
+        default: main
+        type: string
 
-# GITHUB_TOKEN only reads: main's version and its tag, and the pull
+# GITHUB_TOKEN only reads: the branch's version and its tag, and the pull
 # requests the gate asks about.
 permissions:
   contents: read
   pull-requests: read
 
-# A newer CI run's trigger cancels a run still updating the pull request: the
-# newer run reads a later main and rewrites the same pull request from it.
+# One group per branch: a newer CI run's trigger cancels a run still updating
+# that branch's pull request, since the newer run reads a later branch and
+# rewrites the same pull request from it. main's run and a line's never
+# touch each other's.
 concurrency:
-  group: release-pr
+  group: release-pr-${{ github.event.workflow_run.head_branch || inputs.branch }}
   cancel-in-progress: true
 
 defaults:
@@ -52,44 +68,56 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # The branch whose pull request this run keeps: the one CI ran on, or
+    # the one named by hand.
+    env:
+      BRANCH: ${{ github.event.workflow_run.head_branch || inputs.branch }}
     outputs:
       updated: ${{ steps.release.outputs.prs_created }}
       # The pull request the action opened or updated, as JSON.
       pr: ${{ steps.release.outputs.pr }}
     steps:
       # The commit CI tested, whose version that run's release job tagged.
-      # main can be ahead by then, at a version whose own CI run has not yet
-      # reached its release job.
+      # The branch can be ahead by then, at a version whose own CI run has
+      # not yet reached its release job. By hand, the branch's tip.
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha || inputs.branch }}
+
+      # Only main and the lines release. Nothing else reaches here from CI,
+      # whose trigger above names them, so this is for a hand run.
+      - name: Require a branch that releases
+        run: scripts/release_lines.py line --branch "$BRANCH"
 
       # Two things must be true before release-please runs, and after a green
-      # CI run on main they are, so this checks once and fails if not. It
-      # opens nothing while a merged release PR still carries
-      # `autorelease: pending`: it stops with "untagged, merged release PRs
-      # outstanding". It never tags (skip-github-release below), so
-      # release-tag.yml, inside the CI run this follows, swaps that label for
-      # `autorelease: tagged` once it has tagged the version. And it reads the
-      # last release from the tag `v<version>`: with no tag, it reads main's
-      # whole history as unreleased. A failure here means the release job of
-      # that CI run did not tag: re-run it, then run this workflow by hand.
-      - name: Require main's version to be tagged
+      # CI run on the branch they are, so this checks once and fails if not.
+      # It opens nothing while a merged release PR of this branch still
+      # carries `autorelease: pending`: it stops with "untagged, merged
+      # release PRs outstanding". It never tags (skip-github-release below),
+      # so release-tag.yml, inside the CI run this follows, swaps that label
+      # for `autorelease: tagged` once it has tagged the version. And it
+      # reads the last release from the tag `v<version>`: with no tag, it
+      # reads the branch's whole history as unreleased. A failure here means
+      # the release job of that CI run did not tag: re-run it, then run this
+      # workflow by hand. The label check reads this branch's merged pull
+      # requests alone, as release-please does: another branch's pending
+      # label is that branch's to clear.
+      - name: Require the branch's version to be tagged
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
           if ! git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" > /dev/null 2>&1; then
-            echo "::error::v$VERSION is not tagged. Re-run the Release job of CI on main, then run this workflow by hand."
+            echo "::error::v$VERSION is not tagged. Re-run the Release job of CI on $BRANCH, then run this workflow by hand for $BRANCH."
             exit 1
           fi
-          pending=$(gh pr list -R "$GITHUB_REPOSITORY" --state merged --label 'autorelease: pending' --json number --jq 'length')
+          pending=$(gh pr list -R "$GITHUB_REPOSITORY" --base "$BRANCH" --state merged --label 'autorelease: pending' --json number --jq 'length')
           if [ "$pending" != 0 ]; then
-            echo "::error::a merged release PR is still labelled 'autorelease: pending'; CI's release job relabels it when it tags, and goes on if the relabel fails. Swap the label for 'autorelease: tagged' by hand, then run this workflow by hand."
+            echo "::error::a merged release PR of $BRANCH is still labelled 'autorelease: pending'; CI's release job relabels it when it tags, and goes on if the relabel fails. Swap the label for 'autorelease: tagged' by hand, then run this workflow by hand for $BRANCH."
             exit 1
           fi
-          echo "✓ v$VERSION is tagged, and no merged release PR is waiting for its tag"
+          echo "✓ v$VERSION is tagged, and no merged release PR of $BRANCH is waiting for its tag"
 
       - name: Generate GitHub App token
         id: app-token
@@ -103,12 +131,20 @@ jobs:
       # each makes the GitHub release itself, with generated notes. release-please
       # only keeps the pull request. With `always-update` in the config it
       # rewrites the pull request on every run, so the pull request is never
-      # behind main, which the ruleset requires before a merge.
+      # behind its branch, which the ruleset requires before a merge.
+      #
+      # target-branch is the branch it reads and opens against: the config,
+      # the manifest, the commits since the last release and the pull
+      # request's base are all that branch's. A line cut from vX.Y.0 has a
+      # manifest reading X.Y.0 and that tag on its first commit, so
+      # release-please counts the cherry-picks since it and proposes
+      # X.Y.1-rc.1 on its own.
       - name: Open or update the release PR
         id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ steps.app-token.outputs.token }}
+          target-branch: ${{ env.BRANCH }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           skip-github-release: true
@@ -135,30 +171,31 @@ jobs:
 
       # A stable version comes only from promote.yml, never from this pull
       # request, and the pull request must propose a candidate of a version
-      # that has not shipped. release-please gets this wrong in two cases, and
-      # a `Release-As: X.Y.Z-rc.1` line at the end of the message of a commit
-      # that merges next puts it right. A feat merged while main is a patch
-      # candidate such as 0.29.1-rc.1 makes it propose 0.30.0 rather than
-      # 0.30.0-rc.1. And after a promotion it proposes the shipped version's
-      # rc.N+1: promote.yml tags the stable version from the candidate's
-      # commit, not from main, so the candidate is still the last release it
-      # can see from main.
-      - name: Require a release candidate of an unshipped version
+      # that has not shipped, and of its own branch's line: main the next
+      # minor, a line release/X.Y.x its next patch. scripts/release_lines.py
+      # holds all of that, with fixtures, and each refusal names the
+      # `Release-As: X.Y.Z-rc.1` line that puts it right, at the end of the
+      # message of a commit that merges next. release-please needs that line
+      # in three cases. A feat merged while main is a patch candidate such as
+      # 0.29.1-rc.1 makes it propose 0.30.0 rather than 0.30.0-rc.1. After a
+      # promotion it proposes the shipped version's rc.N+1: promote.yml tags
+      # the stable version from the candidate's commit, not from the branch,
+      # so the candidate is still the last release it can see from there.
+      # And once a line is cut, fixes on main alone would propose that line's
+      # next patch, which the line cuts; main goes on to the next minor. A
+      # feat cherry-picked onto a line proposes the next minor there, and is
+      # refused outright: it does not belong on a line.
+      - name: Require a release candidate of an unshipped version of this line
         id: guard
+        env:
+          BASE: ${{ fromJSON(needs.release-pr.outputs.pr).baseBranchName }}
         run: |
           VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
-            echo "::error::The release PR proposes $VERSION, which is not a release candidate; a stable version comes only from Promote. Merge a commit whose message ends with a 'Release-As: X.Y.Z-rc.1' line naming the candidate meant, and the release PR is rewritten to it."
-            exit 1
-          fi
-          STABLE=${VERSION%-rc.*}
-          if git ls-remote --exit-code --tags origin "refs/tags/v${STABLE}" > /dev/null 2>&1; then
-            IFS=. read -r major minor patch <<< "$STABLE"
-            echo "::error::The release PR proposes $VERSION, but $STABLE has shipped: Promote tagged v$STABLE from its candidate, so from main the candidate still looks like the last release. Merge a commit whose message ends with 'Release-As: $major.$((minor + 1)).0-rc.1' (a feat or a breaking change since $STABLE) or 'Release-As: $major.$minor.$((patch + 1))-rc.1' (fixes only), and the release PR is rewritten to it."
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "✓ The release PR proposes the release candidate $VERSION"
+          git ls-remote --tags origin > "$RUNNER_TEMP/tags.txt"
+          git ls-remote --heads origin 'refs/heads/release/*' > "$RUNNER_TEMP/release-branches.txt"
+          scripts/release_lines.py guard-pr --branch "$BASE" --version "$VERSION" \
+            --tags "$RUNNER_TEMP/tags.txt" --branches "$RUNNER_TEMP/release-branches.txt" >> "$GITHUB_OUTPUT"
+          echo "✓ The release PR on $BASE proposes the release candidate $VERSION"
 
       # The workspace's own versions in both lockfiles, moved to the
       # candidate and checked; scripts/check_workflow_yaml.sh holds the
@@ -185,11 +222,11 @@ jobs:
             echo "✓ The release PR's body refers to its issues without closing them"
           fi
 
-      # release-please rewrites the branch from main on every update, which
-      # drops this commit, and with `always-update` it updates on every green
-      # CI run on main; this job runs after each of those updates and adds the
-      # commit back. CI's concurrency cancels the run on release-please's own commit,
-      # which this one follows within minutes.
+      # release-please rewrites the branch from its base on every update,
+      # which drops this commit, and with `always-update` it updates on every
+      # green CI run on the base; this job runs after each of those updates
+      # and adds the commit back. CI's concurrency cancels the run on
+      # release-please's own commit, which this one follows within minutes.
       - name: Commit the lockfiles
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

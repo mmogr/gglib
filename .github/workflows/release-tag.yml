@@ -1,19 +1,27 @@
 # The tagging half of a release, called by ci.yml's `release` job after CI
-# passes on a push to main, so its check shows on the commit. When main's
-# version has no `v<version>` tag it tags the commit that set that version,
-# makes the GitHub (pre)release, and dispatches release.yml, which builds and
-# publishes the assets in a run of its own. Nothing that cancels this CI run
-# can then cancel the builds.
+# passes on a push to main or to a maintenance line, release/X.Y.x, so its
+# check shows on the commit. When the branch's version has no `v<version>`
+# tag it tags the commit that set that version, makes the GitHub
+# (pre)release, and dispatches release.yml, which builds and publishes the
+# assets in a run of its own. Nothing that cancels this CI run can then
+# cancel the builds.
 #
 # This tags every candidate. release-please.yml never tags, and promote.yml
 # tags a stable version itself, from the candidate's tag, so a promotion
 # never comes this way.
 #
-# Run by hand, it tags without waiting for CI: the same steps on main as it
-# is now, and then the release PR workflow, which otherwise follows CI. That
-# is the maintainer's shortcut past a CI run that takes an hour, taken on
-# their own judgement of the tree: nothing here has tested it. A CI run that
-# finishes afterwards finds the tag and releases nothing twice.
+# main cuts the next minor's candidates and a line its own version's
+# patches, and scripts/release_lines.py holds each branch to its own before
+# anything is tagged: a line tags nothing outside its X.Y, and main tags
+# nothing inside a line that has a branch. A line runs this file as the line
+# holds it, since ci.yml calls it by path.
+#
+# Run by hand, it tags without waiting for CI: the same steps on the branch
+# it is run on, as it is now, and then the release PR workflow for that
+# branch, which otherwise follows CI. That is the maintainer's shortcut past
+# a CI run that takes an hour, taken on their own judgement of the tree:
+# nothing here has tested it. A CI run that finishes afterwards finds the
+# tag and releases nothing twice.
 
 name: Release tag
 
@@ -78,13 +86,30 @@ jobs:
             echo "New version detected: v$VERSION"
           fi
 
+      # A line's version stays inside its X.Y, and main's outside every line
+      # that has a branch. The release PR's guard (release-please.yml) says
+      # the same before a merge; this is for a version set by hand or by an
+      # admin's push that no release PR carried. Only for a version about to
+      # be tagged: a branch's tagged version is its own by then, and main's
+      # last candidate reads as inside a line the moment the line is cut from
+      # its stable version. Before anything is tagged, so a refusal leaves no
+      # tag and no release behind.
+      - name: Require the version to belong to this branch
+        if: steps.version.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          git ls-remote --heads origin 'refs/heads/release/*' > "$RUNNER_TEMP/release-branches.txt"
+          scripts/release_lines.py guard-tag --branch "$BRANCH" --version "$VERSION" --branches "$RUNNER_TEMP/release-branches.txt"
+
       # The tag goes on the commit that set the version, not on this run's
       # commit. When runs overlap, or a run is cancelled and a later one picks
       # the version up, the run that tags can be testing a newer commit; the
       # bump commit is the same whichever run gets there.
       #
       # -G matches a line the commit added or removed. The newest such commit
-      # is the one that added it, since main still carries the line.
+      # is the one that added it, since the branch still carries the line.
       - name: Find the commit that set the version
         id: bump
         if: steps.version.outputs.changed == 'true'
@@ -94,7 +119,7 @@ jobs:
           ver_re=$(printf '%s' "$VERSION" | sed 's/[.[\*^$/]/\\&/g')
           bump=$(git log -1 --format=%H -G"^version = \"${ver_re}\"\$" -- Cargo.toml)
           if [ -z "$bump" ]; then
-            echo "::error::no commit in main's history sets version = \"$VERSION\" in Cargo.toml"
+            echo "::error::no commit in this branch's history sets version = \"$VERSION\" in Cargo.toml"
             exit 1
           fi
           git show "$bump:Cargo.toml" > "$RUNNER_TEMP/bump-Cargo.toml"
@@ -108,7 +133,7 @@ jobs:
       # A stable version is released only as its last release candidate with
       # the version changed. promote.yml makes one that way from the
       # candidate's tag and never comes here, so this guards a version set
-      # to stable on main by hand. Checked before anything is tagged, so a
+      # to stable on a branch by hand. Checked before anything is tagged, so a
       # refusal leaves no tag and no release behind; the script's header
       # says how to recover. Judged on the bump commit's own tree, so a bump
       # whose run was overtaken is not judged on a newer one.
@@ -143,7 +168,7 @@ jobs:
       BUMP: ${{ needs.check-version.outputs.bump }}
     steps:
       # Through the API, which creates the tag only if no tag of that name
-      # exists. Two overlapping runs on main can both find the version
+      # exists. Two overlapping runs on a branch can both find the version
       # untagged; the one that loses gets a 422 and stops here, and the
       # winner makes the release and dispatches the build.
       #
@@ -159,7 +184,7 @@ jobs:
       # `X-Accepted-Github-Permissions: contents=write,workflows=write`, a
       # permission it never has. The bump commit is the run's own only when
       # nothing merged after the release PR before this ran, which a hand
-      # run or a busy main breaks. The App has that permission (its
+      # run or a busy branch breaks. The App has that permission (its
       # settings: "Workflows: read and write").
       - name: App token
         id: app
@@ -205,8 +230,9 @@ jobs:
           if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
           gh release create "v$VERSION" "${args[@]}"
 
-      # From main, whose release.yml is the current one; it checks out the tag.
-      # A failed build is re-run with the same command.
+      # From main, whose release.yml is the current one, also for a line's
+      # candidate; it checks out the tag. A failed build is re-run with the
+      # same command.
       - name: Dispatch the build
         if: steps.tag.outputs.tagged == 'true'
         run: gh workflow run release.yml --ref main -f tag="v$VERSION"
@@ -216,17 +242,21 @@ jobs:
       # opens no other while a merged release PR is labelled
       # `autorelease: pending`. Swapping that label for `autorelease: tagged`
       # is how a release tells it. Only the merged PR titled for this version
-      # is touched; a promotion has no such PR, and nothing changes. Last and
-      # allowed to fail, so a label can never hold up the build: if it fails,
-      # release-please.yml stops with an error naming the label.
+      # on this branch is touched (release-please titles it
+      # `chore(<branch>): release <version>`); a promotion has no such PR, and
+      # nothing changes. Last and allowed to fail, so a label can never hold
+      # up the build: if it fails, release-please.yml stops with an error
+      # naming the label.
       - name: Mark the release PR as tagged
         if: steps.tag.outputs.tagged == 'true'
         continue-on-error: true
+        env:
+          BRANCH: ${{ github.ref_name }}
         uses: actions/github-script@v9
         with:
           script: |
             const { owner, repo } = context.repo;
-            const title = `chore(main): release ${process.env.VERSION}`;
+            const title = `chore(${process.env.BRANCH}): release ${process.env.VERSION}`;
             // The issues list rather than search, which can lag behind a label.
             const items = await github.paginate(github.rest.issues.listForRepo, {
               owner, repo, state: 'closed', labels: 'autorelease: pending', per_page: 100,
@@ -243,8 +273,11 @@ jobs:
             }
 
       # Run by hand there is no CI run for release-please.yml to follow, so
-      # it is started here, after the relabel above: its gate reads that
-      # label.
+      # it is started here, for this branch, after the relabel above: its
+      # gate reads that label. From main, whose release-please.yml is the one
+      # that runs after CI too.
       - name: Refresh the release PR
         if: github.event_name == 'workflow_dispatch' && steps.tag.outputs.tagged == 'true'
-        run: gh workflow run release-please.yml --ref main
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: gh workflow run release-please.yml --ref main -f branch="$BRANCH"
