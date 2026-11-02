@@ -136,6 +136,43 @@ fn the_component_goldens_hold_the_tensors_the_roles_read() {
     assert!(numbered(&llm, "blk.", 36));
 }
 
+/// The FLUX.3 Image Klein files' headers hold what the rules read: the
+/// diffusion model's names bare, no metadata, a 128-feature image embedder
+/// and a 20480-feature text embedder; a VAE whose decoder takes 32 channels;
+/// a Qwen3-VL language model 2560 wide.
+#[test]
+fn the_flux3_klein_goldens_hold_the_tensors_the_rules_read() {
+    let klein = Golden::Flux3KleinQ8.table();
+    assert_eq!(klein.tensors.len(), 359);
+    assert_eq!(klein.format, WeightsFormat::Gguf);
+    assert_eq!(klein.architecture, None);
+    assert_eq!(shape(&klein, "emb_in.image.weight"), [3072, 128]);
+    assert_eq!(shape(&klein, "txt_in.weight"), [3072, 20480]);
+    assert_eq!(
+        shape(&klein, "txt_mode_blocks.0.q_proj.weight"),
+        [3072, 3072]
+    );
+    assert_eq!(shape(&klein, "ref_time_in.in_layer.weight"), [3072, 256]);
+    assert!(numbered(&klein, "txt_mode_blocks.", 5));
+    assert!(numbered(&klein, "single_blocks.", 28));
+
+    let vae = Golden::Flux2Vae.table();
+    assert_eq!(vae.tensors.len(), 251);
+    assert_eq!(shape(&vae, "decoder.conv_in.weight"), [512, 32, 3, 3]);
+    assert_eq!(shape(&vae, "encoder.conv_in.weight"), [128, 3, 3, 3]);
+    assert!(
+        vae.get("decoder.mid_block.attentions.0.to_q.weight")
+            .is_some(),
+        "diffusers' names"
+    );
+
+    let llm = Golden::Qwen3Vl4bQ8.table();
+    assert_eq!(llm.format, WeightsFormat::Gguf);
+    assert_eq!(llm.architecture.as_deref(), Some("qwen3vl"));
+    assert_eq!(shape(&llm, "token_embd.weight"), [151_936, 2560]);
+    assert!(numbered(&llm, "blk.", 36));
+}
+
 // ── Sniff ───────────────────────────────────────────────────────────────────
 
 #[test]
@@ -162,6 +199,8 @@ fn no_component_file_sniffs_as_a_family() {
         Golden::T5xxl,
         Golden::QwenImage21Vae,
         Golden::Qwen3Vl8bQ8,
+        Golden::Flux2Vae,
+        Golden::Qwen3Vl4bQ8,
     ] {
         assert_eq!(ImageFamily::sniff(&golden.table()), None, "{golden:?}");
     }
