@@ -136,9 +136,9 @@ fn a_projector_and_a_companion_are_no_shards_and_shards_count_from_one() {
     ];
 
     let roles = [
-        GgufFileRole::Weights,
-        GgufFileRole::Projector,
-        GgufFileRole::Weights,
+        Some(GgufFileRole::Weights),
+        Some(GgufFileRole::Projector),
+        None,
     ];
 
     let kinds = VerifiedFileKind::of_rows(&rows, &roles);

@@ -1,5 +1,5 @@
 use super::match_variant;
-use crate::ports::huggingface::{LabelMismatch, variants_of};
+use crate::ports::huggingface::{HfQuantInfo, LabelMismatch, variants_of};
 
 /// The label of the variant of `files` that `request` names.
 fn named(files: &[&str], request: &str) -> Result<String, LabelMismatch> {
@@ -92,4 +92,42 @@ fn a_whole_file_name_beats_a_longer_one_holding_it() {
     ];
     let label = named(&sharded, "model-Q8_0").unwrap();
     assert!(!label.contains("4_4"), "{label}");
+}
+
+/// A variant labelled `label`, of the one file `path`.
+fn variant(label: &str, path: &str) -> HfQuantInfo {
+    HfQuantInfo {
+        label: label.to_owned(),
+        role: None,
+        file_paths: vec![path.to_owned()],
+        total_size: 1,
+    }
+}
+
+/// A label is looked for before any file name: a request that is one
+/// variant's label names that variant, though it is another's file name.
+#[test]
+fn a_label_names_its_variant_before_another_variants_file_name() {
+    let variants = [
+        variant("Q8_0", "model-Q8_0.gguf"),
+        variant("model-Q8_0", "folder/zeta.gguf"),
+    ];
+
+    let named = match_variant(&variants, "model-Q8_0").unwrap();
+
+    assert_eq!(named.file_paths, ["folder/zeta.gguf"]);
+}
+
+/// A whole file name names its variant ignoring case, where its tokens
+/// would name two.
+#[test]
+fn a_whole_file_name_is_matched_ignoring_case() {
+    let variants = [
+        variant("Q4_K_M", "model-Q4_K_M.gguf"),
+        variant("Q4_K_M-x", "model-Q4_K_M.x.gguf"),
+    ];
+
+    let named = match_variant(&variants, "MODEL-q4_k_m").unwrap();
+
+    assert_eq!(named.label, "Q4_K_M");
 }

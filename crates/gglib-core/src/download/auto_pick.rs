@@ -19,9 +19,10 @@ use async_trait::async_trait;
 use super::file_role::GgufFileRole;
 use crate::cache_config::{DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V};
 use crate::domain::FileType;
+use crate::domain::SECOND_RUNG;
 use crate::domain::gguf::{GgufMetadata, HeadMetadata};
 use crate::domain::kv_estimate::{
-    estimate_kv_bytes_for_context, estimate_kv_elems_per_token, kv_bytes_per_token,
+    KvElemsPerToken, estimate_kv_bytes_for_context, estimate_kv_elems_per_token, kv_bytes_per_token,
 };
 use crate::domain::phone_fit::{FitVerdict, MissingInput, fit_verdict};
 use crate::domain::recommendation::usable_share;
@@ -81,7 +82,8 @@ pub trait FitJudge: Send + Sync {
     fn fit(&self, metadata: &GgufMetadata, image: bool, weights_bytes: u64) -> Fit;
 
     /// Whether `weights_bytes` of weights fit alone: the fit of a model whose
-    /// whole header leaves its trained context or KV shape unknown.
+    /// whole header leaves its trained context or KV shape unknown. A model
+    /// whose weights do not fit alone never fits.
     fn weights_fit(&self, weights_bytes: u64) -> bool;
 }
 
@@ -90,8 +92,9 @@ pub trait FitJudge: Send + Sync {
 /// A chat model fits when the verdict is [`FitVerdict::Fits`]: a context
 /// above the lowest rung. [`FitVerdict::Tight`] counts only when that rung is
 /// the whole context the model was trained for. A model trained for fewer
-/// tokens than the lowest rung, which the ladder never serves, fits when its
-/// weights and the KV cache of its whole trained context do. Its trained
+/// tokens than the lowest rung, which the ladder never serves, or for fewer
+/// than the next, which it serves only at the lowest, fits when its weights
+/// and the KV cache of its whole trained context do. Its trained
 /// context and KV shape come from its metadata, as a phone's fit reads them
 /// from a head, and a missing trained context or KV shape is
 /// [`Fit::CannotTell`]. An image model fits when its weights fit the share of
@@ -113,6 +116,16 @@ impl MemoryFit {
     }
 }
 
+impl MemoryFit {
+    /// Whether `weights_bytes` of weights and the KV cache of all `trained`
+    /// tokens, at the default KV types, fit the share of the budget a fit
+    /// spends.
+    fn whole_window(self, weights_bytes: u64, trained: u64, kv: KvElemsPerToken) -> Fit {
+        let per_token = kv_bytes_per_token(kv, DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
+        self.holds(weights_bytes.saturating_add(estimate_kv_bytes_for_context(per_token, trained)))
+    }
+}
+
 impl FitJudge for MemoryFit {
     fn fit(&self, metadata: &GgufMetadata, image: bool, weights_bytes: u64) -> Fit {
         if image {
@@ -125,14 +138,15 @@ impl FitJudge for MemoryFit {
             (FitVerdict::Fits { .. }, ..) => Fit::Fits,
             // The lowest rung is all the model was trained for.
             (FitVerdict::Tight { ctx }, Some(trained), _) if ctx >= trained => Fit::Fits,
-            // The ladder starts above the trained context: the whole of it.
+            // The ladder starts above the trained context, or its next rung
+            // does: the whole of it.
             (FitVerdict::TooBig { .. }, Some(trained), Some(kv))
                 if trained < DEFAULT_CONTEXT_SIZE =>
             {
-                let per_token = kv_bytes_per_token(kv, DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
-                self.holds(
-                    weights_bytes.saturating_add(estimate_kv_bytes_for_context(per_token, trained)),
-                )
+                self.whole_window(weights_bytes, trained, kv)
+            }
+            (FitVerdict::Tight { .. }, Some(trained), Some(kv)) if trained < SECOND_RUNG => {
+                self.whole_window(weights_bytes, trained, kv)
             }
             (
                 FitVerdict::Unknown {
@@ -188,8 +202,9 @@ impl std::error::Error for NoWeights {}
 /// The variant a download takes among `contenders` when none is asked for.
 ///
 /// Reads nothing ahead of need: a head per variant walked, and a whole
-/// header only for a variant whose fit its head cannot tell, or that fits
-/// and whose head left its type or role open. A variant whose whole header
+/// header only for a variant whose fit its head cannot tell and whose
+/// weights fit alone, or that fits and whose head left its type or role
+/// open. A variant whose whole header
 /// leaves its trained context or KV shape unknown is judged by its weights
 /// alone. With no `judge` (no budget), the
 /// smallest variant is taken and no fit is judged.
@@ -233,6 +248,9 @@ pub async fn pick_variant(
             Fit::DoesNotFit => false,
             // The whole header leaves the shape unknown: the weights alone.
             Fit::CannotTell if head.head.complete => judge.weights_fit(size),
+            // Weights that do not fit alone fit with no KV cache either: no
+            // header is read to tell.
+            Fit::CannotTell if !judge.weights_fit(size) => false,
             Fit::CannotTell => {
                 header = reader.header(index).await;
                 match header

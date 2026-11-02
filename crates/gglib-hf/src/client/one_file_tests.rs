@@ -137,6 +137,45 @@ async fn a_range_is_asked_for_from_its_start() {
     assert_eq!(header(&asked, "range"), Some("bytes=16-23"));
 }
 
+/// A range that starts where the file ends, read on from a head that held
+/// all of it, is answered 416: that is the end of the file, read as nothing.
+#[tokio::test]
+async fn a_range_past_the_end_of_the_file_is_empty() {
+    let (base_url, served) = hub("416 Range Not Satisfiable", Vec::new());
+
+    let more = HfClientPort::read_range(
+        &client(base_url),
+        "leejet/FLUX.1-schnell-gguf",
+        "flux1-schnell-q8_0.gguf",
+        1 << 20,
+        7 << 20,
+    )
+    .await
+    .expect("the end of the file");
+
+    assert!(more.is_empty(), "{more:?}");
+    served.join().unwrap();
+}
+
+/// A 416 to a range from the file's start is not the end of a file read on
+/// from a head: it stays an error.
+#[tokio::test]
+async fn a_range_from_the_start_answered_416_is_an_error() {
+    let (base_url, served) = hub("416 Range Not Satisfiable", Vec::new());
+
+    let refused = HfClientPort::read_range(
+        &client(base_url),
+        "leejet/FLUX.1-schnell-gguf",
+        "flux1-schnell-q8_0.gguf",
+        0,
+        8,
+    )
+    .await;
+
+    assert!(refused.is_err(), "{refused:?}");
+    served.join().unwrap();
+}
+
 /// A server that ignores the `Range` and sends the whole file has the bytes
 /// before the range skipped.
 #[tokio::test]

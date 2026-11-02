@@ -63,6 +63,7 @@ export function useRetagModel({
             diff.added.length > 0 ? `added ${diff.added.length}` : null,
             diff.removed.length > 0 ? `removed ${diff.removed.length}` : null,
             diff.specChanged ? 'dialect spec re-derived' : null,
+            diff.factsRead ? 'type read from its header' : null,
           ].filter(Boolean);
           // Counts, not full lists: the chips reload right below, and a
           // removal is the half worth pausing on, so it gets longer on screen.

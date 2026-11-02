@@ -9,4 +9,9 @@ export type RetagResponse = { changed: boolean, added: Array<string>, removed: A
 /**
  * The image family read from the file for a model that had none.
  */
-familyFound: ImageFamily | null, };
+familyFound: ImageFamily | null, 
+/**
+ * Whether the type or the bits per weight the model lacked were read
+ * from its file's header.
+ */
+factsRead: boolean, };

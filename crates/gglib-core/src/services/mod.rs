@@ -30,7 +30,7 @@ pub use catalog::{
 pub use chat_history::{ChangeError, ChatHistoryService};
 pub use component_choices::component_choices;
 pub use drawing::{drawing_availability, drawing_refusal, image_model_answer, resolve_image_model};
-pub use model_header_facts::{HeaderFacts, header_facts};
+pub use model_header_facts::{HeaderFacts, header_facts, read_header_facts};
 pub use model_import::{
     HfOrigin, MAX_GENERATION_CONFIG_LOOKUPS, ModelOrigin, build_new_model, fetch_published_sampling,
 };

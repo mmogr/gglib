@@ -119,3 +119,81 @@ fn no_parse_gives_no_facts() {
     let facts = header_facts(Path::new("/m/a.gguf"), None, None, &NoopGgufParser);
     assert!(facts.is_empty());
 }
+
+/// A parser that reads every file as `Q4_K_M`, its tensor data 8 bits per
+/// weight.
+struct TypedQ4KM;
+
+impl GgufParserPort for TypedQ4KM {
+    fn parse(&self, _file_path: &Path) -> Result<GgufMetadata, GgufParseError> {
+        Ok(GgufMetadata {
+            file_type: Some(FileType(15)),
+            payload: Some(payload(1_000, 1_000)),
+            ..GgufMetadata::default()
+        })
+    }
+
+    fn detect_capabilities(&self, metadata: &GgufMetadata) -> GgufCapabilities {
+        NoopGgufParser.detect_capabilities(metadata)
+    }
+
+    fn tensor_table(&self, path: &Path) -> Result<TensorTable, GgufParseError> {
+        NoopGgufParser.tensor_table(path)
+    }
+
+    fn tensor_table_of_head(&self, head: &[u8]) -> Result<TensorTable, GgufParseError> {
+        NoopGgufParser.tensor_table_of_head(head)
+    }
+
+    fn parse_head(&self, head: &[u8], file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        NoopGgufParser.parse_head(head, file_name)
+    }
+}
+
+/// Model 1, of the file `file`, storing `file_type` and no bits per weight.
+fn stored(file: &Path, file_type: Option<FileType>) -> Model {
+    let mut new = crate::domain::NewModel::new(
+        "zeta".to_owned(),
+        file.to_path_buf(),
+        7.0,
+        chrono::Utc::now(),
+    );
+    new.file_type = file_type;
+    Model::stored(1, &new)
+}
+
+/// Only the missing fact is filled: a stored type stays, though the header
+/// names another.
+#[test]
+fn a_stored_type_is_kept_when_only_the_bits_are_missing() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("zeta.gguf");
+    std::fs::write(&file, b"weights").unwrap();
+    let mut model = stored(&file, Some(FileType(7)));
+
+    assert!(fill_missing_facts(&mut model, &TypedQ4KM));
+
+    assert_eq!(model.file_type, Some(FileType(7)));
+    assert_eq!(model.bits_per_weight, Some(8.0));
+}
+
+/// A retag fills both facts of a model that has neither, and says so.
+#[tokio::test]
+async fn a_retag_fills_the_facts_a_model_lacks() {
+    use crate::services::ModelService;
+    use crate::services::model_projector::tests::OneModelRepo;
+    use std::sync::{Arc, Mutex};
+
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("zeta.gguf");
+    std::fs::write(&file, b"weights").unwrap();
+    let repo = Arc::new(OneModelRepo(Mutex::new(stored(&file, None))));
+    let service = ModelService::new(repo.clone());
+
+    let diff = service.retag_model(1, &TypedQ4KM, false).await.unwrap();
+
+    assert!(diff.is_some_and(|diff| diff.facts_read));
+    let model = repo.0.lock().unwrap().clone();
+    assert_eq!(model.file_type, Some(FileType(15)));
+    assert_eq!(model.bits_per_weight, Some(8.0));
+}

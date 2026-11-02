@@ -56,16 +56,20 @@ pub struct RetagDiff {
     pub spec_changed: bool,
     /// The image family read from the file for a model that had none.
     pub family_found: Option<crate::domain::ImageFamily>,
+    /// Whether the type or the bits per weight the model lacked were read
+    /// from its file's header.
+    pub facts_read: bool,
 }
 
 impl RetagDiff {
-    /// Returns `true` if any tag was added or removed, the spec changed, or
-    /// a family was found.
+    /// Returns `true` if any tag was added or removed, the spec changed, a
+    /// family was found, or a header fact was read.
     pub const fn is_changed(&self) -> bool {
         !self.added.is_empty()
             || !self.removed.is_empty()
             || self.spec_changed
             || self.family_found.is_some()
+            || self.facts_read
     }
 }
 
@@ -544,7 +548,9 @@ impl ModelService {
     ///
     /// A model with no image family has one read from its file's tensor
     /// table, when the file is there and names one; a family already set is
-    /// never changed, in either mode.
+    /// never changed, in either mode. A model without its type or bits per
+    /// weight has them read from its file's header the same way, every shard
+    /// of a split summed.
     ///
     /// Returns `None` when the tag set is unchanged (no write occurred) and
     /// `Some(diff)` when the model was updated, carrying the full added/removed
@@ -586,6 +592,7 @@ impl ModelService {
         };
 
         let family_found = super::model_components::sniff_missing_family(&mut model, gguf_parser);
+        let facts_read = super::model_header_facts::fill_missing_facts(&mut model, gguf_parser);
 
         let before: std::collections::BTreeSet<String> = model.tags.iter().cloned().collect();
 
@@ -608,7 +615,7 @@ impl ModelService {
         model.tags.sort();
 
         let after: std::collections::BTreeSet<String> = model.tags.iter().cloned().collect();
-        if after == before && !spec_changed && family_found.is_none() {
+        if after == before && !spec_changed && family_found.is_none() && !facts_read {
             return Ok(None);
         }
 
@@ -618,6 +625,7 @@ impl ModelService {
             removed: before.difference(&after).cloned().collect(),
             spec_changed,
             family_found,
+            facts_read,
         }))
     }
 }

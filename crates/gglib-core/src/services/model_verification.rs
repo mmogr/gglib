@@ -91,15 +91,15 @@ pub enum VerifiedFileKind {
 
 impl VerifiedFileKind {
     /// The kind of each of `files`, a model's rows in file order, whose
-    /// roles are `roles`, in the same order: a row holding an absolute path
-    /// is a companion, a row whose role is projector the projector, and every
-    /// other row a weights shard.
+    /// roles are `roles`, in the same order, `None` where a role cannot be
+    /// told: a row holding an absolute path is a companion, a row whose role
+    /// is projector the projector, and every other row a weights shard.
     #[must_use]
-    pub fn of_rows(files: &[ModelFile], roles: &[GgufFileRole]) -> Vec<Self> {
-        let kind_of = |(file, role): (&ModelFile, &GgufFileRole)| {
+    pub fn of_rows(files: &[ModelFile], roles: &[Option<GgufFileRole>]) -> Vec<Self> {
+        let kind_of = |(file, role): (&ModelFile, &Option<GgufFileRole>)| {
             if Path::new(&file.file_path).is_absolute() {
                 Some(Self::Companion)
-            } else if role.is_projector() {
+            } else if role.is_some_and(GgufFileRole::is_projector) {
                 Some(Self::Projector)
             } else {
                 None
@@ -413,7 +413,7 @@ impl ModelVerificationService {
 
         // The folder the download wrote the files in, where each row is read.
         let folder = ModelFolder::of(&model.file_path, &model_files);
-        let roles = row_roles(&model, &folder, &model_files, self.gguf_parser.as_ref());
+        let roles = row_roles(&model, &folder, &model_files, &self.gguf_parser).await;
         let kinds = VerifiedFileKind::of_rows(&model_files, &roles);
 
         let total_shards = model_files.len();

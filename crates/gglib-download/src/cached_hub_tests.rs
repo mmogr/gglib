@@ -133,3 +133,19 @@ async fn a_file_read_whole_is_not_read_again() {
     assert_eq!(again, hub.bytes(0, 50));
     assert_eq!(hub.calls(), ["head 100"]);
 }
+
+/// A head that ends exactly where the file does reads on to nothing: that
+/// empty read is the end of the file, and no longer read asks again.
+#[tokio::test]
+async fn an_empty_read_on_is_the_end_of_the_file() {
+    let hub = Hub::new(100);
+    let cached = CachedHub::new(hub.clone());
+
+    cached.read_head("o/r", "m.gguf", 100).await.unwrap();
+    let longer = cached.read_head("o/r", "m.gguf", 300).await.unwrap();
+    let again = cached.read_head("o/r", "m.gguf", 1_000).await.unwrap();
+
+    assert_eq!(longer, hub.bytes(0, 100));
+    assert_eq!(again, hub.bytes(0, 100));
+    assert_eq!(hub.calls(), ["head 100", "range 100 200"]);
+}

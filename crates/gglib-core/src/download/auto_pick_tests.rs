@@ -342,6 +342,32 @@ async fn a_head_that_ends_before_the_fit_keys_is_judged_from_the_whole_header() 
     assert_eq!(reader.reads(), ["head 0", "header 0"]);
 }
 
+/// A variant whose fit its head cannot tell, and whose weights do not fit
+/// alone, does not fit with any KV cache: its whole header is not read.
+#[tokio::test]
+async fn weights_too_big_alone_have_no_whole_header_read() {
+    let cut = |file_type| {
+        let mut late = typed_late(file_type);
+        if let Some(head) = &mut late.head {
+            head.head.metadata.context_length = None;
+        }
+        late
+    };
+    let contenders = [open(16), open(8)];
+    let reader = Reader::new(vec![cut(Q8_0), cut(Q4_K_M)]);
+
+    let picked = pick(&contenders, &reader, 10).await.unwrap();
+
+    assert_eq!(
+        picked,
+        Pick {
+            index: 1,
+            reason: PickReason::Quantized(Q4_K_M)
+        }
+    );
+    assert_eq!(reader.reads(), ["head 0", "head 1", "header 1"]);
+}
+
 /// A head that already shows a draft settles it: no whole header is read
 /// for it, though its fit could not be told from the head.
 #[tokio::test]
@@ -552,6 +578,40 @@ fn a_model_trained_for_no_more_than_the_lowest_rung_fits_its_whole_window() {
         assert_eq!(
             roomy.fit(&model, false, QWEN3_4B_Q4_K_M),
             Fit::Fits,
+            "{trained}"
+        );
+    }
+}
+
+/// A model trained for more than the lowest rung and fewer than the next is
+/// fitted at the lowest, short of its window: it fits once its weights and
+/// the KV cache of its whole trained context do, as one trained for fewer
+/// does.
+#[test]
+fn a_model_trained_between_the_lowest_two_rungs_fits_its_whole_window() {
+    for trained in [6144, 8191] {
+        let mut model = qwen3_4b();
+        model.context_length = Some(trained);
+        let kv =
+            estimate_kv_elems_per_token(&model.metadata, model.architecture.as_deref()).unwrap();
+        let per_token = kv_bytes_per_token(kv, DEFAULT_CACHE_TYPE_K, DEFAULT_CACHE_TYPE_V);
+        let window = QWEN3_4B_Q4_K_M + per_token * trained;
+
+        let at_edge = MemoryFit {
+            budget_bytes: budget_covering(window),
+        };
+        let short = MemoryFit {
+            budget_bytes: budget_covering(window) - 1,
+        };
+
+        assert_eq!(
+            at_edge.fit(&model, false, QWEN3_4B_Q4_K_M),
+            Fit::Fits,
+            "{trained}"
+        );
+        assert_eq!(
+            short.fit(&model, false, QWEN3_4B_Q4_K_M),
+            Fit::DoesNotFit,
             "{trained}"
         );
     }
