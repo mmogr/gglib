@@ -277,7 +277,7 @@ pub struct ModelComponent {
 }
 
 /// Why a model downloaded before its label was kept cannot be looked up on
-/// the Hub again.
+/// the Hub again, when no variant of its repository holds its file either.
 ///
 /// Its label is the only name for the files it came as: its header's type
 /// does not tell a `UD-Q4_K_XL` download from a `Q4_K_M` one.

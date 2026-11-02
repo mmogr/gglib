@@ -1,11 +1,13 @@
 //! What a repository's variants are, read from the head of each one's first
-//! file.
+//! file, and the variant a stored model came as.
 
 use futures_util::{StreamExt, stream};
 
 use super::client::HfClientPort;
+use super::error::HfPortResult;
 use super::types::HfQuantInfo;
-use crate::domain::HeadMetadata;
+use super::variant_match::match_variant;
+use crate::domain::{HeadMetadata, Model};
 use crate::download::GgufFileRole;
 use crate::ports::GgufParserPort;
 
@@ -77,6 +79,66 @@ pub async fn read_roles(
         .buffered(HEADS_AT_ONCE)
         .collect()
         .await
+}
+
+/// The label a Hub lookup asks `repo_id` for to find `model`'s files again.
+///
+/// That is its stored label while it names a variant ([`match_variant`]).
+/// When it has none, or the listing no longer has it, it is the label of the
+/// one variant that holds its file: the longest file path its stored path
+/// ends with, folder and name, else one named as its `hf_filename`. `None`
+/// when the model has neither a label nor an `hf_filename`, and when no
+/// variant, or more than one, holds its file.
+///
+/// # Errors
+///
+/// What the client answers when the repository is listed.
+pub async fn stored_label(
+    client: &dyn HfClientPort,
+    repo_id: &str,
+    model: &Model,
+) -> HfPortResult<Option<String>> {
+    if model.variant_label.is_none() && model.hf_filename.is_none() {
+        return Ok(None);
+    }
+    let variants = client.list_quantizations(repo_id).await?;
+    if let Some(label) = &model.variant_label
+        && match_variant(&variants, label).is_ok()
+    {
+        return Ok(Some(label.clone()));
+    }
+    // The variants whose file is the longest end of the stored path: a
+    // nested `Q8_0/model.gguf` over a root `model.gguf`.
+    let suffix = |variant: &HfQuantInfo| {
+        variant
+            .file_paths
+            .iter()
+            .filter(|path| model.file_path.ends_with(path))
+            .map(|path| path.split('/').count())
+            .max()
+    };
+    let longest = variants.iter().filter_map(suffix).max();
+    let mut found: Vec<&HfQuantInfo> = variants
+        .iter()
+        .filter(|variant| longest.is_some() && suffix(variant) == longest)
+        .collect();
+    if found.is_empty()
+        && let Some(file_name) = model.hf_filename.as_deref()
+    {
+        found = variants
+            .iter()
+            .filter(|variant| {
+                variant
+                    .file_paths
+                    .iter()
+                    .any(|path| path.rsplit('/').next() == Some(file_name))
+            })
+            .collect();
+    }
+    Ok(match found.as_slice() {
+        [one] => Some(one.label.clone()),
+        _ => None,
+    })
 }
 
 #[cfg(test)]

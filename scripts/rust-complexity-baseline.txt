@@ -12,7 +12,7 @@ crates/gglib-app-services/src/mcp.rs 330
 crates/gglib-app-services/src/mcp_tests.rs 329
 crates/gglib-app-services/src/models.rs 419
 crates/gglib-app-services/src/models_tests.rs 897
-crates/gglib-app-services/src/models_upgrade.rs 312
+crates/gglib-app-services/src/models_upgrade.rs 324
 crates/gglib-app-services/src/models_upgrade_tests.rs 373
 crates/gglib-app-services/src/proxy.rs 421
 crates/gglib-app-services/src/remote/teardown.rs 331
@@ -149,7 +149,7 @@ crates/gglib-core/src/services/model_registrar.rs 479
 crates/gglib-core/src/services/model_registrar_components_tests.rs 347
 crates/gglib-core/src/services/model_service.rs 1487
 crates/gglib-core/src/services/model_verification.rs 656
-crates/gglib-core/src/services/model_verification_remote.rs 407
+crates/gglib-core/src/services/model_verification_remote.rs 424
 crates/gglib-core/src/settings.rs 580
 crates/gglib-core/src/settings_remote.rs 303
 crates/gglib-core/src/settings_remote_tests.rs 321

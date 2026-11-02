@@ -4,8 +4,9 @@
 //! These operations don't require database access.
 
 use anyhow::{Result, anyhow};
+use gglib_core::domain::Model;
 use gglib_core::ports::GgufParserPort;
-use gglib_core::ports::huggingface::{HfClientPort, read_roles};
+use gglib_core::ports::huggingface::{HfClientPort, read_roles, stored_label};
 use gglib_core::{Quantization, repo_short_name, strip_gguf_suffix};
 use gglib_hf::{DefaultHfClient, HfClientConfig, build_file_url};
 use reqwest::header::CONTENT_LENGTH;
@@ -60,6 +61,26 @@ pub async fn list_quantizations(
     }
 
     Ok(())
+}
+
+/// The label a Hub lookup of `model` in `repo` asks for, as
+/// [`stored_label`] reads it.
+///
+/// That is its stored variant label, else the label of the variant that
+/// holds its file, asked of the Hub with `token`. `None` when neither names
+/// one.
+///
+/// # Errors
+///
+/// When the repository cannot be listed.
+pub async fn stored_variant_label(
+    repo: &str,
+    model: &Model,
+    token: Option<String>,
+) -> Result<Option<String>> {
+    stored_label(&hub_client(token), repo, model)
+        .await
+        .map_err(|e| anyhow!("Failed to list {repo}'s variants: {e}"))
 }
 
 /// Build the list of candidate GGUF filenames to probe when the primary

@@ -17,7 +17,9 @@ A repository's variants (`list_quantizations`, `HfQuantInfo`) are its GGUF files
 grouped into shard sets, each labelled as its uploader named it (`variants_of`),
 and a request names one by its label (`match_label`). What a variant is comes
 from a 64 KiB head of its first file (`variant_role`, `read_roles`): a draft or
-helper is listed and never downloaded (`HELPER_FILES_REFUSAL`). The projectors are also listed apart (`list_projectors`).
+helper is listed and never downloaded (`HELPER_FILES_REFUSAL`). A model stored
+without a label is found again by the variant that holds its file
+(`stored_label`). The projectors are also listed apart (`list_projectors`).
 `download_group` answers what one download fetches: a variant's files, and the
 projector chosen to go with them. `projector_fetched_with` is that choice alone,
 for a listing that shows which projector comes with each variant.

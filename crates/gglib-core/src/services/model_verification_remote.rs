@@ -24,7 +24,7 @@ use super::model_verification::{
 use crate::domain::{Model, ModelFile, ModelFolder, NO_HUB_LABEL};
 use crate::download::{DownloadId, GgufFileRole};
 use crate::ports::RepositoryError;
-use crate::ports::huggingface::download_group;
+use crate::ports::huggingface::{download_group, stored_label};
 
 /// Whether a model's file row is its projector's.
 fn is_projector(file: &ModelFile) -> bool {
@@ -98,6 +98,22 @@ pub struct RepairStarted {
     pub files: Vec<String>,
 }
 
+/// Why `model`'s files cannot be looked up in `repo_id`: it was stored with
+/// no label, or with one the repository no longer has, and no one variant
+/// holds its file.
+fn no_label(repo_id: &str, model: &Model) -> String {
+    model.variant_label.as_ref().map_or_else(
+        || NO_HUB_LABEL.to_owned(),
+        |label| {
+            format!(
+                "no variant of {repo_id} is labelled '{label}' any more, and none holds this \
+                 model's file, so its files cannot be found on the Hub again; download it again \
+                 to check, repair or upgrade it"
+            )
+        },
+    )
+}
+
 /// What to say of `files`, missing from a model's folder since a repair, when
 /// `download` did not bring them back: their names, and the command that
 /// fetches them.
@@ -135,10 +151,6 @@ impl ModelVerificationService {
         let Some(repo_id) = &model.hf_repo_id else {
             return Ok(unchanged);
         };
-        // Not "unchanged": without its label the check cannot be made.
-        let Some(label) = model.variant_label.as_deref() else {
-            return Err(RepositoryError::Constraint(NO_HUB_LABEL.to_owned()));
-        };
 
         // Get local file metadata
         let local_files = self.files_of(model_id).await?;
@@ -147,14 +159,22 @@ impl ModelVerificationService {
             return Ok(unchanged);
         }
 
+        let fetch_failed =
+            |e| RepositoryError::Storage(format!("Failed to fetch remote files: {e}"));
+        // Not "unchanged": without its label the check cannot be made.
+        let Some(label) = stored_label(self.hf_client.as_ref(), repo_id, &model)
+            .await
+            .map_err(fetch_failed)?
+        else {
+            return Err(RepositoryError::Constraint(no_label(repo_id, &model)));
+        };
+
         // Get remote file metadata from HuggingFace. The variant's files
         // are weights alone, so a model with a projector row also asks for
         // the repository's projectors.
-        let fetch_failed =
-            |e| RepositoryError::Storage(format!("Failed to fetch remote files: {e}"));
         let mut remote_files = self
             .hf_client
-            .get_quantization_files(repo_id, label)
+            .get_quantization_files(repo_id, &label)
             .await
             .map_err(fetch_failed)?;
         if local_files.iter().any(is_projector) {
@@ -248,15 +268,16 @@ impl ModelVerificationService {
             return Err("Model does not have HuggingFace repository information".to_string());
         };
 
-        let Some(quantization) = model.variant_label.clone() else {
-            return Err(NO_HUB_LABEL.to_owned());
-        };
-
         // Get file metadata
         let model_files = self
             .files_of(model_id)
             .await
             .map_err(|e| format!("Failed to get model files: {e}"))?;
+
+        let quantization = stored_label(self.hf_client.as_ref(), repo_id, &model)
+            .await
+            .map_err(|e| format!("Failed to list {repo_id}'s variants: {e}"))?
+            .ok_or_else(|| no_label(repo_id, &model))?;
 
         // The folder the download wrote the files in, where each row is read.
         let folder = ModelFolder::of(&model.file_path, &model_files);

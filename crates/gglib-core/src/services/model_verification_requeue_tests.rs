@@ -35,11 +35,20 @@ fn stored_as(dir: &Path, quantization: &str, queued: AskedDownloads) -> Fixture 
 
 // ── The label asked for ──────────────────────────────────────────────────
 
-/// A stored label is asked of the Hub and the queue as it was stored: the
-/// Hub matches it to its variant.
+/// A stored label the listing still has is asked of the Hub and the queue
+/// as it was stored; a stale one gives way to the label of the variant that
+/// holds the model's file.
 #[tokio::test]
 async fn a_repair_asks_for_the_label_the_model_was_stored_with() {
-    for stored in ["Q8_0", "q4_k_m", "UD-Q6_K", "Q3_K_P", "FastMTP-32K"] {
+    let stored = [
+        ("Q8_0", "Q8_0"),
+        ("q8_0", "q8_0"),
+        ("zeta.Q8_0", "zeta.Q8_0"),
+        ("q4_k_m", "zeta.Q8_0"),
+        ("Q3_K_P", "zeta.Q8_0"),
+        ("FastMTP-32K", "zeta.Q8_0"),
+    ];
+    for (stored, asked) in stored {
         let dir = tempfile::tempdir().unwrap();
         let f = stored_as(dir.path(), stored, AskedDownloads::default());
 
@@ -47,16 +56,49 @@ async fn a_repair_asks_for_the_label_the_model_was_stored_with() {
 
         assert_eq!(
             *f.hub.quantizations_asked.lock().unwrap(),
-            [stored],
+            [asked],
             "the Hub, for a model stored as {stored}"
         );
         assert_eq!(
             f.queued.asked(),
-            [(REPO.to_owned(), Some(stored.to_owned()))],
+            [(REPO.to_owned(), Some(asked.to_owned()))],
             "the queue, for a model stored as {stored}"
         );
-        assert_eq!(started.id, format!("{REPO}:{stored}"));
+        assert_eq!(started.id, format!("{REPO}:{asked}"));
     }
+}
+
+/// A model stored with no label is repaired at the label of the variant
+/// that holds its file, read from the repository's listing.
+#[tokio::test]
+async fn a_model_stored_without_a_label_is_repaired_at_the_variant_holding_its_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = stored_as(dir.path(), "", AskedDownloads::default());
+
+    let started = f.service.repair_model(1, None).await.unwrap();
+
+    assert_eq!(*f.hub.quantizations_asked.lock().unwrap(), ["zeta.Q8_0"]);
+    assert_eq!(started.id, format!("{REPO}:zeta.Q8_0"));
+}
+
+/// A model stored with no label whose file no variant holds is refused
+/// while the file is still there: nothing stands in for the label.
+#[tokio::test]
+async fn a_model_no_variant_holds_is_refused_before_anything_is_deleted() {
+    let dir = tempfile::tempdir().unwrap();
+    let rows = Arc::new(Rows(corrupt_weights(dir.path())));
+    let hub = FakeHub {
+        weights: vec![hub_file("zeta.Q4_K_M.gguf", 7, "w-oid")],
+        ..Default::default()
+    };
+    let f = fixture_queueing_on(dir.path(), "", rows, hub, AskedDownloads::default());
+
+    let refused = f.service.repair_model(1, None).await.unwrap_err();
+
+    assert_eq!(refused, crate::domain::NO_HUB_LABEL);
+    assert!(dir.path().join(WEIGHTS).exists(), "nothing is deleted");
+    assert!(f.queued.asked().is_empty(), "nothing is queued");
+    assert!(f.hub.quantizations_asked.lock().unwrap().is_empty());
 }
 
 /// A stored label the repository has no variant of is refused while the
@@ -76,7 +118,9 @@ async fn a_label_the_repository_has_no_variant_of_is_refused_before_anything_is_
     let refused = f.service.repair_model(1, None).await.unwrap_err();
 
     assert!(
-        refused.starts_with(&format!("Failed to read what a download of {REPO} fetches")),
+        refused.starts_with(&format!(
+            "no variant of {REPO} is labelled 'BANANA' any more"
+        )),
         "{refused}"
     );
     assert!(dir.path().join(WEIGHTS).exists(), "nothing is deleted");
@@ -117,9 +161,9 @@ async fn a_repair_answers_its_download_and_the_files_it_fetches_again() {
 // ── When nothing fetches the files ───────────────────────────────────────
 
 /// The Hub is asked what the download fetches before any file is deleted, so
-/// a repository that does not answer costs the model nothing.
+/// a repository that no longer holds the model's files costs it nothing.
 #[tokio::test]
-async fn a_repository_that_cannot_be_read_stops_a_repair_before_anything_is_deleted() {
+async fn a_repository_without_the_files_stops_a_repair_before_anything_is_deleted() {
     let dir = tempfile::tempdir().unwrap();
     let rows = corrupt_weights(dir.path());
     let f = fixture(dir.path(), rows, FakeHub::default());
@@ -127,7 +171,7 @@ async fn a_repository_that_cannot_be_read_stops_a_repair_before_anything_is_dele
     let failed = f.service.repair_model(1, None).await.unwrap_err();
 
     assert!(
-        failed.starts_with("Failed to read what a download of owner/zeta-GGUF fetches: "),
+        failed.starts_with("no variant of owner/zeta-GGUF is labelled 'Q8_0' any more"),
         "{failed}"
     );
     assert!(dir.path().join(WEIGHTS).exists(), "nothing is deleted");
