@@ -413,7 +413,7 @@ impl ModelVerificationService {
 
         // The folder the download wrote the files in, where each row is read.
         let folder = ModelFolder::of(&model.file_path, &model_files);
-        let roles = row_roles(&model, &folder, &model_files, self.gguf_parser.as_ref());
+        let roles = row_roles(&model, &folder, &model_files, &self.gguf_parser).await;
         let kinds = VerifiedFileKind::of_rows(&model_files, &roles);
 
         let total_shards = model_files.len();

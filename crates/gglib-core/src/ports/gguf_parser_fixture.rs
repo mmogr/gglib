@@ -1,7 +1,8 @@
 //! A [`GgufParserPort`] that reads a file's role from its first bytes, for
 //! tests.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use super::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata, TensorTable,
@@ -46,6 +47,46 @@ impl GgufParserPort for FirstBytesParser {
             role: Some(role_of(head)?),
             ..HeadMetadata::default()
         })
+    }
+}
+
+/// [`FirstBytesParser`], writing down the path of each file it parses, so a
+/// test can say which files were read.
+#[derive(Debug, Default)]
+pub struct ParsedPaths(Mutex<Vec<PathBuf>>);
+
+impl ParsedPaths {
+    /// The paths parsed so far, oldest first.
+    ///
+    /// # Panics
+    ///
+    /// When a parse panicked while it held the record.
+    #[must_use]
+    pub fn parsed(&self) -> Vec<PathBuf> {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+impl GgufParserPort for ParsedPaths {
+    fn parse(&self, file_path: &Path) -> Result<GgufMetadata, GgufParseError> {
+        self.0.lock().unwrap().push(file_path.to_path_buf());
+        FirstBytesParser.parse(file_path)
+    }
+
+    fn detect_capabilities(&self, metadata: &GgufMetadata) -> GgufCapabilities {
+        FirstBytesParser.detect_capabilities(metadata)
+    }
+
+    fn tensor_table(&self, path: &Path) -> Result<TensorTable, GgufParseError> {
+        FirstBytesParser.tensor_table(path)
+    }
+
+    fn tensor_table_of_head(&self, head: &[u8]) -> Result<TensorTable, GgufParseError> {
+        FirstBytesParser.tensor_table_of_head(head)
+    }
+
+    fn parse_head(&self, head: &[u8], file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        FirstBytesParser.parse_head(head, file_name)
     }
 }
 

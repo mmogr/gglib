@@ -182,7 +182,7 @@ impl ModelVerificationService {
             .await
             .map_err(fetch_failed)?;
         let folder = ModelFolder::of(&model.file_path, &local_files);
-        let roles = row_roles(&model, &folder, &local_files, self.gguf_parser.as_ref());
+        let roles = row_roles(&model, &folder, &local_files, &self.gguf_parser).await;
         if roles.iter().any(|role| role.is_projector()) {
             let files = self.hf_client.list_gguf_files(repo_id).await;
             remote_files.extend(files.map_err(fetch_failed)?);
@@ -289,7 +289,7 @@ impl ModelVerificationService {
         let folder = ModelFolder::of(&model.file_path, &model_files);
 
         // What each file is, read before anything is deleted.
-        let roles = row_roles(&model, &folder, &model_files, self.gguf_parser.as_ref());
+        let roles = row_roles(&model, &folder, &model_files, &self.gguf_parser).await;
 
         // Determine which files to repair
         let to_repair: Vec<&ModelFile> = if let Some(indices) = shard_indices {

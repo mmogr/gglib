@@ -75,7 +75,7 @@ pub use gguf_parser::{
     TensorTable,
 };
 #[cfg(any(test, feature = "test-utils"))]
-pub use gguf_parser_fixture::FirstBytesParser;
+pub use gguf_parser_fixture::{FirstBytesParser, ParsedPaths};
 pub use hub_chats::{AgentRunStarter, HubChatsError, HubChatsPort, TurnRefused};
 pub use huggingface::{
     HfClientPort, HfFileInfo, HfModelKind, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions,
