@@ -67,6 +67,15 @@ impl FileType {
             _ => return None,
         })
     }
+
+    /// Whether the file's weights were quantized: every type but the float
+    /// ones a converter writes before any quantizing, `F32`, `F16` and
+    /// `BF16`. A number the pinned llama.cpp does not know counts as
+    /// quantized, since every type llama.cpp has added since `BF16` is one.
+    #[must_use]
+    pub const fn is_quantized(self) -> bool {
+        !matches!(self.0, 0 | 1 | 32)
+    }
 }
 
 impl fmt::Display for FileType {
@@ -99,6 +108,16 @@ mod tests {
         assert_eq!(FileType(32).name(), Some("BF16"));
         assert_eq!(FileType(38).name(), Some("MXFP4_MOE"));
         assert_eq!(FileType(41).name(), Some("Q2_0"));
+    }
+
+    #[test]
+    fn only_the_float_types_are_unquantized() {
+        for float in [0, 1, 32] {
+            assert!(!FileType(float).is_quantized(), "{float}");
+        }
+        for quantized in [2, 7, 15, 18, 30, 38, 41, 42] {
+            assert!(FileType(quantized).is_quantized(), "{quantized}");
+        }
     }
 
     #[test]
