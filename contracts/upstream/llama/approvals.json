@@ -40,8 +40,8 @@
     "note": "first reading, b11669"
   },
   "help_diff.options": {
-    "approved": 258,
-    "note": "first reading, b11669"
+    "approved": 261,
+    "note": "keeping, because --connect is a WebRTC link to one server's web UI through llama-connect; gglib's tunnel reaches the daemon, the proxy and /mcp"
   },
   "image_token_delta": {
     "approved": 258,
