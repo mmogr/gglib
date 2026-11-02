@@ -158,14 +158,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # The check writes the pull request's comment too, when a reading
+      # moved: what moved, why it matters, the lines to paste.
       - name: Check each ADR reading against its approval
         id: check
-        shell: bash
-        run: make adr-readings 2>&1 | tee "$RUNNER_TEMP/adr-readings.log"
+        env:
+          ADR_COMMENT_FILE: ${{ runner.temp }}/adr-comment.md
+        run: make adr-readings
 
       # On a pull request from this repository, one comment carries each
-      # moved reading and the `/approve` line to paste for it, so the fix is a
-      # comment away from the check (approve-reading.yml takes it from
+      # moved reading and the `/approve` lines to paste for it, so the fix is
+      # a comment away from the check (approve-reading.yml takes it from
       # there); it is removed once the check passes. Posted with GITHUB_TOKEN,
       # so it starts no run and cannot be mistaken for the owner's comment.
       - name: Say on the pull request what to approve
@@ -194,24 +197,15 @@ jobs:
             failure) ;;
             *) exit 0 ;;
           esac
-          # Each moved reading's message, its %0A line breaks restored and the
-          # indent the check gives its hints dropped, so a copied /approve
-          # line starts the comment, in a fenced block: nothing in it links,
-          # mentions anyone or closes anything.
-          moved=$(grep '^::error title=ADR criterion moved::' "$RUNNER_TEMP/adr-readings.log" \
-            | sed 's/^::error title=ADR criterion moved:://; s/%0A */\n/g' || true)
-          t=$(printf '\x60')
+          # The check wrote the comment when a reading moved; a failure for
+          # another reason (a malformed entry, a stale quote) points at the job.
           {
             echo "$marker"
-            echo '### ADR criterion moved'
-            echo
-            if [[ -n $moved ]]; then
-              echo "A reading an ADR names moved. To approve it, comment the ${t}/approve${t} line you mean with its placeholders filled, one per reading; the note is the record of why. ${t}/approve <reading> remove${t} drops an approval whose reading is gone."
-              echo
-              echo "${t}${t}${t}${t}"
-              echo "$moved"
-              echo "${t}${t}${t}${t}"
+            if [[ -s $RUNNER_TEMP/adr-comment.md ]]; then
+              cat "$RUNNER_TEMP/adr-comment.md"
             else
+              echo '### ADR criterion moved'
+              echo
               echo "The check failed for another reason; read the job: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             fi
           } > "$RUNNER_TEMP/comment.md"
