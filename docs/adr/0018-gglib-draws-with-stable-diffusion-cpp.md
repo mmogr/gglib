@@ -159,8 +159,8 @@ Amended on 2026-11-02: FLUX.3 Image Klein is budgeted at 7 GiB, Flux.1's;
 its 1024x1024 render peaked well inside it ([log-0018](log-0018.md#2026-11-02-flux3-image-klein-is-a-family-read-from-its-headers)).
 
 Amended on 2026-11-02: FLUX.2 klein is budgeted at 7 GiB, FLUX.3 Image
-Klein's, since it decodes with the same VAE; no render has read its own
-([log-0018](log-0018.md#2026-11-02-flux2-klein-is-a-family-read-from-its-headers)).
+Klein's, since it decodes with the same VAE; its render peaked well inside
+it ([log-0018](log-0018.md#2026-11-02-flux2-klein-is-a-family-read-from-its-headers)).
 
 ### 7. The GPU is given in turns: one render, or the chats
 

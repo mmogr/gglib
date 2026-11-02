@@ -173,8 +173,8 @@ pub struct Recipe {
     /// (`runs/*.log` in the image-gen handoff): Flux.1 6,657 MB, SDXL
     /// 7,680 MB, Qwen-Image 2.1 8,650 MB; and on 2026-10-11 Z-Image Turbo
     /// 6,657 MB, the same VAE's decode as Flux.1's. FLUX.3 Image Klein's is
-    /// Flux.1's, kept after a run, and FLUX.2 klein's is FLUX.3 Image
-    /// Klein's, unmeasured (their recipes say why).
+    /// Flux.1's, and FLUX.2 klein's is FLUX.3 Image Klein's, each kept
+    /// after a run (their recipes say why).
     pub compute_margin_bytes: u64,
 }
 
