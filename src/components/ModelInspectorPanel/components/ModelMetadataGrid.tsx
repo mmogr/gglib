@@ -16,6 +16,7 @@ import { MetadataSection } from './MetadataSection';
 export type MetadataModel = Pick<ModelDetail, 'paramCountB' | 'expertCount' | 'expertUsedCount' | 'filePath'> & {
   architecture?: string | null;
   quantization?: string | null;
+  bitsPerWeight?: number | null;
   contextLength?: number | null;
   hfRepoId?: string | null;
   serverDefaults?: GgufModel['serverDefaults'];
@@ -86,9 +87,11 @@ export const ModelMetadataGrid: FC<ModelMetadataGridProps> = ({
 
         {model.architecture && <InfoRow label="Architecture">{model.architecture}</InfoRow>}
 
-        {model.quantization && (
+        {(model.quantization || model.bitsPerWeight != null) && (
           <InfoRow label="Quantization" className="font-mono tabular-nums">
-            {model.quantization}
+            {[model.quantization, model.bitsPerWeight != null && `${model.bitsPerWeight.toFixed(2)} bpw`]
+              .filter(Boolean)
+              .join(' · ')}
           </InfoRow>
         )}
 
