@@ -33,7 +33,7 @@
       "ids": ["params:server_connect", "env:LLAMA_ARG_CONNECT"],
       "phrases": ["tunnel", "p2p", "peer-to-peer", "relay", "outside lan", "pairing"]
     },
-    "readings": ["help_diff.options"]
+    "readings": []
   },
   "template-caps": {
     "engine": "llama",
@@ -42,7 +42,7 @@
     "upstream": {
       "paths": ["common/jinja/caps.cpp", "common/jinja/caps.h"],
       "headings": ["### **GET** `/props`"],
-      "ids": ["props:chat_template_caps.", "env:LLAMA_ARG_REASONING_EFFORT"],
+      "ids": ["env:LLAMA_ARG_REASONING_EFFORT"],
       "phrases": ["chat_template_caps", "template cap", "reasoning effort", "reasoning_effort"]
     },
     "readings": ["caps.*"]
@@ -52,7 +52,7 @@
     "adr": "0020",
     "paths": ["crates/gglib-core/src/normalize/history.rs", "crates/gglib-core/src/request_pipeline/messages.rs", "crates/gglib-proxy/src/turn_dialect.rs"],
     "upstream": {
-      "paths": ["common/reasoning-budget.cpp", "common/reasoning-budget.h", "!common/chat.cpp", "common/parsers/"],
+      "paths": ["common/reasoning-budget.cpp", "common/reasoning-budget.h", "common/chat.cpp", "common/parsers/"],
       "headings": [],
       "ids": ["params:preserve_reasoning", "params:reasoning_", "env:LLAMA_ARG_THINK", "env:LLAMA_ARG_REASONING"],
       "phrases": ["reasoning", "thinking", "reasoning_content", "preserve reasoning", "reasoning-preserve", "reasoning budget", "separator"]
@@ -61,12 +61,12 @@
   },
   "dialect-normalise": {
     "engine": "llama",
-    "adr": "0001",
+    "adr": "0002",
     "paths": ["crates/gglib-core/src/normalize", "crates/gglib-core/src/request_pipeline/constrain.rs", "crates/gglib-proxy/src/repair.rs"],
     "upstream": {
-      "paths": ["!common/chat.cpp", "common/chat.h", "common/chat-peg-parser.cpp", "common/chat-peg-parser.h", "common/chat-auto-parser.h", "common/chat-auto-parser-generator.cpp", "common/chat-auto-parser-helpers.cpp", "common/chat-auto-parser-helpers.h", "common/chat-diff-analyzer.cpp", "common/parsers/", "common/peg-parser.cpp", "common/peg-parser.h", "common/json-schema-to-grammar.cpp", "common/json-schema-to-grammar.h"],
+      "paths": ["common/chat.cpp", "common/chat.h", "common/chat-peg-parser.cpp", "common/chat-peg-parser.h", "common/chat-auto-parser.h", "common/chat-auto-parser-generator.cpp", "common/chat-auto-parser-helpers.cpp", "common/chat-auto-parser-helpers.h", "common/chat-diff-analyzer.cpp", "common/parsers/", "common/peg-parser.cpp", "common/peg-parser.h", "common/json-schema-to-grammar.cpp", "common/json-schema-to-grammar.h"],
       "headings": ["### POST `/v1/chat/completions`"],
-      "ids": ["params:reasoning_format", "schema:tools", "schema:tool_choice"],
+      "ids": ["params:reasoning_format"],
       "phrases": ["tool call", "tool_call", "tool choice", "tool_choice", "deferred tool", "tool_reference", "grammar", "chat format", "chat_format", "dialect", "peg", "harmony", "repair"]
     },
     "readings": ["slots_chat_format.*", "auto_grammar.*", "required_grammar.*"]
