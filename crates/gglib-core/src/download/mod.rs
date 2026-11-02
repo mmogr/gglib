@@ -1,4 +1,5 @@
 #![doc = include_str!("README.md")]
+pub mod auto_pick;
 pub(crate) mod completion;
 pub(crate) mod errors;
 pub(crate) mod events;
@@ -13,6 +14,10 @@ pub(crate) mod throttle;
 pub(crate) mod types;
 
 // Re-export commonly used types
+pub use auto_pick::{
+    Contender, Fit, FitJudge, HeadFacts, MemoryFit, NoWeights, Pick, PickReason, VariantReader,
+    pick_variant,
+};
 pub use completion::{
     AttemptCounts, CompletionDetail, CompletionKey, CompletionKind, QueueRunSummary,
 };
