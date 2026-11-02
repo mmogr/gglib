@@ -230,6 +230,11 @@ fn table_of(family: ImageFamily) -> TensorTable {
             tensor("txt_in.weight", &[3072, 20480]),
             tensor("txt_mode_blocks.0.q_proj.weight", &[3072, 3072]),
         ],
+        ImageFamily::Flux2Klein => vec![
+            tensor("double_stream_modulation_img.lin.weight", &[18432, 3072]),
+            tensor("img_in.weight", &[3072, 128]),
+            tensor("txt_in.weight", &[3072, 7680]),
+        ],
     };
     TensorTable {
         format: WeightsFormat::Gguf,

@@ -51,11 +51,11 @@ infrastructure concerns (database, filesystem, etc.).
   safetensors file declares (`TensorTable`), which is all an image model's GGUF
   says about itself
 - `image_family` - An image model's family (`ImageFamily`: Flux.1, SDXL,
-  Qwen-Image 2.1, Z-Image, FLUX.3 Image Klein), sniffed from its tensor names
-  by stable-diffusion.cpp's rules; the files a family draws with beside its
-  main weights (`ComponentRole`) and whether a file fits one; each family's
-  `Recipe`, the one table of its components' default sources, placement,
-  sizes and memory; each variant's `Sampling` (steps, guidance, sampler,
+  Qwen-Image 2.1, Z-Image, FLUX.3 Image Klein, FLUX.2 klein), sniffed from
+  its tensor names by stable-diffusion.cpp's rules; the files a family draws
+  with beside its main weights (`ComponentRole`) and whether a file fits one;
+  each family's `Recipe`, the one table of its components' default sources,
+  placement, sizes and memory; each variant's `Sampling` (steps, guidance, sampler,
   sigma preset, linear scale), picked from the file name where two variants
   share tensors; and the one variant refused by name, FLUX.3 Image Klein
   base. Its tests read the files' tables in `testdata/image_families/`

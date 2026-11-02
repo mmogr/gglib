@@ -68,6 +68,12 @@ describe('the Draws chip', () => {
     expect(screen.queryByText(/flux3-klein$/)).not.toBeInTheDocument();
   });
 
+  it('names FLUX.2 klein by its label and not its wire name', () => {
+    header({ name: 'flux-2-klein-4b-Q8_0', imageInput: false, imageFamily: 'flux2-klein' });
+    expect(screen.getByText('Draws · FLUX.2 klein')).toBeInTheDocument();
+    expect(screen.queryByText(/flux2-klein$/)).not.toBeInTheDocument();
+  });
+
   it("is not in the inspector's header for a model that chats", () => {
     header({ name: 'X', imageInput: false });
     expect(screen.getByRole('heading', { name: 'X' })).toBeInTheDocument();

@@ -351,6 +351,49 @@ async fn a_flux3_klein_download_brings_the_flux2_vae_and_qwen3_vl_4b() {
     assert_eq!(resolution.components().count(), 2);
 }
 
+/// A FLUX.2 klein repository's download is its weights, then the FLUX.2
+/// VAE and Qwen3 4B, each from its own repository.
+#[tokio::test]
+async fn a_flux2_klein_download_brings_the_flux2_vae_and_qwen3_4b() {
+    const REPO: &str = "leejet/FLUX.2-klein-4B-GGUF";
+    let hub = RepoHub::image(
+        ImageFamily::Flux2Klein,
+        &[
+            ("flux-2-klein-4b-Q4_0.gguf", 600),
+            ("flux-2-klein-4b-Q8_0.gguf", 1_000),
+        ],
+        10,
+    );
+    let resolver = HfQuantizationResolver::new(Arc::new(hub), Arc::new(ImageHeadParser));
+
+    let resolution = resolver.resolve(REPO, Quantization::Q8_0).await.unwrap();
+
+    assert_eq!(resolution.image_family, Some(ImageFamily::Flux2Klein));
+    let files: Vec<_> = resolution
+        .files
+        .iter()
+        .map(|f| (f.path.as_str(), f.repo_or(REPO), f.component))
+        .collect();
+    assert_eq!(
+        files,
+        [
+            ("flux-2-klein-4b-Q8_0.gguf", REPO, None),
+            (
+                "split_files/vae/flux2-vae.safetensors",
+                "unsloth/FLUX.2-VAE",
+                Some(ComponentRole::Vae)
+            ),
+            (
+                "Qwen3-4B-Q8_0.gguf",
+                "unsloth/Qwen3-4B-GGUF",
+                Some(ComponentRole::Llm)
+            ),
+        ]
+    );
+    assert_eq!(resolution.total_size(), Some(1_020));
+    assert_eq!(resolution.components().count(), 2);
+}
+
 /// A chat model's head names no family: its download is what it always
 /// was, and the head of its first weights file was asked once.
 #[tokio::test]
