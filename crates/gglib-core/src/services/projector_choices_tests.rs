@@ -6,7 +6,7 @@ use chrono::Utc;
 
 use super::*;
 use crate::domain::NewModel;
-use crate::ports::FirstBytesParser;
+use crate::ports::{FirstBytesParser, ParsedPaths};
 
 fn model(id: i64, weights: &Path, projector: Option<&Path>) -> Model {
     let mut new = NewModel::new(format!("m{id}"), weights.to_path_buf(), 7.0, Utc::now());
@@ -47,6 +47,26 @@ fn a_models_own_projector_file_is_offered_and_its_weights_are_not() {
     );
 
     assert_eq!(choices, vec![projector]);
+}
+
+/// The weights are never read: only the model's other files have their
+/// headers parsed.
+#[test]
+fn the_weights_file_is_never_parsed() {
+    let dir = tempfile::tempdir().unwrap();
+    let dir = dir.path().canonicalize().unwrap();
+    let weights = dir.join("X.Q8_0.gguf");
+    let projector = dir.join("X.mmproj-Q8_0.gguf");
+    std::fs::write(&weights, b"weights").unwrap();
+    std::fs::write(&projector, b"projector").unwrap();
+    let files = [file(0, "X.Q8_0.gguf"), file(1, "X.mmproj-Q8_0.gguf")];
+    let this = model(3, &weights, None);
+    let spy = ParsedPaths::default();
+
+    let choices = projector_choices(&this, &files, &[], &spy);
+
+    assert_eq!(choices, vec![projector.clone()]);
+    assert_eq!(spy.parsed(), [projector]);
 }
 
 /// A row for a projector that was never fetched is not a choice: linking it
