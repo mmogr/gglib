@@ -151,12 +151,68 @@ jobs:
     name: ADR criterion moved
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
       - name: Check each ADR reading against its approval
-        run: make adr-readings
+        id: check
+        shell: bash
+        run: make adr-readings 2>&1 | tee "$RUNNER_TEMP/adr-readings.log"
+
+      # On a pull request from this repository, one comment carries each
+      # moved reading and the `/approve` line to paste for it, so the fix is a
+      # comment away from the check (approve-reading.yml takes it from
+      # there); it is removed once the check passes. Posted with GITHUB_TOKEN,
+      # so it starts no run and cannot be mistaken for the owner's comment.
+      - name: Say on the pull request what to approve
+        if: >-
+          always() &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          OUTCOME: ${{ steps.check.outcome }}
+        run: |
+          marker='<!-- adr-criterion-moved -->'
+          existing=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+            --jq ".[] | select(.body | contains(\"$marker\")) | .id" | head -1)
+          if [[ $OUTCOME == success ]]; then
+            if [[ -n $existing ]]; then
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$existing" --silent
+            fi
+            exit 0
+          fi
+          # Each moved reading's message, its %0A line breaks restored, in a
+          # fenced block: nothing in it links, mentions anyone or closes
+          # anything. The lines starting /approve are the ones to paste.
+          moved=$(grep '^::error title=ADR criterion moved::' "$RUNNER_TEMP/adr-readings.log" \
+            | sed 's/^::error title=ADR criterion moved:://; s/%0A/\n/g' || true)
+          t=$(printf '\x60')
+          {
+            echo "$marker"
+            echo '### ADR criterion moved'
+            echo
+            if [[ -n $moved ]]; then
+              echo "A reading an ADR names moved. To approve it, comment the ${t}/approve${t} line you mean, one per reading; the note is the record of why. ${t}/approve <reading> remove${t} drops an approval whose reading is gone."
+              echo
+              echo "${t}${t}${t}"
+              echo "$moved"
+              echo "${t}${t}${t}"
+            else
+              echo "The check failed for another reason; read the job: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            fi
+          } > "$RUNNER_TEMP/comment.md"
+          if [[ -n $existing ]]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" \
+              -F body=@"$RUNNER_TEMP/comment.md" --silent
+          else
+            gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          fi
 
   test:
     name: Test (Rust)
