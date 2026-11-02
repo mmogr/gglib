@@ -41,8 +41,8 @@ static SAMPLER: Criterion = Criterion {
 static TRANSPORT: Criterion = Criterion {
     adr: "0012",
     quote: "If `llama-server` — or another dependency gglib fundamentally relies on — ships a first-party remote transport, this defers to it and the tunnel is deleted rather than carried beside it.",
-    how_read: "the number of options llama-server --help lists; read help.txt's diff for a transport",
-    if_moved: "read the help.txt diff for a remote transport",
+    how_read: "the first flag of each option llama-server --help lists, sorted; read the flags that came and went for a transport",
+    if_moved: "read the flags that came and went for a remote transport",
 };
 static CACHE_PROMPT: Criterion = Criterion {
     adr: "0022",
@@ -103,9 +103,17 @@ pub(super) fn json_of(body: &str) -> Value {
 /// `--help` and `--version` of both servers.
 fn engines_said(inputs: &Inputs, r: &mut Recording) {
     let (help, _) = inputs.run(&inputs.llama_server, "--help");
-    let options = help_options(&help).len();
-    assert!(options > 100, "llama-server --help lists {options} options");
-    r.named("help_diff.options", options, &TRANSPORT);
+    let mut flags: Vec<String> = help_options(&help)
+        .into_iter()
+        .filter_map(|option| option.flags.into_iter().next())
+        .collect();
+    flags.sort_unstable();
+    assert!(
+        flags.len() > 100,
+        "llama-server --help lists {} options",
+        flags.len()
+    );
+    r.named("help_diff.options", flags, &TRANSPORT);
     for (name, flag) in [
         ("batch", "--batch-size"),
         ("fit", "--fit"),
