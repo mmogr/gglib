@@ -391,6 +391,11 @@ enforce: ## Run the architecture enforcement checks
 	@# The diagrams inside the crate READMEs are drawn by hand; this fails when
 	@# one names a type or a .rs file the code no longer has.
 	@./scripts/check_diagram_names.py --check
+	@# contracts/upstream/overlaps.json names each gglib feature an engine could
+	@# come to do itself, and what of upstream to watch for it. This fails when a
+	@# row names a path or an ADR the tree no longer has, or a Tier A
+	@# compensation stage has no row.
+	@./scripts/check_overlaps.sh
 
 # The ADR readings in contracts/upstream against their hand-kept approvals. Not
 # in `enforce`: CI runs it as a job of its own, `ADR criterion moved`, so one

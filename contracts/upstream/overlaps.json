@@ -1,0 +1,110 @@
+{
+  "residency": {
+    "engine": "llama",
+    "adr": "0009",
+    "paths": ["crates/gglib-runtime/src/process/residency", "crates/gglib-runtime/src/process/admission", "crates/gglib-proxy/src/slot_eviction.rs"],
+    "upstream": {
+      "paths": ["tools/server/server-models.cpp", "tools/server/server-models.h", "tools/server/server-models-sched.cpp", "tools/server/server-models-sched.h"],
+      "headings": ["## Using multiple models", "### Routing requests", "### Memory-based unloading", "### POST `/models/load`", "### POST `/models/unload`", "### GET `/models`"],
+      "ids": ["params:models_", "env:LLAMA_ARG_MODELS_", "route:/models"],
+      "phrases": ["unload", "evict", "memory margin", "lru", "resident", "device memory", "models-max", "router"]
+    },
+    "readings": []
+  },
+  "context-fit": {
+    "engine": "llama",
+    "adr": "0009",
+    "paths": ["crates/gglib-runtime/src/process/residency/context.rs", "crates/gglib-proxy/src/models_endpoint.rs"],
+    "upstream": {
+      "paths": ["common/fit.cpp", "common/fit.h"],
+      "headings": [],
+      "ids": ["params:fit_", "params:n_ctx", "env:LLAMA_ARG_FIT", "env:LLAMA_ARG_CTX_SIZE"],
+      "phrases": ["fit the context", "fit-target", "fit-ctx", "context size"]
+    },
+    "readings": ["help_defaults.fit"]
+  },
+  "tunnel": {
+    "engine": "llama",
+    "adr": "0012",
+    "paths": ["crates/gglib-proxy/src/remote", "crates/gglib-proxy/src/tunnel_routes.rs", "crates/gglib-app-services/src/remote"],
+    "upstream": {
+      "paths": ["tools/server/server-connect.cpp", "tools/server/server-connect.h"],
+      "headings": [],
+      "ids": ["params:server_connect", "env:LLAMA_ARG_CONNECT"],
+      "phrases": ["tunnel", "p2p", "peer-to-peer", "relay", "outside lan", "pairing"]
+    },
+    "readings": []
+  },
+  "template-caps": {
+    "engine": "llama",
+    "adr": "0007",
+    "paths": ["crates/gglib-proxy/src/template_caps_read.rs", "crates/gglib-core/src/domain/template_caps.rs", "crates/gglib-core/src/request_pipeline/effort_gate.rs"],
+    "upstream": {
+      "paths": ["common/jinja/caps.cpp", "common/jinja/caps.h"],
+      "headings": ["### **GET** `/props`"],
+      "ids": ["env:LLAMA_ARG_REASONING_EFFORT"],
+      "phrases": ["chat_template_caps", "template cap", "reasoning effort", "reasoning_effort"]
+    },
+    "readings": ["caps.*"]
+  },
+  "reasoning-history": {
+    "engine": "llama",
+    "adr": "0020",
+    "paths": ["crates/gglib-core/src/normalize/history.rs", "crates/gglib-core/src/request_pipeline/messages.rs", "crates/gglib-proxy/src/turn_dialect.rs"],
+    "upstream": {
+      "paths": ["common/reasoning-budget.cpp", "common/reasoning-budget.h", "common/chat.cpp", "common/parsers/"],
+      "headings": [],
+      "ids": ["params:preserve_reasoning", "params:reasoning_", "env:LLAMA_ARG_THINK", "env:LLAMA_ARG_REASONING"],
+      "phrases": ["reasoning", "thinking", "reasoning_content", "preserve reasoning", "reasoning-preserve", "reasoning budget", "separator"]
+    },
+    "readings": ["caps.*.supports_preserve_reasoning"]
+  },
+  "dialect-normalise": {
+    "engine": "llama",
+    "adr": "0002",
+    "paths": ["crates/gglib-core/src/normalize", "crates/gglib-core/src/request_pipeline/constrain.rs", "crates/gglib-proxy/src/repair.rs"],
+    "upstream": {
+      "paths": ["common/chat.cpp", "common/chat.h", "common/chat-peg-parser.cpp", "common/chat-peg-parser.h", "common/chat-auto-parser.h", "common/chat-auto-parser-generator.cpp", "common/chat-auto-parser-helpers.cpp", "common/chat-auto-parser-helpers.h", "common/chat-diff-analyzer.cpp", "common/parsers/", "common/peg-parser.cpp", "common/peg-parser.h", "common/json-schema-to-grammar.cpp", "common/json-schema-to-grammar.h"],
+      "headings": ["### POST `/v1/chat/completions`"],
+      "ids": ["params:reasoning_format"],
+      "phrases": ["tool call", "tool_call", "tool choice", "tool_choice", "deferred tool", "tool_reference", "grammar", "chat format", "chat_format", "dialect", "peg", "harmony", "repair"]
+    },
+    "readings": ["slots_chat_format.*", "auto_grammar.*", "required_grammar.*"]
+  },
+  "mcp-gateway": {
+    "engine": "llama",
+    "adr": "0024",
+    "paths": ["crates/gglib-proxy/src/mcp", "crates/gglib-mcp"],
+    "upstream": {
+      "paths": ["tools/server/server-mcp.cpp", "tools/server/server-mcp.h", "tools/server/server-tools.cpp", "tools/server/server-tools.h"],
+      "headings": ["### MCP servers", "## Server tools", "### Server tools support"],
+      "ids": ["params:mcp_", "env:LLAMA_ARG_MCP", "route:/tools"],
+      "phrases": ["mcp", "model context protocol", "tool server", "built-in tool"]
+    },
+    "readings": []
+  },
+  "hf-download": {
+    "engine": "llama",
+    "adr": null,
+    "paths": ["crates/gglib-download", "crates/gglib-hf"],
+    "upstream": {
+      "paths": ["common/download.cpp", "common/download.h", "common/hf-cache.cpp", "common/hf-cache.h"],
+      "headings": ["### Model sources", "### POST `/models`: Download new model"],
+      "ids": ["params:hf_", "params:model.hf_", "env:LLAMA_ARG_HF_"],
+      "phrases": ["hf-repo", "hugging face", "huggingface", "download", "mmproj auto", "quant"]
+    },
+    "readings": []
+  },
+  "sd-recipes": {
+    "engine": "sd",
+    "adr": "0018",
+    "paths": ["crates/gglib-core/src/domain/image_family.rs", "crates/gglib-runtime/src/sd/server"],
+    "upstream": {
+      "paths": ["examples/server/model_catalog.cpp", "examples/server/model_catalog.h", "examples/server/routes_models.cpp", "examples/server/recipes/", "examples/server/routes_openai.cpp", "src/pipeline/request.cpp"],
+      "headings": ["## Model management", "### Recipe feature declarations", "### User recipe format", "#### `POST /v1/images/generations`"],
+      "ids": ["route:/v1/images", "route:/sdcpp/v1/models"],
+      "phrases": ["recipe", "preset", "idempotent", "model load", "resolution", "dimension", "width", "height", "hires", "steps", "cfg", "size constraint", "multiple of"]
+    },
+    "readings": []
+  }
+}
