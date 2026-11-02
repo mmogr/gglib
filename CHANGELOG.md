@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.30.0-rc.3](https://github.com/mmogr/gglib/compare/v0.30.0-rc.2...v0.30.0-rc.3) (2026-11-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** `gglib_core::Quantization`, `gglib_core::download::Quantization`, `gglib_download::Quantization` and `DownloadError::InvalidQuantization` are removed.
+* **core:** a file's role is never read from its name ([#1737](https://github.com/mmogr/gglib/issues/1737))
+* **download:** with no quant asked, the largest quantized variant that fits ([#1736](https://github.com/mmogr/gglib/issues/1736))
+* **hf:** a repository's variants are shard sets named as their uploader named them ([#1735](https://github.com/mmogr/gglib/issues/1735))
+* **db:** models store the header's type and bits per weight ([#1734](https://github.com/mmogr/gglib/issues/1734))
+
+### What gglib now does
+
+* **contracts:** the help reading names the flags ([#1725](https://github.com/mmogr/gglib/issues/1725)) ([14473ff](https://github.com/mmogr/gglib/commit/14473ff7adb846d6caf1f51762aed67d7114554f))
+* **db:** models store the header's type and bits per weight ([#1734](https://github.com/mmogr/gglib/issues/1734)) ([cd83837](https://github.com/mmogr/gglib/commit/cd83837c51611f4da21fb6c19bef6c695f230175))
+* **download:** with no quant asked, the largest quantized variant that fits ([#1736](https://github.com/mmogr/gglib/issues/1736)) ([630ebd5](https://github.com/mmogr/gglib/commit/630ebd5ef37e2bae7e0d85bcdbfa54619bd526b6))
+* **engine-pins:** the pin body reads upstream against gglib's own features ([#1728](https://github.com/mmogr/gglib/issues/1728)) ([a52304e](https://github.com/mmogr/gglib/commit/a52304e6c1fc127fe6533f5fc8a2805810b5860c))
+* **hf:** a repository's variants are shard sets named as their uploader named them ([#1735](https://github.com/mmogr/gglib/issues/1735)) ([e39af94](https://github.com/mmogr/gglib/commit/e39af94355cadfbfb9e8eb760c159676de203861))
+* **images:** a model is drawn by its variant, read from its file name ([#1717](https://github.com/mmogr/gglib/issues/1717)) ([5155326](https://github.com/mmogr/gglib/commit/5155326caffc249bf8ade1fdde62e151002c4e67))
+* **models:** gglib knows FLUX.2 klein ([#1720](https://github.com/mmogr/gglib/issues/1720)) ([4956942](https://github.com/mmogr/gglib/commit/49569429e864efe9ae2b1442f85b77ec59e977ff))
+* **models:** gglib knows FLUX.3 Image Klein ([#1718](https://github.com/mmogr/gglib/issues/1718)) ([050c19b](https://github.com/mmogr/gglib/commit/050c19b48db1237c35d98f78f2e5488b2771fe9c))
+
+
+### What it stopped getting wrong
+
+* **engine-pins:** the pin body lists stable-diffusion.cpp's server commits ([#1724](https://github.com/mmogr/gglib/issues/1724)) ([6cded37](https://github.com/mmogr/gglib/commit/6cded37e5bed7ad9ba06e9f7e8a29215ae1d1c76)), closes [#1722](https://github.com/mmogr/gglib/issues/1722)
+* **gguf:** what a file is comes from its header, never its name ([#1731](https://github.com/mmogr/gglib/issues/1731)) ([f8d3de7](https://github.com/mmogr/gglib/commit/f8d3de7ea6bf3a40ae3266d33166e88d28be760d))
+* **quant:** the follow-ups the quant stack's reviews left ([#1741](https://github.com/mmogr/gglib/issues/1741)) ([cc34c9c](https://github.com/mmogr/gglib/commit/cc34c9c5a39dde4b42f6ca7bad43e3e1e615f638))
+
+
+### Documentation
+
+* **models:** name models that come with a projector ([#1716](https://github.com/mmogr/gglib/issues/1716)) ([1675a79](https://github.com/mmogr/gglib/commit/1675a79632bbdfa1c8c17f7c7b443948a55f619b))
+* **readme:** the lead says what gglib is before what it does ([#1730](https://github.com/mmogr/gglib/issues/1730)) ([18f43a6](https://github.com/mmogr/gglib/commit/18f43a6c6e4251d2ff82c1ae2100a22c97d78b94))
+
+
+### Internal
+
+* **core:** a file's role is never read from its name ([#1737](https://github.com/mmogr/gglib/issues/1737)) ([cfc35c1](https://github.com/mmogr/gglib/commit/cfc35c1240b0a1e830065644c4f88a290426b692))
+* **core:** the closed quantization enum is gone ([#1738](https://github.com/mmogr/gglib/issues/1738)) ([9ccb5fe](https://github.com/mmogr/gglib/commit/9ccb5fe683130bdcdd2af82dd7d809147c9b244d))
+* **deps:** move llama.cpp's pin from b11669 to b11960 ([#1715](https://github.com/mmogr/gglib/issues/1715)) ([e990d9c](https://github.com/mmogr/gglib/commit/e990d9c9b2b8a8bc6c9810d598bf65863cf07954))
+* **deps:** move stable-diffusion.cpp's pin from master-1000-95ff762 to master-1025-8ee08e3 ([#1714](https://github.com/mmogr/gglib/issues/1714)) ([2394bd4](https://github.com/mmogr/gglib/commit/2394bd467ca49944dc6762f2246783a5b65ffae9))
+* **engine-pins:** a /approve comment on the pull request writes the approval ([#1723](https://github.com/mmogr/gglib/issues/1723)) ([f324875](https://github.com/mmogr/gglib/commit/f3248750a8b32bbae630fb3f9e413ac320bcd165))
+* **proxy:** the objects gglib reads from llama-server are held to the recording ([#1726](https://github.com/mmogr/gglib/issues/1726)) ([37736f0](https://github.com/mmogr/gglib/commit/37736f03869100a4337dea1ad25702e8b27673b1))
+* **release:** cut a maintenance line and backport to it by label ([#1733](https://github.com/mmogr/gglib/issues/1733)) ([4d0f168](https://github.com/mmogr/gglib/commit/4d0f1683e3402cae861d5c9e962843818f037185))
+* **release:** maintenance lines release/X.Y.x carry a stable version's patches ([#1732](https://github.com/mmogr/gglib/issues/1732)) ([8b49e12](https://github.com/mmogr/gglib/commit/8b49e12d7363b6f804ee50621ed8bfc6f4f80f8e))
+* the check's comment reads top down ([#1729](https://github.com/mmogr/gglib/issues/1729)) ([309864b](https://github.com/mmogr/gglib/commit/309864b2dd8db763511c33cdba7affebb8fb0bc1))
+
 ## [0.30.0-rc.2](https://github.com/mmogr/gglib/compare/v0.30.0-rc.1...v0.30.0-rc.2) (2026-11-01)
 
 
