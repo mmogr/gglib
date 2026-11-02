@@ -111,6 +111,19 @@ part of a message's `content`, as a `data:image/png;base64,…` or
 Which models read images is in `/v1/models`: such a model's entry carries
 `"capabilities": ["vision"]`.
 
+Any model llama.cpp reads images with works, once its projector is linked,
+and a download from a repository that publishes one links it. These
+repositories have one; only the first has been read through gglib:
+
+| Repository | Size |
+|---|---|
+| `unsloth/Qwen3.8-27B-GGUF` | 27B |
+| `ggml-org/gemma-4-31B-it-GGUF` | 31B |
+| `ggml-org/gemma-4-26B-A4B-it-GGUF` | 26B, 4B active |
+| `ggml-org/GLM-4.6V-Flash-GGUF` | 9B |
+| `unsloth/Qwen3.5-9B-GGUF` | 9B |
+| `openbmb/MiniCPM-V-4.6-gguf` | 1.3B |
+
 - **What an image costs.** gglib counts an image against the model's context
   by its pixels, not by the length of its base64: about one token per 32x32
   pixels, at most 4,096 an image. A 2560x1440 screenshot is about 3,600

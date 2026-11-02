@@ -139,6 +139,7 @@ order of how often it matters:
 - **Images.** A screenshot pasted into a client goes to a model linked to
   its projector, is counted against the context by its pixels, and is
   refused by name on a model that cannot see, before anything is loaded.
+  A download of Gemma 4, Qwen3.5 or GLM-4.6V brings its projector.
   [Details →](docs/clients.md#images)
 
 <p align="center">
