@@ -21,7 +21,8 @@ use gglib_core::ports::{
 };
 use gglib_core::services::AppCore;
 use gglib_db::{
-    LoopGuardTripWriter, SqliteBenchmarkRepository, SqliteLoopGuardTripLog, repair_at_daemon_start,
+    LoopGuardTripWriter, SqliteBenchmarkRepository, SqliteLoopGuardTripLog, fill_header_facts_once,
+    repair_at_daemon_start,
 };
 use gglib_gguf::ToolSupportDetector;
 use gglib_mcp::McpService;
@@ -166,6 +167,20 @@ pub async fn bootstrap(config: ServerConfig) -> Result<AxumContext> {
     //     startup: this is the one long-lived process, and the CLI opens the
     //     same database on every invocation.
     repair_at_daemon_start(&pool).await;
+
+    // 3c. The type and bits per weight of the models added before they were
+    //     kept, read once per library from their files. Beside the start, not
+    //     before it: a slow disk must not keep the daemon from answering.
+    let (pass_pool, pass_parser) = (pool.clone(), Arc::clone(&gguf_parser));
+    tokio::spawn(async move {
+        match fill_header_facts_once(&pass_pool, pass_parser).await {
+            Ok(None | Some(0)) => {}
+            Ok(Some(filled)) => {
+                tracing::info!(filled, "read the type of models added before it was kept");
+            }
+            Err(e) => tracing::warn!("Failed to read the models' types from their headers: {e}"),
+        }
+    });
 
     // 4. MCP service.
     let mcp = Arc::new(McpService::new(repos.mcp_servers.clone()));

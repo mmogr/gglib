@@ -96,8 +96,9 @@ pub(super) async fn create_models_table(pool: &SqlitePool) -> Result<()> {
 
     // Migration: a model's type comes from its header, never a name, so
     // `quantization` (a string read from either) goes, carrying nothing
-    // over. Dropped in place: every id, and every row that references one,
-    // stays.
+    // over. The daemon reads the header's type and bits per weight back at
+    // its start (`fill_header_facts_once`). Dropped in place: every
+    // id, and every row that references one, stays.
     drop_column_if_present(pool, "models", "quantization").await?;
     add_column_if_missing(pool, "models", "variant_label", "TEXT").await?;
     add_column_if_missing(pool, "models", "file_type", "INTEGER").await?;
