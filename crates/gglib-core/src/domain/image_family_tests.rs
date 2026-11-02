@@ -173,6 +173,33 @@ fn the_flux3_klein_goldens_hold_the_tensors_the_rules_read() {
     assert!(numbered(&llm, "blk.", 36));
 }
 
+/// The FLUX.2 klein 4B files' headers hold what the rules read: the
+/// diffusion model's names bare, no metadata, FLUX.2's shared modulation, a
+/// 128-feature image embedder, a 7680-feature text embedder and 20 single
+/// blocks (FLUX.2 dev has a 48th); a Qwen3 language model 2560 wide.
+#[test]
+fn the_flux2_klein_goldens_hold_the_tensors_the_rules_read() {
+    let klein = Golden::Flux2Klein4bQ8.table();
+    assert_eq!(klein.tensors.len(), 149);
+    assert_eq!(klein.format, WeightsFormat::Gguf);
+    assert_eq!(klein.architecture, None);
+    assert_eq!(
+        shape(&klein, "double_stream_modulation_img.lin.weight"),
+        [18432, 3072]
+    );
+    assert_eq!(shape(&klein, "img_in.weight"), [3072, 128]);
+    assert_eq!(shape(&klein, "txt_in.weight"), [3072, 7680]);
+    assert!(numbered(&klein, "double_blocks.", 5));
+    assert!(numbered(&klein, "single_blocks.", 20));
+
+    let llm = Golden::Qwen34bOriginalQ8.table();
+    assert_eq!(llm.tensors.len(), 398);
+    assert_eq!(llm.format, WeightsFormat::Gguf);
+    assert_eq!(llm.architecture.as_deref(), Some("qwen3"));
+    assert_eq!(shape(&llm, "token_embd.weight"), [151_936, 2560]);
+    assert!(numbered(&llm, "blk.", 36));
+}
+
 // ── Sniff ───────────────────────────────────────────────────────────────────
 
 #[test]
@@ -205,6 +232,7 @@ fn no_component_file_sniffs_as_a_family() {
         Golden::Qwen3Vl8bQ8,
         Golden::Flux2Vae,
         Golden::Qwen3Vl4bQ8,
+        Golden::Qwen34bOriginalQ8,
     ] {
         assert_eq!(ImageFamily::sniff(&golden.table()), None, "{golden:?}");
     }
