@@ -29,13 +29,14 @@ const INPROC_VERSION: &str = include_str!("../../../contracts/upstream/llama-inp
 /// The lines without which the in-process recording says nothing, one or
 /// more for each endpoint the recorder asks: what gglib-proxy forwards and
 /// reads, and what ggchat reads of a stream.
-const REQUIRED: [&str; 22] = [
+const REQUIRED: [&str; 23] = [
     "/props\tdefault_generation_settings.n_ctx\tnumber",
     "/props\tbuild_info\tstring",
     "/props\tchat_template\tstring",
     "/health\tstatus\tstring",
     "/apply-template\tprompt\tstring",
     "chat completion\tchoices[].message.content\tstring",
+    "chat completion\tchoices[].message.reasoning_content\tstring",
     "chat completion\tchoices[].finish_reason\tstring",
     "chat completion\tusage.prompt_tokens\tnumber",
     "chat completion\tusage.prompt_tokens_details.cached_tokens\tnumber",
@@ -53,6 +54,25 @@ const REQUIRED: [&str; 22] = [
     "stream chunk\ttimings.predicted_n\tnumber",
     "error (over context)\terror.n_ctx\tnumber",
 ];
+
+/// The fields of a choice's `delta` or `message` the pinned llama-server
+/// answers that nothing in gglib reads, as `endpoint<TAB>key path` without
+/// the type, each with why. A field the recording gains that is in neither
+/// this list nor [`REQUIRED`] fails
+/// [`every_choice_field_llama_server_answers_is_read_or_known`]: upstream
+/// has put something new in the object gglib reads, and it is read, or it is
+/// named here with its reason.
+const UNREAD_CHOICE_FIELDS: [(&str, &str); 1] = [(
+    "chat completion\tchoices[].message.role",
+    "always `assistant`; the proxy forwards the stream's `delta.role`, which ggchat reads",
+)];
+
+/// A `shape.txt` line's endpoint and key path, without its type: one field
+/// is one name, whatever types it has taken (a stream's `delta.content` is a
+/// string, then `null` on the last chunk).
+fn field(line: &str) -> &str {
+    line.rsplit_once('\t').map_or(line, |(field, _)| field)
+}
 
 /// Every line of `inproc` is one `llama` has: fails naming each that is not,
 /// with its endpoint, and whether llama-server was asked that endpoint at all.
@@ -95,6 +115,47 @@ fn reading(observed: &str, name: &str) -> Value {
 #[test]
 fn the_in_process_engine_answers_in_the_pinned_llama_server_s_shape() {
     assert_subset(INPROC_SHAPE, LLAMA_SHAPE);
+}
+
+/// What the pinned llama-server puts in a choice's `delta` or `message` is
+/// either read (in [`REQUIRED`]) or known and left (in
+/// [`UNREAD_CHOICE_FIELDS`]); and nothing is known that it no longer answers.
+#[test]
+fn every_choice_field_llama_server_answers_is_read_or_known() {
+    let answered: BTreeSet<&str> = LLAMA_SHAPE
+        .lines()
+        .filter(|line| line.contains("\tchoices[].delta.") || line.contains("\tchoices[].message."))
+        .map(field)
+        .collect();
+    let read: BTreeSet<&str> = REQUIRED.into_iter().map(field).collect();
+    let known: BTreeSet<&str> = UNREAD_CHOICE_FIELDS.into_iter().map(|(l, _)| l).collect();
+    let new: Vec<&str> = answered
+        .iter()
+        .copied()
+        .filter(|line| !read.contains(line) && !known.contains(line))
+        .collect();
+    assert!(
+        new.is_empty(),
+        "llama-server now answers fields of a choice gglib neither reads nor knows: {new:#?}\n\
+         Read each, or add it to UNREAD_CHOICE_FIELDS with why it is left."
+    );
+    let choice_read: BTreeSet<&str> = read
+        .iter()
+        .copied()
+        .filter(|f| f.contains("\tchoices[].delta.") || f.contains("\tchoices[].message."))
+        .collect();
+    let gone: Vec<&str> = known
+        .iter()
+        .chain(&choice_read)
+        .copied()
+        .filter(|field| !answered.contains(field))
+        .collect();
+    assert!(
+        gone.is_empty(),
+        "REQUIRED or UNREAD_CHOICE_FIELDS names fields llama-server no longer answers: {gone:#?}"
+    );
+    let both: Vec<&str> = known.intersection(&choice_read).copied().collect();
+    assert!(both.is_empty(), "read and listed as unread: {both:?}");
 }
 
 #[test]
