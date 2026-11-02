@@ -45,7 +45,7 @@ async fn library(
     std::fs::write(dir.join(WEIGHTS), "weights").unwrap();
     let mut new = NewModel::new("flux".to_owned(), dir.join(WEIGHTS), 12.0, Utc::now());
     new.hf_repo_id = Some(REPO.to_owned());
-    new.quantization = Some("Q8_0".to_owned());
+    new.variant_label = Some("Q8_0".to_owned());
     new.image_family = Some(ImageFamily::Flux1);
     let linked = canonical_model_path(vae).unwrap();
     new.components = vec![ModelComponent {

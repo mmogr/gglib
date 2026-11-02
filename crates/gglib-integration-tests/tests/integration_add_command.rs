@@ -42,7 +42,9 @@ async fn test_add_command_database_integration() {
         Utc::now(),
     );
     new_model.architecture = Some("llama".to_string());
-    new_model.quantization = Some("Q4_0".to_string());
+    new_model.variant_label = Some("UD-Q4_K_XL".to_string());
+    new_model.file_type = Some(gglib_core::domain::FileType(15));
+    new_model.bits_per_weight = Some(5.25);
     new_model.context_length = Some(4096);
     new_model.metadata = metadata;
 
@@ -64,6 +66,12 @@ async fn test_add_command_database_integration() {
     assert_eq!(added_model.file_path, expected_path);
     assert_eq!(added_model.param_count_b, 7.0);
     assert_eq!(added_model.architecture, Some("llama".to_string()));
+    assert_eq!(added_model.variant_label.as_deref(), Some("UD-Q4_K_XL"));
+    assert_eq!(
+        added_model.file_type,
+        Some(gglib_core::domain::FileType(15))
+    );
+    assert_eq!(added_model.bits_per_weight, Some(5.25));
     assert!(added_model.id > 0, "Added model should have an ID");
 }
 
@@ -83,13 +91,13 @@ async fn test_add_command_duplicate_model_handling() {
         Utc::now(),
     );
     new_model1.architecture = Some("llama".to_string());
-    new_model1.quantization = Some("Q4_0".to_string());
+    new_model1.variant_label = Some("Q4_0".to_string());
     new_model1.context_length = Some(4096);
 
     // Add first model
     let first_model = repo.insert(&new_model1).await.unwrap();
     assert_eq!(first_model.param_count_b, 7.0);
-    assert_eq!(first_model.quantization, Some("Q4_0".to_string()));
+    assert_eq!(first_model.variant_label, Some("Q4_0".to_string()));
 
     // Add second model with same file path (should update via UPSERT for sharded download support)
     let mut new_model2 = NewModel::new(
@@ -99,7 +107,7 @@ async fn test_add_command_duplicate_model_handling() {
         Utc::now(),
     );
     new_model2.architecture = Some("mistral".to_string());
-    new_model2.quantization = Some("Q8_0".to_string());
+    new_model2.variant_label = Some("Q8_0".to_string());
     new_model2.context_length = Some(8192);
 
     // This should succeed and update the existing model (UPSERT behavior)
@@ -117,7 +125,7 @@ async fn test_add_command_duplicate_model_handling() {
         "File path should remain the same"
     );
     assert_eq!(
-        updated_model.quantization,
+        updated_model.variant_label,
         Some("Q8_0".to_string()),
         "Quantization should be updated"
     );
@@ -165,7 +173,7 @@ async fn test_add_command_with_complex_metadata() {
         Utc::now(),
     );
     new_model.architecture = Some("llama".to_string());
-    new_model.quantization = Some("Q4_0".to_string());
+    new_model.variant_label = Some("Q4_0".to_string());
     new_model.context_length = Some(4096);
     new_model.metadata = metadata.clone();
 
@@ -213,7 +221,7 @@ async fn test_add_command_with_minimal_data() {
     assert_eq!(retrieved_model.name, "Minimal Model");
     assert_eq!(retrieved_model.param_count_b, 1.3);
     assert_eq!(retrieved_model.architecture, None);
-    assert_eq!(retrieved_model.quantization, None);
+    assert_eq!(retrieved_model.variant_label, None);
     assert_eq!(retrieved_model.context_length, None);
     assert!(retrieved_model.metadata.is_empty());
 }

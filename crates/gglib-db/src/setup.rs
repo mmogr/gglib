@@ -4,7 +4,7 @@
 //! the `SQLite` database with full schema. Entry points call this with the
 //! resolved database path.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use sqlx::{
     SqlitePool,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
@@ -80,20 +80,53 @@ async fn add_column_if_missing(
     column: &str,
     decl: &str,
 ) -> Result<()> {
+    if column_present(pool, table, column).await? {
+        return Ok(());
+    }
+
+    // Two processes opening one library at once may both find the column
+    // missing. The second's ALTER then fails, and is a skip when the column
+    // is there after all; any other failure still fails the boot.
+    if let Err(error) = sqlx::query(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"))
+        .execute(pool)
+        .await
+    {
+        if !column_present(pool, table, column).await? {
+            return Err(error.into());
+        }
+    }
+    Ok(())
+}
+
+/// Drops `column` from `table`, when the table still has it.
+///
+/// Asks the table's shape first, as `add_column_if_missing` does, and as it
+/// does takes a failed `DROP` for a skip when another process opening the
+/// library at once dropped the column first.
+async fn drop_column_if_present(pool: &SqlitePool, table: &str, column: &str) -> Result<()> {
+    if !column_present(pool, table, column).await? {
+        return Ok(());
+    }
+    if let Err(error) = sqlx::query(&format!("ALTER TABLE {table} DROP COLUMN {column}"))
+        .execute(pool)
+        .await
+    {
+        if column_present(pool, table, column).await? {
+            return Err(error).with_context(|| format!("dropping {table}.{column}"));
+        }
+    }
+    Ok(())
+}
+
+/// Whether `table` has `column`, as `PRAGMA table_info` reads it.
+async fn column_present(pool: &SqlitePool, table: &str, column: &str) -> Result<bool> {
     let present: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?")
             .bind(table)
             .bind(column)
             .fetch_one(pool)
             .await?;
-    if present > 0 {
-        return Ok(());
-    }
-
-    sqlx::query(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"))
-        .execute(pool)
-        .await?;
-    Ok(())
+    Ok(present > 0)
 }
 
 /// Sets up the `SQLite` database connection and ensures the schema exists.
@@ -757,3 +790,7 @@ mod models_tests;
 #[cfg(test)]
 #[path = "setup_models_pool_tests.rs"]
 mod models_pool_tests;
+
+#[cfg(test)]
+#[path = "setup_models_quantization_tests.rs"]
+mod models_quantization_tests;

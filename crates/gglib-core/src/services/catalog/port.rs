@@ -48,7 +48,7 @@ fn model_to_summary(m: &Model) -> ModelSummary {
         image_input: m.image_input(),
         image_output: m.generates_images(),
         param_count: format_param_count(m.param_count_b),
-        quantization: m.quantization.clone(),
+        quantization: m.quant_label().map(str::to_owned),
         architecture: m.architecture.clone(),
         created_at: m.added_at.timestamp(),
         file_size,
@@ -76,6 +76,7 @@ pub fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
     // `ModelSamplingDefaults` for why the proxy needs it.
     let model_sampling = crate::domain::ModelSamplingDefaults::from_metadata(&m.metadata);
 
+    let quantization = m.quant_label().map(str::to_owned);
     ModelLaunchSpec {
         id: m.id as u32,
         name: m.name,
@@ -85,7 +86,7 @@ pub fn model_to_launch_spec(m: Model) -> ModelLaunchSpec {
         components: m.components,
         tags: m.tags,
         architecture: m.architecture,
-        quantization: m.quantization,
+        quantization,
         context_length: m.context_length,
         server_defaults: m.server_defaults,
         file_size_bytes,

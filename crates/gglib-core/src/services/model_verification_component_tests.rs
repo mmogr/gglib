@@ -24,7 +24,7 @@ fn service(
 ) -> ModelVerificationService {
     let mut new = NewModel::new("flux".to_owned(), dir.join(WEIGHTS), 12.0, Utc::now());
     new.hf_repo_id = Some(REPO.to_owned());
-    new.quantization = Some("Q8_0".to_owned());
+    new.variant_label = Some("Q8_0".to_owned());
     new.image_family = Some(ImageFamily::Flux1);
     new.components = vec![ModelComponent {
         role: ComponentRole::Vae,

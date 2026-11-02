@@ -305,7 +305,7 @@ async fn quantization_of(state: &AppState, model_id: i64) -> Option<String> {
         .await
         .ok()
         .flatten()?;
-    model.quantization
+    model.quant_label().map(str::to_owned)
 }
 
 #[cfg(test)]

@@ -47,7 +47,7 @@ async fn a_repair_leaves_a_running_download() {
     std::fs::write(&corrupt, "damaged").unwrap();
     let mut model = NewModel::new("zeta".to_owned(), corrupt.clone(), 7.0, chrono::Utc::now());
     model.hf_repo_id = Some("owner/zeta-GGUF".to_owned());
-    model.quantization = Some("Q8_0".to_owned());
+    model.variant_label = Some("Q8_0".to_owned());
     let id = built.app.models().add(model).await.unwrap().id;
     let oid = Some(HEALTHY_OID.to_owned());
     let row = NewModelFile::new(id, WEIGHTS.to_owned(), 0, 7, oid);

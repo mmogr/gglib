@@ -59,7 +59,7 @@ pub(super) fn row(index: i32, name: &str, oid: &str) -> ModelFile {
 fn model_in(dir: &Path, quantization: &str) -> Model {
     let mut new = NewModel::new("zeta".to_owned(), dir.join(WEIGHTS), 7.0, Utc::now());
     new.hf_repo_id = Some(REPO.to_owned());
-    new.quantization = Some(quantization.to_owned());
+    new.variant_label = Some(quantization.to_owned());
     Model::stored(1, &new)
 }
 

@@ -23,7 +23,9 @@ fn create_test_model() -> Model {
         inference_defaults: None,
         defaults_origin: None,
         architecture: Some("llama".to_string()),
-        quantization: Some("Q4_0".to_string()),
+        variant_label: Some("Q4_0".to_string()),
+        file_type: None,
+        bits_per_weight: None,
         context_length: Some(4096),
         expert_count: None,
         expert_used_count: None,
@@ -159,7 +161,7 @@ fn test_create_updated_model() {
     assert_eq!(updated.name, "Updated Name");
     assert_eq!(updated.param_count_b, 13.0);
     assert_eq!(updated.architecture, Some("mistral".to_string()));
-    assert_eq!(updated.quantization, Some("Q4_0".to_string())); // Unchanged
+    assert_eq!(updated.variant_label, Some("Q4_0".to_string())); // Unchanged
     assert_eq!(updated.context_length, Some(8192));
     assert!(updated.metadata.contains_key("new.key"));
     assert!(!updated.metadata.contains_key("test.key")); // Removed

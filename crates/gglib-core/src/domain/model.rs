@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use super::capabilities::ModelCapabilities;
+use super::file_type::FileType;
 use super::image_family::{ComponentRole, ImageFamily};
 use super::inference::{DefaultsOrigin, InferenceConfig};
 use super::runtime_kind::RuntimeKind;
@@ -91,8 +92,18 @@ pub struct Model {
     pub param_count_b: f64,
     /// Model architecture (e.g., "llama", "mistral", "falcon").
     pub architecture: Option<String>,
-    /// Quantization type (e.g., "`Q4_0`", "`Q8_0`", "`F16`", "`F32`").
-    pub quantization: Option<String>,
+    /// The name the uploader gave this variant (`UD-Q4_K_XL`), when it came
+    /// from a download, or the one its owner set; `None` for a local import
+    /// and for a model added before labels were kept.
+    #[serde(default)]
+    pub variant_label: Option<String>,
+    /// The type the header says the file was quantized to, when it says.
+    #[serde(default)]
+    pub file_type: Option<FileType>,
+    /// The bits each weight takes on average, over every shard, read from
+    /// the tensor data.
+    #[serde(default)]
+    pub bits_per_weight: Option<f64>,
     /// Maximum context length the model supports.
     pub context_length: Option<u64>,
     /// Number of experts (for `MoE` models).
@@ -192,8 +203,18 @@ pub struct NewModel {
     pub param_count_b: f64,
     /// Model architecture (e.g., "llama", "mistral", "falcon").
     pub architecture: Option<String>,
-    /// Quantization type (e.g., "`Q4_0`", "`Q8_0`", "`F16`", "`F32`").
-    pub quantization: Option<String>,
+    /// The name the uploader gave this variant (`UD-Q4_K_XL`), when it came
+    /// from a download, or the one its owner set; `None` for a local import
+    /// and for a model added before labels were kept.
+    #[serde(default)]
+    pub variant_label: Option<String>,
+    /// The type the header says the file was quantized to, when it says.
+    #[serde(default)]
+    pub file_type: Option<FileType>,
+    /// The bits each weight takes on average, over every shard, read from
+    /// the tensor data.
+    #[serde(default)]
+    pub bits_per_weight: Option<f64>,
     /// Maximum context length the model supports.
     pub context_length: Option<u64>,
     /// Number of experts (for `MoE` models).
@@ -255,7 +276,29 @@ pub struct ModelComponent {
     pub path: PathBuf,
 }
 
+/// Why a model downloaded before its label was kept cannot be looked up on
+/// the Hub again.
+///
+/// Its label is the only name for the files it came as: its header's type
+/// does not tell a `UD-Q4_K_XL` download from a `Q4_K_M` one.
+pub const NO_HUB_LABEL: &str = "this model was added before gglib kept the name of the \
+    quantization it was downloaded as, so its files cannot be found on the Hub again; \
+    download it again to check, repair or upgrade it";
+
 impl Model {
+    /// The label this model's type is shown and named by: the uploader's
+    /// variant label, else the name of the type its header states. An
+    /// unknown type number has no name, so no label.
+    ///
+    /// For showing and naming only: a lookup on the Hub reads
+    /// [`Self::variant_label`] alone (see [`NO_HUB_LABEL`]).
+    #[must_use]
+    pub fn quant_label(&self) -> Option<&str> {
+        self.variant_label
+            .as_deref()
+            .or_else(|| self.file_type.and_then(FileType::name))
+    }
+
     /// Whether this model reads images: it does exactly when it has a
     /// projector.
     #[must_use]
@@ -322,7 +365,9 @@ impl NewModel {
             projector_path: None,
             param_count_b,
             architecture: None,
-            quantization: None,
+            variant_label: None,
+            file_type: None,
+            bits_per_weight: None,
             context_length: None,
             expert_count: None,
             expert_used_count: None,
@@ -413,6 +458,19 @@ mod tests {
             ComponentRole::ClipL,
         ];
         assert!(flux(&all).missing_components().is_empty());
+    }
+
+    #[test]
+    fn the_label_is_the_uploaders_else_the_headers_type() {
+        let mut model = flux(&[]);
+        assert_eq!(model.quant_label(), None);
+        model.file_type = Some(FileType(15));
+        assert_eq!(model.quant_label(), Some("Q4_K_M"));
+        model.variant_label = Some("UD-Q4_K_XL".to_owned());
+        assert_eq!(model.quant_label(), Some("UD-Q4_K_XL"));
+        model.variant_label = None;
+        model.file_type = Some(FileType(42));
+        assert_eq!(model.quant_label(), None, "an unknown number has no name");
     }
 
     #[test]

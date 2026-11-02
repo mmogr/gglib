@@ -255,11 +255,8 @@ impl GgufValue {
 pub struct GgufMetadata {
     /// Model architecture (e.g., "llama", "mistral").
     pub architecture: Option<String>,
-    /// The name of [`Self::file_type`] (e.g. "`Q4_K_M`"), or of the
-    /// number when the pinned llama.cpp does not know it. Never read from
+    /// The type the header says the file was quantized to. Never read from
     /// the file's name.
-    pub quantization: Option<String>,
-    /// The type the header says the file was quantized to.
     pub file_type: Option<crate::domain::FileType>,
     /// The file's tensor data and the weights it encodes, when the whole
     /// tensor-info table was read; `None` from a head.

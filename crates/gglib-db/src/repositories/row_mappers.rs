@@ -8,7 +8,7 @@ use sqlx::Row;
 use std::path::Path;
 
 /// Shared SELECT column list for model queries (no table alias required).
-pub(crate) const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, projector_path, param_count_b, architecture, quantization, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key, dialect_spec, template_caps, image_family";
+pub(crate) const MODEL_SELECT_COLUMNS: &str = "id, name, file_path, projector_path, param_count_b, architecture, variant_label, file_type, bits_per_weight, context_length, expert_count, expert_used_count, expert_shared_count, metadata, added_at, hf_repo_id, hf_commit_sha, hf_filename, download_date, last_update_check, tags, capabilities, inference_defaults, defaults_origin, server_defaults, model_key, dialect_spec, template_caps, image_family";
 
 /// Additional columns to SELECT when the model query includes a LEFT JOIN
 /// with `model_benchmark_summaries s`. All columns are aliased with an `s_`
@@ -119,8 +119,17 @@ pub(crate) fn row_to_model(row: &sqlx::sqlite::SqliteRow) -> Result<Model, Repos
         architecture: row
             .try_get("architecture")
             .map_err(|e| RepositoryError::Storage(e.to_string()))?,
-        quantization: row
-            .try_get("quantization")
+        variant_label: row
+            .try_get("variant_label")
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?,
+        // A number outside `u32` is no type llama.cpp writes; read as none.
+        file_type: row
+            .try_get::<Option<i64>, _>("file_type")
+            .map_err(|e| RepositoryError::Storage(e.to_string()))?
+            .and_then(|number| u32::try_from(number).ok())
+            .map(gglib_core::domain::FileType),
+        bits_per_weight: row
+            .try_get("bits_per_weight")
             .map_err(|e| RepositoryError::Storage(e.to_string()))?,
         context_length,
         expert_count: row.try_get::<Option<u32>, _>("expert_count").ok().flatten(),

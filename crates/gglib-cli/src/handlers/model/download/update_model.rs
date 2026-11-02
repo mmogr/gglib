@@ -42,7 +42,7 @@ pub(crate) async fn execute(ctx: &CliContext, identifier: &str, yes: bool) -> Re
     if let Some(repo) = model.hf_repo_id.as_deref() {
         println!("  Repository: {repo}");
     }
-    if let Some(quant) = model.quantization.as_deref() {
+    if let Some(quant) = model.quant_label() {
         println!("  Quantization: {quant}");
     }
 

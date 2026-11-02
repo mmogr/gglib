@@ -3,6 +3,7 @@
 mod daemon_startup;
 mod database_file;
 pub mod factory;
+mod header_facts_pass;
 mod loop_guard_trip_writer;
 pub mod repositories;
 pub mod setup;
@@ -23,6 +24,7 @@ pub use loop_guard_trip_writer::{LoopGuardTripWriter, TripWriterLimits};
 
 // What the daemon, and only the daemon, runs once when it starts.
 pub use daemon_startup::repair_at_daemon_start;
+pub use header_facts_pass::fill_header_facts_once;
 
 // Re-export setup functions for convenient access
 pub use setup::setup_database;

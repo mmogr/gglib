@@ -56,7 +56,9 @@ impl TurnModel {
             name: model
                 .as_ref()
                 .map_or_else(|| identifier.clone(), |m| m.name.clone()),
-            quantization: model.as_ref().and_then(|m| m.quantization.clone()),
+            quantization: model
+                .as_ref()
+                .and_then(|m| m.quant_label().map(str::to_owned)),
             model_ref: model.map(|m| ModelRef {
                 machine: Machine::Local,
                 id: m.id,

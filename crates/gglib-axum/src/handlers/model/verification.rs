@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::HttpError;
 use crate::state::AppState;
 use gglib_core::Model;
-use gglib_core::ports::AppEventEmitter;
+use gglib_core::ports::{AppEventEmitter, RepositoryError};
 use gglib_core::services::{RepairStarted, UpdateCheckResult, VerificationReport};
 
 /// Response from verify endpoint.
@@ -154,7 +154,11 @@ pub(crate) async fn check_updates(
         .verification()
         .check_for_updates(id)
         .await
-        .map_err(|e| HttpError::Internal(format!("Failed to check for updates: {e}")))?;
+        .map_err(|e| match e {
+            // A model the check cannot be made for, said in its own words.
+            RepositoryError::Constraint(why) => HttpError::Conflict(why),
+            e => HttpError::Internal(format!("Failed to check for updates: {e}")),
+        })?;
 
     let message = if result.update_available {
         let changed_shards = result.details.as_ref().map_or(0, |d| d.changed_shards);

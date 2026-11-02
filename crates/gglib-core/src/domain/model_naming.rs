@@ -103,7 +103,7 @@ pub struct ListedModel<'a> {
     pub id: i64,
     /// The model's name, which another model may share.
     pub name: &'a str,
-    /// The model's quantization (`Q4_K_M`), when the catalogue recorded one.
+    /// The model's label (`Q4_K_M`, `UD-Q4_K_XL`): see `Model::quant_label`.
     pub quantization: Option<&'a str>,
 }
 
@@ -112,7 +112,7 @@ impl<'a> From<&'a Model> for ListedModel<'a> {
         Self {
             id: model.id,
             name: &model.name,
-            quantization: model.quantization.as_deref(),
+            quantization: model.quant_label(),
         }
     }
 }

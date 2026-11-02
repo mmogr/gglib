@@ -147,7 +147,6 @@ pub(crate) fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetad
     GgufMetadata {
         architecture,
         param_count_b,
-        quantization: file_type.map(|file_type| file_type.to_string()),
         file_type,
         payload: None,
         context_length,

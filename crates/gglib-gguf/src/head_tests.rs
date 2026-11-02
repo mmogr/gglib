@@ -196,7 +196,7 @@ fn the_fit_keys_survive_a_64_kib_head_of_a_real_models_header() {
     // The type is never read off the name, and this head states none, as a
     // head of unsloth's file does not: it writes `general.file_type` after
     // the tokenizer.
-    assert_eq!(metadata.quantization, None);
+    assert_eq!(metadata.file_type, None);
     // Weights are settled only by a whole header.
     assert_eq!(read.role, None);
     assert!(

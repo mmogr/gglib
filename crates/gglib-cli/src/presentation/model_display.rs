@@ -83,8 +83,11 @@ pub(crate) fn summary_lines(model: &Model, opts: &ModelSummaryOpts) -> Vec<Strin
         lines.push(format!("  Architecture: {arch}"));
     }
 
-    if let Some(quant) = &model.quantization {
-        lines.push(format!("  Quantization: {quant}"));
+    match (model.quant_label(), model.bits_per_weight) {
+        (Some(quant), Some(bits)) => lines.push(format!("  Quantization: {quant} · {bits:.2} bpw")),
+        (Some(quant), None) => lines.push(format!("  Quantization: {quant}")),
+        (None, Some(bits)) => lines.push(format!("  Quantization: {bits:.2} bpw")),
+        (None, None) => {}
     }
 
     if let Some(ctx) = model.context_length {

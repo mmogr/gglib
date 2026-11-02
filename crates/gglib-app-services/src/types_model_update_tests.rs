@@ -22,7 +22,7 @@ fn row() -> Model {
         chrono::Utc::now(),
     );
     new.architecture = Some("qwen3".to_owned());
-    new.quantization = Some("Q8_0".to_owned());
+    new.variant_label = Some("Q8_0".to_owned());
     new.context_length = Some(4096);
     new.metadata = HashMap::from([("general.name".to_owned(), "Qwen".to_owned())]);
     new.inference_defaults = Some(sampling(0.2, Some(40)));
@@ -75,7 +75,7 @@ fn each_field_a_request_names_is_written() {
     .apply_to(&mut model);
 
     assert_eq!(model.name, "renamed");
-    assert_eq!(model.quantization.as_deref(), Some("Q4_K_M"));
+    assert_eq!(model.quant_label(), Some("Q4_K_M"));
     assert_eq!(model.file_path, PathBuf::from("/models/moved.gguf"));
     assert!((model.param_count_b - 13.0).abs() < f64::EPSILON);
     assert_eq!(model.architecture.as_deref(), Some("mistral"));

@@ -111,7 +111,7 @@ fn installed_models_of_one_name_say_their_own_quantization() {
         .map(|quantization| {
             let weights = file(&folder.join(format!("X.{quantization}.gguf")), MIB);
             let mut model = test_model(&weights, None, &[]);
-            model.quantization = Some(quantization.to_owned());
+            model.variant_label = Some(quantization.to_owned());
             model.hf_repo_id = Some("o/r".to_owned());
             insert(&library, &model)
         })

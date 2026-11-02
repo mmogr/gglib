@@ -21,7 +21,7 @@ use super::model_verification::{
     FilePlace, ModelVerificationService, OperationType, ShardHealth, ShardUpdate,
     UpdateCheckResult, UpdateDetails, VerifiedFileKind,
 };
-use crate::domain::{Model, ModelFile, ModelFolder};
+use crate::domain::{Model, ModelFile, ModelFolder, NO_HUB_LABEL};
 use crate::download::{DownloadId, GgufFileRole, Quantization};
 use crate::ports::RepositoryError;
 use crate::ports::huggingface::download_group;
@@ -132,8 +132,12 @@ impl ModelVerificationService {
         // Get model metadata
         let model = self.model_repo.get_by_id(model_id).await?;
 
-        let (Some(repo_id), Some(quantization)) = (&model.hf_repo_id, &model.quantization) else {
+        let Some(repo_id) = &model.hf_repo_id else {
             return Ok(unchanged);
+        };
+        // Not "unchanged": without its label the check cannot be made.
+        let Some(quantization) = model.variant_label.as_deref() else {
+            return Err(RepositoryError::Constraint(NO_HUB_LABEL.to_owned()));
         };
 
         // Get local file metadata
@@ -244,8 +248,8 @@ impl ModelVerificationService {
             return Err("Model does not have HuggingFace repository information".to_string());
         };
 
-        let Some(ref quantization) = model.quantization else {
-            return Err("Model does not have quantization information".to_string());
+        let Some(quantization) = model.variant_label.as_deref() else {
+            return Err(NO_HUB_LABEL.to_owned());
         };
 
         // Get file metadata
@@ -397,3 +401,7 @@ mod component_tests;
 #[cfg(test)]
 #[path = "model_verification_folder_tests.rs"]
 mod folder_tests;
+
+#[cfg(test)]
+#[path = "model_verification_label_tests.rs"]
+mod label_tests;

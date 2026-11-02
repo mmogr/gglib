@@ -129,8 +129,8 @@ pub struct ModelLaunchSpec {
     /// Quantization label (`Q4_K_M`), when the catalog recorded one.
     ///
     /// Carried purely so the launch can name what it loaded — see
-    /// [`crate::domain::LaunchNarration`]. `None` for models whose GGUF
-    /// metadata did not identify a quantization.
+    /// [`crate::domain::LaunchNarration`]. The model's label (see
+    /// `Model::quant_label`); `None` when it has none.
     pub quantization: Option<String>,
     /// Maximum context length the model supports.
     pub context_length: Option<u64>,

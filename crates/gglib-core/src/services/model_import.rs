@@ -12,7 +12,6 @@ use chrono::{DateTime, Utc};
 use crate::domain::{
     DefaultsOrigin, GgufMetadata, InferenceConfig, NameSource, NewModel, resolve_model_name,
 };
-use crate::download::Quantization;
 use crate::ports::GgufParserPort;
 use tracing::{debug, info, warn};
 
@@ -43,8 +42,8 @@ pub struct HfOrigin<'a> {
     pub repo_id: &'a str,
     pub commit_sha: &'a str,
     pub hf_tags: &'a [String],
-    /// Used when the GGUF header declares no quantization.
-    pub quantization_fallback: Quantization,
+    /// The name the uploader gave the variant downloaded (`UD-Q4_K_XL`).
+    pub variant_label: Option<String>,
     /// Ordered file paths for sharded models.
     pub file_paths: Option<&'a [PathBuf]>,
     /// The model author's own recipe, if one was fetched from the base repo.
@@ -230,24 +229,27 @@ pub fn build_new_model(
     model.expert_used_count = gguf.and_then(|g| g.expert_used_count);
     model.expert_shared_count = gguf.and_then(|g| g.expert_shared_count);
     model.image_family = gguf.and_then(|g| g.image_family);
+    let shards = match origin {
+        ModelOrigin::HuggingFace(hf) => hf.file_paths,
+        ModelOrigin::LocalFile { .. } => None,
+    };
+    let facts = super::header_facts(file_path, gguf, shards, parser);
+    model.file_type = facts.file_type;
+    model.bits_per_weight = facts.bits_per_weight;
     if let Some(g) = gguf {
         model.metadata.clone_from(&g.metadata);
     }
 
     match origin {
         ModelOrigin::LocalFile { .. } => {
-            model.quantization = gguf.and_then(|g| g.quantization.clone());
             model.tags = gguf_tags;
         }
         ModelOrigin::HuggingFace(hf) => {
             // The quant the download asked for names the Hub's files, which an
             // update check and an upgrade look up again: `UD-Q4_K_XL` states
-            // `Q4_K_M` in its header. The header's name only when it asked
-            // for none.
-            model.quantization = Some(hf.quantization_fallback)
-                .filter(|asked| !asked.is_unknown())
-                .map(|asked| asked.to_string())
-                .or_else(|| gguf.and_then(|g| g.quantization.clone()));
+            // `Q4_K_M` in its header. The header's type stands in, through
+            // `Model::quant_label`, only when it asked for none.
+            model.variant_label.clone_from(&hf.variant_label);
             model.hf_repo_id = Some(hf.repo_id.to_string());
             model.hf_commit_sha = Some(hf.commit_sha.to_string());
             model.hf_filename = Some(file_path.file_name().unwrap().to_string_lossy().to_string());
@@ -384,7 +386,7 @@ mod tests {
             repo_id,
             commit_sha: "abc123",
             hf_tags,
-            quantization_fallback: Quantization::Q4KM,
+            variant_label: Some("UD-Q4_K_XL".to_owned()),
             file_paths: None,
             published_sampling,
         })
@@ -496,28 +498,72 @@ mod tests {
     fn a_hub_import_keeps_the_quant_it_asked_for() {
         let hf_tags: Vec<String> = vec![];
         let gguf = GgufMetadata {
-            quantization: Some("Q8_0".to_string()),
+            file_type: Some(crate::domain::FileType(7)),
             ..Default::default()
         };
         let import = |origin: &ModelOrigin<'_>| {
-            build_new_model(
+            let model = build_new_model(
                 Path::new("/models/m.gguf"),
                 Some(&gguf),
                 &NoopGgufParser,
                 origin,
                 Utc::now(),
-            )
-            .quantization
+            );
+            crate::domain::Model::stored(1, &model)
+                .quant_label()
+                .map(str::to_owned)
         };
 
         let asked = hf_origin("unsloth/Qwen3-8B-GGUF", &hf_tags);
-        assert_eq!(import(&asked), Some(Quantization::Q4KM.to_string()));
+        assert_eq!(import(&asked).as_deref(), Some("UD-Q4_K_XL"));
 
         let mut unasked = hf_origin("unsloth/Qwen3-8B-GGUF", &hf_tags);
         if let ModelOrigin::HuggingFace(hf) = &mut unasked {
-            hf.quantization_fallback = Quantization::Unknown;
+            hf.variant_label = None;
         }
-        assert_eq!(import(&unasked), Some("Q8_0".to_string()));
+        assert_eq!(import(&unasked).as_deref(), Some("Q8_0"));
+    }
+
+    /// The type and the bits per weight are the header's, and never the
+    /// label's.
+    #[test]
+    fn the_type_and_bits_are_the_headers() {
+        let hf_tags: Vec<String> = vec![];
+        let origin = hf_origin("unsloth/Qwen3-8B-GGUF", &hf_tags);
+        let model = build_new_model(
+            Path::new("/models/m.gguf"),
+            None,
+            &NoopGgufParser,
+            &origin,
+            Utc::now(),
+        );
+        assert_eq!(model.variant_label.as_deref(), Some("UD-Q4_K_XL"));
+        assert_eq!(
+            model.file_type, None,
+            "no header, no type: never the label's"
+        );
+        assert_eq!(model.bits_per_weight, None);
+
+        let gguf = GgufMetadata {
+            file_type: Some(crate::domain::FileType(7)),
+            payload: Some(crate::domain::TensorPayload {
+                bytes: 8_500,
+                elements: 8_000,
+            }),
+            ..Default::default()
+        };
+        let model = build_new_model(
+            Path::new("/models/m.gguf"),
+            Some(&gguf),
+            &NoopGgufParser,
+            &ModelOrigin::LocalFile {
+                param_count_override: None,
+            },
+            Utc::now(),
+        );
+        assert_eq!(model.file_type, Some(crate::domain::FileType(7)));
+        assert_eq!(model.bits_per_weight, Some(8.5));
+        assert_eq!(model.variant_label, None, "a local file has no uploader");
     }
 
     #[test]

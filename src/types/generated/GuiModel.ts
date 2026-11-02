@@ -9,7 +9,16 @@ import type { ServerConfig } from "./ServerConfig";
 /**
  * Frontend-friendly model structure.
  */
-export type GuiModel = { id: number, name: string, filePath: string, paramCountB: number, architecture: string | null, quantization: string | null, contextLength: number | null, 
+export type GuiModel = { id: number, name: string, filePath: string, paramCountB: number, architecture: string | null, 
+/**
+ * The label the model's type is shown by: see `Model::quant_label`.
+ */
+quantization: string | null, 
+/**
+ * The bits each weight takes on average, read from the tensor data;
+ * omitted when the header could not measure them.
+ */
+bitsPerWeight?: number, contextLength: number | null, 
 /**
  * Total number of experts (`MoE` models only).
  */
