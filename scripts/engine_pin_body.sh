@@ -143,7 +143,7 @@ readings_section() {
       $1 == a && $2 == c { printf "%s%s%s%s: %s → %s", sep, t, $4, t, $5, $6; sep = "; "; m = $3 }
       END { printf "\t%s", m }' <<<"$rows")
     local readings=${lines%%$'\t'*} if_moved=${lines#*$'\t'}
-    printf -- '- %s. %s → %s. Approve in `contracts/upstream/llama/approvals.json`, in this PR.\n' \
+    printf -- '- %s. %s → %s. Approve with a `/approve <reading> <note>` comment on this PR.\n' \
       "$readings" "$(adr_names "$adr" "$criterion")" "$if_moved"
   done < <(cut -f1,2 <<<"$rows" | sort -u)
   echo

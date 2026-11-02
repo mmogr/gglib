@@ -13,10 +13,12 @@
 # takes that handover, records the in-process engine beside it, and hands
 # over in the same form. This script is how either takes a handover: it
 # refuses anything but regular files at those paths, mirrors
-# contracts/upstream/ from the handover, keeps the hand-kept approvals.json
-# and README.md from this checkout, copies the pin file, and prints the
-# recorder line made safe for the body. It runs from the checkout's root, and
-# never runs anything the handover holds.
+# contracts/upstream/ from the handover, keeps approvals.json and README.md
+# from this checkout (no recording job writes either: approvals.json is
+# written on a pull request's branch from the owner's `/approve` comment),
+# copies the pin file, and prints the recorder line made safe for the body.
+# It runs from the checkout's root, and never runs anything the handover
+# holds.
 
 set -euo pipefail
 
@@ -24,7 +26,7 @@ set -euo pipefail
 HANDOVER=$1 FILE=$2
 FILES=$HANDOVER/files
 UPSTREAM=contracts/upstream
-HAND_KEPT=("$UPSTREAM/llama/approvals.json" "$UPSTREAM/README.md")
+FROM_CHECKOUT=("$UPSTREAM/llama/approvals.json" "$UPSTREAM/README.md")
 
 refuse() { echo "::error title=the handover is refused::$1" >&2; exit 1; }
 
@@ -51,7 +53,7 @@ for rel in "${taken[@]}"; do
   mkdir -p "$(dirname "$rel")"
   cp "$FILES/$rel" "$rel"
 done
-git checkout HEAD -- "${HAND_KEPT[@]}"
+git checkout HEAD -- "${FROM_CHECKOUT[@]}"
 
 # The recorder's line: printable, no backticks, at most 200 characters.
 reason=$(head -1 "$HANDOVER/recorder.txt" 2>/dev/null | tr -cd '[:print:]' | tr -d '`' | cut -c1-200 || true)
