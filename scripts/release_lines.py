@@ -6,6 +6,7 @@
     scripts/release_lines.py guard-tag --branch B --version V --branches FILE
     scripts/release_lines.py candidate --input I --tags FILE
     scripts/release_lines.py previous  --stable S --tags FILE
+    scripts/release_lines.py cut       --stable vS --tags FILE --branches FILE
     scripts/release_lines.py --self-test
 
 Releases come from two kinds of branch. `main` carries the next minor,
@@ -35,6 +36,12 @@ is one `::error::` line on stderr and exit 1, and says what to do.
   from: the newest stable below it. Refused when a newer stable exists,
   since the stable channels carry one version each and would be downgraded;
   that is the rule that only the newest line is maintained.
+* `cut`: the line a stable tag starts (cut-release-branch.yml): its branch
+  and its backport label. Refused for a candidate, an untagged version, a
+  line that is cut already, a version with a newer patch (the line starts at
+  its newest), and a version below the newest stable, by the same rule.
+  Whether the tag's own workflows know lines is the workflow's check, since
+  it needs git.
 
 FILE holds one ref per line: bare tags, or `git ls-remote` output, whose
 sha and `refs/tags/` are dropped and whose `^{}` entries are skipped. `-`
@@ -333,6 +340,37 @@ def previous(text: str, tags: Sequence[str]) -> Dict[str, str]:
     return {"previous": f"v{spell(below[-1])}"}
 
 
+# --- cut ---------------------------------------------------------------------
+
+
+def cut(text: str, tags: Sequence[str], branches: Sequence[str]) -> Dict[str, str]:
+    stable = parse(text)
+    if not text.startswith("v") or stable is None or stable[3] is not None:
+        raise Refusal(f"{text} is not a stable version's tag, vX.Y.Z; a line starts at a stable version")
+    if stable not in versions(tags):
+        raise Refusal(f"{text} is not tagged. Promote the version first; a line starts at its tag.")
+    line = (stable[0], stable[1])
+    if line in lines_with_branches(branches):
+        raise Refusal(
+            f"{branch_of(line)} exists already: the {line_name(line)} line is cut. Backport to it with the "
+            f"'backport: {line_name(line)}' label on a merged pull request."
+        )
+    shipped_versions = stables(tags)
+    newer = [v for v in shipped_versions if sort_key(v) > sort_key(stable)]
+    on_line = [v for v in newer if in_line(v, line)]
+    if on_line:
+        raise Refusal(
+            f"v{spell(on_line[-1])} is the newest {line_name(line)} version; a line starts at its newest, so "
+            f"cut it from v{spell(on_line[-1])}."
+        )
+    if newer:
+        raise Refusal(
+            f"v{spell(newer[-1])} is the newest stable version; a line for {text} would ship below it, and a "
+            f"line older than the newest stable is not maintained: {CHANNELS} each carry one version."
+        )
+    return {"branch": branch_of(line), "line": line_name(line), "label": f"backport: {line_name(line)}"}
+
+
 # --- self-test ---------------------------------------------------------------
 
 TODAY = ["v0.28.0", "v0.28.0-rc.5", "v0.29.0-rc.1", "v0.29.0-rc.7", "v0.29.0", "v0.30.0-rc.1", "v0.30.0-rc.2"]
@@ -459,6 +497,16 @@ def self_test() -> bool:
     refuses("previous: with a v", lambda: previous("v0.30.0", TODAY), "not a stable version")
     refuses("previous: a candidate", lambda: previous("0.30.0-rc.1", TODAY), "not a stable version")
 
+    # cut
+    passes("cut: today's stable", cut("v0.29.0", TODAY, []), {"branch": "release/0.29.x", "line": "0.29.x", "label": "backport: 0.29.x"})
+    passes("cut: the newest patch of a line", cut("v0.29.1", INTERLEAVED[:-1], []), {"branch": "release/0.29.x", "line": "0.29.x", "label": "backport: 0.29.x"})
+    refuses("cut: a candidate", lambda: cut("v0.30.0-rc.2", TODAY, []), "not a stable version's tag")
+    refuses("cut: without a v", lambda: cut("0.29.0", TODAY, []), "not a stable version's tag")
+    refuses("cut: untagged", lambda: cut("v0.30.0", TODAY, []), "not tagged", "Promote the version first")
+    refuses("cut: the line exists", lambda: cut("v0.30.0", LINE, LINE_BRANCHES), "release/0.30.x exists already", "'backport: 0.30.x'")
+    refuses("cut: an older patch of the line", lambda: cut("v0.30.0", PATCHED, []), "v0.30.1 is the newest 0.30.x version", "cut it from v0.30.1")
+    refuses("cut: below the newest stable", lambda: cut("v0.29.1", INTERLEAVED, []), "v0.30.0 is the newest stable", "not maintained")
+
     if not failures:
         print("✓ release_lines.py self-test: the line rules hold on main, on a line and between them", file=sys.stderr)
         return True
@@ -506,6 +554,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     sub = commands.add_parser("previous", help="the stable version a promotion's notes start from")
     sub.add_argument("--stable", required=True, help="the version being promoted, X.Y.Z")
     sub.add_argument("--tags", required=True, help="a file of tags, or - for stdin")
+    sub = commands.add_parser("cut", help="the line a stable tag starts")
+    sub.add_argument("--stable", required=True, help="the stable version's tag, vX.Y.Z")
+    sub.add_argument("--tags", required=True, help="a file of tags, or - for stdin")
+    sub.add_argument("--branches", required=True, help="a file of branches")
     args = parser.parse_args(argv)
 
     if args.self_test:
@@ -522,6 +574,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             out = guard_tag(args.branch, args.version, read_refs(args.branches, "refs/heads/"))
         elif args.command == "candidate":
             out = candidate(args.input, read_refs(args.tags, "refs/tags/"))
+        elif args.command == "cut":
+            out = cut(args.stable, read_refs(args.tags, "refs/tags/"), read_refs(args.branches, "refs/heads/"))
         else:
             out = previous(args.stable, read_refs(args.tags, "refs/tags/"))
     except Refusal as refusal:
