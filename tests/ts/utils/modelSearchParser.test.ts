@@ -201,7 +201,7 @@ describe("parseModelSearchIntent", () => {
       });
     });
 
-    it("detects HF URL with blob path and extracts quant from filename", () => {
+    it("asks for a blob URL's file by its stem", () => {
       const result = parseModelSearchIntent(
         "https://huggingface.co/bartowski/Llama-3.2-3B-GGUF/blob/main/Llama-3.2-3B.Q4_K_M.gguf"
       );
@@ -209,11 +209,11 @@ describe("parseModelSearchIntent", () => {
         kind: "url",
         url: "https://huggingface.co/bartowski/Llama-3.2-3B-GGUF/blob/main/Llama-3.2-3B.Q4_K_M.gguf",
         repo: "bartowski/Llama-3.2-3B-GGUF",
-        quant: "Q4_K_M",
+        quant: "Llama-3.2-3B.Q4_K_M",
       });
     });
 
-    it("detects HF URL with resolve path and extracts quant", () => {
+    it("asks for a resolve URL's file by its stem", () => {
       const result = parseModelSearchIntent(
         "https://huggingface.co/user/model/resolve/main/model-Q8_0.gguf"
       );
@@ -221,7 +221,7 @@ describe("parseModelSearchIntent", () => {
         kind: "url",
         url: "https://huggingface.co/user/model/resolve/main/model-Q8_0.gguf",
         repo: "user/model",
-        quant: "Q8_0",
+        quant: "model-Q8_0",
       });
     });
 
@@ -237,7 +237,7 @@ describe("parseModelSearchIntent", () => {
       });
     });
 
-    it("extracts IQ quant from filename", () => {
+    it("keeps the whole stem, not the quant, of an IQ file", () => {
       const result = parseModelSearchIntent(
         "https://huggingface.co/user/model/blob/main/model_IQ4_XS.gguf"
       );
@@ -245,20 +245,57 @@ describe("parseModelSearchIntent", () => {
         kind: "url",
         url: "https://huggingface.co/user/model/blob/main/model_IQ4_XS.gguf",
         repo: "user/model",
-        quant: "IQ4_XS",
+        quant: "model_IQ4_XS",
       });
     });
 
-    it("extracts F16 from filename", () => {
+    it("asks for a file no quant pattern knew by its stem", () => {
       const result = parseModelSearchIntent(
-        "https://huggingface.co/user/model/blob/main/model-F16.gguf"
+        "https://huggingface.co/ggml-org/gpt-oss-20b-GGUF/blob/main/gpt-oss-20b-MXFP4.gguf"
       );
       expect(result).toEqual({
         kind: "url",
-        url: "https://huggingface.co/user/model/blob/main/model-F16.gguf",
-        repo: "user/model",
-        quant: "F16",
+        url: "https://huggingface.co/ggml-org/gpt-oss-20b-GGUF/blob/main/gpt-oss-20b-MXFP4.gguf",
+        repo: "ggml-org/gpt-oss-20b-GGUF",
+        quant: "gpt-oss-20b-MXFP4",
       });
+    });
+
+    it("drops a shard's numbering and the folder from a sharded file's URL", () => {
+      const url =
+        "https://huggingface.co/unsloth/DeepSeek-V3.1-GGUF/resolve/main/UD-Q4_K_XL/DeepSeek-V3.1-UD-Q4_K_XL-00001-of-00008.gguf?download=true";
+      expect(parseModelSearchIntent(url)).toEqual({
+        kind: "url",
+        url,
+        repo: "unsloth/DeepSeek-V3.1-GGUF",
+        quant: "DeepSeek-V3.1-UD-Q4_K_XL",
+      });
+    });
+
+    it("decodes a percent-encoded file name", () => {
+      const url =
+        "https://huggingface.co/user/model/resolve/main/model%2DQ8_0.gguf";
+      expect(parseModelSearchIntent(url)).toEqual({
+        kind: "url",
+        url,
+        repo: "user/model",
+        quant: "model-Q8_0",
+      });
+    });
+
+    it("asks for no file when the URL is not a GGUF file's", () => {
+      for (const url of [
+        "https://huggingface.co/user/model/blob/main/README.md",
+        "https://huggingface.co/user/model/tree/main/UD-Q4_K_XL",
+        "https://huggingface.co/user/model/blob/main/odd%3Aname.gguf",
+      ]) {
+        expect(parseModelSearchIntent(url)).toEqual({
+          kind: "url",
+          url,
+          repo: "user/model",
+          quant: undefined,
+        });
+      }
     });
   });
 
@@ -325,7 +362,7 @@ describe("getButtonTextForIntent", () => {
       kind: "url",
       url: "https://huggingface.co/user/model/blob/main/model.Q4_K_M.gguf",
       repo: "user/model",
-      quant: "Q4_K_M",
+      quant: "model.Q4_K_M",
     };
     expect(getButtonTextForIntent(intent)).toBe("Download");
   });

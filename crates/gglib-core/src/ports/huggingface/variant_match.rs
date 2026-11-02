@@ -101,10 +101,17 @@ pub fn match_label<'a>(
 
 /// The variant of `variants` that `request` names.
 ///
-/// That is the one whose label [`match_label`] reads it as naming, else,
-/// when it names no label, the one whose file name holds it as a whole
-/// token or ends with it after a byte that is not a letter or digit
-/// (`Q4_K_M` names `my_model_Q4_K_M`, `Q6_K` still not `model_Q6_K_P`).
+/// That is the one whose label is the request ignoring case; else the one
+/// whose file name is, as a pasted file's URL asks; else the one whose
+/// label [`match_label`] reads it as naming; else, when it names no label,
+/// the one whose file name holds it as a whole token or ends with it after
+/// a byte that is not a letter or digit (`Q4_K_M` names `my_model_Q4_K_M`,
+/// `Q6_K` still not `model_Q6_K_P`).
+///
+/// A file name is checked whole before any label's tokens, since a
+/// projector's or a draft's label is its whole file name and so holds the
+/// model's name as a token (`mmproj-Qwen2-VL-7B-Instruct-f16` holds
+/// `Qwen2-VL-7B-Instruct-f16`).
 ///
 /// # Errors
 ///
@@ -114,6 +121,19 @@ pub fn match_variant<'a>(
     request: &str,
 ) -> Result<&'a HfQuantInfo, LabelMismatch> {
     let variants: Vec<&'a HfQuantInfo> = variants.into_iter().collect();
+    if !variants
+        .iter()
+        .any(|v| v.label.eq_ignore_ascii_case(request))
+    {
+        let named: Vec<&'a HfQuantInfo> = variants
+            .iter()
+            .copied()
+            .filter(|v| variant_name(v).eq_ignore_ascii_case(request))
+            .collect();
+        if let [one] = named.as_slice() {
+            return Ok(one);
+        }
+    }
     match match_label(variants.iter().map(|v| v.label.as_str()), request) {
         Ok(label) => variants
             .iter()
@@ -192,3 +212,7 @@ pub fn label_refusal(
         ),
     }
 }
+
+#[cfg(test)]
+#[path = "variant_match_tests.rs"]
+mod tests;
