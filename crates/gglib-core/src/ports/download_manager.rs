@@ -69,7 +69,7 @@ impl DownloadManagerConfig {
 ///
 /// // Queue a download
 /// let id = Arc::clone(&manager)
-///     .queue_smart("unsloth/Llama-3-GGUF".to_string(), Some("Q4_K_M".to_string()))
+///     .queue_smart("unsloth/Llama-3-GGUF".to_string(), Some("Q4_K_M".to_string()), None)
 ///     .await?;
 ///
 /// // Check status
@@ -80,25 +80,24 @@ impl DownloadManagerConfig {
 /// ```
 #[async_trait]
 pub trait DownloadManagerPort: Send + Sync {
-    /// Queue a download, choosing its quantization when none is named.
+    /// Queue a download, choosing its variant when none is named.
     ///
     /// How a user and a repair queue a download; an upgrade has
-    /// [`Self::queue_upgrade`]. It:
-    /// 1. Selects the best quantization if none specified
-    /// 2. Validates the requested quantization exists
-    /// 3. Queues the download and starts processing
+    /// [`Self::queue_upgrade`].
     ///
-    /// # Quantization Selection Rules
-    ///
-    /// - If a quantization is provided, validates it exists in the repository
-    /// - If none provided and 1 option exists, auto-picks it (pre-quantized model)
-    /// - If none provided and multiple exist, uses default preference order
-    /// - Returns error if requested quant not found or no suitable default
+    /// A named variant is looked up by its label. With none named, the
+    /// largest quantized variant that fits `budget_bytes` is taken
+    /// ([`pick_variant`](crate::download::pick_variant)); with no budget,
+    /// the smallest variant.
     ///
     /// # Arguments
     ///
     /// * `repo_id` - `HuggingFace` repository ID (e.g., "unsloth/Llama-3-GGUF")
-    /// * `quantization` - Optional quantization name (e.g., "`Q4_K_M`", "`Q8_0`")
+    /// * `quantization` - Optional variant label (e.g., "`Q4_K_M`", "`Q8_0`")
+    /// * `budget_bytes` - The memory a variant must fit when none is named:
+    ///   the device's, the figure a launch fits its context against, or the
+    ///   system's RAM where the device's cannot be read. `None` when neither
+    ///   can be.
     ///
     /// # Returns
     ///
@@ -109,6 +108,7 @@ pub trait DownloadManagerPort: Send + Sync {
         self: Arc<Self>,
         repo_id: String,
         quantization: Option<String>,
+        budget_bytes: Option<u64>,
     ) -> Result<DownloadId, DownloadError>;
 
     /// Queue the upgrade of model `model_id`: its files from `repo_id` at

@@ -57,7 +57,7 @@ async fn a_download_queued_through_the_port_is_run_with_nothing_else_queued() {
     let manager = manager_that_cannot_write(dir.path());
 
     let id = Arc::clone(&manager)
-        .queue_smart(REPO.to_string(), Some("Q8_0".to_string()))
+        .queue_smart(REPO.to_string(), Some("Q8_0".to_string()), None)
         .await
         .unwrap();
 

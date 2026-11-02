@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow, bail};
+use gglib_app_services::download_budget;
 use gglib_core::SettingsUpdate;
 use gglib_core::domain::{Model, Recommendation, format_gib, recommend};
 use gglib_core::utils::system::SystemMemoryInfo;
@@ -119,7 +120,7 @@ async fn download_recommended(
     let quant = rec.candidate.quantization.map(str::to_owned);
     println!();
     Arc::clone(&ctx.downloads)
-        .queue_smart(repo.clone(), quant)
+        .queue_smart(repo.clone(), quant, download_budget().await)
         .await?;
     run_interactive_monitor(Arc::clone(&ctx.downloads), Arc::clone(&ctx.console)).await?;
 

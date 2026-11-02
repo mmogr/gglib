@@ -47,6 +47,7 @@ impl DownloadManagerPort for Recording {
         self: Arc<Self>,
         repo_id: String,
         quantization: Option<String>,
+        _budget_bytes: Option<u64>,
     ) -> Result<DownloadId, DownloadError> {
         self.record(format!("queue_smart {repo_id} {quantization:?}"));
         Ok(DownloadId::from(QUEUED))

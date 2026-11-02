@@ -102,6 +102,7 @@ impl DownloadManagerPort for MockDownloadManager {
         self: Arc<Self>,
         _repo_id: String,
         _quantization: Option<String>,
+        _budget_bytes: Option<u64>,
     ) -> Result<DownloadId, DownloadError> {
         Ok(DownloadId::new("mock/model", Some("Q8_0")))
     }

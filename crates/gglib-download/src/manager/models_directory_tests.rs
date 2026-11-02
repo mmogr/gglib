@@ -140,7 +140,7 @@ fn planned_for(manager: &DownloadManagerImpl, started: &Started) -> PathBuf {
 /// where the registrar was told they are.
 async fn download(manager: &Arc<DownloadManagerImpl>, registrar: &RecordingRegistrar) -> PathBuf {
     let id = Arc::clone(manager)
-        .queue_smart(REPO.to_string(), Some("Q8_0".to_string()))
+        .queue_smart(REPO.to_string(), Some("Q8_0".to_string()), None)
         .await
         .expect("queued");
     let outcome = ended(manager, &id).await.outcome;

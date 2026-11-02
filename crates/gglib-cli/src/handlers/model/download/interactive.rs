@@ -62,6 +62,7 @@ use console::{Key, Term};
 use indicatif::{ProgressBar, ProgressStyle};
 use tokio::sync::mpsc;
 
+use gglib_app_services::download_budget;
 use gglib_core::ports::DownloadManagerPort;
 
 use crate::console::CliConsole;
@@ -360,7 +361,11 @@ async fn handle_add_to_queue(
     };
 
     let (model_id, quant) = entry;
-    match Arc::clone(downloads).queue_smart(model_id, quant).await {
+    let budget = download_budget().await;
+    match Arc::clone(downloads)
+        .queue_smart(model_id, quant, budget)
+        .await
+    {
         Ok(_) => {
             mp.println("✓ Queued").ok();
         }

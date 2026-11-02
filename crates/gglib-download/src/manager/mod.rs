@@ -1084,6 +1084,7 @@ impl DownloadManagerPort for DownloadManagerImpl {
         self: Arc<Self>,
         repo_id: String,
         quantization: Option<String>,
+        _budget_bytes: Option<u64>,
     ) -> Result<DownloadId, DownloadError> {
         let id = self.queue_download_smart(&repo_id, quantization).await?;
         self.ensure_runner();

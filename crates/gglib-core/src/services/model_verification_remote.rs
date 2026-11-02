@@ -367,7 +367,7 @@ impl ModelVerificationService {
         // refusal says which, and what fetches them.
         let asked = quantization;
         match Arc::clone(&self.downloads)
-            .queue_smart(repo_id.clone(), Some(asked.clone()))
+            .queue_smart(repo_id.clone(), Some(asked.clone()), None)
             .await
         {
             Ok(download) => Ok(RepairStarted {
