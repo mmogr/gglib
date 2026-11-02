@@ -9,6 +9,11 @@
 # keeps a record of what broke. The `no-issue` label is the escape for a fix with no
 # issue on purpose. The rule reads the title and body, hence `edited` in the triggers.
 #
+# And one reminder for a fix while a maintenance line (release/X.Y.x) exists: say
+# whether it goes there, with `backport: X.Y.x` (backport.yml cherry-picks it on merge)
+# or `no-backport`. A warning and a line in the assist comment, never a failure;
+# .github/scripts/backport-rule.cjs says when.
+#
 # Two jobs in ONE workflow, deliberately:
 #   enrich       — applies what can be derived (including inheriting component:/
 #                  priority:/type: from any issue this PR closes), and asks for
@@ -139,6 +144,12 @@ jobs:
               core.info(`Inherited from linked issue(s): ${toInherit.join(', ')}`);
             }
 
+            // --- A fix says whether it goes to the maintenance line --------------
+            // After the inheritance, which can bring `type: bug`. A reminder in the
+            // comment below; .github/scripts/backport-rule.cjs says when.
+            const { backportAsk } = require('./.github/scripts/backport-rule.cjs');
+            const backportReminder = await backportAsk({ github, owner, repo, title: pr.title, labelNames: names });
+
             // --- Changed files --------------------------------------------------
             const files = await github.paginate(github.rest.pulls.listFiles, {
               owner, repo, pull_number: issue_number, per_page: 100,
@@ -253,6 +264,7 @@ jobs:
             const asks = [];
 
             if (fixAsk) asks.push(fixAsk);
+            if (backportReminder) asks.push(backportReminder);
 
             if (!has('size:')) {
               asks.push([
@@ -404,6 +416,14 @@ jobs:
             const { fixIssueProblem } = require('./.github/scripts/fix-issue-rule.cjs');
             const fixProblem = await fixIssueProblem({ github, owner, repo, number: pr.number, labelNames: names });
             if (fixProblem) failures.push(fixProblem);
+
+            // --- A fix says whether it goes to the maintenance line --------------
+            // A warning, never a failure: most fixes stay on main, and the check
+            // stays what the ruleset requires. The same sentence is in the assist
+            // comment, from `enrich`.
+            const { backportAsk } = require('./.github/scripts/backport-rule.cjs');
+            const backportReminder = await backportAsk({ github, owner, repo, title: pr.title, labelNames: names });
+            if (backportReminder) core.warning(backportReminder.replace(/\*\*/g, ''));
 
             if (!failures.length) {
               core.info(`All required labels present: ${names.join(', ')}`);

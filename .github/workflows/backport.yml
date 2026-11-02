@@ -1,0 +1,229 @@
+# Carries a merged fix from main to a maintenance line. A pull request into
+# main labelled `backport: X.Y.x` is, once merged, cherry-picked onto a
+# branch from release/X.Y.x and opened as a pull request against that line,
+# with the fix's own title, so the line's release PR counts it as the
+# conventional commit it is (CONTRIBUTING, "Maintenance lines"). The label
+# exists once the line is cut (cut-release-branch.yml makes it).
+#
+# Two triggers cover the two orders a decision is taken in: `closed`, for a
+# label put on before the merge, and `labeled`, for one put on after it
+# (GitHub sends pull_request events for a closed pull request too). A label
+# added with GITHUB_TOKEN starts no workflow, so only a person's label
+# brings a run. By hand, `pr` and `line` run one backport, which is also
+# how a conflict is finished: resolve it on the named branch and push, or
+# run this again once the line has moved.
+#
+# A conflict is not resolved here: the run comments the commands on the
+# source pull request and fails. A backport already open or merged for the
+# same pull request and line is left alone, so a second label or a re-run
+# opens nothing twice.
+#
+# The push and the pull request use the GitHub App's token, as
+# engine-pins.yml's do: a pull request opened with GITHUB_TOKEN starts no
+# workflows, so CI would never run on it. The App is the author, which
+# label-check.yml exempts (a bot's pull request needs no labels), and the
+# source's labels are copied for the record. The comments on the source
+# pull request use GITHUB_TOKEN.
+
+name: Backport
+
+on:
+  pull_request:
+    types: [closed, labeled]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "The merged pull request's number"
+        required: true
+        type: number
+      line:
+        description: 'The line, X.Y.x'
+        required: true
+        type: string
+
+permissions: {}
+
+# One run per source pull request at a time; a second label queues behind
+# the first.
+concurrency:
+  group: backport-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # GitHub's default is `bash -e`; this adds pipefail.
+    shell: bash
+
+jobs:
+  backport:
+    name: Backport
+    # A merged pull request into main, on its merge or on a backport label;
+    # any other label's event is not for this workflow.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       github.event.pull_request.base.ref == 'main' &&
+       (github.event.action == 'closed' || startsWith(github.event.label.name, 'backport: ')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # The comments on the source pull request.
+      pull-requests: write
+    steps:
+      # What to backport and where. The lines come from the labels: the one
+      # that was just added, or every backport label on a merge, or the
+      # input. The source is read again rather than taken from the event,
+      # which is a snapshot.
+      - name: Read the source pull request
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+          LABEL: ${{ github.event.label.name }}
+          LINE: ${{ inputs.line }}
+        run: |
+          gh pr view "$PR" -R "$GITHUB_REPOSITORY" \
+            --json number,title,body,mergeCommit,mergedAt,baseRefName,labels,url > "$RUNNER_TEMP/source.json"
+          if [ "$(jq -r .mergedAt "$RUNNER_TEMP/source.json")" = null ] || [ "$(jq -r .baseRefName "$RUNNER_TEMP/source.json")" != main ]; then
+            echo "::error::#$PR is not a merged pull request into main; a backport carries a merged fix."
+            exit 1
+          fi
+          case "$EVENT:$ACTION" in
+            workflow_dispatch:*)
+              if ! [[ "$LINE" =~ ^[0-9]+\.[0-9]+\.x$ ]]; then
+                echo "::error::'$LINE' is not a line, X.Y.x"
+                exit 1
+              fi
+              lines=$LINE ;;
+            pull_request:labeled)
+              lines=${LABEL#backport: } ;;
+            *)
+              lines=$(jq -r '.labels[].name | select(startswith("backport: ")) | ltrimstr("backport: ")' "$RUNNER_TEMP/source.json") ;;
+          esac
+          if [ -z "$lines" ]; then
+            echo "::notice::#$PR carries no backport label; nothing to do"
+          fi
+          {
+            echo "number=$(jq -r .number "$RUNNER_TEMP/source.json")"
+            echo "sha=$(jq -r .mergeCommit.oid "$RUNNER_TEMP/source.json")"
+            echo "url=$(jq -r .url "$RUNNER_TEMP/source.json")"
+            echo "lines=$(printf '%s' "$lines" | tr '\n' ' ')"
+          } >> "$GITHUB_OUTPUT"
+          echo "#$PR -> lines: ${lines:-none}"
+
+      # The whole history: the merge commit is cherry-picked and the lines
+      # are checked out. The App's token stays out of the checkout's config
+      # and goes to the one push below.
+      - name: Checkout repository
+        if: steps.source.outputs.lines != ''
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Generate GitHub App token
+        if: steps.source.outputs.lines != ''
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Cherry-pick onto each line and open the pull requests
+        if: steps.source.outputs.lines != ''
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          SLUG: ${{ steps.app-token.outputs.app-slug }}
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ steps.source.outputs.number }}
+          SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_URL: ${{ steps.source.outputs.url }}
+          LINES: ${{ steps.source.outputs.lines }}
+        run: |
+          title=$(jq -r .title "$RUNNER_TEMP/source.json")
+          # The source's own labels, for the record; the App's pull request
+          # is exempt from the label check regardless.
+          mapfile -t copied < <(jq -r '.labels[].name | select(test("^(type|component|priority|size): "))' "$RUNNER_TEMP/source.json")
+          labels=(--label automated)
+          for label in "${copied[@]}"; do labels+=(--label "$label"); done
+          # Closing keywords close an issue only on a merge into the default
+          # branch, but the body is read by people too: say refs.
+          jq -r .body "$RUNNER_TEMP/source.json" | sed -E 's/\b(Closes|Fixes|Resolves)( #)/Refs\2/g' > "$RUNNER_TEMP/source-body.md"
+
+          # The commit as the App, the author as the fix's.
+          id=$(gh api "users/${SLUG}[bot]" --jq .id)
+          export GIT_COMMITTER_NAME="${SLUG}[bot]" GIT_COMMITTER_EMAIL="${id}+${SLUG}[bot]@users.noreply.github.com"
+          basic=$(printf 'x-access-token:%s' "$APP_TOKEN" | base64 -w0)
+          echo "::add-mask::$basic"
+
+          # A squash or rebase merge is one commit; a merge commit has two
+          # parents, and its first-parent side is the one main had.
+          mainline=()
+          if [ "$(git rev-list --parents -n1 "$SHA" | wc -w)" -gt 2 ]; then mainline=(-m 1); fi
+
+          failed=0
+          for line in $LINES; do
+            target="release/$line"
+            head="backport/$NUMBER-$line"
+            echo "::group::$target"
+            if ! git ls-remote --exit-code --heads origin "refs/heads/$target" > /dev/null; then
+              echo "::error::$target does not exist; cut it first (Actions -> Cut a maintenance line), then run Backport by hand for #$NUMBER and $line."
+              gh pr comment "$NUMBER" -R "$GITHUB_REPOSITORY" --body "Backport to \`$target\`: the line is not cut. Cut it (Actions → Cut a maintenance line, from the line's stable tag), then run Backport by hand for #$NUMBER and \`$line\`."
+              failed=1; echo "::endgroup::"; continue
+            fi
+            existing=$(gh pr list -R "$GITHUB_REPOSITORY" --head "$head" --base "$target" --state all --json url,state --jq '.[0] | "\(.url) (\(.state))"')
+            if [ -n "$existing" ]; then
+              echo "::notice::#$NUMBER is already backported to $target: $existing"
+              echo "- \`$target\`: already open or merged, $existing" >> "$RUNNER_TEMP/summary.md"
+              echo "::endgroup::"; continue
+            fi
+            git fetch -q origin "refs/heads/$target"
+            git switch -q -C "$head" FETCH_HEAD
+            if ! git cherry-pick -x "${mainline[@]}" "$SHA"; then
+              git cherry-pick --abort || true
+              echo "::error::#$NUMBER does not apply to $target cleanly; the comment on it says how to finish by hand."
+              gh pr comment "$NUMBER" -R "$GITHUB_REPOSITORY" --body-file - <<EOF
+          Backport to \`$target\`: the cherry-pick of $SHA conflicts. To finish it by hand:
+
+          \`\`\`
+          git fetch origin $target
+          git switch -c $head origin/$target
+          git cherry-pick -x ${mainline[*]} $SHA
+          # resolve, then: git add -A && git cherry-pick --continue
+          git push -u origin $head
+          gh pr create --base $target --head $head --title "$title" --label automated --body "Backport of #$NUMBER to $target."
+          \`\`\`
+
+          Or, once the line has moved, run Backport again by hand for #$NUMBER and \`$line\`.
+          EOF
+              failed=1; echo "::endgroup::"; continue
+            fi
+            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+              GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $basic" \
+              git push -q origin "$head"
+            {
+              echo "Backport of #$NUMBER to \`$target\`, cherry-picked from $SHA."
+              echo
+              echo "---"
+              echo
+              cat "$RUNNER_TEMP/source-body.md"
+            } > "$RUNNER_TEMP/body.md"
+            url=$(GH_TOKEN="$APP_TOKEN" gh pr create -R "$GITHUB_REPOSITORY" --base "$target" --head "$head" \
+              --title "$title" --body-file "$RUNNER_TEMP/body.md" "${labels[@]}")
+            gh pr comment "$NUMBER" -R "$GITHUB_REPOSITORY" --body "Backport to \`$target\`: $url"
+            echo "- \`$target\`: opened $url" >> "$RUNNER_TEMP/summary.md"
+            echo "✓ $url"
+            echo "::endgroup::"
+          done
+
+          {
+            echo "## Backport of #$NUMBER"
+            echo
+            echo "Source: $SOURCE_URL, merge commit \`$SHA\`."
+            echo
+            cat "$RUNNER_TEMP/summary.md" 2>/dev/null || echo "Nothing was opened."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$failed"

@@ -1,0 +1,184 @@
+# Cuts a maintenance line: the branch release/X.Y.x at the stable tag
+# vX.Y.Z, and the label `backport: X.Y.x` that sends a merged fix there
+# (backport.yml). Run it from Actions -> Cut a maintenance line -> Run
+# workflow, or with `gh workflow run cut-release-branch.yml -f stable=vX.Y.Z`,
+# the first time a fix is wanted for a version that main has moved past
+# (CONTRIBUTING, "Maintenance lines"). Nothing else is needed: CI, the
+# release PR (release-please.yml) and Promote all follow the branch once it
+# exists.
+#
+# The line starts at the tag, not at main: the commit that reads X.Y.Z is
+# the one Promote made on top of the candidate, and it is not on main. From
+# the tag, release-please finds vX.Y.Z on the branch's first commit and
+# proposes X.Y.(Z+1)-rc.1 from the cherry-picks alone.
+#
+# scripts/release_lines.py refuses what a hand cut would not notice: a
+# candidate, a version with a newer patch (the line starts at its newest),
+# a line that is cut already, and a version below the newest stable, since
+# a line older than that is not maintained. Then this checks what only git
+# can: that the tag's own ci.yml and release-tag.yml know lines. A push
+# runs the pushed branch's workflow files, so a line cut from a tag older
+# than that change would get no CI run and tag nothing.
+#
+# The ref is created with the GitHub App's token, as release-tag.yml's tag
+# is: GITHUB_TOKEN may create a ref only at the run's own commit. The
+# ruleset for release/** does not require status checks on creation; if it
+# refuses the App for another reason, the error names the one-line push an
+# admin can make instead. The labels are made with GITHUB_TOKEN.
+
+name: Cut a maintenance line
+
+on:
+  workflow_dispatch:
+    inputs:
+      stable:
+        description: "The stable version's tag the line starts at, vX.Y.Z"
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run: check everything, then create no branch and no label'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cut-release-branch
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # GitHub's default is `bash -e`; this adds pipefail.
+    shell: bash
+
+jobs:
+  cut:
+    name: Cut the line
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # The two labels.
+      issues: write
+    steps:
+      # main, for the script and the tags; the tag's own files are read
+      # with `git show`.
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch tags
+        run: git fetch --force --tags
+
+      - name: Choose the line
+        id: line
+        env:
+          STABLE: ${{ inputs.stable }}
+        run: |
+          git tag -l 'v*' > "$RUNNER_TEMP/tags.txt"
+          git ls-remote --heads origin 'refs/heads/release/*' > "$RUNNER_TEMP/release-branches.txt"
+          scripts/release_lines.py cut --stable "$STABLE" --tags "$RUNNER_TEMP/tags.txt" \
+            --branches "$RUNNER_TEMP/release-branches.txt" | tee -a "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse "refs/tags/$STABLE^{commit}")" >> "$GITHUB_OUTPUT"
+
+      # Lines began with #1732. A tag from before it has a ci.yml that runs
+      # on main alone, and ci.yml calls release-tag.yml by path, so both
+      # must be the tag's own. The strings are the ones the two files took
+      # in that change.
+      - name: Require the tag's workflows to know lines
+        env:
+          STABLE: ${{ inputs.stable }}
+          BRANCH: ${{ steps.line.outputs.branch }}
+        run: |
+          if ! git show "refs/tags/$STABLE:.github/workflows/ci.yml" | grep -q "release/\*\*"; then
+            echo "::error::$STABLE's ci.yml runs on main alone, so $BRANCH would get no CI run and tag nothing. Lines start at the first stable version tagged after #1732 (the change that taught ci.yml about release/**); an older version's fix ships from the newest line, or from main."
+            exit 1
+          fi
+          if ! git show "refs/tags/$STABLE:.github/workflows/release-tag.yml" | grep -q "guard-tag"; then
+            echo "::error::$STABLE's release-tag.yml predates #1732, so $BRANCH would tag without the line guard. Lines start at the first stable version tagged after that change."
+            exit 1
+          fi
+          echo "✓ $STABLE's ci.yml and release-tag.yml run on a line"
+
+      - name: Dry run
+        if: inputs.dry_run
+        env:
+          STABLE: ${{ inputs.stable }}
+          BRANCH: ${{ steps.line.outputs.branch }}
+          LABEL: ${{ steps.line.outputs.label }}
+          SHA: ${{ steps.line.outputs.sha }}
+        run: |
+          {
+            echo "## Dry run: $BRANCH from $STABLE"
+            echo
+            echo "Every check passed. Nothing was created. A real run would:"
+            echo
+            echo "- create \`$BRANCH\` at \`$SHA\` (\`$STABLE\`)"
+            echo "- create the labels \`$LABEL\` and \`no-backport\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::dry run: $BRANCH would be cut from $STABLE at $SHA; nothing was created"
+
+      - name: Generate GitHub App token
+        if: ${{ !inputs.dry_run }}
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      # Through the API, which creates the ref only if none of that name
+      # exists, so two runs cannot both cut it.
+      - name: Create the branch
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          STABLE: ${{ inputs.stable }}
+          BRANCH: ${{ steps.line.outputs.branch }}
+          SHA: ${{ steps.line.outputs.sha }}
+        if: ${{ !inputs.dry_run }}
+        run: |
+          if ! out=$(gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/heads/$BRANCH" -f sha="$SHA" 2>&1); then
+            echo "$out"
+            echo "::error::$BRANCH could not be created at $SHA. If the ruleset for release/** refused the App, an admin cuts it with: git fetch origin --tags && git push origin refs/tags/$STABLE:refs/heads/$BRANCH; then run this workflow again for the labels, or make them by hand (the summary of a dry run names them)."
+            exit 1
+          fi
+          echo "✓ $BRANCH is at $SHA ($STABLE)"
+
+      # --force updates a label that exists, so a second cut of a later line
+      # leaves `no-backport` as it is. The colours are GitHub's green and
+      # grey.
+      - name: Create the labels
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.line.outputs.branch }}
+          LABEL: ${{ steps.line.outputs.label }}
+        run: |
+          gh label create "$LABEL" --color 0E8A16 --description "Cherry-pick this pull request onto $BRANCH when it merges" --force
+          gh label create no-backport --color BFBFBF --description "This fix stays on main; no maintenance line gets it" --force
+          echo "✓ labels '$LABEL' and 'no-backport'"
+
+      - name: Say what comes next
+        if: ${{ !inputs.dry_run }}
+        env:
+          STABLE: ${{ inputs.stable }}
+          BRANCH: ${{ steps.line.outputs.branch }}
+          LINE: ${{ steps.line.outputs.line }}
+          LABEL: ${{ steps.line.outputs.label }}
+          SHA: ${{ steps.line.outputs.sha }}
+        run: |
+          {
+            echo "## $BRANCH, from $STABLE"
+            echo
+            echo "The line is at \`$SHA\`, with the labels \`$LABEL\` and \`no-backport\`."
+            echo
+            echo "- Put \`$LABEL\` on a merged pull request into main, and Backport opens the cherry-pick against \`$BRANCH\`."
+            echo "- Once that merges and CI on \`$BRANCH\` passes, the Release PR workflow opens \`chore($BRANCH): release X.Y.Z-rc.1\` for the line's next patch; merging it tags and builds the candidate."
+            echo "- Promote with the candidate named, \`vX.Y.Z-rc.N\`, ships the patch to every stable channel."
+            echo
+            echo "Only the newest stable line is maintained: when the next minor is promoted, this line is done. Delete the branch and the \`$LABEL\` label; the tags keep its history."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::$BRANCH is cut; label a merged fix '$LABEL' to backport it"
