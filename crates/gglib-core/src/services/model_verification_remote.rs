@@ -5,7 +5,8 @@
 //! A model's files are its weights and, when it was downloaded with one, a
 //! projector. Both operations cover both: the update check compares the
 //! projector's OID with the repository's, and a repair deletes an unhealthy
-//! projector only when the download it queues brings that file back. An
+//! projector, or a file whose role cannot be told, only when the download
+//! it queues brings that file back. An
 //! image model's components are its files too, and a repair never deletes
 //! one: the file lives in its own repository's folder, and other models may
 //! draw with it.
@@ -26,12 +27,26 @@ use crate::download::{DownloadId, GgufFileRole};
 use crate::ports::RepositoryError;
 use crate::ports::huggingface::{download_group, stored_label};
 
+/// Whether a repair deletes `file`, among `rows` whose roles are `roles`, in
+/// the same order, only when its download fetches that very file: a
+/// projector, and a file whose role cannot be told. Weights go whatever the
+/// download fetches, since it fetches the model's weights.
+fn kept_unless_fetched(
+    rows: &[ModelFile],
+    roles: &[Option<GgufFileRole>],
+    file: &ModelFile,
+) -> bool {
+    rows.iter().zip(roles).any(|(row, role)| {
+        row.file_path == file.file_path && role.is_none_or(GgufFileRole::is_projector)
+    })
+}
+
 /// Whether `file` is a projector, among `rows` whose roles are `roles`, in
 /// the same order.
-fn is_projector(rows: &[ModelFile], roles: &[GgufFileRole], file: &ModelFile) -> bool {
-    rows.iter()
-        .zip(roles)
-        .any(|(row, role)| row.file_path == file.file_path && role.is_projector())
+fn is_projector(rows: &[ModelFile], roles: &[Option<GgufFileRole>], file: &ModelFile) -> bool {
+    rows.iter().zip(roles).any(|(row, role)| {
+        row.file_path == file.file_path && role.is_some_and(GgufFileRole::is_projector)
+    })
 }
 
 /// The component `model` links to the file of `row`, read in `folder`, when
@@ -183,7 +198,7 @@ impl ModelVerificationService {
             .map_err(fetch_failed)?;
         let folder = ModelFolder::of(&model.file_path, &local_files);
         let roles = row_roles(&model, &folder, &local_files, &self.gguf_parser).await;
-        if roles.iter().any(|role| role.is_projector()) {
+        if roles.iter().flatten().any(|role| role.is_projector()) {
             let files = self.hf_client.list_gguf_files(repo_id).await;
             remote_files.extend(files.map_err(fetch_failed)?);
         }
@@ -231,7 +246,10 @@ impl ModelVerificationService {
     /// again, at the variant the model was stored from, which fetches
     /// what is missing. An unhealthy projector is deleted only when that
     /// download fetches it; one it would not bring back stays on disk and
-    /// stays linked.
+    /// stays linked. So does a file whose role cannot be told (its header
+    /// is unreadable and the model links it as nothing): it is deleted, and
+    /// named among the files coming back, only when the download fetches
+    /// that very file.
     ///
     /// What the download fetches is read from the repository before any file
     /// is deleted, so a repository that cannot be read, or that does not hold
@@ -247,8 +265,8 @@ impl ModelVerificationService {
     ///
     /// A message when the model has no repository or variant, when
     /// nothing is unhealthy, when every unhealthy file is a component the
-    /// model links (never deleted) or a projector the download would not
-    /// bring back, when the repository cannot be read, and when no unhealthy
+    /// model links (never deleted) or a projector or unknown file the
+    /// download would not bring back, when the repository cannot be read, and when no unhealthy
     /// file could be deleted: in each of those nothing was deleted. A
     /// download that cannot be queued after the files are gone is a message
     /// that names them, with [`missing_after_repair`]'s words.
@@ -311,22 +329,33 @@ impl ModelVerificationService {
 
         // What the download queued below fetches, asked while every file is
         // still in place.
-        let fetched = self.fetched_projector(repo_id, &label).await?;
+        let fetched = self.fetched_files(repo_id, &label).await?;
 
-        // A projector is deleted only when that download fetches that same
-        // file. Each one is judged on its own.
-        let is_projector = |file: &ModelFile| is_projector(&model_files, &roles, file);
-        if to_repair.iter().any(|file| is_projector(file)) {
-            let (repaired, left): (Vec<&ModelFile>, Vec<&ModelFile>) =
-                to_repair.into_iter().partition(|file| {
-                    !is_projector(file) || fetched.as_deref() == Some(file.file_path.as_str())
-                });
+        // A projector, and a file whose role cannot be told, is deleted only
+        // when that download fetches that same file. Each one is judged on
+        // its own.
+        let kept_unless_fetched =
+            |file: &ModelFile| kept_unless_fetched(&model_files, &roles, file);
+        if to_repair.iter().any(|file| kept_unless_fetched(file)) {
+            let (repaired, left): (Vec<&ModelFile>, Vec<&ModelFile>) = to_repair
+                .into_iter()
+                .partition(|file| !kept_unless_fetched(file) || fetched.contains(&file.file_path));
             if repaired.is_empty() {
                 let names: Vec<&str> = left.iter().map(|file| file.file_path.as_str()).collect();
+                let projector = left
+                    .iter()
+                    .any(|file| is_projector(&model_files, &roles, file));
+                let relink = if projector {
+                    format!(
+                        ". Link another projector with \
+                         `gglib model update {model_id} --projector <path>`"
+                    )
+                } else {
+                    String::new()
+                };
                 return Err(format!(
                     "{} is unhealthy, and a download of {repo_id} at {label} does \
-                     not fetch it, so it was left in place. Link another projector with \
-                     `gglib model update {model_id} --projector <path>`",
+                     not fetch it, so it was left in place{relink}",
                     names.join(", ")
                 ));
             }
@@ -400,13 +429,10 @@ impl ModelVerificationService {
         unhealthy
     }
 
-    /// The path of the projector a download of the variant labelled `label`
-    /// from `repo_id` fetches, when one comes with it.
-    async fn fetched_projector(
-        &self,
-        repo_id: &str,
-        label: &str,
-    ) -> Result<Option<String>, String> {
+    /// The paths of the files a download of the variant labelled `label`
+    /// from `repo_id` fetches: its weights, and the projector that comes
+    /// with them, when one does.
+    async fn fetched_files(&self, repo_id: &str, label: &str) -> Result<Vec<String>, String> {
         let group = download_group(
             self.hf_client.as_ref(),
             Some(self.gguf_parser.as_ref()),
@@ -415,7 +441,7 @@ impl ModelVerificationService {
         )
         .await
         .map_err(|e| format!("Failed to read what a download of {repo_id} fetches: {e}"))?;
-        Ok(group.projector.map(|projector| projector.path))
+        Ok(group.files().map(|file| file.path.clone()).collect())
     }
 }
 
@@ -446,3 +472,7 @@ mod folder_tests;
 #[cfg(test)]
 #[path = "model_verification_label_tests.rs"]
 mod label_tests;
+
+#[cfg(test)]
+#[path = "model_verification_unknown_tests.rs"]
+mod unknown_tests;

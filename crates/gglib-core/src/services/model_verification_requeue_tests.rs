@@ -20,6 +20,15 @@ fn hub() -> FakeHub {
     }
 }
 
+/// A repository whose variant's files are [`WEIGHTS`] and `shards`: what a
+/// download of it fetches.
+fn hub_with(shards: &[&str]) -> FakeHub {
+    let mut hub = hub();
+    hub.weights
+        .extend(shards.iter().map(|shard| hub_file(shard, 7, "s-oid")));
+    hub
+}
+
 /// [`WEIGHTS`] in `dir` with bytes its row does not match, and that row.
 fn corrupt_weights(dir: &Path) -> Vec<ModelFile> {
     std::fs::write(dir.join(WEIGHTS), "damaged").unwrap();
@@ -142,7 +151,7 @@ async fn a_repair_answers_its_download_and_the_files_it_fetches_again() {
         row(1, missing, &sha256("weights")),
         row(2, healthy, &sha256("weights")),
     ];
-    let f = fixture(dir.path(), rows, hub());
+    let f = fixture(dir.path(), rows, hub_with(&[corrupt, missing, healthy]));
 
     let started = f.service.repair_model(1, None).await.unwrap();
 
@@ -211,7 +220,7 @@ async fn a_file_that_cannot_be_deleted_is_not_among_those_fetched_again() {
         row(0, stuck, &sha256("weights")),
         row(1, corrupt, &sha256("weights")),
     ];
-    let f = fixture(dir.path(), rows, hub());
+    let f = fixture(dir.path(), rows, hub_with(&[stuck, corrupt]));
 
     let started = f.service.repair_model(1, None).await.unwrap();
 

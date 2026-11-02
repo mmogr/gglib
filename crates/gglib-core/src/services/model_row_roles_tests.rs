@@ -34,8 +34,11 @@ fn rows(names: &[&str]) -> Vec<ModelFile> {
         .collect()
 }
 
+const WEIGHTS: Option<GgufFileRole> = Some(GgufFileRole::Weights);
+const PROJECTOR: Option<GgufFileRole> = Some(GgufFileRole::Projector);
+
 /// The roles of `names`, the rows of `model`, read beside its weights.
-async fn roles(model: &Model, names: &[&str]) -> Vec<GgufFileRole> {
+async fn roles(model: &Model, names: &[&str]) -> Vec<Option<GgufFileRole>> {
     let folder = ModelFolder::new(&model.file_path, None);
     let parser: Arc<dyn GgufParserPort> = Arc::new(FirstBytesParser);
     row_roles(model, &folder, &rows(names), &parser).await
@@ -50,7 +53,7 @@ async fn a_projector_named_like_weights_is_the_projector() {
 
     let found = roles(&model, &["zeta.Q8_0.gguf", "vision-F16.gguf"]).await;
 
-    assert_eq!(found, [GgufFileRole::Weights, GgufFileRole::Projector]);
+    assert_eq!(found, [WEIGHTS, PROJECTOR]);
 }
 
 #[tokio::test]
@@ -61,12 +64,12 @@ async fn weights_named_like_a_projector_are_weights() {
 
     let found = roles(&model, &["mmproj-F16.gguf"]).await;
 
-    assert_eq!(found, [GgufFileRole::Weights]);
+    assert_eq!(found, [WEIGHTS]);
 }
 
 /// No header can be read from a missing file: the one the model links as
-/// its projector is the projector, and any other counts as weights, whatever
-/// it is named.
+/// its projector is the projector, and any other is unknown, whatever it is
+/// named.
 #[tokio::test]
 async fn a_missing_file_is_the_projector_only_when_the_model_links_it() {
     let dir = tempfile::tempdir().unwrap();
@@ -78,14 +81,21 @@ async fn a_missing_file_is_the_projector_only_when_the_model_links_it() {
     )
     .await;
 
-    assert_eq!(
-        found,
-        [
-            GgufFileRole::Weights,
-            GgufFileRole::Projector,
-            GgufFileRole::Weights
-        ]
-    );
+    assert_eq!(found, [WEIGHTS, PROJECTOR, None]);
+}
+
+/// A file that is there but holds no header the model's link does not
+/// name is unknown, not weights.
+#[tokio::test]
+async fn an_unlinked_file_with_a_corrupt_header_is_unknown() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("zeta.Q8_0.gguf"), "weights").unwrap();
+    std::fs::write(dir.path().join("zeta-00002.gguf"), "damaged").unwrap();
+    let model = model(dir.path(), "zeta.Q8_0.gguf", None);
+
+    let found = roles(&model, &["zeta.Q8_0.gguf", "zeta-00002.gguf"]).await;
+
+    assert_eq!(found, [WEIGHTS, None]);
 }
 
 /// A header that can be read wins over the link.
@@ -97,7 +107,7 @@ async fn a_linked_file_whose_header_says_weights_is_weights() {
 
     let found = roles(&model, &["vision-F16.gguf"]).await;
 
-    assert_eq!(found, [GgufFileRole::Weights]);
+    assert_eq!(found, [WEIGHTS]);
 }
 
 /// The model's own file is its weights without a read; every other row has
@@ -116,14 +126,7 @@ async fn the_weights_file_is_weights_unread_and_every_other_row_is_read() {
 
     let found = row_roles(&model, &folder, &rows(&names), &parser).await;
 
-    assert_eq!(
-        found,
-        [
-            GgufFileRole::Weights,
-            GgufFileRole::Projector,
-            GgufFileRole::Weights
-        ]
-    );
+    assert_eq!(found, [WEIGHTS, PROJECTOR, WEIGHTS]);
     assert_eq!(
         spy.parsed(),
         [dir.path().join(names[1]), dir.path().join(names[2])]

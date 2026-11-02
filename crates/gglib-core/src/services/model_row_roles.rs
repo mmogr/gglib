@@ -20,24 +20,24 @@ pub(super) fn header_role(path: &Path, gguf_parser: &dyn GgufParserPort) -> Opti
 }
 
 /// The role of each of `files`, `model`'s rows read in `folder`, in row
-/// order.
+/// order; `None` for a row whose role cannot be told.
 ///
 /// The row that is the model's own file is its weights, and its header is
 /// not read: a model is registered from its weights. Every other row is
 /// what its header says. A row whose header cannot be read, which is what
 /// verification and a repair look for, is the projector when `model` links
 /// that very file as its projector: a link is made only to a file that was
-/// one. Any other such row counts as weights, and its name is not read.
+/// one. Any other such row is unknown, and its name is not read.
 ///
 /// Every path is resolved and every header read on the blocking pool, so a
 /// slow disk or a dead mount holds a blocking thread and never the runtime.
-/// A read that panics is logged and leaves every row weights.
+/// A read that panics is logged and leaves every row unknown.
 pub(super) async fn row_roles(
     model: &Model,
     folder: &ModelFolder,
     files: &[ModelFile],
     gguf_parser: &Arc<dyn GgufParserPort>,
-) -> Vec<GgufFileRole> {
+) -> Vec<Option<GgufFileRole>> {
     let weights = model.file_path.clone();
     let projector = model.projector_path.clone();
     let paths: Vec<PathBuf> = files
@@ -54,14 +54,11 @@ pub(super) async fn row_roles(
             .map(|path| {
                 let resolved = resolved_or_literal(path);
                 if resolved == weights {
-                    return GgufFileRole::Weights;
+                    return Some(GgufFileRole::Weights);
                 }
                 let linked = projector.as_ref() == Some(&resolved);
-                header_role(path, parser.as_ref()).unwrap_or(if linked {
-                    GgufFileRole::Projector
-                } else {
-                    GgufFileRole::Weights
-                })
+                header_role(path, parser.as_ref())
+                    .or_else(|| linked.then_some(GgufFileRole::Projector))
             })
             .collect::<Vec<_>>()
     })
@@ -72,7 +69,7 @@ pub(super) async fn row_roles(
             error = %panicked,
             "a model's files could not be read for their roles"
         );
-        vec![GgufFileRole::Weights; count]
+        vec![None; count]
     })
 }
 
