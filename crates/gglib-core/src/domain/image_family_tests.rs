@@ -629,9 +629,9 @@ fn a_flux3_table_of_other_shapes_is_not_flux3_klein() {
     }
 }
 
-/// No other family's file is Klein, and Klein is none of them: no rule reads
-/// a tensor another's file holds, so the order they are checked in changes
-/// nothing for these files.
+/// No other family's file is Klein, and Klein is none of them: no rule's
+/// required names are in another's file, so the order they are checked in
+/// changes nothing for these files.
 #[test]
 fn flux3_klein_and_the_other_families_do_not_overlap() {
     for (table, family) in [
