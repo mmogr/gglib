@@ -136,6 +136,70 @@ fn the_component_goldens_hold_the_tensors_the_roles_read() {
     assert!(numbered(&llm, "blk.", 36));
 }
 
+/// The FLUX.3 Image Klein files' headers hold what the rules read: the
+/// diffusion model's names bare, no metadata, a 128-feature image embedder
+/// and a 20480-feature text embedder; a VAE whose decoder takes 32 channels;
+/// a Qwen3-VL language model 2560 wide.
+#[test]
+fn the_flux3_klein_goldens_hold_the_tensors_the_rules_read() {
+    let klein = Golden::Flux3KleinQ8.table();
+    assert_eq!(klein.tensors.len(), 359);
+    assert_eq!(klein.format, WeightsFormat::Gguf);
+    assert_eq!(klein.architecture, None);
+    assert_eq!(shape(&klein, "emb_in.image.weight"), [3072, 128]);
+    assert_eq!(shape(&klein, "txt_in.weight"), [3072, 20480]);
+    assert_eq!(
+        shape(&klein, "txt_mode_blocks.0.q_proj.weight"),
+        [3072, 3072]
+    );
+    assert_eq!(shape(&klein, "ref_time_in.in_layer.weight"), [3072, 256]);
+    assert!(numbered(&klein, "txt_mode_blocks.", 5));
+    assert!(numbered(&klein, "single_blocks.", 28));
+
+    let vae = Golden::Flux2Vae.table();
+    assert_eq!(vae.tensors.len(), 251);
+    assert_eq!(shape(&vae, "decoder.conv_in.weight"), [512, 32, 3, 3]);
+    assert_eq!(shape(&vae, "encoder.conv_in.weight"), [128, 3, 3, 3]);
+    assert!(
+        vae.get("decoder.mid_block.attentions.0.to_q.weight")
+            .is_some(),
+        "diffusers' names"
+    );
+
+    let llm = Golden::Qwen3Vl4bQ8.table();
+    assert_eq!(llm.format, WeightsFormat::Gguf);
+    assert_eq!(llm.architecture.as_deref(), Some("qwen3vl"));
+    assert_eq!(shape(&llm, "token_embd.weight"), [151_936, 2560]);
+    assert!(numbered(&llm, "blk.", 36));
+}
+
+/// The FLUX.2 klein 4B files' headers hold what the rules read: the
+/// diffusion model's names bare, no metadata, FLUX.2's shared modulation, a
+/// 128-feature image embedder, a 7680-feature text embedder and 20 single
+/// blocks (FLUX.2 dev has a 48th); a Qwen3 language model 2560 wide.
+#[test]
+fn the_flux2_klein_goldens_hold_the_tensors_the_rules_read() {
+    let klein = Golden::Flux2Klein4bQ8.table();
+    assert_eq!(klein.tensors.len(), 149);
+    assert_eq!(klein.format, WeightsFormat::Gguf);
+    assert_eq!(klein.architecture, None);
+    assert_eq!(
+        shape(&klein, "double_stream_modulation_img.lin.weight"),
+        [18432, 3072]
+    );
+    assert_eq!(shape(&klein, "img_in.weight"), [3072, 128]);
+    assert_eq!(shape(&klein, "txt_in.weight"), [3072, 7680]);
+    assert!(numbered(&klein, "double_blocks.", 5));
+    assert!(numbered(&klein, "single_blocks.", 20));
+
+    let llm = Golden::Qwen34bOriginalQ8.table();
+    assert_eq!(llm.tensors.len(), 398);
+    assert_eq!(llm.format, WeightsFormat::Gguf);
+    assert_eq!(llm.architecture.as_deref(), Some("qwen3"));
+    assert_eq!(shape(&llm, "token_embd.weight"), [151_936, 2560]);
+    assert!(numbered(&llm, "blk.", 36));
+}
+
 // ── Sniff ───────────────────────────────────────────────────────────────────
 
 #[test]
@@ -152,6 +216,14 @@ fn each_main_file_sniffs_as_its_family() {
         ImageFamily::sniff(&Golden::SdxlBase.table()),
         Some(ImageFamily::Sdxl)
     );
+    assert_eq!(
+        ImageFamily::sniff(&Golden::Flux3KleinQ8.table()),
+        Some(ImageFamily::Flux3Klein)
+    );
+    assert_eq!(
+        ImageFamily::sniff(&Golden::Flux2Klein4bQ8.table()),
+        Some(ImageFamily::Flux2Klein)
+    );
 }
 
 #[test]
@@ -162,6 +234,9 @@ fn no_component_file_sniffs_as_a_family() {
         Golden::T5xxl,
         Golden::QwenImage21Vae,
         Golden::Qwen3Vl8bQ8,
+        Golden::Flux2Vae,
+        Golden::Qwen3Vl4bQ8,
+        Golden::Qwen34bOriginalQ8,
     ] {
         assert_eq!(ImageFamily::sniff(&golden.table()), None, "{golden:?}");
     }
@@ -512,6 +587,494 @@ fn z_image_takes_qwen3_4b_and_qwen_image_takes_qwen3_vl() {
     );
 }
 
+// ── FLUX.3 Image Klein ──────────────────────────────────────────────────────
+
+/// FLUX.3 Image Klein is its family as the file names its tensors, and under
+/// either prefix stable-diffusion.cpp strips.
+#[test]
+fn a_flux3_klein_table_is_flux3_klein() {
+    let klein = Golden::Flux3KleinQ8.table();
+    for prefix in ["", "model.diffusion_model.", "diffusion_model."] {
+        assert_eq!(
+            ImageFamily::sniff(&prefixed(&klein, prefix)),
+            Some(ImageFamily::Flux3Klein),
+            "{prefix}"
+        );
+    }
+    assert_eq!(ImageFamily::sniff(&prefixed(&klein, "transformer.")), None);
+}
+
+/// Klein base's header is Klein's less the two `ref_time_in.` tensors
+/// (read from `leejet/flux-3-image-klein-base-GGUF` on 2026-11-02), which no
+/// rule reads: it sniffs as Klein, and only its name tells it apart.
+#[test]
+fn klein_base_sniffs_as_klein() {
+    let base = without_prefix(&Golden::Flux3KleinQ8.table(), "ref_time_in.");
+    assert_eq!(base.tensors.len(), 357);
+    assert_eq!(ImageFamily::sniff(&base), Some(ImageFamily::Flux3Klein));
+}
+
+/// stable-diffusion.cpp loads FIBO 2 for a file with `perceiver.latent_queries`
+/// before it asks for FLUX.3's tensors, so such a file is not Klein.
+#[test]
+fn a_flux3_table_with_fibo2s_perceiver_is_not_flux3_klein() {
+    let fibo = with(
+        &Golden::Flux3KleinQ8.table(),
+        "perceiver.latent_queries",
+        &[64, 3072],
+    );
+    assert_eq!(ImageFamily::sniff(&fibo), None);
+    assert_eq!(
+        ImageFamily::sniff(&prefixed(&fibo, "model.diffusion_model.")),
+        None
+    );
+}
+
+/// The two names alone are not Klein: the image embedder must take the
+/// FLUX.2 VAE's 128 packed channels and the text embedder eight Qwen3-VL 4B
+/// layers, or the recipe's companions do not fit. With either name gone, no
+/// other rule claims what is left.
+#[test]
+fn a_flux3_table_of_other_shapes_is_not_flux3_klein() {
+    let klein = Golden::Flux3KleinQ8.table();
+    for (what, table) in [
+        (
+            "the Flux.1 VAE's 64",
+            reshaped(&klein, "emb_in.image.weight", &[3072, 64]),
+        ),
+        (
+            "three Qwen3 4B layers, as FLUX.2 klein takes",
+            reshaped(&klein, "txt_in.weight", &[3072, 7680]),
+        ),
+        ("no text embedder", without_prefix(&klein, "txt_in.")),
+        ("no image embedder", without_prefix(&klein, "emb_in.image.")),
+        (
+            "no text block",
+            without_prefix(&klein, "txt_mode_blocks.0.q_proj."),
+        ),
+        (
+            "the image embedder under a longer name",
+            renamed(&klein, "emb_in.image.weight", "foo.emb_in.image.weight"),
+        ),
+    ] {
+        assert_eq!(ImageFamily::sniff(&table), None, "{what}");
+    }
+}
+
+/// No other family's file is Klein, and Klein is none of them: no rule's
+/// required names are in another's file, so the order they are checked in
+/// changes nothing for these files.
+#[test]
+fn flux3_klein_and_the_other_families_do_not_overlap() {
+    for (table, family) in [
+        (Golden::FluxSchnellQ8.table(), ImageFamily::Flux1),
+        (Golden::QwenImage21Q8.table(), ImageFamily::QwenImage21),
+        (Golden::SdxlBase.table(), ImageFamily::Sdxl),
+        (StandIn::ZImageTurboQ8.table(), ImageFamily::ZImage),
+    ] {
+        assert_eq!(ImageFamily::sniff(&table), Some(family), "{family}");
+        for name in ["emb_in.image.weight", "txt_mode_blocks.0.q_proj.weight"] {
+            for prefix in ["", "model.diffusion_model."] {
+                assert!(
+                    table.get(&format!("{prefix}{name}")).is_none(),
+                    "{family} holds no {prefix}{name}"
+                );
+            }
+        }
+    }
+    let klein = Golden::Flux3KleinQ8.table();
+    for name in [
+        "txt_in.text_norm.weight",
+        "double_blocks.0.img_attn.qkv.weight",
+        "single_blocks.0.linear1.weight",
+        "img_in.weight",
+        "input_blocks.0.0.weight",
+        "cap_embedder.0.weight",
+        "x_embedder.weight",
+    ] {
+        assert!(klein.get(name).is_none(), "Klein holds no {name}");
+    }
+    assert!(!klein.has_prefix("input_blocks."));
+}
+
+/// Klein decodes with the FLUX.2 VAE, whose decoder takes 32 channels where
+/// the Flux.1 VAE's takes 16; neither passes for the other's families.
+#[test]
+fn flux3_klein_takes_the_flux2_vae_and_not_the_flux1_vae() {
+    let flux2 = Golden::Flux2Vae.table();
+    let needs = Err(
+        "a FLUX.2 VAE: decoder.conv_in.weight with 32 input channels, and encoder.conv_in.weight",
+    );
+    assert_eq!(
+        ComponentRole::Vae.fits(ImageFamily::Flux3Klein, &flux2),
+        Ok(())
+    );
+    for other in [Golden::FluxVae, Golden::QwenImage21Vae, Golden::Qwen3Vl4bQ8] {
+        assert_eq!(
+            ComponentRole::Vae.fits(ImageFamily::Flux3Klein, &other.table()),
+            needs,
+            "{other:?}"
+        );
+    }
+    for family in [ImageFamily::Flux1, ImageFamily::ZImage] {
+        assert_eq!(
+            ComponentRole::Vae.fits(family, &flux2),
+            Err(
+                "a Flux.1 VAE: decoder.conv_in.weight with 16 input channels, and encoder.conv_in.weight"
+            ),
+            "{family}"
+        );
+    }
+    assert!(
+        ComponentRole::Vae
+            .fits(ImageFamily::QwenImage21, &flux2)
+            .is_err()
+    );
+    let no_encoder = without_prefix(&flux2, "encoder.conv_in.");
+    assert_eq!(
+        ComponentRole::Vae.fits(ImageFamily::Flux3Klein, &no_encoder),
+        needs
+    );
+}
+
+/// Klein's text encoder is Qwen3-VL 4B: `qwen3vl` and 2560 wide. Qwen-Image
+/// 2.1's (`qwen3vl`, 4096) and Z-Image's (`qwen3`, 2560) do not pass for it,
+/// nor it for theirs, and each refusal names what its family needs.
+#[test]
+fn flux3_klein_takes_qwen3_vl_4b_and_no_other_encoder() {
+    let vl4b = Golden::Qwen3Vl4bQ8.table();
+    let needs = Err("a Qwen3-VL 4B GGUF: architecture qwen3vl, token_embd.weight of width 2560");
+    assert_eq!(
+        ComponentRole::Llm.fits(ImageFamily::Flux3Klein, &vl4b),
+        Ok(())
+    );
+    for (what, other) in [
+        ("Qwen3-VL 8B", Golden::Qwen3Vl8bQ8.table()),
+        ("Qwen3 4B", StandIn::Qwen34bQ8.table()),
+    ] {
+        assert_eq!(
+            ComponentRole::Llm.fits(ImageFamily::Flux3Klein, &other),
+            needs,
+            "{what}"
+        );
+    }
+    assert_eq!(
+        ComponentRole::Llm.fits(ImageFamily::QwenImage21, &vl4b),
+        Err("a Qwen3-VL 8B GGUF: architecture qwen3vl, token_embd.weight of width 4096")
+    );
+    assert_eq!(
+        ComponentRole::Llm.fits(ImageFamily::ZImage, &vl4b),
+        Err("a Qwen3 4B GGUF: architecture qwen3, token_embd.weight of width 2560")
+    );
+    let mut safetensors = vl4b;
+    safetensors.format = WeightsFormat::Safetensors;
+    assert_eq!(
+        ComponentRole::Llm.fits(ImageFamily::Flux3Klein, &safetensors),
+        needs
+    );
+}
+
+/// A FLUX.3 Image Klein file named "base", in any case, is refused with a
+/// sentence; Klein's own file, and every other family's but FLUX.2 klein's
+/// whatever its name (SDXL's measured file is `sd_xl_base_1.0`), is not.
+#[test]
+fn only_a_klein_file_named_base_is_refused() {
+    for name in [
+        "flux3-image-klein-base-Q8_0.gguf",
+        "FLUX-3-Klein-BASE.gguf",
+        "klein_base.safetensors",
+    ] {
+        assert_eq!(
+            ImageFamily::Flux3Klein.refusal(name),
+            Some(
+                "Only FLUX.3 Image Klein is supported: Klein base needs other steps and \
+                 guidance, and gglib has not drawn with it"
+            ),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        ImageFamily::Flux3Klein.refusal("flux3-image-klein-Q8_0.gguf"),
+        None
+    );
+    for family in ImageFamily::ALL {
+        if ![ImageFamily::Flux3Klein, ImageFamily::Flux2Klein].contains(&family) {
+            assert_eq!(
+                family.refusal("sd_xl_base_1.0.safetensors"),
+                None,
+                "{family}"
+            );
+        }
+    }
+}
+
+/// Klein's recipe is stable-diffusion.cpp's guide for it, not a measurement:
+/// the FLUX.2 VAE and Qwen3-VL 4B, flash attention in the diffusion model
+/// alone, sizes by 16, and a margin that is Flux.1's until a run reads one.
+#[test]
+fn the_flux3_klein_recipe_is_its_guides() {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let klein = ImageFamily::Flux3Klein.recipe();
+    assert_eq!(klein.placement, Placement::DiffusionOnly);
+    assert_eq!(klein.flash_attention, FlashAttention::DiffusionOnly);
+    assert_eq!(klein.size, ImageFamily::ZImage.recipe().size);
+    assert_eq!(klein.size.step, 16);
+    assert_eq!(klein.compute_margin_bytes, 7 * GIB);
+    assert_eq!(
+        klein.components,
+        [
+            ComponentSpec {
+                role: ComponentRole::Vae,
+                repo: "unsloth/FLUX.2-VAE",
+                path: "split_files/vae/flux2-vae.safetensors",
+                size: 336_213_556,
+            },
+            ComponentSpec {
+                role: ComponentRole::Llm,
+                repo: "Qwen/Qwen3-VL-4B-Instruct-GGUF",
+                path: "Qwen3VL-4B-Instruct-Q8_0.gguf",
+                size: 4_280_406_144,
+            },
+        ]
+    );
+    for name in ["flux3-image-klein-Q8_0.gguf", "klein-turbo.gguf"] {
+        assert_eq!(
+            *ImageFamily::Flux3Klein.sampling(name),
+            plain(16, 1.0, "euler"),
+            "{name}"
+        );
+    }
+}
+
+// ── FLUX.2 klein ────────────────────────────────────────────────────────────
+
+/// FLUX.2 klein 4B is its family as the file names its tensors, and under
+/// either prefix stable-diffusion.cpp strips.
+#[test]
+fn a_flux2_klein_table_is_flux2_klein() {
+    let klein = Golden::Flux2Klein4bQ8.table();
+    for prefix in ["", "model.diffusion_model.", "diffusion_model."] {
+        assert_eq!(
+            ImageFamily::sniff(&prefixed(&klein, prefix)),
+            Some(ImageFamily::Flux2Klein),
+            "{prefix}"
+        );
+    }
+    assert_eq!(ImageFamily::sniff(&prefixed(&klein, "transformer.")), None);
+}
+
+/// The FLUX.2 models stable-diffusion.cpp loads otherwise are not klein 4B:
+/// FLUX.2 dev has a 48th single block, SeFi-Image a semantic time embedder
+/// (sd.cpp returns SeFi-Image before it asks for FLUX.2), and klein 9B,
+/// whose image embedder takes the same 128 features, a text embedder of
+/// three Qwen3 8B layers, 4096 wide. Nor is a table the recipe's companions
+/// do not fit, or one without the modulation that makes it FLUX.2.
+#[test]
+fn a_flux2_table_of_another_model_is_not_flux2_klein() {
+    let klein = Golden::Flux2Klein4bQ8.table();
+    for (what, table) in [
+        (
+            "FLUX.2 dev",
+            with(&klein, "single_blocks.47.linear1.weight", &[27648, 3072]),
+        ),
+        (
+            "SeFi-Image",
+            with(
+                &klein,
+                "dual_time_embed.semantic_embedder.linear_1.weight",
+                &[3072, 256],
+            ),
+        ),
+        (
+            "klein 9B",
+            reshaped(&klein, "txt_in.weight", &[4096, 12288]),
+        ),
+        (
+            "the Flux.1 VAE's 64",
+            reshaped(&klein, "img_in.weight", &[3072, 64]),
+        ),
+        ("no text embedder", without_prefix(&klein, "txt_in.")),
+        ("no image embedder", without_prefix(&klein, "img_in.")),
+        (
+            "no shared modulation",
+            without_prefix(&klein, "double_stream_modulation_img."),
+        ),
+        (
+            "the modulation under a longer name",
+            renamed(
+                &klein,
+                "double_stream_modulation_img.lin.weight",
+                "foo.double_stream_modulation_img.lin.weight",
+            ),
+        ),
+    ] {
+        assert_eq!(ImageFamily::sniff(&table), None, "{what}");
+    }
+}
+
+/// No other family's file is FLUX.2 klein, and klein is none of them. Klein's
+/// required names are in no other family's file. Its file holds Flux.1's two
+/// required block names, and Flux.1's rule turns it away by its widths and by
+/// the modulation; no other rule's required names are in it.
+#[test]
+fn flux2_klein_and_the_other_families_do_not_overlap() {
+    for (table, family) in [
+        (Golden::FluxSchnellQ8.table(), ImageFamily::Flux1),
+        (Golden::QwenImage21Q8.table(), ImageFamily::QwenImage21),
+        (Golden::SdxlBase.table(), ImageFamily::Sdxl),
+        (StandIn::ZImageTurboQ8.table(), ImageFamily::ZImage),
+        (Golden::Flux3KleinQ8.table(), ImageFamily::Flux3Klein),
+    ] {
+        assert_eq!(ImageFamily::sniff(&table), Some(family), "{family}");
+        for prefix in ["", "model.diffusion_model."] {
+            let name = format!("{prefix}double_stream_modulation_img.lin.weight");
+            assert!(table.get(&name).is_none(), "{family} holds no {name}");
+        }
+    }
+    let klein = Golden::Flux2Klein4bQ8.table();
+    for name in [
+        "double_blocks.0.img_attn.qkv.weight",
+        "single_blocks.0.linear1.weight",
+    ] {
+        assert!(klein.get(name).is_some(), "klein holds {name}");
+    }
+    for name in [
+        "txt_in.text_norm.weight",
+        "emb_in.image.weight",
+        "txt_mode_blocks.0.q_proj.weight",
+        "cap_embedder.0.weight",
+        "x_embedder.weight",
+        "double_blocks.0.img_mlp.gate_proj.weight",
+        "nerf_final_layer_conv.weight",
+    ] {
+        assert!(klein.get(name).is_none(), "klein holds no {name}");
+    }
+    assert!(!klein.has_prefix("input_blocks."));
+}
+
+/// FLUX.2 klein decodes with the FLUX.2 VAE, as FLUX.3 Image Klein does,
+/// under the same refusal; the Flux.1 VAE does not pass for it.
+#[test]
+fn flux2_klein_takes_the_flux2_vae_and_not_the_flux1_vae() {
+    assert_eq!(
+        ComponentRole::Vae.fits(ImageFamily::Flux2Klein, &Golden::Flux2Vae.table()),
+        Ok(())
+    );
+    for other in [Golden::FluxVae, Golden::QwenImage21Vae] {
+        assert_eq!(
+            ComponentRole::Vae.fits(ImageFamily::Flux2Klein, &other.table()),
+            Err(
+                "a FLUX.2 VAE: decoder.conv_in.weight with 32 input channels, and encoder.conv_in.weight"
+            ),
+            "{other:?}"
+        );
+    }
+}
+
+/// FLUX.2 klein's text encoder is Qwen3 4B, by Z-Image's own test: `qwen3`
+/// and 2560 wide. So the guide's original Qwen3 4B fits both, and so does
+/// Z-Image's 2507 instruct model; FLUX.3 Image Klein's Qwen3-VL 4B and klein
+/// 9B's Qwen3 8B do not, and Qwen3 4B does not fit FLUX.3 Image Klein.
+#[test]
+fn flux2_klein_takes_qwen3_4b_as_z_image_does() {
+    let original = Golden::Qwen34bOriginalQ8.table();
+    let needs = Err("a Qwen3 4B GGUF: architecture qwen3, token_embd.weight of width 2560");
+    for (what, table) in [
+        ("the original", &original),
+        ("Z-Image's 2507", &StandIn::Qwen34bQ8.table()),
+    ] {
+        for family in [ImageFamily::Flux2Klein, ImageFamily::ZImage] {
+            assert_eq!(
+                ComponentRole::Llm.fits(family, table),
+                Ok(()),
+                "{what} {family}"
+            );
+        }
+    }
+    for (what, other) in [
+        ("Qwen3-VL 4B", Golden::Qwen3Vl4bQ8.table()),
+        (
+            "Qwen3 8B",
+            reshaped(&original, "token_embd.weight", &[151_936, 4096]),
+        ),
+    ] {
+        assert_eq!(
+            ComponentRole::Llm.fits(ImageFamily::Flux2Klein, &other),
+            needs,
+            "{what}"
+        );
+    }
+    assert_eq!(
+        ComponentRole::Llm.fits(ImageFamily::Flux3Klein, &original),
+        Err("a Qwen3-VL 4B GGUF: architecture qwen3vl, token_embd.weight of width 2560")
+    );
+}
+
+/// Klein base 4B's header (read from `leejet/FLUX.2-klein-base-4B-GGUF` on
+/// 2026-11-02) holds klein 4B's 149 names and shapes exactly, so it sniffs
+/// as FLUX.2 klein and only its name tells it apart: a FLUX.2 klein file
+/// named "base", in any case, is refused with its own sentence, and klein's
+/// own file is not.
+#[test]
+fn a_flux2_klein_file_named_base_is_refused() {
+    for name in [
+        "flux-2-klein-base-4b-Q8_0.gguf",
+        "FLUX.2-Klein-BASE-4B.gguf",
+        "klein_base.safetensors",
+    ] {
+        assert_eq!(
+            ImageFamily::Flux2Klein.refusal(name),
+            Some(
+                "Only FLUX.2 klein is supported: klein base needs other steps and guidance, \
+                 and gglib has not drawn with it"
+            ),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        ImageFamily::Flux2Klein.refusal("flux-2-klein-4b-Q8_0.gguf"),
+        None
+    );
+}
+
+/// FLUX.2 klein's recipe is stable-diffusion.cpp's guide for it, not a
+/// measurement: the FLUX.2 VAE and Qwen3 4B, flash attention in the
+/// diffusion model alone, sizes by 16, and FLUX.3 Image Klein's margin, the
+/// same VAE's; 4 steps at guidance 1.0 with `euler`, whatever the name.
+#[test]
+fn the_flux2_klein_recipe_is_its_guides() {
+    let klein = ImageFamily::Flux2Klein.recipe();
+    let flux3 = ImageFamily::Flux3Klein.recipe();
+    assert_eq!(klein.placement, Placement::DiffusionOnly);
+    assert_eq!(klein.flash_attention, FlashAttention::DiffusionOnly);
+    assert_eq!(klein.size, flux3.size);
+    assert_eq!(klein.size.step, 16);
+    assert_eq!(klein.compute_margin_bytes, flux3.compute_margin_bytes);
+    assert_eq!(
+        klein.components,
+        [
+            flux3.components[0],
+            ComponentSpec {
+                role: ComponentRole::Llm,
+                repo: "unsloth/Qwen3-4B-GGUF",
+                path: "Qwen3-4B-Q8_0.gguf",
+                size: 4_280_405_792,
+            },
+        ]
+    );
+    assert_eq!(
+        klein.components[0].path,
+        "split_files/vae/flux2-vae.safetensors"
+    );
+    for name in ["flux-2-klein-4b-Q8_0.gguf", "klein-turbo.gguf"] {
+        assert_eq!(
+            *ImageFamily::Flux2Klein.sampling(name),
+            plain(4, 1.0, "euler"),
+            "{name}"
+        );
+    }
+}
+
 // ── Role fits ───────────────────────────────────────────────────────────────
 
 #[test]
@@ -523,6 +1086,11 @@ fn every_recipe_component_fits_its_role() {
         (ComponentRole::Vae, ImageFamily::QwenImage21) => Golden::QwenImage21Vae.table(),
         (ComponentRole::Llm, ImageFamily::QwenImage21) => Golden::Qwen3Vl8bQ8.table(),
         (ComponentRole::Llm, ImageFamily::ZImage) => StandIn::Qwen34bQ8.table(),
+        (ComponentRole::Vae, ImageFamily::Flux3Klein | ImageFamily::Flux2Klein) => {
+            Golden::Flux2Vae.table()
+        }
+        (ComponentRole::Llm, ImageFamily::Flux3Klein) => Golden::Qwen3Vl4bQ8.table(),
+        (ComponentRole::Llm, ImageFamily::Flux2Klein) => Golden::Qwen34bOriginalQ8.table(),
         other => panic!("no file for {other:?}"),
     };
     let mut checked = 0;
@@ -538,7 +1106,7 @@ fn every_recipe_component_fits_its_role() {
             checked += 1;
         }
     }
-    assert_eq!(checked, 7);
+    assert_eq!(checked, 11);
 }
 
 #[test]
@@ -628,6 +1196,26 @@ fn a_component_under_longer_names_does_not_fit() {
             ComponentRole::Llm,
             ImageFamily::QwenImage21,
             Golden::Qwen3Vl8bQ8,
+        ),
+        (
+            ComponentRole::Vae,
+            ImageFamily::Flux3Klein,
+            Golden::Flux2Vae,
+        ),
+        (
+            ComponentRole::Llm,
+            ImageFamily::Flux3Klein,
+            Golden::Qwen3Vl4bQ8,
+        ),
+        (
+            ComponentRole::Vae,
+            ImageFamily::Flux2Klein,
+            Golden::Flux2Vae,
+        ),
+        (
+            ComponentRole::Llm,
+            ImageFamily::Flux2Klein,
+            Golden::Qwen34bOriginalQ8,
         ),
     ] {
         assert!(role.fits(family, &prefixed(golden)).is_err(), "{role}");
@@ -742,6 +1330,22 @@ fn a_role_outside_the_recipe_is_refused() {
         ComponentRole::T5xxl.fits(ImageFamily::ZImage, &Golden::T5xxl.table()),
         refused
     );
+    assert_eq!(
+        ComponentRole::ClipL.fits(ImageFamily::Flux3Klein, &Golden::ClipL.table()),
+        refused
+    );
+    assert_eq!(
+        ComponentRole::T5xxl.fits(ImageFamily::Flux3Klein, &Golden::T5xxl.table()),
+        refused
+    );
+    assert_eq!(
+        ComponentRole::ClipL.fits(ImageFamily::Flux2Klein, &Golden::ClipL.table()),
+        refused
+    );
+    assert_eq!(
+        ComponentRole::T5xxl.fits(ImageFamily::Flux2Klein, &Golden::T5xxl.table()),
+        refused
+    );
 }
 
 // ── Names and the recipe table ──────────────────────────────────────────────
@@ -755,11 +1359,25 @@ fn names_round_trip_through_serde_from_str_and_display() {
     }
     assert_eq!(
         ImageFamily::ALL.map(ImageFamily::as_str),
-        ["qwen-image-2.1", "flux1", "sdxl", "z-image"]
+        [
+            "qwen-image-2.1",
+            "flux1",
+            "sdxl",
+            "z-image",
+            "flux3-klein",
+            "flux2-klein"
+        ]
     );
     assert_eq!(
         ImageFamily::ALL.map(ImageFamily::label),
-        ["Qwen-Image 2.1", "Flux.1", "SDXL", "Z-Image"]
+        [
+            "Qwen-Image 2.1",
+            "Flux.1",
+            "SDXL",
+            "Z-Image",
+            "FLUX 3 Klein",
+            "FLUX.2 klein"
+        ]
     );
     for role in ComponentRole::ALL {
         let wire = serde_json::to_string(&role).unwrap();
@@ -777,7 +1395,8 @@ fn names_round_trip_through_serde_from_str_and_display() {
     let unknown = "zimage".parse::<ImageFamily>().unwrap_err();
     assert_eq!(
         unknown.to_string(),
-        "unknown image family \"zimage\"; expected one of flux1, sdxl, qwen-image-2.1, z-image"
+        "unknown image family \"zimage\"; expected one of flux1, sdxl, qwen-image-2.1, z-image, \
+         flux3-klein, flux2-klein"
     );
     let unknown = "clip".parse::<ComponentRole>().unwrap_err();
     assert_eq!(
@@ -790,10 +1409,7 @@ fn names_round_trip_through_serde_from_str_and_display() {
 fn the_recipes_are_the_measured_ones() {
     let flux = ImageFamily::Flux1.recipe();
     assert_eq!(flux.placement, Placement::DiffusionOnly);
-    assert_eq!(
-        (flux.steps, flux.sampler, flux.flash_attention),
-        (4, "euler", FlashAttention::Off)
-    );
+    assert_eq!(flux.flash_attention, FlashAttention::Off);
     assert_eq!(
         flux.size,
         SizeRule {
@@ -806,16 +1422,12 @@ fn the_recipes_are_the_measured_ones() {
     let sdxl = ImageFamily::Sdxl.recipe();
     assert_eq!(sdxl.placement, Placement::AllInOne);
     assert!(sdxl.components.is_empty());
-    assert_eq!((sdxl.steps, sdxl.sampler), (20, "euler_a"));
     assert_eq!(sdxl.flash_attention, FlashAttention::Off);
     assert_eq!(FlashAttention::Off.mode(), "off");
     assert_eq!(FlashAttention::Everywhere.mode(), "on");
     assert_eq!(FlashAttention::DiffusionOnly.mode(), "off,diffusion=on");
     let qwen = ImageFamily::QwenImage21.recipe();
-    assert_eq!(
-        (qwen.steps, qwen.sampler, qwen.flash_attention),
-        (20, "euler", FlashAttention::Everywhere)
-    );
+    assert_eq!(qwen.flash_attention, FlashAttention::Everywhere);
     assert_eq!(qwen.size.step, 32);
     let roles = |r: &Recipe| r.components.iter().map(|c| c.role).collect::<Vec<_>>();
     assert_eq!(
@@ -829,16 +1441,14 @@ fn the_recipes_are_the_measured_ones() {
     assert_eq!(roles(qwen), [ComponentRole::Vae, ComponentRole::Llm]);
 }
 
-/// Z-Image's recipe is stable-diffusion.cpp's guide for Z-Image Turbo, not a
-/// measurement: 8 steps at guidance 1.0, the Flux.1 VAE and Qwen3 4B.
+/// Z-Image's recipe is stable-diffusion.cpp's guide for it, not a
+/// measurement: the Flux.1 VAE and Qwen3 4B, flash attention in the
+/// diffusion model alone.
 #[test]
-fn the_z_image_recipe_is_turbos() {
+fn the_z_image_recipe_is_its_guides() {
     let z = ImageFamily::ZImage.recipe();
     assert_eq!(z.placement, Placement::DiffusionOnly);
-    assert_eq!(
-        (z.steps, z.cfg, z.sampler, z.flash_attention),
-        (8, 1.0, "euler", FlashAttention::DiffusionOnly)
-    );
+    assert_eq!(z.flash_attention, FlashAttention::DiffusionOnly);
     assert_eq!(
         z.size,
         SizeRule {
@@ -864,27 +1474,72 @@ fn the_z_image_recipe_is_turbos() {
     assert_eq!(z.components[0].path, "ae.safetensors");
 }
 
-/// Only Z-Image Turbo is drawn: a Z-Image file whose name lacks "turbo", in
-/// any case, is refused; no other family is refused by name.
-#[test]
-fn a_z_image_file_not_named_turbo_is_refused() {
-    let refused = ImageFamily::ZImage.refusal("z-image-Q8_0.gguf");
-    assert_eq!(
-        refused,
-        Some(
-            "Only Z-Image Turbo is supported: base Z-Image needs other steps and guidance, \
-             and its Q8_0 file draws blank on Metal (stable-diffusion.cpp #2074)"
-        )
-    );
-    assert_eq!(ImageFamily::ZImage.refusal("z_image_turbo-Q8_0.gguf"), None);
-    assert_eq!(ImageFamily::ZImage.refusal("Z-Image-TURBO-q4_0.gguf"), None);
-    for family in [
-        ImageFamily::Flux1,
-        ImageFamily::Sdxl,
-        ImageFamily::QwenImage21,
-    ] {
-        assert_eq!(family.refusal("z-image-Q8_0.gguf"), None, "{family}");
+const fn plain(steps: u32, cfg: f32, sampler: &'static str) -> Sampling {
+    Sampling {
+        steps,
+        cfg,
+        sampler,
+        sigmas: None,
+        linear_scale: None,
     }
+}
+
+/// Flux.1, SDXL and base Qwen-Image 2.1 are sampled as the 2026-10-09 runs
+/// were, whatever the file is named: "turbo" in an SDXL name changes nothing.
+#[test]
+fn the_measured_samplings_are_the_measured_runs() {
+    for name in ["m.gguf", "sdxl-turbo.safetensors"] {
+        assert_eq!(*ImageFamily::Flux1.sampling(name), plain(4, 1.0, "euler"));
+        assert_eq!(*ImageFamily::Sdxl.sampling(name), plain(20, 7.0, "euler_a"));
+    }
+    assert_eq!(
+        *ImageFamily::QwenImage21.sampling("qwen-image-2.1-Q8_0.gguf"),
+        plain(20, 6.0, "euler")
+    );
+}
+
+/// Qwen-Image 2.1 Turbo, named so in any case, is sampled as
+/// stable-diffusion.cpp's guide runs it: the `qwen-image-2.1-turbo` preset's
+/// nine sigmas, so 8 steps, at guidance 1.0 with `euler`.
+#[test]
+fn a_qwen_image_file_named_turbo_is_sampled_by_its_sigma_preset() {
+    let turbo = Sampling {
+        steps: 8,
+        cfg: 1.0,
+        sampler: "euler",
+        sigmas: Some("qwen-image-2.1-turbo"),
+        linear_scale: None,
+    };
+    for name in [
+        "qwen-image-2.1-turbo-Q8_0.gguf",
+        "Qwen-Image-2.1-TURBO.gguf",
+    ] {
+        assert_eq!(*ImageFamily::QwenImage21.sampling(name), turbo, "{name}");
+    }
+}
+
+/// Z-Image Turbo, named so in any case, is drawn at 8 steps and guidance 1.0;
+/// a Z-Image file whose name lacks "turbo" is base, drawn at 28 steps and
+/// guidance 5.0 with the linear scale that drew its `Q8_0` file in `sd-cli`.
+#[test]
+fn a_z_image_file_is_turbo_by_name_and_base_otherwise() {
+    for name in ["z_image_turbo-Q8_0.gguf", "Z-Image-TURBO-q4_0.gguf"] {
+        assert_eq!(
+            *ImageFamily::ZImage.sampling(name),
+            plain(8, 1.0, "euler"),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        *ImageFamily::ZImage.sampling("z-image-Q8_0.gguf"),
+        Sampling {
+            steps: 28,
+            cfg: 5.0,
+            sampler: "euler",
+            sigmas: None,
+            linear_scale: Some(0.000_244_140_625),
+        }
+    );
 }
 
 /// Each measured family's compute margin is its measured 1024x1024 VAE decode
@@ -934,6 +1589,12 @@ fn a_size_is_checked_against_its_familys_rule() {
     assert!(!flux.check(1056, 1024), "Flux.1 steps by 64");
     let z = ImageFamily::ZImage.recipe().size;
     assert!(z.check(1040, 1024), "Z-Image steps by 16");
+    let klein = ImageFamily::Flux3Klein.recipe().size;
+    assert!(klein.check(1040, 1024), "FLUX.3 Image Klein steps by 16");
+    assert!(!klein.check(1032, 1024), "8 is under Klein's step");
+    let flux2 = ImageFamily::Flux2Klein.recipe().size;
+    assert!(flux2.check(1040, 1024), "FLUX.2 klein steps by 16");
+    assert!(!flux2.check(1032, 1024), "8 is under FLUX.2 klein's step");
     assert!(!qwen.check(1040, 1024), "Qwen-Image 2.1 steps by 32");
     assert!(!z.check(1032, 1024), "8 is under Z-Image's step");
     assert_eq!(

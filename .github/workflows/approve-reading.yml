@@ -1,0 +1,169 @@
+name: Approve a reading
+
+# A comment on a pull request approves the ADR readings that moved, so
+# nobody edits contracts/upstream/llama/approvals.json by hand. The owner
+# comments, one request per line and the comment starting with the first:
+#
+#   /approve help_diff.options keeping, because <reason>
+#   /approve <key> deleting <stage> (#<issue>)
+#   /approve <key> probe changed in this PR
+#   /approve <key> first reading, <tag>
+#   /approve <key> remove
+#
+# scripts/approve_reading.sh checks every line and writes approvals.json on
+# the pull request's branch; this workflow commits that one file and pushes
+# it with the GitHub App token, which starts CI on the new head, where
+# `ADR criterion moved` reads the file. The file stays the record, so main is
+# green after the merge. The comment gets 👀 when the run starts, 🚀 when the
+# push is made, and one reply naming the bad line when nothing was pushed.
+#
+# Only the repository's owner is heard: the job runs for a comment whose
+# author association is OWNER and whose actor is the owner's login, on an
+# open pull request from a branch of this repository. The comment's text
+# reaches the script through the environment, never a command line, and the
+# commit subject names the keys only. The script that runs is main's, from
+# the checkout this event gives, against the pull request's files, so a
+# branch cut before this workflow existed is approved like any other. The
+# App token is minted after the script has run, as engine-pins.yml mints it,
+# and goes to the one push through the environment.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  approve:
+    name: Write the approval the comment asks for
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: >-
+      github.event.issue.pull_request &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.actor == 'mmogr' &&
+      github.triggering_actor == 'mmogr' &&
+      startsWith(github.event.comment.body, '/approve ')
+    # On the job, not the workflow: every comment on the repository starts a
+    # run of this workflow, and a workflow-level group would let any of them
+    # cancel an approval still queued. Two approvals on one pull request run
+    # one after the other.
+    concurrency:
+      group: approve-reading-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    env:
+      PR: ${{ github.event.issue.number }}
+      COMMENT_ID: ${{ github.event.comment.id }}
+    steps:
+      - name: Say the comment was heard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
+            -f content=eyes --silent
+
+      # The branch to write on: open, this repository's, and at the head read
+      # here, when the run starts, so a push during the run is not approved
+      # unseen: the push below then fails as not fast-forward.
+      - name: Read the pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json headRefName,headRefOid,isCrossRepository,state > "$RUNNER_TEMP/pr.json"
+          state=$(jq -r .state "$RUNNER_TEMP/pr.json")
+          cross=$(jq -r .isCrossRepository "$RUNNER_TEMP/pr.json")
+          [[ $state == OPEN ]] || { echo "the pull request is $state" > "$RUNNER_TEMP/problem.txt"; exit 1; }
+          [[ $cross == false ]] || { echo "the pull request is from another repository" > "$RUNNER_TEMP/problem.txt"; exit 1; }
+          {
+            echo "branch=$(jq -r .headRefName "$RUNNER_TEMP/pr.json")"
+            echo "head=$(jq -r .headRefOid "$RUNNER_TEMP/pr.json")"
+          } >> "$GITHUB_OUTPUT"
+
+      # main's scripts, at the root; the pull request's files, under head/.
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Checkout the pull request's head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.pr.outputs.head }}
+          path: head
+          persist-credentials: false
+
+      - name: Write the approvals
+        id: write
+        env:
+          COMMENT: ${{ github.event.comment.body }}
+        run: |
+          printf '%s\n' "$COMMENT" > "$RUNNER_TEMP/comment.txt"
+          if ! subject=$(scripts/approve_reading.sh \
+              head/contracts/upstream/llama/observed.json \
+              head/contracts/upstream/llama/approvals.json \
+              "$RUNNER_TEMP/comment.txt" 2> "$RUNNER_TEMP/problem.txt"); then
+            cat "$RUNNER_TEMP/problem.txt"
+            exit 1
+          fi
+          echo "subject=$subject" >> "$GITHUB_OUTPUT"
+          git -C head add contracts/upstream/llama/approvals.json
+          git -C head -c user.name=mmogr -c user.email=172192206+mmogr@users.noreply.github.com \
+            commit -m "$subject"
+
+      # Minted last, as engine-pins.yml mints it: after the script has run.
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Push the approval
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+        run: |
+          # The token goes to this one push through the environment, never
+          # into the checkout's config or a command line.
+          basic=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$basic"
+          if ! GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+              GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $basic" \
+              git -C head push origin "HEAD:refs/heads/$BRANCH"; then
+            echo "the push was refused: the branch moved after the comment, or the run could not reach it; read the run, then comment again" > "$RUNNER_TEMP/problem.txt"
+            exit 1
+          fi
+
+      # After the push nothing is undone, so a reaction that fails is not a
+      # failure to report.
+      - name: Say the approval was pushed
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" \
+            -f content=rocket --silent
+
+      # One reply, only when nothing was pushed: what was wrong, in a code
+      # block, so nothing in it links, mentions anyone or closes an issue.
+      - name: Say what was wrong
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          fence='```'
+          problem=$(head -c 2000 "$RUNNER_TEMP/problem.txt" 2>/dev/null | tr -d '`' || true)
+          : "${problem:=the run stopped before the approval was written; read $RUN_URL}"
+          printf 'Nothing was approved.\n\n%s\n%s\n%s\n\nThe run: %s\n' \
+            "$fence" "$problem" "$fence" "$RUN_URL" > "$RUNNER_TEMP/reply.md"
+          gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/reply.md"

@@ -36,14 +36,25 @@ has no asset and builds from source.
 ## The command line
 
 `--diffusion-model <file>` for a diffusion-only family (Flux.1, Qwen-Image
-2.1, Z-Image) or `-m <file>` for an all-in-one checkpoint (SDXL); each component in
-role order, `--vae`, `--clip_l`, `--t5xxl`, `--llm`, whatever order the
-model lists them in; `--listen-ip 127.0.0.1 --listen-port <port>`; then the
-recipe's `--steps`, `--cfg-scale` and `--sampling-method`, and its
-`--flash-attn` mode (`on` for Qwen-Image 2.1, `off,diffusion=on` for
-Z-Image, `off` for the rest), and `--conv-direct off`. Flags given at launch
-are the defaults for every request. `server/args_tests.rs` pins one whole argv per
-family.
+2.1, Z-Image, FLUX.3 Image Klein, FLUX.2 klein) or `-m <file>` for an
+all-in-one checkpoint (SDXL); each component in role order, `--vae`, `--clip_l`,
+`--t5xxl`, `--llm`, whatever order the model lists them in; `--listen-ip
+127.0.0.1 --listen-port <port>`; then the variant's `--steps`, `--cfg-scale`
+and `--sampling-method`, its `--sigmas` preset and `--linear-scale` when it
+has them, and the recipe's `--flash-attn` mode (`on` for Qwen-Image 2.1,
+`off,diffusion=on` for Z-Image, FLUX.3 Image Klein and FLUX.2 klein, `off`
+for the rest),
+and `--conv-direct off`. The variant is read from the main file's name
+(`ImageFamily::sampling`): "turbo" in it, in any case, makes a Qwen-Image
+2.1 file Turbo (`--sigmas qwen-image-2.1-turbo`, 8 steps, guidance 1) and a
+Z-Image file Turbo (8 steps, guidance 1); a Z-Image file without it is base
+(28 steps, guidance 5, `--linear-scale 0.000244140625`). FLUX.3 Image Klein
+draws at 16 steps, guidance 1, and a Klein file with "base" in its name is
+refused before anything queues (`ImageFamily::refusal`). FLUX.2 klein draws
+at 4 steps, guidance 1, and a FLUX.2 klein file with "base" in its name is
+refused the same way. Flags given at
+launch are the defaults for every request. `server/args_tests.rs` pins one
+whole argv per variant.
 
 ## Launching
 
@@ -51,7 +62,9 @@ The residency launch starts `sd-server` (`process::residency`): it checks
 the binary and every component before the queue, places the model by its
 files plus its family's compute margin (`Recipe::compute_margin_bytes`, the
 1024x1024 VAE decode buffer rounded up: Flux.1 7 GiB, SDXL 8 GiB,
-Qwen-Image 2.1 9 GiB, Z-Image 7 GiB), spawns
+Qwen-Image 2.1 9 GiB, Z-Image 7 GiB, FLUX.3 Image Klein 7 GiB; FLUX.2
+klein's 7 GiB is FLUX.3 Image Klein's, the same VAE's, until a run reads
+it), spawns
 with `server/spawn.rs`, and narrates the build from
 `sd-config.json` (`binary_install::recorded_release`).
 
@@ -87,8 +100,11 @@ pass, then the PNGs, their sizes read from the images.
 
 A request that carries a picture is drawn from it, at the picture's size,
 which the family's rule judges like any size. The job carries the picture
-as `init_image`, the request's strength, and the recipe's steps divided by
-the strength, rounded up, because sd-server shortens the schedule by it.
+as `init_image`, the request's strength, and the variant's steps divided by
+the strength, rounded up, because sd-server shortens the schedule by it. A
+variant with a sigma preset (Qwen-Image 2.1 Turbo) is sent its own steps
+instead: sd-server sets any other count back to the preset's, so its redraw
+samples `floor(8 x strength)` of them.
 With a mask it carries `mask_image` too and draws again only where the mask
 is white; the result is then pasted over the picture, since sd-server does
 not hand back the rest as it was: sd-server's pixels on the white, the

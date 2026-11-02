@@ -5,6 +5,8 @@
 //! The model is the one core's rule picks
 //! ([`resolve_image_model`]): the one named, else the default image model
 //! the settings name, else the only complete image model on this machine.
+//! A variant gglib does not draw is refused by its file name
+//! (`ImageFamily::refusal`: FLUX.3 Image Klein base, FLUX.2 klein base).
 //! Its family's recipe judges the size; one to four images.
 //!
 //! A request with a picture to draw from ([`Source`]) is drawn at the
@@ -13,9 +15,12 @@
 //! a result of another size cannot be pasted back. `sd-server` shortens a
 //! schedule by the strength, and sampled `floor(steps x strength)` steps in
 //! each of nine renders read (log-0018, 2026-10-12), so the steps asked for
-//! are the recipe's divided by the strength, rounded up ([`steps_for`]):
-//! a redraw then samples about as many steps as a draw, not a fraction.
+//! are the variant's divided by the strength, rounded up ([`steps_for`]):
+//! a redraw then samples about as many steps as a draw, not a fraction. A
+//! variant with a sigma preset cannot be stretched so, and is asked for its
+//! own steps ([`redraw_steps`]).
 
+use gglib_core::domain::Sampling;
 use gglib_core::ports::{
     ImageError, ImageRequest, ImageSize, MAX_IMAGES_PER_REQUEST, ModelCatalogPort,
 };
@@ -40,16 +45,33 @@ pub(crate) struct Plan {
 }
 
 /// The steps to ask `sd-server` for so that a redraw at `strength` samples
-/// about `recipe_steps`: `recipe_steps / strength`, rounded up. A strength
-/// that is not a number above 0 asks for the recipe's own.
-pub(crate) fn steps_for(recipe_steps: u32, strength: f32) -> u32 {
+/// about `draw_steps`: `draw_steps / strength`, rounded up. A strength that
+/// is not a number above 0 asks for `draw_steps` itself.
+pub(crate) fn steps_for(draw_steps: u32, strength: f32) -> u32 {
     if !(strength > 0.0 && strength.is_finite()) {
-        return recipe_steps;
+        return draw_steps;
     }
-    let enough = |steps: &u32| f64::from(*steps) * f64::from(strength) >= f64::from(recipe_steps);
-    (recipe_steps..=u32::MAX)
-        .find(enough)
-        .unwrap_or(recipe_steps)
+    let enough = |steps: &u32| f64::from(*steps) * f64::from(strength) >= f64::from(draw_steps);
+    (draw_steps..=u32::MAX).find(enough).unwrap_or(draw_steps)
+}
+
+/// The steps a redraw at `strength` asks `sd-server` for, by the variant's
+/// [`Sampling`]: [`steps_for`] its steps, unless it has a sigma preset.
+///
+/// A preset fixes the schedule, and a request's `sample_steps` cannot
+/// lengthen it: at the pin (master-1000-95ff762) `SamplePlan::resolve` in
+/// `src/pipeline/request.cpp` (lines 369-378) sets the steps to the sigma
+/// count less one whenever they differ, with a warning, and the img2img path
+/// in `src/pipeline/image.cpp` (lines 153-187) then samples only the last
+/// `floor(steps x strength)` steps of that schedule. So Qwen-Image 2.1 Turbo is
+/// asked for its own 8, which the server would use anyway, and a redraw at
+/// strength 0.5 samples 4 steps, not about 8 as the other variants do.
+pub(crate) fn redraw_steps(sampling: &Sampling, strength: f32) -> u32 {
+    if sampling.sigmas.is_some() {
+        sampling.steps
+    } else {
+        steps_for(sampling.steps, strength)
+    }
 }
 
 /// Read `request` against the catalogue: [`Plan`] or its refusal.
@@ -78,14 +100,18 @@ pub(crate) async fn plan(
     let Some(family) = spec.image_family else {
         return Err(ImageError::NotAnImageModel { model: spec.name });
     };
-    let file_name = spec.file_path.file_name().unwrap_or_default();
-    if let Some(refusal) = family.refusal(&file_name.to_string_lossy()) {
+    let file_name = spec
+        .file_path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
+    if let Some(refusal) = family.refusal(&file_name) {
         return Err(ImageError::Invalid {
             message: refusal.to_owned(),
         });
     }
-    let recipe = family.recipe();
-    let rule = recipe.size;
+    let sampling = family.sampling(&file_name);
+    let rule = family.recipe().size;
     if request.source.is_some() && request.size.is_some() {
         return Err(ImageError::Invalid {
             message: "a request with a picture is drawn at the picture's size; leave size out"
@@ -151,7 +177,7 @@ pub(crate) async fn plan(
             mask_image,
             strength: source.as_ref().map(|s| s.strength),
             sample_params: source.as_ref().map(|s| SampleParams {
-                sample_steps: steps_for(recipe.steps, s.strength),
+                sample_steps: redraw_steps(sampling, s.strength),
             }),
         },
         source,

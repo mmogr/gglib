@@ -1,5 +1,5 @@
-//! An image model's family, read from its tensor names, and the recipe that
-//! family is drawn with.
+//! An image model's family, read from its tensor names, the recipe that
+//! family is drawn with, and the sampling each of its variants is drawn at.
 //!
 //! An image model's GGUF has no metadata (the measured Flux schnell and
 //! Qwen-Image 2.1 files hold no key-value pairs), so a family is known only
@@ -7,7 +7,10 @@
 //! them with the rules stable-diffusion.cpp loads by (`src/model_loader.cpp`),
 //! and [`ComponentRole::fits`] checks a file offered as one of a family's
 //! components the same way. [`ImageFamily::recipe`] is the one table of what
-//! each family needs beside its main file and how it is drawn.
+//! each family needs beside its main file and how it is placed and drawn;
+//! [`ImageFamily::sampling`] picks the steps, guidance and sampler of the
+//! variant a file is, which stable-diffusion.cpp cannot tell apart where two
+//! variants share their tensors.
 
 use std::fmt;
 use std::str::FromStr;
@@ -18,7 +21,8 @@ use super::tensor_table::{TensorTable, WeightsFormat};
 
 /// A family of image models gglib can draw with.
 ///
-/// On the wire `flux1`, `sdxl`, `qwen-image-2.1` and `z-image`.
+/// On the wire `flux1`, `sdxl`, `qwen-image-2.1`, `z-image`, `flux3-klein`
+/// and `flux2-klein`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub enum ImageFamily {
@@ -28,13 +32,20 @@ pub enum ImageFamily {
     /// Stable Diffusion XL.
     #[serde(rename = "sdxl")]
     Sdxl,
-    /// Qwen-Image 2.1.
+    /// Qwen-Image 2.1, base or Turbo ([`ImageFamily::sampling`]).
     #[serde(rename = "qwen-image-2.1")]
     QwenImage21,
-    /// Z-Image (Turbo; a base file is refused by name,
-    /// [`ImageFamily::refusal`]).
+    /// Z-Image, base or Turbo ([`ImageFamily::sampling`]).
     #[serde(rename = "z-image")]
     ZImage,
+    /// FLUX.3 Image Klein, the distilled model; Klein base sniffs the same
+    /// and is refused ([`ImageFamily::refusal`]).
+    #[serde(rename = "flux3-klein")]
+    Flux3Klein,
+    /// FLUX.2 klein 4B, the distilled model; klein base 4B's header is the
+    /// same and it is refused ([`ImageFamily::refusal`]).
+    #[serde(rename = "flux2-klein")]
+    Flux2Klein,
 }
 
 /// A file a family draws with beside its main weights, named by the
@@ -143,20 +154,15 @@ impl fmt::Display for SizeRule {
     }
 }
 
-/// How a family is drawn: what it needs beside its main file, and its
-/// defaults.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// How a family is drawn whatever its variant: what it needs beside its main
+/// file, and how it is placed and run. A variant's steps and guidance are its
+/// [`Sampling`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Recipe {
     /// How the main file holds the model.
     pub placement: Placement,
     /// The components it needs, each with its default source.
     pub components: &'static [ComponentSpec],
-    /// Sampling steps.
-    pub steps: u32,
-    /// Classifier-free guidance scale.
-    pub cfg: f32,
-    /// The stable-diffusion.cpp sampler name.
-    pub sampler: &'static str,
     /// Where flash attention is on.
     pub flash_attention: FlashAttention,
     /// The sizes it draws.
@@ -166,8 +172,30 @@ pub struct Recipe {
     /// decode, rounded up to a whole GiB. Measured on Metal on 2026-10-09
     /// (`runs/*.log` in the image-gen handoff): Flux.1 6,657 MB, SDXL
     /// 7,680 MB, Qwen-Image 2.1 8,650 MB; and on 2026-10-11 Z-Image Turbo
-    /// 6,657 MB, the same VAE's decode as Flux.1's.
+    /// 6,657 MB, the same VAE's decode as Flux.1's. FLUX.3 Image Klein's is
+    /// Flux.1's, and FLUX.2 klein's is FLUX.3 Image Klein's, each kept
+    /// after a run (their recipes say why).
     pub compute_margin_bytes: u64,
+}
+
+/// How one variant of a family is sampled, by the `sd-server` flags it is
+/// given at launch.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Sampling {
+    /// Sampling steps (`--steps`). With [`Self::sigmas`] set it is the
+    /// preset's own count, since stable-diffusion.cpp samples one step per
+    /// sigma after the first whatever it is asked for.
+    pub steps: u32,
+    /// Classifier-free guidance scale (`--cfg-scale`).
+    pub cfg: f32,
+    /// The stable-diffusion.cpp sampler name (`--sampling-method`).
+    pub sampler: &'static str,
+    /// A sigma schedule preset (`--sigmas`), or `None` for the model's own
+    /// scheduler.
+    pub sigmas: Option<&'static str>,
+    /// The linear input scale (`--linear-scale`), or `None` for the model's
+    /// own. An `f64`, so the flag reads as the number written here.
+    pub linear_scale: Option<f64>,
 }
 
 /// One GiB, for the compute margins.
@@ -211,28 +239,41 @@ const FLUX1: Recipe = Recipe {
             size: 9_787_841_024,
         },
     ],
-    steps: 4,
-    cfg: 1.0,
-    sampler: "euler",
     flash_attention: FlashAttention::Off,
     size: sizes(64),
     compute_margin_bytes: 7 * GIB,
 };
 
-/// SDXL: the checkpoint holds everything; `euler_a` is what the measured run
-/// logged (stable-diffusion.cpp's default).
+/// Flux.1 schnell, as measured on 2026-10-09.
+const FLUX1_SAMPLING: Sampling = Sampling {
+    steps: 4,
+    cfg: 1.0,
+    sampler: "euler",
+    sigmas: None,
+    linear_scale: None,
+};
+
+/// SDXL: the checkpoint holds everything.
 const SDXL: Recipe = Recipe {
     placement: Placement::AllInOne,
     components: &[],
-    steps: 20,
-    cfg: 7.0,
-    sampler: "euler_a",
     flash_attention: FlashAttention::Off,
     size: sizes(64),
     compute_margin_bytes: 8 * GIB,
 };
 
-/// Qwen-Image 2.1: sizes step by 32, per stable-diffusion.cpp's guide.
+/// SDXL as measured on 2026-10-09; `euler_a` is what the run logged
+/// (stable-diffusion.cpp's default).
+const SDXL_SAMPLING: Sampling = Sampling {
+    steps: 20,
+    cfg: 7.0,
+    sampler: "euler_a",
+    sigmas: None,
+    linear_scale: None,
+};
+
+/// Qwen-Image 2.1, base and Turbo: sizes step by 32, per stable-diffusion.cpp's
+/// guide (`docs/qwen_image_2.1.md`), which draws Turbo with base's files.
 const QWEN_IMAGE_21: Recipe = Recipe {
     placement: Placement::DiffusionOnly,
     components: &[
@@ -249,24 +290,38 @@ const QWEN_IMAGE_21: Recipe = Recipe {
             size: 8_709_519_456,
         },
     ],
-    steps: 20,
-    cfg: 6.0,
-    sampler: "euler",
     flash_attention: FlashAttention::Everywhere,
     size: sizes(32),
     compute_margin_bytes: 9 * GIB,
 };
 
-/// Z-Image Turbo: 8 steps at guidance 1.0, as stable-diffusion.cpp's guide
-/// (`docs/z_image.md`) runs it; a base Z-Image file is refused
-/// ([`ImageFamily::refusal`]). `euler` is stable-diffusion.cpp's default
-/// sampler for a diffusion transformer; the guide names none. Flash attention is on in the diffusion model alone
-/// (`--flash-attn off,diffusion=on`), as `--diffusion-fa` did, which the
-/// guide passed until master-995: `on` would turn it on in the Flux.1 VAE
-/// too, where it has never run. Sizes step by 16: the VAE's 8
-/// times the model's patch of 2.
-/// The text encoder is Qwen3 4B, sizes checked against the Hub on
-/// 2026-10-11. Nothing here has drawn a picture yet.
+/// Qwen-Image 2.1 base, as measured on 2026-10-09.
+const QWEN_IMAGE_21_SAMPLING: Sampling = Sampling {
+    steps: 20,
+    cfg: 6.0,
+    sampler: "euler",
+    sigmas: None,
+    linear_scale: None,
+};
+
+/// Qwen-Image 2.1 Turbo as stable-diffusion.cpp's guide runs it: its fixed
+/// schedule (`--sigmas qwen-image-2.1-turbo`, nine sigmas, so 8 steps) at
+/// guidance 1.0 with `euler`; drew in 135 s on Metal (log-0018, 2026-11-02).
+const QWEN_IMAGE_21_TURBO_SAMPLING: Sampling = Sampling {
+    steps: 8,
+    cfg: 1.0,
+    sampler: "euler",
+    sigmas: Some("qwen-image-2.1-turbo"),
+    linear_scale: None,
+};
+
+/// Z-Image, base and Turbo, as stable-diffusion.cpp's guide (`docs/z_image.md`)
+/// loads them: one model with the same files. Flash attention is on in the
+/// diffusion model alone (`--flash-attn off,diffusion=on`), as
+/// `--diffusion-fa` did, which the guide passed until master-995: `on` would
+/// turn it on in the Flux.1 VAE too, where it has never run. Sizes step by
+/// 16: the VAE's 8 times the model's patch of 2. The text encoder is Qwen3
+/// 4B, sizes checked against the Hub on 2026-10-11.
 const Z_IMAGE: Recipe = Recipe {
     placement: Placement::DiffusionOnly,
     components: &[
@@ -278,20 +333,172 @@ const Z_IMAGE: Recipe = Recipe {
             size: 4_280_405_600,
         },
     ],
-    steps: 8,
-    cfg: 1.0,
-    sampler: "euler",
     flash_attention: FlashAttention::DiffusionOnly,
     size: sizes(16),
     compute_margin_bytes: 7 * GIB,
 };
 
+/// Z-Image Turbo: 8 steps at guidance 1.0, as the guide runs it. `euler` is
+/// stable-diffusion.cpp's default sampler for a diffusion transformer; the
+/// guide names none.
+const Z_IMAGE_TURBO_SAMPLING: Sampling = Sampling {
+    steps: 8,
+    cfg: 1.0,
+    sampler: "euler",
+    sigmas: None,
+    linear_scale: None,
+};
+
+/// Base Z-Image: guidance 5.0 as the guide runs it, which names no step
+/// count; 28 is the low end of Tongyi's 28 to 50. Its `Q8_0` file drew blank
+/// white on Metal, an f16 overflow in the quantized matmuls, and drew in
+/// `sd-cli` with `--linear-scale 0.000244140625` (log-0018, 2026-10-12).
+/// With the scale its `Q8_0` and `BF16` files draw alike, in about 12
+/// minutes on Metal (log-0018, 2026-11-02).
+const Z_IMAGE_BASE_SAMPLING: Sampling = Sampling {
+    steps: 28,
+    cfg: 5.0,
+    sampler: "euler",
+    sigmas: None,
+    linear_scale: Some(0.000_244_140_625),
+};
+
+/// The FLUX.2 VAE, which FLUX.3 Image Klein and FLUX.2 klein decode with:
+/// from `unsloth/FLUX.2-VAE`, ungated, Apache 2.0. Its LFS sha256 (`d64f3a68…`)
+/// is that of `vae/diffusion_pytorch_model.safetensors` in the gated
+/// `black-forest-labs/FLUX.2-dev` and `black-forest-labs/flux-3-image-klein`,
+/// so it is their file byte for byte, under diffusers' tensor names, which
+/// stable-diffusion.cpp renames as it loads (`convert_first_stage_model_name`,
+/// `src/name_conversion.cpp:1293-1306`). It is not their `ae.safetensors`,
+/// whose hash differs (`868fe7b3…`) and whose header was not read. Checked
+/// against the Hub on 2026-11-02.
+const FLUX2_VAE: ComponentSpec = ComponentSpec {
+    role: ComponentRole::Vae,
+    repo: "unsloth/FLUX.2-VAE",
+    path: "split_files/vae/flux2-vae.safetensors",
+    size: 336_213_556,
+};
+
+/// FLUX.3 Image Klein as stable-diffusion.cpp's guide (`docs/flux3.md`) and
+/// server recipe (`examples/server/recipes/flux3-klein.json`) load it at
+/// master-1000-95ff762: the diffusion model, the FLUX.2 VAE and Qwen3-VL 4B
+/// as `--llm` (`QWEN3_VL`, `src/conditioning/conditioner.hpp:2013`), sizes
+/// checked against the Hub on 2026-11-02.
+///
+/// Sizes step by 16. sd.cpp aligns a size to the VAE's scale times the
+/// model's down factor (`src/pipeline/request.cpp:182-183`): 16 for the
+/// FLUX.2 VAE (`src/model/vae/vae.hpp:185-186`, 8 of convolution and the
+/// 2 by 2 pack of its latents), times 1 (`geometry`,
+/// `src/model/integrations/flux3.cpp:24`); the model's patches are 1 by 1
+/// (`src/model/diffusion/flux3.hpp:151`), so nothing is padded at 16.
+///
+/// Flash attention is on in the diffusion model alone. The guide passes no
+/// flag, which is sd.cpp's per-backend `auto`, and no recipe runs that way.
+/// The diffusion model alone is how Z-Image, the nearest measured
+/// transformer, sampled faster in a third of the buffer (log-0018,
+/// 2026-10-11), and it keeps flash attention out of the FLUX.2 VAE, whose
+/// attention reads the switch (`src/model/vae/auto_encoder_kl.hpp:145`) and
+/// had never run here; the run in log-0018 (2026-11-02) drew with both.
+///
+/// The compute margin is Flux.1's 7 GiB. The pinned sd-server no longer
+/// logs its compute buffers; a 1024x1024 render peaked at a 10.4 GiB
+/// footprint with 9.9 GiB of weights loaded (log-0018, 2026-11-02), well
+/// inside it.
+const FLUX3_KLEIN: Recipe = Recipe {
+    placement: Placement::DiffusionOnly,
+    components: &[
+        FLUX2_VAE,
+        ComponentSpec {
+            role: ComponentRole::Llm,
+            repo: "Qwen/Qwen3-VL-4B-Instruct-GGUF",
+            path: "Qwen3VL-4B-Instruct-Q8_0.gguf",
+            size: 4_280_406_144,
+        },
+    ],
+    flash_attention: FlashAttention::DiffusionOnly,
+    size: sizes(16),
+    compute_margin_bytes: 7 * GIB,
+};
+
+/// FLUX.3 Image Klein, the distilled model: 16 steps at guidance 1.0 with
+/// `euler`, as the guide runs it and the server recipe defaults to; `euler`
+/// is sd.cpp's default sampler for it too (`default_sample_method`,
+/// `src/model/integrations/flux3.cpp:30`). Drew a 1024x1024 picture in 166 s
+/// on Metal (log-0018, 2026-11-02).
+const FLUX3_KLEIN_SAMPLING: Sampling = Sampling {
+    steps: 16,
+    cfg: 1.0,
+    sampler: "euler",
+    sigmas: None,
+    linear_scale: None,
+};
+
+/// FLUX.2 klein 4B as stable-diffusion.cpp's guide (`docs/flux2.md`) and
+/// server recipe (`examples/server/recipes/flux2-klein-4b.json`) load it at
+/// master-1000-95ff762: the diffusion model, the FLUX.2 VAE and Qwen3 4B as
+/// `--llm` (`QWEN3`, `src/conditioning/conditioner.hpp:2023-2024`), sizes
+/// checked against the Hub on 2026-11-02. Qwen3 4B is the guide's
+/// `unsloth/Qwen3-4B-GGUF` file, not Z-Image's 2507 instruct model.
+///
+/// Sizes step by 16, as FLUX.3 Image Klein's: the FLUX.2 VAE's scale of 16
+/// (`src/model/vae/vae.hpp:185-186`) times the model's down factor of 1
+/// (`geometry`, `src/model/integrations/flux2.cpp:50`;
+/// `src/pipeline/request.cpp:182-183`), in patches of 1
+/// (`src/model/diffusion/flux.hpp:88`), so nothing is padded at 16.
+///
+/// Flash attention is on in the diffusion model alone, as FLUX.3 Image
+/// Klein's: the guide passes no flag, which is sd.cpp's per-backend `auto`,
+/// and this mode drew FLUX.3 Image Klein's picture through this same VAE
+/// (log-0018, 2026-11-02), and FLUX.2 klein's too.
+///
+/// The compute margin is FLUX.3 Image Klein's 7 GiB: the same VAE decodes
+/// the same 1024x1024 latents, and a render peaked at a 9.6 GiB footprint
+/// with 8.1 GiB of weights loaded (log-0018, 2026-11-02).
+const FLUX2_KLEIN: Recipe = Recipe {
+    placement: Placement::DiffusionOnly,
+    components: &[
+        FLUX2_VAE,
+        ComponentSpec {
+            role: ComponentRole::Llm,
+            repo: "unsloth/Qwen3-4B-GGUF",
+            path: "Qwen3-4B-Q8_0.gguf",
+            size: 4_280_405_792,
+        },
+    ],
+    flash_attention: FlashAttention::DiffusionOnly,
+    size: sizes(16),
+    compute_margin_bytes: 7 * GIB,
+};
+
+/// FLUX.2 klein 4B, the distilled model: 4 steps at guidance 1.0 with
+/// `euler`, as the guide runs it and the server recipe defaults to; `euler`
+/// is sd.cpp's default sampler for it too (`default_sample_method`,
+/// `src/model/integrations/flux2.cpp:56`). Its scheduler and flow shift are
+/// the model's own (`flux2.cpp:57-59`), so none is given. Nothing here has
+/// drawn a picture yet.
+const FLUX2_KLEIN_SAMPLING: Sampling = Sampling {
+    steps: 4,
+    cfg: 1.0,
+    sampler: "euler",
+    sigmas: None,
+    linear_scale: None,
+};
+
 impl ImageFamily {
-    /// Every family, in sniff order.
-    pub const ALL: [Self; 4] = [Self::QwenImage21, Self::Flux1, Self::Sdxl, Self::ZImage];
+    /// Every family, in the order the list of image models shows them: the
+    /// order [`Self::sniff`] checks them in, but FLUX.3 Image Klein's rule,
+    /// checked first, listed after Z-Image's.
+    pub const ALL: [Self; 6] = [
+        Self::QwenImage21,
+        Self::Flux1,
+        Self::Sdxl,
+        Self::ZImage,
+        Self::Flux3Klein,
+        Self::Flux2Klein,
+    ];
 
     /// The name a person reads: "Flux.1", "SDXL", "Qwen-Image 2.1",
-    /// "Z-Image".
+    /// "Z-Image", "FLUX 3 Klein", "FLUX.2 klein".
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
@@ -299,10 +506,13 @@ impl ImageFamily {
             Self::Sdxl => "SDXL",
             Self::QwenImage21 => "Qwen-Image 2.1",
             Self::ZImage => "Z-Image",
+            Self::Flux3Klein => "FLUX 3 Klein",
+            Self::Flux2Klein => "FLUX.2 klein",
         }
     }
 
-    /// The wire name: `flux1`, `sdxl`, `qwen-image-2.1`, `z-image`.
+    /// The wire name: `flux1`, `sdxl`, `qwen-image-2.1`, `z-image`,
+    /// `flux3-klein`, `flux2-klein`.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -310,10 +520,12 @@ impl ImageFamily {
             Self::Sdxl => "sdxl",
             Self::QwenImage21 => "qwen-image-2.1",
             Self::ZImage => "z-image",
+            Self::Flux3Klein => "flux3-klein",
+            Self::Flux2Klein => "flux2-klein",
         }
     }
 
-    /// How this family is drawn.
+    /// How this family is drawn, whatever its variant.
     #[must_use]
     pub const fn recipe(self) -> &'static Recipe {
         match self {
@@ -321,19 +533,56 @@ impl ImageFamily {
             Self::Sdxl => &SDXL,
             Self::QwenImage21 => &QWEN_IMAGE_21,
             Self::ZImage => &Z_IMAGE,
+            Self::Flux3Klein => &FLUX3_KLEIN,
+            Self::Flux2Klein => &FLUX2_KLEIN,
         }
     }
 
     /// Why a main file named `file_name` of this family is not drawn, or
-    /// `None` when it is. stable-diffusion.cpp loads base and Turbo Z-Image
-    /// as one model, so the name is what tells them apart: a Z-Image file
-    /// whose name lacks "turbo", in any case, is refused.
+    /// `None` when it is. FLUX.3 Image Klein base sniffs as Klein (it lacks
+    /// only the distilled model's `ref_time_in.` tensors, which no rule
+    /// reads), and FLUX.2 klein base 4B's header holds klein 4B's names and
+    /// shapes exactly; each is drawn at other steps and guidance, which
+    /// gglib has not run. A file of either family whose name holds "base",
+    /// in any case, is refused.
     #[must_use]
     pub fn refusal(self, file_name: &str) -> Option<&'static str> {
-        (self == Self::ZImage && !file_name.to_ascii_lowercase().contains("turbo")).then_some(
-            "Only Z-Image Turbo is supported: base Z-Image needs other steps and guidance, \
-             and its Q8_0 file draws blank on Metal (stable-diffusion.cpp #2074)",
-        )
+        if !file_name.to_ascii_lowercase().contains("base") {
+            return None;
+        }
+        match self {
+            Self::Flux3Klein => Some(
+                "Only FLUX.3 Image Klein is supported: Klein base needs other steps and guidance, \
+                 and gglib has not drawn with it",
+            ),
+            Self::Flux2Klein => Some(
+                "Only FLUX.2 klein is supported: klein base needs other steps and guidance, \
+                 and gglib has not drawn with it",
+            ),
+            _ => None,
+        }
+    }
+
+    /// How a main file named `file_name` of this family is sampled. Base and
+    /// Turbo Qwen-Image 2.1, and base and Turbo Z-Image, share their tensors,
+    /// so stable-diffusion.cpp loads each pair as one model and the name is
+    /// what tells them apart: a name holding "turbo", in any case, is Turbo.
+    /// Flux.1, SDXL, FLUX.3 Image Klein and FLUX.2 klein have one sampling
+    /// each, whatever the name ([`Self::refusal`] turns either klein base
+    /// away first).
+    #[must_use]
+    pub fn sampling(self, file_name: &str) -> &'static Sampling {
+        let turbo = file_name.to_ascii_lowercase().contains("turbo");
+        match (self, turbo) {
+            (Self::Flux1, _) => &FLUX1_SAMPLING,
+            (Self::Sdxl, _) => &SDXL_SAMPLING,
+            (Self::QwenImage21, false) => &QWEN_IMAGE_21_SAMPLING,
+            (Self::QwenImage21, true) => &QWEN_IMAGE_21_TURBO_SAMPLING,
+            (Self::ZImage, false) => &Z_IMAGE_BASE_SAMPLING,
+            (Self::ZImage, true) => &Z_IMAGE_TURBO_SAMPLING,
+            (Self::Flux3Klein, _) => &FLUX3_KLEIN_SAMPLING,
+            (Self::Flux2Klein, _) => &FLUX2_KLEIN_SAMPLING,
+        }
     }
 
     /// The family a main weights file belongs to, from its tensor names and
@@ -345,6 +594,14 @@ impl ImageFamily {
     /// diffusion-only file before it sniffs. The rules are its own, checked
     /// in this order:
     ///
+    /// - FLUX.3 Image Klein: `emb_in.image.weight` and
+    ///   `txt_mode_blocks.0.q_proj.weight`, and not `perceiver.latent_queries`
+    ///   (FIBO 2, the one model stable-diffusion.cpp checks before it). Two
+    ///   shapes its own loader sizes the model from are held to what the
+    ///   recipe's companions fit: `emb_in.image.weight` with 128 input
+    ///   features (the FLUX.2 VAE's 32 channels packed 2 by 2, in patches
+    ///   of one) and `txt_in.weight` with 20480 (eight of Qwen3-VL 4B's
+    ///   layers, 2560 wide each).
     /// - Qwen-Image 2.1: `txt_in.text_norm.weight`, and `img_in.weight` with
     ///   64 input features.
     /// - Flux.1: `double_blocks.0.img_attn.qkv.weight` and
@@ -363,9 +620,28 @@ impl ImageFamily {
     ///   are held to what the recipe's companions fit: `x_embedder.weight`
     ///   with 64 input features (a patch of 2 by 2 over the Flux.1 VAE's 16
     ///   channels) and `cap_embedder.1.weight` with 2560 (Qwen3 4B's width).
+    /// - FLUX.2 klein: `double_stream_modulation_img.lin.weight` (FLUX.2's
+    ///   shared modulation), and neither `single_blocks.47.linear1.weight`
+    ///   (FLUX.2 dev's 48 single blocks) nor
+    ///   `dual_time_embed.semantic_embedder.linear_1.weight` (SeFi-Image,
+    ///   built as FLUX.2 is, which stable-diffusion.cpp checks first). Two
+    ///   shapes its own loader sizes the model from are held to what the
+    ///   recipe's companions fit: `img_in.weight` with 128 input features
+    ///   (the FLUX.2 VAE's 32 channels packed 2 by 2, in patches of one)
+    ///   and `txt_in.weight` with 7680 (three of Qwen3 4B's layers, 2560
+    ///   wide each), which klein 9B (Qwen3 8B, 12288) and FLUX.2 dev
+    ///   (Mistral Small 3.2) are not.
     #[must_use]
     pub fn sniff(table: &TensorTable) -> Option<Self> {
         let names = Normalised::of(table);
+        if names.has("emb_in.image.weight")
+            && names.has("txt_mode_blocks.0.q_proj.weight")
+            && !names.has("perceiver.latent_queries")
+            && names.dim("emb_in.image.weight", 1) == Some(128)
+            && names.dim("txt_in.weight", 1) == Some(20480)
+        {
+            return Some(Self::Flux3Klein);
+        }
         if names.has("txt_in.text_norm.weight") && names.dim("img_in.weight", 1) == Some(64) {
             return Some(Self::QwenImage21);
         }
@@ -394,6 +670,14 @@ impl ImageFamily {
             && names.dim("cap_embedder.1.weight", 1) == Some(2560)
         {
             return Some(Self::ZImage);
+        }
+        if names.has("double_stream_modulation_img.lin.weight")
+            && !names.has("single_blocks.47.linear1.weight")
+            && !names.has("dual_time_embed.semantic_embedder.linear_1.weight")
+            && names.dim("img_in.weight", 1) == Some(128)
+            && names.dim("txt_in.weight", 1) == Some(7680)
+        {
+            return Some(Self::Flux2Klein);
         }
         None
     }
@@ -453,6 +737,11 @@ impl ComponentRole {
                     && table.get("encoder.conv_in.weight").is_some(),
                 "a Flux.1 VAE: decoder.conv_in.weight with 16 input channels, and encoder.conv_in.weight",
             ),
+            (Self::Vae, ImageFamily::Flux3Klein | ImageFamily::Flux2Klein) => (
+                dim("decoder.conv_in.weight", 1) == Some(32)
+                    && table.get("encoder.conv_in.weight").is_some(),
+                "a FLUX.2 VAE: decoder.conv_in.weight with 32 input channels, and encoder.conv_in.weight",
+            ),
             (Self::Vae, ImageFamily::QwenImage21) => (
                 table
                     .get("decoder.conv1.weight")
@@ -478,11 +767,17 @@ impl ComponentRole {
                     && dim("token_embd.weight", 1) == Some(4096),
                 "a Qwen3-VL 8B GGUF: architecture qwen3vl, token_embd.weight of width 4096",
             ),
-            (Self::Llm, ImageFamily::ZImage) => (
+            (Self::Llm, ImageFamily::ZImage | ImageFamily::Flux2Klein) => (
                 table.format == WeightsFormat::Gguf
                     && table.architecture.as_deref() == Some("qwen3")
                     && dim("token_embd.weight", 1) == Some(2560),
                 "a Qwen3 4B GGUF: architecture qwen3, token_embd.weight of width 2560",
+            ),
+            (Self::Llm, ImageFamily::Flux3Klein) => (
+                table.format == WeightsFormat::Gguf
+                    && table.architecture.as_deref() == Some("qwen3vl")
+                    && dim("token_embd.weight", 1) == Some(2560),
+                "a Qwen3-VL 4B GGUF: architecture qwen3vl, token_embd.weight of width 2560",
             ),
             _ => (false, "a role this family's recipe does not use"),
         };
@@ -564,7 +859,7 @@ impl FromStr for ImageFamily {
             .ok_or_else(|| UnknownName {
                 what: "image family",
                 given: s.to_owned(),
-                expected: "flux1, sdxl, qwen-image-2.1, z-image",
+                expected: "flux1, sdxl, qwen-image-2.1, z-image, flux3-klein, flux2-klein",
             })
     }
 }

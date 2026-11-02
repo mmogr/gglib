@@ -2,8 +2,9 @@
 
 <!-- module-docs:start -->
 
-The tensor tables of the eight image-model files measured on 2026-10-09, one
-file per source. `image_family_goldens.rs` reads them with `include_str!`;
+The tensor tables of the eight image-model files measured on 2026-10-09, and
+of the three FLUX.3 Image Klein files and the two FLUX.2 klein 4B files cut
+on 2026-11-02 from their headers alone, one file per source. `image_family_goldens.rs` reads them with `include_str!`;
 `image_family_tests.rs` pins `ImageFamily::sniff` and `ComponentRole::fits`
 against them, and the component tests (`model_components_tests.rs`,
 `model_registrar_components_tests.rs`, `image_companions_tests.rs`) use
@@ -12,8 +13,8 @@ them as components.
 Each `.tsv` holds one line per tensor, sorted: the tensor's name, a tab, and
 its shape outermost first as `AxBxC` (`-` for a tensor of no dimensions). A
 GGUF that has `general.architecture` starts with the line
-`architecture: <it>`; of these only the Qwen3-VL file does (the two image
-GGUFs hold no metadata at all). The suffix before `.tsv` is the source's own
+`architecture: <it>`; of these only the two Qwen3-VL files and Qwen3 4B
+do (the four image GGUFs hold no metadata at all). The suffix before `.tsv` is the source's own
 extension, which is how a test knows the table's format.
 
 The sources are **not in this repository** (about 50 GB). They were the files
@@ -32,6 +33,21 @@ and the header end is where the tensor table stops.
 | `t5xxl_fp16.safetensors.tsv` | `comfyanonymous/flux_text_encoders` `t5xxl_fp16.safetensors` | 9,787,841,024 | 27,136 | 220 | `6e480b09fae049a72d2a8c5fbccb8d3e92febeb233bbe9dfe7256958a9167635` |
 | `qwen_image_2.1_vae_bf16.safetensors.tsv` | `Comfy-Org/Qwen-Image-2.1` `vae/qwen_image_2.1_vae_bf16.safetensors` | 675,509,688 | 28,880 | 238 | `bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9` |
 | `Qwen3VL-8B-Instruct-Q8_0.gguf.tsv` | `Qwen/Qwen3-VL-8B-Instruct-GGUF` `Qwen3VL-8B-Instruct-Q8_0.gguf` | 8,709,519,456 | 5,957,704 | 399 | `0d264b3941185d00a74f75c4245521dae088ff1efc90ab8d1754e83f5844adb0` |
+| `flux3-image-klein-Q8_0.gguf.tsv` | `leejet/flux-3-image-klein-GGUF` `flux3-image-klein-Q8_0.gguf` | 6,151,716,032 | 26,274 | 359 | `8b71ffd749bcacbd50cc0acca4f2d31a044c94412743e1e780db99bf13f89752` |
+| `flux2-vae.safetensors.tsv` | `unsloth/FLUX.2-VAE` `split_files/vae/flux2-vae.safetensors` (byte-identical to `vae/diffusion_pytorch_model.safetensors` at `black-forest-labs/FLUX.2-dev`) | 336,213,556 | 28,064 | 251 | `d64f3a68e1cc4f9f4e29b6e0da38a0204fe9a49f2d4053f0ec1fa1ca02f9c4b5` |
+| `Qwen3VL-4B-Instruct-Q8_0.gguf.tsv` | `Qwen/Qwen3-VL-4B-Instruct-GGUF` `Qwen3VL-4B-Instruct-Q8_0.gguf` | 4,280,406,144 | 5,957,758 | 398 | `054721f478bc5fa6beffb7f38eae575d45298f88cbb8d2f83ef675a727863eb1` |
+| `flux-2-klein-4b-Q8_0.gguf.tsv` | `leejet/FLUX.2-klein-4B-GGUF` `flux-2-klein-4b-Q8_0.gguf` | 4,300,629,440 | 10,682 | 149 | `0bba6951258ec8f92d51114a8fa13e66828297bfff58a738f52729b3ef66fa28` |
+| `Qwen3-4B-Q8_0.gguf.tsv` | `unsloth/Qwen3-4B-GGUF` `Qwen3-4B-Q8_0.gguf` | 4,280,405,792 | 5,957,386 | 398 | `eed555233267a33c7e8ee31682762cc7751b3f6d224039086e0e846f05fffa5d` |
+
+The last five files were never downloaded. Their sizes and sha256 are the
+LFS ones the Hub's API reports (`/api/models/<repo>?blobs=true`), and their
+goldens were cut on 2026-11-02 from the header bytes alone, fetched with
+HTTP range requests (`curl -r 0-N -L
+https://huggingface.co/<repo>/resolve/main/<path>`, N doubled until the
+header parsed): the script below, with each `f.read` reading a buffer of
+those bytes and a short read asking for more. The same reads cut
+`unsloth/FLUX.1-schnell` `ae.safetensors` to this folder's
+`ae.safetensors.tsv` byte for byte.
 
 They were cut with the script below, saved outside the repository and run
 read-only over the sources with `python3 -I cut_goldens.py

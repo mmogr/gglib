@@ -11,8 +11,9 @@
 //! differ.
 //!
 //! Each `observed.json` leaf an ADR's criterion names carries the quote; the
-//! hand-kept `approvals.json` beside it is what `scripts/check_adr_readings.sh`
-//! holds it to. Redacted raw bodies, and the prompts the dateless templates
+//! `approvals.json` beside it, which a `/approve` comment on a pull request
+//! writes, is what `scripts/check_adr_readings.sh` holds it to. Redacted raw
+//! bodies, and the prompts the dateless templates
 //! render for one fixed chat, verbatim, go to `GGLIB_ENGINE_BODIES_DIR` (CI's
 //! artifact), and are committed under `llama/bodies/` only when a pin moves.
 //!
