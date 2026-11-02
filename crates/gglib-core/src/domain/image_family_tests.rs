@@ -775,8 +775,8 @@ fn flux3_klein_takes_qwen3_vl_4b_and_no_other_encoder() {
 }
 
 /// A FLUX.3 Image Klein file named "base", in any case, is refused with a
-/// sentence; Klein's own file, and every other family's file whatever its
-/// name (SDXL's measured file is `sd_xl_base_1.0`), is not.
+/// sentence; Klein's own file, and every other family's but FLUX.2 klein's
+/// whatever its name (SDXL's measured file is `sd_xl_base_1.0`), is not.
 #[test]
 fn only_a_klein_file_named_base_is_refused() {
     for name in [
@@ -798,7 +798,7 @@ fn only_a_klein_file_named_base_is_refused() {
         None
     );
     for family in ImageFamily::ALL {
-        if family != ImageFamily::Flux3Klein {
+        if ![ImageFamily::Flux3Klein, ImageFamily::Flux2Klein].contains(&family) {
             assert_eq!(
                 family.refusal("sd_xl_base_1.0.safetensors"),
                 None,
@@ -1007,6 +1007,33 @@ fn flux2_klein_takes_qwen3_4b_as_z_image_does() {
     assert_eq!(
         ComponentRole::Llm.fits(ImageFamily::Flux3Klein, &original),
         Err("a Qwen3-VL 4B GGUF: architecture qwen3vl, token_embd.weight of width 2560")
+    );
+}
+
+/// Klein base 4B's header (read from `leejet/FLUX.2-klein-base-4B-GGUF` on
+/// 2026-11-02) holds klein 4B's 149 names and shapes exactly, so it sniffs
+/// as FLUX.2 klein and only its name tells it apart: a FLUX.2 klein file
+/// named "base", in any case, is refused with its own sentence, and klein's
+/// own file is not.
+#[test]
+fn a_flux2_klein_file_named_base_is_refused() {
+    for name in [
+        "flux-2-klein-base-4b-Q8_0.gguf",
+        "FLUX.2-Klein-BASE-4B.gguf",
+        "klein_base.safetensors",
+    ] {
+        assert_eq!(
+            ImageFamily::Flux2Klein.refusal(name),
+            Some(
+                "Only FLUX.2 klein is supported: klein base needs other steps and guidance, \
+                 and gglib has not drawn with it"
+            ),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        ImageFamily::Flux2Klein.refusal("flux-2-klein-4b-Q8_0.gguf"),
+        None
     );
 }
 

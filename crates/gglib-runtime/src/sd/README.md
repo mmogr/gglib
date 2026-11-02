@@ -51,7 +51,8 @@ Z-Image file Turbo (8 steps, guidance 1); a Z-Image file without it is base
 (28 steps, guidance 5, `--linear-scale 0.000244140625`). FLUX.3 Image Klein
 draws at 16 steps, guidance 1, and a Klein file with "base" in its name is
 refused before anything queues (`ImageFamily::refusal`). FLUX.2 klein draws
-at 4 steps, guidance 1. Flags given at
+at 4 steps, guidance 1, and a FLUX.2 klein file with "base" in its name is
+refused the same way. Flags given at
 launch are the defaults for every request. `server/args_tests.rs` pins one
 whole argv per variant.
 

@@ -42,7 +42,8 @@ pub enum ImageFamily {
     /// and is refused ([`ImageFamily::refusal`]).
     #[serde(rename = "flux3-klein")]
     Flux3Klein,
-    /// FLUX.2 klein 4B, the distilled model.
+    /// FLUX.2 klein 4B, the distilled model; klein base 4B's header is the
+    /// same and it is refused ([`ImageFamily::refusal`]).
     #[serde(rename = "flux2-klein")]
     Flux2Klein,
 }
@@ -540,15 +541,26 @@ impl ImageFamily {
     /// Why a main file named `file_name` of this family is not drawn, or
     /// `None` when it is. FLUX.3 Image Klein base sniffs as Klein (it lacks
     /// only the distilled model's `ref_time_in.` tensors, which no rule
-    /// reads) and is drawn at other steps and guidance, which gglib has not
-    /// run: a FLUX.3 Image Klein file whose name holds "base", in any case,
-    /// is refused.
+    /// reads), and FLUX.2 klein base 4B's header holds klein 4B's names and
+    /// shapes exactly; each is drawn at other steps and guidance, which
+    /// gglib has not run. A file of either family whose name holds "base",
+    /// in any case, is refused.
     #[must_use]
     pub fn refusal(self, file_name: &str) -> Option<&'static str> {
-        (self == Self::Flux3Klein && file_name.to_ascii_lowercase().contains("base")).then_some(
-            "Only FLUX.3 Image Klein is supported: Klein base needs other steps and guidance, \
-             and gglib has not drawn with it",
-        )
+        if !file_name.to_ascii_lowercase().contains("base") {
+            return None;
+        }
+        match self {
+            Self::Flux3Klein => Some(
+                "Only FLUX.3 Image Klein is supported: Klein base needs other steps and guidance, \
+                 and gglib has not drawn with it",
+            ),
+            Self::Flux2Klein => Some(
+                "Only FLUX.2 klein is supported: klein base needs other steps and guidance, \
+                 and gglib has not drawn with it",
+            ),
+            _ => None,
+        }
     }
 
     /// How a main file named `file_name` of this family is sampled. Base and
@@ -556,8 +568,8 @@ impl ImageFamily {
     /// so stable-diffusion.cpp loads each pair as one model and the name is
     /// what tells them apart: a name holding "turbo", in any case, is Turbo.
     /// Flux.1, SDXL, FLUX.3 Image Klein and FLUX.2 klein have one sampling
-    /// each, whatever the name ([`Self::refusal`] turns Klein base away
-    /// first).
+    /// each, whatever the name ([`Self::refusal`] turns either klein base
+    /// away first).
     #[must_use]
     pub fn sampling(self, file_name: &str) -> &'static Sampling {
         let turbo = file_name.to_ascii_lowercase().contains("turbo");

@@ -57,8 +57,8 @@ infrastructure concerns (database, filesystem, etc.).
   each family's `Recipe`, the one table of its components' default sources,
   placement, sizes and memory; each variant's `Sampling` (steps, guidance, sampler,
   sigma preset, linear scale), picked from the file name where two variants
-  share tensors; and the one variant refused by name, FLUX.3 Image Klein
-  base. Its tests read the files' tables in `testdata/image_families/`
+  share tensors; and the variants refused by name, FLUX.3 Image Klein base
+  and FLUX.2 klein base. Its tests read the files' tables in `testdata/image_families/`
 - `engine_pins` - The llama.cpp release gglib installs (`PINNED_LLAMA_RELEASE`),
   in this crate so that code which builds for iOS reads the pin the installer does
 - `runtime_kind` - Which program serves a model (`RuntimeKind`: llama.cpp's

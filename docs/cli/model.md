@@ -241,7 +241,8 @@ beside its weights.
   and Qwen3-VL 4B. A Klein file with "base" in its name, in any case, is
   Klein base, which is not drawn: a request for it is refused.
 - FLUX.2 klein (the 4B model) draws at 4 steps, guidance 1.0, with the
-  FLUX.2 VAE and Qwen3 4B.
+  FLUX.2 VAE and Qwen3 4B. A FLUX.2 klein file with "base" in its name, in
+  any case, is klein base, which is not drawn: a request for it is refused.
 - `list` names a model's family in the `Draws` column, with the components
   it still needs; `inspect` names the family and each component, linked or
   missing.
