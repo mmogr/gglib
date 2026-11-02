@@ -85,6 +85,10 @@ pub(crate) mod unary_body;
 
 pub(crate) mod upstream_health;
 pub(crate) mod upstream_read;
+// Test-only: the objects this crate reads from llama-server, held to the
+// pinned build's recording in contracts/upstream.
+#[cfg(test)]
+mod upstream_shape_tests;
 pub(crate) mod usage_reading;
 
 // What `POST /v1/models/{name}/load` answers, for a paired machine that reads it.
