@@ -51,6 +51,7 @@ approve() {
 
   while IFS= read -r line; do
     line=${line%$'\r'}
+    line=${line#"${line%%[![:space:]]*}"}
     [[ $line == "/approve "* ]] || continue
     line=${line#/approve }
     key=${line%% *}
@@ -144,7 +145,7 @@ selftest() {
   printf '%s\n' \
     'Looks fine to me.' \
     $'/approve moved keeping, because the tunnel reaches the daemon\r' \
-    '/approve flag first reading, b2' \
+    '  /approve flag first reading, b2' \
     '/approve gone remove' \
     '/approve dead remove' >"$dir/good.txt"
   if ! out=$(approve "$dir/observed.json" "$dir/approvals.json" "$dir/good.txt" 2>&1); then
