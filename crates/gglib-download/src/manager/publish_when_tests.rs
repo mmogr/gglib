@@ -9,7 +9,7 @@ use super::super::*;
 use super::tests::{Fixture, ID, REPO, queued};
 
 fn id() -> DownloadId {
-    DownloadId::new(REPO, Some("Q8_0"))
+    DownloadId::new(REPO, Some("zeta.Q8_0"))
 }
 
 /// How many snapshots have been sent, and the last of them.
@@ -52,7 +52,7 @@ async fn queueing_publishes_the_new_row() {
     let (after, snapshot) = sent(&f);
     assert_eq!(after, before + 1);
     let waiting: Vec<&str> = snapshot.waiting.iter().map(|row| row.id.as_str()).collect();
-    assert_eq!(waiting, [ID, "owner/other:Q8_0"]);
+    assert_eq!(waiting, [ID, "owner/other:zeta.Q8_0"]);
 }
 
 /// A waiting download taken off the queue is gone from the next snapshot

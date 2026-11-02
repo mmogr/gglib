@@ -22,9 +22,7 @@ async fn the_group_is_the_weights_then_the_chosen_projector() {
         ..Default::default()
     };
 
-    let group = download_group(&hub, "o/r", Quantization::Q8_0)
-        .await
-        .unwrap();
+    let group = download_group(&hub, "o/r", "Q8_0").await.unwrap();
 
     assert_eq!(
         paths(&group),
@@ -46,9 +44,7 @@ async fn a_repository_without_projectors_gives_the_weights_alone() {
         ..Default::default()
     };
 
-    let group = download_group(&hub, "o/r", Quantization::Q8_0)
-        .await
-        .unwrap();
+    let group = download_group(&hub, "o/r", "Q8_0").await.unwrap();
 
     assert_eq!(paths(&group), ["m-Q8_0.gguf"]);
     assert!(group.projector.is_none());
@@ -63,7 +59,7 @@ async fn a_quantization_the_repository_lacks_is_not_found() {
         ..Default::default()
     };
 
-    let refused = download_group(&hub, "o/r", Quantization::Q8_0).await;
+    let refused = download_group(&hub, "o/r", "Q8_0").await;
 
     assert!(matches!(
         refused,
@@ -80,8 +76,8 @@ fn the_projector_fetched_with_a_quantization_is_the_chosen_one() {
         hub_file("mmproj-F16.gguf", 2, "pf"),
     ];
 
-    let with_q8 = projector_fetched_with(Quantization::Q8_0, &projectors).unwrap();
-    let with_q4 = projector_fetched_with(Quantization::Q4KM, &projectors).unwrap();
+    let with_q8 = projector_fetched_with("Q8_0", &projectors).unwrap();
+    let with_q4 = projector_fetched_with("Q4_K_M", &projectors).unwrap();
 
     assert_eq!(
         (with_q8.path.as_str(), with_q8.size),
@@ -91,5 +87,5 @@ fn the_projector_fetched_with_a_quantization_is_the_chosen_one() {
         (with_q4.path.as_str(), with_q4.size),
         ("mmproj-F16.gguf", 2)
     );
-    assert!(projector_fetched_with(Quantization::Q8_0, &[]).is_none());
+    assert!(projector_fetched_with("Q8_0", &[]).is_none());
 }

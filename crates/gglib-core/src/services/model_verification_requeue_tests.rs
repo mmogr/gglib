@@ -33,25 +33,20 @@ fn stored_as(dir: &Path, quantization: &str, queued: AskedDownloads) -> Fixture 
     fixture_queueing_on(dir, quantization, rows, hub(), queued)
 }
 
-// ── The quantization asked for ───────────────────────────────────────────
+// ── The label asked for ──────────────────────────────────────────────────
 
-/// The shapes a quantization is stored in, each with the one a download asks
-/// the Hub and the queue for. An Unsloth Dynamic quantization stays one, and
-/// none of them becomes a default.
+/// A stored label the listing still has is asked of the Hub and the queue
+/// as it was stored; a stale one gives way to the label of the variant that
+/// holds the model's file.
 #[tokio::test]
-async fn a_repair_asks_for_the_quantization_the_model_was_stored_with() {
+async fn a_repair_asks_for_the_label_the_model_was_stored_with() {
     let stored = [
         ("Q8_0", "Q8_0"),
-        ("q4_k_m", "Q4_K_M"),
-        ("Q6_K", "Q6_K"),
-        ("UD-Q6_K", "UD-Q6_K"),
-        ("ud-q6_k", "UD-Q6_K"),
-        ("UD_Q4_K_M", "UD-Q4_K_M"),
-        ("F16", "F16"),
-        ("FP16", "F16"),
-        ("BF16", "BF16"),
-        ("IQ4_XS", "IQ4_XS"),
-        ("UD-Q6_K_M", "UD-Q6_K_M"),
+        ("q8_0", "q8_0"),
+        ("zeta.Q8_0", "zeta.Q8_0"),
+        ("q4_k_m", "zeta.Q8_0"),
+        ("Q3_K_P", "zeta.Q8_0"),
+        ("FastMTP-32K", "zeta.Q8_0"),
     ];
     for (stored, asked) in stored {
         let dir = tempfile::tempdir().unwrap();
@@ -73,24 +68,63 @@ async fn a_repair_asks_for_the_quantization_the_model_was_stored_with() {
     }
 }
 
-/// A stored quantization that names none is refused while the file is still
-/// there: nothing stands in for it.
+/// A model stored with no label is repaired at the label of the variant
+/// that holds its file, read from the repository's listing.
 #[tokio::test]
-async fn a_stored_quantization_no_download_asks_for_is_refused_before_anything_is_deleted() {
-    for stored in ["BANANA", "Unknown", "Q4_K_M_typo", ""] {
-        let dir = tempfile::tempdir().unwrap();
-        let f = stored_as(dir.path(), stored, AskedDownloads::default());
+async fn a_model_stored_without_a_label_is_repaired_at_the_variant_holding_its_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = stored_as(dir.path(), "", AskedDownloads::default());
 
-        let refused = f.service.repair_model(1, None).await.unwrap_err();
+    let started = f.service.repair_model(1, None).await.unwrap();
 
-        assert_eq!(
-            refused,
-            format!("{stored} is not a quantization a download asks for")
-        );
-        assert!(dir.path().join(WEIGHTS).exists(), "nothing is deleted");
-        assert!(f.queued.asked().is_empty(), "nothing is queued");
-        assert!(f.hub.quantizations_asked.lock().unwrap().is_empty());
-    }
+    assert_eq!(*f.hub.quantizations_asked.lock().unwrap(), ["zeta.Q8_0"]);
+    assert_eq!(started.id, format!("{REPO}:zeta.Q8_0"));
+}
+
+/// A model stored with no label whose file no variant holds is refused
+/// while the file is still there: nothing stands in for the label.
+#[tokio::test]
+async fn a_model_no_variant_holds_is_refused_before_anything_is_deleted() {
+    let dir = tempfile::tempdir().unwrap();
+    let rows = Arc::new(Rows(corrupt_weights(dir.path())));
+    let hub = FakeHub {
+        weights: vec![hub_file("zeta.Q4_K_M.gguf", 7, "w-oid")],
+        ..Default::default()
+    };
+    let f = fixture_queueing_on(dir.path(), "", rows, hub, AskedDownloads::default());
+
+    let refused = f.service.repair_model(1, None).await.unwrap_err();
+
+    assert_eq!(refused, crate::domain::NO_HUB_LABEL);
+    assert!(dir.path().join(WEIGHTS).exists(), "nothing is deleted");
+    assert!(f.queued.asked().is_empty(), "nothing is queued");
+    assert!(f.hub.quantizations_asked.lock().unwrap().is_empty());
+}
+
+/// A stored label the repository has no variant of is refused while the
+/// file is still there.
+#[tokio::test]
+async fn a_label_the_repository_has_no_variant_of_is_refused_before_anything_is_deleted() {
+    let dir = tempfile::tempdir().unwrap();
+    let rows = Arc::new(Rows(corrupt_weights(dir.path())));
+    let f = fixture_queueing_on(
+        dir.path(),
+        "BANANA",
+        rows,
+        FakeHub::default(),
+        AskedDownloads::default(),
+    );
+
+    let refused = f.service.repair_model(1, None).await.unwrap_err();
+
+    assert!(
+        refused.starts_with(&format!(
+            "no variant of {REPO} is labelled 'BANANA' any more"
+        )),
+        "{refused}"
+    );
+    assert!(dir.path().join(WEIGHTS).exists(), "nothing is deleted");
+    assert!(f.queued.asked().is_empty(), "nothing is queued");
 }
 
 // ── What a repair answers ────────────────────────────────────────────────
@@ -127,9 +161,9 @@ async fn a_repair_answers_its_download_and_the_files_it_fetches_again() {
 // ── When nothing fetches the files ───────────────────────────────────────
 
 /// The Hub is asked what the download fetches before any file is deleted, so
-/// a repository that does not answer costs the model nothing.
+/// a repository that no longer holds the model's files costs it nothing.
 #[tokio::test]
-async fn a_repository_that_cannot_be_read_stops_a_repair_before_anything_is_deleted() {
+async fn a_repository_without_the_files_stops_a_repair_before_anything_is_deleted() {
     let dir = tempfile::tempdir().unwrap();
     let rows = corrupt_weights(dir.path());
     let f = fixture(dir.path(), rows, FakeHub::default());
@@ -137,7 +171,7 @@ async fn a_repository_that_cannot_be_read_stops_a_repair_before_anything_is_dele
     let failed = f.service.repair_model(1, None).await.unwrap_err();
 
     assert!(
-        failed.starts_with("Failed to read what a download of owner/zeta-GGUF fetches: "),
+        failed.starts_with("no variant of owner/zeta-GGUF is labelled 'Q8_0' any more"),
         "{failed}"
     );
     assert!(dir.path().join(WEIGHTS).exists(), "nothing is deleted");

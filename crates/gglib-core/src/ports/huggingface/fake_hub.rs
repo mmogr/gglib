@@ -8,10 +8,10 @@ use async_trait::async_trait;
 use super::client::HfClientPort;
 use super::error::{HfPortError, HfPortResult};
 use super::types::{HfFileInfo, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult};
-use crate::download::Quantization;
+use super::variants::variants_of;
 
-/// One repository: the weights files of its one quantization, and its
-/// projectors. Every quantization asked for answers the same weights.
+/// One repository: the weights files of its one variant, and its
+/// projectors. Every label asked for answers the same weights.
 ///
 /// It also holds the heads of files, for a head read, and files of other
 /// repositories, for a file looked up by its path.
@@ -71,16 +71,13 @@ impl HfClientPort for FakeHub {
     async fn search(&self, _options: &HfSearchOptions) -> HfPortResult<HfSearchResult> {
         unimplemented!("a listing is all this hub answers")
     }
-    /// The one quantization, named as the first weights file names it.
+    /// The weights files grouped and labelled as the Hub's listing is.
     async fn list_quantizations(&self, _model_id: &str) -> HfPortResult<Vec<HfQuantInfo>> {
-        Ok(self.weights.first().map_or_else(Vec::new, |first| {
-            vec![HfQuantInfo {
-                name: Quantization::from_filename(&first.path).to_string(),
-                shard_count: self.weights.len(),
-                total_size: self.weights.iter().map(|file| file.size).sum(),
-                file_paths: self.weights.iter().map(|file| file.path.clone()).collect(),
-            }]
-        }))
+        Ok(variants_of(
+            self.weights
+                .iter()
+                .map(|file| (file.path.as_str(), file.size)),
+        ))
     }
     async fn list_gguf_files(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
         unimplemented!("a listing is all this hub answers")

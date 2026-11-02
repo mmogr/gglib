@@ -5,7 +5,7 @@ mod quant_listing;
 mod types;
 mod utils;
 
-pub use api::list_quantizations;
+pub use api::{list_quantizations, stored_variant_label};
 pub use exec::{check_update, update_model};
 pub use types::*;
 

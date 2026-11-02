@@ -6,7 +6,6 @@
 
 use std::path::PathBuf;
 
-use gglib_core::download::Quantization;
 use gglib_core::ports::{CompletedDownload, ResolvedFile};
 
 /// Request to download a model from `HuggingFace`.
@@ -65,7 +64,8 @@ pub struct CliDownloadResult {
     pub downloaded_paths: Vec<PathBuf>,
     /// Primary model file path (first shard or single file).
     pub primary_path: PathBuf,
-    /// Resolved quantization name.
+    /// The label of the variant downloaded, as the repository's listing
+    /// gives it.
     pub quantization: String,
     /// `HuggingFace` repository ID.
     pub repo_id: String,
@@ -95,7 +95,7 @@ impl CliDownloadResult {
             all_paths: self.downloaded_paths.clone(),
             projector_path,
             components: Vec::new(),
-            quantization: Quantization::from_filename(&self.quantization),
+            variant_label: Some(self.quantization.clone()),
             repo_id: self.repo_id.clone(),
             commit_sha: self.commit_sha.clone(),
             is_sharded: weights.len() > 1,

@@ -11,7 +11,7 @@ use gglib_core::download::DownloadError;
 use gglib_core::events::AppEvent;
 use gglib_core::ports::ModelRegistrarPort;
 use gglib_download::cli_exec::{
-    CliDownloadResult, CliUpdateRequest, RowCallback, UpdateCheckResult,
+    CliDownloadResult, CliUpdateRequest, RowCallback, UpdateCheckResult, stored_variant_label,
 };
 
 use crate::error::GuiError;
@@ -45,13 +45,25 @@ impl ModelOps {
         })
     }
 
-    /// Preconditions of the upgrade itself: the repository, and the
-    /// quantization it downloads again.
-    fn upgrade_source(model: &gglib_core::Model) -> Result<(String, String), GuiError> {
+    /// Preconditions of the upgrade itself: the repository, and the label of
+    /// the variant it downloads again: the one stored, else the one of the
+    /// variant that holds the model's file, asked of the Hub with the core's
+    /// token.
+    ///
+    /// A stored label is taken as it is, with no listing: the download
+    /// resolves it against the repository's variants, and refuses a label
+    /// the repository no longer has with the labels it has.
+    async fn upgrade_source(
+        &self,
+        model: &gglib_core::Model,
+    ) -> Result<(String, String), GuiError> {
         let repo = Self::hf_repo(model)?;
-        let quant = model
-            .variant_label
-            .clone()
+        if let Some(label) = &model.variant_label {
+            return Ok((repo, label.clone()));
+        }
+        let quant = stored_variant_label(&repo, model, self.deps.core.hf_token())
+            .await
+            .map_err(|e| GuiError::Internal(e.to_string()))?
             .ok_or_else(|| GuiError::ValidationFailed(gglib_core::domain::NO_HUB_LABEL.into()))?;
         Ok((repo, quant))
     }
@@ -99,7 +111,7 @@ impl ModelOps {
     /// is still checked.
     pub async fn check_upgrade(&self, id: i64) -> Result<UpgradeCheck, GuiError> {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
-        Self::upgrade_source(&model)?;
+        self.upgrade_source(&model).await?;
         self.check_update(id).await
     }
 
@@ -114,7 +126,7 @@ impl ModelOps {
     {
         let model = crate::helpers::resolve_model(self.deps.core.models(), id).await?;
         self.refuse_if_served(&model).await?;
-        let (repo, quant) = Self::upgrade_source(&model)?;
+        let (repo, quant) = self.upgrade_source(&model).await?;
         let check = check(
             repo.clone(),
             model.hf_commit_sha.clone(),

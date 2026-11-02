@@ -6,17 +6,19 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use gglib_core::domain::{ImageFamily, TensorInfo, TensorTable, WeightsFormat};
-use gglib_core::download::{GgufFileRole, Quantization};
+use gglib_core::download::GgufFileRole;
 use gglib_core::ports::huggingface::{
     HfClientPort, HfFileInfo, HfPortError, HfPortResult, HfQuantInfo, HfRepoInfo, HfSearchOptions,
-    HfSearchResult,
+    HfSearchResult, match_variant, variants_of,
 };
 use gglib_core::ports::{
     GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata,
 };
 
-/// One repository. A file's role is read from its name by
-/// [`GgufFileRole::classify`], and its OID is `oid-<path>`.
+/// One repository, whose files are grouped and labelled into variants as
+/// the Hub's listing is. A variant's role, which the Hub's header would
+/// give, is read from its first file's name by [`GgufFileRole::classify`];
+/// a file's OID is `oid-<path>`.
 ///
 /// An image repository's weights also have a head, which
 /// [`ImageHeadParser`] reads as the family's tensor table, and its family's
@@ -79,6 +81,19 @@ impl RepoHub {
         }
     }
 
+    /// The repository's variants, each with the role its first file's name
+    /// gives.
+    fn variants(&self) -> Vec<HfQuantInfo> {
+        let mut variants = variants_of(self.files.iter().map(|f| (f.path.as_str(), f.size)));
+        for variant in &mut variants {
+            variant.role = variant
+                .file_paths
+                .first()
+                .map(|first| GgufFileRole::classify(Path::new(first)));
+        }
+        variants
+    }
+
     /// The files of one role, by path.
     fn of_role(&self, role: GgufFileRole) -> Vec<HfFileInfo> {
         let mut files: Vec<HfFileInfo> = self
@@ -95,23 +110,7 @@ impl RepoHub {
 #[async_trait]
 impl HfClientPort for RepoHub {
     async fn list_quantizations(&self, _model_id: &str) -> HfPortResult<Vec<HfQuantInfo>> {
-        let mut quantizations: Vec<HfQuantInfo> = Vec::new();
-        for file in self.of_role(GgufFileRole::Weights) {
-            let name = Quantization::from_filename(&file.path).to_string();
-            if let Some(known) = quantizations.iter_mut().find(|q| q.name == name) {
-                known.shard_count += 1;
-                known.total_size += file.size;
-                known.file_paths.push(file.path);
-            } else {
-                quantizations.push(HfQuantInfo {
-                    name,
-                    shard_count: 1,
-                    total_size: file.size,
-                    file_paths: vec![file.path],
-                });
-            }
-        }
-        Ok(quantizations)
+        Ok(self.variants())
     }
 
     async fn list_projectors(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
@@ -123,18 +122,19 @@ impl HfClientPort for RepoHub {
         model_id: &str,
         quantization: &str,
     ) -> HfPortResult<Vec<HfFileInfo>> {
-        let files: Vec<HfFileInfo> = self
-            .of_role(GgufFileRole::Weights)
-            .into_iter()
-            .filter(|f| Quantization::from_filename(&f.path).to_string() == quantization)
-            .collect();
-        if files.is_empty() {
+        let variants = self.variants();
+        let chosen = match_variant(&variants, quantization).ok();
+        let Some(variant) = chosen else {
             return Err(HfPortError::QuantizationNotFound {
                 model_id: model_id.to_string(),
                 quantization: quantization.to_string(),
             });
-        }
-        Ok(files)
+        };
+        Ok(variant
+            .file_paths
+            .iter()
+            .filter_map(|path| self.files.iter().find(|f| &f.path == path).cloned())
+            .collect())
     }
 
     async fn search(&self, _options: &HfSearchOptions) -> HfPortResult<HfSearchResult> {

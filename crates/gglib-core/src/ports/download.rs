@@ -7,17 +7,18 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{ComponentRole, ImageFamily};
-use crate::download::{DownloadError, GgufFileRole, Quantization};
+use crate::download::{DownloadError, GgufFileRole};
+use crate::ports::huggingface::HfQuantInfo;
 
 // ============================================================================
 // Resolution Types
 // ============================================================================
 
-/// Result of resolving files for a quantization: the download group.
+/// Result of resolving the files of one variant: the download group.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Resolution {
-    /// The resolved quantization type.
-    pub quantization: Quantization,
+    /// The label of the variant resolved, as the repository's listing has it.
+    pub label: String,
     /// The files to download. The weights come first, in shard order, then
     /// the projector fetched with them, when there is one, and last an image
     /// model's companions, each from its own repository.
@@ -167,23 +168,20 @@ impl ResolvedFile {
 ///
 /// ```ignore
 /// let resolver: Arc<dyn QuantizationResolver> = /* ... */;
-/// let resolution = resolver.resolve("unsloth/Llama-3-GGUF", Quantization::Q4KM).await?;
+/// let resolution = resolver.resolve("unsloth/Llama-3-GGUF", "Q4_K_M").await?;
 /// println!("Found {} files", resolution.file_count());
 /// ```
 #[async_trait]
 pub trait QuantizationResolver: Send + Sync {
-    /// Resolve files for a specific quantization.
-    ///
-    /// Returns a `Resolution` containing the list of files to download
-    /// and metadata about the resolution.
-    async fn resolve(
-        &self,
-        repo_id: &str,
-        quantization: Quantization,
-    ) -> Result<Resolution, DownloadError>;
+    /// Resolve the files of the variant `label` names, as a download group.
+    async fn resolve(&self, repo_id: &str, label: &str) -> Result<Resolution, DownloadError>;
 
-    /// List all available quantizations in a repository.
-    async fn list_available(&self, repo_id: &str) -> Result<Vec<Quantization>, DownloadError>;
+    /// The repository's variants, as its listing gives them, no role read.
+    async fn list_available(&self, repo_id: &str) -> Result<Vec<HfQuantInfo>, DownloadError>;
+
+    /// What `variant` of `repo_id` is, from its first file's header; one that
+    /// cannot be read is a model's.
+    async fn role_of(&self, repo_id: &str, variant: &HfQuantInfo) -> GgufFileRole;
 }
 
 #[cfg(test)]
@@ -193,7 +191,7 @@ mod tests {
     #[test]
     fn test_resolution_methods() {
         let resolution = Resolution {
-            quantization: Quantization::Q4KM,
+            label: "Q4_K_M".to_owned(),
             files: vec![
                 ResolvedFile::with_size("model.gguf", 1000),
                 ResolvedFile::with_size("model-00001-of-00002.gguf", 500),
@@ -222,7 +220,7 @@ mod tests {
     #[test]
     fn a_projector_is_a_file_of_the_group_and_not_a_shard() {
         let resolution = Resolution {
-            quantization: Quantization::Q8_0,
+            label: "Q8_0".to_owned(),
             files: vec![
                 ResolvedFile::with_size("model-Q8_0.gguf", 1000),
                 ResolvedFile::projector("mmproj-F16.gguf", 300, None),
@@ -252,7 +250,7 @@ mod tests {
     #[test]
     fn a_companion_is_a_file_of_the_group_and_not_a_shard() {
         let resolution = Resolution {
-            quantization: Quantization::Q8_0,
+            label: "Q8_0".to_owned(),
             files: vec![
                 ResolvedFile::with_size("flux1-schnell-q8_0.gguf", 1000),
                 ResolvedFile::companion(
@@ -288,7 +286,7 @@ mod tests {
     #[test]
     fn a_group_without_a_projector_has_none() {
         let resolution = Resolution {
-            quantization: Quantization::Q8_0,
+            label: "Q8_0".to_owned(),
             files: vec![ResolvedFile::with_size("model-Q8_0.gguf", 1000)],
             is_sharded: false,
             image_family: None,

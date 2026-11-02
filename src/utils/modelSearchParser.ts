@@ -21,8 +21,10 @@ export type ModelSearchIntent =
 const REPO_PATTERN = /^([a-zA-Z0-9._-]+)\/([a-zA-Z0-9._-]+)$/;
 
 /**
- * Download pattern: namespace/repo:quant
- * Quant must be non-empty and contain only valid characters (no spaces, slashes)
+ * Download pattern: namespace/repo:label
+ * The label is the variant's as the repository's listing gives it (`Q4_K_M`,
+ * `UD-Q4_K_XL`, `FastMTP-32K`): non-empty, with no spaces, slashes or colons.
+ * The daemon matches it to a variant; nothing here reads a quant from it.
  */
 const DOWNLOAD_PATTERN = /^([a-zA-Z0-9._-]+)\/([a-zA-Z0-9._-]+):([a-zA-Z0-9._-]+)$/;
 

@@ -11,7 +11,6 @@ use std::path::Path;
 use super::RepositoryError;
 use super::download::ResolvedFile;
 use crate::domain::{ComponentRole, Model};
-use crate::download::Quantization;
 
 /// Information about a completed download for model registration.
 ///
@@ -30,8 +29,9 @@ pub struct CompletedDownload {
     /// An image model's companions downloaded with its weights, each with the
     /// role it plays, in the group's order. Empty for any other model.
     pub components: Vec<(ComponentRole, std::path::PathBuf)>,
-    /// The resolved quantization.
-    pub quantization: Quantization,
+    /// The label of the Hub variant downloaded, as the repository's listing
+    /// gives it; `None` when the download named none.
+    pub variant_label: Option<String>,
     /// Repository ID (e.g., "unsloth/Llama-3-GGUF").
     pub repo_id: String,
     /// Commit SHA at time of download.

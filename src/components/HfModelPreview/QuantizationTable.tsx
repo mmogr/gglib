@@ -39,10 +39,13 @@ const FitIndicator: FC<FitIndicatorProps> = ({ sizeBytes, checkFit, getTooltip }
   );
 };
 
+/** Why a draft or helper variant offers no download. */
+const HELPER_FILES_REFUSAL = "gglib can't run draft or helper files on their own";
+
 interface QuantizationTableProps {
-  /** The repository's quantizations, in the order shown */
+  /** The repository's variants, in the order shown */
   quantizations: HfQuantization[];
-  /** Name of the selected quantization */
+  /** Label of the selected variant */
   selectedName: string | undefined;
   /** Called when a row is clicked, or focus enters it */
   onSelect: (quant: HfQuantization) => void;
@@ -55,10 +58,11 @@ interface QuantizationTableProps {
 }
 
 /**
- * The quantization table: one row per quantization with its weights' size,
- * shard count, memory fit and download button. One row is the selected one.
- * The size and shard count are the weights alone; the fit counts the
- * projector fetched with them too, since both are loaded.
+ * The variant table: one row per variant, by its uploader's label, with its
+ * size, shard count, memory fit and download button. One row is the
+ * selected one. The size and shard count are the weights alone; the fit
+ * counts the projector fetched with them too, since both are loaded. A
+ * draft or helper is marked as one, and its download is disabled.
  */
 export const QuantizationTable: FC<QuantizationTableProps> = ({
   quantizations,
@@ -85,20 +89,27 @@ export const QuantizationTable: FC<QuantizationTableProps> = ({
         <span></span>
       </div>
       <div className="flex flex-col max-h-[300px] overflow-y-auto">
-        {quantizations.map((quant) => (
+        {quantizations.map((quant) => {
+          const helper = quant.role === 'Sidecar';
+          return (
           <div
-            key={quant.name}
-            data-testid={`quant-row-${quant.name}`}
-            aria-current={quant.name === selectedName ? 'true' : undefined}
+            key={quant.label}
+            data-testid={`quant-row-${quant.label}`}
+            aria-current={quant.label === selectedName ? 'true' : undefined}
             onClick={() => onSelect(quant)}
             onFocus={() => onSelect(quant)}
             className={cn(
               'grid grid-cols-[1fr_80px_60px_50px_90px] gap-sm px-base py-md items-center border-b border-border-light last:border-b-0 cursor-pointer transition-colors duration-150 ease-linear hover:bg-surface-hover',
-              quant.name === selectedName && 'bg-surface-hover',
+              quant.label === selectedName && 'bg-surface-hover',
             )}
           >
             <span className="overflow-hidden text-ellipsis whitespace-nowrap">
-              <span className="font-medium text-text">{quant.name}</span>
+              <span className="font-medium text-text">{quant.label}</span>
+              {helper && (
+                <span className="ml-sm text-xs text-text-secondary" title={HELPER_FILES_REFUSAL}>
+                  draft or helper
+                </span>
+              )}
             </span>
             <span className="text-sm text-text-secondary text-right">{formatBytes(quant.size_bytes)}</span>
             <span className="text-sm text-text-secondary text-center">
@@ -117,14 +128,21 @@ export const QuantizationTable: FC<QuantizationTableProps> = ({
               <Button
                 size="sm"
                 onClick={() => onDownload(quant)}
-                disabled={downloadsDisabled}
-                title={downloadsDisabled ? disabledReason : `Download ${quant.name}`}
+                disabled={downloadsDisabled || helper}
+                title={
+                  helper
+                    ? HELPER_FILES_REFUSAL
+                    : downloadsDisabled
+                      ? disabledReason
+                      : `Download ${quant.label}`
+                }
               >
                 Download
               </Button>
             </span>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

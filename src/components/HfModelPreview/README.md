@@ -9,7 +9,7 @@ Detail preview card for a HuggingFace model showing metadata (params, architectu
 | File | Role |
 |------|------|
 | `HfModelPreview.tsx` | Model header, tool badge, loading of the listing, the selected quantization |
-| `QuantizationTable.tsx` | One row per quantization: weights size, shards, fit indicator, download button; a click or focus selects the row |
+| `QuantizationTable.tsx` | One row per variant, by its uploader's label: size, shards, fit indicator, download button; a click or focus selects the row. A draft or helper is marked and offers no download; a projector is no row |
 | `ProjectorNote.tsx` | Under the table: the projector the selected quantization's download fetches, its size, and what it costs |
 | `CompanionNote.tsx` | Under the table, for a repository the daemon reads as an image model: the family, each companion's role, file name, repository and size, "already here" for one in the models directory, and the bytes the companions add |
 

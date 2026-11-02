@@ -2161,13 +2161,19 @@ public func FfiConverterTypeLibraryDirs_lower(_ value: LibraryDirs) -> RustBuffe
 
 
 /**
- * One quantization a repository publishes.
+ * One variant a repository publishes: files that are shards of one
+ * another, named as its uploader named it.
  */
 public struct QuantOffer: Equatable, Hashable {
     /**
-     * Its name: `Q4_K_M`, `Q8_0` and so on.
+     * Its label, which a download asks for it by: `Q4_K_M`, `UD-Q4_K_XL`,
+     * `Q3_K_P` and so on.
      */
-    public var name: String
+    public var label: String
+    /**
+     * What its header says it is.
+     */
+    public var role: VariantRole
     /**
      * The size of every file of it, in bytes.
      */
@@ -2189,8 +2195,12 @@ public struct QuantOffer: Equatable, Hashable {
     // declare one manually.
     public init(
         /**
-         * Its name: `Q4_K_M`, `Q8_0` and so on.
-         */name: String, 
+         * Its label, which a download asks for it by: `Q4_K_M`, `UD-Q4_K_XL`,
+         * `Q3_K_P` and so on.
+         */label: String, 
+        /**
+         * What its header says it is.
+         */role: VariantRole, 
         /**
          * The size of every file of it, in bytes.
          */totalBytes: UInt64, 
@@ -2203,7 +2213,8 @@ public struct QuantOffer: Equatable, Hashable {
         /**
          * What the verdict was reached from.
          */why: FitWhy) {
-        self.name = name
+        self.label = label
+        self.role = role
         self.totalBytes = totalBytes
         self.shardCount = shardCount
         self.verdict = verdict
@@ -2226,7 +2237,8 @@ public struct FfiConverterTypeQuantOffer: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> QuantOffer {
         return
             try QuantOffer(
-                name: FfiConverterString.read(from: &buf), 
+                label: FfiConverterString.read(from: &buf), 
+                role: FfiConverterTypeVariantRole.read(from: &buf), 
                 totalBytes: FfiConverterUInt64.read(from: &buf), 
                 shardCount: FfiConverterUInt32.read(from: &buf), 
                 verdict: FfiConverterTypeFitVerdict.read(from: &buf), 
@@ -2235,7 +2247,8 @@ public struct FfiConverterTypeQuantOffer: FfiConverterRustBuffer {
     }
 
     public static func write(_ value: QuantOffer, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.label, into: &buf)
+        FfiConverterTypeVariantRole.write(value.role, into: &buf)
         FfiConverterUInt64.write(value.totalBytes, into: &buf)
         FfiConverterUInt32.write(value.shardCount, into: &buf)
         FfiConverterTypeFitVerdict.write(value.verdict, into: &buf)
@@ -3214,6 +3227,94 @@ public func FfiConverterTypeMissingInput_lift(_ buf: RustBuffer) throws -> Missi
 #endif
 public func FfiConverterTypeMissingInput_lower(_ value: MissingInput) -> RustBuffer {
     return FfiConverterTypeMissingInput.lower(value)
+}
+
+
+
+/**
+ * What a variant's header says it is.
+ */
+
+public enum VariantRole: Equatable, Hashable {
+    
+    /**
+     * A model's weights, which a download fetches and gglib runs. A
+     * variant whose header could not be read is taken for one.
+     */
+    case model
+    /**
+     * A draft or helper (an MTP head, an EAGLE or `DFlash` draft, an
+     * importance matrix), which gglib cannot run on its own: listed, never
+     * downloaded.
+     */
+    case draftOrHelper
+    /**
+     * A multimodal projector, fetched with a model and never alone.
+     */
+    case projector
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension VariantRole: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVariantRole: FfiConverterRustBuffer {
+    typealias SwiftType = VariantRole
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VariantRole {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .model
+        
+        case 2: return .draftOrHelper
+        
+        case 3: return .projector
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: VariantRole, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .model:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .draftOrHelper:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .projector:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVariantRole_lift(_ buf: RustBuffer) throws -> VariantRole {
+    return try FfiConverterTypeVariantRole.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVariantRole_lower(_ value: VariantRole) -> RustBuffer {
+    return FfiConverterTypeVariantRole.lower(value)
 }
 
 

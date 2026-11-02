@@ -83,7 +83,10 @@ async fn an_image_models_companions_are_queued_under_its_one_id() {
         .await
         .unwrap();
 
-    assert_eq!(id.to_string(), "leejet/FLUX.1-schnell-gguf:Q8_0");
+    assert_eq!(
+        id.to_string(),
+        "leejet/FLUX.1-schnell-gguf:flux1-schnell-q8_0"
+    );
     let snapshot = manager.get_queue_snapshot().await.unwrap();
     assert_eq!(snapshot.waiting.len(), 1, "one row for the model");
     assert_eq!(snapshot.waiting[0].total_bytes, Some(1_030));
@@ -143,7 +146,7 @@ async fn an_image_repository_with_no_quantization_asked_is_fetched_at_q8_0() {
 
     let id = manager.queue_download_smart(FLUX_REPO, None).await.unwrap();
 
-    assert_eq!(id.quantization(), Some("Q8_0"));
+    assert_eq!(id.quantization(), Some("q8_0"));
     let files = queued_files(&manager).await;
     assert_eq!(files[0].shard_info.as_ref().unwrap().filename, WEIGHTS);
     assert_eq!(files.len(), 4, "with its companions");
@@ -157,7 +160,7 @@ async fn an_image_repository_without_q8_0_is_fetched_at_what_it_has() {
 
     let id = manager.queue_download_smart(FLUX_REPO, None).await.unwrap();
 
-    assert_eq!(id.quantization(), Some("Q4_K_M"));
+    assert_eq!(id.quantization(), Some("flux1-schnell-q4_k_m"));
     let files = queued_files(&manager).await;
     assert_eq!(
         files[0].shard_info.as_ref().unwrap().filename,
@@ -203,7 +206,7 @@ async fn a_quantization_asked_for_an_image_model_is_the_one_fetched() {
         .await
         .unwrap();
 
-    assert_eq!(id.quantization(), Some("Q4_K_M"));
+    assert_eq!(id.quantization(), Some("q4_k_m"));
 }
 
 // ── Where each file goes ─────────────────────────────────────────────────

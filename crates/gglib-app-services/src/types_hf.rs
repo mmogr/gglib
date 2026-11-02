@@ -5,6 +5,7 @@
 //! `types`.
 
 use gglib_core::domain::{ComponentRole, ImageFamily};
+use gglib_core::download::GgufFileRole;
 use gglib_core::ports::HfRepoInfo;
 use serde::{Deserialize, Serialize};
 
@@ -102,11 +103,17 @@ pub struct HfSearchResponse {
     pub total_count: Option<u64>,
 }
 
-/// Information about a specific quantization variant.
+/// One variant a repository publishes: a set of files that are shards of
+/// one another, named as its uploader named it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS), ts(export))]
 pub struct HfQuantization {
-    pub name: String,
+    /// The uploader's name for it, which a download asks for it by.
+    pub label: String,
+    /// What its first file's header says it is: a model's weights, a draft
+    /// or helper (`Sidecar`), or a projector. Only a model is downloaded.
+    pub role: GgufFileRole,
+    /// Its first file.
     pub file_path: String,
     #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
     pub size_bytes: u64,

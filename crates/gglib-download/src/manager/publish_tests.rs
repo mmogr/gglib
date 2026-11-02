@@ -13,7 +13,7 @@ use super::super::*;
 use crate::test_hub::RepoHub;
 
 pub(super) const REPO: &str = "owner/zeta-GGUF";
-pub(super) const ID: &str = "owner/zeta-GGUF:Q8_0";
+pub(super) const ID: &str = "owner/zeta-GGUF:zeta.Q8_0";
 
 pub(super) struct Fixture {
     pub(super) manager: Arc<DownloadManagerImpl>,
@@ -59,7 +59,7 @@ async fn rest_and_sse_carry_the_same_snapshot() {
         .queue_download_smart("owner/other", Some("Q8_0".to_string()))
         .await
         .unwrap();
-    let ended = DownloadId::new("owner/gone", Some("Q8_0"));
+    let ended = DownloadId::new("owner/gone", Some("zeta.Q8_0"));
     let mut queue = f.manager.queue.write().await;
     queue.record_outcome(&ended, failed("no route"));
     drop(queue);
@@ -256,7 +256,7 @@ async fn the_meter_task_ends_on_cancellation() {
     let (progress_tx, _rx) = watch::channel(ProgressUpdate::default());
     let cancel = CancellationToken::new();
     let task = tokio::spawn(Arc::clone(&manager).run_meter(
-        DownloadId::new(REPO, Some("Q8_0")),
+        DownloadId::new(REPO, Some("zeta.Q8_0")),
         progress_tx.subscribe(),
         cancel.clone(),
         CancellationToken::new(),

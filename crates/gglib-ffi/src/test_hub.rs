@@ -6,12 +6,10 @@
 //! also holds files of its own, whose bytes a fake file server serves at the
 //! addresses it gives, and it can refuse everything with one error.
 
-use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use async_trait::async_trait;
-use gglib_core::download::Quantization;
-use gglib_core::ports::huggingface::HfPortResult;
+use gglib_core::ports::huggingface::{HfPortResult, match_variant, variants_of};
 use gglib_core::ports::{
     HfClientPort, HfFileInfo, HfPortError, HfQuantInfo, HfRepoInfo, HfSearchOptions, HfSearchResult,
 };
@@ -55,11 +53,6 @@ pub(crate) struct HubFile {
 }
 
 impl HubFile {
-    /// The quantization the file's name says it is.
-    fn quantization(&self) -> String {
-        Quantization::from_filename(&self.path).to_string()
-    }
-
     /// The file's SHA-256, which the Hub gives as its LFS OID.
     pub(crate) fn digest(&self) -> String {
         Sha256::digest(&self.bytes)
@@ -96,24 +89,33 @@ impl TestHub {
         self.refusal.map_or(Ok(()), |refusal| Err(refusal()))
     }
 
-    /// The recorded repository's GGUF files, by quantization.
-    fn recorded_quantizations() -> BTreeMap<String, Vec<String>> {
+    /// The recorded repository's variants, grouped and labelled as the
+    /// Hub's listing is, each at its size in [`RECORDED_SIZES`].
+    fn recorded_variants() -> Vec<HfQuantInfo> {
         let info: Value = serde_json::from_str(MODEL_INFO).expect("the recording is JSON");
-        let mut quants: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        for sibling in info["siblings"]
+        let paths = info["siblings"]
             .as_array()
             .expect("the recording lists files")
-        {
-            let path = sibling["rfilename"].as_str().expect("a file has a name");
-            if std::path::Path::new(path)
-                .extension()
-                .is_some_and(|extension| extension == "gguf")
-            {
-                let name = Quantization::from_filename(path).to_string();
-                quants.entry(name).or_default().push(path.to_owned());
-            }
-        }
-        quants
+            .iter()
+            .map(|sibling| sibling["rfilename"].as_str().expect("a file has a name"));
+        variants_of(paths.map(|path| (path, 0)))
+            .into_iter()
+            .map(|variant| HfQuantInfo {
+                total_size: RECORDED_SIZES
+                    .iter()
+                    .find(|(label, _)| *label == variant.label)
+                    .map_or(0, |(_, size)| *size),
+                ..variant
+            })
+            .collect()
+    }
+
+    /// This Hub's own files of `repo`, as variants.
+    fn variants_of_repo(&self, repo: &str) -> Vec<HfQuantInfo> {
+        variants_of(
+            self.files_of(repo)
+                .map(|file| (file.path.as_str(), file.bytes.len() as u64)),
+        )
     }
 
     fn files_of<'a>(&'a self, repo: &'a str) -> impl Iterator<Item = &'a HubFile> {
@@ -156,28 +158,9 @@ impl HfClientPort for TestHub {
     async fn list_quantizations(&self, model_id: &str) -> HfPortResult<Vec<HfQuantInfo>> {
         self.refused()?;
         if model_id == RECORDED_REPO {
-            return Ok(Self::recorded_quantizations()
-                .into_iter()
-                .map(|(name, file_paths)| HfQuantInfo {
-                    total_size: RECORDED_SIZES
-                        .iter()
-                        .find(|(quant, _)| *quant == name)
-                        .map_or(0, |(_, size)| *size),
-                    shard_count: file_paths.len(),
-                    file_paths,
-                    name,
-                })
-                .collect());
+            return Ok(Self::recorded_variants());
         }
-        Ok(self
-            .files_of(model_id)
-            .map(|file| HfQuantInfo {
-                name: file.quantization(),
-                shard_count: 1,
-                total_size: file.bytes.len() as u64,
-                file_paths: vec![file.path.clone()],
-            })
-            .collect())
+        Ok(self.variants_of_repo(model_id))
     }
 
     async fn list_projectors(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
@@ -196,9 +179,13 @@ impl HfClientPort for TestHub {
         quantization: &str,
     ) -> HfPortResult<Vec<HfFileInfo>> {
         self.refused()?;
+        let variants = self.variants_of_repo(model_id);
+        let paths = match_variant(&variants, quantization)
+            .map(|v| v.file_paths.clone())
+            .unwrap_or_default();
         let files: Vec<HfFileInfo> = self
             .files_of(model_id)
-            .filter(|file| file.quantization() == quantization)
+            .filter(|file| paths.contains(&file.path))
             .map(HubFile::info)
             .collect();
         if files.is_empty() {

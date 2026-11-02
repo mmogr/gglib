@@ -1,0 +1,23 @@
+[
+{"type": "file", "path": ".gitattributes", "size": 2619},
+{"type": "file", "path": "FastMTP-PROVENANCE.json", "size": 882},
+{"type": "file", "path": "FastMTP-PROVENANCE.json.sig", "size": 64},
+{"type": "file", "path": "HauhauCS-FastMTP-Ed25519-PUBLIC.pem", "size": 113},
+{"type": "file", "path": "HauhauCS-FastMTP-llama.cpp.patch", "size": 2445},
+{"type": "file", "path": "HauhauCS-RELEASE-MANIFEST.json", "size": 4828},
+{"type": "file", "path": "HauhauCS-RELEASE-MANIFEST.json.sig", "size": 64},
+{"type": "file", "path": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-FastMTP-32K.gguf", "size": 903453952},
+{"type": "file", "path": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ2_M.gguf", "size": 10319906944},
+{"type": "file", "path": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ3_M.gguf", "size": 12789303424},
+{"type": "file", "path": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ3_XS.gguf", "size": 12175558784},
+{"type": "file", "path": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ4_XS.gguf", "size": 15705860224},
+{"type": "file", "path": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q2_K_P.gguf", "size": 10676422784},
+{"type": "file", "path": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q3_K_P.gguf", "size": 13441058944},
+{"type": "file", "path": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf", "size": 17923393664},
+{"type": "file", "path": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q5_K_P.gguf", "size": 20218177664},
+{"type": "file", "path": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q6_K_P.gguf", "size": 25924151424},
+{"type": "file", "path": "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q8_K_P.gguf", "size": 31457990784},
+{"type": "file", "path": "README.md", "size": 16474},
+{"type": "file", "path": "SHA256SUMS", "size": 2119},
+{"type": "file", "path": "mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf", "size": 931146624}
+]

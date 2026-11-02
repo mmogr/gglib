@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use gglib_core::download::{CompletionKey, DownloadError, DownloadId, Quantization};
+use gglib_core::download::{CompletionKey, DownloadError, DownloadId};
 use gglib_core::ports::{QuantizationResolver, Resolution};
 use gglib_core::utils::shard_filename::base_shard_filename;
 
@@ -30,10 +30,8 @@ impl DownloadManagerImpl {
         commit: String,
     ) -> Result<DownloadId, DownloadError> {
         let resolver = HfQuantizationResolver::weights_only(Arc::clone(&self.hf_client));
-        let resolution = resolver
-            .resolve(repo_id, Quantization::from_filename(quantization))
-            .await?;
-        let id = DownloadId::new(repo_id, Some(&resolution.quantization.to_string()));
+        let resolution = resolver.resolve(repo_id, quantization).await?;
+        let id = DownloadId::new(repo_id, Some(&resolution.label));
         let upgrade = Upgrade { model_id, commit };
 
         let Some(position) = self.enqueue_group(&id, &resolution, Some(&upgrade)).await? else {
@@ -136,19 +134,18 @@ fn completion_key(
         repo_id: id.model_id().to_string(),
         revision: "unspecified".to_string(),
         filename_canon: base_shard_filename(filename),
-        quantization: Some(resolution.quantization.to_string()),
+        quantization: Some(resolution.label.clone()),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gglib_core::download::Quantization;
     use gglib_core::ports::ResolvedFile;
 
     fn resolution(files: Vec<ResolvedFile>) -> Resolution {
         Resolution {
-            quantization: Quantization::Q8_0,
+            label: "Q8_0".to_owned(),
             files,
             is_sharded: false,
             image_family: None,

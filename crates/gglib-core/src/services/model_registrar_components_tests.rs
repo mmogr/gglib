@@ -11,7 +11,6 @@ use chrono::{DateTime, Utc};
 use super::*;
 use crate::domain::image_family_goldens::Golden;
 use crate::domain::{ComponentRole, ImageFamily, Model, ModelComponent, ModelFile, NewModel};
-use crate::download::Quantization;
 use crate::paths::canonical_model_path;
 use crate::ports::{
     GgufCapabilities, GgufMetadata, GgufParseError, HeadMetadata, ResolvedFile, TensorTable,
@@ -160,7 +159,7 @@ fn flux_download(models: &Path, vae: Golden) -> CompletedDownload {
         primary_path: weights,
         projector_path: None,
         components,
-        quantization: Quantization::Q8_0,
+        variant_label: Some("Q8_0".to_owned()),
         repo_id: "leejet/FLUX.1-schnell-gguf".to_owned(),
         commit_sha: "abc123".to_owned(),
         is_sharded: false,

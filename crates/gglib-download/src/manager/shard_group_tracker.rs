@@ -7,7 +7,6 @@ use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::time::Instant;
 
-use gglib_core::download::Quantization;
 use gglib_core::ports::ResolvedFile;
 
 use crate::queue::ShardGroupId;
@@ -19,8 +18,9 @@ pub(crate) struct GroupMetadata {
     pub repo_id: String,
     /// Commit SHA at time of download.
     pub commit_sha: String,
-    /// The resolved quantization.
-    pub quantization: Quantization,
+    /// The label of the variant downloaded; `None` when the download named
+    /// none.
+    pub variant_label: Option<String>,
     /// Primary filename (first shard filename).
     pub primary_filename: String,
     /// `HuggingFace` tags for the model.

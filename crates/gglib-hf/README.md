@@ -33,11 +33,11 @@ gglib-core (port definition)        gglib-hf (adapter implementation)
 **Module Descriptions:**
 - **`config.rs`** — Client configuration (tokens, base URLs)
 - **`error.rs`** — Error types for API failures
-- **`file_roles.rs`** — Telling a repository's weights files from its projectors
+- **`file_roles.rs`** — Finding a repository's projectors by name
 - **`http.rs`** — HTTP backend abstraction for testability: JSON reads, a ranged read of a file's head, and a posted form
 - **`kind.rs`** — What each `HfModelKind` of search is: the tags it asks the Hub for, and which hits it keeps
-- **`models.rs`** — What the crate holds of a repository: its reference, its file entries and its quantizations
-- **`parsing.rs`** — JSON parsing: a model's summary (`repo_info_from_json`, the one reader of a search hit and of a model info), a file tree, and the grouping of files into quantizations
+- **`models.rs`** — What the crate holds of a repository: its reference and its file entries
+- **`parsing.rs`** — JSON parsing: a model's summary (`repo_info_from_json`, the one reader of a search hit and of a model info), a file tree, and the grouping of files into labelled variants
 - **`port.rs`** — `HfClientPort` trait implementation
 - **`url.rs`** — URL construction helpers and the Hub's own name for each `HfSortField`
 - **`client/`** — HTTP client implementation and `HuggingFace` API integration
@@ -71,11 +71,11 @@ async fn example() {
 - **Model Search**: Search `HuggingFace` Hub for GGUF models with pagination and sorting, of
   models that chat (`filter=gguf`, keeping the hits whose pipeline is a chat one or none) or
   text-to-image ones (`filter=gguf&filter=text-to-image`)
-- **Quantization Listing**: List available quantization variants (`Q4_K_M`, `Q5_K_S`, etc.),
-  including Unsloth Dynamic ("UD-") quants (`UD-Q4_K_M`, `UD-Q6_K`, etc.) as separate,
-  independently selectable entries from their plain counterparts
+- **Variant Listing**: A repository's variants: its GGUF files grouped into shard sets,
+  each labelled as its uploader named it (`UD-Q4_K_XL`, `Q3_K_P`, `FastMTP-32K`), with no
+  quant read from a name, so no two distinct files are merged as shards
 - **Projector Listing**: A repository's projectors (`mmproj` files) are listed apart, with
-  their OIDs. A projector is never a quantization of the model and never a shard of one
+  their OIDs. A projector is a variant of its own, never a shard of another
 - **File Resolution**: Find specific GGUF files for download, including sharded models
 - **One File by Path**: A file's first bytes, read with a `Range` from the address a download
   fetches it from, and its size and LFS OID, looked up at `paths-info`

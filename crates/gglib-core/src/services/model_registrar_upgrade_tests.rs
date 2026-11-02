@@ -11,7 +11,6 @@ use super::*;
 use crate::domain::{
     FileType, GgufCapabilities, GgufMetadata, HeadMetadata, NewModel, TensorPayload, TensorTable,
 };
-use crate::download::Quantization;
 use crate::ports::{GgufParseError, NoopGgufParser};
 
 /// Reads every file as a `Q8_0` header over 8000 weights in 8500 bytes.
@@ -69,7 +68,7 @@ async fn an_upgrade_reads_the_new_files_type_and_bits_and_keeps_the_label() {
         all_paths: vec![PathBuf::from("/models/new.gguf")],
         projector_path: None,
         components: vec![],
-        quantization: Quantization::Q8_0,
+        variant_label: Some("Q8_0".to_owned()),
         repo_id: "test/model".to_string(),
         commit_sha: "def456".to_string(),
         is_sharded: false,

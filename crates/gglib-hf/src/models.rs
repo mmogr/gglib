@@ -128,43 +128,6 @@ impl HfFileEntry {
     }
 }
 
-// ============================================================================
-// Quantization (internal)
-// ============================================================================
-
-/// Information about a quantization variant in a repository.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct HfQuantization {
-    /// Quantization name (e.g., `Q4_K_M`, `Q8_0`)
-    pub name: String,
-    /// Number of files (1 for single file, >1 for sharded)
-    pub shard_count: usize,
-    /// Paths to all files for this quantization
-    pub paths: Vec<String>,
-    /// Total size in bytes across all shards
-    pub total_size: u64,
-}
-
-/// Test-only, and necessarily so: this type never leaves gglib-hf. `port.rs`'s
-/// `to_quant_info` converts it into the `HfQuantInfo` DTO, and that is what
-/// every other crate reads — so nothing outside could call this even if it
-/// wanted to.
-///
-/// Do not use a workspace grep for `is_sharded` or `shard_count` as evidence
-/// either way. Those names sit on several other types across the workspace —
-/// `HfQuantInfo` carries an `is_sharded()` method with this one's exact body,
-/// and gglib-app-services has a second struct also called `HfQuantization`,
-/// with an `is_sharded` field — so a hit tells you nothing about *this* method
-/// until you have resolved the receiver's type. Resolving the type is the
-/// point; counting the surfaces is not.
-#[cfg(test)]
-impl HfQuantization {
-    /// Check if this quantization is sharded (multiple files).
-    pub(crate) const fn is_sharded(&self) -> bool {
-        self.shard_count > 1
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,28 +184,5 @@ mod tests {
             oid: None,
         };
         assert!(!other.is_gguf());
-    }
-
-    #[test]
-    fn test_hf_quantization_is_sharded() {
-        let single = HfQuantization {
-            name: "Q4_K_M".to_string(),
-            shard_count: 1,
-            paths: vec!["model.Q4_K_M.gguf".to_string()],
-            total_size: 4_000_000_000,
-        };
-        assert!(!single.is_sharded());
-
-        let sharded = HfQuantization {
-            name: "Q8_0".to_string(),
-            shard_count: 3,
-            paths: vec![
-                "model-00001-of-00003.gguf".to_string(),
-                "model-00002-of-00003.gguf".to_string(),
-                "model-00003-of-00003.gguf".to_string(),
-            ],
-            total_size: 12_000_000_000,
-        };
-        assert!(sharded.is_sharded());
     }
 }

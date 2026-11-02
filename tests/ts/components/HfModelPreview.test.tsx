@@ -59,10 +59,16 @@ const MODEL: HfModelSummary = {
   tags: [],
 };
 
-function quant(name: string, sizeMib: number, projector: HfQuantization['projector']): HfQuantization {
+function quant(
+  label: string,
+  sizeMib: number,
+  projector: HfQuantization['projector'],
+  role: HfQuantization['role'] = 'Weights',
+): HfQuantization {
   return {
-    name,
-    file_path: `X-${name}.gguf`,
+    label,
+    role,
+    file_path: `X-${label}.gguf`,
     size_bytes: sizeMib * MIB,
     size_mb: sizeMib,
     is_sharded: false,
@@ -144,6 +150,22 @@ describe('HfModelPreview — the projector that comes with a download', () => {
     await user.click(within(row).getByRole('button', { name: 'Download' }));
 
     expect(onDownload).toHaveBeenCalledWith('owner/X-GGUF', 'Q8_0');
+  });
+
+  it('marks a draft and offers no download of it, and lists no projector as a row', async () => {
+    await preview([
+      quant('Q4_K_P', 16000, null),
+      quant('FastMTP-32K', 860, null, 'Sidecar'),
+      quant('mmproj-BF16', 880, null, 'Projector'),
+    ]);
+
+    const draft = screen.getByTestId('quant-row-FastMTP-32K');
+    expect(within(draft).getByText('draft or helper')).toBeInTheDocument();
+    expect(within(draft).getByRole('button', { name: 'Download' })).toBeDisabled();
+    expect(
+      within(screen.getByTestId('quant-row-Q4_K_P')).getByRole('button', { name: 'Download' }),
+    ).toBeEnabled();
+    expect(screen.queryByTestId('quant-row-mmproj-BF16')).not.toBeInTheDocument();
   });
 
   it('judges the fit with the projector counted, since both are loaded', async () => {

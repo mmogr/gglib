@@ -15,7 +15,7 @@ use std::sync::Arc;
 use common::setup_test_pool;
 
 use gglib_core::services::{ImportMode, ModelService};
-use gglib_core::{CompletedDownload, ModelRegistrarPort, ModelRepository, Quantization};
+use gglib_core::{CompletedDownload, ModelRegistrarPort, ModelRepository};
 use gglib_db::{CoreFactory, SqliteModelRepository};
 use gglib_gguf::{GgufParser, write_string_gguf};
 
@@ -41,7 +41,7 @@ async fn register_from_hf(
         all_paths: vec![file_path.to_path_buf()],
         projector_path: None,
         components: vec![],
-        quantization: Quantization::from_filename(quantization),
+        variant_label: Some(quantization.to_owned()),
         repo_id: repo_id.to_string(),
         commit_sha: "abc123".to_string(),
         is_sharded: false,
@@ -108,7 +108,7 @@ async fn duplicate_names_from_distinct_repos_both_persist_and_resolve() {
             all_paths: vec![path.clone()],
             projector_path: None,
             components: vec![],
-            quantization: Quantization::from_filename("Q4_K_M"),
+            variant_label: Some("Q4_K_M".to_owned()),
             repo_id: repo_id.to_string(),
             commit_sha: "abc123".to_string(),
             is_sharded: false,

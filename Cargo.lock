@@ -2569,6 +2569,7 @@ dependencies = [
  "dirs 6.0.0",
  "dotenvy",
  "futures-core",
+ "futures-util",
  "getrandom 0.4.3",
  "serde",
  "serde_json",

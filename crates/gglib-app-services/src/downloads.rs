@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use gglib_core::download::{DownloadId, QueueSnapshot};
 use gglib_core::paths::resolve_models_dir;
+use gglib_core::ports::huggingface::read_roles;
 use gglib_core::ports::{
     DownloadManagerPort, GgufParserPort, HfClientPort, HfSearchOptions, ToolSupportDetectorPort,
 };
@@ -170,8 +171,10 @@ impl DownloadOps {
     /// projector its download fetches, and an image model's companions with
     /// what a download would fetch of them.
     ///
-    /// The head of one quantization's weights is read for that, so every
-    /// listing costs one ranged read of at most `SNIFF_HEAD_BYTES`.
+    /// Each variant's role is read from a head of its first file, and the
+    /// head of one model's weights for an image model's companions, so a
+    /// listing costs a ranged read of `VARIANT_HEAD_BYTES` per variant and
+    /// one of at most `SNIFF_HEAD_BYTES`.
     pub async fn get_model_quantizations(
         &self,
         model_id: &str,
@@ -182,6 +185,13 @@ impl DownloadOps {
             .list_quantizations(model_id)
             .await
             .map_err(failed)?;
+        let quants = read_roles(
+            self.hf_client.as_ref(),
+            self.gguf_parser.as_ref(),
+            model_id,
+            quants,
+        )
+        .await;
         let projectors = self
             .hf_client
             .list_projectors(model_id)

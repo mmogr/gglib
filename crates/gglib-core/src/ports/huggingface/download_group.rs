@@ -10,10 +10,10 @@ use super::error::HfPortResult;
 use super::types::HfFileInfo;
 use crate::download::{Quantization, choose_projector};
 
-/// What a download of one quantization of a repository fetches.
+/// What a download of one variant of a repository fetches.
 #[derive(Debug, Clone)]
 pub struct DownloadGroup {
-    /// The weights files of the quantization, in shard order.
+    /// The weights files of the variant, in shard order.
     pub weights: Vec<HfFileInfo>,
     /// The projector fetched with them, when the repository has one.
     pub projector: Option<HfFileInfo>,
@@ -26,39 +26,39 @@ impl DownloadGroup {
     }
 }
 
-/// The files a download of `quantization` from `model_id` fetches: the
-/// quantization's weights, and the projector [`choose_projector`] picks among
-/// the repository's.
+/// The files a download of the variant labelled `label` from `model_id`
+/// fetches: the variant's weights, and the projector [`choose_projector`]
+/// picks among the repository's.
 ///
 /// # Errors
 ///
-/// Whatever the client answers for either listing; a quantization the
-/// repository does not have is the client's `QuantizationNotFound`.
+/// Whatever the client answers for either listing; a label the repository
+/// has no variant of is the client's `QuantizationNotFound`.
 pub async fn download_group(
     client: &dyn HfClientPort,
     model_id: &str,
-    quantization: Quantization,
+    label: &str,
 ) -> HfPortResult<DownloadGroup> {
-    let weights = client
-        .get_quantization_files(model_id, &quantization.to_string())
-        .await?;
+    let weights = client.get_quantization_files(model_id, label).await?;
     let projectors = client.list_projectors(model_id).await?;
     Ok(DownloadGroup {
         weights,
-        projector: projector_fetched_with(quantization, &projectors).cloned(),
+        projector: projector_fetched_with(label, &projectors).cloned(),
     })
 }
 
-/// The projector a download of `quantization` fetches, among `projectors`,
-/// the repository's: the one [`choose_projector`] picks.
+/// The projector a download of the variant labelled `label` fetches, among
+/// `projectors`, the repository's: the one [`choose_projector`] picks for
+/// the quantization the label names.
 ///
-/// A listing that says which projector comes with a quantization asks this,
-/// so it names the file the download fetches.
+/// A listing that says which projector comes with a variant asks this, so
+/// it names the file the download fetches.
 #[must_use]
-pub fn projector_fetched_with(
-    quantization: Quantization,
-    projectors: &[HfFileInfo],
-) -> Option<&HfFileInfo> {
+pub fn projector_fetched_with<'a>(
+    label: &str,
+    projectors: &'a [HfFileInfo],
+) -> Option<&'a HfFileInfo> {
+    let quantization = Quantization::from_filename(label);
     let path = choose_projector(quantization, projectors.iter().map(|p| p.path.as_str()))?;
     projectors.iter().find(|p| p.path == path)
 }

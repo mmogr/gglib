@@ -18,7 +18,7 @@ use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
-use gglib_core::download::{DownloadError, DownloadId, Quantization};
+use gglib_core::download::{DownloadError, DownloadId};
 use gglib_core::ports::{DownloadManagerConfig, HfClientPort};
 
 use crate::executor::{DownloadPlan, FileProgress, download_file};
@@ -109,8 +109,9 @@ pub(crate) struct CompletedJob {
     pub repo_id: String,
     /// Commit SHA for model registration.
     pub commit_sha: String,
-    /// Quantization for model registration.
-    pub quantization: Quantization,
+    /// The label of the variant downloaded, for model registration: what
+    /// the download's ID names; `None` when it names none.
+    pub variant_label: Option<String>,
     /// List of file names downloaded.
     pub files: Vec<String>,
 }
@@ -188,22 +189,14 @@ pub(super) fn completed(job: &DownloadJob) -> Result<CompletedJob, DownloadError
         (None, Some(r)) => format!("rev:{}", percent_encode_revision(r)),
         (None, None) => "rev:main".to_string(),
     };
-    let quantization = job.id.quantization().map_or_else(
-        || {
-            job.destination
-                .files
-                .first()
-                .map_or(Quantization::Unknown, |f| Quantization::from_filename(f))
-        },
-        Quantization::from_filename,
-    );
+    let variant_label = job.id.quantization().map(str::to_owned);
 
     Ok(CompletedJob {
         primary_path,
         all_paths,
         repo_id,
         commit_sha,
-        quantization,
+        variant_label,
         files: job.destination.files.clone(),
     })
 }

@@ -6,6 +6,7 @@
 
 use super::Model;
 use super::gguf::GgufMetadata;
+use crate::ports::huggingface::match_label;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -203,9 +204,10 @@ pub fn split_listed_id(identifier: &str) -> Option<(&str, ListedSuffix<'_>)> {
 /// The catalogue id of the model a listed id names among `models`.
 ///
 /// Read as [`openai_model_ids`] writes it: `name@<id>` is the model with that
-/// id when it is named `name`; `name@QUANT` is the one model named `name`
-/// with that quantization, and nothing when two have it. `None` for an
-/// identifier with no `@`.
+/// id when it is named `name`; `name@LABEL` is the one model named `name`
+/// whose label the suffix names as a request names a Hub variant
+/// ([`match_label`]: exactly ignoring case, else as a whole token), and
+/// nothing when two have that label. `None` for an identifier with no `@`.
 ///
 /// Only the `@` forms: the numeric id and the exact name are tried first, by
 /// [`crate::ports::ModelRepository::get_by_identifier`], so a model whose
@@ -217,7 +219,9 @@ pub fn resolve_listed_id(identifier: &str, models: &[ListedModel<'_>]) -> Option
     match suffix {
         ListedSuffix::Id(id) => named.find(|m| m.id == id).map(|m| m.id),
         ListedSuffix::Quantization(q) => {
-            let mut matching = named.filter(|m| m.quantization == Some(q));
+            let named: Vec<&ListedModel<'_>> = named.collect();
+            let label = match_label(named.iter().filter_map(|m| m.quantization), q).ok()?;
+            let mut matching = named.iter().filter(|m| m.quantization == Some(label));
             let found = matching.next()?;
             matching.next().is_none().then_some(found.id)
         }
