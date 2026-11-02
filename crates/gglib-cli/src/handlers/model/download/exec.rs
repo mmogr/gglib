@@ -38,7 +38,12 @@ pub(crate) struct DownloadArgs<'a> {
 pub(crate) async fn execute(ctx: &CliContext, args: DownloadArgs<'_>) -> Result<()> {
     // --list-quants: show available quantizations and exit (uses cli_exec directly).
     if args.list_quants {
-        list_quantizations(args.model_id, args.token.map(String::from)).await?;
+        list_quantizations(
+            args.model_id,
+            args.token.map(String::from),
+            ctx.gguf_parser.as_ref(),
+        )
+        .await?;
         return Ok(());
     }
 

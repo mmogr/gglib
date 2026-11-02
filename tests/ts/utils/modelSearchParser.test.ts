@@ -134,6 +134,16 @@ describe("parseModelSearchIntent", () => {
       });
     });
 
+    it("takes an uploader's own label as the quant", () => {
+      for (const label of ["UD-Q4_K_XL", "Q3_K_P", "FastMTP-32K", "instruct.Q8_0"]) {
+        expect(parseModelSearchIntent(`owner/repo:${label}`)).toEqual({
+          kind: "download",
+          repo: "owner/repo",
+          quant: label,
+        });
+      }
+    });
+
     it("allows dots in repo with quant", () => {
       const result = parseModelSearchIntent("user.name/model.v2:Q4_K_M");
       expect(result).toEqual({

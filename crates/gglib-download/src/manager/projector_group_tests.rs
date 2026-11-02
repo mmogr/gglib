@@ -41,13 +41,16 @@ async fn the_projector_is_queued_in_the_models_group_and_is_not_a_shard() {
         .await
         .unwrap();
 
-    assert_eq!(queued.to_string(), "owner/zeta-GGUF:Q8_0");
+    assert_eq!(queued.to_string(), "owner/zeta-GGUF:zeta.Q8_0");
     let snapshot = manager.get_queue_snapshot().await.unwrap();
     assert!(snapshot.active.is_none());
     assert_eq!(snapshot.waiting.len(), 1, "one row for the model");
     let row = &snapshot.waiting[0];
-    assert_eq!(row.id, "owner/zeta-GGUF:Q8_0");
-    assert_eq!(row.text.title, "owner/zeta-GGUF:Q8_0", "no file's name");
+    assert_eq!(row.id, "owner/zeta-GGUF:zeta.Q8_0");
+    assert_eq!(
+        row.text.title, "owner/zeta-GGUF:zeta.Q8_0",
+        "no file's name"
+    );
     assert_eq!(row.text.file.as_deref(), Some("3 parts"));
     assert_eq!(row.total_bytes, Some(2_800), "the projector's bytes too");
 
@@ -56,7 +59,7 @@ async fn the_projector_is_queued_in_the_models_group_and_is_not_a_shard() {
     let files: Vec<_> = std::iter::from_fn(|| queue.dequeue()).collect();
     assert_eq!(files.len(), 4, "progress covers every file");
     for file in &files {
-        assert_eq!(file.id.to_string(), "owner/zeta-GGUF:Q8_0");
+        assert_eq!(file.id.to_string(), "owner/zeta-GGUF:zeta.Q8_0");
         assert_eq!(file.group_id, files[0].group_id, "one group for the model");
         let place = file.shard_info.as_ref().unwrap();
         assert_eq!(place.total_shards, 3);
@@ -111,7 +114,7 @@ async fn the_row_names_each_file_and_carries_the_groups_bytes() {
 
         let snapshot = manager.get_queue_snapshot().await.unwrap();
         let row = snapshot.active.expect("the model's row");
-        assert_eq!(row.id, "owner/zeta-GGUF:Q8_0");
+        assert_eq!(row.id, "owner/zeta-GGUF:zeta.Q8_0");
         assert_eq!(row.total_bytes, Some(2_800));
         seen.push((row.text.file.unwrap(), row.downloaded_bytes));
 

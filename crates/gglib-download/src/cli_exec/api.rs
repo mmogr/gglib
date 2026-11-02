@@ -4,7 +4,8 @@
 //! These operations don't require database access.
 
 use anyhow::{Result, anyhow};
-use gglib_core::ports::huggingface::HfClientPort;
+use gglib_core::ports::GgufParserPort;
+use gglib_core::ports::huggingface::{HfClientPort, read_roles};
 use gglib_core::{Quantization, repo_short_name, strip_gguf_suffix};
 use gglib_hf::{DefaultHfClient, HfClientConfig, build_file_url};
 use reqwest::header::CONTENT_LENGTH;
@@ -18,8 +19,13 @@ pub(super) fn hub_client(token: Option<String>) -> DefaultHfClient {
     DefaultHfClient::new(&HfClientConfig::default().with_optional_token(token))
 }
 
-/// List a repository's GGUF quantizations, and its projectors apart.
-pub async fn list_quantizations(model_id: &str, token: Option<String>) -> Result<()> {
+/// List a repository's variants, each with what the head of its first file
+/// says it is (read with `parser`), and its projectors apart.
+pub async fn list_quantizations(
+    model_id: &str,
+    token: Option<String>,
+    parser: &dyn GgufParserPort,
+) -> Result<()> {
     println!("Finding available GGUF quantizations for {model_id}...");
 
     let client = hub_client(token.clone());
@@ -35,8 +41,9 @@ pub async fn list_quantizations(model_id: &str, token: Option<String>) -> Result
                 HfClientPort::list_projectors(&client, model_id),
             );
             match listed {
-                Ok((quantizations, projectors)) => {
-                    print!("{}", quant_listing(model_id, &quantizations, &projectors));
+                Ok((variants, projectors)) => {
+                    let variants = read_roles(&client, parser, model_id, variants).await;
+                    print!("{}", quant_listing(model_id, &variants, &projectors));
                 }
                 Err(e) => {
                     println!("Failed to fetch quantizations: {e}");

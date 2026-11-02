@@ -2,8 +2,6 @@
 
 use std::path::PathBuf;
 
-use gglib_core::download::Quantization;
-
 use super::*;
 use crate::manager::shard_group_tracker::ShardGroupTracker;
 use crate::queue::ShardGroupId;
@@ -18,7 +16,7 @@ fn job(file: &str) -> CompletedJob {
         all_paths: vec![dir().join(file)],
         repo_id: "owner/zeta-GGUF".to_string(),
         commit_sha: "rev:main".to_string(),
-        quantization: Quantization::Q8_0,
+        variant_label: Some("Q8_0".to_owned()),
         files: vec![file.to_string()],
     }
 }
@@ -94,7 +92,7 @@ fn the_tags_and_identity_are_carried_over() {
     assert_eq!(download.hf_tags, ["vision"]);
     assert_eq!(download.repo_id, "owner/zeta-GGUF");
     assert_eq!(download.commit_sha, "rev:main");
-    assert_eq!(download.quantization, Quantization::Q8_0);
+    assert_eq!(download.variant_label.as_deref(), Some("Q8_0"));
 }
 
 /// One weights file, a projector and two companions from their own folders:

@@ -13,11 +13,14 @@ the Hub read from the repository's GGUF header. `HfSortField` is the one list
 of orders a search can ask for: the browser sends it on the wire and the CLI's
 `--sort` maps onto it.
 
-A repository's quantizations are made of weights files alone, and its projectors
-are listed apart (`list_projectors`). `download_group` answers what one download
-fetches: a quantization's weights, and the projector chosen to go with them.
-`projector_fetched_with` is that choice alone, for a listing that shows which
-projector comes with each quantization.
+A repository's variants (`list_quantizations`, `HfQuantInfo`) are its GGUF files
+grouped into shard sets, each labelled as its uploader named it (`variants_of`),
+and a request names one by its label (`match_label`). What a variant is comes
+from a 64 KiB head of its first file (`variant_role`, `read_roles`): a draft or
+helper is listed and never downloaded (`HELPER_FILES_REFUSAL`). The projectors are also listed apart (`list_projectors`).
+`download_group` answers what one download fetches: a variant's files, and the
+projector chosen to go with them. `projector_fetched_with` is that choice alone,
+for a listing that shows which projector comes with each variant.
 
 A search asks for one `HfModelKind`: models that chat (the default) or models
 that draw. `read_head` reads a file's first bytes (at most `SNIFF_HEAD_BYTES`

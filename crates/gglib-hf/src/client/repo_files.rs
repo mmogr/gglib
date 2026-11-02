@@ -2,8 +2,10 @@
 
 use crate::error::{HfError, HfResult};
 use crate::http::HttpBackend;
-use crate::models::{HfFileEntry, HfQuantization, HfRepoRef};
-use crate::parsing::{aggregate_quantizations, filter_files_by_quantization, parse_tree_entries};
+use gglib_core::ports::huggingface::HfQuantInfo;
+
+use crate::models::{HfFileEntry, HfRepoRef};
+use crate::parsing::{parse_tree_entries, variant_files, variants};
 use crate::url::{build_model_info_url, build_tree_url};
 
 use super::HfClient;
@@ -48,48 +50,25 @@ impl<B: HttpBackend> HfClient<B> {
         Ok(all_files)
     }
 
-    /// List available quantizations for a model.
-    ///
-    /// Scans the repository for GGUF files and groups them by quantization type.
-    pub(crate) async fn list_quantizations(
-        &self,
-        repo: &HfRepoRef,
-    ) -> HfResult<Vec<HfQuantization>> {
+    /// The repository's variants: its GGUF files grouped into shard sets,
+    /// each labelled as its uploader named it. No header is read.
+    pub(crate) async fn list_variants(&self, repo: &HfRepoRef) -> HfResult<Vec<HfQuantInfo>> {
         let files = self.list_all_gguf_files(repo).await?;
-        Ok(aggregate_quantizations(&files))
+        Ok(variants(&files))
     }
 
-    /// Find GGUF files for a specific quantization.
-    pub(crate) async fn find_quantization_files(
+    /// The files of the variant `label` names, in shard order, with their
+    /// OIDs.
+    pub(crate) async fn find_variant_files(
         &self,
         repo: &HfRepoRef,
-        quantization: &str,
+        label: &str,
     ) -> HfResult<Vec<HfFileEntry>> {
         let files = self.list_all_gguf_files(repo).await?;
-        let matching = filter_files_by_quantization(&files, quantization);
-
-        if matching.is_empty() {
-            return Err(HfError::QuantizationNotFound {
-                model_id: repo.id(),
-                quantization: quantization.to_string(),
-            });
-        }
-
-        Ok(matching)
-    }
-
-    /// Find GGUF files for a specific quantization, returning file entries with OIDs.
-    pub(crate) async fn find_quantization_files_with_sizes(
-        &self,
-        repo: &HfRepoRef,
-        quantization: &str,
-    ) -> HfResult<Vec<HfFileEntry>> {
-        let mut files = self.find_quantization_files(repo, quantization).await?;
-
-        // Sort by path to ensure correct shard order
-        files.sort_by(|a, b| a.path.cmp(&b.path));
-
-        Ok(files)
+        variant_files(&files, label).ok_or_else(|| HfError::QuantizationNotFound {
+            model_id: repo.id(),
+            quantization: label.to_string(),
+        })
     }
 
     /// Fetch model info (commit SHA, metadata, etc.).
@@ -143,7 +122,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_list_quantizations() {
+    async fn test_list_variants() {
         let backend = FakeBackend::new().with_response(
             "tree/main",
             CannedResponse::of(json!([
@@ -155,16 +134,16 @@ mod tests {
         let client = HfClient::with_backend(test_config(), backend);
         let repo = HfRepoRef::new("TheBloke", "Llama-2-7B-GGUF");
 
-        let quants = client.list_quantizations(&repo).await.unwrap();
+        let quants = client.list_variants(&repo).await.unwrap();
 
         assert_eq!(quants.len(), 2);
-        // Sorted alphabetically
-        assert_eq!(quants[0].name, "Q4_K_M");
-        assert_eq!(quants[1].name, "Q8_0");
+        // Sorted by label
+        assert_eq!(quants[0].label, "Q4_K_M");
+        assert_eq!(quants[1].label, "Q8_0");
     }
 
     #[tokio::test]
-    async fn test_find_quantization_files() {
+    async fn test_find_variant_files() {
         let backend = FakeBackend::new().with_response(
             "tree/main",
             CannedResponse::of(json!([
@@ -176,17 +155,14 @@ mod tests {
         let client = HfClient::with_backend(test_config(), backend);
         let repo = HfRepoRef::new("TheBloke", "Llama-2-7B-GGUF");
 
-        let files = client
-            .find_quantization_files(&repo, "Q4_K_M")
-            .await
-            .unwrap();
+        let files = client.find_variant_files(&repo, "Q4_K_M").await.unwrap();
 
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].path, "model-Q4_K_M.gguf");
     }
 
     #[tokio::test]
-    async fn test_find_quantization_files_not_found() {
+    async fn test_find_variant_files_not_found() {
         let backend = FakeBackend::new().with_response(
             "tree/main",
             CannedResponse::of(json!([
@@ -197,13 +173,13 @@ mod tests {
         let client = HfClient::with_backend(test_config(), backend);
         let repo = HfRepoRef::new("TheBloke", "Llama-2-7B-GGUF");
 
-        let result = client.find_quantization_files(&repo, "Q99_Z").await;
+        let result = client.find_variant_files(&repo, "Q99_Z").await;
 
         assert!(matches!(result, Err(HfError::QuantizationNotFound { .. })));
     }
 
     #[tokio::test]
-    async fn test_find_quantization_files_excludes_unsloth_ud_variant() {
+    async fn test_find_variant_files_excludes_unsloth_ud_variant() {
         // Regression: a request for the plain "Q6_K" quantization must not
         // also return the unrelated Unsloth Dynamic "UD-Q6_K" file, even
         // though both share the same "Q6_K" bit-depth suffix.
@@ -218,14 +194,11 @@ mod tests {
         let client = HfClient::with_backend(test_config(), backend);
         let repo = HfRepoRef::new("unsloth", "Qwen3-Coder-Next-GGUF");
 
-        let plain = client.find_quantization_files(&repo, "Q6_K").await.unwrap();
+        let plain = client.find_variant_files(&repo, "Q6_K").await.unwrap();
         assert_eq!(plain.len(), 1);
         assert_eq!(plain[0].path, "model-Q6_K.gguf");
 
-        let dynamic = client
-            .find_quantization_files(&repo, "UD-Q6_K")
-            .await
-            .unwrap();
+        let dynamic = client.find_variant_files(&repo, "UD-Q6_K").await.unwrap();
         assert_eq!(dynamic.len(), 1);
         assert_eq!(dynamic[0].path, "model-UD-Q6_K.gguf");
     }

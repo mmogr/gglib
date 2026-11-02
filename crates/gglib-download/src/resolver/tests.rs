@@ -15,8 +15,8 @@ fn resolver(files: &[(&str, u64)]) -> HfQuantizationResolver {
     HfQuantizationResolver::new(Arc::new(RepoHub::new(files)), Arc::new(ImageHeadParser))
 }
 
-async fn resolve(files: &[(&str, u64)], quantization: Quantization) -> Resolution {
-    resolver(files).resolve(REPO, quantization).await.unwrap()
+async fn resolve(files: &[(&str, u64)], label: &str) -> Resolution {
+    resolver(files).resolve(REPO, label).await.unwrap()
 }
 
 fn paths(resolution: &Resolution) -> Vec<&str> {
@@ -37,7 +37,7 @@ const THREE_SHARDS: [(&str, u64); 3] = [
 async fn the_weights_come_first_whatever_the_names() {
     let resolution = resolve(
         &[("mmproj-F16.gguf", 300), ("zeta.Q8_0.gguf", 1_000)],
-        Quantization::Q8_0,
+        "Q8_0",
     )
     .await;
 
@@ -54,7 +54,7 @@ async fn the_weights_come_first_whatever_the_names() {
 async fn one_weights_file_and_a_projector_are_one_unsharded_model() {
     let resolution = resolve(
         &[("mmproj-F16.gguf", 300), ("zeta.Q8_0.gguf", 1_000)],
-        Quantization::Q8_0,
+        "Q8_0",
     )
     .await;
 
@@ -69,7 +69,7 @@ async fn three_shards_and_a_projector_are_three_shards() {
     let mut files = THREE_SHARDS.to_vec();
     files.push(("mmproj-F16.gguf", 300));
 
-    let resolution = resolve(&files, Quantization::Q8_0).await;
+    let resolution = resolve(&files, "Q8_0").await;
 
     assert!(resolution.is_sharded);
     assert_eq!(resolution.shard_count(), 3);
@@ -88,8 +88,8 @@ async fn three_shards_and_a_projector_are_three_shards() {
 
 #[tokio::test]
 async fn a_repository_without_projectors_resolves_to_its_weights() {
-    let one = resolve(&[("zeta.Q8_0.gguf", 1_000)], Quantization::Q8_0).await;
-    let three = resolve(&THREE_SHARDS, Quantization::Q8_0).await;
+    let one = resolve(&[("zeta.Q8_0.gguf", 1_000)], "Q8_0").await;
+    let three = resolve(&THREE_SHARDS, "Q8_0").await;
 
     assert_eq!(paths(&one), ["zeta.Q8_0.gguf"]);
     assert_eq!(one.projector(), None);
@@ -103,7 +103,7 @@ async fn a_repository_without_projectors_resolves_to_its_weights() {
 async fn each_file_keeps_its_size_and_oid() {
     let resolution = resolve(
         &[("mmproj-F16.gguf", 300), ("zeta.Q8_0.gguf", 1_000)],
-        Quantization::Q8_0,
+        "Q8_0",
     )
     .await;
 
@@ -121,7 +121,7 @@ async fn each_file_keeps_its_size_and_oid() {
 async fn a_projector_of_the_same_quantization_is_the_projector_not_a_shard() {
     let resolution = resolve(
         &[("X.Q8_0.gguf", 8_000), ("X.mmproj-Q8_0.gguf", 600)],
-        Quantization::Q8_0,
+        "Q8_0",
     )
     .await;
 
@@ -140,7 +140,7 @@ async fn the_projector_is_chosen_by_the_one_rule() {
         let mut files = vec![weights];
         files.extend_from_slice(projectors);
         async move {
-            let resolution = resolve(&files, Quantization::Q8_0).await;
+            let resolution = resolve(&files, "Q8_0").await;
             resolution.projector().map(|f| f.path.clone())
         }
     };
@@ -156,22 +156,33 @@ async fn the_projector_is_chosen_by_the_one_rule() {
 
 // ── What is not a download ───────────────────────────────────────────────
 
+/// A projector is a variant of its own, which the selector never takes as a
+/// model.
 #[tokio::test]
-async fn a_repository_of_only_projectors_resolves_to_nothing() {
+async fn a_repository_of_only_projectors_offers_no_model() {
     let only_projectors = resolver(&[("mmproj-F16.gguf", 300), ("mmproj-Q8_0.gguf", 200)]);
 
-    let refused = only_projectors.resolve(REPO, Quantization::F16).await;
     let available = only_projectors.list_available(REPO).await.unwrap();
+    let selector = QuantizationSelector::new(Arc::new(only_projectors));
+    let auto = selector.select(REPO, None).await.unwrap_err().to_string();
+    let asked = selector
+        .select(REPO, Some("F16"))
+        .await
+        .unwrap_err()
+        .to_string();
 
-    let message = refused.unwrap_err().to_string();
-    assert!(message.contains("F16"), "{message}");
-    assert!(available.is_empty());
+    assert_eq!(available.len(), 2);
+    assert!(auto.contains("only draft or helper files"), "{auto}");
+    assert!(
+        asked.contains("mmproj-F16 is a projector, not a model"),
+        "{asked}"
+    );
 }
 
 #[tokio::test]
 async fn a_quantization_the_repository_lacks_fails_to_resolve() {
     let refused = resolver(&[("zeta.Q8_0.gguf", 1_000)])
-        .resolve(REPO, Quantization::Q4KM)
+        .resolve(REPO, "Q4_K_M")
         .await;
 
     assert!(matches!(
@@ -196,10 +207,7 @@ async fn an_image_models_companions_follow_its_weights_from_their_own_repositori
     );
     let resolver = HfQuantizationResolver::new(Arc::new(hub), Arc::new(ImageHeadParser));
 
-    let resolution = resolver
-        .resolve(FLUX_REPO, Quantization::Q8_0)
-        .await
-        .unwrap();
+    let resolution = resolver.resolve(FLUX_REPO, "Q8_0").await.unwrap();
 
     assert_eq!(resolution.image_family, Some(ImageFamily::Flux1));
     let files: Vec<_> = resolution
@@ -250,7 +258,7 @@ async fn the_companions_come_after_the_projector() {
     let resolver = HfQuantizationResolver::new(Arc::new(hub), Arc::new(ImageHeadParser));
 
     let resolution = resolver
-        .resolve("leejet/Qwen-Image-2.1-GGUF", Quantization::Q8_0)
+        .resolve("leejet/Qwen-Image-2.1-GGUF", "Q8_0")
         .await
         .unwrap();
 
@@ -280,7 +288,7 @@ async fn a_z_image_download_brings_the_flux_vae_and_qwen3_4b() {
     );
     let resolver = HfQuantizationResolver::new(Arc::new(hub), Arc::new(ImageHeadParser));
 
-    let resolution = resolver.resolve(REPO, Quantization::Q8_0).await.unwrap();
+    let resolution = resolver.resolve(REPO, "Q8_0").await.unwrap();
 
     assert_eq!(resolution.image_family, Some(ImageFamily::ZImage));
     let files: Vec<_> = resolution
@@ -323,7 +331,7 @@ async fn a_flux3_klein_download_brings_the_flux2_vae_and_qwen3_vl_4b() {
     );
     let resolver = HfQuantizationResolver::new(Arc::new(hub), Arc::new(ImageHeadParser));
 
-    let resolution = resolver.resolve(REPO, Quantization::Q8_0).await.unwrap();
+    let resolution = resolver.resolve(REPO, "Q8_0").await.unwrap();
 
     assert_eq!(resolution.image_family, Some(ImageFamily::Flux3Klein));
     let files: Vec<_> = resolution
@@ -366,7 +374,7 @@ async fn a_flux2_klein_download_brings_the_flux2_vae_and_qwen3_4b() {
     );
     let resolver = HfQuantizationResolver::new(Arc::new(hub), Arc::new(ImageHeadParser));
 
-    let resolution = resolver.resolve(REPO, Quantization::Q8_0).await.unwrap();
+    let resolution = resolver.resolve(REPO, "Q8_0").await.unwrap();
 
     assert_eq!(resolution.image_family, Some(ImageFamily::Flux2Klein));
     let files: Vec<_> = resolution
@@ -401,7 +409,7 @@ async fn a_chat_models_download_has_no_family_and_no_companion() {
     let hub = Arc::new(RepoHub::new(&THREE_SHARDS));
     let resolver = HfQuantizationResolver::new(Arc::clone(&hub) as _, Arc::new(ImageHeadParser));
 
-    let resolution = resolver.resolve(REPO, Quantization::Q8_0).await.unwrap();
+    let resolution = resolver.resolve(REPO, "Q8_0").await.unwrap();
 
     assert_eq!(resolution.image_family, None);
     assert_eq!(resolution.components().count(), 0);
@@ -426,10 +434,7 @@ async fn a_weights_only_resolver_reads_no_head() {
     ));
     let resolver = HfQuantizationResolver::weights_only(Arc::clone(&hub) as _);
 
-    let resolution = resolver
-        .resolve(FLUX_REPO, Quantization::Q8_0)
-        .await
-        .unwrap();
+    let resolution = resolver.resolve(FLUX_REPO, "Q8_0").await.unwrap();
 
     assert_eq!(paths(&resolution), ["flux1-schnell-q8_0.gguf"]);
     assert_eq!(resolution.image_family, None);
@@ -439,7 +444,7 @@ async fn a_weights_only_resolver_reads_no_head() {
 // ── The quantizations on offer ───────────────────────────────────────────
 
 #[tokio::test]
-async fn the_available_quantizations_are_those_of_the_weights() {
+async fn the_available_variants_are_every_gguf_by_its_label() {
     let available = resolver(&[
         ("zeta.Q8_0.gguf", 8_000),
         ("zeta.Q4_K_M.gguf", 4_000),
@@ -450,14 +455,15 @@ async fn the_available_quantizations_are_those_of_the_weights() {
     .await
     .unwrap();
 
-    assert_eq!(available, [Quantization::Q4KM, Quantization::Q8_0]);
+    let labels: Vec<&str> = available.iter().map(|v| v.label.as_str()).collect();
+    assert_eq!(labels, ["Q4_K_M", "Q8_0", "mmproj-BF16", "mmproj-F16"]);
 }
 
-/// One quantization and two projectors is still "one option": the automatic
-/// pick takes it, and does not ask the user to choose between the weights
-/// and a projector's `F16`.
+/// One model and two projectors is still "one option": the automatic pick
+/// takes it, and does not ask the user to choose between the weights and a
+/// projector's `F16`.
 #[tokio::test]
-async fn the_single_quantization_pick_ignores_projectors() {
+async fn the_single_model_pick_ignores_projectors() {
     let hub = resolver(&[
         ("zeta.IQ2_XXS.gguf", 2_000),
         ("mmproj-F16.gguf", 300),
@@ -467,7 +473,7 @@ async fn the_single_quantization_pick_ignores_projectors() {
 
     let selection = selector.select(REPO, None).await.unwrap();
 
-    assert_eq!(selection.quantization, Quantization::Iq2Xxs);
+    assert_eq!(selection.label, "zeta.IQ2_XXS");
     assert!(selection.auto_selected);
-    assert_eq!(selection.available, [Quantization::Iq2Xxs]);
+    assert_eq!(selection.available.len(), 3);
 }

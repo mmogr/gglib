@@ -5,11 +5,12 @@
 
 use crate::error::{HfError, HfResult};
 use crate::kind::keeps;
-use crate::models::{HfEntryType, HfFileEntry, HfQuantization};
-use gglib_core::ports::huggingface::{HfModelKind, HfRepoInfo};
-use gglib_core::{Quantization, repo_short_name};
+use crate::models::{HfEntryType, HfFileEntry};
+use gglib_core::ports::huggingface::{
+    HfModelKind, HfQuantInfo, HfRepoInfo, match_variant, variants_of,
+};
+use gglib_core::repo_short_name;
 use serde_json::Value;
-use std::collections::HashMap;
 
 // ============================================================================
 // Model Summary Parsing
@@ -156,84 +157,33 @@ pub(crate) fn parse_tree_entries(json: &Value) -> HfResult<Vec<HfFileEntry>> {
 }
 
 // ============================================================================
-// Quantization Aggregation
+// Variants
 // ============================================================================
 
-/// Aggregate file entries into quantization groups.
-///
-/// Groups weights files by their quantization type, handling both single files
-/// and sharded models (multiple files per quantization). A projector is skipped.
-pub(crate) fn aggregate_quantizations(files: &[HfFileEntry]) -> Vec<HfQuantization> {
-    let mut quant_map: HashMap<String, HfQuantization> = HashMap::new();
-
-    for file in files {
-        if !file.is_weights() {
-            continue;
-        }
-
-        // Use gglib-core's Quantization::from_filename
-        let quant = Quantization::from_filename(&file.path);
-        if quant.is_unknown() {
-            continue;
-        }
-
-        let quant_name = quant.to_string();
-
-        if let Some(existing) = quant_map.get_mut(&quant_name) {
-            // Add to existing quantization (sharded model)
-            existing.paths.push(file.path.clone());
-            existing.shard_count += 1;
-            existing.total_size += file.size;
-        } else {
-            // New quantization
-            quant_map.insert(
-                quant_name.clone(),
-                HfQuantization {
-                    name: quant_name,
-                    shard_count: 1,
-                    paths: vec![file.path.clone()],
-                    total_size: file.size,
-                },
-            );
-        }
-    }
-
-    // Sort paths within each quantization (for consistent shard ordering)
-    let mut quantizations: Vec<HfQuantization> = quant_map
-        .into_values()
-        .map(|mut q| {
-            q.paths.sort();
-            q
-        })
-        .collect();
-
-    // Sort by quantization name
-    quantizations.sort_by(|a, b| a.name.cmp(&b.name));
-
-    quantizations
+/// The repository's variants among `files`: its GGUF files grouped into
+/// shard sets and labelled as [`variants_of`] does. No header is read.
+pub(crate) fn variants(files: &[HfFileEntry]) -> Vec<HfQuantInfo> {
+    variants_of(
+        files
+            .iter()
+            .filter(|file| file.is_gguf())
+            .map(|file| (file.path.as_str(), file.size)),
+    )
 }
 
-/// Filter files to only weights files matching a specific quantization.
-pub(crate) fn filter_files_by_quantization(
-    files: &[HfFileEntry],
-    quantization: &str,
-) -> Vec<HfFileEntry> {
-    let quant_upper = quantization.to_uppercase();
-
-    let mut matching: Vec<HfFileEntry> = files
-        .iter()
-        .filter(|f| {
-            if !f.is_weights() {
-                return false;
-            }
-            let file_quant = Quantization::from_filename(&f.path);
-            file_quant.to_string().to_uppercase() == quant_upper
-        })
-        .cloned()
-        .collect();
-
-    matching.sort_by(|a, b| a.path.cmp(&b.path));
-    matching
+/// The files, in shard order, of the variant among `files` that `label`
+/// names as [`match_variant`] reads a request; `None` when it names no single
+/// one.
+pub(crate) fn variant_files(files: &[HfFileEntry], label: &str) -> Option<Vec<HfFileEntry>> {
+    let variants = variants(files);
+    let variant = match_variant(&variants, label).ok()?;
+    Some(
+        variant
+            .file_paths
+            .iter()
+            .filter_map(|path| files.iter().find(|file| &file.path == path).cloned())
+            .collect(),
+    )
 }
 
 #[cfg(test)]
@@ -241,67 +191,13 @@ pub(crate) fn filter_files_by_quantization(
 pub(crate) mod summary_tests;
 
 #[cfg(test)]
+#[path = "variants_tests.rs"]
+mod variants_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::HfEntryType;
     use serde_json::json;
-
-    fn gguf_file(path: &str, size: u64) -> HfFileEntry {
-        HfFileEntry {
-            path: path.to_string(),
-            entry_type: HfEntryType::File,
-            size,
-            oid: None,
-        }
-    }
-
-    #[test]
-    fn test_aggregate_quantizations_distinguishes_ud_dynamic_quants() {
-        // The real unsloth/Qwen3-Coder-Next-GGUF layout: a plain Q6_K/
-        // directory and a UD-Q6_K/ (Unsloth Dynamic) directory are two
-        // HfQuantization groups, not one merged group.
-        let files = vec![
-            gguf_file("Q6_K/model-Q6_K.gguf", 6_000_000_000),
-            gguf_file("UD-Q6_K/model-UD-Q6_K.gguf", 6_500_000_000),
-        ];
-
-        let quantizations = aggregate_quantizations(&files);
-
-        assert_eq!(
-            quantizations.len(),
-            2,
-            "plain and UD- quants must not merge"
-        );
-        let plain = quantizations
-            .iter()
-            .find(|q| q.name == "Q6_K")
-            .expect("plain Q6_K group present");
-        let dynamic = quantizations
-            .iter()
-            .find(|q| q.name == "UD-Q6_K")
-            .expect("UD-Q6_K group present");
-
-        assert_eq!(plain.shard_count, 1);
-        assert_eq!(plain.total_size, 6_000_000_000);
-        assert_eq!(dynamic.shard_count, 1);
-        assert_eq!(dynamic.total_size, 6_500_000_000);
-    }
-
-    #[test]
-    fn test_filter_files_by_quantization_excludes_ud_variant() {
-        let files = vec![
-            gguf_file("Q6_K/model-Q6_K.gguf", 6_000_000_000),
-            gguf_file("UD-Q6_K/model-UD-Q6_K.gguf", 6_500_000_000),
-        ];
-
-        let plain = filter_files_by_quantization(&files, "Q6_K");
-        assert_eq!(plain.len(), 1);
-        assert_eq!(plain[0].path, "Q6_K/model-Q6_K.gguf");
-
-        let dynamic = filter_files_by_quantization(&files, "UD-Q6_K");
-        assert_eq!(dynamic.len(), 1);
-        assert_eq!(dynamic[0].path, "UD-Q6_K/model-UD-Q6_K.gguf");
-    }
 
     #[test]
     fn test_parse_tree_entries_mixed() {
@@ -329,106 +225,5 @@ mod tests {
     fn test_parse_tree_entries_invalid_json() {
         let json = json!({"not": "an array"});
         assert!(parse_tree_entries(&json).is_err());
-    }
-
-    #[test]
-    fn test_aggregate_quantizations_single_files() {
-        let files = vec![
-            HfFileEntry {
-                path: "model-Q4_K_M.gguf".to_string(),
-                entry_type: HfEntryType::File,
-                size: 4_000_000_000,
-                oid: None,
-            },
-            HfFileEntry {
-                path: "model-Q8_0.gguf".to_string(),
-                entry_type: HfEntryType::File,
-                size: 8_000_000_000,
-                oid: None,
-            },
-            HfFileEntry {
-                path: "README.md".to_string(),
-                entry_type: HfEntryType::File,
-                size: 1000,
-                oid: None,
-            },
-        ];
-
-        let quants = aggregate_quantizations(&files);
-        assert_eq!(quants.len(), 2);
-
-        // Should be sorted alphabetically
-        assert_eq!(quants[0].name, "Q4_K_M");
-        assert_eq!(quants[0].shard_count, 1);
-        assert_eq!(quants[0].total_size, 4_000_000_000);
-
-        assert_eq!(quants[1].name, "Q8_0");
-        assert_eq!(quants[1].shard_count, 1);
-    }
-
-    #[test]
-    fn test_aggregate_quantizations_sharded() {
-        let files = vec![
-            HfFileEntry {
-                path: "model-Q8_0-00001-of-00003.gguf".to_string(),
-                entry_type: HfEntryType::File,
-                size: 4_000_000_000,
-                oid: None,
-            },
-            HfFileEntry {
-                path: "model-Q8_0-00002-of-00003.gguf".to_string(),
-                entry_type: HfEntryType::File,
-                size: 4_000_000_000,
-                oid: None,
-            },
-            HfFileEntry {
-                path: "model-Q8_0-00003-of-00003.gguf".to_string(),
-                entry_type: HfEntryType::File,
-                size: 4_000_000_000,
-                oid: None,
-            },
-        ];
-
-        let quants = aggregate_quantizations(&files);
-        assert_eq!(quants.len(), 1);
-        assert_eq!(quants[0].name, "Q8_0");
-        assert_eq!(quants[0].shard_count, 3);
-        assert_eq!(quants[0].total_size, 12_000_000_000);
-        assert_eq!(quants[0].paths.len(), 3);
-
-        // Paths should be sorted
-        assert!(quants[0].paths[0].contains("00001"));
-        assert!(quants[0].paths[2].contains("00003"));
-    }
-
-    #[test]
-    fn test_filter_files_by_quantization() {
-        let files = vec![
-            HfFileEntry {
-                path: "model-Q4_K_M.gguf".to_string(),
-                entry_type: HfEntryType::File,
-                size: 4_000_000_000,
-                oid: None,
-            },
-            HfFileEntry {
-                path: "model-Q8_0.gguf".to_string(),
-                entry_type: HfEntryType::File,
-                size: 8_000_000_000,
-                oid: None,
-            },
-            HfFileEntry {
-                path: "README.md".to_string(),
-                entry_type: HfEntryType::File,
-                size: 1000,
-                oid: None,
-            },
-        ];
-
-        let filtered = filter_files_by_quantization(&files, "Q4_K_M");
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].path, "model-Q4_K_M.gguf");
-
-        let filtered = filter_files_by_quantization(&files, "q4_k_m"); // case insensitive
-        assert_eq!(filtered.len(), 1);
     }
 }

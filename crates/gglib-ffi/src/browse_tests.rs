@@ -82,14 +82,15 @@ fn each_quantization_is_judged_from_its_head_at_its_size() {
     let offers =
         wait(library.quantizations(RECORDED_REPO.to_owned(), PHONE)).expect("the quantizations");
 
-    let mut names: Vec<&str> = offers.iter().map(|offer| offer.name.as_str()).collect();
+    let mut names: Vec<&str> = offers.iter().map(|offer| offer.label.as_str()).collect();
     names.sort_unstable();
     let mut recorded: Vec<&str> = RECORDED_SIZES.iter().map(|(name, _)| *name).collect();
     recorded.sort_unstable();
     assert_eq!(names, recorded);
     for offer in &offers {
         let expected = carried(core_verdict(offer.total_bytes), false);
-        assert_eq!(offer.verdict, expected, "{}", offer.name);
+        assert_eq!(offer.verdict, expected, "{}", offer.label);
+        assert_eq!(offer.role, VariantRole::Model, "{}", offer.label);
         assert_eq!(offer.why.trained_ctx, Some(u64::from(RECORDED_TRAINED_CTX)));
         assert_eq!(offer.why.weights_bytes, Some(offer.total_bytes));
         assert_eq!(offer.shard_count, 1);
@@ -97,7 +98,7 @@ fn each_quantization_is_judged_from_its_head_at_its_size() {
     let verdict_of = |name: &str| {
         offers
             .iter()
-            .find(|offer| offer.name == name)
+            .find(|offer| offer.label == name)
             .unwrap()
             .verdict
     };

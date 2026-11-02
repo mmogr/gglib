@@ -31,7 +31,7 @@ export const ProjectorNote: FC<ProjectorNoteProps> = ({ quantization }) => {
         <span className="text-text-secondary" aria-hidden>
           <Icon icon={Eye} size={14} />
         </span>
-        <span>{quantization.name} comes with a projector, so the model reads images:</span>
+        <span>{quantization.label} comes with a projector, so the model reads images:</span>
         <span className="font-mono text-xs break-all" title={projector.file_path}>{fileName}</span>
         <span className="text-text-secondary">{size}</span>
       </div>

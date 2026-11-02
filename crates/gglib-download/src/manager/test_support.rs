@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Mutex as StdMutex;
 use std::time::Instant;
 
-use gglib_core::download::{Quantization, QueueSnapshot};
+use gglib_core::download::QueueSnapshot;
 
 use super::worker::CompletedJob;
 use super::*;
@@ -122,7 +122,7 @@ pub(super) async fn end_started(
                 all_paths: vec![path],
                 repo_id: item.id.model_id().to_string(),
                 commit_sha: "abc123".to_string(),
-                quantization: Quantization::Q8_0,
+                variant_label: Some("Q8_0".to_owned()),
                 files: vec![name.clone()],
             })
         }

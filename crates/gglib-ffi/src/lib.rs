@@ -104,7 +104,7 @@ mod test_library;
 #[cfg(test)]
 mod test_server;
 
-pub use browse::{QuantOffer, SearchHit, SearchPage, Suggestion};
+pub use browse::{QuantOffer, SearchHit, SearchPage, Suggestion, VariantRole};
 pub use build_info::{BuildInfo, build_info};
 pub use download_watch::{DownloadProgress, DownloadState, DownloadWatch};
 pub use engine_watch::{EngineState, EngineWatch};

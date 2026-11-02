@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use futures_util::{StreamExt, TryStreamExt, stream};
 use gglib_core::domain::recommendation::PHONE_SHORTLIST;
+use gglib_core::download::GgufFileRole;
 use gglib_core::ports::{
     GgufParserPort, HfClientPort, HfModelKind, HfQuantInfo, HfRepoInfo, HfSearchOptions,
 };
@@ -70,11 +71,39 @@ pub struct SearchPage {
     pub next_cursor: Option<String>,
 }
 
-/// One quantization a repository publishes.
+/// What a variant's header says it is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum VariantRole {
+    /// A model's weights, which a download fetches and gglib runs. A
+    /// variant whose header could not be read is taken for one.
+    Model,
+    /// A draft or helper (an MTP head, an EAGLE or `DFlash` draft, an
+    /// importance matrix), which gglib cannot run on its own: listed, never
+    /// downloaded.
+    DraftOrHelper,
+    /// A multimodal projector, fetched with a model and never alone.
+    Projector,
+}
+
+impl From<GgufFileRole> for VariantRole {
+    fn from(role: GgufFileRole) -> Self {
+        match role {
+            GgufFileRole::Weights => Self::Model,
+            GgufFileRole::Sidecar => Self::DraftOrHelper,
+            GgufFileRole::Projector => Self::Projector,
+        }
+    }
+}
+
+/// One variant a repository publishes: files that are shards of one
+/// another, named as its uploader named it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct QuantOffer {
-    /// Its name: `Q4_K_M`, `Q8_0` and so on.
-    pub name: String,
+    /// Its label, which a download asks for it by: `Q4_K_M`, `UD-Q4_K_XL`,
+    /// `Q3_K_P` and so on.
+    pub label: String,
+    /// What its header says it is.
+    pub role: VariantRole,
     /// The size of every file of it, in bytes.
     pub total_bytes: u64,
     /// How many files it is split into.
@@ -135,8 +164,8 @@ fn hit(repo: HfRepoInfo) -> SearchHit {
     }
 }
 
-/// Each quantization `repo` publishes, in the Hub's order, judged at
-/// `budget` from the first [`FIT_HEAD_BYTES`] of its first file.
+/// Each variant `repo` publishes, by label, judged at `budget` from the
+/// first [`FIT_HEAD_BYTES`] of its first file, which also says what it is.
 ///
 /// A head the Hub refuses fails the call with the Hub's error. A head that
 /// is not a GGUF header leaves its quantization unknown.
@@ -162,21 +191,23 @@ async fn offer(
     budget: Option<u64>,
 ) -> Result<QuantOffer, GglibError> {
     let weights = Some(quant.total_size);
-    let (verdict, why) = match quant.file_paths.first() {
-        Some(first) => {
-            let head = hub.read_head(repo, first, FIT_HEAD_BYTES).await?;
-            let file_name = first.rsplit('/').next().unwrap_or(first);
-            parser.parse_head(&head, file_name).map_or_else(
-                |_| unreadable(weights, budget),
-                |head| ModelShape::of_head(&head).judge(weights, budget),
-            )
-        }
-        None => unreadable(weights, budget),
+    let head = if let Some(first) = quant.file_paths.first() {
+        let head = hub.read_head(repo, first, FIT_HEAD_BYTES).await?;
+        let file_name = first.rsplit('/').next().unwrap_or(first);
+        parser.parse_head(&head, file_name).ok()
+    } else {
+        None
     };
+    let (verdict, why) = head.as_ref().map_or_else(
+        || unreadable(weights, budget),
+        |head| ModelShape::of_head(head).judge(weights, budget),
+    );
+    let role = head.and_then(|head| head.role).unwrap_or_default();
     Ok(QuantOffer {
-        name: quant.name,
+        shard_count: u32::try_from(quant.shard_count()).unwrap_or(u32::MAX),
+        label: quant.label,
+        role: role.into(),
         total_bytes: quant.total_size,
-        shard_count: u32::try_from(quant.shard_count).unwrap_or(u32::MAX),
         verdict,
         why,
     })

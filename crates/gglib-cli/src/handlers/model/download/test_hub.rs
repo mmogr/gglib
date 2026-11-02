@@ -160,10 +160,10 @@ impl HfClientPort for Hub {
         Ok(names
             .iter()
             .map(|name| HfQuantInfo {
-                name: (*name).to_string(),
-                shard_count: 1,
+                label: (*name).to_string(),
+                role: None,
                 total_size: 1,
-                file_paths: vec![],
+                file_paths: vec![format!("model-{name}.gguf")],
             })
             .collect())
     }

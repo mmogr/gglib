@@ -3,10 +3,12 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use gglib_core::download::{DownloadError, Quantization};
-use gglib_core::ports::huggingface::{download_group, image_companions};
+use gglib_core::download::{DownloadError, GgufFileRole};
+use gglib_core::ports::huggingface::{
+    download_group, image_companions, label_refusal, match_variant, variant_role,
+};
 use gglib_core::ports::{
-    GgufParserPort, HfClientPort, QuantizationResolver, Resolution, ResolvedFile,
+    GgufParserPort, HfClientPort, HfQuantInfo, QuantizationResolver, Resolution, ResolvedFile,
 };
 
 /// Resolver that uses the `HuggingFace` client port.
@@ -39,14 +41,21 @@ impl HfQuantizationResolver {
 
 #[async_trait]
 impl QuantizationResolver for HfQuantizationResolver {
-    async fn resolve(
-        &self,
-        repo_id: &str,
-        quantization: Quantization,
-    ) -> Result<Resolution, DownloadError> {
-        // The weights of this quantization, and the projector fetched with
-        // them when the repository has one
-        let group = download_group(self.hf_client.as_ref(), repo_id, quantization)
+    /// The variant is the one `label` names as a request does, and the
+    /// resolution carries its label as the listing gives it.
+    async fn resolve(&self, repo_id: &str, label: &str) -> Result<Resolution, DownloadError> {
+        let variants = self.list_available(repo_id).await?;
+        let labels: Vec<&str> = variants.iter().map(|v| v.label.as_str()).collect();
+        let label = match_variant(&variants, label)
+            .map_err(|mismatch| {
+                DownloadError::resolution_failed(label_refusal(repo_id, label, &labels, &mismatch))
+            })?
+            .label
+            .as_str();
+
+        // The weights of this variant, and the projector fetched with them
+        // when the repository has one
+        let group = download_group(self.hf_client.as_ref(), repo_id, label)
             .await
             .map_err(|e| {
                 DownloadError::resolution_failed(format!("Failed to get quantization files: {e}"))
@@ -54,7 +63,7 @@ impl QuantizationResolver for HfQuantizationResolver {
 
         if group.weights.is_empty() {
             return Err(DownloadError::resolution_failed(format!(
-                "No files found for quantization {quantization} in {repo_id}"
+                "No files found for variant {label} in {repo_id}"
             )));
         }
 
@@ -106,30 +115,29 @@ impl QuantizationResolver for HfQuantizationResolver {
         });
 
         Ok(Resolution {
-            quantization,
+            label: label.to_owned(),
             files: weights.chain(projector).chain(companions).collect(),
             is_sharded,
             image_family,
         })
     }
 
-    async fn list_available(&self, repo_id: &str) -> Result<Vec<Quantization>, DownloadError> {
-        let quant_infos = self
-            .hf_client
+    async fn list_available(&self, repo_id: &str) -> Result<Vec<HfQuantInfo>, DownloadError> {
+        self.hf_client
             .list_quantizations(repo_id)
             .await
-            .map_err(|e| {
-                DownloadError::resolution_failed(format!("Failed to list quantizations: {e}"))
-            })?;
+            .map_err(|e| DownloadError::resolution_failed(format!("Failed to list variants: {e}")))
+    }
 
-        // Convert HfQuantInfo to Quantization, filtering out Unknown
-        let quantizations: Vec<_> = quant_infos
-            .into_iter()
-            .map(|info| Quantization::from_filename(&info.name))
-            .filter(|q| !q.is_unknown())
-            .collect();
-
-        Ok(quantizations)
+    /// Read from the head of the variant's first file when the resolver has
+    /// a parser; one that reads no head takes every variant for a model.
+    async fn role_of(&self, repo_id: &str, variant: &HfQuantInfo) -> GgufFileRole {
+        match &self.head_reader {
+            Some(parser) => {
+                variant_role(self.hf_client.as_ref(), parser.as_ref(), repo_id, variant).await
+            }
+            None => GgufFileRole::Weights,
+        }
     }
 }
 

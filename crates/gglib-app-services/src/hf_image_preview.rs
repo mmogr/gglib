@@ -3,21 +3,25 @@
 
 use std::path::Path;
 
-use gglib_core::download::Quantization;
+use gglib_core::download::GgufFileRole;
 use gglib_core::paths::repository_dir;
-use gglib_core::ports::huggingface::image_companions;
+use gglib_core::ports::huggingface::{image_companions, match_variant};
 use gglib_core::ports::{GgufParserPort, HfClientPort, HfFileInfo, HfQuantInfo};
 
 use crate::types::{HfCompanion, HfImagePreview};
 
-/// The quantization whose first file is read to know the family: `Q8_0`
-/// when the repository has it, as an image repository's download defaults
-/// to, and otherwise the smallest.
+/// The model variant whose first file is read to know the family: the one
+/// `Q8_0` names when the repository has it, as an image repository's
+/// download defaults to, and otherwise the smallest. A draft, a helper or a
+/// projector is never read for it.
 fn sniffed_quantization(quants: &[HfQuantInfo]) -> Option<&HfQuantInfo> {
-    quants
+    let models: Vec<&HfQuantInfo> = quants
         .iter()
-        .find(|q| Quantization::from_filename(&q.name) == Quantization::Q8_0)
-        .or_else(|| quants.iter().min_by_key(|q| q.total_size))
+        .filter(|q| q.role.is_none_or(GgufFileRole::is_weights))
+        .collect();
+    match_variant(models.iter().copied(), "Q8_0")
+        .ok()
+        .or_else(|| models.into_iter().min_by_key(|q| q.total_size))
 }
 
 /// The image model `model_id`'s family and companions, from one head read of

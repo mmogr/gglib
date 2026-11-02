@@ -54,7 +54,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
 
   // The selected quantization: the one picked, else the first listed
   const [selectedName, setSelectedName] = useState<string | undefined>(undefined);
-  const selected = quantizations.find((q) => q.name === selectedName) ?? quantizations[0];
+  const selected = quantizations.find((q) => q.label === selectedName) ?? quantizations[0];
 
   // Format last modified date
   const formatLastModified = (dateStr?: string | null): string => {
@@ -88,8 +88,11 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
       try {
         const response: HfQuantizationsResponse = await getTransport().getHfQuantizations(model.id);
         if (!cancelled) {
-          // Sort by size ascending (smallest first)
-          const sorted = [...response.quantizations].sort((a, b) => a.size_bytes - b.size_bytes);
+          // Sort by size ascending (smallest first). A projector is fetched
+          // with a model, never on its own, so it is not a row.
+          const sorted = response.quantizations
+            .filter((q) => q.role !== 'Projector')
+            .sort((a, b) => a.size_bytes - b.size_bytes);
           setQuantizations(sorted);
           setImage(response.image ?? null);
         }
@@ -147,7 +150,7 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
   }, [model.id]);
 
   const handleDownload = useCallback((quant: HfQuantization) => {
-    onDownload(model.id, quant.name);
+    onDownload(model.id, quant.label);
   }, [model.id, onDownload]);
 
   // Build tooltip for tool support badge
@@ -243,8 +246,8 @@ const HfModelPreview: FC<HfModelPreviewProps> = ({
           <>
             <QuantizationTable
               quantizations={quantizations}
-              selectedName={selected?.name}
-              onSelect={(quant) => setSelectedName(quant.name)}
+              selectedName={selected?.label}
+              onSelect={(quant) => setSelectedName(quant.label)}
               onDownload={handleDownload}
               downloadsDisabled={downloadsDisabled}
               disabledReason={disabledReason}

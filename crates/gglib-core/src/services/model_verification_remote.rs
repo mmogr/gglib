@@ -22,7 +22,7 @@ use super::model_verification::{
     UpdateCheckResult, UpdateDetails, VerifiedFileKind,
 };
 use crate::domain::{Model, ModelFile, ModelFolder, NO_HUB_LABEL};
-use crate::download::{DownloadId, GgufFileRole, Quantization};
+use crate::download::{DownloadId, GgufFileRole};
 use crate::ports::RepositoryError;
 use crate::ports::huggingface::download_group;
 
@@ -136,7 +136,7 @@ impl ModelVerificationService {
             return Ok(unchanged);
         };
         // Not "unchanged": without its label the check cannot be made.
-        let Some(quantization) = model.variant_label.as_deref() else {
+        let Some(label) = model.variant_label.as_deref() else {
             return Err(RepositoryError::Constraint(NO_HUB_LABEL.to_owned()));
         };
 
@@ -147,14 +147,14 @@ impl ModelVerificationService {
             return Ok(unchanged);
         }
 
-        // Get remote file metadata from HuggingFace. The quantization's files
+        // Get remote file metadata from HuggingFace. The variant's files
         // are weights alone, so a model with a projector row also asks for
         // the repository's projectors.
         let fetch_failed =
             |e| RepositoryError::Storage(format!("Failed to fetch remote files: {e}"));
         let mut remote_files = self
             .hf_client
-            .get_quantization_files(repo_id, quantization)
+            .get_quantization_files(repo_id, label)
             .await
             .map_err(fetch_failed)?;
         if local_files.iter().any(is_projector) {
@@ -248,7 +248,7 @@ impl ModelVerificationService {
             return Err("Model does not have HuggingFace repository information".to_string());
         };
 
-        let Some(quantization) = model.variant_label.as_deref() else {
+        let Some(quantization) = model.variant_label.clone() else {
             return Err(NO_HUB_LABEL.to_owned());
         };
 
@@ -299,7 +299,7 @@ impl ModelVerificationService {
 
         // What the download queued below fetches, asked while every file is
         // still in place.
-        let (asked, fetched) = self.fetched_group(repo_id, quantization).await?;
+        let fetched = self.fetched_projector(repo_id, &quantization).await?;
 
         // A projector is deleted only when that download fetches that same
         // file. Each one is judged on its own.
@@ -344,7 +344,7 @@ impl ModelVerificationService {
 
         // Queue the download and start it. The files are gone by now, so a
         // refusal says which, and what fetches them.
-        let asked = asked.to_string();
+        let asked = quantization;
         match Arc::clone(&self.downloads)
             .queue_smart(repo_id.clone(), Some(asked.clone()))
             .await
@@ -360,21 +360,17 @@ impl ModelVerificationService {
         }
     }
 
-    /// What a download of the stored `quantization` from `repo_id` asks for
-    /// and fetches: the quantization, and the path of the projector that
-    /// comes with it, when one does.
-    async fn fetched_group(
+    /// The path of the projector a download of the variant labelled `label`
+    /// from `repo_id` fetches, when one comes with it.
+    async fn fetched_projector(
         &self,
         repo_id: &str,
-        quantization: &str,
-    ) -> Result<(Quantization, Option<String>), String> {
-        let asked: Quantization = quantization
-            .parse()
-            .map_err(|()| format!("{quantization} is not a quantization a download asks for"))?;
-        let group = download_group(self.hf_client.as_ref(), repo_id, asked)
+        label: &str,
+    ) -> Result<Option<String>, String> {
+        let group = download_group(self.hf_client.as_ref(), repo_id, label)
             .await
             .map_err(|e| format!("Failed to read what a download of {repo_id} fetches: {e}"))?;
-        Ok((asked, group.projector.map(|projector| projector.path)))
+        Ok(group.projector.map(|projector| projector.path))
     }
 }
 

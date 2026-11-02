@@ -1,0 +1,14 @@
+[
+{"type": "directory", "path": "assets", "size": 0},
+{"type": "file", "path": ".gitattributes", "size": 2287},
+{"type": "file", "path": "README.md", "size": 2348},
+{"type": "file", "path": "assets/gemmable_4_12b.png", "size": 232879},
+{"type": "file", "path": "assets/gemmable_4_31b.png", "size": 242187},
+{"type": "file", "path": "gemmable-4-12b-Q4_K_M-mtp.gguf", "size": 331546880},
+{"type": "file", "path": "gemmable-4-12b-Q4_K_M.gguf", "size": 7381364160},
+{"type": "file", "path": "gemmable-4-12b-Q6_K-mtp.gguf", "size": 362703104},
+{"type": "file", "path": "gemmable-4-12b-Q6_K.gguf", "size": 9786002880},
+{"type": "file", "path": "gemmable-4-12b-Q8_0-mtp.gguf", "size": 465109248},
+{"type": "file", "path": "gemmable-4-12b-Q8_0.gguf", "size": 12669627840},
+{"type": "file", "path": "gemmable-4-12b-fp16-mtp.gguf", "size": 861520128}
+]

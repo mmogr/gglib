@@ -8,7 +8,6 @@ use chrono::{DateTime, Utc};
 
 use super::*;
 use crate::domain::{Model, ModelFile, NewModel};
-use crate::download::Quantization;
 use crate::paths::canonical_model_path;
 use crate::ports::ResolvedFile;
 use crate::services::model_projector::tests::FirstBytesParser;
@@ -89,7 +88,7 @@ pub(super) fn downloaded(dir: &Path, projector: &str) -> CompletedDownload {
         all_paths: vec![weights, projector_path.clone()],
         projector_path: Some(projector_path),
         components: vec![],
-        quantization: Quantization::Q8_0,
+        variant_label: Some("Q8_0".to_owned()),
         repo_id: "owner/zeta-GGUF".to_owned(),
         commit_sha: "abc123".to_owned(),
         is_sharded: false,

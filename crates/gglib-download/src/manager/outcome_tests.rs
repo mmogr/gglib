@@ -35,7 +35,7 @@ async fn a_completed_download_is_recorded_with_its_message() {
     assert!(
         f.manager
             .meters()
-            .contains_key(&DownloadId::new(REPO, Some("Q8_0")))
+            .contains_key(&DownloadId::new(REPO, Some("zeta.Q8_0")))
     );
     run_next(&f.manager, End::OnDisk).await;
 

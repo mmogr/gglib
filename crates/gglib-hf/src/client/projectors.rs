@@ -59,19 +59,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_quantizations_are_the_weights_alone() {
-        let quantizations = client().list_quantizations(&repo()).await.unwrap();
+    async fn each_projector_is_a_variant_apart_and_never_a_shard() {
+        let variants = client().list_variants(&repo()).await.unwrap();
 
-        assert_eq!(quantizations.len(), 1);
-        assert_eq!(quantizations[0].name, "Q8_0");
-        assert_eq!(quantizations[0].paths, ["X.Q8_0.gguf"]);
-        assert_eq!(quantizations[0].shard_count, 1);
+        let shapes: Vec<(&str, &[String])> = variants
+            .iter()
+            .map(|v| (v.label.as_str(), v.file_paths.as_slice()))
+            .collect();
+        assert_eq!(
+            shapes,
+            [
+                ("X.Q8_0", &["X.Q8_0.gguf".to_owned()][..]),
+                ("X.mmproj-Q8_0", &["X.mmproj-Q8_0.gguf".to_owned()][..]),
+                ("mmproj-F16", &["mmproj-F16.gguf".to_owned()][..]),
+            ]
+        );
     }
 
     #[tokio::test]
-    async fn the_files_of_a_quantization_are_the_weights_alone() {
+    async fn the_files_of_a_variant_are_its_own_alone() {
         let files = client()
-            .find_quantization_files_with_sizes(&repo(), "Q8_0")
+            .find_variant_files(&repo(), "X.Q8_0")
             .await
             .unwrap();
 
@@ -79,10 +87,10 @@ mod tests {
         assert_eq!(files[0].path, "X.Q8_0.gguf");
     }
 
-    /// `F16` is the name of a projector here and of no weights.
+    /// `Q4` is in no label here.
     #[tokio::test]
-    async fn a_quantization_only_a_projector_carries_is_not_found() {
-        let refused = client().find_quantization_files(&repo(), "F16").await;
+    async fn a_label_no_variant_holds_is_not_found() {
+        let refused = client().find_variant_files(&repo(), "Q4").await;
 
         assert!(matches!(refused, Err(HfError::QuantizationNotFound { .. })));
     }

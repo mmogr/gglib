@@ -37,10 +37,11 @@ use tokio::sync::{Mutex, Notify, RwLock, watch};
 use tokio_util::sync::CancellationToken;
 
 use gglib_core::download::{
-    DownloadError, DownloadEvent, DownloadId, DownloadOutcome, DownloadPhase, Quantization,
-    QueueSnapshot, ShardInfo, download_title,
+    DownloadError, DownloadEvent, DownloadId, DownloadOutcome, DownloadPhase, QueueSnapshot,
+    ShardInfo, download_title,
 };
 use gglib_core::events::AppEvent;
+use gglib_core::ports::huggingface::match_variant;
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, GgufParserPort, HfClientPort,
     ModelRegistrarPort, QuantizationResolver, ResolvedFile,
@@ -1203,31 +1204,28 @@ impl DownloadManagerImpl {
             .select(&repo_id, quantization.as_deref())
             .await?;
 
-        let mut resolution = self
-            .resolver
-            .resolve(&repo_id, selection.quantization)
-            .await?;
+        let mut resolution = self.resolver.resolve(&repo_id, &selection.label).await?;
 
         // An image model drawn at Q8_0 is what was measured: with none asked,
-        // a repository whose weights' head names a family is fetched at Q8_0
-        // when it has it, chosen once the head has been read.
+        // a repository whose weights' head names a family is fetched at the
+        // variant `Q8_0` names when it has one, chosen once the head has been
+        // read.
         if selection.auto_selected
             && resolution.image_family.is_some()
-            && resolution.quantization != Quantization::Q8_0
-            && selection.available.contains(&Quantization::Q8_0)
+            && let Ok(q8) = match_variant(&selection.available, "Q8_0")
+            && q8.label != resolution.label
         {
-            resolution = self.resolver.resolve(&repo_id, Quantization::Q8_0).await?;
+            resolution = self.resolver.resolve(&repo_id, &q8.label).await?;
         }
 
-        let quant_str = resolution.quantization.to_string();
-        let id = DownloadId::new(&repo_id, Some(&quant_str));
+        let id = DownloadId::new(&repo_id, Some(&resolution.label));
 
         if selection.auto_selected {
             tracing::info!(
                 repo_id = %repo_id,
-                selected = %quant_str,
-                available = ?selection.available.iter().map(ToString::to_string).collect::<Vec<_>>(),
-                "Auto-selected quantization"
+                selected = %resolution.label,
+                available = ?selection.available.iter().map(|v| v.label.as_str()).collect::<Vec<_>>(),
+                "Auto-selected variant"
             );
         }
 

@@ -6,6 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::variants::HELPER_FILES_REFUSAL;
+use crate::download::GgufFileRole;
+
 /// Information about a `HuggingFace` repository/model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HfRepoInfo {
@@ -52,24 +55,53 @@ pub struct HfFileInfo {
     pub oid: Option<String>,
 }
 
-/// Information about a quantization variant.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// One variant a repository publishes: a set of GGUF files that are shards
+/// of one another, named as its uploader named it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HfQuantInfo {
-    /// Quantization name (e.g., `Q4_K_M`)
-    pub name: String,
-    /// Number of files (1 for single, >1 for sharded)
-    pub shard_count: usize,
-    /// Total size across all shards
-    pub total_size: u64,
-    /// Paths to all files for this quantization
+    /// The uploader's name for it (`UD-Q4_K_XL`, `Q3_K_P`, `BF16`): its file
+    /// name less what every variant's name shares. A request names it.
+    pub label: String,
+    /// What its first file's header says it is; `None` when the header has
+    /// not been read, which a listing never does. A variant that is not a
+    /// draft, a helper or a projector is a model.
+    pub role: Option<GgufFileRole>,
+    /// Every file of it, in shard order.
     pub file_paths: Vec<String>,
+    /// The size of every file of it, in bytes.
+    pub total_size: u64,
 }
 
 impl HfQuantInfo {
-    /// Check if this quantization is sharded.
+    /// How many files it is split into.
+    #[must_use]
+    pub const fn shard_count(&self) -> usize {
+        self.file_paths.len()
+    }
+
+    /// Whether it is split into several files.
     #[must_use]
     pub const fn is_sharded(&self) -> bool {
-        self.shard_count > 1
+        self.shard_count() > 1
+    }
+
+    /// Why it is not downloaded as a model, when its header says it is a
+    /// draft, a helper or a projector; `None` for a model, and for a
+    /// variant whose header has not been read.
+    #[must_use]
+    pub fn refusal(&self) -> Option<String> {
+        match self.role? {
+            GgufFileRole::Weights => None,
+            GgufFileRole::Sidecar => Some(format!(
+                "{} is a draft or helper file, not a model: {HELPER_FILES_REFUSAL}",
+                self.label
+            )),
+            GgufFileRole::Projector => Some(format!(
+                "{} is a projector, not a model: a download of a model fetches its projector \
+                 with it",
+                self.label
+            )),
+        }
     }
 }
 
@@ -218,25 +250,34 @@ mod tests {
     }
 
     #[test]
-    fn test_quant_info_helpers() {
-        let single = HfQuantInfo {
-            name: "Q4_K_M".to_string(),
-            shard_count: 1,
-            total_size: 4_000_000_000,
-            file_paths: vec!["model.gguf".to_string()],
+    fn a_variant_is_sharded_when_it_holds_several_files() {
+        let variant = |paths: &[&str]| HfQuantInfo {
+            label: "Q8_0".to_string(),
+            role: None,
+            total_size: 1,
+            file_paths: paths.iter().map(ToString::to_string).collect(),
         };
-        assert!(!single.is_sharded());
+        assert!(!variant(&["model.gguf"]).is_sharded());
+        assert_eq!(variant(&["a.gguf", "b.gguf", "c.gguf"]).shard_count(), 3);
+        assert!(variant(&["a.gguf", "b.gguf"]).is_sharded());
+    }
 
-        let sharded = HfQuantInfo {
-            name: "Q8_0".to_string(),
-            shard_count: 3,
-            total_size: 12_000_000_000,
-            file_paths: vec![
-                "a.gguf".to_string(),
-                "b.gguf".to_string(),
-                "c.gguf".to_string(),
-            ],
+    #[test]
+    fn only_a_variant_whose_head_says_it_is_no_model_is_refused() {
+        let variant = |role| HfQuantInfo {
+            label: "FastMTP-32K".to_string(),
+            role,
+            total_size: 1,
+            file_paths: vec!["x.gguf".to_string()],
         };
-        assert!(sharded.is_sharded());
+        assert_eq!(variant(None).refusal(), None);
+        assert_eq!(variant(Some(GgufFileRole::Weights)).refusal(), None);
+        let draft = variant(Some(GgufFileRole::Sidecar)).refusal().unwrap();
+        assert!(
+            draft.starts_with("FastMTP-32K is a draft or helper file"),
+            "{draft}"
+        );
+        assert!(draft.ends_with(HELPER_FILES_REFUSAL), "{draft}");
+        assert!(variant(Some(GgufFileRole::Projector)).refusal().is_some());
     }
 }

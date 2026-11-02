@@ -108,7 +108,6 @@ mod through_a_symlink {
     use std::path::Path;
     use std::sync::Arc;
 
-    use gglib_core::download::Quantization;
     use gglib_core::ports::{CompletedDownload, GgufParserPort, ModelRegistrarPort, TensorTable};
     use gglib_core::{GgufCapabilities, GgufFileRole, GgufMetadata, GgufParseError, HeadMetadata};
 
@@ -164,7 +163,7 @@ mod through_a_symlink {
             all_paths: vec![weights, projector.clone()],
             projector_path: Some(projector),
             components: vec![],
-            quantization: Quantization::Q8_0,
+            variant_label: Some("Q8_0".to_owned()),
             repo_id: "owner/zeta-GGUF".to_owned(),
             commit_sha: "abc123".to_owned(),
             is_sharded: false,

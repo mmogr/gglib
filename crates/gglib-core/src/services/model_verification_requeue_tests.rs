@@ -33,27 +33,13 @@ fn stored_as(dir: &Path, quantization: &str, queued: AskedDownloads) -> Fixture 
     fixture_queueing_on(dir, quantization, rows, hub(), queued)
 }
 
-// ── The quantization asked for ───────────────────────────────────────────
+// ── The label asked for ──────────────────────────────────────────────────
 
-/// The shapes a quantization is stored in, each with the one a download asks
-/// the Hub and the queue for. An Unsloth Dynamic quantization stays one, and
-/// none of them becomes a default.
+/// A stored label is asked of the Hub and the queue as it was stored: the
+/// Hub matches it to its variant.
 #[tokio::test]
-async fn a_repair_asks_for_the_quantization_the_model_was_stored_with() {
-    let stored = [
-        ("Q8_0", "Q8_0"),
-        ("q4_k_m", "Q4_K_M"),
-        ("Q6_K", "Q6_K"),
-        ("UD-Q6_K", "UD-Q6_K"),
-        ("ud-q6_k", "UD-Q6_K"),
-        ("UD_Q4_K_M", "UD-Q4_K_M"),
-        ("F16", "F16"),
-        ("FP16", "F16"),
-        ("BF16", "BF16"),
-        ("IQ4_XS", "IQ4_XS"),
-        ("UD-Q6_K_M", "UD-Q6_K_M"),
-    ];
-    for (stored, asked) in stored {
+async fn a_repair_asks_for_the_label_the_model_was_stored_with() {
+    for stored in ["Q8_0", "q4_k_m", "UD-Q6_K", "Q3_K_P", "FastMTP-32K"] {
         let dir = tempfile::tempdir().unwrap();
         let f = stored_as(dir.path(), stored, AskedDownloads::default());
 
@@ -61,36 +47,40 @@ async fn a_repair_asks_for_the_quantization_the_model_was_stored_with() {
 
         assert_eq!(
             *f.hub.quantizations_asked.lock().unwrap(),
-            [asked],
+            [stored],
             "the Hub, for a model stored as {stored}"
         );
         assert_eq!(
             f.queued.asked(),
-            [(REPO.to_owned(), Some(asked.to_owned()))],
+            [(REPO.to_owned(), Some(stored.to_owned()))],
             "the queue, for a model stored as {stored}"
         );
-        assert_eq!(started.id, format!("{REPO}:{asked}"));
+        assert_eq!(started.id, format!("{REPO}:{stored}"));
     }
 }
 
-/// A stored quantization that names none is refused while the file is still
-/// there: nothing stands in for it.
+/// A stored label the repository has no variant of is refused while the
+/// file is still there.
 #[tokio::test]
-async fn a_stored_quantization_no_download_asks_for_is_refused_before_anything_is_deleted() {
-    for stored in ["BANANA", "Unknown", "Q4_K_M_typo", ""] {
-        let dir = tempfile::tempdir().unwrap();
-        let f = stored_as(dir.path(), stored, AskedDownloads::default());
+async fn a_label_the_repository_has_no_variant_of_is_refused_before_anything_is_deleted() {
+    let dir = tempfile::tempdir().unwrap();
+    let rows = Arc::new(Rows(corrupt_weights(dir.path())));
+    let f = fixture_queueing_on(
+        dir.path(),
+        "BANANA",
+        rows,
+        FakeHub::default(),
+        AskedDownloads::default(),
+    );
 
-        let refused = f.service.repair_model(1, None).await.unwrap_err();
+    let refused = f.service.repair_model(1, None).await.unwrap_err();
 
-        assert_eq!(
-            refused,
-            format!("{stored} is not a quantization a download asks for")
-        );
-        assert!(dir.path().join(WEIGHTS).exists(), "nothing is deleted");
-        assert!(f.queued.asked().is_empty(), "nothing is queued");
-        assert!(f.hub.quantizations_asked.lock().unwrap().is_empty());
-    }
+    assert!(
+        refused.starts_with(&format!("Failed to read what a download of {REPO} fetches")),
+        "{refused}"
+    );
+    assert!(dir.path().join(WEIGHTS).exists(), "nothing is deleted");
+    assert!(f.queued.asked().is_empty(), "nothing is queued");
 }
 
 // ── What a repair answers ────────────────────────────────────────────────

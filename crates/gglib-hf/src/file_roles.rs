@@ -1,11 +1,11 @@
-//! Telling a repository's weights from its projectors and sidecars.
+//! Finding a repository's projectors by name.
 //!
 //! A repository lists a projector as one more GGUF, and its name carries a
-//! quantization like any weights file's (`mmproj-F16.gguf`). So may a
-//! sidecar, an importance matrix or an MTP head (`MTP/mtp-X-Q4_0.gguf`). The
-//! role is decided once, by [`GgufFileRole::classify`], and everything that
-//! groups files into quantizations asks [`HfFileEntry::is_weights`]: neither
-//! is ever a quantization of the model or a shard of one.
+//! quantization like any weights file's (`mmproj-F16.gguf`). The projectors a
+//! download may fetch beside a model's weights are the files
+//! [`GgufFileRole::classify`] names as one. A projector is also a variant of
+//! its own in the listing, never a shard of another: the variants are
+//! grouped by name alone, and what each one is comes from its header.
 
 use std::path::Path;
 
@@ -15,11 +15,6 @@ use gglib_core::ports::huggingface::HfFileInfo;
 use crate::models::HfFileEntry;
 
 impl HfFileEntry {
-    /// Whether this is a GGUF file holding a model's weights.
-    pub(crate) fn is_weights(&self) -> bool {
-        self.is_gguf() && GgufFileRole::classify(Path::new(&self.path)).is_weights()
-    }
-
     /// Whether this is a GGUF file holding a projector.
     pub(crate) fn is_projector(&self) -> bool {
         self.is_gguf() && GgufFileRole::classify(Path::new(&self.path)).is_projector()

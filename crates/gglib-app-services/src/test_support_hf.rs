@@ -20,8 +20,8 @@ impl HfClientPort for MockHfClient {
 
     async fn list_quantizations(&self, _model_id: &str) -> Result<Vec<HfQuantInfo>, HfPortError> {
         Ok(vec![HfQuantInfo {
-            name: "Q4_K_M".to_string(),
-            shard_count: 1,
+            label: "Q4_K_M".to_string(),
+            role: None,
             total_size: 0,
             file_paths: vec!["model.gguf".to_string()],
         }])

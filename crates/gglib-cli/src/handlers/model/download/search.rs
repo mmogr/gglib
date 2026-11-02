@@ -115,7 +115,7 @@ pub(super) async fn find(
         let quantizations = hf.list_quantizations(&model.id).await.unwrap_or_default();
         hits.push(Hit {
             model,
-            quantizations: quantizations.into_iter().map(|q| q.name).collect(),
+            quantizations: quantizations.into_iter().map(|q| q.label).collect(),
         });
     }
     Ok(hits)

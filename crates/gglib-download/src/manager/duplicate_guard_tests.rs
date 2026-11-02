@@ -23,8 +23,8 @@ struct OneQuantHf;
 impl HfClientPort for OneQuantHf {
     async fn list_quantizations(&self, _model_id: &str) -> HfPortResult<Vec<HfQuantInfo>> {
         Ok(vec![HfQuantInfo {
-            name: "Q8_0".to_string(),
-            shard_count: 1,
+            label: "Q8_0".to_string(),
+            role: None,
             total_size: 1_024,
             file_paths: vec!["model-Q8_0.gguf".to_string()],
         }])

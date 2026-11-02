@@ -47,7 +47,8 @@ async fn a_repair_leaves_a_running_download() {
     std::fs::write(&corrupt, "damaged").unwrap();
     let mut model = NewModel::new("zeta".to_owned(), corrupt.clone(), 7.0, chrono::Utc::now());
     model.hf_repo_id = Some("owner/zeta-GGUF".to_owned());
-    model.variant_label = Some("Q8_0".to_owned());
+    // The label the repository's listing gives its one file.
+    model.variant_label = Some("zeta.Q8_0".to_owned());
     let id = built.app.models().add(model).await.unwrap().id;
     let oid = Some(HEALTHY_OID.to_owned());
     let row = NewModelFile::new(id, WEIGHTS.to_owned(), 0, 7, oid);
@@ -61,7 +62,7 @@ async fn a_repair_leaves_a_running_download() {
         .unwrap();
 
     assert!(!corrupt.exists(), "the corrupt file is deleted");
-    assert_eq!(started.id, "owner/zeta-GGUF:Q8_0");
+    assert_eq!(started.id, "owner/zeta-GGUF:zeta.Q8_0");
     assert_eq!(started.files, [WEIGHTS]);
     // Nothing more is asked of the manager, and the download ends.
     let read = async {

@@ -1,16 +1,22 @@
-//! Quantization selection logic.
+//! Choosing the variant a download fetches.
 //!
-//! Centralizes the rules for selecting a quantization when the user hasn't
-//! specified one explicitly. This prevents each adapter (GUI, CLI, Tauri)
-//! from implementing their own (potentially inconsistent) selection logic.
+//! Centralizes the rules for choosing a repository's variant, so each
+//! adapter (GUI, CLI, daemon) asks the same way.
 //!
 //! # Selection Rules
 //!
-//! 1. If a quantization is provided, validate it exists in the repository
-//! 2. If none is provided:
-//!    - 0 options available → error (empty repository)
-//!    - 1 option available → auto-pick it (pre-quantized model)
-//!    - >1 options available → use default preference list, else error
+//! 1. A request names a variant by its label ([`match_variant`]): exactly,
+//!    ignoring case, else as the one label that holds it as a whole token.
+//!    A request that names none, or several, is refused with the labels.
+//! 2. With no request:
+//!    - no variant → error (empty repository)
+//!    - the first entry of the default preference list that names a model
+//!      the same way
+//!    - else the one model there is, beside drafts, helpers and projectors
+//!    - else an error listing the models, or saying there are none
+//! 3. A variant whose header says it is a draft, a helper or a projector is
+//!    never chosen: asked for, it is refused; on the preference list, it is
+//!    passed over.
 //!
 //! # Example
 //!
@@ -23,98 +29,31 @@
 
 use std::sync::Arc;
 
-use gglib_core::download::{DownloadError, Quantization};
-use gglib_core::ports::QuantizationResolver;
+use gglib_core::download::DownloadError;
+use gglib_core::ports::huggingface::{HELPER_FILES_REFUSAL, label_refusal, match_variant};
+use gglib_core::ports::{HfQuantInfo, QuantizationResolver};
 
 /// Default quantization preference order.
 ///
-/// When no quantization is specified and multiple are available,
-/// we try these in order and pick the first one that exists.
+/// When no variant is asked for and several are available, each entry is
+/// matched against the labels as a request is, in order, and the first
+/// model it names is taken.
 const DEFAULT_QUANT_PREFERENCE: &[&str] = &["Q5_K_M", "Q4_K_M", "Q5_K_S", "Q4_K_S", "Q6_K", "Q8_0"];
 
-/// Result of quantization selection.
+/// Result of choosing a variant.
 #[derive(Debug, Clone)]
 pub(crate) struct QuantizationSelection {
-    /// The selected quantization.
-    pub quantization: Quantization,
+    /// The label of the variant chosen.
+    pub label: String,
     /// Whether this was auto-selected (vs. explicitly requested).
     pub auto_selected: bool,
-    /// The available quantizations in the repository.
-    pub available: Vec<Quantization>,
+    /// The repository's variants, as its listing gave them.
+    pub available: Vec<HfQuantInfo>,
 }
 
-/// Error details for quantization selection failures.
-#[derive(Debug, Clone)]
-pub enum SelectionError {
-    /// No quantizations available in the repository.
-    NoQuantizationsAvailable { repo_id: String },
-    /// Requested quantization not found.
-    QuantizationNotFound {
-        repo_id: String,
-        requested: String,
-        available: Vec<String>,
-    },
-    /// Multiple quantizations available but none match defaults.
-    SelectionRequired {
-        repo_id: String,
-        available: Vec<String>,
-    },
-}
-
-impl std::fmt::Display for SelectionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NoQuantizationsAvailable { repo_id } => {
-                write!(f, "No quantizations available for model '{repo_id}'")
-            }
-            Self::QuantizationNotFound {
-                repo_id,
-                requested,
-                available,
-            } => {
-                write!(
-                    f,
-                    "Quantization '{requested}' not found for model '{repo_id}'. Available: {}",
-                    available.join(", ")
-                )
-            }
-            Self::SelectionRequired { repo_id, available } => {
-                write!(
-                    f,
-                    "Multiple quantizations available for '{repo_id}', please select one: {}",
-                    available.join(", ")
-                )
-            }
-        }
-    }
-}
-
-impl From<SelectionError> for DownloadError {
-    fn from(err: SelectionError) -> Self {
-        match err {
-            SelectionError::NoQuantizationsAvailable { repo_id } => {
-                Self::resolution_failed(format!("No quantizations available for model '{repo_id}'"))
-            }
-            SelectionError::QuantizationNotFound {
-                requested,
-                available,
-                ..
-            } => Self::InvalidQuantization {
-                value: format!("{} (available: {})", requested, available.join(", ")),
-            },
-            SelectionError::SelectionRequired { available, .. } => {
-                Self::resolution_failed(format!(
-                    "Multiple quantizations available, please select one: {}",
-                    available.join(", ")
-                ))
-            }
-        }
-    }
-}
-
-/// Quantization selection service.
+/// Variant selection service.
 ///
-/// Uses a resolver to list available quantizations and applies selection rules.
+/// Uses a resolver to list the repository's variants and read their roles.
 pub(crate) struct QuantizationSelector {
     resolver: Arc<dyn QuantizationResolver>,
 }
@@ -125,216 +64,114 @@ impl QuantizationSelector {
         Self { resolver }
     }
 
-    /// Select a quantization for download.
-    ///
-    /// # Arguments
-    ///
-    /// * `repo_id` - The `HuggingFace` repository ID
-    /// * `requested` - Optional user-requested quantization (e.g., "`Q8_0`")
-    ///
-    /// # Returns
-    ///
-    /// Returns the selected quantization and metadata about the selection.
+    /// Choose the variant of `repo_id` a download fetches: the one
+    /// `requested` names, or one chosen by the rules above.
     ///
     /// # Errors
     ///
-    /// - `NoQuantizationsAvailable` if the repo has no GGUF files
-    /// - `QuantizationNotFound` if the requested quant doesn't exist
-    /// - `SelectionRequired` if multiple quants exist but none match defaults
+    /// - the repository has no GGUF files
+    /// - the request names no single variant, or names one that is not a
+    ///   model
+    /// - with no request, no preference names a model and there is not
+    ///   exactly one model
     pub(crate) async fn select(
         &self,
         repo_id: &str,
         requested: Option<&str>,
     ) -> Result<QuantizationSelection, DownloadError> {
-        // Get available quantizations
         let available = self.resolver.list_available(repo_id).await?;
-        let available_strings: Vec<String> = available.iter().map(ToString::to_string).collect();
+        let labels: Vec<&str> = available.iter().map(|v| v.label.as_str()).collect();
 
-        // Case: No quantizations available
         if available.is_empty() {
-            return Err(SelectionError::NoQuantizationsAvailable {
-                repo_id: repo_id.to_string(),
-            }
-            .into());
+            return Err(DownloadError::resolution_failed(format!(
+                "No GGUF files available for model '{repo_id}'"
+            )));
         }
 
-        // Case: User specified a quantization - validate it exists
-        if let Some(req) = requested {
-            // Parse the requested quantization
-            let synthetic_filename = format!("model-{req}.gguf");
-            let quant = Quantization::from_filename(&synthetic_filename);
-
-            // Check if it exists in available list
-            if available.contains(&quant) {
-                return Ok(QuantizationSelection {
-                    quantization: quant,
-                    auto_selected: false,
-                    available,
-                });
-            }
-
-            // Also try exact string match (handles edge cases)
-            for avail in &available {
-                if avail.to_string().eq_ignore_ascii_case(req) {
-                    return Ok(QuantizationSelection {
-                        quantization: *avail,
-                        auto_selected: false,
-                        available,
-                    });
-                }
-            }
-
-            // Not found
-            return Err(SelectionError::QuantizationNotFound {
-                repo_id: repo_id.to_string(),
-                requested: req.to_string(),
-                available: available_strings,
-            }
-            .into());
-        }
-
-        // Case: Single quantization available - auto-pick it
-        if available.len() == 1 {
+        if let Some(request) = requested {
+            let label = match_variant(&available, request)
+                .map_err(|mismatch| {
+                    DownloadError::other(label_refusal(repo_id, request, &labels, &mismatch))
+                })?
+                .label
+                .clone();
+            self.refuse_unless_a_model(repo_id, &available, &label)
+                .await?;
             return Ok(QuantizationSelection {
-                quantization: available[0],
+                label,
+                auto_selected: false,
+                available,
+            });
+        }
+
+        for preference in DEFAULT_QUANT_PREFERENCE {
+            let Ok(variant) = match_variant(&available, preference) else {
+                continue;
+            };
+            let label = variant.label.as_str();
+            if !self.resolver.role_of(repo_id, variant).await.is_weights() {
+                continue;
+            }
+            tracing::info!(
+                repo_id = %repo_id,
+                selected = %label,
+                "Auto-selected a variant from the default preference list"
+            );
+            return Ok(QuantizationSelection {
+                label: label.to_owned(),
                 auto_selected: true,
                 available,
             });
         }
 
-        // Case: Multiple quantizations - try default preference list
-        for pref in DEFAULT_QUANT_PREFERENCE {
-            let synthetic_filename = format!("model-{pref}.gguf");
-            let quant = Quantization::from_filename(&synthetic_filename);
-
-            if available.contains(&quant) {
-                tracing::info!(
-                    repo_id = %repo_id,
-                    selected = %quant,
-                    "Auto-selected quantization from default preference list"
-                );
-                return Ok(QuantizationSelection {
-                    quantization: quant,
-                    auto_selected: true,
-                    available,
-                });
+        // No preference names a model: the one model there is, when there
+        // is one, beside any drafts, helpers and projectors.
+        let mut models = Vec::new();
+        for variant in &available {
+            if self.resolver.role_of(repo_id, variant).await.is_weights() {
+                models.push(variant.label.as_str());
             }
         }
-
-        // No default preference matched - require explicit selection
-        Err(SelectionError::SelectionRequired {
-            repo_id: repo_id.to_string(),
-            available: available_strings,
+        match models.as_slice() {
+            [only] => {
+                let label = (*only).to_owned();
+                Ok(QuantizationSelection {
+                    label,
+                    auto_selected: true,
+                    available,
+                })
+            }
+            [] => Err(DownloadError::other(format!(
+                "No model in '{repo_id}', only draft or helper files: {HELPER_FILES_REFUSAL}"
+            ))),
+            several => Err(DownloadError::resolution_failed(format!(
+                "Multiple variants available for '{repo_id}', please select one: {}",
+                several.join(", ")
+            ))),
         }
-        .into())
+    }
+
+    /// Refuse the variant labelled `label` among `available` when its
+    /// header says it is a draft, a helper or a projector.
+    async fn refuse_unless_a_model(
+        &self,
+        repo_id: &str,
+        available: &[HfQuantInfo],
+        label: &str,
+    ) -> Result<(), DownloadError> {
+        let Some(variant) = available.iter().find(|v| v.label == label) else {
+            return Ok(());
+        };
+        let judged = HfQuantInfo {
+            role: Some(self.resolver.role_of(repo_id, variant).await),
+            ..variant.clone()
+        };
+        judged
+            .refusal()
+            .map_or(Ok(()), |why| Err(DownloadError::other(why)))
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use async_trait::async_trait;
-    use gglib_core::ports::Resolution;
-
-    /// Mock resolver for testing.
-    struct MockResolver {
-        available: Vec<Quantization>,
-    }
-
-    impl MockResolver {
-        fn new(quants: &[&str]) -> Self {
-            let available = quants
-                .iter()
-                .map(|q| {
-                    let filename = format!("model-{q}.gguf");
-                    Quantization::from_filename(&filename)
-                })
-                .collect();
-            Self { available }
-        }
-
-        fn empty() -> Self {
-            Self { available: vec![] }
-        }
-    }
-
-    #[async_trait]
-    impl QuantizationResolver for MockResolver {
-        async fn resolve(
-            &self,
-            _repo_id: &str,
-            _quantization: Quantization,
-        ) -> Result<Resolution, DownloadError> {
-            unimplemented!("not needed for selection tests")
-        }
-
-        async fn list_available(&self, _repo_id: &str) -> Result<Vec<Quantization>, DownloadError> {
-            Ok(self.available.clone())
-        }
-    }
-
-    #[tokio::test]
-    async fn test_explicit_quant_exists() {
-        let resolver = Arc::new(MockResolver::new(&["Q4_K_M", "Q8_0", "F16"]));
-        let selector = QuantizationSelector::new(resolver);
-
-        let result = selector.select("test/model", Some("Q8_0")).await.unwrap();
-        assert_eq!(result.quantization.to_string(), "Q8_0");
-        assert!(!result.auto_selected);
-    }
-
-    #[tokio::test]
-    async fn test_explicit_quant_not_found() {
-        let resolver = Arc::new(MockResolver::new(&["Q8_0"]));
-        let selector = QuantizationSelector::new(resolver);
-
-        let result = selector.select("test/model", Some("Q4_K_M")).await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains("Q4_K_M"));
-    }
-
-    #[tokio::test]
-    async fn test_single_quant_auto_selected() {
-        let resolver = Arc::new(MockResolver::new(&["Q8_0"]));
-        let selector = QuantizationSelector::new(resolver);
-
-        let result = selector.select("test/model", None).await.unwrap();
-        assert_eq!(result.quantization.to_string(), "Q8_0");
-        assert!(result.auto_selected);
-    }
-
-    #[tokio::test]
-    async fn test_multiple_quants_default_preference() {
-        let resolver = Arc::new(MockResolver::new(&["Q8_0", "Q4_K_M", "F16"]));
-        let selector = QuantizationSelector::new(resolver);
-
-        let result = selector.select("test/model", None).await.unwrap();
-        // Q4_K_M is in the default preference list before Q8_0
-        assert_eq!(result.quantization.to_string(), "Q4_K_M");
-        assert!(result.auto_selected);
-    }
-
-    #[tokio::test]
-    async fn test_no_quants_available() {
-        let resolver = Arc::new(MockResolver::empty());
-        let selector = QuantizationSelector::new(resolver);
-
-        let result = selector.select("test/model", None).await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains("No quantizations"));
-    }
-
-    #[tokio::test]
-    async fn test_no_default_match_requires_selection() {
-        // Use quantizations that aren't in the default preference list
-        let resolver = Arc::new(MockResolver::new(&["IQ2_XXS", "IQ1_M"]));
-        let selector = QuantizationSelector::new(resolver);
-
-        let result = selector.select("test/model", None).await;
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains("please select one"));
-    }
-}
+#[path = "quant_selector_tests.rs"]
+mod tests;

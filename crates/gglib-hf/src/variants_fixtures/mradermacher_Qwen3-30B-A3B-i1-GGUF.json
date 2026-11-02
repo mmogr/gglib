@@ -1,0 +1,21 @@
+[
+{"type": "file", "path": ".gitattributes", "size": 2598},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-IQ3_M.gguf", "size": 13513062976},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-IQ3_S.gguf", "size": 13299153472},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-IQ3_XS.gguf", "size": 12598442560},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-IQ3_XXS.gguf", "size": 11849327168},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-IQ4_XS.gguf", "size": 16368349760},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-Q2_K.gguf", "size": 11258610240},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-Q3_K_L.gguf", "size": 15900670528},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-Q3_K_M.gguf", "size": 14711847488},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-Q3_K_S.gguf", "size": 13292468800},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-Q4_0.gguf", "size": 17379988032},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-Q4_1.gguf", "size": 19192500800},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-Q4_K_M.gguf", "size": 18556686912},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-Q4_K_S.gguf", "size": 17456009792},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-Q5_K_M.gguf", "size": 21725581888},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-Q5_K_S.gguf", "size": 21080511040},
+{"type": "file", "path": "Qwen3-30B-A3B.i1-Q6_K.gguf", "size": 25092532800},
+{"type": "file", "path": "README.md", "size": 4169},
+{"type": "file", "path": "imatrix.dat", "size": 116929677}
+]

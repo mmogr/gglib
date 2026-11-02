@@ -22,9 +22,9 @@ use crate::{DownloadProgress, DownloadState, DownloadWatch, GglibError};
 const REPO: &str = "tester/tiny-chat-GGUF";
 const FILE: &str = "tiny-chat-Q4_K_M.gguf";
 const QUANT: &str = "Q4_K_M";
+const LABEL: &str = "tiny-chat-Q4_K_M"; // the listing's label, which `QUANT` names
 const MIB: usize = 1 << 20;
-/// The file's size: a chat model's header, then bytes that stand in for
-/// its tensors.
+/// The file's size: a chat model's header, then stand-ins for its tensors.
 const SIZE: usize = 3 * MIB;
 
 /// A test's library, the file server its Hub sends downloads to, and the
@@ -79,7 +79,7 @@ impl Rig {
 
     /// Where the feed has the download.
     fn standing(&self) -> Option<Standing> {
-        let tracked = self.library.feed.tracked(&format!("{REPO}:{QUANT}"));
+        let tracked = self.library.feed.tracked(&format!("{REPO}:{LABEL}"));
         tracked.map(|tracked| tracked.standing)
     }
 

@@ -106,7 +106,7 @@ async fn a_cancel_after_ok_is_cancelled_and_the_group_stays_closed() {
     let metadata = GroupMetadata {
         repo_id: "owner/zeta-GGUF".to_string(),
         commit_sha: "abc123".to_string(),
-        quantization: gglib_core::download::Quantization::Q8_0,
+        variant_label: Some("Q8_0".to_owned()),
         primary_filename: "zeta.Q8_0.gguf".to_string(),
         hf_tags: vec![],
         file_entries: vec![],

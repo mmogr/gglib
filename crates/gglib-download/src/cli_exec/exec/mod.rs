@@ -48,24 +48,23 @@ pub(super) async fn download(
     gglib_core::telemetry::console_println(&format!("Found repository, commit SHA: {commit_sha}"));
 
     // Resolve files using the HuggingFace resolver
-    gglib_core::telemetry::console_println(&format!("Looking for {quant} quantization..."));
+    gglib_core::telemetry::console_println(&format!("Looking for the {quant} variant..."));
     // A forced fetch again of the model's own files: its companions, if it
     // draws with any, are in their own folders and linked already.
     let resolver = HfQuantizationResolver::weights_only(Arc::clone(&hub));
 
-    let quantization = gglib_core::download::Quantization::from_filename(quant);
-    let resolution = resolver.resolve(&request.model_id, quantization).await
+    let resolution = resolver.resolve(&request.model_id, quant).await
         .map_err(|e| anyhow!(
-            "No GGUF file found for quantization '{quant}'. Use --list-quants to see available options. Error: {e}",
+            "No variant labelled '{quant}' found. Use --list-quants to see available options. Error: {e}",
         ))?;
 
     // Weights first: `files[0]` is the primary file, never the projector.
     let files: Vec<String> = resolution.files.iter().map(|f| f.path.clone()).collect();
     if resolution.is_sharded {
         gglib_core::telemetry::console_println(&format!(
-            "✓ Found {} sharded files for quantization {}",
+            "✓ Found {} sharded files for variant {}",
             resolution.shard_count(),
-            quant
+            resolution.label
         ));
     } else {
         gglib_core::telemetry::console_println(&format!("✓ Found file: {}", files[0]));
@@ -84,7 +83,7 @@ pub(super) async fn download(
     }
 
     // Download the files one at a time, as one download with one row.
-    let id = DownloadId::new(request.model_id.as_str(), Some(quant.as_str()));
+    let id = DownloadId::new(request.model_id.as_str(), Some(resolution.label.as_str()));
     let transfer = Transfer {
         repo_id: &request.model_id,
         revision: &commit_sha,
@@ -110,7 +109,7 @@ pub(super) async fn download(
     Ok(CliDownloadResult {
         downloaded_paths: all_paths,
         primary_path,
-        quantization: quant.clone(),
+        quantization: resolution.label.clone(),
         repo_id: request.model_id,
         commit_sha,
         files: resolution.files,

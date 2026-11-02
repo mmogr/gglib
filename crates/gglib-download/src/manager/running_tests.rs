@@ -76,14 +76,14 @@ async fn a_download_between_its_files_stays_active() {
     let snapshot = manager.get_queue_snapshot().await.unwrap();
 
     let running = snapshot.active.as_ref().expect("a running download");
-    assert_eq!(running.id, "owner/a:Q8_0");
+    assert_eq!(running.id, "owner/a:zeta.Q8_0");
     assert_eq!(
         (running.phase, running.position),
         (DownloadPhase::Downloading, 1)
     );
     assert_eq!(running.text.file.as_deref(), Some("projector"), "its next");
     assert_eq!(snapshot.waiting.len(), 1);
-    assert_eq!(snapshot.waiting[0].id, "owner/b:Q8_0");
+    assert_eq!(snapshot.waiting[0].id, "owner/b:zeta.Q8_0");
     assert_eq!(snapshot.waiting[0].position, 2);
 }
 
@@ -129,7 +129,7 @@ async fn a_download_with_nothing_left_waiting_is_not_active() {
     let metadata = GroupMetadata {
         repo_id: "owner/a".to_string(),
         commit_sha: "abc123".to_string(),
-        quantization: gglib_core::download::Quantization::Q8_0,
+        variant_label: Some("Q8_0".to_owned()),
         primary_filename: "zeta.Q8_0.gguf".to_string(),
         hf_tags: vec![],
         file_entries: vec![],

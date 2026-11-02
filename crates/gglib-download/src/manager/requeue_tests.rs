@@ -38,7 +38,7 @@ async fn a_retry_does_not_start_with_the_failed_runs_bytes() {
 #[tokio::test]
 async fn a_download_cancelled_between_files_is_queued_again_from_nothing() {
     let f = queued(Arc::new(NoRegistrar)).await;
-    let id = DownloadId::new(REPO, Some("Q8_0"));
+    let id = DownloadId::new(REPO, Some("zeta.Q8_0"));
     run_next(&f.manager, End::OnDisk).await;
     f.manager.cancel_download(&id).await.unwrap();
     assert!(f.manager.get_queue_snapshot().await.unwrap().is_idle());

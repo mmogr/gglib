@@ -49,8 +49,10 @@ impl GgufParserPort for HeadParser {
         })
     }
 
+    /// An image model's head holds no metadata: no role is read from it,
+    /// so its variant is a model's.
     fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
-        unimplemented!("only tensor tables are read from heads here")
+        Err(GgufParseError::InvalidFormat("no metadata here".to_owned()))
     }
 }
 
@@ -58,8 +60,8 @@ const REPO: &str = "leejet/FLUX.1-schnell-gguf";
 
 fn quant(name: &str, total_size: u64) -> HfQuantInfo {
     HfQuantInfo {
-        name: name.to_owned(),
-        shard_count: 1,
+        label: name.to_owned(),
+        role: None,
         total_size,
         file_paths: vec![format!("flux1-schnell-{name}.gguf")],
     }

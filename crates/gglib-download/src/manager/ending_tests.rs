@@ -8,7 +8,7 @@ use super::super::*;
 use super::tests::{Fixture, ID, REPO, queued};
 
 pub(super) fn id() -> DownloadId {
-    DownloadId::new(REPO, Some("Q8_0"))
+    DownloadId::new(REPO, Some("zeta.Q8_0"))
 }
 
 /// Queue a second download, of two files like the first, and answer its id.
@@ -224,5 +224,5 @@ async fn requeueing_clears_the_old_outcome() {
     let waiting: Vec<&str> = last.waiting.iter().map(|row| row.id.as_str()).collect();
     assert_eq!(waiting, [ID]);
     let ended: Vec<&str> = last.finished.iter().map(|e| e.id.as_str()).collect();
-    assert_eq!(ended, ["owner/other:Q8_0"]);
+    assert_eq!(ended, ["owner/other:zeta.Q8_0"]);
 }

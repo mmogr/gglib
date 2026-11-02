@@ -115,8 +115,7 @@ impl ModelRegistrarPort for ModelRegistrar {
             repo_id: &download.repo_id,
             commit_sha: &download.commit_sha,
             hf_tags: &download.hf_tags,
-            variant_label: (!download.quantization.is_unknown())
-                .then(|| download.quantization.to_string()),
+            variant_label: download.variant_label.clone(),
             file_paths: download.file_paths.as_deref(),
             published_sampling: published.as_ref(),
         });
@@ -316,7 +315,6 @@ mod upgrade_tests;
 mod tests {
     use super::*;
     use crate::domain::{Model, NewModel};
-    use crate::download::Quantization;
     use crate::ports::NoopGgufParser;
     use std::path::PathBuf;
     use std::sync::Mutex;
@@ -421,7 +419,7 @@ mod tests {
             all_paths: vec![PathBuf::from("/models/test-model-q4_k_m.gguf")],
             projector_path: None,
             components: vec![],
-            quantization: Quantization::Q4KM,
+            variant_label: Some("Q4_K_M".to_owned()),
             repo_id: "test/model".to_string(),
             commit_sha: "abc123".to_string(),
             is_sharded: false,
@@ -460,7 +458,7 @@ mod tests {
             ],
             projector_path: None,
             components: vec![],
-            quantization: Quantization::Q8_0,
+            variant_label: Some("Q8_0".to_owned()),
             repo_id: "test/llama".to_string(),
             commit_sha: "def456".to_string(),
             is_sharded: true,

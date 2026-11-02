@@ -7,7 +7,7 @@ crates/gglib-agent/tests/unit_first_call.rs 527
 crates/gglib-app-services/src/benchmark/agentic.rs 753
 crates/gglib-app-services/src/benchmark/mapper.rs 534
 crates/gglib-app-services/src/benchmark/tune/mod.rs 1390
-crates/gglib-app-services/src/downloads.rs 305
+crates/gglib-app-services/src/downloads.rs 315
 crates/gglib-app-services/src/mcp.rs 330
 crates/gglib-app-services/src/mcp_tests.rs 329
 crates/gglib-app-services/src/models.rs 419
@@ -172,12 +172,12 @@ crates/gglib-download/src/cli_exec/exec/python_env.rs 1544
 crates/gglib-download/src/cli_exec/exec/python_protocol.rs 347
 crates/gglib-download/src/executor/native.rs 598
 crates/gglib-download/src/executor/native_tests.rs 901
-crates/gglib-download/src/manager/companion_group_tests.rs 475
+crates/gglib-download/src/manager/companion_group_tests.rs 478
 crates/gglib-download/src/manager/group_completion_tests.rs 366
 crates/gglib-download/src/manager/mod.rs 1266
 crates/gglib-download/src/quant_selector.rs 340
 crates/gglib-download/src/queue/mod.rs 1081
-crates/gglib-download/src/resolver/tests.rs 473
+crates/gglib-download/src/resolver/tests.rs 479
 crates/gglib-engine-llama/src/decoder/llama.rs 321
 crates/gglib-engine-llama/src/decoder/llama_tests.rs 372
 crates/gglib-engine-llama/src/decoder/scripted.rs 310

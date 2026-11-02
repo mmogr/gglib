@@ -1,14 +1,14 @@
-//! A repository's quantizations as the `HuggingFace` browser shows them.
+//! A repository's variants as the `HuggingFace` browser shows them.
 
-use gglib_core::download::Quantization;
 use gglib_core::ports::huggingface::projector_fetched_with;
 use gglib_core::ports::{HfFileInfo, HfQuantInfo};
 
 use crate::types::{HfImagePreview, HfProjector, HfQuantization, HfQuantizationsResponse};
 
-/// The listing of `model_id`: each of `quants` with its weights' size and
-/// shard count, and the one of `projectors` its download fetches; and
-/// `image`, what it fetches beside them when it is an image model.
+/// The listing of `model_id`: each of `quants`, its role read, with its
+/// label, its files' size and shard count, and the one of `projectors` its
+/// download fetches; and `image`, what it fetches beside them when it is an
+/// image model.
 pub(crate) fn quantizations_response(
     model_id: &str,
     quants: Vec<HfQuantInfo>,
@@ -25,15 +25,16 @@ pub(crate) fn quantizations_response(
                 size_bytes: q.total_size,
                 #[allow(clippy::cast_precision_loss, reason = "a size in MiB for display")]
                 size_mb: q.total_size as f64 / 1_048_576.0,
-                is_sharded: q.shard_count > 1,
-                shard_count: (q.shard_count > 1)
-                    .then(|| u32::try_from(q.shard_count).unwrap_or(u32::MAX)),
-                projector: projector_fetched_with(Quantization::from_filename(&q.name), projectors)
-                    .map(|p| HfProjector {
-                        file_path: p.path.clone(),
-                        size_bytes: p.size,
-                    }),
-                name: q.name,
+                is_sharded: q.is_sharded(),
+                shard_count: q
+                    .is_sharded()
+                    .then(|| u32::try_from(q.shard_count()).unwrap_or(u32::MAX)),
+                projector: projector_fetched_with(&q.label, projectors).map(|p| HfProjector {
+                    file_path: p.path.clone(),
+                    size_bytes: p.size,
+                }),
+                role: q.role.unwrap_or_default(),
+                label: q.label,
             })
             .collect(),
     }
@@ -43,12 +44,14 @@ pub(crate) fn quantizations_response(
 mod tests {
     use super::*;
 
-    fn quant(name: &str, shard_count: usize, total_size: u64) -> HfQuantInfo {
+    fn quant(label: &str, shard_count: usize, total_size: u64) -> HfQuantInfo {
         HfQuantInfo {
-            name: name.to_owned(),
-            shard_count,
+            label: label.to_owned(),
+            role: Some(gglib_core::download::GgufFileRole::Weights),
             total_size,
-            file_paths: vec![format!("m-{name}.gguf")],
+            file_paths: (0..shard_count)
+                .map(|i| format!("m-{label}-{i}.gguf"))
+                .collect(),
         }
     }
 
@@ -101,7 +104,7 @@ mod tests {
             (q8.size_bytes, q8.is_sharded, q8.shard_count),
             (8_000, true, Some(2))
         );
-        assert_eq!(q8.file_path, "m-Q8_0.gguf");
+        assert_eq!(q8.file_path, "m-Q8_0-0.gguf");
     }
 
     #[test]

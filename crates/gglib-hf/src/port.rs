@@ -13,7 +13,7 @@ use crate::client::HfClient;
 use crate::error::HfError;
 use crate::file_roles::to_file_info;
 use crate::http::HttpBackend;
-use crate::models::{HfQuantization, HfRepoRef};
+use crate::models::HfRepoRef;
 use crate::parsing::repo_info_from_json;
 
 // ============================================================================
@@ -86,16 +86,6 @@ fn parse_repo(model_id: &str) -> HfPortResult<HfRepoRef> {
     })
 }
 
-/// Convert internal `HfQuantization` to core `HfQuantInfo`.
-fn to_quant_info(quant: &HfQuantization) -> HfQuantInfo {
-    HfQuantInfo {
-        name: quant.name.clone(),
-        shard_count: quant.shard_count,
-        total_size: quant.total_size,
-        file_paths: quant.paths.clone(),
-    }
-}
-
 // ============================================================================
 // Port Implementation
 // ============================================================================
@@ -109,9 +99,7 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
     async fn list_quantizations(&self, model_id: &str) -> HfPortResult<Vec<HfQuantInfo>> {
         let repo = parse_repo(model_id)?;
 
-        let quants = self.list_quantizations(&repo).await.map_err(map_error)?;
-
-        Ok(quants.iter().map(to_quant_info).collect())
+        self.list_variants(&repo).await.map_err(map_error)
     }
 
     async fn list_gguf_files(&self, model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
@@ -138,7 +126,7 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
         let repo = parse_repo(model_id)?;
 
         let files = self
-            .find_quantization_files_with_sizes(&repo, quantization)
+            .find_variant_files(&repo, quantization)
             .await
             .map_err(map_error)?;
         Ok(files.into_iter().map(to_file_info).collect())

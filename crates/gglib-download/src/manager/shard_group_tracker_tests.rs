@@ -6,7 +6,7 @@ fn test_metadata() -> GroupMetadata {
     GroupMetadata {
         repo_id: "test/model".to_string(),
         commit_sha: "abc123".to_string(),
-        quantization: Quantization::Q4KM,
+        variant_label: Some("Q4_K_M".to_owned()),
         primary_filename: "model-00001-of-00003.gguf".to_string(),
         hf_tags: vec![],
         file_entries: vec![],

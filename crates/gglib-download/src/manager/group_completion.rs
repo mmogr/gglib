@@ -18,7 +18,7 @@ use super::worker::CompletedJob;
 
 impl GroupMetadata {
     /// The identity every file of one group computes: the job's repository,
-    /// commit and quantization, and the group's `file_entries`.
+    /// commit and variant label, and the group's `file_entries`.
     ///
     /// The primary filename is the group's first file, a weights file, so
     /// the projector's own job answers the same metadata as the weights'.
@@ -30,7 +30,7 @@ impl GroupMetadata {
         Self {
             repo_id: completed.repo_id.clone(),
             commit_sha: completed.commit_sha.clone(),
-            quantization: completed.quantization,
+            variant_label: completed.variant_label.clone(),
             primary_filename: primary.map_or_else(|| "unknown".to_string(), base_shard_filename),
             hf_tags: vec![],
             file_entries,
@@ -79,7 +79,7 @@ impl GroupComplete {
             is_sharded: weights.len() > 1,
             file_paths: (weights.len() > 1).then_some(weights),
             all_paths: self.ordered_paths,
-            quantization: self.metadata.quantization,
+            variant_label: self.metadata.variant_label,
             repo_id: self.metadata.repo_id,
             commit_sha: self.metadata.commit_sha,
             hf_tags,
