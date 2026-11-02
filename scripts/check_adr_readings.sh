@@ -70,15 +70,24 @@ check() {
   moved="$(jq -r --slurpfile approvals "$approvals" --arg file "$file" '
     $approvals[0] as $a
     | (with_entries(select(.value.adr != null))) as $named
-    | def how_to_approve($k; $v):
-        "To approve at \($v | tojson), comment on the pull request:%0A  /approve \($k) deleting <stage> (#<issue>)%0Aor with the note \"keeping, because <reason>\", \"probe changed in this PR\" or \"first reading, <tag>\"; that writes \($file).";
+    # A list is never printed whole: it is its length, and against another
+    # list what came and went.
+    | def brief: if type == "array" then "a list of \(length)" else tojson end;
+      def how_to_approve($k; $v):
+        "To approve at \($v | brief), comment on the pull request:%0A  /approve \($k) deleting <stage> (#<issue>)%0Aor with the note \"keeping, because <reason>\", \"probe changed in this PR\" or \"first reading, <tag>\"; that writes \($file).";
+      def moved_from($old; $new):
+        if ($old | type) == "array" and ($new | type) == "array" then
+          "now lists \($new | length) (\(
+            ([($new - $old)[] | "+" + tostring] + [($old - $new)[] | "−" + tostring]) | join(", ")
+          )); \($file) lists \($old | length)"
+        else "is now \($new | brief); \($file) says \($old | brief)" end;
       ( $named | to_entries[]
         | .key as $k | .value as $o
-        | ($o.value | tojson) as $now
+        | ($o.value | brief) as $now
         | if ($a | has($k) | not) then
             "::error title=ADR criterion moved::\($k) reads \($now) on this tree; \($file) has no entry for it.%0AADR \($o.adr): \"\($o.criterion)\" → \($o.if_moved).%0A" + how_to_approve($k; $o.value)
           elif $a[$k].approved != $o.value then
-            "::error title=ADR criterion moved::\($k) is now \($now); \($file) says \($a[$k].approved | tojson).%0AADR \($o.adr): \"\($o.criterion)\" → \($o.if_moved).%0A" + how_to_approve($k; $o.value)
+            "::error title=ADR criterion moved::\($k) \(moved_from($a[$k].approved; $o.value)).%0AADR \($o.adr): \"\($o.criterion)\" → \($o.if_moved).%0A" + how_to_approve($k; $o.value)
           else empty end ),
       ( $a | to_entries[]
         | .key as $k
@@ -141,14 +150,17 @@ selftest() {
       extra_key: r(3; "A criterion that is still quoted."),
       stale: r(4; "A criterion nobody wrote."),
       struck: r(5; "A struck criterion."),
+      flags: r(["--a", "--b", "--c"]; "A criterion that is still quoted."),
       plain: {value: 6} }' >"$dir/observed.json"
   jq -n '
     def ok($v): {approved: $v, note: "first reading, b1"};
     { moved: ok(false), bad_note: {approved: 2, note: "because"},
-      extra_key: (ok(3) + {by: "me"}), stale: ok(4), struck: ok(5), ghost: ok(7) }' >"$dir/approvals.json"
+      extra_key: (ok(3) + {by: "me"}), stale: ok(4), struck: ok(5), ghost: ok(7),
+      flags: ok(["--a", "--z"]) }' >"$dir/approvals.json"
   out="$(check "$dir/observed.json" "$dir/approvals.json" "$dir/adr")" && status=1
   for expected in \
     "ADR criterion moved::moved is now true" \
+    "ADR criterion moved::flags now lists 3 (+--b, +--c, −--z); $LLAMA/approvals.json lists 2." \
     "ADR criterion moved::missing reads 1" \
     "ADR criterion moved::$LLAMA/approvals.json approves ghost," \
     "approvals.json entry is malformed::bad_note " \
@@ -160,8 +172,8 @@ selftest() {
       status=1
     fi
   done
-  if [ "$(grep -c '^::error' <<<"$out")" -ne 7 ]; then
-    echo "❌ self-test: expected 7 errors for 7 planted faults:"
+  if [ "$(grep -c '^::error' <<<"$out")" -ne 8 ]; then
+    echo "❌ self-test: expected 8 errors for 8 planted faults:"
     printf '%s\n' "$out" | sed 's/^/     /'
     status=1
   fi
@@ -196,7 +208,7 @@ selftest || { echo "check_adr_readings.sh: the self-test failed, so a clean run 
 check "$ROOT_DIR/$LLAMA/observed.json" "$ROOT_DIR/$LLAMA/approvals.json" "$ROOT_DIR/docs/adr" || exit 1
 
 count="$(jq '[.[] | select(.adr != null)] | length' "$ROOT_DIR/$LLAMA/observed.json")"
-echo "Self-test passed: each of 11 planted faults was reported."
+echo "Self-test passed: each of 12 planted faults was reported."
 echo "All $count ADR readings in $LLAMA/observed.json match their approvals, and every quote is in its ADR."
 echo "Taken by hand, not here:"
 printf '  %s\n' "${MANUAL_ONLY[@]}"

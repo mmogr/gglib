@@ -89,6 +89,7 @@ keys() {
 
 # One line per moved reading: adr, criterion, if_moved, reading, approved, now.
 # A reading approvals.json names that the recording no longer has is "gone".
+# Two lists are shown by their counts and what came and went, not whole.
 moved_readings() {
   local observed=$AFTER/llama/observed.json approvals=$AFTER/llama/approvals.json
   local before=$BEFORE/llama/observed.json
@@ -96,11 +97,16 @@ moved_readings() {
   jq -r --slurpfile a "$approvals" --slurpfile b "$before" '
     ($a[0]) as $a | ($b[0]) as $b
     | (with_entries(select(.value.adr != null))) as $named
-    | ( $named | to_entries[] | .key as $k
+    | def shown($old; $new):
+        if ($old | type) == "array" and ($new | type) == "array" then
+          ["\($old | length)",
+           "\($new | length) (\(([($new - $old)[] | "+`\(.)`"] + [($old - $new)[] | "−`\(.)`"]) | join(", ")))"]
+        else [($old | tojson), ($new | tojson)] end;
+    ( $named | to_entries[] | .key as $k
         | select(($a | has($k) | not) or $a[$k].approved != .value.value)
-        | [.value.adr, .value.criterion, .value.if_moved, $k,
-           (if $a | has($k) then $a[$k].approved | tojson else "no approval" end),
-           (.value.value | tojson)] ),
+        | (if $a | has($k) then shown($a[$k].approved; .value.value)
+           else ["no approval", (.value.value | tojson)] end) as $pair
+        | [.value.adr, .value.criterion, .value.if_moved, $k, $pair[0], $pair[1]] ),
       ( $a | keys[] | . as $k | select($named | has($k) | not)
         | ($b[$k] // {}) as $o
         | [($o.adr // "?"), ($o.criterion // ""), "remove its entry", $k,
