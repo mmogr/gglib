@@ -153,13 +153,14 @@ pub struct ModelDetailDto {
     ///
     /// # Why the one field and not the whole caps object
     ///
-    /// `TemplateCaps` carries nine bools. Eight describe things gglib already
-    /// models in [`Self::capabilities`] from its own catalog — tools, system
-    /// role, parallel calls — and publishing a second, differently-sourced
-    /// answer to the same question invites a client to read whichever it finds
-    /// first. The ninth has no other home, and this is it. A surface that
-    /// genuinely needs the raw self-report should get its own endpoint rather
-    /// than a `serde` alias on this one.
+    /// `TemplateCaps` carries nine bools and a list of effort levels. Eight
+    /// of the bools describe things gglib already models in
+    /// [`Self::capabilities`] from its own catalog — tools, system role,
+    /// parallel calls — and publishing a second, differently-sourced answer
+    /// to the same question invites a client to read whichever it finds
+    /// first. The ninth has no other home, and this is it; the list is read
+    /// by nothing yet. A surface that genuinely needs the raw self-report
+    /// should get its own endpoint rather than a `serde` alias on this one.
     ///
     /// [`Support`]: gglib_core::domain::Support
     /// [`Support::No`]: gglib_core::domain::Support::No

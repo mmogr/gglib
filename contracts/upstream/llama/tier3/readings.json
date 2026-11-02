@@ -1,0 +1,16 @@
+{
+  "image_in_tool_message_answered": {
+    "value": true
+  },
+  "model": "Qwen3.5-0.8B-Q8_0.gguf",
+  "projector": "mmproj-F16.gguf",
+  "reasoning_split": {
+    "value": true
+  },
+  "tool_call_native": {
+    "value": true
+  },
+  "tool_call_parsed": {
+    "value": true
+  }
+}

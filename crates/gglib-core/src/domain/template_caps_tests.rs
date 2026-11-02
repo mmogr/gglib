@@ -4,10 +4,12 @@
 
 use super::*;
 
-/// The nine wire keys, byte-for-byte as the measurement transcribed them from
-/// the pinned build (`b1-10bf611`), sorted. Transcribed from the wire, not
+/// The ten wire keys, byte-for-byte as the measurements transcribed them,
+/// sorted: nine bools from `b1-10bf611`, and `reasoning_effort_levels` from
+/// `b11960`, which added it (llama.cpp#31271). Transcribed from the wire, not
 /// from the C++ source — the report is the contract, per ADR 0007's method.
-const MEASURED_KEYS: [&str; 9] = [
+const MEASURED_KEYS: [&str; 10] = [
+    "reasoning_effort_levels",
     "supports_object_arguments",
     "supports_parallel_tool_calls",
     "supports_preserve_reasoning",
@@ -21,10 +23,15 @@ const MEASURED_KEYS: [&str; 9] = [
 
 /// Shaped like config A (gpt-oss template) of the 2026-08-17 measurement:
 /// the key set and the explicit-`false` serialization are transcribed from
-/// the wire — the pinned build always writes all nine, `false`s included —
+/// the wire — that build always wrote all nine bools, `false`s included —
 /// and `supports_reasoning_effort: true` is A's measured value. The other
 /// bools are representative; the pin below is about the *keys*.
+/// `reasoning_effort_levels` was added here by hand from the `b11960`
+/// bodies (`contracts/upstream/llama/bodies/props.*.json`, all `[]`); its
+/// value beside `supports_reasoning_effort: true` is a placeholder, not a
+/// reading of config A.
 const MEASURED_CONFIG_A: &str = r#"{
+    "reasoning_effort_levels": [],
     "supports_tools": true,
     "supports_tool_calls": true,
     "supports_system_role": true,
@@ -68,10 +75,11 @@ fn the_measured_report_parses_with_every_field_present() {
         Some(false),
         "an explicit false must survive as Some(false), not collapse to None"
     );
+    assert_eq!(caps.reasoning_effort_levels, Some(Vec::new()));
     let value = serde_json::to_value(&caps).unwrap();
     assert!(
         value.as_object().unwrap().values().all(|v| !v.is_null()),
-        "all nine fields were on the wire, so all nine must be Some"
+        "all ten fields were on the wire, so all ten must be Some"
     );
 }
 
@@ -85,7 +93,7 @@ fn an_absent_key_stays_none_rather_than_defaulting_to_false() {
     assert_eq!(caps.supports_system_role, None);
 }
 
-/// A future build adding a tenth cap must not make the nine known ones
+/// A future build adding an eleventh cap must not make the ten known ones
 /// unreadable.
 #[test]
 fn an_unknown_key_is_ignored_rather_than_failing_the_parse() {

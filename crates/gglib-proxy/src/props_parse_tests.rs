@@ -168,8 +168,9 @@ const RECORDED_PROPS: [(&str, &str); 3] = [
     ),
 ];
 
-/// Both halves read, and the caps the build reports are exactly the nine
-/// `TemplateCaps` names, every one of them a yes or a no.
+/// Both halves read, and the caps the build reports are exactly the
+/// `TemplateCaps` names: nine of them a yes or a no, and
+/// `reasoning_effort_levels` a list.
 #[test]
 fn the_pinned_servers_props_read_both_halves_for_every_template() {
     for (template, body) in RECORDED_PROPS {
@@ -188,7 +189,10 @@ fn the_pinned_servers_props_read_both_halves_for_every_template() {
         };
         assert_eq!(names(read), names(sent), "{template}");
         assert!(
-            read.values().all(serde_json::Value::is_boolean),
+            read.iter().all(|(key, value)| match key.as_str() {
+                "reasoning_effort_levels" => value.is_array(),
+                _ => value.is_boolean(),
+            }),
             "{template}: {read:?}"
         );
     }

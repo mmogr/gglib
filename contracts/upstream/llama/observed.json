@@ -69,6 +69,9 @@
     "if_moved": "decision 1 is reversed: gglib sends cache_prompt itself",
     "value": true
   },
+  "caps.Qwen-Qwen3-0.6B.reasoning_effort_levels": {
+    "value": []
+  },
   "caps.Qwen-Qwen3-0.6B.supports_object_arguments": {
     "value": true
   },
@@ -96,6 +99,9 @@
   "caps.Qwen-Qwen3-0.6B.supports_typed_content": {
     "value": false
   },
+  "caps.Qwen3.5-4B.reasoning_effort_levels": {
+    "value": []
+  },
   "caps.Qwen3.5-4B.supports_object_arguments": {
     "value": true
   },
@@ -122,6 +128,9 @@
   },
   "caps.Qwen3.5-4B.supports_typed_content": {
     "value": true
+  },
+  "caps.ibm-granite-granite-4.0.reasoning_effort_levels": {
+    "value": []
   },
   "caps.ibm-granite-granite-4.0.supports_object_arguments": {
     "value": true
@@ -197,7 +206,7 @@
     "criterion": "If `llama-server` — or another dependency gglib fundamentally relies on — ships a first-party remote transport, this defers to it and the tunnel is deleted rather than carried beside it.",
     "how_read": "the number of options llama-server --help lists; read help.txt's diff for a transport",
     "if_moved": "read the help.txt diff for a remote transport",
-    "value": 258
+    "value": 261
   },
   "image_token_delta": {
     "adr": "0015",
