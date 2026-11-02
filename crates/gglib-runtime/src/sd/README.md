@@ -48,8 +48,10 @@ and `--conv-direct off`. The variant is read from the main file's name
 2.1 file Turbo (`--sigmas qwen-image-2.1-turbo`, 8 steps, guidance 1) and a
 Z-Image file Turbo (8 steps, guidance 1); a Z-Image file without it is base
 (28 steps, guidance 5, `--linear-scale 0.000244140625`). FLUX.3 Image Klein
-draws at 16 steps, guidance 1. Flags given at launch are the defaults for
-every request. `server/args_tests.rs` pins one whole argv per variant.
+draws at 16 steps, guidance 1, and a Klein file with "base" in its name is
+refused before anything queues (`ImageFamily::refusal`). Flags given at
+launch are the defaults for every request. `server/args_tests.rs` pins one
+whole argv per variant.
 
 ## Launching
 

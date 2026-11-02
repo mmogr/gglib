@@ -38,7 +38,8 @@ pub enum ImageFamily {
     /// Z-Image, base or Turbo ([`ImageFamily::sampling`]).
     #[serde(rename = "z-image")]
     ZImage,
-    /// FLUX.3 Image Klein, the distilled model.
+    /// FLUX.3 Image Klein, the distilled model; Klein base sniffs the same
+    /// and is refused ([`ImageFamily::refusal`]).
     #[serde(rename = "flux3-klein")]
     Flux3Klein,
 }
@@ -475,12 +476,26 @@ impl ImageFamily {
         }
     }
 
+    /// Why a main file named `file_name` of this family is not drawn, or
+    /// `None` when it is. FLUX.3 Image Klein base sniffs as Klein (it lacks
+    /// only the distilled model's `ref_time_in.` tensors, which no rule
+    /// reads) and is drawn at other steps and guidance, which gglib has not
+    /// run: a FLUX.3 Image Klein file whose name holds "base", in any case,
+    /// is refused.
+    #[must_use]
+    pub fn refusal(self, file_name: &str) -> Option<&'static str> {
+        (self == Self::Flux3Klein && file_name.to_ascii_lowercase().contains("base")).then_some(
+            "Only FLUX.3 Image Klein is supported: Klein base needs other steps and guidance, \
+             and gglib has not drawn with it",
+        )
+    }
+
     /// How a main file named `file_name` of this family is sampled. Base and
     /// Turbo Qwen-Image 2.1, and base and Turbo Z-Image, share their tensors,
     /// so stable-diffusion.cpp loads each pair as one model and the name is
     /// what tells them apart: a name holding "turbo", in any case, is Turbo.
     /// Flux.1, SDXL and FLUX.3 Image Klein have one sampling each, whatever
-    /// the name.
+    /// the name ([`Self::refusal`] turns Klein base away first).
     #[must_use]
     pub fn sampling(self, file_name: &str) -> &'static Sampling {
         let turbo = file_name.to_ascii_lowercase().contains("turbo");

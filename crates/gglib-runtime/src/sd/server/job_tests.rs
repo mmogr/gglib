@@ -510,6 +510,59 @@ async fn a_base_z_image_draws_as_turbo_does() {
     assert_eq!(jobs.bodies.lock().unwrap().len(), 2, "Turbo was submitted");
 }
 
+/// A FLUX.3 Image Klein base, known by "base" in its file name, is refused
+/// with every file it needs before anything queues; Klein plans.
+#[tokio::test(start_paused = true)]
+async fn a_klein_base_is_refused_by_name_before_it_queues() {
+    let klein = |id, name: &str| ModelLaunchSpec {
+        components: [ComponentRole::Vae, ComponentRole::Llm]
+            .map(|role| ModelComponent {
+                role,
+                path: format!("/nonexistent/{role}").into(),
+            })
+            .into(),
+        ..spec(id, name, Some(ImageFamily::Flux3Klein))
+    };
+    let jobs = Arc::new(Timeline::new(flux_like()));
+    let host = Host::new();
+    let catalog = vec![
+        klein(5, "flux3-image-klein-base-Q8_0"),
+        klein(6, "flux3-image-klein-Q8_0"),
+    ];
+    let driver = driver(catalog, &jobs, &host);
+    let (tx, mut rx) = mpsc::channel(64);
+    let named = |model: &str| ImageRequest {
+        model: Some(model.to_owned()),
+        ..ImageRequest::new("a lighthouse at dusk")
+    };
+
+    let refused = driver
+        .generate(named("flux3-image-klein-base-Q8_0"), tx.clone())
+        .await
+        .unwrap_err();
+    assert_eq!(refused.code(), Some("invalid_request"), "{refused:?}");
+    assert!(
+        refused
+            .to_string()
+            .contains("Only FLUX.3 Image Klein is supported"),
+        "{refused}"
+    );
+    assert!(drain(&mut rx).is_empty(), "no stage was reported");
+    assert_eq!(
+        host.admits.load(Ordering::SeqCst),
+        0,
+        "nothing was admitted"
+    );
+    assert!(
+        jobs.bodies.lock().unwrap().is_empty(),
+        "nothing was submitted"
+    );
+
+    let batch = driver.generate(named("flux3-image-klein-Q8_0"), tx).await;
+    assert_eq!(batch.expect("Klein draws").model, "flux3-image-klein-Q8_0");
+    assert_eq!(jobs.bodies.lock().unwrap().len(), 1, "Klein was submitted");
+}
+
 /// With no model named, the only complete image model draws; with none, or
 /// several, or only one that lacks a file, drawing is unavailable and says
 /// why.

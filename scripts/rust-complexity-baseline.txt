@@ -103,8 +103,8 @@ crates/gglib-core/src/domain/chat.rs 337
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 382
 crates/gglib-core/src/domain/hub_chats_tests.rs 481
-crates/gglib-core/src/domain/image_family.rs 775
-crates/gglib-core/src/domain/image_family_tests.rs 1267
+crates/gglib-core/src/domain/image_family.rs 790
+crates/gglib-core/src/domain/image_family_tests.rs 1311
 crates/gglib-core/src/domain/inference.rs 1611
 crates/gglib-core/src/domain/inference_tests.rs 1283
 crates/gglib-core/src/domain/kv_estimate.rs 341
@@ -287,7 +287,7 @@ crates/gglib-runtime/src/sd/install/install_tests.rs 320
 crates/gglib-runtime/src/sd/install/release_tests.rs 350
 crates/gglib-runtime/src/sd/server/job.rs 396
 crates/gglib-runtime/src/sd/server/job_leave_tests.rs 537
-crates/gglib-runtime/src/sd/server/job_tests.rs 999
+crates/gglib-runtime/src/sd/server/job_tests.rs 1052
 crates/gglib-runtime/src/system/gpu.rs 331
 crates/gglib-runtime/src/system/mod.rs 640
 crates/gglib-runtime/src/unified_server_config.rs 465

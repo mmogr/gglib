@@ -572,6 +572,16 @@ fn a_flux3_klein_table_is_flux3_klein() {
     assert_eq!(ImageFamily::sniff(&prefixed(&klein, "transformer.")), None);
 }
 
+/// Klein base's header is Klein's less the two `ref_time_in.` tensors
+/// (read from `leejet/flux-3-image-klein-base-GGUF` on 2026-11-02), which no
+/// rule reads: it sniffs as Klein, and only its name tells it apart.
+#[test]
+fn klein_base_sniffs_as_klein() {
+    let base = without_prefix(&Golden::Flux3KleinQ8.table(), "ref_time_in.");
+    assert_eq!(base.tensors.len(), 357);
+    assert_eq!(ImageFamily::sniff(&base), Some(ImageFamily::Flux3Klein));
+}
+
 /// stable-diffusion.cpp loads FIBO 2 for a file with `perceiver.latent_queries`
 /// before it asks for FLUX.3's tensors, so such a file is not Klein.
 #[test]
@@ -730,6 +740,40 @@ fn flux3_klein_takes_qwen3_vl_4b_and_no_other_encoder() {
         ComponentRole::Llm.fits(ImageFamily::Flux3Klein, &safetensors),
         needs
     );
+}
+
+/// A FLUX.3 Image Klein file named "base", in any case, is refused with a
+/// sentence; Klein's own file, and every other family's file whatever its
+/// name (SDXL's measured file is `sd_xl_base_1.0`), is not.
+#[test]
+fn only_a_klein_file_named_base_is_refused() {
+    for name in [
+        "flux3-image-klein-base-Q8_0.gguf",
+        "FLUX-3-Klein-BASE.gguf",
+        "klein_base.safetensors",
+    ] {
+        assert_eq!(
+            ImageFamily::Flux3Klein.refusal(name),
+            Some(
+                "Only FLUX.3 Image Klein is supported: Klein base needs other steps and \
+                 guidance, and gglib has not drawn with it"
+            ),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        ImageFamily::Flux3Klein.refusal("flux3-image-klein-Q8_0.gguf"),
+        None
+    );
+    for family in ImageFamily::ALL {
+        if family != ImageFamily::Flux3Klein {
+            assert_eq!(
+                family.refusal("sd_xl_base_1.0.safetensors"),
+                None,
+                "{family}"
+            );
+        }
+    }
 }
 
 /// Klein's recipe is stable-diffusion.cpp's guide for it, not a measurement:

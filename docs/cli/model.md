@@ -238,7 +238,8 @@ weights.
   it, Qwen-Image 2.1 draws as base and Z-Image as base Z-Image (28 steps,
   guidance 5.0).
 - FLUX.3 Image Klein draws at 16 steps, guidance 1.0, with the FLUX.2 VAE
-  and Qwen3-VL 4B.
+  and Qwen3-VL 4B. A Klein file with "base" in its name, in any case, is
+  Klein base, which is not drawn: a request for it is refused.
 - `list` names a model's family in the `Draws` column, with the components
   it still needs; `inspect` names the family and each component, linked or
   missing.
