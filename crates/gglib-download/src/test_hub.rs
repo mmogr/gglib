@@ -225,6 +225,11 @@ fn table_of(family: ImageFamily) -> TensorTable {
             tensor("cap_embedder.1.weight", &[3840, 2560]),
             tensor("x_embedder.weight", &[3840, 64]),
         ],
+        ImageFamily::Flux3Klein => vec![
+            tensor("emb_in.image.weight", &[3072, 128]),
+            tensor("txt_in.weight", &[3072, 20480]),
+            tensor("txt_mode_blocks.0.q_proj.weight", &[3072, 3072]),
+        ],
     };
     TensorTable {
         format: WeightsFormat::Gguf,

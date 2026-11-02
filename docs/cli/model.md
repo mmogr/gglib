@@ -228,14 +228,17 @@ What gglib derived from the file, and how to change it.
 
 ## Image models
 
-An image model (Flux.1, SDXL, Qwen-Image 2.1 or Z-Image, known from its
-tensor names) draws with companion files beside its weights.
+An image model (Flux.1, SDXL, Qwen-Image 2.1, Z-Image or FLUX.3 Image
+Klein, known from its tensor names) draws with companion files beside its
+weights.
 
 - A file's name picks its variant: with "turbo" in it, in any case, a
   Qwen-Image 2.1 file draws as Turbo (its 8-step sigma schedule, guidance
   1.0) and a Z-Image file as Z-Image Turbo (8 steps, guidance 1.0); without
   it, Qwen-Image 2.1 draws as base and Z-Image as base Z-Image (28 steps,
   guidance 5.0).
+- FLUX.3 Image Klein draws at 16 steps, guidance 1.0, with the FLUX.2 VAE
+  and Qwen3-VL 4B.
 - `list` names a model's family in the `Draws` column, with the components
   it still needs; `inspect` names the family and each component, linked or
   missing.

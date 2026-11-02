@@ -62,6 +62,12 @@ describe('the Draws chip', () => {
     expect(screen.queryByText(/z-image$/)).not.toBeInTheDocument();
   });
 
+  it('names FLUX.3 Image Klein by its label and not its wire name', () => {
+    header({ name: 'flux3-image-klein-Q8_0', imageInput: false, imageFamily: 'flux3-klein' });
+    expect(screen.getByText('Draws · FLUX 3 Klein')).toBeInTheDocument();
+    expect(screen.queryByText(/flux3-klein$/)).not.toBeInTheDocument();
+  });
+
   it("is not in the inspector's header for a model that chats", () => {
     header({ name: 'X', imageInput: false });
     expect(screen.getByRole('heading', { name: 'X' })).toBeInTheDocument();

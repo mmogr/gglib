@@ -24,6 +24,9 @@ fn golden_named(head: &[u8]) -> Option<Golden> {
         Golden::T5xxl,
         Golden::QwenImage21Vae,
         Golden::Qwen3Vl8bQ8,
+        Golden::Flux3KleinQ8,
+        Golden::Flux2Vae,
+        Golden::Qwen3Vl4bQ8,
     ]
     .into_iter()
     .find(|golden| golden.file_name().as_bytes() == head)
@@ -235,6 +238,47 @@ async fn a_z_image_head_brings_the_flux_vae_and_qwen3_4b() {
         (companions[0].repo.as_str(), &companions[0].file.path),
         (flux_vae.0.as_str(), &flux_vae.1.path),
         "one file on disk serves both families"
+    );
+}
+
+/// FLUX.3 Image Klein's header, cut from the real file, brings the FLUX.2
+/// VAE and Qwen3-VL 4B, each from its own repository.
+#[tokio::test]
+async fn a_flux3_klein_head_brings_the_flux2_vae_and_qwen3_vl_4b() {
+    let path = "flux3-image-klein-Q8_0.gguf";
+    let hub = hub(path, path.as_bytes(), listed(ImageFamily::Flux3Klein));
+
+    let (family, companions) = image_companions(
+        &hub,
+        &HeadParser,
+        "leejet/flux-3-image-klein-GGUF",
+        &hub_file(path, 1, "w"),
+    )
+    .await
+    .unwrap()
+    .expect("an image model");
+
+    assert_eq!(family, ImageFamily::Flux3Klein);
+    let found: Vec<_> = companions
+        .iter()
+        .map(|c| (c.role, c.repo.as_str(), c.file.path.as_str(), c.file.size))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (
+                ComponentRole::Vae,
+                "unsloth/FLUX.2-VAE",
+                "split_files/vae/flux2-vae.safetensors",
+                336_213_556
+            ),
+            (
+                ComponentRole::Llm,
+                "Qwen/Qwen3-VL-4B-Instruct-GGUF",
+                "Qwen3VL-4B-Instruct-Q8_0.gguf",
+                4_280_406_144
+            ),
+        ]
     );
 }
 

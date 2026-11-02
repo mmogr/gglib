@@ -103,8 +103,8 @@ crates/gglib-core/src/domain/chat.rs 337
 crates/gglib-core/src/domain/generation_config.rs 496
 crates/gglib-core/src/domain/gguf.rs 382
 crates/gglib-core/src/domain/hub_chats_tests.rs 481
-crates/gglib-core/src/domain/image_family.rs 661
-crates/gglib-core/src/domain/image_family_tests.rs 1018
+crates/gglib-core/src/domain/image_family.rs 775
+crates/gglib-core/src/domain/image_family_tests.rs 1267
 crates/gglib-core/src/domain/inference.rs 1611
 crates/gglib-core/src/domain/inference_tests.rs 1283
 crates/gglib-core/src/domain/kv_estimate.rs 341
@@ -122,7 +122,7 @@ crates/gglib-core/src/download/rate.rs 628
 crates/gglib-core/src/download/types.rs 680
 crates/gglib-core/src/normalize/parsers/delimited.rs 985
 crates/gglib-core/src/normalize/stream.rs 662
-crates/gglib-core/src/ports/huggingface/image_companions_tests.rs 339
+crates/gglib-core/src/ports/huggingface/image_companions_tests.rs 383
 crates/gglib-core/src/ports/image_generation.rs 370
 crates/gglib-core/src/ports/model_catalog.rs 303
 crates/gglib-core/src/ports/model_runtime.rs 808
@@ -142,7 +142,7 @@ crates/gglib-core/src/services/catalog/port_tests.rs 352
 crates/gglib-core/src/services/chat_history.rs 342
 crates/gglib-core/src/services/drawing.rs 349
 crates/gglib-core/src/services/drawing_tests.rs 347
-crates/gglib-core/src/services/model_components_tests.rs 645
+crates/gglib-core/src/services/model_components_tests.rs 719
 crates/gglib-core/src/services/model_import.rs 695
 crates/gglib-core/src/services/model_projector_tests.rs 308
 crates/gglib-core/src/services/model_registrar.rs 461
@@ -177,7 +177,7 @@ crates/gglib-download/src/manager/group_completion_tests.rs 366
 crates/gglib-download/src/manager/mod.rs 1266
 crates/gglib-download/src/quant_selector.rs 340
 crates/gglib-download/src/queue/mod.rs 1081
-crates/gglib-download/src/resolver/tests.rs 387
+crates/gglib-download/src/resolver/tests.rs 430
 crates/gglib-engine-llama/src/decoder/llama.rs 321
 crates/gglib-engine-llama/src/decoder/llama_tests.rs 372
 crates/gglib-engine-llama/src/decoder/scripted.rs 310
