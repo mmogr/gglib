@@ -103,7 +103,7 @@ fn manager(files: &[(&str, u64)]) -> (Arc<DownloadManagerImpl>, Arc<RecordingReg
         Arc::new(RepoHub::new(files)),
         Arc::new(NoopEmitter::new()),
         DownloadManagerConfig::default(),
-        Arc::new(gglib_core::ports::NoopGgufParser),
+        Arc::new(crate::test_hub::ImageHeadParser),
     );
     (Arc::new(manager), registrar)
 }
@@ -111,7 +111,7 @@ fn manager(files: &[(&str, u64)]) -> (Arc<DownloadManagerImpl>, Arc<RecordingReg
 /// Queue the `Q8_0` download of [`REPO`], and leave the runner unstarted.
 async fn queue(manager: &DownloadManagerImpl) {
     manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .expect("queued");
 }
@@ -140,7 +140,7 @@ fn planned_for(manager: &DownloadManagerImpl, started: &Started) -> PathBuf {
 /// where the registrar was told they are.
 async fn download(manager: &Arc<DownloadManagerImpl>, registrar: &RecordingRegistrar) -> PathBuf {
     let id = Arc::clone(manager)
-        .queue_smart(REPO.to_string(), Some("Q8_0".to_string()))
+        .queue_smart(REPO.to_string(), Some("Q8_0".to_string()), None)
         .await
         .expect("queued");
     let outcome = ended(manager, &id).await.outcome;

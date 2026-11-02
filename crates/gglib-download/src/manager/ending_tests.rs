@@ -14,7 +14,7 @@ pub(super) fn id() -> DownloadId {
 /// Queue a second download, of two files like the first, and answer its id.
 async fn queue_other(f: &Fixture, repo: &str) -> DownloadId {
     f.manager
-        .queue_download_smart(repo, Some("Q8_0".to_string()))
+        .queue_download_smart(repo, Some("Q8_0".to_string()), None)
         .await
         .unwrap()
 }
@@ -216,7 +216,7 @@ async fn requeueing_clears_the_old_outcome() {
     assert_eq!(finished(&f).len(), 2);
 
     f.manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
 

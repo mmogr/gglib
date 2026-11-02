@@ -172,8 +172,10 @@ impl ModelOps {
         id: i64,
         rows: Option<RowCallback>,
     ) -> Result<UpgradeOutcome, GuiError> {
-        self.apply_upgrade_with(id, rows, hub_check, gglib_download::cli_exec::update_model)
-            .await
+        let parser = Arc::clone(&self.deps.gguf_parser);
+        let download =
+            |request, rows| gglib_download::cli_exec::update_model(request, parser, rows);
+        self.apply_upgrade_with(id, rows, hub_check, download).await
     }
 
     /// [`apply_upgrade`](Self::apply_upgrade) with the two things it asks of

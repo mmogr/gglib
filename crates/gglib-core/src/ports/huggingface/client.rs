@@ -50,11 +50,6 @@ pub trait HfClientPort: Send + Sync {
     /// * `model_id` - Full model ID (e.g., `TheBloke/Llama-2-7B-GGUF`)
     async fn list_quantizations(&self, model_id: &str) -> HfPortResult<Vec<HfQuantInfo>>;
 
-    /// List the projector files in a model repository, by path, with OIDs.
-    ///
-    /// Empty for a repository that has none.
-    async fn list_projectors(&self, model_id: &str) -> HfPortResult<Vec<HfFileInfo>>;
-
     /// List all GGUF files in a model repository.
     ///
     /// # Arguments
@@ -93,6 +88,26 @@ pub trait HfClientPort: Send + Sync {
     /// a header can be read before the file is fetched. A file shorter than
     /// `max_bytes` answers all of itself.
     async fn read_head(&self, model_id: &str, path: &str, max_bytes: u64) -> HfPortResult<Vec<u8>>;
+
+    /// At most `max_bytes` bytes of the file at `path` in repository
+    /// `model_id` from byte `start`: a [`Self::read_head`] read further,
+    /// without its first bytes asked for again.
+    ///
+    /// By default the head is read again to `start + max_bytes` and cut, for
+    /// a client that cannot read from an offset.
+    async fn read_range(
+        &self,
+        model_id: &str,
+        path: &str,
+        start: u64,
+        max_bytes: u64,
+    ) -> HfPortResult<Vec<u8>> {
+        let head = self
+            .read_head(model_id, path, start.saturating_add(max_bytes))
+            .await?;
+        let from = usize::try_from(start).unwrap_or(usize::MAX).min(head.len());
+        Ok(head[from..].to_vec())
+    }
 
     /// The address a download reads the whole of the file at `path` in
     /// repository `model_id` from, at `revision`: by default the Hub's own,

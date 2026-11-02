@@ -33,7 +33,7 @@ fn the_shortlist_is_suggested_row_for_row_with_its_verdicts_and_reasons() {
     assert_eq!(suggested.len(), PHONE_SHORTLIST.len());
     for (suggestion, row) in suggested.iter().zip(PHONE_SHORTLIST) {
         assert_eq!(suggestion.repo, row.repo);
-        assert_eq!(suggestion.quantization, row.quantization);
+        assert_eq!(Some(suggestion.quantization.as_str()), row.quantization);
         assert_eq!(suggestion.bytes, row.weights_bytes);
         assert_eq!(suggestion.rationale, row.rationale);
         assert_eq!(suggestion.why.trained_ctx, Some(row.trained_ctx));

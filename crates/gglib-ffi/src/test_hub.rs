@@ -163,11 +163,6 @@ impl HfClientPort for TestHub {
         Ok(self.variants_of_repo(model_id))
     }
 
-    async fn list_projectors(&self, _model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        self.refused()?;
-        Ok(Vec::new())
-    }
-
     async fn list_gguf_files(&self, model_id: &str) -> HfPortResult<Vec<HfFileInfo>> {
         self.refused()?;
         Ok(self.files_of(model_id).map(HubFile::info).collect())

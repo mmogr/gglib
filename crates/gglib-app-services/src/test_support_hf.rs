@@ -19,25 +19,24 @@ impl HfClientPort for MockHfClient {
     }
 
     async fn list_quantizations(&self, _model_id: &str) -> Result<Vec<HfQuantInfo>, HfPortError> {
-        Ok(vec![HfQuantInfo {
-            label: "Q4_K_M".to_string(),
-            role: None,
-            total_size: 0,
-            file_paths: vec!["model.gguf".to_string()],
-        }])
+        Ok(vec![
+            HfQuantInfo {
+                label: "Q4_K_M".to_string(),
+                role: None,
+                total_size: 0,
+                file_paths: vec!["model.gguf".to_string()],
+            },
+            HfQuantInfo {
+                label: "mmproj-F16".to_string(),
+                role: None,
+                total_size: 7,
+                file_paths: vec!["mmproj-F16.gguf".to_string()],
+            },
+        ])
     }
 
     async fn list_gguf_files(&self, _model_id: &str) -> Result<Vec<HfFileInfo>, HfPortError> {
         Ok(vec![])
-    }
-
-    async fn list_projectors(&self, _model_id: &str) -> Result<Vec<HfFileInfo>, HfPortError> {
-        Ok(vec![HfFileInfo {
-            path: "mmproj-F16.gguf".to_string(),
-            size: 7,
-            is_gguf: true,
-            oid: None,
-        }])
     }
 
     async fn get_quantization_files(
@@ -76,6 +75,9 @@ impl HfClientPort for MockHfClient {
         path: &str,
         _max_bytes: u64,
     ) -> Result<Vec<u8>, HfPortError> {
+        if path == "mmproj-F16.gguf" {
+            return Ok(gglib_core::ports::huggingface::fake_hub::PROJECTOR_HEAD.to_vec());
+        }
         Err(HfPortError::FileNotFound {
             model_id: model_id.to_owned(),
             path: path.to_owned(),

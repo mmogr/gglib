@@ -21,7 +21,6 @@ const mockGet = vi.mocked(getRecommendedModel);
 
 const rec: ModelRecommendation = {
   repo: 'unsloth/Qwen3-30B-A3B-GGUF',
-  quantization: 'Q4_K_M',
   rationale: 'mixture-of-experts: 30B of knowledge, ~3B active per token',
   // Binary, matching formatMemorySize: 21 GiB and 32 GiB exactly.
   requiredBytes: 21 * 1024 ** 3,

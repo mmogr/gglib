@@ -82,7 +82,8 @@ between the worker (core download logic) and publishing (the queue snapshot).
   completion key; a second model of the family finds it there and fetches
   nothing. A file on disk is kept when it is the listed size, and a `.gguf`
   only when it starts as one: a safetensors companion has no magic. With no
-  quantization asked, an image repository is fetched at `Q8_0` when it has it.
+  quantization asked, an image repository takes the largest variant whose
+  weights fit, as any repository takes the largest that fits.
 - **Running download**: The group being fetched, or the one between two of its
   files (`running.rs`). The queue snapshot has it as `active`, at position 1,
   across its file boundaries, read from its meter; every other group is one

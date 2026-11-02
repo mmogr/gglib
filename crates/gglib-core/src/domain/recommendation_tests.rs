@@ -71,6 +71,18 @@ fn shortlist_is_internally_consistent() {
     }
 }
 
+/// `gglib up` names no quantization, so its download takes the largest that
+/// fits; a phone's download must name one, so every phone row does.
+#[test]
+fn only_a_phone_row_names_a_quantization() {
+    for c in SHORTLIST {
+        assert_eq!(c.quantization, None, "{}", c.repo);
+    }
+    for c in PHONE_SHORTLIST {
+        assert!(c.quantization.is_some(), "{}", c.repo);
+    }
+}
+
 /// Phone-sized memory readings, as the unified memory a phone has. The
 /// table tops out at the 4B, so every one of these is offered it.
 #[test]

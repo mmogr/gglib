@@ -171,15 +171,15 @@ impl ModelVerificationService {
 
         // Get remote file metadata from HuggingFace. The variant's files
         // are weights alone, so a model with a projector row also asks for
-        // the repository's projectors.
+        // the repository's files, its projector found among them by path.
         let mut remote_files = self
             .hf_client
             .get_quantization_files(repo_id, &label)
             .await
             .map_err(fetch_failed)?;
         if local_files.iter().any(is_projector) {
-            let projectors = self.hf_client.list_projectors(repo_id).await;
-            remote_files.extend(projectors.map_err(fetch_failed)?);
+            let files = self.hf_client.list_gguf_files(repo_id).await;
+            remote_files.extend(files.map_err(fetch_failed)?);
         }
 
         // Compare OIDs
@@ -367,7 +367,7 @@ impl ModelVerificationService {
         // refusal says which, and what fetches them.
         let asked = quantization;
         match Arc::clone(&self.downloads)
-            .queue_smart(repo_id.clone(), Some(asked.clone()))
+            .queue_smart(repo_id.clone(), Some(asked.clone()), None)
             .await
         {
             Ok(download) => Ok(RepairStarted {
@@ -388,9 +388,14 @@ impl ModelVerificationService {
         repo_id: &str,
         label: &str,
     ) -> Result<Option<String>, String> {
-        let group = download_group(self.hf_client.as_ref(), repo_id, label)
-            .await
-            .map_err(|e| format!("Failed to read what a download of {repo_id} fetches: {e}"))?;
+        let group = download_group(
+            self.hf_client.as_ref(),
+            self.gguf_parser.as_deref(),
+            repo_id,
+            label,
+        )
+        .await
+        .map_err(|e| format!("Failed to read what a download of {repo_id} fetches: {e}"))?;
         Ok(group.projector.map(|projector| projector.path))
     }
 }

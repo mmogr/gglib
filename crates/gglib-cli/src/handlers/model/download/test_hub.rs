@@ -168,9 +168,6 @@ impl HfClientPort for Hub {
             .collect())
     }
 
-    async fn list_projectors(&self, _: &str) -> HfPortResult<Vec<HfFileInfo>> {
-        unimplemented!("a search and its quantizations are all this hub answers")
-    }
     async fn list_gguf_files(&self, _: &str) -> HfPortResult<Vec<HfFileInfo>> {
         unimplemented!("a search and its quantizations are all this hub answers")
     }

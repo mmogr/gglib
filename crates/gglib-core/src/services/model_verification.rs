@@ -20,7 +20,8 @@ use tokio::task::JoinHandle;
 use crate::domain::{ModelFile, ModelFolder};
 use crate::download::GgufFileRole;
 use crate::ports::{
-    DownloadManagerPort, HfClientPort, ModelFilesRepositoryPort, ModelRepository, RepositoryError,
+    DownloadManagerPort, GgufParserPort, HfClientPort, ModelFilesRepositoryPort, ModelRepository,
+    RepositoryError,
 };
 
 // ============================================================================
@@ -340,6 +341,9 @@ pub struct ModelVerificationService {
     pub(super) hf_client: Arc<dyn HfClientPort>,
     /// The download queue a repair fetches its files through.
     pub(super) downloads: Arc<dyn DownloadManagerPort>,
+    /// Reads the heads of a repository's files, to know which projector a
+    /// download fetches. `None` knows of none.
+    pub(super) gguf_parser: Option<Arc<dyn GgufParserPort>>,
     /// Concurrency control.
     pub(super) operation_lock: ModelOperationLock,
 }
@@ -357,8 +361,17 @@ impl ModelVerificationService {
             model_files_repo,
             hf_client,
             downloads,
+            gguf_parser: None,
             operation_lock: ModelOperationLock::new(),
         }
+    }
+
+    /// This service, reading the heads of a repository's files with
+    /// `parser` to know which projector a repair's download fetches.
+    #[must_use]
+    pub fn with_gguf_parser(mut self, parser: Arc<dyn GgufParserPort>) -> Self {
+        self.gguf_parser = Some(parser);
+        self
     }
 
     /// Verify the integrity of a model by computing SHA256 hashes.

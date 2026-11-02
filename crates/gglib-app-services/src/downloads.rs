@@ -33,6 +33,33 @@ pub struct DownloadDeps {
     pub models_directory: Option<PathBuf>,
 }
 
+/// The memory a download that names no variant must fit.
+///
+/// The device's: the figure a launch fits its context against
+/// ([`gglib_runtime::system::total_device_memory_bytes`]). A machine whose
+/// device memory cannot be read, a CPU-only one among them, runs a model from
+/// its RAM, so then the system's RAM ([`crate::settings::system_memory`]).
+/// `None` when neither can be read, and the download then takes the smallest
+/// variant.
+///
+/// Read off the async runtime: the first reading probes the hardware.
+pub async fn download_budget() -> Option<u64> {
+    tokio::task::spawn_blocking(|| {
+        device_or_ram(gglib_runtime::system::total_device_memory_bytes(), || {
+            crate::settings::system_memory(&gglib_runtime::system::DefaultSystemProbe::new())
+                .map(|memory| memory.total_ram_bytes)
+        })
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+/// `device`, or else what `ram` reads.
+fn device_or_ram(device: Option<u64>, ram: impl FnOnce() -> Option<u64>) -> Option<u64> {
+    device.or_else(ram)
+}
+
 /// Download and `HuggingFace` operations handler.
 pub struct DownloadOps {
     downloads: Arc<dyn DownloadManagerPort>,
@@ -59,18 +86,15 @@ impl DownloadOps {
 
     /// Queue a model download from `HuggingFace` Hub, and answer its ID.
     ///
-    /// Uses smart quantization selection:
-    /// - If quantization is provided, validates it exists
-    /// - If none provided and 1 option exists, auto-picks it
-    /// - If none provided and multiple exist, uses default preference order
+    /// The variant named by `quantization`, or with none named the largest
+    /// quantized one that fits this machine's [`download_budget`].
     pub async fn queue_download(
         &self,
         model_id: String,
         quantization: Option<String>,
     ) -> Result<QueueDownloadResponse, GuiError> {
-        // Use queue_smart which handles quantization selection in the domain layer
         let id = Arc::clone(&self.downloads)
-            .queue_smart(model_id, quantization)
+            .queue_smart(model_id, quantization, download_budget().await)
             .await
             .map_err(|e| GuiError::Internal(e.to_string()))?;
         Ok(QueueDownloadResponse { id: id.to_string() })
@@ -192,11 +216,6 @@ impl DownloadOps {
             quants,
         )
         .await;
-        let projectors = self
-            .hf_client
-            .list_projectors(model_id)
-            .await
-            .map_err(failed)?;
 
         let models_dir = self
             .models_directory
@@ -211,7 +230,7 @@ impl DownloadOps {
         )
         .await;
 
-        Ok(quantizations_response(model_id, quants, &projectors, image))
+        Ok(quantizations_response(model_id, quants, image))
     }
 
     /// Check if a `HuggingFace` model supports tool/function calling.

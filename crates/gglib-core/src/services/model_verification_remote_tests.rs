@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 
 use super::*;
 use crate::domain::{Model, NewModel, NewModelFile};
-use crate::ports::huggingface::fake_hub::{FakeHub, hub_file};
+use crate::ports::huggingface::fake_hub::{FakeHub, RoleParser, hub_file};
 use crate::ports::{AskedDownloads, ModelFilesRepositoryPort};
 use crate::services::model_projector::tests::OneModelRepo;
 
@@ -100,7 +100,8 @@ pub(super) fn fixture_queueing_on(
         store,
         hub.clone(),
         queued.clone(),
-    );
+    )
+    .with_gguf_parser(Arc::new(RoleParser));
     Fixture {
         service,
         hub,
@@ -149,11 +150,11 @@ async fn an_unchanged_projector_is_no_update() {
 
     assert!(!result.update_available);
     assert!(result.details.is_none());
-    assert_eq!(f.hub.projector_listings.load(Ordering::Relaxed), 1);
+    assert_eq!(f.hub.file_listings.load(Ordering::Relaxed), 1);
 }
 
 /// A model downloaded without a projector has no row for one, and the
-/// repository's projectors are not listed for it.
+/// repository's files are not listed for it.
 #[tokio::test]
 async fn a_model_without_a_projector_row_checks_its_weights_alone() {
     let rows = vec![row(0, WEIGHTS, "w-old")];
@@ -169,7 +170,7 @@ async fn a_model_without_a_projector_row_checks_its_weights_alone() {
     let details = result.details.expect("the weights changed");
     assert_eq!(details.changed_shards, 1);
     assert_eq!(details.changes[0].file_path, WEIGHTS);
-    assert_eq!(f.hub.projector_listings.load(Ordering::Relaxed), 0);
+    assert_eq!(f.hub.file_listings.load(Ordering::Relaxed), 0);
 }
 
 // ── Repair ───────────────────────────────────────────────────────────────
@@ -210,7 +211,9 @@ async fn a_corrupt_projector_is_deleted_and_its_group_is_queued_again() {
         [(REPO.to_owned(), Some("Q8_0".to_owned()))]
     );
     // What was queued is a group that holds the projector.
-    let group = download_group(f.hub.as_ref(), REPO, "Q8_0").await.unwrap();
+    let group = download_group(f.hub.as_ref(), Some(&RoleParser), REPO, "Q8_0")
+        .await
+        .unwrap();
     assert!(group.files().any(|file| file.path == PROJECTOR));
 }
 

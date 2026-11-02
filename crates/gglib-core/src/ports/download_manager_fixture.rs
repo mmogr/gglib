@@ -46,6 +46,7 @@ impl DownloadManagerPort for AskedDownloads {
         self: Arc<Self>,
         repo_id: String,
         quantization: Option<String>,
+        _budget_bytes: Option<u64>,
     ) -> Result<DownloadId, DownloadError> {
         let id = DownloadId::new(repo_id.as_str(), quantization.as_deref());
         self.asked
@@ -63,7 +64,7 @@ impl DownloadManagerPort for AskedDownloads {
         _model_id: i64,
         _commit: String,
     ) -> Result<DownloadId, DownloadError> {
-        self.queue_smart(repo_id, Some(quantization)).await
+        self.queue_smart(repo_id, Some(quantization), None).await
     }
 
     async fn get_queue_snapshot(&self) -> Result<QueueSnapshot, DownloadError> {

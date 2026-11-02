@@ -32,10 +32,10 @@ pub(super) async fn queued(registrar: Arc<dyn ModelRegistrarPort>) -> Fixture {
         ])),
         recorded.clone(),
         DownloadManagerConfig::default(),
-        Arc::new(gglib_core::ports::NoopGgufParser),
+        Arc::new(crate::test_hub::ImageHeadParser),
     ));
     manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
     Fixture { manager, recorded }
@@ -56,7 +56,7 @@ pub(super) fn failed(error: &str) -> DownloadOutcome {
 async fn rest_and_sse_carry_the_same_snapshot() {
     let f = queued(Arc::new(NoRegistrar)).await;
     f.manager
-        .queue_download_smart("owner/other", Some("Q8_0".to_string()))
+        .queue_download_smart("owner/other", Some("Q8_0".to_string()), None)
         .await
         .unwrap();
     let ended = DownloadId::new("owner/gone", Some("zeta.Q8_0"));
@@ -147,7 +147,7 @@ fn snapshots_are_emitted_in_revision_order() {
         Arc::new(RepoHub::new(&[])),
         held.clone(),
         DownloadManagerConfig::default(),
-        Arc::new(gglib_core::ports::NoopGgufParser),
+        Arc::new(crate::test_hub::ImageHeadParser),
     ));
     let runtime = tokio::runtime::Builder::new_current_thread()
         .build()
@@ -251,7 +251,7 @@ async fn the_meter_task_ends_on_cancellation() {
         Arc::new(RepoHub::new(&[])),
         Arc::new(NoopEmitter::new()),
         DownloadManagerConfig::default(),
-        Arc::new(gglib_core::ports::NoopGgufParser),
+        Arc::new(crate::test_hub::ImageHeadParser),
     ));
     let (progress_tx, _rx) = watch::channel(ProgressUpdate::default());
     let cancel = CancellationToken::new();

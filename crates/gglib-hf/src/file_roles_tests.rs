@@ -1,7 +1,9 @@
 //! Tests that a projector and a sidecar are their own variants, never a
-//! shard of the weights, and that the projectors are listed apart.
+//! shard of the weights.
 
-use gglib_core::download::{GgufFileRole, Quantization, choose_projector};
+use std::path::Path;
+
+use gglib_core::download::GgufFileRole;
 use gglib_core::ports::huggingface::HfQuantInfo;
 
 use super::*;
@@ -43,19 +45,6 @@ fn files_of<'a>(variants: &'a [HfQuantInfo], label: &str) -> &'a [String] {
 }
 
 // ── The real listing ─────────────────────────────────────────────────────
-
-#[test]
-fn the_real_listing_holds_two_projectors_listed_apart() {
-    let projectors = projectors_among(&qwen_files());
-
-    assert_eq!(paths(&projectors), ["mmproj-BF16.gguf", "mmproj-F16.gguf"]);
-    assert_eq!(projectors[0].size, 931_146_432);
-    assert_eq!(projectors[1].size, 927_607_488);
-    assert_eq!(
-        projectors[1].oid.as_deref(),
-        Some("cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e")
-    );
-}
 
 /// Each projector is a variant of its own, and `BF16` is its two weights
 /// shards without `mmproj-BF16.gguf` as a third.
@@ -124,19 +113,6 @@ fn the_files_a_label_names_in_the_real_listing() {
     assert!(variant_files(&files, "Q4_K").is_none(), "several hold it");
 }
 
-/// What a `Q8_0` download of the real repository fetches with its weights.
-#[test]
-fn a_q8_download_of_the_real_listing_takes_the_f16_projector() {
-    let projectors = projectors_among(&qwen_files());
-
-    let chosen = choose_projector(
-        Quantization::Q8_0,
-        projectors.iter().map(|p| p.path.as_str()),
-    );
-
-    assert_eq!(chosen, Some("mmproj-F16.gguf"));
-}
-
 /// The sidecars' names, which the role a header gives replaces wherever a
 /// variant is judged.
 #[test]
@@ -150,7 +126,6 @@ fn the_real_listing_names_two_sidecars() {
         paths(&sidecars),
         ["MTP/mtp-Qwen3.8-27B-Q4_0.gguf", "imatrix_unsloth.gguf"]
     );
-    assert!(sidecars.iter().all(|sidecar| !sidecar.is_projector()));
 }
 
 // ── The shapes a repository takes ────────────────────────────────────────
@@ -166,7 +141,6 @@ fn a_projector_beside_one_model_is_a_variant_apart() {
 
     assert_eq!(labels(&variants), ["mmproj-F16", "model-Q4_K_M"]);
     assert_eq!(files_of(&variants, "model-Q4_K_M"), ["model-Q4_K_M.gguf"]);
-    assert_eq!(paths(&projectors_among(&files)), ["mmproj-F16.gguf"]);
 }
 
 /// The shape a library downloaded before the split holds: the projector was
@@ -182,35 +156,6 @@ fn a_projector_of_the_same_quantization_is_not_a_second_shard() {
         paths(&variant_files(&files, "X.Q8_0").unwrap()),
         ["X.Q8_0.gguf"]
     );
-    assert_eq!(paths(&projectors_among(&files)), ["X.mmproj-Q8_0.gguf"]);
-}
-
-#[test]
-fn projectors_are_listed_by_path_whatever_order_the_repository_gives() {
-    let files = [
-        gguf("mmproj-Q8_0.gguf", 600),
-        gguf("model-Q8_0.gguf", 8_000),
-        gguf("mmproj-F16.gguf", 900),
-    ];
-
-    assert_eq!(
-        paths(&projectors_among(&files)),
-        ["mmproj-F16.gguf", "mmproj-Q8_0.gguf"]
-    );
-}
-
-/// A file is a projector only when it is a GGUF file at all.
-#[test]
-fn a_directory_or_another_file_type_is_no_projector() {
-    let directory = HfFileEntry {
-        entry_type: HfEntryType::Directory,
-        ..gguf("mmproj.gguf", 0)
-    };
-    let readme = gguf("mmproj-notes.md", 10);
-
-    for entry in [directory, readme] {
-        assert!(!entry.is_projector());
-    }
 }
 
 #[test]

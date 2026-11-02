@@ -110,7 +110,6 @@ pub(crate) struct DiagnosticsDto {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RecommendationDto {
     pub repo: String,
-    pub quantization: String,
     /// Why this model, in the user's terms.
     pub rationale: String,
     /// Weights plus KV cache at the candidate's context, at the quantization
@@ -134,7 +133,6 @@ impl From<gglib_core::domain::recommendation::Recommendation> for Recommendation
 
         Self {
             repo: rec.candidate.repo.to_string(),
-            quantization: rec.candidate.quantization.to_string(),
             rationale: rec.candidate.rationale.to_string(),
             required_bytes: rec.candidate.required_bytes(),
             budget_bytes: rec.budget_bytes,

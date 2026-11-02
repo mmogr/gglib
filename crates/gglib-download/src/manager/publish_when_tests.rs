@@ -45,7 +45,7 @@ async fn queueing_publishes_the_new_row() {
     let (before, _) = sent(&f);
 
     f.manager
-        .queue_download_smart("owner/other", Some("Q8_0".to_string()))
+        .queue_download_smart("owner/other", Some("Q8_0".to_string()), None)
         .await
         .unwrap();
 

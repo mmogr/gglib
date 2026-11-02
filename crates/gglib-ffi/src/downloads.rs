@@ -45,7 +45,7 @@ pub(crate) async fn start(
     }
     let since = feed.count();
     let id = Arc::clone(&downloads)
-        .queue_smart(repo, Some(quantization))
+        .queue_smart(repo, Some(quantization), None)
         .await?;
     // Asked for again, it is no longer waiting on a resume.
     feed.unpause(&id.to_string());
@@ -83,7 +83,7 @@ pub(crate) async fn pause_all(downloads: &dyn DownloadManagerPort, feed: &Downlo
 pub(crate) async fn resume_all(downloads: &Arc<dyn DownloadManagerPort>, feed: &DownloadFeed) {
     for paused in feed.take_paused() {
         if let Err(error) = Arc::clone(downloads)
-            .queue_smart(paused.repo, paused.quantization)
+            .queue_smart(paused.repo, paused.quantization, None)
             .await
         {
             feed.fail(&paused.id, error.to_string());

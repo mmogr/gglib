@@ -109,6 +109,14 @@ impl AppCore {
         Arc::clone(&self.verification.downloads)
     }
 
+    /// This core, whose repairs read the heads of a repository's files with
+    /// `parser` to know which projector their download fetches.
+    #[must_use]
+    pub fn with_gguf_parser(mut self, parser: Arc<dyn GgufParserPort>) -> Self {
+        self.verification = self.verification.with_gguf_parser(parser);
+        self
+    }
+
     /// This core, holding the token its process asks the Hub with.
     #[must_use]
     pub fn with_hf_token(mut self, token: Option<String>) -> Self {

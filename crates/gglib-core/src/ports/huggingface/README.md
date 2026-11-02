@@ -19,10 +19,10 @@ and a request names one by its label (`match_label`). What a variant is comes
 from a 64 KiB head of its first file (`variant_role`, `read_roles`): a draft or
 helper is listed and never downloaded (`HELPER_FILES_REFUSAL`). A model stored
 without a label is found again by the variant that holds its file
-(`stored_label`). The projectors are also listed apart (`list_projectors`).
-`download_group` answers what one download fetches: a variant's files, and the
-projector chosen to go with them. `projector_fetched_with` is that choice alone,
-for a listing that shows which projector comes with each variant.
+(`stored_label`). `download_group` answers what one download fetches: a
+variant's weights, and the repository's projector (`repository_projector`), the
+largest file whose head says it is one, the same for every variant.
+`largest_projector` is that choice alone, over variants whose roles are read.
 
 A search asks for one `HfModelKind`: models that chat (the default) or models
 that draw. `read_head` reads a file's first bytes (at most `SNIFF_HEAD_BYTES`

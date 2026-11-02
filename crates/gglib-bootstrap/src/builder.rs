@@ -192,7 +192,8 @@ fn wire(
     //    HF client and queues a repair's download on that same manager
     let app = Arc::new(
         AppCore::new(repos.clone(), hf_client.clone(), Arc::clone(&downloads))
-            .with_hf_token(core_token),
+            .with_hf_token(core_token)
+            .with_gguf_parser(gguf_parser.clone()),
     );
 
     BuiltCore {

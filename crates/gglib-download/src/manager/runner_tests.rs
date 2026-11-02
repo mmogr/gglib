@@ -27,7 +27,7 @@ fn manager_that_cannot_write(dir: &Path) -> Arc<DownloadManagerImpl> {
             models_directory: Some(blocked),
             ..DownloadManagerConfig::default()
         },
-        Arc::new(gglib_core::ports::NoopGgufParser),
+        Arc::new(crate::test_hub::ImageHeadParser),
     ))
 }
 
@@ -57,7 +57,7 @@ async fn a_download_queued_through_the_port_is_run_with_nothing_else_queued() {
     let manager = manager_that_cannot_write(dir.path());
 
     let id = Arc::clone(&manager)
-        .queue_smart(REPO.to_string(), Some("Q8_0".to_string()))
+        .queue_smart(REPO.to_string(), Some("Q8_0".to_string()), None)
         .await
         .unwrap();
 
@@ -117,11 +117,11 @@ async fn a_quantization_asked_for_by_its_name_is_the_one_queued() {
             Arc::new(RepoHub::new(&files)),
             Arc::new(NoopEmitter::new()),
             DownloadManagerConfig::default(),
-            Arc::new(gglib_core::ports::NoopGgufParser),
+            Arc::new(crate::test_hub::ImageHeadParser),
         );
 
         let id = manager
-            .queue_download_smart(REPO, Some(name.to_string()))
+            .queue_download_smart(REPO, Some(name.to_string()), None)
             .await
             .unwrap();
 

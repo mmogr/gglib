@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use gglib_core::download::{DownloadError, DownloadId};
-use gglib_core::ports::{HfClientPort, QuantizationResolver, ResolvedFile};
+use gglib_core::ports::{GgufParserPort, HfClientPort, QuantizationResolver, ResolvedFile};
 
 use super::types::{CliDownloadRequest, CliDownloadResult, CliUpdateRequest, UpdateCheckResult};
 use super::utils::model_directory;
@@ -21,7 +21,8 @@ use crate::resolver::HfQuantizationResolver;
 use crate::solo::{RowCallback, fetch_solo};
 
 /// Execute a download request and return the result, handing `rows` the
-/// download's row while its files are fetched.
+/// download's row while its files are fetched. `parser` reads the heads of
+/// the repository's files, to know its projector.
 ///
 /// Used internally by [`update_model`] for the force-redownload path.
 /// Interactive CLI downloads now route through
@@ -29,6 +30,7 @@ use crate::solo::{RowCallback, fetch_solo};
 /// instead of calling this function directly.
 pub(super) async fn download(
     request: CliDownloadRequest,
+    parser: Arc<dyn GgufParserPort>,
     rows: Option<RowCallback>,
 ) -> Result<CliDownloadResult> {
     let quant = request.quantization.as_ref().ok_or_else(|| {
@@ -49,9 +51,10 @@ pub(super) async fn download(
 
     // Resolve files using the HuggingFace resolver
     gglib_core::telemetry::console_println(&format!("Looking for the {quant} variant..."));
-    // A forced fetch again of the model's own files: its companions, if it
-    // draws with any, are in their own folders and linked already.
-    let resolver = HfQuantizationResolver::weights_only(Arc::clone(&hub));
+    // A forced fetch again of the model's own files, its projector with
+    // them: its companions, if it draws with any, are in their own folders
+    // and linked already.
+    let resolver = HfQuantizationResolver::new(Arc::clone(&hub), parser).own_files();
 
     let resolution = resolver.resolve(&request.model_id, quant).await
         .map_err(|e| anyhow!(
@@ -204,9 +207,13 @@ async fn check_update_with(
 }
 
 /// Update a model to the latest version, handing `rows` the download's row
-/// while its files are fetched. Without `rows` its progress is not shown.
+/// while its files are fetched.
+///
+/// Without `rows` its progress is not shown. `parser` reads the heads of the repository's files, so the projector is
+/// fetched again with the weights.
 pub async fn update_model(
     request: CliUpdateRequest,
+    parser: Arc<dyn GgufParserPort>,
     rows: Option<RowCallback>,
 ) -> Result<CliDownloadResult> {
     // Reuse the download logic with force=true
@@ -218,7 +225,7 @@ pub async fn update_model(
         token: request.token,
     };
 
-    download(download_request, rows).await
+    download(download_request, parser, rows).await
 }
 
 #[cfg(test)]
