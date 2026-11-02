@@ -70,6 +70,9 @@ pub(crate) async fn execute(
                 if let Some(family) = pass.family_found {
                     println!("  [{id}] {name} — draws as {}", family.label());
                 }
+                if pass.facts_read {
+                    println!("  [{id}] {name} — type and bits per weight read from its header");
+                }
             }
             Err(e) => {
                 eprintln!("  [{id}] {name} — FAILED: {e}");

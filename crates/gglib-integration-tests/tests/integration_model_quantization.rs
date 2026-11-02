@@ -114,3 +114,41 @@ async fn the_daemons_pass_reads_the_facts_of_a_model_that_has_none_once() {
     let split = service.get_by_id(ids[0]).await.unwrap().unwrap();
     assert_eq!(split.file_type, None);
 }
+
+/// A model the start-up pass missed, its file unreadable then, has its facts
+/// read by a retag, summed over every shard of a split as the pass sums
+/// them; a retag that finds them stored reads nothing more.
+#[tokio::test]
+async fn a_retag_reads_the_facts_of_a_model_that_has_none() {
+    let pool = setup_test_pool().await.unwrap();
+    let repo = Arc::new(SqliteModelRepository::new(pool));
+    let service = ModelService::new(repo);
+    let parser = GgufParser::new();
+    let dir = tempfile::tempdir().unwrap();
+
+    // 64 weights in 48 bytes and 64 in 80: 8 bits each, together.
+    let first = dir.path().join("big-00001-of-00002.gguf");
+    let second = dir.path().join("big-00002-of-00002.gguf");
+    let pairs = [
+        ("general.file_type", GgufValue::U32(7)),
+        ("split.count", GgufValue::U16(2)),
+    ];
+    write_gguf(&first, &pairs, &[("a.weight", &[8, 8])], 48);
+    write_gguf(&second, &[], &[("b.weight", &[8, 8])], 80);
+    let mut model = service
+        .import_from_file(&first, &parser, None, ImportMode::Fresh)
+        .await
+        .unwrap();
+    model.file_type = None;
+    model.bits_per_weight = None;
+    service.update(&model).await.unwrap();
+
+    let diff = service.retag_model(model.id, &parser, false).await.unwrap();
+
+    assert!(diff.is_some_and(|diff| diff.facts_read && diff.is_changed()));
+    let read = service.get_by_id(model.id).await.unwrap().unwrap();
+    assert_eq!(read.quant_label(), Some("Q8_0"));
+    assert_eq!(read.bits_per_weight, Some(8.0));
+    let again = service.retag_model(model.id, &parser, false).await.unwrap();
+    assert_eq!(again, None, "nothing is left to read");
+}

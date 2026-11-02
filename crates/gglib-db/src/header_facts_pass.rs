@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use gglib_core::ports::GgufParserPort;
-use gglib_core::services::{HeaderFacts, header_facts};
+use gglib_core::services::read_header_facts;
 use serde_json::Value;
 use sqlx::SqlitePool;
 
@@ -58,7 +58,8 @@ pub async fn fill_header_facts_once(
     let mut filled = 0;
     for (id, path) in rows {
         let parser = Arc::clone(&parser);
-        let read = tokio::task::spawn_blocking(move || read_facts(Path::new(&path), &*parser));
+        let read =
+            tokio::task::spawn_blocking(move || read_header_facts(Path::new(&path), &*parser));
         let Some(facts) = read.await? else {
             continue;
         };
@@ -79,14 +80,4 @@ pub async fn fill_header_facts_once(
     let mut conn = pool.acquire().await?;
     write_row(&mut conn, READ_KEY, Some(&Value::Bool(true)), &now()).await?;
     Ok(Some(filled))
-}
-
-/// The facts the file at `path` states, when it is there and states either.
-fn read_facts(path: &Path, parser: &dyn GgufParserPort) -> Option<HeaderFacts> {
-    if !path.is_file() {
-        return None;
-    }
-    let gguf = parser.parse(path).ok()?;
-    let facts = header_facts(path, Some(&gguf), None, parser);
-    (!facts.is_empty()).then_some(facts)
 }
