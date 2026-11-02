@@ -9,7 +9,8 @@
 use std::io::Read;
 use std::path::Path;
 
-use gglib_core::domain::{TensorInfo, TensorTable, WeightsFormat};
+use gglib_core::domain::gguf::{GgufValue, RawMetadata};
+use gglib_core::domain::{TensorInfo, TensorPayload, TensorTable, WeightsFormat};
 
 use crate::error::{GgufInternalError, GgufResult};
 use crate::format::GGUF_MAGIC;
@@ -97,6 +98,42 @@ pub(crate) fn read_tensor_infos<R: Read>(
         tensors.push(TensorInfo { name, shape });
     }
     Ok(tensors)
+}
+
+/// The alignment of a file's tensor data when `general.alignment` does not
+/// set one: ggml's `GGUF_DEFAULT_ALIGNMENT`.
+const DEFAULT_ALIGNMENT: u64 = 32;
+
+/// The tensor data of a file `file_len` bytes long whose tensor-info table
+/// ends at `table_end`: from the aligned start of the data to the end of the
+/// file, and the elements of `tensors`. `None` when nothing follows the
+/// table, as in a file written without its data, or when the shapes count
+/// more elements than a `u64` holds.
+pub(crate) fn payload(
+    raw: &RawMetadata,
+    tensors: &[TensorInfo],
+    file_len: u64,
+    table_end: u64,
+) -> Option<TensorPayload> {
+    let alignment = raw
+        .get("general.alignment")
+        .and_then(GgufValue::as_u64)
+        .filter(|alignment| *alignment > 0)
+        .unwrap_or(DEFAULT_ALIGNMENT);
+    let data_start = table_end.div_ceil(alignment).checked_mul(alignment)?;
+    // A count past `u64` is a file that lies about its shapes: no payload.
+    let elements = tensors.iter().try_fold(0_u64, |total, tensor| {
+        let tensor_elements = tensor
+            .shape
+            .iter()
+            .try_fold(1_u64, |n, dim| n.checked_mul(*dim))?;
+        total.checked_add(tensor_elements)
+    })?;
+    let payload = TensorPayload {
+        bytes: file_len.checked_sub(data_start)?,
+        elements,
+    };
+    payload.bits_per_weight().map(|_| payload)
 }
 
 #[cfg(test)]

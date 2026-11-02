@@ -240,9 +240,14 @@ pub fn build_new_model(
             model.tags = gguf_tags;
         }
         ModelOrigin::HuggingFace(hf) => {
-            model.quantization = gguf
-                .and_then(|g| g.quantization.clone())
-                .or_else(|| Some(hf.quantization_fallback.to_string()));
+            // The quant the download asked for names the Hub's files, which an
+            // update check and an upgrade look up again: `UD-Q4_K_XL` states
+            // `Q4_K_M` in its header. The header's name only when it asked
+            // for none.
+            model.quantization = Some(hf.quantization_fallback)
+                .filter(|asked| !asked.is_unknown())
+                .map(|asked| asked.to_string())
+                .or_else(|| gguf.and_then(|g| g.quantization.clone()));
             model.hf_repo_id = Some(hf.repo_id.to_string());
             model.hf_commit_sha = Some(hf.commit_sha.to_string());
             model.hf_filename = Some(file_path.file_name().unwrap().to_string_lossy().to_string());
@@ -484,31 +489,35 @@ mod tests {
         assert_eq!(model.param_count_b, 7.0);
     }
 
+    /// The quant a download asked for is the Hub's name for its files, which
+    /// an update and an upgrade look up again; a `UD-Q4_K_XL` header states
+    /// `Q4_K_M`. The header's name stands in only when nothing was asked.
     #[test]
-    fn hf_quant_fallback_used_only_when_header_has_none() {
+    fn a_hub_import_keeps_the_quant_it_asked_for() {
         let hf_tags: Vec<String> = vec![];
-        let origin = hf_origin("unsloth/Qwen3-8B-GGUF", &hf_tags);
-        let model = build_new_model(
-            Path::new("/models/m.gguf"),
-            None,
-            &NoopGgufParser,
-            &origin,
-            Utc::now(),
-        );
-        assert_eq!(model.quantization, Some(Quantization::Q4KM.to_string()));
-
         let gguf = GgufMetadata {
             quantization: Some("Q8_0".to_string()),
             ..Default::default()
         };
-        let model = build_new_model(
-            Path::new("/models/m.gguf"),
-            Some(&gguf),
-            &NoopGgufParser,
-            &origin,
-            Utc::now(),
-        );
-        assert_eq!(model.quantization, Some("Q8_0".to_string()));
+        let import = |origin: &ModelOrigin<'_>| {
+            build_new_model(
+                Path::new("/models/m.gguf"),
+                Some(&gguf),
+                &NoopGgufParser,
+                origin,
+                Utc::now(),
+            )
+            .quantization
+        };
+
+        let asked = hf_origin("unsloth/Qwen3-8B-GGUF", &hf_tags);
+        assert_eq!(import(&asked), Some(Quantization::Q4KM.to_string()));
+
+        let mut unasked = hf_origin("unsloth/Qwen3-8B-GGUF", &hf_tags);
+        if let ModelOrigin::HuggingFace(hf) = &mut unasked {
+            hf.quantization_fallback = Quantization::Unknown;
+        }
+        assert_eq!(import(&unasked), Some("Q8_0".to_string()));
     }
 
     #[test]

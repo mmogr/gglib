@@ -34,11 +34,16 @@ pub(crate) fn read(head: &[u8], file_name: &str) -> GgufResult<HeadMetadata> {
         Err(error) if ran_out(&error) => {}
         Err(error) => return Err(error),
     }
+    let role = crate::role::head_role(&found.pairs, found.tensor_count, found.complete);
+    let mut metadata = extract_metadata(&found.pairs, Path::new(file_name));
+    metadata.role = role.unwrap_or_default();
     Ok(HeadMetadata {
-        metadata: extract_metadata(&found.pairs, Path::new(file_name)),
+        metadata,
         reached_tokenizer: found.reached_tokenizer,
         complete: found.complete,
         bytes_used: found.bytes_used,
+        tensor_count: found.tensor_count,
+        role,
     })
 }
 
@@ -49,6 +54,7 @@ struct Found {
     reached_tokenizer: bool,
     complete: bool,
     bytes_used: u64,
+    tensor_count: u64,
 }
 
 /// Read the header after the magic and the metadata pairs into `found`,
@@ -63,7 +69,8 @@ fn read_pairs<R: Read>(
     found: &mut Found,
 ) -> GgufResult<()> {
     let used = |reader: &GgufReader<R>| head_len - reader.remaining();
-    let (_tensor_count, metadata_count) = reader.read_counts()?;
+    let (tensor_count, metadata_count) = reader.read_counts()?;
+    found.tensor_count = tensor_count;
     found.bytes_used = used(reader);
     for _ in 0..metadata_count {
         let key = reader.read_string()?;

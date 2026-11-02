@@ -21,11 +21,25 @@ pub(crate) fn resource_root(root: &Path) -> PathBuf {
     root.join("resources")
 }
 
-/// A GGUF v3 file in `dir` whose only metadata is its architecture, under
-/// its canonical path.
+/// A GGUF v3 file in `dir` whose only metadata is its architecture and its
+/// file type, `Q8_0`, under its canonical path. The type is the header's to
+/// state: gglib never reads it off the name.
 pub(crate) fn write_gguf(dir: &Path, name: &str) -> PathBuf {
+    use gglib_core::domain::gguf::GgufValue;
+
     let path = dir.join(name);
-    gglib_gguf::write_string_gguf(&path, &[("general.architecture", "qwen3")]);
+    gglib_gguf::write_gguf(
+        &path,
+        &[
+            (
+                "general.architecture",
+                GgufValue::String("qwen3".to_owned()),
+            ),
+            ("general.file_type", GgufValue::U32(7)),
+        ],
+        &[],
+        0,
+    );
     path.canonicalize().expect("its canonical path")
 }
 

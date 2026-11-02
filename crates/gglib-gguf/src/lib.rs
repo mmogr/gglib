@@ -33,4 +33,4 @@ pub use render::{ChatKwargs, ChatMessage, ChatTemplate, RenderError, VocabTokens
 
 // Weights files written without a model, for another crate's tests.
 #[cfg(any(test, feature = "test-utils"))]
-pub use fixture::{write_safetensors, write_string_gguf, write_tensor_gguf};
+pub use fixture::{write_gguf, write_safetensors, write_string_gguf, write_tensor_gguf};

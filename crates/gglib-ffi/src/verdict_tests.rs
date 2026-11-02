@@ -35,6 +35,8 @@ fn head(trained_ctx: Option<u64>, with_kv: bool, complete: bool) -> HeadMetadata
         reached_tokenizer: !complete,
         complete,
         bytes_used: 1024,
+        tensor_count: 291,
+        role: Some(gglib_core::GgufFileRole::Weights),
     }
 }
 

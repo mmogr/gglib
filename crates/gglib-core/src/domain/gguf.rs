@@ -255,8 +255,15 @@ impl GgufValue {
 pub struct GgufMetadata {
     /// Model architecture (e.g., "llama", "mistral").
     pub architecture: Option<String>,
-    /// Quantization type (e.g., "`Q4_K_M`", "`Q8_0`").
+    /// The name of [`Self::file_type`] (e.g. "`Q4_K_M`"), or of the
+    /// number when the pinned llama.cpp does not know it. Never read from
+    /// the file's name.
     pub quantization: Option<String>,
+    /// The type the header says the file was quantized to.
+    pub file_type: Option<crate::domain::FileType>,
+    /// The file's tensor data and the weights it encodes, when the whole
+    /// tensor-info table was read; `None` from a head.
+    pub payload: Option<crate::domain::TensorPayload>,
     /// Number of parameters in billions.
     pub param_count_b: Option<f64>,
     /// Maximum context length.
@@ -269,8 +276,9 @@ pub struct GgufMetadata {
     pub expert_shared_count: Option<u32>,
     /// Additional key-value metadata from the file (string representation).
     pub metadata: HashMap<String, String>,
-    /// What the header says the file is: a model's weights, or a projector
-    /// (`general.type` is `mmproj`, or `general.architecture` is `clip`).
+    /// What the header says the file is: a model's weights, a projector, or
+    /// a sidecar (a draft model, an MTP head, an importance matrix or an
+    /// adapter). From a head, the role the head settles, or weights.
     pub role: crate::download::GgufFileRole,
     /// The image family the tensor table says this is, when it is a main
     /// image-model file; `None` for a chat model, a component, or a table
@@ -303,6 +311,12 @@ pub struct HeadMetadata {
     /// ends when [`Self::complete`]. Zero when the head ends inside the
     /// header.
     pub bytes_used: u64,
+    /// The tensors the file declares, which the header states before any
+    /// metadata; zero when the head ends inside the header.
+    pub tensor_count: u64,
+    /// The file's role when the pairs the head holds settle it; `None`
+    /// when a key that could change it may lie past the head's end.
+    pub role: Option<crate::download::GgufFileRole>,
 }
 
 /// Raw metadata from GGUF parsing (before string conversion).

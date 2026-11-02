@@ -89,24 +89,113 @@ fn test_extract_moe_metadata() {
     assert_eq!(shared, None);
 }
 
+// ── The type and the payload, from the header alone ─────────────────────────
+
+/// A file whose name says one type and whose header says another.
+fn typed(dir: &Path, name: &str, file_type: Option<u32>) -> std::path::PathBuf {
+    let path = dir.join(name);
+    let mut pairs = vec![("general.architecture", GgufValue::String("qwen3".into()))];
+    if let Some(file_type) = file_type {
+        pairs.push(("general.file_type", GgufValue::U32(file_type)));
+    }
+    crate::write_gguf(&path, &pairs, &[], 0);
+    path
+}
+
 #[test]
-fn test_extract_quantization_from_filename() {
-    assert_eq!(
-        extract_quantization_from_filename("model-Q4_K_M.gguf"),
-        "Q4_K_M"
+fn the_type_is_the_headers_and_never_the_names() {
+    let dir = tempfile::tempdir().unwrap();
+    let parser = GgufParser::new();
+
+    let renamed = parser
+        .parse(&typed(dir.path(), "model-Q4_K_M.gguf", Some(7)))
+        .unwrap();
+    assert_eq!(renamed.file_type, Some(FileType(7)));
+    assert_eq!(renamed.quantization.as_deref(), Some("Q8_0"));
+
+    let unstated = parser
+        .parse(&typed(dir.path(), "model-UD-Q4_K_XL.gguf", None))
+        .unwrap();
+    assert_eq!(unstated.file_type, None);
+    assert_eq!(unstated.quantization, None);
+}
+
+/// Bits per weight are the bytes after the aligned table over the elements
+/// of every tensor: 96 bytes for 8 × 16 weights is six bits each.
+#[test]
+fn the_payload_is_the_data_after_the_table_over_its_weights() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("mystery.gguf");
+    crate::write_gguf(
+        &path,
+        &[("general.file_type", GgufValue::U32(18))],
+        &[
+            ("blk.0.ffn_up.weight", &[8, 8]),
+            ("output.weight", &[4, 16]),
+        ],
+        96,
     );
-    assert_eq!(extract_quantization_from_filename("model-f16.gguf"), "F16");
-    assert_eq!(extract_quantization_from_filename("model.gguf"), "Unknown");
-    // Unsloth "UD-" dynamic quants keep their prefix.
-    assert_eq!(
-        extract_quantization_from_filename("model-UD-Q4_K_M.gguf"),
-        "UD-Q4_K_M"
+
+    let parsed = GgufParser::new().parse(&path).unwrap();
+    let payload = parsed.payload.unwrap();
+    assert_eq!(payload.bytes, 96);
+    assert_eq!(payload.elements, 128);
+    assert_eq!(payload.bits_per_weight(), Some(6.0));
+}
+
+/// The data starts at the table's end rounded up to `general.alignment`.
+#[test]
+fn the_payload_starts_where_the_files_own_alignment_puts_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("aligned.gguf");
+    crate::write_gguf(
+        &path,
+        &[("general.alignment", GgufValue::U32(4096))],
+        &[("output.weight", &[4, 16])],
+        64,
     );
-    // IQ-family quants are recognised.
-    assert_eq!(
-        extract_quantization_from_filename("model-IQ4_XS.gguf"),
-        "IQ4_XS"
+
+    let payload = GgufParser::new().parse(&path).unwrap().payload.unwrap();
+    assert_eq!(payload.bytes, 64);
+}
+
+#[test]
+fn shapes_that_count_past_u64_have_no_payload() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lies.gguf");
+    crate::write_gguf(&path, &[], &[("a", &[u64::MAX, 2])], 64);
+
+    assert_eq!(GgufParser::new().parse(&path).unwrap().payload, None);
+}
+
+#[test]
+fn a_file_with_no_tensor_data_has_no_payload() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("model.gguf");
+    crate::write_tensor_gguf(&path, &[], &[("output.weight", &[4, 16])]);
+
+    assert_eq!(GgufParser::new().parse(&path).unwrap().payload, None);
+}
+
+/// The role the parser reports counts the file's tensors: Qwen 3.8's MTP
+/// block on its own is no model.
+#[test]
+fn the_parser_reports_a_cut_out_mtp_head_as_a_sidecar() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("FastMTP-32K.gguf");
+    crate::write_gguf(
+        &path,
+        &[
+            ("general.architecture", GgufValue::String("qwen35".into())),
+            ("qwen35.block_count", GgufValue::U32(65)),
+            ("qwen35.nextn_predict_layers", GgufValue::U32(1)),
+        ],
+        &[("blk.64.nextn.eh_proj.weight", &[4, 4])],
+        64,
     );
+
+    let parsed = GgufParser::new().parse(&path).unwrap();
+    assert_eq!(parsed.role, gglib_core::GgufFileRole::Sidecar);
 }
 
 // ── The image family, read on from the tensor table ─────────────────────────

@@ -8,14 +8,14 @@ use std::io::Read;
 use std::path::Path;
 
 use gglib_core::domain::gguf::{GgufValue, RawMetadata};
-use gglib_core::domain::{ImageFamily, TensorTable, WeightsFormat};
+use gglib_core::domain::{FileType, ImageFamily, TensorTable, WeightsFormat};
 use gglib_core::{
-    GgufCapabilities, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata, Quantization,
+    GgufCapabilities, GgufFileRole, GgufMetadata, GgufParseError, GgufParserPort, HeadMetadata,
 };
 
 use crate::capabilities;
 use crate::error::GgufResult;
-use crate::format::{CONTEXT_LENGTH_KEYS, quantization};
+use crate::format::CONTEXT_LENGTH_KEYS;
 use crate::reader::GgufReader;
 use crate::{head, tensor_table};
 
@@ -39,12 +39,13 @@ impl GgufParser {
 }
 
 /// The metadata of the GGUF file `reader` reads from its start, which
-/// `file_path` names: the name is read for the quantization and the
-/// parameter count when the header has neither.
+/// `file_path` names: the name is read for the parameter count when the
+/// header has none, and never for the type.
 pub(crate) fn parse_internal<R: Read>(
     mut reader: GgufReader<R>,
     file_path: &Path,
 ) -> GgufResult<GgufMetadata> {
+    let file_len = reader.remaining();
     reader.read_magic()?;
     // The tensor count is held to the size of the file only when the
     // tensor-info table after the metadata is read.
@@ -59,30 +60,31 @@ pub(crate) fn parse_internal<R: Read>(
         raw_metadata.insert(key, value);
     }
 
-    // Read on into the tensor-info table, the only place an image
-    // model's GGUF says what it is. A table that cannot be read leaves
-    // the family unknown and never fails a parse of the metadata.
-    let image_family = match tensor_table::read_tensor_infos(&mut reader, tensor_count) {
-        Ok(tensors) => ImageFamily::sniff(&TensorTable {
-            format: WeightsFormat::Gguf,
-            architecture: raw_metadata
-                .get("general.architecture")
-                .and_then(GgufValue::as_str)
-                .map(str::to_owned),
-            tensors,
-        }),
+    let mut metadata = extract_metadata(&raw_metadata, file_path);
+    metadata.role = crate::role::file_role(&raw_metadata, tensor_count);
+
+    // Read on into the tensor-info table, the only place an image model's
+    // GGUF says what it is, and the end of which is where the tensor data
+    // starts. A table that cannot be read leaves the family and the payload
+    // unknown and never fails a parse of the metadata.
+    match tensor_table::read_tensor_infos(&mut reader, tensor_count) {
+        Ok(tensors) => {
+            let table_end = file_len - reader.remaining();
+            metadata.payload = tensor_table::payload(&raw_metadata, &tensors, file_len, table_end);
+            metadata.image_family = ImageFamily::sniff(&TensorTable {
+                format: WeightsFormat::Gguf,
+                architecture: metadata.architecture.clone(),
+                tensors,
+            });
+        }
         Err(error) => {
             tracing::debug!(
                 path = %file_path.display(),
                 %error,
                 "the tensor table could not be read; no image family"
             );
-            None
         }
-    };
-
-    let mut metadata = extract_metadata(&raw_metadata, file_path);
-    metadata.image_family = image_family;
+    }
     Ok(metadata)
 }
 
@@ -136,7 +138,7 @@ pub(crate) fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetad
     let architecture = extract_architecture(raw);
     let context_length = extract_context_length(raw, architecture.as_ref());
     let param_count_b = extract_param_count(raw, file_path);
-    let quantization = extract_quantization(raw, file_path);
+    let file_type = extract_file_type(raw);
 
     // Extract MoE metadata
     let (expert_count, expert_used_count, expert_shared_count) =
@@ -145,13 +147,15 @@ pub(crate) fn extract_metadata(raw: &RawMetadata, file_path: &Path) -> GgufMetad
     GgufMetadata {
         architecture,
         param_count_b,
-        quantization,
+        quantization: file_type.map(|file_type| file_type.to_string()),
+        file_type,
+        payload: None,
         context_length,
         expert_count,
         expert_used_count,
         expert_shared_count,
         metadata: processed,
-        role: crate::role::file_role(raw),
+        role: GgufFileRole::Weights,
         image_family: None,
     }
 }
@@ -312,37 +316,13 @@ fn parse_param_from_filename(filename: &str) -> Option<f64> {
     None
 }
 
-/// Extract quantization from filename.
-fn extract_quantization_from_filename(filename: &str) -> String {
-    let quant = Quantization::from_filename(filename);
-    if quant.is_unknown() {
-        "Unknown".to_string()
-    } else {
-        quant.as_str().to_string()
-    }
-}
-
-/// Extract quantization from metadata or filename.
-fn extract_quantization(raw: &RawMetadata, file_path: &Path) -> Option<String> {
-    // First try filename parsing
-    if let Some(filename) = file_path.file_name().and_then(|s| s.to_str()) {
-        let quant = extract_quantization_from_filename(filename);
-        if quant != "Unknown" {
-            return Some(quant);
-        }
-    }
-
-    // Fallback to file_type metadata
-    if let Some(file_type) = raw.get("general.file_type") {
-        let type_str = file_type.to_string();
-        if let Ok(type_num) = type_str.parse::<u32>() {
-            if let Some(quant) = quantization::from_file_type(type_num) {
-                return Some(quant.to_string());
-            }
-        }
-    }
-
-    None
+/// The type `general.file_type` states, which llama.cpp's converter and
+/// quantizer write as an unsigned integer.
+fn extract_file_type(raw: &RawMetadata) -> Option<FileType> {
+    raw.get("general.file_type")
+        .and_then(GgufValue::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .map(FileType)
 }
 
 #[cfg(test)]

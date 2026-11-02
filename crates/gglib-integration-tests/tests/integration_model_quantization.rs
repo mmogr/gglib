@@ -1,11 +1,6 @@
-//! Regression test proving the local-file import path resolves modern
-//! quantization filename conventions correctly.
-//!
-//! `gglib-gguf`'s filename-based quantization matcher used to have its own
-//! 14-pattern hardcoded list with no Unsloth "UD-" dynamic-quant handling.
-//! Delegating it to the shared `gglib_core::download::Quantization` matcher
-//! fixes this at the source, but this test proves the fix actually reaches
-//! the real local-add path end-to-end, through the real `GgufParser`.
+//! The local-file import path takes a model's type from its header, through
+//! the real `GgufParser`, and never from its name: a file is imported under
+//! whatever name its owner gave it.
 
 mod common;
 
@@ -13,24 +8,47 @@ use std::sync::Arc;
 
 use common::setup_test_pool;
 
+use gglib_core::domain::gguf::GgufValue;
 use gglib_core::services::{ImportMode, ModelService};
 use gglib_db::SqliteModelRepository;
-use gglib_gguf::{GgufParser, write_string_gguf};
+use gglib_gguf::{GgufParser, write_gguf};
 
 #[tokio::test]
-async fn local_import_resolves_unsloth_dynamic_quantization_from_filename() {
+async fn local_import_takes_the_type_from_the_header_not_the_name() {
     let pool = setup_test_pool().await.unwrap();
     let repo = Arc::new(SqliteModelRepository::new(pool));
     let service = ModelService::new(repo);
 
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("qwen3-8b-UD-Q4_K_M.gguf");
-    write_string_gguf(&path, &[("general.architecture", "qwen3")]);
+    let named = dir.path().join("qwen3-8b-UD-Q4_K_XL.gguf");
+    write_gguf(
+        &named,
+        &[
+            (
+                "general.architecture",
+                GgufValue::String("qwen3".to_owned()),
+            ),
+            ("general.file_type", GgufValue::U32(7)),
+        ],
+        &[],
+        0,
+    );
+    let unstated = dir.path().join("qwen3-8b-Q6_K.gguf");
+    write_gguf(
+        &unstated,
+        &[(
+            "general.architecture",
+            GgufValue::String("qwen3".to_owned()),
+        )],
+        &[],
+        0,
+    );
 
-    let model = service
-        .import_from_file(&path, &GgufParser::new(), None, ImportMode::Fresh)
-        .await
-        .unwrap();
-
-    assert_eq!(model.quantization, Some("UD-Q4_K_M".to_string()));
+    let parser = GgufParser::new();
+    let import = |path| service.import_from_file(path, &parser, None, ImportMode::Fresh);
+    assert_eq!(
+        import(&named).await.unwrap().quantization.as_deref(),
+        Some("Q8_0")
+    );
+    assert_eq!(import(&unstated).await.unwrap().quantization, None);
 }
