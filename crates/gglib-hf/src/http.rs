@@ -36,7 +36,15 @@ pub trait HttpBackend: Send + Sync {
     /// Fetch at most the first `max_bytes` bytes of a URL's body, asking
     /// with a `Range` header and stopping there even when the server answers
     /// with the whole body.
-    async fn get_head(&self, url: &Url, max_bytes: u64) -> HfResult<Vec<u8>>;
+    async fn get_head(&self, url: &Url, max_bytes: u64) -> HfResult<Vec<u8>> {
+        self.get_range(url, 0, max_bytes).await
+    }
+
+    /// Fetch at most `max_bytes` bytes of a URL's body from byte `start`,
+    /// asking with a `Range` header. A server that answers with the whole
+    /// body instead has the bytes before `start` skipped, and the read
+    /// stops at `max_bytes` all the same.
+    async fn get_range(&self, url: &Url, start: u64, max_bytes: u64) -> HfResult<Vec<u8>>;
 
     /// Post `form` to a URL as `application/x-www-form-urlencoded` and
     /// deserialize the JSON answer.
@@ -230,26 +238,35 @@ impl HttpBackend for ReqwestBackend {
         Ok((data, cursor))
     }
 
-    async fn get_head(&self, url: &Url, max_bytes: u64) -> HfResult<Vec<u8>> {
+    async fn get_range(&self, url: &Url, start: u64, max_bytes: u64) -> HfResult<Vec<u8>> {
         if max_bytes == 0 {
             return Ok(Vec::new());
         }
-        let range = format!("bytes=0-{}", max_bytes - 1);
+        let range = format!("bytes={start}-{}", start.saturating_add(max_bytes - 1));
         let mut response = self
             .send_with_retry(url, || {
                 self.build_request(url).header("Range", range.as_str())
             })
             .await?;
+        // A server that ignored the range sends the body from its start.
+        let mut skip = if response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
+            0
+        } else {
+            usize::try_from(start).unwrap_or(usize::MAX)
+        };
         let cap = usize::try_from(max_bytes).unwrap_or(usize::MAX);
-        let mut head = Vec::new();
-        while head.len() < cap {
+        let mut read = Vec::new();
+        while read.len() < cap {
             let Some(chunk) = response.chunk().await? else {
                 break;
             };
-            let room = cap - head.len();
-            head.extend_from_slice(&chunk[..chunk.len().min(room)]);
+            let dropped = chunk.len().min(skip);
+            skip -= dropped;
+            let chunk = &chunk[dropped..];
+            let room = cap - read.len();
+            read.extend_from_slice(&chunk[..chunk.len().min(room)]);
         }
-        Ok(head)
+        Ok(read)
     }
 
     async fn post_form_json<T: DeserializeOwned + Send>(
@@ -301,8 +318,12 @@ pub(crate) mod testing {
     /// One request the fake backend was asked, as it was asked.
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub(crate) enum Asked {
-        /// A ranged read of a URL, for at most this many bytes.
+        /// A ranged read of a URL from its start, for at most this many
+        /// bytes.
         Head(String, u64),
+        /// A ranged read of a URL from a byte past its start, for at most
+        /// this many bytes.
+        Range(String, u64, u64),
         /// A form posted to a URL, as its encoded body.
         Form(String, String),
     }
@@ -399,11 +420,13 @@ pub(crate) mod testing {
             Ok((data, response.next_cursor))
         }
 
-        async fn get_head(&self, url: &Url, max_bytes: u64) -> HfResult<Vec<u8>> {
-            self.asked
-                .lock()
-                .unwrap()
-                .push(Asked::Head(url.to_string(), max_bytes));
+        async fn get_range(&self, url: &Url, start: u64, max_bytes: u64) -> HfResult<Vec<u8>> {
+            let asked = if start == 0 {
+                Asked::Head(url.to_string(), max_bytes)
+            } else {
+                Asked::Range(url.to_string(), start, max_bytes)
+            };
+            self.asked.lock().unwrap().push(asked);
             let body = self
                 .bodies
                 .iter()
@@ -412,8 +435,9 @@ pub(crate) mod testing {
                     status: 404,
                     url: url.to_string(),
                 })?;
+            let from = usize::try_from(start).unwrap_or(usize::MAX).min(body.len());
             let cap = usize::try_from(max_bytes).unwrap_or(usize::MAX);
-            Ok(body[..body.len().min(cap)].to_vec())
+            Ok(body[from..body.len().min(from.saturating_add(cap))].to_vec())
         }
 
         async fn post_form_json<T: DeserializeOwned + Send>(

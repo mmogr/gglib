@@ -8,11 +8,25 @@ use gglib_core::download::GgufFileRole;
 use super::*;
 use crate::quant_selector::QuantizationSelector;
 use crate::test_hub::{ImageHeadParser, RepoHub};
+use crate::variant_reader::HubSource;
 
 const REPO: &str = "owner/zeta-GGUF";
 
 fn resolver(files: &[(&str, u64)]) -> HfQuantizationResolver {
     HfQuantizationResolver::new(Arc::new(RepoHub::new(files)), Arc::new(ImageHeadParser))
+}
+
+/// A selector over a repository of `files`, read through one hub.
+fn selector(files: &[(&str, u64)]) -> QuantizationSelector {
+    let hub = Arc::new(RepoHub::new(files));
+    let parser = Arc::new(ImageHeadParser);
+    QuantizationSelector::new(
+        Arc::new(HfQuantizationResolver::new(hub.clone(), parser.clone())),
+        Arc::new(HubSource {
+            client: hub,
+            parser,
+        }),
+    )
 }
 
 async fn resolve(files: &[(&str, u64)], label: &str) -> Resolution {
@@ -160,13 +174,17 @@ async fn the_projector_is_chosen_by_the_one_rule() {
 /// model.
 #[tokio::test]
 async fn a_repository_of_only_projectors_offers_no_model() {
-    let only_projectors = resolver(&[("mmproj-F16.gguf", 300), ("mmproj-Q8_0.gguf", 200)]);
+    let files = [("mmproj-F16.gguf", 300), ("mmproj-Q8_0.gguf", 200)];
 
-    let available = only_projectors.list_available(REPO).await.unwrap();
-    let selector = QuantizationSelector::new(Arc::new(only_projectors));
-    let auto = selector.select(REPO, None).await.unwrap_err().to_string();
+    let available = resolver(&files).list_available(REPO).await.unwrap();
+    let selector = selector(&files);
+    let auto = selector
+        .select(REPO, None, Some(u64::MAX))
+        .await
+        .unwrap_err()
+        .to_string();
     let asked = selector
-        .select(REPO, Some("F16"))
+        .select(REPO, Some("F16"), None)
         .await
         .unwrap_err()
         .to_string();
@@ -464,16 +482,13 @@ async fn the_available_variants_are_every_gguf_by_its_label() {
 /// projector's `F16`.
 #[tokio::test]
 async fn the_single_model_pick_ignores_projectors() {
-    let hub = resolver(&[
+    let selector = selector(&[
         ("zeta.IQ2_XXS.gguf", 2_000),
         ("mmproj-F16.gguf", 300),
         ("mmproj-BF16.gguf", 300),
     ]);
-    let selector = QuantizationSelector::new(Arc::new(hub));
 
-    let selection = selector.select(REPO, None).await.unwrap();
+    let label = selector.select(REPO, None, Some(u64::MAX)).await.unwrap();
 
-    assert_eq!(selection.label, "zeta.IQ2_XXS");
-    assert!(selection.auto_selected);
-    assert_eq!(selection.available.len(), 3);
+    assert_eq!(label, "zeta.IQ2_XXS");
 }

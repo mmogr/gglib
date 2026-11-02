@@ -35,7 +35,7 @@ pub(super) async fn queued(registrar: Arc<dyn ModelRegistrarPort>) -> Fixture {
         Arc::new(gglib_core::ports::NoopGgufParser),
     ));
     manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
     Fixture { manager, recorded }
@@ -56,7 +56,7 @@ pub(super) fn failed(error: &str) -> DownloadOutcome {
 async fn rest_and_sse_carry_the_same_snapshot() {
     let f = queued(Arc::new(NoRegistrar)).await;
     f.manager
-        .queue_download_smart("owner/other", Some("Q8_0".to_string()))
+        .queue_download_smart("owner/other", Some("Q8_0".to_string()), None)
         .await
         .unwrap();
     let ended = DownloadId::new("owner/gone", Some("zeta.Q8_0"));

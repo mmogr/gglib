@@ -11,11 +11,13 @@ pub use gglib_core::ports::{
 };
 
 // Internal modules (pub(crate) to keep implementation private)
+mod cached_hub;
 pub(crate) mod executor;
 mod meter;
 pub(crate) mod queue;
 mod resolver;
 mod solo;
+mod variant_reader;
 
 // Quantization selection service
 mod quant_selector;

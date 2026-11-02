@@ -127,14 +127,14 @@ async fn repeat_request_while_active_attaches_instead_of_duplicating() {
     let manager = test_manager();
 
     manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .expect("first queue");
     let active_id = start_head(&manager).await;
     assert_eq!(manager.queue.read().await.pending_len(), 0);
 
     let again = manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .expect("a repeat request attaches rather than failing");
 
@@ -154,13 +154,13 @@ async fn repeat_request_while_pending_attaches_instead_of_duplicating() {
     let manager = test_manager();
 
     manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .expect("first queue");
     assert_eq!(manager.queue.read().await.pending_len(), 1);
 
     manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .expect("a repeat request attaches rather than failing");
 
@@ -177,7 +177,7 @@ async fn repeat_request_while_pending_attaches_instead_of_duplicating() {
 #[tokio::test]
 async fn a_repeat_request_leaves_the_files_kept_for_registration() {
     let manager = test_manager();
-    let request = || manager.queue_download_smart(REPO, Some("Q8_0".to_string()));
+    let request = || manager.queue_download_smart(REPO, Some("Q8_0".to_string()), None);
 
     let first = request().await.expect("first");
     // Stand a marker in for the files kept for registration: an attach
@@ -222,7 +222,7 @@ async fn a_failed_download_can_still_be_requeued() {
     let manager = test_manager();
 
     manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .expect("first queue");
     {
@@ -238,7 +238,7 @@ async fn a_failed_download_can_still_be_requeued() {
     assert_eq!(manager.queue.read().await.pending_len(), 0);
 
     manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .expect("a failed download must stay re-queueable");
 

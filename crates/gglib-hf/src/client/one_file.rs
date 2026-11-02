@@ -22,6 +22,19 @@ impl<B: HttpBackend> HfClient<B> {
         self.backend.get_head(&url, max_bytes).await
     }
 
+    /// At most `max_bytes` bytes of the file at `path` from byte `start`:
+    /// a head read further without reading its first bytes again.
+    pub(crate) async fn read_range(
+        &self,
+        repo: &HfRepoRef,
+        path: &str,
+        start: u64,
+        max_bytes: u64,
+    ) -> HfResult<Vec<u8>> {
+        let url = build_resolve_url(&self.config, repo, path);
+        self.backend.get_range(&url, start, max_bytes).await
+    }
+
     /// The file at `path` on `main`, or `None` when the repository holds no
     /// file there (the path is absent, or is a folder).
     pub(crate) async fn file_at(

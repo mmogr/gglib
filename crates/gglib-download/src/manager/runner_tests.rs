@@ -121,7 +121,7 @@ async fn a_quantization_asked_for_by_its_name_is_the_one_queued() {
         );
 
         let id = manager
-            .queue_download_smart(REPO, Some(name.to_string()))
+            .queue_download_smart(REPO, Some(name.to_string()), None)
             .await
             .unwrap();
 

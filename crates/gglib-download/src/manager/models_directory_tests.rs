@@ -111,7 +111,7 @@ fn manager(files: &[(&str, u64)]) -> (Arc<DownloadManagerImpl>, Arc<RecordingReg
 /// Queue the `Q8_0` download of [`REPO`], and leave the runner unstarted.
 async fn queue(manager: &DownloadManagerImpl) {
     manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .expect("queued");
 }

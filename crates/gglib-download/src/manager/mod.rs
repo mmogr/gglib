@@ -41,16 +41,17 @@ use gglib_core::download::{
     ShardInfo, download_title,
 };
 use gglib_core::events::AppEvent;
-use gglib_core::ports::huggingface::match_variant;
 use gglib_core::ports::{
     AppEventEmitter, DownloadManagerConfig, DownloadManagerPort, GgufParserPort, HfClientPort,
     ModelRegistrarPort, QuantizationResolver, ResolvedFile,
 };
 
+use crate::cached_hub::CachedHub;
 use crate::executor::known_size;
 use crate::quant_selector::QuantizationSelector;
 use crate::queue::{DownloadQueue, QueuedItem};
 use crate::resolver::HfQuantizationResolver;
+use crate::variant_reader::HubSource;
 
 pub(crate) use meter::GroupMeter;
 use shard_group_tracker::{GroupMetadata, ShardGroupTracker};
@@ -270,8 +271,9 @@ pub struct DownloadManagerImpl {
     hf_client: Arc<dyn HfClientPort>,
     /// File resolver, shared with [`QuantizationSelector`].
     resolver: Arc<HfQuantizationResolver>,
-    /// Quantization selector for choosing best quantization.
-    selector: QuantizationSelector,
+    /// Reads the heads of a repository's files, for the variant a download
+    /// takes and the projector it brings.
+    gguf_parser: Arc<dyn GgufParserPort>,
     /// Queue state (protected by `RwLock` for async access).
     queue: RwLock<DownloadQueue>,
     /// Configuration.
@@ -314,17 +316,15 @@ impl DownloadManagerImpl {
     ) -> Self {
         let resolver = Arc::new(HfQuantizationResolver::new(
             Arc::clone(&hf_client),
-            gguf_parser,
+            Arc::clone(&gguf_parser),
         ));
-        let selector =
-            QuantizationSelector::new(Arc::clone(&resolver) as Arc<dyn QuantizationResolver>);
 
         Self {
             model_registrar,
             event_emitter,
             hf_client,
             resolver,
-            selector,
+            gguf_parser,
             queue: RwLock::new(DownloadQueue::new(config.max_queue_size)),
             config,
             publish: Mutex::new(0),
@@ -1084,9 +1084,11 @@ impl DownloadManagerPort for DownloadManagerImpl {
         self: Arc<Self>,
         repo_id: String,
         quantization: Option<String>,
-        _budget_bytes: Option<u64>,
+        budget_bytes: Option<u64>,
     ) -> Result<DownloadId, DownloadError> {
-        let id = self.queue_download_smart(&repo_id, quantization).await?;
+        let id = self
+            .queue_download_smart(&repo_id, quantization, budget_bytes)
+            .await?;
         self.ensure_runner();
         Ok(id)
     }
@@ -1197,38 +1199,32 @@ impl DownloadManagerImpl {
         &self,
         repo_id: impl Into<String>,
         quantization: Option<String>,
+        budget_bytes: Option<u64>,
     ) -> Result<DownloadId, DownloadError> {
         let repo_id = repo_id.into();
 
-        let selection = self
-            .selector
-            .select(&repo_id, quantization.as_deref())
+        // One Hub cache for the choice and its resolution: the listing and
+        // each file's head are read once, and a longer read of a header
+        // goes on from where the last one ended.
+        let hub: Arc<dyn HfClientPort> = Arc::new(CachedHub::new(Arc::clone(&self.hf_client)));
+        let resolver = Arc::new(HfQuantizationResolver::new(
+            Arc::clone(&hub),
+            Arc::clone(&self.gguf_parser),
+        ));
+        let selector = QuantizationSelector::new(
+            Arc::clone(&resolver) as Arc<dyn QuantizationResolver>,
+            Arc::new(HubSource {
+                client: hub,
+                parser: Arc::clone(&self.gguf_parser),
+            }),
+        );
+
+        let label = selector
+            .select(&repo_id, quantization.as_deref(), budget_bytes)
             .await?;
 
-        let mut resolution = self.resolver.resolve(&repo_id, &selection.label).await?;
-
-        // An image model drawn at Q8_0 is what was measured: with none asked,
-        // a repository whose weights' head names a family is fetched at the
-        // variant `Q8_0` names when it has one, chosen once the head has been
-        // read.
-        if selection.auto_selected
-            && resolution.image_family.is_some()
-            && let Ok(q8) = match_variant(&selection.available, "Q8_0")
-            && q8.label != resolution.label
-        {
-            resolution = self.resolver.resolve(&repo_id, &q8.label).await?;
-        }
-
+        let resolution = resolver.resolve(&repo_id, &label).await?;
         let id = DownloadId::new(&repo_id, Some(&resolution.label));
-
-        if selection.auto_selected {
-            tracing::info!(
-                repo_id = %repo_id,
-                selected = %resolution.label,
-                available = ?selection.available.iter().map(|v| v.label.as_str()).collect::<Vec<_>>(),
-                "Auto-selected variant"
-            );
-        }
 
         // `None` is a repeat request, attached to the download already in
         // flight: the same answer, and nothing new to announce.

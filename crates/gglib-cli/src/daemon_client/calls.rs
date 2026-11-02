@@ -164,12 +164,14 @@ impl DaemonHandle {
     /// gave it: the download this request is, whatever else the queue holds.
     ///
     /// Long timeout: the daemon resolves the repo and its shard list against
-    /// `HuggingFace` before answering.
+    /// `HuggingFace` before answering, and with no quant named it reads the
+    /// head of each variant it weighs and the whole header of one that fits,
+    /// which can run to tens of megabytes on a slow link.
     pub(crate) async fn queue_download(&self, body: &QueueDownloadBody) -> Result<DownloadId> {
         let response = self
             .post(paths::DOWNLOADS_QUEUE_PATH)
             .json(body)
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_mins(2))
             .send()
             .await?;
         let queued: QueueDownloadResponse = Self::expect_ok(response).await?.json().await?;

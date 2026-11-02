@@ -117,6 +117,47 @@ async fn a_server_that_sends_the_whole_file_is_cut_at_the_head() {
     served.join().unwrap();
 }
 
+/// A head read further asks for the bytes after it alone.
+#[tokio::test]
+async fn a_range_is_asked_for_from_its_start() {
+    let (base_url, served) = hub("206 Partial Content", vec![9; 8]);
+
+    let more = HfClientPort::read_range(
+        &client(base_url),
+        "leejet/FLUX.1-schnell-gguf",
+        "flux1-schnell-q8_0.gguf",
+        16,
+        8,
+    )
+    .await
+    .expect("the range");
+
+    assert_eq!(more, vec![9; 8]);
+    let asked = served.join().unwrap().head;
+    assert_eq!(header(&asked, "range"), Some("bytes=16-23"));
+}
+
+/// A server that ignores the `Range` and sends the whole file has the bytes
+/// before the range skipped.
+#[tokio::test]
+async fn a_server_that_sends_the_whole_file_is_read_from_the_range() {
+    let whole: Vec<u8> = (0..=255).collect();
+    let (base_url, served) = hub("200 OK", whole.clone());
+
+    let more = HfClientPort::read_range(
+        &client(base_url),
+        "leejet/FLUX.1-schnell-gguf",
+        "flux1-schnell-q8_0.gguf",
+        100,
+        10,
+    )
+    .await
+    .expect("the range");
+
+    assert_eq!(more, whole[100..110]);
+    served.join().unwrap();
+}
+
 /// A file looked up by its path is posted to `paths-info` as a form naming
 /// that path, and answered with its size and LFS OID.
 #[tokio::test]

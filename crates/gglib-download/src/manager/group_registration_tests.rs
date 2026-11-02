@@ -97,7 +97,7 @@ async fn queued(files: &[(&str, u64)], refusal: Option<&str>) -> Fixture {
         Arc::new(gglib_core::ports::NoopGgufParser),
     );
     manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
     Fixture {

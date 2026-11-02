@@ -9,7 +9,7 @@ use super::tests::{ID, REPO, queued};
 /// row it then has.
 async fn queued_again(manager: &DownloadManagerImpl) -> gglib_core::download::DownloadRow {
     manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
     manager.next_job().await.expect("the weights are pending");

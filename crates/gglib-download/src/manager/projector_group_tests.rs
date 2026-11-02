@@ -37,7 +37,7 @@ async fn the_projector_is_queued_in_the_models_group_and_is_not_a_shard() {
     let manager = manager();
 
     let queued = manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
 
@@ -75,7 +75,7 @@ async fn the_projector_is_queued_in_the_models_group_and_is_not_a_shard() {
 async fn queueing_keeps_the_groups_files_for_registration() {
     let manager = manager();
     let id = manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
 
@@ -102,7 +102,7 @@ async fn queueing_keeps_the_groups_files_for_registration() {
 async fn the_row_names_each_file_and_carries_the_groups_bytes() {
     let manager = manager();
     manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
 

@@ -264,7 +264,14 @@ impl GgufParserPort for ImageHeadParser {
         Ok(table)
     }
 
-    fn parse_head(&self, _head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
-        unimplemented!("only tensor tables are read from heads here")
+    /// A head that names a family holds an image model's whole header,
+    /// which states no type; any other is no GGUF header.
+    fn parse_head(&self, head: &[u8], _file_name: &str) -> Result<HeadMetadata, GgufParseError> {
+        self.tensor_table_of_head(head)?;
+        Ok(HeadMetadata {
+            complete: true,
+            role: Some(GgufFileRole::Weights),
+            ..HeadMetadata::default()
+        })
     }
 }

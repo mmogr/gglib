@@ -26,7 +26,7 @@ fn manager() -> DownloadManagerImpl {
 
 async fn queue(manager: &DownloadManagerImpl, repo: &str) -> DownloadId {
     manager
-        .queue_download_smart(repo, Some("Q8_0".to_string()))
+        .queue_download_smart(repo, Some("Q8_0".to_string()), None)
         .await
         .unwrap()
 }
@@ -216,7 +216,7 @@ async fn the_running_downloads_files_take_no_place_in_the_gap() {
 
     queue(&manager, "owner/b").await;
     let third = manager
-        .queue_download_smart("owner/c", Some("Q8_0".to_string()))
+        .queue_download_smart("owner/c", Some("Q8_0".to_string()), None)
         .await;
 
     assert!(matches!(third, Err(DownloadError::QueueFull { .. })));

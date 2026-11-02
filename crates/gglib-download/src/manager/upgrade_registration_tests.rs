@@ -189,7 +189,7 @@ async fn an_upgrades_files_are_fetched_again_at_its_commit() {
 
     let f = manager();
     f.manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
     let on_main = Fetched {
@@ -230,7 +230,7 @@ async fn an_upgrade_rewrites_its_models_row_at_the_commit() {
 async fn a_download_that_adds_a_model_registers_it() {
     let f = manager();
     f.manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
 
@@ -273,7 +273,7 @@ async fn an_upgrade_leaves_the_old_file_for_its_new_copy_to_replace() {
 async fn an_upgrade_of_files_already_queued_is_refused() {
     let f = manager();
     f.manager
-        .queue_download_smart(REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
 

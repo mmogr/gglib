@@ -189,6 +189,20 @@ impl<B: HttpBackend + Send + Sync> HfClientPort for HfClient<B> {
             .map_err(map_error)
     }
 
+    async fn read_range(
+        &self,
+        model_id: &str,
+        path: &str,
+        start: u64,
+        max_bytes: u64,
+    ) -> HfPortResult<Vec<u8>> {
+        let repo = parse_repo(model_id)?;
+
+        self.read_range(&repo, path, start, max_bytes)
+            .await
+            .map_err(map_error)
+    }
+
     async fn file_at(&self, model_id: &str, path: &str) -> HfPortResult<Option<HfFileInfo>> {
         let repo = parse_repo(model_id)?;
 

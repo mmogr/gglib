@@ -79,7 +79,7 @@ async fn an_image_models_companions_are_queued_under_its_one_id() {
     let (manager, _) = manager(&[(WEIGHTS, 1_000)], None);
 
     let id = manager
-        .queue_download_smart(FLUX_REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(FLUX_REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
 
@@ -131,10 +131,11 @@ async fn an_image_models_companions_are_queued_under_its_one_id() {
     assert_eq!(repo_id, FLUX_REPO, "the main repository's key");
 }
 
-/// With no quantization asked, an image repository is fetched at `Q8_0`,
-/// though the preference list a chat model is chosen by would take another.
+/// With no quantization asked, an image repository is fetched at the
+/// largest variant whose weights fit the budget's usable share: it keeps no
+/// KV cache.
 #[tokio::test]
-async fn an_image_repository_with_no_quantization_asked_is_fetched_at_q8_0() {
+async fn an_image_repository_with_none_asked_takes_the_largest_whose_weights_fit() {
     let (manager, _) = manager(
         &[
             ("flux1-schnell-q4_k_m.gguf", 600),
@@ -143,42 +144,86 @@ async fn an_image_repository_with_no_quantization_asked_is_fetched_at_q8_0() {
         ],
         None,
     );
+    // 90% of it is 800 bytes: the q5_k_m fits, the q8_0 does not.
+    let budget = gglib_core::domain::recommendation::budget_covering(800);
 
-    let id = manager.queue_download_smart(FLUX_REPO, None).await.unwrap();
+    let id = manager
+        .queue_download_smart(FLUX_REPO, None, Some(budget))
+        .await
+        .unwrap();
 
-    assert_eq!(id.quantization(), Some("q8_0"));
-    let files = queued_files(&manager).await;
-    assert_eq!(files[0].shard_info.as_ref().unwrap().filename, WEIGHTS);
-    assert_eq!(files.len(), 4, "with its companions");
-}
-
-/// An image repository with no `Q8_0` is chosen for as a chat one is: the
-/// quantization it has, with its companions.
-#[tokio::test]
-async fn an_image_repository_without_q8_0_is_fetched_at_what_it_has() {
-    let (manager, _) = manager(&[("flux1-schnell-q4_k_m.gguf", 600)], None);
-
-    let id = manager.queue_download_smart(FLUX_REPO, None).await.unwrap();
-
-    assert_eq!(id.quantization(), Some("flux1-schnell-q4_k_m"));
+    assert_eq!(id.quantization(), Some("q5_k_m"));
     let files = queued_files(&manager).await;
     assert_eq!(
         files[0].shard_info.as_ref().unwrap().filename,
-        "flux1-schnell-q4_k_m.gguf"
+        "flux1-schnell-q5_k_m.gguf"
     );
     assert_eq!(files.len(), 4, "with its companions");
 }
 
-/// A chat repository with no quantization asked is chosen for as before:
-/// the preference list's first, not `Q8_0`.
+/// Choosing a variant with none asked and resolving it read each file's head
+/// once, though the walk, the projector and the image companions all ask.
 #[tokio::test]
-async fn a_chat_repository_with_no_quantization_asked_is_chosen_for_as_before() {
+async fn a_download_chosen_with_none_asked_reads_each_head_once() {
+    let hub = Arc::new(RepoHub::image(
+        ImageFamily::Flux1,
+        &[
+            ("flux1-schnell-q4_k_m.gguf", 600),
+            (WEIGHTS, 1_000),
+            ("mmproj-F16.gguf", 30),
+        ],
+        COMPANION_SIZE,
+    ));
+    let manager = DownloadManagerImpl::new(
+        Arc::new(RecordingRegistrar::default()),
+        hub.clone(),
+        Arc::new(NoopEmitter::new()),
+        DownloadManagerConfig::default(),
+        Arc::new(ImageHeadParser),
+    );
+
+    manager
+        .queue_download_smart(FLUX_REPO, None, Some(u64::MAX))
+        .await
+        .unwrap();
+
+    let asked = hub.heads_asked.lock().unwrap().clone();
+    let mut paths: Vec<&str> = asked.iter().map(|(_, path)| path.as_str()).collect();
+    let reads = paths.len();
+    paths.sort_unstable();
+    paths.dedup();
+    assert_eq!(reads, paths.len(), "{asked:?}");
+    assert_eq!(paths.len(), 3, "{asked:?}");
+}
+
+/// With no budget, an image repository is fetched at its smallest variant,
+/// with its companions.
+#[tokio::test]
+async fn an_image_repository_with_no_budget_takes_its_smallest() {
+    let (manager, _) = manager(
+        &[(WEIGHTS, 1_000), ("flux1-schnell-q4_k_m.gguf", 600)],
+        None,
+    );
+
+    let id = manager
+        .queue_download_smart(FLUX_REPO, None, None)
+        .await
+        .unwrap();
+
+    assert_eq!(id.quantization(), Some("q4_k_m"));
+    assert_eq!(queued_files(&manager).await.len(), 4, "with its companions");
+}
+
+/// A chat repository whose heads cannot be read can be judged by none of
+/// them, and takes its smallest variant.
+#[tokio::test]
+async fn a_chat_repository_whose_heads_cannot_be_read_takes_its_smallest() {
     let registrar = Arc::new(RecordingRegistrar::default());
     let manager = DownloadManagerImpl::new(
         registrar,
         Arc::new(RepoHub::new(&[
-            ("zeta.Q4_K_M.gguf", 600),
             ("zeta.Q8_0.gguf", 1_000),
+            ("zeta.Q4_K_M.gguf", 600),
         ])),
         Arc::new(NoopEmitter::new()),
         DownloadManagerConfig::default(),
@@ -186,7 +231,7 @@ async fn a_chat_repository_with_no_quantization_asked_is_chosen_for_as_before() 
     );
 
     let id = manager
-        .queue_download_smart("owner/zeta-GGUF", None)
+        .queue_download_smart("owner/zeta-GGUF", None, Some(u64::MAX))
         .await
         .unwrap();
 
@@ -202,7 +247,7 @@ async fn a_quantization_asked_for_an_image_model_is_the_one_fetched() {
     );
 
     let id = manager
-        .queue_download_smart(FLUX_REPO, Some("Q4_K_M".to_string()))
+        .queue_download_smart(FLUX_REPO, Some("Q4_K_M".to_string()), None)
         .await
         .unwrap();
 
@@ -218,7 +263,7 @@ async fn a_companion_is_planned_in_its_own_repositorys_folder() {
     let models = tempfile::tempdir().unwrap();
     let (manager, _) = manager(&[(WEIGHTS, 1_000)], Some(models.path()));
     manager
-        .queue_download_smart(FLUX_REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(FLUX_REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
 
@@ -249,7 +294,7 @@ async fn each_files_job_is_fetched_from_its_own_repository() {
     let models = tempfile::tempdir().unwrap();
     let (manager, _) = manager(&[(WEIGHTS, 1_000)], Some(models.path()));
     let id = manager
-        .queue_download_smart(FLUX_REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(FLUX_REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
 
@@ -370,7 +415,7 @@ async fn a_companion_two_models_name_is_fetched_once_and_linked_to_both() {
     let mut received = Vec::new();
     for (repo, quantization) in [(FLUX_REPO, "Q8_0"), (FINETUNE_REPO, "Q6_K")] {
         manager
-            .queue_download_smart(repo, Some(quantization.to_string()))
+            .queue_download_smart(repo, Some(quantization.to_string()), None)
             .await
             .unwrap();
         for _ in 0..4 {
@@ -449,7 +494,7 @@ async fn the_companions_linked_and_refused_are_announced_at_the_end() {
         put(&root.join(folder).join(file), COMPANION_ON_DISK);
     }
     manager
-        .queue_download_smart(FLUX_REPO, Some("Q8_0".to_string()))
+        .queue_download_smart(FLUX_REPO, Some("Q8_0".to_string()), None)
         .await
         .unwrap();
 
