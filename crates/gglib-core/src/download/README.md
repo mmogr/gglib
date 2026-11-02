@@ -9,10 +9,8 @@ system. No I/O, networking, or runtime dependencies allowed.
 
 # Structure
 
-- `types` - Core identifiers and data structures (`DownloadId`, `Quantization`).
-  `Quantization` models Unsloth Dynamic ("UD-") quants (e.g. `UD-Q6_K`) as distinct
-  values from their plain counterparts (`Q6_K`), since `HuggingFace` repos frequently
-  publish both with the same bit-depth suffix.
+- `types` - The download's identifier (`DownloadId`): a repository and, when the
+  download names one, the variant's label as the repository's listing gives it.
 - `file_role` - What a GGUF file is for (`GgufFileRole`): a model's weights, a
   multimodal projector, or a sidecar (an importance matrix, an adapter or a draft
   model's head, never a quantization). `gglib-gguf` reads it from the file's

@@ -39,13 +39,6 @@ pub enum DownloadError {
         message: String,
     },
 
-    /// Invalid quantization specified.
-    #[error("Invalid quantization: {value}")]
-    InvalidQuantization {
-        /// The invalid quantization string.
-        value: String,
-    },
-
     /// Failed to resolve quantization to a file.
     #[error("Resolution failed: {message}")]
     ResolutionFailed {
@@ -191,9 +184,6 @@ impl DownloadError {
             }
             Self::Network { message, .. } => format!("Network error: {message}"),
             Self::NotFound { message } => format!("Not found: {message}"),
-            Self::InvalidQuantization { value } => {
-                format!("Invalid quantization '{value}'. Use values like `Q4_K_M`, `Q5_K_S`, etc.")
-            }
             Self::ResolutionFailed { message } => format!("Could not resolve file: {message}"),
             Self::QueueFull { max_size } => {
                 format!(
